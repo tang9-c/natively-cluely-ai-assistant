@@ -284,6 +284,22 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
     setIsSettingsOpen(!isSettingsOpen)
   }
 
+  const handleCodeHint = async () => {
+    try {
+      await window.electronAPI.generateCodeHint()
+    } catch (err) {
+      console.error('[Queue] Code hint failed:', err)
+    }
+  }
+
+  const handleBrainstorm = async () => {
+    try {
+      await window.electronAPI.generateBrainstorm()
+    } catch (err) {
+      console.error('[Queue] Brainstorm failed:', err)
+    }
+  }
+
   const handleModelChange = (modelId: string) => {
     setCurrentModel(modelId)
     window.electronAPI.setModel(modelId).catch(console.error);
@@ -321,6 +337,8 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
               onTooltipVisibilityChange={handleTooltipVisibilityChange}
               onChatToggle={handleChatToggle}
               onSettingsToggle={handleSettingsToggle}
+              onCodeHint={handleCodeHint}
+              onBrainstorm={handleBrainstorm}
             />
           </div>
           {/* Conditional Settings Interface */}

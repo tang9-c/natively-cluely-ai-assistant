@@ -1,8 +1,10 @@
 export interface Solution {
-  initial_thoughts: string[]
-  thought_steps: string[]
-  description: string
-  code: string
+  problem_identifier_script: string; // What to say to confirm understanding
+  brainstorm_script: string;         // What to say to compare approaches
+  code: string;                      // The actual code block
+  dry_run_script: string;            // What to say to trace the code
+  time_complexity: string;
+  space_complexity: string;
 }
 
 export interface SolutionsResponse {

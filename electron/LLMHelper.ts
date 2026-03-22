@@ -532,19 +532,32 @@ export class LLMHelper {
   }
 
   public async generateSolution(problemInfo: any) {
-    const prompt = `Given this problem or situation:\n${JSON.stringify(problemInfo, null, 2)}\n\nPlease provide your response in the following JSON format:\n{
-  "solution": {
-    "code": "The code or main answer here.",
-    "problem_statement": "Restate the problem or situation.",
-    "context": "Relevant background/context.",
-    "suggested_responses": ["First possible answer or action", "Second possible answer or action", "..."],
-    "reasoning": "Explanation of why these suggestions are appropriate."
-  }
-}\nImportant: Return ONLY the JSON object, without any markdown formatting or code blocks.`
+    const systemPrompt = `You are an elite FAANG Senior Software Engineer taking a live technical interview.
+The user has provided a problem statement. You must generate a highly structured "Rolling Interview Script" that the candidate can read out loud to pass the interview perfectly.
+
+Output EXACTLY this JSON structure, and nothing else (no markdown fences around the whole response):
+{
+  "problem_identifier_script": "1-2 conversational sentences confirming you understand the problem and its edge cases. Start with 'So just to make sure I understand...'",
+  "brainstorm_script": "3-4 conversational sentences. First, mention a naive/brute-force approach. Then, pivot to the optimal approach, mentioning data structures. End by asking the interviewer if you can proceed with the optimal approach. Keep it natural.",
+  "code": "The full, production-ready, heavily-commented optimal code solution. Include imports.",
+  "dry_run_script": "2-3 conversational sentences doing a quick dry-run of the code with a simple example input. (e.g., 'Let's trace this. If our array is [1,2], the loop starts...')",
+  "time_complexity": "O(...) with a 5-word explanation",
+  "space_complexity": "O(...) with a 5-word explanation"
+}
+
+CRITICAL RULES:
+- The scripts MUST sound like a human speaking out loud in an interview. Use "I", "we", "my first thought is".
+- The JSON must be perfectly valid. Escape quotes properly.
+`;
+
+    const prompt = `Here is the problem to solve:\n${JSON.stringify(problemInfo, null, 2)}\n\nGenerate the Rolling Interview Script JSON now.`
 
     try {
-      const text = await this.generateWithVisionFallback(IMAGE_ANALYSIS_PROMPT, prompt)
-      const parsed = JSON.parse(this.cleanJsonResponse(text))
+      const text = await this.generateWithVisionFallback(systemPrompt, prompt)
+      const cleaned = this.cleanJsonResponse(text)
+      // Extract JSON block if the model wrapped it in markdown fences
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+      const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : cleaned)
       return parsed
     } catch (error) {
       throw error;

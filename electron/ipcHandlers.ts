@@ -1521,6 +1521,128 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // CODE HINT: Review partially written code and return a short targeted hint
+  safeHandle("generate-code-hint", async () => {
+    try {
+      // Auto-capture a fresh screenshot so the AI always sees the user's CURRENT code,
+      // not a stale problem screenshot from an earlier ⌘H press.
+      // restoreFocus=false: the screenshot session hides/restores windows without stealing
+      // focus back to Natively, so the user stays in their code editor.
+      try {
+        await appState.takeScreenshot(false);
+      } catch (screenshotErr: any) {
+        console.warn('[IPC:generate-code-hint] Auto-screenshot failed (non-fatal):', screenshotErr.message);
+        // Continue — we'll still attempt the hint with whatever is already in the queue
+      }
+
+      const intelligenceManager = appState.getIntelligenceManager();
+      const imagePaths = appState.getScreenshotQueue();
+
+      // Source 1: problem statement from last Solve run (highest confidence)
+      const problemInfo = appState.getProblemInfo();
+      let problemStatement = problemInfo?.problem_statement?.trim() || undefined;
+
+      // Source 2: if no problemStatement but screenshots exist, extract on-demand.
+      // This handles the common case where the user presses ⌘6 without ever pressing
+      // ⌘↵ (Solve) — the code screenshot is present but the question was never extracted.
+      if (!problemStatement && imagePaths.length > 0) {
+        try {
+          const llmHelper = appState.processingHelper.getLLMHelper();
+          const imageResult = await llmHelper.analyzeImageFiles(imagePaths);
+          const extractedText = imageResult?.text?.trim();
+          // analyzeImageFiles never throws — it returns an error sentinel on failure.
+          // Guard: skip if it's the error message or implausibly short for a real question.
+          if (extractedText && extractedText.length > 30 && !extractedText.startsWith("I couldn't analyze")) {
+            problemStatement = extractedText;
+            // Cache in session so follow-up ⌘6 presses reuse this extraction
+            intelligenceManager.setCodingQuestion(problemStatement, 'screenshot');
+            console.log('[IPC:generate-code-hint] Extracted question from screenshots on-demand');
+          }
+        } catch (extractErr: any) {
+          console.warn('[IPC:generate-code-hint] On-demand screenshot extraction failed (non-fatal):', extractErr.message);
+        }
+      }
+
+      if (problemStatement) {
+        // Keep session in sync so a stale transcript question doesn't shadow a fresh screenshot one
+        intelligenceManager.setCodingQuestion(problemStatement, 'screenshot');
+      }
+
+      const hint = await intelligenceManager.runCodeHint(
+        imagePaths.length > 0 ? imagePaths : undefined,
+        problemStatement
+      );
+      return { hint };
+    } catch (error: any) {
+      return { hint: null, error: error.message };
+    }
+  });
+
+  // Expose detected question so the UI can show "Question: Two Sum (from transcript)"
+  safeHandle("get-detected-question", () => {
+    const intelligenceManager = appState.getIntelligenceManager();
+    return intelligenceManager.getDetectedCodingQuestion();
+  });
+
+  // Allow manual override (e.g. user types/pastes the question)
+  safeHandle("set-coding-question", (_event, question: string) => {
+    const intelligenceManager = appState.getIntelligenceManager();
+    intelligenceManager.setCodingQuestion(question, 'screenshot'); // treat manual as authoritative
+    return { success: true };
+  });
+
+  // BRAINSTORM: Generate "thinking out loud" approaches with bolded complexities
+  safeHandle("generate-brainstorm", async () => {
+    try {
+      // Auto-capture fresh screenshot so the LLM sees the current problem/code state
+      try {
+        await appState.takeScreenshot(false);
+      } catch (screenshotErr: any) {
+        console.warn('[IPC:generate-brainstorm] Auto-screenshot failed (non-fatal):', screenshotErr.message);
+      }
+
+      const intelligenceManager = appState.getIntelligenceManager();
+      const imagePaths = appState.getScreenshotQueue();
+
+      // Pull problem statement from screenshot extraction (same as code-hint)
+      const problemInfo = appState.getProblemInfo();
+      const problemStatement = problemInfo?.problem_statement?.trim() || undefined;
+
+      if (problemStatement) {
+        intelligenceManager.setCodingQuestion(problemStatement, 'screenshot');
+      }
+
+      const brainstorm = await intelligenceManager.runBrainstorm(
+        imagePaths.length > 0 ? imagePaths : undefined,
+        problemStatement
+      );
+      return { brainstorm };
+    } catch (error: any) {
+      return { brainstorm: null, error: error.message };
+    }
+  });
+
+  // ACTION BUTTON MODE: get/set whether Cmd+4 fires Recap or Brainstorm
+  safeHandle("get-action-button-mode", () => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const mode = SettingsManager.getInstance().get('actionButtonMode') ?? 'recap';
+    return mode;
+  });
+
+  safeHandle("set-action-button-mode", (_event: any, mode: 'recap' | 'brainstorm') => {
+    if (mode !== 'recap' && mode !== 'brainstorm') {
+      return { success: false, error: 'Invalid mode' };
+    }
+    const { SettingsManager } = require('./services/SettingsManager');
+    SettingsManager.getInstance().set('actionButtonMode', mode);
+    BrowserWindow.getAllWindows().forEach(win => {
+      if (!win.isDestroyed()) {
+        win.webContents.send('action-button-mode-changed', mode);
+      }
+    });
+    return { success: true };
+  });
+
   // MODE 3: Follow-Up (Refinement)
   safeHandle("generate-follow-up", async (_, intent: string, userRequest?: string) => {
     try {
@@ -1538,6 +1660,17 @@ export function initializeIpcHandlers(appState: AppState): void {
       const intelligenceManager = appState.getIntelligenceManager();
       const summary = await intelligenceManager.runRecap();
       return { summary };
+    } catch (error: any) {
+      throw error;
+    }
+  });
+
+  // MODE 5: Clarify (Ask interviewer)
+  safeHandle("generate-clarify", async () => {
+    try {
+      const intelligenceManager = appState.getIntelligenceManager();
+      const clarification = await intelligenceManager.runClarify();
+      return { clarification };
     } catch (error: any) {
       throw error;
     }

@@ -4,10 +4,13 @@ import { acceleratorToKeys, keysToAccelerator } from '../utils/keyboardUtils';
 // Define the shape of our shortcuts configuration
 export interface ShortcutConfig {
     whatToAnswer: string[];
-    shorten: string[];
+    autoAnswerMode: string[];
+    clarify: string[];
     followUp: string[];
-    recap: string[];
+    dynamicAction4: string[];
     answer: string[];
+    codeHint: string[];
+    brainstorm: string[];
     scrollUp: string[];
     scrollDown: string[];
     // Window Movement
@@ -18,6 +21,7 @@ export interface ShortcutConfig {
     // General
     toggleVisibility: string[];
     processScreenshots: string[];
+    captureAndProcess: string[];
     resetCancel: string[];
     takeScreenshot: string[];
     selectiveScreenshot: string[];
@@ -25,18 +29,22 @@ export interface ShortcutConfig {
 
 export const DEFAULT_SHORTCUTS: ShortcutConfig = {
     whatToAnswer: ['⌘', '1'],
-    shorten: ['⌘', '2'],
+    autoAnswerMode: ['Command', 'f'],
+    clarify: ['Command', '2'],
     followUp: ['⌘', '3'],
-    recap: ['⌘', '4'],
+    dynamicAction4: ['⌘', '4'],
     answer: ['⌘', '5'],
+    codeHint: ['⌘', '6'],
+    brainstorm: ['⌘', '7'],
     scrollUp: ['↑'],
     scrollDown: ['↓'],
-    moveWindowUp: ['⌘', '↑'],
-    moveWindowDown: ['⌘', '↓'],
-    moveWindowLeft: ['⌘', '←'],
-    moveWindowRight: ['⌘', '→'],
+    moveWindowUp: ['⌘', 'Shift', '↑'],
+    moveWindowDown: ['⌘', 'Shift', '↓'],
+    moveWindowLeft: ['⌘', 'Shift', '←'],
+    moveWindowRight: ['⌘', 'Shift', '→'],
     toggleVisibility: ['⌘', 'B'],
     processScreenshots: ['⌘', 'Enter'],
+    captureAndProcess: ['⌘', 'Shift', 'Enter'],
     resetCancel: ['⌘', 'R'],
     takeScreenshot: ['⌘', 'H'],
     selectiveScreenshot: ['⌘', 'Shift', 'H']
@@ -56,12 +64,16 @@ export const useShortcuts = () => {
 
                 // Map backend IDs to frontend keys
                 if (kb.id === 'chat:whatToAnswer') newShortcuts.whatToAnswer = keys;
-                else if (kb.id === 'chat:shorten') newShortcuts.shorten = keys;
-                else if (kb.id === 'chat:followUp') newShortcuts.followUp = keys;
-                else if (kb.id === 'chat:recap') newShortcuts.recap = keys;
+                else if (kb.id === 'app:toggle-global-overlay') newShortcuts.toggleGlobalOverlay = keys;
+                else if (kb.id === 'chat:followup') newShortcuts.followUp = keys;
+                else if (kb.id === 'chat:clarify') newShortcuts.clarify = keys;
+                else if (kb.id === 'chat:dynamicAction4') newShortcuts.dynamicAction4 = keys;
                 else if (kb.id === 'chat:answer') newShortcuts.answer = keys;
+                else if (kb.id === 'chat:codeHint') newShortcuts.codeHint = keys;
+                else if (kb.id === 'chat:brainstorm') newShortcuts.brainstorm = keys;
                 else if (kb.id === 'chat:scrollUp') newShortcuts.scrollUp = keys;
                 else if (kb.id === 'chat:scrollDown') newShortcuts.scrollDown = keys;
+                else if (kb.id === 'chat:auto-answer-mode') newShortcuts.autoAnswerMode = keys;
                 // Window
                 else if (kb.id === 'window:move-up') newShortcuts.moveWindowUp = keys;
                 else if (kb.id === 'window:move-down') newShortcuts.moveWindowDown = keys;
@@ -70,6 +82,7 @@ export const useShortcuts = () => {
                 // General
                 else if (kb.id === 'general:toggle-visibility') newShortcuts.toggleVisibility = keys;
                 else if (kb.id === 'general:process-screenshots') newShortcuts.processScreenshots = keys;
+                else if (kb.id === 'general:capture-and-process') newShortcuts.captureAndProcess = keys;
                 else if (kb.id === 'general:reset-cancel') newShortcuts.resetCancel = keys;
                 else if (kb.id === 'general:take-screenshot') newShortcuts.takeScreenshot = keys;
                 else if (kb.id === 'general:selective-screenshot') newShortcuts.selectiveScreenshot = keys;
@@ -109,31 +122,37 @@ export const useShortcuts = () => {
         let backendId = '';
 
         // Map frontend key back to backend ID
-        if (actionId === 'whatToAnswer') backendId = 'chat:whatToAnswer';
-        else if (actionId === 'shorten') backendId = 'chat:shorten';
-        else if (actionId === 'followUp') backendId = 'chat:followUp';
-        else if (actionId === 'recap') backendId = 'chat:recap';
-        else if (actionId === 'answer') backendId = 'chat:answer';
-        else if (actionId === 'scrollUp') backendId = 'chat:scrollUp';
-        else if (actionId === 'scrollDown') backendId = 'chat:scrollDown';
-        // Window
-        else if (actionId === 'moveWindowUp') backendId = 'window:move-up';
-        else if (actionId === 'moveWindowDown') backendId = 'window:move-down';
-        else if (actionId === 'moveWindowLeft') backendId = 'window:move-left';
-        else if (actionId === 'moveWindowRight') backendId = 'window:move-right';
-        // General
-        else if (actionId === 'toggleVisibility') backendId = 'general:toggle-visibility';
-        else if (actionId === 'processScreenshots') backendId = 'general:process-screenshots';
-        else if (actionId === 'resetCancel') backendId = 'general:reset-cancel';
-        else if (actionId === 'takeScreenshot') backendId = 'general:take-screenshot';
-        else if (actionId === 'selectiveScreenshot') backendId = 'general:selective-screenshot';
+        switch (actionId) {
+            case 'whatToAnswer': backendId = 'chat:whatToAnswer'; break;
+            case 'autoAnswerMode': backendId = 'chat:auto-answer-mode'; break;
+            case 'clarify': backendId = 'chat:clarify'; break;
+            case 'followUp': backendId = 'chat:followup'; break;
+            case 'dynamicAction4': backendId = 'chat:dynamicAction4'; break;
+            case 'answer': backendId = 'chat:answer'; break;
+            case 'codeHint': backendId = 'chat:codeHint'; break;
+            case 'brainstorm': backendId = 'chat:brainstorm'; break;
+            case 'scrollUp': backendId = 'chat:scrollUp'; break;
+            case 'scrollDown': backendId = 'chat:scrollDown'; break;
+            // Window
+            case 'moveWindowUp': backendId = 'window:move-up'; break;
+            case 'moveWindowDown': backendId = 'window:move-down'; break;
+            case 'moveWindowLeft': backendId = 'window:move-left'; break;
+            case 'moveWindowRight': backendId = 'window:move-right'; break;
+            // General
+            case 'toggleVisibility': backendId = 'general:toggle-visibility'; break;
+            case 'processScreenshots': backendId = 'general:process-screenshots'; break;
+            case 'captureAndProcess': backendId = 'general:capture-and-process'; break;
+            case 'resetCancel': backendId = 'general:reset-cancel'; break;
+            case 'takeScreenshot': backendId = 'general:take-screenshot'; break;
+            case 'selectiveScreenshot': backendId = 'general:selective-screenshot'; break;
+            default: break;
+        }
 
         if (backendId) {
             try {
                 await window.electronAPI.setKeybind(backendId, accelerator);
             } catch (error) {
                 console.error(`Failed to set keybind for ${actionId}:`, error);
-                // Revert optimistic update if needed? For now, we rely on the next update from backend or refresh.
             }
         }
     }, []);

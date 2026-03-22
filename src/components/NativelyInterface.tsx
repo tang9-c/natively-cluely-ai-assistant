@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import {
     Sparkles,
     Pencil,
     MessageSquare,
     RefreshCw,
+    GitBranch,
     Settings,
     ArrowUp,
     ArrowRight,
@@ -27,7 +28,7 @@ import {
     Copy,
     Check
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 // import { ModelSelector } from './ui/ModelSelector'; // REMOVED
@@ -111,10 +112,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const isMotionAnimatingRef = useRef(false);
+    const rafDimUpdateRef = useRef<number | null>(null);
+    const codeExpandedRef = useRef(false);
     // const settingsButtonRef = useRef<HTMLButtonElement>(null);
 
     // Latent Context State (Screenshots attached but not sent)
     const [attachedContext, setAttachedContext] = useState<Array<{ path: string, preview: string }>>([]);
+
+    // Action Button Mode — 'recap' (meeting) or 'brainstorm' (coding interview)
+    const [actionButtonMode, setActionButtonMode] = useState<'recap' | 'brainstorm'>('recap');
 
     // Settings State with Persistence
     const [isUndetectable, setIsUndetectable] = useState(false);
@@ -195,26 +202,37 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
     }, [isUndetectable, hideChatHidesWidget]);
 
     // Auto-resize Window
+    // rAF-debounced so Framer Motion's 60fps spring never floods the Electron main
+    // process with setBounds calls. During the expand animation the flag is set and
+    // the observer is fully suppressed; the OS window is pre-sized before the spring
+    // starts. During contraction the flag is clear so the observer follows the spring.
     useLayoutEffect(() => {
         if (!contentRef.current) return;
 
-        const observer = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                // Use getBoundingClientRect to get the exact rendered size including padding
-                const rect = entry.target.getBoundingClientRect();
+        const flush = () => {
+            rafDimUpdateRef.current = null;
+            if (!contentRef.current) return;
+            const rect = contentRef.current.getBoundingClientRect();
+            window.electronAPI?.updateContentDimensions({
+                width: Math.ceil(rect.width),
+                height: Math.ceil(rect.height)
+            });
+        };
 
-                // Send exact dimensions to Electron
-                // Removed buffer to ensure tight fit
-                console.log('[NativelyInterface] ResizeObserver:', Math.ceil(rect.width), Math.ceil(rect.height));
-                window.electronAPI?.updateContentDimensions({
-                    width: Math.ceil(rect.width),
-                    height: Math.ceil(rect.height)
-                });
-            }
+        const observer = new ResizeObserver(() => {
+            if (isMotionAnimatingRef.current) return;
+            if (rafDimUpdateRef.current) cancelAnimationFrame(rafDimUpdateRef.current);
+            rafDimUpdateRef.current = requestAnimationFrame(flush);
         });
 
         observer.observe(contentRef.current);
-        return () => observer.disconnect();
+        return () => {
+            observer.disconnect();
+            if (rafDimUpdateRef.current) {
+                cancelAnimationFrame(rafDimUpdateRef.current);
+                rafDimUpdateRef.current = null;
+            }
+        };
     }, []);
 
     // Force resize when attachedContext changes (screenshots added/removed)
@@ -244,6 +262,80 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         }, 600);
         return () => clearTimeout(timer);
     }, []);
+
+    // ── Code-expansion ──────────────────────────────────────────────────────
+    // All animation state lives in motion values — zero React re-renders per frame.
+    // Spring physics: snappy like Apple's system animations (fast settle, slight overshoot).
+    const shellWidth = useMotionValue(600);
+    const animatedShellWidth = useSpring(shellWidth, { stiffness: 400, damping: 38, mass: 0.8 });
+    // Scroll container max-height tracks the spring directly — no className toggling.
+    const scrollMaxH = useTransform(animatedShellWidth, [600, 780], [450, 585]);
+
+    // IPC helper — sends OS window dimensions exactly once per transition.
+    // Called before the spring starts (expand) or after it settles (contract).
+    const syncOSWindow = useCallback((targetWidth: number) => {
+        if (!contentRef.current) return;
+        const h = Math.ceil(contentRef.current.getBoundingClientRect().height);
+        window.electronAPI?.updateContentDimensions({ width: targetWidth, height: h });
+    }, []);
+
+    // Scan [data-code-msg] elements and check if any intersect the scroll container
+    // viewport. Called on every scroll event and after every messages update.
+    const checkCodeVisibility = useCallback(() => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        const codeEls = container.querySelectorAll('[data-code-msg]');
+        let visible = false;
+        if (codeEls.length > 0) {
+            const cRect = container.getBoundingClientRect();
+            for (const el of codeEls) {
+                const r = el.getBoundingClientRect();
+                if (r.bottom > cRect.top && r.top < cRect.bottom) { visible = true; break; }
+            }
+        }
+        if (visible !== codeExpandedRef.current) {
+            codeExpandedRef.current = visible;
+            isMotionAnimatingRef.current = true;
+
+            if (visible) {
+                // Expanding: pre-size the OS window to the target NOW so the spring
+                // animates freely inside an already-correct-sized window.
+                // Zero per-frame setBounds calls during the animation.
+                syncOSWindow(780);
+                shellWidth.set(780);
+            } else {
+                // Contracting: let the spring animate first, then shrink the OS window
+                // after it settles. OS window stays at 780 during animation (transparent
+                // overflow is invisible on a fully-transparent overlay).
+                shellWidth.set(600);
+            }
+
+            // Clear the animation flag and sync final OS dimensions after spring settles.
+            setTimeout(() => {
+                isMotionAnimatingRef.current = false;
+                syncOSWindow(visible ? 780 : 600);
+            }, 700);
+        }
+    }, [shellWidth, syncOSWindow]);
+
+    // Re-check after every messages update (catches mid-stream code fences).
+    // Defer one rAF so the DOM reflects the latest text before we query it.
+    useEffect(() => {
+        const raf = requestAnimationFrame(() => checkCodeVisibility());
+        return () => cancelAnimationFrame(raf);
+    }, [messages, checkCodeVisibility]);
+
+    // Re-attach scroll listener whenever messages change — the scroll container
+    // is conditionally rendered so scrollContainerRef.current is null at mount.
+    // Depending on `messages` guarantees the listener is added as soon as the
+    // container exists and stays fresh through every message update.
+    useEffect(() => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        container.addEventListener('scroll', checkCodeVisibility, { passive: true });
+        return () => container.removeEventListener('scroll', checkCodeVisibility);
+    }, [messages, checkCodeVisibility]);
+    // ────────────────────────────────────────────────────────────────────────
 
     // Auto-scroll
     useEffect(() => {
@@ -303,6 +395,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
             isStealthRef.current = true;
             setIsExpanded(true);
         });
+        return () => unsubscribe();
+    }, []);
+
+    // Load action button mode (recap vs brainstorm) and subscribe to changes
+    useEffect(() => {
+        window.electronAPI.getActionButtonMode?.()?.then(setActionButtonMode).catch(() => {});
+        if (!window.electronAPI.onActionButtonModeChanged) return;
+        const unsubscribe = window.electronAPI.onActionButtonModeChanged(setActionButtonMode);
         return () => unsubscribe();
     }, []);
 
@@ -503,7 +603,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                     };
                     return updated;
                 }
-                // New stream start (e.g. user clicked Shorten)
+                // New stream start (e.g. user clicked Clarify)
                 return [...prev, {
                     id: Date.now().toString(),
                     role: 'system',
@@ -576,6 +676,50 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
                     role: 'system',
                     text: data.summary,
                     intent: 'recap'
+                }];
+            });
+        }));
+
+        // STREAMING: Clarify
+        cleanups.push(window.electronAPI.onIntelligenceClarifyToken((data) => {
+            setMessages(prev => {
+                const lastMsg = prev[prev.length - 1];
+                if (lastMsg && lastMsg.isStreaming && lastMsg.intent === 'clarify') {
+                    const updated = [...prev];
+                    updated[prev.length - 1] = {
+                        ...lastMsg,
+                        text: lastMsg.text + data.token
+                    };
+                    return updated;
+                }
+                return [...prev, {
+                    id: Date.now().toString(),
+                    role: 'system',
+                    text: data.token,
+                    intent: 'clarify',
+                    isStreaming: true
+                }];
+            });
+        }));
+
+        cleanups.push(window.electronAPI.onIntelligenceClarify((data) => {
+            setIsProcessing(false);
+            setMessages(prev => {
+                const lastMsg = prev[prev.length - 1];
+                if (lastMsg && lastMsg.isStreaming && lastMsg.intent === 'clarify') {
+                    const updated = [...prev];
+                    updated[prev.length - 1] = {
+                        ...lastMsg,
+                        text: data.clarification,
+                        isStreaming: false
+                    };
+                    return updated;
+                }
+                return [...prev, {
+                    id: Date.now().toString(),
+                    role: 'system',
+                    text: data.clarification,
+                    intent: 'clarify'
                 }];
             });
         }));
@@ -706,6 +850,42 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
         }
     };
 
+    const handleCodeHint = async () => {
+        setIsExpanded(true);
+        setIsProcessing(true);
+        analytics.trackCommandExecuted('code_hint');
+
+        try {
+            await window.electronAPI.generateCodeHint();
+        } catch (err) {
+            setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                role: 'system',
+                text: `Error: ${err}`
+            }]);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleBrainstorm = async () => {
+        setIsExpanded(true);
+        setIsProcessing(true);
+        analytics.trackCommandExecuted('brainstorm');
+
+        try {
+            await window.electronAPI.generateBrainstorm();
+        } catch (err) {
+            setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                role: 'system',
+                text: `Error: ${err}`
+            }]);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
     const handleFollowUp = async (intent: string = 'rephrase') => {
         setIsExpanded(true);
         setIsProcessing(true);
@@ -731,6 +911,33 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({ onEndMeeting, ove
 
         try {
             await window.electronAPI.generateRecap();
+        } catch (err) {
+            setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                role: 'system',
+                text: `Error: ${err}`
+            }]);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    // Cmd+4 dynamic action — delegates to Recap or Brainstorm based on actionButtonMode
+    const handleDynamicAction4 = async () => {
+        if (actionButtonMode === 'brainstorm') {
+            await handleBrainstorm();
+        } else {
+            await handleRecap();
+        }
+    };
+
+    const handleClarify = async () => {
+        setIsExpanded(true);
+        setIsProcessing(true);
+        analytics.trackCommandExecuted('clarify');
+
+        try {
+            await window.electronAPI.generateClarify();
         } catch (err) {
             setMessages(prev => [...prev, {
                 id: Date.now().toString(),
@@ -1134,7 +1341,6 @@ Provide only the answer, nothing else.`;
             return (
                 <NegotiationCoachingCard
                     {...msg.negotiationCoachingData}
-                    phase={msg.negotiationCoachingData.phase as any}
                     onSilenceTimerEnd={() => {
                         setMessages(prev => prev.map(m =>
                             m.id === msg.id
@@ -1227,13 +1433,13 @@ Provide only the answer, nothing else.`;
             );
         }
 
-        // Custom Styled Labels (Shorten, Recap, Follow-up) - also use Markdown for content
-        if (msg.intent === 'shorten') {
+        // Custom Styled Labels (Clarify, Recap, Follow-up) - also use Markdown for content
+        if (msg.intent === 'clarify') {
             return (
                 <div className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`} style={appearance.subtleStyle}>
                     <div className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-cyan-700' : 'text-cyan-300'}`}>
                         <MessageSquare className="w-3.5 h-3.5" />
-                        <span>Shortened</span>
+                        <span>Clarification</span>
                     </div>
                     <div className={`text-[13px] leading-relaxed markdown-content ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}>
                         <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{
@@ -1404,7 +1610,11 @@ Provide only the answer, nothing else.`;
     // We use a ref to hold the latest handlers to avoid re-binding the event listener on every render
     const handlersRef = useRef({
         handleWhatToSay,
+        handleCodeHint,
+        handleBrainstorm,
+        handleDynamicAction4,
         handleFollowUp,
+        handleClarify,
         handleFollowUpQuestions,
         handleRecap,
         handleAnswerNow
@@ -1413,7 +1623,11 @@ Provide only the answer, nothing else.`;
     // Update ref on every render so the event listener always access latest state/props
     handlersRef.current = {
         handleWhatToSay,
+        handleCodeHint,
+        handleBrainstorm,
+        handleDynamicAction4,
         handleFollowUp,
+        handleClarify,
         handleFollowUpQuestions,
         handleRecap,
         handleAnswerNow
@@ -1421,24 +1635,30 @@ Provide only the answer, nothing else.`;
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            const { handleWhatToSay, handleFollowUp, handleFollowUpQuestions, handleRecap, handleAnswerNow } = handlersRef.current;
+            const { handleWhatToSay, handleCodeHint, handleBrainstorm, handleDynamicAction4, handleFollowUp, handleClarify, handleFollowUpQuestions, handleAnswerNow } = handlersRef.current;
 
             // Chat Shortcuts (Scope: Local to Chat/Overlay usually, but we allow them here if focused)
             if (isShortcutPressed(e, 'whatToAnswer')) {
                 e.preventDefault();
                 handleWhatToSay();
-            } else if (isShortcutPressed(e, 'shorten')) {
+            } else if (isShortcutPressed(e, 'clarify')) {
                 e.preventDefault();
-                handleFollowUp('shorten');
+                handleClarify();
             } else if (isShortcutPressed(e, 'followUp')) {
                 e.preventDefault();
                 handleFollowUpQuestions();
-            } else if (isShortcutPressed(e, 'recap')) {
+            } else if (isShortcutPressed(e, 'dynamicAction4')) {
                 e.preventDefault();
-                handleRecap();
+                handleDynamicAction4();
             } else if (isShortcutPressed(e, 'answer')) {
                 e.preventDefault();
                 handleAnswerNow();
+            } else if (isShortcutPressed(e, 'codeHint')) {
+                e.preventDefault();
+                handleCodeHint();
+            } else if (isShortcutPressed(e, 'brainstorm')) {
+                e.preventDefault();
+                handleBrainstorm();
             } else if (isShortcutPressed(e, 'scrollUp')) {
                 e.preventDefault();
                 scrollContainerRef.current?.scrollBy({ top: -100, behavior: 'smooth' });
@@ -1485,7 +1705,9 @@ Provide only the answer, nothing else.`;
                     handleScreenshotAttach(data as { path: string; preview: string });
                 }
             } catch (err) {
-                console.error("Error triggering screenshot:", err);
+                if (!(err instanceof Error) || err.message !== "Screenshot capture already in progress") {
+                    console.error("Error triggering screenshot:", err);
+                }
             }
         },
         selectiveScreenshot: async () => {
@@ -1495,7 +1717,9 @@ Provide only the answer, nothing else.`;
                     handleScreenshotAttach(data as { path: string; preview: string });
                 }
             } catch (err) {
-                console.error("Error triggering selective screenshot:", err);
+                if (!(err instanceof Error) || err.message !== "Screenshot capture already in progress") {
+                    console.error("Error triggering selective screenshot:", err);
+                }
             }
         }
     });
@@ -1521,7 +1745,9 @@ Provide only the answer, nothing else.`;
                     handleScreenshotAttach(data as { path: string; preview: string });
                 }
             } catch (err) {
-                console.error("Error triggering screenshot:", err);
+                if (!(err instanceof Error) || err.message !== "Screenshot capture already in progress") {
+                    console.error("Error triggering screenshot:", err);
+                }
             }
         },
         selectiveScreenshot: async () => {
@@ -1531,7 +1757,9 @@ Provide only the answer, nothing else.`;
                     handleScreenshotAttach(data as { path: string; preview: string });
                 }
             } catch (err) {
-                console.error("Error triggering selective screenshot:", err);
+                if (!(err instanceof Error) || err.message !== "Screenshot capture already in progress") {
+                    console.error("Error triggering selective screenshot:", err);
+                }
             }
         }
     };
@@ -1599,9 +1827,11 @@ Provide only the answer, nothing else.`;
             isStealthRef.current = true;
 
             if (action === 'whatToAnswer') handlers.handleWhatToSay();
-            else if (action === 'shorten') handlers.handleFollowUp('shorten');
+            else if (action === 'codeHint') handlers.handleCodeHint();
+            else if (action === 'brainstorm') handlers.handleBrainstorm();
+            else if (action === 'dynamicAction4') handlers.handleDynamicAction4();
+            else if (action === 'clarify') handlers.handleClarify();
             else if (action === 'followUp') handlers.handleFollowUpQuestions();
-            else if (action === 'recap') handlers.handleRecap();
             else if (action === 'answer') handlers.handleAnswerNow();
             else if (action === 'scrollUp') scrollContainerRef.current?.scrollBy({ top: -100, behavior: 'smooth' });
             else if (action === 'scrollDown') scrollContainerRef.current?.scrollBy({ top: 100, behavior: 'smooth' });
@@ -1633,9 +1863,9 @@ Provide only the answer, nothing else.`;
                             appearance={appearance}
                             onLogoClick={() => window.electronAPI?.setWindowMode?.('launcher')}
                         />
-                        <div
-                            className={`relative w-[600px] max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}
-                            style={appearance.shellStyle}
+                        <motion.div
+                            className={`relative max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}
+                            style={{ ...appearance.shellStyle, width: animatedShellWidth, willChange: 'transform', transform: 'translateZ(0)' }}
                         >
 
 
@@ -1652,11 +1882,15 @@ Provide only the answer, nothing else.`;
 
                             {/* Chat History - Only show if there are messages OR active states */}
                             {(messages.length > 0 || isManualRecording || isProcessing) && (
-                                <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[clamp(300px,35vh,450px)] no-drag" style={{ scrollbarWidth: 'none' }}>
+                                <motion.div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 no-drag" style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH }}>
                                     {messages.map((msg) => (
-                                        <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
+                                        <div
+                                            key={msg.id}
+                                            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}
+                                            {...(msg.role === 'system' && msg.text.includes('```') ? { 'data-code-msg': 'true' } : {})}
+                                        >
                                             <div className={`
-                      ${msg.role === 'user' ? 'max-w-[72.25%] px-[13.6px] py-[10.2px]' : 'max-w-[85%] px-4 py-3'} text-[14px] leading-relaxed relative group whitespace-pre-wrap
+                      ${msg.role === 'user' ? 'max-w-[90%] px-[13.6px] py-[10.2px]' : 'max-w-[90%] px-4 py-3'} text-[14px] leading-relaxed relative group whitespace-pre-wrap
                       ${msg.role === 'user'
                                                     ? (isLightTheme
                                                         ? 'bg-blue-500/10 backdrop-blur-md border border-blue-500/20 text-blue-900 rounded-[20px] rounded-tr-[4px] shadow-sm font-medium'
@@ -1704,7 +1938,7 @@ Provide only the answer, nothing else.`;
                                         <div className="flex flex-col items-end gap-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
                                             {/* Live transcription preview */}
                                             {(manualTranscript || voiceInput) && (
-                                                <div className="max-w-[85%] px-3.5 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-[18px] rounded-tr-[4px]">
+                                                <div className="max-w-[90%] px-3.5 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-[18px] rounded-tr-[4px]">
                                                     <span className="text-[13px] text-emerald-300">
                                                         {voiceInput}{voiceInput && manualTranscript ? ' ' : ''}{manualTranscript}
                                                     </span>
@@ -1729,7 +1963,7 @@ Provide only the answer, nothing else.`;
                                         </div>
                                     )}
                                     <div ref={messagesEndRef} />
-                                </div>
+                                </motion.div>
                             )}
 
                             {/* Quick Actions - Minimal & Clean */}
@@ -1737,11 +1971,14 @@ Provide only the answer, nothing else.`;
                                 <button onClick={handleWhatToSay} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
                                     <Pencil className="w-3 h-3 opacity-70" /> What to answer?
                                 </button>
-                                <button onClick={() => handleFollowUp('shorten')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    <MessageSquare className="w-3 h-3 opacity-70" /> Shorten
+                                <button onClick={handleClarify} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
+                                    <MessageSquare className="w-3 h-3 opacity-70" /> Clarify
                                 </button>
-                                <button onClick={handleRecap} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
-                                    <RefreshCw className="w-3 h-3 opacity-70" /> Recap
+                                <button onClick={handleDynamicAction4} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
+                                    {actionButtonMode === 'brainstorm'
+                                        ? <><GitBranch className="w-3 h-3 opacity-70" /> Brainstorm</>
+                                        : <><RefreshCw className="w-3 h-3 opacity-70" /> Recap</>
+                                    }
                                 </button>
                                 <button onClick={handleFollowUpQuestions} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`} style={appearance.chipStyle}>
                                     <HelpCircle className="w-3 h-3 opacity-70" /> Follow Up Question
@@ -1941,7 +2178,7 @@ Provide only the answer, nothing else.`;
                                     </button>
                                 </div>
                             </div>
-                        </div>
+                        </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>

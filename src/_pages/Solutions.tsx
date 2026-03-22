@@ -12,12 +12,70 @@ import {
   ToastTitle,
   ToastVariant
 } from "../components/ui/toast"
-import { ProblemStatementData } from "../types/solutions"
+import { ProblemStatementData, Solution } from "../types/solutions"
 import { AudioResult } from "../types/audio"
 import SolutionCommands from "../components/Solutions/SolutionCommands"
 import Debug from "./Debug"
 
 // (Using global ElectronAPI type from src/types/electron.d.ts)
+
+// ── Phase card for spoken scripts ─────────────────────────────────────────────
+
+const PhaseCard = ({
+  phase,
+  label,
+  icon,
+  accentClass,
+  children,
+  isLoading
+}: {
+  phase: number
+  label: string
+  icon: string
+  accentClass: string
+  children?: React.ReactNode
+  isLoading: boolean
+}) => (
+  <div className={`rounded-lg border ${accentClass} overflow-hidden`}>
+    <div className={`flex items-center gap-2 px-3 py-2 border-b ${accentClass}`}>
+      <span className="text-base">{icon}</span>
+      <span className="text-[11px] font-semibold uppercase tracking-widest text-white/50">
+        Phase {phase}
+      </span>
+      <span className="text-[11px] font-bold text-white/80 ml-1">{label}</span>
+    </div>
+    <div className="px-4 py-3">
+      {isLoading ? (
+        <p className="text-xs bg-gradient-to-r from-gray-300 via-gray-100 to-gray-300 bg-clip-text text-transparent animate-pulse">
+          Drafting interview script...
+        </p>
+      ) : (
+        children
+      )}
+    </div>
+  </div>
+)
+
+// ── Spoken script text — what the user reads aloud ────────────────────────────
+
+const SpokenScript = ({ text }: { text: string }) => (
+  <p className="text-[14px] leading-[1.65] text-white/90 italic font-light tracking-wide">
+    &ldquo;{text}&rdquo;
+  </p>
+)
+
+// ── Complexity pill ───────────────────────────────────────────────────────────
+
+const ComplexityPill = ({ label, value }: { label: string; value: string }) => (
+  <div className="flex items-center gap-2">
+    <span className="text-[11px] font-semibold text-white/40 uppercase tracking-wider">
+      {label}
+    </span>
+    <span className="text-[13px] font-mono text-emerald-300">{value}</span>
+  </div>
+)
+
+// ── Legacy components still used for non-coding views ─────────────────────────
 
 export const ContentSection = ({
   title,
@@ -45,48 +103,6 @@ export const ContentSection = ({
     )}
   </div>
 )
-const SolutionSection = ({
-  title,
-  content,
-  isLoading
-}: {
-  title: string
-  content: React.ReactNode
-  isLoading: boolean
-}) => (
-  <div className="space-y-2">
-    <h2 className="text-[13px] font-medium text-white tracking-wide">
-      {title}
-    </h2>
-    {isLoading ? (
-      <div className="space-y-1.5">
-        <div className="mt-4 flex">
-          <p className="text-xs bg-gradient-to-r from-gray-300 via-gray-100 to-gray-300 bg-clip-text text-transparent animate-pulse">
-            Loading solutions...
-          </p>
-        </div>
-      </div>
-    ) : (
-      <div className="w-full">
-        <SyntaxHighlighter
-          showLineNumbers
-          language="python"
-          style={dracula}
-          customStyle={{
-            maxWidth: "100%",
-            margin: 0,
-            padding: "1rem",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-all"
-          }}
-          wrapLongLines={true}
-        >
-          {content as string}
-        </SyntaxHighlighter>
-      </div>
-    )}
-  </div>
-)
 
 export const ComplexitySection = ({
   timeComplexity,
@@ -99,7 +115,7 @@ export const ComplexitySection = ({
 }) => (
   <div className="space-y-2">
     <h2 className="text-[13px] font-medium text-white tracking-wide">
-      Complexity (Updated)
+      Complexity
     </h2>
     {isLoading ? (
       <p className="text-xs bg-gradient-to-r from-gray-300 via-gray-100 to-gray-300 bg-clip-text text-transparent animate-pulse">
@@ -124,29 +140,25 @@ export const ComplexitySection = ({
   </div>
 )
 
+// ── Main component ─────────────────────────────────────────────────────────────
+
 interface SolutionsProps {
   setView: React.Dispatch<React.SetStateAction<"queue" | "solutions" | "debug">>
 }
+
 const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
   const queryClient = useQueryClient()
   const contentRef = useRef<HTMLDivElement>(null)
 
-  // Audio recording state
   const [audioRecording, setAudioRecording] = useState(false)
   const [audioResult, setAudioResult] = useState<AudioResult | null>(null)
 
   const [debugProcessing, setDebugProcessing] = useState(false)
   const [problemStatementData, setProblemStatementData] =
     useState<ProblemStatementData | null>(null)
-  const [solutionData, setSolutionData] = useState<string | null>(null)
-  const [thoughtsData, setThoughtsData] = useState<string[] | null>(null)
-  const [timeComplexityData, setTimeComplexityData] = useState<string | null>(
-    null
-  )
-  const [spaceComplexityData, setSpaceComplexityData] = useState<string | null>(
-    null
-  )
-  const [customContent, setCustomContent] = useState<string | null>(null)
+
+  // Single solution state using the new Solution type
+  const [solutionData, setSolutionData] = useState<Solution | null>(null)
 
   const [toastOpen, setToastOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState<ToastMessage>({
@@ -157,45 +169,32 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 
   const [isTooltipVisible, setIsTooltipVisible] = useState(false)
   const [tooltipHeight, setTooltipHeight] = useState(0)
-
   const [isResetting, setIsResetting] = useState(false)
 
   const { data: extraScreenshots = [], refetch } = useQuery<Array<{ path: string; preview: string }>, Error>(
     ["extras"],
     async () => {
       try {
-        const existing = await window.electronAPI.getScreenshots()
-        return existing
+        return await window.electronAPI.getScreenshots()
       } catch (error) {
         console.error("Error loading extra screenshots:", error)
         return []
       }
     },
-    {
-      staleTime: Infinity,
-      cacheTime: Infinity
-    }
+    { staleTime: Infinity, cacheTime: Infinity }
   )
 
-  const showToast = (
-    title: string,
-    description: string,
-    variant: ToastVariant
-  ) => {
+  const showToast = (title: string, description: string, variant: ToastVariant) => {
     setToastMessage({ title, description, variant })
     setToastOpen(true)
   }
 
   const handleDeleteExtraScreenshot = async (index: number) => {
     const screenshotToDelete = extraScreenshots[index]
-
     try {
-      const response = await window.electronAPI.deleteScreenshot(
-        screenshotToDelete.path
-      )
-
+      const response = await window.electronAPI.deleteScreenshot(screenshotToDelete.path)
       if (response.success) {
-        refetch() // Refetch screenshots instead of managing state directly
+        refetch()
       } else {
         console.error("Failed to delete extra screenshot:", response.error)
       }
@@ -205,142 +204,71 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
   }
 
   useEffect(() => {
-    // Height update logic
     const updateDimensions = () => {
       if (contentRef.current) {
         let contentHeight = contentRef.current.scrollHeight
         const contentWidth = contentRef.current.scrollWidth
-        if (isTooltipVisible) {
-          contentHeight += tooltipHeight
-        }
-        window.electronAPI.updateContentDimensions({
-          width: contentWidth,
-          height: contentHeight
-        })
+        if (isTooltipVisible) contentHeight += tooltipHeight
+        window.electronAPI.updateContentDimensions({ width: contentWidth, height: contentHeight })
       }
     }
 
-    // Initialize resize observer
     const resizeObserver = new ResizeObserver(updateDimensions)
-    if (contentRef.current) {
-      resizeObserver.observe(contentRef.current)
-    }
+    if (contentRef.current) resizeObserver.observe(contentRef.current)
     updateDimensions()
 
-    // Set up event listeners
     const cleanupFunctions = [
       window.electronAPI.onScreenshotTaken(() => refetch()),
       window.electronAPI.onResetView(() => {
-        // Set resetting state first
         setIsResetting(true)
-
-        // Clear the queries
         queryClient.removeQueries(["solution"])
         queryClient.removeQueries(["new_solution"])
-
-        // Reset other states
         refetch()
-
-        // After a small delay, clear the resetting state
-        setTimeout(() => {
-          setIsResetting(false)
-        }, 0)
+        setTimeout(() => setIsResetting(false), 0)
       }),
       window.electronAPI.onSolutionStart(async () => {
-        // Reset UI state for a new solution
         setSolutionData(null)
-        setThoughtsData(null)
-        setTimeComplexityData(null)
-        setSpaceComplexityData(null)
-        setCustomContent(null)
         setAudioResult(null)
-
-        // LEGACY: Audio recording is now handled by native audio service continuously
-        // The native service sends transcripts via WebSocket, not via this handler
-        console.log('[Solutions] onSolutionStart: Audio is now handled by native audio service')
-
-        // Simulate receiving custom content shortly after start
-        setTimeout(() => {
-          setCustomContent(
-            "This is the dynamically generated content appearing after loading starts."
-          )
-        }, 1500) // Example delay
+        console.log('[Solutions] onSolutionStart: generating interview script...')
       }),
-      //if there was an error processing the initial solution
       window.electronAPI.onSolutionError((error: string) => {
-        showToast(
-          "Processing Failed",
-          "There was an error processing your extra screenshots.",
-          "error"
-        )
-        // Reset solutions in the cache (even though this shouldn't ever happen) and complexities to previous states
-        const solution = queryClient.getQueryData(["solution"]) as {
-          code: string
-          thoughts: string[]
-          time_complexity: string
-          space_complexity: string
-        } | null
-        if (!solution) {
-          setView("queue") //make sure that this is correct. or like make sure there's a toast or something
-        }
-        setSolutionData(solution?.code || null)
-        setThoughtsData(solution?.thoughts || null)
-        setTimeComplexityData(solution?.time_complexity || null)
-        setSpaceComplexityData(solution?.space_complexity || null)
+        showToast("Processing Failed", "There was an error processing your screenshots.", "error")
+        const cached = queryClient.getQueryData(["solution"]) as Solution | null
+        if (!cached) setView("queue")
+        setSolutionData(cached)
         console.error("Processing error:", error)
       }),
-      //when the initial solution is generated, we'll set the solution data to that
       window.electronAPI.onSolutionSuccess((data) => {
         if (!data?.solution) {
           console.warn("Received empty or invalid solution data")
           return
         }
-
         console.log({ solution: data.solution })
-
-        const solutionData = {
-          code: data.solution.code,
-          thoughts: data.solution.thoughts,
-          time_complexity: data.solution.time_complexity,
-          space_complexity: data.solution.space_complexity
+        const sol: Solution = {
+          problem_identifier_script: data.solution.problem_identifier_script || "",
+          brainstorm_script: data.solution.brainstorm_script || "",
+          code: data.solution.code || "",
+          dry_run_script: data.solution.dry_run_script || "",
+          time_complexity: data.solution.time_complexity || "",
+          space_complexity: data.solution.space_complexity || ""
         }
-
-        queryClient.setQueryData(["solution"], solutionData)
-        setSolutionData(solutionData.code || null)
-        setThoughtsData(solutionData.thoughts || null)
-        setTimeComplexityData(solutionData.time_complexity || null)
-        setSpaceComplexityData(solutionData.space_complexity || null)
+        queryClient.setQueryData(["solution"], sol)
+        setSolutionData(sol)
       }),
 
-      //########################################################
-      //DEBUG EVENTS
-      //########################################################
-      window.electronAPI.onDebugStart(() => {
-        //we'll set the debug processing state to true and use that to render a little loader
-        setDebugProcessing(true)
-      }),
-      //the first time debugging works, we'll set the view to debug and populate the cache with the data
+      // ── Debug events ──────────────────────────────────────────────────────
+      window.electronAPI.onDebugStart(() => setDebugProcessing(true)),
       window.electronAPI.onDebugSuccess((data) => {
         console.log({ debug_data: data })
-
         queryClient.setQueryData(["new_solution"], data.solution)
         setDebugProcessing(false)
       }),
-      //when there was an error in the initial debugging, we'll show a toast and stop the little generating pulsing thing.
       window.electronAPI.onDebugError(() => {
-        showToast(
-          "Processing Failed",
-          "There was an error debugging your code.",
-          "error"
-        )
+        showToast("Processing Failed", "There was an error debugging your code.", "error")
         setDebugProcessing(false)
       }),
       window.electronAPI.onProcessingNoScreenshots(() => {
-        showToast(
-          "No Screenshots",
-          "There are no extra screenshots to process.",
-          "neutral"
-        )
+        showToast("No Screenshots", "There are no extra screenshots to process.", "neutral")
       })
     ]
 
@@ -351,57 +279,30 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
   }, [isTooltipVisible, tooltipHeight])
 
   useEffect(() => {
-    setProblemStatementData(
-      queryClient.getQueryData(["problem_statement"]) || null
-    )
-    setSolutionData(queryClient.getQueryData(["solution"]) || null)
+    setProblemStatementData(queryClient.getQueryData(["problem_statement"]) || null)
+    const cached = queryClient.getQueryData(["solution"]) as Solution | null
+    if (cached) setSolutionData(cached)
 
     const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
       if (event?.query.queryKey[0] === "problem_statement") {
-        setProblemStatementData(
-          queryClient.getQueryData(["problem_statement"]) || null
-        )
-        // If this is from audio processing, show it in the custom content section
-        const audioResult = queryClient.getQueryData(["audio_result"]) as AudioResult | undefined;
+        setProblemStatementData(queryClient.getQueryData(["problem_statement"]) || null)
+        const audioResult = queryClient.getQueryData(["audio_result"]) as AudioResult | undefined
         if (audioResult) {
-          // Update all relevant sections when audio result is received
           setProblemStatementData({
             problem_statement: audioResult.text,
-            input_format: {
-              description: "Generated from audio input",
-              parameters: []
-            },
-            output_format: {
-              description: "Generated from audio input",
-              type: "string",
-              subtype: "text"
-            },
-            complexity: {
-              time: "N/A",
-              space: "N/A"
-            },
+            input_format: { description: "Generated from audio input", parameters: [] },
+            output_format: { description: "Generated from audio input", type: "string", subtype: "text" },
+            complexity: { time: "N/A", space: "N/A" },
             test_cases: [],
             validation_type: "manual",
             difficulty: "custom"
-          });
-          setSolutionData(null); // Reset solution to trigger loading state
-          setThoughtsData(null);
-          setTimeComplexityData(null);
-          setSpaceComplexityData(null);
+          })
+          setSolutionData(null)
         }
       }
       if (event?.query.queryKey[0] === "solution") {
-        const solution = queryClient.getQueryData(["solution"]) as {
-          code: string
-          thoughts: string[]
-          time_complexity: string
-          space_complexity: string
-        } | null
-
-        setSolutionData(solution?.code ?? null)
-        setThoughtsData(solution?.thoughts ?? null)
-        setTimeComplexityData(solution?.time_complexity ?? null)
-        setSpaceComplexityData(solution?.space_complexity ?? null)
+        const sol = queryClient.getQueryData(["solution"]) as Solution | null
+        setSolutionData(sol)
       }
     })
     return () => unsubscribe()
@@ -412,28 +313,41 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
     setTooltipHeight(height)
   }
 
+  const handleCodeHint = async () => {
+    try {
+      await window.electronAPI.generateCodeHint()
+    } catch (err) {
+      console.error('[Solutions] Code hint failed:', err)
+    }
+  }
+
+  const handleBrainstorm = async () => {
+    try {
+      await window.electronAPI.generateBrainstorm()
+    } catch (err) {
+      console.error('[Solutions] Brainstorm failed:', err)
+    }
+  }
+
+  // ── Is this a coding problem with our new interview script? ─────────────────
+  const isCodingMode =
+    problemStatementData?.validation_type === "coding" ||
+    (solutionData && "problem_identifier_script" in solutionData)
+
+  const scriptLoading = problemStatementData !== null && solutionData === null
+
   return (
     <>
       {!isResetting && queryClient.getQueryData(["new_solution"]) ? (
-        <>
-          <Debug
-            isProcessing={debugProcessing}
-            setIsProcessing={setDebugProcessing}
-          />
-        </>
+        <Debug isProcessing={debugProcessing} setIsProcessing={setDebugProcessing} />
       ) : (
         <div ref={contentRef} className="relative space-y-3 px-4 py-3">
-          <Toast
-            open={toastOpen}
-            onOpenChange={setToastOpen}
-            variant={toastMessage.variant}
-            duration={3000}
-          >
+          <Toast open={toastOpen} onOpenChange={setToastOpen} variant={toastMessage.variant} duration={3000}>
             <ToastTitle>{toastMessage.title}</ToastTitle>
             <ToastDescription>{toastMessage.description}</ToastDescription>
           </Toast>
 
-          {/* Conditionally render the screenshot queue if solutionData is available */}
+          {/* Screenshot queue strip */}
           {solutionData && (
             <div className="bg-transparent w-fit">
               <div className="pb-3">
@@ -448,18 +362,21 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
             </div>
           )}
 
-          {/* Navbar of commands with the SolutionsHelper */}
+          {/* Commands bar */}
           <SolutionCommands
             extraScreenshots={extraScreenshots}
             onTooltipVisibilityChange={handleTooltipVisibilityChange}
+            onCodeHint={handleCodeHint}
+            onBrainstorm={handleBrainstorm}
           />
 
-          {/* Main Content - Modified width constraints */}
+          {/* Main content */}
           <div className="w-full text-sm text-black bg-black/60 rounded-md">
             <div className="rounded-lg overflow-hidden">
               <div className="px-4 py-3 space-y-4 max-w-full">
-                {/* Show Screenshot or Audio Result as main output if validation_type is manual */}
-                {problemStatementData?.validation_type === "manual" ? (
+
+                {/* ── Non-coding / manual result (audio, generic screenshot) ── */}
+                {!isCodingMode && problemStatementData?.validation_type === "manual" ? (
                   <ContentSection
                     title={problemStatementData?.output_format?.subtype === "voice" ? "Audio Result" : "Screenshot Result"}
                     content={problemStatementData.problem_statement}
@@ -467,59 +384,105 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
                   />
                 ) : (
                   <>
-                    {/* Problem Statement Section - Only for non-manual */}
-                    <ContentSection
-                      title={problemStatementData?.output_format?.subtype === "voice" ? "Voice Input" : "Problem Statement"}
-                      content={problemStatementData?.problem_statement}
-                      isLoading={!problemStatementData}
-                    />
-                    {/* Show loading state when waiting for solution */}
-                    {problemStatementData && !solutionData && (
-                      <div className="mt-4 flex">
-                        <p className="text-xs bg-gradient-to-r from-gray-300 via-gray-100 to-gray-300 bg-clip-text text-transparent animate-pulse">
-                          {problemStatementData?.output_format?.subtype === "voice"
-                            ? "Processing voice input..."
-                            : "Generating solutions..."}
+                    {/* Problem statement header */}
+                    {problemStatementData && (
+                      <div className="space-y-1">
+                        <h2 className="text-[11px] font-semibold uppercase tracking-widest text-white/40">
+                          Problem Detected
+                        </h2>
+                        <p className="text-[13px] leading-[1.5] text-gray-200 max-w-[600px] line-clamp-3">
+                          {problemStatementData.problem_statement}
                         </p>
                       </div>
                     )}
-                    {/* Solution Sections (legacy, only for non-manual) */}
-                    {solutionData && (
-                      <>
-                        <ContentSection
-                          title="Analysis"
-                          content={
-                            thoughtsData && (
-                              <div className="space-y-3">
-                                <div className="space-y-1">
-                                  {thoughtsData.map((thought, index) => (
-                                    <div
-                                      key={index}
-                                      className="flex items-start gap-2"
-                                    >
-                                      <div className="w-1 h-1 rounded-full bg-blue-400/80 mt-2 shrink-0" />
-                                      <div>{thought}</div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )
-                          }
-                          isLoading={!thoughtsData}
-                        />
-                        <SolutionSection
-                          title={problemStatementData?.output_format?.subtype === "voice" ? "Response" : "Solution"}
-                          content={solutionData}
-                          isLoading={!solutionData}
-                        />
-                        {problemStatementData?.output_format?.subtype !== "voice" && (
-                          <ComplexitySection
-                            timeComplexity={timeComplexityData}
-                            spaceComplexity={spaceComplexityData}
-                            isLoading={!timeComplexityData || !spaceComplexityData}
-                          />
-                        )}
-                      </>
+
+                    {/* Loading state while script is generating */}
+                    {problemStatementData && scriptLoading && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <p className="text-xs bg-gradient-to-r from-indigo-300 via-purple-200 to-indigo-300 bg-clip-text text-transparent animate-pulse">
+                          Drafting interview script...
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Initial loading (no problem yet) */}
+                    {!problemStatementData && (
+                      <div className="mt-4 flex">
+                        <p className="text-xs bg-gradient-to-r from-gray-300 via-gray-100 to-gray-300 bg-clip-text text-transparent animate-pulse">
+                          Analyzing screenshot...
+                        </p>
+                      </div>
+                    )}
+
+                    {/* ── Rolling Interview Script ── */}
+                    {solutionData && isCodingMode && (
+                      <div className="space-y-3">
+
+                        {/* Phase 1 — Understand */}
+                        <PhaseCard
+                          phase={1}
+                          label="Understand"
+                          icon="🎯"
+                          accentClass="border-sky-500/30 bg-sky-950/30"
+                          isLoading={false}
+                        >
+                          <SpokenScript text={solutionData.problem_identifier_script} />
+                        </PhaseCard>
+
+                        {/* Phase 2 — Brainstorm */}
+                        <PhaseCard
+                          phase={2}
+                          label="Brainstorm"
+                          icon="💡"
+                          accentClass="border-violet-500/30 bg-violet-950/30"
+                          isLoading={false}
+                        >
+                          <SpokenScript text={solutionData.brainstorm_script} />
+                        </PhaseCard>
+
+                        {/* Phase 3 — Implement */}
+                        <PhaseCard
+                          phase={3}
+                          label="Implement"
+                          icon="⌨️"
+                          accentClass="border-amber-500/30 bg-amber-950/20"
+                          isLoading={false}
+                        >
+                          <SyntaxHighlighter
+                            showLineNumbers
+                            language="python"
+                            style={dracula}
+                            customStyle={{
+                              maxWidth: "100%",
+                              margin: 0,
+                              padding: "0.75rem",
+                              whiteSpace: "pre-wrap",
+                              wordBreak: "break-all",
+                              borderRadius: "0.375rem",
+                              fontSize: "12px"
+                            }}
+                            wrapLongLines={true}
+                          >
+                            {solutionData.code}
+                          </SyntaxHighlighter>
+                        </PhaseCard>
+
+                        {/* Phase 4 — Verify */}
+                        <PhaseCard
+                          phase={4}
+                          label="Verify"
+                          icon="✅"
+                          accentClass="border-emerald-500/30 bg-emerald-950/30"
+                          isLoading={false}
+                        >
+                          <SpokenScript text={solutionData.dry_run_script} />
+                          <div className="mt-3 flex flex-wrap gap-4 border-t border-white/10 pt-3">
+                            <ComplexityPill label="Time" value={solutionData.time_complexity} />
+                            <ComplexityPill label="Space" value={solutionData.space_complexity} />
+                          </div>
+                        </PhaseCard>
+
+                      </div>
                     )}
                   </>
                 )}

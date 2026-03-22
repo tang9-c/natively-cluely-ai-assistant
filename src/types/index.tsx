@@ -6,8 +6,10 @@ export interface Screenshot {
 }
 
 export interface Solution {
-  initial_thoughts: string[]
-  thought_steps: string[]
-  description: string
-  code: string
+  problem_identifier_script: string;
+  brainstorm_script: string;
+  code: string;
+  dry_run_script: string;
+  time_complexity: string;
+  space_complexity: string;
 }
