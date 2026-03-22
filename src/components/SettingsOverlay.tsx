@@ -113,7 +113,7 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                                 <Pencil className="w-3 h-3 opacity-70" /> What to answer?
                             </div>
                             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <MessageSquare className="w-3 h-3 opacity-70" /> Shorten
+                                <MessageSquare className="w-3 h-3 opacity-70" /> Clarify
                             </div>
                             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
                                 <RefreshCw className="w-3 h-3 opacity-70" /> Recap
@@ -241,6 +241,7 @@ interface ProviderSelectProps {
 }
 
 const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChange }) => {
+    const isLight = useResolvedTheme() === 'light';
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = React.useRef<HTMLDivElement>(null);
 
@@ -318,7 +319,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 4, scale: 0.98 }}
                         transition={{ duration: 0.15, ease: "easeOut" }}
-                        className="absolute top-full left-0 w-full mt-2 bg-bg-elevated/90 backdrop-blur-xl border border-white/5 rounded-xl shadow-2xl overflow-hidden ring-1 ring-black/5"
+                        className={`absolute top-full left-0 w-full mt-2 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden ring-1 ring-black/5 ${isLight ? 'bg-bg-elevated border border-border-subtle' : 'bg-bg-elevated/90 border border-white/5'}`}
                     >
                         <div className="max-h-[320px] overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
                             {options.map(option => {
@@ -327,7 +328,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
                                     <button
                                         key={option.id}
                                         onClick={() => { onChange(option.id); setIsOpen(false); }}
-                                        className={`w-full rounded-[10px] p-2 flex items-center gap-3 transition-all duration-200 group relative ${isSelected ? 'bg-white/10 shadow-inner' : 'hover:bg-white/5'}`}
+                                        className={`w-full rounded-[10px] p-2 flex items-center gap-3 transition-all duration-200 group relative ${isSelected ? (isLight ? 'bg-bg-item-active shadow-inner' : 'bg-white/10 shadow-inner') : (isLight ? 'hover:bg-bg-item-surface' : 'hover:bg-white/5')}`}
                                     >
                                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 ${isSelected ? 'scale-100' : 'scale-95 group-hover:scale-100'} ${getIconStyle(option.color, false)}`}>
                                             {option.icon}
@@ -335,16 +336,16 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
                                         <div className="flex-1 min-w-0 text-left">
                                             <div className="flex items-center justify-between mb-0.5">
                                                 <div className="flex items-center gap-2">
-                                                    <span className={`text-[13px] font-medium transition-colors ${isSelected ? 'text-white' : 'text-text-primary'}`}>{option.label}</span>
+                                                    <span className={`text-[13px] font-medium transition-colors ${isSelected && !isLight ? 'text-white' : 'text-text-primary'}`}>{option.label}</span>
                                                     {option.badge && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${getBadgeStyle(option.badge === 'Saved' ? 'green' : option.color)}`}>{option.badge}</span>}
                                                     {option.recommended && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${getBadgeStyle(option.color)}`}>Recommended</span>}
                                                 </div>
                                                 {isSelected && <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}><Check size={14} className="text-accent-primary" strokeWidth={3} /></motion.div>}
                                             </div>
-                                            <span className={`text-[11px] block truncate transition-colors ${isSelected ? 'text-white/70' : 'text-text-tertiary'}`}>{option.desc}</span>
+                                            <span className={`text-[11px] block truncate transition-colors ${isSelected && !isLight ? 'text-white/70' : 'text-text-tertiary'}`}>{option.desc}</span>
                                         </div>
                                         {/* Hover Indicator */}
-                                        {!isSelected && <div className="absolute inset-0 rounded-[10px] ring-1 ring-inset ring-white/0 group-hover:ring-white/5 pointer-events-none" />}
+                                        {!isSelected && <div className="absolute inset-0 rounded-[10px] ring-1 ring-inset ring-transparent group-hover:ring-border-subtle pointer-events-none" />}
                                     </button>
                                 );
                             })}
@@ -363,6 +364,7 @@ interface SettingsOverlayProps {
 }
 
 const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, initialTab = 'general' }) => {
+    const isLight = useResolvedTheme() === 'light';
     const [activeTab, setActiveTab] = useState(initialTab);
     
     // Sync active tab when modal opens
@@ -1263,7 +1265,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                 <div className="space-y-6 animated fadeIn">
                                     <div className="space-y-3.5">
                                         {/* UndetectableToggle */}
-                                        <div className={`bg-bg-item-surface rounded-xl p-5 border border-border-subtle flex items-center justify-between transition-all ${isUndetectable ? 'shadow-lg shadow-blue-500/10' : ''}`}>
+                                        <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle flex items-center justify-between transition-all ${isUndetectable ? 'shadow-lg shadow-blue-500/10' : ''}`}>
                                             <div className="flex flex-col gap-1">
                                                 <div className="flex items-center gap-2">
                                                     {isUndetectable ? (
@@ -1309,9 +1311,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             <h3 className="text-lg font-bold text-text-primary mb-1">General settings</h3>
                                             <p className="text-xs text-text-secondary mb-2">Customize how Natively works for you</p>
 
-                                            <div className="space-y-4">
+                                            <div className={`rounded-xl border overflow-hidden ${isLight ? 'bg-bg-card border-border-subtle divide-y divide-border-subtle' : 'bg-transparent border-transparent divide-y divide-border-subtle/20'}`}>
+                                            <div className="space-y-0">
                                                 {/* Open at Login */}
-                                                <div className="flex items-center justify-between">
+                                                <div className="flex items-center justify-between px-4 py-4">
                                                     <div className="flex items-center gap-4">
                                                         <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
                                                             <Power size={20} />
@@ -1334,7 +1337,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 </div>
 
                                                 {/* Debug Logging */}
-                                                <div className="flex items-center justify-between">
+                                                <div className="flex items-center justify-between px-4 py-4">
                                                     <div className="flex items-center gap-4">
                                                         <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center transition-colors ${verboseLogging ? 'border-amber-500/40 text-amber-400' : 'border-border-subtle text-text-tertiary'}`}>
                                                             <Terminal size={20} />
@@ -1357,7 +1360,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 </div>
 
                                                 {/* Interviewer Transcript */}
-                                                <div className="flex items-center justify-between">
+                                                <div className="flex items-center justify-between px-4 py-4">
                                                     <div className="flex items-center gap-4">
                                                         <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
                                                             <MessageSquare size={20} />
@@ -1382,7 +1385,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
 
                                                 {/* Theme */}
-                                                <div className="flex items-center justify-between">
+                                                <div className="flex items-center justify-between px-4 py-4">
                                                     <div className="flex items-center gap-4">
                                                         <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
                                                             <Palette size={20} />
@@ -1435,7 +1438,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 </div>
 
                                                 {/* AI Response Language */}
-                                                <div className="flex items-center justify-between">
+                                                <div className="flex items-center justify-between px-4 py-4">
                                                     <div className="flex items-center gap-4">
                                                         <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary">
                                                             <Globe size={20} />
@@ -1478,7 +1481,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 </div>
 
                                                 {/* Version */}
-                                                <div className="flex items-start justify-between gap-4">
+                                                <div className="flex items-start justify-between gap-4 px-4 py-4">
                                                     <div className="flex items-start gap-4">
                                                         <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle flex items-center justify-center text-text-tertiary shrink-0">
                                                             <BadgeCheck size={20} />
@@ -1540,6 +1543,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         )}
                                                     </button>
                                                 </div>
+                                            </div>
+                                            </div>
 
                                                 {/* ------------------------------------------------------------------ */}
                                                 {/* Interface Opacity (Stealth Mode)                                   */}
@@ -1547,7 +1552,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 <div
                                                     id="opacity-slider-card"
                                                     style={isPreviewingOpacity ? { visibility: 'visible', position: 'relative', zIndex: 9999 } : {}}
-                                                    className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle mt-4"
+                                                    className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle mt-4`}
                                                 >
                                                     <div className="flex items-center justify-between mb-3">
                                                         <label className="flex items-center gap-2 text-xs font-medium text-text-secondary uppercase tracking-wide">
@@ -1585,14 +1590,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     </p>
                                                 </div>
 
-                                            </div>
                                         </div>
 
                                     </div>
 
                                     {/* Process Disguise */}
                                     {/* Process Disguise */}
-                                    <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle">
+                                    <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle`}>
                                         <div className="flex flex-col gap-1 mb-3">
                                             <div className="flex items-center gap-2">
                                                 <h3 className="text-lg font-bold text-text-primary">Process Disguise</h3>
@@ -1658,7 +1662,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             <button
                                                 onClick={() => setIsPremiumModalOpen(true)}
                                                 className={`text-[11px] font-semibold flex items-center gap-1.5 transition-all duration-200 px-2.5 py-1 rounded-full border shadow-[0_0_10px_rgba(250,204,21,0.2)] hover:shadow-[0_0_15px_rgba(250,204,21,0.3)] ${isPremium
-                                                    ? 'bg-zinc-800 text-white border-white/10 hover:bg-zinc-700'
+                                                    ? (isLight ? 'bg-bg-component text-text-primary border-border-subtle hover:bg-bg-item-surface' : 'bg-zinc-800 text-white border-white/10 hover:bg-zinc-700')
                                                     : 'bg-[#FACC15] text-black border-transparent hover:bg-[#FDE047] active:scale-[0.98]'
                                                     }`}
                                             >
@@ -2533,6 +2537,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
+                                                        <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Sparkles size={14} /></span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">Capture Screen & Ask AI</span>
+                                                    </div>
+                                                    <KeyRecorder
+                                                        currentKeys={shortcuts.captureAndProcess}
+                                                        onSave={(keys) => updateShortcut('captureAndProcess', keys)}
+                                                    />
+                                                </div>
+                                                <div className="flex items-center justify-between py-1.5 group">
+                                                    <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><RotateCcw size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">Reset / Cancel</span>
                                                     </div>
@@ -2572,10 +2586,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             <div className="space-y-1">
                                                 {[
                                                     { id: 'whatToAnswer', label: 'What to Answer', icon: <Sparkles size={14} /> },
-                                                    { id: 'shorten', label: 'Shorten', icon: <Pencil size={14} /> },
+                                                    { id: 'clarify', label: 'Clarify', icon: <MessageSquare size={14} /> },
                                                     { id: 'followUp', label: 'Follow Up', icon: <MessageSquare size={14} /> },
-                                                    { id: 'recap', label: 'Get Recap', icon: <RefreshCw size={14} /> },
+                                                    { id: 'dynamicAction4', label: 'Recap / Brainstorm', icon: <RefreshCw size={14} /> },
                                                     { id: 'answer', label: 'Answer / Record', icon: <Mic size={14} /> },
+                                                    { id: 'codeHint', label: 'Get Code Hint', icon: <Zap size={14} /> },
+                                                    { id: 'brainstorm', label: 'Brainstorm Approaches', icon: <Zap size={14} /> },
                                                     { id: 'scrollUp', label: 'Scroll Up', icon: <ArrowUp size={14} /> },
                                                     { id: 'scrollDown', label: 'Scroll Down', icon: <ArrowDown size={14} /> },
                                                 ].map((item, i) => (
@@ -3108,7 +3124,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         }
                                                     }}
                                                     disabled={isCalendarsLoading}
-                                                    className="bg-[#303033] hover:bg-[#3A3A3D] text-white px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5"
+                                                    className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 ${isLight ? 'bg-bg-component hover:bg-bg-item-surface text-text-primary border border-border-subtle' : 'bg-[#303033] hover:bg-[#3A3A3D] text-white'}`}
                                                 >
                                                     <svg viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg">
                                                         <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">

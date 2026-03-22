@@ -4,10 +4,12 @@ import {
     Heart, Linkedin, Instagram, Mail, MicOff, Star, Bug, Globe, Sparkles, Zap
 } from 'lucide-react';
 import evinProfile from '../assets/evin.png';
+import { useResolvedTheme } from '../hooks/useResolvedTheme';
 
 interface AboutSectionProps { }
 
 export const AboutSection: React.FC<AboutSectionProps> = () => {
+    const isLight = useResolvedTheme() === 'light';
     const donationClickTimeRef = useRef<number | null>(null);
 
     // Initial check for donation status not needed for visuals anymore (since we removed key input)
@@ -204,7 +206,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                                 <div className="pt-0.5">
                                     <div className="flex items-center gap-2 mb-1">
                                         <h5 className="text-sm font-bold text-text-primary">Evin John</h5>
-                                        <span className="text-[10px] font-medium px-1.5 py-[1px] rounded-full bg-yellow-400/10 text-yellow-200 border border-yellow-400/5">Creator</span>
+                                        <span className={`text-[10px] font-medium px-1.5 py-[1px] rounded-full ${isLight ? 'bg-amber-100 text-amber-700 border border-amber-300' : 'bg-yellow-400/10 text-yellow-200 border border-yellow-400/5'}`}>Creator</span>
                                     </div>
                                     <p className="text-xs text-text-secondary leading-relaxed max-w-lg">
                                         I build software that stays out of the way.

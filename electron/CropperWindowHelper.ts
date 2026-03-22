@@ -506,12 +506,18 @@ export class CropperWindowHelper {
 
     private hideOrClose(): void {
         if (this.cropperWindow && !this.cropperWindow.isDestroyed() && !this.isDisposed) {
-            // Reset opacity before hiding so it's back to 0 on next show (Windows shield sequence)
-            if (process.platform === 'win32') {
-                this.cropperWindow.setOpacity(0);
-                this.cropperWindow.hide();
-            } else {
+            if (process.platform === 'linux') {
+                // Linux: close and recreate each time (no preload strategy on Linux)
                 this.cropperWindow.close();
+            } else {
+                // Windows & macOS: hide and reuse to avoid cold-start on next call.
+                // Windows: reset opacity to 0 first so the opacity-shield sequence
+                // works correctly on next show (DWM needs window "invisible" before
+                // setContentProtection is applied).
+                if (process.platform === 'win32') {
+                    this.cropperWindow.setOpacity(0);
+                }
+                this.cropperWindow.hide();
             }
         }
     }

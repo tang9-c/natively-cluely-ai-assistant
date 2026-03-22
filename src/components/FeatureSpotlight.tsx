@@ -128,20 +128,19 @@ export const FeatureSpotlight: React.FC = () => {
 
     return (
         <div
-            className="relative h-full w-full overflow-hidden rounded-xl bg-gradient-to-br from-[#1C1C1E] to-[#151516] flex flex-col group select-none"
+            className="relative h-full w-full overflow-hidden rounded-xl flex flex-col group select-none bg-gradient-to-br from-[#1C1C1E] to-[#151516]"
             onMouseEnter={() => setIsPaused(true)}
             onMouseLeave={() => setIsPaused(false)}
-            // Ensure container doesn't layout shift
             style={{ isolation: 'isolate' }}
         >
-            {/* 1. Background (Ambient) with 85% opacity as requested */}
+            {/* 1. Background (Ambient) */}
             <div className="absolute inset-0 z-0 pointer-events-none">
                 <img
                     src={mainui}
                     alt=""
-                    className="w-full h-full object-cover opacity-85 scale-100 transition-transform duration-[700ms] ease-out group-hover:scale-110"
+                    className="w-full h-full object-cover scale-100 transition-transform duration-[700ms] ease-out group-hover:scale-110 opacity-85"
                 />
-                <div className="absolute inset-0 bg-black/20" /> {/* Slight dim for text contrast */}
+                <div className="absolute inset-0 bg-black/20" />
             </div>
 
             {/* 2. Content Area (Centered) */}
@@ -196,14 +195,14 @@ export const FeatureSpotlight: React.FC = () => {
 
                                 {/* Title */}
                                 <h2
-                                    className={`text-white drop-shadow-sm tracking-tight mb-0 transition-all duration-300 group-hover:brightness-105 ${isSupport ? 'translate-y-1.5' : ''}`}
+                                    className={`drop-shadow-sm tracking-tight mb-0 transition-all duration-300 group-hover:brightness-105 ${isSupport ? 'translate-y-1.5' : ''}`}
                                     style={{
                                         fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text"',
                                         fontSize: (isPremium || isSupport) ? '30px' : '26px',
                                         fontWeight: 500,
                                         lineHeight: 1.1,
-                                        color: (isPremium || isSupport) ? '#E6C46A' : '#ffffff', // Gold for Premium & Support
-                                        textShadow: (isPremium || isSupport) ? '0px 1px 1px rgba(0, 0, 0, 0.25)' : 'none',
+                                        color: (isPremium || isSupport) ? '#E6C46A' : '#ffffff',
+                                        textShadow: (isPremium || isSupport) ? '0px 1px 1px rgba(0, 0, 0, 0.1)' : 'none',
                                     }}
                                 >
                                     {currentFeature.headline}
@@ -217,7 +216,7 @@ export const FeatureSpotlight: React.FC = () => {
                                         fontSize: (isPremium || isSupport) ? '16px' : '15px',
                                         fontWeight: 400,
                                         lineHeight: 1.4,
-                                        color: '#F5F7FA', // Soft white
+                                        color: '#F5F7FA',
                                         opacity: 0.9,
                                         maxWidth: isSupport ? '380px' : '360px'
                                     }}
@@ -230,8 +229,8 @@ export const FeatureSpotlight: React.FC = () => {
                                         {currentFeature.bullets.map((bullet, idx) => (
                                             <div key={idx} className={`flex items-center justify-center group/item transition-transform duration-200 px-2`}>
                                                 <span
-                                                    className={`${isSupport ? 'text-[12px] leading-relaxed font-medium opacity-100' : 'text-[12.5px] leading-snug font-medium'} text-[#E6C46A]`}
-                                                    style={{ letterSpacing: isSupport ? '0.01em' : '-0.01em' }}
+                                                    className={`${isSupport ? 'text-[12px] leading-relaxed font-medium opacity-100' : 'text-[12.5px] leading-snug font-medium'}`}
+                                                    style={{ letterSpacing: isSupport ? '0.01em' : '-0.01em', color: '#E6C46A' }}
                                                 >
                                                     {bullet}
                                                 </span>
@@ -244,9 +243,10 @@ export const FeatureSpotlight: React.FC = () => {
                                 {currentFeature.footer && (
                                     <div className="w-full text-center pointer-events-none mt-2 translate-y-5">
                                         <p
-                                            className="text-[#F5F7FA] opacity-65 font-medium tracking-wide"
+                                            className="opacity-65 font-medium tracking-wide"
                                             style={{
-                                                fontSize: (isPremium || isSupport) ? '13px' : '15px'
+                                                fontSize: (isPremium || isSupport) ? '13px' : '15px',
+                                                color: '#F5F7FA'
                                             }}
                                         >
                                             {currentFeature.footer}
@@ -270,7 +270,7 @@ export const FeatureSpotlight: React.FC = () => {
                                             overflow-hidden
                                             ${isSupport
                                                 ? 'mt-2 translate-y-5 px-6 py-2 text-[13px] font-medium text-[#1C1C1E]'
-                                                : 'px-10 py-2.5 text-[13px] font-medium text-[#F5F7FA]'
+                                                : `px-10 py-2.5 text-[13px] font-medium text-[#F5F7FA]`
                                             }
                                         `}
                                         style={isSupport ? {

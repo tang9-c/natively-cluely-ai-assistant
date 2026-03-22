@@ -93,6 +93,13 @@ interface ElectronAPI {
   generateWhatToSay: (question?: string, imagePaths?: string[]) => Promise<{ answer: string | null; question?: string; error?: string }>
   generateFollowUp: (intent: string, userRequest?: string) => Promise<{ refined: string | null; intent: string }>
   generateRecap: () => Promise<{ summary: string | null }>
+  generateCodeHint: () => Promise<{ hint: string | null; error?: string }>
+  getDetectedQuestion: () => Promise<{ question: string | null; source: 'screenshot' | 'transcript' | null }>
+  setCodingQuestion: (question: string) => Promise<{ success: boolean }>
+  generateBrainstorm: () => Promise<{ brainstorm: string | null; error?: string }>
+  getActionButtonMode: () => Promise<'recap' | 'brainstorm'>
+  setActionButtonMode: (mode: 'recap' | 'brainstorm') => Promise<{ success: boolean }>
+  onActionButtonModeChanged: (callback: (mode: 'recap' | 'brainstorm') => void) => () => void
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>
   getIntelligenceContext: () => Promise<{ context: string; lastAssistantMessage: string | null; activeMode: string }>
   resetIntelligence: () => Promise<{ success: boolean; error?: string }>
@@ -559,6 +566,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
   generateFollowUp: (intent: string, userRequest?: string) => ipcRenderer.invoke("generate-follow-up", intent, userRequest),
   generateFollowUpQuestions: () => ipcRenderer.invoke("generate-follow-up-questions"),
   generateRecap: () => ipcRenderer.invoke("generate-recap"),
+  generateCodeHint: () => ipcRenderer.invoke("generate-code-hint"),
+  getDetectedQuestion: () => ipcRenderer.invoke("get-detected-question"),
+  setCodingQuestion: (question: string) => ipcRenderer.invoke("set-coding-question", question),
+  generateBrainstorm: () => ipcRenderer.invoke("generate-brainstorm"),
+  getActionButtonMode: () => ipcRenderer.invoke("get-action-button-mode"),
+  setActionButtonMode: (mode: 'recap' | 'brainstorm') => ipcRenderer.invoke("set-action-button-mode", mode),
+  onActionButtonModeChanged: (callback: (mode: 'recap' | 'brainstorm') => void) => {
+    const subscription = (_: any, mode: 'recap' | 'brainstorm') => callback(mode);
+    ipcRenderer.on('action-button-mode-changed', subscription);
+    return () => { ipcRenderer.removeListener('action-button-mode-changed', subscription); };
+  },
+  generateClarify: () => ipcRenderer.invoke("generate-clarify"),
   submitManualQuestion: (question: string) => ipcRenderer.invoke("submit-manual-question", question),
   getIntelligenceContext: () => ipcRenderer.invoke("get-intelligence-context"),
   resetIntelligence: () => ipcRenderer.invoke("reset-intelligence"),
@@ -632,6 +651,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("intelligence-recap", subscription)
     return () => {
       ipcRenderer.removeListener("intelligence-recap", subscription)
+    }
+  },
+  onIntelligenceClarifyToken: (callback: (data: { token: string }) => void) => {
+    const subscription = (_: any, data: any) => callback(data)
+    ipcRenderer.on("intelligence-clarify-token", subscription)
+    return () => {
+      ipcRenderer.removeListener("intelligence-clarify-token", subscription)
+    }
+  },
+  onIntelligenceClarify: (callback: (data: { clarification: string }) => void) => {
+    const subscription = (_: any, data: any) => callback(data)
+    ipcRenderer.on("intelligence-clarify", subscription)
+    return () => {
+      ipcRenderer.removeListener("intelligence-clarify", subscription)
     }
   },
   onIntelligenceFollowUpQuestionsToken: (callback: (data: { token: string }) => void) => {

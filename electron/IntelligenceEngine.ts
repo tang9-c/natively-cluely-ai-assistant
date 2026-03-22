@@ -6,20 +6,19 @@ import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
 import { SessionTracker, TranscriptSegment, SuggestionTrigger, ContextItem } from './SessionTracker';
 import {
-    AnswerLLM, AssistLLM, FollowUpLLM, RecapLLM,
+    AnswerLLM, AssistLLM, BrainstormLLM, ClarifyLLM, CodeHintLLM, FollowUpLLM, RecapLLM,
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent
 } from './llm';
 
 // Mode types
-export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'manual' | 'follow_up_questions';
+export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm';
 
 // Refinement intent detection (refined to avoid false positives)
 function detectRefinementIntent(userText: string): { isRefinement: boolean; intent: string } {
     const lowercased = userText.toLowerCase().trim();
     const refinementPatterns = [
-        { pattern: /make it shorter|shorten this|be brief/i, intent: 'shorten' },
         { pattern: /make it longer|expand on this|elaborate more/i, intent: 'expand' },
         { pattern: /rephrase that|say it differently|put it another way/i, intent: 'rephrase' },
         { pattern: /give me an example|provide an instance/i, intent: 'add_example' },
@@ -47,6 +46,8 @@ export interface IntelligenceModeEvents {
     'refined_answer_token': (token: string, intent: string) => void;
     'recap': (summary: string) => void;
     'recap_token': (token: string) => void;
+    'clarify': (clarification: string) => void;
+    'clarify_token': (token: string) => void;
     'follow_up_questions_update': (questions: string) => void;
     'follow_up_questions_token': (token: string) => void;
     'manual_answer_started': () => void;
@@ -58,15 +59,21 @@ export interface IntelligenceModeEvents {
 export class IntelligenceEngine extends EventEmitter {
     // Mode state
     private activeMode: IntelligenceMode = 'idle';
-    private assistCancellationToken: AbortController | null = null;
 
     // Mode-specific LLMs
     private answerLLM: AnswerLLM | null = null;
     private assistLLM: AssistLLM | null = null;
+    private clarifyLLM: ClarifyLLM | null = null;
     private followUpLLM: FollowUpLLM | null = null;
     private recapLLM: RecapLLM | null = null;
     private followUpQuestionsLLM: FollowUpQuestionsLLM | null = null;
     private whatToAnswerLLM: WhatToAnswerLLM | null = null;
+    private codeHintLLM: CodeHintLLM | null = null;
+    private brainstormLLM: BrainstormLLM | null = null;
+
+    // Concurrency tracking
+    private assistCancellationToken: AbortController | null = null;
+    private currentGenerationId: number = 0;
 
     // Keep reference to LLMHelper for client access
     private llmHelper: LLMHelper;
@@ -106,10 +113,13 @@ export class IntelligenceEngine extends EventEmitter {
         console.log(`[IntelligenceEngine] Initializing LLMs with LLMHelper`);
         this.answerLLM = new AnswerLLM(this.llmHelper);
         this.assistLLM = new AssistLLM(this.llmHelper);
+        this.clarifyLLM = new ClarifyLLM(this.llmHelper);
         this.followUpLLM = new FollowUpLLM(this.llmHelper);
         this.recapLLM = new RecapLLM(this.llmHelper);
         this.followUpQuestionsLLM = new FollowUpQuestionsLLM(this.llmHelper);
         this.whatToAnswerLLM = new WhatToAnswerLLM(this.llmHelper);
+        this.codeHintLLM = new CodeHintLLM(this.llmHelper);
+        this.brainstormLLM = new BrainstormLLM(this.llmHelper);
 
         // Sync RecapLLM reference to SessionTracker for epoch compaction
         this.session.setRecapLLM(this.recapLLM);
@@ -283,10 +293,15 @@ export class IntelligenceEngine extends EventEmitter {
 
             console.log(`[IntelligenceEngine] Temporal RAG: ${temporalContext.previousResponses.length} responses, tone: ${temporalContext.toneSignals[0]?.type || 'neutral'}, intent: ${intentResult.intent}${imagePaths?.length ? `, with ${imagePaths.length} image(s)` : ''}`);
 
+            const generationId = ++this.currentGenerationId;
             let fullAnswer = "";
             const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths);
 
             for await (const token of stream) {
+                if (this.currentGenerationId !== generationId) {
+                    console.log('[IntelligenceEngine] _what_to_say stream aborted by new generation');
+                    break;
+                }
                 this.emit('suggested_answer_token', token, question || 'inferred', confidence);
                 fullAnswer += token;
             }
@@ -340,6 +355,7 @@ export class IntelligenceEngine extends EventEmitter {
             const context = this.session.getFormattedContext(60);
             const refinementRequest = userRequest || intent;
 
+            const generationId = ++this.currentGenerationId;
             let fullRefined = "";
             const stream = this.followUpLLM.generateStream(
                 lastMsg,
@@ -348,6 +364,10 @@ export class IntelligenceEngine extends EventEmitter {
             );
 
             for await (const token of stream) {
+                if (this.currentGenerationId !== generationId) {
+                    console.log('[IntelligenceEngine] _follow_up stream aborted by new generation');
+                    break;
+                }
                 this.emit('refined_answer_token', token, intent);
                 fullRefined += token;
             }
@@ -357,7 +377,6 @@ export class IntelligenceEngine extends EventEmitter {
                 this.emit('refined_answer', fullRefined, intent);
 
                 const intentMap: Record<string, string> = {
-                    'shorten': 'Shorten Answer',
                     'expand': 'Expand Answer',
                     'rephrase': 'Rephrase Answer',
                     'add_example': 'Add Example',
@@ -409,15 +428,21 @@ export class IntelligenceEngine extends EventEmitter {
                 return null;
             }
 
+            const generationId = ++this.currentGenerationId;
             let fullSummary = "";
             const stream = this.recapLLM.generateStream(context);
 
             for await (const token of stream) {
+                if (this.currentGenerationId !== generationId) {
+                    console.log('[IntelligenceEngine] _recap stream aborted by new generation');
+                    break;
+                }
                 this.emit('recap_token', token);
                 fullSummary += token;
             }
 
-            if (fullSummary) {
+            // Only emit final if not aborted
+            if (fullSummary && this.currentGenerationId === generationId) {
                 this.emit('recap', fullSummary);
 
                 this.session.pushUsage({
@@ -427,11 +452,72 @@ export class IntelligenceEngine extends EventEmitter {
                     answer: fullSummary
                 });
             }
-            this.setMode('idle');
+            if (this.currentGenerationId === generationId) {
+                this.setMode('idle');
+            }
             return fullSummary;
 
         } catch (error) {
             this.emit('error', error as Error, 'recap');
+            this.setMode('idle');
+            return null;
+        }
+    }
+
+    /**
+     * MODE: Clarify
+     * Ask a clarifying question to the interviewer
+     */
+    async runClarify(): Promise<string | null> {
+        console.log('[IntelligenceEngine] runClarify called');
+        this.setMode('clarify');
+
+        try {
+            if (!this.clarifyLLM) {
+                console.error('[IntelligenceEngine] ClarifyLLM not initialized');
+                this.setMode('idle');
+                return null;
+            }
+
+            const context = this.session.getFormattedContext(120);
+            if (!context) {
+                console.warn('[IntelligenceEngine] No context available for clarify');
+                this.setMode('idle');
+                return null;
+            }
+
+            const generationId = ++this.currentGenerationId;
+            let fullClarification = "";
+            const stream = this.clarifyLLM.generateStream(context);
+
+            for await (const token of stream) {
+                if (this.currentGenerationId !== generationId) {
+                    console.log('[IntelligenceEngine] _clarify stream aborted by new generation');
+                    break;
+                }
+                this.emit('clarify_token', token);
+                fullClarification += token;
+            }
+
+            // Only update history and emit final if not aborted
+            if (fullClarification && this.currentGenerationId === generationId) {
+                this.emit('clarify', fullClarification);
+                this.session.addAssistantMessage(fullClarification);
+
+                this.session.pushUsage({
+                    type: 'chat',
+                    timestamp: Date.now(),
+                    question: 'Clarify Question',
+                    answer: fullClarification
+                });
+            }
+            if (this.currentGenerationId === generationId) {
+                this.setMode('idle');
+            }
+            return fullClarification;
+
+        } catch (error) {
+            this.emit('error', error as Error, 'clarify');
             this.setMode('idle');
             return null;
         }
@@ -459,15 +545,20 @@ export class IntelligenceEngine extends EventEmitter {
                 return null;
             }
 
+            const generationId = ++this.currentGenerationId;
             let fullQuestions = "";
             const stream = this.followUpQuestionsLLM.generateStream(context);
 
             for await (const token of stream) {
+                if (this.currentGenerationId !== generationId) {
+                    console.log('[IntelligenceEngine] _follow_up_questions stream aborted by new generation');
+                    break;
+                }
                 this.emit('follow_up_questions_token', token);
                 fullQuestions += token;
             }
 
-            if (fullQuestions) {
+            if (fullQuestions && this.currentGenerationId === generationId) {
                 this.emit('follow_up_questions_update', fullQuestions);
                 this.session.pushUsage({
                     type: 'followup_questions',
@@ -476,7 +567,9 @@ export class IntelligenceEngine extends EventEmitter {
                     answer: fullQuestions
                 });
             }
-            this.setMode('idle');
+            if (this.currentGenerationId === generationId) {
+                this.setMode('idle');
+            }
             return fullQuestions;
 
         } catch (error) {
@@ -525,6 +618,144 @@ export class IntelligenceEngine extends EventEmitter {
         }
     }
 
+    /**
+     * MODE 7: Code Hint (Live Code Reviewer)
+     * Analyzes a screenshot of partially written code against the detected/provided question
+     * and returns a short targeted hint. Question comes from (priority order):
+     *   1. problemStatement passed in from ipcHandler (screenshot extraction — highest confidence)
+     *   2. session.detectedCodingQuestion (detected from interviewer transcript)
+     *   3. transcriptContext (last N seconds of conversation — fallback for inference)
+     */
+    async runCodeHint(imagePaths?: string[], problemStatement?: string): Promise<string | null> {
+        if (this.assistCancellationToken) {
+            this.assistCancellationToken.abort();
+            this.assistCancellationToken = null;
+        }
+
+        this.setMode('code_hint');
+
+        try {
+            if (!this.codeHintLLM) {
+                this.setMode('idle');
+                return "Please configure your API Keys in Settings to use this feature.";
+            }
+
+            // Resolve question context from available sources (priority order)
+            const sessionQuestion = this.session.getDetectedCodingQuestion();
+            const questionContext = problemStatement ?? sessionQuestion.question ?? null;
+            const questionSource = problemStatement
+                ? 'screenshot'
+                : sessionQuestion.source;
+
+            // Pull transcript as fallback context when no question is pinned
+            const transcriptContext = questionContext === null
+                ? this.session.getFormattedContext(120)
+                : null;
+
+            console.log(`[IntelligenceEngine] Code hint — question source: ${questionContext ? (questionSource ?? 'passed') : 'none'}, transcript lines: ${transcriptContext ? transcriptContext.split('\n').length : 0}, images: ${imagePaths?.length ?? 0}`);
+
+            const generationId = ++this.currentGenerationId;
+            let fullHint = "";
+            const stream = this.codeHintLLM.generateStream(
+                imagePaths,
+                questionContext ?? undefined,
+                questionSource,
+                transcriptContext ?? undefined
+            );
+
+            for await (const token of stream) {
+                if (this.currentGenerationId !== generationId) {
+                    console.log('[IntelligenceEngine] code_hint stream aborted by new generation');
+                    break;
+                }
+                this.emit('suggested_answer_token', token, 'Code Hint', 1.0);
+                fullHint += token;
+            }
+
+            if (!fullHint || fullHint.trim().length < 5) {
+                fullHint = "I couldn't detect any code in the screenshot. Try screenshotting your code editor directly.";
+            }
+
+            this.session.addAssistantMessage(fullHint);
+            this.session.pushUsage({
+                type: 'assist',
+                timestamp: Date.now(),
+                question: 'Code Hint',
+                answer: fullHint
+            });
+
+            this.emit('suggested_answer', fullHint, 'Code Hint', 1.0);
+            this.setMode('idle');
+            return fullHint;
+
+        } catch (error) {
+            this.emit('error', error as Error, 'code_hint');
+            this.setMode('idle');
+            return null;
+        }
+    }
+
+    /**
+     * MODE 8: Brainstorm (Strategic Approach Generator)
+     * Generates a spoken script outlining 2-3 problem-solving approaches with trade-offs.
+     */
+    async runBrainstorm(imagePaths?: string[], problemStatement?: string): Promise<string | null> {
+        if (this.assistCancellationToken) {
+            this.assistCancellationToken.abort();
+            this.assistCancellationToken = null;
+        }
+
+        this.setMode('brainstorm');
+
+        try {
+            if (!this.brainstormLLM) {
+                this.setMode('idle');
+                return "Please configure your API Keys in Settings to use this feature.";
+            }
+
+            let context = this.session.getFormattedContext(120);
+            // Prepend the problem statement so the LLM knows exactly what to brainstorm
+            const resolvedProblem = problemStatement?.trim() ||
+                this.session.getDetectedCodingQuestion().question?.trim();
+            if (resolvedProblem) {
+                context = `<problem_statement>\n${resolvedProblem}\n</problem_statement>\n\n${context}`;
+            }
+            const generationId = ++this.currentGenerationId;
+            let fullResult = "";
+            const stream = this.brainstormLLM.generateStream(context, imagePaths);
+
+            for await (const token of stream) {
+                if (this.currentGenerationId !== generationId) {
+                    console.log('[IntelligenceEngine] brainstorm stream aborted by new generation');
+                    break;
+                }
+                this.emit('suggested_answer_token', token, 'Brainstorming Approaches', 1.0);
+                fullResult += token;
+            }
+
+            if (!fullResult || fullResult.trim().length < 5) {
+                fullResult = "I couldn't generate brainstorm approaches. Make sure your question is visible and try again.";
+            }
+
+            this.session.addAssistantMessage(fullResult);
+            this.session.pushUsage({
+                type: 'assist',
+                timestamp: Date.now(),
+                question: 'Brainstorm',
+                answer: fullResult
+            });
+
+            this.emit('suggested_answer', fullResult, 'Brainstorming Approaches', 1.0);
+            this.setMode('idle');
+            return fullResult;
+
+        } catch (error) {
+            this.emit('error', error as Error, 'brainstorm');
+            this.setMode('idle');
+            return null;
+        }
+    }
+
     // ============================================
     // State Management
     // ============================================
@@ -545,6 +776,7 @@ export class IntelligenceEngine extends EventEmitter {
      */
     reset(): void {
         this.activeMode = 'idle';
+        this.currentGenerationId++; // Increment to break all active LLM streams
         if (this.assistCancellationToken) {
             this.assistCancellationToken.abort();
             this.assistCancellationToken = null;

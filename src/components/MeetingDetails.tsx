@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import MeetingChatOverlay from './MeetingChatOverlay';
@@ -60,6 +61,7 @@ interface MeetingDetailsProps {
 }
 
 const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting }) => {
+    const isLight = useResolvedTheme() === 'light';
     // We need local state for the meeting object to reflect optimistic updates
     const [meeting, setMeeting] = useState<Meeting>(initialMeeting);
     const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'usage'>('summary');
@@ -220,7 +222,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     onClick={() => setActiveTab(tab as any)}
                                     className={`
                                         relative px-3 py-1 text-[13px] font-medium rounded-lg transition-all duration-200 z-10
-                                        ${activeTab === tab ? 'text-black dark:text-[#E9E9E9]' : 'text-text-tertiary hover:text-text-secondary dark:text-[#888889] dark:hover:text-[#B0B0B1]'}
+                                        ${activeTab === tab ? 'text-black dark:text-[#E9E9E9]' : `${isLight ? 'text-text-secondary' : 'text-text-tertiary'} hover:text-text-primary dark:text-[#888889] dark:hover:text-[#B0B0B1]`}
                                     `}
                                 >
                                     {activeTab === tab && (
@@ -413,7 +415,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         {interaction.answer && (
                                             <div className="flex items-start gap-4">
                                                 <div className="mt-1 w-6 h-6 rounded-full bg-bg-input flex items-center justify-center border border-border-subtle shrink-0">
-                                                    <img src={NativelyLogo} alt="AI" className="w-4 h-4 opacity-50 grayscale object-contain" />
+                                                    <img src={NativelyLogo} alt="AI" className="w-4 h-4 opacity-50 grayscale object-contain force-black-icon" />
                                                 </div>
                                                 <div>
                                                     <div className="text-[11px] text-text-tertiary mb-1.5 font-medium">{formatTime(interaction.timestamp)}</div>

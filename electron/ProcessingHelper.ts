@@ -160,14 +160,27 @@ export class ProcessingHelper {
         const problemInfo = {
           problem_statement: imageResult.text,
           input_format: { description: "Generated from screenshot", parameters: [] as any[] },
-          output_format: { description: "Generated from screenshot", type: "string", subtype: "text" },
+          output_format: { description: "Generated from screenshot", type: "string", subtype: "coding" },
           complexity: { time: "N/A", space: "N/A" },
           test_cases: [] as any[],
-          validation_type: "manual",
+          validation_type: "coding",
           difficulty: "custom"
         };
         mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.PROBLEM_EXTRACTED, problemInfo);
         this.appState.setProblemInfo(problemInfo);
+        // Store in session so Code Hint has the question even without a screenshot of the problem
+        try {
+          const intelligenceManager = this.appState.getIntelligenceManager();
+          if (problemInfo.problem_statement?.trim()) {
+            intelligenceManager.setCodingQuestion(problemInfo.problem_statement.trim(), 'screenshot');
+          }
+        } catch (e) {
+          // Non-fatal — code hint will fall back to transcript context
+        }
+
+        // Generate the Rolling Interview Script and send to renderer
+        const solution = await this.llmHelper.generateSolution(problemInfo);
+        mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.SOLUTION_SUCCESS, { solution });
       } catch (error: any) {
         // console.error("Image processing error:", error)
         mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR, error.message)

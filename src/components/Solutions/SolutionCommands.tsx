@@ -4,11 +4,15 @@ import { IoLogOutOutline } from "react-icons/io5"
 interface SolutionCommandsProps {
   extraScreenshots: any[]
   onTooltipVisibilityChange?: (visible: boolean, height: number) => void
+  onCodeHint?: () => void
+  onBrainstorm?: () => void
 }
 
 const SolutionCommands: React.FC<SolutionCommandsProps> = ({
   extraScreenshots,
-  onTooltipVisibilityChange
+  onTooltipVisibilityChange,
+  onCodeHint,
+  onBrainstorm
 }) => {
   const [isTooltipVisible, setIsTooltipVisible] = useState(false)
   const tooltipRef = useRef<HTMLDivElement>(null)
@@ -77,6 +81,46 @@ const SolutionCommands: React.FC<SolutionCommandsProps> = ({
               </div>
             </div>
           )}
+
+          {/* Hint — always available in solutions view since code is always on screen */}
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <button
+              className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-2 py-1 text-[11px] leading-none text-white/70 flex items-center gap-1"
+              onClick={onCodeHint}
+              type="button"
+              title="Screenshot your code first (⌘H), then press ⌘6 to get a hint"
+            >
+              💡 Hint
+            </button>
+            <div className="flex gap-1">
+              <button className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+                ⌘
+              </button>
+              <button className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+                6
+              </button>
+            </div>
+          </div>
+
+          {/* Brainstorm */}
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <button
+              className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-2 py-1 text-[11px] leading-none text-white/70 flex items-center gap-1"
+              onClick={onBrainstorm}
+              type="button"
+              title="Brainstorm 2-3 problem-solving approaches"
+            >
+              🧠 Brainstorm
+            </button>
+            <div className="flex gap-1">
+              <button className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+                ⌘
+              </button>
+              <button className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+                7
+              </button>
+            </div>
+          </div>
 
           {/* Start Over */}
           <div className="flex items-center gap-2 whitespace-nowrap">

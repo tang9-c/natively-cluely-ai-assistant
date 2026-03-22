@@ -21,18 +21,20 @@ export const DEFAULT_KEYBINDS: KeybindConfig[] = [
 
     // Chat - Global shortcuts (work even when app is not focused - stealth mode)
     { id: 'chat:whatToAnswer', label: 'What to Answer', accelerator: 'CommandOrControl+1', isGlobal: true, defaultAccelerator: 'CommandOrControl+1' },
-    { id: 'chat:shorten', label: 'Shorten', accelerator: 'CommandOrControl+2', isGlobal: true, defaultAccelerator: 'CommandOrControl+2' },
+    { id: 'chat:clarify', label: 'Clarify', accelerator: 'CommandOrControl+2', isGlobal: true, defaultAccelerator: 'CommandOrControl+2' },
     { id: 'chat:followUp', label: 'Follow Up', accelerator: 'CommandOrControl+3', isGlobal: true, defaultAccelerator: 'CommandOrControl+3' },
-    { id: 'chat:recap', label: 'Recap', accelerator: 'CommandOrControl+4', isGlobal: true, defaultAccelerator: 'CommandOrControl+4' },
+    { id: 'chat:dynamicAction4', label: 'Recap / Brainstorm', accelerator: 'CommandOrControl+4', isGlobal: true, defaultAccelerator: 'CommandOrControl+4' },
     { id: 'chat:answer', label: 'Answer / Record', accelerator: 'CommandOrControl+5', isGlobal: true, defaultAccelerator: 'CommandOrControl+5' },
+    { id: 'chat:codeHint', label: 'Get Code Hint', accelerator: 'CommandOrControl+6', isGlobal: true, defaultAccelerator: 'CommandOrControl+6' },
+    { id: 'chat:brainstorm', label: 'Brainstorm Approaches', accelerator: 'CommandOrControl+7', isGlobal: true, defaultAccelerator: 'CommandOrControl+7' },
     { id: 'chat:scrollUp', label: 'Scroll Up', accelerator: 'CommandOrControl+Up', isGlobal: true, defaultAccelerator: 'CommandOrControl+Up' },
     { id: 'chat:scrollDown', label: 'Scroll Down', accelerator: 'CommandOrControl+Down', isGlobal: true, defaultAccelerator: 'CommandOrControl+Down' },
 
     // Window Movement - Global shortcuts (stealth window positioning)
-    { id: 'window:move-up', label: 'Move Window Up', accelerator: 'CommandOrControl+Up', isGlobal: true, defaultAccelerator: 'CommandOrControl+Up' },
-    { id: 'window:move-down', label: 'Move Window Down', accelerator: 'CommandOrControl+Down', isGlobal: true, defaultAccelerator: 'CommandOrControl+Down' },
-    { id: 'window:move-left', label: 'Move Window Left', accelerator: 'CommandOrControl+Left', isGlobal: true, defaultAccelerator: 'CommandOrControl+Left' },
-    { id: 'window:move-right', label: 'Move Window Right', accelerator: 'CommandOrControl+Right', isGlobal: true, defaultAccelerator: 'CommandOrControl+Right' },
+    { id: 'window:move-up', label: 'Move Window Up', accelerator: 'CommandOrControl+Shift+Up', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Up' },
+    { id: 'window:move-down', label: 'Move Window Down', accelerator: 'CommandOrControl+Shift+Down', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Down' },
+    { id: 'window:move-left', label: 'Move Window Left', accelerator: 'CommandOrControl+Shift+Left', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Left' },
+    { id: 'window:move-right', label: 'Move Window Right', accelerator: 'CommandOrControl+Shift+Right', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Right' },
 ];
 
 export class KeybindManager {
@@ -42,6 +44,34 @@ export class KeybindManager {
     private windowHelper: any; // Type avoided for circular dep, passed in init
     private onUpdateCallbacks: (() => void)[] = [];
     private onShortcutTriggeredCallbacks: ((actionId: string) => void)[] = [];
+    private activeMode: 'launcher' | 'overlay' = 'launcher';
+
+    public setMode(mode: 'launcher' | 'overlay') {
+        if (this.activeMode === mode) return;
+        this.activeMode = mode;
+        console.log(`[KeybindManager] Mode changed to: ${mode}. Refreshing global shortcuts.`);
+        this.registerGlobalShortcuts();
+    }
+
+    private shouldRegister(actionId: string): boolean {
+        if (this.activeMode === 'overlay') return true;
+        
+        // In launcher mode, only register specific shortcuts
+        if (actionId === 'general:toggle-visibility') return true;
+        if (actionId.startsWith('window:move-')) return true;
+        
+        return false;
+    }
+
+    private normalizeAccelerator(acc: string): string {
+        if (!acc) return '';
+        // Electron accelerators are case-insensitive and order-independent for modifiers.
+        // We split, lowercase, and sort to ensure consistent string matching.
+        // E.g., 'Shift+CommandOrControl+Up' === 'CommandOrControl+Shift+Up'
+        const parts = acc.split('+').map(p => p.trim().toLowerCase());
+        parts.sort();
+        return parts.join('+');
+    }
 
     private constructor() {
         this.filePath = path.join(app.getPath('userData'), 'keybinds.json');
@@ -77,10 +107,40 @@ export class KeybindManager {
         try {
             if (fs.existsSync(this.filePath)) {
                 const data = JSON.parse(fs.readFileSync(this.filePath, 'utf-8'));
+
+                // Migrate renamed IDs so saved user customizations survive renames
+                const ID_MIGRATIONS: Record<string, string> = {
+                    'chat:recap': 'chat:dynamicAction4',
+                };
+                for (const fileKb of data) {
+                    if (ID_MIGRATIONS[fileKb.id]) {
+                        fileKb.id = ID_MIGRATIONS[fileKb.id];
+                    }
+                }
+
                 // Validate and merge
                 for (const fileKb of data) {
                     if (this.keybinds.has(fileKb.id)) {
                         const current = this.keybinds.get(fileKb.id)!;
+
+                        // Deduplicate: If another keybind is already using this accelerator, skip or clear it
+                        if (fileKb.accelerator && fileKb.accelerator.trim() !== '') {
+                            let conflictId: string | null = null;
+                            const normalizedNew = this.normalizeAccelerator(fileKb.accelerator);
+                            this.keybinds.forEach((kb, existingId) => {
+                                if (existingId !== fileKb.id && this.normalizeAccelerator(kb.accelerator) === normalizedNew) {
+                                    conflictId = existingId;
+                                }
+                            });
+                            
+                            if (conflictId) {
+                                // Conflict found in saved data. Unbind the old one.
+                                const conflictKb = this.keybinds.get(conflictId)!;
+                                conflictKb.accelerator = '';
+                                this.keybinds.set(conflictId, conflictKb);
+                            }
+                        }
+
                         current.accelerator = fileKb.accelerator;
                         this.keybinds.set(fileKb.id, current);
                     }
@@ -116,9 +176,29 @@ export class KeybindManager {
     public setKeybind(id: string, accelerator: string) {
         if (!this.keybinds.has(id)) return;
 
-        const kb = this.keybinds.get(id)!;
-        kb.accelerator = accelerator;
-        this.keybinds.set(id, kb);
+        const currentKb = this.keybinds.get(id)!;
+        const oldAccelerator = currentKb.accelerator || '';
+
+        // Fallback: If assigning a new accelerator, swap any existing action using it
+        if (accelerator && accelerator.trim() !== '') {
+            const normalizedNew = this.normalizeAccelerator(accelerator);
+            let swappedId: string | null = null;
+
+            this.keybinds.forEach((kb, existingId) => {
+                if (existingId !== id && this.normalizeAccelerator(kb.accelerator) === normalizedNew) {
+                    swappedId = existingId;
+                }
+            });
+
+            if (swappedId) {
+                const conflictKb = this.keybinds.get(swappedId)!;
+                conflictKb.accelerator = oldAccelerator; // Give the conflicting one our old shortcut
+                this.keybinds.set(swappedId, conflictKb);
+            }
+        }
+
+        currentKb.accelerator = accelerator;
+        this.keybinds.set(id, currentKb);
 
         this.save();
         this.registerGlobalShortcuts(); // Re-register if it was a global one
@@ -136,31 +216,23 @@ export class KeybindManager {
     public registerGlobalShortcuts() {
         globalShortcut.unregisterAll();
 
-        // Group global keybinds by accelerator so that multiple actions sharing
-        // the same key combo (e.g. chat:scrollUp and window:move-up both use
-        // CommandOrControl+Up) are fired from a single OS-level registration.
-        const acceleratorMap = new Map<string, string[]>(); // accelerator -> [actionId]
         this.keybinds.forEach(kb => {
             if (kb.isGlobal && kb.accelerator && kb.accelerator.trim() !== '') {
-                const acc = kb.accelerator.trim();
-                if (!acceleratorMap.has(acc)) {
-                    acceleratorMap.set(acc, []);
-                }
-                acceleratorMap.get(acc)!.push(kb.id);
-            }
-        });
+                if (!this.shouldRegister(kb.id)) return;
 
-        // Register one OS handler per unique accelerator
-        acceleratorMap.forEach((actionIds, accelerator) => {
-            try {
-                globalShortcut.register(accelerator, () => {
-                    actionIds.forEach(actionId => {
-                        this.onShortcutTriggeredCallbacks.forEach(cb => cb(actionId));
+                const acc = kb.accelerator.trim();
+                try {
+                    globalShortcut.register(acc, () => {
+                        this.onShortcutTriggeredCallbacks.forEach(cb => cb(kb.id));
                     });
-                });
-                console.log(`[KeybindManager] Registered global shortcut: ${accelerator} -> [${actionIds.join(', ')}]`);
-            } catch (e) {
-                console.error(`[KeybindManager] Failed to register global shortcut ${accelerator}:`, e);
+                    if (globalShortcut.isRegistered(acc)) {
+                        console.log(`[KeybindManager] Registered global shortcut: ${acc} -> ${kb.id}`);
+                    } else {
+                        console.warn(`[KeybindManager] Failed to register global shortcut (likely in use by OS): ${acc}`);
+                    }
+                } catch (e) {
+                    console.error(`[KeybindManager] Exception while registering global shortcut ${acc}:`, e);
+                }
             }
         });
 
@@ -194,7 +266,7 @@ export class KeybindManager {
                 submenu: [
                     {
                         label: 'Toggle Visibility',
-                        accelerator: toggleAccelerator,
+                        accelerator: toggleAccelerator || undefined,
                         click: () => {
                             // Require AppState dynamically to avoid circular dependencies
                             const { AppState } = require('../main');
@@ -204,22 +276,22 @@ export class KeybindManager {
                     { type: 'separator' },
                     {
                         label: 'Move Window Up',
-                        accelerator: this.getKeybind('window:move-up') || 'CommandOrControl+Up',
+                        accelerator: this.getKeybind('window:move-up') || undefined,
                         click: () => this.windowHelper?.moveWindowUp()
                     },
                     {
                         label: 'Move Window Down',
-                        accelerator: this.getKeybind('window:move-down') || 'CommandOrControl+Down',
+                        accelerator: this.getKeybind('window:move-down') || undefined,
                         click: () => this.windowHelper?.moveWindowDown()
                     },
                     {
                         label: 'Move Window Left',
-                        accelerator: this.getKeybind('window:move-left') || 'CommandOrControl+Left',
+                        accelerator: this.getKeybind('window:move-left') || undefined,
                         click: () => this.windowHelper?.moveWindowLeft()
                     },
                     {
                         label: 'Move Window Right',
-                        accelerator: this.getKeybind('window:move-right') || 'CommandOrControl+Right',
+                        accelerator: this.getKeybind('window:move-right') || undefined,
                         click: () => this.windowHelper?.moveWindowRight()
                     },
                     { type: 'separator' },

@@ -437,6 +437,17 @@ export class EmbeddingPipeline {
         const embedding = await p.embed(row.summary_text);
         this.vectorStore.storeSummaryEmbedding(meetingId, embedding);
 
+        // P2-8: record provider metadata on the meeting row so that provider-switch
+        // compatibility checks (which gate search queries by embedding_provider) also
+        // cover meetings whose only embedding is a summary (no chunks).
+        try {
+            this.db.prepare(
+                'UPDATE meetings SET embedding_provider = ?, embedding_dimensions = ? WHERE id = ? AND embedding_provider IS NULL'
+            ).run(p.name, p.dimensions, meetingId);
+        } catch (e) {
+            // Non-fatal — metadata is for safety filtering, not critical path
+        }
+
         console.log(`[EmbeddingPipeline] Embedded summary for meeting ${meetingId} via ${p.name}`);
     }
 

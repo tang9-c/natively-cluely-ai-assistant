@@ -199,6 +199,13 @@ parentPort.on('message', (message: WorkerMessage) => {
 
             case 'nativeVecSearch': {
                 const { requestId, dbPath, extPath, queryBlob, dim, meetingId, providerName, limit, minSimilarity, fetchMultiplier } = message;
+                // P1-4: validate dim is a positive integer before interpolating into the table name.
+                // This worker runs in a separate thread and receives messages from the main process,
+                // so it operates at a trust boundary — the value must be validated here independently.
+                if (!Number.isInteger(dim) || dim <= 0 || dim > 65536) {
+                    parentPort!.postMessage({ type: 'error', requestId, error: `Invalid embedding dimension: ${dim}` });
+                    break;
+                }
                 const db = getDb(dbPath, extPath);
                 const fetchLimit = (meetingId || providerName) ? limit * fetchMultiplier : limit;
                 const vecTable = `vec_chunks_${dim}`;
@@ -238,6 +245,11 @@ parentPort.on('message', (message: WorkerMessage) => {
 
             case 'nativeVecSearchSummaries': {
                 const { requestId, dbPath, extPath, queryBlob, dim, providerName, limit } = message;
+                // P1-4: same integer validation as nativeVecSearch — worker trust boundary.
+                if (!Number.isInteger(dim) || dim <= 0 || dim > 65536) {
+                    parentPort!.postMessage({ type: 'error', requestId, error: `Invalid embedding dimension: ${dim}` });
+                    break;
+                }
                 const db = getDb(dbPath, extPath);
                 const fetchLimit = providerName ? limit * 4 : limit;
                 const vecTable = `vec_summaries_${dim}`;

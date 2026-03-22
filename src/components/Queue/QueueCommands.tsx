@@ -7,6 +7,8 @@ interface QueueCommandsProps {
   screenshots: Array<{ path: string; preview: string }>
   onChatToggle: () => void
   onSettingsToggle: () => void
+  onCodeHint?: () => void
+  onBrainstorm?: () => void
 }
 
 interface Transcript {
@@ -19,7 +21,9 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
   onTooltipVisibilityChange,
   screenshots,
   onChatToggle,
-  onSettingsToggle
+  onSettingsToggle,
+  onCodeHint,
+  onBrainstorm
 }) => {
   const [isTooltipVisible, setIsTooltipVisible] = useState(false)
   const tooltipRef = useRef<HTMLDivElement>(null)
@@ -152,6 +156,48 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
             </div>
           </div>
         )}
+
+        {/* Hint Command */}
+        {screenshots.length > 0 && (
+          <div className="flex items-center gap-2">
+            <button
+              className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-2 py-1 text-[11px] leading-none text-white/70 flex items-center gap-1"
+              onClick={onCodeHint}
+              type="button"
+              title="Get a hint on your partially written code (⌘6)"
+            >
+              💡 Hint
+            </button>
+            <div className="flex gap-1">
+              <button className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+                ⌘
+              </button>
+              <button className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+                6
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Brainstorm Command */}
+        <div className="flex items-center gap-2">
+          <button
+            className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-2 py-1 text-[11px] leading-none text-white/70 flex items-center gap-1"
+            onClick={onBrainstorm}
+            type="button"
+            title="Brainstorm 2-3 problem-solving approaches (⌘7)"
+          >
+            🧠 Brainstorm
+          </button>
+          <div className="flex gap-1">
+            <button className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+              ⌘
+            </button>
+            <button className="bg-white/10 hover:bg-white/20 transition-colors rounded-md px-1.5 py-1 text-[11px] leading-none text-white/70">
+              7
+            </button>
+          </div>
+        </div>
 
         {/* Voice Recording Button */}
         <div className="flex items-center gap-2">

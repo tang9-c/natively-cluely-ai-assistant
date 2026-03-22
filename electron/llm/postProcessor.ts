@@ -21,7 +21,6 @@ const FILLER_PHRASES = [
  */
 const PREFIXES = [
     "Refined (rephrase):",
-    "Refined (shorten):",
     "Refined (expand):",
     "Refined answer:",
     "Refined:",
