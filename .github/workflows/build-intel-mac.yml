@@ -3,14 +3,18 @@
 # Trigger: manual (workflow_dispatch) only. Run from the Actions tab in
 # the GitHub UI, or with `gh workflow run build-intel-mac`.
 #
-# Why macos-13: the last Intel x86_64 hosted runner image. Lets the Rust
-# native module, better-sqlite3, keytar, and sharp all build natively for
-# x86_64 without cross-compilation.
+# Why macos-latest + cross-compile: as of 2026, GitHub's macos-13
+# (Intel x86_64) hosted runner is severely under-provisioned and can sit
+# queued for 30+ minutes. macos-latest (arm64) runners allocate much
+# faster; we use them and cross-compile the Rust native module +
+# better-sqlite3 + keytar + sharp to x86_64-apple-darwin via
+# NATIVELY_BUILD_ALL_MAC_ARCHES=1. electron-builder then packages the
+# x64-only artifact (--mac --x64).
 #
 # Tuning notes:
-#   - To switch to arm64 runner + cross-compile, change runs-on to
-#     macos-latest and export NATIVELY_BUILD_ALL_MAC_ARCHES=1 before
-#     `npm run build:native`.
+#   - To switch to native x86_64 (when macos-13 is reliable again),
+#     change runs-on to macos-13 and drop the
+#     NATIVELY_BUILD_ALL_MAC_ARCHES env var from the build step.
 #   - CSC_IDENTITY_AUTO_DISCOVERY=false prevents electron-builder from
 #     looking for an Apple cert in the CI keychain (we use ad-hoc signing).
 #   - Bump timeout-minutes to 60-90 if the cold first run exceeds 45.
@@ -22,7 +26,7 @@ on:
 
 jobs:
   build-intel-mac:
-    runs-on: macos-13
+    runs-on: macos-latest
     timeout-minutes: 45
 
     steps:
@@ -39,6 +43,8 @@ jobs:
         run: npm ci
 
       - name: Build renderer, main, and native module
+        env:
+          NATIVELY_BUILD_ALL_MAC_ARCHES: "1"
         run: |
           npm run build
           npm run build:electron
