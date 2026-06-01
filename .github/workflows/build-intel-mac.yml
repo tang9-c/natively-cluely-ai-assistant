@@ -1,20 +1,19 @@
-# .github/workflows/build-intel-mac.yml
-#
 # Build an x86_64 (Intel) macOS distributable of Natively on GitHub Actions.
 #
-# Trigger: manual (workflow_dispatch) only — saves CI minutes. Run from
-# the Actions tab in the GitHub UI, or with `gh workflow run build-intel-mac`.
+# Trigger: manual (workflow_dispatch) only. Run from the Actions tab in
+# the GitHub UI, or with `gh workflow run build-intel-mac`.
 #
 # Why macos-13: the last Intel x86_64 hosted runner image. Lets the Rust
 # native module, better-sqlite3, keytar, and sharp all build natively for
 # x86_64 without cross-compilation.
 #
 # Tuning notes:
-# - To switch to arm64 runner + cross-compile, change runs-on to macos-latest
-#   and add `export NATIVELY_BUILD_ALL_MAC_ARCHES=1` before `npm run build:native`.
-# - CSC_IDENTITY_AUTO_DISCOVERY=false prevents electron-builder from looking
-#   for an Apple cert in the CI keychain (we use ad-hoc signing).
-# - Bump timeout-minutes to 60-90 if the cold first run exceeds 45.
+#   - To switch to arm64 runner + cross-compile, change runs-on to
+#     macos-latest and export NATIVELY_BUILD_ALL_MAC_ARCHES=1 before
+#     `npm run build:native`.
+#   - CSC_IDENTITY_AUTO_DISCOVERY=false prevents electron-builder from
+#     looking for an Apple cert in the CI keychain (we use ad-hoc signing).
+#   - Bump timeout-minutes to 60-90 if the cold first run exceeds 45.
 
 name: Build Intel Mac
 
@@ -38,8 +37,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-        # postinstall rebuilds better-sqlite3 + keytar for the runner arch (x86_64),
-        # downloads models, ensures sqlite-vec, and patches Electron.app Info.plist.
 
       - name: Build renderer, main, and native module
         run: |
