@@ -79,7 +79,7 @@ export default function TopPill({
                             <ChevronDown className="w-3.5 h-3.5" />
                         )}
                     </span>
-                    <span className="tracking-wide opacity-80 group-hover:opacity-100">{expanded ? "Hide" : "Show"}</span>
+                    <span className="tracking-wide opacity-80 group-hover:opacity-100">{expanded ? "隐藏" : "显示"}</span>
                 </button>
 
                 {/* STOP / QUIT BUTTON */}

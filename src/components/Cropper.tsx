@@ -250,7 +250,7 @@ const Cropper: React.FC = () => {
                                 fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
                             }}
                         >
-                            Select area
+                            选择区域
                         </span>
 
                         <div
@@ -281,7 +281,7 @@ const Cropper: React.FC = () => {
                                         : 'rgba(255, 255, 255, 0.4)'
                                 }}
                             >
-                                to cancel
+                                按 ESC 取消
                             </span>
                         </div>
                     </div>

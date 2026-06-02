@@ -33,7 +33,7 @@ export interface StoredCredentials {
     defaultModel?: string;
     nativelyApiKey?: string;
     // STT Provider settings
-    sttProvider?: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper';
+    sttProvider?: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper';
     groqSttApiKey?: string;
     groqSttModel?: string;
     openAiSttApiKey?: string;
@@ -47,6 +47,10 @@ export interface StoredCredentials {
     ibmWatsonApiKey?: string;
     ibmWatsonRegion?: string;
     sonioxApiKey?: string;
+    doubaoApiKey?: string;
+    doubaoLlmApiKey?: string;
+    /** Doubao (Ark) embedding endpoint ID, e.g. ep-20260321165850-k9w7r */
+    doubaoEmbeddingModel?: string;
     sttLanguage?: string;
     aiResponseLanguage?: string;
     // Tavily Search
@@ -56,6 +60,7 @@ export interface StoredCredentials {
     groqPreferredModel?: string;
     openaiPreferredModel?: string;
     claudePreferredModel?: string;
+    doubaoPreferredModel?: string;
     // Free trial state
     trialToken?: string;   // server-issued signed token (natively_trial_…)
     trialExpiresAt?: string;   // ISO timestamp — local copy for startup check
@@ -115,7 +120,7 @@ export class CredentialsManager {
         return this.credentials.customProviders || [];
     }
 
-    public getSttProvider(): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper' {
+    public getSttProvider(): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper' {
         const provider = this.credentials.sttProvider || 'none';
         // Self-heal: if provider is 'none' but a Natively key exists, the user is in a
         // broken state (key cleared then re-entered via a path that skipped auto-promote,
@@ -171,6 +176,22 @@ export class CredentialsManager {
 
     public getSonioxApiKey(): string | undefined {
         return this.credentials.sonioxApiKey;
+    }
+
+    public getDoubaoApiKey(): string | undefined {
+        return this.credentials.doubaoApiKey;
+    }
+
+    public getDoubaoAucApiKey(): string | undefined {
+        return this.credentials.doubaoApiKey; // Reuse same key for now
+    }
+
+    public getDoubaoLlmApiKey(): string | undefined {
+        return this.credentials.doubaoLlmApiKey;
+    }
+
+    public getDoubaoEmbeddingModel(): string | undefined {
+        return this.credentials.doubaoEmbeddingModel;
     }
 
     public getTavilyApiKey(): string | undefined {
@@ -266,7 +287,7 @@ export class CredentialsManager {
         console.log('[CredentialsManager] Google Service Account path updated');
     }
 
-    public setSttProvider(provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper'): void {
+    public setSttProvider(provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper'): void {
         this.credentials.sttProvider = provider;
         this.saveCredentials();
         console.log(`[CredentialsManager] STT Provider set to: ${provider}`);
@@ -341,6 +362,30 @@ export class CredentialsManager {
         console.log('[CredentialsManager] Soniox API Key updated');
     }
 
+    public setDoubaoApiKey(key: string): void {
+        this.credentials.doubaoApiKey = key;
+        this.saveCredentials();
+        console.log('[CredentialsManager] Doubao API Key updated');
+    }
+
+    public setDoubaoAucApiKey(key: string): void {
+        this.credentials.doubaoApiKey = key;
+        this.saveCredentials();
+        console.log('[CredentialsManager] Doubao AUC API Key updated');
+    }
+
+    public setDoubaoLlmApiKey(key: string): void {
+        this.credentials.doubaoLlmApiKey = key;
+        this.saveCredentials();
+        console.log('[CredentialsManager] Doubao LLM API Key updated');
+    }
+
+    public setDoubaoEmbeddingModel(model: string): void {
+        this.credentials.doubaoEmbeddingModel = model.trim() || undefined;
+        this.saveCredentials();
+        console.log('[CredentialsManager] Doubao Embedding model updated');
+    }
+
     public setTavilyApiKey(key: string): void {
         // Store undefined (not empty string) when removing, so hasKey() checks stay consistent
         this.credentials.tavilyApiKey = key.trim() || undefined;
@@ -405,12 +450,12 @@ export class CredentialsManager {
         console.log('[CredentialsManager] Natively API Key updated');
     }
 
-    public getPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude'): string | undefined {
+    public getPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao'): string | undefined {
         const key = `${provider}PreferredModel` as keyof StoredCredentials;
         return this.credentials[key] as string | undefined;
     }
 
-    public setPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude', modelId: string): void {
+    public setPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao', modelId: string): void {
         const key = `${provider}PreferredModel` as keyof StoredCredentials;
         (this.credentials as any)[key] = modelId;
         this.saveCredentials();
@@ -534,7 +579,13 @@ export class CredentialsManager {
     private saveCredentials(): void {
         try {
             if (!safeStorage.isEncryptionAvailable()) {
-                console.warn('[CredentialsManager] Encryption not available; credentials kept in memory only');
+                // Fallback to plaintext JSON when encryption is unavailable
+                // (e.g. sandboxed environments, some CI/CD contexts).
+                // loadCredentials already handles reading this file, so this is symmetric.
+                const plaintextPath = CREDENTIALS_PATH + '.json';
+                const data = JSON.stringify(this.credentials);
+                fs.writeFileSync(plaintextPath, data, { mode: 0o600 });
+                console.warn('[CredentialsManager] Encryption unavailable; credentials saved as plaintext (fallback)');
                 return;
             }
 
@@ -545,6 +596,15 @@ export class CredentialsManager {
             fs.renameSync(tmpEnc, CREDENTIALS_PATH);
         } catch (error) {
             console.error('[CredentialsManager] Failed to save credentials:', error);
+            // Emergency fallback: if encryption fails, try plaintext
+            try {
+                const plaintextPath = CREDENTIALS_PATH + '.json';
+                const data = JSON.stringify(this.credentials);
+                fs.writeFileSync(plaintextPath, data, { mode: 0o600 });
+                console.warn('[CredentialsManager] Emergency fallback: saved as plaintext');
+            } catch (fallbackError) {
+                console.error('[CredentialsManager] Even plaintext fallback failed:', fallbackError);
+            }
         }
     }
 
@@ -553,7 +613,22 @@ export class CredentialsManager {
             // Try encrypted file first
             if (fs.existsSync(CREDENTIALS_PATH)) {
                 if (!safeStorage.isEncryptionAvailable()) {
-                    console.warn('[CredentialsManager] Encryption not available for load');
+                    console.warn('[CredentialsManager] Encryption not available for load, trying plaintext fallback');
+                    const plaintextPath = CREDENTIALS_PATH + '.json';
+                    if (fs.existsSync(plaintextPath)) {
+                        try {
+                            const plaintextData = fs.readFileSync(plaintextPath, 'utf8');
+                            const parsed = JSON.parse(plaintextData);
+                            if (typeof parsed === 'object' && parsed !== null) {
+                                this.credentials = parsed;
+                                console.log('[CredentialsManager] Loaded credentials from plaintext fallback (encryption unavailable)');
+                                return;
+                            }
+                        } catch (plaintextError) {
+                            console.error('[CredentialsManager] Plaintext fallback failed:', plaintextError);
+                        }
+                    }
+                    console.warn('[CredentialsManager] No plaintext fallback found');
                     return;
                 }
 
@@ -568,7 +643,22 @@ export class CredentialsManager {
                         throw new Error('Decrypted credentials is not a valid object');
                     }
                 } catch (parseError) {
-                    console.error('[CredentialsManager] Failed to parse decrypted credentials — file may be corrupted. Starting fresh:', parseError);
+                    console.error('[CredentialsManager] Failed to parse decrypted credentials — file may be corrupted. Trying plaintext fallback:', parseError);
+                    // Try plaintext fallback when encrypted file is corrupt
+                    const plaintextPath = CREDENTIALS_PATH + '.json';
+                    if (fs.existsSync(plaintextPath)) {
+                        try {
+                            const plaintextData = fs.readFileSync(plaintextPath, 'utf8');
+                            const parsed = JSON.parse(plaintextData);
+                            if (typeof parsed === 'object' && parsed !== null) {
+                                this.credentials = parsed;
+                                console.log('[CredentialsManager] Loaded credentials from plaintext fallback');
+                                return;
+                            }
+                        } catch (plaintextError) {
+                            console.error('[CredentialsManager] Plaintext fallback also failed:', plaintextError);
+                        }
+                    }
                     this.credentials = {};
                 }
 
@@ -585,13 +675,21 @@ export class CredentialsManager {
                 return;
             }
 
+            // Encrypted file doesn't exist — try plaintext fallback
             const plaintextPath = CREDENTIALS_PATH + '.json';
             if (fs.existsSync(plaintextPath)) {
                 try {
-                    fs.unlinkSync(plaintextPath);
-                    console.log('[CredentialsManager] Removed plaintext credential file');
-                } catch (cleanupErr) {
-                    console.warn('[CredentialsManager] Could not remove plaintext credential file:', cleanupErr);
+                    const plaintextData = fs.readFileSync(plaintextPath, 'utf8');
+                    const parsed = JSON.parse(plaintextData);
+                    if (typeof parsed === 'object' && parsed !== null) {
+                        this.credentials = parsed;
+                        console.log('[CredentialsManager] Loaded credentials from plaintext fallback (encrypted file not found)');
+                        // Note: we keep the plaintext file so it persists across app restarts
+                        // until encryption becomes available again
+                        return;
+                    }
+                } catch (plaintextError) {
+                    console.error('[CredentialsManager] Plaintext fallback failed:', plaintextError);
                 }
             }
 

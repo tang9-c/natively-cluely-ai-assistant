@@ -19,6 +19,8 @@ export interface RAGManagerConfig {
     extPath: string;      // Resolved sqlite-vec extension path (no platform suffix)
     openaiKey?: string;
     geminiKey?: string;
+    doubaoKey?: string;
+    doubaoEmbeddingModel?: string;
     ollamaUrl?: string;
     providerDataScopes?: ProviderDataScopePolicy;
 }
@@ -51,13 +53,17 @@ export class RAGManager {
         this.embeddingPipeline.initialize({
             openaiKey: config.openaiKey,
             geminiKey: config.geminiKey,
+            doubaoKey: config.doubaoKey,
+            doubaoEmbeddingModel: config.doubaoEmbeddingModel,
             ollamaUrl: config.ollamaUrl,
             providerDataScopes: config.providerDataScopes
         }).then(() => {
             // Backfill provider metadata for meetings that were embedded before the
             // embedding_provider column was written (or where the write failed silently).
             this._backfillEmbeddingProviderMetadata();
-        }).catch(() => { /* non-critical, suppress */ });
+        }).catch((err) => { 
+            console.error('[RAGManager] Embedding pipeline initialization failed:', err);
+        });
     }
 
     /**
@@ -71,7 +77,7 @@ export class RAGManager {
         return this.embeddingPipeline;
     }
 
-    initializeEmbeddings(keys: { openaiKey?: string, geminiKey?: string, ollamaUrl?: string, providerDataScopes?: ProviderDataScopePolicy }): void {
+    initializeEmbeddings(keys: { openaiKey?: string, geminiKey?: string, doubaoKey?: string, doubaoEmbeddingModel?: string, ollamaUrl?: string, providerDataScopes?: ProviderDataScopePolicy }): void {
         const initPromise = this.embeddingPipeline.initialize(keys);
         // After init, backfill embedding_provider on meetings that have embedded chunks
         // but a NULL metadata column (common for meetings embedded before this metadata

@@ -47,9 +47,9 @@ export const NativelyQuotaBanner: React.FC = () => {
 
                 const near: NearLimitBucket[] = (
                     [
-                        { label: 'AI requests',   bucket: ai            },
-                        { label: 'Transcription', bucket: transcription },
-                        { label: 'Web searches',  bucket: search        },
+                        { label: 'AI 请求',     bucket: ai            },
+                        { label: '转录',       bucket: transcription },
+                        { label: '网页搜索',   bucket: search        },
                     ] as Array<{ label: string; bucket: QuotaBucket }>
                 )
                     .filter(({ bucket }) => bucket.limit > 0 && (bucket.used / bucket.limit) * 100 >= THRESHOLD_PCT)
@@ -91,7 +91,7 @@ export const NativelyQuotaBanner: React.FC = () => {
                     <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2">
                             <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-[1px]" strokeWidth={2} />
-                            <span className="text-[13px] font-semibold text-[#E0E0E0]">Natively quota almost full</span>
+                            <span className="text-[13px] font-semibold text-[#E0E0E0]">Natively 配额即将用完</span>
                         </div>
                         <button
                             onClick={() => setVisible(false)}
@@ -115,12 +115,12 @@ export const NativelyQuotaBanner: React.FC = () => {
 
                     {/* Footer */}
                     <div className="flex items-center justify-between pt-0.5">
-                        <span className="text-[11px] text-white/30">Resets on your next billing date</span>
+                        <span className="text-[11px] text-white/30">在下一个账单日重置</span>
                         <button
                             onClick={() => (window.electronAPI as any)?.openExternal?.(UPGRADE_URL)}
                             className="flex items-center gap-1 text-[11px] font-semibold text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
                         >
-                            Upgrade <ArrowUpRight size={11} strokeWidth={2.5} />
+                           升级 <ArrowUpRight size={11} strokeWidth={2.5} />
                         </button>
                     </div>
                 </div>

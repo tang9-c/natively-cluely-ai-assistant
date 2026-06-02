@@ -27,7 +27,7 @@ export const PhoneMirrorSettings: React.FC = () => {
       const next = await window.electronAPI.phoneMirrorGetInfo();
       if (next && typeof next === 'object') setInfo(next as PhoneMirrorInfo);
     } catch (e: any) {
-      setError(e?.message || 'Failed to load phone mirror status');
+      setError(e?.message || '加载手机镜像状态失败');
     }
   }, []);
 
@@ -69,7 +69,7 @@ export const PhoneMirrorSettings: React.FC = () => {
           await refresh();
         }
       } catch (e: any) {
-        setError(e?.message || 'Action failed');
+        setError(e?.message || '操作失败');
       } finally {
         setBusy(null);
       }
@@ -116,7 +116,7 @@ export const PhoneMirrorSettings: React.FC = () => {
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="text-text-primary text-lg font-semibold tracking-tight">Phone Mirror</h3>
+            <h3 className="text-text-primary text-lg font-semibold tracking-tight">手机镜像</h3>
             <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.08em] bg-amber-500/15 text-amber-400 border border-amber-500/30">
               Beta
             </span>
@@ -132,7 +132,7 @@ export const PhoneMirrorSettings: React.FC = () => {
       {/* Master toggle */}
       <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <div className="text-text-primary font-medium text-sm">Enable Phone Mirror</div>
+          <div className="text-text-primary font-medium text-sm">启用手机镜像</div>
           <div className="text-text-secondary text-xs mt-1">
             {info.running
               ? `Running on port ${info.port} · ${info.clients} ${info.clients === 1 ? 'phone' : 'phones'} connected`

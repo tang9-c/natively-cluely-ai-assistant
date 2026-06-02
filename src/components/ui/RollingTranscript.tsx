@@ -99,7 +99,7 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
                     >
                         {isNormal && (
                             <span className="inline-flex items-center text-[13px] italic leading-7 text-[var(--overlay-text-muted)] transition-all duration-300">
-                                {text || 'Listening…'}
+                                {text || '聆听中...'}
                                 {isActive && (
                                     <span className="inline-flex items-center ml-2">
                                         <span className="w-[3px] h-[3px] bg-emerald-400/70 rounded-full animate-pulse" />
@@ -111,7 +111,7 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
                         {anyReconnecting && !anyFailed && (
                             <span className="flex items-center justify-center w-full text-[12px] leading-7 stt-state-enter">
                                 <span className="text-amber-400/70 font-medium tracking-wide">
-                                    Reconnecting
+                                    重新连接中
                                 </span>
                             </span>
                         )}
@@ -148,13 +148,13 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
                                         <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
                                         <line x1="12" y1="19" x2="12" y2="22"/>
                                     </svg>
-                                    Mic: {micErrorCategory.title}
+                                   麦克风: {micErrorCategory.title}
                                 </span>
                             )}
 
                             {/* Expand/collapse chevron */}
                             <button
-                                aria-label={expanded ? 'Collapse error details' : 'Expand error details'}
+                                aria-label={expanded ? '收起错误详情' : '展开错误详情'}
                                 onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' || e.key === ' ') {
@@ -208,13 +208,13 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
                                         }`} />
                                     </div>
                                     <span className="text-[11px] font-semibold tracking-[0.08em] uppercase overlay-text-muted">
-                                        Audio Diagnostics
+                                        音频诊断
                                     </span>
                                 </div>
                                 <span className={`text-[10px] px-2 py-0.5 rounded-full ${
                                     anyFailed ? 'bg-red-500/20 text-red-400/80' : anyReconnecting ? 'bg-amber-500/20 text-amber-400/80' : 'bg-sky-500/20 text-sky-400/80'
                                 }`}>
-                                    {anyFailed ? 'Issues Detected' : anyReconnecting ? 'Reconnecting' : 'Healthy'}
+                                    {anyFailed ? '检测到问题' : anyReconnecting ? '重新连接中' : '正常'}
                                 </span>
                             </div>
 
@@ -222,7 +222,7 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
                             <div className="grid grid-cols-2 gap-2.5">
                                 {/* System Audio */}
                                 <ChannelCard
-                                    name="System Audio"
+                                    name="系统音频"
                                     status={intStatus}
                                     provider={intProvider}
                                     error={intError}
@@ -250,7 +250,7 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
 
                                 {/* Microphone */}
                                 <ChannelCard
-                                    name="Microphone"
+                                    name="麦克风"
                                     status={micStatus}
                                     provider={micProvider}
                                     error={micError}
@@ -282,7 +282,7 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
                                 <div className="flex items-center justify-center pt-2 border-t border-white/5">
                                     <button
                                         onClick={handleCopy}
-                                        aria-label="Copy STT error details"
+                                        aria-label="复制语音转文字错误详情"
                                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold tracking-wide transition-all duration-200 interaction-press ${
                                             copied
                                                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
@@ -294,7 +294,7 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
                                                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                                     <polyline points="20 6 9 17 4 12" />
                                                 </svg>
-                                                <span>Copied</span>
+                                                <span>已复制</span>
                                             </>
                                         ) : (
                                             <>
@@ -302,7 +302,7 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
                                                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                                                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                                                 </svg>
-                                                <span>Copy Report</span>
+                                                <span>复制报告</span>
                                             </>
                                         )}
                                     </button>
