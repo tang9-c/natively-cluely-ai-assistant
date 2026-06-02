@@ -34,8 +34,10 @@ test('SettingsOverlay renders a real do-not-save meetings control', () => {
   assert.match(source, /const \[meetingRetention, setMeetingRetention\]/);
   assert.match(source, /getMeetingRetention\?\.\(\)\.then\(setMeetingRetention\)/);
   assert.match(source, /setMeetingRetention\?\.\(nextRetention\)/);
-  assert.match(source, /Do not save meetings/);
-  assert.match(source, /transcripts, summaries, and history are discarded/);
+  // Stable i18n-safe anchor: data-testid lives outside the translated
+  // label text, so future translations don't break this contract.
+  assert.match(source, /data-testid="meeting-retention-row"/);
+  assert.match(source, /data-testid="meeting-retention-description"/);
 });
 
 test('launcher startMeeting metadata carries doNotPersist when retention is never', () => {
