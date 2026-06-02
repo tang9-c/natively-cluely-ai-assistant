@@ -416,7 +416,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // not yet active" (macOS: block anyway) from "tap not available" (Windows:
   // never block, or the input becomes permanently trapped).
   // Set synchronously from preload — platform is known immediately at render time.
-  const isCgEventTapAvailableRef = useRef<boolean>(window.electronAPI?.platform === 'darwin');
+  const isCgEventTapAvailableRef = useRef<boolean>(false);
   // Latest-handler ref so the captured-key listener (mounted with [] deps)
   // calls the CURRENT handleManualSubmit closure — not the one captured at
   // first render, which reads inputValue="" and silently no-ops on submit.
@@ -3362,9 +3362,18 @@ Provide only the answer, nothing else.`;
         setIsExpanded(true);
         setStealthPermissionMissing(false);
         escSuppressUntilNextActive = false;
+        // M1: when the tap is actually engaged, the platform probe has
+        // succeeded — promote the ref so the symmetric M2 guard in the
+        // click-to-engage listener lets future clicks through.
+        isCgEventTapAvailableRef.current = true;
       }
       if (!active && reason === 'permission') {
         setStealthPermissionMissing(true);
+        // M1: Accessibility / Input Monitoring revoked at runtime. Drop
+        // the ref so blockInputFocus and the M2 click gate both un-trap
+        // the chat input — otherwise the user is stuck until restart
+        // (this is exactly the Windows #246 regression re-imported).
+        isCgEventTapAvailableRef.current = false;
       }
     });
 
@@ -3510,19 +3519,65 @@ Provide only the answer, nothing else.`;
         });
     }
 
+    // M2: probe the synchronous CGEventTap availability flag once at
+    // mount. Until this resolves the safe-false default of
+    // isCgEventTapAvailableRef keeps the chat input clickable on every
+    // platform (Windows / Linux already had this; macOS now matches
+    // during the ~50ms IPC round-trip).
+    if (window.electronAPI.stealthTapAvailable) {
+      window.electronAPI
+        .stealthTapAvailable()
+        .then((ok) => {
+          isCgEventTapAvailableRef.current = !!ok;
+        })
+        .catch(() => {
+          /* safe-false default: input stays clickable */
+        });
+    }
+
     const onMouseDown = (e: MouseEvent) => {
       if (stealthTapActiveRef.current) return; // already on
       // IME present → never auto-engage. The user can still press the
       // explicit hotkey if they want true OS-level invisible typing
       // (they'll lose composition in that path by design).
       if (!stealthAutoEngageOkRef.current) return;
+      // M2 symmetry with blockInputFocus: short-circuit when the tap is
+      // not actually available. Prevents a useless IPC on Windows /
+      // Linux and keeps the truth table identical across both gates.
+      if (!isCgEventTapAvailableRef.current) return;
       const target = e.target as HTMLElement | null;
       if (!target?.closest?.('[data-stealth-engage="true"]')) return;
-      window.electronAPI.stealthTapStart().catch(() => {});
+      window.electronAPI.stealthTapStart().catch((err) => {
+        // m5: log so the failure surfaces in dev tools. The previous
+        // `.catch(() => {})` swallowed every error and made post-mortem
+        // debugging of broken tap engagement impossible.
+        console.warn('[stealth] tap start IPC failed', err);
+      });
     };
 
     document.addEventListener('mousedown', onMouseDown, true); // capture phase
     return () => document.removeEventListener('mousedown', onMouseDown, true);
+  }, []);
+
+  // M3: re-probe the current IME state on every window focus. The user
+  // may switch input sources (Pinyin → ASCII, Hangul → English, …) while
+  // the app is in the background; without this listener the next click
+  // would still use the stale probe and either fire the tap over a
+  // composition IME (breaking CJK) or block DOM focus on a layout that
+  // no longer needs it.
+  useEffect(() => {
+    if (!window.electronAPI?.stealthTapRefreshIme) return;
+    const onFocusRefresh = () => {
+      window.electronAPI.stealthTapRefreshIme?.()
+        .then((ok) => {
+          stealthAutoEngageOkRef.current = !!ok;
+        })
+        .catch((err) => {
+          console.warn('[stealth] IME refresh IPC failed', err);
+        });
+    };
+    window.addEventListener('focus', onFocusRefresh);
+    return () => window.removeEventListener('focus', onFocusRefresh);
   }, []);
 
   // ── ModelSelector click-outside close ──

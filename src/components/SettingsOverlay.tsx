@@ -1617,7 +1617,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <Shield size={20} />
                                                         </div>
                                                         <div className="flex-1">
-                                                            <h3 className="text-sm font-bold text-text-primary">不保存会议</h3>
+                                                            <h3 className="text-sm font-bold text-text-primary">Do not save meetings</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5 leading-normal">When enabled, live assistance works but transcripts, summaries, and history are discarded when the meeting ends</p>
                                                         </div>
                                                     </div>
