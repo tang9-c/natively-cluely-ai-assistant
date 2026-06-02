@@ -131,7 +131,8 @@ test('preload and renderer types expose provider data scope controls', () => {
 test('AIProvidersSettings renders cloud provider data scope controls wired to real IPC', () => {
   const src = read('src/components/settings/AIProvidersSettings.tsx');
 
-  assert.match(src, /Cloud provider data scopes/);
+  // Stable i18n-safe anchor: data-testid survives translation.
+  assert.match(src, /data-testid="cloud-provider-data-scopes"/);
   assert.match(src, /getProviderDataScopes\?\.\(\)\.then\(setProviderDataScopes\)/);
   assert.match(src, /setProviderDataScopes\?\.\(next\)/);
   assert.match(src, /onProviderDataScopesChanged\(setProviderDataScopes\)/);
