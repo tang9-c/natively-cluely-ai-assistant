@@ -68,7 +68,7 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                             </div>
                             <div className="flex items-center gap-2 px-4 py-1.5 rounded-full text-[12px] font-medium border overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
                                 <ChevronUp className="w-3.5 h-3.5 opacity-70" />
-                                <span className="opacity-80 tracking-wide">Hide</span>
+                                <span className="opacity-80 tracking-wide">隐藏</span>
                             </div>
                             <div className="w-8 h-8 rounded-full flex items-center justify-center overlay-icon-surface overlay-text-primary" style={appearance.iconStyle}>
                                 <div className="w-3.5 h-3.5 rounded-[3px] bg-red-400 opacity-80" />
@@ -82,7 +82,7 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                         {/* Rolling Transcript Bar */}
                         <div className="w-full flex justify-center py-2 px-4 border-b mb-1 overlay-transcript-surface" style={appearance.transcriptStyle}>
                             <p className="text-[13px] truncate max-w-[90%] font-medium overlay-text-primary">
-                                <span className={`${resolvedTheme === 'light' ? 'text-blue-700' : 'text-blue-400'} mr-2 font-semibold`}>Interviewer</span>
+                                <span className={`${resolvedTheme === 'light' ? 'text-blue-700' : 'text-blue-400'} mr-2 font-semibold`}>面试官</span>
                                 <span className="opacity-95">So how would you optimize the current algorithm?</span>
                             </p>
                         </div>
@@ -91,7 +91,7 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                         <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3">
                             <div className="flex justify-start">
                                 <div className="max-w-[85%] px-4 py-3 text-[14px] leading-relaxed font-normal overlay-text-primary">
-                                    <span className="font-semibold text-emerald-500 block mb-1">Suggestion</span>
+                                    <span className="font-semibold text-emerald-500 block mb-1">建议</span>
                                     A good approach would be to use a hash map to cache the intermediate results, which brings the time complexity down from O(n²) to O(n).
                                 </div>
                             </div>
@@ -120,7 +120,7 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                         <div className="px-3">
                             <div className="relative group">
                                 <div className="w-full border rounded-xl pl-3 pr-10 py-2.5 h-[38px] flex items-center overlay-input-surface" style={appearance.inputStyle}>
-                                    <span className="text-[13px] overlay-text-muted">Ask anything on screen or conversation</span>
+                                    <span className="text-[13px] overlay-text-muted">询问屏幕或对话中的任何内容</span>
                                 </div>
                             </div>
 
@@ -204,7 +204,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ label, icon, value, options
                                 </button>
                             ))}
                             {options.length === 0 && (
-                                <div className="px-3 py-2 text-sm text-gray-500 italic">No devices found</div>
+                                <div className="px-3 py-2 text-sm text-gray-500 italic">未找到设备</div>
                             )}
                         </div>
                     </div>
@@ -290,13 +290,13 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
                             <div className="flex items-center gap-2">
                                 <span className="text-[13px] font-semibold text-text-primary truncate leading-tight">{selected.label}</span>
                                 {selected.badge && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ml-2 ${getBadgeStyle(selected.badge === 'Saved' ? 'green' : selected.color)}`}>{selected.badge}</span>}
-                                {selected.recommended && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ml-2 ${getBadgeStyle(selected.color)}`}>Recommended</span>}
+                                {selected.recommended && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ml-2 ${getBadgeStyle(selected.color)}`}>推荐</span>}
                             </div>
                             {/* Short description for trigger */}
                             <span className="text-[11px] text-text-tertiary truncate block leading-tight mt-0.5">{selected.desc}</span>
                         </div>
                     </div>
-                ) : <span className="text-text-secondary px-2 text-sm">Select Provider</span>}
+                ) : <span className="text-text-secondary px-2 text-sm">选择提供商</span>}
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-text-tertiary transition-transform duration-300 group-hover:bg-bg-input ${isOpen ? 'rotate-180 bg-bg-input text-text-primary' : ''}`}>
                     <ChevronDown size={14} strokeWidth={2.5} />
                 </div>
@@ -328,7 +328,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
                                                 <div className="flex items-center gap-2">
                                                     <span className={`text-[13px] font-medium transition-colors ${isSelected && !isLight ? 'text-white' : 'text-text-primary'}`}>{option.label}</span>
                                                     {option.badge && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${getBadgeStyle(option.badge === 'Saved' ? 'green' : option.color)}`}>{option.badge}</span>}
-                                                    {option.recommended && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${getBadgeStyle(option.color)}`}>Recommended</span>}
+                                                    {option.recommended && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${getBadgeStyle(option.color)}`}>推荐</span>}
                                                 </div>
                                                 {isSelected && <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}><Check size={14} className="text-accent-primary" strokeWidth={3} /></motion.div>}
                                             </div>
@@ -821,7 +821,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     } | null>(null);
 
     // STT Provider settings
-    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper'>('none');
+    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper'>('none');
     const [groqSttModel, setGroqSttModel] = useState('whisper-large-v3-turbo');
     const [sttGroqKey, setSttGroqKey] = useState('');
     const [sttOpenaiKey, setSttOpenaiKey] = useState('');
@@ -833,6 +833,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [sttOpenaiBaseUrl, setSttOpenaiBaseUrl] = useState('');
     const [sttTestStatus, setSttTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
     const [sttTestError, setSttTestError] = useState('');
+    const [sttTestOnlyVerified, setSttTestOnlyVerified] = useState(false);
     const [sttSaving, setSttSaving] = useState(false);
     const [sttSaved, setSttSaved] = useState(false);
     const [googleServiceAccountPath, setGoogleServiceAccountPath] = useState<string | null>(null);
@@ -845,6 +846,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [hasStoredIbmWatsonKey, setHasStoredIbmWatsonKey] = useState(false);
     const [sttSonioxKey, setSttSonioxKey] = useState('');
     const [hasStoredSonioxKey, setHasStoredSonioxKey] = useState(false);
+    const [sttDoubaoKey, setSttDoubaoKey] = useState('');
+    const [hasStoredDoubaoKey, setHasStoredDoubaoKey] = useState(false);
     const [isSttDropdownOpen, setIsSttDropdownOpen] = useState(false);
     const sttDropdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -879,6 +882,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                     if (creds.azureRegion) setSttAzureRegion(creds.azureRegion);
                     setHasStoredIbmWatsonKey(creds.hasIbmWatsonKey);
                     setHasStoredSonioxKey(creds.hasSonioxKey || false);
+                    setHasStoredDoubaoKey(creds.hasSttDoubaoKey || creds.hasDoubaoSttKey || false);
 
                     setHasNativelyKey(creds.hasNativelyKey || false);
                     // Populate key fields so switching providers doesn't make saved keys appear gone
@@ -889,6 +893,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                     if (creds.sttAzureKey) setSttAzureKey(creds.sttAzureKey);
                     if (creds.sttIbmKey) setSttIbmKey(creds.sttIbmKey);
                     if (creds.sttSonioxKey) setSttSonioxKey(creds.sttSonioxKey);
+                    if (creds.sttDoubaoKey) setSttDoubaoKey(creds.sttDoubaoKey);
                     if (typeof creds.openAiSttBaseUrl === 'string') setSttOpenaiBaseUrl(creds.openAiSttBaseUrl);
                 }
             } catch (e) {
@@ -916,19 +921,35 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                     setHasStoredDeepgramKey(creds.hasDeepgramKey);
                     setHasStoredElevenLabsKey(creds.hasElevenLabsKey);
                     setHasStoredAzureKey(creds.hasAzureKey);
+                    if (creds.azureRegion) setSttAzureRegion(creds.azureRegion);
                     setHasStoredIbmWatsonKey(creds.hasIbmWatsonKey);
                     setHasStoredSonioxKey(creds.hasSonioxKey || false);
+                    setHasStoredDoubaoKey(creds.hasSttDoubaoKey || creds.hasDoubaoSttKey || false);
+                    // Mirror the initial-load behavior: repopulate the masked key values so
+                    // a save in one window shows the new masked key in the input of this
+                    // window. Skips empty values to avoid clobbering a value the user is
+                    // currently editing.
+                    if (creds.sttGroqKey) setSttGroqKey(creds.sttGroqKey);
+                    if (creds.sttOpenaiKey) setSttOpenaiKey(creds.sttOpenaiKey);
+                    if (creds.sttDeepgramKey) setSttDeepgramKey(creds.sttDeepgramKey);
+                    if (creds.sttElevenLabsKey) setSttElevenLabsKey(creds.sttElevenLabsKey);
+                    if (creds.sttAzureKey) setSttAzureKey(creds.sttAzureKey);
+                    if (creds.sttIbmKey) setSttIbmKey(creds.sttIbmKey);
+                    if (creds.sttSonioxKey) setSttSonioxKey(creds.sttSonioxKey);
+                    if (creds.sttDoubaoKey) setSttDoubaoKey(creds.sttDoubaoKey);
+                    if (typeof creds.openAiSttBaseUrl === 'string') setSttOpenaiBaseUrl(creds.openAiSttBaseUrl);
                 }).catch(() => { /* silently ignore */ });
             }
         });
         return () => unsubscribe();
     }, []); // mount-once: isOpen is checked inside the callback
 
-    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper') => {
+    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper') => {
         setSttProvider(provider);
         setIsSttDropdownOpen(false);
         setSttTestStatus('idle');
         setSttTestError('');
+        setSttTestOnlyVerified(false);
         try {
             // @ts-ignore
             await window.electronAPI?.setSttProvider?.(provider);
@@ -937,8 +958,19 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         }
     };
 
-    const handleSttKeySubmit = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox', key: string) => {
+    const handleSttKeySubmit = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc', key: string) => {
         if (!key.trim()) return;
+
+        // Reject masked/preview values that get rendered into the input after loading from disk.
+        // The backend returns keys as `sk-...<last4>`; if the user clicks Save without replacing
+        // the masked string we'd silently overwrite the real key with the masked placeholder.
+        const masked = key.trim();
+        if (/^sk-\.\.\./.test(masked) || /^sk-…/.test(masked) || /^•/.test(masked)) {
+            setSttTestStatus('error');
+            setSttTestError('输入框显示的是已保存 key 的遮罩值。请重新输入完整的 API key。');
+            setSttSaving(false);
+            return;
+        }
 
         // Auto-test before saving
         setSttSaving(true);
@@ -966,33 +998,85 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
             if (provider === 'groq') {
                 // @ts-ignore
-                await window.electronAPI?.setGroqSttApiKey?.(key.trim());
+                const result = await window.electronAPI?.setGroqSttApiKey?.(key.trim());
+                if (!result?.success) {
+                    setSttTestStatus('error');
+                    setSttTestError(result?.error || '保存失败');
+                    setSttSaving(false);
+                    return;
+                }
+                setHasStoredSttGroqKey(true);
             } else if (provider === 'openai') {
                 // @ts-ignore
-                await window.electronAPI?.setOpenAiSttApiKey?.(key.trim());
+                const result = await window.electronAPI?.setOpenAiSttApiKey?.(key.trim());
+                if (!result?.success) {
+                    setSttTestStatus('error');
+                    setSttTestError(result?.error || '保存失败');
+                    setSttSaving(false);
+                    return;
+                }
+                setHasStoredSttOpenaiKey(true);
             } else if (provider === 'elevenlabs') {
                 // @ts-ignore
-                await window.electronAPI?.setElevenLabsApiKey?.(key.trim());
+                const result = await window.electronAPI?.setElevenLabsApiKey?.(key.trim());
+                if (!result?.success) {
+                    setSttTestStatus('error');
+                    setSttTestError(result?.error || '保存失败');
+                    setSttSaving(false);
+                    return;
+                }
+                setHasStoredElevenLabsKey(true);
             } else if (provider === 'azure') {
                 // @ts-ignore
-                await window.electronAPI?.setAzureApiKey?.(key.trim());
+                const result = await window.electronAPI?.setAzureApiKey?.(key.trim());
+                if (!result?.success) {
+                    setSttTestStatus('error');
+                    setSttTestError(result?.error || '保存失败');
+                    setSttSaving(false);
+                    return;
+                }
+                setHasStoredAzureKey(true);
             } else if (provider === 'ibmwatson') {
                 // @ts-ignore
-                await window.electronAPI?.setIbmWatsonApiKey?.(key.trim());
+                const result = await window.electronAPI?.setIbmWatsonApiKey?.(key.trim());
+                if (!result?.success) {
+                    setSttTestStatus('error');
+                    setSttTestError(result?.error || '保存失败');
+                    setSttSaving(false);
+                    return;
+                }
+                setHasStoredIbmWatsonKey(true);
             } else if (provider === 'soniox') {
                 // @ts-ignore
-                await window.electronAPI?.setSonioxApiKey?.(key.trim());
+                const result = await window.electronAPI?.setSonioxApiKey?.(key.trim());
+                if (!result?.success) {
+                    setSttTestStatus('error');
+                    setSttTestError(result?.error || '保存失败');
+                    setSttSaving(false);
+                    return;
+                }
+                setHasStoredSonioxKey(true);
+            } else if (provider === 'doubao' || provider === 'doubao-auc') {
+                // @ts-ignore
+                const result = await window.electronAPI?.setDoubaoApiKey?.(key.trim());
+                if (!result?.success) {
+                    setSttTestStatus('error');
+                    setSttTestError(result?.error || '保存失败');
+                    setSttSaving(false);
+                    return;
+                }
+                setHasStoredDoubaoKey(true);
             } else {
                 // @ts-ignore
-                await window.electronAPI?.setDeepgramApiKey?.(key.trim());
+                const result = await window.electronAPI?.setDeepgramApiKey?.(key.trim());
+                if (!result?.success) {
+                    setSttTestStatus('error');
+                    setSttTestError(result?.error || '保存失败');
+                    setSttSaving(false);
+                    return;
+                }
+                setHasStoredDeepgramKey(true);
             }
-            if (provider === 'groq') setHasStoredSttGroqKey(true);
-            else if (provider === 'openai') setHasStoredSttOpenaiKey(true);
-            else if (provider === 'elevenlabs') setHasStoredElevenLabsKey(true);
-            else if (provider === 'azure') setHasStoredAzureKey(true);
-            else if (provider === 'ibmwatson') setHasStoredIbmWatsonKey(true);
-            else if (provider === 'soniox') setHasStoredSonioxKey(true);
-            else setHasStoredDeepgramKey(true);
 
             setSttSaved(true);
             setTimeout(() => setSttSaved(false), 2000);
@@ -1005,7 +1089,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         }
     };
 
-    const handleRemoveSttKey = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox') => {
+    const handleRemoveSttKey = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc') => {
         if (!confirm(`Are you sure you want to remove the ${provider === 'ibmwatson' ? 'IBM Watson' : provider.charAt(0).toUpperCase() + provider.slice(1)} API key?`)) return;
 
         try {
@@ -1039,6 +1123,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 await window.electronAPI?.setSonioxApiKey?.('');
                 setSttSonioxKey('');
                 setHasStoredSonioxKey(false);
+            } else if (provider === 'doubao' || provider === 'doubao-auc') {
+                // @ts-ignore
+                await window.electronAPI?.setDoubaoApiKey?.('');
+                setSttDoubaoKey('');
+                setHasStoredDoubaoKey(false);
             } else {
                 // @ts-ignore
                 await window.electronAPI?.setDeepgramApiKey?.('');
@@ -1064,36 +1153,38 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
     const handleTestSttConnection = async () => {
         if (sttProvider === 'none' || sttProvider === 'google' || sttProvider === 'natively' || sttProvider === 'local-whisper') return;
-        const keyMap: Record<string, string> = {
-            groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
-            elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
-            soniox: sttSonioxKey,
-        };
-        const keyToTest = keyMap[sttProvider] || '';
-        if (!keyToTest.trim()) {
-            setSttTestStatus('error');
-            setSttTestError('Please enter an API key first');
-            return;
-        }
 
+        // Always test the SAVED key from disk, not whatever happens to be in the input.
+        // Rationale: the input is pre-populated with a masked preview (`sk-...xxxx`) on
+        // open, so testing it would always fail. The whole point of this button is to
+        // verify "is the key I previously saved still valid?", which only the stored
+        // value can answer. If the user wants to test a freshly typed key, they should
+        // click Save (which auto-tests as part of the save flow).
         setSttTestStatus('testing');
         setSttTestError('');
+        setSttTestOnlyVerified(false);
         try {
             // @ts-ignore
-            const result = await window.electronAPI?.testSttConnection?.(
+            const result = await window.electronAPI?.testSavedSttConnection?.(
                 sttProvider,
-                keyToTest.trim(),
                 sttProvider === 'azure' ? sttAzureRegion : undefined
             );
             if (result?.success) {
                 setSttTestStatus('success');
+                setSttTestOnlyVerified(true);
                 setTimeout(() => setSttTestStatus('idle'), 3000);
+                setTimeout(() => setSttTestOnlyVerified(false), 5000);
+            } else if (result?.error === 'no_saved_key') {
+                setSttTestStatus('error');
+                setSttTestError('尚未保存该 provider 的 API key。请先点击 Save 保存。');
             } else {
                 setSttTestStatus('error');
+                setSttTestOnlyVerified(false);
                 setSttTestError(result?.error || 'Connection failed');
             }
         } catch (e: any) {
             setSttTestStatus('error');
+            setSttTestOnlyVerified(false);
             setSttTestError(e.message || 'Test failed');
         }
     };
@@ -1318,13 +1409,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                         {/* Sidebar */}
                         <div className="w-64 bg-bg-sidebar flex flex-col border-r border-border-subtle">
                             <div className="p-6">
-                                <h2 className="font-semibold text-gray-400 text-xs uppercase tracking-wider mb-2">Settings</h2>
+                                <h2 className="font-semibold text-gray-400 text-xs uppercase tracking-wider mb-2">设置</h2>
                                 <nav className="space-y-1">
                                     <button
                                         onClick={() => setActiveTab('general')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'general' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <Monitor size={16} /> General
+                                        <Monitor size={16} /> 通用
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('natively-api')}
@@ -1338,58 +1429,58 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'natively-pro' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
                                         <NativelyLogoMark size={16} className={activeTab === 'natively-pro' ? 'text-text-primary' : 'text-text-secondary'} />
-                                        <span>Natively Pro</span>
+                                        <span>Natively 专业版</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('ai-providers')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'ai-providers' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <FlaskConical size={16} /> AI Providers
+                                        <FlaskConical size={16} /> AI 提供商
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('skills')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'skills' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <Sparkles size={16} className={activeTab === 'skills' ? 'text-accent-primary' : 'text-text-secondary'} /> Skills
+                                        <Sparkles size={16} className={activeTab === 'skills' ? 'text-accent-primary' : 'text-text-secondary'} /> 技能
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('calendar')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'calendar' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <Calendar size={16} /> Calendar
+                                        <Calendar size={16} /> 日历
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('audio')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'audio' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <Mic size={16} /> Audio
+                                        <Mic size={16} /> 音频
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('keybinds')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'keybinds' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <Keyboard size={16} /> Keybinds
+                                        <Keyboard size={16} /> 快捷键
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('phone-mirror')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'phone-mirror' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <Smartphone size={16} /> Phone Mirror
+                                        <Smartphone size={16} /> 手机投屏
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('help')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors flex items-center gap-3 ${activeTab === 'help' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <HelpCircle size={16} /> Setup & Help
+                                        <HelpCircle size={16} /> 设置与帮助
                                     </button>
 
                                     <button
                                         onClick={() => setActiveTab('about')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'about' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <Info size={16} /> About
+                                        <Info size={16} /> 关于
                                     </button>
                                 </nav>
                             </div>
@@ -1399,10 +1490,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                     onClick={() => window.electronAPI.quitApp()}
                                     className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-3"
                                 >
-                                    <LogOut size={16} /> Quit Natively
+                                    <LogOut size={16} /> 退出 Natively
                                 </button>
                                 <button onClick={onClose} className="group mt-2 w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50 transition-colors flex items-center gap-3">
-                                    <X size={18} className="group-hover:text-red-500 transition-colors" /> Close
+                                    <X size={18} className="group-hover:text-red-500 transition-colors" /> 关闭
                                 </button>
                             </div>
                         </div>
@@ -1435,10 +1526,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     ) : (
                                                         <Ghost size={18} className="text-text-primary" />
                                                     )}
-                                                    <h3 className="text-lg font-bold text-text-primary">{isUndetectable ? 'Undetectable' : 'Detectable'}</h3>
+                                                    <h3 className="text-lg font-bold text-text-primary">{isUndetectable ? '隐藏模式' : '可见模式'}</h3>
                                                 </div>
                                                 <p className="text-xs text-text-secondary">
-                                                    Natively is currently {isUndetectable ? 'undetectable' : 'detectable'} by screen-sharing. <button className="text-blue-400 hover:underline">Supported apps here</button>
+                                                    Natively 当前对屏幕共享 {isUndetectable ? '不可见' : '可见'}。 <button className="text-blue-400 hover:underline">此处支持的应用</button>
                                                 </p>
                                             </div>
                                             <div
@@ -1460,7 +1551,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             <div className="flex flex-col gap-1">
                                                 <div className="flex items-center gap-2">
                                                     <PointerOff size={18} className={isMousePassthrough ? 'text-sky-400' : 'text-text-primary'} />
-                                                    <h3 className="text-lg font-bold text-text-primary">Mouse Passthrough</h3>
+                                                    <h3 className="text-lg font-bold text-text-primary">鼠标穿透</h3>
                                                 </div>
                                                 <p className="text-xs text-text-secondary">
                                                     Overlay stays visible but lets all mouse clicks pass through to the app beneath.
@@ -1479,8 +1570,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         </div>
 
                                         <div>
-                                            <h3 className="text-lg font-bold text-text-primary mb-1">General settings</h3>
-                                            <p className="text-xs text-text-secondary mb-2">Customize how Natively works for you</p>
+                                            <h3 className="text-lg font-bold text-text-primary mb-1">通用设置</h3>
+                                            <p className="text-xs text-text-secondary mb-2">自定义 Natively 的工作方式</p>
 
                                             <div className={`rounded-xl border ${isLight ? 'bg-bg-card border-border-subtle divide-y divide-border-subtle' : 'bg-transparent border-transparent divide-y divide-border-subtle/20'}`}>
                                             <div className="space-y-0">
@@ -1497,7 +1588,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <Power size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">Open Natively when you log in</h3>
+                                                            <h3 className="text-sm font-bold text-text-primary">登录时打开 Natively</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">Natively will open automatically when you log in to your computer</p>
                                                         </div>
                                                     </div>
@@ -1526,7 +1617,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <Shield size={20} />
                                                         </div>
                                                         <div className="flex-1">
-                                                            <h3 className="text-sm font-bold text-text-primary">Do not save meetings</h3>
+                                                            <h3 className="text-sm font-bold text-text-primary">不保存会议</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5 leading-normal">When enabled, live assistance works but transcripts, summaries, and history are discarded when the meeting ends</p>
                                                         </div>
                                                     </div>
@@ -1539,7 +1630,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         className={`w-11 h-6 rounded-full relative transition-colors cursor-pointer shrink-0 mt-2 ${meetingRetention === 'never' ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                         role="switch"
                                                         aria-checked={meetingRetention === 'never'}
-                                                        aria-label="Do not save meetings"
+                                                        aria-label="不保存会议"
                                                     >
                                                         <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${meetingRetention === 'never' ? 'translate-x-5' : 'translate-x-0'}`} />
                                                     </div>
@@ -1558,7 +1649,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <Terminal size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">Verbose debug logging</h3>
+                                                            <h3 className="text-sm font-bold text-text-primary">详细调试日志</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">Print detailed audio, STT, and pipeline diagnostics</p>
                                                         </div>
                                                     </div>
@@ -1626,7 +1717,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <MessageSquare size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">Interviewer Transcript</h3>
+                                                            <h3 className="text-sm font-bold text-text-primary">面试官转录文本</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">Show real-time transcription of the interviewer</p>
                                                         </div>
                                                     </div>
@@ -1656,7 +1747,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <ArrowDown size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">Auto Scroll</h3>
+                                                            <h3 className="text-sm font-bold text-text-primary">自动滚动</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">Automatically scroll to the latest message as new responses arrive</p>
                                                         </div>
                                                     </div>
@@ -1687,8 +1778,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <Palette size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">Theme</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">Customize how Natively looks on your device</p>
+                                                            <h3 className="text-sm font-bold text-text-primary">主题</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">自定义 Natively 在您设备上的外观</p>
                                                         </div>
                                                     </div>
 
@@ -1746,7 +1837,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <Layout size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">Meeting Interface Style</h3>
+                                                            <h3 className="text-sm font-bold text-text-primary">会议界面风格</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">
                                                                 {meetingInterfaceTheme === 'liquid-glass'
                                                                     ? 'Liquid glass — Apple-inspired transparent overlay'
@@ -1802,7 +1893,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <Globe size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">AI Response Language</h3>
+                                                            <h3 className="text-sm font-bold text-text-primary">AI 响应语言</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">
                                                                 {aiResponseLanguage === 'auto'
                                                                     ? 'Mirrors user\'s language automatically'
@@ -1836,7 +1927,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                         className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${aiResponseLanguage === option.code ? 'text-text-primary bg-bg-item-active/50' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
                                                                     >
                                                                         {option.code === 'auto' ? (
-                                                                            <span className="font-medium">Auto</span>
+                                                                            <span className="font-medium">自动</span>
                                                                         ) : (
                                                                             <span className="font-medium">{option.label}</span>
                                                                         )}
@@ -1854,7 +1945,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <BadgeCheck size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">Version</h3>
+                                                            <h3 className="text-sm font-bold text-text-primary">版本</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">
                                                                 You are currently using Natively version {packageJson.version}
                                                             </p>
@@ -1952,8 +2043,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     />
 
                                                     <div className="flex justify-between mt-1.5">
-                                                        <span className="text-[10px] text-text-tertiary">More Stealth</span>
-                                                        <span className="text-[10px] text-text-tertiary">Fully Visible</span>
+                                                        <span className="text-[10px] text-text-tertiary">更多隐身</span>
+                                                        <span className="text-[10px] text-text-tertiary">完全可见</span>
                                                     </div>
 
                                                     <p className="text-xs text-text-tertiary mt-2">
@@ -1971,7 +2062,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                     <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle`}>
                                         <div className="flex flex-col gap-1 mb-3">
                                             <div className="flex items-center gap-2">
-                                                <h3 className="text-lg font-bold text-text-primary">Process Disguise</h3>
+                                                <h3 className="text-lg font-bold text-text-primary">进程伪装</h3>
                                             </div>
                                             <p className="text-xs text-text-secondary">
                                                 Disguise Natively as another application to prevent detection during screen sharing.
@@ -2039,7 +2130,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                 <div className="space-y-5 animated fadeIn select-text pb-4">
                                     <div className="flex items-start justify-between">
                                         <div>
-                                            <h3 className="text-lg font-bold text-text-primary mb-1">Keyboard shortcuts</h3>
+                                            <h3 className="text-lg font-bold text-text-primary mb-1">键盘快捷键</h3>
                                             <p className="text-xs text-text-secondary">Natively works with these easy to remember commands.</p>
                                         </div>
                                         <button
@@ -2054,12 +2145,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                     <div className="grid gap-6">
                                         {/* General Category */}
                                         <div>
-                                            <h4 className="text-sm font-bold text-text-primary mb-3">General</h4>
+                                            <h4 className="text-sm font-bold text-text-primary mb-3">通用</h4>
                                             <div className="space-y-1">
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Eye size={14} /></span>
-                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">Toggle Visibility</span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">切换可见性</span>
                                                     </div>
                                                     <KeyRecorder
                                                         currentKeys={shortcuts.toggleVisibility}
@@ -2069,7 +2160,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><PointerOff size={14} /></span>
-                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">Toggle Mouse Passthrough</span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">切换鼠标穿透</span>
                                                     </div>
                                                     <KeyRecorder
                                                         currentKeys={shortcuts.toggleMousePassthrough}
@@ -2079,7 +2170,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><MessageSquare size={14} /></span>
-                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">Process Screenshots</span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">处理截图</span>
                                                     </div>
                                                     <KeyRecorder
                                                         currentKeys={shortcuts.processScreenshots}
@@ -2109,7 +2200,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Camera size={14} /></span>
-                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">Take Screenshot</span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">截取屏幕</span>
                                                     </div>
                                                     <KeyRecorder
                                                         currentKeys={shortcuts.takeScreenshot}
@@ -2119,7 +2210,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Crop size={14} /></span>
-                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">Selective Screenshot</span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">选择性截图</span>
                                                     </div>
                                                     <KeyRecorder
                                                         currentKeys={shortcuts.selectiveScreenshot}
@@ -2132,7 +2223,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         {/* Chat Category */}
                                         <div>
                                             <div className="mb-3">
-                                                <h4 className="text-sm font-bold text-text-primary">Chat</h4>
+                                                <h4 className="text-sm font-bold text-text-primary">聊天</h4>
                                             </div>
                                             <div className="space-y-1">
                                                 {[
@@ -2165,7 +2256,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                                         {/* Window Category */}
                                         <div>
-                                            <h4 className="text-sm font-bold text-text-primary mb-3">Window</h4>
+                                            <h4 className="text-sm font-bold text-text-primary mb-3">窗口</h4>
                                             <div className="space-y-1">
                                                 {[
                                                     { id: 'moveWindowUp', label: 'Move Window Up', icon: <ArrowUp size={14} /> },
@@ -2194,12 +2285,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                 <div className="space-y-6 animated fadeIn">
                                     {/* ── Speech Provider Section ── */}
                                     <div>
-                                        <h3 className="text-lg font-bold text-text-primary mb-1">Speech Provider</h3>
+                                        <h3 className="text-lg font-bold text-text-primary mb-1">语音提供商</h3>
                                         <p className="text-xs text-text-secondary mb-5">Choose the engine that transcribes audio to text.</p>
 
                                         <div className="space-y-4">
                                             <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
-                                                <label className="text-xs font-medium text-text-secondary block">Speech Provider</label>
+                                                <label className="text-xs font-medium text-text-secondary block">语音提供商</label>
                                                 <div className="relative">
                                                     <ProviderSelect
                                                         value={sttProvider}
@@ -2214,6 +2305,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             { id: 'azure', label: 'Azure Speech', badge: hasStoredAzureKey ? 'Saved' : null, desc: 'Microsoft Cognitive Services STT', color: 'cyan', icon: <Mic size={14} /> },
                                                             { id: 'ibmwatson', label: 'IBM Watson', badge: hasStoredIbmWatsonKey ? 'Saved' : null, desc: 'IBM Watson cloud STT service', color: 'indigo', icon: <Mic size={14} /> },
                                                             { id: 'soniox', label: 'Soniox', badge: hasStoredSonioxKey ? 'Saved' : null, recommended: true, desc: '60+ languages, multilingual, domain context', color: 'cyan', icon: <Mic size={14} /> },
+                                                            { id: 'doubao', label: 'Doubao (Volcengine)', badge: hasStoredDoubaoKey ? 'Saved' : null, desc: 'Doubao Streaming ASR 2.0', color: 'orange', icon: <Mic size={14} /> },
+                                                            { id: 'doubao-auc', label: 'Doubao AUC (BigModel)', badge: hasStoredDoubaoKey ? 'Saved' : null, desc: 'Doubao AUC BigModel API', color: 'orange', icon: <Mic size={14} /> },
                                                             { id: 'local-whisper', label: 'Local Whisper', badge: null, desc: 'Privacy-first: runs 100% on your device', color: 'green', icon: <Cpu size={14} /> },
                                                         ]}
                                                     />
@@ -2223,7 +2316,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             {/* Groq Model Selector */}
                                             {sttProvider === 'groq' && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
-                                                    <label className="text-xs font-medium text-text-secondary mb-2.5 block">Whisper Model</label>
+                                                    <label className="text-xs font-medium text-text-secondary mb-2.5 block">Whisper 模型</label>
                                                     <div className="grid grid-cols-2 gap-2">
                                                         {[
                                                             { id: 'whisper-large-v3-turbo', label: 'V3 Turbo', desc: 'Fastest' },
@@ -2257,12 +2350,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             {/* Google Cloud Service Account */}
                                             {sttProvider === 'google' && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
-                                                    <label className="text-xs font-medium text-text-secondary mb-2 block">Service Account JSON</label>
+                                                    <label className="text-xs font-medium text-text-secondary mb-2 block">服务账号 JSON</label>
                                                     <div className="flex gap-2">
                                                         <div className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-secondary font-mono truncate">
                                                             {googleServiceAccountPath
                                                                 ? <span className="text-text-primary">{googleServiceAccountPath.split('/').pop()}</span>
-                                                                : <span className="text-text-tertiary italic">No file selected</span>}
+                                                                : <span className="text-text-tertiary italic">未选择文件</span>}
                                                         </div>
                                                         <button
                                                             onClick={async () => {
@@ -2287,7 +2380,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'natively' && sttProvider !== 'none' && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
                                                     <label className="text-xs font-medium text-text-secondary block">
-                                                        {sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : 'Deepgram'} API Key
+                                                        {sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : sttProvider === 'doubao' || sttProvider === 'doubao-auc' ? 'Doubao' : 'Deepgram'} API Key
                                                     </label>
                                                     {sttProvider === 'openai' && (
                                                         <p className="text-[10px] text-text-tertiary mb-1.5">
@@ -2304,6 +2397,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                             : sttProvider === 'azure' ? sttAzureKey
                                                                                 : sttProvider === 'ibmwatson' ? sttIbmKey
                                                                                     : sttProvider === 'soniox' ? sttSonioxKey
+                                                                                    : sttProvider === 'doubao' || sttProvider === 'doubao-auc' ? sttDoubaoKey
                                                                                         : sttDeepgramKey
                                                             }
                                                             onChange={(e) => {
@@ -2313,6 +2407,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 else if (sttProvider === 'azure') setSttAzureKey(e.target.value);
                                                                 else if (sttProvider === 'ibmwatson') setSttIbmKey(e.target.value);
                                                                 else if (sttProvider === 'soniox') setSttSonioxKey(e.target.value);
+                                                                else if (sttProvider === 'doubao' || sttProvider === 'doubao-auc') setSttDoubaoKey(e.target.value);
                                                                 else setSttDeepgramKey(e.target.value);
                                                             }}
                                                             placeholder={
@@ -2328,7 +2423,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                                     ? (hasStoredIbmWatsonKey ? '••••••••••••' : 'Enter IBM Watson API key')
                                                                                     : sttProvider === 'soniox'
                                                                                         ? (hasStoredSonioxKey ? '••••••••••••' : 'Enter Soniox API key')
-                                                                                        : (hasStoredDeepgramKey ? '••••••••••••' : 'Enter Deepgram API key')
+                                                                                        : sttProvider === 'doubao' || sttProvider === 'doubao-auc'
+                                                                                            ? (hasStoredDoubaoKey ? '••••••••••••' : 'Enter Doubao API key')
+                                                                                            : (hasStoredDeepgramKey ? '••••••••••••' : 'Enter Deepgram API key')
                                                             }
                                                             className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary transition-colors"
                                                         />
@@ -2337,7 +2434,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 const keyMap: Record<string, string> = {
                                                                     groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
                                                                     elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
-                                                                    soniox: sttSonioxKey,
+                                                                    soniox: sttSonioxKey, doubao: sttDoubaoKey, 'doubao-auc': sttDoubaoKey,
                                                                 };
                                                                 handleSttKeySubmit(sttProvider as any, keyMap[sttProvider] || '');
                                                             }}
@@ -2345,7 +2442,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 const keyMap: Record<string, string> = {
                                                                     groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
                                                                     elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
-                                                                    soniox: sttSonioxKey,
+                                                                    soniox: sttSonioxKey, doubao: sttDoubaoKey, 'doubao-auc': sttDoubaoKey,
                                                                 };
                                                                 return (keyMap[sttProvider] || '').trim();
                                                             })()}
@@ -2365,12 +2462,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 azure: hasStoredAzureKey,
                                                                 ibmwatson: hasStoredIbmWatsonKey,
                                                                 soniox: hasStoredSonioxKey,
+                                                                doubao: hasStoredDoubaoKey,
                                                             };
                                                             return hasKeyMap[sttProvider] ? (
                                                                 <button
                                                                     onClick={() => handleRemoveSttKey(sttProvider as any)}
                                                                     className="px-2.5 py-2.5 rounded-lg text-xs font-medium text-text-tertiary hover:text-red-500 hover:bg-red-500/10 transition-all"
-                                                                    title="Remove API Key"
+                                                                    title="移除 API 密钥"
                                                                 >
                                                                     <Trash2 size={16} strokeWidth={1.5} />
                                                                 </button>
@@ -2381,13 +2479,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     {/* Azure Region Input */}
                                                     {sttProvider === 'azure' && (
                                                         <div className="space-y-1.5">
-                                                            <label className="text-xs font-medium text-text-secondary block">Region</label>
+                                                            <label className="text-xs font-medium text-text-secondary block">地区</label>
                                                             <div className="flex gap-2">
                                                                 <input
                                                                     type="text"
                                                                     value={sttAzureRegion}
                                                                     onChange={(e) => setSttAzureRegion(e.target.value)}
-                                                                    placeholder="e.g. eastus"
+                                                                    placeholder="例如 eastus"
                                                                     className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary transition-colors"
                                                                 />
                                                                 <button
@@ -2418,7 +2516,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                     type="text"
                                                                     value={sttOpenaiBaseUrl}
                                                                     onChange={(e) => setSttOpenaiBaseUrl(e.target.value)}
-                                                                    placeholder="https://api.openai.com (default)"
+                                                                    placeholder="https://api.openai.com（默认）"
                                                                     className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary transition-colors"
                                                                 />
                                                                 <button
@@ -2448,7 +2546,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             ) : sttTestStatus === 'success' ? (
                                                                 <><Check size={12} className="text-green-500" /> Connected</>
                                                             ) : (
-                                                                <>Test Connection</>
+                                                                <>测试连接</>
                                                             )}
                                                         </button>
                                                         <button
@@ -2459,7 +2557,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                     deepgram: 'https://console.deepgram.com',
                                                                     elevenlabs: 'https://elevenlabs.io/app/settings/api-keys',
                                                                     azure: 'https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeech',
-                                                                    ibmwatson: 'https://cloud.ibm.com/catalog/services/speech-to-text'
+                                                                    ibmwatson: 'https://cloud.ibm.com/catalog/services/speech-to-text',
+                                                                    doubao: 'https://www.volcengine.com/docs/6561/1354869',
+                                                                    'doubao-auc': 'https://www.volcengine.com/docs/6561/1354869'
                                                                 };
                                                                 if (urls[sttProvider]) {
                                                                     // @ts-ignore
@@ -2467,12 +2567,17 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 }
                                                             }}
                                                             className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors ml-1"
-                                                            title="Get API Key"
+                                                            title="获取 API 密钥"
                                                         >
                                                             <ExternalLink size={12} />
                                                         </button>
                                                         {sttTestStatus === 'error' && (
                                                             <span className="text-xs text-red-400">{sttTestError}</span>
+                                                        )}
+                                                        {sttTestOnlyVerified && sttTestStatus !== 'error' && (
+                                                            <span className="text-[10px] text-amber-400/90" title="测试连接只验证连通性,不会写入磁盘。需点击 Save 才会持久化。">
+                                                                ✓ 验证通过 — 点击 Save 才会持久化
+                                                            </span>
                                                         )}
                                                     </div>
                                                 </div>
@@ -2485,7 +2590,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                                             {/* Recognition Language Family */}
                                             <CustomSelect
-                                                label="Language"
+                                                label="语言"
                                                 icon={<Globe size={14} />}
                                                 value={selectedSttGroup}
                                                 options={languageGroups.map(g => ({
@@ -2496,19 +2601,19 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     toJSON: () => ({})
                                                 }))}
                                                 onChange={handleGroupChange}
-                                                placeholder="Select Language"
+                                                placeholder="选择语言"
                                             />
 
                                             {/* Variant/Accent Selector (Conditional) */}
                                             {currentGroupVariants.length > 1 && (
                                                 <div className="mt-3 animated fadeIn">
                                                     <CustomSelect
-                                                        label="Accent / Region"
+                                                        label="口音/地区"
                                                         icon={<MapPin size={14} />}
                                                         value={recognitionLanguage}
                                                         options={currentGroupVariants}
                                                         onChange={handleLanguageChange}
-                                                        placeholder="Select Region"
+                                                        placeholder="选择地区"
                                                     />
                                                 </div>
                                             )}
@@ -2536,7 +2641,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                                     {/* ── Audio Configuration Section ── */}
                                     <div>
-                                        <h3 className="text-lg font-bold text-text-primary mb-1">Audio Configuration</h3>
+                                        <h3 className="text-lg font-bold text-text-primary mb-1">音频配置</h3>
                                         <p className="text-xs text-text-secondary mb-5">Manage input and output devices.</p>
 
                                         {/* Device-fallback banner: shown when main process couldn't
@@ -2575,7 +2680,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                                         <div className="space-y-4">
                                             <CustomSelect
-                                                label="Input Device"
+                                                label="输入设备"
                                                 icon={<Mic size={16} />}
                                                 value={selectedInput}
                                                 options={inputDevices}
@@ -2583,12 +2688,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     setSelectedInput(id);
                                                     localStorage.setItem('preferredInputDeviceId', id);
                                                 }}
-                                                placeholder="Default Microphone"
+                                                placeholder="默认麦克风"
                                             />
 
                                             <div>
                                                 <div className="flex justify-between text-xs text-text-secondary mb-2 px-1">
-                                                    <span>Input Level</span>
+                                                    <span>输入级别</span>
                                                 </div>
                                                 <div className="h-1.5 bg-bg-input rounded-full overflow-hidden">
                                                     <div
@@ -2601,7 +2706,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             <div className="h-px bg-border-subtle my-2" />
 
                                             <CustomSelect
-                                                label="Output Device"
+                                                label="输出设备"
                                                 icon={<Speaker size={16} />}
                                                 value={selectedOutput}
                                                 options={outputDevices}
@@ -2609,7 +2714,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     setSelectedOutput(id);
                                                     localStorage.setItem('preferredOutputDeviceId', id);
                                                 }}
-                                                placeholder="Default Speakers"
+                                                placeholder="默认扬声器"
                                             />
 
                                             <div className="flex justify-end">
@@ -2676,8 +2781,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 </div>
                                                                 <div>
                                                                     <div className="flex items-center gap-2 mb-0.5">
-                                                                        <h3 className="text-sm font-bold text-text-primary">SCK Backend</h3>
-                                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 uppercase tracking-wide">Alternative</span>
+                                                                        <h3 className="text-sm font-bold text-text-primary">SCK 后端</h3>
+                                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 uppercase tracking-wide">替代方案</span>
                                                                     </div>
                                                                     <p className="text-xs text-text-secondary leading-relaxed max-w-[300px]">
                                                                         Use the ScreenCaptureKit backend. An optimized alternative to CoreAudio if you experience any capture issues.
@@ -2707,7 +2812,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                             {activeTab === 'calendar' && (
                                 <div className="space-y-6 animated fadeIn h-full">
                                     <div>
-                                        <h3 className="text-lg font-bold text-text-primary mb-2">Visible Calendars</h3>
+                                        <h3 className="text-lg font-bold text-text-primary mb-2">可见日历</h3>
                                         <p className="text-xs text-text-secondary mb-4">Upcoming meetings are synchronized from these calendars</p>
                                     </div>
 
@@ -2721,7 +2826,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <Calendar size={20} />
                                                         </div>
                                                         <div>
-                                                            <h4 className="text-sm font-medium text-text-primary">Google Calendar</h4>
+                                                            <h4 className="text-sm font-medium text-text-primary">Google 日历</h4>
                                                             <p className="text-xs text-text-secondary">Connected as {calendarStatus.email || 'User'}</p>
                                                         </div>
                                                     </div>
@@ -2783,7 +2888,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 }
                                                             }}
                                                             disabled={isCalendarRefreshing}
-                                                            aria-label="Refresh upcoming events"
+                                                            aria-label="刷新即将开始的事件"
                                                             className="group h-8 w-8 rounded-full bg-white/[0.04] hover:bg-white/[0.08] ring-1 ring-white/[0.07] text-text-secondary hover:text-text-primary transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.92] flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                                                         >
                                                             <RefreshCw
@@ -2903,14 +3008,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                                     title={ev.link}
                                                                                     className="self-center shrink-0 group/btn inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1.5 bg-white/[0.05] hover:bg-white/[0.1] ring-1 ring-white/[0.07] text-text-primary text-[11px] font-medium transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.97] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                                                                                 >
-                                                                                    <span>Join</span>
+                                                                                    <span>加入</span>
                                                                                     <span className="w-5 h-5 rounded-full bg-white/[0.08] ring-1 ring-white/[0.08] flex items-center justify-center transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover/btn:translate-x-[1px] group-hover/btn:-translate-y-[1px]">
                                                                                         <ExternalLink size={9} strokeWidth={2} />
                                                                                     </span>
                                                                                 </button>
                                                                             ) : (
                                                                                 <span
-                                                                                    aria-label="No meeting link"
+                                                                                    aria-label="无会议链接"
                                                                                     className="self-center shrink-0 inline-flex items-center justify-center w-2 h-2 rounded-full bg-white/[0.08] mr-3"
                                                                                 />
                                                                             )}
@@ -2926,7 +3031,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             <div className="w-full p-6">
                                                 <div className="mb-4">
                                                     <Calendar size={24} className="text-text-tertiary mb-3" />
-                                                    <h4 className="text-sm font-bold text-text-primary mb-1">No calendars</h4>
+                                                    <h4 className="text-sm font-bold text-text-primary mb-1">无日历</h4>
                                                     <p className="text-xs text-text-secondary">Get started by connecting a Google account.</p>
                                                 </div>
 

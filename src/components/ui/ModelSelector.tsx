@@ -177,7 +177,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                                 {customProviders.length === 0 ? (
                                     <div className="text-center py-6 text-text-tertiary">
                                         <p className="text-xs mb-2">No custom providers.</p>
-                                        <button className="text-[10px] text-accent-primary hover:underline">Manage in Settings</button>
+                                        <button className="text-[10px] text-accent-primary hover:underline">在设置中管理</button>
                                     </div>
                                 ) : (
                                     customProviders.map(provider => (

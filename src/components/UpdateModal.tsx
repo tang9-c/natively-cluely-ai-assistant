@@ -42,12 +42,12 @@ const CopyBlock = ({ command }: { command: string }) => {
             <button
                 onClick={handleCopy}
                 className="h-6 px-2.5 rounded-md bg-white/5 hover:bg-white/10 active:bg-white/15 flex items-center justify-center transition-colors border border-white/5 flex-shrink-0"
-                title="Copy to clipboard"
+                title="复制到剪贴板"
             >
                 {copied ? (
-                    <span className="text-[10px] font-semibold text-green-400">Copied</span>
+                    <span className="text-[10px] font-semibold text-green-400">已复制</span>
                 ) : (
-                    <span className="text-[10px] font-medium text-white/50 group-hover:text-white/80">Copy</span>
+                    <span className="text-[10px] font-medium text-white/50 group-hover:text-white/80">复制</span>
                 )}
             </button>
         </div>
@@ -67,9 +67,9 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
 }) => {
     // Helper to format version string
     const formatVersion = (v: string) => {
-        if (!v) return 'Unknown';
-        if (v === 'latest') return 'Latest';
-        if (v === 'vlatest') return 'Latest';
+        if (!v) return '未知';
+        if (v === 'latest') return '最新';
+        if (v === 'vlatest') return '最新';
         return v.startsWith('v') ? v : `v${v}`;
     };
 
@@ -161,7 +161,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                             <div className="p-8 flex flex-col items-center justify-center h-full text-center">
                                 <div className="space-y-2 mb-6">
                                     <h2 className="text-[17px] font-semibold text-white tracking-tight">
-                                        Update Failed
+                                        更新失败
                                     </h2>
                                     {errorMessage && (
                                         <p className="text-[13px] text-red-400 font-medium">
@@ -169,44 +169,44 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                         </p>
                                     )}
                                     <p className="text-[13px] text-white/40">
-                                        Check your internet connection or download the update manually from GitHub.
+                                        请检查您的网络连接或从 GitHub 手动下载更新。
                                     </p>
                                 </div>
                                 <button
                                     onClick={onDismiss}
                                     className="px-5 py-[6px] bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium rounded-lg transition-colors"
                                 >
-                                    Close
+                                    关闭
                                 </button>
                             </div>
                         ) : status === 'instructions' ? (
                             <div className="p-8 flex flex-col h-full relative text-left w-full max-w-full">
                                 <div className="space-y-1.5 mb-5 text-center mt-2">
                                     <h2 className="text-[17px] font-semibold text-white tracking-tight">
-                                        Manual Update Required
+                                        需要手动更新
                                     </h2>
                                     <p className="text-[13px] text-white/40 font-medium leading-relaxed">
-                                        The download has started in your browser. Follow these steps to install the update:
+                                        下载已在浏览器中开始。请按照以下步骤安装更新：
                                     </p>
                                 </div>
                                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 mb-4 space-y-2 w-full">
                                     {isMac ? (
                                         <>
                                             <div className="space-y-1 w-full">
-                                                <p className="text-[12px] font-medium text-white/80">1. Clear quarantine on the downloaded file:</p>
+                                                <p className="text-[12px] font-medium text-white/80">1. 清除下载文件的隔离属性：</p>
                                                 <CopyBlock command={`xattr -cr ~/Downloads/Natively-${displayVersion.replace('v', '')}-${instructionsArch || 'arm64'}.dmg`} />
                                             </div>
                                             <div className="space-y-1 mt-1 pl-0.5">
-                                                <p className="text-[12px] font-medium text-white/80">2. Open the file and install Natively.</p>
+                                                <p className="text-[12px] font-medium text-white/80">2. 打开文件并安装 Natively。</p>
                                             </div>
                                             <div className="space-y-1 mt-3 w-full">
-                                                <p className="text-[12px] font-medium text-white/80">3. Clear quarantine on the installed app:</p>
+                                                <p className="text-[12px] font-medium text-white/80">3. 清除已安装应用的隔离属性：</p>
                                                 <CopyBlock command="xattr -cr /Applications/Natively.app" />
                                             </div>
                                         </>
                                     ) : (
                                         <div className="space-y-1 w-full">
-                                            <p className="text-[12px] font-medium text-white/80">Run the downloaded installer (.exe) and follow the prompts. Natively will restart when finished.</p>
+                                            <p className="text-[12px] font-medium text-white/80">运行下载的安装程序 (.exe) 并按照提示操作。完成后 Natively 将重新启动。</p>
                                         </div>
                                     )}
                                 </div>
@@ -215,7 +215,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                         onClick={onDismiss}
                                         className="px-6 py-[6px] bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium rounded-lg transition-colors w-[200px]"
                                     >
-                                        Done
+                                        完成
                                     </button>
                                 </div>
                             </div>
@@ -225,10 +225,10 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                 {/* 1. Header Text */}
                                 <div className="space-y-1.5 mb-8">
                                     <h2 className="text-[17px] font-semibold text-white tracking-tight">
-                                        Downloading Update...
+                                        正在下载更新...
                                     </h2>
                                     <p className="text-[13px] text-white/40 font-medium">
-                                        {downloadProgress < 100 ? 'Please wait while we prepare the update.' : 'Finalizing package...'}
+                                        {downloadProgress < 100 ? '请稍候，我们正在准备更新。' : '正在完成打包...'}
                                     </p>
                                 </div>
 
@@ -248,10 +248,10 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                         </div>
                                         <div className="space-y-0.5">
                                             <p className="text-[12px] font-medium text-white/80 leading-tight">
-                                                If macOS says "App is damaged"
+                                                如果 macOS 提示"应用已损坏"
                                             </p>
                                             <p className="text-[11px] text-white/40 leading-snug">
-                                                Move app to Applications folder, then run:
+                                                将应用移动到应用程序文件夹，然后运行：
                                             </p>
                                         </div>
                                     </div>
@@ -264,12 +264,12 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                         <button
                                             onClick={handleCopyCommand}
                                             className="h-6 px-2.5 rounded-md bg-white/5 hover:bg-white/10 active:bg-white/15 flex items-center justify-center transition-colors border border-white/5"
-                                            title="Copy to clipboard"
+                                            title="复制到剪贴板"
                                         >
                                             {copied ? (
-                                                <span className="text-[10px] font-semibold text-green-400">Copied</span>
+                                                <span className="text-[10px] font-semibold text-green-400">已复制</span>
                                             ) : (
-                                                <span className="text-[10px] font-medium text-white/50 group-hover:text-white/80">Copy</span>
+                                                <span className="text-[10px] font-medium text-white/50 group-hover:text-white/80">复制</span>
                                             )}
                                         </button>
                                     </div>

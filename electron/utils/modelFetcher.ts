@@ -10,7 +10,7 @@ export interface ProviderModel {
     label: string;
 }
 
-type Provider = 'gemini' | 'groq' | 'openai' | 'claude';
+type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao';
 
 /**
  * Fetch available models from a provider's API.
@@ -29,6 +29,8 @@ export async function fetchProviderModels(
             return fetchAnthropicModels(apiKey);
         case 'gemini':
             return fetchGeminiModels(apiKey);
+        case 'doubao':
+            return fetchDoubaoModels(apiKey);
         default:
             throw new Error(`Unknown provider: ${provider}`);
     }
@@ -160,5 +162,29 @@ async function fetchGeminiModels(apiKey: string): Promise<ProviderModel[]> {
             const id = (m.name || '').replace(/^models\//, '');
             return { id, label: m.displayName || id };
         })
+        .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+// ─── Doubao ──────────────────────────────────────────────────────────────────
+
+async function fetchDoubaoModels(apiKey: string): Promise<ProviderModel[]> {
+    const response = await axios.get(
+        'https://ark.cn-beijing.volces.com/api/v3/models',
+        {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            timeout: 15000,
+        }
+    );
+
+    const models: any[] = response.data?.data || [];
+
+    // Only include Doubao Seed, general chat models, and endpoint IDs
+    const filtered = models.filter((m: any) => {
+        const id = (m.id || '').toLowerCase();
+        return id.startsWith('doubao-seed') || id.startsWith('doubao-') || id.startsWith('ep-');
+    });
+
+    return filtered
+        .map((m: any) => ({ id: m.id, label: m.id }))
         .sort((a, b) => a.label.localeCompare(b.label));
 }

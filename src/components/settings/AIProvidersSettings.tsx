@@ -68,7 +68,7 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
                             </button>
                         ))}
                         {options.length === 0 && (
-                            <div className="px-3 py-2 text-xs text-gray-500 italic">No models available</div>
+                            <div className="px-3 py-2 text-xs text-gray-500 italic">无可用模型</div>
                         )}
                     </div>
                 </div>
@@ -104,7 +104,7 @@ const CodexCliModelField: React.FC<{
                     onChange(modelId);
                     onSelect(modelId);
                 }}
-                placeholder="Preset"
+                placeholder="预设"
             />
         </div>
     </label>
@@ -116,6 +116,8 @@ export const AIProvidersSettings: React.FC = () => {
     const [groqApiKey, setGroqApiKey] = useState('');
     const [openaiApiKey, setOpenaiApiKey] = useState('');
     const [claudeApiKey, setClaudeApiKey] = useState('');
+    const [doubaoApiKey, setDoubaoApiKey] = useState('');
+    const [doubaoEmbeddingModel, setDoubaoEmbeddingModel] = useState('');
 
     // Status
     const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>({});
@@ -176,6 +178,7 @@ export const AIProvidersSettings: React.FC = () => {
                         groq: creds.hasGroqKey,
                         openai: creds.hasOpenaiKey,
                         claude: creds.hasClaudeKey,
+                        doubao: creds.hasDoubaoKey || false,
                         natively: creds.hasNativelyKey || false
                     });
                     // Load preferred models
@@ -184,7 +187,9 @@ export const AIProvidersSettings: React.FC = () => {
                     if (creds.groqPreferredModel) pm.groq = creds.groqPreferredModel;
                     if (creds.openaiPreferredModel) pm.openai = creds.openaiPreferredModel;
                     if (creds.claudePreferredModel) pm.claude = creds.claudePreferredModel;
+                    if (creds.doubaoPreferredModel) pm.doubao = creds.doubaoPreferredModel;
                     setPreferredModels(pm);
+                    if (creds.doubaoEmbeddingModel) setDoubaoEmbeddingModel(creds.doubaoEmbeddingModel);
                 }
 
                 // Now it's safe to read fast mode — hasStoredKey is already set so
@@ -403,6 +408,8 @@ export const AIProvidersSettings: React.FC = () => {
             if (provider === 'openai') result = await window.electronAPI.setOpenaiApiKey(key);
             // @ts-ignore
             if (provider === 'claude') result = await window.electronAPI.setClaudeApiKey(key);
+            // @ts-ignore
+            if (provider === 'doubao') result = await window.electronAPI.setDoubaoLlmApiKey(key);
 
             if (result && result.success) {
                 setSavedStatus(prev => ({ ...prev, [provider]: true }));
@@ -429,6 +436,8 @@ export const AIProvidersSettings: React.FC = () => {
             if (provider === 'openai') result = await window.electronAPI.setOpenaiApiKey('');
             // @ts-ignore
             if (provider === 'claude') result = await window.electronAPI.setClaudeApiKey('');
+            // @ts-ignore
+            if (provider === 'doubao') result = await window.electronAPI.setDoubaoLlmApiKey('');
 
             if (result && result.success) {
                 setHasStoredKey(prev => ({ ...prev, [provider]: false }));
@@ -455,11 +464,11 @@ export const AIProvidersSettings: React.FC = () => {
                 setTimeout(() => setTestStatus(prev => ({ ...prev, [provider]: 'idle' })), 3000);
             } else {
                 setTestStatus(prev => ({ ...prev, [provider]: 'error' }));
-                setTestError(prev => ({ ...prev, [provider]: result.error || 'Connection failed' }));
+                setTestError(prev => ({ ...prev, [provider]: result.error || '连接失败' }));
             }
         } catch (e: any) {
             setTestStatus(prev => ({ ...prev, [provider]: 'error' }));
-            setTestError(prev => ({ ...prev, [provider]: e.message || 'Connection failed' }));
+            setTestError(prev => ({ ...prev, [provider]: e.message || '连接失败' }));
         }
     };
 
@@ -468,7 +477,8 @@ export const AIProvidersSettings: React.FC = () => {
             gemini: 'https://aistudio.google.com/app/apikey',
             groq: 'https://console.groq.com/keys',
             openai: 'https://platform.openai.com/api-keys',
-            claude: 'https://console.anthropic.com/settings/keys'
+            claude: 'https://console.anthropic.com/settings/keys',
+            doubao: 'https://www.volcengine.com/docs/82379/1494384?lang=zh'
         };
         // @ts-ignore
         window.electronAPI?.openExternal(urls[provider]);
@@ -552,13 +562,13 @@ export const AIProvidersSettings: React.FC = () => {
             {/* Default Model for Chat */}
             <div className="space-y-5">
                 <div>
-                    <h3 className="text-sm font-bold text-text-primary mb-1">Default Model for Chat</h3>
+                    <h3 className="text-sm font-bold text-text-primary mb-1">聊天默认模型</h3>
                     <p className="text-xs text-text-secondary mb-2">Primary model for new chats. Other configured models act as fallbacks.</p>
                 </div>
 
                 <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle flex items-center justify-between">
                     <div>
-                        <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">Active Model</label>
+                        <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">当前模型</label>
                         <p className="text-[10px] text-text-secondary">Applies to new chats instantly.</p>
                     </div>
                     <ModelSelect
@@ -610,8 +620,8 @@ export const AIProvidersSettings: React.FC = () => {
                 >
                     <div className="flex-1">
                         <div className="flex items-center gap-2">
-                            <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">Fast Response Mode</label>
-                            <span className="bg-orange-500/10 text-orange-500 text-[9px] font-bold px-1.5 py-0.5 rounded border border-orange-500/20">NEW</span>
+                            <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">快速响应模式</label>
+                            <span className="bg-orange-500/10 text-orange-500 text-[9px] font-bold px-1.5 py-0.5 rounded border border-orange-500/20">新建</span>
                         </div>
                         <p className="text-[10px] text-text-secondary mt-0.5">Super fast responses using the Codex CLI fast model, Groq, or Natively. Turn this off to use the selected normal model.</p>
                         {!canUseFastMode && (
@@ -640,7 +650,7 @@ export const AIProvidersSettings: React.FC = () => {
             {/* Cloud Providers */}
             <div className="space-y-5">
                 <div>
-                    <h3 className="text-sm font-bold text-text-primary mb-1">Cloud Providers</h3>
+                    <h3 className="text-sm font-bold text-text-primary mb-1">云提供商</h3>
                     <p className="text-xs text-text-secondary mb-2">Add API keys to unlock cloud AI models.</p>
                 </div>
 
@@ -726,6 +736,65 @@ export const AIProvidersSettings: React.FC = () => {
                         onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, claude: model }))}
                     />
 
+                    {/* Doubao */}
+                    <ProviderCard
+                        providerId="doubao"
+                        providerName="Doubao (Volcengine)"
+                        apiKey={doubaoApiKey}
+                        preferredModel={preferredModels.doubao}
+                        hasStoredKey={!!hasStoredKey.doubao}
+                        onKeyChange={setDoubaoApiKey}
+                        onSaveKey={async () => { await handleSaveKey('doubao', doubaoApiKey, setDoubaoApiKey); }}
+                        onRemoveKey={() => handleRemoveKey('doubao', setDoubaoApiKey)}
+                        onTestConnection={() => handleTestConnection('doubao', doubaoApiKey)}
+                        testStatus={testStatus.doubao || 'idle'}
+                        testError={testError.doubao}
+                        savingStatus={!!savingStatus.doubao}
+                        savedStatus={!!savedStatus.doubao}
+                        keyPlaceholder="Bearer ..."
+                        keyUrl="https://www.volcengine.com/docs/82379/1494384?lang=zh"
+                        onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, doubao: model }))}
+                    />
+                    {/* Doubao Embedding Endpoint ID */}
+                    <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle mt-3">
+                        <div className="mb-2 flex items-center justify-between">
+                            <label className="flex items-center text-xs font-medium text-text-primary uppercase tracking-wide">
+                                Doubao Embedding Endpoint ID
+                                {doubaoEmbeddingModel && <span className="ml-2 text-green-500 normal-case">✓ Saved</span>}
+                            </label>
+                            <span className="text-[10px] text-text-tertiary">用于 RAG 向量搜索</span>
+                        </div>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={doubaoEmbeddingModel}
+                                onChange={(e) => setDoubaoEmbeddingModel(e.target.value)}
+                                placeholder="ep-20260321165850-k9w7r"
+                                className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary font-mono focus:outline-none focus:border-accent-primary transition-colors"
+                            />
+                            <button
+                                onClick={async () => {
+                                    // @ts-ignore
+                                    const result = await window.electronAPI?.setDoubaoEmbeddingModel?.(doubaoEmbeddingModel);
+                                    if (result?.success) {
+                                        setSavedStatus(prev => ({ ...prev, doubaoEmbedding: true }));
+                                        setTimeout(() => setSavedStatus(prev => ({ ...prev, doubaoEmbedding: false })), 2000);
+                                    }
+                                }}
+                                disabled={!doubaoEmbeddingModel.trim()}
+                                className={`px-5 py-2.5 rounded-lg text-xs font-medium transition-colors ${savedStatus.doubaoEmbedding
+                                    ? 'bg-green-500/20 text-green-400'
+                                    : 'bg-bg-input hover:bg-bg-secondary border border-border-subtle text-text-primary disabled:opacity-50'
+                                    }`}
+                            >
+                                {savedStatus.doubaoEmbedding ? 'Saved!' : 'Save'}
+                            </button>
+                        </div>
+                        <p className="text-[10px] text-text-secondary mt-2">
+                            在<a href="https://console.volcengine.com/ark/region:ark+cn-beijing/model" target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:underline">方舟控制台</a>创建 Embedding 推理接入点，复制 Endpoint ID（以 ep- 开头）粘贴到此处。
+                        </p>
+                    </div>
+
                 </div>
             </div>
 
@@ -739,7 +808,7 @@ export const AIProvidersSettings: React.FC = () => {
                 <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle space-y-4">
                     <div className="flex items-center justify-between">
                         <div>
-                            <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">Enable Codex CLI</label>
+                            <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">启用 Codex CLI</label>
                             <p className="text-[10px] text-text-secondary">Adds Codex CLI as a selectable local backend and fallback.</p>
                         </div>
                         <button
@@ -756,7 +825,7 @@ export const AIProvidersSettings: React.FC = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <label className="space-y-1">
-                            <span className="text-[10px] font-medium text-text-secondary uppercase tracking-wide">Executable</span>
+                            <span className="text-[10px] font-medium text-text-secondary uppercase tracking-wide">可执行文件</span>
                             <input
                                 value={codexCliConfig.path}
                                 onChange={e => setCodexCliConfig(prev => ({ ...prev, path: e.target.value }))}
@@ -777,7 +846,7 @@ export const AIProvidersSettings: React.FC = () => {
                             />
                         </label>
                         <CodexCliModelField
-                            label="Normal Model"
+                            label="普通模型"
                             value={codexCliConfig.model}
                             placeholder="gpt-5.5"
                             onChange={(model) => setCodexCliConfig(prev => ({ ...prev, model }))}
@@ -785,7 +854,7 @@ export const AIProvidersSettings: React.FC = () => {
                             onSave={() => saveCodexCliConfig()}
                         />
                         <CodexCliModelField
-                            label="Fast Model"
+                            label="快速模型"
                             value={codexCliConfig.fastModel}
                             placeholder="gpt-5.3-codex-spark"
                             onChange={(fastModel) => setCodexCliConfig(prev => ({ ...prev, fastModel }))}
@@ -799,7 +868,7 @@ export const AIProvidersSettings: React.FC = () => {
                             {codexCliStatus === 'success' && (
                                 <div className="flex items-center gap-2 text-xs text-green-400">
                                     <CheckCircle size={14} />
-                                    <span>Codex CLI detected</span>
+                                    <span>检测到 Codex CLI</span>
                                 </div>
                             )}
                             {codexCliStatus === 'error' && (
@@ -837,7 +906,7 @@ export const AIProvidersSettings: React.FC = () => {
                             setTimeout(() => setIsRefreshingOllama(false), 500);
                         }}
                         className="p-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-input transition-colors"
-                        title="Refresh Ollama"
+                        title="刷新 Ollama"
                         disabled={isRefreshingOllama}
                     >
                         <RefreshCw size={18} className={isRefreshingOllama ? "animate-spin" : ""} />
@@ -861,7 +930,7 @@ export const AIProvidersSettings: React.FC = () => {
                         <div className="flex flex-col gap-2">
                             <div className="flex items-center gap-2 text-xs text-red-400">
                                 <AlertCircle size={14} />
-                                <span>Ollama not detected</span>
+                                <span>未检测到 Ollama</span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <p className="text-xs text-text-secondary">
@@ -881,14 +950,14 @@ export const AIProvidersSettings: React.FC = () => {
                         <div className="space-y-3">
                             <div className="flex items-center gap-2 text-xs text-green-400 mb-3">
                                 <CheckCircle size={14} />
-                                <span>Ollama connected</span>
+                                <span>Ollama 已连接</span>
                             </div>
 
                             <div className="grid grid-cols-1 gap-2">
                                 {ollamaModels.map(model => (
                                     <div key={model} className="flex items-center justify-between p-2 bg-bg-input rounded-lg border border-border-subtle">
                                         <span className="text-xs text-text-primary font-mono">{model}</span>
-                                        <span className="text-[10px] text-bg-elevated bg-text-secondary px-1.5 py-0.5 rounded-full font-bold">LOCAL</span>
+                                        <span className="text-[10px] text-bg-elevated bg-text-secondary px-1.5 py-0.5 rounded-full font-bold">本地</span>
                                     </div>
                                 ))}
                             </div>
@@ -907,8 +976,8 @@ export const AIProvidersSettings: React.FC = () => {
                 <div className="flex items-center justify-between mb-2">
                     <div>
                         <div className="flex items-center gap-2 mb-1">
-                            <h3 className="text-sm font-bold text-text-primary">Custom Providers</h3>
-                            <span className="px-1.5 py-0 rounded-full text-[7px] font-bold bg-yellow-500/10 text-yellow-500 uppercase tracking-widest border border-yellow-500/20 leading-loose mt-0.5">Experimental</span>
+                            <h3 className="text-sm font-bold text-text-primary">自定义提供商</h3>
+                            <span className="px-1.5 py-0 rounded-full text-[7px] font-bold bg-yellow-500/10 text-yellow-500 uppercase tracking-widest border border-yellow-500/20 leading-loose mt-0.5">实验性</span>
                         </div>
                         <p className="text-xs text-text-secondary">Add your own AI endpoints via cURL.</p>
                     </div>
@@ -928,12 +997,12 @@ export const AIProvidersSettings: React.FC = () => {
 
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-1">Provider Name</label>
+                                <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-1">提供商名称</label>
                                 <input
                                     type="text"
                                     value={customName}
                                     onChange={(e) => setCustomName(e.target.value)}
-                                    placeholder="My Custom LLM"
+                                    placeholder="我的自定义 LLM"
                                     className="w-full bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary transition-colors"
                                 />
                             </div>
@@ -958,7 +1027,7 @@ export const AIProvidersSettings: React.FC = () => {
                                     type="text"
                                     value={customResponsePath}
                                     onChange={(e) => setCustomResponsePath(e.target.value)}
-                                    placeholder="e.g. choices[0].message.content"
+                                    placeholder="例如 choices[0].message.content"
                                     className="w-full bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary transition-colors font-mono"
                                 />
                                 <p className="text-[10px] text-text-secondary mt-1">
@@ -975,7 +1044,7 @@ export const AIProvidersSettings: React.FC = () => {
 
                                 <div className="p-4 space-y-4">
                                     <div>
-                                        <p className="text-xs text-text-secondary mb-2 font-medium">Available Variables</p>
+                                        <p className="text-xs text-text-secondary mb-2 font-medium">可用变量</p>
                                         <div className="grid grid-cols-1 gap-2">
                                             <div className="flex items-center gap-2 text-xs">
                                                 <code className="bg-bg-input px-1.5 py-0.5 rounded text-text-primary font-mono border border-border-subtle">{"{{TEXT}}"}</code>
@@ -989,7 +1058,7 @@ export const AIProvidersSettings: React.FC = () => {
                                     </div>
 
                                     <div>
-                                        <p className="text-xs text-text-secondary mb-2 font-medium">Examples</p>
+                                        <p className="text-xs text-text-secondary mb-2 font-medium">示例</p>
                                         <div className="space-y-3">
                                             {/* Ollama Example */}
                                             <div>
@@ -1003,7 +1072,7 @@ export const AIProvidersSettings: React.FC = () => {
 
                                             {/* OpenAI Example */}
                                             <div>
-                                                <div className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1.5">OpenAI Compatible</div>
+                                                <div className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1.5">OpenAI 兼容</div>
                                                 <div className="bg-bg-input p-2.5 rounded-lg border border-border-subtle overflow-x-auto">
                                                     <code className="font-mono text-[10px] text-text-primary whitespace-pre block">
                                                         {`curl https://api.openai.com/v1/chat/completions \\
@@ -1077,14 +1146,14 @@ export const AIProvidersSettings: React.FC = () => {
                                         <button
                                             onClick={() => handleEditProvider(provider)}
                                             className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-elevated transition-colors"
-                                            title="Edit"
+                                            title="编辑"
                                         >
                                             <Edit2 size={14} />
                                         </button>
                                         <button
                                             onClick={() => handleDeleteCustom(provider.id)}
                                             className="p-1.5 rounded-lg text-text-secondary hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                                            title="Delete"
+                                            title="删除"
                                         >
                                             <Trash2 size={14} />
                                         </button>
@@ -1098,7 +1167,7 @@ export const AIProvidersSettings: React.FC = () => {
             {/* Screen Understanding — vision-first routing */}
             <div className="space-y-5">
                 <div>
-                    <h3 className="text-sm font-bold text-text-primary mb-1">Screen understanding</h3>
+                    <h3 className="text-sm font-bold text-text-primary mb-1">屏幕理解</h3>
                     <p className="text-xs text-text-secondary mb-2">Pick how Natively reads what is on your screen. All paths use the vision-capable AI provider directly; OCR is no longer used.</p>
                 </div>
                 <div className="bg-bg-item-surface rounded-xl p-4 border border-border-subtle flex flex-col gap-2">
@@ -1143,7 +1212,7 @@ export const AIProvidersSettings: React.FC = () => {
                     })}
                     <div className="flex items-center justify-between pt-2 mt-1 border-t border-border-subtle">
                         <div className="flex flex-col">
-                            <span className="text-xs text-text-primary font-semibold">Technical interview direct vision</span>
+                            <span className="text-xs text-text-primary font-semibold">技术面试直接视角</span>
                             <span className="text-[11px] text-text-secondary leading-snug mt-0.5">Use the highest-resolution image profile so code text stays sharp in interview mode.</span>
                         </div>
                         <div
@@ -1170,7 +1239,7 @@ export const AIProvidersSettings: React.FC = () => {
             {/* Cloud Provider Data Scopes — fail-closed cloud share controls */}
             <div className="space-y-5">
                 <div>
-                    <h3 className="text-sm font-bold text-text-primary mb-1">Cloud provider data scopes</h3>
+                    <h3 className="text-sm font-bold text-text-primary mb-1">云提供商数据范围</h3>
                     <p className="text-xs text-text-secondary mb-2">Control what data cloud AI providers can access. Disabled types are handled locally for privacy.</p>
                 </div>
                 <div className="bg-bg-item-surface rounded-xl p-4 border border-border-subtle flex flex-col gap-2">

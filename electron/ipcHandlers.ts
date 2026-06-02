@@ -1187,6 +1187,40 @@ export function initializeIpcHandlers(appState: AppState): void {
   const _usageCache = new Map<string, { data: any; ts: number }>();
   const USAGE_CACHE_TTL_MS = 60_000;
 
+  safeHandle('set-doubao-llm-api-key', async (_, apiKey: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().setDoubaoLlmApiKey(apiKey);
+
+      // Also update the LLMHelper immediately
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      llmHelper.setDoubaoApiKey(apiKey);
+
+      // Re-initialize RAG embedding pipeline with new Doubao key
+      const ragManager = appState.getRAGManager();
+      if (ragManager) {
+        console.log('[IPC] Re-initializing RAG embedding pipeline with Doubao key');
+        ragManager.initializeEmbeddings({
+          openaiKey: CredentialsManager.getInstance().getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
+          geminiKey: CredentialsManager.getInstance().getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
+          doubaoKey: apiKey || process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY || undefined,
+          ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
+          providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
+        });
+      }
+
+      // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
+      appState.getIntelligenceManager().resetEngine();
+      // Re-init IntelligenceManager
+      appState.getIntelligenceManager().initializeLLMs();
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error saving Doubao LLM API key:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   safeHandle('set-natively-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -1720,6 +1754,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasGroqKey: hasKey(creds.groqApiKey),
         hasOpenaiKey: hasKey(creds.openaiApiKey),
         hasClaudeKey: hasKey(creds.claudeApiKey),
+        hasDoubaoKey: hasKey(creds.doubaoLlmApiKey),
         hasNativelyKey: hasKey(creds.nativelyApiKey),
         googleServiceAccountPath: creds.googleServiceAccountPath || null,
         sttProvider: creds.sttProvider || 'none',
@@ -1733,6 +1768,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasIbmWatsonKey: hasKey(creds.ibmWatsonApiKey),
         ibmWatsonRegion: creds.ibmWatsonRegion || 'us-south',
         hasSonioxKey: hasKey(creds.sonioxApiKey),
+        // STT Doubao key - separate from LLM Doubao key
+        hasSttDoubaoKey: hasKey(creds.doubaoApiKey),
         // STT key values — returned so the settings UI can pre-populate input fields.
         // SECURITY FIX (P0): Return masked keys only, never raw API keys.
         // The hasSttGroqKey boolean tells UI if key exists — no raw key needed.
@@ -1743,6 +1780,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         sttAzureKey: creds.azureApiKey ? `sk-...${creds.azureApiKey.slice(-4)}` : '',
         sttIbmKey: creds.ibmWatsonApiKey ? `sk-...${creds.ibmWatsonApiKey.slice(-4)}` : '',
         sttSonioxKey: creds.sonioxApiKey ? `sk-...${creds.sonioxApiKey.slice(-4)}` : '',
+        sttDoubaoKey: creds.doubaoApiKey ? `sk-...${creds.doubaoApiKey.slice(-4)}` : '',
         openAiSttBaseUrl: creds.openAiSttBaseUrl || '',
         hasTavilyKey: hasKey(creds.tavilyApiKey),
         // Dynamic Model Discovery - preferred models
@@ -1750,6 +1788,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         groqPreferredModel: creds.groqPreferredModel || undefined,
         openaiPreferredModel: creds.openaiPreferredModel || undefined,
         claudePreferredModel: creds.claudePreferredModel || undefined,
+        doubaoPreferredModel: creds.doubaoPreferredModel || undefined,
+        doubaoEmbeddingModel: creds.doubaoEmbeddingModel || undefined,
       };
     } catch (error: any) {
       // SECURITY FIX (P0): Error fallback returns masked keys, not raw strings
@@ -1758,6 +1798,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasGroqKey: false,
         hasOpenaiKey: false,
         hasClaudeKey: false,
+        hasDoubaoKey: false,
         hasNativelyKey: false,
         googleServiceAccountPath: null,
         sttProvider: 'none',
@@ -1771,6 +1812,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasIbmWatsonKey: false,
         ibmWatsonRegion: 'us-south',
         hasSonioxKey: false,
+        hasSttDoubaoKey: false,
         hasTavilyKey: false,
         sttGroqKey: '',
         sttOpenaiKey: '',
@@ -1789,7 +1831,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'fetch-provider-models',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao', apiKey: string) => {
       try {
         // Fall back to stored key if no key was explicitly provided
         let key = apiKey?.trim();
@@ -1800,6 +1842,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'groq') key = cm.getGroqApiKey();
           else if (provider === 'openai') key = cm.getOpenaiApiKey();
           else if (provider === 'claude') key = cm.getClaudeApiKey();
+          else if (provider === 'doubao') key = cm.getDoubaoLlmApiKey();
         }
 
         if (!key) {
@@ -1820,7 +1863,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'set-provider-preferred-model',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude', modelId: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao', modelId: string) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         CredentialsManager.getInstance().setPreferredModel(provider, modelId);
@@ -1848,6 +1891,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         | 'azure'
         | 'ibmwatson'
         | 'soniox'
+        | 'doubao'
+        | 'doubao-auc'
         | 'natively',
     ) => {
       try {
@@ -2018,6 +2063,43 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('set-doubao-api-key', async (_, apiKey: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().setDoubaoApiKey(apiKey);
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
+      });
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error saving Doubao API key:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('set-doubao-embedding-model', async (_, model: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().setDoubaoEmbeddingModel(model);
+      // Reinitialize RAG pipeline to pick up the new embedding model
+      const ragManager = appState.getRAGManager();
+      if (ragManager) {
+        ragManager.initializeEmbeddings({
+          openaiKey: CredentialsManager.getInstance().getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
+          geminiKey: CredentialsManager.getInstance().getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
+          doubaoKey: CredentialsManager.getInstance().getDoubaoLlmApiKey() || process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY || undefined,
+          doubaoEmbeddingModel: model.trim() || undefined,
+          ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
+          providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
+        });
+      }
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error saving Doubao embedding model:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   safeHandle('set-ibmwatson-region', async (_, region: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -2039,16 +2121,20 @@ export function initializeIpcHandlers(appState: AppState): void {
     return msg.replace(/:\s*[a-zA-Z0-9*]+\*+[a-zA-Z0-9*]+\.?$/g, '').trim();
   };
 
-  safeHandle(
-    'test-stt-connection',
-    async (
-      _,
-      provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox',
-      apiKey: string,
-      region?: string,
-    ) => {
-      console.log(`[IPC] Received test - stt - connection request for provider: ${provider} `);
-      try {
+  // Shared test logic for STT providers. Used by both the user-input flow
+  // (test-stt-connection: caller supplies the key) and the saved-key flow
+  // (test-saved-stt-connection: handler reads the key from CredentialsManager).
+  type SttTestProvider =
+    | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson'
+    | 'soniox' | 'doubao' | 'doubao-auc';
+
+  const runSttConnectionTest = async (
+    provider: SttTestProvider,
+    apiKey: string,
+    region?: string,
+  ): Promise<{ success: boolean; error?: string }> => {
+    console.log(`[IPC] Received test - stt - connection request for provider: ${provider} `);
+    try {
         if (provider === 'deepgram') {
           const WebSocket = require('ws');
           const token = apiKey.trim();
@@ -2231,6 +2317,61 @@ export function initializeIpcHandlers(appState: AppState): void {
               timeout: 15000,
             },
           );
+        } else if (provider === 'doubao-auc') {
+          // Doubao AUC: JSON body with Base64 audio
+          // New console API uses single X-Api-Key header (no more AppId|AccessKey)
+          const audioBase64 = testWav.toString('base64');
+          const requestId = `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+
+          const authHeaders: Record<string, string> = {
+            'X-Api-Key': apiKey.trim(),
+            'X-Api-Resource-Id': 'volc.seedasr.auc',
+            'Content-Type': 'application/json',
+            'X-Api-Request-Id': requestId,
+            'X-Api-Sequence': '-1',
+          };
+          console.log('[IPC] Testing Doubao AUC with X-Api-Key prefix:', apiKey.substring(0, 8) + '...');
+          console.log('[IPC]   Request ID:', requestId);
+
+          try {
+            const response = await axios.post(
+              'https://openspeech-direct.zijieapi.com/api/v3/auc/bigmodel/submit',
+              {
+                user: { uid: 'cluely-test' },
+                audio: {
+                  data: audioBase64,
+                  format: 'wav',
+                  codec: 'raw',
+                  rate: 16000,
+                  bits: 16,
+                  channel: 1,
+                },
+                request: {
+                  model_name: 'bigmodel',
+                  enable_itn: true,
+                  enable_punc: true,
+                },
+              },
+              {
+                headers: authHeaders,
+                timeout: 15000,
+              },
+            );
+
+            console.log('[IPC] Doubao AUC test response:', {
+              status: response.status,
+              statusText: response.statusText,
+              headers: response.headers,
+            });
+          } catch (testErr: any) {
+            console.error('[IPC] Doubao AUC test detailed error:', {
+              status: testErr?.response?.status,
+              statusText: testErr?.response?.statusText,
+              data: testErr?.response?.data,
+              headers: testErr?.response?.headers,
+            });
+            throw testErr;
+          }
         } else {
           // Groq / OpenAI: multipart FormData
           let openAiEndpoint = 'https://api.openai.com/v1/audio/transcriptions';
@@ -2247,11 +2388,18 @@ export function initializeIpcHandlers(appState: AppState): void {
                 : `${trimmed}/v1/audio/transcriptions`;
             }
           }
-          const endpoint =
-            provider === 'groq'
-              ? 'https://api.groq.com/openai/v1/audio/transcriptions'
-              : openAiEndpoint;
-          const model = provider === 'groq' ? 'whisper-large-v3-turbo' : 'whisper-1';
+          let endpoint: string;
+          let model: string;
+          if (provider === 'groq') {
+            endpoint = 'https://api.groq.com/openai/v1/audio/transcriptions';
+            model = 'whisper-large-v3-turbo';
+          } else if (provider === 'doubao') {
+            endpoint = 'https://ark.cn-beijing.volces.com/api/v3/audio/transcriptions';
+            model = 'volc.seedasr.sauc.duration';
+          } else {
+            endpoint = openAiEndpoint;
+            model = 'whisper-1';
+          }
 
           const form = new FormData();
           form.append('file', testWav, { filename: 'test.wav', contentType: 'audio/wav' });
@@ -2276,8 +2424,59 @@ export function initializeIpcHandlers(appState: AppState): void {
           error.message ||
           'Connection failed';
         const msg = sanitizeErrorMessage(rawMsg);
-        console.error('STT connection test failed:', msg);
+        console.error(`[IPC] STT connection test failed for ${provider}:`, {
+          message: msg,
+          status: error?.response?.status,
+          data: respData,
+        });
         return { success: false, error: msg };
+      }
+  };
+
+  safeHandle(
+    'test-stt-connection',
+    async (
+      _,
+      provider: SttTestProvider,
+      apiKey: string,
+      region?: string,
+    ) => runSttConnectionTest(provider, apiKey, region),
+  );
+
+  // Test the STT key that is already persisted in CredentialsManager (not the input
+  // field). Used by the settings UI's Test Connection button, which is the user's way
+  // to verify "is my saved key still valid?" without re-typing it. The Save flow still
+  // uses test-stt-connection with the user-supplied input.
+  safeHandle(
+    'test-saved-stt-connection',
+    async (_, provider: SttTestProvider, region?: string) => {
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const cm = CredentialsManager.getInstance();
+        const savedKey =
+          provider === 'groq' ? cm.getGroqSttApiKey()
+          : provider === 'openai' ? cm.getOpenAiSttApiKey()
+          : provider === 'deepgram' ? cm.getDeepgramApiKey()
+          : provider === 'elevenlabs' ? cm.getElevenLabsApiKey()
+          : provider === 'azure' ? cm.getAzureApiKey()
+          : provider === 'ibmwatson' ? cm.getIbmWatsonApiKey()
+          : provider === 'soniox' ? cm.getSonioxApiKey()
+          : provider === 'doubao' ? cm.getDoubaoApiKey()
+          : provider === 'doubao-auc' ? cm.getDoubaoAucApiKey()
+          : undefined;
+        if (!savedKey) {
+          return { success: false, error: 'no_saved_key' };
+        }
+        return await runSttConnectionTest(provider, savedKey, region);
+      } catch (error: any) {
+        const respData = error?.response?.data;
+        const rawMsg =
+          respData?.error?.message ||
+          respData?.detail?.message ||
+          respData?.message ||
+          error.message ||
+          'Connection failed';
+        return { success: false, error: sanitizeErrorMessage(rawMsg) };
       }
     },
   );
@@ -2421,7 +2620,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'test-llm-connection',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey?: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao', apiKey?: string) => {
       console.log(`[IPC] Received test-llm-connection request for provider: ${provider}`);
       try {
         if (!apiKey || !apiKey.trim()) {
@@ -2431,6 +2630,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'groq') apiKey = creds.getGroqApiKey();
           else if (provider === 'openai') apiKey = creds.getOpenaiApiKey();
           else if (provider === 'claude') apiKey = creds.getClaudeApiKey();
+          else if (provider === 'doubao') apiKey = creds.getDoubaoLlmApiKey();
         }
 
         if (!apiKey || !apiKey.trim()) {
@@ -2489,6 +2689,22 @@ export function initializeIpcHandlers(appState: AppState): void {
                 'x-api-key': apiKey,
                 'anthropic-version': '2023-06-01',
                 'content-type': 'application/json',
+              },
+              timeout: 15000,
+            },
+          );
+        } else if (provider === 'doubao') {
+          response = await axios.post(
+            'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+            {
+              model: 'doubao-seed-2-0-lite-260215',
+              messages: [{ role: 'user', content: 'Hello' }],
+              max_tokens: 10,
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
               },
               timeout: 15000,
             },
@@ -3424,7 +3640,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
-        filters: [{ name: 'JSON', extensions: ['json'] }],
+        filters: [{ name: 'JSON 文件', extensions: ['json'] }],
       });
 
       if (result.canceled || result.filePaths.length === 0) {
@@ -3890,7 +4106,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
-        filters: [{ name: 'Resume Files', extensions: ['pdf', 'docx', 'txt'] }],
+        filters: [{ name: '简历文件', extensions: ['pdf', 'docx', 'txt'] }],
       });
 
       if (result.canceled || result.filePaths.length === 0) {

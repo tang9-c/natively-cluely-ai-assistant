@@ -12,7 +12,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onClo
     return (
         <div className="w-64 bg-bg-sidebar flex flex-col border-r border-border-subtle h-full">
             <div className="p-6">
-                <h2 className="font-semibold text-gray-400 text-xs uppercase tracking-wider mb-4">Advanced Settings</h2>
+                <h2 className="font-semibold text-gray-400 text-xs uppercase tracking-wider mb-4">高级设置</h2>
                 <nav className="space-y-1">
                     <button
                         onClick={() => setActiveTab('general')}

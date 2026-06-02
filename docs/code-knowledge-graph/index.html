@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Natively 代码知识图谱</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0e1a;
+      color: #e0e6ed;
+      overflow: hidden;
+    }
+    #graph-container {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+    svg { width: 100%; height: 100%; }
+    
+    /* 节点样式 */
+    .node circle {
+      stroke-width: 2px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .node:hover circle {
+      stroke-width: 4px;
+      filter: drop-shadow(0 0 8px rgba(255,255,255,0.3));
+    }
+    .node text {
+      font-size: 11px;
+      fill: #e0e6ed;
+      pointer-events: none;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+    }
+    .node .node-label {
+      font-weight: 500;
+    }
+    .node .node-type {
+      font-size: 9px;
+      fill: #8899aa;
+    }
+    
+    /* 连线样式 */
+    .link {
+      stroke-opacity: 0.4;
+      transition: stroke-opacity 0.2s;
+    }
+    .link:hover {
+      stroke-opacity: 0.8;
+    }
+    
+    /* 侧边栏 */
+    #sidebar {
+      position: fixed;
+      right: -400px;
+      top: 0;
+      width: 400px;
+      height: 100vh;
+      background: rgba(15, 20, 35, 0.95);
+      backdrop-filter: blur(20px);
+      border-left: 1px solid rgba(255,255,255,0.08);
+      padding: 24px;
+      overflow-y: auto;
+      transition: right 0.3s ease;
+      z-index: 100;
+    }
+    #sidebar.open { right: 0; }
+    #sidebar h2 {
+      font-size: 20px;
+      margin-bottom: 8px;
+      color: #fff;
+    }
+    #sidebar .node-meta {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    #sidebar .badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    #sidebar .badge-layer-electron { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+    #sidebar .badge-layer-renderer { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    #sidebar .badge-type { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }
+    #sidebar .badge-lines { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    #sidebar .description {
+      color: #9ca3af;
+      line-height: 1.6;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+    #sidebar .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      margin: 20px 0 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    #sidebar .connection-list {
+      list-style: none;
+    }
+    #sidebar .connection-list li {
+      padding: 8px 12px;
+      margin-bottom: 6px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #sidebar .connection-list li .conn-type {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.08);
+      color: #8899aa;
+      white-space: nowrap;
+    }
+    #sidebar .close-btn {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: none;
+      border: none;
+      color: #8899aa;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px;
+    }
+    #sidebar .close-btn:hover { color: #fff; }
+    
+    /* 控制面板 */
+    #controls {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      background: rgba(15, 20, 35, 0.9);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 16px;
+      z-index: 100;
+      max-width: 280px;
+    }
+    #controls h1 {
+      font-size: 16px;
+      margin-bottom: 12px;
+      color: #fff;
+    }
+    #controls .stats {
+      font-size: 12px;
+      color: #8899aa;
+      margin-bottom: 12px;
+    }
+    #controls .filter-group {
+      margin-bottom: 12px;
+    }
+    #controls .filter-group label {
+      display: block;
+      font-size: 12px;
+      color: #8899aa;
+      margin-bottom: 6px;
+    }
+    #controls .filter-btn {
+      display: inline-block;
+      padding: 4px 10px;
+      margin: 2px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.03);
+      color: #8899aa;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    #controls .filter-btn:hover, #controls .filter-btn.active {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      border-color: rgba(255,255,255,0.2);
+    }
+    #controls .search-box {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.03);
+      color: #e0e6ed;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+    #controls .search-box:focus {
+      outline: none;
+      border-color: rgba(59, 130, 246, 0.5);
+    }
+    
+    /* 图例 */
+    #legend {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      background: rgba(15, 20, 35, 0.9);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 12px 16px;
+      z-index: 100;
+    }
+    #legend .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: #8899aa;
+      margin-bottom: 4px;
+    }
+    #legend .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    
+    /* 工具提示 */
+    .tooltip {
+      position: absolute;
+      padding: 8px 12px;
+      background: rgba(15, 20, 35, 0.95);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      font-size: 12px;
+      color: #e0e6ed;
+      pointer-events: none;
+      z-index: 200;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    
+    /* 高亮 */
+    .dimmed { opacity: 0.15 !important; }
+    .highlighted { opacity: 1 !important; }
+    
+    /* 缩放控制 */
+    #zoom-controls {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      z-index: 100;
+    }
+    #zoom-controls button {
+      width: 36px;
+      height: 36px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      background: rgba(15, 20, 35, 0.9);
+      color: #8899aa;
+      font-size: 18px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    #zoom-controls button:hover {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div id="graph-container">
+    <svg id="graph"></svg>
+  </div>
+  
+  <div id="controls">
+    <h1>Natively 代码知识图谱</h1>
+    <div class="stats">
+      <span id="node-count">0</span> 节点 · <span id="edge-count">0</span> 连线
+    </div>
+    <input type="text" class="search-box" id="search" placeholder="搜索模块...">
+    <div class="filter-group">
+      <label>层级过滤</label>
+      <button class="filter-btn active" data-filter="all">全部</button>
+      <button class="filter-btn" data-filter="electron">Electron</button>
+      <button class="filter-btn" data-filter="renderer">Renderer</button>
+    </div>
+    <div class="filter-group">
+      <label>类型过滤</label>
+      <button class="filter-btn active" data-type="all">全部</button>
+      <button class="filter-btn" data-type="class">类</button>
+      <button class="filter-btn" data-type="component">组件</button>
+      <button class="filter-btn" data-type="module">模块</button>
+      <button class="filter-btn" data-type="interface">接口</button>
+    </div>
+  </div>
+  
+  <div id="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>Electron 主进程</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div>Renderer 渲染层</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>Entry / Bridge</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6"></div>Class / Service</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ec4899"></div>Component / UI</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#6b7280"></div>Module / Utility</div>
+  </div>
+  
+  <div id="zoom-controls">
+    <button id="zoom-in">+</button>
+    <button id="zoom-out">−</button>
+    <button id="zoom-fit">⟲</button>
+  </div>
+  
+  <div id="sidebar">
+    <button class="close-btn" onclick="closeSidebar()">×</button>
+    <h2 id="detail-title">模块详情</h2>
+    <div class="node-meta" id="detail-meta"></div>
+    <div class="description" id="detail-desc"></div>
+    <div class="section-title">入站连接</div>
+    <ul class="connection-list" id="detail-incoming"></ul>
+    <div class="section-title">出站连接</div>
+    <ul class="connection-list" id="detail-outgoing"></ul>
+  </div>
+  
+  <div class="tooltip" id="tooltip"></div>
+
+  <script>
+    // 颜色配置
+    const COLORS = {
+      electron: '#3b82f6',
+      renderer: '#10b981',
+      entry: '#f59e0b',
+      bridge: '#f59e0b',
+      class: '#8b5cf6',
+      component: '#ec4899',
+      module: '#6b7280',
+      interface: '#06b6d4',
+      types: '#64748b',
+      hook: '#d946ef',
+      service: '#0ea5e9',
+      utility: '#78716c',
+      worker: '#dc2626',
+      loader: '#f97316',
+      enum: '#84cc16'
+    };
+    
+    const LINK_COLORS = {
+      contains: '#3b82f6',
+      imports: '#60a5fa',
+      uses: '#94a3b8',
+      renders: '#10b981',
+      exports: '#f59e0b',
+      probes: '#ec4899'
+    };
+    
+    let graphData = null;
+    let simulation = null;
+    let svg = null;
+    let g = null;
+    let zoom = null;
+    let currentFilter = 'all';
+    let currentTypeFilter = 'all';
+    
+    // 加载数据
+    fetch('natively-knowledge-graph.json')
+      .then(r => r.json())
+      .then(data => {
+        graphData = data;
+        document.getElementById('node-count').textContent = data.nodes.length;
+        document.getElementById('edge-count').textContent = data.edges.length;
+        initGraph(data);
+      });
+    
+    function initGraph(data) {
+      const container = document.getElementById('graph-container');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      
+      svg = d3.select('#graph')
+        .attr('width', width)
+        .attr('height', height);
+      
+      // 定义箭头
+      svg.append('defs').selectAll('marker')
+        .data(['end'])
+        .enter().append('marker')
+        .attr('id', 'arrow')
+        .attr('viewBox', '0 -5 10 10')
+        .attr('refX', 25)
+        .attr('refY', 0)
+        .attr('markerWidth', 6)
+        .attr('markerHeight', 6)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M0,-5L10,0L0,5')
+        .attr('fill', '#64748b');
+      
+      g = svg.append('g');
+      
+      zoom = d3.zoom()
+        .scaleExtent([0.1, 4])
+        .on('zoom', (e) => g.attr('transform', e.transform));
+      
+      svg.call(zoom);
+      
+      // 准备数据
+      const nodes = data.nodes.map(d => ({...d}));
+      const nodeMap = new Map(nodes.map(n => [n.id, n]));
+      const links = data.edges
+        .filter(e => nodeMap.has(e.source) && nodeMap.has(e.target))
+        .map(e => ({...e}));
+      
+      // 力导向模拟
+      simulation = d3.forceSimulation(nodes)
+        .force('link', d3.forceLink(links).id(d => d.id).distance(80))
+        .force('charge', d3.forceManyBody().strength(-200))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide().radius(d => getNodeRadius(d) + 5))
+        .force('x', d3.forceX(width / 2).strength(0.05))
+        .force('y', d3.forceY(height / 2).strength(0.05));
+      
+      // 绘制连线
+      const link = g.append('g')
+        .attr('class', 'links')
+        .selectAll('line')
+        .data(links)
+        .enter().append('line')
+        .attr('class', 'link')
+        .attr('stroke', d => LINK_COLORS[d.type] || '#64748b')
+        .attr('stroke-width', d => d.type === 'contains' ? 2 : 1)
+        .attr('marker-end', 'url(#arrow)');
+      
+      // 绘制节点
+      const node = g.append('g')
+        .attr('class', 'nodes')
+        .selectAll('g')
+        .data(nodes)
+        .enter().append('g')
+        .attr('class', 'node')
+        .call(d3.drag()
+          .on('start', dragstarted)
+          .on('drag', dragged)
+          .on('end', dragended));
+      
+      node.append('circle')
+        .attr('r', d => getNodeRadius(d))
+        .attr('fill', d => getNodeColor(d))
+        .attr('stroke', d => d3.rgb(getNodeColor(d)).brighter(0.5))
+        .on('click', (e, d) => showDetails(d))
+        .on('mouseover', (e, d) => {
+          showTooltip(e, d);
+          highlightNode(d);
+        })
+        .on('mouseout', () => {
+          hideTooltip();
+          clearHighlight();
+        });
+      
+      node.append('text')
+        .attr('class', 'node-label')
+        .attr('dx', d => getNodeRadius(d) + 6)
+        .attr('dy', 4)
+        .text(d => d.label.length > 20 ? d.label.slice(0, 18) + '...' : d.label)
+        .style('opacity', d => d.lines > 200 ? 1 : 0.7);
+      
+      simulation.on('tick', () => {
+        link
+          .attr('x1', d => d.source.x)
+          .attr('y1', d => d.source.y)
+          .attr('x2', d => d.target.x)
+          .attr('y2', d => d.target.y);
+        
+        node.attr('transform', d => `translate(${d.x},${d.y})`);
+      });
+      
+      // 搜索功能
+      document.getElementById('search').addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase();
+        if (!term) { clearHighlight(); return; }
+        const matched = nodes.filter(n => 
+          n.label.toLowerCase().includes(term) || 
+          n.description.toLowerCase().includes(term)
+        );
+        highlightNodes(matched);
+      });
+      
+      // 过滤功能
+      document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentFilter = btn.dataset.filter;
+          applyFilters();
+        });
+      });
+      
+      document.querySelectorAll('.filter-btn[data-type]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.filter-btn[data-type]').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentTypeFilter = btn.dataset.type;
+          applyFilters();
+        });
+      });
+      
+      function applyFilters() {
+        node.style('display', d => {
+          const layerMatch = currentFilter === 'all' || d.layer === currentFilter;
+          const typeMatch = currentTypeFilter === 'all' || d.type === currentTypeFilter;
+          return layerMatch && typeMatch ? 'block' : 'none';
+        });
+        
+        link.style('display', d => {
+          const sourceVisible = d.source.layer === currentFilter || currentFilter === 'all';
+          const targetVisible = d.target.layer === currentFilter || currentFilter === 'all';
+          const sourceType = d.source.type === currentTypeFilter || currentTypeFilter === 'all';
+          const targetType = d.target.type === currentTypeFilter || currentTypeFilter === 'all';
+          return sourceVisible && targetVisible && sourceType && targetType ? 'block' : 'none';
+        });
+      }
+      
+      // 缩放控制
+      document.getElementById('zoom-in').addEventListener('click', () => {
+        svg.transition().call(zoom.scaleBy, 1.3);
+      });
+      document.getElementById('zoom-out').addEventListener('click', () => {
+        svg.transition().call(zoom.scaleBy, 0.7);
+      });
+      document.getElementById('zoom-fit').addEventListener('click', () => {
+        svg.transition().call(zoom.transform, d3.zoomIdentity);
+      });
+    }
+    
+    function getNodeRadius(d) {
+      const base = d.type === 'entry' || d.type === 'bridge' ? 12 : 
+                   d.type === 'class' ? 10 : 
+                   d.type === 'component' ? 9 : 7;
+      return base + Math.min(d.lines / 500, 8);
+    }
+    
+    function getNodeColor(d) {
+      if (d.type === 'entry' || d.type === 'bridge') return COLORS.entry;
+      if (d.layer === 'renderer') {
+        if (d.type === 'component') return COLORS.component;
+        if (d.type === 'hook') return COLORS.hook;
+        if (d.type === 'types') return COLORS.types;
+        return COLORS.renderer;
+      }
+      return COLORS[d.type] || COLORS.electron;
+    }
+    
+    function dragstarted(e, d) {
+      if (!e.active) simulation.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    }
+    
+    function dragged(e, d) {
+      d.fx = e.x;
+      d.fy = e.y;
+    }
+    
+    function dragended(e, d) {
+      if (!e.active) simulation.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    }
+    
+    function showTooltip(e, d) {
+      const tooltip = document.getElementById('tooltip');
+      tooltip.innerHTML = `<strong>${d.label}</strong><br>${d.type} · ${d.lines} lines`;
+      tooltip.style.left = (e.pageX + 12) + 'px';
+      tooltip.style.top = (e.pageY - 12) + 'px';
+      tooltip.style.opacity = 1;
+    }
+    
+    function hideTooltip() {
+      document.getElementById('tooltip').style.opacity = 0;
+    }
+    
+    function highlightNode(d) {
+      const connected = new Set([d.id]);
+      graphData.edges.forEach(e => {
+        if (e.source === d.id) connected.add(e.target);
+        if (e.target === d.id) connected.add(e.source);
+      });
+      
+      d3.selectAll('.node').classed('dimmed', n => !connected.has(n.id));
+      d3.selectAll('.link').classed('dimmed', l => 
+        l.source.id !== d.id && l.target.id !== d.id
+      );
+    }
+    
+    function highlightNodes(nodes) {
+      const ids = new Set(nodes.map(n => n.id));
+      d3.selectAll('.node').classed('dimmed', n => !ids.has(n.id));
+      d3.selectAll('.link').classed('dimmed', true);
+    }
+    
+    function clearHighlight() {
+      d3.selectAll('.node').classed('dimmed', false);
+      d3.selectAll('.link').classed('dimmed', false);
+    }
+    
+    function showDetails(d) {
+      const sidebar = document.getElementById('sidebar');
+      document.getElementById('detail-title').textContent = d.label;
+      document.getElementById('detail-meta').innerHTML = `
+        <span class="badge badge-layer-${d.layer}">${d.layer}</span>
+        <span class="badge badge-type">${d.type}</span>
+        <span class="badge badge-lines">${d.lines} lines</span>
+      `;
+      document.getElementById('detail-desc').textContent = d.description;
+      
+      const incoming = graphData.edges.filter(e => e.target === d.id);
+      const outgoing = graphData.edges.filter(e => e.source === d.id);
+      
+      document.getElementById('detail-incoming').innerHTML = incoming.map(e => {
+        const node = graphData.nodes.find(n => n.id === e.source);
+        return `<li><span class="conn-type">${e.type}</span>${node ? node.label : e.source}</li>`;
+      }).join('') || '<li style="color:#666">无入站连接</li>';
+      
+      document.getElementById('detail-outgoing').innerHTML = outgoing.map(e => {
+        const node = graphData.nodes.find(n => n.id === e.target);
+        return `<li><span class="conn-type">${e.type}</span>${node ? node.label : e.target}</li>`;
+      }).join('') || '<li style="color:#666">无出站连接</li>';
+      
+      sidebar.classList.add('open');
+    }
+    
+    function closeSidebar() {
+      document.getElementById('sidebar').classList.remove('open');
+    }
+    
+    // 键盘快捷键
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeSidebar();
+      if (e.key === 'f' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        document.getElementById('search').focus();
+      }
+    });
+  </script>
+</body>
+</html>

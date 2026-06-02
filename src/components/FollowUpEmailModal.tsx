@@ -49,7 +49,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
     const initializeFields = async () => {
         // 1. Set Subject
         const cleanTitle = meeting.title.replace(/["\*]/g, '').trim();
-        setSubject(`Follow up - ${cleanTitle}`); // Default subject
+        setSubject(`跟进 - ${cleanTitle}`); // Default subject
 
         // 2. Load Sender Name
         const storedName = localStorage.getItem('natively_user_name');
@@ -112,7 +112,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
             }
         } catch (error) {
             console.error('Failed to generate email:', error);
-            setEmailBody('Hi there,\n\nI enjoyed our conversation. Let me know if you have any questions.\n\nBest,');
+            setEmailBody('您好，\n\n很高兴与您交流。如果您有任何问题，请告诉我。\n\n最好的问候，');
         } finally {
             setIsGenerating(false);
         }
@@ -168,7 +168,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
 
                             {/* Header / Top Bar */}
                             <div className="flex px-6 py-4 justify-between items-center border-b border-white/[0.06]">
-                                <h2 className="text-sm font-medium text-[#E9E9E9] tracking-wide">Draft Follow-up</h2>
+                                <h2 className="text-sm font-medium text-[#E9E9E9] tracking-wide">起草跟进</h2>
                                 <button onClick={onClose} className="text-[#71717A] hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-1.5 rounded-full">
                                     <X size={14} />
                                 </button>
@@ -179,7 +179,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
 
                                 {/* TO Field */}
                                 <div className="flex items-start gap-6 group">
-                                    <label className="text-[#71717A] text-[13px] w-[50px] font-medium pt-2">To</label>
+                                    <label className="text-[#71717A] text-[13px] w-[50px] font-medium pt-2">收件人</label>
                                     <div className="flex-1 min-h-[32px] flex items-center border-b border-white/[0.06] group-focus-within:border-white/20 transition-colors pb-1">
                                         {recipientEmail ? (
                                             <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#27272A] border border-white/10 rounded-full text-[#E9E9E9] text-[13px] shadow-sm animate-in fade-in zoom-in duration-200">
@@ -197,7 +197,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
                                                 type="email"
                                                 value={recipientEmail}
                                                 onChange={(e) => setRecipientEmail(e.target.value)}
-                                                placeholder="Recipient email"
+                                                placeholder="收件人邮箱"
                                                 className="w-full bg-transparent text-[#E9E9E9] placeholder-[#525255] focus:outline-none text-[14px]"
                                                 autoFocus
                                             />
@@ -207,14 +207,14 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
 
                                 {/* SUBJECT Field */}
                                 <div className="flex items-center gap-6 group">
-                                    <label className="text-[#71717A] text-[13px] w-[50px] font-medium">Subject</label>
+                                    <label className="text-[#71717A] text-[13px] w-[50px] font-medium">主题</label>
                                     <div className="flex-1 border-b border-white/[0.06] group-focus-within:border-white/20 transition-colors pb-1">
                                         <input
                                             type="text"
                                             value={subject}
                                             onChange={(e) => setSubject(e.target.value)}
                                             className="w-full bg-transparent text-[#E9E9E9] focus:outline-none text-[14px] font-medium placeholder-[#525255]"
-                                            placeholder="Subject line"
+                                            placeholder="主题行"
                                         />
                                     </div>
                                 </div>
@@ -231,7 +231,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
                                                     <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
                                                 </div>
                                             </div>
-                                            <span className="text-xs font-medium text-[#71717A] animate-pulse">Drafting perfect follow-up...</span>
+                                            <span className="text-xs font-medium text-[#71717A] animate-pulse">正在起草完美的跟进...</span>
                                         </div>
                                     </div>
                                 ) : (
@@ -239,7 +239,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
                                         value={emailBody}
                                         onChange={(e) => setEmailBody(e.target.value)}
                                         className="w-full h-full bg-transparent text-[#D4D4D8] text-[15px] leading-7 focus:outline-none resize-none placeholder-[#3F3F46] font-normal"
-                                        placeholder="Write your email..."
+                                        placeholder="撰写邮件..."
                                         spellCheck={false}
                                     />
                                 )}
@@ -266,10 +266,10 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
                                         onClick={handleReset}
                                         disabled={isGenerating}
                                         className="flex items-center gap-2 px-4 py-2.5 hover:bg-white/5 rounded-xl transition-colors text-[#71717A] hover:text-[#E9E9E9] disabled:opacity-30 disabled:cursor-not-allowed group"
-                                        title="Regenerate"
+                                        title="重新生成"
                                     >
                                         <RotateCcw size={15} className={`group-hover:rotate-180 transition-transform duration-500 ${isGenerating ? 'animate-spin' : ''}`} />
-                                        <span className="text-[13px] font-medium">Reset</span>
+                                        <span className="text-[13px] font-medium">重置</span>
                                     </button>
                                 </div>
                             </div>

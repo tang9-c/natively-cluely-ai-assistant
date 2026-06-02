@@ -14,7 +14,7 @@ export type EnglishVariant = LanguageOption & {
 
 export const ENGLISH_VARIANTS: Record<string, EnglishVariant> = {
     'english-us': {
-        label: 'United States',
+        label: '美国',
         code: 'english-us',
         bcp47: 'en-US',
         iso639: 'en',
@@ -23,7 +23,7 @@ export const ENGLISH_VARIANTS: Record<string, EnglishVariant> = {
         alternates: ['en-GB', 'en-IN', 'en-AU', 'en-CA'],
     },
     'english-uk': {
-        label: 'United Kingdom',
+        label: '英国',
         code: 'english-uk',
         bcp47: 'en-GB',
         iso639: 'en',
@@ -32,7 +32,7 @@ export const ENGLISH_VARIANTS: Record<string, EnglishVariant> = {
         alternates: ['en-US', 'en-IN', 'en-AU', 'en-CA'],
     },
     'english-in': {
-        label: 'India',
+        label: '印度',
         code: 'english-in',
         bcp47: 'en-IN',
         iso639: 'en',
@@ -41,7 +41,7 @@ export const ENGLISH_VARIANTS: Record<string, EnglishVariant> = {
         alternates: ['en-US', 'en-GB', 'en-AU', 'en-CA'],
     },
     'english-au': {
-        label: 'Australia',
+        label: '澳大利亚',
         code: 'english-au',
         bcp47: 'en-AU',
         iso639: 'en',
@@ -50,7 +50,7 @@ export const ENGLISH_VARIANTS: Record<string, EnglishVariant> = {
         alternates: ['en-US', 'en-GB', 'en-IN', 'en-CA'],
     },
     'english-ca': {
-        label: 'Canada',
+        label: '加拿大',
         code: 'english-ca',
         bcp47: 'en-CA',
         iso639: 'en',
@@ -61,11 +61,11 @@ export const ENGLISH_VARIANTS: Record<string, EnglishVariant> = {
 };
 
 export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
-    'auto': { label: 'Auto Detect', code: 'auto', bcp47: 'auto', iso639: 'auto', group: 'Auto' },
+    'auto': { label: '自动检测', code: 'auto', bcp47: 'auto', iso639: 'auto', group: 'Auto' },
     ...ENGLISH_VARIANTS,
-    'indonesian': { label: 'Indonesian', code: 'indonesian', bcp47: 'id-ID', iso639: 'id', group: 'Indonesian' },
-    'russian': { label: 'Russian', code: 'russian', bcp47: 'ru-RU', iso639: 'ru', group: 'Russian' },
-    'spanish': { label: 'Spanish', code: 'spanish', bcp47: 'es-ES', iso639: 'es', group: 'Spanish' },
+    'indonesian': { label: '印度尼西亚语', code: 'indonesian', bcp47: 'id-ID', iso639: 'id', group: 'Indonesian' },
+    'russian': { label: '俄语', code: 'russian', bcp47: 'ru-RU', iso639: 'ru', group: 'Russian' },
+    'spanish': { label: '西班牙语', code: 'spanish', bcp47: 'es-ES', iso639: 'es', group: 'Spanish' },
     'french': { label: 'French', code: 'french', bcp47: 'fr-FR', iso639: 'fr', group: 'French' },
     'german': { label: 'German', code: 'german', bcp47: 'de-DE', iso639: 'de', group: 'German' },
     'italian': { label: 'Italian', code: 'italian', bcp47: 'it-IT', iso639: 'it', group: 'Italian' },
@@ -80,9 +80,9 @@ export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
 export const AI_RESPONSE_LANGUAGES = [
     { label: 'Auto (Detect)', code: 'auto' },
     { label: 'English', code: 'English' },
-    { label: 'Indonesian', code: 'Indonesian' },
-    { label: 'Russian', code: 'Russian' },
-    { label: 'Spanish', code: 'Spanish' },
+    { label: '印度尼西亚语', code: 'Indonesian' },
+    { label: '俄语', code: 'Russian' },
+    { label: '西班牙语', code: 'Spanish' },
     { label: 'French', code: 'French' },
     { label: 'German', code: 'German' },
     { label: 'Italian', code: 'Italian' },

@@ -58,7 +58,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
         <div className="space-y-6 animated fadeIn pb-10">
             {/* Header */}
             <div>
-                <h3 className="text-lg font-bold text-text-primary mb-1">About Natively</h3>
+                <h3 className="text-lg font-bold text-text-primary mb-1">关于 Natively</h3>
                 <p className="text-sm text-text-secondary">Designed to be invisible, intelligent, and trusted.</p>
             </div>
 
@@ -72,7 +72,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                                 <Smartphone size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Phone Link Integration</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">手机链接集成</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
                                     Connect your iOS or Android device to seamlessly use it as a wireless remote microphone or companion screen for your meeting notes.
                                 </p>
@@ -100,7 +100,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                                 <ListTodo size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Smart Task Sync</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">智能任务同步</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
                                     Action items are now auto-extracted with extreme precision and can be instantly exported to Jira, Linear, or Asana boards.
                                 </p>
@@ -114,7 +114,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                                 <Users size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Speaker Identification</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">说话人识别</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
                                     Advanced real-time speaker diarization automatically tags individual speakers by name throughout the meeting transcript.
                                 </p>
@@ -128,7 +128,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                                 <WifiOff size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Expanded Offline Mode</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">扩展离线模式</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
                                     Now featuring 100% offline transcription and intelligent note generation using specialized, lightning-fast on-device SLMs.
                                 </p>
@@ -140,7 +140,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
 
             {/* Architecture Section */}
             <div>
-                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">How Natively Works</h4>
+                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">Natively 工作原理</h4>
                 <div className="bg-bg-item-surface rounded-xl border border-border-subtle overflow-hidden">
                     <div className="p-3 border-b border-border-subtle bg-bg-card/50">
                         <div className="flex items-start gap-4">
@@ -148,7 +148,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                                 <Cpu size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Hybrid Intelligence</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">混合智能</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
                                     Seamlessly routes queries between ultra-fast models for instant speed and reasoning models (Gemini, OpenAI, Claude) for complex tasks. Powered by enterprise-grade speech recognition from 7+ providers.
                                 </p>
@@ -188,7 +188,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                     <div className="flex items-start gap-3">
                         <MicOff size={16} className="text-red-500 mt-0.5" />
                         <div>
-                            <h5 className="text-sm font-medium text-text-primary">No Recording</h5>
+                            <h5 className="text-sm font-medium text-text-primary">未录制</h5>
                             <p className="text-xs text-text-secondary mt-1 leading-relaxed">
                                 Natively listens only when active. It does not record video, take arbitrary screenshots without command, or perform background surveillance.
                             </p>
@@ -203,7 +203,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
 
             {/* Community Section */}
             <div>
-                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">Community</h4>
+                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">社区</h4>
                 <div className="space-y-4">
                     {/* 0. Official Website */}
                     <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -212,7 +212,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                                 <Globe size={18} className="opacity-80" />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary">Official Website</h5>
+                                <h5 className="text-sm font-bold text-text-primary">官方网站</h5>
                             </div>
                         </div>
                         <a
@@ -235,7 +235,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                                 <div className="pt-0.5">
                                     <div className="flex items-center gap-2 mb-1">
                                         <h5 className="text-sm font-bold text-text-primary">Evin John</h5>
-                                        <span className={`text-[10px] font-medium px-1.5 py-[1px] rounded-full ${isLight ? 'bg-amber-100 text-amber-700 border border-amber-300' : 'bg-yellow-400/10 text-yellow-200 border border-yellow-400/5'}`}>Creator</span>
+                                        <span className={`text-[10px] font-medium px-1.5 py-[1px] rounded-full ${isLight ? 'bg-amber-100 text-amber-700 border border-amber-300' : 'bg-yellow-400/10 text-yellow-200 border border-yellow-400/5'}`}>创作者</span>
                                     </div>
                                     <p className="text-xs text-text-secondary leading-relaxed max-w-lg">
                                         I build software that stays out of the way.
@@ -292,7 +292,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                                 <Star size={20} className="transition-all group-hover:fill-current" />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary">Star on GitHub</h5>
+                                <h5 className="text-sm font-bold text-text-primary">在 GitHub 上标星</h5>
                                 <p className="text-xs text-text-secondary mt-0.5">Love Natively? Support us by starring the repo.</p>
                             </div>
                         </a>
@@ -306,7 +306,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                                 <Bug size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary">Report an Issue</h5>
+                                <h5 className="text-sm font-bold text-text-primary">报告问题</h5>
                                 <p className="text-xs text-text-secondary mt-0.5">Found a bug? Let us know so we can fix it.</p>
                             </div>
                         </a>
@@ -319,7 +319,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                                 <Mail size={18} className="opacity-80" />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary">Get in Touch</h5>
+                                <h5 className="text-sm font-bold text-text-primary">联系我们</h5>
                                 <p className="text-xs text-text-secondary mt-0.5">Open for professional collaborations and job offers.</p>
                             </div>
                         </div>
@@ -340,7 +340,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                                 <Heart size={18} fill="currentColor" className="opacity-80" />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary">Support Development</h5>
+                                <h5 className="text-sm font-bold text-text-primary">支持开发</h5>
                                 <p className="text-xs text-text-secondary mt-0.5">Natively is independent open-source software.</p>
                             </div>
                         </div>
@@ -358,7 +358,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
             {/* Credits */}
             <div className="pt-4 border-t border-border-subtle">
                 <div>
-                    <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-3">Core Technology</h4>
+                    <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-3">核心技术</h4>
                     <div className="flex flex-wrap gap-2">
                         {['Groq', 'Gemini', 'OpenAI', 'Deepgram', 'ElevenLabs', 'Electron', 'React', 'Rust', 'Sharp', 'TypeScript', 'Tailwind CSS', 'Vite', 'Google Cloud', 'SQLite'].map(tech => (
                             <span key={tech} className="px-2.5 py-1 rounded-md bg-bg-input border border-border-subtle text-[11px] font-medium text-text-secondary">

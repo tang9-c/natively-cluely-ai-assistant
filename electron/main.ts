@@ -728,6 +728,8 @@ export class AppState {
              this.ragManager.initializeEmbeddings({
                 openaiKey: cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
                 geminiKey: cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
+                doubaoKey: cm.getDoubaoLlmApiKey() || process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY || undefined,
+                doubaoEmbeddingModel: cm.getDoubaoEmbeddingModel() || process.env.DOUBAO_EMBEDDING_MODEL || undefined,
                 ollamaUrl: process.env.OLLAMA_URL || "http://localhost:11434",
                 providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
              });
@@ -751,12 +753,16 @@ export class AppState {
         const geminiKey = cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
 
         const providerDataScopes = (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })();
+        const doubaoKey = cm.getDoubaoLlmApiKey() || process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY;
+        const doubaoEmbeddingModel = cm.getDoubaoEmbeddingModel() || process.env.DOUBAO_EMBEDDING_MODEL;
         this.ragManager = new RAGManager({
             db: sqliteDb,
             dbPath: db.getDbPath(),
             extPath: db.getExtPath(),
             openaiKey,
             geminiKey,
+            doubaoKey,
+            doubaoEmbeddingModel,
             ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
             providerDataScopes
         });
@@ -1099,7 +1105,7 @@ export class AppState {
         console.warn(`[Main] No API key for OpenAI STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
       }
-    } else if (sttProvider === 'groq' || sttProvider === 'azure' || sttProvider === 'ibmwatson') {
+    } else if (sttProvider === 'groq' || sttProvider === 'azure' || sttProvider === 'ibmwatson' || sttProvider === 'doubao' || sttProvider === 'doubao-auc') {
       let apiKey: string | undefined;
       let region: string | undefined;
       let modelOverride: string | undefined;
@@ -1113,6 +1119,10 @@ export class AppState {
       } else if (sttProvider === 'ibmwatson') {
         apiKey = CredentialsManager.getInstance().getIbmWatsonApiKey();
         region = CredentialsManager.getInstance().getIbmWatsonRegion();
+      } else if (sttProvider === 'doubao') {
+        apiKey = CredentialsManager.getInstance().getDoubaoApiKey();
+      } else if (sttProvider === 'doubao-auc') {
+        apiKey = CredentialsManager.getInstance().getDoubaoApiKey();
       }
 
       if (apiKey) {
@@ -3293,11 +3303,11 @@ export class AppState {
       // In launcher mode, just physically hide/show the window
       this.windowHelper.toggleMainWindow();
     } else {
-      // In overlay mode, send toggle-expand IPC to expand/collapse the UI
-      const targetWindow = this.windowHelper.getOverlayWindow();
-      if (targetWindow && !targetWindow.isDestroyed()) {
-        targetWindow.webContents.send('toggle-expand');
-      }
+      // In overlay mode, physically hide/show the window like launcher mode does.
+      // Previously this sent a 'toggle-expand' IPC which only expands/collapses the
+      // UI but does NOT actually show a hidden window — leaving no recovery path in
+      // stealth mode (no dock, no tray). Now both modes behave identically.
+      this.windowHelper.toggleMainWindow();
     }
   }
 
@@ -3563,13 +3573,13 @@ export class AppState {
 
     const contextMenu = Menu.buildFromTemplate([
       {
-        label: 'Show Natively',
+        label: '显示 Natively',
         click: () => {
           this.centerAndShowWindow()
         }
       },
       {
-        label: `Toggle Window (${displayToggle})`,
+        label: `切换窗口 (${displayToggle})`,
         click: () => {
           this.toggleMainWindow()
         }
@@ -3578,7 +3588,7 @@ export class AppState {
         type: 'separator'
       },
       {
-        label: `Take Screenshot (${displayScreenshot})`,
+        label: `截取屏幕 (${displayScreenshot})`,
         accelerator: screenshotAccel,
         click: async () => {
           try {
@@ -3600,7 +3610,7 @@ export class AppState {
         type: 'separator'
       },
       {
-        label: 'Quit',
+        label: '退出',
         accelerator: 'Command+Q',
         click: () => {
           app.quit()
@@ -4092,12 +4102,10 @@ async function initializeApp() {
 
   // Apply initial stealth state based on isUndetectable setting.
   // NOTE: app.dock.hide() was already called pre-emptively before createWindow()
-  // when isUndetectable=true. Here we only need to initialize the tray for non-stealth mode.
-  if (!appState.getUndetectable()) {
-    // Normal mode: show tray (dock is already showing — no need to call dock.show() again)
-    appState.showTray();
-  }
-  // Stealth mode: dock is already hidden, tray stays hidden, no action needed here.
+  // when isUndetectable=true. Always create the tray as a recovery path — even in
+  // stealth mode the user needs a way to restore a hidden window (no dock, no tray
+  // would otherwise leave the window unrecoverable after a hide).
+  appState.showTray();
   // Register global shortcuts using KeybindManager
   KeybindManager.getInstance().registerGlobalShortcuts()
 
@@ -4166,7 +4174,7 @@ async function initializeApp() {
           // database — we do NOT check status immediately after because the dialog
           // is still open; the status will be read correctly next time `startMeeting`
           // is called (which is the correct gate for system audio access).
-          console.log('[Init] Screen recording not-determined — showing one-time TCC dialog...');
+          console.log('[初始化] 屏幕录制权限未确定 — 显示一次性 TCC 对话框...');
           try {
             await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } });
           } catch (e) {

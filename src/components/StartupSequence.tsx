@@ -145,7 +145,7 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
                             fontWeight: 500
                         }}
                     >
-                        Welcome to Natively
+                        欢迎使用 Natively
                     </motion.h1>
 
                     <motion.p
@@ -153,7 +153,7 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
                         className="text-[25px] text-center mb-12 text-[#a7a7ad]"
                         style={{ fontFamily: FONTS.celebLight, fontWeight: 300 }}
                     >
-                        The ultimate AI meeting assistant
+                        终极 AI 会议助手
                     </motion.p>
 
                     {/* High-Fidelity "Continue" Button */}
@@ -174,7 +174,7 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
                             }} />
 
                             <span className="relative z-10 flex items-center">
-                                Continue <span className="ml-[10px] text-[22px] opacity-90">›</span>
+                                继续 <span className="ml-[10px] text-[22px] opacity-90">›</span>
                             </span>
                         </motion.button>
                     </motion.div>
@@ -188,14 +188,14 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
                             onClick={() => (window.electronAPI as any)?.openExternal?.('https://natively.software/termsandconditions')}
                             className="font-semibold text-[#2f2f34] underline underline-offset-[3px] decoration-[#2f2f34]/30 hover:decoration-[#2f2f34]/70 cursor-pointer transition-colors"
                         >
-                            Terms &amp; Conditions
+                            服务条款
                         </span>
                         {' '}and{' '}
                         <span
                             onClick={() => (window.electronAPI as any)?.openExternal?.('https://natively.software/privacy')}
                             className="font-semibold text-[#2f2f34] underline underline-offset-[3px] decoration-[#2f2f34]/30 hover:decoration-[#2f2f34]/70 cursor-pointer transition-colors"
                         >
-                            Privacy Policy
+                            隐私政策
                         </span>
                         .
                     </p>
@@ -269,8 +269,8 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
                         className="text-[36px] font-medium leading-[1.25] tracking-tight"
                         style={{ color: COLORS.charcoalInk }}
                     >
-                        Real-time meeting assistant,<br />
-                        always ready to help
+                        实时会议助手，<br />
+                        随时准备帮助
                     </h2>
                 </motion.div>
 
