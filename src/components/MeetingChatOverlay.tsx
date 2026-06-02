@@ -121,7 +121,7 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                                     <div className="my-3 rounded-xl overflow-hidden border border-white/[0.08] shadow-lg bg-zinc-800/60 backdrop-blur-md">
                                         <div className="bg-white/[0.04] px-3 py-1.5 border-b border-white/[0.08]">
                                             <span className="text-[10px] uppercase tracking-widest font-semibold text-white/40 font-mono">
-                                                {lang || 'CODE'}
+                                                {lang || '代码'}
                                             </span>
                                         </div>
                                         <div className="bg-transparent">
@@ -171,7 +171,7 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                     className="flex items-center gap-2 mt-3 text-[13px] text-text-tertiary hover:text-text-secondary transition-colors"
                 >
                     {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                    {copied ? 'Copied' : 'Copy message'}
+                    {copied ? '已复制' : '复制消息'}
                 </button>
             )}
         </motion.div>
@@ -508,7 +508,7 @@ ${contextString}`;
                         <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle shrink-0">
                             <div className="flex items-center gap-2 text-text-tertiary">
                                 <img src={nativelyIcon} className="w-3.5 h-3.5 force-black-icon opacity-50" alt="logo" />
-                                <span className="text-[13px] font-medium">Search this meeting</span>
+                                <span className="text-[13px] font-medium">搜索本次会议</span>
                             </div>
                             <button
                                 onClick={handleClose}

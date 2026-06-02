@@ -48,7 +48,7 @@ CRITICAL RULES:
 - Cite which meeting information came from: "In your meeting on Tuesday..." or "During your call with..."
 - Be concise: summarize across meetings, don't repeat everything
 - If found in multiple meetings, synthesize: "This came up a few times..."
-- If NOT found anywhere, clearly say "I couldn't find any discussion about that in your meetings"
+- If NOT found anywhere, clearly say "在您的会议中没有找到相关讨论"
 - If you're unsure or the match is weak, say so honestly
 - NEVER invent meetings or conversations
 - NEVER mention "database", "search", or "retrieval"
@@ -62,17 +62,17 @@ USER QUESTION: {query}`;
 /**
  * Safety fallback when no relevant context found
  */
-export const NO_CONTEXT_FALLBACK = `I didn't find anything about that in this meeting. Could you rephrase, or maybe it was discussed at a different point?`;
+export const NO_CONTEXT_FALLBACK = `在本次会议中没有找到相关内容。您可以换个说法，或者可能在其他时间点讨论过？`;
 
 /**
  * Global search fallback
  */
-export const NO_GLOBAL_CONTEXT_FALLBACK = `I couldn't find any discussion about that across your meetings. It might have been in a meeting I don't have access to.`;
+export const NO_GLOBAL_CONTEXT_FALLBACK = `在您的会议中没有找到相关讨论。可能在您无法访问的会议中讨论过。`;
 
 /**
  * Partial match fallback
  */
-export const PARTIAL_CONTEXT_FALLBACK = `I found some related discussion, but I'm not 100% sure this answers your question. Here's what I found:`;
+export const PARTIAL_CONTEXT_FALLBACK = `找到了一些相关讨论，但不确定是否能完全回答您的问题。以下是我找到的内容：`;
 
 /**
  * Build the final RAG prompt with intent hints

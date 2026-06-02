@@ -651,7 +651,7 @@ const App: React.FC = () => {
               <div className="flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-[#ff3333] shrink-0 mt-0.5" />
                 <div>
-                  <h3 className="text-[#E0E0E0] font-medium text-sm">Provider Changed</h3>
+                  <h3 className="text-[#E0E0E0] font-medium text-sm">提供商已更改</h3>
                   <p className="text-[#A0A0A0] text-xs mt-1 leading-relaxed">
                     ⚠ {incompatibleWarning.count} meetings used your previous AI provider ({incompatibleWarning.oldProvider}) and won't appear in search results under {incompatibleWarning.newProvider}.
                   </p>
@@ -709,7 +709,7 @@ const App: React.FC = () => {
         onDismiss={() => setShowTrialPromo(false)}
         onStartTrial={async () => {
           const res = await window.electronAPI?.startTrial?.();
-          if (!res?.ok) throw new Error(res?.error || 'Could not start trial');
+          if (!res?.ok) throw new Error(res?.error || '无法开始试用');
           if (res.expires_at) {
             setActiveTrial({ expiresAt: res.expires_at, usage: res.usage ?? { ai: 0, stt_seconds: 0, search: 0 } });
           }

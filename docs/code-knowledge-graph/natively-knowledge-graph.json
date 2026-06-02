@@ -1,0 +1,3837 @@
+{
+  "project": {
+    "name": "Natively",
+    "version": "2.6.0",
+    "description": "AI Meeting Assistant - Electron + React + TypeScript",
+    "totalLines": 52800,
+    "electronFiles": 135,
+    "srcFiles": 78
+  },
+  "nodes": [
+    {
+      "id": "main",
+      "label": "main.ts",
+      "type": "entry",
+      "layer": "electron",
+      "lines": 4000,
+      "description": "Electron main process entry point"
+    },
+    {
+      "id": "preload",
+      "label": "preload.ts",
+      "type": "bridge",
+      "layer": "electron",
+      "lines": 2000,
+      "description": "IPC bridge between main and renderer"
+    },
+    {
+      "id": "appState",
+      "label": "AppState",
+      "type": "class",
+      "layer": "electron",
+      "lines": 200,
+      "description": "Central application state container"
+    },
+    {
+      "id": "windowHelper",
+      "label": "WindowHelper",
+      "type": "class",
+      "layer": "electron",
+      "lines": 889,
+      "description": "Main window management"
+    },
+    {
+      "id": "settingsWindowHelper",
+      "label": "SettingsWindowHelper",
+      "type": "class",
+      "layer": "electron",
+      "lines": 311,
+      "description": "Settings window management"
+    },
+    {
+      "id": "modelSelectorWindowHelper",
+      "label": "ModelSelectorWindowHelper",
+      "type": "class",
+      "layer": "electron",
+      "lines": 300,
+      "description": "Model selector window"
+    },
+    {
+      "id": "cropperWindowHelper",
+      "label": "CropperWindowHelper",
+      "type": "class",
+      "layer": "electron",
+      "lines": 634,
+      "description": "Screenshot cropper window"
+    },
+    {
+      "id": "ipcHandlers",
+      "label": "ipcHandlers.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 4000,
+      "description": "IPC handler registration"
+    },
+    {
+      "id": "processingHelper",
+      "label": "ProcessingHelper",
+      "type": "class",
+      "layer": "electron",
+      "lines": 266,
+      "description": "Audio processing coordinator"
+    },
+    {
+      "id": "screenshotHelper",
+      "label": "ScreenshotHelper",
+      "type": "class",
+      "layer": "electron",
+      "lines": 819,
+      "description": "Screenshot capture and management"
+    },
+    {
+      "id": "sessionTracker",
+      "label": "SessionTracker",
+      "type": "class",
+      "layer": "electron",
+      "lines": 581,
+      "description": "Meeting session state tracking"
+    },
+    {
+      "id": "meetingPersistence",
+      "label": "MeetingPersistence",
+      "type": "class",
+      "layer": "electron",
+      "lines": 459,
+      "description": "Meeting data persistence"
+    },
+    {
+      "id": "intelligenceManager",
+      "label": "IntelligenceManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 278,
+      "description": "High-level intelligence orchestration"
+    },
+    {
+      "id": "intelligenceEngine",
+      "label": "IntelligenceEngine",
+      "type": "class",
+      "layer": "electron",
+      "lines": 1000,
+      "description": "LLM mode routing and orchestration"
+    },
+    {
+      "id": "llmHelper",
+      "label": "LLMHelper",
+      "type": "class",
+      "layer": "electron",
+      "lines": 4000,
+      "description": "Unified LLM client wrapper"
+    },
+    {
+      "id": "databaseManager",
+      "label": "DatabaseManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 1520,
+      "description": "SQLite + sqlite-vec database"
+    },
+    {
+      "id": "credentialsManager",
+      "label": "CredentialsManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 604,
+      "description": "API key and credential storage"
+    },
+    {
+      "id": "settingsManager",
+      "label": "SettingsManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 175,
+      "description": "App settings persistence"
+    },
+    {
+      "id": "keybindManager",
+      "label": "KeybindManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 496,
+      "description": "Global keyboard shortcuts"
+    },
+    {
+      "id": "themeManager",
+      "label": "ThemeManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 102,
+      "description": "Dark/light theme management"
+    },
+    {
+      "id": "calendarManager",
+      "label": "CalendarManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 493,
+      "description": "Calendar integration"
+    },
+    {
+      "id": "phoneMirrorService",
+      "label": "PhoneMirrorService",
+      "type": "class",
+      "layer": "electron",
+      "lines": 775,
+      "description": "Phone screen mirroring"
+    },
+    {
+      "id": "skillsManager",
+      "label": "SkillsManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 684,
+      "description": "Skill system management"
+    },
+    {
+      "id": "stealthKeyboardManager",
+      "label": "StealthKeyboardManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 392,
+      "description": "Stealth input injection"
+    },
+    {
+      "id": "rateLimiter",
+      "label": "RateLimiter",
+      "type": "class",
+      "layer": "electron",
+      "lines": 115,
+      "description": "API rate limiting"
+    },
+    {
+      "id": "modelVersionManager",
+      "label": "ModelVersionManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 1000,
+      "description": "Model version and family management"
+    },
+    {
+      "id": "ollamaManager",
+      "label": "OllamaManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 148,
+      "description": "Ollama local LLM management"
+    },
+    {
+      "id": "imeDetector",
+      "label": "ImeDetector",
+      "type": "class",
+      "layer": "electron",
+      "lines": 80,
+      "description": "Input method detection"
+    },
+    {
+      "id": "installPingManager",
+      "label": "InstallPingManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 182,
+      "description": "Installation analytics"
+    },
+    {
+      "id": "donationManager",
+      "label": "DonationManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 82,
+      "description": "Donation handling"
+    },
+    {
+      "id": "releaseNotesManager",
+      "label": "ReleaseNotesManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 178,
+      "description": "Update release notes"
+    },
+    {
+      "id": "telemetryService",
+      "label": "TelemetryService",
+      "type": "class",
+      "layer": "electron",
+      "lines": 219,
+      "description": "Telemetry and analytics"
+    },
+    {
+      "id": "codexCliService",
+      "label": "CodexCliService",
+      "type": "class",
+      "layer": "electron",
+      "lines": 420,
+      "description": "OpenAI Codex CLI integration"
+    },
+    {
+      "id": "ragManager",
+      "label": "RAGManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 487,
+      "description": "RAG orchestration (global + meeting scope)"
+    },
+    {
+      "id": "ragRetriever",
+      "label": "RAGRetriever",
+      "type": "class",
+      "layer": "electron",
+      "lines": 357,
+      "description": "Context retrieval with hybrid search"
+    },
+    {
+      "id": "vectorStore",
+      "label": "VectorStore",
+      "type": "class",
+      "layer": "electron",
+      "lines": 710,
+      "description": "sqlite-vec vector storage"
+    },
+    {
+      "id": "embeddingPipeline",
+      "label": "EmbeddingPipeline",
+      "type": "class",
+      "layer": "electron",
+      "lines": 606,
+      "description": "Multi-provider embedding with fallback"
+    },
+    {
+      "id": "embeddingProviderResolver",
+      "label": "EmbeddingProviderResolver",
+      "type": "class",
+      "layer": "electron",
+      "lines": 76,
+      "description": "Embedding provider selection"
+    },
+    {
+      "id": "liveRAGIndexer",
+      "label": "LiveRAGIndexer",
+      "type": "class",
+      "layer": "electron",
+      "lines": 205,
+      "description": "Real-time transcript indexing"
+    },
+    {
+      "id": "semanticChunker",
+      "label": "SemanticChunker",
+      "type": "class",
+      "layer": "electron",
+      "lines": 153,
+      "description": "Transcript semantic chunking"
+    },
+    {
+      "id": "transcriptPreprocessor",
+      "label": "TranscriptPreprocessor",
+      "type": "class",
+      "layer": "electron",
+      "lines": 195,
+      "description": "Transcript cleaning and preprocessing"
+    },
+    {
+      "id": "ollamaBootstrap",
+      "label": "OllamaBootstrap",
+      "type": "class",
+      "layer": "electron",
+      "lines": 172,
+      "description": "Ollama auto-setup for embeddings"
+    },
+    {
+      "id": "vectorSearchWorker",
+      "label": "vectorSearchWorker",
+      "type": "worker",
+      "layer": "electron",
+      "lines": 299,
+      "description": "Worker thread for vector search"
+    },
+    {
+      "id": "geminiEmbeddingProvider",
+      "label": "GeminiEmbeddingProvider",
+      "type": "class",
+      "layer": "electron",
+      "lines": 36,
+      "description": "Gemini embedding provider"
+    },
+    {
+      "id": "openaiEmbeddingProvider",
+      "label": "OpenAIEmbeddingProvider",
+      "type": "class",
+      "layer": "electron",
+      "lines": 48,
+      "description": "OpenAI embedding provider"
+    },
+    {
+      "id": "localEmbeddingProvider",
+      "label": "LocalEmbeddingProvider",
+      "type": "class",
+      "layer": "electron",
+      "lines": 95,
+      "description": "Local Xenova embedding provider"
+    },
+    {
+      "id": "ollamaEmbeddingProvider",
+      "label": "OllamaEmbeddingProvider",
+      "type": "class",
+      "layer": "electron",
+      "lines": 51,
+      "description": "Ollama embedding provider"
+    },
+    {
+      "id": "iEmbeddingProvider",
+      "label": "IEmbeddingProvider",
+      "type": "interface",
+      "layer": "electron",
+      "lines": 10,
+      "description": "Embedding provider interface"
+    },
+    {
+      "id": "modesManager",
+      "label": "ModesManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 567,
+      "description": "Mode template management"
+    },
+    {
+      "id": "modeContextRetriever",
+      "label": "ModeContextRetriever",
+      "type": "class",
+      "layer": "electron",
+      "lines": 251,
+      "description": "Mode-specific context retrieval"
+    },
+    {
+      "id": "modeHybridRetriever",
+      "label": "ModeHybridRetriever",
+      "type": "class",
+      "layer": "electron",
+      "lines": 754,
+      "description": "FTS + vector hybrid retrieval for modes"
+    },
+    {
+      "id": "answerLLM",
+      "label": "AnswerLLM",
+      "type": "class",
+      "layer": "electron",
+      "lines": 32,
+      "description": "Answer generation LLM"
+    },
+    {
+      "id": "assistLLM",
+      "label": "AssistLLM",
+      "type": "class",
+      "layer": "electron",
+      "lines": 47,
+      "description": "Real-time assist LLM"
+    },
+    {
+      "id": "brainstormLLM",
+      "label": "BrainstormLLM",
+      "type": "class",
+      "layer": "electron",
+      "lines": 27,
+      "description": "Brainstorming LLM"
+    },
+    {
+      "id": "clarifyLLM",
+      "label": "ClarifyLLM",
+      "type": "class",
+      "layer": "electron",
+      "lines": 43,
+      "description": "Clarification LLM"
+    },
+    {
+      "id": "codeHintLLM",
+      "label": "CodeHintLLM",
+      "type": "class",
+      "layer": "electron",
+      "lines": 48,
+      "description": "Code hint generation LLM"
+    },
+    {
+      "id": "codeSanityCheck",
+      "label": "CodeSanityCheck",
+      "type": "class",
+      "layer": "electron",
+      "lines": 137,
+      "description": "Code correctness validation"
+    },
+    {
+      "id": "conversationSummarizer",
+      "label": "ConversationSummarizer",
+      "type": "class",
+      "layer": "electron",
+      "lines": 183,
+      "description": "Conversation summarization"
+    },
+    {
+      "id": "followUpLLM",
+      "label": "FollowUpLLM",
+      "type": "class",
+      "layer": "electron",
+      "lines": 39,
+      "description": "Follow-up generation LLM"
+    },
+    {
+      "id": "followUpQuestionsLLM",
+      "label": "FollowUpQuestionsLLM",
+      "type": "class",
+      "layer": "electron",
+      "lines": 37,
+      "description": "Follow-up questions LLM"
+    },
+    {
+      "id": "recapLLM",
+      "label": "RecapLLM",
+      "type": "class",
+      "layer": "electron",
+      "lines": 72,
+      "description": "Meeting recap LLM"
+    },
+    {
+      "id": "whatToAnswerLLM",
+      "label": "WhatToAnswerLLM",
+      "type": "class",
+      "layer": "electron",
+      "lines": 284,
+      "description": "What-to-say suggestion LLM"
+    },
+    {
+      "id": "intentClassifier",
+      "label": "IntentClassifier",
+      "type": "class",
+      "layer": "electron",
+      "lines": 306,
+      "description": "Zero-shot intent classification"
+    },
+    {
+      "id": "plannerDecision",
+      "label": "PlannerDecision",
+      "type": "class",
+      "layer": "electron",
+      "lines": 94,
+      "description": "Action planner decision engine"
+    },
+    {
+      "id": "providerRouter",
+      "label": "ProviderRouter",
+      "type": "class",
+      "layer": "electron",
+      "lines": 440,
+      "description": "Multi-provider LLM routing with circuit breaker"
+    },
+    {
+      "id": "geminiPromptCache",
+      "label": "GeminiPromptCache",
+      "type": "class",
+      "layer": "electron",
+      "lines": 175,
+      "description": "Gemini prompt caching optimization"
+    },
+    {
+      "id": "temporalContextBuilder",
+      "label": "TemporalContextBuilder",
+      "type": "class",
+      "layer": "electron",
+      "lines": 211,
+      "description": "Temporal context for LLM prompts"
+    },
+    {
+      "id": "prompts",
+      "label": "prompts.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 2323,
+      "description": "All LLM system prompts (7 mode templates)"
+    },
+    {
+      "id": "tinyPrompts",
+      "label": "tinyPrompts.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 235,
+      "description": "Compact prompt variants for local models"
+    },
+    {
+      "id": "modelCapabilities",
+      "label": "modelCapabilities.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 184,
+      "description": "Model capability detection and token estimation"
+    },
+    {
+      "id": "postProcessor",
+      "label": "postProcessor.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 327,
+      "description": "LLM output post-processing"
+    },
+    {
+      "id": "transcriptCleaner",
+      "label": "transcriptCleaner.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 156,
+      "description": "Transcript cleaning utilities"
+    },
+    {
+      "id": "llmTypes",
+      "label": "llm/types.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 63,
+      "description": "LLM type definitions"
+    },
+    {
+      "id": "llmIndex",
+      "label": "llm/index.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 83,
+      "description": "LLM module barrel export"
+    },
+    {
+      "id": "ragIndex",
+      "label": "rag/index.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 29,
+      "description": "RAG module barrel export"
+    },
+    {
+      "id": "ragPrompts",
+      "label": "rag/prompts.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 96,
+      "description": "RAG system prompts"
+    },
+    {
+      "id": "screenContextService",
+      "label": "ScreenContextService",
+      "type": "class",
+      "layer": "electron",
+      "lines": 191,
+      "description": "Screen context extraction"
+    },
+    {
+      "id": "screenUnderstandingService",
+      "label": "ScreenUnderstandingService",
+      "type": "class",
+      "layer": "electron",
+      "lines": 511,
+      "description": "Screen content understanding via vision LLM"
+    },
+    {
+      "id": "imageOptimizer",
+      "label": "ImageOptimizer",
+      "type": "class",
+      "layer": "electron",
+      "lines": 309,
+      "description": "Screenshot optimization for vision APIs"
+    },
+    {
+      "id": "imageHashService",
+      "label": "ImageHashService",
+      "type": "class",
+      "layer": "electron",
+      "lines": 72,
+      "description": "Image deduplication hashing"
+    },
+    {
+      "id": "ocrProvider",
+      "label": "OcrProvider",
+      "type": "class",
+      "layer": "electron",
+      "lines": 293,
+      "description": "OCR provider adapters (Tesseract/Apple/Windows/Rapid)"
+    },
+    {
+      "id": "ocrProviderManager",
+      "label": "OcrProviderManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 187,
+      "description": "OCR provider selection and management"
+    },
+    {
+      "id": "visionProviderFallbackChain",
+      "label": "VisionProviderFallbackChain",
+      "type": "class",
+      "layer": "electron",
+      "lines": 371,
+      "description": "Vision provider fallback chain"
+    },
+    {
+      "id": "visionProviderRegistry",
+      "label": "VisionProviderRegistry",
+      "type": "class",
+      "layer": "electron",
+      "lines": 328,
+      "description": "Vision provider registry"
+    },
+    {
+      "id": "visionPrompts",
+      "label": "visionPrompts.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 110,
+      "description": "Vision analysis prompts"
+    },
+    {
+      "id": "dynamicActionEngine",
+      "label": "DynamicActionEngine",
+      "type": "class",
+      "layer": "electron",
+      "lines": 104,
+      "description": "Dynamic action card engine"
+    },
+    {
+      "id": "dynamicActionDetector",
+      "label": "DynamicActionDetector",
+      "type": "class",
+      "layer": "electron",
+      "lines": 352,
+      "description": "Action detection from transcripts"
+    },
+    {
+      "id": "dynamicActionStore",
+      "label": "DynamicActionStore",
+      "type": "class",
+      "layer": "electron",
+      "lines": 72,
+      "description": "Action card storage"
+    },
+    {
+      "id": "dynamicAction",
+      "label": "DynamicAction",
+      "type": "interface",
+      "layer": "electron",
+      "lines": 32,
+      "description": "Dynamic action data structure"
+    },
+    {
+      "id": "postCallWorkflow",
+      "label": "PostCallWorkflow",
+      "type": "class",
+      "layer": "electron",
+      "lines": 207,
+      "description": "Post-meeting action item extraction"
+    },
+    {
+      "id": "promptAssembler",
+      "label": "PromptAssembler",
+      "type": "class",
+      "layer": "electron",
+      "lines": 465,
+      "description": "LLM prompt assembly with context packets"
+    },
+    {
+      "id": "contextPacket",
+      "label": "ContextPacket",
+      "type": "interface",
+      "layer": "electron",
+      "lines": 15,
+      "description": "Context packet data structure"
+    },
+    {
+      "id": "trustLevels",
+      "label": "TrustLevels",
+      "type": "enum",
+      "layer": "electron",
+      "lines": 91,
+      "description": "Context trust level definitions"
+    },
+    {
+      "id": "audioDevices",
+      "label": "AudioDevices",
+      "type": "class",
+      "layer": "electron",
+      "lines": 39,
+      "description": "Audio device enumeration"
+    },
+    {
+      "id": "microphoneCapture",
+      "label": "MicrophoneCapture",
+      "type": "class",
+      "layer": "electron",
+      "lines": 154,
+      "description": "Microphone audio capture"
+    },
+    {
+      "id": "systemAudioCapture",
+      "label": "SystemAudioCapture",
+      "type": "class",
+      "layer": "electron",
+      "lines": 200,
+      "description": "System audio capture"
+    },
+    {
+      "id": "nativeModuleLoader",
+      "label": "nativeModuleLoader",
+      "type": "module",
+      "layer": "electron",
+      "lines": 248,
+      "description": "Native Rust module loader"
+    },
+    {
+      "id": "googleSTT",
+      "label": "GoogleSTT",
+      "type": "class",
+      "layer": "electron",
+      "lines": 388,
+      "description": "Google Cloud Speech-to-Text"
+    },
+    {
+      "id": "deepgramSTT",
+      "label": "DeepgramStreamingSTT",
+      "type": "class",
+      "layer": "electron",
+      "lines": 268,
+      "description": "Deepgram streaming STT"
+    },
+    {
+      "id": "openaiSTT",
+      "label": "OpenAIStreamingSTT",
+      "type": "class",
+      "layer": "electron",
+      "lines": 1000,
+      "description": "OpenAI Whisper streaming STT"
+    },
+    {
+      "id": "elevenlabsSTT",
+      "label": "ElevenLabsStreamingSTT",
+      "type": "class",
+      "layer": "electron",
+      "lines": 389,
+      "description": "ElevenLabs streaming STT"
+    },
+    {
+      "id": "sonioxSTT",
+      "label": "SonioxStreamingSTT",
+      "type": "class",
+      "layer": "electron",
+      "lines": 409,
+      "description": "Soniox streaming STT"
+    },
+    {
+      "id": "restSTT",
+      "label": "RestSTT",
+      "type": "class",
+      "layer": "electron",
+      "lines": 499,
+      "description": "Generic REST STT provider"
+    },
+    {
+      "id": "nativelyProSTT",
+      "label": "NativelyProSTT",
+      "type": "class",
+      "layer": "electron",
+      "lines": 519,
+      "description": "Natively Pro STT service"
+    },
+    {
+      "id": "localWhisperSTT",
+      "label": "LocalWhisperSTT",
+      "type": "class",
+      "layer": "electron",
+      "lines": 673,
+      "description": "Local Whisper.cpp STT"
+    },
+    {
+      "id": "whisperModelManager",
+      "label": "modelManager",
+      "type": "class",
+      "layer": "electron",
+      "lines": 174,
+      "description": "Whisper model download/management"
+    },
+    {
+      "id": "whisperModelPreloader",
+      "label": "modelPreloader",
+      "type": "class",
+      "layer": "electron",
+      "lines": 116,
+      "description": "Whisper model preloading"
+    },
+    {
+      "id": "whisperWorker",
+      "label": "whisperWorker",
+      "type": "worker",
+      "layer": "electron",
+      "lines": 297,
+      "description": "Whisper inference worker thread"
+    },
+    {
+      "id": "vadProcessor",
+      "label": "VadProcessor",
+      "type": "class",
+      "layer": "electron",
+      "lines": 214,
+      "description": "Voice Activity Detection"
+    },
+    {
+      "id": "audioResampler",
+      "label": "audioResampler",
+      "type": "module",
+      "layer": "electron",
+      "lines": 36,
+      "description": "Audio resampling utilities"
+    },
+    {
+      "id": "hallucinationFilter",
+      "label": "hallucinationFilter",
+      "type": "module",
+      "layer": "electron",
+      "lines": 38,
+      "description": "STT hallucination filtering"
+    },
+    {
+      "id": "hardwareDetect",
+      "label": "hardwareDetect",
+      "type": "module",
+      "layer": "electron",
+      "lines": 70,
+      "description": "Hardware capability detection"
+    },
+    {
+      "id": "inferenceConfig",
+      "label": "inferenceConfig",
+      "type": "module",
+      "layer": "electron",
+      "lines": 92,
+      "description": "Whisper inference configuration"
+    },
+    {
+      "id": "whisperTypes",
+      "label": "whisper/types.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 89,
+      "description": "Whisper type definitions"
+    },
+    {
+      "id": "workerPathResolver",
+      "label": "workerPathResolver",
+      "type": "module",
+      "layer": "electron",
+      "lines": 33,
+      "description": "Worker path resolution"
+    },
+    {
+      "id": "dnsHelpers",
+      "label": "dnsHelpers",
+      "type": "module",
+      "layer": "electron",
+      "lines": 47,
+      "description": "DNS resolution helpers"
+    },
+    {
+      "id": "featureGate",
+      "label": "featureGate.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 37,
+      "description": "Premium feature runtime gating"
+    },
+    {
+      "id": "curlUtils",
+      "label": "curlUtils.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 352,
+      "description": "cURL command utilities"
+    },
+    {
+      "id": "emailUtils",
+      "label": "emailUtils.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 137,
+      "description": "Email generation utilities"
+    },
+    {
+      "id": "modelFetcher",
+      "label": "modelFetcher.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 164,
+      "description": "Model metadata fetching"
+    },
+    {
+      "id": "redactForLog",
+      "label": "redactForLog.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 142,
+      "description": "Log data redaction"
+    },
+    {
+      "id": "verboseLog",
+      "label": "verboseLog.ts",
+      "type": "module",
+      "layer": "electron",
+      "lines": 14,
+      "description": "Verbose logging flag"
+    },
+    {
+      "id": "app",
+      "label": "App.tsx",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 814,
+      "description": "Root React component"
+    },
+    {
+      "id": "mainEntry",
+      "label": "main.tsx",
+      "type": "entry",
+      "layer": "renderer",
+      "lines": 37,
+      "description": "Renderer entry point"
+    },
+    {
+      "id": "launcher",
+      "label": "Launcher",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 1000,
+      "description": "Main dashboard with meeting list"
+    },
+    {
+      "id": "nativelyInterface",
+      "label": "NativelyInterface",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 4000,
+      "description": "Main meeting overlay UI"
+    },
+    {
+      "id": "meetingDetails",
+      "label": "MeetingDetails",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 655,
+      "description": "Meeting detail view with tabs"
+    },
+    {
+      "id": "meetingChatOverlay",
+      "label": "MeetingChatOverlay",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 550,
+      "description": "In-meeting chat overlay"
+    },
+    {
+      "id": "globalChatOverlay",
+      "label": "GlobalChatOverlay",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 409,
+      "description": "Global RAG query UI"
+    },
+    {
+      "id": "settingsOverlay",
+      "label": "SettingsOverlay",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 3000,
+      "description": "Settings panel overlay"
+    },
+    {
+      "id": "settingsPopup",
+      "label": "SettingsPopup",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 420,
+      "description": "Quick settings popup"
+    },
+    {
+      "id": "topSearchPill",
+      "label": "TopSearchPill",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 438,
+      "description": "Global search (⌘K)"
+    },
+    {
+      "id": "suggestionOverlay",
+      "label": "SuggestionOverlay",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 160,
+      "description": "Suggestion display overlay"
+    },
+    {
+      "id": "startupSequence",
+      "label": "StartupSequence",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 282,
+      "description": "App startup animation"
+    },
+    {
+      "id": "cropper",
+      "label": "Cropper",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 294,
+      "description": "Screenshot cropper UI"
+    },
+    {
+      "id": "featureSpotlight",
+      "label": "FeatureSpotlight",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 357,
+      "description": "Feature highlight overlay"
+    },
+    {
+      "id": "followUpEmailModal",
+      "label": "FollowUpEmailModal",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 285,
+      "description": "Follow-up email composer"
+    },
+    {
+      "id": "editableTextBlock",
+      "label": "EditableTextBlock",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 150,
+      "description": "Editable text component"
+    },
+    {
+      "id": "errorBoundary",
+      "label": "ErrorBoundary",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 141,
+      "description": "React error boundary"
+    },
+    {
+      "id": "nativelyInterfaceCard",
+      "label": "NativelyInterfaceCard",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 210,
+      "description": "Interface card component"
+    },
+    {
+      "id": "nativelyLogoMark",
+      "label": "NativelyLogoMark",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 65,
+      "description": "Logo SVG component"
+    },
+    {
+      "id": "nativelyQuotaBanner",
+      "label": "NativelyQuotaBanner",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 130,
+      "description": "Quota usage banner"
+    },
+    {
+      "id": "localWhisperModelPanel",
+      "label": "LocalWhisperModelPanel",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 397,
+      "description": "Local model management panel"
+    },
+    {
+      "id": "modelSelectorWindow",
+      "label": "ModelSelectorWindow",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 200,
+      "description": "Model selector window"
+    },
+    {
+      "id": "profileIntelligenceSettings",
+      "label": "ProfileIntelligenceSettings",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 1000,
+      "description": "Resume/JD upload settings (Premium-gated)"
+    },
+    {
+      "id": "aboutSection",
+      "label": "AboutSection",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 373,
+      "description": "About page section"
+    },
+    {
+      "id": "windowControls",
+      "label": "WindowControls",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 77,
+      "description": "Window control buttons"
+    },
+    {
+      "id": "supportToaster",
+      "label": "SupportToaster",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 220,
+      "description": "Support notification toaster"
+    },
+    {
+      "id": "updateBanner",
+      "label": "UpdateBanner",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 129,
+      "description": "Update available banner"
+    },
+    {
+      "id": "updateModal",
+      "label": "UpdateModal",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 390,
+      "description": "Update details modal"
+    },
+    {
+      "id": "dynamicActionBar",
+      "label": "DynamicActionBar",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 135,
+      "description": "Dynamic action cards bar"
+    },
+    {
+      "id": "dynamicActionCard",
+      "label": "DynamicActionCard",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 93,
+      "description": "Individual action card"
+    },
+    {
+      "id": "aiProvidersSettings",
+      "label": "AIProvidersSettings",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 1000,
+      "description": "AI provider configuration"
+    },
+    {
+      "id": "nativelyApiSettings",
+      "label": "NativelyApiSettings",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 1000,
+      "description": "Natively API settings"
+    },
+    {
+      "id": "nativelyProSettings",
+      "label": "NativelyProSettings",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 366,
+      "description": "Premium settings"
+    },
+    {
+      "id": "skillsSettings",
+      "label": "SkillsSettings",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 133,
+      "description": "Skills configuration"
+    },
+    {
+      "id": "phoneMirrorSettings",
+      "label": "PhoneMirrorSettings",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 318,
+      "description": "Phone mirroring settings"
+    },
+    {
+      "id": "helpSettings",
+      "label": "HelpSettings",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 1000,
+      "description": "Help and documentation"
+    },
+    {
+      "id": "providerCard",
+      "label": "ProviderCard",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 269,
+      "description": "Provider configuration card"
+    },
+    {
+      "id": "sidebar",
+      "label": "Sidebar",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 49,
+      "description": "Settings sidebar"
+    },
+    {
+      "id": "modesSettings",
+      "label": "ModesSettings",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 11,
+      "description": "Mode settings (Premium stub)"
+    },
+    {
+      "id": "freeTrialBanner",
+      "label": "FreeTrialBanner",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 140,
+      "description": "Free trial banner"
+    },
+    {
+      "id": "freeTrialModal",
+      "label": "FreeTrialModal",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 558,
+      "description": "Trial signup modal"
+    },
+    {
+      "id": "trialPromoToaster",
+      "label": "TrialPromoToaster",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 334,
+      "description": "Trial promotion toaster"
+    },
+    {
+      "id": "permissionsToaster",
+      "label": "PermissionsToaster",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 371,
+      "description": "Permission request toaster"
+    },
+    {
+      "id": "channelCard",
+      "label": "ChannelCard",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 151,
+      "description": "Audio channel status card"
+    },
+    {
+      "id": "connectCalendarButton",
+      "label": "ConnectCalendarButton",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 212,
+      "description": "Calendar connect button"
+    },
+    {
+      "id": "glassEffectLayer",
+      "label": "GlassEffectLayer",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 127,
+      "description": "Glass morphism effect layer"
+    },
+    {
+      "id": "keyBadge",
+      "label": "KeyBadge",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 51,
+      "description": "Keyboard shortcut badge"
+    },
+    {
+      "id": "keyRecorder",
+      "label": "KeyRecorder",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 95,
+      "description": "Keybinding recorder"
+    },
+    {
+      "id": "modelSelector",
+      "label": "ModelSelector",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 253,
+      "description": "Model selection dropdown"
+    },
+    {
+      "id": "rollingTranscript",
+      "label": "RollingTranscript",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 319,
+      "description": "Live transcript display"
+    },
+    {
+      "id": "topPill",
+      "label": "TopPill",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 104,
+      "description": "Top status pill"
+    },
+    {
+      "id": "dialog",
+      "label": "dialog",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 46,
+      "description": "Radix UI dialog wrapper"
+    },
+    {
+      "id": "toast",
+      "label": "toast",
+      "type": "component",
+      "layer": "renderer",
+      "lines": 120,
+      "description": "Toast notification system"
+    },
+    {
+      "id": "useResolvedTheme",
+      "label": "useResolvedTheme",
+      "type": "hook",
+      "layer": "renderer",
+      "lines": 34,
+      "description": "Theme resolution hook"
+    },
+    {
+      "id": "useShortcuts",
+      "label": "useShortcuts",
+      "type": "hook",
+      "layer": "renderer",
+      "lines": 279,
+      "description": "Keyboard shortcuts hook"
+    },
+    {
+      "id": "useStreamBuffer",
+      "label": "useStreamBuffer",
+      "type": "hook",
+      "layer": "renderer",
+      "lines": 59,
+      "description": "Stream buffering hook"
+    },
+    {
+      "id": "analyticsService",
+      "label": "analytics.service",
+      "type": "service",
+      "layer": "renderer",
+      "lines": 259,
+      "description": "Client-side analytics"
+    },
+    {
+      "id": "curlValidator",
+      "label": "curl-validator",
+      "type": "utility",
+      "layer": "renderer",
+      "lines": 41,
+      "description": "cURL command validation"
+    },
+    {
+      "id": "sttErrorMapper",
+      "label": "sttErrorMapper",
+      "type": "utility",
+      "layer": "renderer",
+      "lines": 158,
+      "description": "STT error mapping"
+    },
+    {
+      "id": "overlayAppearance",
+      "label": "overlayAppearance",
+      "type": "utility",
+      "layer": "renderer",
+      "lines": 170,
+      "description": "Overlay theme appearance"
+    },
+    {
+      "id": "meetingInterfaceTheme",
+      "label": "meetingInterfaceTheme",
+      "type": "utility",
+      "layer": "renderer",
+      "lines": 12,
+      "description": "Meeting UI theme config"
+    },
+    {
+      "id": "featureFlags",
+      "label": "featureFlags",
+      "type": "utility",
+      "layer": "renderer",
+      "lines": 16,
+      "description": "Feature flag definitions"
+    },
+    {
+      "id": "glassDisplacementMap",
+      "label": "glassDisplacementMap",
+      "type": "utility",
+      "layer": "renderer",
+      "lines": 2,
+      "description": "Glass effect displacement"
+    },
+    {
+      "id": "utils",
+      "label": "utils",
+      "type": "utility",
+      "layer": "renderer",
+      "lines": 5,
+      "description": "General utilities"
+    },
+    {
+      "id": "pdfGenerator",
+      "label": "pdfGenerator",
+      "type": "utility",
+      "layer": "renderer",
+      "lines": 126,
+      "description": "PDF export generation"
+    },
+    {
+      "id": "keyboardUtils",
+      "label": "keyboardUtils",
+      "type": "utility",
+      "layer": "renderer",
+      "lines": 106,
+      "description": "Keyboard utilities"
+    },
+    {
+      "id": "modelUtils",
+      "label": "modelUtils",
+      "type": "utility",
+      "layer": "renderer",
+      "lines": 65,
+      "description": "Model metadata utilities"
+    },
+    {
+      "id": "platformUtils",
+      "label": "platformUtils",
+      "type": "utility",
+      "layer": "renderer",
+      "lines": 47,
+      "description": "Platform detection utilities"
+    },
+    {
+      "id": "electronTypes",
+      "label": "electron.d.ts",
+      "type": "types",
+      "layer": "renderer",
+      "lines": 510,
+      "description": "Electron API type definitions"
+    },
+    {
+      "id": "typesIndex",
+      "label": "types/index.tsx",
+      "type": "types",
+      "layer": "renderer",
+      "lines": 15,
+      "description": "Shared type definitions"
+    },
+    {
+      "id": "audioTypes",
+      "label": "audio.ts",
+      "type": "types",
+      "layer": "renderer",
+      "lines": 4,
+      "description": "Audio type definitions"
+    },
+    {
+      "id": "solutionsTypes",
+      "label": "solutions.ts",
+      "type": "types",
+      "layer": "renderer",
+      "lines": 32,
+      "description": "Solution data types"
+    },
+    {
+      "id": "languagesConfig",
+      "label": "languages.ts",
+      "type": "config",
+      "layer": "renderer",
+      "lines": 34,
+      "description": "Language configuration"
+    },
+    {
+      "id": "sttConstants",
+      "label": "stt.constants.ts",
+      "type": "config",
+      "layer": "renderer",
+      "lines": 131,
+      "description": "STT provider constants"
+    },
+    {
+      "id": "urlsConfig",
+      "label": "urls.ts",
+      "type": "config",
+      "layer": "renderer",
+      "lines": 19,
+      "description": "URL configuration"
+    },
+    {
+      "id": "premiumLoader",
+      "label": "premium/index.tsx",
+      "type": "loader",
+      "layer": "renderer",
+      "lines": 112,
+      "description": "Premium module runtime loader"
+    },
+    {
+      "id": "electron",
+      "label": "electron",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "Electron framework"
+    },
+    {
+      "id": "sharp",
+      "label": "sharp",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "Image processing library"
+    },
+    {
+      "id": "uuid",
+      "label": "uuid",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "UUID generation"
+    },
+    {
+      "id": "crypto",
+      "label": "crypto",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "Node.js crypto module"
+    },
+    {
+      "id": "worker_threads",
+      "label": "worker_threads",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "Node.js worker threads"
+    },
+    {
+      "id": "child_process",
+      "label": "child_process",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "Node.js child_process"
+    },
+    {
+      "id": "fs",
+      "label": "fs",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "Node.js fs module"
+    },
+    {
+      "id": "os",
+      "label": "os",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "Node.js os module"
+    },
+    {
+      "id": "path",
+      "label": "path",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "Node.js path module"
+    },
+    {
+      "id": "events",
+      "label": "events",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "Node.js events module"
+    },
+    {
+      "id": "better-sqlite3",
+      "label": "better-sqlite3",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "SQLite binding"
+    },
+    {
+      "id": "sqlite-vec",
+      "label": "sqlite-vec",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "Vector search extension"
+    },
+    {
+      "id": "axios",
+      "label": "axios",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "HTTP client"
+    },
+    {
+      "id": "tree-kill",
+      "label": "tree-kill",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "Process tree killer"
+    },
+    {
+      "id": "electron-store",
+      "label": "electron-store",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "Electron settings store"
+    },
+    {
+      "id": "curl-to-json",
+      "label": "@bany/curl-to-json",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "cURL parser"
+    },
+    {
+      "id": "phoneMirrorClient",
+      "label": "phoneMirrorClient",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "Phone mirror HTML client"
+    },
+    {
+      "id": "premium",
+      "label": "premium/",
+      "type": "external",
+      "layer": "external",
+      "lines": 0,
+      "description": "Premium submodule (private)"
+    }
+  ],
+  "edges": [
+    {
+      "source": "main",
+      "target": "appState",
+      "type": "contains"
+    },
+    {
+      "source": "main",
+      "target": "ipcHandlers",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "windowHelper",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "settingsWindowHelper",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "modelSelectorWindowHelper",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "cropperWindowHelper",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "processingHelper",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "screenshotHelper",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "intelligenceManager",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "audioDevices",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "microphoneCapture",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "systemAudioCapture",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "nativeModuleLoader",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "googleSTT",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "restSTT",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "deepgramSTT",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "sonioxSTT",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "elevenlabsSTT",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "openaiSTT",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "nativelyProSTT",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "localWhisperSTT",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "themeManager",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "ragManager",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "databaseManager",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "credentialsManager",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "settingsManager",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "phoneMirrorService",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "ollamaBootstrap",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "featureGate",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "releaseNotesManager",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "verboseLog",
+      "type": "imports"
+    },
+    {
+      "source": "ipcHandlers",
+      "target": "databaseManager",
+      "type": "uses"
+    },
+    {
+      "source": "ipcHandlers",
+      "target": "audioDevices",
+      "type": "uses"
+    },
+    {
+      "source": "ipcHandlers",
+      "target": "credentialsManager",
+      "type": "uses"
+    },
+    {
+      "source": "ipcHandlers",
+      "target": "settingsManager",
+      "type": "uses"
+    },
+    {
+      "source": "ipcHandlers",
+      "target": "skillsManager",
+      "type": "uses"
+    },
+    {
+      "source": "ipcHandlers",
+      "target": "phoneMirrorService",
+      "type": "uses"
+    },
+    {
+      "source": "ipcHandlers",
+      "target": "codexCliService",
+      "type": "uses"
+    },
+    {
+      "source": "ipcHandlers",
+      "target": "featureGate",
+      "type": "uses"
+    },
+    {
+      "source": "ipcHandlers",
+      "target": "releaseNotesManager",
+      "type": "uses"
+    },
+    {
+      "source": "ipcHandlers",
+      "target": "calendarManager",
+      "type": "uses"
+    },
+    {
+      "source": "ipcHandlers",
+      "target": "ragManager",
+      "type": "uses"
+    },
+    {
+      "source": "ipcHandlers",
+      "target": "modesManager",
+      "type": "uses"
+    },
+    {
+      "source": "ipcHandlers",
+      "target": "modelVersionManager",
+      "type": "uses"
+    },
+    {
+      "source": "ipcHandlers",
+      "target": "telemetryService",
+      "type": "uses"
+    },
+    {
+      "source": "ipcHandlers",
+      "target": "ollamaManager",
+      "type": "uses"
+    },
+    {
+      "source": "ipcHandlers",
+      "target": "stealthKeyboardManager",
+      "type": "uses"
+    },
+    {
+      "source": "processingHelper",
+      "target": "llmHelper",
+      "type": "uses"
+    },
+    {
+      "source": "processingHelper",
+      "target": "credentialsManager",
+      "type": "uses"
+    },
+    {
+      "source": "processingHelper",
+      "target": "settingsManager",
+      "type": "uses"
+    },
+    {
+      "source": "intelligenceManager",
+      "target": "intelligenceEngine",
+      "type": "uses"
+    },
+    {
+      "source": "intelligenceManager",
+      "target": "llmHelper",
+      "type": "uses"
+    },
+    {
+      "source": "intelligenceManager",
+      "target": "meetingPersistence",
+      "type": "uses"
+    },
+    {
+      "source": "intelligenceManager",
+      "target": "sessionTracker",
+      "type": "uses"
+    },
+    {
+      "source": "intelligenceManager",
+      "target": "screenContextService",
+      "type": "uses"
+    },
+    {
+      "source": "intelligenceEngine",
+      "target": "llmHelper",
+      "type": "uses"
+    },
+    {
+      "source": "intelligenceEngine",
+      "target": "sessionTracker",
+      "type": "uses"
+    },
+    {
+      "source": "intelligenceEngine",
+      "target": "llmIndex",
+      "type": "uses"
+    },
+    {
+      "source": "intelligenceEngine",
+      "target": "dynamicActionEngine",
+      "type": "uses"
+    },
+    {
+      "source": "intelligenceEngine",
+      "target": "screenContextService",
+      "type": "uses"
+    },
+    {
+      "source": "llmHelper",
+      "target": "providerRouter",
+      "type": "uses"
+    },
+    {
+      "source": "llmHelper",
+      "target": "modelCapabilities",
+      "type": "uses"
+    },
+    {
+      "source": "llmHelper",
+      "target": "geminiPromptCache",
+      "type": "uses"
+    },
+    {
+      "source": "llmHelper",
+      "target": "prompts",
+      "type": "uses"
+    },
+    {
+      "source": "llmHelper",
+      "target": "tinyPrompts",
+      "type": "uses"
+    },
+    {
+      "source": "llmHelper",
+      "target": "transcriptCleaner",
+      "type": "uses"
+    },
+    {
+      "source": "llmHelper",
+      "target": "curlUtils",
+      "type": "uses"
+    },
+    {
+      "source": "llmHelper",
+      "target": "credentialsManager",
+      "type": "uses"
+    },
+    {
+      "source": "llmHelper",
+      "target": "modelVersionManager",
+      "type": "uses"
+    },
+    {
+      "source": "llmHelper",
+      "target": "modesManager",
+      "type": "uses"
+    },
+    {
+      "source": "llmHelper",
+      "target": "rateLimiter",
+      "type": "uses"
+    },
+    {
+      "source": "llmHelper",
+      "target": "codexCliService",
+      "type": "uses"
+    },
+    {
+      "source": "llmHelper",
+      "target": "settingsManager",
+      "type": "uses"
+    },
+    {
+      "source": "llmHelper",
+      "target": "ollamaManager",
+      "type": "uses"
+    },
+    {
+      "source": "meetingPersistence",
+      "target": "llmHelper",
+      "type": "uses"
+    },
+    {
+      "source": "meetingPersistence",
+      "target": "sessionTracker",
+      "type": "uses"
+    },
+    {
+      "source": "meetingPersistence",
+      "target": "databaseManager",
+      "type": "uses"
+    },
+    {
+      "source": "meetingPersistence",
+      "target": "providerRouter",
+      "type": "uses"
+    },
+    {
+      "source": "meetingPersistence",
+      "target": "modesManager",
+      "type": "uses"
+    },
+    {
+      "source": "meetingPersistence",
+      "target": "settingsManager",
+      "type": "uses"
+    },
+    {
+      "source": "meetingPersistence",
+      "target": "postCallWorkflow",
+      "type": "uses"
+    },
+    {
+      "source": "meetingPersistence",
+      "target": "telemetryService",
+      "type": "uses"
+    },
+    {
+      "source": "sessionTracker",
+      "target": "llmIndex",
+      "type": "uses"
+    },
+    {
+      "source": "sessionTracker",
+      "target": "verboseLog",
+      "type": "uses"
+    },
+    {
+      "source": "ragManager",
+      "target": "llmHelper",
+      "type": "uses"
+    },
+    {
+      "source": "ragManager",
+      "target": "databaseManager",
+      "type": "uses"
+    },
+    {
+      "source": "ragManager",
+      "target": "ragRetriever",
+      "type": "uses"
+    },
+    {
+      "source": "ragManager",
+      "target": "embeddingPipeline",
+      "type": "uses"
+    },
+    {
+      "source": "ragManager",
+      "target": "liveRAGIndexer",
+      "type": "uses"
+    },
+    {
+      "source": "ragManager",
+      "target": "semanticChunker",
+      "type": "uses"
+    },
+    {
+      "source": "ragManager",
+      "target": "transcriptPreprocessor",
+      "type": "uses"
+    },
+    {
+      "source": "ragManager",
+      "target": "vectorStore",
+      "type": "uses"
+    },
+    {
+      "source": "ragManager",
+      "target": "ragPrompts",
+      "type": "uses"
+    },
+    {
+      "source": "ragManager",
+      "target": "providerRouter",
+      "type": "uses"
+    },
+    {
+      "source": "ragRetriever",
+      "target": "embeddingPipeline",
+      "type": "uses"
+    },
+    {
+      "source": "ragRetriever",
+      "target": "semanticChunker",
+      "type": "uses"
+    },
+    {
+      "source": "ragRetriever",
+      "target": "vectorStore",
+      "type": "uses"
+    },
+    {
+      "source": "vectorStore",
+      "target": "databaseManager",
+      "type": "uses"
+    },
+    {
+      "source": "vectorStore",
+      "target": "semanticChunker",
+      "type": "uses"
+    },
+    {
+      "source": "embeddingPipeline",
+      "target": "embeddingProviderResolver",
+      "type": "uses"
+    },
+    {
+      "source": "embeddingPipeline",
+      "target": "vectorStore",
+      "type": "uses"
+    },
+    {
+      "source": "embeddingPipeline",
+      "target": "localEmbeddingProvider",
+      "type": "uses"
+    },
+    {
+      "source": "embeddingProviderResolver",
+      "target": "geminiEmbeddingProvider",
+      "type": "uses"
+    },
+    {
+      "source": "embeddingProviderResolver",
+      "target": "openaiEmbeddingProvider",
+      "type": "uses"
+    },
+    {
+      "source": "embeddingProviderResolver",
+      "target": "localEmbeddingProvider",
+      "type": "uses"
+    },
+    {
+      "source": "embeddingProviderResolver",
+      "target": "ollamaEmbeddingProvider",
+      "type": "uses"
+    },
+    {
+      "source": "embeddingProviderResolver",
+      "target": "iEmbeddingProvider",
+      "type": "uses"
+    },
+    {
+      "source": "embeddingProviderResolver",
+      "target": "providerRouter",
+      "type": "uses"
+    },
+    {
+      "source": "liveRAGIndexer",
+      "target": "embeddingPipeline",
+      "type": "uses"
+    },
+    {
+      "source": "liveRAGIndexer",
+      "target": "semanticChunker",
+      "type": "uses"
+    },
+    {
+      "source": "liveRAGIndexer",
+      "target": "transcriptPreprocessor",
+      "type": "uses"
+    },
+    {
+      "source": "liveRAGIndexer",
+      "target": "vectorStore",
+      "type": "uses"
+    },
+    {
+      "source": "semanticChunker",
+      "target": "transcriptPreprocessor",
+      "type": "uses"
+    },
+    {
+      "source": "ollamaBootstrap",
+      "target": "databaseManager",
+      "type": "uses"
+    },
+    {
+      "source": "modesManager",
+      "target": "databaseManager",
+      "type": "uses"
+    },
+    {
+      "source": "modesManager",
+      "target": "modeContextRetriever",
+      "type": "uses"
+    },
+    {
+      "source": "modesManager",
+      "target": "telemetryService",
+      "type": "uses"
+    },
+    {
+      "source": "modeContextRetriever",
+      "target": "databaseManager",
+      "type": "uses"
+    },
+    {
+      "source": "modeContextRetriever",
+      "target": "embeddingPipeline",
+      "type": "uses"
+    },
+    {
+      "source": "modeContextRetriever",
+      "target": "vectorStore",
+      "type": "uses"
+    },
+    {
+      "source": "modeContextRetriever",
+      "target": "modesManager",
+      "type": "uses"
+    },
+    {
+      "source": "modeContextRetriever",
+      "target": "modeHybridRetriever",
+      "type": "uses"
+    },
+    {
+      "source": "modeHybridRetriever",
+      "target": "embeddingPipeline",
+      "type": "uses"
+    },
+    {
+      "source": "modeHybridRetriever",
+      "target": "vectorStore",
+      "type": "uses"
+    },
+    {
+      "source": "modeHybridRetriever",
+      "target": "modesManager",
+      "type": "uses"
+    },
+    {
+      "source": "modeHybridRetriever",
+      "target": "telemetryService",
+      "type": "uses"
+    },
+    {
+      "source": "llmIndex",
+      "target": "answerLLM",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "assistLLM",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "brainstormLLM",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "clarifyLLM",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "codeHintLLM",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "followUpLLM",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "followUpQuestionsLLM",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "recapLLM",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "whatToAnswerLLM",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "intentClassifier",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "plannerDecision",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "providerRouter",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "geminiPromptCache",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "temporalContextBuilder",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "postProcessor",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "transcriptCleaner",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "modelCapabilities",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "prompts",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "tinyPrompts",
+      "type": "exports"
+    },
+    {
+      "source": "llmIndex",
+      "target": "llmTypes",
+      "type": "exports"
+    },
+    {
+      "source": "answerLLM",
+      "target": "llmHelper",
+      "type": "uses"
+    },
+    {
+      "source": "answerLLM",
+      "target": "prompts",
+      "type": "uses"
+    },
+    {
+      "source": "answerLLM",
+      "target": "tinyPrompts",
+      "type": "uses"
+    },
+    {
+      "source": "assistLLM",
+      "target": "llmHelper",
+      "type": "uses"
+    },
+    {
+      "source": "assistLLM",
+      "target": "prompts",
+      "type": "uses"
+    },
+    {
+      "source": "assistLLM",
+      "target": "tinyPrompts",
+      "type": "uses"
+    },
+    {
+      "source": "brainstormLLM",
+      "target": "llmHelper",
+      "type": "uses"
+    },
+    {
+      "source": "brainstormLLM",
+      "target": "prompts",
+      "type": "uses"
+    },
+    {
+      "source": "brainstormLLM",
+      "target": "tinyPrompts",
+      "type": "uses"
+    },
+    {
+      "source": "clarifyLLM",
+      "target": "llmHelper",
+      "type": "uses"
+    },
+    {
+      "source": "clarifyLLM",
+      "target": "prompts",
+      "type": "uses"
+    },
+    {
+      "source": "clarifyLLM",
+      "target": "tinyPrompts",
+      "type": "uses"
+    },
+    {
+      "source": "codeHintLLM",
+      "target": "llmHelper",
+      "type": "uses"
+    },
+    {
+      "source": "codeHintLLM",
+      "target": "prompts",
+      "type": "uses"
+    },
+    {
+      "source": "codeHintLLM",
+      "target": "tinyPrompts",
+      "type": "uses"
+    },
+    {
+      "source": "followUpLLM",
+      "target": "llmHelper",
+      "type": "uses"
+    },
+    {
+      "source": "followUpLLM",
+      "target": "prompts",
+      "type": "uses"
+    },
+    {
+      "source": "followUpLLM",
+      "target": "tinyPrompts",
+      "type": "uses"
+    },
+    {
+      "source": "followUpQuestionsLLM",
+      "target": "llmHelper",
+      "type": "uses"
+    },
+    {
+      "source": "followUpQuestionsLLM",
+      "target": "prompts",
+      "type": "uses"
+    },
+    {
+      "source": "followUpQuestionsLLM",
+      "target": "tinyPrompts",
+      "type": "uses"
+    },
+    {
+      "source": "recapLLM",
+      "target": "llmHelper",
+      "type": "uses"
+    },
+    {
+      "source": "recapLLM",
+      "target": "prompts",
+      "type": "uses"
+    },
+    {
+      "source": "recapLLM",
+      "target": "tinyPrompts",
+      "type": "uses"
+    },
+    {
+      "source": "whatToAnswerLLM",
+      "target": "llmHelper",
+      "type": "uses"
+    },
+    {
+      "source": "whatToAnswerLLM",
+      "target": "prompts",
+      "type": "uses"
+    },
+    {
+      "source": "whatToAnswerLLM",
+      "target": "tinyPrompts",
+      "type": "uses"
+    },
+    {
+      "source": "whatToAnswerLLM",
+      "target": "intentClassifier",
+      "type": "uses"
+    },
+    {
+      "source": "whatToAnswerLLM",
+      "target": "codeSanityCheck",
+      "type": "uses"
+    },
+    {
+      "source": "whatToAnswerLLM",
+      "target": "providerRouter",
+      "type": "uses"
+    },
+    {
+      "source": "whatToAnswerLLM",
+      "target": "temporalContextBuilder",
+      "type": "uses"
+    },
+    {
+      "source": "whatToAnswerLLM",
+      "target": "modelCapabilities",
+      "type": "uses"
+    },
+    {
+      "source": "whatToAnswerLLM",
+      "target": "modesManager",
+      "type": "uses"
+    },
+    {
+      "source": "whatToAnswerLLM",
+      "target": "settingsManager",
+      "type": "uses"
+    },
+    {
+      "source": "whatToAnswerLLM",
+      "target": "promptAssembler",
+      "type": "uses"
+    },
+    {
+      "source": "whatToAnswerLLM",
+      "target": "screenContextService",
+      "type": "uses"
+    },
+    {
+      "source": "intentClassifier",
+      "target": "electron",
+      "type": "uses"
+    },
+    {
+      "source": "plannerDecision",
+      "target": "intentClassifier",
+      "type": "uses"
+    },
+    {
+      "source": "modelCapabilities",
+      "target": "transcriptCleaner",
+      "type": "uses"
+    },
+    {
+      "source": "screenContextService",
+      "target": "screenshotHelper",
+      "type": "uses"
+    },
+    {
+      "source": "screenContextService",
+      "target": "imageHashService",
+      "type": "uses"
+    },
+    {
+      "source": "screenContextService",
+      "target": "ocrProviderManager",
+      "type": "uses"
+    },
+    {
+      "source": "screenUnderstandingService",
+      "target": "imageOptimizer",
+      "type": "uses"
+    },
+    {
+      "source": "screenUnderstandingService",
+      "target": "imageHashService",
+      "type": "uses"
+    },
+    {
+      "source": "screenUnderstandingService",
+      "target": "visionProviderRegistry",
+      "type": "uses"
+    },
+    {
+      "source": "screenUnderstandingService",
+      "target": "curlUtils",
+      "type": "uses"
+    },
+    {
+      "source": "visionProviderFallbackChain",
+      "target": "imageOptimizer",
+      "type": "uses"
+    },
+    {
+      "source": "visionProviderRegistry",
+      "target": "credentialsManager",
+      "type": "uses"
+    },
+    {
+      "source": "ocrProviderManager",
+      "target": "ocrProvider",
+      "type": "uses"
+    },
+    {
+      "source": "ocrProvider",
+      "target": "sharp",
+      "type": "uses"
+    },
+    {
+      "source": "ocrProvider",
+      "target": "uuid",
+      "type": "uses"
+    },
+    {
+      "source": "imageOptimizer",
+      "target": "sharp",
+      "type": "uses"
+    },
+    {
+      "source": "imageOptimizer",
+      "target": "uuid",
+      "type": "uses"
+    },
+    {
+      "source": "imageHashService",
+      "target": "sharp",
+      "type": "uses"
+    },
+    {
+      "source": "imageHashService",
+      "target": "crypto",
+      "type": "uses"
+    },
+    {
+      "source": "dynamicActionEngine",
+      "target": "dynamicActionDetector",
+      "type": "uses"
+    },
+    {
+      "source": "dynamicActionEngine",
+      "target": "dynamicActionStore",
+      "type": "uses"
+    },
+    {
+      "source": "dynamicActionEngine",
+      "target": "dynamicAction",
+      "type": "uses"
+    },
+    {
+      "source": "dynamicActionStore",
+      "target": "dynamicAction",
+      "type": "uses"
+    },
+    {
+      "source": "promptAssembler",
+      "target": "contextPacket",
+      "type": "uses"
+    },
+    {
+      "source": "promptAssembler",
+      "target": "trustLevels",
+      "type": "uses"
+    },
+    {
+      "source": "contextPacket",
+      "target": "trustLevels",
+      "type": "uses"
+    },
+    {
+      "source": "postCallWorkflow",
+      "target": "databaseManager",
+      "type": "uses"
+    },
+    {
+      "source": "localWhisperSTT",
+      "target": "whisperModelManager",
+      "type": "uses"
+    },
+    {
+      "source": "localWhisperSTT",
+      "target": "whisperModelPreloader",
+      "type": "uses"
+    },
+    {
+      "source": "localWhisperSTT",
+      "target": "whisperWorker",
+      "type": "uses"
+    },
+    {
+      "source": "localWhisperSTT",
+      "target": "vadProcessor",
+      "type": "uses"
+    },
+    {
+      "source": "localWhisperSTT",
+      "target": "audioResampler",
+      "type": "uses"
+    },
+    {
+      "source": "localWhisperSTT",
+      "target": "hallucinationFilter",
+      "type": "uses"
+    },
+    {
+      "source": "localWhisperSTT",
+      "target": "inferenceConfig",
+      "type": "uses"
+    },
+    {
+      "source": "localWhisperSTT",
+      "target": "workerPathResolver",
+      "type": "uses"
+    },
+    {
+      "source": "localWhisperSTT",
+      "target": "whisperTypes",
+      "type": "uses"
+    },
+    {
+      "source": "whisperModelManager",
+      "target": "inferenceConfig",
+      "type": "uses"
+    },
+    {
+      "source": "whisperModelManager",
+      "target": "electron",
+      "type": "uses"
+    },
+    {
+      "source": "whisperModelPreloader",
+      "target": "workerPathResolver",
+      "type": "uses"
+    },
+    {
+      "source": "whisperModelPreloader",
+      "target": "worker_threads",
+      "type": "uses"
+    },
+    {
+      "source": "vadProcessor",
+      "target": "whisperTypes",
+      "type": "uses"
+    },
+    {
+      "source": "inferenceConfig",
+      "target": "whisperModelManager",
+      "type": "uses"
+    },
+    {
+      "source": "windowHelper",
+      "target": "nativeModuleLoader",
+      "type": "uses"
+    },
+    {
+      "source": "windowHelper",
+      "target": "keybindManager",
+      "type": "uses"
+    },
+    {
+      "source": "windowHelper",
+      "target": "stealthKeyboardManager",
+      "type": "uses"
+    },
+    {
+      "source": "windowHelper",
+      "target": "main",
+      "type": "uses"
+    },
+    {
+      "source": "settingsWindowHelper",
+      "target": "windowHelper",
+      "type": "uses"
+    },
+    {
+      "source": "settingsWindowHelper",
+      "target": "nativeModuleLoader",
+      "type": "uses"
+    },
+    {
+      "source": "settingsWindowHelper",
+      "target": "stealthKeyboardManager",
+      "type": "uses"
+    },
+    {
+      "source": "modelSelectorWindowHelper",
+      "target": "windowHelper",
+      "type": "uses"
+    },
+    {
+      "source": "modelSelectorWindowHelper",
+      "target": "nativeModuleLoader",
+      "type": "uses"
+    },
+    {
+      "source": "modelSelectorWindowHelper",
+      "target": "stealthKeyboardManager",
+      "type": "uses"
+    },
+    {
+      "source": "cropperWindowHelper",
+      "target": "nativeModuleLoader",
+      "type": "uses"
+    },
+    {
+      "source": "cropperWindowHelper",
+      "target": "stealthKeyboardManager",
+      "type": "uses"
+    },
+    {
+      "source": "microphoneCapture",
+      "target": "nativeModuleLoader",
+      "type": "uses"
+    },
+    {
+      "source": "systemAudioCapture",
+      "target": "nativeModuleLoader",
+      "type": "uses"
+    },
+    {
+      "source": "audioDevices",
+      "target": "nativeModuleLoader",
+      "type": "uses"
+    },
+    {
+      "source": "stealthKeyboardManager",
+      "target": "nativeModuleLoader",
+      "type": "uses"
+    },
+    {
+      "source": "stealthKeyboardManager",
+      "target": "main",
+      "type": "uses"
+    },
+    {
+      "source": "stealthKeyboardManager",
+      "target": "verboseLog",
+      "type": "uses"
+    },
+    {
+      "source": "keybindManager",
+      "target": "main",
+      "type": "uses"
+    },
+    {
+      "source": "keybindManager",
+      "target": "electron",
+      "type": "uses"
+    },
+    {
+      "source": "phoneMirrorService",
+      "target": "settingsManager",
+      "type": "uses"
+    },
+    {
+      "source": "phoneMirrorService",
+      "target": "phoneMirrorClient",
+      "type": "uses"
+    },
+    {
+      "source": "codexCliService",
+      "target": "child_process",
+      "type": "uses"
+    },
+    {
+      "source": "codexCliService",
+      "target": "fs",
+      "type": "uses"
+    },
+    {
+      "source": "codexCliService",
+      "target": "os",
+      "type": "uses"
+    },
+    {
+      "source": "codexCliService",
+      "target": "path",
+      "type": "uses"
+    },
+    {
+      "source": "credentialsManager",
+      "target": "electron",
+      "type": "uses"
+    },
+    {
+      "source": "credentialsManager",
+      "target": "fs",
+      "type": "uses"
+    },
+    {
+      "source": "credentialsManager",
+      "target": "path",
+      "type": "uses"
+    },
+    {
+      "source": "settingsManager",
+      "target": "electron",
+      "type": "uses"
+    },
+    {
+      "source": "settingsManager",
+      "target": "fs",
+      "type": "uses"
+    },
+    {
+      "source": "settingsManager",
+      "target": "path",
+      "type": "uses"
+    },
+    {
+      "source": "calendarManager",
+      "target": "electron",
+      "type": "uses"
+    },
+    {
+      "source": "calendarManager",
+      "target": "events",
+      "type": "uses"
+    },
+    {
+      "source": "databaseManager",
+      "target": "better-sqlite3",
+      "type": "uses"
+    },
+    {
+      "source": "databaseManager",
+      "target": "sqlite-vec",
+      "type": "uses"
+    },
+    {
+      "source": "databaseManager",
+      "target": "electron",
+      "type": "uses"
+    },
+    {
+      "source": "databaseManager",
+      "target": "fs",
+      "type": "uses"
+    },
+    {
+      "source": "databaseManager",
+      "target": "path",
+      "type": "uses"
+    },
+    {
+      "source": "modelVersionManager",
+      "target": "electron",
+      "type": "uses"
+    },
+    {
+      "source": "modelVersionManager",
+      "target": "fs",
+      "type": "uses"
+    },
+    {
+      "source": "modelVersionManager",
+      "target": "path",
+      "type": "uses"
+    },
+    {
+      "source": "ollamaManager",
+      "target": "child_process",
+      "type": "uses"
+    },
+    {
+      "source": "ollamaManager",
+      "target": "tree-kill",
+      "type": "uses"
+    },
+    {
+      "source": "releaseNotesManager",
+      "target": "electron",
+      "type": "uses"
+    },
+    {
+      "source": "telemetryService",
+      "target": "fs",
+      "type": "uses"
+    },
+    {
+      "source": "telemetryService",
+      "target": "path",
+      "type": "uses"
+    },
+    {
+      "source": "themeManager",
+      "target": "electron",
+      "type": "uses"
+    },
+    {
+      "source": "themeManager",
+      "target": "fs",
+      "type": "uses"
+    },
+    {
+      "source": "themeManager",
+      "target": "path",
+      "type": "uses"
+    },
+    {
+      "source": "curlUtils",
+      "target": "curl-to-json",
+      "type": "uses"
+    },
+    {
+      "source": "curlUtils",
+      "target": "fs",
+      "type": "uses"
+    },
+    {
+      "source": "curlUtils",
+      "target": "path",
+      "type": "uses"
+    },
+    {
+      "source": "modelFetcher",
+      "target": "axios",
+      "type": "uses"
+    },
+    {
+      "source": "donationManager",
+      "target": "electron-store",
+      "type": "uses"
+    },
+    {
+      "source": "featureGate",
+      "target": "premium",
+      "type": "probes"
+    },
+    {
+      "source": "screenshotHelper",
+      "target": "sharp",
+      "type": "uses"
+    },
+    {
+      "source": "screenshotHelper",
+      "target": "child_process",
+      "type": "uses"
+    },
+    {
+      "source": "screenshotHelper",
+      "target": "uuid",
+      "type": "uses"
+    },
+    {
+      "source": "app",
+      "target": "launcher",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "nativelyInterface",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "settingsOverlay",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "settingsPopup",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "modelSelectorWindow",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "startupSequence",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "errorBoundary",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "permissionsToaster",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "freeTrialBanner",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "freeTrialModal",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "trialPromoToaster",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "nativelyQuotaBanner",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "updateBanner",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "supportToaster",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "profileIntelligenceSettings",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "modesSettings",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "analyticsService",
+      "type": "uses"
+    },
+    {
+      "source": "app",
+      "target": "meetingInterfaceTheme",
+      "type": "uses"
+    },
+    {
+      "source": "app",
+      "target": "overlayAppearance",
+      "type": "uses"
+    },
+    {
+      "source": "app",
+      "target": "platformUtils",
+      "type": "uses"
+    },
+    {
+      "source": "launcher",
+      "target": "globalChatOverlay",
+      "type": "renders"
+    },
+    {
+      "source": "launcher",
+      "target": "meetingDetails",
+      "type": "renders"
+    },
+    {
+      "source": "launcher",
+      "target": "topSearchPill",
+      "type": "renders"
+    },
+    {
+      "source": "launcher",
+      "target": "featureSpotlight",
+      "type": "renders"
+    },
+    {
+      "source": "launcher",
+      "target": "windowControls",
+      "type": "renders"
+    },
+    {
+      "source": "launcher",
+      "target": "connectCalendarButton",
+      "type": "renders"
+    },
+    {
+      "source": "launcher",
+      "target": "useResolvedTheme",
+      "type": "uses"
+    },
+    {
+      "source": "launcher",
+      "target": "useShortcuts",
+      "type": "uses"
+    },
+    {
+      "source": "launcher",
+      "target": "analyticsService",
+      "type": "uses"
+    },
+    {
+      "source": "launcher",
+      "target": "platformUtils",
+      "type": "uses"
+    },
+    {
+      "source": "launcher",
+      "target": "pdfGenerator",
+      "type": "uses"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "rollingTranscript",
+      "type": "renders"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "topPill",
+      "type": "renders"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "modelSelector",
+      "type": "renders"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "glassEffectLayer",
+      "type": "renders"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "dynamicActionBar",
+      "type": "renders"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "meetingChatOverlay",
+      "type": "renders"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "suggestionOverlay",
+      "type": "renders"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "premiumLoader",
+      "type": "uses"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "useResolvedTheme",
+      "type": "uses"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "useShortcuts",
+      "type": "uses"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "analyticsService",
+      "type": "uses"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "meetingInterfaceTheme",
+      "type": "uses"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "platformUtils",
+      "type": "uses"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "modelUtils",
+      "type": "uses"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "electronTypes",
+      "type": "uses"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "aiProvidersSettings",
+      "type": "renders"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "nativelyApiSettings",
+      "type": "renders"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "nativelyProSettings",
+      "type": "renders"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "skillsSettings",
+      "type": "renders"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "phoneMirrorSettings",
+      "type": "renders"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "helpSettings",
+      "type": "renders"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "aboutSection",
+      "type": "renders"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "localWhisperModelPanel",
+      "type": "renders"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "sidebar",
+      "type": "renders"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "nativelyLogoMark",
+      "type": "renders"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "keyRecorder",
+      "type": "renders"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "premiumLoader",
+      "type": "uses"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "useResolvedTheme",
+      "type": "uses"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "useShortcuts",
+      "type": "uses"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "analyticsService",
+      "type": "uses"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "meetingInterfaceTheme",
+      "type": "uses"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "platformUtils",
+      "type": "uses"
+    },
+    {
+      "source": "meetingDetails",
+      "target": "meetingChatOverlay",
+      "type": "renders"
+    },
+    {
+      "source": "meetingDetails",
+      "target": "editableTextBlock",
+      "type": "renders"
+    },
+    {
+      "source": "meetingDetails",
+      "target": "useResolvedTheme",
+      "type": "uses"
+    },
+    {
+      "source": "globalChatOverlay",
+      "target": "useStreamBuffer",
+      "type": "uses"
+    },
+    {
+      "source": "topSearchPill",
+      "target": "useResolvedTheme",
+      "type": "uses"
+    },
+    {
+      "source": "settingsPopup",
+      "target": "useResolvedTheme",
+      "type": "uses"
+    },
+    {
+      "source": "settingsPopup",
+      "target": "useShortcuts",
+      "type": "uses"
+    },
+    {
+      "source": "settingsPopup",
+      "target": "platformUtils",
+      "type": "uses"
+    },
+    {
+      "source": "aiProvidersSettings",
+      "target": "providerCard",
+      "type": "renders"
+    },
+    {
+      "source": "aiProvidersSettings",
+      "target": "curlValidator",
+      "type": "uses"
+    },
+    {
+      "source": "aiProvidersSettings",
+      "target": "modelUtils",
+      "type": "uses"
+    },
+    {
+      "source": "nativelyApiSettings",
+      "target": "nativelyLogoMark",
+      "type": "renders"
+    },
+    {
+      "source": "nativelyApiSettings",
+      "target": "freeTrialModal",
+      "type": "renders"
+    },
+    {
+      "source": "nativelyProSettings",
+      "target": "nativelyLogoMark",
+      "type": "renders"
+    },
+    {
+      "source": "nativelyProSettings",
+      "target": "useResolvedTheme",
+      "type": "uses"
+    },
+    {
+      "source": "skillsSettings",
+      "target": "electronTypes",
+      "type": "uses"
+    },
+    {
+      "source": "phoneMirrorSettings",
+      "target": "electronTypes",
+      "type": "uses"
+    },
+    {
+      "source": "phoneMirrorSettings",
+      "target": "platformUtils",
+      "type": "uses"
+    },
+    {
+      "source": "helpSettings",
+      "target": "useResolvedTheme",
+      "type": "uses"
+    },
+    {
+      "source": "helpSettings",
+      "target": "useShortcuts",
+      "type": "uses"
+    },
+    {
+      "source": "helpSettings",
+      "target": "platformUtils",
+      "type": "uses"
+    },
+    {
+      "source": "sidebar",
+      "target": "nativelyLogoMark",
+      "type": "renders"
+    },
+    {
+      "source": "profileIntelligenceSettings",
+      "target": "premiumLoader",
+      "type": "uses"
+    },
+    {
+      "source": "profileIntelligenceSettings",
+      "target": "useResolvedTheme",
+      "type": "uses"
+    },
+    {
+      "source": "dynamicActionBar",
+      "target": "dynamicActionCard",
+      "type": "renders"
+    },
+    {
+      "source": "dynamicActionBar",
+      "target": "electronTypes",
+      "type": "uses"
+    },
+    {
+      "source": "dynamicActionCard",
+      "target": "electronTypes",
+      "type": "uses"
+    },
+    {
+      "source": "rollingTranscript",
+      "target": "channelCard",
+      "type": "renders"
+    },
+    {
+      "source": "rollingTranscript",
+      "target": "sttErrorMapper",
+      "type": "uses"
+    },
+    {
+      "source": "channelCard",
+      "target": "sttErrorMapper",
+      "type": "uses"
+    },
+    {
+      "source": "modelSelector",
+      "target": "modelUtils",
+      "type": "uses"
+    },
+    {
+      "source": "modelSelectorWindow",
+      "target": "useResolvedTheme",
+      "type": "uses"
+    },
+    {
+      "source": "modelSelectorWindow",
+      "target": "modelUtils",
+      "type": "uses"
+    },
+    {
+      "source": "localWhisperModelPanel",
+      "target": "platformUtils",
+      "type": "uses"
+    },
+    {
+      "source": "windowControls",
+      "target": "platformUtils",
+      "type": "uses"
+    },
+    {
+      "source": "aboutSection",
+      "target": "useResolvedTheme",
+      "type": "uses"
+    },
+    {
+      "source": "aboutSection",
+      "target": "platformUtils",
+      "type": "uses"
+    },
+    {
+      "source": "updateModal",
+      "target": "platformUtils",
+      "type": "uses"
+    },
+    {
+      "source": "nativelyInterfaceCard",
+      "target": "platformUtils",
+      "type": "uses"
+    },
+    {
+      "source": "useShortcuts",
+      "target": "keyboardUtils",
+      "type": "uses"
+    },
+    {
+      "source": "useShortcuts",
+      "target": "platformUtils",
+      "type": "uses"
+    },
+    {
+      "source": "keyboardUtils",
+      "target": "platformUtils",
+      "type": "uses"
+    },
+    {
+      "source": "mainEntry",
+      "target": "app",
+      "type": "renders"
+    },
+    {
+      "source": "preload",
+      "target": "electron",
+      "type": "uses"
+    },
+    {
+      "source": "llmIndex",
+      "target": "conversationSummarizer",
+      "type": "exports"
+    },
+    {
+      "source": "openaiSTT",
+      "target": "dnsHelpers",
+      "type": "uses"
+    },
+    {
+      "source": "elevenlabsSTT",
+      "target": "dnsHelpers",
+      "type": "uses"
+    },
+    {
+      "source": "sonioxSTT",
+      "target": "dnsHelpers",
+      "type": "uses"
+    },
+    {
+      "source": "nativelyProSTT",
+      "target": "dnsHelpers",
+      "type": "uses"
+    },
+    {
+      "source": "whisperModelManager",
+      "target": "hardwareDetect",
+      "type": "uses"
+    },
+    {
+      "source": "main",
+      "target": "imeDetector",
+      "type": "imports"
+    },
+    {
+      "source": "main",
+      "target": "installPingManager",
+      "type": "imports"
+    },
+    {
+      "source": "vectorStore",
+      "target": "vectorSearchWorker",
+      "type": "uses"
+    },
+    {
+      "source": "screenUnderstandingService",
+      "target": "visionPrompts",
+      "type": "uses"
+    },
+    {
+      "source": "meetingPersistence",
+      "target": "emailUtils",
+      "type": "uses"
+    },
+    {
+      "source": "main",
+      "target": "redactForLog",
+      "type": "uses"
+    },
+    {
+      "source": "ragManager",
+      "target": "ragIndex",
+      "type": "uses"
+    },
+    {
+      "source": "app",
+      "target": "cropper",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "followUpEmailModal",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "keyBadge",
+      "type": "renders"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "dialog",
+      "type": "renders"
+    },
+    {
+      "source": "settingsOverlay",
+      "target": "toast",
+      "type": "renders"
+    },
+    {
+      "source": "app",
+      "target": "featureFlags",
+      "type": "uses"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "featureFlags",
+      "type": "uses"
+    },
+    {
+      "source": "nativelyInterface",
+      "target": "glassDisplacementMap",
+      "type": "uses"
+    },
+    {
+      "source": "app",
+      "target": "utils",
+      "type": "uses"
+    },
+    {
+      "source": "app",
+      "target": "electronTypes",
+      "type": "uses"
+    },
+    {
+      "source": "app",
+      "target": "typesIndex",
+      "type": "uses"
+    },
+    {
+      "source": "app",
+      "target": "audioTypes",
+      "type": "uses"
+    },
+    {
+      "source": "app",
+      "target": "solutionsTypes",
+      "type": "uses"
+    },
+    {
+      "source": "app",
+      "target": "languagesConfig",
+      "type": "uses"
+    },
+    {
+      "source": "app",
+      "target": "sttConstants",
+      "type": "uses"
+    },
+    {
+      "source": "app",
+      "target": "urlsConfig",
+      "type": "uses"
+    }
+  ]
+}

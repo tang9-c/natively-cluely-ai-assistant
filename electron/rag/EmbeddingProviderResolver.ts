@@ -3,11 +3,14 @@ import { OpenAIEmbeddingProvider } from './providers/OpenAIEmbeddingProvider';
 import { GeminiEmbeddingProvider } from './providers/GeminiEmbeddingProvider';
 import { OllamaEmbeddingProvider } from './providers/OllamaEmbeddingProvider';
 import { LocalEmbeddingProvider } from './providers/LocalEmbeddingProvider';
+import { DoubaoEmbeddingProvider } from './providers/DoubaoEmbeddingProvider';
 import { ProviderScopeError, assertProviderDataScopes, type ProviderDataScopePolicy } from '../llm/ProviderRouter';
 
 export interface AppAPIConfig {
   openaiKey?: string;
   geminiKey?: string;
+  doubaoKey?: string;
+  doubaoEmbeddingModel?: string;
   ollamaUrl?: string; // e.g. 'http://localhost:11434'
   providerDataScopes?: ProviderDataScopePolicy;
 }
@@ -40,6 +43,21 @@ export class EmbeddingProviderResolver {
       try {
         assertProviderDataScopes('gemini_embeddings', ['embeddings'], config.providerDataScopes);
         candidates.push(new GeminiEmbeddingProvider(config.geminiKey));
+      } catch (error) {
+        if (error instanceof ProviderScopeError) {
+          embeddingsDenied = true;
+          console.warn('[ScopeFallback] embeddings denied for cloud; routing to Ollama');
+        } else {
+          throw error;
+        }
+      }
+    }
+    if (config.doubaoKey) {
+      try {
+        assertProviderDataScopes('doubao_embeddings', ['embeddings'], config.providerDataScopes);
+        // Use configured endpoint ID, then env var, then default
+        const doubaoModel = config.doubaoEmbeddingModel || process.env.DOUBAO_EMBEDDING_MODEL || undefined;
+        candidates.push(new DoubaoEmbeddingProvider(config.doubaoKey, doubaoModel));
       } catch (error) {
         if (error instanceof ProviderScopeError) {
           embeddingsDenied = true;

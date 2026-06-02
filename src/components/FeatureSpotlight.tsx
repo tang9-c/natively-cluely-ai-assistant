@@ -302,15 +302,15 @@ export const FeatureSpotlight: React.FC = () => {
                                                 exit={{ opacity: 0, y: isInterested ? -5 : 5 }}
                                                 className="flex items-center gap-2.5 relative z-10"
                                             >
-                                                <span>
+                                               <span>
                                                     {isInterested && !isSupport
-                                                        ? 'Interested'
+                                                        ? '感兴趣'
                                                         : (isSupport ? (
                                                             <span className="flex items-center gap-2">
                                                                 <Rocket size={14} className="text-[#1C1C1E]" strokeWidth={2.5} />
-                                                                Fund development
+                                                                资助开发
                                                             </span>
-                                                        ) : (currentFeature.actionLabel || 'Mark interest'))
+                                                        ) : (currentFeature.actionLabel || '标记兴趣'))
                                                     }
                                                 </span>
 

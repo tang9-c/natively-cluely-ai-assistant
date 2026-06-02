@@ -48,7 +48,7 @@ export const SkillsSettings: React.FC = () => {
         <div className="space-y-5 animated fadeIn select-text pb-4">
             <div className="flex items-start justify-between gap-4">
                 <div>
-                    <h3 className="text-lg font-bold text-text-primary mb-1">Skills</h3>
+                    <h3 className="text-lg font-bold text-text-primary mb-1">技能</h3>
                     <p className="text-xs text-text-secondary">
                         Local SKILL.md instructions that can be invoked from the overlay dropdown or by typing $skill-name or /skill-name.
                     </p>
@@ -68,7 +68,7 @@ export const SkillsSettings: React.FC = () => {
                     <div className="min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                             <FolderOpen size={15} className="text-text-secondary" />
-                            <h4 className="text-sm font-semibold text-text-primary">Skills Folder</h4>
+                            <h4 className="text-sm font-semibold text-text-primary">技能文件夹</h4>
                         </div>
                         <p className="text-xs text-text-secondary">
                             Add a folder containing a SKILL.md file here. Scripts and assets are ignored in this v1.
@@ -121,7 +121,7 @@ export const SkillsSettings: React.FC = () => {
                 {!loading && skills.length === 0 && (
                     <div className="bg-bg-card rounded-xl border border-border-subtle p-6 text-center">
                         <Sparkles size={20} className="mx-auto mb-2 text-text-tertiary" />
-                        <p className="text-sm font-medium text-text-primary">No skills found</p>
+                        <p className="text-sm font-medium text-text-primary">未找到技能</p>
                         <p className="text-xs text-text-secondary mt-1">Open the skills folder and add a folder with SKILL.md.</p>
                     </div>
                 )}

@@ -43,14 +43,14 @@ const WindowControls: React.FC = () => {
       <button
         onClick={handleMinimize}
         className="flex items-center justify-center w-[46px] h-full border-0 bg-transparent text-text-secondary hover:text-text-primary hover:bg-white/10 transition-colors duration-100"
-        title="Minimize"
+        title="最小化"
       >
         <Minus size={16} strokeWidth={1.5} />
       </button>
       <button
         onClick={handleMaximize}
         className="flex items-center justify-center w-[46px] h-full border-0 bg-transparent text-text-secondary hover:text-text-primary hover:bg-white/10 transition-colors duration-100"
-        title={isMaximized ? 'Restore' : 'Maximize'}
+        title={isMaximized ? '还原' : '最大化'}
       >
         {isMaximized ? (
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -66,7 +66,7 @@ const WindowControls: React.FC = () => {
       <button
         onClick={handleClose}
         className="flex items-center justify-center w-[46px] h-full border-0 bg-transparent text-text-secondary hover:text-white hover:bg-red-500 transition-colors duration-100"
-        title="Close"
+        title="关闭"
       >
         <X size={16} strokeWidth={1.5} />
       </button>

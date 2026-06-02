@@ -43,7 +43,9 @@ export class ProcessingHelper {
         console.warn("[ProcessingHelper] GEMINI_API_KEY not found in env. Will try CredentialsManager after ready.")
       }
 
-      this.llmHelper = new LLMHelper(apiKey, false, undefined, undefined, groqApiKey, openaiApiKey, claudeApiKey)
+      let doubaoApiKey = process.env.DOUBAO_API_KEY
+
+      this.llmHelper = new LLMHelper(apiKey, false, undefined, undefined, groqApiKey, openaiApiKey, claudeApiKey, doubaoApiKey)
     }
   }
 
@@ -77,6 +79,12 @@ export class ProcessingHelper {
     if (claudeKey) {
       console.log("[ProcessingHelper] Loading stored Claude API Key from CredentialsManager");
       this.llmHelper.setClaudeApiKey(claudeKey);
+    }
+
+    const doubaoKey = credManager.getDoubaoLlmApiKey();
+    if (doubaoKey) {
+      console.log("[ProcessingHelper] Loading stored Doubao LLM API Key from CredentialsManager");
+      this.llmHelper.setDoubaoApiKey(doubaoKey);
     }
 
     const nativelyKey = credManager.getNativelyApiKey();

@@ -38,7 +38,7 @@ interface ElectronAPI {
 
   // LLM Model Management
   getCurrentLlmConfig: () => Promise<{
-    provider: 'ollama' | 'gemini';
+    provider: 'ollama' | 'gemini' | 'doubao';
     model: string;
     isOllama: boolean;
   }>;
@@ -49,7 +49,7 @@ interface ElectronAPI {
     modelId?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   testLlmConnection: (
-    provider: 'gemini' | 'groq' | 'openai' | 'claude',
+    provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao',
     apiKey?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   selectServiceAccount: () => Promise<{
@@ -64,6 +64,8 @@ interface ElectronAPI {
   setGroqApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setOpenaiApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setClaudeApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  setDoubaoLlmApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  setDoubaoEmbeddingModel: (model: string) => Promise<{ success: boolean; error?: string }>;
   setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   getNativelyUsage: () => Promise<{
     ok: boolean;
@@ -150,6 +152,8 @@ interface ElectronAPI {
       | 'azure'
       | 'ibmwatson'
       | 'soniox'
+      | 'doubao'
+      | 'doubao-auc'
       | 'natively'
       | 'local-whisper',
   ) => Promise<{ success: boolean; error?: string }>;
@@ -188,10 +192,15 @@ interface ElectronAPI {
   setIbmWatsonApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setGroqSttModel: (model: string) => Promise<{ success: boolean; error?: string }>;
   setSonioxApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  setDoubaoApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setIbmWatsonRegion: (region: string) => Promise<{ success: boolean; error?: string }>;
   testSttConnection: (
-    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox',
+    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao',
     apiKey: string,
+    region?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  testSavedSttConnection: (
+    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc',
     region?: string,
   ) => Promise<{ success: boolean; error?: string }>;
 
@@ -1015,7 +1024,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('switch-to-ollama', model, url),
   switchToGemini: (apiKey?: string, modelId?: string) =>
     ipcRenderer.invoke('switch-to-gemini', apiKey, modelId),
-  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey: string) =>
+  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao', apiKey: string) =>
     ipcRenderer.invoke('test-llm-connection', provider, apiKey),
   selectServiceAccount: () => ipcRenderer.invoke('select-service-account'),
 
@@ -1024,6 +1033,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setGroqApiKey: (apiKey: string) => ipcRenderer.invoke('set-groq-api-key', apiKey),
   setOpenaiApiKey: (apiKey: string) => ipcRenderer.invoke('set-openai-api-key', apiKey),
   setClaudeApiKey: (apiKey: string) => ipcRenderer.invoke('set-claude-api-key', apiKey),
+  setDoubaoLlmApiKey: (apiKey: string) => ipcRenderer.invoke('set-doubao-llm-api-key', apiKey),
+  setDoubaoEmbeddingModel: (model: string) => ipcRenderer.invoke('set-doubao-embedding-model', model),
   setNativelyApiKey: (apiKey: string) => ipcRenderer.invoke('set-natively-api-key', apiKey),
   getNativelyUsage: () => ipcRenderer.invoke('get-natively-usage'),
   getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),
@@ -1057,6 +1068,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       | 'azure'
       | 'ibmwatson'
       | 'soniox'
+      | 'doubao'
+      | 'doubao-auc'
       | 'natively'
       | 'local-whisper',
   ) => ipcRenderer.invoke('set-stt-provider', provider),
@@ -1071,12 +1084,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setIbmWatsonApiKey: (apiKey: string) => ipcRenderer.invoke('set-ibmwatson-api-key', apiKey),
   setGroqSttModel: (model: string) => ipcRenderer.invoke('set-groq-stt-model', model),
   setSonioxApiKey: (apiKey: string) => ipcRenderer.invoke('set-soniox-api-key', apiKey),
+  setDoubaoApiKey: (apiKey: string) => ipcRenderer.invoke('set-doubao-api-key', apiKey),
   setIbmWatsonRegion: (region: string) => ipcRenderer.invoke('set-ibmwatson-region', region),
   testSttConnection: (
-    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox',
+    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc',
     apiKey: string,
     region?: string,
   ) => ipcRenderer.invoke('test-stt-connection', provider, apiKey, region),
+  testSavedSttConnection: (
+    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc',
+    region?: string,
+  ) => ipcRenderer.invoke('test-saved-stt-connection', provider, region),
   localWhisperGetModels: () => ipcRenderer.invoke('local-whisper-get-models'),
   localWhisperSetModel: (modelId: string) => ipcRenderer.invoke('local-whisper-set-model', modelId),
   localWhisperDeleteModel: (modelId: string) =>
@@ -1817,9 +1835,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setTavilyApiKey: (apiKey: string) => ipcRenderer.invoke('set-tavily-api-key', apiKey),
 
   // Dynamic Model Discovery
-  fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude', apiKey: string) =>
+  fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao', apiKey: string) =>
     ipcRenderer.invoke('fetch-provider-models', provider, apiKey),
-  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude', modelId: string) =>
+  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao', modelId: string) =>
     ipcRenderer.invoke('set-provider-preferred-model', provider, modelId),
 
   // License Management

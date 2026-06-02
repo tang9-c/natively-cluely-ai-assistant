@@ -105,7 +105,7 @@ export const NativelyProSettings: React.FC = () => {
         <div className="space-y-4 animated fadeIn">
             {/* Page title */}
             <div>
-                <h3 className="text-[15px] font-semibold text-text-primary tracking-[-0.01em]">Natively Pro</h3>
+                <h3 className="text-[15px] font-semibold text-text-primary tracking-[-0.01em]">Natively 专业版</h3>
                 <p className="text-[12px] text-text-tertiary mt-0.5 leading-snug">
                     Profile Engine &amp; Job Description Intelligence
                 </p>
@@ -117,7 +117,7 @@ export const NativelyProSettings: React.FC = () => {
                         <div className="w-16 h-16 rounded-[16px] bg-emerald-500/10 border border-emerald-500/20 flex flex-col items-center justify-center mb-6 shadow-inner relative group transition-transform duration-500 hover:scale-105">
                             <CheckCircle size={28} className="text-emerald-400" strokeWidth={2} />
                         </div>
-                        <h2 className="text-[18px] font-semibold tracking-tight text-text-primary">Pro License Active</h2>
+                        <h2 className="text-[18px] font-semibold tracking-tight text-text-primary">专业版许可证已激活</h2>
                         <p className="text-[13px] mt-2 max-w-[280px] mx-auto leading-relaxed mb-8 text-text-secondary">
                             Your device is fully authorized for Natively's premium features including the Profile Engine, Job Description Intelligence, and Company Research.
                         </p>
@@ -142,7 +142,7 @@ export const NativelyProSettings: React.FC = () => {
                                 <div className="w-12 h-12 rounded-[14px] bg-yellow-500/10 border border-yellow-500/20 shadow-[inset_0_1px_rgba(255,255,255,0.06),0_2px_10px_rgba(0,0,0,0.05)] flex items-center justify-center mb-4 relative">
                                     <NativelyLogoMark size={24} className="text-white drop-shadow-sm" />
                                 </div>
-                                <h2 className="text-[17px] font-bold tracking-tight text-text-primary">Unlock Natively Pro</h2>
+                                <h2 className="text-[17px] font-bold tracking-tight text-text-primary">解锁 Natively 专业版</h2>
                                 <p className="text-[12.5px] mt-1.5 leading-relaxed text-text-secondary max-w-[260px]">Supercharge your workflow with advanced intelligence and candidate insights.</p>
                             </div>
 
@@ -169,7 +169,7 @@ export const NativelyProSettings: React.FC = () => {
                                                         {f.title}
                                                     </span>
                                                     {f.status === 'soon' && (
-                                                        <span className="text-[7px] font-black uppercase tracking-widest px-1 py-0.5 rounded bg-bg-input border border-border-subtle text-text-tertiary">Soon</span>
+                                                        <span className="text-[7px] font-black uppercase tracking-widest px-1 py-0.5 rounded bg-bg-input border border-border-subtle text-text-tertiary">即将推出</span>
                                                     )}
                                                 </div>
                                                 <p className={`text-[10px] leading-snug truncate ${f.status === 'ready' || f.status === 'soon' ? 'text-text-secondary' : 'text-text-tertiary opacity-25'}`}>
@@ -212,7 +212,7 @@ export const NativelyProSettings: React.FC = () => {
                                     className="text-[12px] font-medium flex items-center gap-1.5 transition-all duration-200 text-blue-400 hover:text-blue-300 cursor-pointer"
                                 >
                                     <PlayCircle size={14} /> 
-                                    <span className="underline underline-offset-4 decoration-current/30 hover:decoration-current/60">Watch it in action</span>
+                                    <span className="underline underline-offset-4 decoration-current/30 hover:decoration-current/60">观看实际效果</span>
                                 </button>
                             </div>
                         </div>
@@ -238,7 +238,7 @@ export const NativelyProSettings: React.FC = () => {
                                         value={licenseKey}
                                         onChange={(e) => setLicenseKey(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && handleActivate()}
-                                        placeholder="Enter your license key"
+                                        placeholder="输入您的许可证密钥"
                                         disabled={status === 'loading' || status === 'success'}
                                         className={`w-full rounded-[10px] pl-9 pr-3 py-2.5 text-[13px] font-mono focus:outline-none transition-all disabled:opacity-50 bg-bg-input border border-border-subtle text-text-primary placeholder-text-tertiary focus:border-text-primary focus:ring-1 focus:ring-text-primary/20 shadow-[inset_0_1px_2px_rgba(0,0,0,0.1)]`}
                                     />
@@ -347,7 +347,7 @@ export const NativelyProSettings: React.FC = () => {
             {hardwareId && (
                 <div className="px-2 pt-2">
                     <div className="flex items-center justify-between">
-                        <span className="text-[10px] uppercase tracking-widest font-semibold text-text-tertiary">Device ID</span>
+                        <span className="text-[10px] uppercase tracking-widest font-semibold text-text-tertiary">设备 ID</span>
                         <button
                             onClick={copyHardwareId}
                             className="text-[11px] font-medium transition-colors flex items-center gap-1 text-text-secondary hover:text-text-primary cursor-pointer"

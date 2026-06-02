@@ -215,7 +215,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         <div className="w-full pr-4">
                             {/* Date formatting could be improved to use meeting.date if it's an ISO string */}
                             <div className="text-xs text-text-tertiary font-medium mb-1">
-                                {new Date(meeting.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                                {new Date(meeting.date).toLocaleDateString('zh-CN', { weekday: 'long', month: 'short', day: 'numeric' })}
                             </div>
 
                             {/* Editable Title */}
@@ -264,7 +264,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                             className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors"
                         >
                             {isCopied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                            {isCopied ? 'Copied' : activeTab === 'summary' ? 'Copy full summary' : activeTab === 'transcript' ? 'Copy full transcript' : 'Copy usage'}
+                            {isCopied ? '已复制' : activeTab === 'summary' ? '复制完整摘要' : activeTab === 'transcript' ? '复制完整转录' : '复制使用量'}
                         </button>
                     </div>
 
@@ -323,7 +323,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                             onSave={(val) => handleActionItemSave(i, val)}
                                                             tagName="p"
                                                             className="text-sm text-text-secondary leading-relaxed -ml-2 px-2 rounded-sm transition-colors"
-                                                            placeholder="Type an action item..."
+                                                            placeholder="输入行动项..."
                                                             onEnter={() => {
                                                                 const newItems = [...(meeting.detailedSummary?.actionItems || [])];
                                                                 newItems.splice(i + 1, 0, "");
@@ -368,7 +368,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                             onSave={(val) => handleKeyPointSave(i, val)}
                                                             tagName="p"
                                                             className="text-sm text-text-secondary leading-relaxed -ml-2 px-2 rounded-sm transition-colors"
-                                                            placeholder="Type a key point..."
+                                                            placeholder="输入关键点..."
                                                             onEnter={() => {
                                                                 const newItems = [...(meeting.detailedSummary?.keyPoints || [])];
                                                                 newItems.splice(i + 1, 0, "");
@@ -391,7 +391,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     pre-Phase-7 meetings still look the same. */}
                                 {meeting.detailedSummary?.actionItemsStructured && meeting.detailedSummary.actionItemsStructured.length > 0 && (
                                     <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">Next Steps</h2>
+                                        <h2 className="text-lg font-semibold text-text-primary mb-4">下一步</h2>
                                         <ul className="space-y-2">
                                             {meeting.detailedSummary.actionItemsStructured.map(item => (
                                                 <li key={item.id} className="flex items-start gap-3 group">
@@ -415,7 +415,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 {/* Phase 7 — Coaching insights (mode-specific opportunities). */}
                                 {meeting.detailedSummary?.coachingInsights && meeting.detailedSummary.coachingInsights.length > 0 && (
                                     <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">Coaching</h2>
+                                        <h2 className="text-lg font-semibold text-text-primary mb-4">辅导</h2>
                                         <ul className="space-y-3">
                                             {meeting.detailedSummary.coachingInsights.map(insight => {
                                                 const tone = insight.severity === 'warning'
@@ -614,7 +614,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleInputKeyDown}
-                        placeholder="Ask about this meeting..."
+                        placeholder="询问本次会议..."
                         className="w-full pl-5 pr-12 py-3 bg-transparent backdrop-blur-[24px] backdrop-saturate-[140%] shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-white/20 rounded-full text-sm text-text-primary placeholder-text-tertiary/70 focus:outline-none transition-shadow duration-200"
                     />
                     <button

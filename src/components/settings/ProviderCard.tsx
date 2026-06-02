@@ -7,7 +7,7 @@ interface FetchedModel {
 }
 
 interface ProviderCardProps {
-    providerId: 'gemini' | 'groq' | 'openai' | 'claude';
+    providerId: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao';
     providerName: string;
     apiKey: string;
     preferredModel?: string;
@@ -114,10 +114,10 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                     }
                 }
             } else {
-                setFetchError(result?.error || 'Failed to fetch models');
+                setFetchError(result?.error || '获取模型失败');
             }
         } catch (e: any) {
-            setFetchError(e.message || 'Failed to fetch models');
+            setFetchError(e.message || '获取模型失败');
         } finally {
             setIsFetching(false);
         }
@@ -144,7 +144,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
             <div className="mb-2 flex items-center justify-between">
                 <label className="flex items-center text-xs font-medium text-text-primary uppercase tracking-wide">
                     {providerName} API Key
-                    {hasStoredKey && <span className="ml-2 text-green-500 normal-case">✓ Saved</span>}
+                    {hasStoredKey && <span className="ml-2 text-green-500 normal-case">✓ 已保存</span>}
                 </label>
                 <button
                     onClick={() => {
@@ -154,7 +154,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                     className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors"
                     title={`Get ${providerName} API Key`}
                 >
-                    <span className="text-[10px] uppercase tracking-wide">Get Key</span>
+                    <span className="text-[10px] uppercase tracking-wide">获取密钥</span>
                     <ExternalLink size={12} />
                 </button>
             </div>
@@ -174,13 +174,13 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                         : 'bg-bg-input hover:bg-bg-secondary border border-border-subtle text-text-primary disabled:opacity-50'
                         }`}
                 >
-                    {savingStatus ? 'Saving...' : savedStatus ? 'Saved!' : 'Save'}
+                    {savingStatus ? '保存中...' : savedStatus ? '已保存！' : '保存'}
                 </button>
                 {hasStoredKey && (
                     <button
                         onClick={onRemoveKey}
                         className="px-2.5 py-2.5 rounded-lg text-xs font-medium text-text-tertiary hover:text-red-500 hover:bg-red-500/10 transition-all"
-                        title="Remove API Key"
+                        title="移除 API 密钥"
                     >
                         <Trash2 size={16} strokeWidth={1.5} />
                     </button>
@@ -198,10 +198,10 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                         }`}
                     title={testError || "Test Connection"}
                 >
-                    {testStatus === 'testing' ? <><Loader2 size={12} className="animate-spin" /> Testing...</> :
-                        testStatus === 'success' ? <><CheckCircle size={12} /> Connected</> :
-                            testStatus === 'error' ? <><AlertCircle size={12} /> Error</> :
-                                <>{/* No Icon */} Test Connection</>}
+                    {testStatus === 'testing' ? <><Loader2 size={12} className="animate-spin" /> 测试中...</> :
+                        testStatus === 'success' ? <><CheckCircle size={12} /> 已连接</> :
+                            testStatus === 'error' ? <><AlertCircle size={12} /> 错误</> :
+                                <>{/* No Icon */} 测试连接</>}
                 </button>
 
                 {/* Inline Model Dropdown */}
@@ -212,7 +212,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                             className={`w-full bg-bg-input border border-border-subtle rounded-md px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary flex items-center justify-between transition-colors ${fetchedModels.length > 0 ? 'hover:bg-bg-elevated' : 'opacity-80 cursor-default'}`}
                             type="button"
                         >
-                            <span className="truncate pr-2">{selectedOption ? selectedOption.label : (preferredModel || 'Select model')}</span>
+                            <span className="truncate pr-2">{selectedOption ? selectedOption.label : (preferredModel || '选择模型')}</span>
                             <ChevronDown size={14} className={`text-text-secondary transition-transform ${isDropdownOpen ? 'rotate-180' : ''} ${fetchedModels.length === 0 ? 'opacity-50' : ''}`} />
                         </button>
 
@@ -248,9 +248,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                             }`}
                     >
                         {isFetching ? (
-                            <><Loader2 size={12} className="animate-spin" /> Fetching...</>
+                            <><Loader2 size={12} className="animate-spin" /> 获取中...</>
                         ) : (
-                            <><RefreshCw size={12} /> Fetch Models</>
+                            <><RefreshCw size={12} /> 获取模型</>
                         )}
                     </button>
                 ) : (
@@ -261,7 +261,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
             {/* Error from test or fetch */}
             {testError && <p className="text-[10px] text-red-400 mt-1.5 mb-2">{testError}</p>}
-            {fetchError && <p className="text-[10px] text-red-400 mt-1.5 mb-2">Model fetch error: {fetchError}</p>}
+            {fetchError && <p className="text-[10px] text-red-400 mt-1.5 mb-2">获取模型错误: {fetchError}</p>}
 
 
         </div>

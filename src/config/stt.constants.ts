@@ -3,7 +3,7 @@
  * Configuration for STT providers (Google gRPC, REST, WebSocket)
  */
 
-export type SttProviderId = 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'natively';
+export type SttProviderId = 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'doubao' | 'doubao-auc' | 'natively';
 
 export interface SttProviderConfig {
     id: SttProviderId;
@@ -112,6 +112,31 @@ export const STT_PROVIDERS: Record<SttProviderId, SttProviderConfig> = {
             Authorization: `Basic ${btoa(`apikey:${apiKey}`)}`,
         }),
         responseContentPath: 'results[0].alternatives[0].transcript',
+    },
+    doubao: {
+        id: 'doubao',
+        name: 'Doubao (Volcengine)',
+        description: 'Doubao Streaming ASR 2.0 via Volcengine API (OpenAI-compatible)',
+        endpoint: 'https://ark.cn-beijing.volces.com/api/v3/audio/transcriptions',
+        model: 'volc.seedasr.sauc.duration',
+        uploadType: 'multipart',
+        authHeader: (apiKey: string) => ({
+            Authorization: `Bearer ${apiKey}`,
+        }),
+        responseContentPath: 'text',
+    },
+    'doubao-auc': {
+        id: 'doubao-auc',
+        name: 'Doubao AUC (BigModel)',
+        description: 'Doubao AUC BigModel API via ByteDance OpenSpeech (Base64 audio upload)',
+        endpoint: 'https://openspeech.bytedance.com/api/v3/auc/bigmodel',
+        model: 'volc.seedasr.auc',
+        uploadType: 'multipart',
+        authHeader: (apiKey: string) => ({
+            'x-api-key': apiKey,
+            'X-Api-Resource-Id': 'volc.seedasr.auc',
+        }),
+        responseContentPath: 'result[0].text',
     },
     natively: {
         id: 'natively',

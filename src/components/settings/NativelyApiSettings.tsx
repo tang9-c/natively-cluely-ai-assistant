@@ -224,18 +224,18 @@ export const NativelyApiSettings: React.FC = () => {
       } else {
         setUsageError(
           r.error === 'subscription_inactive'
-            ? 'Subscription inactive — renew to restore access.'
+            ? '订阅已失效，请续订以恢复访问。'
             : r.error === 'key_not_found'
-              ? 'Key not recognised by server.'
+              ? '服务器无法识别此密钥。'
               : r.error === 'invalid_key_format'
-                ? 'Invalid key format.'
+                ? '密钥格式无效。'
                 : r.error === 'network_error' || r.error?.includes('fetch')
-                  ? 'Could not reach server.'
-                  : `Server error: ${r.error ?? 'unknown'}`,
+                  ? '无法连接服务器。'
+                  : `服务器错误：${r.error ?? '未知'}`,
         );
       }
     } catch {
-      setUsageError('Failed to load usage.');
+      setUsageError('加载使用量失败。');
     } finally {
       setIsLoadingUsage(false);
     }
@@ -339,8 +339,8 @@ export const NativelyApiSettings: React.FC = () => {
         }
         const msg =
           res?.error === 'invalid_hwid'
-            ? 'Could not read device ID. Restart the app and try again.'
-            : res?.error || 'Could not start trial. Try again.';
+            ? '无法读取设备 ID。重启应用后重试。'
+            : res?.error || '无法启动试用，请重试。';
         setTrialError(msg);
         return;
       }
@@ -368,7 +368,7 @@ export const NativelyApiSettings: React.FC = () => {
         trialPollRef.current = setInterval(refreshTrial, 30_000);
       }
     } catch (e: any) {
-      setTrialError(e.message || 'Network error');
+      setTrialError(e.message || '网络错误');
     } finally {
       setTrialLoading(false);
     }
@@ -400,10 +400,10 @@ export const NativelyApiSettings: React.FC = () => {
         // @ts-ignore
         window.electronAPI?.setSttProvider?.('natively').catch(console.error);
       } else {
-        setError(r.error || 'Failed to save API key');
+        setError(r.error || '保存 API 密钥失败');
       }
     } catch (e: any) {
-      setError(e.message || 'Unexpected error');
+      setError(e.message || '意外错误');
     } finally {
       setIsSaving(false);
     }
@@ -584,7 +584,7 @@ export const NativelyApiSettings: React.FC = () => {
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]" />
             <span className="text-[10px] font-semibold text-emerald-500 tracking-wide">
-              {planLabel ?? 'Connected'}
+              {planLabel ?? '已连接'}
             </span>
           </div>
         )}
@@ -610,13 +610,13 @@ export const NativelyApiSettings: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <p className="text-[13.5px] font-semibold text-text-primary tracking-tight">
-                        Free Trial Active
+                        免费试用已激活
                       </p>
                       <TrialCountdown expiresAt={trialState.expiresAt} />
                     </div>
                     <p className="text-[10.5px] text-text-tertiary mt-1">
-                      {trialState.usage.ai} AI · {sttMin} min STT · {trialState.usage.search}{' '}
-                      searches used
+ {trialState.usage.ai} AI · {sttMin} min STT · {trialState.usage.search}{' '}
+                      次搜索已使用
                     </p>
                   </div>
                 </div>
@@ -634,14 +634,14 @@ export const NativelyApiSettings: React.FC = () => {
                     icon={Mic}
                     used={Math.round(trialState.usage.stt_seconds / 60)}
                     limit={10}
-                    label="STT"
+                    label="语音转文字"
                     unit="m"
                   />
                   <TrialUsagePill
                     icon={Search}
                     used={trialState.usage.search}
                     limit={2}
-                    label="Search"
+                    label="搜索"
                     unit=""
                   />
                 </div>
@@ -728,12 +728,12 @@ export const NativelyApiSettings: React.FC = () => {
                 >
                   {trialLoading ? (
                     <>
-                      <Loader2 size={13} className="animate-spin" /> Starting trial…
+                      <Loader2 size={13} className="animate-spin" /> 启动试用中...
                     </>
                   ) : isClaimed ? (
-                    'Trial Already Claimed'
+                    '试用已被领取'
                   ) : (
-                    'Start 10-Minute Free Trial'
+                    '开始 10 分钟免费试用'
                   )}
                 </button>
 
@@ -746,13 +746,13 @@ export const NativelyApiSettings: React.FC = () => {
                 )}
 
                 <p className="text-[10.5px] text-text-tertiary font-medium mt-3">
-                  No account needed — bound to this device.
+                 无需账号 — 绑定此设备。
                 </p>
 
                 <div className="w-[30px] h-px bg-border-subtle my-3" />
 
                 <p className="text-[11px] text-text-secondary font-medium">
-                  Already have an API key? Enter it below.
+                  已有 API Key？在下方输入。
                 </p>
               </div>
             </Card>
@@ -771,7 +771,7 @@ export const NativelyApiSettings: React.FC = () => {
             <NativelyLogoMark size={18} className="text-blue-400" />
           </div>
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-text-primary">API Key</p>
+            <p className="text-[13px] font-semibold text-text-primary">API 密钥</p>
             <p className="text-[11px] text-text-tertiary leading-snug mt-0.5">
               Your Natively API key from your subscription email
             </p>
@@ -900,7 +900,7 @@ export const NativelyApiSettings: React.FC = () => {
                 )}
               </div>
               <div>
-                <p className="text-[13px] font-semibold text-text-primary">Usage this month</p>
+                <p className="text-[13px] font-semibold text-text-primary">本月使用量</p>
                 {usageData && (
                   <p className="text-[11px] text-text-tertiary mt-0.5">
                     Resets {fmtDate(usageData.quota.resets_at)}
@@ -970,19 +970,19 @@ export const NativelyApiSettings: React.FC = () => {
               {/* Progress bars */}
               <div className="px-5 pb-5 space-y-3.5">
                 <QuotaBar
-                  label="Transcription"
+                  label="转录"
                   icon={Mic}
                   bucket={usageData.quota.transcription}
                   barColor="bg-blue-500"
                 />
                 <QuotaBar
-                  label="AI requests"
+                  label="AI 请求"
                   icon={Brain}
                   bucket={usageData.quota.ai}
                   barColor="bg-violet-500"
                 />
                 <QuotaBar
-                  label="Web searches"
+                  label="网页搜索"
                   icon={Search}
                   bucket={usageData.quota.search}
                   barColor="bg-emerald-500"
@@ -1012,9 +1012,9 @@ export const NativelyApiSettings: React.FC = () => {
           </div>
           <div className="space-y-3">
             {[
-              { step: '1', text: 'Subscribe above and complete checkout on Dodo Payments.' },
-              { step: '2', text: 'Your API key is emailed instantly to your inbox.' },
-              { step: '3', text: 'Paste it here — Natively handles the rest automatically.' },
+              { step: '1', text: '在上面订阅并在 Dodo Payments 完成结账。' },
+              { step: '2', text: '您的 API 密钥会立即发送到您的邮箱。' },
+              { step: '3', text: '在此粘贴 — Natively 会自动处理其余部分。' },
             ].map(({ step, text }) => (
               <div key={step} className="flex items-start gap-3">
                 <div className="w-5 h-5 rounded-full bg-bg-input border border-border-subtle flex items-center justify-center text-[10px] font-bold text-text-tertiary shrink-0 mt-[1px]">
@@ -1034,7 +1034,7 @@ export const NativelyApiSettings: React.FC = () => {
             <Shield size={18} className="text-emerald-400" />
           </div>
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-text-primary">Refund Policy</p>
+            <p className="text-[13px] font-semibold text-text-primary">退款政策</p>
             <p className="text-[11px] text-text-tertiary leading-snug mt-0.5">
               24-hour refund window — voucher purchases are final sale
             </p>

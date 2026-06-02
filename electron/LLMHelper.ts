@@ -46,6 +46,8 @@ const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 const GROQ_MODEL = "llama-3.3-70b-versatile"
 const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
+const DOUBAO_MODEL = "doubao-seed-2-0-lite-260215"
+const DOUBAO_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 const MAX_OUTPUT_TOKENS = 65536
 const CLAUDE_MAX_OUTPUT_TOKENS = 64000
 
@@ -57,10 +59,12 @@ export class LLMHelper {
   private groqClient: Groq | null = null
   private openaiClient: OpenAI | null = null
   private claudeClient: Anthropic | null = null
+  private doubaoClient: OpenAI | null = null
   private apiKey: string | null = null
   private groqApiKey: string | null = null
   private openaiApiKey: string | null = null
   private claudeApiKey: string | null = null
+  private doubaoApiKey: string | null = null
   private useOllama: boolean = false
   private ollamaModel: string = ""
   private ollamaUrl: string = "http://127.0.0.1:11434"
@@ -142,7 +146,7 @@ export class LLMHelper {
     console.warn(`[ScopeFallback] ${scope} denied; Ollama unavailable, omitting from context`);
   }
 
-  constructor(apiKey?: string, useOllama: boolean = false, ollamaModel?: string, ollamaUrl?: string, groqApiKey?: string, openaiApiKey?: string, claudeApiKey?: string) {
+  constructor(apiKey?: string, useOllama: boolean = false, ollamaModel?: string, ollamaUrl?: string, groqApiKey?: string, openaiApiKey?: string, claudeApiKey?: string, doubaoApiKey?: string) {
     this.useOllama = useOllama
 
     // Initialize rate limiters
@@ -173,6 +177,12 @@ export class LLMHelper {
       this.claudeApiKey = claudeApiKey
       this.claudeClient = new Anthropic({ apiKey: claudeApiKey })
       console.log(`[LLMHelper] Claude client initialized with model: ${CLAUDE_MODEL}`)
+    }
+
+    if (doubaoApiKey) {
+      this.doubaoApiKey = doubaoApiKey
+      this.doubaoClient = new OpenAI({ apiKey: doubaoApiKey, baseURL: DOUBAO_BASE_URL })
+      console.log(`[LLMHelper] Doubao client initialized with model: ${DOUBAO_MODEL}`)
     }
 
     if (useOllama) {
@@ -229,6 +239,12 @@ export class LLMHelper {
     this.claudeApiKey = apiKey;
     this.claudeClient = new Anthropic({ apiKey });
     console.log("[LLMHelper] Claude API Key updated.");
+  }
+
+  public setDoubaoApiKey(apiKey: string) {
+    this.doubaoApiKey = apiKey;
+    this.doubaoClient = new OpenAI({ apiKey, baseURL: DOUBAO_BASE_URL });
+    console.log("[LLMHelper] Doubao API Key updated.");
   }
 
   public setNativelyKey(key: string | null): void {
@@ -434,6 +450,10 @@ export class LLMHelper {
     return modelId.startsWith("llama-") || modelId.startsWith("mixtral-") || modelId.startsWith("gemma-") || modelId.startsWith("meta-llama/") || modelId.startsWith("qwen/") || modelId.startsWith("qwen-");
   }
 
+  private isDoubaoModel(modelId: string): boolean {
+    return modelId.startsWith("doubao-") || modelId.startsWith("volc.") || modelId.startsWith("ep-");
+  }
+
   private isGeminiModel(modelId: string): boolean {
     return modelId.startsWith("gemini-") || modelId.startsWith("models/");
   }
@@ -487,6 +507,92 @@ export class LLMHelper {
     if (targetModelId === GEMINI_FLASH_MODEL) this.geminiModel = GEMINI_FLASH_MODEL;
 
     console.log(`[LLMHelper] Switched to Model: ${targetModelId}`);
+  }
+
+  /**
+   * Generate response from Doubao (OpenAI-compatible API)
+   */
+  private async generateWithDoubao(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    if (!this.doubaoClient) throw new Error("Doubao client not initialized");
+    this.assertOutboundScopes('doubao', userMessage, imagePaths);
+
+    await this.rateLimiters.openai.acquire(); // Reuse OpenAI rate limiter
+
+    const model = modelId || (this.isDoubaoModel(this.currentModelId) ? this.currentModelId : DOUBAO_MODEL);
+
+    const messages: any[] = [];
+    if (systemPrompt) {
+      messages.push({ role: "system", content: systemPrompt });
+    }
+
+    if (imagePaths && imagePaths.length > 0) {
+      const contentParts: any[] = [{ type: "text", text: userMessage }];
+      for (const p of imagePaths) {
+        if (fs.existsSync(p)) {
+          const data = fs.readFileSync(p);
+          const mime = p.endsWith('.png') ? 'image/png' : p.endsWith('.jpg') || p.endsWith('.jpeg') ? 'image/jpeg' : 'image/webp';
+          contentParts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${data.toString('base64')}` } });
+        }
+      }
+      messages.push({ role: "user", content: contentParts });
+    } else {
+      messages.push({ role: "user", content: userMessage });
+    }
+
+    const response = await this.doubaoClient.chat.completions.create({
+      model,
+      messages,
+      max_completion_tokens: MAX_OUTPUT_TOKENS,
+    });
+
+    return response.choices[0]?.message?.content ?? "";
+  }
+
+  /**
+   * Stream response from Doubao (OpenAI-compatible API)
+   */
+  private async * streamWithDoubao(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    if (!this.doubaoClient) throw new Error("Doubao client not initialized");
+    this.assertOutboundScopes('doubao', userMessage, imagePaths);
+
+    await this.rateLimiters.openai.acquire(); // Reuse OpenAI rate limiter
+
+    const model = modelId || (this.isDoubaoModel(this.currentModelId) ? this.currentModelId : DOUBAO_MODEL);
+
+    const messages: any[] = [];
+    if (systemPrompt) {
+      messages.push({ role: "system", content: systemPrompt });
+    }
+
+    if (imagePaths && imagePaths.length > 0) {
+      const contentParts: any[] = [{ type: "text", text: userMessage }];
+      for (const p of imagePaths) {
+        if (fs.existsSync(p)) {
+          const data = fs.readFileSync(p);
+          const mime = p.endsWith('.png') ? 'image/png' : p.endsWith('.jpg') || p.endsWith('.jpeg') ? 'image/jpeg' : 'image/webp';
+          contentParts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${data.toString('base64')}` } });
+        }
+      }
+      messages.push({ role: "user", content: contentParts });
+    } else {
+      messages.push({ role: "user", content: userMessage });
+    }
+
+    const stream = await this.doubaoClient.chat.completions.create({
+      model,
+      messages,
+      stream: true,
+      max_completion_tokens: MAX_OUTPUT_TOKENS,
+    });
+
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content;
+      if (content) {
+        yield content;
+      }
+    }
   }
 
   private buildCodexCliPrompt(userContent: string, systemPrompt?: string): string {
@@ -1526,6 +1632,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         // CACHE: pass system separately so Groq prefix-cache hits across turns.
         return await this.generateWithGroq(cloudUserContent, this.currentModelId, skipSystemPrompt ? undefined : finalGroqPrompt);
       }
+      if (this.isDoubaoModel(this.currentModelId) && this.doubaoClient) {
+        return await this.generateWithDoubao(cloudUserContent, openaiSystemPrompt, cloudImagePaths);
+      }
 
       // Fallback (Gemini) - logic handled below by SMART DYNAMIC FALLBACK list
 
@@ -2545,9 +2654,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // Execute 3-tier rotation with exponential backoff between tiers
     // ──────────────────────────────────────────────────────────────────
     const tiers = [
-      { label: 'Tier 1 (Stable)', providers: tier1Providers },
-      { label: 'Tier 2 (Latest)', providers: tier2Providers },
-      { label: 'Tier 3 (Retry)', providers: tier3Providers },
+      { label: '层级 1 (稳定)', providers: tier1Providers },
+      { label: '层级 2 (最新)', providers: tier2Providers },
+      { label: '层级 3 (重试)', providers: tier3Providers },
     ];
 
     for (let tierIndex = 0; tierIndex < tiers.length; tierIndex++) {
@@ -2718,6 +2827,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       if (this.groqClient) {
         providers.push({ name: `Groq (meta-llama/llama-4-scout-17b-16e-instruct)`, execute: () => this.streamWithGroqMultimodal(userContent, imagePaths!, openaiSystemPrompt) });
       }
+      if (this.doubaoClient) {
+        providers.push({ name: `Doubao (${DOUBAO_MODEL})`, execute: () => this.streamWithDoubao(userContent, openaiSystemPrompt, imagePaths) });
+      }
     } else {
       // TEXT-ONLY PROVIDER ORDER: [Natively] -> Groq -> Codex CLI -> OpenAI -> Claude -> Gemini Flash -> Gemini Pro
       if (this.hasNatively()) {
@@ -2741,6 +2853,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         providers.push({ name: `Gemini Flash (${textGeminiFlash})`, execute: () => this.streamWithGeminiModel(userContent, textGeminiFlash, undefined, geminiSystemForCache) });
         providers.push({ name: `Gemini Pro (${textGeminiPro})`, execute: () => this.streamWithGeminiModel(userContent, textGeminiPro, undefined, geminiSystemForCache) });
       }
+      if (this.doubaoClient) {
+        providers.push({ name: `Doubao (${DOUBAO_MODEL})`, execute: () => this.streamWithDoubao(userContent, openaiSystemPrompt, undefined) });
+      }
     }
 
     if (providers.length === 0) {
@@ -2758,6 +2873,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         : this.isOpenAiModel(this.currentModelId) ? 'OpenAI'
           : this.isGroqModel(this.currentModelId) ? 'Groq'
             : this.isGeminiModel(this.currentModelId) ? 'Gemini'
+              : this.isDoubaoModel(this.currentModelId) ? 'Doubao'
               : '';
 
     if (currentFamilyLabel) {
@@ -3103,6 +3219,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
       // CACHE: pass system separately so Groq prefix-cache hits across turns.
       yield* this.streamWithGroq(userContent, this.currentModelId, finalGroqSystem);
+      return;
+    }
+
+    // Doubao
+    if (this.isDoubaoModel(this.currentModelId) && this.doubaoClient) {
+      const doubaoSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
+      const finalDoubaoSystem = this.injectLanguageInstruction(doubaoSystem);
+      yield* this.streamWithDoubao(userContent, finalDoubaoSystem, imagePaths);
       return;
     }
 
@@ -4085,9 +4209,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
   }
 
-  public getCurrentProvider(): "ollama" | "gemini" | "custom" | "codex-cli" {
+  public getCurrentProvider(): "ollama" | "gemini" | "custom" | "codex-cli" | "doubao" {
     if (this.customProvider) return "custom";
     if (this.isCodexCliModel(this.currentModelId)) return "codex-cli";
+    if (this.isDoubaoModel(this.currentModelId)) return "doubao";
     return this.useOllama ? "ollama" : "gemini";
   }
 

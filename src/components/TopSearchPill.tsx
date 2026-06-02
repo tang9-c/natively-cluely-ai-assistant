@@ -300,7 +300,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                         focus:outline-none
                                         ${state === 'idle' ? 'cursor-default' : 'cursor-text'}
                                     `}
-                                        placeholder="Search or ask anything..."
+                                        placeholder="搜索或询问任何问题..."
                                     />
                                 </div>
 

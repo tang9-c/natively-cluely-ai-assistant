@@ -98,7 +98,7 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                     className="flex items-center gap-2 mt-3 text-[13px] text-text-tertiary hover:text-text-secondary transition-colors"
                 >
                     {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                    {copied ? 'Copied' : 'Copy message'}
+                    {copied ? '已复制' : '复制消息'}
                 </button>
             )}
         </motion.div>
@@ -340,7 +340,7 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                         <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle shrink-0">
                             <div className="flex items-center gap-2 text-text-tertiary">
                                 <img src={nativelyIcon} className="w-3.5 h-3.5 force-black-icon opacity-50" alt="logo" />
-                                <span className="text-[13px] font-medium">Search all meetings</span>
+                                <span className="text-[13px] font-medium">搜索所有会议</span>
                             </div>
                             <button
                                 onClick={onClose}
@@ -382,7 +382,7 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                                     value={query}
                                     onChange={(e) => setQuery(e.target.value)}
                                     onKeyDown={handleInputKeyDown}
-                                    placeholder="Ask me anything..."
+                                    placeholder="问我任何问题..."
                                     className="w-full pl-5 pr-12 py-3 bg-bg-elevated shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-border-muted rounded-full text-sm text-text-primary placeholder-text-tertiary/70 focus:outline-none transition-all"
                                 />
                                 <button
