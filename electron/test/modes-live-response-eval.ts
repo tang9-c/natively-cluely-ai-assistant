@@ -12,11 +12,6 @@ const originalLoad = (Module as any)._load;
           return path.join(os.tmpdir(), 'natively-live-eval', name);
         },
       },
-      safeStorage: {
-        isEncryptionAvailable: () => false,
-        encryptString: (value: string) => Buffer.from(value, 'utf8'),
-        decryptString: (value: Buffer) => value.toString('utf8'),
-      },
     };
   }
   return originalLoad.call(this, request, parent, isMain);
