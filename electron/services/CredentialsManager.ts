@@ -1,13 +1,11 @@
 /**
- * CredentialsManager - Secure storage for API keys and service account paths
- * Uses Electron's safeStorage API for encryption at rest
+ * CredentialsManager - Device-bound encrypted storage for API keys and service account paths
  */
 
-import { app, safeStorage } from 'electron';
+import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
-
-const CREDENTIALS_PATH = path.join(app.getPath('userData'), 'credentials.enc');
+import * as SecureStorage from './SecureStorage';
 
 export interface CustomProvider {
     id: string;
@@ -88,7 +86,9 @@ export class CredentialsManager {
      * Must be called after app.whenReady()
      */
     public init(): void {
+        SecureStorage.init();
         this.loadCredentials();
+        this.removeLegacyCredentialFiles();
         console.log('[CredentialsManager] Initialized');
     }
 
@@ -215,6 +215,10 @@ export class CredentialsManager {
 
     public getAllCredentials(): StoredCredentials {
         return { ...this.credentials };
+    }
+
+    public getDeviceKeyLost(): boolean {
+        return SecureStorage.getDeviceKeyLost();
     }
 
     // =========================================================================
@@ -546,10 +550,11 @@ export class CredentialsManager {
 
     public clearAll(): void {
         this.scrubMemory();
-        if (fs.existsSync(CREDENTIALS_PATH)) {
-            fs.unlinkSync(CREDENTIALS_PATH);
+        const credentialsPath = this.credentialsFilePath();
+        if (fs.existsSync(credentialsPath)) {
+            fs.unlinkSync(credentialsPath);
         }
-        const plaintextPath = CREDENTIALS_PATH + '.json';
+        const plaintextPath = credentialsPath + '.json';
         if (fs.existsSync(plaintextPath)) {
             fs.unlinkSync(plaintextPath);
         }
@@ -576,123 +581,54 @@ export class CredentialsManager {
     // Storage (Encrypted)
     // =========================================================================
 
+    private credentialsFilePath(): string {
+        return path.join(app.getPath('userData'), 'credentials.enc');
+    }
+
+    private removeLegacyCredentialFiles(): void {
+        const credentialsPath = this.credentialsFilePath();
+        const plaintextPath = `${credentialsPath}.json`;
+
+        if (fs.existsSync(plaintextPath)) {
+            fs.unlinkSync(plaintextPath);
+            console.warn('[CredentialsManager] Removed legacy credential file (.json)');
+        }
+
+        if (!fs.existsSync(credentialsPath)) return;
+
+        try {
+            const header = fs.readFileSync(credentialsPath).subarray(0, 10);
+            const magic = header.subarray(0, 9).toString('utf8');
+            const version = header[9];
+            if (magic !== 'NATIVELY:' || version !== 0x02) {
+                fs.unlinkSync(credentialsPath);
+                console.warn('[CredentialsManager] Removed legacy credential file (.enc)');
+            }
+        } catch (error) {
+            fs.unlinkSync(credentialsPath);
+            console.warn('[CredentialsManager] Removed unreadable legacy credential file (.enc)');
+        }
+    }
+
     private saveCredentials(): void {
         try {
-            if (!safeStorage.isEncryptionAvailable()) {
-                // Fallback to plaintext JSON when encryption is unavailable
-                // (e.g. sandboxed environments, some CI/CD contexts).
-                // loadCredentials already handles reading this file, so this is symmetric.
-                const plaintextPath = CREDENTIALS_PATH + '.json';
-                const data = JSON.stringify(this.credentials);
-                fs.writeFileSync(plaintextPath, data, { mode: 0o600 });
-                console.warn('[CredentialsManager] Encryption unavailable; credentials saved as plaintext (fallback)');
-                return;
-            }
-
-            const data = JSON.stringify(this.credentials);
-            const encrypted = safeStorage.encryptString(data);
-            const tmpEnc = CREDENTIALS_PATH + '.tmp';
-            fs.writeFileSync(tmpEnc, encrypted);
-            fs.renameSync(tmpEnc, CREDENTIALS_PATH);
+            SecureStorage.encryptJSON(this.credentialsFilePath(), this.credentials);
         } catch (error) {
             console.error('[CredentialsManager] Failed to save credentials:', error);
-            // Emergency fallback: if encryption fails, try plaintext
-            try {
-                const plaintextPath = CREDENTIALS_PATH + '.json';
-                const data = JSON.stringify(this.credentials);
-                fs.writeFileSync(plaintextPath, data, { mode: 0o600 });
-                console.warn('[CredentialsManager] Emergency fallback: saved as plaintext');
-            } catch (fallbackError) {
-                console.error('[CredentialsManager] Even plaintext fallback failed:', fallbackError);
-            }
+            throw error;
         }
     }
 
     private loadCredentials(): void {
         try {
-            // Try encrypted file first
-            if (fs.existsSync(CREDENTIALS_PATH)) {
-                if (!safeStorage.isEncryptionAvailable()) {
-                    console.warn('[CredentialsManager] Encryption not available for load, trying plaintext fallback');
-                    const plaintextPath = CREDENTIALS_PATH + '.json';
-                    if (fs.existsSync(plaintextPath)) {
-                        try {
-                            const plaintextData = fs.readFileSync(plaintextPath, 'utf8');
-                            const parsed = JSON.parse(plaintextData);
-                            if (typeof parsed === 'object' && parsed !== null) {
-                                this.credentials = parsed;
-                                console.log('[CredentialsManager] Loaded credentials from plaintext fallback (encryption unavailable)');
-                                return;
-                            }
-                        } catch (plaintextError) {
-                            console.error('[CredentialsManager] Plaintext fallback failed:', plaintextError);
-                        }
-                    }
-                    console.warn('[CredentialsManager] No plaintext fallback found');
-                    return;
-                }
-
-                const encrypted = fs.readFileSync(CREDENTIALS_PATH);
-                const decrypted = safeStorage.decryptString(encrypted);
-                try {
-                    const parsed = JSON.parse(decrypted);
-                    if (typeof parsed === 'object' && parsed !== null) {
-                        this.credentials = parsed;
-                        console.log('[CredentialsManager] Loaded encrypted credentials');
-                    } else {
-                        throw new Error('Decrypted credentials is not a valid object');
-                    }
-                } catch (parseError) {
-                    console.error('[CredentialsManager] Failed to parse decrypted credentials — file may be corrupted. Trying plaintext fallback:', parseError);
-                    // Try plaintext fallback when encrypted file is corrupt
-                    const plaintextPath = CREDENTIALS_PATH + '.json';
-                    if (fs.existsSync(plaintextPath)) {
-                        try {
-                            const plaintextData = fs.readFileSync(plaintextPath, 'utf8');
-                            const parsed = JSON.parse(plaintextData);
-                            if (typeof parsed === 'object' && parsed !== null) {
-                                this.credentials = parsed;
-                                console.log('[CredentialsManager] Loaded credentials from plaintext fallback');
-                                return;
-                            }
-                        } catch (plaintextError) {
-                            console.error('[CredentialsManager] Plaintext fallback also failed:', plaintextError);
-                        }
-                    }
-                    this.credentials = {};
-                }
-
-                // Clean up any leftover plaintext fallback file to eliminate the data leak
-                const plaintextPath = CREDENTIALS_PATH + '.json';
-                if (fs.existsSync(plaintextPath)) {
-                    try {
-                        fs.unlinkSync(plaintextPath);
-                        console.log('[CredentialsManager] Removed stale plaintext credential file');
-                    } catch (cleanupErr) {
-                        console.warn('[CredentialsManager] Could not remove stale plaintext file:', cleanupErr);
-                    }
-                }
+            const parsed = SecureStorage.decryptJSON<StoredCredentials>(this.credentialsFilePath());
+            if (parsed && typeof parsed === 'object') {
+                this.credentials = parsed;
+                console.log('[CredentialsManager] Loaded encrypted credentials');
                 return;
             }
 
-            // Encrypted file doesn't exist — try plaintext fallback
-            const plaintextPath = CREDENTIALS_PATH + '.json';
-            if (fs.existsSync(plaintextPath)) {
-                try {
-                    const plaintextData = fs.readFileSync(plaintextPath, 'utf8');
-                    const parsed = JSON.parse(plaintextData);
-                    if (typeof parsed === 'object' && parsed !== null) {
-                        this.credentials = parsed;
-                        console.log('[CredentialsManager] Loaded credentials from plaintext fallback (encrypted file not found)');
-                        // Note: we keep the plaintext file so it persists across app restarts
-                        // until encryption becomes available again
-                        return;
-                    }
-                } catch (plaintextError) {
-                    console.error('[CredentialsManager] Plaintext fallback failed:', plaintextError);
-                }
-            }
-
+            this.credentials = {};
             console.log('[CredentialsManager] No stored credentials found');
         } catch (error) {
             console.error('[CredentialsManager] Failed to load credentials:', error);
