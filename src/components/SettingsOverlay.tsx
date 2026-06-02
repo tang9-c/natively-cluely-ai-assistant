@@ -1605,7 +1605,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 </div>
 
                                                 {/* Meeting Retention */}
-                                                <div className="flex items-start justify-between px-4 py-3 gap-4">
+                                                <div
+                                                    className="flex items-start justify-between px-4 py-3 gap-4"
+                                                    data-testid="meeting-retention-row"
+                                                >
                                                     <div className="flex items-start gap-4">
                                                         <div className={`w-10 h-10 bg-bg-item-surface rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 ${
                                                             meetingRetention === 'never'
@@ -1617,8 +1620,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <Shield size={20} />
                                                         </div>
                                                         <div className="flex-1">
-                                                            <h3 className="text-sm font-bold text-text-primary">Do not save meetings</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5 leading-normal">When enabled, live assistance works but transcripts, summaries, and history are discarded when the meeting ends</p>
+                                                            <h3 className="text-sm font-bold text-text-primary">不保存会议</h3>
+                                                            <p
+                                                                className="text-xs text-text-secondary mt-0.5 leading-normal"
+                                                                data-testid="meeting-retention-description"
+                                                            >启用后,实时辅助正常工作,但会议结束时会丢弃转录、摘要和历史记录</p>
                                                         </div>
                                                     </div>
                                                     <div
