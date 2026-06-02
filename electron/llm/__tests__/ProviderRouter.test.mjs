@@ -26,6 +26,7 @@ test('routeLLMProviders returns deterministic text fallback order with availabil
       hasGemini: true,
       hasOpenAI: true,
       hasClaude: true,
+      hasDoubao: true,
     },
     models: {
       groq: 'groq-text',
@@ -34,6 +35,7 @@ test('routeLLMProviders returns deterministic text fallback order with availabil
       geminiPro: 'gemini-pro',
       openai: 'openai-text',
       claude: 'claude-text',
+      doubao: 'doubao-text',
     },
   });
 
@@ -45,6 +47,7 @@ test('routeLLMProviders returns deterministic text fallback order with availabil
     'gemini_pro',
     'openai',
     'claude',
+    'doubao',
   ]);
   assert.equal(attempts.every(attempt => attempt.status === 'available'), true);
   assert.deepEqual(attempts.map(attempt => attempt.provider), attempts.map(attempt => attempt.provider));
@@ -61,6 +64,7 @@ test('routeLLMProviders returns multimodal fallback order', async () => {
       hasGemini: true,
       hasOpenAI: true,
       hasClaude: true,
+      hasDoubao: true,
     },
   });
 
@@ -70,6 +74,7 @@ test('routeLLMProviders returns multimodal fallback order', async () => {
     'openai',
     'gemini_flash',
     'claude',
+    'doubao',
     'gemini_pro',
     'groq',
   ]);
@@ -86,13 +91,15 @@ test('routeLLMProviders marks missing providers unavailable with reasons', async
       hasGemini: false,
       hasOpenAI: false,
       hasClaude: false,
+      hasDoubao: false,
     },
   });
 
-  assert.equal(attempts.length, 7);
+  assert.equal(attempts.length, 8);
   assert.equal(attempts.every(attempt => attempt.status === 'unavailable'), true);
   assert.equal(attempts.find(attempt => attempt.provider === 'codex').unavailableReason, 'missing_config');
   assert.equal(attempts.find(attempt => attempt.provider === 'openai').unavailableReason, 'missing_api_key');
+  assert.equal(attempts.find(attempt => attempt.provider === 'doubao').unavailableReason, 'missing_api_key');
 });
 
 test('routeLLMProviders reports disabled Groq distinctly from missing key', async () => {
