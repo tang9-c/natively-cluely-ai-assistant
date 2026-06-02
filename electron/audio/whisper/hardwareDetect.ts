@@ -42,7 +42,7 @@ export function detectHardware(): HardwareInfo {
     } else if (isIntelMac) {
         tier = 'limited';
         recommendation = 'Intel Mac — CPU inference with int8 quantization. Moonshine Tiny streams in real-time on CPU; Cloud STT (Groq/Deepgram) recommended for long multilingual sessions.';
-        recommendedModel = 'onnx-community/moonshine-tiny-ONNX';
+        recommendedModel = 'onnx-community/moonshine-tiny-zh-ONNX';
     } else if (platform === 'win32' && totalRamGb >= 8) {
         tier = 'good';
         recommendation = 'Windows — DirectML activates GPU acceleration (NVIDIA, AMD, Intel) via ONNX Runtime. Moonshine Base streams in real-time on most gaming hardware.';
@@ -54,7 +54,7 @@ export function detectHardware(): HardwareInfo {
     } else {
         tier = 'limited';
         recommendation = 'Limited hardware — Moonshine Tiny streams in real-time even on minimal CPUs.';
-        recommendedModel = 'onnx-community/moonshine-tiny-ONNX';
+        recommendedModel = 'onnx-community/moonshine-tiny-zh-ONNX';
     }
 
     return {
