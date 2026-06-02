@@ -18,13 +18,11 @@ test('CredentialsManager does not persist plaintext fallback credentials when en
   const saveSource = source.slice(saveStart, saveEnd);
 
   assert.ok(saveStart >= 0, 'saveCredentials should exist');
-  assert.match(saveSource, /Encryption not available; credentials kept in memory only/);
-  assert.doesNotMatch(saveSource, /falling back to plaintext/);
-  assert.doesNotMatch(saveSource, /const plainPath/);
-  assert.doesNotMatch(saveSource, /tmpPlain/);
-  assert.doesNotMatch(saveSource, /writeFileSync\([^\n]*plain/i);
-  assert.doesNotMatch(saveSource, /const plainPath = CREDENTIALS_PATH \+ '\.json'/);
-  assert.doesNotMatch(saveSource, /fs\.writeFileSync\(tmpPlain, JSON\.stringify\(this\.credentials\)\)/);
+  assert.match(saveSource, /SecureStorage\.encryptJSON/);
+  assert.doesNotMatch(source, /safeStorage/);
+  assert.doesNotMatch(saveSource, /\.json'\s*\)/);
+  assert.doesNotMatch(source, /kept in memory only/);
+  assert.match(read('electron/services/SecureStorage.ts'), /NATIVELY:/);
 });
 
 test('CredentialsManager removes plaintext fallback files instead of loading them', () => {
@@ -33,14 +31,11 @@ test('CredentialsManager removes plaintext fallback files instead of loading the
   const loadSource = source.slice(loadStart);
 
   assert.ok(loadStart >= 0, 'loadCredentials should exist');
-  assert.match(loadSource, /Removed plaintext credential file/);
-  assert.doesNotMatch(loadSource, /Loaded plaintext credentials/);
+  assert.match(loadSource, /SecureStorage\.decryptJSON<StoredCredentials>/);
   assert.doesNotMatch(loadSource, /readFileSync\(plaintextPath/);
-  const plaintextSectionStart = loadSource.indexOf("const plaintextPath = CREDENTIALS_PATH + '.json';", loadSource.indexOf('// Try encrypted file first') + 1);
-  const plaintextSection = loadSource.slice(plaintextSectionStart);
-  assert.doesNotMatch(plaintextSection, /const data = fs\.readFileSync/);
-  assert.doesNotMatch(plaintextSection, /JSON\.parse\(data\)/);
-  assert.doesNotMatch(plaintextSection, /this\.credentials = parsed/);
+  assert.doesNotMatch(loadSource, /JSON\.parse\(plaintextData\)/);
+  assert.doesNotMatch(loadSource, /Loaded credentials from plaintext fallback/);
+  assert.doesNotMatch(loadSource, /safeStorage\.decryptString/);
 });
 
 test('SettingsManager does not log full settings JSON', () => {
