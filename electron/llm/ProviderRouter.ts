@@ -171,8 +171,8 @@ export function routeLLMProviders(options: ProviderRouteOptions): ProviderAttemp
     };
 
     const orderedSpecs: ProviderSpec[] = options.multimodal
-        ? [natively, codex, openai, geminiFlash, claude, geminiPro, groq]
-        : [natively, groq, codex, geminiFlash, geminiPro, openai, claude];
+        ? [natively, codex, openai, geminiFlash, claude, doubao, geminiPro, groq]
+        : [natively, groq, codex, geminiFlash, geminiPro, openai, claude, doubao];
 
     if (availability.hasOllama) {
         orderedSpecs.push(ollama);
