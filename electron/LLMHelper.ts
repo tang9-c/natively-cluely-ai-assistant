@@ -1203,6 +1203,9 @@ CRITICAL RULES:
       ? `${modeContextBlock}\n\n${context}`
       : context;
 
+    // Trust boundary: the user-supplied notes and the retrieved reference
+    // context are untrusted and must be captured into a user-message block
+    // below — never concatenated into the trusted system prompt string.
     const customNotesBlock = this.customNotes?.trim()
       ? `<user_context>\n${this.customNotes.trim()}\n</user_context>\nUse this context naturally if relevant. Never quote it verbatim.`
       : '';
@@ -1222,10 +1225,13 @@ RULES:
 - If unsure, answer briefly and confidently anyway.
 - Never hedge. Never say "it depends".`;
 
-    const promptMessage = `LATEST QUESTION:
-${lastQuestion}
-
-ANSWER DIRECTLY:`;
+    // Trust boundary: basePrompt (system) carries only the trusted mode
+    // suffix. The user-supplied notes and retrieved context are routed
+    // into the user message below — never into the system prompt, where
+    // untrusted content could override security rules.
+    const promptMessage = suggestionContext
+      ? `${suggestionContext}\n\nLATEST QUESTION:\n${lastQuestion}\n\nANSWER DIRECTLY:`
+      : `LATEST QUESTION:\n${lastQuestion}\n\nANSWER DIRECTLY:`;
 
     // Apply language instruction so this path honours the user's language setting
     const systemPrompt = this.injectLanguageInstruction(basePrompt);
@@ -1234,7 +1240,7 @@ ANSWER DIRECTLY:`;
       if (this.codexCliConfig.enabled) {
         // Codex CLI takes priority when enabled — same precedence as in chat().
         try {
-          const text = await this.chatWithGemini(promptMessage, undefined, suggestionContext, true);
+          const text = await this.generateWithCodexCli(promptMessage, basePrompt);
           if (text && text.trim().length > 0) return this.processResponse(text);
           console.warn('[LLMHelper] Codex CLI suggestion empty, falling back.');
         } catch (e: any) {
@@ -1245,13 +1251,13 @@ ANSWER DIRECTLY:`;
         return await this.callOllama(promptMessage, undefined, systemPrompt);
       } else if (this.customProvider || this.activeCurlProvider) {
         let fullResponse = '';
-        for await (const chunk of this.streamChat(promptMessage, undefined, suggestionContext, basePrompt, true)) {
+        for await (const chunk of this.streamChat(promptMessage, undefined, undefined, basePrompt, true)) {
           fullResponse += chunk;
         }
         return this.processResponse(fullResponse);
       } else if (this.client) {
         let fullResponse = '';
-        for await (const chunk of this.streamChat(promptMessage, undefined, suggestionContext, basePrompt, true)) {
+        for await (const chunk of this.streamChat(promptMessage, undefined, undefined, basePrompt, true)) {
           fullResponse += chunk;
         }
         return this.processResponse(fullResponse);
