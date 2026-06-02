@@ -115,7 +115,7 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
     setStep('wiping');
     setError(null);
     try   { await onByok(); setStep('done'); }
-    catch (e: any) { setError(e.message || 'Something went wrong. Restart the app.'); setStep('choose'); }
+    catch (e: any) { setError(e.message || '出了点问题。请重启应用。'); setStep('choose'); }
   };
 
   return (
@@ -216,9 +216,9 @@ function ChooseState({ usage, error, reduced, onPro, onMax, onUltra, onStandard,
           <NativelyLogoMark size={16} className="text-violet-400" />
         </div>
         <div>
-          <div style={{fontSize:'14px',fontWeight:650,color:C.t1,letterSpacing:'-.02em',lineHeight:1.2}}>Keep the momentum going</div>
+          <div style={{fontSize:'14px',fontWeight:650,color:C.t1,letterSpacing:'-.02em',lineHeight:1.2}}>保持势头</div>
           <div style={{fontSize:'11.5px',color:C.t4,marginTop:'2px'}}>
-            {usage.ai} AI · {sttMin} min · {usage.search} searches used in your trial
+            {usage.ai} AI · {sttMin} min · {usage.search} 次搜索试用中已使用
           </div>
         </div>
       </div>
@@ -227,22 +227,22 @@ function ChooseState({ usage, error, reduced, onPro, onMax, onUltra, onStandard,
       <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
 
         <HeroCard
-          title="Natively Pro" price="$15" period="/mo" icon={Zap}
-          spec="1,000 AI answers · 500 min live STT · 100 searches · Pro App included"
+          title="Natively 专业版" price="$15" period="/mo" icon={Zap}
+          spec="1000 次 AI 回复 · 500 分钟实时 STT · 100 次搜索 · 包含 Pro 应用"
           accent="violet" reduced={reduced} onClick={onPro}
         />
 
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px'}}>
-          <TierCard title="Max"   price="$25" period="/mo" icon={Brain}
-            spec="2,000 AI · 1,000 min · 200 searches · Pro App included"
+          <TierCard title="最大"   price="$25" period="/mo" icon={Brain}
+            spec="2000 次 AI · 1000 分钟 · 200 次搜索 · 包含 Pro 应用"
             badge="Best value" accent="indigo" onClick={onMax} />
-          <TierCard title="Ultra" price="$35" period="/mo" icon={Flame}
-            spec="3,000 AI · 2,000 min · 300 searches · Pro App included"
+          <TierCard title="高级" price="$35" period="/mo" icon={Flame}
+            spec="3000 次 AI · 2000 分钟 · 300 次搜索 · 包含 Pro 应用"
             badge="Power" accent="amber" onClick={onUltra} />
         </div>
 
-        <TierCard title="Standard" price="$8" period="/mo" icon={Mic}
-            spec="500 AI · 200 min · 20 searches"
+        <TierCard title="标准" price="$8" period="/mo" icon={Mic}
+            spec="500 次 AI · 200 分钟 · 20 次搜索"
             badge="No Pro App" badgeWarn accent="slate" onClick={onStandard} />
       </div>
 
@@ -251,7 +251,7 @@ function ChooseState({ usage, error, reduced, onPro, onMax, onUltra, onStandard,
 
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'4px',marginTop:'-2px'}}>
         <ShieldCheck size={9.5} strokeWidth={2} color={C.t3} />
-        <span style={{fontSize:'10px',color:C.t3}}>Cancel anytime · Secure checkout via Dodo Payments</span>
+        <span style={{fontSize:'10px',color:C.t3}}>随时取消 · 通过 Dodo Payments 安全结账</span>
       </div>
 
       {error && <p style={{fontSize:'11px',color:'rgba(248,113,113,.85)',textAlign:'center',margin:0}}>{error}</p>}
@@ -293,7 +293,7 @@ function HeroCard({ title, price, period, icon: Icon, spec, accent, reduced, onC
             <span style={{
               fontSize:'7.5px',fontWeight:720,letterSpacing:'.12em',textTransform:'uppercase',
               color:a.bandText, background:a.bandBg, padding:'2px 6px', borderRadius:'4px',
-            }}>Popular</span>
+            }}>热门</span>
           </div>
           <div style={{display:'flex',alignItems:'baseline',gap:'2px'}}>
             <span style={{fontSize:'22px',fontWeight:760,color:C.t1,letterSpacing:'-.05em',lineHeight:1}}>{price}</span>
@@ -326,7 +326,7 @@ function HeroCard({ title, price, period, icon: Icon, spec, accent, reduced, onC
             />
           )}
           <span style={{position:'relative',zIndex:1,fontSize:'12.5px',fontWeight:650,color:a.btnColor,letterSpacing:'-.015em'}}>
-            Start {title}
+            开始 {title}
           </span>
           <motion.span style={{position:'relative',zIndex:1,display:'flex',alignItems:'center'}}
             animate={reduced?{}:{x:hov?3:0}} transition={{duration:.16}}>
@@ -496,13 +496,13 @@ function ByokRow({ onClick }: { onClick:()=>void }) {
         </div>
         <div style={{flex:1}}>
           <div style={{display:'flex',alignItems:'center',gap:'7px'}}>
-            <span style={{fontSize:'12px',fontWeight:580,color:hov ? C.t1 : C.t2,transition:`color 180ms ${EASE}`}}>
-              Use my own API keys
+ <span style={{fontSize:'12px',fontWeight:580,color:hov ? C.t1 : C.t2,transition:`color 180ms ${EASE}`}}>
+              使用我自己的 API Key
             </span>
             <span style={{fontSize:'7.5px',fontWeight:700,letterSpacing:'.08em',textTransform:'uppercase',color:C.t4,border:`1px solid rgba(255,255,255,0.12)`,padding:'1.5px 4px',borderRadius:'3px'}}>free</span>
           </div>
           <div style={{fontSize:'10.5px',color:C.t4,marginTop:'1px'}}>
-            Natively API disabled · No Pro features
+            Natively API 已禁用 · 无 Pro 功能
           </div>
         </div>
         <ArrowRight size={11} strokeWidth={2} color={hov ? C.t2 : C.t3} style={{flexShrink:0,transition:`color 180ms ${EASE}`}} />
@@ -520,8 +520,8 @@ function WipingState() {
         <Loader2 size={24} strokeWidth={1.5} color={C.t4} />
       </motion.div>
       <div>
-        <div style={{fontSize:'14px',fontWeight:560,color:C.t2,marginBottom:'6px',fontFamily:F}}>Cleaning up trial data…</div>
-        <div style={{fontSize:'12px',color:C.t4,lineHeight:1.6,fontFamily:F}}>Wiping cached company research and Pro data.</div>
+        <div style={{fontSize:'14px',fontWeight:560,color:C.t2,marginBottom:'6px',fontFamily:F}}>正在清理试用数据…</div>
+        <div style={{fontSize:'12px',color:C.t4,lineHeight:1.6,fontFamily:F}}>正在清除缓存的公司研究和 Pro 数据。</div>
       </div>
     </div>
   );
@@ -534,9 +534,9 @@ function DoneState({ onDone }: { onDone?:()=>void }) {
         <CheckCircle size={22} strokeWidth={1.5} color="#34D399" />
       </div>
       <div>
-        <div style={{fontSize:'15px',fontWeight:600,color:C.t1,marginBottom:'6px',fontFamily:F}}>All set.</div>
+        <div style={{fontSize:'15px',fontWeight:600,color:C.t1,marginBottom:'6px',fontFamily:F}}>准备就绪。</div>
         <div style={{fontSize:'12.5px',color:C.t3,lineHeight:1.65,maxWidth:'240px',margin:'0 auto',fontFamily:F}}>
-          Trial data wiped. Add your API keys in Settings → AI Providers to get started.
+          试用数据已清除。在设置 → AI 提供商中添加您的 API Key 以开始使用。
         </div>
       </div>
       {onDone && (
@@ -550,7 +550,7 @@ function DoneState({ onDone }: { onDone?:()=>void }) {
           onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,.1)';e.currentTarget.style.color=C.t2;}}
           onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,.06)';e.currentTarget.style.color=C.t3;}}
         >
-          Continue →
+         继续 →
         </button>
       )}
     </div>

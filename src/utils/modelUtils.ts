@@ -3,7 +3,7 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     ids: string[];
     names: string[];
     descs: string[];
-    pmKey: 'geminiPreferredModel' | 'openaiPreferredModel' | 'claudePreferredModel' | 'groqPreferredModel';
+    pmKey: 'geminiPreferredModel' | 'openaiPreferredModel' | 'claudePreferredModel' | 'groqPreferredModel' | 'doubaoPreferredModel';
 }> = {
     gemini: {
         hasKeyCheck: (creds) => !!creds?.hasGeminiKey,
@@ -29,9 +29,16 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     groq: {
         hasKeyCheck: (creds) => !!creds?.hasGroqKey,
         ids: ['llama-3.3-70b-versatile'],
-        names: ['Groq Llama 3.3'],
-        descs: ['Ultra Fast'],
+        names: ['Llama 3.3 70B'],
+        descs: ['Groq'],
         pmKey: 'groqPreferredModel'
+    },
+    doubao: {
+        hasKeyCheck: (creds) => !!creds?.hasDoubaoKey,
+        ids: ['doubao-seed-2-0-lite-260215'],
+        names: ['Doubao Seed 2.0 Lite'],
+        descs: ['Volcengine'],
+        pmKey: 'doubaoPreferredModel'
     },
 };
 

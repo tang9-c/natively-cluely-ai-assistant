@@ -72,7 +72,7 @@ const NativelyInterfaceCard = ({ className = "", isMobile = false, isStatic = fa
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-white/75 text-[12px] font-medium tracking-[0.02em] relative overflow-hidden" style={DARK_GLASS}>
               {GLOSS}
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="opacity-70 relative"><path d="M3 7.5L6 4.5L9 7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              <span className="relative">Hide</span>
+              <span className="relative">隐藏</span>
             </div>
 
             {/* Stop */}

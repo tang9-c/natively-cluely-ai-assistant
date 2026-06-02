@@ -117,7 +117,7 @@ export const DynamicActionBar: React.FC<Props> = ({
     <div
       className="flex flex-col gap-1.5 px-3 pt-1 pb-1 w-full"
       data-testid="dynamic-action-bar"
-      aria-label="Suggested actions"
+      aria-label="建议操作"
     >
       <AnimatePresence initial={false}>
         {visible.map((a, i) => (

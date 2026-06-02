@@ -82,7 +82,7 @@ export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, onAccept
             onDismiss(action.id)
           }}
           className="ml-0.5 p-1 rounded-full text-white/30 hover:text-white/70 hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100"
-          title="Dismiss"
+          title="忽略"
           aria-label={`Dismiss ${action.label}`}
         >
           <X className="w-3 h-3" />

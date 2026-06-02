@@ -533,13 +533,13 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                     </div>
                     <div>
                         <div className="flex items-center gap-2.5 mb-1.5">
-                            <h2 className="text-[22px] font-bold text-text-primary leading-none" style={{ letterSpacing: '-0.025em' }}>Profile Intelligence</h2>
-                            <span className="pi-beta-badge">BETA</span>
+                            <h2 className="text-[22px] font-bold text-text-primary leading-none" style={{ letterSpacing: '-0.025em' }}>档案智能</h2>
+                            <span className="pi-beta-badge">测试版</span>
                             {isPremium && premiumPlan && (
                                 <span className="pi-meta-badge pi-meta-badge--plan">{premiumPlan} Plan</span>
                             )}
                             {isTrialActive && !isPremium && (
-                                <span className="pi-meta-badge pi-meta-badge--trial">Free Trial</span>
+                                <span className="pi-meta-badge pi-meta-badge--trial">免费试用</span>
                             )}
                         </div>
                         <p className="text-[13px] text-text-secondary" style={{ letterSpacing: '-0.005em' }}>
@@ -565,7 +565,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                     <button
                         onClick={onClose}
                         className="pi-close-btn"
-                        aria-label="Close"
+                        aria-label="关闭"
                     >
                         <X size={18} strokeWidth={2} />
                     </button>
@@ -577,7 +577,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                 <div className="max-w-3xl mx-auto p-5 pb-12">
                     <div className="space-y-6">
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, ...spring }} className="mb-4 pt-2">
-                            <h3 className="text-lg font-bold text-text-primary tracking-tight">Professional Identity</h3>
+                            <h3 className="text-lg font-bold text-text-primary tracking-tight">专业身份</h3>
                             <p className="text-[13px] text-text-secondary mt-1">
                                 This engine constructs an intelligent representation of your career history and skills graph.
                             </p>
@@ -624,7 +624,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
 
                                                         {/* High-fidelity Toggle */}
                                                         <div className={`flex items-center gap-2 bg-bg-input px-3 py-1.5 rounded-full border border-border-subtle ${!hasProfileAccess ? 'opacity-40 cursor-not-allowed' : ''}`} title={!hasProfileAccess ? 'Requires Pro license' : ''}>
-                                                            <span className="text-xs font-medium text-text-secondary">Persona Engine</span>
+                                                            <span className="text-xs font-medium text-text-secondary">角色引擎</span>
                                                             <div
                                                                 onClick={async () => {
                                                                     if (!profileStatus.hasProfile || !hasProfileAccess) return;
@@ -652,7 +652,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         <span className="text-[20px] font-bold text-text-primary tracking-tight leading-none mb-1">{profileData?.experienceCount || 0}</span>
                                                         <div className="flex items-center gap-1.5">
                                                             <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
-                                                            <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-widest">Experience</span>
+                                                            <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-widest">经验</span>
                                                         </div>
                                                     </div>
 
@@ -662,7 +662,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         <span className="text-[20px] font-bold text-text-primary tracking-tight leading-none mb-1">{profileData?.projectCount || 0}</span>
                                                         <div className="flex items-center gap-1.5">
                                                             <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.4)]" />
-                                                            <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-widest">Projects</span>
+                                                            <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-widest">项目</span>
                                                         </div>
                                                     </div>
 
@@ -672,7 +672,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         <span className="text-[20px] font-bold text-text-primary tracking-tight leading-none mb-1">{profileData?.nodeCount || 0}</span>
                                                         <div className="flex items-center gap-1.5">
                                                             <div className="w-1.5 h-1.5 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.4)]" />
-                                                            <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-widest">Nodes</span>
+                                                            <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-widest">节点</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -707,7 +707,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         <h4 className="text-[15px] font-bold text-text-primary mb-1 tracking-tight">
                                                             {profileStatus.hasProfile ? 'Overwrite Source Document' : 'Initialize Knowledge Base'}
                                                             {!hasProfileAccess && (
-                                                                <span className="pi-upload-pill__pro-badge" aria-label="Pro feature">Pro</span>
+                                                                <span className="pi-upload-pill__pro-badge" aria-label="专业版功能">专业版</span>
                                                             )}
                                                         </h4>
                                                         <p className="text-xs text-text-secondary leading-relaxed pr-2">
@@ -738,10 +738,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                 const data = await window.electronAPI?.profileGetProfile?.();
                                                                 if (data) setProfileData(data);
                                                             } else {
-                                                                setProfileError(result?.error || 'Upload failed');
+                                                                setProfileError(result?.error || '上传失败');
                                                             }
                                                         } catch (e: any) {
-                                                            setProfileError(e.message || 'Upload failed');
+                                                            setProfileError(e.message || '上传失败');
                                                         } finally {
                                                             setProfileUploading(false);
                                                         }
@@ -789,7 +789,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         <h4 className="text-[15px] font-bold text-text-primary mb-1 tracking-tight">
                                                             {profileData?.hasActiveJD ? `${profileData.activeJD?.title} @ ${profileData.activeJD?.company}` : 'Upload Job Description'}
                                                             {!hasProfileAccess && (
-                                                                <span className="pi-upload-pill__pro-badge" aria-label="Pro feature">Pro</span>
+                                                                <span className="pi-upload-pill__pro-badge" aria-label="专业版功能">专业版</span>
                                                             )}
                                                         </h4>
                                                         {profileData?.hasActiveJD ? (
@@ -820,7 +820,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                 setCompanyDossier(null);
                                                             }}
                                                             className="shrink-0 mt-0.5 px-2.5 py-2 rounded-full text-xs text-text-tertiary hover:text-red-500 hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/20"
-                                                            aria-label="Remove job description"
+                                                            aria-label="移除职位描述"
                                                         >
                                                             <Trash2 size={14} />
                                                         </button>
@@ -895,7 +895,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     </div>
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex items-center gap-2">
-                                                            <h4 className="text-sm font-bold text-text-primary">Custom Context</h4>
+                                                            <h4 className="text-sm font-bold text-text-primary">自定义上下文</h4>
                                                             {customNotesSaved && (
                                                                 <span className="text-[9px] font-bold text-emerald-500 px-1.5 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20 uppercase tracking-wide flex items-center gap-1">
                                                                     <Check size={8} /> Saved
@@ -948,9 +948,9 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     </div>
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex items-center gap-2">
-                                                            <h4 className="text-sm font-bold text-text-primary">AI Persona</h4>
+                                                            <h4 className="text-sm font-bold text-text-primary">AI 角色</h4>
                                                             {!hasProfileAccess && (
-                                                                <span className="text-[9px] font-bold text-accent-primary px-1.5 py-0.5 bg-accent-primary/10 rounded-full border border-accent-primary/20 uppercase tracking-wide">Pro Only</span>
+                                                                <span className="text-[9px] font-bold text-accent-primary px-1.5 py-0.5 bg-accent-primary/10 rounded-full border border-accent-primary/20 uppercase tracking-wide">仅专业版</span>
                                                             )}
                                                             {personaSaved && hasProfileAccess && (
                                                                 <span className="text-[9px] font-bold text-emerald-500 px-1.5 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20 uppercase tracking-wide flex items-center gap-1">
@@ -1015,9 +1015,9 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     </div>
                                                     <div>
                                                         <div className="flex items-center gap-2">
-                                                            <h4 className="text-sm font-bold text-text-primary">Tavily Search API</h4>
+                                                            <h4 className="text-sm font-bold text-text-primary">Tavily 搜索 API</h4>
                                                             {hasStoredTavilyKey && (
-                                                                <span className="text-[9px] font-bold text-emerald-500 px-1.5 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20 uppercase tracking-wide">Connected</span>
+                                                                <span className="text-[9px] font-bold text-emerald-500 px-1.5 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20 uppercase tracking-wide">已连接</span>
                                                             )}
                                                         </div>
                                                         <p className="text-[11px] text-text-secondary mt-0.5">
@@ -1029,12 +1029,12 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                 <div className="space-y-3">
                                                     <div>
                                                         <div className="flex justify-between items-center mb-1.5">
-                                                            <label className="text-[10px] font-semibold text-text-secondary uppercase tracking-wide block">API Key</label>
+                                                            <label className="text-[10px] font-semibold text-text-secondary uppercase tracking-wide block">API 密钥</label>
                                                             {hasStoredTavilyKey && (
                                                                 <button
                                                                     onClick={handleRemoveTavilyKey}
                                                                     className="text-[10px] flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors bg-red-500/10 hover:bg-red-500/20 px-1.5 py-0.5 rounded"
-                                                                    title="Remove API Key"
+                                                                    title="移除 API 密钥"
                                                                 >
                                                                     <Trash2 size={10} strokeWidth={2} /> Remove
                                                                 </button>
@@ -1100,7 +1100,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                 <h4 className="text-sm font-bold text-text-primary">
                                                                     Company Intel: <span className="text-purple-400">{profileData.activeJD.company}</span>
                                                                 </h4>
-                                                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full tracking-widest uppercase bg-purple-500/15 text-purple-400 border border-purple-500/25">Beta</span>
+                                                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full tracking-widest uppercase bg-purple-500/15 text-purple-400 border border-purple-500/25">测试版</span>
                                                             </div>
                                                             <p className="text-[11px] text-text-secondary mt-0.5">
                                                                 {companyDossier ? 'Research complete' : 'Run research to get hiring strategy, salaries & competitors'}
@@ -1151,7 +1151,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         {/* Hiring Strategy */}
                                                         {companyDossier.hiring_strategy && (
                                                             <div>
-                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-1">Hiring Strategy</div>
+                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-1">招聘策略</div>
                                                                 <p className="text-xs text-text-secondary leading-relaxed bg-bg-input p-3 rounded-lg">{companyDossier.hiring_strategy}</p>
                                                             </div>
                                                         )}
@@ -1160,7 +1160,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         {companyDossier.interview_focus && (
                                                             <div>
                                                                 <div className="flex items-center gap-2 mb-1">
-                                                                    <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide">Interview Focus</div>
+                                                                    <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide">面试专注</div>
                                                                     {companyDossier.interview_difficulty && (
                                                                         <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
                                                                             companyDossier.interview_difficulty === 'easy' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
@@ -1179,7 +1179,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         {/* Salary Estimates */}
                                                         {companyDossier.salary_estimates?.length > 0 && (
                                                             <div>
-                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-1">Salary Estimates</div>
+                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-1">薪资估算</div>
                                                                 <div className="space-y-2 bg-bg-input p-3 rounded-lg">
                                                                     {companyDossier.salary_estimates.map((s: any, i: number) => (
                                                                         <div key={i} className="flex items-center justify-between pb-2 mb-2 border-b border-border-subtle last:border-0 last:pb-0 last:mb-0">
@@ -1202,7 +1202,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         {companyDossier.culture_ratings && typeof companyDossier.culture_ratings === 'object' &&
                                                           Object.values(companyDossier.culture_ratings).some(v => typeof v === 'number' && (v as number) > 0) && (
                                                             <div>
-                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-2">Work Culture</div>
+                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-2">工作文化</div>
                                                                 <div className="bg-bg-input p-3 rounded-lg">
                                                                     {/* Overall score hero */}
                                                                     <div className="flex items-center justify-between mb-3 pb-3 border-b border-border-subtle">
@@ -1253,7 +1253,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         {/* Employee Reviews */}
                                                         {companyDossier.employee_reviews?.length > 0 && (
                                                             <div>
-                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-2">Employee Reviews</div>
+                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-2">员工评价</div>
                                                                 <div className="space-y-2">
                                                                     {companyDossier.employee_reviews.map((r: any, i: number) => (
                                                                         <div key={i} className="bg-bg-input p-3 rounded-lg">
@@ -1277,7 +1277,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             <div>
                                                                 <div className="flex items-center gap-1.5 mb-2">
                                                                     <AlertCircle size={11} className="text-orange-400" />
-                                                                    <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide">Common Complaints</div>
+                                                                    <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide">常见投诉</div>
                                                                 </div>
                                                                 <div className="space-y-2">
                                                                     {companyDossier.critics.map((c: any, i: number) => (
@@ -1317,7 +1317,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         {/* Core Values */}
                                                         {companyDossier.core_values?.length > 0 && (
                                                             <div>
-                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-2">Core Values</div>
+                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-2">核心价值观</div>
                                                                 <div className="flex flex-wrap gap-1.5">
                                                                     {companyDossier.core_values.map((v: string, i: number) => (
                                                                         <span key={i} className="text-[11px] text-purple-400/90 px-2.5 py-1 rounded-full bg-purple-500/10 border border-purple-500/20">{v}</span>
@@ -1329,7 +1329,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         {/* Recent News */}
                                                         {companyDossier.recent_news && (
                                                             <div>
-                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-1">Recent News</div>
+                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-1">最近新闻</div>
                                                                 <p className="text-xs text-text-secondary leading-relaxed bg-bg-input p-3 rounded-lg">{companyDossier.recent_news}</p>
                                                             </div>
                                                         )}
@@ -1337,7 +1337,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         {/* Competitors */}
                                                         {companyDossier.competitors?.length > 0 && (
                                                             <div>
-                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-2">Competitors</div>
+                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-2">竞争对手</div>
                                                                 <div className="flex flex-wrap gap-2">
                                                                     {companyDossier.competitors.map((c: string, i: number) => (
                                                                         <span key={i} className="text-[11px] text-text-secondary px-2.5 py-1 rounded-full bg-bg-input flex items-center gap-1.5">
@@ -1387,7 +1387,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                 )}
                                                             </div>
                                                             <div>
-                                                                <h3 className="text-[13px] font-bold text-text-primary tracking-tight">Negotiation Script</h3>
+                                                                <h3 className="text-[13px] font-bold text-text-primary tracking-tight">谈判脚本</h3>
                                                                 <p className="text-[10px] text-text-tertiary mt-0.5 tracking-wide uppercase">
                                                                     {negotiationScript ? `Tailored for ${profileData?.activeJD?.company || 'this role'}` : 'AI-powered salary coaching'}
                                                                 </p>
@@ -1410,7 +1410,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                         finally { setNegotiationGenerating(false); }
                                                                     }}
                                                                     disabled={negotiationGenerating}
-                                                                    title="Regenerate script"
+                                                                    title="重新生成脚本"
                                                                     className="w-7 h-7 rounded-lg flex items-center justify-center text-text-tertiary hover:text-text-primary hover:bg-bg-input transition-all border border-border-subtle"
                                                                 >
                                                                     <RefreshCw size={12} className={negotiationGenerating ? 'animate-spin' : ''} />
@@ -1456,7 +1456,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                 <Briefcase size={20} className="text-emerald-500/50" />
                                                             </div>
                                                             <div className="text-center">
-                                                                <p className="text-[12px] font-medium text-text-secondary">No script yet</p>
+                                                                <p className="text-[12px] font-medium text-text-secondary">尚无脚本</p>
                                                                 <p className="text-[10px] text-text-tertiary mt-0.5">Generate a personalized opening, justification &amp; counter-offer</p>
                                                             </div>
                                                         </div>
@@ -1486,7 +1486,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             {negotiationScript.salary_range && (
                                                                 <div className="rounded-xl p-4 flex items-center justify-between" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(6,182,212,0.06) 100%)', border: '1px solid rgba(16,185,129,0.18)' }}>
                                                                     <div>
-                                                                        <div className="text-[9px] font-bold uppercase tracking-widest text-emerald-500/70 mb-1">Target Compensation</div>
+                                                                        <div className="text-[9px] font-bold uppercase tracking-widest text-emerald-500/70 mb-1">目标薪酬</div>
                                                                         <div className="text-xl font-bold tracking-tight" style={{ color: '#34d399' }}>
                                                                             {negotiationScript.salary_range.currency} {negotiationScript.salary_range.min.toLocaleString()}
                                                                             <span className="text-text-tertiary font-normal mx-2">–</span>
@@ -1547,7 +1547,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                         </div>
                                                                         <button
                                                                             onClick={() => navigator.clipboard?.writeText(s.content)}
-                                                                            title="Copy to clipboard"
+                                                                            title="复制到剪贴板"
                                                                             className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-medium transition-all hover:bg-bg-input text-text-tertiary hover:text-text-secondary"
                                                                         >
                                                                             <Check size={9} />

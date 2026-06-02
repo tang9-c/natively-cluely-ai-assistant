@@ -12,7 +12,7 @@ export interface KeybindConfig {
 
 export const DEFAULT_KEYBINDS: KeybindConfig[] = [
     // General
-    { id: 'general:toggle-visibility', label: 'Toggle Visibility', accelerator: 'CommandOrControl+B', isGlobal: true, defaultAccelerator: 'CommandOrControl+B' },
+    { id: 'general:toggle-visibility', label: '切换可见性', accelerator: 'CommandOrControl+B', isGlobal: true, defaultAccelerator: 'CommandOrControl+B' },
     { id: 'general:toggle-mouse-passthrough', label: 'Toggle Mouse Passthrough', accelerator: 'CommandOrControl+Shift+B', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+B' },
     { id: 'general:process-screenshots', label: 'Process Screenshots', accelerator: 'CommandOrControl+Enter', isGlobal: true, defaultAccelerator: 'CommandOrControl+Enter' },
     { id: 'general:capture-and-process', label: 'Capture Screen & Ask AI (Global)', accelerator: 'CommandOrControl+Shift+Enter', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Enter' },
@@ -49,10 +49,10 @@ export const DEFAULT_KEYBINDS: KeybindConfig[] = [
     { id: 'chat:focusInput', label: 'Toggle Stealth Typing', accelerator: 'CommandOrControl+Shift+Space', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Space' },
 
     // Window Movement - Global shortcuts (stealth window positioning)
-    { id: 'window:move-up', label: 'Move Window Up', accelerator: 'CommandOrControl+Shift+Up', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Up' },
-    { id: 'window:move-down', label: 'Move Window Down', accelerator: 'CommandOrControl+Shift+Down', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Down' },
-    { id: 'window:move-left', label: 'Move Window Left', accelerator: 'CommandOrControl+Shift+Left', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Left' },
-    { id: 'window:move-right', label: 'Move Window Right', accelerator: 'CommandOrControl+Shift+Right', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Right' },
+    { id: 'window:move-up', label: '向上移动窗口', accelerator: 'CommandOrControl+Shift+Up', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Up' },
+    { id: 'window:move-down', label: '向下移动窗口', accelerator: 'CommandOrControl+Shift+Down', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Down' },
+    { id: 'window:move-left', label: '向左移动窗口', accelerator: 'CommandOrControl+Shift+Left', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Left' },
+    { id: 'window:move-right', label: '向右移动窗口', accelerator: 'CommandOrControl+Shift+Right', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Right' },
 ];
 
 export class KeybindManager {
@@ -356,7 +356,7 @@ export class KeybindManager {
         if (process.platform !== 'darwin') {
             const template: any[] = [
                 {
-                    label: 'View',
+                    label: '视图',
                     submenu: [
                         { role: 'reload' },
                         { role: 'forceReload' },
@@ -397,10 +397,10 @@ export class KeybindManager {
                 role: 'editMenu'
             },
             {
-                label: 'View',
+                label: '视图',
                 submenu: [
                     {
-                        label: 'Toggle Visibility',
+                        label: '切换可见性',
                         accelerator: toggleAccelerator || undefined,
                         click: () => {
                             // Require AppState dynamically to avoid circular dependencies
@@ -410,22 +410,22 @@ export class KeybindManager {
                     },
                     { type: 'separator' },
                     {
-                        label: 'Move Window Up',
+                        label: '向上移动窗口',
                         accelerator: this.getKeybind('window:move-up') || undefined,
                         click: () => this.windowHelper?.moveWindowUp()
                     },
                     {
-                        label: 'Move Window Down',
+                        label: '向下移动窗口',
                         accelerator: this.getKeybind('window:move-down') || undefined,
                         click: () => this.windowHelper?.moveWindowDown()
                     },
                     {
-                        label: 'Move Window Left',
+                        label: '向左移动窗口',
                         accelerator: this.getKeybind('window:move-left') || undefined,
                         click: () => this.windowHelper?.moveWindowLeft()
                     },
                     {
-                        label: 'Move Window Right',
+                        label: '向右移动窗口',
                         accelerator: this.getKeybind('window:move-right') || undefined,
                         click: () => this.windowHelper?.moveWindowRight()
                     },
@@ -448,7 +448,7 @@ export class KeybindManager {
                 role: 'help',
                 submenu: [
                     {
-                        label: 'Learn More',
+                        label: '了解更多',
                         click: async () => {
                             const { shell } = require('electron');
                             await shell.openExternal('https://electronjs.org');
@@ -460,7 +460,7 @@ export class KeybindManager {
 
         const menu = Menu.buildFromTemplate(template);
         Menu.setApplicationMenu(menu);
-        console.log('[KeybindManager] Application menu updated');
+        console.log('[快捷键管理器] 应用菜单已更新');
     }
 
     private broadcastUpdate() {

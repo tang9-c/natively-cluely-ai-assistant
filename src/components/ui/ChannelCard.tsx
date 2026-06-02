@@ -22,15 +22,15 @@ interface ChannelCardProps {
 const providerLabel = (provider?: string): string => {
     if (!provider || provider === 'none') return '';
     const labels: Record<string, string> = {
-        google: 'Google',
+        google: '谷歌',
         groq: 'Groq',
         openai: 'OpenAI',
         deepgram: 'Deepgram',
         elevenlabs: 'ElevenLabs',
-        azure: 'Azure',
+        azure: '微软 Azure',
         ibmwatson: 'IBM Watson',
         soniox: 'Soniox',
-        natively: 'Natively Pro',
+        natively: 'Natively 专业版',
     };
     return labels[provider.toLowerCase()] || provider;
 };
@@ -53,7 +53,7 @@ const ChannelCard: React.FC<ChannelCardProps> = ({
 
     const icon = status === 'failed' ? iconFailed : status === 'reconnecting' ? iconReconnecting : iconConnected;
 
-    const statusLabel = status === 'connected' ? 'Operational' : status === 'reconnecting' ? 'Reconnecting...' : 'Error';
+    const statusLabel = status === 'connected' ? '运行中' : status === 'reconnecting' ? '重新连接中...' : '错误';
     const label = providerLabel(provider);
 
     return (
@@ -100,7 +100,7 @@ const ChannelCard: React.FC<ChannelCardProps> = ({
                         </p>
                         {label && (
                             <p className="text-[9px] overlay-text-muted opacity-60 mt-0.5">
-                                via {label}
+                                通过 {label}
                             </p>
                         )}
                     </div>
@@ -123,7 +123,7 @@ const ChannelCard: React.FC<ChannelCardProps> = ({
                     <div className="pt-1.5 border-t border-white/5">
                         <div className="flex items-center justify-between mb-1">
                             <span className="text-[9px] font-medium tracking-wide overlay-text-muted opacity-60">
-                                Details
+                                详情
                             </span>
                             <button
                                 onClick={(e) => {

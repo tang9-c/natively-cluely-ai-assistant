@@ -194,7 +194,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                 <span style={{ fontSize: '10.5px', fontWeight: 660, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.t2 }}>
                   Natively · Permissions
                 </span>
-                <button onClick={handleDismiss} aria-label="Dismiss"
+                <button onClick={handleDismiss} aria-label="忽略"
                   style={{ background: 'none', border: 'none', cursor: 'pointer', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', opacity: 0.35, padding: 0, transition: 'opacity 150ms, background 150ms' }}
                   onMouseEnter={e => { e.currentTarget.style.opacity = '0.8'; e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
                   onMouseLeave={e => { e.currentTarget.style.opacity = '0.35'; e.currentTarget.style.background = 'transparent'; }}>
@@ -206,12 +206,12 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                 {/* Headline */}
                 <motion.div variants={ITEM}>
                   <h2 style={{ ...GT, fontSize: '22px', fontWeight: 720, letterSpacing: '-0.03em', lineHeight: 1.2, margin: '0 0 8px' }}>
-                    Before we start
+                    开始之前
                   </h2>
                   <p style={{ fontSize: '13px', lineHeight: 1.64, color: T.t3, margin: 0, maxWidth: '340px' }}>
                     {platform === 'darwin'
-                      ? 'Natively needs access to your screen and microphone to capture meetings and transcribe speech.'
-                      : 'Click "Allow" if Windows asks for microphone or screen access when you start a meeting.'}
+                      ? 'Natively 需要访问您的屏幕和麦克风来捕获会议内容并转录语音。'
+                      : '当您开始会议时，如果 Windows 请求麦克风或屏幕访问权限，请点击"允许"。'}
                   </p>
                 </motion.div>
 
@@ -223,11 +223,11 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                   {platform === 'darwin' && (
                     <PermRow
                       icon={Monitor}
-                      label="Screen Recording"
-                      description="Required to capture meeting content"
+                      label="屏幕录制"
+                      description="用于捕获会议内容"
                       status={scrStatus}
                       platform={platform}
-                      actionLabel="Open Settings"
+                      actionLabel="打开设置"
                       actionIcon={ExternalLink}
                       onAction={openScreenSettings}
                       reduced={reduced}
@@ -235,11 +235,11 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                   )}
                   <PermRow
                     icon={Mic}
-                    label="Microphone"
-                    description="Required for speech transcription"
+                    label="麦克风"
+                    description="用于语音转录"
                     status={micStatus}
                     platform={platform}
-                    actionLabel={requesting ? 'Requesting…' : 'Request Access'}
+                    actionLabel={requesting ? '请求中...' : '请求访问'}
                     onAction={micStatus !== 'granted' && !requesting ? handleMicRequest : undefined}
                     reduced={reduced}
                   />
@@ -263,15 +263,15 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                     onMouseLeave={e => { if (!allGranted) e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}
                   >
                     <span style={{ fontSize: '14px', fontWeight: 640, color: allGranted ? '#fff' : T.t2, letterSpacing: '-0.01em' }}>
-                      {allGranted ? 'All set — continue' : 'Continue'}
+                      {allGranted ? '准备就绪 — 继续' : '继续'}
                     </span>
                     <ArrowRight size={15} strokeWidth={2.2} color={allGranted ? '#fff' : T.t3} />
                   </button>
                   {!allGranted && (
                     <p style={{ fontSize: '11px', color: T.t4, textAlign: 'center', marginTop: '10px', fontFamily: T.font }}>
                       {platform === 'darwin'
-                        ? 'You can grant permissions later in System Preferences.'
-                        : 'Windows will prompt you the first time Natively needs the microphone.'}
+                        ? '您可以稍后在系统偏好设置中授予权限。'
+                        : '首次需要麦克风时，Windows 会提示您。'}
                     </p>
                   )}
                 </motion.div>
@@ -304,8 +304,8 @@ function PermRow({
   const isPending  = status === 'loading' || status === 'not-determined';
 
   const statusColor = isGranted ? T.green : isDenied ? T.red : T.amber;
-  const statusLabel = platform !== 'darwin' ? 'System handles this'
-    : isGranted ? 'Granted' : isDenied ? 'Denied — re-enable in Settings' : 'Not yet granted';
+  const statusLabel = platform !== 'darwin' ? '系统处理'
+    : isGranted ? '已授权' : isDenied ? '已拒绝 — 在设置中重新启用' : '尚未授权';
 
   return (
     <div style={{

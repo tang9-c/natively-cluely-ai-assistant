@@ -1,4 +1,4 @@
-export type LLMProviderId = 'natively' | 'groq' | 'codex' | 'gemini_flash' | 'gemini_pro' | 'openai' | 'claude' | 'ollama';
+export type LLMProviderId = 'natively' | 'groq' | 'codex' | 'gemini_flash' | 'gemini_pro' | 'openai' | 'claude' | 'doubao' | 'ollama';
 export type ProviderCapability = 'chat' | 'stream_chat' | 'structured' | 'vision';
 export type ProviderAttemptStatus = 'available' | 'unavailable';
 export type ProviderUnavailableReason = 'missing_api_key' | 'missing_config' | 'unsupported_capability' | 'disabled';
@@ -34,6 +34,7 @@ export interface ProviderAvailabilityState {
     hasGemini?: boolean;
     hasOpenAI?: boolean;
     hasClaude?: boolean;
+    hasDoubao?: boolean;
     hasOllama?: boolean;
 }
 
@@ -45,6 +46,7 @@ export interface ProviderModelState {
     geminiPro?: string;
     openai?: string;
     claude?: string;
+    doubao?: string;
     ollama?: string;
 }
 
@@ -151,6 +153,14 @@ export function routeLLMProviders(options: ProviderRouteOptions): ProviderAttemp
         unavailableReason: 'missing_api_key',
         supports: ['chat', 'stream_chat', 'structured', 'vision'],
     };
+    const doubao: ProviderSpec = {
+        provider: 'doubao',
+        name: `Doubao (${models.doubao ?? 'default'})`,
+        model: models.doubao,
+        available: Boolean(availability.hasDoubao),
+        unavailableReason: 'missing_api_key',
+        supports: ['chat', 'stream_chat', 'structured', 'vision'],
+    };
     const ollama: ProviderSpec = {
         provider: 'ollama',
         name: `Ollama (${models.ollama ?? 'local'})`,
@@ -161,8 +171,8 @@ export function routeLLMProviders(options: ProviderRouteOptions): ProviderAttemp
     };
 
     const orderedSpecs: ProviderSpec[] = options.multimodal
-        ? [natively, codex, openai, geminiFlash, claude, geminiPro, groq]
-        : [natively, groq, codex, geminiFlash, geminiPro, openai, claude];
+        ? [natively, codex, openai, geminiFlash, claude, doubao, geminiPro, groq]
+        : [natively, groq, codex, geminiFlash, geminiPro, openai, claude, doubao];
 
     if (availability.hasOllama) {
         orderedSpecs.push(ollama);
@@ -207,11 +217,11 @@ export interface ProviderChoice {
 }
 
 // Vision-capable providers (ordered by capability)
-const VISION_PROVIDERS = ['gemini', 'claude', 'openai', 'groq'];
+const VISION_PROVIDERS = ['gemini', 'claude', 'openai', 'groq', 'doubao'];
 // Low-latency providers (ordered by speed)
 const LOW_LATENCY_PROVIDERS = ['groq', 'gemini'];
 // Quality providers (for summary/recap tasks)
-const QUALITY_PROVIDERS = ['claude', 'openai', 'gemini_pro'];
+const QUALITY_PROVIDERS = ['claude', 'openai', 'gemini_pro', 'doubao'];
 // Local providers (for privacy mode)
 const LOCAL_PROVIDERS = ['ollama', 'custom'];
 

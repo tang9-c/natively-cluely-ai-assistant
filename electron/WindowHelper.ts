@@ -844,7 +844,7 @@ export class WindowHelper {
   private showContextMenu(win: BrowserWindow, point: { x: number; y: number }): void {
     const template: Electron.MenuItemConstructorOptions[] = [
       {
-        label: 'Developer Console',
+        label: '开发者控制台',
         click: () => {
           win.webContents.toggleDevTools();
         },

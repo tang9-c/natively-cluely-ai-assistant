@@ -94,7 +94,7 @@ export const TrialPromoToaster: React.FC<Props> = ({
       localStorage.setItem(STORAGE_KEY, String(Date.now()));
       setVisible(false);
     } catch (e: any) {
-      setError(e.message || 'Could not start trial. Check your connection.');
+      setError(e.message || '无法开始试用。请检查您的连接。');
       setStarting(false);
     }
   };
@@ -182,7 +182,7 @@ export const TrialPromoToaster: React.FC<Props> = ({
                 <span style={{ fontSize: '10.5px', fontWeight: 660, letterSpacing: '0.15em', textTransform: 'uppercase', color: T.t2 }}>
                   Natively API
                 </span>
-                <button onClick={handleDismiss} aria-label="Dismiss"
+                <button onClick={handleDismiss} aria-label="忽略"
                   style={{ background: 'none', border: 'none', cursor: 'pointer', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', opacity: 0.35, padding: 0, transition: 'opacity 150ms, background 150ms' }}
                   onMouseEnter={e => { e.currentTarget.style.opacity = '0.8'; e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
                   onMouseLeave={e => { e.currentTarget.style.opacity = '0.35'; e.currentTarget.style.background = 'transparent'; }}>
@@ -219,10 +219,10 @@ export const TrialPromoToaster: React.FC<Props> = ({
                   </div>
 
                   <h2 style={{ ...GT, fontSize: '21px', fontWeight: 720, letterSpacing: '-0.03em', lineHeight: 1.2, margin: '0 0 9px' }}>
-                    Try everything. No card needed.
+                    全部尝试。无需信用卡。
                   </h2>
                   <p style={{ fontSize: '13px', lineHeight: 1.66, color: T.t3, margin: '0 auto', maxWidth: '330px' }}>
-                    Full Natively API access — AI chat, meeting transcription, and company research — free for 30 minutes. Bound to this device. No sign-in.
+                    完全访问 Natively API — AI 聊天、会议转录和公司研究 — 30 分钟免费。绑定此设备。无需登录。
                   </p>
                 </motion.div>
 
@@ -230,9 +230,9 @@ export const TrialPromoToaster: React.FC<Props> = ({
                 <motion.div variants={ITEM}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
                     {[
-                      { icon: Zap,    label: 'AI Chat',       sub: '10 requests' },
-                      { icon: Mic,    label: 'Transcription', sub: '10 min STT' },
-                      { icon: Search, label: 'Research',      sub: '2 searches' },
+                      { icon: Zap,    label: 'AI 聊天',       sub: '10 次请求' },
+                      { icon: Mic,    label: '转录',          sub: '10 分钟 STT' },
+                      { icon: Search, label: '研究',          sub: '2 次搜索' },
                     ].map(({ icon: Icon, label, sub }) => (
                       <div key={label} style={{
                         padding: '12px 14px', borderRadius: '12px',
@@ -257,7 +257,7 @@ export const TrialPromoToaster: React.FC<Props> = ({
                 {/* CTAs */}
                 <motion.div variants={ITEM} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <VioletCTA
-                    label={starting ? 'Starting trial…' : 'Start free trial'}
+                    label={starting ? '启动试用中...' : '开始免费试用'}
                     onClick={handleStartTrial}
                     disabled={starting}
                     reduced={reduced}
@@ -272,7 +272,7 @@ export const TrialPromoToaster: React.FC<Props> = ({
                     onMouseEnter={e => (e.currentTarget.style.color = T.t3)}
                     onMouseLeave={e => (e.currentTarget.style.color = T.t4)}
                   >
-                    I'll set up manually
+                    我将手动设置
                   </button>
                 </motion.div>
               </motion.div>

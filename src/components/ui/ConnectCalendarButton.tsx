@@ -126,7 +126,7 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
 
                     {/* Text: High-End Typography */}
                     <span className="text-[13px] font-medium tracking-wide text-white flex flex-col leading-none gap-0.5" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
-                        <span className="font-semibold text-white/95">Calendar Connected</span>
+                        <span className="font-semibold text-white/95">日历已连接</span>
                     </span>
                 </span>
             </motion.div>
@@ -195,7 +195,7 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
                     </svg>
                 )}
 
-                {loading ? 'Connecting...' : 'Connect calendar'}
+                {loading ? '连接中...' : '连接日历'}
 
                 {!loading && (
                     <ArrowRight

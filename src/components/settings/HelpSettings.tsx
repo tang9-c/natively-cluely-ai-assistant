@@ -60,7 +60,7 @@ const MockAppInterface = () => {
                         {/* Center Segment */}
                         <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-bg-item-surface text-text-primary text-[12px] font-medium border border-border-muted">
                             <ChevronUp className="w-3.5 h-3.5 opacity-70" />
-                            <span className="tracking-wide opacity-80">Hide</span>
+                            <span className="tracking-wide opacity-80">隐藏</span>
                         </div>
                         {/* Stop Button */}
                         <div className="w-8 h-8 rounded-full flex items-center justify-center bg-bg-item-active text-text-primary border border-border-muted">
@@ -181,7 +181,7 @@ const MockMeetingInterfaceAnim = () => {
             {/* Header */}
             <div className="px-6 pt-5 pb-0 shrink-0">
                 <div className="text-xs text-text-tertiary font-medium mb-0.5">Today · 47 min</div>
-                <h1 className="text-xl font-bold text-text-primary tracking-tight">System Design Interview</h1>
+                <h1 className="text-xl font-bold text-text-primary tracking-tight">系统设计面试</h1>
             </div>
 
             {/* Tabs row */}
@@ -209,7 +209,7 @@ const MockMeetingInterfaceAnim = () => {
                             </div>
                             {/* Action Items — h2 heading + dot-bullet list, matches MeetingDetails exactly */}
                             <section className="mb-6">
-                                <h2 className="text-base font-semibold text-text-primary mb-3">Action Items</h2>
+                                <h2 className="text-base font-semibold text-text-primary mb-3">行动项</h2>
                                 <ul className="space-y-3">
                                     {['Draft Redis implementation constraints doc.', 'Schedule follow-up on Memcached benchmarks.'].map((item, i) => (
                                         <li key={i} className="flex items-start gap-3">
@@ -221,7 +221,7 @@ const MockMeetingInterfaceAnim = () => {
                             </section>
                             {/* Key Points */}
                             <section>
-                                <h2 className="text-base font-semibold text-text-primary mb-3">Key Points</h2>
+                                <h2 className="text-base font-semibold text-text-primary mb-3">关键点</h2>
                                 <ul className="space-y-3">
                                     {['Redis chosen for sorted set support enabling O(log N) rate limiting.', 'Horizontal scaling via distributed cache layer discussed.'].map((item, i) => (
                                         <li key={i} className="flex items-start gap-3">
@@ -237,8 +237,8 @@ const MockMeetingInterfaceAnim = () => {
                         <motion.div key="transcript" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="space-y-6">
                             {/* Matches MeetingDetails: speaker + timestamp inline, then text below — no card/border */}
                             {[
-                                { speaker: 'Them', time: '10:32', text: 'Why did you use Redis over Memcached for the cart session?' },
-                                { speaker: 'Me', time: '10:33', text: 'Because we needed sorted sets for rate limiting and automatic expiry without custom cron jobs.' },
+                                { speaker: '面试官', time: '10:32', text: '为什么购物车会话使用 Redis 而不是 Memcached？' },
+                                { speaker: '我', time: '10:33', text: '因为我们需要有序集合来实现速率限制和自动过期，而无需自定义定时任务。' },
                             ].map((entry, i) => (
                                 <div key={i}>
                                     <div className="flex items-center gap-2 mb-1">
@@ -274,7 +274,7 @@ const MockMeetingInterfaceAnim = () => {
             {/* Floating ask bar */}
             <div className="absolute bottom-0 left-0 right-0 p-4 flex justify-center">
                 <div className="w-full max-w-[440px] flex items-center relative">
-                    <div className="w-full pl-4 pr-11 py-2.5 bg-bg-item-surface shadow-sm border border-border-subtle rounded-full text-xs text-text-tertiary/70">Ask about this meeting...</div>
+                    <div className="w-full pl-4 pr-11 py-2.5 bg-bg-item-surface shadow-sm border border-border-subtle rounded-full text-xs text-text-tertiary/70">询问本次会议...</div>
                     <div className="absolute right-2 p-1.5 rounded-full bg-bg-item-active text-text-primary border border-border-subtle shadow-sm">
                         <ArrowUp size={13} className="rotate-45" />
                     </div>
@@ -291,7 +291,7 @@ const MockMeetingChatAnim = () => {
             <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle shrink-0">
                 <div className="flex items-center gap-2 text-text-tertiary">
                     <img src={nativelyIcon} className="w-3.5 h-3.5 force-black-icon opacity-50" alt="logo" />
-                    <span className="text-[13px] font-medium">Search this meeting</span>
+                    <span className="text-[13px] font-medium">搜索本次会议</span>
                 </div>
                 <X size={16} className="text-text-tertiary" />
             </div>
@@ -305,7 +305,7 @@ const MockMeetingChatAnim = () => {
                 </div>
                 <div className="flex flex-col items-start">
                     <p className="text-sm text-text-primary leading-relaxed max-w-[85%]">
-                        Based on the transcript near 10:45 AM, they explicitly mentioned integrating <code className="bg-bg-tertiary px-1.5 py-0.5 rounded text-[12px] font-mono text-text-primary border border-border-subtle">Stripe Payment Intents</code> to handle the recurring tier logic securely.
+                        Based on the transcript near 10:45 AM, they explicitly mentioned integrating <code className="bg-bg-tertiary px-1.5 py-0.5 rounded text-[12px] font-mono text-text-primary border border-border-subtle">Stripe 支付意向</code> to handle the recurring tier logic securely.
                     </p>
                     <div className="flex items-center gap-2 mt-2.5 text-xs text-text-tertiary">
                         <Copy size={13} /> Copy message
@@ -332,7 +332,7 @@ const MockSearchPillAnim = () => {
                         <Search size={14} className="text-text-tertiary" />
                     </div>
                     <div className="w-full bg-transparent pl-9 pr-4 py-2.5 text-[13px] text-text-primary outline-none flex items-center h-[38px]">
-                        <span className="opacity-90">System</span><motion.span animate={{ opacity: [1, 0, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="w-[1.5px] h-3.5 bg-blue-500 ml-[2px] inline-block" />
+                        <span className="opacity-90">系统</span><motion.span animate={{ opacity: [1, 0, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="w-[1.5px] h-3.5 bg-blue-500 ml-[2px] inline-block" />
                     </div>
                 </div>
 
@@ -419,7 +419,7 @@ const MockPermissionsAnim = () => {
                     <div className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-500 flex items-center justify-center">
                         <Monitor className="w-4 h-4" />
                     </div>
-                    <div className="font-semibold text-sm text-text-primary">Screen Recording</div>
+                    <div className="font-semibold text-sm text-text-primary">屏幕录制</div>
                 </div>
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
@@ -459,7 +459,7 @@ const MockPillControlsAnim = () => {
 
     return (
         <div className="mt-4 space-y-2.5">
-            <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider px-1 mb-3">Pill Controls</div>
+            <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider px-1 mb-3">胶囊控制</div>
 
             {/* Logo → Launcher */}
             <div className="flex items-center gap-3 p-3 bg-bg-elevated border border-border-subtle rounded-xl">
@@ -477,7 +477,7 @@ const MockPillControlsAnim = () => {
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
                             <span className="relative inline-flex rounded-full h-[7px] w-[7px] bg-emerald-400" />
                         </span>
-                        <span className="text-[11px] font-medium text-emerald-500">Meeting ongoing</span>
+                        <span className="text-[11px] font-medium text-emerald-500">会议进行中</span>
                     </motion.div>
                     <span className="text-[11px] text-text-secondary leading-snug">— clicking this brings you right back</span>
                 </div>
@@ -547,7 +547,7 @@ const MockFastModeAnim = () => {
                     <Zap className="w-8 h-8 text-white" />
                 </motion.div>
                 <div className="text-center">
-                    <div className="font-bold text-lg text-text-primary">Fast Mode Enabled</div>
+                    <div className="font-bold text-lg text-text-primary">快速模式已启用</div>
                     <div className="text-xs text-text-secondary mt-1">Routing via Groq LPU (Response &lt; 0.5s)</div>
                 </div>
             </div>
@@ -613,7 +613,7 @@ const MockProviderSelectionAnim = () => {
     return (
         <div className="flex justify-center flex-col items-center py-6 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[300px]">
             <div className="w-[340px] flex flex-col gap-2 relative z-10 font-sans">
-                <label className="text-xs font-medium text-text-secondary">Speech Provider</label>
+                <label className="text-xs font-medium text-text-secondary">语音提供商</label>
                 <div className="relative">
                     <button className={`w-full group bg-bg-input border border-border-subtle shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-all duration-200 outline-none ${isOpen ? 'ring-2 ring-accent-primary/20 border-accent-primary/50' : 'hover:shadow-md'}`}>
                         <div className="flex items-center gap-3 overflow-hidden">
@@ -624,7 +624,7 @@ const MockProviderSelectionAnim = () => {
                                 <div className="flex items-center gap-2">
                                     <span className="text-[13px] font-semibold text-text-primary truncate leading-tight">{selected.label}</span>
                                     {selected.badge && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ml-2 ${getBadgeStyle('green')}`}>{selected.badge}</span>}
-                                    {selected.recommended && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ml-2 ${getBadgeStyle(selected.color)}`}>Recommended</span>}
+                                    {selected.recommended && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ml-2 ${getBadgeStyle(selected.color)}`}>推荐</span>}
                                 </div>
                                 <span className="text-[11px] text-text-tertiary truncate block leading-tight mt-0.5">{selected.desc}</span>
                             </div>
@@ -661,7 +661,7 @@ const MockProviderSelectionAnim = () => {
                                                             <div className="flex items-center gap-2">
                                                                 <span className={"text-[13px] font-medium transition-colors text-text-primary"}>{option.label}</span>
                                                                 {option.badge && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${getBadgeStyle('green')}`}>{option.badge}</span>}
-                                                                {option.recommended && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${getBadgeStyle(option.color)}`}>Recommended</span>}
+                                                                {option.recommended && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide ${getBadgeStyle(option.color)}`}>推荐</span>}
                                                             </div>
                                                             {isSelected && <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}><Check size={14} className="text-accent-primary" strokeWidth={3} /></motion.div>}
                                                         </div>
@@ -703,7 +703,7 @@ const MockApiKeyFlowAnim = () => {
     return (
         <div className="flex justify-center flex-col items-center gap-2 py-8 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[240px]">
             <div className="w-[380px] space-y-2 relative z-10">
-                <label className="text-xs font-medium text-text-secondary block">Groq API Key</label>
+                <label className="text-xs font-medium text-text-secondary block">Groq API 密钥</label>
                 <div className="flex gap-2">
                     <div className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary flex items-center shadow-inner">
                         <span className={stage > 0 ? "opacity-100" : "opacity-40"}>
@@ -749,10 +749,10 @@ const ElevenLabsPermissionsMock = () => {
     return (
         <div className="w-full flex justify-center py-4 bg-bg-elevated rounded-xl border border-border-subtle mb-3 mt-2 shadow-sm">
             <div className="flex items-center justify-between w-full max-w-[360px]">
-                <span className="text-[14.5px] text-text-primary font-medium tracking-tight">Speech to Text</span>
+                <span className="text-[14.5px] text-text-primary font-medium tracking-tight">语音转文字</span>
                 <div className="flex items-center bg-bg-main p-[3px] rounded-lg border border-border-subtle shadow-inner">
-                    <div className="px-3.5 py-1.5 text-[13px] font-medium text-text-secondary">No Access</div>
-                    <div className="px-3.5 py-1.5 text-[13px] font-medium text-black bg-white rounded-md shadow-sm relative z-10 before:absolute before:inset-0 before:rounded-md before:border-[1.5px] before:border-black before:opacity-90 before:-m-[1px]">Access</div>
+                    <div className="px-3.5 py-1.5 text-[13px] font-medium text-text-secondary">无访问权限</div>
+                    <div className="px-3.5 py-1.5 text-[13px] font-medium text-black bg-white rounded-md shadow-sm relative z-10 before:absolute before:inset-0 before:rounded-md before:border-[1.5px] before:border-black before:opacity-90 before:-m-[1px]">访问</div>
                 </div>
             </div>
         </div>
@@ -842,7 +842,7 @@ const SetupGuide = () => {
     return (
         <div className="mb-10">
             <div className="mb-7">
-                <h3 className="text-[20px] font-bold text-text-primary tracking-tight leading-tight">Quick Start</h3>
+                <h3 className="text-[20px] font-bold text-text-primary tracking-tight leading-tight">快速开始</h3>
                 <p className="text-[13px] text-text-tertiary mt-0.5">Get Natively running in four steps.</p>
             </div>
 
@@ -935,10 +935,10 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                 <div className="h-10" />
                 <div className="mb-4 flex items-center gap-2 border-b border-border-subtle pb-3">
-                    <h3 className="text-[20px] font-bold text-text-primary tracking-tight leading-tight">Help Guide</h3>
+                    <h3 className="text-[20px] font-bold text-text-primary tracking-tight leading-tight">帮助指南</h3>
                 </div>
 
-                <AccordionSection title="1. App Permissions Setup" icon={<Monitor className="w-4 h-4" />}>
+                <AccordionSection title="1. 应用权限设置" icon={<Monitor className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <p>
                             {isMac
@@ -954,7 +954,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <Mic size={14} className="text-blue-500" /> Microphone & Speaker Loopback Selection
                                 </h5>
                                 <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                    Natively can capture both what you say and what you hear globally. At the top of the Audio Settings, use the Dropdowns to explicitly select your hardware Input (e.g. your physical microphone) and Output capture (what the speakers play). By default, Natively utilizes the <strong>System Default</strong>, so audio routing will automatically follow your OS preferences.
+                                    Natively can capture both what you say and what you hear globally. At the top of the Audio Settings, use the Dropdowns to explicitly select your hardware Input (e.g. your physical microphone) and Output capture (what the speakers play). By default, Natively utilizes the <strong>系统默认</strong>, so audio routing will automatically follow your OS preferences.
                                 </p>
                             </div>
 
@@ -984,7 +984,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <Globe size={14} className="text-green-500" /> Language & Regional Accents
                                 </h5>
                                 <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                    Below the provider list, you must specify the <strong>Language</strong> you will be speaking (e.g., English). Most importantly, ensure you select your specific regional <span className={kbdClass}>Accent / Region</span> mapping (e.g., <em>en-US</em> vs <em>en-GB</em> vs <em>en-IN</em>) as STT backends use this map to vastly increase transcription accuracy logic based on regional inflections.
+                                    Below the provider list, you must specify the <strong>语言</strong> you will be speaking (e.g., English). Most importantly, ensure you select your specific regional <span className={kbdClass}>口音/地区</span> mapping (e.g., <em>en-US</em> vs <em>en-GB</em> vs <em>en-IN</em>) as STT backends use this map to vastly increase transcription accuracy logic based on regional inflections.
                                 </p>
                             </div>
                         </div>
@@ -1021,7 +1021,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="2. Audio STT Providers Setup (Microphone)" icon={<Mic className="w-4 h-4" />}>
+                <AccordionSection title="2. 音频语音转文字提供商设置（麦克风）" icon={<Mic className="w-4 h-4" />}>
                     <div className="space-y-6">
                         <p>Natively supports over 8 different Audio engines to transcribe what you hear and say. From the Audio tab in settings, use the overarching dropdown to switch the active engine.</p>
 
@@ -1035,7 +1035,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         </div>
 
                         <div className="space-y-3 pt-4">
-                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">Specific Provider Setup</h4>
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">特定提供商设置</h4>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
@@ -1095,7 +1095,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <button onClick={() => { (window as any).electronAPI?.openExternal('https://portal.azure.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Requires establishing Azure Speech Services. <strong>Important</strong>: You must also specify an Azure Region alongside your key (e.g. <em>eastus</em>, <em>westeurope</em>) or requests will bounce.
+                                    Requires establishing Azure Speech Services. <strong>重要</strong>: You must also specify an Azure Region alongside your key (e.g. <em>eastus</em>, <em>westeurope</em>) or requests will bounce.
                                 </p>
                             </div>
 
@@ -1123,7 +1123,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="3. AI Providers & Prompt Engine" icon={<Key className="w-4 h-4" />}>
+                <AccordionSection title="3. AI 提供商与提示词引擎" icon={<Key className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <p className="text-sm">Natively uses Large Language Models (LLMs) to reason about your screen and audio context. You can configure cloud providers, local models, or fully custom endpoints.</p>
 
@@ -1183,9 +1183,9 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                             </div>
 
                             <div className="p-4 mt-2 rounded-xl border border-border-subtle bg-bg-item-surface">
-                                <h5 className="font-semibold text-[13px] text-text-primary mb-1">Configuring the Active Model Engine</h5>
+                                <h5 className="font-semibold text-[13px] text-text-primary mb-1">配置当前模型引擎</h5>
                                 <p className="text-[11px] text-text-secondary leading-relaxed">
-                                    Inside the Launcher UI (above the start button), you can hot-swap your <strong>Active Model</strong>. This dictation is extremely important—it determines the active core reasoning engine. If set to <strong>claude-3-5-sonnet</strong>, the intelligence agent uses Anthropic infrastructure exclusively for screen analysis. Switch to <strong>llama3:8b</strong> beneath it, and the architecture instantly reverts to generating responses via your offline GPU pipeline.
+                                    Inside the Launcher UI (above the start button), you can hot-swap your <strong>当前模型</strong>. This dictation is extremely important—it determines the active core reasoning engine. If set to <strong>claude-3-5-sonnet</strong>, the intelligence agent uses Anthropic infrastructure exclusively for screen analysis. Switch to <strong>llama3:8b</strong> beneath it, and the architecture instantly reverts to generating responses via your offline GPU pipeline.
                                 </p>
                             </div>
                         </div>
@@ -1235,7 +1235,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="4. Natively Interface Operations" icon={<Monitor className="w-4 h-4" />}>
+                <AccordionSection title="4. Natively 界面操作" icon={<Monitor className="w-4 h-4" />}>
                     <div className="space-y-6">
                         <p className="text-[13px]">When initialized, Natively hides itself visually while remaining active as a persistent translucent overlay. This is your command center.</p>
 
@@ -1297,7 +1297,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                             {badge ? (
                                                 <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-[2px] border rounded leading-none ${bc}`}>{badge}</span>
                                             ) : (
-                                                <span className="text-[9px] font-bold text-text-tertiary/50 uppercase tracking-wider leading-none">Always active</span>
+                                                <span className="text-[9px] font-bold text-text-tertiary/50 uppercase tracking-wider leading-none">始终活跃</span>
                                             )}
                                         </div>
 
@@ -1322,7 +1322,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="5. Meeting Intelligence" icon={<Calendar className="w-4 h-4" />}>
+                <AccordionSection title="5. 会议智能" icon={<Calendar className="w-4 h-4" />}>
                     <div className="space-y-6">
                         <p className="text-[13px]">When an active session concludes, it gets saved directly to your local file system as a complete intelligence dossier spanning the transcript, AI token usage, and automated structural summaries.</p>
 
@@ -1388,7 +1388,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="6. Global Search & Shortcuts" icon={<Search className="w-4 h-4" />}>
+                <AccordionSection title="6. 全局搜索与快捷键" icon={<Search className="w-4 h-4" />}>
                     <div className="space-y-6">
                         <p className="text-[13px]">Hit <span className={kbdClass}>{isMac ? 'Cmd+K' : 'Ctrl+K'}</span> anywhere on your computer to invoke the Natively Global Palette. This acts as your Spotlight overlay for interacting directly with the system backbone.</p>
 
@@ -1415,7 +1415,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         </div>
 
                         <div className="border-t border-border-subtle pt-6">
-                            <h4 className="font-bold text-sm text-text-primary border-b border-border-subtle pb-1">Global System Shortcuts</h4>
+                            <h4 className="font-bold text-sm text-text-primary border-b border-border-subtle pb-1">全局系统快捷键</h4>
                             <p className="text-[11px] text-text-secondary mt-1 mb-3">These hotkeys work anywhere on your operating system, regardless of whether Natively is focused or completely hidden. Change them via <strong>Settings &gt; Hotkeys</strong>.</p>
 
                             <div className="grid gap-3">
@@ -1440,7 +1440,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                             <Image className="w-4 h-4 text-text-primary" />
                                         </div>
                                         <div>
-                                            <div className="font-semibold text-sm text-text-primary">Capture Contextual Screenshot</div>
+                                            <div className="font-semibold text-sm text-text-primary">捕获上下文截图</div>
                                             <div className="text-xs text-text-secondary mt-1">Takes a silent screenshot in the background, feeding the visual data to the LLM context flow.</div>
                                         </div>
                                     </div>
@@ -1485,7 +1485,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
 
 
-                <AccordionSection title="7. Pro Intelligence" icon={<Star className="w-4 h-4" />}>
+                <AccordionSection title="7. 专业版智能" icon={<Star className="w-4 h-4" />}>
                     <div className="space-y-6">
                         {/* Profile */}
                         <div>
@@ -1506,7 +1506,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                         <li><strong>Zero Context Prep:</strong> Model inherits your coding stack, experience, etc.</li>
                                         <li><strong>Resume Parsing:</strong> Upload your PDF Resume for local extraction.</li>
-                                        <li><strong>Global Toggle:</strong> Enable <span className="text-amber-500 font-semibold">Profile Mode</span> via the Star button.</li>
+                                        <li><strong>Global Toggle:</strong> Enable <span className="text-amber-500 font-semibold">档案模式</span> via the Star button.</li>
                                     </ul>
                                 </div>
 
@@ -1531,7 +1531,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <Briefcase size={14} /> Job Description Targeting
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    Drop a target <strong>JD PDF</strong> alongside your resume. Natively extracts the role title, level, company, and required technologies, then biases every prompt to align your responses with that exact spec — perfect for staying on-message during a final loop.
+                                    Drop a target <strong>职位描述 PDF</strong> alongside your resume. Natively extracts the role title, level, company, and required technologies, then biases every prompt to align your responses with that exact spec — perfect for staying on-message during a final loop.
                                 </p>
                             </div>
 
@@ -1541,7 +1541,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         <Building2 className="w-4 h-4 text-purple-400" /> Company Intelligence
                                     </h4>
                                     <p className="text-[11px] text-text-secondary leading-relaxed">
-                                        After uploading a JD, hit <strong>Research Now</strong> to compile a live dossier on the company — recent news, product surface area, culture signals — cached and injected into every reply so you sound briefed without prep.
+                                        After uploading a JD, hit <strong>立即研究</strong> to compile a live dossier on the company — recent news, product surface area, culture signals — cached and injected into every reply so you sound briefed without prep.
                                     </p>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
@@ -1559,7 +1559,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <FileText size={14} /> Custom Context Notes
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    In addition to your Resume and JD, type any free-form context into the <strong>Custom Context</strong> textarea — sales stats, product details, LeetCode solutions, personal preferences. Injected as a <code className="bg-bg-elevated px-1 rounded text-[10px]">&lt;user_context&gt;</code> block into every AI call, across all modes and providers.
+                                    In addition to your Resume and JD, type any free-form context into the <strong>自定义上下文</strong> textarea — sales stats, product details, LeetCode solutions, personal preferences. Injected as a <code className="bg-bg-elevated px-1 rounded text-[10px]">&lt;user_context&gt;</code> block into every AI call, across all modes and providers.
                                 </p>
                             </div>
                             <div className="grid md:grid-cols-2 gap-3">
@@ -1569,7 +1569,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     </h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                         <li>Open <strong>Settings → Profile Intelligence</strong></li>
-                                        <li>Scroll to the <strong>Custom Context</strong> textarea</li>
+                                        <li>Scroll to the <strong>自定义上下文</strong> textarea</li>
                                         <li>Type anything — auto-saved after 800 ms</li>
                                         <li>Up to 4,000 characters with a live counter</li>
                                     </ul>
@@ -1580,9 +1580,9 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     </h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                         <li>Your company's product details or pricing</li>
-                                        <li>Candidate pipeline notes for recruiting</li>
+                                        <li>招聘候选人流程备注</li>
                                         <li>LeetCode / DSA patterns you prefer</li>
-                                        <li>Personal formatting or style preferences</li>
+                                        <li>个人格式或风格偏好</li>
                                     </ul>
                                 </div>
                             </div>
@@ -1590,7 +1590,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="8. Modes Manager" icon={<LayoutGrid className="w-4 h-4" />}>
+                <AccordionSection title="8. 模式管理器" icon={<LayoutGrid className="w-4 h-4" />}>
                     <div className="space-y-6">
                         <p className="text-[13px]">Modes let you assign a specialized AI persona to your session. Each mode has a tailored system prompt, a personal context area, reference files, and smart note template sections — so Natively behaves differently depending on whether you're in a sales call, a coding interview, or a team standup.</p>
 
@@ -1611,27 +1611,27 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         </div>
 
                         <div className="space-y-3 pt-2 border-t border-border-subtle">
-                            <h4 className="font-bold text-sm text-text-primary pt-4">How to Use Modes</h4>
+                            <h4 className="font-bold text-sm text-text-primary pt-4">如何使用模式</h4>
                             <div className="grid md:grid-cols-2 gap-3">
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Opening the Manager</h4>
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">打开管理器</h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                         <li>Click the <strong>grid icon</strong> in the Launcher header</li>
                                         <li>Or click the grid icon in the main interface toolbar</li>
-                                        <li>Requires a Natively Pro license</li>
+                                        <li>需要 Natively 专业版许可证</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Activating a Mode</h4>
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">激活模式</h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Select any mode in the left sidebar</li>
-                                        <li>Click <strong>Set active</strong> to apply it</li>
-                                        <li>The toolbar icon shows the active mode name live</li>
-                                        <li>Click <strong>Deactivate</strong> to return to General</li>
+                                        <li>在左侧边栏选择任意模式</li>
+                                        <li>Click <strong>设为活跃</strong> to apply it</li>
+                                        <li>工具栏图标实时显示当前模式名称</li>
+                                        <li>Click <strong>停用</strong> to return to General</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Reference Files</h4>
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">参考文件</h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                         <li>Upload PDF, DOCX, or TXT files per mode</li>
                                         <li>File contents are injected as real-time context</li>
@@ -1643,9 +1643,9 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary">Custom Modes & Templates</h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                         <li>Click <strong>+ New Mode</strong> for a blank slate</li>
-                                        <li>Browse the <strong>Templates Gallery</strong> for ready-made personas</li>
+                                        <li>Browse the <strong>模板库</strong> for ready-made personas</li>
                                         <li>Edit the <strong>Real-time Prompt</strong> with the inline Save action</li>
-                                        <li>Define <strong>Note Section Templates</strong> per mode for capture format</li>
+                                        <li>Define <strong>备注分区模板</strong> per mode for capture format</li>
                                     </ul>
                                 </div>
                             </div>
@@ -1662,7 +1662,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="9. Miscellaneous" icon={<Settings className="w-4 h-4" />}>
+                <AccordionSection title="9. 其他" icon={<Settings className="w-4 h-4" />}>
                     <div className="space-y-6">
                         {/* Calendar */}
                         <div>
@@ -1677,10 +1677,10 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                             <div className="grid md:grid-cols-2 gap-3">
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">How to Set it Up</h4>
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">如何设置</h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Navigate to the <strong>Calendar</strong> tab in settings.</li>
-                                        <li>Click <strong>Connect Google Calendar</strong> and authenticate securely.</li>
+                                        <li>Navigate to the <strong>日历</strong> tab in settings.</li>
+                                        <li>Click <strong>连接 Google 日历</strong> and authenticate securely.</li>
                                         <li>Natively will quietly background-sync your schedule.</li>
                                     </ul>
                                 </div>
@@ -1703,7 +1703,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         <ExternalLink className="w-4 h-4 text-emerald-500" /> One-Click Join
                                     </h4>
                                     <p className="text-[11px] text-text-secondary">
-                                        Each upcoming event shows a <strong>Join Now</strong> button that opens the meeting link in your <strong>system default browser</strong> (so it lands in the right Chrome/Safari profile), not an in-app webview.
+                                        Each upcoming event shows a <strong>立即加入</strong> button that opens the meeting link in your <strong>system default browser</strong> (so it lands in the right Chrome/Safari profile), not an in-app webview.
                                     </p>
                                 </div>
                             </div>
@@ -1729,7 +1729,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="10. Phone Mirror" icon={<Smartphone className="w-4 h-4" />}>
+                <AccordionSection title="10. 手机镜像" icon={<Smartphone className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl mb-2">
                             <h4 className="text-[13px] font-semibold text-sky-400 flex items-center gap-2 mb-1">
@@ -1748,7 +1748,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                     <li>Open <strong>Settings → Phone Mirror</strong></li>
                                     <li>Toggle on, then scan the generated QR code from your phone</li>
-                                    <li>Loopback by default — flip <strong>Expose on LAN</strong> to reach it from another device on the same Wi-Fi</li>
+                                    <li>Loopback by default — flip <strong>在局域网暴露</strong> to reach it from another device on the same Wi-Fi</li>
                                 </ul>
                             </div>
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
@@ -1756,20 +1756,20 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <Lock className="w-4 h-4 text-amber-500" /> Token-Gated Security
                                 </h4>
                                 <p className="text-[11px] text-text-secondary">
-                                    Every session is protected by a single-use bearer token baked into the QR. If a device leaves your trust circle, hit <strong>Rotate Token</strong> to invalidate every existing connection in one tap.
+                                    Every session is protected by a single-use bearer token baked into the QR. If a device leaves your trust circle, hit <strong>轮换令牌</strong> to invalidate every existing connection in one tap.
                                 </p>
                             </div>
                         </div>
 
                         <div className="p-3 border border-orange-500/20 bg-orange-500/5 rounded-lg">
                             <p className="text-[10px] text-orange-400 m-0">
-                                <strong>⚠️ LAN exposure:</strong> Only enable <em>Expose on LAN</em> on networks you trust. The token stops casual snoops, but anyone who captures the QR or copies the URL can read your live transcript until you rotate.
+                                <strong>⚠️ LAN exposure:</strong> Only enable <em>在局域网暴露</em> on networks you trust. The token stops casual snoops, but anyone who captures the QR or copies the URL can read your live transcript until you rotate.
                             </p>
                         </div>
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="11. Stealth & Window Control" icon={<Ghost className="w-4 h-4" />}>
+                <AccordionSection title="11. 隐身与窗口控制" icon={<Ghost className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl mb-4">
                             <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
@@ -1786,7 +1786,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <EyeOff className="w-4 h-4 text-text-secondary" /> Dynamic UI Opacity
                                 </h4>
                                 <p className="text-xs text-text-secondary">
-                                    Decrease your visual footprint to near-zero. Navigate to the General Settings overlay and dynamically drag the <strong>Opacity Slider</strong> down to make the interface completely translucent against your underlying native applications.
+                                    Decrease your visual footprint to near-zero. Navigate to the General Settings overlay and dynamically drag the <strong>透明度滑块</strong> down to make the interface completely translucent against your underlying native applications.
                                 </p>
                             </div>
 

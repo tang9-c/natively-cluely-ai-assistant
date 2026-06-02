@@ -85,7 +85,7 @@ function PremiumSelect({ label, value, options, onChange, placeholder }: any) {
                                 );
                             })}
                             {options.length === 0 && (
-                                <div className="px-3 py-2.5 text-sm text-text-tertiary italic text-center">No models available</div>
+                                <div className="px-3 py-2.5 text-sm text-text-tertiary italic text-center">无可用模型</div>
                             )}
                         </div>
                     </motion.div>
@@ -230,7 +230,7 @@ export function LocalWhisperModelPanel() {
         <div className="space-y-4">
             <div className="bg-bg-card rounded-xl border border-border-subtle p-5 shadow-sm">
                 <div className="mb-5">
-                    <h3 className="text-sm font-semibold text-text-primary">Local Engine Configuration</h3>
+                    <h3 className="text-sm font-semibold text-text-primary">本地引擎配置</h3>
                     <p className="text-xs text-text-secondary mt-1 leading-relaxed">Select the AI models you want to use for Speech-to-Text inference.</p>
                 </div>
 
@@ -242,7 +242,7 @@ export function LocalWhisperModelPanel() {
                         onChange={(e) => toggleDualChannel(e.target.checked)} 
                     />
                     <div>
-                        <span className="text-sm font-medium text-text-primary block transition-colors group-hover:text-accent-primary">Split Audio Channels</span>
+                        <span className="text-sm font-medium text-text-primary block transition-colors group-hover:text-accent-primary">分离音频通道</span>
                         <span className="text-xs text-text-tertiary mt-0.5 block">Use different models for microphone and system audio</span>
                     </div>
                     <div className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:ring-opacity-75 ${config.enabled ? 'bg-accent-primary' : 'bg-border-muted'}`}>
@@ -262,18 +262,18 @@ export function LocalWhisperModelPanel() {
                                 className="grid grid-cols-2 gap-4"
                             >
                                 <PremiumSelect
-                                    label="Mic Audio Model"
+                                    label="麦克风音频模型"
                                     value={config.micModelId}
                                     onChange={setMicModel}
                                     options={availableModels}
-                                    placeholder="Select mic model"
+                                    placeholder="选择麦克风模型"
                                 />
                                 <PremiumSelect
-                                    label="System Audio Model"
+                                    label="系统音频模型"
                                     value={config.systemModelId}
                                     onChange={setSystemModel}
                                     options={availableModels}
-                                    placeholder="Select system model"
+                                    placeholder="选择系统模型"
                                 />
                             </motion.div>
                         ) : (
@@ -285,11 +285,11 @@ export function LocalWhisperModelPanel() {
                                 transition={{ duration: 0.2, ease: "easeOut" }}
                             >
                                 <PremiumSelect
-                                    label="Global Model"
+                                    label="全局模型"
                                     value={config.globalModelId}
                                     onChange={setGlobalModel}
                                     options={availableModels}
-                                    placeholder="Select global model"
+                                    placeholder="选择全局模型"
                                 />
                             </motion.div>
                         )}
@@ -299,7 +299,7 @@ export function LocalWhisperModelPanel() {
 
             <div className="bg-bg-card rounded-xl border border-border-subtle overflow-hidden shadow-sm relative z-0">
                 <div className="px-5 py-4 bg-bg-elevated/50 border-b border-border-subtle flex justify-between items-center">
-                    <h3 className="text-sm font-semibold text-text-primary">Model Manager</h3>
+                    <h3 className="text-sm font-semibold text-text-primary">模型管理器</h3>
                     {hardware?.recommendedModel && (
                         <span className="text-[11px] text-text-tertiary font-medium bg-bg-input px-2 py-1 rounded-md border border-border-subtle">
                             Recommended for your {isMac ? 'Mac' : 'PC'}: <span className="text-text-primary">{models.find(m => m.id === hardware.recommendedModel)?.name}</span>
@@ -320,7 +320,7 @@ export function LocalWhisperModelPanel() {
                                     <div className="flex items-center gap-2 mb-1.5">
                                         <span className="text-sm font-medium text-text-primary truncate tracking-tight">{model.name}</span>
                                         {isRecommended && (
-                                            <span className="px-1.5 py-0.5 rounded-[4px] bg-accent-primary/10 text-accent-primary text-[9px] font-bold uppercase tracking-wider">Recommended</span>
+                                            <span className="px-1.5 py-0.5 rounded-[4px] bg-accent-primary/10 text-accent-primary text-[9px] font-bold uppercase tracking-wider">推荐</span>
                                         )}
                                         {model.requiresAppleSilicon && (
                                             <span className="px-1.5 py-0.5 rounded-[4px] bg-purple-500/10 text-purple-500 text-[9px] font-bold uppercase tracking-wider">Apple Silicon</span>
@@ -364,7 +364,7 @@ export function LocalWhisperModelPanel() {
                                             className="group/btn relative h-[34px] px-4 flex items-center gap-1.5 rounded-[10px] bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary text-[13px] font-semibold transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.96] shadow-sm"
                                         >
                                             <Download size={14} className="transition-transform duration-300 group-hover/btn:-translate-y-[2px]" /> 
-                                            <span>Install</span>
+                                            <span>安装</span>
                                         </button>
                                     )}
                                     
@@ -372,7 +372,7 @@ export function LocalWhisperModelPanel() {
                                         <button
                                             onClick={() => handleDelete(model.id)}
                                             className="p-2 rounded-[10px] text-text-tertiary hover:bg-red-500/10 hover:text-red-500 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.96]"
-                                            title="Delete model"
+                                            title="删除模型"
                                         >
                                             <Trash2 size={16} />
                                         </button>

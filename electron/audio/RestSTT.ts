@@ -16,16 +16,22 @@ import axios from 'axios';
 import FormData from 'form-data';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 
-export type RestSttProvider = 'groq' | 'openai' | 'elevenlabs' | 'azure' | 'ibmwatson';
+export type RestSttProvider = 'groq' | 'openai' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'doubao' | 'doubao-auc';
 
 interface RestSttProviderConfig {
     endpoint: string;
     model: string;
     authHeader: Record<string, string>;
-    uploadType: 'multipart' | 'binary';
+    uploadType: 'multipart' | 'binary' | 'json';
     extraFormFields?: Record<string, string>;
     /** Extract transcript text from the API response */
     extractTranscript: (data: any) => string;
+    /** For async providers: submit endpoint (if different from query endpoint) */
+    submitEndpoint?: string;
+    /** For async providers: query endpoint */
+    queryEndpoint?: string;
+    /** For async providers: build the request body from audio buffer */
+    buildRequestBody?: (audioBase64: string, mimeType: string) => any;
 }
 
 type ProviderConfigFactory = (apiKey: string, region?: string, languageKey?: string) => RestSttProviderConfig;
@@ -108,6 +114,71 @@ const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
                 } catch {
                     return '';
                 }
+            },
+        };
+    },
+    doubao: (apiKey, region, languageKey) => {
+        const lang = (languageKey && languageKey !== 'auto') ? RECOGNITION_LANGUAGES[languageKey]?.iso639 : undefined;
+        return {
+            endpoint: 'https://ark.cn-beijing.volces.com/api/v3/audio/transcriptions',
+            model: 'volc.seedasr.sauc.duration',
+            authHeader: { Authorization: `Bearer ${apiKey}` },
+            uploadType: 'multipart',
+            extraFormFields: {
+                ...(lang ? { language: lang } : {})
+            },
+            extractTranscript: (data: any) => {
+                if (typeof data === 'string') return data;
+                return data?.text ?? '';
+            },
+        };
+    },
+    'doubao-auc': (apiKey, region, languageKey) => {
+        // New console API uses single X-Api-Key header (no more AppId|AccessKey)
+        const authHeader: Record<string, string> = {
+            'X-Api-Key': apiKey.trim(),
+            'X-Api-Resource-Id': 'volc.seedasr.auc',
+        };
+
+        return {
+            endpoint: 'https://openspeech-direct.zijieapi.com/api/v3/auc/bigmodel',
+            model: 'volc.seedasr.auc',
+            authHeader,
+            uploadType: 'json',
+            submitEndpoint: 'https://openspeech-direct.zijieapi.com/api/v3/auc/bigmodel/submit',
+            queryEndpoint: 'https://openspeech-direct.zijieapi.com/api/v3/auc/bigmodel/query',
+            buildRequestBody: (audioBase64: string, mimeType: string) => {
+                const format = mimeType.includes('wav') ? 'wav' : mimeType.includes('mp3') ? 'mp3' : 'wav';
+                return {
+                    user: { uid: 'cluely-user' },
+                    audio: {
+                        data: audioBase64,
+                        format: format,
+                        codec: 'raw',
+                        rate: 16000,
+                        bits: 16,
+                        channel: 1,
+                    },
+                    request: {
+                        model_name: 'bigmodel',
+                        enable_itn: true,
+                        enable_punc: true,
+                        enable_ddc: false,
+                        enable_speaker_info: false,
+                        enable_channel_split: false,
+                        show_utterances: true,
+                        vad_segment: true,
+                    },
+                };
+            },
+            extractTranscript: (data: any) => {
+                if (typeof data === 'string') return data;
+                // AUC API returns results in resp_speech_info or result
+                const result = data?.result || data?.resp_speech_info;
+                if (Array.isArray(result) && result.length > 0) {
+                    return result.map((item: any) => item?.text || item?.transcription || '').join(' ');
+                }
+                return data?.text || data?.transcription || '';
             },
         };
     },
@@ -345,6 +416,9 @@ export class RestSTT extends EventEmitter {
         if (this.config.uploadType === 'binary') {
             return this.uploadBinary(wavBuffer);
         }
+        if (this.config.uploadType === 'json') {
+            return this.uploadJson(wavBuffer);
+        }
         return this.uploadMultipart(wavBuffer);
     }
 
@@ -396,6 +470,106 @@ export class RestSTT extends EventEmitter {
         });
 
         return this.config.extractTranscript(response.data);
+    }
+
+    /**
+     * Upload via JSON body with Base64 audio (Doubao AUC)
+     * Two-step async process: submit -> query for results
+     */
+    private async uploadJson(wavBuffer: Buffer): Promise<string> {
+        const submitEndpoint = this.config.submitEndpoint || this.config.endpoint;
+        const queryEndpoint = this.config.queryEndpoint || this.config.endpoint;
+
+        // Convert WAV buffer to Base64
+        const audioBase64 = wavBuffer.toString('base64');
+        const mimeType = 'audio/wav';
+
+        // Build request body
+        const requestBody = this.config.buildRequestBody
+            ? this.config.buildRequestBody(audioBase64, mimeType)
+            : { audio: audioBase64 };
+
+        // Generate unique request ID
+        const requestId = `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+
+        // Step 1: Submit the task
+        const submitResponse = await axios.post(submitEndpoint, requestBody, {
+            headers: {
+                ...this.config.authHeader,
+                'Content-Type': 'application/json',
+                'X-Api-Request-Id': requestId,
+                'X-Api-Sequence': '-1',
+            },
+            timeout: 30000,
+        });
+
+        console.log('[RestSTT] Doubao AUC submit response:', submitResponse.data);
+        console.log('[RestSTT] Doubao AUC submit headers:', submitResponse.headers);
+
+        // Check response status from headers (Doubao AUC specific)
+        const submitStatusCode = submitResponse.headers['x-api-status-code'];
+        if (submitStatusCode && submitStatusCode !== '20000000') {
+            throw new Error(`Doubao AUC submit failed with status: ${submitStatusCode}, message: ${submitResponse.headers['x-api-message'] || 'Unknown'}`);
+        }
+
+        // Check if result is immediately available
+        const immediateResult = this.config.extractTranscript(submitResponse.data);
+        if (immediateResult && immediateResult.trim().length > 0) {
+            return immediateResult;
+        }
+
+        // Step 2: Poll for results (if task_id is returned)
+        const taskId = submitResponse.data?.task_id || submitResponse.data?.id;
+        const xTtLogid = submitResponse.headers['x-tt-logid'];
+        if (!taskId) {
+            // No task_id, try to extract from submit response directly
+            return immediateResult;
+        }
+
+        // Poll for results (max 30 seconds, 500ms intervals)
+        const maxAttempts = 60;
+        const intervalMs = 500;
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, intervalMs));
+
+            const queryHeaders: any = {
+                ...this.config.authHeader,
+                'Content-Type': 'application/json',
+                'X-Api-Request-Id': requestId,
+            };
+            
+            // Pass x-tt-logid if available (required by Doubao AUC)
+            if (xTtLogid) {
+                queryHeaders['X-Tt-Logid'] = xTtLogid;
+            }
+
+            const queryResponse = await axios.post(queryEndpoint, {}, {
+                headers: queryHeaders,
+                timeout: 15000,
+            });
+
+            console.log(`[RestSTT] Doubao AUC query attempt ${attempt + 1}:`, queryResponse.data);
+            console.log(`[RestSTT] Doubao AUC query headers:`, queryResponse.headers);
+
+            // Check query status from headers
+            const queryStatusCode = queryResponse.headers['x-api-status-code'];
+            if (queryStatusCode === '20000000') {
+                // Task finished successfully
+                const result = this.config.extractTranscript(queryResponse.data);
+                if (result && result.trim().length > 0) {
+                    return result;
+                }
+                // If no text extracted but status is success, return empty
+                return '';
+            } else if (queryStatusCode !== '20000001' && queryStatusCode !== '20000002') {
+                // Task failed (not processing or queued)
+                throw new Error(`Doubao AUC task failed with status: ${queryStatusCode}, message: ${queryResponse.headers['x-api-message'] || 'Unknown'}`);
+            }
+            // Status 20000001 or 20000002 means still processing, continue polling
+        }
+
+        throw new Error('Doubao AUC transcription timed out after 30 seconds');
     }
 
     /**
