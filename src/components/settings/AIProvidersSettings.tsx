@@ -1239,7 +1239,7 @@ export const AIProvidersSettings: React.FC = () => {
             {/* Cloud Provider Data Scopes — fail-closed cloud share controls */}
             <div className="space-y-5">
                 <div>
-                    <h3 className="text-sm font-bold text-text-primary mb-1">云提供商数据范围</h3>
+                    <h3 className="text-sm font-bold text-text-primary mb-1">Cloud provider data scopes</h3>
                     <p className="text-xs text-text-secondary mb-2">Control what data cloud AI providers can access. Disabled types are handled locally for privacy.</p>
                 </div>
                 <div className="bg-bg-item-surface rounded-xl p-4 border border-border-subtle flex flex-col gap-2">

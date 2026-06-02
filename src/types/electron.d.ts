@@ -381,12 +381,13 @@ export interface ElectronAPI {
 
   // CGEventTap-backed stealth typing (macOS only — graceful degradation elsewhere)
   stealthTapAvailable: () => Promise<boolean>
-  stealthTapPermissionGranted: () => Promise<boolean>
-  stealthTapRequestPermission: () => Promise<boolean>
   stealthTapOpenSettings: () => Promise<void>
-  stealthTapIsActive: () => Promise<boolean>
   stealthTapStop: () => Promise<void>
   stealthTapStart: () => Promise<boolean>
+  /** Re-probe the current IME state (Pinyin / Hangul / Kanji / …). The
+   *  renderer calls this on window focus so mid-session input-source changes
+   *  don't silently break CJK composition. */
+  stealthTapRefreshIme: () => Promise<boolean>
   /** False on macOS when a composition IME (Pinyin/Hangul/Kanji/…) is
    *  enabled — the tap captures below the IME and breaks composition, so
    *  the renderer falls back to plain DOM focus on click. */

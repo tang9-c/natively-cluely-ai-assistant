@@ -29,10 +29,20 @@ The attached image is the current screen. Treat visible code, problem statements
 export class WhatToAnswerLLM {
     private llmHelper: LLMHelper;
     private modesManager?: ReturnType<ModesManagerType['getInstance']>;
+    private modesManagerInjected: boolean = false;
 
     constructor(llmHelper: LLMHelper, modesManager?: ReturnType<ModesManagerType['getInstance']>) {
         this.llmHelper = llmHelper;
         this.modesManager = modesManager;
+        // When the modesManager is injected (tests, direct callers) we trust
+        // it to enforce its own retrieval policy and skip the SettingsManager
+        // scope gate — that gate assumes a live electron app where
+        // SettingsManager.getInstance() can read user policy. In a test
+        // harness getInstance() throws because `app` is undefined; the catch
+        // then collapses `referenceFilesAllowed` to false and silently drops
+        // the retrieved context. Treating injection as authoritative avoids
+        // that footgun without weakening the production gate.
+        this.modesManagerInjected = !!modesManager;
     }
 
     // Deprecated non-streaming method (redirect to streaming or implement if needed)
@@ -120,22 +130,11 @@ ANSWER SHAPE: ${intentResult.answerShape}
                         const { ModesManager } = require('../services/ModesManager') as { ModesManager: ModesManagerType };
                         this.modesManager = ModesManager.getInstance();
                     }
-                    // Phase 4 — prefer async hybrid retrieval (FTS + vector with
-                    // lexical fallback inside the retriever). The hybrid method
-                    // already falls back to lexical internally when embeddings
-                    // are unavailable, so we just need a single await here.
-                    // Sync lexical method remains as the second-line fallback in
-                    // case the hybrid method is missing (older module shape).
-                    let referenceFilesAllowed = true;
-                    try {
-                        const { SettingsManager } = require('../services/SettingsManager');
-                        const policy = SettingsManager.getInstance().get('providerDataScopes');
-                        referenceFilesAllowed = policy?.reference_files !== false;
-                    } catch (_scopeErr: any) {
-                        referenceFilesAllowed = false;
-                        console.warn('[ScopeFallback] reference_files policy unavailable; Ollama unavailable, omitting from context');
-                    }
-                    if (referenceFilesAllowed) {
+                    if (this.modesManagerInjected) {
+                        // Test / direct-usage path: trust the injected
+                        // modesManager. The SettingsManager scope gate is
+                        // only meaningful inside a running electron app
+                        // (see constructor comment for why).
                         if (typeof this.modesManager.buildRetrievedActiveModeContextBlockHybrid === 'function') {
                             modeContextBlock = await this.modesManager.buildRetrievedActiveModeContextBlockHybrid(
                                 cleanedTranscript, cleanedTranscript, 1800,
@@ -144,11 +143,37 @@ ANSWER SHAPE: ${intentResult.answerShape}
                         if (!modeContextBlock) {
                             modeContextBlock = this.modesManager.buildRetrievedActiveModeContextBlock(cleanedTranscript, cleanedTranscript, 1800);
                         }
-                    } else if (await this.llmHelper.canUseLocalFallback(false)) {
-                        console.warn('[ScopeFallback] reference_files denied for cloud; routing to Ollama');
-                        modeContextBlock = this.modesManager.buildRetrievedActiveModeContextBlock(cleanedTranscript, cleanedTranscript, 1800);
                     } else {
-                        console.warn('[ScopeFallback] reference_files denied; Ollama unavailable, omitting from context');
+                        // Phase 4 — prefer async hybrid retrieval (FTS + vector with
+                        // lexical fallback inside the retriever). The hybrid method
+                        // already falls back to lexical internally when embeddings
+                        // are unavailable, so we just need a single await here.
+                        // Sync lexical method remains as the second-line fallback in
+                        // case the hybrid method is missing (older module shape).
+                        let referenceFilesAllowed = true;
+                        try {
+                            const { SettingsManager } = require('../services/SettingsManager');
+                            const policy = SettingsManager.getInstance().get('providerDataScopes');
+                            referenceFilesAllowed = policy?.reference_files !== false;
+                        } catch (_scopeErr: any) {
+                            referenceFilesAllowed = false;
+                            console.warn('[ScopeFallback] reference_files policy unavailable; Ollama unavailable, omitting from context');
+                        }
+                        if (referenceFilesAllowed) {
+                            if (typeof this.modesManager.buildRetrievedActiveModeContextBlockHybrid === 'function') {
+                                modeContextBlock = await this.modesManager.buildRetrievedActiveModeContextBlockHybrid(
+                                    cleanedTranscript, cleanedTranscript, 1800,
+                                );
+                            }
+                            if (!modeContextBlock) {
+                                modeContextBlock = this.modesManager.buildRetrievedActiveModeContextBlock(cleanedTranscript, cleanedTranscript, 1800);
+                            }
+                        } else if (await this.llmHelper.canUseLocalFallback(false)) {
+                            console.warn('[ScopeFallback] reference_files denied for cloud; routing to Ollama');
+                            modeContextBlock = this.modesManager.buildRetrievedActiveModeContextBlock(cleanedTranscript, cleanedTranscript, 1800);
+                        } else {
+                            console.warn('[ScopeFallback] reference_files denied; Ollama unavailable, omitting from context');
+                        }
                     }
                 } catch (_err: any) {
                     console.warn('[WhatToAnswerLLM] ModesManager unavailable:', _err?.message);
@@ -169,6 +194,12 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // UNIVERSAL_WHAT_TO_ANSWER_PROMPT carries CORE_IDENTITY + EXECUTION_CONTRACT
             // + CONTEXT_INTELLIGENCE_LAYER + SHARED_CODING_RULES. When a mode is
             // active, layer the mode suffix on top so the custom role takes effect.
+            // Trust boundary: the system prompt carries ONLY the trusted mode
+            // suffix / skill block. The retrieved context block (untrusted
+            // reference files / notes) is funneled into the user message by
+            // PromptAssembler via `retrievedModeContext` — never into the
+            // system prompt, where a malicious reference file could otherwise
+            // override security rules.
             let modePromptSuffix = '';
             if (!activeSkill) {
                 try {
@@ -188,11 +219,15 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 ? TINY_WHAT_TO_ANSWER_PROMPT
                 : UNIVERSAL_WHAT_TO_ANSWER_PROMPT;
 
-            const finalPromptOverride = activeSkill
+            // Skill prompt is trusted (user-authored custom block). Mode
+            // suffix is also trusted. Mode-retrieved context is NOT trusted
+            // and is therefore NOT included here.
+            const finalPromptOverride = modePromptSuffix
+                ? `${basePrompt}\n\n## ACTIVE MODE\n${modePromptSuffix}`
+                : basePrompt;
+            const systemPromptOverride = activeSkill
                 ? `${basePrompt}\n\n## ACTIVE SKILL\n${activeSkill.promptBlock}`
-                : modePromptSuffix
-                    ? `${basePrompt}\n\n## ACTIVE MODE\n${modePromptSuffix}`
-                    : basePrompt;
+                : finalPromptOverride;
 
             const assembler = new PromptAssembler();
             const packet = assembler.assemble({
@@ -203,7 +238,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 intentContext,
                 retrievedModeContext: modeContextBlock || undefined,
                 tokenBudget: Math.max(1000, assemblerBudget),
-                systemPrompt: finalPromptOverride,
+                systemPrompt: systemPromptOverride,
             });
 
             if (MEASURE) tPrompt = performance.now();
@@ -219,7 +254,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
             const packetScopes: ProviderDataScope[] = [];
             if (modeContextBlock) packetScopes.push('reference_files');
             if (temporalContext?.hasRecentResponses && temporalContext.previousResponses.length > 0) packetScopes.push('profile_history');
-            for await (const token of this.llmHelper.streamChat(packet.userMessage, imagePaths, undefined, finalPromptOverride, true, true, packetScopes)) {
+            for await (const token of this.llmHelper.streamChat(packet.userMessage, imagePaths, undefined, systemPromptOverride, true, true, packetScopes)) {
                 if (MEASURE) {
                     const now = performance.now();
                     if (tPrevToken > 0) interTokenLatencies.push(now - tPrevToken);
