@@ -5,7 +5,6 @@
 import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import * as SecureStorage from './SecureStorage';
 
 export interface CustomProvider {
     id: string;
@@ -86,9 +85,7 @@ export class CredentialsManager {
      * Must be called after app.whenReady()
      */
     public init(): void {
-        SecureStorage.init();
         this.loadCredentials();
-        this.removeLegacyCredentialFiles();
         console.log('[CredentialsManager] Initialized');
     }
 
@@ -215,10 +212,6 @@ export class CredentialsManager {
 
     public getAllCredentials(): StoredCredentials {
         return { ...this.credentials };
-    }
-
-    public getDeviceKeyLost(): boolean {
-        return SecureStorage.getDeviceKeyLost();
     }
 
     // =========================================================================
@@ -554,10 +547,6 @@ export class CredentialsManager {
         if (fs.existsSync(credentialsPath)) {
             fs.unlinkSync(credentialsPath);
         }
-        const plaintextPath = credentialsPath + '.json';
-        if (fs.existsSync(plaintextPath)) {
-            fs.unlinkSync(plaintextPath);
-        }
         console.log('[CredentialsManager] All credentials cleared');
     }
 
@@ -585,34 +574,13 @@ export class CredentialsManager {
         return path.join(app.getPath('userData'), 'credentials.enc');
     }
 
-    private removeLegacyCredentialFiles(): void {
-        const credentialsPath = this.credentialsFilePath();
-        const plaintextPath = `${credentialsPath}.json`;
-
-        if (fs.existsSync(plaintextPath)) {
-            fs.unlinkSync(plaintextPath);
-            console.warn('[CredentialsManager] Removed legacy credential file (.json)');
-        }
-
-        if (!fs.existsSync(credentialsPath)) return;
-
-        try {
-            const header = fs.readFileSync(credentialsPath).subarray(0, 10);
-            const magic = header.subarray(0, 9).toString('utf8');
-            const version = header[9];
-            if (magic !== 'NATIVELY:' || version !== 0x02) {
-                fs.unlinkSync(credentialsPath);
-                console.warn('[CredentialsManager] Removed legacy credential file (.enc)');
-            }
-        } catch (error) {
-            fs.unlinkSync(credentialsPath);
-            console.warn('[CredentialsManager] Removed unreadable legacy credential file (.enc)');
-        }
-    }
-
     private saveCredentials(): void {
         try {
-            SecureStorage.encryptJSON(this.credentialsFilePath(), this.credentials);
+            fs.writeFileSync(
+                this.credentialsFilePath(),
+                JSON.stringify(this.credentials, null, 2),
+                'utf8'
+            );
         } catch (error) {
             console.error('[CredentialsManager] Failed to save credentials:', error);
             throw error;
@@ -620,16 +588,16 @@ export class CredentialsManager {
     }
 
     private loadCredentials(): void {
-        try {
-            const parsed = SecureStorage.decryptJSON<StoredCredentials>(this.credentialsFilePath());
-            if (parsed && typeof parsed === 'object') {
-                this.credentials = parsed;
-                console.log('[CredentialsManager] Loaded encrypted credentials');
-                return;
-            }
-
+        const filePath = this.credentialsFilePath();
+        if (!fs.existsSync(filePath)) {
             this.credentials = {};
             console.log('[CredentialsManager] No stored credentials found');
+            return;
+        }
+        try {
+            const raw = fs.readFileSync(filePath, 'utf8');
+            this.credentials = JSON.parse(raw);
+            console.log('[CredentialsManager] Loaded credentials');
         } catch (error) {
             console.error('[CredentialsManager] Failed to load credentials:', error);
             this.credentials = {};

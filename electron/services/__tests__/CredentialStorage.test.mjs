@@ -11,31 +11,29 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
 
-test('CredentialsManager does not persist plaintext fallback credentials when encryption is unavailable', () => {
+test('CredentialsManager persists credentials as plaintext JSON', () => {
   const source = read('electron/services/CredentialsManager.ts');
   const saveStart = source.indexOf('    private saveCredentials(): void');
   const saveEnd = source.indexOf('    private loadCredentials(): void', saveStart);
   const saveSource = source.slice(saveStart, saveEnd);
 
   assert.ok(saveStart >= 0, 'saveCredentials should exist');
-  assert.match(saveSource, /SecureStorage\.encryptJSON/);
-  assert.doesNotMatch(source, /safeStorage/);
-  assert.doesNotMatch(saveSource, /\.json'\s*\)/);
-  assert.doesNotMatch(source, /kept in memory only/);
-  assert.match(read('electron/services/SecureStorage.ts'), /NATIVELY:/);
+  assert.match(saveSource, /fs\.writeFileSync/);
+  assert.match(saveSource, /JSON\.stringify/);
+  assert.doesNotMatch(saveSource, /safeStorage/);
+  assert.doesNotMatch(saveSource, /encrypt/);
 });
 
-test('CredentialsManager removes plaintext fallback files instead of loading them', () => {
+test('CredentialsManager loads credentials from plaintext JSON', () => {
   const source = read('electron/services/CredentialsManager.ts');
   const loadStart = source.indexOf('    private loadCredentials(): void');
   const loadSource = source.slice(loadStart);
 
   assert.ok(loadStart >= 0, 'loadCredentials should exist');
-  assert.match(loadSource, /SecureStorage\.decryptJSON<StoredCredentials>/);
-  assert.doesNotMatch(loadSource, /readFileSync\(plaintextPath/);
-  assert.doesNotMatch(loadSource, /JSON\.parse\(plaintextData\)/);
-  assert.doesNotMatch(loadSource, /Loaded credentials from plaintext fallback/);
-  assert.doesNotMatch(loadSource, /safeStorage\.decryptString/);
+  assert.match(loadSource, /fs\.readFileSync/);
+  assert.match(loadSource, /JSON\.parse/);
+  assert.doesNotMatch(loadSource, /safeStorage/);
+  assert.doesNotMatch(loadSource, /decrypt/);
 });
 
 test('SettingsManager does not log full settings JSON', () => {
