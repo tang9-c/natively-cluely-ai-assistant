@@ -85,9 +85,8 @@ const modesPath = path.resolve(distDir, 'electron/services/ModesManager.js');
 const cjsRequire = createRequire(import.meta.url);
 
 // --- Electron stub ----------------------------------------------------------
-// LLMHelper transitively constructs ModelVersionManager which calls
-// `electron.app.getPath('userData')`. We need a tmp dir that exists so the
-// state-persistence loader doesn't ENOENT.
+// ModelVersionManager is now static (no disk access), but other modules may
+// still need electron.app. Keep the stub minimal.
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'llmhelper-gate-test-'));
 const electronStub = {
   app: {
