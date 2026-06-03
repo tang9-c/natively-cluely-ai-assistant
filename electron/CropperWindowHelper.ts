@@ -491,20 +491,6 @@ export class CropperWindowHelper {
             }
         })
 
-        // ROUND 3 FIX (#1): stop the stealth tap when Cropper shows so the
-        // user's selection-area drag/keystrokes (Esc to cancel, etc.) reach
-        // the cropper, not the overlay's hidden chat input. Same rationale
-        // as Settings + Model Selector.
-        this.cropperWindow.on('show', () => {
-            if (process.platform !== 'darwin') return;
-            try {
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
-                StealthKeyboardManager.getInstance().stop();
-            } catch (e) {
-                console.error('[CropperWindowHelper] failed to stop stealth tap on show:', e);
-            }
-        });
 
         this.cropperWindow.on('closed', () => {
             // Protect against race condition: window closed after successful selection

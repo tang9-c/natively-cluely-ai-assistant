@@ -570,25 +570,6 @@ interface ElectronAPI {
   // Global shortcut events (stealth: fired even when window is not focused)
   onGlobalShortcut: (callback: (data: { action: string }) => void) => () => void;
 
-  // CGEventTap-backed stealth keyboard tap (macOS only). Returns false on
-  // non-macOS or when the native module / Accessibility permission is missing.
-  stealthTapAvailable: () => Promise<boolean>;
-  stealthTapOpenSettings: () => Promise<void>;
-  stealthTapStop: () => Promise<void>;
-  stealthTapStart: () => Promise<boolean>;
-  /** Re-probe the current IME state (Pinyin / Hangul / Kanji / …). The
-   *  renderer calls this on window focus so mid-session input-source changes
-   *  don't silently break CJK composition. */
-  stealthTapRefreshIme: () => Promise<boolean>;
-  /** False on macOS when a composition IME (Pinyin/Hangul/Kanji/…) is
-   *  enabled — the tap captures below the IME and breaks composition, so
-   *  the renderer falls back to plain DOM focus on click. */
-  stealthTapShouldAutoEngage: () => Promise<boolean>;
-  onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => () => void;
-  onStealthKeyCaptured: (
-    cb: (ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean }) => void,
-  ) => () => void;
-
   // Donation API
   getDonationStatus: () => Promise<{
     shouldShow: boolean;
@@ -1749,33 +1730,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('global-shortcut', subscription);
     return () => {
       ipcRenderer.removeListener('global-shortcut', subscription);
-    };
-  },
-
-  // Stealth keyboard tap bridge
-  stealthTapAvailable: () => ipcRenderer.invoke('stealth-tap:available'),
-  stealthTapOpenSettings: () => ipcRenderer.invoke('stealth-tap:open-settings'),
-  stealthTapStop: () => ipcRenderer.invoke('stealth-tap:stop'),
-  stealthTapStart: () => ipcRenderer.invoke('stealth-tap:start'),
-  stealthTapRefreshIme: () => ipcRenderer.invoke('stealth-tap:should-auto-engage'),
-  stealthTapShouldAutoEngage: () => ipcRenderer.invoke('stealth-tap:should-auto-engage'),
-  onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => {
-    const sub = (_: any, state: { active: boolean; reason?: string }) => cb(state);
-    ipcRenderer.on('stealth-tap-state', sub);
-    return () => {
-      ipcRenderer.removeListener('stealth-tap-state', sub);
-    };
-  },
-  onStealthKeyCaptured: (
-    cb: (ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean }) => void,
-  ) => {
-    const sub = (
-      _: any,
-      ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean },
-    ) => cb(ev);
-    ipcRenderer.on('stealth-key-captured', sub);
-    return () => {
-      ipcRenderer.removeListener('stealth-key-captured', sub);
     };
   },
 
