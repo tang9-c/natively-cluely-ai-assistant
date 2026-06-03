@@ -476,16 +476,6 @@ export interface ElectronAPI {
   skillsRefresh: () => Promise<SkillSummary[]>;
   skillsOpenFolder: () => Promise<{ success: boolean; path: string; error?: string }>;
 
-  // Phone Mirror
-  phoneMirrorGetInfo: () => Promise<PhoneMirrorInfo>;
-  phoneMirrorEnable: (exposeOnLan: boolean) => Promise<PhoneMirrorInfo | { error: string }>;
-  phoneMirrorDisable: () => Promise<{ success: true }>;
-  phoneMirrorSetLan: (exposeOnLan: boolean) => Promise<PhoneMirrorInfo | { error: string }>;
-  phoneMirrorRotateToken: () => Promise<PhoneMirrorInfo | { error: string }>;
-  onPhoneMirrorStatus: (callback: (info: PhoneMirrorInfo) => void) => () => void;
-  onPhoneMirrorIncomingChat: (
-    callback: (data: { message: string; streamId: string }) => void,
-  ) => () => void;
 }
 
 export interface SkillSummary {
@@ -493,19 +483,6 @@ export interface SkillSummary {
   name: string;
   description: string;
   source: 'builtin' | 'userData';
-}
-
-export interface PhoneMirrorInfo {
-  running: boolean;
-  enabled: boolean;
-  exposeOnLan: boolean;
-  port: number;
-  loopbackUrl: string | null;
-  primaryUrl: string | null;
-  lanUrls: string[];
-  token: string | null;
-  qrDataUrl: string | null;
-  clients: number;
 }
 
 declare global {

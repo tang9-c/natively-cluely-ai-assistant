@@ -14,7 +14,6 @@ import { HelpSettings } from './settings/HelpSettings';
 import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { NativelyApiSettings } from './settings/NativelyApiSettings';
 import { NativelyProSettings } from './settings/NativelyProSettings';
-import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
 import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
 import { NativelyLogoMark } from './NativelyLogoMark';
@@ -1460,13 +1459,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'keybinds' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
                                         <Keyboard size={16} /> 快捷键
-                                    </button>
-
-                                    <button
-                                        onClick={() => setActiveTab('phone-mirror')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'phone-mirror' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
-                                    >
-                                        <Smartphone size={16} /> 手机投屏
                                     </button>
 
                                     <button
@@ -3073,10 +3065,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         )}
                                     </div>
                                 </div>
-                            )}
-
-                            {activeTab === 'phone-mirror' && (
-                                <PhoneMirrorSettings />
                             )}
 
                             {activeTab === 'help' && (
