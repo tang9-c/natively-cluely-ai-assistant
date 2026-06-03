@@ -297,11 +297,8 @@ export class AppState {
   private knowledgeOrchestrator: any = null
   private tray: Tray | null = null
   private updateAvailable: boolean = false
-  private disguiseMode: 'terminal' | 'settings' | 'activity' | 'none' = 'none'
-
   // View management
   private view: "queue" | "solutions" = "queue"
-  private isUndetectable: boolean = false
 
   private problemInfo: {
     problem_statement: string
@@ -335,9 +332,6 @@ export class AppState {
   // first-chunk handler reads the freshly-detected native rate.
   private _sysSttRateApplied: boolean = false;
   private _micSttRateApplied: boolean = false;
-  private _disguiseTimers: NodeJS.Timeout[] = []; // Track forceUpdate timeouts
-  private _dockDebounceTimer: NodeJS.Timeout | null = null; // Debounce dock state changes
-  private _dockReassertTimers: NodeJS.Timeout[] = []; // Re-assert dock-hidden state after show+focus
   private _ollamaBootstrapPromise: Promise<void> | null = null;
   private screenshotCaptureInProgress: boolean = false;
 
@@ -363,11 +357,9 @@ export class AppState {
   constructor() {
     // 1. Load boot-critical settings first (used by WindowHelpers)
     const settingsManager = SettingsManager.getInstance();
-    this.isUndetectable = settingsManager.get('isUndetectable') ?? false;
-    this.disguiseMode = settingsManager.get('disguiseMode') ?? 'none';
     this._verboseLogging = settingsManager.get('verboseLogging') ?? false;
     setVerboseLoggingFlag(this._verboseLogging);
-    console.log(`[AppState] Initialized with isUndetectable=${this.isUndetectable}, disguiseMode=${this.disguiseMode}, verboseLogging=${this._verboseLogging}`);
+    console.log(`[AppState] Initialized with verboseLogging=${this._verboseLogging}`);
 
     // 2. Initialize Helpers with loaded state
     this.windowHelper = new WindowHelper(this)
@@ -379,10 +371,9 @@ export class AppState {
     this.screenshotHelper = new ScreenshotHelper(this.view)
     this.processingHelper = new ProcessingHelper(this)
 
-    this.windowHelper.setContentProtection(this.isUndetectable);
-    this.settingsWindowHelper.setContentProtection(this.isUndetectable);
-    this.modelSelectorWindowHelper.setContentProtection(this.isUndetectable);
-    this.cropperWindowHelper.setContentProtection(this.isUndetectable);
+    if (process.platform === 'win32' || process.platform === 'darwin') {
+      this.cropperWindowHelper.preload();
+    }
 
     if (process.platform === 'win32' || process.platform === 'darwin') {
       this.cropperWindowHelper.preload();
@@ -453,11 +444,6 @@ export class AppState {
           const preview = await this.getImagePreview(screenshotPath);
           // Ensure the window is visible so the user can see the response without stealing focus
           this.showMainWindow(true);
-          // win.focus() can cause macOS to re-activate the app. Re-hide the dock
-          // if we are in undetectable mode.
-          if (process.platform === 'darwin' && this.isUndetectable) {
-            app.dock.hide();
-          }
           const mainWindow = this.getMainWindow();
           if (mainWindow) {
             mainWindow.webContents.send("capture-and-process", {
@@ -3562,118 +3548,6 @@ export class AppState {
     return this.hasDebugged
   }
 
-  public setUndetectable(state: boolean): void {
-    // Guard: skip if state hasn't actually changed to prevent
-    // duplicate dock hide/show cycles from renderer feedback loops
-    if (this.isUndetectable === state) return;
-
-    console.log(`[Stealth] setUndetectable(${state}) called`);
-
-    this.isUndetectable = state
-    this.windowHelper.setContentProtection(state)
-    this.settingsWindowHelper.setContentProtection(state)
-    this.modelSelectorWindowHelper.setContentProtection(state)
-    this.cropperWindowHelper.setContentProtection(state)
-
-    if (process.platform === 'win32') {
-      this.windowHelper.syncOverlayInteractionPolicy();
-      this.settingsWindowHelper.syncActivationPolicy();
-      this.modelSelectorWindowHelper.syncActivationPolicy();
-    }
-
-    // Persist state via SettingsManager
-    SettingsManager.getInstance().set('isUndetectable', state);
-
-    // Cancel all pending disguise timers to prevent their app.setName() calls
-    // from re-registering the dock icon after we hide it
-    if (state) {
-      for (const timer of this._disguiseTimers) {
-        clearTimeout(timer);
-      }
-      this._disguiseTimers = [];
-    }
-
-    // Broadcast state change to all relevant windows
-    this._broadcastToAllWindows('undetectable-changed', state);
-
-    // --- STEALTH MODE LOGIC ---
-    // The dock hide/show is debounced: rapid toggles update isUndetectable immediately
-    // (so content protection, IPC broadcasts and the guard above are always current),
-    // but the actual macOS dock/tray/focus operation only fires once the user stops
-    // toggling. This eliminates the race where dock.show() + NSApp.activate() lingers
-    // after a subsequent dock.hide() call.
-    if (process.platform === 'darwin') {
-      if (this._dockDebounceTimer) {
-        clearTimeout(this._dockDebounceTimer);
-        this._dockDebounceTimer = null;
-      }
-
-      this._dockDebounceTimer = setTimeout(() => {
-        this._dockDebounceTimer = null;
-
-        // Read the settled state — may differ from the `state` captured above
-        // if the user toggled again before the timer fired.
-        const settled = this.isUndetectable;
-
-        const activeWindow = this.windowHelper.getMainWindow();
-        const settingsWindow = this.settingsWindowHelper.getSettingsWindow();
-        let targetFocusWindow = activeWindow;
-        if (settingsWindow && !settingsWindow.isDestroyed() && settingsWindow.isVisible()) {
-          targetFocusWindow = settingsWindow;
-        }
-
-        const modelSelectorWindow = this.modelSelectorWindowHelper.getWindow();
-        const isModelSelectorVisible = modelSelectorWindow && !modelSelectorWindow.isDestroyed() && modelSelectorWindow.isVisible();
-
-        if (targetFocusWindow && targetFocusWindow === settingsWindow) {
-          this.settingsWindowHelper.setIgnoreBlur(true);
-        }
-        if (isModelSelectorVisible) {
-          this.modelSelectorWindowHelper.setIgnoreBlur(true);
-        }
-
-        if (settled) {
-          // Capture whether Natively is currently the frontmost app BEFORE
-          // dock.hide() — that call triggers an implicit macOS app-deactivation
-          // which shifts keyboard focus to the next frontmost app (Chrome, etc.).
-          const nativelyWasFocused =
-            targetFocusWindow != null &&
-            !targetFocusWindow.isDestroyed() &&
-            targetFocusWindow.isFocused();
-
-          console.log('[Stealth] Calling app.dock.hide()');
-          app.dock.hide();
-          this.hideTray();
-
-          // If Natively was the focused window when the user toggled stealth,
-          // restore focus to our window after dock.hide() so macOS does not
-          // hand control to Chrome / whatever is behind us.
-          // We use win.focus() (not app.focus()) to avoid the heavy-handed
-          // [NSApp activateIgnoringOtherApps:YES] side-effect.
-          if (nativelyWasFocused && targetFocusWindow && !targetFocusWindow.isDestroyed()) {
-            targetFocusWindow.focus();
-          }
-        } else {
-          console.log('[Stealth] Calling app.dock.show()');
-          app.dock.show();
-          this.showTray();
-          // Do NOT call focus() — let the user's current app retain focus
-        }
-
-        if (targetFocusWindow && targetFocusWindow === settingsWindow) {
-          setTimeout(() => { this.settingsWindowHelper.setIgnoreBlur(false); }, 500);
-        }
-        if (isModelSelectorVisible) {
-          setTimeout(() => { this.modelSelectorWindowHelper.setIgnoreBlur(false); }, 500);
-        }
-      }, 150);
-    }
-  }
-
-  public getUndetectable(): boolean {
-    return this.isUndetectable
-  }
-
   // --- Mouse Passthrough (Adapted from public PR #113 — verify premium interaction) ---
   private overlayMousePassthrough: boolean = false;
 
@@ -3717,165 +3591,6 @@ export class AppState {
     this.broadcast('verbose-logging-changed', enabled);
   }
 
-  public setDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
-    this.disguiseMode = mode;
-    SettingsManager.getInstance().set('disguiseMode', mode);
-
-    // Apply the disguise regardless of undetectable state
-    // (disguise affects Activity Monitor name via process.title,
-    //  dock icon only updates when NOT in stealth)
-    this._applyDisguise(mode);
-  }
-
-  public applyInitialDisguise(): void {
-    this._applyDisguise(this.disguiseMode);
-  }
-
-  private _applyDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
-    let appName = "Natively";
-    let iconPath = "";
-
-    const isWin = process.platform === 'win32';
-    const isMac = process.platform === 'darwin';
-
-    switch (mode) {
-      case 'terminal':
-        appName = isWin ? "Command Prompt " : "Terminal ";
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/terminal.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/terminal.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/terminal.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/terminal.png");
-        }
-        break;
-      case 'settings':
-        appName = isWin ? "Settings " : "System Settings ";
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/settings.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/settings.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/settings.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/settings.png");
-        }
-        break;
-      case 'activity':
-        appName = isWin ? "Task Manager " : "Activity Monitor ";
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/activity.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/activity.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/activity.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/activity.png");
-        }
-        break;
-      case 'none':
-        appName = "Natively";
-        if (isMac) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "natively.icns")
-            : path.join(app.getAppPath(), "assets/natively.icns");
-        } else if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/icons/win/icon.ico")
-            : path.join(app.getAppPath(), "assets/icons/win/icon.ico");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "icon.png")
-            : path.join(app.getAppPath(), "assets/icon.png");
-        }
-        break;
-    }
-
-    console.log(`[AppState] Applying disguise: ${mode} (${appName}) on ${process.platform}`);
-
-    // 1. Update process title (affects Activity Monitor / Task Manager)
-    process.title = appName;
-
-    // 2. Update app name (affects macOS Menu / Dock)
-    // Skip when undetectable — app.setName() causes macOS to re-register
-    // the app and re-show the dock icon even after dock.hide()
-    if (!this.isUndetectable) {
-      app.setName(appName);
-    }
-
-    if (isMac) {
-      process.env.CFBundleName = appName.trim();
-    }
-
-    // 3. Update App User Model ID (Windows Taskbar grouping)
-    if (isWin) {
-      // Use unique AUMID per disguise to avoid grouping with the real app
-      app.setAppUserModelId(`com.natively.assistant.${mode}`);
-    }
-
-    // 4. Update Icons
-    if (fs.existsSync(iconPath)) {
-      const image = nativeImage.createFromPath(iconPath);
-
-      if (isMac) {
-        // Skip dock icon update when dock is hidden to avoid potential flicker
-        if (!this.isUndetectable) {
-          app.dock.setIcon(image);
-        }
-      } else {
-        // Windows/Linux: Update all window icons
-        this.windowHelper.getLauncherWindow()?.setIcon(image);
-        this.windowHelper.getOverlayWindow()?.setIcon(image);
-        this.settingsWindowHelper.getSettingsWindow()?.setIcon(image);
-      }
-    } else {
-      console.warn(`[AppState] Disguise icon not found: ${iconPath}`);
-    }
-
-    // 5. Update Window Titles
-    const launcher = this.windowHelper.getLauncherWindow();
-    if (launcher && !launcher.isDestroyed()) {
-      launcher.setTitle(appName.trim());
-      launcher.webContents.send('disguise-changed', mode);
-    }
-
-    const overlay = this.windowHelper.getOverlayWindow();
-    if (overlay && !overlay.isDestroyed()) {
-      overlay.setTitle(appName.trim());
-      overlay.webContents.send('disguise-changed', mode);
-    }
-
-    const settingsWin = this.settingsWindowHelper.getSettingsWindow();
-    if (settingsWin && !settingsWin.isDestroyed()) {
-      settingsWin.setTitle(appName.trim());
-      settingsWin.webContents.send('disguise-changed', mode);
-    }
-
-    // Cancel any stale forceUpdate timeouts from previous disguise changes
-    for (const timer of this._disguiseTimers) {
-      clearTimeout(timer);
-    }
-    this._disguiseTimers = [];
-
-    // Periodically re-assert process.title only — it can drift on some systems.
-    // NOTE: We intentionally do NOT call app.setName() here — it was already called
-    // synchronously above, and repeated calls on macOS cause the system to briefly
-    // show a second dock tile while re-registering the app identity.
-    const scheduleUpdate = (ms: number) => {
-      const ts = setTimeout(() => {
-        process.title = appName;
-        this._disguiseTimers = this._disguiseTimers.filter(t => t !== ts);
-      }, ms);
-      this._disguiseTimers.push(ts);
-    };
-
-    scheduleUpdate(200);
-    scheduleUpdate(1000);
-    scheduleUpdate(5000);
-  }
-
   // Helper: broadcast an IPC event to all windows
   private _broadcastToAllWindows(channel: string, ...args: any[]): void {
     const windows = [
@@ -3892,10 +3607,6 @@ export class AppState {
         win.webContents.send(channel, ...args);
       }
     }
-  }
-
-  public getDisguise(): string {
-    return this.disguiseMode;
   }
 }
 
@@ -3931,18 +3642,6 @@ async function initializeApp() {
 
   // 2. Wait for app to be ready
   await app.whenReady()
-
-  // 2a. PRE-EMPTIVE dock hide: must happen before ANY operation that causes macOS to
-  // register a dock entry (app.setName, BrowserWindow creation, etc.).
-  // We read isUndetectable directly from settings here — AppState singleton isn't
-  // constructed yet, so we cannot call appState.getUndetectable().
-  if (process.platform === 'darwin') {
-    // SettingsManager is already statically imported — no require() needed.
-    const isUndetectableOnStartup = SettingsManager.getInstance().get('isUndetectable') ?? false;
-    if (isUndetectableOnStartup) {
-      app.dock.hide();
-    }
-  }
 
   // 3. Initialize Managers
   // Phase 6 — bind TelemetryService to the Electron userData path. The
@@ -3985,8 +3684,8 @@ async function initializeApp() {
   // Initialize IPC handlers before window creation
   initializeIpcHandlers(appState)
 
-  // Apply the full disguise payload (names, dock icon, AUMID) early
-  appState.applyInitialDisguise();
+  // 5. Initialize IPC handlers before window creation
+  initializeIpcHandlers(appState)
 
   // Start the Ollama lifecycle manager
   OllamaManager.getInstance().init().catch(console.error);
@@ -4026,11 +3725,8 @@ async function initializeApp() {
 
   appState.createWindow()
 
-  // Apply initial stealth state based on isUndetectable setting.
-  // NOTE: app.dock.hide() was already called pre-emptively before createWindow()
-  // when isUndetectable=true. Always create the tray as a recovery path — even in
-  // stealth mode the user needs a way to restore a hidden window (no dock, no tray
-  // would otherwise leave the window unrecoverable after a hide).
+  // Always create the tray as a recovery path — the user needs a way to restore a
+  // hidden window (no tray would otherwise leave the window unrecoverable after a hide).
   appState.showTray();
   // Register global shortcuts using KeybindManager
   KeybindManager.getInstance().registerGlobalShortcuts()
@@ -4065,8 +3761,7 @@ async function initializeApp() {
   //   1. The Natively launcher window is visible and focused when the TCC dialog
   //      appears — macOS anchors the dialog to the frontmost app window on Ventura+.
   //      Without a visible window the dialog can appear behind other apps (Sequoia).
-  //   2. In stealth/undetectable mode the dock icon is hidden, but the window is
-  //      still visible — the dialog still has a surface to attach to.
+  //   2. The window is still visible — the dialog still has a surface to attach to.
   //
   // The 800ms delay lets the launcher's ready-to-show animation complete so the
   // window is fully composited before the system sheet appears above it.
@@ -4161,9 +3856,8 @@ async function initializeApp() {
   app.on("activate", () => {
     console.log("App activated")
     if (process.platform === 'darwin') {
-      // Do NOT call dock.show() while a meeting is running — the dock icon
-      // appearing mid-meeting is a critical stealth failure.
-      if (!appState.getUndetectable() && !appState.getIsMeetingActive()) {
+      // Do NOT call dock.show() while a meeting is running.
+      if (!appState.getIsMeetingActive()) {
         app.dock.show();
       }
     }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Command, Monitor, Mic, Settings, Zap, Key, User, Play, Image, ArrowUp, FileText, Sparkles, Search, ChevronUp, Copy,
-    FileJson, MessageSquare, Briefcase, Eye, EyeOff, Ghost, ChevronDown, ChevronRight, HelpCircle, Upload, CheckCircle2,
+    FileJson, MessageSquare, Briefcase, Eye, EyeOff, ChevronDown, ChevronRight, HelpCircle, Upload, CheckCircle2,
     RefreshCw, Trash2, Check, ExternalLink, Volume2, Globe, Brain, Cpu, Calendar, Star, CreditCard, X, Pencil, Lightbulb,
     SlidersHorizontal, PointerOff, ArrowRight, LayoutGrid, DollarSign, Building2
 } from 'lucide-react';
@@ -1729,17 +1729,8 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="10. 隐身与窗口控制" icon={<Ghost className="w-4 h-4" />}>
+                <AccordionSection title="10. 窗口控制" icon={<Monitor className="w-4 h-4" />}>
                     <div className="space-y-4">
-                        <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl mb-4">
-                            <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
-                                <Ghost size={14} /> Process Disguise & Undetectability
-                            </h4>
-                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Natively is heavily geared towards power users seeking minimalistic operation. The process completely disguises itself and remains undetectable/invisible to standard screen-recording applications and desktop sharing utilities.
-                            </p>
-                        </div>
-
                         <div className="grid gap-3">
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
