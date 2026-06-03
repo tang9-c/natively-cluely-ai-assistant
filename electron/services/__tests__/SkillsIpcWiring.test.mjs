@@ -107,7 +107,7 @@ test('every preload ipcRenderer.invoke channel has a matching ipcMain.handle reg
   // A handler counts if it's registered via ipcMain.handle OR via any local
   // wrapper that internally calls ipcMain.handle. We scan the full electron/
   // tree (not just ipcHandlers.ts) because subsystems like KeybindManager
-  // and the stealth-tap shim register their own channels.
+  // register their own channels.
   const registered = new Set();
   const handleRe = /(?:ipcMain\.handle|safeHandle|registerStealthHandler|registerHandler)\(\s*['"]([a-z0-9:_\-./]+)['"]/gi;
 
@@ -133,12 +133,6 @@ test('every preload ipcRenderer.invoke channel has a matching ipcMain.handle reg
     // (electron/preload.ts:937) but no handler registers the channel. Renderer
     // invokes silently reject — pre-existing tech debt, separate cleanup.
     'toggle-advanced-settings',
-    // Dead stealth-tap IPCs: M5 cleanup (PR #250 follow-up) was meant to drop
-    // these from preload + electron.d.ts; the existing StealthBlockInputFocusGuards
-    // suite already fails on the same backlog. Pre-existing, unrelated to skills.
-    'stealth-tap:permission-granted',
-    'stealth-tap:request-permission',
-    'stealth-tap:is-active',
   ]);
 
   const missing = [...channels].filter(ch => !registered.has(ch) && !KNOWN_STALE.has(ch)).sort();
