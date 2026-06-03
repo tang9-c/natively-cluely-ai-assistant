@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import fs from "fs"
 import { createHash } from "crypto"
 import sharp from "sharp"
-import { ModelVersionManager, ModelFamily, TextModelFamily } from './services/ModelVersionManager'
+import { ModelVersionManager, ModelFamily, TextModelFamily, VISION_FALLBACK_CHAIN, TEXT_FALLBACK_CHAIN, VISION_PROVIDER_ORDER } from './services/ModelVersionManager'
 import {
   HARD_SYSTEM_PROMPT, GROQ_SYSTEM_PROMPT, OPENAI_SYSTEM_PROMPT, CLAUDE_SYSTEM_PROMPT,
   UNIVERSAL_SYSTEM_PROMPT, UNIVERSAL_ANSWER_PROMPT, UNIVERSAL_WHAT_TO_ANSWER_PROMPT,
@@ -91,7 +91,7 @@ export class LLMHelper {
   // Local-only mode: when enabled, cloud providers are blocked
   private isLocalOnlyMode: boolean = false;
 
-  // Self-improving model version manager for vision analysis
+  // Static fallback chain for vision/text model selection (legacy instance kept for getSummary)
   private modelVersionManager: ModelVersionManager;
 
   // Process-local cache of Gemini explicit context caches (caches.create).
@@ -155,7 +155,7 @@ export class LLMHelper {
     // Initialize policy-aware provider router
     this.providerRouter = new ProviderRouter();
 
-    // Initialize model version manager
+    // Initialize static fallback chain manager (no-op stub)
     this.modelVersionManager = new ModelVersionManager();
 
     // Initialize Groq client if API key provided
@@ -271,22 +271,12 @@ export class LLMHelper {
   }
 
   /**
-   * Initialize the self-improving model version manager.
-   * Should be called after all API keys are configured.
-   * Triggers initial model discovery and starts background scheduler.
+   * Legacy hook — kept for backward compatibility with callers.
+   * ModelVersionManager is now static; no async initialization needed.
    */
   public async initModelVersionManager(): Promise<void> {
-    this.modelVersionManager.setApiKeys({
-      openai: this.openaiApiKey,
-      gemini: this.apiKey,
-      claude: this.claudeApiKey,
-      groq: this.groqApiKey,
-    });
-    await this.modelVersionManager.initialize();
     console.log(this.modelVersionManager.getSummary());
     // Register this instance for VisionProviderRegistry (vision-first screen pipeline).
-    // Registry calls a global accessor instead of constructing its own LLMHelper, so
-    // there is exactly one live helper per Electron process with the user's keys/state.
     try {
       (global as any).__nativelyGetLLMHelper = () => this;
     } catch {
@@ -373,8 +363,6 @@ export class LLMHelper {
     if (this.rateLimiters) {
       Object.values(this.rateLimiters).forEach(rl => rl.destroy());
     }
-    // Stop model version manager background scheduler
-    this.modelVersionManager.stopScheduler();
     console.log('[LLMHelper] Keys scrubbed from memory');
   }
 
@@ -1653,12 +1641,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       type ProviderAttempt = { name: string; execute: () => Promise<string> };
       const providers: ProviderAttempt[] = [];
 
-      // Get auto-discovered text model IDs from ModelVersionManager
-      const textOpenAI = this.modelVersionManager.getTextTieredModels(TextModelFamily.OPENAI).tier1;
-      const textGeminiFlash = this.modelVersionManager.getTextTieredModels(TextModelFamily.GEMINI_FLASH).tier1;
-      const textGeminiPro = this.modelVersionManager.getTextTieredModels(TextModelFamily.GEMINI_PRO).tier1;
-      const textClaude = this.modelVersionManager.getTextTieredModels(TextModelFamily.CLAUDE).tier1;
-      const textGroq = this.modelVersionManager.getTextTieredModels(TextModelFamily.GROQ).tier1;
+      // Static text fallback chain
+      const textOpenAI = TEXT_FALLBACK_CHAIN[TextModelFamily.OPENAI][0];
+      const textGeminiFlash = TEXT_FALLBACK_CHAIN[TextModelFamily.GEMINI_FLASH][0];
+      const textGeminiPro = TEXT_FALLBACK_CHAIN[TextModelFamily.GEMINI_PRO][0];
+      const textClaude = TEXT_FALLBACK_CHAIN[TextModelFamily.CLAUDE][0];
+      const textGroq = TEXT_FALLBACK_CHAIN[TextModelFamily.GROQ][0];
 
       const routedProviders = routeWithScopeFallback({
         capability: 'chat',
@@ -2570,23 +2558,21 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     };
 
     // ──────────────────────────────────────────────────────────────────
-    // Build 3-tier retry rotation from ModelVersionManager
+    // Build 3-tier retry rotation from static VISION_FALLBACK_CHAIN
     // ──────────────────────────────────────────────────────────────────
-    const allTiers = this.modelVersionManager.getAllVisionTiers();
-
-    const buildTierProviders = (tierKey: 'tier1' | 'tier2' | 'tier3'): ProviderAttempt[] => {
+    const buildTierProviders = (tierIndex: 0 | 1 | 2): ProviderAttempt[] => {
       const result: ProviderAttempt[] = [];
-      for (const entry of allTiers) {
-        const modelId = entry[tierKey];
-        const attempt = buildProviderForFamily(entry.family, modelId);
+      for (const family of VISION_PROVIDER_ORDER) {
+        const modelId = VISION_FALLBACK_CHAIN[family][tierIndex];
+        const attempt = buildProviderForFamily(family, modelId);
         if (attempt) result.push(attempt);
       }
       return result;
     };
 
-    const tier1Providers = buildTierProviders('tier1');
-    const tier2Providers = buildTierProviders('tier2');
-    const tier3Providers = buildTierProviders('tier3'); // Same as tier2 — pure retry
+    const tier1Providers = buildTierProviders(0);
+    const tier2Providers = buildTierProviders(1);
+    const tier3Providers = buildTierProviders(2); // Same as tier2 — pure retry
 
 
     // ──────────────────────────────────────────────────────────────────
@@ -2690,11 +2676,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         } catch (err: any) {
           console.warn(`[LLMHelper] ⚠️ [${tier.label}] ${provider.name} failed: ${err.message}`);
 
-          // Event-driven discovery: trigger on 404 / model-not-found errors
-          const errMsg = (err.message || '').toLowerCase();
-          if (errMsg.includes('404') || errMsg.includes('not found') || errMsg.includes('deprecated')) {
-            this.modelVersionManager.onModelError(provider.name).catch(() => { });
-          }
+          // Event-driven discovery removed — ModelVersionManager is now static.
+          // If a model is deprecated, update VISION_FALLBACK_CHAIN directly.
         }
       }
     }
@@ -2801,12 +2784,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(OPENAI_SYSTEM_PROMPT);
     const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(CLAUDE_SYSTEM_PROMPT);
 
-    // Get auto-discovered text model IDs from ModelVersionManager
-    const textOpenAI = this.modelVersionManager.getTextTieredModels(TextModelFamily.OPENAI).tier1;
-    const textGeminiFlash = this.modelVersionManager.getTextTieredModels(TextModelFamily.GEMINI_FLASH).tier1;
-    const textGeminiPro = this.modelVersionManager.getTextTieredModels(TextModelFamily.GEMINI_PRO).tier1;
-    const textClaude = this.modelVersionManager.getTextTieredModels(TextModelFamily.CLAUDE).tier1;
-    const textGroq = this.modelVersionManager.getTextTieredModels(TextModelFamily.GROQ).tier1;
+    // Static text fallback chain
+    const textOpenAI = TEXT_FALLBACK_CHAIN[TextModelFamily.OPENAI][0];
+    const textGeminiFlash = TEXT_FALLBACK_CHAIN[TextModelFamily.GEMINI_FLASH][0];
+    const textGeminiPro = TEXT_FALLBACK_CHAIN[TextModelFamily.GEMINI_PRO][0];
+    const textClaude = TEXT_FALLBACK_CHAIN[TextModelFamily.CLAUDE][0];
+    const textGroq = TEXT_FALLBACK_CHAIN[TextModelFamily.GROQ][0];
 
     if (isMultimodal) {
       // MULTIMODAL PROVIDER ORDER: [Natively] -> Codex CLI -> OpenAI -> Gemini Flash -> Claude -> Gemini Pro -> Groq Scout 4
