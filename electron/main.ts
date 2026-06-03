@@ -277,7 +277,6 @@ try {
 
 import { CredentialsManager } from "./services/CredentialsManager"
 import { SettingsManager } from "./services/SettingsManager"
-import { PhoneMirrorService } from "./services/PhoneMirrorService"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
@@ -4133,14 +4132,6 @@ async function initializeApp() {
   // Pre-create settings window in background for faster first open
   appState.settingsWindowHelper.preloadWindow()
 
-  // Restore Phone Mirror service if it was enabled in a previous session.
-  // Failure here is non-fatal — the user can re-enable from Settings.
-  if (SettingsManager.getInstance().get('phoneMirrorEnabled')) {
-    PhoneMirrorService.getInstance()
-      .start({ exposeOnLan: !!SettingsManager.getInstance().get('phoneMirrorExposeOnLan'), persist: false })
-      .catch((err) => console.error('[Init] PhoneMirror auto-start failed:', err));
-  }
-
   // One-time macOS screen recording permission prompt.
   //
   // We must fire this AFTER createWindow() so that:
@@ -4281,7 +4272,7 @@ async function initializeApp() {
     // remain by the time we return.
     //
     // ORDERING NOTE: this MUST happen before any subsequent napi-touching
-    // cleanup (cropper.dispose, ollama.stop, phoneMirror.dispose). Those
+    // cleanup (cropper.dispose, ollama.stop). Those
     // can spawn their own native threads or release napi resources, which
     // would race with our worker if it's still alive.
     if (process.platform === 'darwin') {
@@ -4302,11 +4293,6 @@ async function initializeApp() {
 
     // Kill Ollama if we started it
     OllamaManager.getInstance().stop();
-
-    // Tear down the Phone Mirror service so the OS port is freed cleanly.
-    PhoneMirrorService.getInstance().dispose().catch((err) =>
-      console.error('[Main] PhoneMirror dispose failed:', err)
-    );
 
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
