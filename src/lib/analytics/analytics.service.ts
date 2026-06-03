@@ -18,7 +18,6 @@ export type AnalyticsEventName =
     | 'assistant_stopped'
     | 'mode_selected'
     | 'copy_answer_clicked'
-    | 'calendar_connected'
     | 'pdf_exported'
     // Meeting Lifecycle
     | 'meeting_started'
@@ -197,11 +196,6 @@ class AnalyticsService {
     public trackConversationStarted(): void {
         if (!this.initialized) return;
         this.trackEvent('conversation_started');
-    }
-
-    public trackCalendarConnected(): void {
-        if (!this.initialized) return;
-        this.trackEvent('calendar_connected');
     }
 
     public trackMeetingStarted(): void {
