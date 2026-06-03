@@ -18,8 +18,6 @@ export interface AppSettings {
     codexCliTimeoutMs?: number;
     codexCliSandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
     knowledgeMode?: boolean;
-    phoneMirrorEnabled?: boolean;
-    phoneMirrorExposeOnLan?: boolean;
     localWhisperModel?: string;
     // Per-channel model overrides for local Whisper. When
     // localWhisperPerChannelEnabled is true, the two LocalWhisperSTT instances

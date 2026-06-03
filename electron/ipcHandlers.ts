@@ -9,7 +9,6 @@ import { AudioDevices } from './audio/AudioDevices';
 import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manager
 import { AppState } from './main';
 import { CodexCliService } from './services/CodexCliService';
-import { PhoneMirrorService } from './services/PhoneMirrorService';
 import { SettingsManager } from './services/SettingsManager';
 import { SkillsManager } from './services/SkillsManager';
 
@@ -541,11 +540,6 @@ export function initializeIpcHandlers(appState: AppState): void {
               { text: message, speaker: 'user', timestamp: Date.now(), final: true },
               true,
             );
-            try {
-              PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message);
-            } catch (_) {
-              /* noop */
-            }
             // Guard against a newer chat stream having taken over while we were computing
             // the canned reply — matches the protection the LLM path uses around its token
             // loop. Prevents cross-stream UI bleed.
@@ -557,16 +551,6 @@ export function initializeIpcHandlers(appState: AppState): void {
             }
             event.sender.send('gemini-stream-token', identityHit);
             event.sender.send('gemini-stream-done');
-            try {
-              PhoneMirrorService.getInstance().publishToken(String(myStreamId), identityHit);
-            } catch (_) {
-              /* noop */
-            }
-            try {
-              PhoneMirrorService.getInstance().publishDone(String(myStreamId), identityHit);
-            } catch (_) {
-              /* noop */
-            }
             intelligenceManager.addAssistantMessage(identityHit);
             intelligenceManager.logUsage('chat', message, identityHit);
             return null;
@@ -596,13 +580,6 @@ export function initializeIpcHandlers(appState: AppState): void {
           },
           true,
         );
-
-        // Mirror to phone (no-op if PhoneMirrorService isn't running).
-        try {
-          PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message);
-        } catch (_) {
-          /* noop */
-        }
 
         let fullResponse = '';
 
@@ -640,22 +617,12 @@ export function initializeIpcHandlers(appState: AppState): void {
               return null;
             }
             event.sender.send('gemini-stream-token', token);
-            try {
-              PhoneMirrorService.getInstance().publishToken(String(myStreamId), token);
-            } catch (_) {
-              /* noop */
-            }
             fullResponse += token;
           }
 
           // Final check: only send done if we are still the active stream
           if (_chatStreamId === myStreamId) {
             event.sender.send('gemini-stream-done');
-            try {
-              PhoneMirrorService.getInstance().publishDone(String(myStreamId), fullResponse);
-            } catch (_) {
-              /* noop */
-            }
 
             // Update IntelligenceManager with ASSISTANT message after completion
             if (fullResponse.trim().length > 0) {
@@ -671,14 +638,6 @@ export function initializeIpcHandlers(appState: AppState): void {
               'gemini-stream-error',
               streamError.message || 'Unknown streaming error',
             );
-            try {
-              PhoneMirrorService.getInstance().publishError(
-                String(myStreamId),
-                streamError?.message || 'Unknown streaming error',
-              );
-            } catch (_) {
-              /* noop */
-            }
           }
         }
 
@@ -3052,15 +3011,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const insight = await intelligenceManager.runAssistMode();
-      if (insight) {
-        try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
-            crypto.randomUUID(),
-            insight,
-            'Assist',
-          );
-        } catch (_) {}
-      }
       return { insight };
     } catch (error: any) {
       throw error;
@@ -3202,15 +3152,6 @@ export function initializeIpcHandlers(appState: AppState): void {
                 : undefined,
           },
         );
-        if (answer) {
-          try {
-            PhoneMirrorService.getInstance().publishAssistantMessage(
-              crypto.randomUUID(),
-              answer,
-              'What to Answer',
-            );
-          } catch (_) {}
-        }
         return {
           answer,
           question: question || 'inferred from context',
@@ -3246,14 +3187,6 @@ export function initializeIpcHandlers(appState: AppState): void {
             'Could not generate a clarifying question. Try again after some audio context is available.',
           mode: 'clarify',
         });
-      } else {
-        try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
-            crypto.randomUUID(),
-            clarification,
-            'Clarify',
-          );
-        } catch (_) {}
       }
       return { clarification };
     } catch (error: any) {
@@ -3335,15 +3268,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         optimizedPaths.length > 0 ? optimizedPaths : undefined,
         problemStatement,
       );
-      if (hint) {
-        try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
-            crypto.randomUUID(),
-            hint,
-            'Code Hint',
-          );
-        } catch (_) {}
-      }
       return { hint };
     } catch (error: any) {
       throw error;
@@ -3391,15 +3315,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         optimizedPaths.length > 0 ? optimizedPaths : undefined,
         problemStatement,
       );
-      if (script) {
-        try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
-            crypto.randomUUID(),
-            script,
-            'Brainstorm',
-          );
-        } catch (_) {}
-      }
       return { script };
     } catch (error: any) {
       throw error;
@@ -3432,15 +3347,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const refined = await intelligenceManager.runFollowUp(intent, userRequest);
-      if (refined) {
-        try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
-            crypto.randomUUID(),
-            refined,
-            'Follow Up',
-          );
-        } catch (_) {}
-      }
       return { refined, intent };
     } catch (error: any) {
       throw error;
@@ -3452,15 +3358,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const summary = await intelligenceManager.runRecap();
-      if (summary) {
-        try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
-            crypto.randomUUID(),
-            summary,
-            'Recap',
-          );
-        } catch (_) {}
-      }
       return { summary };
     } catch (error: any) {
       throw error;
@@ -3472,15 +3369,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const questions = await intelligenceManager.runFollowUpQuestions();
-      if (questions) {
-        try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
-            crypto.randomUUID(),
-            questions,
-            'Follow-Up Questions',
-          );
-        } catch (_) {}
-      }
       return { questions };
     } catch (error: any) {
       throw error;
@@ -3492,16 +3380,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const answer = await intelligenceManager.runManualAnswer(question);
-      if (answer) {
-        try {
-          PhoneMirrorService.getInstance().publishUserMessage(crypto.randomUUID(), question);
-          PhoneMirrorService.getInstance().publishAssistantMessage(
-            crypto.randomUUID(),
-            answer,
-            'Answer',
-          );
-        } catch (_) {}
-      }
       return { answer, question };
     } catch (error: any) {
       throw error;
@@ -4831,23 +4709,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  // -----------------------------------------------------------------------
-  // Phone Mirror — stream live AI responses to a paired phone over WS.
-  // -----------------------------------------------------------------------
-
-  // Push status updates to the renderer whenever the service starts/stops
-  // or a phone connects/disconnects. Idempotent — multiple windows can listen.
-  PhoneMirrorService.getInstance().onStatusChange((info) => {
-    const win = appState.getMainWindow();
-    win?.webContents.send('phone-mirror:status', info);
-    try {
-      const settingsWin = (appState as any).settingsWindowHelper?.getWindow?.();
-      settingsWin?.webContents?.send('phone-mirror:status', info);
-    } catch (_) {
-      /* settings window may not exist yet */
-    }
-  });
-
   safeHandle('skills:list', () => {
     try {
       return SkillsManager.getInstance().listSkills();
@@ -4863,169 +4724,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (e: any) {
       console.warn('[IPC] skills:open-folder error:', e?.message || e);
       return { success: false, path: '', error: e?.message || 'failed to open skills folder' };
-    }
-  });
-
-  safeHandle('phone-mirror:get-info', async () => {
-    return PhoneMirrorService.getInstance().snapshot();
-  });
-
-  safeHandle('phone-mirror:enable', async (_, exposeOnLan?: boolean) => {
-    try {
-      return await PhoneMirrorService.getInstance().start({
-        exposeOnLan: !!exposeOnLan,
-        persist: true,
-      });
-    } catch (e: any) {
-      console.error('[IPC] phone-mirror:enable error:', e);
-      return { error: e?.message || 'failed to start phone mirror' };
-    }
-  });
-
-  safeHandle('phone-mirror:disable', async () => {
-    await PhoneMirrorService.getInstance().stop({ persist: true });
-    return { success: true };
-  });
-
-  safeHandle('phone-mirror:set-lan', async (_, exposeOnLan: boolean) => {
-    try {
-      return await PhoneMirrorService.getInstance().setExposeOnLan(!!exposeOnLan);
-    } catch (e: any) {
-      console.error('[IPC] phone-mirror:set-lan error:', e);
-      return { error: e?.message || 'failed to update lan setting' };
-    }
-  });
-
-  safeHandle('phone-mirror:rotate-token', async () => {
-    try {
-      return await PhoneMirrorService.getInstance().rotateToken();
-    } catch (e: any) {
-      console.error('[IPC] phone-mirror:rotate-token error:', e);
-      return { error: e?.message || 'failed to rotate token' };
-    }
-  });
-
-  // Stealth screenshot capture triggered from the phone UI.
-  // Takes a screenshot on the PC (adding it to the screenshot queue so it can
-  // be used in the next AI prompt), then broadcasts an ack so the phone shows
-  // a confirmation toast.  The image is NOT sent to the phone — the phone is
-  // just a remote shutter; the screenshot stays on the desktop for AI use.
-  safeHandle('phone-mirror:push-screenshot', async (_, screenshotPath?: string) => {
-    try {
-      const imgPath = screenshotPath || (await appState.takeScreenshot(false));
-      PhoneMirrorService.getInstance().publishAck(
-        'screenshot',
-        'Screenshot captured — queued for AI',
-      );
-      return { success: true, path: imgPath };
-    } catch (e: any) {
-      console.error('[IPC] phone-mirror:push-screenshot error:', e);
-      return { error: e?.message || 'failed to capture screenshot' };
-    }
-  });
-
-  // Route commands sent by the phone browser back to the Electron renderer so
-  // the existing action system (global-shortcut events, chat stream) handles
-  // them without duplicating logic.
-  PhoneMirrorService.getInstance().onPhoneCommand(async (cmd) => {
-    const win = appState.getMainWindow();
-
-    if (cmd.type === 'action') {
-      // Re-use the same global-shortcut dispatch path the keyboard uses.
-      // This keeps phone actions identical to key-triggered stealth actions.
-      const allWindows = BrowserWindow.getAllWindows();
-      allWindows.forEach((w) => {
-        if (!w.isDestroyed()) w.webContents.send('global-shortcut', { action: cmd.action });
-      });
-    } else if (cmd.type === 'chat') {
-      // Stream a phone-initiated chat through the LLM exactly like gemini-chat-stream
-      // but without requiring a renderer event sender. Tokens are pushed directly to
-      // the phone over WebSocket; desktop renderer also receives them so both views
-      // stay in sync.
-      const myStreamId = ++_chatStreamId;
-      const message = cmd.message;
-      const phoneMirror = PhoneMirrorService.getInstance();
-      const intelligenceManager = appState.getIntelligenceManager();
-
-      // Capture rolling context BEFORE adding the new user message — same ordering
-      // as gemini-chat-stream so Recap / Follow Up / What to Answer see phone turns.
-      let context: string | undefined;
-      try {
-        const snap = intelligenceManager.getFormattedContext(100);
-        if (snap && snap.trim().length > 0) context = snap;
-      } catch (ctxErr) {
-        console.warn('[PhoneMirror] Failed to capture pre-turn context:', ctxErr);
-      }
-
-      intelligenceManager.addTranscript(
-        { text: message, speaker: 'user', timestamp: Date.now(), final: true },
-        true,
-      );
-
-      try {
-        phoneMirror.publishUserMessage(String(myStreamId), message);
-      } catch (_) {}
-      // Notify renderer so it can display the incoming phone message too.
-      win?.webContents.send('phone-mirror:incoming-chat', {
-        message,
-        streamId: String(myStreamId),
-      });
-
-      try {
-        const llmHelper = appState.processingHelper.getLLMHelper();
-        const stream = llmHelper.streamChat(message, undefined, context, CHAT_MODE_PROMPT);
-        let full = '';
-        for await (const token of stream) {
-          // Bail if a newer stream has taken over (phone or desktop chat).
-          if (_chatStreamId !== myStreamId) {
-            console.log(
-              `[PhoneMirror] phone-chat ${myStreamId} superseded by ${_chatStreamId}, stopping.`,
-            );
-            return;
-          }
-          // Cancel early if all phones have disconnected — no point burning LLM
-          // tokens when nobody is receiving them and we have no desktop renderer
-          // context to show the result in either.
-          if (!phoneMirror.hasClients() && win?.isDestroyed()) break;
-          try {
-            phoneMirror.publishToken(String(myStreamId), token);
-          } catch (_) {}
-          win?.webContents.send('gemini-stream-token', token);
-          full += token;
-        }
-        if (_chatStreamId === myStreamId) {
-          try {
-            phoneMirror.publishDone(String(myStreamId), full);
-          } catch (_) {}
-          win?.webContents.send('gemini-stream-done');
-          if (full.trim().length > 0) {
-            intelligenceManager.addAssistantMessage(full);
-            intelligenceManager.logUsage('chat', message, full);
-          }
-        }
-      } catch (err: any) {
-        console.error('[PhoneMirror] phone-chat stream error:', err);
-        if (_chatStreamId === myStreamId) {
-          try {
-            phoneMirror.publishError(String(myStreamId), err?.message || 'stream error');
-          } catch (_) {}
-          win?.webContents.send('gemini-stream-error', err?.message || 'stream error');
-        }
-      }
-    } else if (cmd.type === 'screenshot') {
-      // Stealth screenshot: capture on PC → add to screenshot queue → ack to phone.
-      // The image is NOT sent to the phone — it stays on the desktop for AI use.
-      // The phone simply acts as a remote shutter button.
-      try {
-        await appState.takeScreenshot(false);
-        PhoneMirrorService.getInstance().publishAck(
-          'screenshot',
-          'Screenshot captured — queued for AI',
-        );
-      } catch (e: any) {
-        console.error('[PhoneMirror] phone screenshot request failed:', e);
-        PhoneMirrorService.getInstance().publishAck('screenshot', 'Screenshot failed');
-      }
     }
   });
 }
