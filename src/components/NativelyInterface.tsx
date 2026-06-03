@@ -398,18 +398,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [voiceInput, setVoiceInput] = useState(''); // Accumulated user voice input
   const voiceInputRef = useRef<string>(''); // Ref for capturing in async handlers
   const textInputRef = useRef<HTMLInputElement>(null); // Ref for input focus
-  const isStealthRef = useRef<boolean>(false); // Tracks if the next expansion should be stealthy
+  const isStealthRef = useRef<boolean>(false); // Tracks if the next window show should be inactive (no focus steal)
   // Latest-handler ref so the captured-key listener (mounted with [] deps)
   // calls the CURRENT handleManualSubmit closure — not the one captured at
   // first render, which reads inputValue="" and silently no-ops on submit.
   // Updated on every render below.
   const handleManualSubmitRef = useRef<() => void>(() => {});
-  // Set when KeybindManager reports the chat:focusInput global shortcut
-  // failed to register (OS already owns it — common with Cmd+Shift+Space
-  // if another app claimed it, or with the macOS input source switcher
-  // in some configs). Stores the attempted accelerator so the banner can
-  // tell the user exactly what conflicted.
-  const [stealthHotkeyConflict, setStealthHotkeyConflict] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -3856,9 +3850,7 @@ Provide only the answer, nothing else.`;
                   </div>
                 )}
 
-                {/* data-stealth-engage marks this subtree as
-                                    the chat input wrapper. */}
-                <div className="relative group" data-stealth-engage="true">
+                <div className="relative group">
                   <input
                     ref={textInputRef}
                     type="text"
