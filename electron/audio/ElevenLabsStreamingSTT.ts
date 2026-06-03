@@ -1,10 +1,10 @@
-import { EventEmitter } from 'events';
 import WebSocket from 'ws';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { streamingStttWsOptions } from './dnsHelpers';
+import { BaseSTT } from './BaseSTT';
 
 const ELEVENLABS_WS_URL = 'wss://api.elevenlabs.io/v1/speech-to-text/realtime';
 // Cap reconnect attempts so a flapping network can't drive an indefinite WS
@@ -13,34 +13,33 @@ const ELEVENLABS_WS_URL = 'wss://api.elevenlabs.io/v1/speech-to-text/realtime';
 // user-triggered restart via stop()/start() resets the counter to 0.
 const RECONNECT_MAX_ATTEMPTS = 10;
 
-export class ElevenLabsStreamingSTT extends EventEmitter {
+export class ElevenLabsStreamingSTT extends BaseSTT {
     private apiKey: string;
     private ws: WebSocket | null = null;
-    private isActive = false;
     private shouldReconnect = false;
     private reconnectAttempts = 0;
     private reconnectTimer: NodeJS.Timeout | null = null;
     private inputSampleRate = 48000; // what the mic/system audio captures at
     private targetSampleRate = 16000; // what ElevenLabs Scribe v2 requires
-    
+
     private buffer: Buffer[] = [];
     private isConnecting = false;
     private isSessionReady = false;
     private languageCode = 'en'; // Default to English
-    
+
     private debugWriteStream: fs.WriteStream | null = null;
-    
+
     // Chunk buffering properties (250ms @ 16k = 4000 samples)
     private pcmAccumulator: Int16Array[] = [];
     private pcmAccumulatorLen = 0;
     private readonly SEND_THRESHOLD_SAMPLES = 4000;
-    
+
     private debugMessageCount = 0;
 
     constructor(apiKey: string) {
         super();
         this.apiKey = apiKey;
-        
+
         // Open a debug file only in development to avoid disk fill-up in production
         if (process.env.NODE_ENV === 'development') {
             try {
@@ -53,22 +52,23 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
         }
     }
 
-    public setSampleRate(rate: number): void {
+    setSampleRate(rate: number): void {
+        if (this.inputSampleRate === rate) return;
         this.inputSampleRate = rate;
         console.log(`[ElevenLabsStreaming] Input sample rate set to ${rate}Hz`);
         // We always downsample to 16000Hz for ElevenLabs
     }
 
     /** No-op - channel count is expected to be mono by ElevenLabs Scribe */
-    public setAudioChannelCount(_count: number): void {}
+    setAudioChannelCount(_count: number): void {}
 
     /** Recognition language - maps Natively key to ISO-639-1 for ElevenLabs, or 'auto' to omit code */
-    public setRecognitionLanguage(key: string): void {
+    setRecognitionLanguage(key: string): void {
         const newCode = key === 'auto' ? '' : (RECOGNITION_LANGUAGES[key]?.iso639 ?? this.languageCode);
         if (this.languageCode !== newCode) {
             console.log(`[ElevenLabsStreaming] Language changed: ${this.languageCode || '(auto)'} -> ${newCode || '(auto)'}`);
             this.languageCode = newCode;
-            if (this.isActive) {
+            if (this._isActive) {
                 console.log('[ElevenLabsStreaming] Restarting session to apply new language...');
                 this.stop();
                 this.start();
@@ -76,19 +76,16 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
         }
     }
 
-    /** No-op - credentials passed via API key */
-    public setCredentials(_path: string): void {}
-
-    public start(): void {
-        if (this.isActive) return;
+    start(): void {
+        if (this._isActive) return;
         if (this.isConnecting) return; // Already mid-connect (prevents double-connect race)
-        this.isActive = true;          // Set immediately so write() buffers audio during WS handshake
+        this._isActive = true;          // Set immediately so write() buffers audio during WS handshake
         this.shouldReconnect = true;
         this.reconnectAttempts = 0;
         this.connect();
     }
 
-    public stop(): void {
+    stop(): void {
         this.shouldReconnect = false;
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
@@ -99,7 +96,7 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
             this.ws.close();
             this.ws = null;
         }
-        this.isActive = false;
+        this._isActive = false;
         this.isConnecting = false;
         this.isSessionReady = false;
         this.buffer = [];
@@ -112,8 +109,8 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
         console.log('[ElevenLabsStreaming] Stopped');
     }
 
-    public finalize(): void {
-        if (!this.isActive || !this.ws || this.ws.readyState !== WebSocket.OPEN || !this.isSessionReady) return;
+    finalize(): void {
+        if (!this._isActive || !this.ws || this.ws.readyState !== WebSocket.OPEN || !this.isSessionReady) return;
 
         if (this.pcmAccumulatorLen > 0) {
             const combined = new Int16Array(this.pcmAccumulatorLen);
@@ -141,8 +138,8 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
      * ElevenLabs WebSocket expects "input_audio_chunk" in base64 16-bit PCM.
      * Note: Input from Natively DSP is 32-bit Float PCM (F32).
      */
-    public write(chunk: Buffer): void {
-        if (!this.isActive) return;
+    write(chunk: Buffer): void {
+        if (!this._isActive) return;
 
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.isSessionReady) {
             this.buffer.push(chunk);
@@ -249,7 +246,7 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
         this.ws.on('open', () => {
             // Guard: stop() calls removeAllListeners() before closing, so this handler
             // normally won't fire after stop(). But if there's a narrow race, bail out.
-            if (!this.isActive || !this.shouldReconnect) {
+            if (!this._isActive || !this.shouldReconnect) {
                 this.ws?.close();
                 this.ws = null;
                 this.isConnecting = false;
@@ -351,7 +348,7 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
                 this.scheduleReconnect();
             } else {
                 // If not reconnecting, mark session as truly inactive
-                this.isActive = false;
+                this._isActive = false;
             }
         });
 

@@ -31,7 +31,6 @@
  *     - Reset session state for the next segment
  */
 
-import { EventEmitter } from 'events';
 import { Worker } from 'worker_threads';
 import { resampleToF32 } from './whisper/audioResampler';
 import { VadProcessor } from './whisper/vadProcessor';
@@ -41,8 +40,9 @@ import { modelPreloader } from './whisper/modelPreloader';
 import { buildWorkerInitMessage } from './whisper/inferenceConfig';
 import { resolveWhisperWorkerPath } from './whisper/workerPathResolver';
 import type { WorkerOutMessage } from './whisper/types';
+import { BaseSTT } from './BaseSTT';
 
-export class LocalWhisperSTT extends EventEmitter {
+export class LocalWhisperSTT extends BaseSTT {
     private readonly modelId: string;
     private inputSampleRate = 48000;
     private language = 'auto';
@@ -82,7 +82,6 @@ export class LocalWhisperSTT extends EventEmitter {
     private channelLabel = '';
     private worker: Worker | null = null;
     private vad: VadProcessor | null = null;
-    private isActive = false;
     private taskCounter = 0;
     private workerReady = false;
     private isDrainingFinals = false;
@@ -201,18 +200,18 @@ export class LocalWhisperSTT extends EventEmitter {
     }
 
     start(): void {
-        if (this.isActive) return;
+        if (this._isActive) return;
         this.isDrainingFinals = false;
         this.drainingFinalsInFlight = 0;
-        this.isActive = true;
+        this._isActive = true;
         this.vad = new VadProcessor();
         this.spawnWorker();
         this.startStreamingLoop();
     }
 
     stop(): void {
-        if (!this.isActive) return;
-        this.isActive = false;
+        if (!this._isActive) return;
+        this._isActive = false;
 
         this.stopStreamingLoop();
         if (this.gapFlushTimer) {
@@ -250,7 +249,7 @@ export class LocalWhisperSTT extends EventEmitter {
     }
 
     write(chunk: Buffer): void {
-        if (!this.isActive || !this.vad) return;
+        if (!this._isActive || !this.vad) return;
         const f32 = resampleToF32(chunk, this.inputSampleRate);
         const segs = this.vad.push(f32);
         segs.forEach(s => this.dispatchFinal(s.samples));
@@ -282,7 +281,7 @@ export class LocalWhisperSTT extends EventEmitter {
         if (this.gapFlushTimer) clearTimeout(this.gapFlushTimer);
         this.gapFlushTimer = setTimeout(() => {
             this.gapFlushTimer = null;
-            if (this.isActive && this.vad) {
+            if (this._isActive && this.vad) {
                 const pending = this.vad.flush();
                 pending.forEach(s => this.dispatchFinal(s.samples));
             }
@@ -290,7 +289,7 @@ export class LocalWhisperSTT extends EventEmitter {
     }
 
     finalize(): void {
-        if (!this.isActive || !this.vad) return;
+        if (!this._isActive || !this.vad) return;
         const segs = this.vad.flush();
         segs.forEach(s => this.dispatchFinal(s.samples));
     }
@@ -305,7 +304,7 @@ export class LocalWhisperSTT extends EventEmitter {
     }
 
     private scheduleNextStreamingTick(): void {
-        if (!this.isActive) return;
+        if (!this._isActive) return;
         this.streamingTimer = setTimeout(() => {
             this.streamingTimer = null;
             // Wrap tick in try/catch — a throw here (worker disposed mid-post,
@@ -335,7 +334,7 @@ export class LocalWhisperSTT extends EventEmitter {
     }
 
     private streamingTick(): void {
-        if (!this.isActive || !this.vad || !this.workerReady || !this.worker) {
+        if (!this._isActive || !this.vad || !this.workerReady || !this.worker) {
             this.recordStreamingStall();
             return;
         }
@@ -578,7 +577,7 @@ export class LocalWhisperSTT extends EventEmitter {
             // After stop(), allow only the explicitly flushed final segments to
             // return during the 5s drain window; partials and unrelated worker
             // messages remain ignored on a torn-down instance.
-            if (!this.isActive && !(this.isDrainingFinals && msg.type === 'result')) return;
+            if (!this._isActive && !(this.isDrainingFinals && msg.type === 'result')) return;
 
             if (msg.type === 'partial') {
                 // Drop partials whose segment has already been finalized — the
