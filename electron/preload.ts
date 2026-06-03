@@ -467,7 +467,6 @@ interface ElectronAPI {
   onGeminiStreamDone: (callback: () => void) => () => void;
   onGeminiStreamError: (callback: (error: string) => void) => () => void;
 
-  onUndetectableChanged: (callback: (state: boolean) => void) => () => void;
   onGroqFastTextChanged: (callback: (enabled: boolean) => void) => () => void;
   onModelChanged: (callback: (modelId: string) => void) => () => void;
 
@@ -935,24 +934,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
-  setUndetectable: (state: boolean) => ipcRenderer.invoke('set-undetectable', state),
-  getUndetectable: () => ipcRenderer.invoke('get-undetectable'),
   setOverlayMousePassthrough: (enabled: boolean) =>
     ipcRenderer.invoke('set-overlay-mouse-passthrough', enabled),
   toggleOverlayMousePassthrough: () => ipcRenderer.invoke('toggle-overlay-mouse-passthrough'),
   getOverlayMousePassthrough: () => ipcRenderer.invoke('get-overlay-mouse-passthrough'),
   setOpenAtLogin: (open: boolean) => ipcRenderer.invoke('set-open-at-login', open),
   getOpenAtLogin: () => ipcRenderer.invoke('get-open-at-login'),
-  setDisguise: (mode: 'terminal' | 'settings' | 'activity' | 'none') =>
-    ipcRenderer.invoke('set-disguise', mode),
-  getDisguise: () => ipcRenderer.invoke('get-disguise'),
-  onDisguiseChanged: (callback: (mode: 'terminal' | 'settings' | 'activity' | 'none') => void) => {
-    const subscription = (_: any, mode: any) => callback(mode);
-    ipcRenderer.on('disguise-changed', subscription);
-    return () => {
-      ipcRenderer.removeListener('disguise-changed', subscription);
-    };
-  },
 
   // Skills — local SKILL.md instructions surfaced in Settings and the overlay.
   skillsRefresh: () => ipcRenderer.invoke('skills:list'),
@@ -1538,14 +1525,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Database
   flushDatabase: () => ipcRenderer.invoke('flush-database'),
-
-  onUndetectableChanged: (callback: (state: boolean) => void) => {
-    const subscription = (_: any, state: boolean) => callback(state);
-    ipcRenderer.on('undetectable-changed', subscription);
-    return () => {
-      ipcRenderer.removeListener('undetectable-changed', subscription);
-    };
-  },
 
   onOverlayMousePassthroughChanged: (callback: (enabled: boolean) => void) => {
     const subscription = (_: any, enabled: boolean) => callback(enabled);

@@ -738,31 +738,13 @@ export function initializeIpcHandlers(appState: AppState): void {
     const launcherWin = appState.getWindowHelper().getLauncherWindow();
     if (launcherWin && !launcherWin.isDestroyed()) {
       launcherWin.webContents.send('settings:open-tab', tab);
-      if (appState.getUndetectable()) {
-        launcherWin.showInactive();
-      } else {
-        launcherWin.show();
-        launcherWin.focus();
-      }
+      launcherWin.show();
+      launcherWin.focus();
     }
   });
 
   safeHandle('close-settings-window', () => {
     appState.settingsWindowHelper.closeWindow();
-  });
-
-  safeHandle('set-undetectable', async (_, state: boolean) => {
-    appState.setUndetectable(state);
-    return { success: true };
-  });
-
-  safeHandle('set-disguise', async (_, mode: 'terminal' | 'settings' | 'activity' | 'none') => {
-    appState.setDisguise(mode);
-    return { success: true };
-  });
-
-  safeHandle('get-undetectable', async () => {
-    return appState.getUndetectable();
   });
 
   // Adapted from public PR #113 — verify premium interaction
@@ -778,10 +760,6 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('get-overlay-mouse-passthrough', async () => {
     return appState.getOverlayMousePassthrough();
-  });
-
-  safeHandle('get-disguise', async () => {
-    return appState.getDisguise();
   });
 
   safeHandle('set-open-at-login', async (_, openAtLogin: boolean) => {
