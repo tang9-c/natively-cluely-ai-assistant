@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ToggleLeft, ToggleRight, Search, Calendar, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Search, Calendar, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
 import icon from "./icon.png";
 import mainui from "../UI_comp/mainui.png";
@@ -80,7 +80,6 @@ const formatTime = (dateStr: string) => {
 
 const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onOpenProfile, onOpenModes, onPageChange, ollamaPullStatus = 'idle', ollamaPullPercent = 0, ollamaPullMessage = '' }) => {
     const [meetings, setMeetings] = useState<Meeting[]>([]);
-    const [isDetectable, setIsDetectable] = useState(false);
     const [isMeetingActive, setIsMeetingActive] = useState(false);
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
     const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
@@ -161,21 +160,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
             }, 18000);
         }
 
-        // Sync initial undetectable state
-        if (window.electronAPI?.getUndetectable) {
-            window.electronAPI.getUndetectable().then((undetectable) => {
-                if (mounted) setIsDetectable(!undetectable);
-            });
-        }
-
-        // Listen for undetectable changes
-        let removeUndetectableListener: (() => void) | undefined;
-        if (window.electronAPI?.onUndetectableChanged) {
-            removeUndetectableListener = window.electronAPI.onUndetectableChanged((undetectable) => {
-                setIsDetectable(!undetectable);
-            });
-        }
-
         fetchMeetings();
         fetchEvents();
 
@@ -206,7 +190,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         return () => {
             mounted = false;
             if (removeMeetingsListener) removeMeetingsListener();
-            if (removeUndetectableListener) removeUndetectableListener();
             if (removeMeetingStateListener) removeMeetingStateListener();
             clearInterval(interval);
         };
@@ -252,12 +235,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         return <div className="text-white p-10">错误：Electron API 未初始化。请检查预加载脚本。</div>;
     }
 
-    const toggleDetectable = () => {
-        const newState = !isDetectable;
-        setIsDetectable(newState);
-        window.electronAPI?.setUndetectable(!newState); // Note: setUndetectable takes the *undetectable* state, which is inverse of *detectable*
-        analytics.trackModeSelected(newState ? 'launcher' : 'undetectable'); // If visible (detectable), mode is normal/launcher. If not detectable, mode is undetectable.
-    };
 
     // Group meetings
     const groupedMeetings = meetings.reduce((acc, meeting) => {
@@ -639,9 +616,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
             </header>
 
             <div className="relative flex-1 flex flex-col overflow-hidden">
-                {!isDetectable && (
-                    <div className={`absolute inset-1 border-2 border-dashed rounded-2xl pointer-events-none z-[100] ${isLight ? 'border-black/15' : 'border-white/20'}`} />
-                )}
                 <AnimatePresence mode="wait">
                     {selectedMeeting ? (
                         <motion.div
@@ -689,41 +663,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                 <RefreshCw size={18} />
                                             </button>
 
-                                            {/* Detectable Toggle Pill */}
-                                            <div className={`flex items-center gap-3 border rounded-full px-3 py-1.5 min-w-[140px] transition-colors ${isLight ? 'bg-bg-elevated border-border-muted shadow-sm' : 'bg-[#101011] border-border-muted'}`}>
-                                                {isDetectable ? (
-                                                    <Ghost
-                                                        size={14}
-                                                        strokeWidth={2}
-                                                        className="text-text-secondary transition-colors"
-                                                    />
-                                                ) : (
-                                                    <svg
-                                                        width="14"
-                                                        height="14"
-                                                        viewBox="0 0 24 24"
-                                                        fill="none"
-                                                        xmlns="http://www.w3.org/2000/svg"
-                                                        className="transition-colors"
-                                                    >
-                                                        <path
-                                                            d="M12 2C7.58172 2 4 5.58172 4 10V22L7 19L9.5 21.5L12 19L14.5 21.5L17 19L20 22V10C20 5.58172 16.4183 2 12 2Z"
-                                                            fill={isLight ? '#48484A' : 'white'}
-                                                        />
-                                                        <circle cx="9" cy="10" r="1.5" fill={isLight ? 'white' : 'black'} />
-                                                        <circle cx="15" cy="10" r="1.5" fill={isLight ? 'white' : 'black'} />
-                                                    </svg>
-                                                )}
-                                                <span className="text-xs font-medium flex-1 transition-colors text-text-secondary">
-                                                                                                       {isDetectable ? "可见模式" : "隐藏模式"}
-                                                </span>
-                                                <div
-                                                    className={`w-8 h-4 rounded-full relative transition-colors cursor-pointer ${!isDetectable ? 'bg-accent-primary' : 'bg-bg-toggle-switch'}`}
-                                                    onClick={toggleDetectable}
-                                                >
-                                                    <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all ${!isDetectable ? 'left-[18px]' : 'left-0.5'}`} />
-                                                </div>
-                                            </div>
                                         </div>
 
                                         {/* Center: Ollama Pull Status Pill (flex-1 to center evenly) */}
