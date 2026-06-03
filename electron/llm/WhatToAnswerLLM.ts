@@ -4,7 +4,7 @@ import { TINY_WHAT_TO_ANSWER_PROMPT } from "./tinyPrompts";
 import { estimateTokens } from "./modelCapabilities";
 import { TemporalContext } from "./TemporalContextBuilder";
 import { IntentResult } from "./IntentClassifier";
-import { ScreenContext } from "../services/screen/ScreenContextService";
+import { ScreenContext } from "../services/screen/types";
 import { PromptAssembler } from "../services/context/PromptAssembler";
 import { checkAnswerForCodeBugs } from "./CodeSanityCheck";
 import type { ProviderDataScope } from "./ProviderRouter";

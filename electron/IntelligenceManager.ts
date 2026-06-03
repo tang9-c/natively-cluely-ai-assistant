@@ -12,7 +12,7 @@ import { LLMHelper } from './LLMHelper';
 import { SessionTracker } from './SessionTracker';
 import { IntelligenceEngine } from './IntelligenceEngine';
 import { MeetingPersistence } from './MeetingPersistence';
-import { ScreenContext } from './services/screen/ScreenContextService';
+import { ScreenContext } from './services/screen/types';
 
 // Re-export types for backward compatibility
 export type { TranscriptSegment, SuggestionTrigger, ContextItem } from './SessionTracker';

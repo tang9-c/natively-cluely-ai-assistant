@@ -13,7 +13,7 @@ import {
 } from './llm';
 import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEngine';
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
-import { ScreenContext } from './services/screen/ScreenContextService';
+import { ScreenContext } from './services/screen/types';
 
 // Mode types
 export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'recap' | 'clarify' | 'manual' | 'code_hint' | 'brainstorm';
