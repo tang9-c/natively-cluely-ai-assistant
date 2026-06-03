@@ -171,6 +171,17 @@ interface ElectronAPI {
   localWhisperPreload: (
     modelId?: string,
   ) => Promise<{ success: boolean; reason?: string; error?: string }>;
+  localWhisperGetChannelConfig: () => Promise<{
+    enabled: boolean;
+    micModelId: string;
+    systemModelId: string;
+    globalModelId: string;
+  }>;
+  localWhisperSetChannelConfig: (cfg: {
+    enabled?: boolean;
+    micModelId?: string;
+    systemModelId?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
   localWhisperGetHardware: () => Promise<{
     arch: string;
     platform: string;
@@ -1023,6 +1034,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('local-whisper-download-error', listener);
   },
   localWhisperPreload: (modelId?: string) => ipcRenderer.invoke('local-whisper-preload', modelId),
+  localWhisperGetChannelConfig: () => ipcRenderer.invoke('local-whisper-get-channel-config'),
+  localWhisperSetChannelConfig: (cfg: { enabled?: boolean; micModelId?: string; systemModelId?: string }) =>
+    ipcRenderer.invoke('local-whisper-set-channel-config', cfg),
   localWhisperGetHardware: () => ipcRenderer.invoke('local-whisper-get-hardware'),
 
   // STT Config Events (Adapted from public PR #173 — verify premium interaction)
