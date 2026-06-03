@@ -280,10 +280,6 @@ interface ElectronAPI {
     imageCount?: number;
     usedImageInput?: boolean;
   }>;
-  generateFollowUp: (
-    intent: string,
-    userRequest?: string,
-  ) => Promise<{ refined: string | null; intent: string }>;
   generateRecap: () => Promise<{ summary: string | null }>;
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>;
   getIntelligenceContext: () => Promise<{
@@ -422,16 +418,6 @@ interface ElectronAPI {
   getCustomProviders: () => Promise<any[]>;
   deleteCustomProvider: (id: string) => Promise<{ success: boolean; error?: string }>;
 
-  // Follow-up Email
-  generateFollowupEmail: (input: any) => Promise<string>;
-  extractEmailsFromTranscript: (transcript: Array<{ text: string }>) => Promise<string[]>;
-  getCalendarAttendees: (eventId: string) => Promise<Array<{ email: string; name: string }>>;
-  openMailto: (params: {
-    to: string;
-    subject: string;
-    body: string;
-  }) => Promise<{ success: boolean; error?: string }>;
-
   // Audio Test
   startAudioTest: (deviceId?: string) => Promise<{ success: boolean }>;
   stopAudioTest: () => Promise<{ success: boolean }>;
@@ -482,22 +468,6 @@ interface ElectronAPI {
   onThemeChanged: (
     callback: (data: { mode: 'system' | 'light' | 'dark'; resolved: 'light' | 'dark' }) => void,
   ) => () => void;
-
-  // Calendar
-  calendarConnect: () => Promise<{ success: boolean; error?: string }>;
-  calendarDisconnect: () => Promise<{ success: boolean; error?: string }>;
-  getCalendarStatus: () => Promise<{ connected: boolean; email?: string }>;
-  getUpcomingEvents: () => Promise<
-    Array<{
-      id: string;
-      title: string;
-      startTime: string;
-      endTime: string;
-      link?: string;
-      source: 'google';
-    }>
-  >;
-  calendarRefresh: () => Promise<{ success: boolean; error?: string }>;
 
   // Auto-Update
   onUpdateAvailable: (callback: (info: any) => void) => () => void;
@@ -1214,9 +1184,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('generate-code-hint', imagePaths, problemStatement),
   generateBrainstorm: (imagePaths?: string[], problemStatement?: string) =>
     ipcRenderer.invoke('generate-brainstorm', imagePaths, problemStatement),
-  generateFollowUp: (intent: string, userRequest?: string) =>
-    ipcRenderer.invoke('generate-follow-up', intent, userRequest),
-  generateFollowUpQuestions: () => ipcRenderer.invoke('generate-follow-up-questions'),
   generateRecap: () => ipcRenderer.invoke('generate-recap'),
   submitManualQuestion: (question: string) =>
     ipcRenderer.invoke('submit-manual-question', question),
@@ -1373,20 +1340,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('intelligence-clarify', subscription);
     };
   },
-  onIntelligenceFollowUpQuestionsToken: (callback: (data: { token: string }) => void) => {
-    const subscription = (_: any, data: any) => callback(data);
-    ipcRenderer.on('intelligence-follow-up-questions-token', subscription);
-    return () => {
-      ipcRenderer.removeListener('intelligence-follow-up-questions-token', subscription);
-    };
-  },
-  onIntelligenceFollowUpQuestionsUpdate: (callback: (data: { questions: string }) => void) => {
-    const subscription = (_: any, data: any) => callback(data);
-    ipcRenderer.on('intelligence-follow-up-questions-update', subscription);
-    return () => {
-      ipcRenderer.removeListener('intelligence-follow-up-questions-update', subscription);
-    };
-  },
   onIntelligenceManualStarted: (callback: () => void) => {
     const subscription = () => callback();
     ipcRenderer.on('intelligence-manual-started', subscription);
@@ -1495,14 +1448,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCustomProviders: () => ipcRenderer.invoke('get-custom-providers'),
   deleteCustomProvider: (id: string) => ipcRenderer.invoke('delete-custom-provider', id),
 
-  // Follow-up Email
-  generateFollowupEmail: (input: any) => ipcRenderer.invoke('generate-followup-email', input),
-  extractEmailsFromTranscript: (transcript: Array<{ text: string }>) =>
-    ipcRenderer.invoke('extract-emails-from-transcript', transcript),
-  getCalendarAttendees: (eventId: string) => ipcRenderer.invoke('get-calendar-attendees', eventId),
-  openMailto: (params: { to: string; subject: string; body: string }) =>
-    ipcRenderer.invoke('open-mailto', params),
-
   // Audio Test
   startAudioTest: (deviceId?: string) => ipcRenderer.invoke('start-audio-test', deviceId),
   stopAudioTest: () => ipcRenderer.invoke('stop-audio-test'),
@@ -1569,13 +1514,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('theme:changed', subscription);
     };
   },
-
-  // Calendar API
-  calendarConnect: () => ipcRenderer.invoke('calendar-connect'),
-  calendarDisconnect: () => ipcRenderer.invoke('calendar-disconnect'),
-  getCalendarStatus: () => ipcRenderer.invoke('get-calendar-status'),
-  getUpcomingEvents: () => ipcRenderer.invoke('get-upcoming-events'),
-  calendarRefresh: () => ipcRenderer.invoke('calendar-refresh'),
 
   // Auto-Update
   onUpdateAvailable: (callback: (info: any) => void) => {
