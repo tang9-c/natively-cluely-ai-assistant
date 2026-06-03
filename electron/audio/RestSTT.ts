@@ -11,10 +11,10 @@
  *   - Raw binary body (Azure, IBM Watson)
  */
 
-import { EventEmitter } from 'events';
 import axios from 'axios';
 import FormData from 'form-data';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
+import { BaseSTT } from './BaseSTT';
 
 export type RestSttProvider = 'groq' | 'openai' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'doubao' | 'doubao-auc';
 
@@ -197,7 +197,7 @@ const SAFETY_NET_INTERVAL_MS = 10000;
 // Silence threshold - if RMS is below this, skip the upload
 const SILENCE_RMS_THRESHOLD = 50;
 
-export class RestSTT extends EventEmitter {
+export class RestSTT extends BaseSTT {
     private provider: RestSttProvider;
     private apiKey: string;
     private region?: string;
@@ -206,13 +206,10 @@ export class RestSTT extends EventEmitter {
     private chunks: Buffer[] = [];
     private totalBufferedBytes = 0;
     private safetyNetTimer: NodeJS.Timeout | null = null;
-    private isActive = false;
     private isUploading = false;
     private flushPending = false;  // Bug #2 fix: queue flush when upload in progress
 
     // Audio config (must match SystemAudioCapture output)
-    private sampleRate = 16000;
-    private numChannels = 1;
     private bitsPerSample = 16;
 
     constructor(provider: RestSttProvider, apiKey: string, modelOverride?: string, region?: string) {
@@ -230,7 +227,7 @@ export class RestSTT extends EventEmitter {
     /**
      * Update API key (e.g., when user saves a new key)
      */
-    public setApiKey(apiKey: string): void {
+    setApiKey(apiKey: string): void {
         this.apiKey = apiKey;
         this.config = PROVIDER_CONFIGS[this.provider](apiKey, this.region);
         console.log(`[RestSTT] API key updated for ${this.provider}`);
@@ -239,25 +236,25 @@ export class RestSTT extends EventEmitter {
     /**
      * Update sample rate to match the audio source
      */
-    public setSampleRate(rate: number): void {
-        if (this.sampleRate === rate) return;
+    setSampleRate(rate: number): void {
+        if (this._sampleRate === rate) return;
         console.log(`[RestSTT] Updating sample rate to ${rate}Hz`);
-        this.sampleRate = rate;
+        this._sampleRate = rate;
     }
 
     /**
      * Update channel count
      */
-    public setAudioChannelCount(count: number): void {
-        if (this.numChannels === count) return;
+    setAudioChannelCount(count: number): void {
+        if (this._numChannels === count) return;
         console.log(`[RestSTT] Updating channel count to ${count}`);
-        this.numChannels = count;
+        this._numChannels = count;
     }
 
     /**
      * Update recognition language
      */
-    public setRecognitionLanguage(key: string): void {
+    setRecognitionLanguage(key: string): void {
         console.log(`[RestSTT] Updating recognition language to: ${key}`);
         this.config = PROVIDER_CONFIGS[this.provider](this.apiKey, this.region, key);
     }
@@ -265,7 +262,7 @@ export class RestSTT extends EventEmitter {
     /**
      * No-op for RestSTT (no Google credentials needed)
      */
-    public setCredentials(_keyFilePath: string): void {
+    setCredentials(_keyFilePath: string): void {
         console.log(`[RestSTT] setCredentials called (no-op for REST provider)`);
     }
 
@@ -273,10 +270,10 @@ export class RestSTT extends EventEmitter {
      * Start the upload timer
      */
     public start(): void {
-        if (this.isActive) return;
+        if (this._isActive) return;
 
         console.log(`[RestSTT] Starting (${this.provider})...`);
-        this.isActive = true;
+        this._isActive = true;
         this.chunks = [];
         this.totalBufferedBytes = 0;
 
@@ -291,11 +288,11 @@ export class RestSTT extends EventEmitter {
     /**
      * Stop the upload timer and flush remaining buffer
      */
-    public stop(): void {
-        if (!this.isActive) return;
+    stop(): void {
+        if (!this._isActive) return;
 
         console.log(`[RestSTT] Stopping (${this.provider})...`);
-        this.isActive = false;
+        this._isActive = false;
 
         if (this.safetyNetTimer) {
             clearInterval(this.safetyNetTimer);
@@ -309,8 +306,8 @@ export class RestSTT extends EventEmitter {
     /**
      * Write raw PCM audio data to the internal buffer
      */
-    public write(audioData: Buffer): void {
-        if (!this.isActive) return;
+    write(audioData: Buffer): void {
+        if (!this._isActive) return;
         this.chunks.push(audioData);
         this.totalBufferedBytes += audioData.length;
     }
@@ -320,15 +317,15 @@ export class RestSTT extends EventEmitter {
      * The internal Rust engine already applies a 150-200ms VAD hangover to avoid
      * word-breaks, so we flush immediately without adding redundant TS debouncing.
      */
-    public notifySpeechEnded(): void {
-        if (!this.isActive) return;
+    notifySpeechEnded(): void {
+        if (!this._isActive) return;
 
         console.log(`[RestSTT] Speech ended detected by native VAD — flushing buffer immediately`);
         this.flushAndUpload();
     }
 
-    public finalize(): void {
-        if (!this.isActive) return;
+    finalize(): void {
+        if (!this._isActive) return;
         console.log(`[RestSTT] Finalize — flushing buffer immediately`);
         this.flushAndUpload();
     }
@@ -375,7 +372,7 @@ export class RestSTT extends EventEmitter {
         // 6x smaller WAV file, reducing upload latency and keeping file sizes well
         // under the Groq/OpenAI 25MB limit even for 10-second safety-net flushes.
         const TARGET_RATE = 16_000;
-        const pcm16k = this.sampleRate === TARGET_RATE && this.numChannels === 1
+        const pcm16k = this._sampleRate === TARGET_RATE && this._numChannels === 1
             ? rawPcm
             : this.resampleTo16kHz(rawPcm);
 
@@ -589,32 +586,32 @@ export class RestSTT extends EventEmitter {
         }
 
         // Already at target rate and mono — return as-is
-        if (this.sampleRate === TARGET_RATE && this.numChannels === 1) {
+        if (this._sampleRate === TARGET_RATE && this._numChannels === 1) {
             return Buffer.from(inputS16.buffer);
         }
 
         // Mix down multi-channel to mono
         let monoS16: Int16Array;
-        if (this.numChannels > 1) {
-            const monoLen = Math.floor(inputS16.length / this.numChannels);
+        if (this._numChannels > 1) {
+            const monoLen = Math.floor(inputS16.length / this._numChannels);
             monoS16 = new Int16Array(monoLen);
             for (let i = 0; i < monoLen; i++) {
                 let sum = 0;
-                for (let c = 0; c < this.numChannels; c++) {
-                    sum += inputS16[i * this.numChannels + c];
+                for (let c = 0; c < this._numChannels; c++) {
+                    sum += inputS16[i * this._numChannels + c];
                 }
-                monoS16[i] = Math.round(sum / this.numChannels);
+                monoS16[i] = Math.round(sum / this._numChannels);
             }
         } else {
             monoS16 = inputS16;
         }
 
         // Decimate to target rate
-        if (this.sampleRate === TARGET_RATE) {
+        if (this._sampleRate === TARGET_RATE) {
             return Buffer.from(monoS16.buffer);
         }
 
-        const factor = this.sampleRate / TARGET_RATE;
+        const factor = this._sampleRate / TARGET_RATE;
         const outLen = Math.floor(monoS16.length / factor);
         const outS16 = new Int16Array(outLen);
         for (let i = 0; i < outLen; i++) {
@@ -626,7 +623,7 @@ export class RestSTT extends EventEmitter {
     /**
      * Check if audio buffer is essentially silence
      */
-    private isSilent(pcmBuffer: Buffer): boolean {
+    protected isSilent(pcmBuffer: Buffer): boolean {
         let sum = 0;
         const step = 20; // Sample every 20th sample for speed
         let count = 0;
@@ -647,7 +644,7 @@ export class RestSTT extends EventEmitter {
      * channels defaults to 1 (mono) because callers always resample to mono first.
      * Critical: Most REST STT APIs require a valid WAV file, NOT raw PCM.
      */
-    private addWavHeader(samples: Buffer, sampleRate: number = 16_000, channels: number = 1): Buffer {
+    protected addWavHeader(samples: Buffer, sampleRate: number = 16_000, channels: number = 1): Buffer {
         const buffer = Buffer.alloc(44 + samples.length);
         // RIFF chunk descriptor
         buffer.write('RIFF', 0);

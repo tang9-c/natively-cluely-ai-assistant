@@ -223,24 +223,15 @@ import { SystemAudioCapture } from "./audio/SystemAudioCapture"
 import { MicrophoneCapture } from "./audio/MicrophoneCapture"
 import { AudioDevices } from "./audio/AudioDevices"
 import { loadNativeModule } from "./audio/nativeModuleLoader"
-import { GoogleSTT } from "./audio/GoogleSTT"
-import { RestSTT } from "./audio/RestSTT"
-import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
-import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
-import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
-import { OpenAIStreamingSTT } from "./audio/OpenAIStreamingSTT"
-import { NativelyProSTT } from "./audio/NativelyProSTT"
+import { BaseSTT } from "./audio/BaseSTT"
+import { createSTTProvider } from "./audio/sttRegistry"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
 import { warmupIntentClassifier } from "./llm"
 
-/** Unified type for all STT providers with optional extended capabilities */
-type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT) & {
-  finalize?: () => void;
-  setAudioChannelCount?: (count: number) => void;
-  notifySpeechEnded?: () => void;
-};
+/** Unified type for all STT providers */
+type STTProvider = BaseSTT;
 
 type ScreenshotWindowMode = 'launcher' | 'overlay';
 
@@ -963,110 +954,8 @@ export class AppState {
       return null;
     }
 
-    let stt: STTProvider;
-
-    if (sttProvider === 'natively') {
-      const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
-      if (!nativelyKey) {
-        // Natively is Coming Soon — no key means degrade gracefully like every other provider
-        console.warn(`[Main] No Natively API Key configured for ${speaker}, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
-      } else {
-        // 'system' for interviewer (system audio), 'mic' for user (microphone).
-        // The server uses ${key}:${channel} as the session key so both streams
-        // can coexist without triggering concurrent_session_blocked.
-        stt = new NativelyProSTT(nativelyKey, speaker === 'interviewer' ? 'system' : 'mic');
-      }
-    } else if (sttProvider === 'deepgram') {
-      const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
-      if (apiKey) {
-        console.log(`[Main] Using DeepgramStreamingSTT for ${speaker}`);
-        stt = new DeepgramStreamingSTT(apiKey);
-      } else {
-        console.warn(`[Main] No API key for Deepgram STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
-      }
-    } else if (sttProvider === 'soniox') {
-      const apiKey = CredentialsManager.getInstance().getSonioxApiKey();
-      if (apiKey) {
-        console.log(`[Main] Using SonioxStreamingSTT for ${speaker}`);
-        stt = new SonioxStreamingSTT(apiKey);
-      } else {
-        console.warn(`[Main] No API key for Soniox STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
-      }
-    } else if (sttProvider === 'elevenlabs') {
-      const apiKey = CredentialsManager.getInstance().getElevenLabsApiKey();
-      if (apiKey) {
-        console.log(`[Main] Using ElevenLabsStreamingSTT for ${speaker}`);
-        stt = new ElevenLabsStreamingSTT(apiKey);
-      } else {
-        console.warn(`[Main] No API key for ElevenLabs STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
-      }
-    } else if (sttProvider === 'openai') {
-      // OpenAI: WebSocket Realtime (gpt-4o-transcribe → gpt-4o-mini-transcribe) with whisper-1 REST fallback.
-      // If a custom OpenAI-compatible base URL is configured (e.g. Speaches), the STT class
-      // skips the Realtime WS path and uses REST against the custom endpoint.
-      const apiKey = CredentialsManager.getInstance().getOpenAiSttApiKey();
-      const baseUrl = CredentialsManager.getInstance().getOpenAiSttBaseUrl();
-      if (apiKey) {
-        console.log(`[Main] Using OpenAIStreamingSTT for ${speaker}${baseUrl ? ` (custom endpoint: ${baseUrl})` : ' (WebSocket+REST fallback)'}`);
-        stt = new OpenAIStreamingSTT(apiKey, baseUrl);
-      } else {
-        console.warn(`[Main] No API key for OpenAI STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
-      }
-    } else if (sttProvider === 'groq' || sttProvider === 'azure' || sttProvider === 'ibmwatson' || sttProvider === 'doubao' || sttProvider === 'doubao-auc') {
-      let apiKey: string | undefined;
-      let region: string | undefined;
-      let modelOverride: string | undefined;
-
-      if (sttProvider === 'groq') {
-        apiKey = CredentialsManager.getInstance().getGroqSttApiKey();
-        modelOverride = CredentialsManager.getInstance().getGroqSttModel();
-      } else if (sttProvider === 'azure') {
-        apiKey = CredentialsManager.getInstance().getAzureApiKey();
-        region = CredentialsManager.getInstance().getAzureRegion();
-      } else if (sttProvider === 'ibmwatson') {
-        apiKey = CredentialsManager.getInstance().getIbmWatsonApiKey();
-        region = CredentialsManager.getInstance().getIbmWatsonRegion();
-      } else if (sttProvider === 'doubao') {
-        apiKey = CredentialsManager.getInstance().getDoubaoApiKey();
-      } else if (sttProvider === 'doubao-auc') {
-        apiKey = CredentialsManager.getInstance().getDoubaoApiKey();
-      }
-
-      if (apiKey) {
-        console.log(`[Main] Using RestSTT (${sttProvider}) for ${speaker}`);
-        stt = new RestSTT(sttProvider, apiKey, modelOverride, region);
-      } else {
-        console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
-      }
-    } else if (sttProvider === 'local-whisper') {
-      const { LocalWhisperSTT } = require('./audio/LocalWhisperSTT');
-      const sm = SettingsManager.getInstance();
-      const globalModel = sm.get('localWhisperModel') ?? 'Xenova/whisper-tiny.en';
-      // Per-channel override: when enabled the two STT instances may load
-      // different models (e.g. Moonshine Tiny for mic, Moonshine Base for
-      // system audio). Falls back to globalModel if the per-channel slot is
-      // empty or the feature is disabled.
-      let modelId = globalModel;
-      if (sm.get('localWhisperPerChannelEnabled')) {
-        const override = speaker === 'interviewer'
-          ? sm.get('localWhisperModelSystem')
-          : sm.get('localWhisperModelMic');
-        if (override) modelId = override;
-      }
-      console.log(`[Main] Using LocalWhisperSTT for ${speaker}, model: ${modelId}`);
-      const lws = new LocalWhisperSTT(modelId);
-      // Channel label disambiguates the two concurrent instances in latency logs.
-      lws.setChannel(speaker === 'interviewer' ? 'system' : 'mic');
-      stt = lws as any;
-    } else {
-      stt = new GoogleSTT(speaker);
-    }
+    const stt = createSTTProvider(sttProvider, speaker);
+    if (!stt) return null;
 
     stt.setRecognitionLanguage(sttLanguage);
 
@@ -1225,7 +1114,8 @@ export class AppState {
     // Auto language detection: NativelyProSTT emits 'languageDetected' when the
     // backend resolves the language from the first audio batch. Notify the renderer
     // so the settings UI can show what was detected.
-    if (stt instanceof NativelyProSTT) {
+    // Use duck-type check instead of instanceof to avoid importing NativelyProSTT.
+    if (typeof (stt as any).setChannel === 'function') {
       stt.on('languageDetected', (bcp47: string) => {
         console.log(`[Main] STT language auto-detected (${speaker}): ${bcp47}`);
         const helper = this.getWindowHelper();
