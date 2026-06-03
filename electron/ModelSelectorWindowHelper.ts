@@ -231,25 +231,11 @@ export class ModelSelectorWindowHelper {
             this.hideWindow();
         })
 
-        // ROUND 3 FIX (#1): stop the stealth tap when Model Selector shows,
-        // mirroring the Settings handler. While brief (model selector is a
-        // dropdown), interaction with the dropdown still requires keystrokes
-        // to reach this window's React tree, which the tap would otherwise
-        // intercept at OS level.
         this.window.on('show', () => {
             // ROUND 4 FIX (#7): see SettingsWindowHelper for rationale —
             // reset blur timestamp on show so the 250ms toggle-protection
             // guard doesn't latch open from a stale prior-session blur.
             this.lastBlurTime = 0;
-
-            if (process.platform !== 'darwin') return;
-            try {
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
-                StealthKeyboardManager.getInstance().stop();
-            } catch (e) {
-                console.error('[ModelSelectorWindowHelper] failed to stop stealth tap on show:', e);
-            }
         });
     }
 

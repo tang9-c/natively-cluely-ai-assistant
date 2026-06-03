@@ -331,19 +331,6 @@ export class WindowHelper {
     this.overlayWindow = new BrowserWindow(overlaySettings);
     this.overlayWindow.setContentProtection(this.contentProtection);
 
-    // Register the overlay as the sole recipient of CGEventTap captured-key
-    // broadcasts. Without this, captured keystrokes fan out to ALL windows
-    // (settings, cropper, etc.) — silent privacy/security exposure.
-    if (process.platform === 'darwin') {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
-        StealthKeyboardManager.getInstance().setOverlayWindow(this.overlayWindow);
-      } catch (e) {
-        console.error('[WindowHelper] failed to register overlay with StealthKeyboardManager:', e);
-      }
-    }
-
     if (process.platform === 'darwin') {
       this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       this.overlayWindow.setHiddenInMissionControl(true);

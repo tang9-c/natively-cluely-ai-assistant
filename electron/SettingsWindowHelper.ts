@@ -239,13 +239,6 @@ export class SettingsWindowHelper {
             this.closeWindow();
         })
 
-        // ROUND 3 FIX (#1): when Settings becomes visible, stop the
-        // CGEventTap. Otherwise the tap intercepts every plain keystroke at
-        // OS level and routes them into Natively's chat input — the user
-        // can't type API keys (or anything) into Settings fields. Settings
-        // input is a long-form interaction; stealth-typing-into-overlay is
-        // not what the user wants here. They can re-engage with the hotkey
-        // after Settings closes.
         this.settingsWindow.on('show', () => {
             // ROUND 4 FIX (#7): reset blur timestamp on every successful
             // show. Without this, a stale lastBlurTime from a prior session
@@ -255,15 +248,6 @@ export class SettingsWindowHelper {
             // time bounds the guard to "the LAST blur" rather than "any
             // blur ever observed."
             this.lastBlurTime = 0;
-
-            if (process.platform !== 'darwin') return;
-            try {
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
-                StealthKeyboardManager.getInstance().stop();
-            } catch (e) {
-                console.error('[SettingsWindowHelper] failed to stop stealth tap on show:', e);
-            }
         });
 
 
