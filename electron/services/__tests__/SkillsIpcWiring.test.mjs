@@ -133,6 +133,14 @@ test('every preload ipcRenderer.invoke channel has a matching ipcMain.handle reg
     // (electron/preload.ts:937) but no handler registers the channel. Renderer
     // invokes silently reject — pre-existing tech debt, separate cleanup.
     'toggle-advanced-settings',
+    // The 5 LLM API key setters are dynamically registered via LLM_KEY_REGISTRY
+    // loop in ipcHandlers.ts; the literal safeHandle('set-X-api-key' pattern no
+    // longer exists, so the regex scan misses them. They ARE registered at runtime.
+    'set-gemini-api-key',
+    'set-groq-api-key',
+    'set-openai-api-key',
+    'set-claude-api-key',
+    'set-doubao-llm-api-key',
   ]);
 
   const missing = [...channels].filter(ch => !registered.has(ch) && !KNOWN_STALE.has(ch)).sort();
