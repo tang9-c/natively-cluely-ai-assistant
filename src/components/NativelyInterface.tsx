@@ -434,7 +434,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   );
 
   // Settings State with Persistence
-  const [isUndetectable, setIsUndetectable] = useState(false);
   const [hideChatHidesWidget, setHideChatHidesWidget] = useState(() => {
     const stored = localStorage.getItem('natively_hideChatHidesWidget');
     return stored ? stored === 'true' : true;
@@ -768,26 +767,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => unsubscribe();
   }, []);
 
-  // Global State Sync
-  useEffect(() => {
-    // Fetch initial state
-    if (window.electronAPI?.getUndetectable) {
-      window.electronAPI.getUndetectable().then(setIsUndetectable);
-    }
-
-    if (window.electronAPI?.onUndetectableChanged) {
-      const unsubscribe = window.electronAPI.onUndetectableChanged((state) => {
-        setIsUndetectable(state);
-      });
-      return () => unsubscribe();
-    }
-  }, []);
-
   // Persist Settings
   useEffect(() => {
-    localStorage.setItem('natively_undetectable', String(isUndetectable));
     localStorage.setItem('natively_hideChatHidesWidget', String(hideChatHidesWidget));
-  }, [isUndetectable, hideChatHidesWidget]);
+  }, [hideChatHidesWidget]);
 
   // Mouse Passthrough State
   const [isMousePassthrough, setIsMousePassthrough] = useState(false);

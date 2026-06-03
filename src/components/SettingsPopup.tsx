@@ -7,7 +7,6 @@ import { getModifierSymbol } from '../utils/platformUtils';
 const SettingsPopup = () => {
     const { shortcuts } = useShortcuts();
     const isLightTheme = useResolvedTheme() === 'light';
-    const [isUndetectable, setIsUndetectable] = useState(false);
     const [useGroqFastText, setUseGroqFastText] = useState(() => {
         return localStorage.getItem('natively_groq_fast_text') === 'true';
     });
@@ -62,26 +61,6 @@ const SettingsPopup = () => {
         loadProfile();
 
         return () => window.removeEventListener('focus', handleFocus);
-    }, []);
-
-    // Fetch initial undetectable state from main process (source of truth)
-    useEffect(() => {
-        if (window.electronAPI?.getUndetectable) {
-            window.electronAPI.getUndetectable().then((state: boolean) => {
-                setIsUndetectable(state);
-            });
-        }
-    }, []);
-
-    // One-way listener: receive state changes from main process, never echo back
-    useEffect(() => {
-        if (window.electronAPI?.onUndetectableChanged) {
-            const unsubscribe = window.electronAPI.onUndetectableChanged((newState: boolean) => {
-                setIsUndetectable(newState);
-                localStorage.setItem('natively_undetectable', String(newState));
-            });
-            return () => unsubscribe();
-        }
     }, []);
 
     useEffect(() => {
@@ -209,33 +188,6 @@ const SettingsPopup = () => {
                     <X size={16} strokeWidth={2} />
                 </button>
                 <div className="flex-1 overflow-y-auto scrollbar-hide flex flex-col min-h-0">
-
-                {/* Undetectability */}
-                <div className={`flex items-center justify-between px-3 py-2 rounded-lg transition-colors duration-200 group cursor-default ${itemHoverClass}`}>
-                    <div className="flex items-center gap-3">
-                        <CustomGhost
-                            className={`w-4 h-4 transition-colors ${isUndetectable ? (isLightTheme ? 'text-slate-900' : 'text-white') : iconInactiveClass}`}
-                            fill={isUndetectable ? "currentColor" : "none"}
-                            stroke={isUndetectable ? "none" : "currentColor"}
-                            eyeColor={isUndetectable ? (isLightTheme ? "white" : "black") : (isLightTheme ? "#334155" : "white")}
-                        />
-                        <span className={`text-[12px] font-medium transition-colors ${isUndetectable ? (isLightTheme ? 'text-slate-950' : 'text-white') : labelInactiveClass}`}>{isUndetectable ? '隐藏模式' : '可见模式'}</span>
-                    </div>
-                    <button
-                        onClick={() => {
-                            const newState = !isUndetectable;
-                            setIsUndetectable(newState);
-                            localStorage.setItem('natively_undetectable', String(newState));
-                            window.electronAPI?.setUndetectable(newState);
-                        }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${isUndetectable
-                            ? (isLightTheme ? 'bg-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.18)]' : 'bg-white shadow-[0_2px_8px_rgba(255,255,255,0.2)]')
-                            : defaultToggleTrackClass}`}
-                    >
-                        <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${isUndetectable ? 'translate-x-[12px]' : 'translate-x-0'}`} />
-                    </button>
-                </div>
-
 
                 {/* Groq (Fast Text) Toggle — enabled with Groq key OR Natively API key */}
                 <div className={`flex items-center justify-between px-3 py-2 rounded-lg transition-colors duration-200 group ${!(hasStoredKey.groq || hasStoredKey.natively) ? 'opacity-50 grayscale cursor-not-allowed' : `${itemHoverClass} cursor-default`}`} title={!(hasStoredKey.groq || hasStoredKey.natively) ? "Requires Groq or Natively API key" : ""}>
@@ -400,36 +352,5 @@ const SettingsPopup = () => {
         </div>
     );
 };
-
-interface CustomGhostProps {
-    className?: string;
-    fill?: string;
-    stroke?: string;
-    eyeColor?: string;
-}
-
-// Custom Ghost with dynamic eye color support
-const CustomGhost = ({ className, fill, stroke, eyeColor }: CustomGhostProps) => (
-    <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill={fill || "none"}
-        stroke={stroke || "currentColor"}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className={className}
-    >
-        {/* Body */}
-        <path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z" />
-        {/* Eyes - No stroke, just fill */}
-        <path
-            d="M9 10h.01 M15 10h.01"
-            stroke={eyeColor || "currentColor"}
-            strokeWidth="2.5" // Slightly bolder for visibility
-            fill="none"
-        />
-    </svg>
-);
 
 export default SettingsPopup;
