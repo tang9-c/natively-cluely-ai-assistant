@@ -181,7 +181,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                         <div>
                             <h5 className="text-sm font-medium text-text-primary">Stealth & Control</h5>
                             <p className="text-xs text-text-secondary mt-1 leading-relaxed">
-                                Features "Undetectable Mode" to hide from the dock and "Masquerading" to disguise as system apps. You control exactly what data leaves your device.
+                                You control exactly what data leaves your device.
                             </p>
                         </div>
                     </div>
