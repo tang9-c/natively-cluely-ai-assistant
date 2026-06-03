@@ -544,19 +544,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // inline <ReactMarkdown components={{...}}> would create a fresh object
   // literal per render — defeating ReactMarkdown's internal render-bailout.
   //
-  // ALL 6 message-intent branches stream tokens (per IntelligenceEngine emits):
+  // ALL message-intent branches stream tokens (per IntelligenceEngine emits):
   //   - standard:              plain system text bubbles (fallback render)
   //   - codeText:              text parts inside a code-bubble
   //   - whatToAnswerText:      `what_to_answer` card body (suggested_answer_token;
   //                            emerald theme)
   //   - recapText:             `recap` body (recap_token; indigo theme)
-  //   - followUpQuestionsText: `follow_up_questions` body
-  //                            (follow_up_questions_token; amber theme)
   //   - shortenText:           `shorten` body — IMPORTANT: shorten streams
   //                            via refined_answer_token with intent='shorten'
-  //                            (IntelligenceEngine.ts:406, triggered by
-  //                            handleFollowUp('shorten') at line 2657);
-  //                            cyan theme.
+  //                            (IntelligenceEngine.ts); cyan theme.
   //
   // No intent is rendered with an inline `components={{...}}` literal.
   const mdComponents = useMemo(
@@ -667,17 +663,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         strong: ({ node, ...props }: any) => (
           <strong
             className={`font-bold ${isLightTheme ? 'text-indigo-800' : 'text-indigo-100'}`}
-            {...props}
-          />
-        ),
-        ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2" {...props} />,
-        li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
-      },
-      followUpQuestionsText: {
-        p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0" {...props} />,
-        strong: ({ node, ...props }: any) => (
-          <strong
-            className={`font-bold ${isLightTheme ? 'text-amber-800' : 'text-[#FFF9C4]'}`}
             {...props}
           />
         ),
@@ -1520,9 +1505,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           for (const it of items) queueToken('recap', (it as any).token);
         } else if (kind === 'clarify') {
           for (const it of items) queueToken('clarify', (it as any).token);
-        } else if (kind === 'follow_up_questions') {
-          for (const it of items) queueToken('follow_up_questions', (it as any).token);
-        }
       }),
     );
 
@@ -1636,53 +1618,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               role: 'system',
               text: data.summary,
               intent: 'recap',
-            },
-          ];
-        });
-      }),
-    );
-
-    // STREAMING: Follow-Up Questions (Rendered as message? Or specific UI?)
-    // Currently interface typically renders follow-up Qs as a message or button update.
-    // Let's assume message for now based on existing 'follow_up_questions_update' handling
-    // But wait, existing handle just sets state?
-    // Let's check how 'follow_up_questions_update' was handled.
-    // It was handled separate locally in this component maybe?
-    // Ah, I need to see the existing listener for 'onIntelligenceFollowUpQuestionsUpdate'
-
-    // Let's implemented token streaming for it anyway, likely it updates a message bubble
-    // OR it might update a specialized "Suggested Questions" area.
-    // Assuming it's a message for consistency with "Copilot" approach.
-
-    cleanups.push(
-      window.electronAPI.onIntelligenceFollowUpQuestionsToken((data) => {
-        queueToken('follow_up_questions', data.token);
-      }),
-    );
-
-    cleanups.push(
-      window.electronAPI.onIntelligenceFollowUpQuestionsUpdate((data) => {
-        flushToken();
-        // This event name is slightly different ('update' vs 'answer')
-        setIsProcessing(false);
-        setMessages((prev) => {
-          const lastMsg = prev[prev.length - 1];
-          if (lastMsg && lastMsg.isStreaming && lastMsg.intent === 'follow_up_questions') {
-            const updated = [...prev];
-            updated[prev.length - 1] = {
-              ...lastMsg,
-              text: data.questions,
-              isStreaming: false,
-            };
-            return updated;
-          }
-          return [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'system',
-              text: data.questions,
-              intent: 'follow_up_questions',
             },
           ];
         });
@@ -1846,27 +1781,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }
   };
 
-  const handleFollowUp = async (intent: string = 'rephrase') => {
-    setIsExpanded(true);
-    setIsProcessing(true);
-    analytics.trackCommandExecuted('follow_up_' + intent);
-
-    try {
-      await window.electronAPI.generateFollowUp(intent);
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          role: 'system',
-          text: `Error: ${err}`,
-        },
-      ]);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   const handleRecap = async () => {
     setIsExpanded(true);
     setIsProcessing(true);
@@ -1874,27 +1788,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     try {
       await window.electronAPI.generateRecap();
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          role: 'system',
-          text: `Error: ${err}`,
-        },
-      ]);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleFollowUpQuestions = async () => {
-    setIsExpanded(true);
-    setIsProcessing(true);
-    analytics.trackCommandExecuted('suggest_questions');
-
-    try {
-      await window.electronAPI.generateFollowUpQuestions();
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -2605,33 +2498,6 @@ Provide only the answer, nothing else.`;
         );
       }
 
-      if (msg.intent === 'follow_up_questions') {
-        return (
-          <div
-            className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}
-            style={appearance.subtleStyle}
-          >
-            <div
-              className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-amber-700' : 'text-[#FFD60A]'}`}
-            >
-              <HelpCircle className="w-3.5 h-3.5" />
-              <span>Follow-Up Questions</span>
-            </div>
-            <div
-              className={`text-[13px] leading-relaxed markdown-content ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}
-            >
-              <ReactMarkdown
-                remarkPlugins={REMARK_PLUGINS}
-                rehypePlugins={REHYPE_PLUGINS}
-                components={mdComponents.followUpQuestionsText}
-              >
-                {msg.text}
-              </ReactMarkdown>
-            </div>
-          </div>
-        );
-      }
-
       if (msg.intent === 'what_to_answer') {
         // Split text by code blocks (Handle unclosed blocks at EOF)
         const parts = msg.text.split(/(```[\s\S]*?(?:```|$))/g);
@@ -2723,8 +2589,6 @@ Provide only the answer, nothing else.`;
   // We use a ref to hold the latest handlers to avoid re-binding the event listener on every render
   const handlersRef = useRef({
     handleWhatToSay,
-    handleFollowUp,
-    handleFollowUpQuestions,
     handleRecap,
     handleAnswerNow,
     handleClarify,
@@ -2735,8 +2599,6 @@ Provide only the answer, nothing else.`;
   // Update ref on every render so the event listener always access latest state/props
   handlersRef.current = {
     handleWhatToSay,
-    handleFollowUp,
-    handleFollowUpQuestions,
     handleRecap,
     handleAnswerNow,
     handleClarify,
@@ -2839,8 +2701,6 @@ Provide only the answer, nothing else.`;
     const handleKeyDown = (e: KeyboardEvent) => {
       const {
         handleWhatToSay,
-        handleFollowUp,
-        handleFollowUpQuestions,
         handleRecap,
         handleAnswerNow,
         handleClarify,
@@ -2855,9 +2715,6 @@ Provide only the answer, nothing else.`;
       } else if (isShortcutPressed(e, 'clarify')) {
         e.preventDefault();
         handleClarify();
-      } else if (isShortcutPressed(e, 'followUp')) {
-        e.preventDefault();
-        handleFollowUpQuestions();
       } else if (isShortcutPressed(e, 'dynamicAction4')) {
         e.preventDefault();
         if (actionButtonMode === 'brainstorm') {
@@ -3220,8 +3077,6 @@ Provide only the answer, nothing else.`;
       isStealthRef.current = true;
 
       if (action === 'whatToAnswer') handlers.handleWhatToSay();
-      else if (action === 'shorten') handlers.handleFollowUp('shorten');
-      else if (action === 'followUp') handlers.handleFollowUpQuestions();
       else if (action === 'recap') handlers.handleRecap();
       else if (action === 'dynamicAction4') {
         if (actionButtonMode === 'brainstorm') handlers.handleBrainstorm();
@@ -3755,13 +3610,6 @@ Provide only the answer, nothing else.`;
                       <RefreshCw className="w-3 h-3 opacity-70" /> 回顾
                     </>
                   )}
-                </button>
-                <button
-                  onClick={handleFollowUpQuestions}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
-                  style={appearance.chipStyle}
-                >
-                  <HelpCircle className="w-3 h-3 opacity-70" /> 后续问题
                 </button>
                 <button
                   onClick={handleAnswerNow}

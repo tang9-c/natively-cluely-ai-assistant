@@ -3297,34 +3297,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
-  // MODE 3: Follow-Up (Refinement)
-  safeHandle('generate-follow-up', async (_, intent: string, userRequest?: string) => {
-    try {
-      const intelligenceManager = appState.getIntelligenceManager();
-      const refined = await intelligenceManager.runFollowUp(intent, userRequest);
-      return { refined, intent };
-    } catch (error: any) {
-      throw error;
-    }
-  });
-
-  // MODE 4: Recap (Summary)
+  // MODE 3: Recap (Summary)
   safeHandle('generate-recap', async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const summary = await intelligenceManager.runRecap();
       return { summary };
-    } catch (error: any) {
-      throw error;
-    }
-  });
-
-  // MODE 6: Follow-Up Questions
-  safeHandle('generate-follow-up-questions', async () => {
-    try {
-      const intelligenceManager = appState.getIntelligenceManager();
-      const questions = await intelligenceManager.runFollowUpQuestions();
-      return { questions };
     } catch (error: any) {
       throw error;
     }
@@ -3512,127 +3490,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     appState.getThemeManager().setMode(mode);
     return { success: true };
   });
-
-  // ==========================================
-  // Calendar Integration Handlers
-  // ==========================================
-
-  safeHandle('calendar-connect', async () => {
-    try {
-      const { CalendarManager } = require('./services/CalendarManager');
-      await CalendarManager.getInstance().startAuthFlow();
-      return { success: true };
-    } catch (error: any) {
-      console.error('Calendar auth error:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  safeHandle('calendar-disconnect', async () => {
-    const { CalendarManager } = require('./services/CalendarManager');
-    await CalendarManager.getInstance().disconnect();
-    return { success: true };
-  });
-
-  safeHandle('get-calendar-status', async () => {
-    const { CalendarManager } = require('./services/CalendarManager');
-    return CalendarManager.getInstance().getConnectionStatus();
-  });
-
-  safeHandle('get-upcoming-events', async () => {
-    const { CalendarManager } = require('./services/CalendarManager');
-    return CalendarManager.getInstance().getUpcomingEvents();
-  });
-
-  safeHandle('calendar-refresh', async () => {
-    const { CalendarManager } = require('./services/CalendarManager');
-    await CalendarManager.getInstance().refreshState();
-    return { success: true };
-  });
-
-  // ==========================================
-  // Follow-up Email Handlers
-  // ==========================================
-
-  safeHandle('generate-followup-email', async (_, input: any) => {
-    try {
-      const { FOLLOWUP_EMAIL_PROMPT, GROQ_FOLLOWUP_EMAIL_PROMPT } = require('./llm/prompts');
-      const { buildFollowUpEmailPromptInput } = require('./utils/emailUtils');
-
-      const llmHelper = appState.processingHelper.getLLMHelper();
-
-      // Build the context string from input
-      const contextString = buildFollowUpEmailPromptInput(input);
-
-      // Build prompts
-      const geminiPrompt = `${FOLLOWUP_EMAIL_PROMPT}\n\nMEETING DETAILS:\n${contextString}`;
-      const groqPrompt = `${GROQ_FOLLOWUP_EMAIL_PROMPT}\n\nMEETING DETAILS:\n${contextString}`;
-
-      // Use chatWithGemini with alternateGroqMessage for fallback
-      const emailBody = await llmHelper.chatWithGemini(
-        geminiPrompt,
-        undefined,
-        undefined,
-        true,
-        groqPrompt,
-      );
-
-      return emailBody;
-    } catch (error: any) {
-      console.error('Error generating follow-up email:', error);
-      throw error;
-    }
-  });
-
-  safeHandle('extract-emails-from-transcript', async (_, transcript: Array<{ text: string }>) => {
-    try {
-      const { extractEmailsFromTranscript } = require('./utils/emailUtils');
-      return extractEmailsFromTranscript(transcript);
-    } catch (error: any) {
-      console.error('Error extracting emails:', error);
-      return [];
-    }
-  });
-
-  safeHandle('get-calendar-attendees', async (_, eventId: string) => {
-    try {
-      const { CalendarManager } = require('./services/CalendarManager');
-      const cm = CalendarManager.getInstance();
-
-      // Try to get attendees from the event
-      const events = await cm.getUpcomingEvents();
-      const event = events?.find((e: any) => e.id === eventId);
-
-      if (event && event.attendees) {
-        return event.attendees
-          .map((a: any) => ({
-            email: a.email,
-            name: a.displayName || a.email?.split('@')[0] || '',
-          }))
-          .filter((a: any) => a.email);
-      }
-
-      return [];
-    } catch (error: any) {
-      console.error('Error getting calendar attendees:', error);
-      return [];
-    }
-  });
-
-  safeHandle(
-    'open-mailto',
-    async (_, { to, subject, body }: { to: string; subject: string; body: string }) => {
-      try {
-        const { buildMailtoLink } = require('./utils/emailUtils');
-        const mailtoUrl = buildMailtoLink(to, subject, body);
-        await shell.openExternal(mailtoUrl);
-        return { success: true };
-      } catch (error: any) {
-        console.error('Error opening mailto:', error);
-        return { success: false, error: error.message };
-      }
-    },
-  );
 
   // ==========================================
   // RAG (Retrieval-Augmented Generation) Handlers

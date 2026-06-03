@@ -150,20 +150,12 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.runWhatShouldISay(question, confidence, imagePaths, options);
     }
 
-    async runFollowUp(intent: string, userRequest?: string): Promise<string | null> {
-        return this.engine.runFollowUp(intent, userRequest);
-    }
-
     async runRecap(): Promise<string | null> {
         return this.engine.runRecap();
     }
 
     async runClarify(): Promise<string | null> {
         return this.engine.runClarify();
-    }
-
-    async runFollowUpQuestions(): Promise<string | null> {
-        return this.engine.runFollowUpQuestions();
     }
 
     async runManualAnswer(question: string): Promise<string | null> {
