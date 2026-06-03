@@ -517,7 +517,7 @@ export class WindowHelper {
 
   public hideMainWindow(): void {
     // Do NOT call setOpacity(0) before hide() on macOS — it causes WindowServer to
-    // re-register the app as a regular window, breaking undetectable/stealth mode
+    // re-register the app as a regular window, breaking the panel's stealth behavior
     // (fixed in v2.0.8, regressed when opacity was re-added for screenshot flash).
     // Screenshot capture already waits 80ms after hide() for compositor flush.
     if (process.platform === 'win32') {
