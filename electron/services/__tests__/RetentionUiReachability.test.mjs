@@ -14,7 +14,7 @@ test('meeting retention IPC exposes get/set and broadcasts updates', () => {
   assert.match(ipc, /SettingsManager\.getInstance\(\)\.get\('meetingRetention'\) \?\? 'forever'/);
   assert.match(ipc, /safeHandle\(['"]set-meeting-retention['"]/);
   assert.match(ipc, /SettingsManager\.getInstance\(\)\.set\('meetingRetention', retention\)/);
-  assert.match(ipc, /webContents\.send\('meeting-retention-changed', retention\)/);
+  assert.match(ipc, /broadcast\('meeting-retention-changed', retention\)/);
 });
 
 test('preload and renderer types expose meeting retention controls', () => {

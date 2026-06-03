@@ -26,6 +26,36 @@ export function initializeIpcHandlers(appState: AppState): void {
   };
 
   /**
+   * Wraps an async handler so that any thrown error is caught and returned
+   * as `{ success: false, error: string }` instead of crashing the IPC channel.
+   * Handlers that already manage their own return shape can opt out.
+   */
+  const withResult = <T extends any[]>(
+    fn: (...args: T) => Promise<any> | any,
+  ): ((...args: T) => Promise<any>) => {
+    return async (...args: T) => {
+      try {
+        return await fn(...args);
+      } catch (error: any) {
+        console.error(`[IPC] ${fn.name || 'handler'} error:`, error);
+        return { success: false, error: error?.message || 'unknown_error' };
+      }
+    };
+  };
+
+  /**
+   * Broadcasts an event to all non-destroyed renderer windows.
+   * Replaces the repetitive `BrowserWindow.getAllWindows().forEach(...)` pattern.
+   */
+  const broadcast = (eventName: string, ...args: any[]): void => {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send(eventName, ...args);
+      }
+    });
+  };
+
+  /**
    * Returns true if the user has an active premium license OR an unexpired free trial.
    * Used to gate profile intelligence features (resume upload, JD upload, company research, etc.).
    */
@@ -61,9 +91,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       db.clearProfilePersona?.();
       const llmHelper = appState.processingHelper?.getLLMHelper?.();
       llmHelper?.setPersonaPrompt?.('');
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('modes-active-cleared');
-      });
+      broadcast('modes-active-cleared');
       console.log('[IPC] Premium-only context cleared due to license loss');
     } catch (e) {
       /* non-fatal */
@@ -104,10 +132,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
       const result = await LicenseManager.getInstance().activateLicense(key);
       if (result?.success) {
-        BrowserWindow.getAllWindows().forEach((win) => {
-          if (!win.isDestroyed())
-            win.webContents.send('license-status-changed', { isPremium: true });
-        });
+        broadcast('license-status-changed', { isPremium: true });
       }
       return result;
     } catch (err: any) {
@@ -164,10 +189,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       // Notify all windows so the license UI (ProGate, settings) refreshes immediately
       clearActiveModeOnLicenseLoss();
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed())
-          win.webContents.send('license-status-changed', { isPremium: false });
-      });
+      broadcast('license-status-changed', { isPremium: false });
     } catch {
       /* LicenseManager not available */
     }
@@ -753,47 +775,106 @@ export function initializeIpcHandlers(appState: AppState): void {
     return settings.openAtLogin;
   });
 
-  safeHandle('get-verbose-logging', async () => {
-    return appState.getVerboseLogging();
-  });
+  // ── Generic Settings Handlers ──────────────────────────────────────────────
+  // Replaces repetitive get-X / set-X pairs for simple SettingsManager passthroughs.
+  // Each entry: [channelSuffix, settingsKey, options]
+  //   - validator: optional (value) => boolean | string (error message)
+  //   - broadcastEvent: optional event name to fire after successful set
+  //   - getter: optional custom getter function
+  //   - setter: optional custom setter function
+  const SETTINGS_REGISTRY: Array<{
+    suffix: string;
+    key: string;
+    validator?: (v: any) => true | string;
+    broadcastEvent?: string;
+    getter?: () => any;
+    setter?: (v: any) => void;
+  }> = [
+    { suffix: 'verbose-logging', key: 'verboseLogging', getter: () => appState.getVerboseLogging(), setter: (v) => appState.setVerboseLogging(v) },
+    {
+      suffix: 'meeting-retention',
+      key: 'meetingRetention',
+      validator: (v) => ['forever', '7d', '30d', 'never'].includes(v) || 'invalid_retention',
+      broadcastEvent: 'meeting-retention-changed',
+    },
+    {
+      suffix: 'provider-data-scopes',
+      key: 'providerDataScopes',
+      validator: (v) => {
+        if (!v || typeof v !== 'object') return 'invalid_scopes';
+        const allowed = new Set(['transcript', 'screenshots', 'reference_files', 'profile_history', 'embeddings', 'post_call_summary']);
+        for (const k of Object.keys(v)) if (!allowed.has(k)) return 'invalid_scopes';
+        return true;
+      },
+      broadcastEvent: 'provider-data-scopes-changed',
+    },
+    {
+      suffix: 'screen-understanding-mode',
+      key: 'screenUnderstandingMode',
+      validator: (v) => ['vision_first', 'vision_only', 'private_vision'].includes(v) || 'invalid_mode',
+      broadcastEvent: 'screen-understanding-mode-changed',
+      getter: () => SettingsManager.getInstance().getScreenUnderstandingMode(),
+      setter: (v) => SettingsManager.getInstance().setScreenUnderstandingMode(v),
+    },
+    {
+      suffix: 'technical-interview-vision-first',
+      key: 'technicalInterviewVisionFirst',
+      validator: (v) => typeof v === 'boolean' || 'invalid_value',
+      broadcastEvent: 'technical-interview-vision-first-changed',
+      getter: () => SettingsManager.getInstance().getTechnicalInterviewVisionFirst(),
+    },
+  ];
 
+  for (const reg of SETTINGS_REGISTRY) {
+    safeHandle(`settings:get:${reg.suffix}`, async () => {
+      if (reg.getter) return reg.getter();
+      return SettingsManager.getInstance().get(reg.key) ?? null;
+    });
+
+    safeHandle(`settings:set:${reg.suffix}`, async (_, value: any) => {
+      if (reg.validator) {
+        const ok = reg.validator(value);
+        if (ok !== true) return { success: false, error: ok };
+      }
+      if (reg.setter) {
+        reg.setter(value);
+      } else {
+        SettingsManager.getInstance().set(reg.key, value);
+      }
+      if (reg.broadcastEvent) {
+        broadcast(reg.broadcastEvent, value);
+      }
+      return { success: true };
+    });
+  }
+
+  // Legacy aliases — map old direct channels to the new generic settings channels
+  safeHandle('get-verbose-logging', async () => appState.getVerboseLogging());
   safeHandle('set-verbose-logging', async (_, enabled: boolean) => {
     appState.setVerboseLogging(enabled);
     return { success: true };
   });
-
-  safeHandle('get-meeting-retention', async () => {
-    return SettingsManager.getInstance().get('meetingRetention') ?? 'forever';
-  });
-
+  safeHandle('get-meeting-retention', async () =>
+    SettingsManager.getInstance().get('meetingRetention') ?? 'forever',
+  );
   safeHandle('set-meeting-retention', async (_, retention: 'forever' | '7d' | '30d' | 'never') => {
     if (!['forever', '7d', '30d', 'never'].includes(retention)) {
       return { success: false, error: 'invalid_retention' };
     }
     SettingsManager.getInstance().set('meetingRetention', retention);
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send('meeting-retention-changed', retention);
-      }
-    });
+    broadcast('meeting-retention-changed', retention);
     return { success: true };
   });
-
-  safeHandle('get-provider-data-scopes', async () => {
-    return SettingsManager.getInstance().get('providerDataScopes') ?? {};
-  });
-
+  safeHandle('get-provider-data-scopes', async () =>
+    SettingsManager.getInstance().get('providerDataScopes') ?? {},
+  );
   safeHandle('set-provider-data-scopes', async (_, scopes: Record<string, boolean>) => {
     if (!scopes || typeof scopes !== 'object') {
       return { success: false, error: 'invalid_scopes' };
     }
     const allowedKeys = new Set([
-      'transcript',
-      'screenshots',
-      'reference_files',
-      'profile_history',
-      'embeddings',
-      'post_call_summary',
+      'transcript', 'screenshots', 'reference_files',
+      'profile_history', 'embeddings', 'post_call_summary',
     ]);
     const sanitized: Record<string, boolean> = {};
     for (const [key, value] of Object.entries(scopes)) {
@@ -802,18 +883,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     }
     SettingsManager.getInstance().set('providerDataScopes', sanitized as any);
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send('provider-data-scopes-changed', sanitized);
-      }
-    });
+    broadcast('provider-data-scopes-changed', sanitized);
     return { success: true };
   });
-
-  safeHandle('get-screen-understanding-mode', async () => {
-    return SettingsManager.getInstance().getScreenUnderstandingMode();
-  });
-
+  safeHandle('get-screen-understanding-mode', async () =>
+    SettingsManager.getInstance().getScreenUnderstandingMode(),
+  );
   safeHandle(
     'set-screen-understanding-mode',
     async (_, mode: 'vision_first' | 'vision_only' | 'private_vision') => {
@@ -821,48 +896,30 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'invalid_mode' };
       }
       SettingsManager.getInstance().setScreenUnderstandingMode(mode);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) {
-          win.webContents.send('screen-understanding-mode-changed', mode);
-        }
-      });
+      broadcast('screen-understanding-mode-changed', mode);
       return { success: true };
     },
   );
-
-  safeHandle('get-technical-interview-vision-first', async () => {
-    return SettingsManager.getInstance().getTechnicalInterviewVisionFirst();
-  });
-
+  safeHandle('get-technical-interview-vision-first', async () =>
+    SettingsManager.getInstance().getTechnicalInterviewVisionFirst(),
+  );
   safeHandle('set-technical-interview-vision-first', async (_, enabled: boolean) => {
     if (typeof enabled !== 'boolean') {
       return { success: false, error: 'invalid_value' };
     }
     SettingsManager.getInstance().set('technicalInterviewVisionFirst', enabled);
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send('technical-interview-vision-first-changed', enabled);
-      }
-    });
+    broadcast('technical-interview-vision-first-changed', enabled);
     return { success: true };
   });
-
-  // Legacy alias for renderer builds that still call the old IPC name.
-  // Maps the deprecated technicalInterviewDirectVision channel onto the new
-  // technicalInterviewVisionFirst getter/setter so old renderer builds keep working.
-  safeHandle('get-technical-interview-direct-vision', async () => {
-    return SettingsManager.getInstance().getTechnicalInterviewVisionFirst();
-  });
+  safeHandle('get-technical-interview-direct-vision', async () =>
+    SettingsManager.getInstance().getTechnicalInterviewVisionFirst(),
+  );
   safeHandle('set-technical-interview-direct-vision', async (_, enabled: boolean) => {
     if (typeof enabled !== 'boolean') {
       return { success: false, error: 'invalid_value' };
     }
     SettingsManager.getInstance().set('technicalInterviewVisionFirst', enabled);
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send('technical-interview-vision-first-changed', enabled);
-      }
-    });
+    broadcast('technical-interview-vision-first-changed', enabled);
     return { success: true };
   });
 
@@ -967,31 +1024,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('restart-ollama', async () => {
-    try {
-      // First try to kill it if it's running
-      await appState.processingHelper.getLLMHelper().forceRestartOllama();
-
-      // The forceRestartOllama now calls OllamaManager.getInstance().init() internally
-      // so we don't need to do it again here.
-
-      return true;
-    } catch (error: any) {
-      console.error('[IPC restart-ollama] Failed to restart:', error);
-      return false;
-    }
-  });
-
-  safeHandle('ensure-ollama-running', async () => {
-    try {
-      const { OllamaManager } = require('./services/OllamaManager');
-      await OllamaManager.getInstance().init();
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, message: error.message };
-    }
-  });
-
   safeHandle('switch-to-gemini', async (_, apiKey?: string, modelId?: string) => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
@@ -1010,130 +1042,69 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  // Dedicated API key setters (for Settings UI Save buttons)
-  safeHandle('set-gemini-api-key', async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setGeminiApiKey(apiKey);
+  // ── Generic LLM API Key Setters ────────────────────────────────────────────
+  // Replaces copy-pasted set-X-api-key handlers for providers that follow the same pattern:
+  //   1. Persist key in CredentialsManager
+  //   2. Update LLMHelper immediately
+  //   3. resetEngine() + initializeLLMs() (CQ-06 fix)
+  const LLM_KEY_REGISTRY: Array<{
+    channel: string;
+    credMethod: string;
+    llmMethod: string;
+    postSave?: (apiKey: string) => void;
+  }> = [
+    { channel: 'set-gemini-api-key', credMethod: 'setGeminiApiKey', llmMethod: 'setApiKey' },
+    { channel: 'set-groq-api-key', credMethod: 'setGroqApiKey', llmMethod: 'setGroqApiKey' },
+    { channel: 'set-openai-api-key', credMethod: 'setOpenaiApiKey', llmMethod: 'setOpenaiApiKey' },
+    { channel: 'set-claude-api-key', credMethod: 'setClaudeApiKey', llmMethod: 'setClaudeApiKey' },
+    {
+      channel: 'set-doubao-llm-api-key',
+      credMethod: 'setDoubaoLlmApiKey',
+      llmMethod: 'setDoubaoApiKey',
+      postSave: (apiKey: string) => {
+        const ragManager = appState.getRAGManager();
+        if (ragManager) {
+          console.log('[IPC] Re-initializing RAG embedding pipeline with Doubao key');
+          const { CredentialsManager } = require('./services/CredentialsManager');
+          ragManager.initializeEmbeddings({
+            openaiKey: CredentialsManager.getInstance().getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
+            geminiKey: CredentialsManager.getInstance().getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
+            doubaoKey: apiKey || process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY || undefined,
+            ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
+            providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
+          });
+        }
+      },
+    },
+  ];
 
-      // Also update the LLMHelper immediately
-      const llmHelper = appState.processingHelper.getLLMHelper();
-      llmHelper.setApiKey(apiKey);
+  for (const reg of LLM_KEY_REGISTRY) {
+    safeHandle(reg.channel, async (_, apiKey: string) => {
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const cm = CredentialsManager.getInstance();
+        (cm as any)[reg.credMethod](apiKey);
 
-      // CQ-06 fix: cancel any in-flight LLM stream before swapping LLM clients.
-      // Use resetEngine() (NOT reset()) so session transcript is preserved mid-meeting.
-      // initializeLLMs() now also calls engine.reset() internally for double-safety.
-      appState.getIntelligenceManager().resetEngine();
-      // Re-init IntelligenceManager
-      appState.getIntelligenceManager().initializeLLMs();
+        const llmHelper = appState.processingHelper.getLLMHelper();
+        (llmHelper as any)[reg.llmMethod](apiKey);
 
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error saving Gemini API key:', error);
-      return { success: false, error: error.message };
-    }
-  });
+        reg.postSave?.(apiKey);
 
-  safeHandle('set-groq-api-key', async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setGroqApiKey(apiKey);
+        // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
+        appState.getIntelligenceManager().resetEngine();
+        appState.getIntelligenceManager().initializeLLMs();
 
-      // Also update the LLMHelper immediately
-      const llmHelper = appState.processingHelper.getLLMHelper();
-      llmHelper.setGroqApiKey(apiKey);
-
-      // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
-      appState.getIntelligenceManager().resetEngine();
-      // Re-init IntelligenceManager
-      appState.getIntelligenceManager().initializeLLMs();
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error saving Groq API key:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  safeHandle('set-openai-api-key', async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setOpenaiApiKey(apiKey);
-
-      // Also update the LLMHelper immediately
-      const llmHelper = appState.processingHelper.getLLMHelper();
-      llmHelper.setOpenaiApiKey(apiKey);
-
-      // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
-      appState.getIntelligenceManager().resetEngine();
-      // Re-init IntelligenceManager
-      appState.getIntelligenceManager().initializeLLMs();
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error saving OpenAI API key:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  safeHandle('set-claude-api-key', async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setClaudeApiKey(apiKey);
-
-      // Also update the LLMHelper immediately
-      const llmHelper = appState.processingHelper.getLLMHelper();
-      llmHelper.setClaudeApiKey(apiKey);
-
-      // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
-      appState.getIntelligenceManager().resetEngine();
-      // Re-init IntelligenceManager
-      appState.getIntelligenceManager().initializeLLMs();
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error saving Claude API key:', error);
-      return { success: false, error: error.message };
-    }
-  });
+        return { success: true };
+      } catch (error: any) {
+        console.error(`[IPC] ${reg.channel} error:`, error);
+        return { success: false, error: error.message };
+      }
+    });
+  }
 
   // ── Usage cache (60-second TTL, keyed by API key) ──────────────────────────
   const _usageCache = new Map<string, { data: any; ts: number }>();
   const USAGE_CACHE_TTL_MS = 60_000;
-
-  safeHandle('set-doubao-llm-api-key', async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setDoubaoLlmApiKey(apiKey);
-
-      // Also update the LLMHelper immediately
-      const llmHelper = appState.processingHelper.getLLMHelper();
-      llmHelper.setDoubaoApiKey(apiKey);
-
-      // Re-initialize RAG embedding pipeline with new Doubao key
-      const ragManager = appState.getRAGManager();
-      if (ragManager) {
-        console.log('[IPC] Re-initializing RAG embedding pipeline with Doubao key');
-        ragManager.initializeEmbeddings({
-          openaiKey: CredentialsManager.getInstance().getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
-          geminiKey: CredentialsManager.getInstance().getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
-          doubaoKey: apiKey || process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY || undefined,
-          ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
-          providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
-        });
-      }
-
-      // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
-      appState.getIntelligenceManager().resetEngine();
-      // Re-init IntelligenceManager
-      appState.getIntelligenceManager().initializeLLMs();
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error saving Doubao LLM API key:', error);
-      return { success: false, error: error.message };
-    }
-  });
 
   safeHandle('set-natively-api-key', async (_, apiKey: string) => {
     try {
@@ -1150,9 +1121,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const defaultModel = cm.getDefaultModel();
       const providers = [...(cm.getCurlProviders() || []), ...(cm.getCustomProviders() || [])];
       llmHelper.setModel(defaultModel, providers);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('model-changed', defaultModel);
-      });
+      broadcast('model-changed', defaultModel);
 
       // If setNativelyApiKey auto-promoted the STT provider to 'natively', reconfigure
       // the audio pipeline immediately — without this, the in-memory pipeline still uses
@@ -1174,10 +1143,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           if (result.success) {
             console.log('[IPC] set-natively-api-key: Pro auto-activated via API plan.');
             // Notify all windows so the license UI refreshes immediately
-            BrowserWindow.getAllWindows().forEach((win) => {
-              if (!win.isDestroyed())
-                win.webContents.send('license-status-changed', { isPremium: true });
-            });
+            broadcast('license-status-changed', { isPremium: true });
           } else if (result.skipped) {
             console.log(
               '[IPC] set-natively-api-key: existing Gumroad/Dodo license preserved — Pro not overwritten.',
@@ -1206,10 +1172,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               '[IPC] set-natively-api-key: key cleared — natively_api Pro license deactivated.',
             );
             clearActiveModeOnLicenseLoss();
-            BrowserWindow.getAllWindows().forEach((win) => {
-              if (!win.isDestroyed())
-                win.webContents.send('license-status-changed', { isPremium: false });
-            });
+            broadcast('license-status-changed', { isPremium: false });
           }
         } catch (e: any) {
           console.warn(
@@ -1450,12 +1413,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       // 7. Notify all windows to refresh license + model state
       clearActiveModeOnLicenseLoss();
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) {
-          win.webContents.send('license-status-changed', { isPremium: false });
-          win.webContents.send('trial-ended', { choice: 'byok' });
-        }
-      });
+      broadcast('license-status-changed', { isPremium: false });
+      broadcast('trial-ended', { choice: 'byok' });
 
       return { success: true };
     } catch (error: any) {
@@ -1593,63 +1552,6 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true };
     } catch (error: any) {
       console.error('Error switching to custom provider:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  // cURL Provider Handlers
-  safeHandle('get-curl-providers', async () => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      return CredentialsManager.getInstance().getCurlProviders();
-    } catch (error: any) {
-      console.error('Error getting curl providers:', error);
-      return [];
-    }
-  });
-
-  safeHandle('save-curl-provider', async (_, provider: any) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().saveCurlProvider(provider);
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error saving curl provider:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  safeHandle('delete-curl-provider', async (_, id: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().deleteCurlProvider(id);
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error deleting curl provider:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  safeHandle('switch-to-curl-provider', async (_, providerId: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const provider = CredentialsManager.getInstance()
-        .getCurlProviders()
-        .find((p: any) => p.id === providerId);
-
-      if (!provider) {
-        throw new Error('Provider not found');
-      }
-
-      const llmHelper = appState.processingHelper.getLLMHelper();
-      await llmHelper.switchToCurl(provider);
-
-      // Re-init IntelligenceManager (optional, but good for consistency)
-      appState.getIntelligenceManager().initializeLLMs();
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error switching to curl provider:', error);
       return { success: false, error: error.message };
     }
   });
@@ -1817,9 +1719,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         await appState.reconfigureSttProvider();
 
         // Notify all windows so the settings UI reflects the change immediately
-        BrowserWindow.getAllWindows().forEach((win) => {
-          if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-        });
+        broadcast('credentials-changed');
 
         return { success: true };
       } catch (error: any) {
@@ -1842,9 +1742,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setGroqSttApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-      });
+      broadcast('credentials-changed');
       return { success: true };
     } catch (error: any) {
       console.error('Error saving Groq STT API key:', error);
@@ -1856,9 +1754,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setOpenAiSttApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-      });
+      broadcast('credentials-changed');
       return { success: true };
     } catch (error: any) {
       console.error('Error saving OpenAI STT API key:', error);
@@ -1873,9 +1769,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Reconfigure the active pipeline so the new endpoint is used immediately,
       // matching the behavior of azure/ibmwatson region setters.
       await appState.reconfigureSttProvider();
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-      });
+      broadcast('credentials-changed');
       return { success: true };
     } catch (error: any) {
       console.error('Error saving OpenAI STT base URL:', error);
@@ -1887,9 +1781,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setDeepgramApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-      });
+      broadcast('credentials-changed');
       return { success: true };
     } catch (error: any) {
       console.error('Error saving Deepgram API key:', error);
@@ -1916,9 +1808,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setElevenLabsApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-      });
+      broadcast('credentials-changed');
       return { success: true };
     } catch (error: any) {
       console.error('Error saving ElevenLabs API key:', error);
@@ -1967,9 +1857,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setSonioxApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-      });
+      broadcast('credentials-changed');
       return { success: true };
     } catch (error: any) {
       console.error('Error saving Soniox API key:', error);
@@ -1981,9 +1869,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setDoubaoApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-      });
+      broadcast('credentials-changed');
       return { success: true };
     } catch (error: any) {
       console.error('Error saving Doubao API key:', error);
@@ -2674,10 +2560,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { SettingsManager } = require('./services/SettingsManager');
       SettingsManager.getInstance().set('groqFastTextMode', enabled);
 
-      // Broadcast to all windows
-      BrowserWindow.getAllWindows().forEach((win) => {
-        win.webContents.send('groq-fast-text-changed', enabled);
-      });
+      broadcast('groq-fast-text-changed', enabled);
 
       return { success: true };
     } catch (error: any) {
@@ -2751,11 +2634,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       appState.modelSelectorWindowHelper.hideWindow();
 
       // Broadcast to all windows so NativelyInterface can update its selector (session-only update)
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) {
-          win.webContents.send('model-changed', modelId);
-        }
-      });
+      broadcast('model-changed', modelId);
 
       return { success: true };
     } catch (error: any) {
@@ -2782,11 +2661,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       appState.modelSelectorWindowHelper.hideWindow();
 
       // Broadcast to all windows so NativelyInterface can update its selector
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) {
-          win.webContents.send('model-changed', modelId);
-        }
-      });
+      broadcast('model-changed', modelId);
 
       return { success: true };
     } catch (error: any) {
@@ -3288,11 +3163,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     const sm = SettingsManager.getInstance();
     sm.set('actionButtonMode', mode);
 
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send('action-button-mode-changed', mode);
-      }
-    });
+    broadcast('action-button-mode-changed', mode);
 
     return { success: true };
   });
@@ -4070,12 +3941,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     // Clamp to valid range
     const clamped = Math.min(1.0, Math.max(0.35, opacity));
     // Broadcast to all renderer windows so the overlay picks it up in real-time
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send('overlay-opacity-changed', clamped);
-      }
-    });
-    return;
+    broadcast('overlay-opacity-changed', clamped);
   });
 
   // ── Permissions ──────────────────────────────────────────────
@@ -4211,9 +4077,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Broadcast mode change to all windows so indicators update immediately
       const activeMode = id ? ModesManager.getInstance().getActiveMode() : null;
       const activeName = activeMode?.name ?? null;
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('mode-changed', { id, name: activeName });
-      });
+      broadcast('mode-changed', { id, name: activeName });
       // Phase 3 — re-bind dynamic action engine so the new mode's trigger pack
       // takes effect immediately. New (sessionId, modeId) pair flushes the per-
       // session store inside DynamicActionEngine, killing any old-mode candidates.
