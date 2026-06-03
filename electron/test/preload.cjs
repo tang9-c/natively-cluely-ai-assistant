@@ -3,7 +3,7 @@
 
 const path = require('path');
 
-// Mock the Electron `app` global that ModelVersionManager and CredentialsManager use at module load time.
+// Mock the Electron `app` global that CredentialsManager uses at module load time.
 // With ES modules / tsx, the mock must be set before the first import.
 const mockApp = {
   getPath: (name) => {
