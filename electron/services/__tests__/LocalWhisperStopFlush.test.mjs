@@ -28,7 +28,7 @@ test('LocalWhisperSTT drains queued stop-time finals before terminating worker',
   assert.ok(flushPendingStart >= 0, 'flushPending should exist');
   assert.match(source, /if \(this\.isDrainingFinals\) \{\n\s+this\.drainingFinalsInFlight\+\+;\n\s+\}\n\s+this\.sendTranscribe\(audio, false\);/);
   assert.match(flushPendingSource, /queued\.forEach\(audio => this\.sendTranscribe\(audio, false\)\);/);
-  assert.match(listenerSource, /!this\.isActive && !\(this\.isDrainingFinals && msg\.type === 'result'\)/);
+  assert.match(listenerSource, /!this\._isActive && !\(this\.isDrainingFinals && msg\.type === 'result'\)/);
   assert.match(listenerSource, /this\.drainingFinalsInFlight = Math\.max\(0, this\.drainingFinalsInFlight - 1\);/);
   assert.match(listenerSource, /this\.beginWorkerTermination\(this\.worker\);/);
 });
