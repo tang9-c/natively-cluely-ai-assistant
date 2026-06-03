@@ -422,54 +422,6 @@ export class AppState {
     // Stealth keyboard tap (CGEventTap) IPC. Renderer drives the permission
     // flow + queries availability/state; the tap itself is toggled by the
     // global shortcut handler above. Only registered on macOS — on other
-    // platforms these handlers no-op so the renderer can render fallback UI.
-    //
-    // removeHandler-then-handle on each channel is defensive against a
-    // second `app.ready` firing (rare but possible during dev HMR / single-
-    // instance second-launch path) — `ipcMain.handle` throws on duplicate
-    // registration, which would propagate as a renderer IPC rejection and
-    // silently leave isCgEventTapAvailableRef at its safe-false default.
-    const registerStealthHandler = (channel: string, fn: (...args: any[]) => any) => {
-      ipcMain.removeHandler(channel);
-      ipcMain.handle(channel, fn);
-    };
-    if (process.platform === 'darwin') {
-      const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
-      const stealth = StealthKeyboardManager.getInstance();
-      registerStealthHandler('stealth-tap:available', () => stealth.isAvailable());
-      registerStealthHandler('stealth-tap:open-settings', () => { stealth.openSettings(); });
-      registerStealthHandler('stealth-tap:stop', () => { stealth.stop(); });
-      registerStealthHandler('stealth-tap:start', () => stealth.start());
-      // IME users (Pinyin, Hangul, Kanji, …) cannot compose under the tap
-      // because CGEventTap fires below TIS. Renderer consults this before
-      // click-to-engage so it can fall back to plain DOM focus when an IME
-      // is in play. See electron/services/ImeDetector.ts for the rationale.
-      registerStealthHandler('stealth-tap:should-auto-engage', () => {
-        const { shouldAutoEngageStealthTap } = require('./services/ImeDetector');
-        return shouldAutoEngageStealthTap();
-      });
-      // Force a fresh IME probe and return the refined value. Renderer calls
-      // this on window focus so users who add a Pinyin/Hangul source mid-
-      // session don't silently break CJK composition the next time the tap
-      // would auto-engage (the cached value from mount-time would be stale).
-      registerStealthHandler('stealth-tap:refresh-ime', () => {
-        const { refreshImeDetection, shouldAutoEngageStealthTap } = require('./services/ImeDetector');
-        refreshImeDetection();
-        return shouldAutoEngageStealthTap();
-      });
-    } else {
-      registerStealthHandler('stealth-tap:available', () => false);
-      registerStealthHandler('stealth-tap:open-settings', () => {});
-      registerStealthHandler('stealth-tap:stop', () => {});
-      registerStealthHandler('stealth-tap:start', () => false);
-      // Non-darwin: returns true so the renderer's stealthAutoEngageOkRef
-      // stays true and the explicit isCgEventTapAvailableRef guard (added in
-      // PR #250) is what actually gates blockInputFocus. Inverted relative
-      // to availability on purpose — see ImeDetector.ts:67.
-      registerStealthHandler('stealth-tap:should-auto-engage', () => true);
-      registerStealthHandler('stealth-tap:refresh-ime', () => true);
-    }
-
     keybindManager.onShortcutTriggered(async (actionId) => {
       console.log(`[Main] Global shortcut triggered: ${actionId}`);
       try {
@@ -514,37 +466,12 @@ export class AppState {
             });
           }
 
-        // --- STEALTH SHORTCUTS: no focus, no show, pure IPC dispatch ---
-
         // Chat actions — fire into the renderer without focusing the window
         } else if (actionId === 'chat:focusInput') {
-          // Toggle CGEventTap-backed stealth typing mode. While engaged, every
-          // keystroke is captured at the OS event-pipeline layer and routed to
-          // the renderer; the foreground app (Zoom/browser/etc.) does NOT
-          // receive any key events and never loses key/frontmost status. This
-          // is the only path that delivers true Cluely-grade undetectability
-          // on macOS — NSPanel-nonactivating gets us 90% there, the tap closes
-          // the remaining gap (the panel never even has to become key-window).
-          //
-          // Falls back to plain panel.focus() if the native tap is unavailable
-          // (no rebuild yet, no Accessibility permission, or non-macOS).
           this.showMainWindow(true);
           const overlay = this.windowHelper.getOverlayWindow();
           if (overlay && !overlay.isDestroyed()) {
             overlay.webContents.send('ensure-expanded');
-          }
-
-          if (process.platform === 'darwin') {
-            const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
-            const mgr = StealthKeyboardManager.getInstance();
-            if (mgr.isAvailable()) {
-              mgr.toggle();
-              return; // tap is the input path; no need to focus the panel
-            }
-          }
-
-          // Fallback: panel-safe focus on macOS without tap, brief focus on Win.
-          if (overlay && !overlay.isDestroyed()) {
             overlay.webContents.send('global-shortcut', { action: 'focusInput' });
             overlay.focus();
           }
@@ -4271,20 +4198,6 @@ async function initializeApp() {
     // crashes. stop() joins the worker, guaranteeing no in-flight callbacks
     // remain by the time we return.
     //
-    // ORDERING NOTE: this MUST happen before any subsequent napi-touching
-    // cleanup (cropper.dispose, ollama.stop). Those
-    // can spawn their own native threads or release napi resources, which
-    // would race with our worker if it's still alive.
-    if (process.platform === 'darwin') {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
-        StealthKeyboardManager.getInstance().stop();
-      } catch (e) {
-        console.error('[main] Failed to stop StealthKeyboardManager during shutdown:', e);
-      }
-    }
-
     // Dispose CropperWindowHelper to clean up IPC listeners and prevent memory leaks
     // This is critical to prevent resource leaks and ensure proper cleanup
     if (appState?.cropperWindowHelper) {
