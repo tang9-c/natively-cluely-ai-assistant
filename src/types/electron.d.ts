@@ -134,6 +134,8 @@ export interface ElectronAPI {
   // STT Provider Management
   setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively') => Promise<{ success: boolean; error?: string }>
   getSttProvider: () => Promise<string>
+  localWhisperGetChannelConfig: () => Promise<{ enabled: boolean; micModelId: string; systemModelId: string; globalModelId: string }>
+  localWhisperSetChannelConfig: (cfg: { enabled?: boolean; micModelId?: string; systemModelId?: string }) => Promise<{ success: boolean; error?: string }>
   setGroqSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setOpenAiSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setOpenAiSttBaseUrl: (url: string) => Promise<{ success: boolean; error?: string }>
