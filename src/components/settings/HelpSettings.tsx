@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Command, Monitor, Mic, Settings, Zap, Key, User, Play, Image, ArrowUp, FileText, Sparkles, Search, ChevronUp, Copy,
-    FileJson, MessageSquare, Briefcase, Eye, EyeOff, Ghost, ChevronDown, ChevronRight, HelpCircle, Upload, CheckCircle2,
+    FileJson, MessageSquare, Briefcase, Eye, EyeOff, ChevronDown, ChevronRight, HelpCircle, Upload, CheckCircle2,
     RefreshCw, Trash2, Check, ExternalLink, Volume2, Globe, Brain, Cpu, Calendar, Star, CreditCard, X, Pencil, Lightbulb,
-    SlidersHorizontal, PointerOff, ArrowRight, LayoutGrid, Smartphone, Wifi, Lock, DollarSign, Building2
+    SlidersHorizontal, PointerOff, ArrowRight, LayoutGrid, DollarSign, Building2
 } from 'lucide-react';
 import { SiOpenai, SiGoogle } from 'react-icons/si';
 import { useShortcuts } from '../../hooks/useShortcuts';
@@ -1729,57 +1729,8 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="10. 手机镜像" icon={<Smartphone className="w-4 h-4" />}>
+                <AccordionSection title="10. 窗口控制" icon={<Monitor className="w-4 h-4" />}>
                     <div className="space-y-4">
-                        <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl mb-2">
-                            <h4 className="text-[13px] font-semibold text-sky-400 flex items-center gap-2 mb-1">
-                                <Smartphone size={14} /> Stream Natively to Your Phone
-                            </h4>
-                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Phone Mirror spins up a small local web server so you can watch Natively's live transcript and AI answers from your phone or tablet — handy when your screen is being shared and you don't want the overlay visible.
-                            </p>
-                        </div>
-
-                        <div className="grid md:grid-cols-2 gap-3">
-                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Wifi className="w-4 h-4 text-sky-500" /> Enable & Connect
-                                </h4>
-                                <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                    <li>Open <strong>Settings → Phone Mirror</strong></li>
-                                    <li>Toggle on, then scan the generated QR code from your phone</li>
-                                    <li>Loopback by default — flip <strong>在局域网暴露</strong> to reach it from another device on the same Wi-Fi</li>
-                                </ul>
-                            </div>
-                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Lock className="w-4 h-4 text-amber-500" /> Token-Gated Security
-                                </h4>
-                                <p className="text-[11px] text-text-secondary">
-                                    Every session is protected by a single-use bearer token baked into the QR. If a device leaves your trust circle, hit <strong>轮换令牌</strong> to invalidate every existing connection in one tap.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="p-3 border border-orange-500/20 bg-orange-500/5 rounded-lg">
-                            <p className="text-[10px] text-orange-400 m-0">
-                                <strong>⚠️ LAN exposure:</strong> Only enable <em>在局域网暴露</em> on networks you trust. The token stops casual snoops, but anyone who captures the QR or copies the URL can read your live transcript until you rotate.
-                            </p>
-                        </div>
-                    </div>
-                </AccordionSection>
-
-                <AccordionSection title="11. 隐身与窗口控制" icon={<Ghost className="w-4 h-4" />}>
-                    <div className="space-y-4">
-                        <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl mb-4">
-                            <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
-                                <Ghost size={14} /> Process Disguise & Undetectability
-                            </h4>
-                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Natively is heavily geared towards power users seeking minimalistic operation. The process completely disguises itself and remains undetectable/invisible to standard screen-recording applications and desktop sharing utilities.
-                            </p>
-                        </div>
-
                         <div className="grid gap-3">
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">

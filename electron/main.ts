@@ -223,24 +223,15 @@ import { SystemAudioCapture } from "./audio/SystemAudioCapture"
 import { MicrophoneCapture } from "./audio/MicrophoneCapture"
 import { AudioDevices } from "./audio/AudioDevices"
 import { loadNativeModule } from "./audio/nativeModuleLoader"
-import { GoogleSTT } from "./audio/GoogleSTT"
-import { RestSTT } from "./audio/RestSTT"
-import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
-import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
-import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
-import { OpenAIStreamingSTT } from "./audio/OpenAIStreamingSTT"
-import { NativelyProSTT } from "./audio/NativelyProSTT"
+import { BaseSTT } from "./audio/BaseSTT"
+import { createSTTProvider } from "./audio/sttRegistry"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
 import { warmupIntentClassifier } from "./llm"
 
-/** Unified type for all STT providers with optional extended capabilities */
-type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT) & {
-  finalize?: () => void;
-  setAudioChannelCount?: (count: number) => void;
-  notifySpeechEnded?: () => void;
-};
+/** Unified type for all STT providers */
+type STTProvider = BaseSTT;
 
 type ScreenshotWindowMode = 'launcher' | 'overlay';
 
@@ -277,7 +268,6 @@ try {
 
 import { CredentialsManager } from "./services/CredentialsManager"
 import { SettingsManager } from "./services/SettingsManager"
-import { PhoneMirrorService } from "./services/PhoneMirrorService"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
@@ -298,11 +288,8 @@ export class AppState {
   private knowledgeOrchestrator: any = null
   private tray: Tray | null = null
   private updateAvailable: boolean = false
-  private disguiseMode: 'terminal' | 'settings' | 'activity' | 'none' = 'none'
-
   // View management
   private view: "queue" | "solutions" = "queue"
-  private isUndetectable: boolean = false
 
   private problemInfo: {
     problem_statement: string
@@ -336,9 +323,6 @@ export class AppState {
   // first-chunk handler reads the freshly-detected native rate.
   private _sysSttRateApplied: boolean = false;
   private _micSttRateApplied: boolean = false;
-  private _disguiseTimers: NodeJS.Timeout[] = []; // Track forceUpdate timeouts
-  private _dockDebounceTimer: NodeJS.Timeout | null = null; // Debounce dock state changes
-  private _dockReassertTimers: NodeJS.Timeout[] = []; // Re-assert dock-hidden state after show+focus
   private _ollamaBootstrapPromise: Promise<void> | null = null;
   private screenshotCaptureInProgress: boolean = false;
 
@@ -364,11 +348,9 @@ export class AppState {
   constructor() {
     // 1. Load boot-critical settings first (used by WindowHelpers)
     const settingsManager = SettingsManager.getInstance();
-    this.isUndetectable = settingsManager.get('isUndetectable') ?? false;
-    this.disguiseMode = settingsManager.get('disguiseMode') ?? 'none';
     this._verboseLogging = settingsManager.get('verboseLogging') ?? false;
     setVerboseLoggingFlag(this._verboseLogging);
-    console.log(`[AppState] Initialized with isUndetectable=${this.isUndetectable}, disguiseMode=${this.disguiseMode}, verboseLogging=${this._verboseLogging}`);
+    console.log(`[AppState] Initialized with verboseLogging=${this._verboseLogging}`);
 
     // 2. Initialize Helpers with loaded state
     this.windowHelper = new WindowHelper(this)
@@ -380,10 +362,9 @@ export class AppState {
     this.screenshotHelper = new ScreenshotHelper(this.view)
     this.processingHelper = new ProcessingHelper(this)
 
-    this.windowHelper.setContentProtection(this.isUndetectable);
-    this.settingsWindowHelper.setContentProtection(this.isUndetectable);
-    this.modelSelectorWindowHelper.setContentProtection(this.isUndetectable);
-    this.cropperWindowHelper.setContentProtection(this.isUndetectable);
+    if (process.platform === 'win32' || process.platform === 'darwin') {
+      this.cropperWindowHelper.preload();
+    }
 
     if (process.platform === 'win32' || process.platform === 'darwin') {
       this.cropperWindowHelper.preload();
@@ -423,54 +404,6 @@ export class AppState {
     // Stealth keyboard tap (CGEventTap) IPC. Renderer drives the permission
     // flow + queries availability/state; the tap itself is toggled by the
     // global shortcut handler above. Only registered on macOS — on other
-    // platforms these handlers no-op so the renderer can render fallback UI.
-    //
-    // removeHandler-then-handle on each channel is defensive against a
-    // second `app.ready` firing (rare but possible during dev HMR / single-
-    // instance second-launch path) — `ipcMain.handle` throws on duplicate
-    // registration, which would propagate as a renderer IPC rejection and
-    // silently leave isCgEventTapAvailableRef at its safe-false default.
-    const registerStealthHandler = (channel: string, fn: (...args: any[]) => any) => {
-      ipcMain.removeHandler(channel);
-      ipcMain.handle(channel, fn);
-    };
-    if (process.platform === 'darwin') {
-      const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
-      const stealth = StealthKeyboardManager.getInstance();
-      registerStealthHandler('stealth-tap:available', () => stealth.isAvailable());
-      registerStealthHandler('stealth-tap:open-settings', () => { stealth.openSettings(); });
-      registerStealthHandler('stealth-tap:stop', () => { stealth.stop(); });
-      registerStealthHandler('stealth-tap:start', () => stealth.start());
-      // IME users (Pinyin, Hangul, Kanji, …) cannot compose under the tap
-      // because CGEventTap fires below TIS. Renderer consults this before
-      // click-to-engage so it can fall back to plain DOM focus when an IME
-      // is in play. See electron/services/ImeDetector.ts for the rationale.
-      registerStealthHandler('stealth-tap:should-auto-engage', () => {
-        const { shouldAutoEngageStealthTap } = require('./services/ImeDetector');
-        return shouldAutoEngageStealthTap();
-      });
-      // Force a fresh IME probe and return the refined value. Renderer calls
-      // this on window focus so users who add a Pinyin/Hangul source mid-
-      // session don't silently break CJK composition the next time the tap
-      // would auto-engage (the cached value from mount-time would be stale).
-      registerStealthHandler('stealth-tap:refresh-ime', () => {
-        const { refreshImeDetection, shouldAutoEngageStealthTap } = require('./services/ImeDetector');
-        refreshImeDetection();
-        return shouldAutoEngageStealthTap();
-      });
-    } else {
-      registerStealthHandler('stealth-tap:available', () => false);
-      registerStealthHandler('stealth-tap:open-settings', () => {});
-      registerStealthHandler('stealth-tap:stop', () => {});
-      registerStealthHandler('stealth-tap:start', () => false);
-      // Non-darwin: returns true so the renderer's stealthAutoEngageOkRef
-      // stays true and the explicit isCgEventTapAvailableRef guard (added in
-      // PR #250) is what actually gates blockInputFocus. Inverted relative
-      // to availability on purpose — see ImeDetector.ts:67.
-      registerStealthHandler('stealth-tap:should-auto-engage', () => true);
-      registerStealthHandler('stealth-tap:refresh-ime', () => true);
-    }
-
     keybindManager.onShortcutTriggered(async (actionId) => {
       console.log(`[Main] Global shortcut triggered: ${actionId}`);
       try {
@@ -502,11 +435,6 @@ export class AppState {
           const preview = await this.getImagePreview(screenshotPath);
           // Ensure the window is visible so the user can see the response without stealing focus
           this.showMainWindow(true);
-          // win.focus() can cause macOS to re-activate the app. Re-hide the dock
-          // if we are in undetectable mode.
-          if (process.platform === 'darwin' && this.isUndetectable) {
-            app.dock.hide();
-          }
           const mainWindow = this.getMainWindow();
           if (mainWindow) {
             mainWindow.webContents.send("capture-and-process", {
@@ -515,37 +443,12 @@ export class AppState {
             });
           }
 
-        // --- STEALTH SHORTCUTS: no focus, no show, pure IPC dispatch ---
-
         // Chat actions — fire into the renderer without focusing the window
         } else if (actionId === 'chat:focusInput') {
-          // Toggle CGEventTap-backed stealth typing mode. While engaged, every
-          // keystroke is captured at the OS event-pipeline layer and routed to
-          // the renderer; the foreground app (Zoom/browser/etc.) does NOT
-          // receive any key events and never loses key/frontmost status. This
-          // is the only path that delivers true Cluely-grade undetectability
-          // on macOS — NSPanel-nonactivating gets us 90% there, the tap closes
-          // the remaining gap (the panel never even has to become key-window).
-          //
-          // Falls back to plain panel.focus() if the native tap is unavailable
-          // (no rebuild yet, no Accessibility permission, or non-macOS).
           this.showMainWindow(true);
           const overlay = this.windowHelper.getOverlayWindow();
           if (overlay && !overlay.isDestroyed()) {
             overlay.webContents.send('ensure-expanded');
-          }
-
-          if (process.platform === 'darwin') {
-            const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
-            const mgr = StealthKeyboardManager.getInstance();
-            if (mgr.isAvailable()) {
-              mgr.toggle();
-              return; // tap is the input path; no need to focus the panel
-            }
-          }
-
-          // Fallback: panel-safe focus on macOS without tap, brief focus on Win.
-          if (overlay && !overlay.isDestroyed()) {
             overlay.webContents.send('global-shortcut', { action: 'focusInput' });
             overlay.focus();
           }
@@ -1051,110 +954,8 @@ export class AppState {
       return null;
     }
 
-    let stt: STTProvider;
-
-    if (sttProvider === 'natively') {
-      const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
-      if (!nativelyKey) {
-        // Natively is Coming Soon — no key means degrade gracefully like every other provider
-        console.warn(`[Main] No Natively API Key configured for ${speaker}, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
-      } else {
-        // 'system' for interviewer (system audio), 'mic' for user (microphone).
-        // The server uses ${key}:${channel} as the session key so both streams
-        // can coexist without triggering concurrent_session_blocked.
-        stt = new NativelyProSTT(nativelyKey, speaker === 'interviewer' ? 'system' : 'mic');
-      }
-    } else if (sttProvider === 'deepgram') {
-      const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
-      if (apiKey) {
-        console.log(`[Main] Using DeepgramStreamingSTT for ${speaker}`);
-        stt = new DeepgramStreamingSTT(apiKey);
-      } else {
-        console.warn(`[Main] No API key for Deepgram STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
-      }
-    } else if (sttProvider === 'soniox') {
-      const apiKey = CredentialsManager.getInstance().getSonioxApiKey();
-      if (apiKey) {
-        console.log(`[Main] Using SonioxStreamingSTT for ${speaker}`);
-        stt = new SonioxStreamingSTT(apiKey);
-      } else {
-        console.warn(`[Main] No API key for Soniox STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
-      }
-    } else if (sttProvider === 'elevenlabs') {
-      const apiKey = CredentialsManager.getInstance().getElevenLabsApiKey();
-      if (apiKey) {
-        console.log(`[Main] Using ElevenLabsStreamingSTT for ${speaker}`);
-        stt = new ElevenLabsStreamingSTT(apiKey);
-      } else {
-        console.warn(`[Main] No API key for ElevenLabs STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
-      }
-    } else if (sttProvider === 'openai') {
-      // OpenAI: WebSocket Realtime (gpt-4o-transcribe → gpt-4o-mini-transcribe) with whisper-1 REST fallback.
-      // If a custom OpenAI-compatible base URL is configured (e.g. Speaches), the STT class
-      // skips the Realtime WS path and uses REST against the custom endpoint.
-      const apiKey = CredentialsManager.getInstance().getOpenAiSttApiKey();
-      const baseUrl = CredentialsManager.getInstance().getOpenAiSttBaseUrl();
-      if (apiKey) {
-        console.log(`[Main] Using OpenAIStreamingSTT for ${speaker}${baseUrl ? ` (custom endpoint: ${baseUrl})` : ' (WebSocket+REST fallback)'}`);
-        stt = new OpenAIStreamingSTT(apiKey, baseUrl);
-      } else {
-        console.warn(`[Main] No API key for OpenAI STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
-      }
-    } else if (sttProvider === 'groq' || sttProvider === 'azure' || sttProvider === 'ibmwatson' || sttProvider === 'doubao' || sttProvider === 'doubao-auc') {
-      let apiKey: string | undefined;
-      let region: string | undefined;
-      let modelOverride: string | undefined;
-
-      if (sttProvider === 'groq') {
-        apiKey = CredentialsManager.getInstance().getGroqSttApiKey();
-        modelOverride = CredentialsManager.getInstance().getGroqSttModel();
-      } else if (sttProvider === 'azure') {
-        apiKey = CredentialsManager.getInstance().getAzureApiKey();
-        region = CredentialsManager.getInstance().getAzureRegion();
-      } else if (sttProvider === 'ibmwatson') {
-        apiKey = CredentialsManager.getInstance().getIbmWatsonApiKey();
-        region = CredentialsManager.getInstance().getIbmWatsonRegion();
-      } else if (sttProvider === 'doubao') {
-        apiKey = CredentialsManager.getInstance().getDoubaoApiKey();
-      } else if (sttProvider === 'doubao-auc') {
-        apiKey = CredentialsManager.getInstance().getDoubaoApiKey();
-      }
-
-      if (apiKey) {
-        console.log(`[Main] Using RestSTT (${sttProvider}) for ${speaker}`);
-        stt = new RestSTT(sttProvider, apiKey, modelOverride, region);
-      } else {
-        console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
-      }
-    } else if (sttProvider === 'local-whisper') {
-      const { LocalWhisperSTT } = require('./audio/LocalWhisperSTT');
-      const sm = SettingsManager.getInstance();
-      const globalModel = sm.get('localWhisperModel') ?? 'Xenova/whisper-tiny.en';
-      // Per-channel override: when enabled the two STT instances may load
-      // different models (e.g. Moonshine Tiny for mic, Moonshine Base for
-      // system audio). Falls back to globalModel if the per-channel slot is
-      // empty or the feature is disabled.
-      let modelId = globalModel;
-      if (sm.get('localWhisperPerChannelEnabled')) {
-        const override = speaker === 'interviewer'
-          ? sm.get('localWhisperModelSystem')
-          : sm.get('localWhisperModelMic');
-        if (override) modelId = override;
-      }
-      console.log(`[Main] Using LocalWhisperSTT for ${speaker}, model: ${modelId}`);
-      const lws = new LocalWhisperSTT(modelId);
-      // Channel label disambiguates the two concurrent instances in latency logs.
-      lws.setChannel(speaker === 'interviewer' ? 'system' : 'mic');
-      stt = lws as any;
-    } else {
-      stt = new GoogleSTT(speaker);
-    }
+    const stt = createSTTProvider(sttProvider, speaker);
+    if (!stt) return null;
 
     stt.setRecognitionLanguage(sttLanguage);
 
@@ -1313,7 +1114,8 @@ export class AppState {
     // Auto language detection: NativelyProSTT emits 'languageDetected' when the
     // backend resolves the language from the first audio batch. Notify the renderer
     // so the settings UI can show what was detected.
-    if (stt instanceof NativelyProSTT) {
+    // Use duck-type check instead of instanceof to avoid importing NativelyProSTT.
+    if (typeof (stt as any).setChannel === 'function') {
       stt.on('languageDetected', (bcp47: string) => {
         console.log(`[Main] STT language auto-detected (${speaker}): ${bcp47}`);
         const helper = this.getWindowHelper();
@@ -3636,118 +3438,6 @@ export class AppState {
     return this.hasDebugged
   }
 
-  public setUndetectable(state: boolean): void {
-    // Guard: skip if state hasn't actually changed to prevent
-    // duplicate dock hide/show cycles from renderer feedback loops
-    if (this.isUndetectable === state) return;
-
-    console.log(`[Stealth] setUndetectable(${state}) called`);
-
-    this.isUndetectable = state
-    this.windowHelper.setContentProtection(state)
-    this.settingsWindowHelper.setContentProtection(state)
-    this.modelSelectorWindowHelper.setContentProtection(state)
-    this.cropperWindowHelper.setContentProtection(state)
-
-    if (process.platform === 'win32') {
-      this.windowHelper.syncOverlayInteractionPolicy();
-      this.settingsWindowHelper.syncActivationPolicy();
-      this.modelSelectorWindowHelper.syncActivationPolicy();
-    }
-
-    // Persist state via SettingsManager
-    SettingsManager.getInstance().set('isUndetectable', state);
-
-    // Cancel all pending disguise timers to prevent their app.setName() calls
-    // from re-registering the dock icon after we hide it
-    if (state) {
-      for (const timer of this._disguiseTimers) {
-        clearTimeout(timer);
-      }
-      this._disguiseTimers = [];
-    }
-
-    // Broadcast state change to all relevant windows
-    this._broadcastToAllWindows('undetectable-changed', state);
-
-    // --- STEALTH MODE LOGIC ---
-    // The dock hide/show is debounced: rapid toggles update isUndetectable immediately
-    // (so content protection, IPC broadcasts and the guard above are always current),
-    // but the actual macOS dock/tray/focus operation only fires once the user stops
-    // toggling. This eliminates the race where dock.show() + NSApp.activate() lingers
-    // after a subsequent dock.hide() call.
-    if (process.platform === 'darwin') {
-      if (this._dockDebounceTimer) {
-        clearTimeout(this._dockDebounceTimer);
-        this._dockDebounceTimer = null;
-      }
-
-      this._dockDebounceTimer = setTimeout(() => {
-        this._dockDebounceTimer = null;
-
-        // Read the settled state — may differ from the `state` captured above
-        // if the user toggled again before the timer fired.
-        const settled = this.isUndetectable;
-
-        const activeWindow = this.windowHelper.getMainWindow();
-        const settingsWindow = this.settingsWindowHelper.getSettingsWindow();
-        let targetFocusWindow = activeWindow;
-        if (settingsWindow && !settingsWindow.isDestroyed() && settingsWindow.isVisible()) {
-          targetFocusWindow = settingsWindow;
-        }
-
-        const modelSelectorWindow = this.modelSelectorWindowHelper.getWindow();
-        const isModelSelectorVisible = modelSelectorWindow && !modelSelectorWindow.isDestroyed() && modelSelectorWindow.isVisible();
-
-        if (targetFocusWindow && targetFocusWindow === settingsWindow) {
-          this.settingsWindowHelper.setIgnoreBlur(true);
-        }
-        if (isModelSelectorVisible) {
-          this.modelSelectorWindowHelper.setIgnoreBlur(true);
-        }
-
-        if (settled) {
-          // Capture whether Natively is currently the frontmost app BEFORE
-          // dock.hide() — that call triggers an implicit macOS app-deactivation
-          // which shifts keyboard focus to the next frontmost app (Chrome, etc.).
-          const nativelyWasFocused =
-            targetFocusWindow != null &&
-            !targetFocusWindow.isDestroyed() &&
-            targetFocusWindow.isFocused();
-
-          console.log('[Stealth] Calling app.dock.hide()');
-          app.dock.hide();
-          this.hideTray();
-
-          // If Natively was the focused window when the user toggled stealth,
-          // restore focus to our window after dock.hide() so macOS does not
-          // hand control to Chrome / whatever is behind us.
-          // We use win.focus() (not app.focus()) to avoid the heavy-handed
-          // [NSApp activateIgnoringOtherApps:YES] side-effect.
-          if (nativelyWasFocused && targetFocusWindow && !targetFocusWindow.isDestroyed()) {
-            targetFocusWindow.focus();
-          }
-        } else {
-          console.log('[Stealth] Calling app.dock.show()');
-          app.dock.show();
-          this.showTray();
-          // Do NOT call focus() — let the user's current app retain focus
-        }
-
-        if (targetFocusWindow && targetFocusWindow === settingsWindow) {
-          setTimeout(() => { this.settingsWindowHelper.setIgnoreBlur(false); }, 500);
-        }
-        if (isModelSelectorVisible) {
-          setTimeout(() => { this.modelSelectorWindowHelper.setIgnoreBlur(false); }, 500);
-        }
-      }, 150);
-    }
-  }
-
-  public getUndetectable(): boolean {
-    return this.isUndetectable
-  }
-
   // --- Mouse Passthrough (Adapted from public PR #113 — verify premium interaction) ---
   private overlayMousePassthrough: boolean = false;
 
@@ -3791,165 +3481,6 @@ export class AppState {
     this.broadcast('verbose-logging-changed', enabled);
   }
 
-  public setDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
-    this.disguiseMode = mode;
-    SettingsManager.getInstance().set('disguiseMode', mode);
-
-    // Apply the disguise regardless of undetectable state
-    // (disguise affects Activity Monitor name via process.title,
-    //  dock icon only updates when NOT in stealth)
-    this._applyDisguise(mode);
-  }
-
-  public applyInitialDisguise(): void {
-    this._applyDisguise(this.disguiseMode);
-  }
-
-  private _applyDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
-    let appName = "Natively";
-    let iconPath = "";
-
-    const isWin = process.platform === 'win32';
-    const isMac = process.platform === 'darwin';
-
-    switch (mode) {
-      case 'terminal':
-        appName = isWin ? "Command Prompt " : "Terminal ";
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/terminal.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/terminal.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/terminal.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/terminal.png");
-        }
-        break;
-      case 'settings':
-        appName = isWin ? "Settings " : "System Settings ";
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/settings.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/settings.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/settings.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/settings.png");
-        }
-        break;
-      case 'activity':
-        appName = isWin ? "Task Manager " : "Activity Monitor ";
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/activity.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/activity.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/activity.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/activity.png");
-        }
-        break;
-      case 'none':
-        appName = "Natively";
-        if (isMac) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "natively.icns")
-            : path.join(app.getAppPath(), "assets/natively.icns");
-        } else if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/icons/win/icon.ico")
-            : path.join(app.getAppPath(), "assets/icons/win/icon.ico");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "icon.png")
-            : path.join(app.getAppPath(), "assets/icon.png");
-        }
-        break;
-    }
-
-    console.log(`[AppState] Applying disguise: ${mode} (${appName}) on ${process.platform}`);
-
-    // 1. Update process title (affects Activity Monitor / Task Manager)
-    process.title = appName;
-
-    // 2. Update app name (affects macOS Menu / Dock)
-    // Skip when undetectable — app.setName() causes macOS to re-register
-    // the app and re-show the dock icon even after dock.hide()
-    if (!this.isUndetectable) {
-      app.setName(appName);
-    }
-
-    if (isMac) {
-      process.env.CFBundleName = appName.trim();
-    }
-
-    // 3. Update App User Model ID (Windows Taskbar grouping)
-    if (isWin) {
-      // Use unique AUMID per disguise to avoid grouping with the real app
-      app.setAppUserModelId(`com.natively.assistant.${mode}`);
-    }
-
-    // 4. Update Icons
-    if (fs.existsSync(iconPath)) {
-      const image = nativeImage.createFromPath(iconPath);
-
-      if (isMac) {
-        // Skip dock icon update when dock is hidden to avoid potential flicker
-        if (!this.isUndetectable) {
-          app.dock.setIcon(image);
-        }
-      } else {
-        // Windows/Linux: Update all window icons
-        this.windowHelper.getLauncherWindow()?.setIcon(image);
-        this.windowHelper.getOverlayWindow()?.setIcon(image);
-        this.settingsWindowHelper.getSettingsWindow()?.setIcon(image);
-      }
-    } else {
-      console.warn(`[AppState] Disguise icon not found: ${iconPath}`);
-    }
-
-    // 5. Update Window Titles
-    const launcher = this.windowHelper.getLauncherWindow();
-    if (launcher && !launcher.isDestroyed()) {
-      launcher.setTitle(appName.trim());
-      launcher.webContents.send('disguise-changed', mode);
-    }
-
-    const overlay = this.windowHelper.getOverlayWindow();
-    if (overlay && !overlay.isDestroyed()) {
-      overlay.setTitle(appName.trim());
-      overlay.webContents.send('disguise-changed', mode);
-    }
-
-    const settingsWin = this.settingsWindowHelper.getSettingsWindow();
-    if (settingsWin && !settingsWin.isDestroyed()) {
-      settingsWin.setTitle(appName.trim());
-      settingsWin.webContents.send('disguise-changed', mode);
-    }
-
-    // Cancel any stale forceUpdate timeouts from previous disguise changes
-    for (const timer of this._disguiseTimers) {
-      clearTimeout(timer);
-    }
-    this._disguiseTimers = [];
-
-    // Periodically re-assert process.title only — it can drift on some systems.
-    // NOTE: We intentionally do NOT call app.setName() here — it was already called
-    // synchronously above, and repeated calls on macOS cause the system to briefly
-    // show a second dock tile while re-registering the app identity.
-    const scheduleUpdate = (ms: number) => {
-      const ts = setTimeout(() => {
-        process.title = appName;
-        this._disguiseTimers = this._disguiseTimers.filter(t => t !== ts);
-      }, ms);
-      this._disguiseTimers.push(ts);
-    };
-
-    scheduleUpdate(200);
-    scheduleUpdate(1000);
-    scheduleUpdate(5000);
-  }
-
   // Helper: broadcast an IPC event to all windows
   private _broadcastToAllWindows(channel: string, ...args: any[]): void {
     const windows = [
@@ -3966,10 +3497,6 @@ export class AppState {
         win.webContents.send(channel, ...args);
       }
     }
-  }
-
-  public getDisguise(): string {
-    return this.disguiseMode;
   }
 }
 
@@ -4005,18 +3532,6 @@ async function initializeApp() {
 
   // 2. Wait for app to be ready
   await app.whenReady()
-
-  // 2a. PRE-EMPTIVE dock hide: must happen before ANY operation that causes macOS to
-  // register a dock entry (app.setName, BrowserWindow creation, etc.).
-  // We read isUndetectable directly from settings here — AppState singleton isn't
-  // constructed yet, so we cannot call appState.getUndetectable().
-  if (process.platform === 'darwin') {
-    // SettingsManager is already statically imported — no require() needed.
-    const isUndetectableOnStartup = SettingsManager.getInstance().get('isUndetectable') ?? false;
-    if (isUndetectableOnStartup) {
-      app.dock.hide();
-    }
-  }
 
   // 3. Initialize Managers
   // Phase 6 — bind TelemetryService to the Electron userData path. The
@@ -4059,8 +3574,8 @@ async function initializeApp() {
   // Initialize IPC handlers before window creation
   initializeIpcHandlers(appState)
 
-  // Apply the full disguise payload (names, dock icon, AUMID) early
-  appState.applyInitialDisguise();
+  // 5. Initialize IPC handlers before window creation
+  initializeIpcHandlers(appState)
 
   // Start the Ollama lifecycle manager
   OllamaManager.getInstance().init().catch(console.error);
@@ -4100,11 +3615,8 @@ async function initializeApp() {
 
   appState.createWindow()
 
-  // Apply initial stealth state based on isUndetectable setting.
-  // NOTE: app.dock.hide() was already called pre-emptively before createWindow()
-  // when isUndetectable=true. Always create the tray as a recovery path — even in
-  // stealth mode the user needs a way to restore a hidden window (no dock, no tray
-  // would otherwise leave the window unrecoverable after a hide).
+  // Always create the tray as a recovery path — the user needs a way to restore a
+  // hidden window (no tray would otherwise leave the window unrecoverable after a hide).
   appState.showTray();
   // Register global shortcuts using KeybindManager
   KeybindManager.getInstance().registerGlobalShortcuts()
@@ -4133,22 +3645,13 @@ async function initializeApp() {
   // Pre-create settings window in background for faster first open
   appState.settingsWindowHelper.preloadWindow()
 
-  // Restore Phone Mirror service if it was enabled in a previous session.
-  // Failure here is non-fatal — the user can re-enable from Settings.
-  if (SettingsManager.getInstance().get('phoneMirrorEnabled')) {
-    PhoneMirrorService.getInstance()
-      .start({ exposeOnLan: !!SettingsManager.getInstance().get('phoneMirrorExposeOnLan'), persist: false })
-      .catch((err) => console.error('[Init] PhoneMirror auto-start failed:', err));
-  }
-
   // One-time macOS screen recording permission prompt.
   //
   // We must fire this AFTER createWindow() so that:
   //   1. The Natively launcher window is visible and focused when the TCC dialog
   //      appears — macOS anchors the dialog to the frontmost app window on Ventura+.
   //      Without a visible window the dialog can appear behind other apps (Sequoia).
-  //   2. In stealth/undetectable mode the dock icon is hidden, but the window is
-  //      still visible — the dialog still has a surface to attach to.
+  //   2. The window is still visible — the dialog still has a surface to attach to.
   //
   // The 800ms delay lets the launcher's ready-to-show animation complete so the
   // window is fully composited before the system sheet appears above it.
@@ -4208,31 +3711,6 @@ async function initializeApp() {
     }, 800);
   }
 
-  // Initialize CalendarManager
-  try {
-    const { CalendarManager } = require('./services/CalendarManager');
-    const calMgr = CalendarManager.getInstance();
-    calMgr.init();
-
-    calMgr.on('start-meeting-requested', (event: any) => {
-      console.log('[Main] Start meeting requested from calendar notification', event);
-      appState.centerAndShowWindow();
-      appState.startMeeting({
-        title: event.title,
-        calendarEventId: event.id,
-        source: 'calendar'
-      });
-    });
-
-    calMgr.on('open-requested', () => {
-      appState.centerAndShowWindow();
-    });
-
-    console.log('[Main] CalendarManager initialized');
-  } catch (e) {
-    console.error('[Main] Failed to initialize CalendarManager:', e);
-  }
-
   // Recover unprocessed meetings (persistence check)
   appState.getIntelligenceManager().recoverUnprocessedMeetings().catch(err => {
     console.error('[Main] Failed to recover unprocessed meetings:', err);
@@ -4243,9 +3721,8 @@ async function initializeApp() {
   app.on("activate", () => {
     console.log("App activated")
     if (process.platform === 'darwin') {
-      // Do NOT call dock.show() while a meeting is running — the dock icon
-      // appearing mid-meeting is a critical stealth failure.
-      if (!appState.getUndetectable() && !appState.getIsMeetingActive()) {
+      // Do NOT call dock.show() while a meeting is running.
+      if (!appState.getIsMeetingActive()) {
         app.dock.show();
       }
     }
@@ -4280,20 +3757,6 @@ async function initializeApp() {
     // crashes. stop() joins the worker, guaranteeing no in-flight callbacks
     // remain by the time we return.
     //
-    // ORDERING NOTE: this MUST happen before any subsequent napi-touching
-    // cleanup (cropper.dispose, ollama.stop, phoneMirror.dispose). Those
-    // can spawn their own native threads or release napi resources, which
-    // would race with our worker if it's still alive.
-    if (process.platform === 'darwin') {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
-        StealthKeyboardManager.getInstance().stop();
-      } catch (e) {
-        console.error('[main] Failed to stop StealthKeyboardManager during shutdown:', e);
-      }
-    }
-
     // Dispose CropperWindowHelper to clean up IPC listeners and prevent memory leaks
     // This is critical to prevent resource leaks and ensure proper cleanup
     if (appState?.cropperWindowHelper) {
@@ -4302,11 +3765,6 @@ async function initializeApp() {
 
     // Kill Ollama if we started it
     OllamaManager.getInstance().stop();
-
-    // Tear down the Phone Mirror service so the OS port is freed cleanly.
-    PhoneMirrorService.getInstance().dispose().catch((err) =>
-      console.error('[Main] PhoneMirror dispose failed:', err)
-    );
 
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');

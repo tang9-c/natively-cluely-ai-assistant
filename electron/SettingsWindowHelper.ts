@@ -15,8 +15,6 @@ type WindowActivationOptions = {
 export class SettingsWindowHelper {
     private settingsWindow: BrowserWindow | null = null
     private windowHelper: WindowHelper | null = null;
-    private opacityTimeout: NodeJS.Timeout | null = null;
-
     public getSettingsWindow(): BrowserWindow | null {
         return this.settingsWindow
     }
@@ -103,23 +101,8 @@ export class SettingsWindowHelper {
         // Ensure fully visible on screen
         this.ensureVisibleOnScreen();
 
-        if (process.platform === 'win32' && this.contentProtection) {
-            this.settingsWindow.setOpacity(0);
-            if (activate) this.settingsWindow.show(); else this.settingsWindow.showInactive();
-            this.settingsWindow.setContentProtection(true);
-
-            if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
-            this.opacityTimeout = setTimeout(() => {
-                if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
-                    this.settingsWindow.setOpacity(1);
-                    if (activate) this.settingsWindow.focus();
-                }
-            }, 60);
-        } else {
-            this.settingsWindow.setContentProtection(this.contentProtection);
-            if (activate) this.settingsWindow.show(); else this.settingsWindow.showInactive();
-            if (activate) this.settingsWindow.focus();
-        }
+        if (activate) this.settingsWindow.show(); else this.settingsWindow.showInactive();
+        if (activate) this.settingsWindow.focus();
 
         this.emitVisibilityChange(true);
     }
@@ -191,8 +174,7 @@ export class SettingsWindowHelper {
             this.settingsWindow.setAlwaysOnTop(true, "floating")
         }
 
-        console.log(`[SettingsWindowHelper] Creating Settings Window with Content Protection: ${this.contentProtection}`);
-        this.settingsWindow.setContentProtection(this.contentProtection);
+        console.log(`[SettingsWindowHelper] Creating Settings Window`);
 
         // Load with query param
         const settingsUrl = isDev
@@ -239,13 +221,6 @@ export class SettingsWindowHelper {
             this.closeWindow();
         })
 
-        // ROUND 3 FIX (#1): when Settings becomes visible, stop the
-        // CGEventTap. Otherwise the tap intercepts every plain keystroke at
-        // OS level and routes them into Natively's chat input — the user
-        // can't type API keys (or anything) into Settings fields. Settings
-        // input is a long-form interaction; stealth-typing-into-overlay is
-        // not what the user wants here. They can re-engage with the hotkey
-        // after Settings closes.
         this.settingsWindow.on('show', () => {
             // ROUND 4 FIX (#7): reset blur timestamp on every successful
             // show. Without this, a stale lastBlurTime from a prior session
@@ -255,15 +230,6 @@ export class SettingsWindowHelper {
             // time bounds the guard to "the LAST blur" rather than "any
             // blur ever observed."
             this.lastBlurTime = 0;
-
-            if (process.platform !== 'darwin') return;
-            try {
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
-                StealthKeyboardManager.getInstance().stop();
-            } catch (e) {
-                console.error('[SettingsWindowHelper] failed to stop stealth tap on show:', e);
-            }
         });
 
 
@@ -288,24 +254,5 @@ export class SettingsWindowHelper {
         }
 
         this.settingsWindow.setPosition(newX, newY);
-    }
-    private contentProtection: boolean = false; // Track state
-
-    public setContentProtection(enable: boolean): void {
-        console.log(`[SettingsWindowHelper] Setting content protection to: ${enable}`);
-        this.contentProtection = enable;
-
-        if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
-            this.settingsWindow.setContentProtection(enable);
-        }
-    }
-
-    public syncActivationPolicy(): void {
-        if (process.platform !== 'win32') return;
-        if (!this.settingsWindow || this.settingsWindow.isDestroyed()) return;
-        this.settingsWindow.setContentProtection(this.contentProtection);
-        if (this.settingsWindow.isVisible()) {
-            this.settingsWindow.setOpacity(1);
-        }
     }
 }
