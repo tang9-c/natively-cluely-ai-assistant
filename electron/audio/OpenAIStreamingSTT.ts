@@ -12,12 +12,12 @@
  *            setRecognitionLanguage(), setCredentials(), notifySpeechEnded()
  */
 
-import { EventEmitter } from 'events';
 import WebSocket from 'ws';
 import axios from 'axios';
 import FormData from 'form-data';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { streamingStttWsOptions } from './dnsHelpers';
+import { BaseSTT } from './BaseSTT';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -77,17 +77,15 @@ type Mode = 'ws' | 'rest';
 
 // ─── Class ────────────────────────────────────────────────────────────────────
 
-export class OpenAIStreamingSTT extends EventEmitter {
+export class OpenAIStreamingSTT extends BaseSTT {
     // Public config
     private apiKey: string;
     private languageKey = 'en';
 
     // Audio config (set from pipeline)
     private inputSampleRate = 16_000;
-    private numChannels     = NUM_CHANNELS;
 
     // Lifecycle
-    private isActive     = false;
     private isConnecting = false;
     private shouldReconnect = false;
 
@@ -150,7 +148,7 @@ export class OpenAIStreamingSTT extends EventEmitter {
 
     // ─── Public Configuration (STTProvider interface) ─────────────────────────
 
-    public setApiKey(apiKey: string): void {
+    setApiKey(apiKey: string): void {
         const changed = this.apiKey !== apiKey;
         this.apiKey = apiKey;
         console.log('[OpenAIStreaming] API key updated');
@@ -160,44 +158,41 @@ export class OpenAIStreamingSTT extends EventEmitter {
         // its next reconnect — which is the wrong behavior for a security-relevant
         // setter (e.g. rotation of a leaked key). Mirror setRecognitionLanguage's
         // close+reopen so a rotated key takes effect immediately.
-        if (changed && this.isActive && this.mode === 'ws') {
+        if (changed && this._isActive && this.mode === 'ws') {
             console.log('[OpenAIStreaming] Reconnecting WS to apply new API key');
             this._closeWs(true);
             this._connectWs();
         }
     }
 
-    public setSampleRate(rate: number): void {
+    setSampleRate(rate: number): void {
         if (this.inputSampleRate === rate) return;
         this.inputSampleRate = rate;
         console.log(`[OpenAIStreaming] Input sample rate set to ${rate}Hz`);
     }
 
-    public setAudioChannelCount(count: number): void {
-        if (this.numChannels === count) return;
-        this.numChannels = count;
+    setAudioChannelCount(count: number): void {
+        if (this._numChannels === count) return;
+        this._numChannels = count;
         console.log(`[OpenAIStreaming] Channel count set to ${count}`);
     }
 
-    public setRecognitionLanguage(key: string): void {
+    setRecognitionLanguage(key: string): void {
         const prev = this.languageKey;
         this.languageKey = key;
-        if (key !== prev && this.isActive && this.mode === 'ws') {
+        if (key !== prev && this._isActive && this.mode === 'ws') {
             console.log(`[OpenAIStreaming] Language changed to ${key} — restarting WS session`);
             this._closeWs(true);
             this._connectWs();
         }
     }
 
-    /** No-op — no credential files needed */
-    public setCredentials(_path: string): void {}
-
     // ─── Lifecycle ────────────────────────────────────────────────────────────
 
-    public start(): void {
-        if (this.isActive) return;
+    start(): void {
+        if (this._isActive) return;
         console.log('[OpenAIStreaming] Starting...');
-        this.isActive       = true;
+        this._isActive       = true;
         this.shouldReconnect = true;
         this.wsModelIndex   = 0;
         this.wsFailures     = 0;
@@ -223,10 +218,10 @@ export class OpenAIStreamingSTT extends EventEmitter {
         this._connectWs();
     }
 
-    public stop(): void {
-        if (!this.isActive) return;
+    stop(): void {
+        if (!this._isActive) return;
         console.log('[OpenAIStreaming] Stopping...');
-        this.isActive        = false;
+        this._isActive        = false;
         this.shouldReconnect = false;
 
         // Flush any remaining buffered audio to the WS before closing so we
@@ -274,8 +269,8 @@ export class OpenAIStreamingSTT extends EventEmitter {
         this.pcmAccumulatorLen = 0;
     }
 
-    public write(chunk: Buffer): void {
-        if (!this.isActive) return;
+    write(chunk: Buffer): void {
+        if (!this._isActive) return;
 
         if (this.mode === 'ws') {
             // Always push to ring-buffer while not yet connected (pre-buffer)
@@ -300,8 +295,8 @@ export class OpenAIStreamingSTT extends EventEmitter {
      * On WebSocket path: server handles VAD — this is a no-op.
      * On REST fallback path: triggers immediate flush.
      */
-    public notifySpeechEnded(): void {
-        if (!this.isActive) return;
+    notifySpeechEnded(): void {
+        if (!this._isActive) return;
         if (this.mode === 'rest') {
             console.log('[OpenAIStreaming][REST] Speech ended — flushing buffer');
             this._restFlushAndUpload();
@@ -309,8 +304,8 @@ export class OpenAIStreamingSTT extends EventEmitter {
         // WebSocket path: server VAD handles this; nothing to do.
     }
 
-    public finalize(): void {
-        if (!this.isActive) return;
+    finalize(): void {
+        if (!this._isActive) return;
         if (this.mode === 'rest') {
             console.log('[OpenAIStreaming][REST] Finalize — flushing buffer');
             this._restFlushAndUpload();
@@ -508,7 +503,7 @@ export class OpenAIStreamingSTT extends EventEmitter {
         // before removeAllListeners() drained. Without this guard, the late
         // frame would set isSessionReady=true and call _startKeepAlive(), leaking
         // a 20s setInterval against a class the caller thinks is shut down.
-        if (!this.isActive) return;
+        if (!this._isActive) return;
         switch (msg.type) {
             case 'transcription_session.created':
                 if (this.sessionSetupTimer) {
@@ -959,21 +954,21 @@ export class OpenAIStreamingSTT extends EventEmitter {
             inputS16[i] = chunk.readInt16LE(i * 2);
         }
 
-        if (this.inputSampleRate === targetRate && this.numChannels === 1) {
+        if (this.inputSampleRate === targetRate && this._numChannels === 1) {
             return Buffer.from(inputS16.buffer);
         }
 
         // Mix down multi-channel to mono first, then downsample
         let monoS16: Int16Array;
-        if (this.numChannels > 1) {
-            const monoLength = Math.floor(inputS16.length / this.numChannels);
+        if (this._numChannels > 1) {
+            const monoLength = Math.floor(inputS16.length / this._numChannels);
             monoS16 = new Int16Array(monoLength);
             for (let i = 0; i < monoLength; i++) {
                 let sum = 0;
-                for (let c = 0; c < this.numChannels; c++) {
-                    sum += inputS16[i * this.numChannels + c];
+                for (let c = 0; c < this._numChannels; c++) {
+                    sum += inputS16[i * this._numChannels + c];
                 }
-                monoS16[i] = Math.round(sum / this.numChannels);
+                monoS16[i] = Math.round(sum / this._numChannels);
             }
         } else {
             monoS16 = inputS16;

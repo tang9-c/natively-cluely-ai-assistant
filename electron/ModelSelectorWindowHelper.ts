@@ -15,8 +15,6 @@ type WindowActivationOptions = {
 
 export class ModelSelectorWindowHelper {
     private window: BrowserWindow | null = null
-    private contentProtection: boolean = false
-    private opacityTimeout: NodeJS.Timeout | null = null;
 
     // Store offsets relative to main window if needed, but absolute positioning is simpler for dropdowns
     private lastBlurTime: number = 0
@@ -77,23 +75,8 @@ export class ModelSelectorWindowHelper {
         this.window.setPosition(Math.round(x), Math.round(y))
         this.ensureVisibleOnScreen();
 
-        if (process.platform === 'win32' && this.contentProtection) {
-            this.window.setOpacity(0);
-            if (activate) this.window.show(); else this.window.showInactive();
-            this.window.setContentProtection(true);
-
-            if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
-            this.opacityTimeout = setTimeout(() => {
-                if (this.window && !this.window.isDestroyed()) {
-                    this.window.setOpacity(1);
-                    if (activate) this.window.focus();
-                }
-            }, 60);
-        } else {
-            this.window.setContentProtection(this.contentProtection);
-            if (activate) this.window.show(); else this.window.showInactive();
-            if (activate) this.window.focus();
-        }
+        if (activate) this.window.show(); else this.window.showInactive();
+        if (activate) this.window.focus();
     }
 
     public hideWindow(): void {
@@ -175,10 +158,6 @@ export class ModelSelectorWindowHelper {
             this.window.setHiddenInMissionControl(true)
         }
 
-        // Apply content protection for Undetectable Mode
-        console.log(`[ModelSelectorWindowHelper] Creating window with Content Protection: ${this.contentProtection}`);
-        this.window.setContentProtection(this.contentProtection)
-
         // Load with query param for routing
         const url = isDev
             ? `${startUrl}?window=model-selector`
@@ -231,25 +210,11 @@ export class ModelSelectorWindowHelper {
             this.hideWindow();
         })
 
-        // ROUND 3 FIX (#1): stop the stealth tap when Model Selector shows,
-        // mirroring the Settings handler. While brief (model selector is a
-        // dropdown), interaction with the dropdown still requires keystrokes
-        // to reach this window's React tree, which the tap would otherwise
-        // intercept at OS level.
         this.window.on('show', () => {
             // ROUND 4 FIX (#7): see SettingsWindowHelper for rationale —
             // reset blur timestamp on show so the 250ms toggle-protection
             // guard doesn't latch open from a stale prior-session blur.
             this.lastBlurTime = 0;
-
-            if (process.platform !== 'darwin') return;
-            try {
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
-                StealthKeyboardManager.getInstance().stop();
-            } catch (e) {
-                console.error('[ModelSelectorWindowHelper] failed to stop stealth tap on show:', e);
-            }
         });
     }
 
@@ -279,22 +244,5 @@ export class ModelSelectorWindowHelper {
         }
 
         this.window.setPosition(newX, newY);
-    }
-
-    public setContentProtection(enable: boolean): void {
-        console.log(`[ModelSelectorWindowHelper] Setting content protection to: ${enable}`);
-        this.contentProtection = enable;
-        if (this.window && !this.window.isDestroyed()) {
-            this.window.setContentProtection(enable);
-        }
-    }
-
-    public syncActivationPolicy(): void {
-        if (process.platform !== 'win32') return;
-        if (!this.window || this.window.isDestroyed()) return;
-        this.window.setContentProtection(this.contentProtection);
-        if (this.window.isVisible()) {
-            this.window.setOpacity(1);
-        }
     }
 }

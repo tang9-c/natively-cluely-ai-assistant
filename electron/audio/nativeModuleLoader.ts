@@ -30,15 +30,6 @@ export interface NativeModule {
   // true if the process is currently trusted; false otherwise. Cheap;
   // safe to poll to drive UI state.
   isAccessibilityGranted?: () => boolean;
-  // macOS-only: CGEventTap-backed stealth keyboard interception.
-  // Engaged by StealthKeyboardManager; the foreground app does NOT
-  // receive any keystroke while the tap is active. Optional: requires
-  // binary rebuild AND Accessibility permission at runtime.
-  StealthKeyboardTap?: new () => {
-    start(callback: (err: Error | null, ev: CapturedKey) => void): boolean;
-    stop(): void;
-    readonly isActive: boolean;
-  };
   SystemAudioCapture: new (deviceId?: string | null) => {
     getSampleRate(): number;
     start(callback: (...args: any[]) => any, onSpeechEnded?: (...args: any[]) => any): void;
@@ -49,14 +40,6 @@ export interface NativeModule {
     start(callback: (...args: any[]) => any, onSpeechEnded?: (...args: any[]) => any): void;
     stop(): void;
   };
-}
-
-/** Mirrors native-module/src/keyboard_tap.rs CapturedKey. */
-export interface CapturedKey {
-  keyCode: number;
-  chars: string;
-  flags: number;
-  isKeyDown: boolean;
 }
 
 // Hard-required: crash the module load if any of these are missing.

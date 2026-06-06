@@ -1,22 +1,20 @@
 import { SpeechClient } from '@google-cloud/speech';
-import { EventEmitter } from 'events';
-import * as path from 'path';
+import { BaseSTT } from './BaseSTT';
 import { RECOGNITION_LANGUAGES, EnglishVariant } from '../config/languages';
 
 /**
  * GoogleSTT
- * 
+ *
  * Manages a bi-directional streaming connection to Google Speech-to-Text.
  * Mirrors the logic previously in Swift:
  * - Handles infinite stream limits by restarting periodically (though less critical for short calls).
  * - Manages authentication via GOOGLE_APPLICATION_CREDENTIALS.
  * - Parses intermediate and final results.
  */
-export class GoogleSTT extends EventEmitter {
+export class GoogleSTT extends BaseSTT {
     private client: SpeechClient;
     private stream: any = null; // Stream type is complex in google-cloud libs
     private isStreaming = false;
-    private isActive = false;
     private isFatalError = false;
     private label = 'default';
     private writeCount = 0;
@@ -53,7 +51,7 @@ export class GoogleSTT extends EventEmitter {
         });
     }
 
-    public setCredentials(keyFilePath: string): void {
+    setCredentials(keyFilePath: string): void {
         console.log(`[GoogleSTT/${this.label}] Updating credentials to: ${keyFilePath}`);
         process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilePath;
         this.client = new SpeechClient({
@@ -61,11 +59,11 @@ export class GoogleSTT extends EventEmitter {
         });
     }
 
-    public setSampleRate(rate: number): void {
+    setSampleRate(rate: number): void {
         if (this.sampleRateHertz === rate) return;
         console.log(`[GoogleSTT/${this.label}] Updating Sample Rate to: ${rate}Hz`);
         this.sampleRateHertz = rate;
-        if (this.isStreaming || this.isActive) {
+        if (this.isStreaming || this._isActive) {
             console.warn(`[GoogleSTT/${this.label}] Config changed while active. Restarting stream...`);
             this.stop();
             this.start();
@@ -77,15 +75,15 @@ export class GoogleSTT extends EventEmitter {
      * This method exists for interface consistency with RestSTT so that
      * main.ts can call notifySpeechEnded() without type-casting to `any`.
      */
-    public notifySpeechEnded(): void {
+    notifySpeechEnded(): void {
         // Intentionally empty. Google STT detects speech boundaries server-side.
     }
 
-    public setAudioChannelCount(count: number): void {
+    setAudioChannelCount(count: number): void {
         if (this.audioChannelCount === count) return;
         console.log(`[GoogleSTT/${this.label}] Updating Channel Count to: ${count}`);
         this.audioChannelCount = count;
-        if (this.isStreaming || this.isActive) {
+        if (this.isStreaming || this._isActive) {
             console.warn(`[GoogleSTT/${this.label}] Config changed while active. Restarting stream...`);
             this.stop();
             this.start();
@@ -94,7 +92,7 @@ export class GoogleSTT extends EventEmitter {
 
     private pendingLanguageChange?: NodeJS.Timeout;
 
-    public setRecognitionLanguage(key: string): void {
+    setRecognitionLanguage(key: string): void {
         // Debounce to prevent rapid restarts (e.g. scrolling through list)
         if (this.pendingLanguageChange) {
             clearTimeout(this.pendingLanguageChange);
@@ -130,7 +128,7 @@ export class GoogleSTT extends EventEmitter {
             }
 
             // Restart if active
-            if (this.isStreaming || this.isActive) {
+            if (this.isStreaming || this._isActive) {
                 console.log(`[GoogleSTT/${this.label}] Language changed while active. Restarting stream...`);
                 this.stop();
                 this.start();
@@ -140,9 +138,9 @@ export class GoogleSTT extends EventEmitter {
         }, 250);
     }
 
-    public start(): void {
-        if (this.isActive) return;
-        this.isActive = true;
+    start(): void {
+        if (this._isActive) return;
+        this._isActive = true;
         this.isFatalError = false;
         this.writeCount = 0;
 
@@ -150,11 +148,11 @@ export class GoogleSTT extends EventEmitter {
         this.startStream();
     }
 
-    public stop(): void {
-        if (!this.isActive) return;
+    stop(): void {
+        if (!this._isActive) return;
 
         console.log(`[GoogleSTT/${this.label}] Stopping stream (wrote ${this.writeCount} chunks total)...`);
-        this.isActive = false;
+        this._isActive = false;
         this.isStreaming = false;
 
         if (this.proactiveRestartTimer) {
@@ -169,8 +167,8 @@ export class GoogleSTT extends EventEmitter {
         }
     }
 
-    public finalize(): void {
-        if (!this.isActive || !this.stream) return;
+    finalize(): void {
+        if (!this._isActive || !this.stream) return;
         console.log(`[GoogleSTT/${this.label}] Finalize — ending gRPC stream to flush final transcript`);
         try {
             this.stream.end();
@@ -191,8 +189,8 @@ export class GoogleSTT extends EventEmitter {
     private proactiveRestartTimer: NodeJS.Timeout | null = null;
     private static readonly PROACTIVE_RESTART_MS = 270_000; // 4 min 30 sec
 
-    public write(audioData: Buffer): void {
-        if (!this.isActive || this.isFatalError) {
+    write(audioData: Buffer): void {
+        if (!this._isActive || this.isFatalError) {
             // Only log occasionally to avoid spam
             if (this.writeCount === 0) console.warn(`[GoogleSTT/${this.label}] write() called but isActive=false — data dropped`);
             return;
@@ -374,7 +372,7 @@ export class GoogleSTT extends EventEmitter {
         if (this.proactiveRestartTimer) clearTimeout(this.proactiveRestartTimer);
         this.proactiveRestartTimer = setTimeout(() => {
             this.proactiveRestartTimer = null;
-            if (!this.isActive) return;
+            if (!this._isActive) return;
             console.log(`[GoogleSTT/${this.label}] Proactive stream restart at 4:30 to preempt Google's 305s limit`);
             if (this.stream) {
                 this.stream.end();

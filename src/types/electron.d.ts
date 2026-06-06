@@ -86,15 +86,10 @@ export interface ElectronAPI {
   onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void
   onEnsureExpanded: (callback: () => void) => () => void
   openExternal: (url: string) => Promise<void>
-  setUndetectable: (state: boolean) => Promise<{ success: boolean; error?: string }>
-  getUndetectable: () => Promise<boolean>
   setOverlayMousePassthrough: (enabled: boolean) => Promise<{ success: boolean }>
   toggleOverlayMousePassthrough: () => Promise<{ success: boolean; enabled: boolean }>
   getOverlayMousePassthrough: () => Promise<boolean>
   onOverlayMousePassthroughChanged: (callback: (enabled: boolean) => void) => () => void
-  setDisguise: (mode: 'terminal' | 'settings' | 'activity' | 'none') => Promise<{ success: boolean; error?: string }>
-  getDisguise: () => Promise<'none' | 'terminal' | 'settings' | 'activity'>
-  onDisguiseChanged: (callback: (mode: 'terminal' | 'settings' | 'activity' | 'none') => void) => () => void
   setOpenAtLogin: (open: boolean) => Promise<{ success: boolean; error?: string }>
   getOpenAtLogin: () => Promise<boolean>
   onSettingsVisibilityChange: (callback: (isVisible: boolean) => void) => () => void
@@ -139,6 +134,8 @@ export interface ElectronAPI {
   // STT Provider Management
   setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively') => Promise<{ success: boolean; error?: string }>
   getSttProvider: () => Promise<string>
+  localWhisperGetChannelConfig: () => Promise<{ enabled: boolean; micModelId: string; systemModelId: string; globalModelId: string }>
+  localWhisperSetChannelConfig: (cfg: { enabled?: boolean; micModelId?: string; systemModelId?: string }) => Promise<{ success: boolean; error?: string }>
   setGroqSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setOpenAiSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setOpenAiSttBaseUrl: (url: string) => Promise<{ success: boolean; error?: string }>
@@ -202,8 +199,6 @@ export interface ElectronAPI {
   generateClarify: () => Promise<{ clarification: string | null }>
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) => Promise<{ hint: string | null }>
   generateBrainstorm: (imagePaths?: string[], problemStatement?: string) => Promise<{ script: string | null }>
-  generateFollowUp: (intent: string, userRequest?: string) => Promise<{ refined: string | null; intent: string }>
-  generateFollowUpQuestions: () => Promise<{ questions: string | null }>
   generateRecap: () => Promise<{ summary: string | null }>
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>
   getIntelligenceContext: () => Promise<{ context: string; lastAssistantMessage: string | null; activeMode: string }>
@@ -255,11 +250,9 @@ export interface ElectronAPI {
   // Sprint 7: dedicated negotiation-coaching channel.
   onIntelligenceNegotiationCoaching: (callback: (data: { payload: any }) => void) => () => void
   // Sprint 9: time-batched IPC token channel.
-  onIntelligenceTokenBatch: (callback: (data: { kind: 'suggested_answer' | 'refined_answer' | 'recap' | 'clarify' | 'follow_up_questions'; items: any[] }) => void) => () => void
+  onIntelligenceTokenBatch: (callback: (data: { kind: 'suggested_answer' | 'refined_answer' | 'recap' | 'clarify'; items: any[] }) => void) => () => void
   onIntelligenceRefinedAnswerToken: (callback: (data: { token: string; intent: string }) => void) => () => void
   onIntelligenceRefinedAnswer: (callback: (data: { answer: string; intent: string }) => void) => () => void
-  onIntelligenceFollowUpQuestionsUpdate: (callback: (data: { questions: string }) => void) => () => void
-  onIntelligenceFollowUpQuestionsToken: (callback: (data: { token: string }) => void) => () => void
   onIntelligenceRecap: (callback: (data: { summary: string }) => void) => () => void
   onIntelligenceRecapToken: (callback: (data: { token: string }) => void) => () => void
   onIntelligenceClarify: (callback: (data: { clarification: string }) => void) => () => void
@@ -303,12 +296,6 @@ export interface ElectronAPI {
   getCustomProviders: () => Promise<any[]>;
   deleteCustomProvider: (id: string) => Promise<{ success: boolean; error?: string }>;
 
-  // Follow-up Email
-  generateFollowupEmail: (input: any) => Promise<string>;
-  extractEmailsFromTranscript: (transcript: Array<{ text: string }>) => Promise<string[]>;
-  getCalendarAttendees: (eventId: string) => Promise<Array<{ email: string; name: string }>>;
-  openMailto: (params: { to: string; subject: string; body: string }) => Promise<{ success: boolean; error?: string }>;
-
   // Audio Test
   startAudioTest: (deviceId?: string) => Promise<{ success: boolean }>;
   stopAudioTest: () => Promise<{ success: boolean }>;
@@ -317,7 +304,6 @@ export interface ElectronAPI {
   // Database
   flushDatabase: () => Promise<{ success: boolean }>;
 
-  onUndetectableChanged: (callback: (state: boolean) => void) => () => void;
   onGroqFastTextChanged: (callback: (enabled: boolean) => void) => () => void;
   onModelChanged: (callback: (modelId: string) => void) => () => void;
 
@@ -334,13 +320,6 @@ export interface ElectronAPI {
   getThemeMode: () => Promise<{ mode: 'system' | 'light' | 'dark', resolved: 'light' | 'dark' }>
   setThemeMode: (mode: 'system' | 'light' | 'dark') => Promise<void>
   onThemeChanged: (callback: (data: { mode: 'system' | 'light' | 'dark', resolved: 'light' | 'dark' }) => void) => () => void
-
-  // Calendar
-  calendarConnect: () => Promise<{ success: boolean; error?: string }>
-  calendarDisconnect: () => Promise<{ success: boolean; error?: string }>
-  getCalendarStatus: () => Promise<{ connected: boolean; email?: string }>
-  getUpcomingEvents: () => Promise<Array<{ id: string; title: string; startTime: string; endTime: string; link?: string; source: 'google'; attendees?: Array<{ email: string; name?: string; photoUrl?: string; response?: 'accepted' | 'declined' | 'tentative' | 'needsAction' }> }>>
-  calendarRefresh: () => Promise<{ success: boolean; error?: string }>
 
   // Auto-Update
   onUpdateAvailable: (callback: (info: any) => void) => () => void
@@ -366,11 +345,6 @@ export interface ElectronAPI {
   onRAGStreamComplete: (callback: (data: { meetingId?: string; global?: boolean }) => void) => () => void
   onRAGStreamError: (callback: (data: { meetingId?: string; global?: boolean; error: string }) => void) => () => void
 
-  // Donation API
-  getDonationStatus: () => Promise<{ shouldShow: boolean; hasDonated: boolean; lifetimeShows: number }>;
-  markDonationToastShown: () => Promise<{ success: boolean }>;
-  setDonationComplete: () => Promise<{ success: boolean }>;
-
   // Keybind Management
   getKeybinds: () => Promise<Array<{ id: string; label: string; accelerator: string; isGlobal: boolean; defaultAccelerator: string }>>
   setKeybind: (id: string, accelerator: string) => Promise<boolean>
@@ -378,22 +352,6 @@ export interface ElectronAPI {
   onKeybindsUpdate: (callback: (keybinds: Array<any>) => void) => () => void
   onKeybindRegistrationFailed: (callback: (data: { id: string; accelerator: string }) => void) => () => void
   onGlobalShortcut: (callback: (data: { action: string }) => void) => () => void
-
-  // CGEventTap-backed stealth typing (macOS only — graceful degradation elsewhere)
-  stealthTapAvailable: () => Promise<boolean>
-  stealthTapOpenSettings: () => Promise<void>
-  stealthTapStop: () => Promise<void>
-  stealthTapStart: () => Promise<boolean>
-  /** Re-probe the current IME state (Pinyin / Hangul / Kanji / …). The
-   *  renderer calls this on window focus so mid-session input-source changes
-   *  don't silently break CJK composition. */
-  stealthTapRefreshIme: () => Promise<boolean>
-  /** False on macOS when a composition IME (Pinyin/Hangul/Kanji/…) is
-   *  enabled — the tap captures below the IME and breaks composition, so
-   *  the renderer falls back to plain DOM focus on click. */
-  stealthTapShouldAutoEngage: () => Promise<boolean>
-  onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => () => void
-  onStealthKeyCaptured: (cb: (ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean }) => void) => () => void
 
   // Profile Engine API
   profileUploadResume: (filePath: string) => Promise<{ success: boolean; error?: string }>
@@ -476,16 +434,6 @@ export interface ElectronAPI {
   skillsRefresh: () => Promise<SkillSummary[]>;
   skillsOpenFolder: () => Promise<{ success: boolean; path: string; error?: string }>;
 
-  // Phone Mirror
-  phoneMirrorGetInfo: () => Promise<PhoneMirrorInfo>;
-  phoneMirrorEnable: (exposeOnLan: boolean) => Promise<PhoneMirrorInfo | { error: string }>;
-  phoneMirrorDisable: () => Promise<{ success: true }>;
-  phoneMirrorSetLan: (exposeOnLan: boolean) => Promise<PhoneMirrorInfo | { error: string }>;
-  phoneMirrorRotateToken: () => Promise<PhoneMirrorInfo | { error: string }>;
-  onPhoneMirrorStatus: (callback: (info: PhoneMirrorInfo) => void) => () => void;
-  onPhoneMirrorIncomingChat: (
-    callback: (data: { message: string; streamId: string }) => void,
-  ) => () => void;
 }
 
 export interface SkillSummary {
@@ -493,19 +441,6 @@ export interface SkillSummary {
   name: string;
   description: string;
   source: 'builtin' | 'userData';
-}
-
-export interface PhoneMirrorInfo {
-  running: boolean;
-  enabled: boolean;
-  exposeOnLan: boolean;
-  port: number;
-  loopbackUrl: string | null;
-  primaryUrl: string | null;
-  lanUrls: string[];
-  token: string | null;
-  qrDataUrl: string | null;
-  clients: number;
 }
 
 declare global {

@@ -1,4 +1,4 @@
-import { Mode, ModeReferenceFile } from './ModesManager';
+import { Mode, ModeReferenceFile, escapeXmlText } from './ModesManager';
 import { ModeHybridRetriever, ModeRetrievedContext as HybridContext } from './modes/ModeHybridRetriever';
 import { VectorStore } from '../rag/VectorStore';
 import { EmbeddingPipeline } from '../rag/EmbeddingPipeline';
@@ -37,15 +37,6 @@ const DEFAULT_TOP_K = 6;
 const MIN_RELEVANCE_SCORE = 0.18;
 const CHUNK_WORDS = 140;
 const CHUNK_OVERLAP = 30;
-
-function escapeXmlText(value: string): string {
-    return value
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
-}
 
 function encodePayload(value: unknown): string {
     return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
