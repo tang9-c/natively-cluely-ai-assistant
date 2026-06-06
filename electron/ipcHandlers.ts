@@ -9,7 +9,7 @@ import { AudioDevices } from './audio/AudioDevices';
 import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manager
 import { AppState } from './main';
 import { CodexCliService } from './services/CodexCliService';
-import { SettingsManager } from './services/SettingsManager';
+import { SettingsManager, type AppSettings } from './services/SettingsManager';
 import { SkillsManager } from './services/SkillsManager';
 
 import { TRIAL_SENTINEL_KEY } from './config/constants';
@@ -784,7 +784,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   //   - setter: optional custom setter function
   const SETTINGS_REGISTRY: Array<{
     suffix: string;
-    key: string;
+    key: keyof AppSettings;
     validator?: (v: any) => true | string;
     broadcastEvent?: string;
     getter?: () => any;
