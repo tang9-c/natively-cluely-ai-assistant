@@ -7,23 +7,20 @@
  *   Methods: start(), stop(), write(chunk), setSampleRate(), setAudioChannelCount()
  */
 
-import { EventEmitter } from 'events';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
+import { BaseSTT } from './BaseSTT';
 
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 30000;
 const RECONNECT_MAX_ATTEMPTS = 10;
 const KEEPALIVE_INTERVAL_MS = 8000;
 
-export class DeepgramStreamingSTT extends EventEmitter {
+export class DeepgramStreamingSTT extends BaseSTT {
     private apiKey: string;
     private live: any = null;
-    private isActive = false;
     private shouldReconnect = false;
     private isOpen = false; // tracks whether SDK connection is in OPEN state
 
-    private sampleRate = 16000;
-    private numChannels = 1;
     private languageCode = 'en';
 
     private reconnectAttempts = 0;
@@ -37,37 +34,35 @@ export class DeepgramStreamingSTT extends EventEmitter {
         this.apiKey = apiKey;
     }
 
-    public setSampleRate(rate: number): void {
-        if (this.sampleRate === rate) return;
-        this.sampleRate = rate;
+    setSampleRate(rate: number): void {
+        if (this._sampleRate === rate) return;
+        this._sampleRate = rate;
         console.log(`[DeepgramStreaming] Sample rate set to ${rate}`);
-        if (this.isActive) this.restartStream();
+        if (this._isActive) this.restartStream();
     }
 
-    public setAudioChannelCount(count: number): void {
-        if (this.numChannels === count) return;
-        this.numChannels = count;
+    setAudioChannelCount(count: number): void {
+        if (this._numChannels === count) return;
+        this._numChannels = count;
         console.log(`[DeepgramStreaming] Channel count set to ${count}`);
-        if (this.isActive) this.restartStream();
+        if (this._isActive) this.restartStream();
     }
 
-    public setRecognitionLanguage(key: string): void {
+    setRecognitionLanguage(key: string): void {
         if (key === 'auto') {
             if (this.languageCode === 'multi') return;
             this.languageCode = 'multi';
             console.log('[DeepgramStreaming] Language set to multilingual (multi)');
-            if (this.isActive) this.restartStream();
+            if (this._isActive) this.restartStream();
             return;
         }
         const config = RECOGNITION_LANGUAGES[key];
         if (config && this.languageCode !== config.iso639) {
             this.languageCode = config.iso639;
             console.log(`[DeepgramStreaming] Language set to ${this.languageCode}`);
-            if (this.isActive) this.restartStream();
+            if (this._isActive) this.restartStream();
         }
     }
-
-    public setCredentials(_path: string): void { }
 
     private restartStream(): void {
         console.log('[DeepgramStreaming] Restarting due to config change...');
@@ -75,15 +70,15 @@ export class DeepgramStreamingSTT extends EventEmitter {
         this.start();
     }
 
-    public start(): void {
-        if (this.isActive) return;
-        this.isActive = true;
+    start(): void {
+        if (this._isActive) return;
+        this._isActive = true;
         this.shouldReconnect = true;
         this.reconnectAttempts = 0;
         this.connect();
     }
 
-    public stop(): void {
+    stop(): void {
         this.shouldReconnect = false;
         this.clearTimers();
 
@@ -96,15 +91,15 @@ export class DeepgramStreamingSTT extends EventEmitter {
             this.live = null;
         }
 
-        this.isActive = false;
+        this._isActive = false;
         this.isConnecting = false;
         this.isOpen = false;
         this.buffer = [];
         console.log('[DeepgramStreaming] Stopped');
     }
 
-    public finalize(): void {
-        if (!this.isActive || !this.isOpen || !this.live) return;
+    finalize(): void {
+        if (!this._isActive || !this.isOpen || !this.live) return;
         try {
             this.live.finalize();
             console.log('[DeepgramStreaming] Sent Finalize to flush server buffer');
@@ -113,8 +108,8 @@ export class DeepgramStreamingSTT extends EventEmitter {
         }
     }
 
-    public write(chunk: Buffer): void {
-        if (!this.isActive) return;
+    write(chunk: Buffer): void {
+        if (!this._isActive) return;
 
         if (!this.isOpen) {
             this.buffer.push(chunk);
@@ -137,7 +132,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
         if (this.isConnecting) return;
         this.isConnecting = true;
 
-        console.log(`[DeepgramStreaming] Connecting (rate=${this.sampleRate}, ch=${this.numChannels}, lang=${this.languageCode})...`);
+        console.log(`[DeepgramStreaming] Connecting (rate=${this._sampleRate}, ch=${this._numChannels}, lang=${this.languageCode})...`);
 
         try {
             const { createClient, LiveTranscriptionEvents } = require('@deepgram/sdk');
@@ -150,8 +145,8 @@ export class DeepgramStreamingSTT extends EventEmitter {
                 smart_format: true,
                 interim_results: true,
                 encoding: 'linear16',
-                sample_rate: this.sampleRate,
-                channels: this.numChannels,
+                sample_rate: this._sampleRate,
+                channels: this._numChannels,
                 endpointing: 300,
                 utterance_end_ms: 1000,
                 vad_events: true,

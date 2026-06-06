@@ -398,40 +398,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [voiceInput, setVoiceInput] = useState(''); // Accumulated user voice input
   const voiceInputRef = useRef<string>(''); // Ref for capturing in async handlers
   const textInputRef = useRef<HTMLInputElement>(null); // Ref for input focus
-  const isStealthRef = useRef<boolean>(false); // Tracks if the next expansion should be stealthy
-  // CGEventTap stealth-typing state. Driven by IPC from main; ref shadows
-  // the state so the captured-key handler can early-out without depending
-  // on React's render cycle for stop signals.
-  const [stealthTapActive, setStealthTapActive] = useState<boolean>(false);
-  const stealthTapActiveRef = useRef<boolean>(false);
-  // True when the click-to-engage stealth path is safe. False when an IME
-  // (Pinyin / Hangul / Kanji / …) is enabled in macOS HIToolbox: the tap
-  // captures below the IME so composition would never reach the chat box.
-  // Resolved once on mount via IPC (default true so non-macOS / probe
-  // failure falls back to existing behaviour).
-  const stealthAutoEngageOkRef = useRef<boolean>(true);
-  // True when CGEventTap is available on this platform. Set once at mount
-  // via IPC. Used to decide whether to block DOM focus in blockInputFocus -
-  // without this synchronous signal, blockInputFocus cannot distinguish "tap
-  // not yet active" (macOS: block anyway) from "tap not available" (Windows:
-  // never block, or the input becomes permanently trapped).
-  // Set synchronously from preload — platform is known immediately at render time.
-  const isCgEventTapAvailableRef = useRef<boolean>(false);
+  const isStealthRef = useRef<boolean>(false); // Tracks if the next window show should be inactive (no focus steal)
   // Latest-handler ref so the captured-key listener (mounted with [] deps)
   // calls the CURRENT handleManualSubmit closure — not the one captured at
   // first render, which reads inputValue="" and silently no-ops on submit.
   // Updated on every render below.
   const handleManualSubmitRef = useRef<() => void>(() => {});
-  // Set when the user tried to engage the tap but Accessibility isn't
-  // granted yet. Renders the inline permission banner so we never silently
-  // fail — Cluely's onboarding is its UX moat; we mirror it.
-  const [stealthPermissionMissing, setStealthPermissionMissing] = useState<boolean>(false);
-  // Set when KeybindManager reports the stealth-typing global shortcut
-  // failed to register (OS already owns it — common with Cmd+Shift+Space
-  // if another app claimed it, or with the macOS input source switcher
-  // in some configs). Stores the attempted accelerator so the banner can
-  // tell the user exactly what conflicted.
-  const [stealthHotkeyConflict, setStealthHotkeyConflict] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -462,7 +434,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   );
 
   // Settings State with Persistence
-  const [isUndetectable, setIsUndetectable] = useState(false);
   const [hideChatHidesWidget, setHideChatHidesWidget] = useState(() => {
     const stored = localStorage.getItem('natively_hideChatHidesWidget');
     return stored ? stored === 'true' : true;
@@ -573,19 +544,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // inline <ReactMarkdown components={{...}}> would create a fresh object
   // literal per render — defeating ReactMarkdown's internal render-bailout.
   //
-  // ALL 6 message-intent branches stream tokens (per IntelligenceEngine emits):
+  // ALL message-intent branches stream tokens (per IntelligenceEngine emits):
   //   - standard:              plain system text bubbles (fallback render)
   //   - codeText:              text parts inside a code-bubble
   //   - whatToAnswerText:      `what_to_answer` card body (suggested_answer_token;
   //                            emerald theme)
   //   - recapText:             `recap` body (recap_token; indigo theme)
-  //   - followUpQuestionsText: `follow_up_questions` body
-  //                            (follow_up_questions_token; amber theme)
   //   - shortenText:           `shorten` body — IMPORTANT: shorten streams
   //                            via refined_answer_token with intent='shorten'
-  //                            (IntelligenceEngine.ts:406, triggered by
-  //                            handleFollowUp('shorten') at line 2657);
-  //                            cyan theme.
+  //                            (IntelligenceEngine.ts); cyan theme.
   //
   // No intent is rendered with an inline `components={{...}}` literal.
   const mdComponents = useMemo(
@@ -702,17 +669,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2" {...props} />,
         li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
       },
-      followUpQuestionsText: {
-        p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0" {...props} />,
-        strong: ({ node, ...props }: any) => (
-          <strong
-            className={`font-bold ${isLightTheme ? 'text-amber-800' : 'text-[#FFF9C4]'}`}
-            {...props}
-          />
-        ),
-        ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2" {...props} />,
-        li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
-      },
       shortenText: {
         p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0" {...props} />,
         strong: ({ node, ...props }: any) => (
@@ -796,26 +752,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => unsubscribe();
   }, []);
 
-  // Global State Sync
-  useEffect(() => {
-    // Fetch initial state
-    if (window.electronAPI?.getUndetectable) {
-      window.electronAPI.getUndetectable().then(setIsUndetectable);
-    }
-
-    if (window.electronAPI?.onUndetectableChanged) {
-      const unsubscribe = window.electronAPI.onUndetectableChanged((state) => {
-        setIsUndetectable(state);
-      });
-      return () => unsubscribe();
-    }
-  }, []);
-
   // Persist Settings
   useEffect(() => {
-    localStorage.setItem('natively_undetectable', String(isUndetectable));
     localStorage.setItem('natively_hideChatHidesWidget', String(hideChatHidesWidget));
-  }, [isUndetectable, hideChatHidesWidget]);
+  }, [hideChatHidesWidget]);
 
   // Mouse Passthrough State
   const [isMousePassthrough, setIsMousePassthrough] = useState(false);
@@ -1565,9 +1505,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           for (const it of items) queueToken('recap', (it as any).token);
         } else if (kind === 'clarify') {
           for (const it of items) queueToken('clarify', (it as any).token);
-        } else if (kind === 'follow_up_questions') {
-          for (const it of items) queueToken('follow_up_questions', (it as any).token);
-        }
       }),
     );
 
@@ -1681,53 +1618,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               role: 'system',
               text: data.summary,
               intent: 'recap',
-            },
-          ];
-        });
-      }),
-    );
-
-    // STREAMING: Follow-Up Questions (Rendered as message? Or specific UI?)
-    // Currently interface typically renders follow-up Qs as a message or button update.
-    // Let's assume message for now based on existing 'follow_up_questions_update' handling
-    // But wait, existing handle just sets state?
-    // Let's check how 'follow_up_questions_update' was handled.
-    // It was handled separate locally in this component maybe?
-    // Ah, I need to see the existing listener for 'onIntelligenceFollowUpQuestionsUpdate'
-
-    // Let's implemented token streaming for it anyway, likely it updates a message bubble
-    // OR it might update a specialized "Suggested Questions" area.
-    // Assuming it's a message for consistency with "Copilot" approach.
-
-    cleanups.push(
-      window.electronAPI.onIntelligenceFollowUpQuestionsToken((data) => {
-        queueToken('follow_up_questions', data.token);
-      }),
-    );
-
-    cleanups.push(
-      window.electronAPI.onIntelligenceFollowUpQuestionsUpdate((data) => {
-        flushToken();
-        // This event name is slightly different ('update' vs 'answer')
-        setIsProcessing(false);
-        setMessages((prev) => {
-          const lastMsg = prev[prev.length - 1];
-          if (lastMsg && lastMsg.isStreaming && lastMsg.intent === 'follow_up_questions') {
-            const updated = [...prev];
-            updated[prev.length - 1] = {
-              ...lastMsg,
-              text: data.questions,
-              isStreaming: false,
-            };
-            return updated;
-          }
-          return [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'system',
-              text: data.questions,
-              intent: 'follow_up_questions',
             },
           ];
         });
@@ -1891,27 +1781,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }
   };
 
-  const handleFollowUp = async (intent: string = 'rephrase') => {
-    setIsExpanded(true);
-    setIsProcessing(true);
-    analytics.trackCommandExecuted('follow_up_' + intent);
-
-    try {
-      await window.electronAPI.generateFollowUp(intent);
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          role: 'system',
-          text: `Error: ${err}`,
-        },
-      ]);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   const handleRecap = async () => {
     setIsExpanded(true);
     setIsProcessing(true);
@@ -1919,27 +1788,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     try {
       await window.electronAPI.generateRecap();
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          role: 'system',
-          text: `Error: ${err}`,
-        },
-      ]);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleFollowUpQuestions = async () => {
-    setIsExpanded(true);
-    setIsProcessing(true);
-    analytics.trackCommandExecuted('suggest_questions');
-
-    try {
-      await window.electronAPI.generateFollowUpQuestions();
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -2135,33 +1983,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             },
           ];
         });
-      }),
-    );
-
-    // Phone-initiated chat: main process streams tokens via gemini-stream-*; this
-    // event adds the user turn + streaming placeholder before tokens arrive.
-    cleanups.push(
-      window.electronAPI.onPhoneMirrorIncomingChat(({ message }) => {
-        flushToken();
-        requestStartTimeRef.current = Date.now();
-        const userId = Date.now().toString();
-        const placeholderId = `${userId}-reply`;
-        setMessages((prev) => [
-          ...prev,
-          { id: userId, role: 'user', text: message },
-          {
-            id: placeholderId,
-            role: 'system',
-            text: '',
-            intent: 'chat',
-            isStreaming: true,
-          },
-        ]);
-        setIsExpanded(true);
-        setIsProcessing(true);
-        setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 50);
       }),
     );
 
@@ -2677,33 +2498,6 @@ Provide only the answer, nothing else.`;
         );
       }
 
-      if (msg.intent === 'follow_up_questions') {
-        return (
-          <div
-            className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}
-            style={appearance.subtleStyle}
-          >
-            <div
-              className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-amber-700' : 'text-[#FFD60A]'}`}
-            >
-              <HelpCircle className="w-3.5 h-3.5" />
-              <span>Follow-Up Questions</span>
-            </div>
-            <div
-              className={`text-[13px] leading-relaxed markdown-content ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}
-            >
-              <ReactMarkdown
-                remarkPlugins={REMARK_PLUGINS}
-                rehypePlugins={REHYPE_PLUGINS}
-                components={mdComponents.followUpQuestionsText}
-              >
-                {msg.text}
-              </ReactMarkdown>
-            </div>
-          </div>
-        );
-      }
-
       if (msg.intent === 'what_to_answer') {
         // Split text by code blocks (Handle unclosed blocks at EOF)
         const parts = msg.text.split(/(```[\s\S]*?(?:```|$))/g);
@@ -2795,8 +2589,6 @@ Provide only the answer, nothing else.`;
   // We use a ref to hold the latest handlers to avoid re-binding the event listener on every render
   const handlersRef = useRef({
     handleWhatToSay,
-    handleFollowUp,
-    handleFollowUpQuestions,
     handleRecap,
     handleAnswerNow,
     handleClarify,
@@ -2807,8 +2599,6 @@ Provide only the answer, nothing else.`;
   // Update ref on every render so the event listener always access latest state/props
   handlersRef.current = {
     handleWhatToSay,
-    handleFollowUp,
-    handleFollowUpQuestions,
     handleRecap,
     handleAnswerNow,
     handleClarify,
@@ -2911,8 +2701,6 @@ Provide only the answer, nothing else.`;
     const handleKeyDown = (e: KeyboardEvent) => {
       const {
         handleWhatToSay,
-        handleFollowUp,
-        handleFollowUpQuestions,
         handleRecap,
         handleAnswerNow,
         handleClarify,
@@ -2927,9 +2715,6 @@ Provide only the answer, nothing else.`;
       } else if (isShortcutPressed(e, 'clarify')) {
         e.preventDefault();
         handleClarify();
-      } else if (isShortcutPressed(e, 'followUp')) {
-        e.preventDefault();
-        handleFollowUpQuestions();
       } else if (isShortcutPressed(e, 'dynamicAction4')) {
         e.preventDefault();
         if (actionButtonMode === 'brainstorm') {
@@ -3292,8 +3077,6 @@ Provide only the answer, nothing else.`;
       isStealthRef.current = true;
 
       if (action === 'whatToAnswer') handlers.handleWhatToSay();
-      else if (action === 'shorten') handlers.handleFollowUp('shorten');
-      else if (action === 'followUp') handlers.handleFollowUpQuestions();
       else if (action === 'recap') handlers.handleRecap();
       else if (action === 'dynamicAction4') {
         if (actionButtonMode === 'brainstorm') handlers.handleBrainstorm();
@@ -3329,257 +3112,6 @@ Provide only the answer, nothing else.`;
     return unsubscribe;
   }, []);
 
-  // ── Stealth keyboard tap (CGEventTap) — true Cluely-grade input path ──
-  //
-  // When the OS-level tap is engaged (toggled by Cmd/Ctrl+Shift+Space),
-  // every keystroke is captured BEFORE the foreground app sees it and
-  // forwarded here. We append `chars` directly to inputValue without ever
-  // touching DOM focus — the chat input never has to be the active element,
-  // so the panel never has to be the key window. Zoom/browser stays as the
-  // OS frontmost+key application throughout the entire typing session.
-  //
-  // HID virtual keycodes referenced below (stable across layouts):
-  //   36 = Return,  48 = Tab,  51 = Delete (Backspace),  53 = Esc,
-  //   76 = Numpad Enter,  123 = Left,  124 = Right,  125 = Down,  126 = Up.
-  useEffect(() => {
-    if (!window.electronAPI?.onStealthTapState || !window.electronAPI?.onStealthKeyCaptured) return;
-
-    // Effect-scoped flag set when Esc is observed in the captured-key
-    // stream. Suppresses non-Esc events that may have been queued by the
-    // worker thread before the user pressed Esc. Cleared on each new
-    // active=true state event (a new tap session). Hoisted here so both
-    // listeners see the same binding.
-    let escSuppressUntilNextActive = false;
-
-    const unsubState = window.electronAPI.onStealthTapState(({ active, reason }) => {
-      stealthTapActiveRef.current = active;
-      setStealthTapActive(active);
-      if (active) {
-        // Auto-expand the overlay so the user can see what they're
-        // typing. We do NOT call .focus() — the whole point of the
-        // tap is to avoid window-level focus.
-        isStealthRef.current = true;
-        setIsExpanded(true);
-        setStealthPermissionMissing(false);
-        escSuppressUntilNextActive = false;
-        // M1: when the tap is actually engaged, the platform probe has
-        // succeeded — promote the ref so the symmetric M2 guard in the
-        // click-to-engage listener lets future clicks through.
-        isCgEventTapAvailableRef.current = true;
-      }
-      if (!active && reason === 'permission') {
-        setStealthPermissionMissing(true);
-        // M1: Accessibility / Input Monitoring revoked at runtime. Drop
-        // the ref so blockInputFocus and the M2 click gate both un-trap
-        // the chat input — otherwise the user is stuck until restart
-        // (this is exactly the Windows #246 regression re-imported).
-        isCgEventTapAvailableRef.current = false;
-      }
-    });
-
-    const unsubKey = window.electronAPI.onStealthKeyCaptured((ev) => {
-      // CONTRACT WITH RUST: keyboard_tap.rs pass-through filter (R3)
-      // returns the event unmodified for ANY system-modifier key
-      // (Cmd / Ctrl / Option / Fn) and for ALL F-keys, so the OS
-      // routes those normally to the foreground app. Consequence:
-      // (ev.flags & CMD) is NEVER true here, neither is OPT or CTRL.
-      // The previous round had Cmd+Enter / Cmd+Backspace / Cmd+A /
-      // Option+Backspace branches — all dead code under R3. Removed
-      // to prevent a false sense of feature support; if Rust ever
-      // changes the filter to deliver Cmd events, those branches
-      // need to be REINTRODUCED with explicit testing, not
-      // resurrected from a TODO.
-
-      // Esc handled regardless of active state (main process broadcasts
-      // it BEFORE stopping the tap, so we get here while still active;
-      // see StealthKeyboardManager.handleCapturedKey ordering).
-      if (ev.isKeyDown && ev.keyCode === 53) {
-        setInputValue('');
-        escSuppressUntilNextActive = true;
-        return;
-      }
-
-      // Belt-and-braces clear of the Esc-suppress flag on the first
-      // key event of a new session. State and captured-key arrive on
-      // separate IPC channels and ordering across channels is NOT
-      // guaranteed — if the first keystroke of a new session arrives
-      // before the state-active broadcast, the suppress flag (set by
-      // a prior Esc) would still be true and the keystroke would be
-      // dropped. We re-check the ref (which the state listener flips
-      // synchronously on receipt): if the ref is now true, this is a
-      // legitimate new-session keystroke → clear suppress and proceed.
-      if (escSuppressUntilNextActive && stealthTapActiveRef.current) {
-        console.warn(
-          '[stealth] cross-channel race resolved by ref check — captured-key arrived before state event',
-        );
-        escSuppressUntilNextActive = false;
-      }
-      if (escSuppressUntilNextActive) return; // drop late-arriving keys after Esc
-      if (!stealthTapActiveRef.current) return; // ignore other events after stop
-      if (!ev.isKeyDown) return; // we only act on keyDown
-
-      switch (ev.keyCode) {
-        case 36: // Return
-        case 76: // Numpad Enter
-          handleManualSubmitRef.current();
-          window.electronAPI.stealthTapStop().catch(() => {});
-          return;
-        case 51: // Backspace — delete one char
-          setInputValue((prev) => prev.slice(0, -1));
-          return;
-        // ROUND 4 FIX (#6): Tab (48) and arrows (123-126) used to
-        // be no-op'd here. They're now passed through at the Rust
-        // layer (keyboard_tap.rs F-key whitelist) so they reach the
-        // user's foreground app normally. Removing the dead cases
-        // keeps the contract honest: this switch only sees text-
-        // worthy keys + Backspace + Enter. If anyone ever changes
-        // the Rust filter to deliver Tab again, decide explicitly
-        // what it should do here rather than copy-pasting a no-op.
-      }
-
-      // Append printable chars. CGEventKeyboardGetUnicodeString already
-      // honors the active layout, dead keys, and IME — we don't need to
-      // re-derive characters from keyCode + modifiers ourselves. Filter
-      // shift-only modifier (it's already encoded in the chars).
-      if (
-        ev.chars &&
-        ev.chars.length > 0 &&
-        ev.chars !== '\r' &&
-        ev.chars !== '\n' &&
-        ev.chars !== '\t'
-      ) {
-        setInputValue((prev) => prev + ev.chars);
-      }
-    });
-
-    return () => {
-      unsubState();
-      unsubKey();
-    };
-  }, []);
-
-  // ── Stealth hotkey registration-failure listener ──
-  //
-  // KeybindManager fires this when globalShortcut.register() returns false
-  // (the OS or another app owns the accelerator). Without surfacing it,
-  // the user presses the hotkey, nothing happens, and they assume the
-  // stealth feature is broken. We filter to the stealth-typing keybind
-  // and render an inline banner pointing to Settings → Shortcuts.
-  useEffect(() => {
-    if (!window.electronAPI?.onKeybindRegistrationFailed) return;
-    const unsubscribe = window.electronAPI.onKeybindRegistrationFailed(({ id, accelerator }) => {
-      if (id !== 'chat:focusInput') return;
-      setStealthHotkeyConflict(accelerator);
-    });
-    return unsubscribe;
-  }, []);
-
-  // ── Click-to-activate: engage CGEventTap on chat-input click only
-  //    (opt-IN model) ──
-  //
-  // ROUND 3 FIX (#1): previously this listener engaged the tap on ANY
-  // mousedown anywhere in the overlay (opt-OUT via data-stealth-ignore).
-  // That model broke hard: clicking the Settings button engaged the tap,
-  // then Settings opened and the user couldn't type their API key (tap
-  // intercepted at OS level → keystrokes went to Natively's read-only
-  // chat input). Worse, every NEW button added to the overlay was a
-  // regression risk — forgetting `data-stealth-ignore` re-introduced the
-  // bug silently.
-  //
-  // Inverted to opt-IN: tap ONLY engages when the user clicks an element
-  // marked with `data-stealth-engage="true"` (the chat input wrapper).
-  // Buttons run their normal onClick handlers without engaging the tap.
-  // Two paths still let the user start typing stealth-style:
-  //   • Click the chat input → tap engages → DOM focus blocked → type
-  //   • Press the activation hotkey (Cmd/Ctrl+Shift+Space) → tap engages
-  //
-  // mousedown (not click) so we engage BEFORE the input would otherwise
-  // take DOM focus — preventing the panel from becoming key window, which
-  // is the precise event coding-interview platforms detect via blur.
-  useEffect(() => {
-    if (!window.electronAPI?.stealthTapStart) return;
-
-    // Resolve the IME-safety policy once at mount. While the promise is in
-    // flight we keep the default (true) so users on plain ASCII layouts
-    // see no behaviour change. The probe runs on the main process via
-    // `defaults read com.apple.HIToolbox`; see electron/services/
-    // ImeDetector.ts for the reason this gate exists at all.
-    // Probe for IME state (Pinyin, Hangul, Kanji). Result refines
-    // stealthAutoEngageOkRef from its safe-true default; we do NOT
-    // need to re-check CGEventTap availability here — the synchronous
-    // window.electronAPI.platform guard above already covers that.
-    if (window.electronAPI.stealthTapShouldAutoEngage) {
-      window.electronAPI
-        .stealthTapShouldAutoEngage()
-        .then((ok) => {
-          stealthAutoEngageOkRef.current = !!ok;
-        })
-        .catch(() => {
-          /* fail open — keep default */
-        });
-    }
-
-    // M2: probe the synchronous CGEventTap availability flag once at
-    // mount. Until this resolves the safe-false default of
-    // isCgEventTapAvailableRef keeps the chat input clickable on every
-    // platform (Windows / Linux already had this; macOS now matches
-    // during the ~50ms IPC round-trip).
-    if (window.electronAPI.stealthTapAvailable) {
-      window.electronAPI
-        .stealthTapAvailable()
-        .then((ok) => {
-          isCgEventTapAvailableRef.current = !!ok;
-        })
-        .catch(() => {
-          /* safe-false default: input stays clickable */
-        });
-    }
-
-    const onMouseDown = (e: MouseEvent) => {
-      if (stealthTapActiveRef.current) return; // already on
-      // IME present → never auto-engage. The user can still press the
-      // explicit hotkey if they want true OS-level invisible typing
-      // (they'll lose composition in that path by design).
-      if (!stealthAutoEngageOkRef.current) return;
-      // M2 symmetry with blockInputFocus: short-circuit when the tap is
-      // not actually available. Prevents a useless IPC on Windows /
-      // Linux and keeps the truth table identical across both gates.
-      if (!isCgEventTapAvailableRef.current) return;
-      const target = e.target as HTMLElement | null;
-      if (!target?.closest?.('[data-stealth-engage="true"]')) return;
-      window.electronAPI.stealthTapStart().catch((err) => {
-        // m5: log so the failure surfaces in dev tools. The previous
-        // `.catch(() => {})` swallowed every error and made post-mortem
-        // debugging of broken tap engagement impossible.
-        console.warn('[stealth] tap start IPC failed', err);
-      });
-    };
-
-    document.addEventListener('mousedown', onMouseDown, true); // capture phase
-    return () => document.removeEventListener('mousedown', onMouseDown, true);
-  }, []);
-
-  // M3: re-probe the current IME state on every window focus. The user
-  // may switch input sources (Pinyin → ASCII, Hangul → English, …) while
-  // the app is in the background; without this listener the next click
-  // would still use the stale probe and either fire the tap over a
-  // composition IME (breaking CJK) or block DOM focus on a layout that
-  // no longer needs it.
-  useEffect(() => {
-    if (!window.electronAPI?.stealthTapRefreshIme) return;
-    const onFocusRefresh = () => {
-      window.electronAPI.stealthTapRefreshIme?.()
-        .then((ok) => {
-          stealthAutoEngageOkRef.current = !!ok;
-        })
-        .catch((err) => {
-          console.warn('[stealth] IME refresh IPC failed', err);
-        });
-    };
-    window.addEventListener('focus', onFocusRefresh);
-    return () => window.removeEventListener('focus', onFocusRefresh);
-  }, []);
-
   // ── ModelSelector click-outside close ──
   //
   // ROUND 3 FIX (#4): replaces the dead `on('blur')` handler in the
@@ -3607,21 +3139,9 @@ Provide only the answer, nothing else.`;
   // <input> element. That focus promotes the NSPanel to key window —
   // which fires window.onblur on whatever app was previously focused
   // (Zoom, browser, IDE). preventDefault() on mousedown blocks the focus
-  // attempt entirely. The above mousedown listener has already fired
-  // stealthTapStart() in capture phase, so by the time we get here, the
-  // tap is engaging and DOM focus is no longer the typing path.
+  // attempt entirely, keeping the panel from stealing focus from the
+  // foreground app.
   const blockInputFocus = useCallback((e: React.MouseEvent<HTMLInputElement>) => {
-    // When auto-engage is disabled (composition IME present), the click
-    // does NOT engage the tap — so blocking DOM focus would leave the
-    // user with no way to type. Let the browser focus the input so the
-    // OS Text Input System can route keystrokes through the active IME
-    // and compose CJK characters normally.
-    if (!stealthAutoEngageOkRef.current) return;
-    // Only block DOM focus when CGEventTap is available on this platform.
-    // On Windows, CGEventTap is never available so this guard exits early
-    // and allows normal input focus. On macOS, the tap is available so we
-    // block focus to prevent the panel from becoming key window.
-    if (!isCgEventTapAvailableRef.current) return;
     e.preventDefault();
     // Don't blur an already-focused element — that itself fires events.
     if (document.activeElement === textInputRef.current) {
@@ -4092,13 +3612,6 @@ Provide only the answer, nothing else.`;
                   )}
                 </button>
                 <button
-                  onClick={handleFollowUpQuestions}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
-                  style={appearance.chipStyle}
-                >
-                  <HelpCircle className="w-3 h-3 opacity-70" /> 后续问题
-                </button>
-                <button
                   onClick={handleAnswerNow}
                   className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${
                     isManualRecording
@@ -4168,83 +3681,7 @@ Provide only the answer, nothing else.`;
                   </div>
                 )}
 
-                {/* Stealth hotkey conflict banner — shown if globalShortcut.register()
-                                    failed for chat:focusInput (typically because the configured
-                                    activation hotkey is already claimed by another app or by the
-                                    OS). Click-to-activate still works (mousedown listener is
-                                    independent of the hotkey), but the user can rebind in Settings. */}
-                {stealthHotkeyConflict && (
-                  <div
-                    className="mb-2 px-3 py-2 rounded-xl border border-rose-400/40 bg-rose-500/10 text-[11px] flex items-center gap-2"
-                    data-stealth-ignore="true"
-                  >
-                    <span className="overlay-text-primary flex-1">
-                      Stealth typing hotkey{' '}
-                      <kbd className="px-1 py-0.5 rounded bg-white/10 font-mono text-[10px]">
-                        {stealthHotkeyConflict}
-                      </kbd>{' '}
-                      is already in use. Click the input to activate, or rebind in Settings.
-                    </span>
-                    <button
-                      onClick={() => window.electronAPI.openSettingsTab('keybinds')}
-                      className="px-2 py-1 rounded-md bg-rose-500/20 hover:bg-rose-500/30 transition-colors text-[11px] font-medium overlay-text-primary whitespace-nowrap"
-                      data-stealth-ignore="true"
-                    >
-                      Rebind
-                    </button>
-                    <button
-                      onClick={() => setStealthHotkeyConflict(null)}
-                      className="px-1.5 py-1 rounded-md hover:bg-white/10 transition-colors text-[11px] overlay-text-muted"
-                      aria-label="Dismiss"
-                      data-stealth-ignore="true"
-                    >
-                      ×
-                    </button>
-                  </div>
-                )}
-
-                {/* Stealth tap permission banner — shown only when the user
-                                    pressed the activation hotkey but Accessibility wasn't
-                                    granted. macOS-only: Accessibility is a TCC concept that
-                                    doesn't exist on Windows, and the underlying CGEventTap
-                                    Rust module ships only in the Darwin binary. Gating here
-                                    is belt-and-suspenders on top of the native-side gate. */}
-                {isMac && stealthPermissionMissing && (
-                  <div
-                    className="mb-2 px-3 py-2 rounded-xl border border-amber-400/40 bg-amber-500/10 text-[11px] flex items-center gap-2"
-                    data-stealth-ignore="true"
-                  >
-                    <span className="overlay-text-primary flex-1">
-                      Stealth typing needs Accessibility access. Grant it in System Settings, then
-                      restart Natively.
-                    </span>
-                    <button
-                      onClick={() => window.electronAPI.stealthTapOpenSettings()}
-                      className="px-2 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 transition-colors text-[11px] font-medium overlay-text-primary whitespace-nowrap"
-                      data-stealth-ignore="true"
-                    >
-                      Open Settings
-                    </button>
-                    <button
-                      onClick={() => setStealthPermissionMissing(false)}
-                      className="px-1.5 py-1 rounded-md hover:bg-white/10 transition-colors text-[11px] overlay-text-muted"
-                      aria-label="Dismiss"
-                      data-stealth-ignore="true"
-                    >
-                      ×
-                    </button>
-                  </div>
-                )}
-
-                {/* data-stealth-engage marks this subtree as
-                                    the ONLY clickable region that engages the
-                                    CGEventTap. See the click-to-activate
-                                    useEffect (~line 2840) for the opt-IN
-                                    rationale — buttons elsewhere in the
-                                    overlay no longer accidentally engage the
-                                    tap and break inputs in Settings/Model
-                                    Selector windows. */}
-                <div className="relative group" data-stealth-engage="true">
+                <div className="relative group">
                   <input
                     ref={textInputRef}
                     type="text"
@@ -4254,11 +3691,8 @@ Provide only the answer, nothing else.`;
                     // Block native DOM focus on click — the panel becoming
                     // key window is exactly the signal coding-interview
                     // platforms watch for via window.onblur on the parent.
-                    // mousedown listener (capture phase) already engaged
-                    // the CGEventTap, so typing routes through that path.
                     onMouseDown={blockInputFocus}
-                    readOnly={stealthTapActive}
-                    className={`w-full border focus:ring-1 rounded-xl pl-3 pr-10 py-2.5 focus:outline-none transition-all duration-200 ease-sculpted text-[13px] leading-relaxed ${inputClass} ${stealthTapActive ? 'ring-2 ring-emerald-400/30 border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.15)]' : ''}`}
+                    className={`w-full border focus:ring-1 rounded-xl pl-3 pr-10 py-2.5 focus:outline-none transition-all duration-200 ease-sculpted text-[13px] leading-relaxed ${inputClass}`}
                     style={appearance.inputStyle}
                   />
 

@@ -4,9 +4,9 @@ import {
     X, Mic, Speaker, Monitor, Keyboard, User, LifeBuoy, LogOut, Upload,
     ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
-    ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
+    ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield
+    Star, AlertCircle, Gift, Cpu, Shield
 } from 'lucide-react';
 import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
@@ -14,7 +14,6 @@ import { HelpSettings } from './settings/HelpSettings';
 import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { NativelyApiSettings } from './settings/NativelyApiSettings';
 import { NativelyProSettings } from './settings/NativelyProSettings';
-import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
 import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
 import { NativelyLogoMark } from './NativelyLogoMark';
@@ -367,9 +366,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     }, [isOpen, initialTab]);
 
     const { shortcuts, updateShortcut, resetShortcuts } = useShortcuts();
-    const [isUndetectable, setIsUndetectable] = useState(false);
     const [isMousePassthrough, setIsMousePassthrough] = useState(false);
-    const [disguiseMode, setDisguiseMode] = useState<'terminal' | 'settings' | 'activity' | 'none'>('none');
     const [openOnLogin, setOpenOnLogin] = useState(false);
     const [themeMode, setThemeMode] = useState<'system' | 'light' | 'dark'>('system');
     const [isThemeDropdownOpen, setIsThemeDropdownOpen] = useState(false);
@@ -394,9 +391,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
 
             // Fetch true initial state from main process
-            window.electronAPI?.getUndetectable?.().then(setIsUndetectable).catch(() => { });
             window.electronAPI?.getOverlayMousePassthrough?.().then(setIsMousePassthrough).catch(() => { });
-            window.electronAPI?.getDisguise?.().then(setDisguiseMode).catch(() => { });
             window.electronAPI?.getVerboseLogging?.().then(setVerboseLogging).catch(() => { });
             window.electronAPI?.getMeetingRetention?.().then(setMeetingRetention).catch(() => { });
         }
@@ -413,26 +408,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
 
     useEffect(() => {
-        if (window.electronAPI?.onUndetectableChanged) {
-            const unsubscribe = window.electronAPI.onUndetectableChanged((newState: boolean) => {
-                setIsUndetectable(newState);
-            });
-            return () => unsubscribe();
-        }
-    }, []);
-
-    useEffect(() => {
         if (window.electronAPI?.onMeetingRetentionChanged) {
             const unsubscribe = window.electronAPI.onMeetingRetentionChanged(setMeetingRetention);
-            return () => unsubscribe();
-        }
-    }, []);
-
-    useEffect(() => {
-        if (window.electronAPI?.onDisguiseChanged) {
-            const unsubscribe = window.electronAPI.onDisguiseChanged((newMode: any) => {
-                setDisguiseMode(newMode);
-            });
             return () => unsubscribe();
         }
     }, []);
@@ -1190,12 +1167,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     };
 
 
-    const [calendarStatus, setCalendarStatus] = useState<{ connected: boolean; email?: string }>({ connected: false });
-    const [isCalendarsLoading, setIsCalendarsLoading] = useState(false);
-    const [calendarEvents, setCalendarEvents] = useState<Array<{ id: string; title: string; startTime: string; endTime: string; link?: string }>>([]);
-    const [isCalendarRefreshing, setIsCalendarRefreshing] = useState(false);
-
-
     // Load stored credentials on mount
 
 
@@ -1242,10 +1213,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
     useEffect(() => {
         if (isOpen) {
-            // Load detectable status
-            if (window.electronAPI?.getUndetectable) {
-                window.electronAPI.getUndetectable().then(setIsUndetectable);
-            }
+            // Load settings
             if (window.electronAPI?.getOpenAtLogin) {
                 window.electronAPI.getOpenAtLogin().then(setOpenOnLogin);
             }
@@ -1300,29 +1268,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             const savedSck = localStorage.getItem('useExperimentalSckBackend') === 'true';
             setUseExperimentalSck(savedSck);
 
-            // Load Calendar Status
-            if (window.electronAPI?.getCalendarStatus) {
-                window.electronAPI.getCalendarStatus().then(setCalendarStatus);
-            }
         }
     }, [isOpen, selectedInput, selectedOutput]); // Re-run if isOpen changes, or if selected devices are cleared
-
-    // Fetch upcoming calendar events while the Calendar tab is open and connected.
-    // Polls every 60s to mirror the Launcher's cadence.
-    useEffect(() => {
-        if (!isOpen || activeTab !== 'calendar' || !calendarStatus.connected) return;
-        if (!window.electronAPI?.getUpcomingEvents) return;
-
-        let cancelled = false;
-        const fetchEvents = () => {
-            window.electronAPI.getUpcomingEvents()
-                .then(events => { if (!cancelled) setCalendarEvents(events || []); })
-                .catch(err => console.error('[Settings] Failed to fetch upcoming events:', err));
-        };
-        fetchEvents();
-        const interval = setInterval(fetchEvents, 60_000);
-        return () => { cancelled = true; clearInterval(interval); };
-    }, [isOpen, activeTab, calendarStatus.connected]);
 
     // Listen for device-selection-applied so the user can see when their saved
     // device couldn't be opened and audio fell back to the system default.
@@ -1444,12 +1391,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         <Sparkles size={16} className={activeTab === 'skills' ? 'text-accent-primary' : 'text-text-secondary'} /> 技能
                                     </button>
                                     <button
-                                        onClick={() => setActiveTab('calendar')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'calendar' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
-                                    >
-                                        <Calendar size={16} /> 日历
-                                    </button>
-                                    <button
                                         onClick={() => setActiveTab('audio')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'audio' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
@@ -1460,13 +1401,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'keybinds' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
                                         <Keyboard size={16} /> 快捷键
-                                    </button>
-
-                                    <button
-                                        onClick={() => setActiveTab('phone-mirror')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'phone-mirror' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
-                                    >
-                                        <Smartphone size={16} /> 手机投屏
                                     </button>
 
                                     <button
@@ -1503,49 +1437,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                             {activeTab === 'general' && (
                                 <div className="space-y-6 animated fadeIn">
                                     <div className="space-y-3.5">
-                                        {/* UndetectableToggle */}
-                                        <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle flex items-center justify-between transition-all ${isUndetectable ? 'shadow-lg shadow-blue-500/10' : ''}`}>
-                                            <div className="flex flex-col gap-1">
-                                                <div className="flex items-center gap-2">
-                                                    {isUndetectable ? (
-                                                        <svg
-                                                            width="18"
-                                                            height="18"
-                                                            viewBox="0 0 24 24"
-                                                            fill="none"
-                                                            stroke="currentColor"
-                                                            strokeWidth="2"
-                                                            strokeLinecap="round"
-                                                            strokeLinejoin="round"
-                                                            className="text-text-primary"
-                                                        >
-                                                            <path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z" fill="currentColor" stroke="currentColor" />
-                                                            <path d="M9 10h.01" stroke="var(--bg-item-surface)" strokeWidth="2.5" />
-                                                            <path d="M15 10h.01" stroke="var(--bg-item-surface)" strokeWidth="2.5" />
-                                                        </svg>
-                                                    ) : (
-                                                        <Ghost size={18} className="text-text-primary" />
-                                                    )}
-                                                    <h3 className="text-lg font-bold text-text-primary">{isUndetectable ? '隐藏模式' : '可见模式'}</h3>
-                                                </div>
-                                                <p className="text-xs text-text-secondary">
-                                                    Natively 当前对屏幕共享 {isUndetectable ? '不可见' : '可见'}。 <button className="text-blue-400 hover:underline">此处支持的应用</button>
-                                                </p>
-                                            </div>
-                                            <div
-                                                onClick={() => {
-                                                    const newState = !isUndetectable;
-                                                    setIsUndetectable(newState);
-                                                    window.electronAPI?.setUndetectable(newState);
-                                                    // Analytics: Undetectable Mode Toggle
-                                                    analytics.trackModeSelected(newState ? 'undetectable' : 'overlay');
-                                                }}
-                                                className={`w-11 h-6 rounded-full relative transition-colors ${isUndetectable ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                                            >
-                                                <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${isUndetectable ? 'translate-x-5' : 'translate-x-0'}`} />
-                                            </div>
-                                        </div>
-
                                         {/* Mouse Passthrough Toggle — Adapted from public PR #113 */}
                                         <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle flex items-center justify-between transition-all ${isMousePassthrough ? 'shadow-lg shadow-sky-500/10' : ''}`}>
                                             <div className="flex flex-col gap-1">
@@ -2063,59 +1954,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                                     </div>
 
-                                    {/* Process Disguise */}
-                                    {/* Process Disguise */}
-                                    <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle`}>
-                                        <div className="flex flex-col gap-1 mb-3">
-                                            <div className="flex items-center gap-2">
-                                                <h3 className="text-lg font-bold text-text-primary">进程伪装</h3>
-                                            </div>
-                                            <p className="text-xs text-text-secondary">
-                                                Disguise Natively as another application to prevent detection during screen sharing.
-                                                <span className="block mt-1 text-text-tertiary">
-                                                    Select a disguise to be automatically applied when Undetectable mode is on.
-                                                </span>
-                                            </p>
-                                        </div>
-
-                                        <div className={`grid grid-cols-2 gap-3 ${isUndetectable ? 'opacity-50 pointer-events-none' : ''}`}>
-                                            {isUndetectable && (
-                                                <p className="col-span-2 text-xs text-yellow-500/80 -mt-1 mb-1">
-                                                    ⚠️ Disable Undetectable mode first to change disguise.
-                                                </p>
-                                            )}
-                                            {[
-                                                { id: 'none', label: 'None (Default)', icon: <Layout size={14} /> },
-                                                { id: 'terminal', label: 'Terminal', icon: <Terminal size={14} /> },
-                                                { id: 'settings', label: 'System Settings', icon: <Settings size={14} /> },
-                                                { id: 'activity', label: 'Activity Monitor', icon: <Activity size={14} /> }
-                                            ].map((option) => (
-                                                <button
-                                                    key={option.id}
-                                                    disabled={isUndetectable}
-                                                    onClick={() => {
-                                                        if (isUndetectable) return;
-                                                        // @ts-ignore
-                                                        setDisguiseMode(option.id);
-                                                        // @ts-ignore
-                                                        window.electronAPI?.setDisguise(option.id);
-                                                        // Analytics
-                                                        analytics.trackModeSelected(`disguise_${option.id}`);
-                                                    }}
-                                                    className={`p-3 rounded-lg border text-left flex items-center gap-3 transition-all ${disguiseMode === option.id
-                                                        ? 'bg-accent-primary border-accent-primary text-white shadow-lg shadow-blue-500/20'
-                                                        : 'bg-bg-input border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-subtle-hover'
-                                                        } ${isUndetectable ? 'cursor-not-allowed' : ''}`}
-                                                >
-                                                    <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${disguiseMode === option.id ? 'bg-white/20 text-white' : 'bg-bg-item-surface text-text-secondary'
-                                                        }`}>
-                                                        {option.icon}
-                                                    </div>
-                                                    <span className="text-xs font-medium">{option.label}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
 
                                 </div>
                             )}
@@ -2235,7 +2073,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                 {[
                                                     { id: 'whatToAnswer', label: 'What to Answer', icon: <Sparkles size={14} /> },
                                                     { id: 'clarify', label: 'Clarify', icon: <MessageSquare size={14} /> },
-                                                    { id: 'followUp', label: 'Follow Up', icon: <MessageSquare size={14} /> },
                                                     { id: 'dynamicAction4', label: 'Recap / Brainstorm', icon: <RefreshCw size={14} /> },
                                                     { id: 'answer', label: 'Answer / Record', icon: <Mic size={14} /> },
                                                     { id: 'codeHint', label: 'Get Code Hint', icon: <Zap size={14} /> },
@@ -2814,270 +2651,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                 </div>
                             )}
 
-
-                            {activeTab === 'calendar' && (
-                                <div className="space-y-6 animated fadeIn h-full">
-                                    <div>
-                                        <h3 className="text-lg font-bold text-text-primary mb-2">可见日历</h3>
-                                        <p className="text-xs text-text-secondary mb-4">Upcoming meetings are synchronized from these calendars</p>
-                                    </div>
-
-                                    <div className="bg-bg-card rounded-xl border border-border-subtle overflow-hidden">
-                                        {calendarStatus.connected ? (
-                                            <>
-                                                {/* Connection header */}
-                                                <div className="p-6 flex items-center justify-between">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
-                                                            <Calendar size={20} />
-                                                        </div>
-                                                        <div>
-                                                            <h4 className="text-sm font-medium text-text-primary">Google 日历</h4>
-                                                            <p className="text-xs text-text-secondary">Connected as {calendarStatus.email || 'User'}</p>
-                                                        </div>
-                                                    </div>
-
-                                                    <button
-                                                        onClick={async () => {
-                                                            setIsCalendarsLoading(true);
-                                                            try {
-                                                                await window.electronAPI.calendarDisconnect();
-                                                                const status = await window.electronAPI.getCalendarStatus();
-                                                                setCalendarStatus(status);
-                                                                setCalendarEvents([]);
-                                                            } catch (e) {
-                                                                console.error(e);
-                                                            } finally {
-                                                                setIsCalendarsLoading(false);
-                                                            }
-                                                        }}
-                                                        disabled={isCalendarsLoading}
-                                                        className="px-3 py-1.5 bg-bg-input hover:bg-bg-elevated border border-border-subtle text-text-primary rounded-md text-xs font-medium transition-colors"
-                                                    >
-                                                        {isCalendarsLoading ? 'Disconnecting...' : 'Disconnect'}
-                                                    </button>
-                                                </div>
-
-                                                {/* Upcoming section — masterpiece treatment, same parent card backdrop */}
-                                                <div className="relative border-t border-white/[0.05]">
-                                                    {/* Ambient mesh — soft cool radial behind the list, pointer-events-none */}
-                                                    <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                                                        <div className="absolute -top-20 -left-10 w-[260px] h-[260px] bg-blue-500/[0.06] blur-[90px]" />
-                                                        <div className="absolute -bottom-24 right-0 w-[220px] h-[220px] bg-violet-500/[0.04] blur-[80px]" />
-                                                    </div>
-
-                                                    {/* Section header */}
-                                                    <div className="relative px-6 pt-5 pb-3 flex items-end justify-between">
-                                                        <div className="space-y-2">
-                                                            <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-white/[0.04] ring-1 ring-white/[0.06] text-[9px] font-medium tracking-[0.22em] text-text-secondary uppercase shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                                                                <span className="w-1 h-1 rounded-full bg-emerald-400/80" />
-                                                                Upcoming
-                                                            </span>
-                                                            <p className="text-[11px] text-text-tertiary tracking-[0.01em]">
-                                                                {calendarEvents.length > 0
-                                                                    ? `${calendarEvents.length} ${calendarEvents.length === 1 ? 'meeting' : 'meetings'} · next 7 days`
-                                                                    : 'next 7 days from your primary calendar'}
-                                                            </p>
-                                                        </div>
-                                                        <button
-                                                            onClick={async () => {
-                                                                if (!window.electronAPI?.calendarRefresh) return;
-                                                                setIsCalendarRefreshing(true);
-                                                                try {
-                                                                    await window.electronAPI.calendarRefresh();
-                                                                    const events = await window.electronAPI.getUpcomingEvents();
-                                                                    setCalendarEvents(events || []);
-                                                                } catch (e) {
-                                                                    console.error(e);
-                                                                } finally {
-                                                                    setIsCalendarRefreshing(false);
-                                                                }
-                                                            }}
-                                                            disabled={isCalendarRefreshing}
-                                                            aria-label="刷新即将开始的事件"
-                                                            className="group h-8 w-8 rounded-full bg-white/[0.04] hover:bg-white/[0.08] ring-1 ring-white/[0.07] text-text-secondary hover:text-text-primary transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.92] flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
-                                                        >
-                                                            <RefreshCw
-                                                                size={12}
-                                                                className={`transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${isCalendarRefreshing ? 'animate-spin' : 'group-hover:rotate-[60deg]'}`}
-                                                            />
-                                                        </button>
-                                                    </div>
-
-                                                    {calendarEvents.length === 0 ? (
-                                                        /* Empty state — composed, not a placeholder */
-                                                        <div className="relative px-6 pt-2 pb-7">
-                                                            <div className="rounded-[1.25rem] p-[1px] bg-gradient-to-b from-white/[0.06] to-white/[0.02]">
-                                                                <div className="rounded-[calc(1.25rem-1px)] bg-bg-card/50 backdrop-blur-md ring-1 ring-white/[0.04] px-6 py-9 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                                                                    <div className="mx-auto w-11 h-11 rounded-2xl bg-white/[0.04] ring-1 ring-white/[0.06] flex items-center justify-center mb-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-                                                                        <Calendar size={18} className="text-text-tertiary" strokeWidth={1.5} />
-                                                                    </div>
-                                                                    <p className="text-[13px] text-text-primary tracking-[-0.01em]">Nothing scheduled.</p>
-                                                                    <p className="text-[11px] text-text-tertiary mt-1">Your week is clear for now.</p>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        <ul className="relative px-3 pb-4 space-y-1.5">
-                                                            {calendarEvents.map(ev => {
-                                                                const start = new Date(ev.startTime);
-                                                                const end = new Date(ev.endTime);
-                                                                const now = new Date();
-                                                                const tomorrow = new Date(now.getTime() + 86400000);
-                                                                const isToday = start.toDateString() === now.toDateString();
-                                                                const isTomorrow = start.toDateString() === tomorrow.toDateString();
-
-                                                                const diffMs = start.getTime() - now.getTime();
-                                                                const diffMin = diffMs / 60000;
-                                                                const durationMin = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
-                                                                const durationLabel = durationMin >= 60
-                                                                    ? `${Math.floor(durationMin / 60)}h${durationMin % 60 ? ` ${durationMin % 60}m` : ''}`
-                                                                    : `${durationMin}m`;
-
-                                                                // Urgency-tinted accent for the time chip
-                                                                let chipTone: { text: string; ring: string; bg: string };
-                                                                if (diffMin <= 30) chipTone = { text: 'text-red-300', ring: 'ring-red-400/25', bg: 'bg-red-500/[0.08]' };
-                                                                else if (diffMin <= 4 * 60) chipTone = { text: 'text-amber-200', ring: 'ring-amber-300/25', bg: 'bg-amber-400/[0.08]' };
-                                                                else chipTone = { text: 'text-text-secondary', ring: 'ring-white/[0.06]', bg: 'bg-white/[0.04]' };
-
-                                                                // Smart relative label
-                                                                let chipLabel: string;
-                                                                if (diffMin <= 0) chipLabel = 'Now';
-                                                                else if (diffMin < 60) chipLabel = `in ${Math.ceil(diffMin)}m`;
-                                                                else if (diffMin < 4 * 60) {
-                                                                    const h = Math.floor(diffMin / 60);
-                                                                    const m = Math.round(diffMin - h * 60);
-                                                                    chipLabel = m > 0 ? `in ${h}h ${m}m` : `in ${h}h`;
-                                                                } else if (isToday) chipLabel = 'Today';
-                                                                else if (isTomorrow) chipLabel = 'Tomorrow';
-                                                                else chipLabel = start.toLocaleDateString([], { weekday: 'short' });
-
-                                                                const timeRange = `${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
-
-                                                                // Boarding-pass style date stub
-                                                                const dayNum = start.getDate();
-                                                                const monthAbbrev = start.toLocaleDateString([], { month: 'short' }).toUpperCase();
-
-                                                                // Provider detection
-                                                                let provider: string | null = null;
-                                                                if (ev.link) {
-                                                                    const u = ev.link.toLowerCase();
-                                                                    if (u.includes('meet.google.com')) provider = 'Meet';
-                                                                    else if (u.includes('zoom.us')) provider = 'Zoom';
-                                                                    else if (u.includes('teams.microsoft.com')) provider = 'Teams';
-                                                                    else if (u.includes('webex.com')) provider = 'Webex';
-                                                                }
-
-                                                                return (
-                                                                    <li
-                                                                        key={ev.id}
-                                                                        className="group/row relative rounded-[1.1rem] p-[1px] bg-gradient-to-b from-white/[0.06] to-white/[0.015] transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:from-white/[0.1] hover:to-white/[0.03]"
-                                                                    >
-                                                                        <div className="relative rounded-[calc(1.1rem-1px)] bg-bg-card/40 backdrop-blur-md ring-1 ring-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] flex items-stretch gap-3 pl-3 pr-3 py-3 transition-colors duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover/row:bg-bg-card/60">
-                                                                            {/* Date stub — boarding-pass style */}
-                                                                            <div className="shrink-0 w-12 flex flex-col items-center justify-center rounded-[0.85rem] bg-white/[0.03] ring-1 ring-white/[0.05] py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                                                                                <span className="text-[9px] font-medium uppercase tracking-[0.16em] text-text-tertiary leading-none">
-                                                                                    {monthAbbrev}
-                                                                                </span>
-                                                                                <span className="text-[20px] font-semibold tracking-[-0.02em] text-text-primary tabular-nums leading-none mt-1">
-                                                                                    {dayNum}
-                                                                                </span>
-                                                                            </div>
-
-                                                                            {/* Body */}
-                                                                            <div className="min-w-0 flex-1 flex flex-col justify-center">
-                                                                                <div className="flex items-center gap-2 mb-1">
-                                                                                    <span className={`shrink-0 inline-flex items-center rounded-full px-1.5 py-[1px] text-[9px] font-medium tracking-[0.06em] ring-1 ${chipTone.bg} ${chipTone.text} ${chipTone.ring} tabular-nums`}>
-                                                                                        {chipLabel}
-                                                                                    </span>
-                                                                                    {provider && (
-                                                                                        <span className="shrink-0 inline-flex items-center rounded-full px-1.5 py-[1px] text-[9px] font-medium tracking-[0.06em] bg-white/[0.04] text-text-secondary ring-1 ring-white/[0.05]">
-                                                                                            {provider}
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                                <h4 className="text-[13.5px] font-medium text-text-primary tracking-[-0.01em] leading-snug truncate [text-wrap:balance]">
-                                                                                    {ev.title}
-                                                                                </h4>
-                                                                                <p className="text-[11px] text-text-tertiary tabular-nums mt-0.5">
-                                                                                    <span className="text-text-secondary">{timeRange}</span>
-                                                                                    <span className="mx-1.5 opacity-50">·</span>
-                                                                                    <span>{durationLabel}</span>
-                                                                                </p>
-                                                                            </div>
-
-                                                                            {/* Trailing action — magnetic button */}
-                                                                            {ev.link ? (
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => window.electronAPI?.openExternal(ev.link!)}
-                                                                                    title={ev.link}
-                                                                                    className="self-center shrink-0 group/btn inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1.5 bg-white/[0.05] hover:bg-white/[0.1] ring-1 ring-white/[0.07] text-text-primary text-[11px] font-medium transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.97] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
-                                                                                >
-                                                                                    <span>加入</span>
-                                                                                    <span className="w-5 h-5 rounded-full bg-white/[0.08] ring-1 ring-white/[0.08] flex items-center justify-center transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover/btn:translate-x-[1px] group-hover/btn:-translate-y-[1px]">
-                                                                                        <ExternalLink size={9} strokeWidth={2} />
-                                                                                    </span>
-                                                                                </button>
-                                                                            ) : (
-                                                                                <span
-                                                                                    aria-label="无会议链接"
-                                                                                    className="self-center shrink-0 inline-flex items-center justify-center w-2 h-2 rounded-full bg-white/[0.08] mr-3"
-                                                                                />
-                                                                            )}
-                                                                        </div>
-                                                                    </li>
-                                                                );
-                                                            })}
-                                                        </ul>
-                                                    )}
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <div className="w-full p-6">
-                                                <div className="mb-4">
-                                                    <Calendar size={24} className="text-text-tertiary mb-3" />
-                                                    <h4 className="text-sm font-bold text-text-primary mb-1">无日历</h4>
-                                                    <p className="text-xs text-text-secondary">Get started by connecting a Google account.</p>
-                                                </div>
-
-                                                <button
-                                                    onClick={async () => {
-                                                        setIsCalendarsLoading(true);
-                                                        try {
-                                                            const res = await window.electronAPI.calendarConnect();
-                                                            if (res.success) {
-                                                                const status = await window.electronAPI.getCalendarStatus();
-                                                                setCalendarStatus(status);
-                                                            }
-                                                        } catch (e) {
-                                                            console.error(e);
-                                                        } finally {
-                                                            setIsCalendarsLoading(false);
-                                                        }
-                                                    }}
-                                                    disabled={isCalendarsLoading}
-                                                    className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 ${isLight ? 'bg-bg-component hover:bg-bg-item-surface text-text-primary border border-border-subtle' : 'bg-[#303033] hover:bg-[#3A3A3D] text-white'}`}
-                                                >
-                                                    <svg viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg">
-                                                        <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
-                                                            <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z" />
-                                                            <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z" />
-                                                            <path fill="#FBBC05" d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.734 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z" />
-                                                            <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
-                                                        </g>
-                                                    </svg>
-                                                    {isCalendarsLoading ? 'Connecting...' : 'Connect Google'}
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {activeTab === 'phone-mirror' && (
-                                <PhoneMirrorSettings />
-                            )}
 
                             {activeTab === 'help' && (
                                 <HelpSettings onNavigate={setActiveTab} />

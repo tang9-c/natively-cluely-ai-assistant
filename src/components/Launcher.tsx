@@ -1,15 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { ToggleLeft, ToggleRight, Search, Calendar, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
 import icon from "./icon.png";
 import mainui from "../UI_comp/mainui.png";
-import calender from "../UI_comp/calender.png";
-import ConnectCalendarButton from './ui/ConnectCalendarButton';
 import MeetingDetails from './MeetingDetails';
 import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FeatureSpotlight } from './FeatureSpotlight';
 import { analytics } from '../lib/analytics/analytics.service'; // Added analytics import
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -32,7 +29,7 @@ interface Meeting {
         timestamp: number;
     }>;
     usage?: Array<{
-        type: 'assist' | 'followup' | 'chat' | 'followup_questions';
+        type: 'assist' | 'chat';
         timestamp: number;
         question?: string;
         answer?: string;
@@ -80,11 +77,8 @@ const formatTime = (dateStr: string) => {
 
 const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onOpenProfile, onOpenModes, onPageChange, ollamaPullStatus = 'idle', ollamaPullPercent = 0, ollamaPullMessage = '' }) => {
     const [meetings, setMeetings] = useState<Meeting[]>([]);
-    const [isDetectable, setIsDetectable] = useState(false);
     const [isMeetingActive, setIsMeetingActive] = useState(false);
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
-    const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
-    const [isCalendarConnected, setIsCalendarConnected] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [showNotification, setShowNotification] = useState(false);
 
@@ -101,27 +95,14 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         }
     };
 
-    const fetchEvents = () => {
-        if (window.electronAPI && window.electronAPI.getUpcomingEvents) {
-            window.electronAPI.getUpcomingEvents().then(setUpcomingEvents).catch(err => console.error("Failed to fetch events:", err));
-        }
-    }
-
     const handleRefresh = async () => {
         setIsRefreshing(true);
-        analytics.trackCommandExecuted('refresh_calendar');
         try {
-            if (window.electronAPI && window.electronAPI.calendarRefresh) {
-                setShowNotification(true);
-                await window.electronAPI.calendarRefresh();
-                fetchEvents();
-                fetchMeetings();
-                setTimeout(() => {
-                    setShowNotification(false);
-                }, 3000);
-            } else {
-                console.warn("electronAPI.calendarRefresh not found");
-            }
+            fetchMeetings();
+            setShowNotification(true);
+            setTimeout(() => {
+                setShowNotification(false);
+            }, 3000);
         } catch (e) {
             console.error("Refresh failed in handleRefresh:", e);
         } finally {
@@ -161,23 +142,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
             }, 18000);
         }
 
-        // Sync initial undetectable state
-        if (window.electronAPI?.getUndetectable) {
-            window.electronAPI.getUndetectable().then((undetectable) => {
-                if (mounted) setIsDetectable(!undetectable);
-            });
-        }
-
-        // Listen for undetectable changes
-        let removeUndetectableListener: (() => void) | undefined;
-        if (window.electronAPI?.onUndetectableChanged) {
-            removeUndetectableListener = window.electronAPI.onUndetectableChanged((undetectable) => {
-                setIsDetectable(!undetectable);
-            });
-        }
-
         fetchMeetings();
-        fetchEvents();
 
         // Sync initial meeting active state — guarded so unmounted component isn't written to
         if (window.electronAPI?.getMeetingActive) {
@@ -200,15 +165,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
             fetchMeetings();
         });
 
-        // Simple polling for events every minute
-        const interval = setInterval(fetchEvents, 60000);
-
         return () => {
             mounted = false;
             if (removeMeetingsListener) removeMeetingsListener();
-            if (removeUndetectableListener) removeUndetectableListener();
             if (removeMeetingStateListener) removeMeetingStateListener();
-            clearInterval(interval);
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Mount-only: stable setup that must run exactly once
@@ -239,25 +199,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         };
     }, [isShortcutPressed]);
 
-    // Upcoming meetings (in-progress up to 5 min ago, or any future event in the API's 7-day
-    // window), sorted soonest-first. Cap at 3 for the right-side calendar card peek stack.
-    const upcomingMeetings = upcomingEvents
-        .filter(e => new Date(e.startTime).getTime() - Date.now() > -5 * 60000)
-        .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
-    const visibleMeetings = upcomingMeetings.slice(0, 3);
-    const nextMeeting = visibleMeetings[0];
-    const moreMeetingsCount = Math.max(0, upcomingMeetings.length - visibleMeetings.length);
-
     if (!window.electronAPI) {
         return <div className="text-white p-10">错误：Electron API 未初始化。请检查预加载脚本。</div>;
     }
 
-    const toggleDetectable = () => {
-        const newState = !isDetectable;
-        setIsDetectable(newState);
-        window.electronAPI?.setUndetectable(!newState); // Note: setUndetectable takes the *undetectable* state, which is inverse of *detectable*
-        analytics.trackModeSelected(newState ? 'launcher' : 'undetectable'); // If visible (detectable), mode is normal/launcher. If not detectable, mode is undetectable.
-    };
 
     // Group meetings
     const groupedMeetings = meetings.reduce((acc, meeting) => {
@@ -639,9 +584,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
             </header>
 
             <div className="relative flex-1 flex flex-col overflow-hidden">
-                {!isDetectable && (
-                    <div className={`absolute inset-1 border-2 border-dashed rounded-2xl pointer-events-none z-[100] ${isLight ? 'border-black/15' : 'border-white/20'}`} />
-                )}
                 <AnimatePresence mode="wait">
                     {selectedMeeting ? (
                         <motion.div
@@ -689,41 +631,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                 <RefreshCw size={18} />
                                             </button>
 
-                                            {/* Detectable Toggle Pill */}
-                                            <div className={`flex items-center gap-3 border rounded-full px-3 py-1.5 min-w-[140px] transition-colors ${isLight ? 'bg-bg-elevated border-border-muted shadow-sm' : 'bg-[#101011] border-border-muted'}`}>
-                                                {isDetectable ? (
-                                                    <Ghost
-                                                        size={14}
-                                                        strokeWidth={2}
-                                                        className="text-text-secondary transition-colors"
-                                                    />
-                                                ) : (
-                                                    <svg
-                                                        width="14"
-                                                        height="14"
-                                                        viewBox="0 0 24 24"
-                                                        fill="none"
-                                                        xmlns="http://www.w3.org/2000/svg"
-                                                        className="transition-colors"
-                                                    >
-                                                        <path
-                                                            d="M12 2C7.58172 2 4 5.58172 4 10V22L7 19L9.5 21.5L12 19L14.5 21.5L17 19L20 22V10C20 5.58172 16.4183 2 12 2Z"
-                                                            fill={isLight ? '#48484A' : 'white'}
-                                                        />
-                                                        <circle cx="9" cy="10" r="1.5" fill={isLight ? 'white' : 'black'} />
-                                                        <circle cx="15" cy="10" r="1.5" fill={isLight ? 'white' : 'black'} />
-                                                    </svg>
-                                                )}
-                                                <span className="text-xs font-medium flex-1 transition-colors text-text-secondary">
-                                                                                                       {isDetectable ? "可见模式" : "隐藏模式"}
-                                                </span>
-                                                <div
-                                                    className={`w-8 h-4 rounded-full relative transition-colors cursor-pointer ${!isDetectable ? 'bg-accent-primary' : 'bg-bg-toggle-switch'}`}
-                                                    onClick={toggleDetectable}
-                                                >
-                                                    <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all ${!isDetectable ? 'left-[18px]' : 'left-0.5'}`} />
-                                                </div>
-                                            </div>
                                         </div>
 
                                         {/* Center: Ollama Pull Status Pill (flex-1 to center evenly) */}
@@ -844,183 +751,21 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
 
                                     {/* 2. Hero Section Cards */}
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 h-[198px]">
-                                        {/* Default Intro — natively support & upcoming features.
-                                            Calendar "Up Next" lives in Settings → Calendar, not here. */}
+                                        {/* Default Intro — natively support & upcoming features. */}
                                         <div className="md:col-span-2 h-full">
-                                            <FeatureSpotlight />
                                         </div>
 
 
 
-                                        {/* Right Secondary Card — violet-tinted, "Calendar Connected" + peeking next meeting */}
+                                        {/* Right Secondary Card — placeholder */}
                                         <div className="md:col-span-1 rounded-xl overflow-hidden bg-bg-elevated relative group flex flex-col shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
-                                            {/* Backdrop image with violet tint mask */}
-                                            <div className="absolute inset-0">
-                                                <img
-                                                    src={calender}
-                                                    alt=""
-                                                    className="w-full h-full object-cover scale-105 translate-y-[1px]"
-                                                />
-                                                {/* Violet tint mask — only when connected, washes the calendar image into the brand purple */}
-                                                {isCalendarConnected && (
-                                                    <>
-                                                        <div className="absolute inset-0 bg-[#3a2a99]/55 mix-blend-multiply" />
-                                                        <div className="absolute inset-0 bg-gradient-to-b from-violet-700/25 via-violet-800/20 to-indigo-950/35" />
-                                                        {/* Soft top-glow */}
-                                                        <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-[260px] h-[200px] bg-violet-300/20 blur-[80px] pointer-events-none" />
-                                                    </>
-                                                )}
-                                                {/* Subtle grain */}
-                                                <div
-                                                    className="absolute inset-0 opacity-[0.05] mix-blend-overlay pointer-events-none"
-                                                    style={{ backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.55'/></svg>\")" }}
-                                                />
+                                            <div className="absolute inset-0 bg-gradient-to-br from-violet-900/30 to-indigo-950/50" />
+                                            <div className="relative z-10 w-full flex flex-col items-center h-full pt-6 text-center">
+                                                <h3 className="text-[19px] leading-tight mb-4 tracking-[-0.01em]">
+                                                    <span className="block font-semibold text-white">Natively</span>
+                                                    <span className="block font-medium text-white/60 text-[0.95em]">AI Meeting Assistant</span>
+                                                </h3>
                                             </div>
-
-                                            {/* Content Layer */}
-                                            {isCalendarConnected ? (() => {
-                                                const eventCount = upcomingMeetings.length;
-                                                const summaryLabel = eventCount === 0
-                                                    ? 'No upcoming events'
-                                                    : `${eventCount} upcoming event${eventCount === 1 ? '' : 's'}`;
-
-                                                const formatTimeLabel = (startTime: string) => {
-                                                    const start = new Date(startTime);
-                                                    const now = new Date();
-                                                    const tomorrow = new Date(now.getTime() + 86400000);
-                                                    const isToday = start.toDateString() === now.toDateString();
-                                                    const isTomorrow = start.toDateString() === tomorrow.toDateString();
-                                                    const t = start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-                                                    return isToday ? `今天 ${t}`
-                                                        : isTomorrow ? `Tomorrow at ${t}`
-                                                        : `${start.toLocaleDateString([], { weekday: 'short' })} at ${t}`;
-                                                };
-
-                                                // Deterministic avatar palette from email/name
-                                                const avatarPalette = [
-                                                    'bg-rose-300/90 text-rose-900',
-                                                    'bg-amber-200/90 text-amber-900',
-                                                    'bg-emerald-200/90 text-emerald-900',
-                                                    'bg-sky-200/90 text-sky-900',
-                                                    'bg-violet-200/90 text-violet-900',
-                                                    'bg-teal-200/90 text-teal-900',
-                                                ];
-                                                const initialsFor = (a: { email: string; name?: string }) => {
-                                                    const src = (a.name || a.email).trim();
-                                                    const parts = src.split(/[\s._-]+/).filter(Boolean);
-                                                    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-                                                    return src.slice(0, 2).toUpperCase();
-                                                };
-                                                const colorFor = (key: string) => {
-                                                    let h = 0;
-                                                    for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
-                                                    return avatarPalette[Math.abs(h) % avatarPalette.length];
-                                                };
-
-                                                const visibleAttendees = (nextMeeting?.attendees || []).slice(0, 3);
-                                                const remaining = Math.max(0, (nextMeeting?.attendees?.length || 0) - visibleAttendees.length);
-                                                const peekMeetings = visibleMeetings.slice(1); // up to 2 behind the front card
-
-                                                return (
-                                                    <div className="relative z-10 w-full flex flex-col h-full">
-                                                        {/* Heading block — top-centered */}
-                                                        <div className="px-4 pt-5 text-center">
-                                                            <h3 className="text-[20px] font-semibold text-white leading-[1.15] tracking-[-0.01em]">日历已关联</h3>
-                                                            <p className="text-[13px] text-white/55 font-medium mt-0.5 tabular-nums">{summaryLabel}</p>
-                                                        </div>
-
-                                                        {/* Calendar Connected pill — translucent violet glass with check */}
-                                                        <div className="px-4 mt-3 flex justify-center">
-                                                            <div className="inline-flex items-center gap-2 rounded-full bg-violet-500/20 ring-1 ring-violet-300/25 backdrop-blur-md px-2 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_4px_18px_-6px_rgba(99,102,241,0.45)]">
-                                                                <span className="w-5 h-5 rounded-full bg-violet-500 ring-1 ring-violet-300/40 flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
-                                                                    <Check size={11} strokeWidth={3} className="text-white" />
-                                                                </span>
-                                                                <span className="text-[12px] font-semibold text-white/95 pr-1.5 tracking-[-0.005em]">日历已连接</span>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Real stacked peek of upcoming meetings — front card is full, 1–2 behind show just titles */}
-                                                        {nextMeeting && (
-                                                            <div className="mt-auto px-2 pb-0">
-                                                                <div className="relative">
-                                                                    {/* Real peek cards behind — show actual subsequent meetings */}
-                                                                    {peekMeetings[1] && (
-                                                                        <div
-                                                                            className="absolute -top-3 left-3 right-3 h-7 rounded-t-[14px] bg-white/[0.06] ring-1 ring-white/[0.06] backdrop-blur-sm overflow-hidden"
-                                                                            title={peekMeetings[1].title}
-                                                                        >
-                                                                            <div className="px-3 pt-1 text-[10.5px] font-medium text-white/55 line-clamp-1 tracking-[-0.005em]">
-                                                                                {peekMeetings[1].title}
-                                                                            </div>
-                                                                        </div>
-                                                                    )}
-                                                                    {peekMeetings[0] && (
-                                                                        <div
-                                                                            className="absolute -top-1.5 left-1.5 right-1.5 h-7 rounded-t-[14px] bg-white/[0.09] ring-1 ring-white/[0.08] backdrop-blur-sm overflow-hidden"
-                                                                            title={peekMeetings[0].title}
-                                                                        >
-                                                                            <div className="px-3 pt-1 text-[11px] font-medium text-white/70 line-clamp-1 tracking-[-0.005em]">
-                                                                                {peekMeetings[0].title}
-                                                                            </div>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {/* Front card — display only, no click */}
-                                                                    <div
-                                                                        className="relative w-full text-left rounded-[14px] bg-white/[0.07] ring-1 ring-white/[0.1] backdrop-blur-md px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_8px_24px_-12px_rgba(0,0,0,0.55)]"
-                                                                    >
-                                                                        <div className="flex items-start justify-between gap-2">
-                                                                            <h4 className="text-[15px] font-semibold text-white leading-tight tracking-[-0.01em] line-clamp-1">
-                                                                                {nextMeeting.title}
-                                                                            </h4>
-                                                                            {moreMeetingsCount > 0 && (
-                                                                                <span className="shrink-0 inline-flex items-center rounded-full bg-white/10 ring-1 ring-white/15 px-1.5 py-0.5 text-[10px] font-semibold text-white/80 tabular-nums">
-                                                                                    +{moreMeetingsCount} more
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
-                                                                        <div className="mt-1.5 flex items-center justify-between gap-2">
-                                                                            <span className="text-[11.5px] text-cyan-200/85 font-medium tabular-nums">
-                                                                                {formatTimeLabel(nextMeeting.startTime)}
-                                                                            </span>
-                                                                            {visibleAttendees.length > 0 && (
-                                                                                <div className="flex -space-x-1.5">
-                                                                                    {visibleAttendees.map((a: { email: string; name?: string }) => (
-                                                                                        <span
-                                                                                            key={a.email}
-                                                                                            title={a.name || a.email}
-                                                                                            className={`inline-flex items-center justify-center w-[18px] h-[18px] rounded-full ring-[1.5px] ring-[#1f1740] text-[8.5px] font-bold ${colorFor(a.email)}`}
-                                                                                        >
-                                                                                            {initialsFor(a)}
-                                                                                        </span>
-                                                                                    ))}
-                                                                                    {remaining > 0 && (
-                                                                                        <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full ring-[1.5px] ring-[#1f1740] bg-white/15 text-[8.5px] font-bold text-white/85 tabular-nums">
-                                                                                            +{remaining}
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })() : (
-                                                <div className="relative z-10 w-full flex flex-col items-center h-full pt-6 text-center">
-                                                    <h3 className="text-[19px] leading-tight mb-4 tracking-[-0.01em]">
-                                                        <span className="block font-semibold text-white">将日历关联到</span>
-                                                        <span className="block font-medium text-white/60 text-[0.95em]">see upcoming events</span>
-                                                    </h3>
-
-                                                    <ConnectCalendarButton
-                                                        className="-translate-x-0.5"
-                                                        onConnect={() => setIsCalendarConnected(true)}
-                                                    />
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
                                 </div>

@@ -6,8 +6,6 @@ export { AssistLLM } from "./AssistLLM";
 export { BrainstormLLM } from "./BrainstormLLM";
 export { ClarifyLLM } from "./ClarifyLLM";
 export { CodeHintLLM } from "./CodeHintLLM";
-export { FollowUpLLM } from "./FollowUpLLM";
-export { FollowUpQuestionsLLM } from "./FollowUpQuestionsLLM";
 export { RecapLLM } from "./RecapLLM";
 export { WhatToAnswerLLM } from "./WhatToAnswerLLM";
 export { clampResponse, validateResponse } from "./postProcessor";
@@ -39,12 +37,9 @@ export {
     HARD_SYSTEM_PROMPT,
     ANSWER_MODE_PROMPT,
     ASSIST_MODE_PROMPT,
-    FOLLOWUP_MODE_PROMPT,
     WHAT_TO_ANSWER_PROMPT,
     GROQ_TITLE_PROMPT,
     GROQ_SUMMARY_JSON_PROMPT,
-    FOLLOWUP_EMAIL_PROMPT,
-    GROQ_FOLLOWUP_EMAIL_PROMPT,
     CODE_HINT_PROMPT,
     buildCodeHintMessage,
     BRAINSTORM_MODE_PROMPT
@@ -56,14 +51,11 @@ export {
     TINY_WHAT_TO_ANSWER_PROMPT,
     TINY_ASSIST_PROMPT,
     TINY_RECAP_PROMPT,
-    TINY_FOLLOWUP_PROMPT,
-    TINY_FOLLOW_UP_QUESTIONS_PROMPT,
     TINY_BRAINSTORM_PROMPT,
     TINY_CLARIFY_PROMPT,
     TINY_CODE_HINT_PROMPT,
     TINY_TITLE_PROMPT,
     TINY_SUMMARY_JSON_PROMPT,
-    TINY_FOLLOWUP_EMAIL_PROMPT,
     TINY_MODE_GENERAL_PROMPT,
     TINY_MODE_LOOKING_FOR_WORK_PROMPT,
     TINY_MODE_SALES_PROMPT,
