@@ -1432,6 +1432,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       console.log(`[LLMHelper] chatWithGemini called`, { messageLength: message.length, imageCount: imagePaths?.length ?? 0, hasContext: Boolean(context) })
 
       // ============================================================
+      let systemPromptOverride: string | undefined;
+      // ============================================================
       // KNOWLEDGE MODE INTERCEPT
       // If knowledge mode is active, check for intro questions and
       // inject system prompt + relevant context
@@ -1465,13 +1467,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             }
             // Inject knowledge system prompt and context
             if (!skipSystemPrompt && knowledgeResult.systemPromptInjection) {
-              skipSystemPrompt = false; // ensure we use the knowledge prompt
-              // Prepend knowledge context to existing context
-              if (knowledgeResult.contextBlock) {
-                context = context
-                  ? `${knowledgeResult.contextBlock}\n\n${context}`
-                  : knowledgeResult.contextBlock;
-              }
+              systemPromptOverride = `${CORE_IDENTITY}\n\n${knowledgeResult.systemPromptInjection}`;
+            }
+            // Inject knowledge context
+            if (knowledgeResult.contextBlock) {
+              context = context
+                ? `${knowledgeResult.contextBlock}\n\n${context}`
+                : knowledgeResult.contextBlock;
             }
           }
         } catch (knowledgeError: any) {
@@ -1497,8 +1499,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const userContent = context
         ? `CONTEXT:\n${context}\n\nUSER QUESTION:\n${message}`
         : message;
-      const finalGeminiPrompt = this.injectLanguageInstruction(HARD_SYSTEM_PROMPT);
-      const finalGroqPrompt = alternateGroqMessage || this.injectLanguageInstruction(GROQ_SYSTEM_PROMPT);
+      const finalGeminiPrompt = this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT);
+      const finalGroqPrompt = alternateGroqMessage || this.injectLanguageInstruction(systemPromptOverride || GROQ_SYSTEM_PROMPT);
 
       const combinedMessages = {
         gemini: buildMessage(finalGeminiPrompt),
@@ -1540,8 +1542,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       }
 
       // System prompts for OpenAI/Claude/Codex CLI (skipped if skipSystemPrompt)
-      const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(OPENAI_SYSTEM_PROMPT);
-      const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(CLAUDE_SYSTEM_PROMPT);
+      const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
+      const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || CLAUDE_SYSTEM_PROMPT);
 
       // GROQ FAST TEXT OVERRIDE (Text-Only) — gated on picked model so Gemini/Claude/OpenAI
       // selections aren't silently routed to Groq. See streamChat() for matching gate.
@@ -2734,7 +2736,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         yield await this.callOllama(localCombined, imagePaths, skipSystemPrompt ? undefined : this.injectLanguageInstruction(HARD_SYSTEM_PROMPT));
         return;
       }
-      if (deniedOutboundScopes.some(scope => scope === 'transcript' || scope === 'reference_files' || scope === 'profile_history' || scope === 'post_call_summary')) context = undefined;
+      const shouldOmitContext = deniedOutboundScopes.some(scope => scope === 'transcript' || scope === 'reference_files' || scope === 'profile_history' || scope === 'post_call_summary');
+      if (shouldOmitContext) context = undefined;
       if (deniedOutboundScopes.includes('screenshots')) imagePaths = undefined;
       isMultimodal = !!(imagePaths?.length);
     }
