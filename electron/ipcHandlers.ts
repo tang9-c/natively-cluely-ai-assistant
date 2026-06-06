@@ -9,7 +9,6 @@ import { AudioDevices } from './audio/AudioDevices';
 import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manager
 import { AppState } from './main';
 import { CodexCliService } from './services/CodexCliService';
-import { PhoneMirrorService } from './services/PhoneMirrorService';
 import { SettingsManager } from './services/SettingsManager';
 import { SkillsManager } from './services/SkillsManager';
 
@@ -24,6 +23,36 @@ export function initializeIpcHandlers(appState: AppState): void {
   ) => {
     ipcMain.removeHandler(channel);
     ipcMain.handle(channel, listener);
+  };
+
+  /**
+   * Wraps an async handler so that any thrown error is caught and returned
+   * as `{ success: false, error: string }` instead of crashing the IPC channel.
+   * Handlers that already manage their own return shape can opt out.
+   */
+  const withResult = <T extends any[]>(
+    fn: (...args: T) => Promise<any> | any,
+  ): ((...args: T) => Promise<any>) => {
+    return async (...args: T) => {
+      try {
+        return await fn(...args);
+      } catch (error: any) {
+        console.error(`[IPC] ${fn.name || 'handler'} error:`, error);
+        return { success: false, error: error?.message || 'unknown_error' };
+      }
+    };
+  };
+
+  /**
+   * Broadcasts an event to all non-destroyed renderer windows.
+   * Replaces the repetitive `BrowserWindow.getAllWindows().forEach(...)` pattern.
+   */
+  const broadcast = (eventName: string, ...args: any[]): void => {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send(eventName, ...args);
+      }
+    });
   };
 
   /**
@@ -62,9 +91,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       db.clearProfilePersona?.();
       const llmHelper = appState.processingHelper?.getLLMHelper?.();
       llmHelper?.setPersonaPrompt?.('');
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('modes-active-cleared');
-      });
+      broadcast('modes-active-cleared');
       console.log('[IPC] Premium-only context cleared due to license loss');
     } catch (e) {
       /* non-fatal */
@@ -105,10 +132,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
       const result = await LicenseManager.getInstance().activateLicense(key);
       if (result?.success) {
-        BrowserWindow.getAllWindows().forEach((win) => {
-          if (!win.isDestroyed())
-            win.webContents.send('license-status-changed', { isPremium: true });
-        });
+        broadcast('license-status-changed', { isPremium: true });
       }
       return result;
     } catch (err: any) {
@@ -165,10 +189,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       // Notify all windows so the license UI (ProGate, settings) refreshes immediately
       clearActiveModeOnLicenseLoss();
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed())
-          win.webContents.send('license-status-changed', { isPremium: false });
-      });
+      broadcast('license-status-changed', { isPremium: false });
     } catch {
       /* LicenseManager not available */
     }
@@ -382,29 +403,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  // Donation IPC Handlers
-  safeHandle('get-donation-status', async () => {
-    const { DonationManager } = require('./DonationManager');
-    const manager = DonationManager.getInstance();
-    return {
-      shouldShow: manager.shouldShowToaster(),
-      hasDonated: manager.getDonationState().hasDonated,
-      lifetimeShows: manager.getDonationState().lifetimeShows,
-    };
-  });
-
-  safeHandle('mark-donation-toast-shown', async () => {
-    const { DonationManager } = require('./DonationManager');
-    DonationManager.getInstance().markAsShown();
-    return { success: true };
-  });
-
-  safeHandle('set-donation-complete', async () => {
-    const { DonationManager } = require('./DonationManager');
-    DonationManager.getInstance().setHasDonated(true);
-    return { success: true };
-  });
-
   // Generate suggestion from transcript - Natively-style text-only reasoning
   safeHandle('generate-suggestion', async (event, context: string, lastQuestion: string) => {
     try {
@@ -541,11 +539,6 @@ export function initializeIpcHandlers(appState: AppState): void {
               { text: message, speaker: 'user', timestamp: Date.now(), final: true },
               true,
             );
-            try {
-              PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message);
-            } catch (_) {
-              /* noop */
-            }
             // Guard against a newer chat stream having taken over while we were computing
             // the canned reply — matches the protection the LLM path uses around its token
             // loop. Prevents cross-stream UI bleed.
@@ -557,16 +550,6 @@ export function initializeIpcHandlers(appState: AppState): void {
             }
             event.sender.send('gemini-stream-token', identityHit);
             event.sender.send('gemini-stream-done');
-            try {
-              PhoneMirrorService.getInstance().publishToken(String(myStreamId), identityHit);
-            } catch (_) {
-              /* noop */
-            }
-            try {
-              PhoneMirrorService.getInstance().publishDone(String(myStreamId), identityHit);
-            } catch (_) {
-              /* noop */
-            }
             intelligenceManager.addAssistantMessage(identityHit);
             intelligenceManager.logUsage('chat', message, identityHit);
             return null;
@@ -596,13 +579,6 @@ export function initializeIpcHandlers(appState: AppState): void {
           },
           true,
         );
-
-        // Mirror to phone (no-op if PhoneMirrorService isn't running).
-        try {
-          PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message);
-        } catch (_) {
-          /* noop */
-        }
 
         let fullResponse = '';
 
@@ -640,22 +616,12 @@ export function initializeIpcHandlers(appState: AppState): void {
               return null;
             }
             event.sender.send('gemini-stream-token', token);
-            try {
-              PhoneMirrorService.getInstance().publishToken(String(myStreamId), token);
-            } catch (_) {
-              /* noop */
-            }
             fullResponse += token;
           }
 
           // Final check: only send done if we are still the active stream
           if (_chatStreamId === myStreamId) {
             event.sender.send('gemini-stream-done');
-            try {
-              PhoneMirrorService.getInstance().publishDone(String(myStreamId), fullResponse);
-            } catch (_) {
-              /* noop */
-            }
 
             // Update IntelligenceManager with ASSISTANT message after completion
             if (fullResponse.trim().length > 0) {
@@ -671,14 +637,6 @@ export function initializeIpcHandlers(appState: AppState): void {
               'gemini-stream-error',
               streamError.message || 'Unknown streaming error',
             );
-            try {
-              PhoneMirrorService.getInstance().publishError(
-                String(myStreamId),
-                streamError?.message || 'Unknown streaming error',
-              );
-            } catch (_) {
-              /* noop */
-            }
           }
         }
 
@@ -779,31 +737,13 @@ export function initializeIpcHandlers(appState: AppState): void {
     const launcherWin = appState.getWindowHelper().getLauncherWindow();
     if (launcherWin && !launcherWin.isDestroyed()) {
       launcherWin.webContents.send('settings:open-tab', tab);
-      if (appState.getUndetectable()) {
-        launcherWin.showInactive();
-      } else {
-        launcherWin.show();
-        launcherWin.focus();
-      }
+      launcherWin.show();
+      launcherWin.focus();
     }
   });
 
   safeHandle('close-settings-window', () => {
     appState.settingsWindowHelper.closeWindow();
-  });
-
-  safeHandle('set-undetectable', async (_, state: boolean) => {
-    appState.setUndetectable(state);
-    return { success: true };
-  });
-
-  safeHandle('set-disguise', async (_, mode: 'terminal' | 'settings' | 'activity' | 'none') => {
-    appState.setDisguise(mode);
-    return { success: true };
-  });
-
-  safeHandle('get-undetectable', async () => {
-    return appState.getUndetectable();
   });
 
   // Adapted from public PR #113 — verify premium interaction
@@ -821,10 +761,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     return appState.getOverlayMousePassthrough();
   });
 
-  safeHandle('get-disguise', async () => {
-    return appState.getDisguise();
-  });
-
   safeHandle('set-open-at-login', async (_, openAtLogin: boolean) => {
     app.setLoginItemSettings({
       openAtLogin,
@@ -839,47 +775,106 @@ export function initializeIpcHandlers(appState: AppState): void {
     return settings.openAtLogin;
   });
 
-  safeHandle('get-verbose-logging', async () => {
-    return appState.getVerboseLogging();
-  });
+  // ── Generic Settings Handlers ──────────────────────────────────────────────
+  // Replaces repetitive get-X / set-X pairs for simple SettingsManager passthroughs.
+  // Each entry: [channelSuffix, settingsKey, options]
+  //   - validator: optional (value) => boolean | string (error message)
+  //   - broadcastEvent: optional event name to fire after successful set
+  //   - getter: optional custom getter function
+  //   - setter: optional custom setter function
+  const SETTINGS_REGISTRY: Array<{
+    suffix: string;
+    key: string;
+    validator?: (v: any) => true | string;
+    broadcastEvent?: string;
+    getter?: () => any;
+    setter?: (v: any) => void;
+  }> = [
+    { suffix: 'verbose-logging', key: 'verboseLogging', getter: () => appState.getVerboseLogging(), setter: (v) => appState.setVerboseLogging(v) },
+    {
+      suffix: 'meeting-retention',
+      key: 'meetingRetention',
+      validator: (v) => ['forever', '7d', '30d', 'never'].includes(v) || 'invalid_retention',
+      broadcastEvent: 'meeting-retention-changed',
+    },
+    {
+      suffix: 'provider-data-scopes',
+      key: 'providerDataScopes',
+      validator: (v) => {
+        if (!v || typeof v !== 'object') return 'invalid_scopes';
+        const allowed = new Set(['transcript', 'screenshots', 'reference_files', 'profile_history', 'embeddings', 'post_call_summary']);
+        for (const k of Object.keys(v)) if (!allowed.has(k)) return 'invalid_scopes';
+        return true;
+      },
+      broadcastEvent: 'provider-data-scopes-changed',
+    },
+    {
+      suffix: 'screen-understanding-mode',
+      key: 'screenUnderstandingMode',
+      validator: (v) => ['vision_first', 'vision_only', 'private_vision'].includes(v) || 'invalid_mode',
+      broadcastEvent: 'screen-understanding-mode-changed',
+      getter: () => SettingsManager.getInstance().getScreenUnderstandingMode(),
+      setter: (v) => SettingsManager.getInstance().setScreenUnderstandingMode(v),
+    },
+    {
+      suffix: 'technical-interview-vision-first',
+      key: 'technicalInterviewVisionFirst',
+      validator: (v) => typeof v === 'boolean' || 'invalid_value',
+      broadcastEvent: 'technical-interview-vision-first-changed',
+      getter: () => SettingsManager.getInstance().getTechnicalInterviewVisionFirst(),
+    },
+  ];
 
+  for (const reg of SETTINGS_REGISTRY) {
+    safeHandle(`settings:get:${reg.suffix}`, async () => {
+      if (reg.getter) return reg.getter();
+      return SettingsManager.getInstance().get(reg.key) ?? null;
+    });
+
+    safeHandle(`settings:set:${reg.suffix}`, async (_, value: any) => {
+      if (reg.validator) {
+        const ok = reg.validator(value);
+        if (ok !== true) return { success: false, error: ok };
+      }
+      if (reg.setter) {
+        reg.setter(value);
+      } else {
+        SettingsManager.getInstance().set(reg.key, value);
+      }
+      if (reg.broadcastEvent) {
+        broadcast(reg.broadcastEvent, value);
+      }
+      return { success: true };
+    });
+  }
+
+  // Legacy aliases — map old direct channels to the new generic settings channels
+  safeHandle('get-verbose-logging', async () => appState.getVerboseLogging());
   safeHandle('set-verbose-logging', async (_, enabled: boolean) => {
     appState.setVerboseLogging(enabled);
     return { success: true };
   });
-
-  safeHandle('get-meeting-retention', async () => {
-    return SettingsManager.getInstance().get('meetingRetention') ?? 'forever';
-  });
-
+  safeHandle('get-meeting-retention', async () =>
+    SettingsManager.getInstance().get('meetingRetention') ?? 'forever',
+  );
   safeHandle('set-meeting-retention', async (_, retention: 'forever' | '7d' | '30d' | 'never') => {
     if (!['forever', '7d', '30d', 'never'].includes(retention)) {
       return { success: false, error: 'invalid_retention' };
     }
     SettingsManager.getInstance().set('meetingRetention', retention);
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send('meeting-retention-changed', retention);
-      }
-    });
+    broadcast('meeting-retention-changed', retention);
     return { success: true };
   });
-
-  safeHandle('get-provider-data-scopes', async () => {
-    return SettingsManager.getInstance().get('providerDataScopes') ?? {};
-  });
-
+  safeHandle('get-provider-data-scopes', async () =>
+    SettingsManager.getInstance().get('providerDataScopes') ?? {},
+  );
   safeHandle('set-provider-data-scopes', async (_, scopes: Record<string, boolean>) => {
     if (!scopes || typeof scopes !== 'object') {
       return { success: false, error: 'invalid_scopes' };
     }
     const allowedKeys = new Set([
-      'transcript',
-      'screenshots',
-      'reference_files',
-      'profile_history',
-      'embeddings',
-      'post_call_summary',
+      'transcript', 'screenshots', 'reference_files',
+      'profile_history', 'embeddings', 'post_call_summary',
     ]);
     const sanitized: Record<string, boolean> = {};
     for (const [key, value] of Object.entries(scopes)) {
@@ -888,18 +883,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     }
     SettingsManager.getInstance().set('providerDataScopes', sanitized as any);
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send('provider-data-scopes-changed', sanitized);
-      }
-    });
+    broadcast('provider-data-scopes-changed', sanitized);
     return { success: true };
   });
-
-  safeHandle('get-screen-understanding-mode', async () => {
-    return SettingsManager.getInstance().getScreenUnderstandingMode();
-  });
-
+  safeHandle('get-screen-understanding-mode', async () =>
+    SettingsManager.getInstance().getScreenUnderstandingMode(),
+  );
   safeHandle(
     'set-screen-understanding-mode',
     async (_, mode: 'vision_first' | 'vision_only' | 'private_vision') => {
@@ -907,48 +896,30 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'invalid_mode' };
       }
       SettingsManager.getInstance().setScreenUnderstandingMode(mode);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) {
-          win.webContents.send('screen-understanding-mode-changed', mode);
-        }
-      });
+      broadcast('screen-understanding-mode-changed', mode);
       return { success: true };
     },
   );
-
-  safeHandle('get-technical-interview-vision-first', async () => {
-    return SettingsManager.getInstance().getTechnicalInterviewVisionFirst();
-  });
-
+  safeHandle('get-technical-interview-vision-first', async () =>
+    SettingsManager.getInstance().getTechnicalInterviewVisionFirst(),
+  );
   safeHandle('set-technical-interview-vision-first', async (_, enabled: boolean) => {
     if (typeof enabled !== 'boolean') {
       return { success: false, error: 'invalid_value' };
     }
     SettingsManager.getInstance().set('technicalInterviewVisionFirst', enabled);
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send('technical-interview-vision-first-changed', enabled);
-      }
-    });
+    broadcast('technical-interview-vision-first-changed', enabled);
     return { success: true };
   });
-
-  // Legacy alias for renderer builds that still call the old IPC name.
-  // Maps the deprecated technicalInterviewDirectVision channel onto the new
-  // technicalInterviewVisionFirst getter/setter so old renderer builds keep working.
-  safeHandle('get-technical-interview-direct-vision', async () => {
-    return SettingsManager.getInstance().getTechnicalInterviewVisionFirst();
-  });
+  safeHandle('get-technical-interview-direct-vision', async () =>
+    SettingsManager.getInstance().getTechnicalInterviewVisionFirst(),
+  );
   safeHandle('set-technical-interview-direct-vision', async (_, enabled: boolean) => {
     if (typeof enabled !== 'boolean') {
       return { success: false, error: 'invalid_value' };
     }
     SettingsManager.getInstance().set('technicalInterviewVisionFirst', enabled);
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send('technical-interview-vision-first-changed', enabled);
-      }
-    });
+    broadcast('technical-interview-vision-first-changed', enabled);
     return { success: true };
   });
 
@@ -1053,31 +1024,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('restart-ollama', async () => {
-    try {
-      // First try to kill it if it's running
-      await appState.processingHelper.getLLMHelper().forceRestartOllama();
-
-      // The forceRestartOllama now calls OllamaManager.getInstance().init() internally
-      // so we don't need to do it again here.
-
-      return true;
-    } catch (error: any) {
-      console.error('[IPC restart-ollama] Failed to restart:', error);
-      return false;
-    }
-  });
-
-  safeHandle('ensure-ollama-running', async () => {
-    try {
-      const { OllamaManager } = require('./services/OllamaManager');
-      await OllamaManager.getInstance().init();
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, message: error.message };
-    }
-  });
-
   safeHandle('switch-to-gemini', async (_, apiKey?: string, modelId?: string) => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
@@ -1096,130 +1042,69 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  // Dedicated API key setters (for Settings UI Save buttons)
-  safeHandle('set-gemini-api-key', async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setGeminiApiKey(apiKey);
+  // ── Generic LLM API Key Setters ────────────────────────────────────────────
+  // Replaces copy-pasted set-X-api-key handlers for providers that follow the same pattern:
+  //   1. Persist key in CredentialsManager
+  //   2. Update LLMHelper immediately
+  //   3. resetEngine() + initializeLLMs() (CQ-06 fix)
+  const LLM_KEY_REGISTRY: Array<{
+    channel: string;
+    credMethod: string;
+    llmMethod: string;
+    postSave?: (apiKey: string) => void;
+  }> = [
+    { channel: 'set-gemini-api-key', credMethod: 'setGeminiApiKey', llmMethod: 'setApiKey' },
+    { channel: 'set-groq-api-key', credMethod: 'setGroqApiKey', llmMethod: 'setGroqApiKey' },
+    { channel: 'set-openai-api-key', credMethod: 'setOpenaiApiKey', llmMethod: 'setOpenaiApiKey' },
+    { channel: 'set-claude-api-key', credMethod: 'setClaudeApiKey', llmMethod: 'setClaudeApiKey' },
+    {
+      channel: 'set-doubao-llm-api-key',
+      credMethod: 'setDoubaoLlmApiKey',
+      llmMethod: 'setDoubaoApiKey',
+      postSave: (apiKey: string) => {
+        const ragManager = appState.getRAGManager();
+        if (ragManager) {
+          console.log('[IPC] Re-initializing RAG embedding pipeline with Doubao key');
+          const { CredentialsManager } = require('./services/CredentialsManager');
+          ragManager.initializeEmbeddings({
+            openaiKey: CredentialsManager.getInstance().getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
+            geminiKey: CredentialsManager.getInstance().getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
+            doubaoKey: apiKey || process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY || undefined,
+            ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
+            providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
+          });
+        }
+      },
+    },
+  ];
 
-      // Also update the LLMHelper immediately
-      const llmHelper = appState.processingHelper.getLLMHelper();
-      llmHelper.setApiKey(apiKey);
+  for (const reg of LLM_KEY_REGISTRY) {
+    safeHandle(reg.channel, async (_, apiKey: string) => {
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const cm = CredentialsManager.getInstance();
+        (cm as any)[reg.credMethod](apiKey);
 
-      // CQ-06 fix: cancel any in-flight LLM stream before swapping LLM clients.
-      // Use resetEngine() (NOT reset()) so session transcript is preserved mid-meeting.
-      // initializeLLMs() now also calls engine.reset() internally for double-safety.
-      appState.getIntelligenceManager().resetEngine();
-      // Re-init IntelligenceManager
-      appState.getIntelligenceManager().initializeLLMs();
+        const llmHelper = appState.processingHelper.getLLMHelper();
+        (llmHelper as any)[reg.llmMethod](apiKey);
 
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error saving Gemini API key:', error);
-      return { success: false, error: error.message };
-    }
-  });
+        reg.postSave?.(apiKey);
 
-  safeHandle('set-groq-api-key', async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setGroqApiKey(apiKey);
+        // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
+        appState.getIntelligenceManager().resetEngine();
+        appState.getIntelligenceManager().initializeLLMs();
 
-      // Also update the LLMHelper immediately
-      const llmHelper = appState.processingHelper.getLLMHelper();
-      llmHelper.setGroqApiKey(apiKey);
-
-      // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
-      appState.getIntelligenceManager().resetEngine();
-      // Re-init IntelligenceManager
-      appState.getIntelligenceManager().initializeLLMs();
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error saving Groq API key:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  safeHandle('set-openai-api-key', async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setOpenaiApiKey(apiKey);
-
-      // Also update the LLMHelper immediately
-      const llmHelper = appState.processingHelper.getLLMHelper();
-      llmHelper.setOpenaiApiKey(apiKey);
-
-      // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
-      appState.getIntelligenceManager().resetEngine();
-      // Re-init IntelligenceManager
-      appState.getIntelligenceManager().initializeLLMs();
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error saving OpenAI API key:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  safeHandle('set-claude-api-key', async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setClaudeApiKey(apiKey);
-
-      // Also update the LLMHelper immediately
-      const llmHelper = appState.processingHelper.getLLMHelper();
-      llmHelper.setClaudeApiKey(apiKey);
-
-      // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
-      appState.getIntelligenceManager().resetEngine();
-      // Re-init IntelligenceManager
-      appState.getIntelligenceManager().initializeLLMs();
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error saving Claude API key:', error);
-      return { success: false, error: error.message };
-    }
-  });
+        return { success: true };
+      } catch (error: any) {
+        console.error(`[IPC] ${reg.channel} error:`, error);
+        return { success: false, error: error.message };
+      }
+    });
+  }
 
   // ── Usage cache (60-second TTL, keyed by API key) ──────────────────────────
   const _usageCache = new Map<string, { data: any; ts: number }>();
   const USAGE_CACHE_TTL_MS = 60_000;
-
-  safeHandle('set-doubao-llm-api-key', async (_, apiKey: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setDoubaoLlmApiKey(apiKey);
-
-      // Also update the LLMHelper immediately
-      const llmHelper = appState.processingHelper.getLLMHelper();
-      llmHelper.setDoubaoApiKey(apiKey);
-
-      // Re-initialize RAG embedding pipeline with new Doubao key
-      const ragManager = appState.getRAGManager();
-      if (ragManager) {
-        console.log('[IPC] Re-initializing RAG embedding pipeline with Doubao key');
-        ragManager.initializeEmbeddings({
-          openaiKey: CredentialsManager.getInstance().getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
-          geminiKey: CredentialsManager.getInstance().getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
-          doubaoKey: apiKey || process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY || undefined,
-          ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
-          providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
-        });
-      }
-
-      // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
-      appState.getIntelligenceManager().resetEngine();
-      // Re-init IntelligenceManager
-      appState.getIntelligenceManager().initializeLLMs();
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error saving Doubao LLM API key:', error);
-      return { success: false, error: error.message };
-    }
-  });
 
   safeHandle('set-natively-api-key', async (_, apiKey: string) => {
     try {
@@ -1236,9 +1121,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const defaultModel = cm.getDefaultModel();
       const providers = [...(cm.getCurlProviders() || []), ...(cm.getCustomProviders() || [])];
       llmHelper.setModel(defaultModel, providers);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('model-changed', defaultModel);
-      });
+      broadcast('model-changed', defaultModel);
 
       // If setNativelyApiKey auto-promoted the STT provider to 'natively', reconfigure
       // the audio pipeline immediately — without this, the in-memory pipeline still uses
@@ -1260,10 +1143,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           if (result.success) {
             console.log('[IPC] set-natively-api-key: Pro auto-activated via API plan.');
             // Notify all windows so the license UI refreshes immediately
-            BrowserWindow.getAllWindows().forEach((win) => {
-              if (!win.isDestroyed())
-                win.webContents.send('license-status-changed', { isPremium: true });
-            });
+            broadcast('license-status-changed', { isPremium: true });
           } else if (result.skipped) {
             console.log(
               '[IPC] set-natively-api-key: existing Gumroad/Dodo license preserved — Pro not overwritten.',
@@ -1292,10 +1172,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               '[IPC] set-natively-api-key: key cleared — natively_api Pro license deactivated.',
             );
             clearActiveModeOnLicenseLoss();
-            BrowserWindow.getAllWindows().forEach((win) => {
-              if (!win.isDestroyed())
-                win.webContents.send('license-status-changed', { isPremium: false });
-            });
+            broadcast('license-status-changed', { isPremium: false });
           }
         } catch (e: any) {
           console.warn(
@@ -1536,12 +1413,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       // 7. Notify all windows to refresh license + model state
       clearActiveModeOnLicenseLoss();
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) {
-          win.webContents.send('license-status-changed', { isPremium: false });
-          win.webContents.send('trial-ended', { choice: 'byok' });
-        }
-      });
+      broadcast('license-status-changed', { isPremium: false });
+      broadcast('trial-ended', { choice: 'byok' });
 
       return { success: true };
     } catch (error: any) {
@@ -1679,63 +1552,6 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true };
     } catch (error: any) {
       console.error('Error switching to custom provider:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  // cURL Provider Handlers
-  safeHandle('get-curl-providers', async () => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      return CredentialsManager.getInstance().getCurlProviders();
-    } catch (error: any) {
-      console.error('Error getting curl providers:', error);
-      return [];
-    }
-  });
-
-  safeHandle('save-curl-provider', async (_, provider: any) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().saveCurlProvider(provider);
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error saving curl provider:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  safeHandle('delete-curl-provider', async (_, id: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().deleteCurlProvider(id);
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error deleting curl provider:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  safeHandle('switch-to-curl-provider', async (_, providerId: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const provider = CredentialsManager.getInstance()
-        .getCurlProviders()
-        .find((p: any) => p.id === providerId);
-
-      if (!provider) {
-        throw new Error('Provider not found');
-      }
-
-      const llmHelper = appState.processingHelper.getLLMHelper();
-      await llmHelper.switchToCurl(provider);
-
-      // Re-init IntelligenceManager (optional, but good for consistency)
-      appState.getIntelligenceManager().initializeLLMs();
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error switching to curl provider:', error);
       return { success: false, error: error.message };
     }
   });
@@ -1903,9 +1719,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         await appState.reconfigureSttProvider();
 
         // Notify all windows so the settings UI reflects the change immediately
-        BrowserWindow.getAllWindows().forEach((win) => {
-          if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-        });
+        broadcast('credentials-changed');
 
         return { success: true };
       } catch (error: any) {
@@ -1928,9 +1742,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setGroqSttApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-      });
+      broadcast('credentials-changed');
       return { success: true };
     } catch (error: any) {
       console.error('Error saving Groq STT API key:', error);
@@ -1942,9 +1754,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setOpenAiSttApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-      });
+      broadcast('credentials-changed');
       return { success: true };
     } catch (error: any) {
       console.error('Error saving OpenAI STT API key:', error);
@@ -1959,9 +1769,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Reconfigure the active pipeline so the new endpoint is used immediately,
       // matching the behavior of azure/ibmwatson region setters.
       await appState.reconfigureSttProvider();
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-      });
+      broadcast('credentials-changed');
       return { success: true };
     } catch (error: any) {
       console.error('Error saving OpenAI STT base URL:', error);
@@ -1973,9 +1781,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setDeepgramApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-      });
+      broadcast('credentials-changed');
       return { success: true };
     } catch (error: any) {
       console.error('Error saving Deepgram API key:', error);
@@ -2002,9 +1808,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setElevenLabsApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-      });
+      broadcast('credentials-changed');
       return { success: true };
     } catch (error: any) {
       console.error('Error saving ElevenLabs API key:', error);
@@ -2053,9 +1857,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setSonioxApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-      });
+      broadcast('credentials-changed');
       return { success: true };
     } catch (error: any) {
       console.error('Error saving Soniox API key:', error);
@@ -2067,9 +1869,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       CredentialsManager.getInstance().setDoubaoApiKey(apiKey);
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
-      });
+      broadcast('credentials-changed');
       return { success: true };
     } catch (error: any) {
       console.error('Error saving Doubao API key:', error);
@@ -2760,10 +2560,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { SettingsManager } = require('./services/SettingsManager');
       SettingsManager.getInstance().set('groqFastTextMode', enabled);
 
-      // Broadcast to all windows
-      BrowserWindow.getAllWindows().forEach((win) => {
-        win.webContents.send('groq-fast-text-changed', enabled);
-      });
+      broadcast('groq-fast-text-changed', enabled);
 
       return { success: true };
     } catch (error: any) {
@@ -2837,11 +2634,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       appState.modelSelectorWindowHelper.hideWindow();
 
       // Broadcast to all windows so NativelyInterface can update its selector (session-only update)
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) {
-          win.webContents.send('model-changed', modelId);
-        }
-      });
+      broadcast('model-changed', modelId);
 
       return { success: true };
     } catch (error: any) {
@@ -2868,11 +2661,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       appState.modelSelectorWindowHelper.hideWindow();
 
       // Broadcast to all windows so NativelyInterface can update its selector
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) {
-          win.webContents.send('model-changed', modelId);
-        }
-      });
+      broadcast('model-changed', modelId);
 
       return { success: true };
     } catch (error: any) {
@@ -3052,15 +2841,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const insight = await intelligenceManager.runAssistMode();
-      if (insight) {
-        try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
-            crypto.randomUUID(),
-            insight,
-            'Assist',
-          );
-        } catch (_) {}
-      }
       return { insight };
     } catch (error: any) {
       throw error;
@@ -3202,15 +2982,6 @@ export function initializeIpcHandlers(appState: AppState): void {
                 : undefined,
           },
         );
-        if (answer) {
-          try {
-            PhoneMirrorService.getInstance().publishAssistantMessage(
-              crypto.randomUUID(),
-              answer,
-              'What to Answer',
-            );
-          } catch (_) {}
-        }
         return {
           answer,
           question: question || 'inferred from context',
@@ -3246,14 +3017,6 @@ export function initializeIpcHandlers(appState: AppState): void {
             'Could not generate a clarifying question. Try again after some audio context is available.',
           mode: 'clarify',
         });
-      } else {
-        try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
-            crypto.randomUUID(),
-            clarification,
-            'Clarify',
-          );
-        } catch (_) {}
       }
       return { clarification };
     } catch (error: any) {
@@ -3335,15 +3098,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         optimizedPaths.length > 0 ? optimizedPaths : undefined,
         problemStatement,
       );
-      if (hint) {
-        try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
-            crypto.randomUUID(),
-            hint,
-            'Code Hint',
-          );
-        } catch (_) {}
-      }
       return { hint };
     } catch (error: any) {
       throw error;
@@ -3391,15 +3145,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         optimizedPaths.length > 0 ? optimizedPaths : undefined,
         problemStatement,
       );
-      if (script) {
-        try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
-            crypto.randomUUID(),
-            script,
-            'Brainstorm',
-          );
-        } catch (_) {}
-      }
       return { script };
     } catch (error: any) {
       throw error;
@@ -3418,70 +3163,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     const sm = SettingsManager.getInstance();
     sm.set('actionButtonMode', mode);
 
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send('action-button-mode-changed', mode);
-      }
-    });
+    broadcast('action-button-mode-changed', mode);
 
     return { success: true };
   });
 
-  // MODE 3: Follow-Up (Refinement)
-  safeHandle('generate-follow-up', async (_, intent: string, userRequest?: string) => {
-    try {
-      const intelligenceManager = appState.getIntelligenceManager();
-      const refined = await intelligenceManager.runFollowUp(intent, userRequest);
-      if (refined) {
-        try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
-            crypto.randomUUID(),
-            refined,
-            'Follow Up',
-          );
-        } catch (_) {}
-      }
-      return { refined, intent };
-    } catch (error: any) {
-      throw error;
-    }
-  });
-
-  // MODE 4: Recap (Summary)
+  // MODE 3: Recap (Summary)
   safeHandle('generate-recap', async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const summary = await intelligenceManager.runRecap();
-      if (summary) {
-        try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
-            crypto.randomUUID(),
-            summary,
-            'Recap',
-          );
-        } catch (_) {}
-      }
       return { summary };
-    } catch (error: any) {
-      throw error;
-    }
-  });
-
-  // MODE 6: Follow-Up Questions
-  safeHandle('generate-follow-up-questions', async () => {
-    try {
-      const intelligenceManager = appState.getIntelligenceManager();
-      const questions = await intelligenceManager.runFollowUpQuestions();
-      if (questions) {
-        try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
-            crypto.randomUUID(),
-            questions,
-            'Follow-Up Questions',
-          );
-        } catch (_) {}
-      }
-      return { questions };
     } catch (error: any) {
       throw error;
     }
@@ -3492,16 +3184,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const answer = await intelligenceManager.runManualAnswer(question);
-      if (answer) {
-        try {
-          PhoneMirrorService.getInstance().publishUserMessage(crypto.randomUUID(), question);
-          PhoneMirrorService.getInstance().publishAssistantMessage(
-            crypto.randomUUID(),
-            answer,
-            'Answer',
-          );
-        } catch (_) {}
-      }
       return { answer, question };
     } catch (error: any) {
       throw error;
@@ -3679,127 +3361,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     appState.getThemeManager().setMode(mode);
     return { success: true };
   });
-
-  // ==========================================
-  // Calendar Integration Handlers
-  // ==========================================
-
-  safeHandle('calendar-connect', async () => {
-    try {
-      const { CalendarManager } = require('./services/CalendarManager');
-      await CalendarManager.getInstance().startAuthFlow();
-      return { success: true };
-    } catch (error: any) {
-      console.error('Calendar auth error:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  safeHandle('calendar-disconnect', async () => {
-    const { CalendarManager } = require('./services/CalendarManager');
-    await CalendarManager.getInstance().disconnect();
-    return { success: true };
-  });
-
-  safeHandle('get-calendar-status', async () => {
-    const { CalendarManager } = require('./services/CalendarManager');
-    return CalendarManager.getInstance().getConnectionStatus();
-  });
-
-  safeHandle('get-upcoming-events', async () => {
-    const { CalendarManager } = require('./services/CalendarManager');
-    return CalendarManager.getInstance().getUpcomingEvents();
-  });
-
-  safeHandle('calendar-refresh', async () => {
-    const { CalendarManager } = require('./services/CalendarManager');
-    await CalendarManager.getInstance().refreshState();
-    return { success: true };
-  });
-
-  // ==========================================
-  // Follow-up Email Handlers
-  // ==========================================
-
-  safeHandle('generate-followup-email', async (_, input: any) => {
-    try {
-      const { FOLLOWUP_EMAIL_PROMPT, GROQ_FOLLOWUP_EMAIL_PROMPT } = require('./llm/prompts');
-      const { buildFollowUpEmailPromptInput } = require('./utils/emailUtils');
-
-      const llmHelper = appState.processingHelper.getLLMHelper();
-
-      // Build the context string from input
-      const contextString = buildFollowUpEmailPromptInput(input);
-
-      // Build prompts
-      const geminiPrompt = `${FOLLOWUP_EMAIL_PROMPT}\n\nMEETING DETAILS:\n${contextString}`;
-      const groqPrompt = `${GROQ_FOLLOWUP_EMAIL_PROMPT}\n\nMEETING DETAILS:\n${contextString}`;
-
-      // Use chatWithGemini with alternateGroqMessage for fallback
-      const emailBody = await llmHelper.chatWithGemini(
-        geminiPrompt,
-        undefined,
-        undefined,
-        true,
-        groqPrompt,
-      );
-
-      return emailBody;
-    } catch (error: any) {
-      console.error('Error generating follow-up email:', error);
-      throw error;
-    }
-  });
-
-  safeHandle('extract-emails-from-transcript', async (_, transcript: Array<{ text: string }>) => {
-    try {
-      const { extractEmailsFromTranscript } = require('./utils/emailUtils');
-      return extractEmailsFromTranscript(transcript);
-    } catch (error: any) {
-      console.error('Error extracting emails:', error);
-      return [];
-    }
-  });
-
-  safeHandle('get-calendar-attendees', async (_, eventId: string) => {
-    try {
-      const { CalendarManager } = require('./services/CalendarManager');
-      const cm = CalendarManager.getInstance();
-
-      // Try to get attendees from the event
-      const events = await cm.getUpcomingEvents();
-      const event = events?.find((e: any) => e.id === eventId);
-
-      if (event && event.attendees) {
-        return event.attendees
-          .map((a: any) => ({
-            email: a.email,
-            name: a.displayName || a.email?.split('@')[0] || '',
-          }))
-          .filter((a: any) => a.email);
-      }
-
-      return [];
-    } catch (error: any) {
-      console.error('Error getting calendar attendees:', error);
-      return [];
-    }
-  });
-
-  safeHandle(
-    'open-mailto',
-    async (_, { to, subject, body }: { to: string; subject: string; body: string }) => {
-      try {
-        const { buildMailtoLink } = require('./utils/emailUtils');
-        const mailtoUrl = buildMailtoLink(to, subject, body);
-        await shell.openExternal(mailtoUrl);
-        return { success: true };
-      } catch (error: any) {
-        console.error('Error opening mailto:', error);
-        return { success: false, error: error.message };
-      }
-    },
-  );
 
   // ==========================================
   // RAG (Retrieval-Augmented Generation) Handlers
@@ -4380,12 +3941,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     // Clamp to valid range
     const clamped = Math.min(1.0, Math.max(0.35, opacity));
     // Broadcast to all renderer windows so the overlay picks it up in real-time
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send('overlay-opacity-changed', clamped);
-      }
-    });
-    return;
+    broadcast('overlay-opacity-changed', clamped);
   });
 
   // ── Permissions ──────────────────────────────────────────────
@@ -4521,9 +4077,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Broadcast mode change to all windows so indicators update immediately
       const activeMode = id ? ModesManager.getInstance().getActiveMode() : null;
       const activeName = activeMode?.name ?? null;
-      BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('mode-changed', { id, name: activeName });
-      });
+      broadcast('mode-changed', { id, name: activeName });
       // Phase 3 — re-bind dynamic action engine so the new mode's trigger pack
       // takes effect immediately. New (sessionId, modeId) pair flushes the per-
       // session store inside DynamicActionEngine, killing any old-mode candidates.
@@ -4831,23 +4385,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  // -----------------------------------------------------------------------
-  // Phone Mirror — stream live AI responses to a paired phone over WS.
-  // -----------------------------------------------------------------------
-
-  // Push status updates to the renderer whenever the service starts/stops
-  // or a phone connects/disconnects. Idempotent — multiple windows can listen.
-  PhoneMirrorService.getInstance().onStatusChange((info) => {
-    const win = appState.getMainWindow();
-    win?.webContents.send('phone-mirror:status', info);
-    try {
-      const settingsWin = (appState as any).settingsWindowHelper?.getWindow?.();
-      settingsWin?.webContents?.send('phone-mirror:status', info);
-    } catch (_) {
-      /* settings window may not exist yet */
-    }
-  });
-
   safeHandle('skills:list', () => {
     try {
       return SkillsManager.getInstance().listSkills();
@@ -4863,169 +4400,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (e: any) {
       console.warn('[IPC] skills:open-folder error:', e?.message || e);
       return { success: false, path: '', error: e?.message || 'failed to open skills folder' };
-    }
-  });
-
-  safeHandle('phone-mirror:get-info', async () => {
-    return PhoneMirrorService.getInstance().snapshot();
-  });
-
-  safeHandle('phone-mirror:enable', async (_, exposeOnLan?: boolean) => {
-    try {
-      return await PhoneMirrorService.getInstance().start({
-        exposeOnLan: !!exposeOnLan,
-        persist: true,
-      });
-    } catch (e: any) {
-      console.error('[IPC] phone-mirror:enable error:', e);
-      return { error: e?.message || 'failed to start phone mirror' };
-    }
-  });
-
-  safeHandle('phone-mirror:disable', async () => {
-    await PhoneMirrorService.getInstance().stop({ persist: true });
-    return { success: true };
-  });
-
-  safeHandle('phone-mirror:set-lan', async (_, exposeOnLan: boolean) => {
-    try {
-      return await PhoneMirrorService.getInstance().setExposeOnLan(!!exposeOnLan);
-    } catch (e: any) {
-      console.error('[IPC] phone-mirror:set-lan error:', e);
-      return { error: e?.message || 'failed to update lan setting' };
-    }
-  });
-
-  safeHandle('phone-mirror:rotate-token', async () => {
-    try {
-      return await PhoneMirrorService.getInstance().rotateToken();
-    } catch (e: any) {
-      console.error('[IPC] phone-mirror:rotate-token error:', e);
-      return { error: e?.message || 'failed to rotate token' };
-    }
-  });
-
-  // Stealth screenshot capture triggered from the phone UI.
-  // Takes a screenshot on the PC (adding it to the screenshot queue so it can
-  // be used in the next AI prompt), then broadcasts an ack so the phone shows
-  // a confirmation toast.  The image is NOT sent to the phone — the phone is
-  // just a remote shutter; the screenshot stays on the desktop for AI use.
-  safeHandle('phone-mirror:push-screenshot', async (_, screenshotPath?: string) => {
-    try {
-      const imgPath = screenshotPath || (await appState.takeScreenshot(false));
-      PhoneMirrorService.getInstance().publishAck(
-        'screenshot',
-        'Screenshot captured — queued for AI',
-      );
-      return { success: true, path: imgPath };
-    } catch (e: any) {
-      console.error('[IPC] phone-mirror:push-screenshot error:', e);
-      return { error: e?.message || 'failed to capture screenshot' };
-    }
-  });
-
-  // Route commands sent by the phone browser back to the Electron renderer so
-  // the existing action system (global-shortcut events, chat stream) handles
-  // them without duplicating logic.
-  PhoneMirrorService.getInstance().onPhoneCommand(async (cmd) => {
-    const win = appState.getMainWindow();
-
-    if (cmd.type === 'action') {
-      // Re-use the same global-shortcut dispatch path the keyboard uses.
-      // This keeps phone actions identical to key-triggered stealth actions.
-      const allWindows = BrowserWindow.getAllWindows();
-      allWindows.forEach((w) => {
-        if (!w.isDestroyed()) w.webContents.send('global-shortcut', { action: cmd.action });
-      });
-    } else if (cmd.type === 'chat') {
-      // Stream a phone-initiated chat through the LLM exactly like gemini-chat-stream
-      // but without requiring a renderer event sender. Tokens are pushed directly to
-      // the phone over WebSocket; desktop renderer also receives them so both views
-      // stay in sync.
-      const myStreamId = ++_chatStreamId;
-      const message = cmd.message;
-      const phoneMirror = PhoneMirrorService.getInstance();
-      const intelligenceManager = appState.getIntelligenceManager();
-
-      // Capture rolling context BEFORE adding the new user message — same ordering
-      // as gemini-chat-stream so Recap / Follow Up / What to Answer see phone turns.
-      let context: string | undefined;
-      try {
-        const snap = intelligenceManager.getFormattedContext(100);
-        if (snap && snap.trim().length > 0) context = snap;
-      } catch (ctxErr) {
-        console.warn('[PhoneMirror] Failed to capture pre-turn context:', ctxErr);
-      }
-
-      intelligenceManager.addTranscript(
-        { text: message, speaker: 'user', timestamp: Date.now(), final: true },
-        true,
-      );
-
-      try {
-        phoneMirror.publishUserMessage(String(myStreamId), message);
-      } catch (_) {}
-      // Notify renderer so it can display the incoming phone message too.
-      win?.webContents.send('phone-mirror:incoming-chat', {
-        message,
-        streamId: String(myStreamId),
-      });
-
-      try {
-        const llmHelper = appState.processingHelper.getLLMHelper();
-        const stream = llmHelper.streamChat(message, undefined, context, CHAT_MODE_PROMPT);
-        let full = '';
-        for await (const token of stream) {
-          // Bail if a newer stream has taken over (phone or desktop chat).
-          if (_chatStreamId !== myStreamId) {
-            console.log(
-              `[PhoneMirror] phone-chat ${myStreamId} superseded by ${_chatStreamId}, stopping.`,
-            );
-            return;
-          }
-          // Cancel early if all phones have disconnected — no point burning LLM
-          // tokens when nobody is receiving them and we have no desktop renderer
-          // context to show the result in either.
-          if (!phoneMirror.hasClients() && win?.isDestroyed()) break;
-          try {
-            phoneMirror.publishToken(String(myStreamId), token);
-          } catch (_) {}
-          win?.webContents.send('gemini-stream-token', token);
-          full += token;
-        }
-        if (_chatStreamId === myStreamId) {
-          try {
-            phoneMirror.publishDone(String(myStreamId), full);
-          } catch (_) {}
-          win?.webContents.send('gemini-stream-done');
-          if (full.trim().length > 0) {
-            intelligenceManager.addAssistantMessage(full);
-            intelligenceManager.logUsage('chat', message, full);
-          }
-        }
-      } catch (err: any) {
-        console.error('[PhoneMirror] phone-chat stream error:', err);
-        if (_chatStreamId === myStreamId) {
-          try {
-            phoneMirror.publishError(String(myStreamId), err?.message || 'stream error');
-          } catch (_) {}
-          win?.webContents.send('gemini-stream-error', err?.message || 'stream error');
-        }
-      }
-    } else if (cmd.type === 'screenshot') {
-      // Stealth screenshot: capture on PC → add to screenshot queue → ack to phone.
-      // The image is NOT sent to the phone — it stays on the desktop for AI use.
-      // The phone simply acts as a remote shutter button.
-      try {
-        await appState.takeScreenshot(false);
-        PhoneMirrorService.getInstance().publishAck(
-          'screenshot',
-          'Screenshot captured — queued for AI',
-        );
-      } catch (e: any) {
-        console.error('[PhoneMirror] phone screenshot request failed:', e);
-        PhoneMirrorService.getInstance().publishAck('screenshot', 'Screenshot failed');
-      }
     }
   });
 }

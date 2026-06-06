@@ -103,8 +103,6 @@ export const TINY_SUMMARY_JSON_PROMPT = `Convert this conversation into concise 
 {"summary": string, "keyPoints": string[], "actionItems": string[], "decisions": string[]}
 No markdown, no commentary. JSON only.`;
 
-export const TINY_FOLLOWUP_EMAIL_PROMPT = `Write a short professional follow-up email after a meeting. 3-5 sentences. Friendly, specific, no fluff. Output the email body only — no subject line, no signature.`;
-
 export const TINY_MODE_GENERAL_PROMPT = `${TINY_CORE}
 
 VOICE: Adapt to context. If the input is a live interview/meeting turn, speak in first person as the user. If the input is a direct factual or coding question to you, answer it directly as an assistant.
@@ -229,7 +227,6 @@ Never write "Thinking:". Never add follow-up questions, edge cases, or extra sec
 // Keep in sync with the individual exports above.
 export const TINY_PROMPTS_SET: ReadonlySet<string> = new Set([
   TINY_SYSTEM_PROMPT, TINY_ANSWER_PROMPT, TINY_WHAT_TO_ANSWER_PROMPT,
-  TINY_ASSIST_PROMPT, TINY_RECAP_PROMPT, TINY_FOLLOWUP_PROMPT,
-  TINY_FOLLOW_UP_QUESTIONS_PROMPT, TINY_BRAINSTORM_PROMPT,
+  TINY_ASSIST_PROMPT, TINY_RECAP_PROMPT, TINY_BRAINSTORM_PROMPT,
   TINY_CLARIFY_PROMPT, TINY_CODE_HINT_PROMPT,
 ]);

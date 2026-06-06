@@ -171,6 +171,17 @@ interface ElectronAPI {
   localWhisperPreload: (
     modelId?: string,
   ) => Promise<{ success: boolean; reason?: string; error?: string }>;
+  localWhisperGetChannelConfig: () => Promise<{
+    enabled: boolean;
+    micModelId: string;
+    systemModelId: string;
+    globalModelId: string;
+  }>;
+  localWhisperSetChannelConfig: (cfg: {
+    enabled?: boolean;
+    micModelId?: string;
+    systemModelId?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
   localWhisperGetHardware: () => Promise<{
     arch: string;
     platform: string;
@@ -280,10 +291,6 @@ interface ElectronAPI {
     imageCount?: number;
     usedImageInput?: boolean;
   }>;
-  generateFollowUp: (
-    intent: string,
-    userRequest?: string,
-  ) => Promise<{ refined: string | null; intent: string }>;
   generateRecap: () => Promise<{ summary: string | null }>;
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>;
   getIntelligenceContext: () => Promise<{
@@ -422,16 +429,6 @@ interface ElectronAPI {
   getCustomProviders: () => Promise<any[]>;
   deleteCustomProvider: (id: string) => Promise<{ success: boolean; error?: string }>;
 
-  // Follow-up Email
-  generateFollowupEmail: (input: any) => Promise<string>;
-  extractEmailsFromTranscript: (transcript: Array<{ text: string }>) => Promise<string[]>;
-  getCalendarAttendees: (eventId: string) => Promise<Array<{ email: string; name: string }>>;
-  openMailto: (params: {
-    to: string;
-    subject: string;
-    body: string;
-  }) => Promise<{ success: boolean; error?: string }>;
-
   // Audio Test
   startAudioTest: (deviceId?: string) => Promise<{ success: boolean }>;
   stopAudioTest: () => Promise<{ success: boolean }>;
@@ -467,7 +464,6 @@ interface ElectronAPI {
   onGeminiStreamDone: (callback: () => void) => () => void;
   onGeminiStreamError: (callback: (error: string) => void) => () => void;
 
-  onUndetectableChanged: (callback: (state: boolean) => void) => () => void;
   onGroqFastTextChanged: (callback: (enabled: boolean) => void) => () => void;
   onModelChanged: (callback: (modelId: string) => void) => () => void;
 
@@ -483,22 +479,6 @@ interface ElectronAPI {
   onThemeChanged: (
     callback: (data: { mode: 'system' | 'light' | 'dark'; resolved: 'light' | 'dark' }) => void,
   ) => () => void;
-
-  // Calendar
-  calendarConnect: () => Promise<{ success: boolean; error?: string }>;
-  calendarDisconnect: () => Promise<{ success: boolean; error?: string }>;
-  getCalendarStatus: () => Promise<{ connected: boolean; email?: string }>;
-  getUpcomingEvents: () => Promise<
-    Array<{
-      id: string;
-      title: string;
-      startTime: string;
-      endTime: string;
-      link?: string;
-      source: 'google';
-    }>
-  >;
-  calendarRefresh: () => Promise<{ success: boolean; error?: string }>;
 
   // Auto-Update
   onUpdateAvailable: (callback: (info: any) => void) => () => void;
@@ -569,34 +549,6 @@ interface ElectronAPI {
 
   // Global shortcut events (stealth: fired even when window is not focused)
   onGlobalShortcut: (callback: (data: { action: string }) => void) => () => void;
-
-  // CGEventTap-backed stealth keyboard tap (macOS only). Returns false on
-  // non-macOS or when the native module / Accessibility permission is missing.
-  stealthTapAvailable: () => Promise<boolean>;
-  stealthTapOpenSettings: () => Promise<void>;
-  stealthTapStop: () => Promise<void>;
-  stealthTapStart: () => Promise<boolean>;
-  /** Re-probe the current IME state (Pinyin / Hangul / Kanji / …). The
-   *  renderer calls this on window focus so mid-session input-source changes
-   *  don't silently break CJK composition. */
-  stealthTapRefreshIme: () => Promise<boolean>;
-  /** False on macOS when a composition IME (Pinyin/Hangul/Kanji/…) is
-   *  enabled — the tap captures below the IME and breaks composition, so
-   *  the renderer falls back to plain DOM focus on click. */
-  stealthTapShouldAutoEngage: () => Promise<boolean>;
-  onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => () => void;
-  onStealthKeyCaptured: (
-    cb: (ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean }) => void,
-  ) => () => void;
-
-  // Donation API
-  getDonationStatus: () => Promise<{
-    shouldShow: boolean;
-    hasDonated: boolean;
-    lifetimeShows: number;
-  }>;
-  markDonationToastShown: () => Promise<{ success: boolean }>;
-  setDonationComplete: () => Promise<{ success: boolean }>;
 
   // Profile Engine API
   profileUploadResume: (filePath: string) => Promise<{ success: boolean; error?: string }>;
@@ -954,53 +906,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
-  setUndetectable: (state: boolean) => ipcRenderer.invoke('set-undetectable', state),
-  getUndetectable: () => ipcRenderer.invoke('get-undetectable'),
   setOverlayMousePassthrough: (enabled: boolean) =>
     ipcRenderer.invoke('set-overlay-mouse-passthrough', enabled),
   toggleOverlayMousePassthrough: () => ipcRenderer.invoke('toggle-overlay-mouse-passthrough'),
   getOverlayMousePassthrough: () => ipcRenderer.invoke('get-overlay-mouse-passthrough'),
   setOpenAtLogin: (open: boolean) => ipcRenderer.invoke('set-open-at-login', open),
   getOpenAtLogin: () => ipcRenderer.invoke('get-open-at-login'),
-  setDisguise: (mode: 'terminal' | 'settings' | 'activity' | 'none') =>
-    ipcRenderer.invoke('set-disguise', mode),
-  getDisguise: () => ipcRenderer.invoke('get-disguise'),
-  onDisguiseChanged: (callback: (mode: 'terminal' | 'settings' | 'activity' | 'none') => void) => {
-    const subscription = (_: any, mode: any) => callback(mode);
-    ipcRenderer.on('disguise-changed', subscription);
-    return () => {
-      ipcRenderer.removeListener('disguise-changed', subscription);
-    };
-  },
 
   // Skills — local SKILL.md instructions surfaced in Settings and the overlay.
   skillsRefresh: () => ipcRenderer.invoke('skills:list'),
   skillsOpenFolder: () => ipcRenderer.invoke('skills:open-folder'),
 
-  // Phone Mirror — stream live AI responses to a paired phone over the LAN.
-  phoneMirrorGetInfo: () => ipcRenderer.invoke('phone-mirror:get-info'),
-  phoneMirrorEnable: (exposeOnLan: boolean) =>
-    ipcRenderer.invoke('phone-mirror:enable', exposeOnLan),
-  phoneMirrorDisable: () => ipcRenderer.invoke('phone-mirror:disable'),
-  phoneMirrorSetLan: (exposeOnLan: boolean) =>
-    ipcRenderer.invoke('phone-mirror:set-lan', exposeOnLan),
-  phoneMirrorRotateToken: () => ipcRenderer.invoke('phone-mirror:rotate-token'),
-  phoneMirrorPushScreenshot: (screenshotPath?: string) =>
-    ipcRenderer.invoke('phone-mirror:push-screenshot', screenshotPath),
-  onPhoneMirrorStatus: (callback: (info: any) => void) => {
-    const subscription = (_: any, info: any) => callback(info);
-    ipcRenderer.on('phone-mirror:status', subscription);
-    return () => {
-      ipcRenderer.removeListener('phone-mirror:status', subscription);
-    };
-  },
-  onPhoneMirrorIncomingChat: (callback: (data: { message: string; streamId: string }) => void) => {
-    const subscription = (_: any, data: any) => callback(data);
-    ipcRenderer.on('phone-mirror:incoming-chat', subscription);
-    return () => {
-      ipcRenderer.removeListener('phone-mirror:incoming-chat', subscription);
-    };
-  },
 
   onSettingsVisibilityChange: (callback: (isVisible: boolean) => void) => {
     const subscription = (_: any, isVisible: boolean) => callback(isVisible);
@@ -1118,6 +1034,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('local-whisper-download-error', listener);
   },
   localWhisperPreload: (modelId?: string) => ipcRenderer.invoke('local-whisper-preload', modelId),
+  localWhisperGetChannelConfig: () => ipcRenderer.invoke('local-whisper-get-channel-config'),
+  localWhisperSetChannelConfig: (cfg: { enabled?: boolean; micModelId?: string; systemModelId?: string }) =>
+    ipcRenderer.invoke('local-whisper-set-channel-config', cfg),
   localWhisperGetHardware: () => ipcRenderer.invoke('local-whisper-get-hardware'),
 
   // STT Config Events (Adapted from public PR #173 — verify premium interaction)
@@ -1279,9 +1198,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('generate-code-hint', imagePaths, problemStatement),
   generateBrainstorm: (imagePaths?: string[], problemStatement?: string) =>
     ipcRenderer.invoke('generate-brainstorm', imagePaths, problemStatement),
-  generateFollowUp: (intent: string, userRequest?: string) =>
-    ipcRenderer.invoke('generate-follow-up', intent, userRequest),
-  generateFollowUpQuestions: () => ipcRenderer.invoke('generate-follow-up-questions'),
   generateRecap: () => ipcRenderer.invoke('generate-recap'),
   submitManualQuestion: (question: string) =>
     ipcRenderer.invoke('submit-manual-question', question),
@@ -1438,20 +1354,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('intelligence-clarify', subscription);
     };
   },
-  onIntelligenceFollowUpQuestionsToken: (callback: (data: { token: string }) => void) => {
-    const subscription = (_: any, data: any) => callback(data);
-    ipcRenderer.on('intelligence-follow-up-questions-token', subscription);
-    return () => {
-      ipcRenderer.removeListener('intelligence-follow-up-questions-token', subscription);
-    };
-  },
-  onIntelligenceFollowUpQuestionsUpdate: (callback: (data: { questions: string }) => void) => {
-    const subscription = (_: any, data: any) => callback(data);
-    ipcRenderer.on('intelligence-follow-up-questions-update', subscription);
-    return () => {
-      ipcRenderer.removeListener('intelligence-follow-up-questions-update', subscription);
-    };
-  },
   onIntelligenceManualStarted: (callback: () => void) => {
     const subscription = () => callback();
     ipcRenderer.on('intelligence-manual-started', subscription);
@@ -1560,14 +1462,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCustomProviders: () => ipcRenderer.invoke('get-custom-providers'),
   deleteCustomProvider: (id: string) => ipcRenderer.invoke('delete-custom-provider', id),
 
-  // Follow-up Email
-  generateFollowupEmail: (input: any) => ipcRenderer.invoke('generate-followup-email', input),
-  extractEmailsFromTranscript: (transcript: Array<{ text: string }>) =>
-    ipcRenderer.invoke('extract-emails-from-transcript', transcript),
-  getCalendarAttendees: (eventId: string) => ipcRenderer.invoke('get-calendar-attendees', eventId),
-  openMailto: (params: { to: string; subject: string; body: string }) =>
-    ipcRenderer.invoke('open-mailto', params),
-
   // Audio Test
   startAudioTest: (deviceId?: string) => ipcRenderer.invoke('start-audio-test', deviceId),
   stopAudioTest: () => ipcRenderer.invoke('stop-audio-test'),
@@ -1581,14 +1475,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Database
   flushDatabase: () => ipcRenderer.invoke('flush-database'),
-
-  onUndetectableChanged: (callback: (state: boolean) => void) => {
-    const subscription = (_: any, state: boolean) => callback(state);
-    ipcRenderer.on('undetectable-changed', subscription);
-    return () => {
-      ipcRenderer.removeListener('undetectable-changed', subscription);
-    };
-  },
 
   onOverlayMousePassthroughChanged: (callback: (enabled: boolean) => void) => {
     const subscription = (_: any, enabled: boolean) => callback(enabled);
@@ -1642,13 +1528,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('theme:changed', subscription);
     };
   },
-
-  // Calendar API
-  calendarConnect: () => ipcRenderer.invoke('calendar-connect'),
-  calendarDisconnect: () => ipcRenderer.invoke('calendar-disconnect'),
-  getCalendarStatus: () => ipcRenderer.invoke('get-calendar-status'),
-  getUpcomingEvents: () => ipcRenderer.invoke('get-upcoming-events'),
-  calendarRefresh: () => ipcRenderer.invoke('calendar-refresh'),
 
   // Auto-Update
   onUpdateAvailable: (callback: (info: any) => void) => {
@@ -1775,38 +1654,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('global-shortcut', subscription);
     };
   },
-
-  // Stealth keyboard tap bridge
-  stealthTapAvailable: () => ipcRenderer.invoke('stealth-tap:available'),
-  stealthTapOpenSettings: () => ipcRenderer.invoke('stealth-tap:open-settings'),
-  stealthTapStop: () => ipcRenderer.invoke('stealth-tap:stop'),
-  stealthTapStart: () => ipcRenderer.invoke('stealth-tap:start'),
-  stealthTapRefreshIme: () => ipcRenderer.invoke('stealth-tap:should-auto-engage'),
-  stealthTapShouldAutoEngage: () => ipcRenderer.invoke('stealth-tap:should-auto-engage'),
-  onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => {
-    const sub = (_: any, state: { active: boolean; reason?: string }) => cb(state);
-    ipcRenderer.on('stealth-tap-state', sub);
-    return () => {
-      ipcRenderer.removeListener('stealth-tap-state', sub);
-    };
-  },
-  onStealthKeyCaptured: (
-    cb: (ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean }) => void,
-  ) => {
-    const sub = (
-      _: any,
-      ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean },
-    ) => cb(ev);
-    ipcRenderer.on('stealth-key-captured', sub);
-    return () => {
-      ipcRenderer.removeListener('stealth-key-captured', sub);
-    };
-  },
-
-  // Donation API
-  getDonationStatus: () => ipcRenderer.invoke('get-donation-status'),
-  markDonationToastShown: () => ipcRenderer.invoke('mark-donation-toast-shown'),
-  setDonationComplete: () => ipcRenderer.invoke('set-donation-complete'),
 
   // Profile Engine API
   profileUploadResume: (filePath: string) => ipcRenderer.invoke('profile:upload-resume', filePath),

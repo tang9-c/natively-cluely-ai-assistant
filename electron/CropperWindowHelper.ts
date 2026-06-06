@@ -92,7 +92,6 @@ export class CropperWindowHelper {
     private opacityTimeout: NodeJS.Timeout | null = null;
     private selectionTimeout: NodeJS.Timeout | null = null;
     private resolvePromise: ((value: Electron.Rectangle | null) => void) | null = null;
-    private isUndetectable: boolean = false;
     private isWaitingForSelection: boolean = false;
     private isDisposed: boolean = false;
 
@@ -243,17 +242,6 @@ export class CropperWindowHelper {
     }
 
     /**
-     * Updates the content protection state.
-     * When enabled, the cropper UI becomes invisible to screen sharing/recording.
-     */
-    public setContentProtection(enable: boolean): void {
-        this.isUndetectable = enable;
-        if (this.cropperWindow && !this.cropperWindow.isDestroyed()) {
-            this.cropperWindow.setContentProtection(enable);
-        }
-    }
-
-    /**
      * Pre-creates the window in hidden state to eliminate cold-start delay.
      * Recommended to call this during AppState initialization on Windows.
      */
@@ -346,15 +334,11 @@ export class CropperWindowHelper {
     /**
      * Windows-specific "Opacity Shield" sequence:
      *
-     * WHY: If setContentProtection(true) is applied before the window is fully "ready"
-     * and shown in the DWM, Windows may ignore the flag.
-     *
      * HOW:
      * 1. Set opacity to 0 (invisible to eye, but "active" for DWM)
      * 2. Show window
-     * 3. Apply protection flag
-     * 4. Delay to let DWM process the flag
-     * 5. Set opacity to 1
+     * 3. Delay to let DWM process
+     * 4. Set opacity to 1
      */
     private applyOpacityShield(): void {
         if (!this.cropperWindow || this.isDisposed) return;
@@ -362,7 +346,6 @@ export class CropperWindowHelper {
         if (process.platform === 'win32') {
             this.cropperWindow.setOpacity(0);
             this.cropperWindow.show();
-            this.cropperWindow.setContentProtection(this.isUndetectable);
 
             // NOTE: Do NOT call maximize() - it limits to current monitor on Windows
             // The window already has correct bounds from createWindow()
@@ -375,7 +358,6 @@ export class CropperWindowHelper {
                 }
             }, CROPPER_CONFIG.OPACITY_DELAY_MS);
         } else {
-            this.cropperWindow.setContentProtection(this.isUndetectable);
             this.cropperWindow.show();
             this.cropperWindow.focus();
         }
@@ -491,20 +473,6 @@ export class CropperWindowHelper {
             }
         })
 
-        // ROUND 3 FIX (#1): stop the stealth tap when Cropper shows so the
-        // user's selection-area drag/keystrokes (Esc to cancel, etc.) reach
-        // the cropper, not the overlay's hidden chat input. Same rationale
-        // as Settings + Model Selector.
-        this.cropperWindow.on('show', () => {
-            if (process.platform !== 'darwin') return;
-            try {
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
-                StealthKeyboardManager.getInstance().stop();
-            } catch (e) {
-                console.error('[CropperWindowHelper] failed to stop stealth tap on show:', e);
-            }
-        });
 
         this.cropperWindow.on('closed', () => {
             // Protect against race condition: window closed after successful selection
@@ -560,8 +528,7 @@ export class CropperWindowHelper {
             } else {
                 // Windows & macOS: hide and reuse to avoid cold-start on next call.
                 // Windows: reset opacity to 0 first so the opacity-shield sequence
-                // works correctly on next show (DWM needs window "invisible" before
-                // setContentProtection is applied).
+                // works correctly on next show.
                 if (process.platform === 'win32') {
                     this.cropperWindow.setOpacity(0);
                 }
