@@ -2047,10 +2047,56 @@ export class AppState {
   }
 
   /**
+   * Serialization mutex for reconfigureSttProvider.
+   *
+   * Crash/hang fix (2026-06-05): a single "save Natively API key" action can
+   * fire up to TWO reconfigure calls back-to-back — one from the
+   * `set-natively-api-key` handler (which auto-promotes the STT provider to
+   * 'natively' and reconfigures), and one from the renderer's follow-up
+   * `set-stt-provider('natively')` call. Each call tears down and rebuilds the
+   * native captures (SystemAudioCapture / MicrophoneCapture → CoreAudio /
+   * ScreenCaptureKit / WASAPI). Two interleaved teardown+construct sequences
+   * against the same native device handles is a native-resource race that
+   * deadlocks the OS audio stack or crashes the process — manifesting as the
+   * "app hangs / freezes the system right after entering the key" reports on
+   * BOTH macOS and Windows (the bug is in this cross-platform JS orchestration,
+   * not in any OS-specific native code).
+   *
+   * Every other capture-mutating flow in this class is already guarded
+   * (`_systemAudioRecoveryInProgress`, `_defaultOutputSwitchInProgress`); this
+   * path was the one gap. We serialize rather than drop: the second caller
+   * genuinely needs to apply the latest provider config, so it awaits the
+   * in-flight reconfigure and then runs its own against fresh state.
+   */
+  private _sttReconfigureChain: Promise<void> = Promise.resolve();
+
+  /**
    * Reconfigure STT provider mid-session (called from IPC when user changes provider)
-   * Destroys existing STT instances and recreates them with the new provider
+   * Destroys existing STT instances and recreates them with the new provider.
+   *
+   * Concurrency: serialized via `_sttReconfigureChain`. Concurrent callers are
+   * queued and run one-at-a-time, so the native captures are never torn down /
+   * rebuilt in parallel. A throw in one queued reconfigure must not break the
+   * chain for the next caller, so the chain link swallows the error here and
+   * re-throws to THIS caller only.
    */
   public async reconfigureSttProvider(): Promise<void> {
+    const run = this._sttReconfigureChain.then(
+      () => this._doReconfigureSttProvider(),
+      // Previous link rejected — its error already surfaced to its own caller.
+      // Don't let it poison this link; proceed with our reconfigure.
+      () => this._doReconfigureSttProvider(),
+    );
+    // Keep the chain alive regardless of this run's outcome so a failure never
+    // wedges all future reconfigures.
+    this._sttReconfigureChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private async _doReconfigureSttProvider(): Promise<void> {
     console.log('[Main] Reconfiguring STT Provider...');
 
     // RC-01 fix: pause audio captures FIRST so their EventEmitter queues drain
@@ -2730,6 +2776,30 @@ export class AppState {
     // threads joined. Calling switchToLauncher() here gets the show/hide
     // commands to the OS compositor before the main thread blocks.
     this.windowHelper.setWindowMode('launcher');
+
+    // ─── CLEAR THE OVERLAY TREE WHILE IT IS HIDDEN ─────────────────────────
+    // The overlay BrowserWindow is PERSISTENT — created once with show:false
+    // and thereafter only hide()/show()'d; its React tree is never unmounted
+    // between meetings. The line above just hid it. If we don't clear it now,
+    // the previous meeting's messages + expanded width survive into the next
+    // meeting and are briefly VISIBLE the instant startMeeting() show()s the
+    // window again — then torn down ON SCREEN (chat-list unmount + height
+    // recompute + the shellWidth→OS-resize shrink) when the start-side
+    // session-reset finally lands a few frames after show(). That on-screen
+    // teardown is the "old UI flashes, then a choppy collapse" the user sees.
+    //
+    // Clearing HERE — after the window is hidden, with a whole meeting of idle
+    // time before the next show() — means the overlay's mounted state is
+    // already the clean collapsed baseline by the next meeting, so its FIRST
+    // visible frame is clean and there is nothing to resize/tear down on
+    // screen. The renderer's onSessionReset handler does the full synchronous
+    // clear (messages, shellWidth→collapsed, code-expansion refs/timers); the
+    // only change is that it now runs while hidden instead of while visible.
+    //
+    // Safe: the overlay is already hidden above and shows nothing post-stop —
+    // trailing transcript finals (_isDraining), meeting save, and the
+    // title/summary all run against the DB / other windows, never this tree.
+    this.getWindowHelper().getOverlayWindow()?.webContents.send('session-reset');
 
     // ─── SYNCHRONOUS: things the user expects "right now" on Stop click ────
     // Captures are deferred-stop wrappers (see SystemAudioCapture.stop /
