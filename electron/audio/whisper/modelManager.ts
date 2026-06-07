@@ -8,7 +8,7 @@ import type { WhisperModelId, WhisperModelInfo } from './types';
 const MODEL_CATALOG: WhisperModelInfo[] = [
   // ── Moonshine — streaming-native ASR. ~100× lower latency than Whisper Large v3.
   //     Encoder caching + decoder state reuse. English-only. Best choice for live use.
-  { id: 'onnx-community/moonshine-tiny-ONNX', name: 'Moonshine Tiny',  sizeMb: 26,   speed: 'very-fast', accuracy: 'good',      multilingual: false, status: 'missing', streaming: true },
+  { id: 'onnx-community/moonshine-tiny-zh-ONNX', name: 'Moonshine Tiny ZH',  sizeMb: 26,   speed: 'very-fast', accuracy: 'good',      multilingual: false, status: 'missing', streaming: true },
   { id: 'onnx-community/moonshine-base-ONNX', name: 'Moonshine Base',  sizeMb: 60,   speed: 'very-fast', accuracy: 'very-high', multilingual: false, status: 'missing', streaming: true },
 
   // ── Distil-Whisper — same architecture as Whisper, distilled to 1/2 layers,
