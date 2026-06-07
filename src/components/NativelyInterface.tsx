@@ -1506,6 +1506,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           for (const it of items) queueToken('recap', (it as any).token);
         } else if (kind === 'clarify') {
           for (const it of items) queueToken('clarify', (it as any).token);
+        }
       }),
     );
 
