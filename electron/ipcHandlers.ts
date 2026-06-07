@@ -2403,7 +2403,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const id =
         modelId ||
         SettingsManager.getInstance().get('localWhisperModel') ||
-        'Xenova/whisper-tiny.en';
+        'Xenova/whisper-base';
       // Pass active dtype so the cache check verifies the SPECIFIC ONNX
       // files (e.g. encoder_model.onnx for fp32) are present — not just
       // "directory non-empty". Otherwise a v2-cached _quantized.onnx-only
