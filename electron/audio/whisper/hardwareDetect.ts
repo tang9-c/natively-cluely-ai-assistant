@@ -29,32 +29,30 @@ export function detectHardware(): HardwareInfo {
     let recommendation: string;
     let recommendedModel: string;
 
-    // Moonshine is the recommended default everywhere — it's purpose-built for
-    // streaming (encoder caching + decoder state reuse) and delivers ~100×
-    // lower latency than Whisper Large v3 with comparable WER. English-only.
-    // For multilingual, the per-platform fallback uses Whisper Large v3 Turbo
-    // (multilingual, 6× faster than Large v3) on capable hardware, otherwise
-    // standard Whisper variants sized to RAM.
+    // Whisper Base is the recommended default — multilingual (supports 99
+    // languages), well-tested, and strikes a good balance between accuracy and
+    // speed. For English-only use cases, Distil-Whisper or Moonshine offer
+    // significantly lower latency.
     if (isAppleSilicon) {
         tier = 'excellent';
-        recommendation = 'Apple Silicon — CoreML activates Metal GPU via ONNX Runtime. Moonshine Base streams in near real-time on the Neural Engine.';
-        recommendedModel = 'onnx-community/moonshine-base-ONNX';
+        recommendation = 'Apple Silicon — CoreML activates Metal GPU via ONNX Runtime. Whisper Base streams smoothly on the Neural Engine with multilingual support.';
+        recommendedModel = 'Xenova/whisper-base';
     } else if (isIntelMac) {
         tier = 'limited';
-        recommendation = 'Intel Mac — CPU inference with int8 quantization. Moonshine Tiny streams in real-time on CPU; Cloud STT (Groq/Deepgram) recommended for long multilingual sessions.';
-        recommendedModel = 'onnx-community/moonshine-tiny-ONNX';
+        recommendation = 'Intel Mac — CPU inference with int8 quantization. Whisper Base runs adequately on CPU with multilingual support; Cloud STT (Groq/Deepgram) recommended for lowest latency.';
+        recommendedModel = 'Xenova/whisper-base';
     } else if (platform === 'win32' && totalRamGb >= 8) {
         tier = 'good';
-        recommendation = 'Windows — DirectML activates GPU acceleration (NVIDIA, AMD, Intel) via ONNX Runtime. Moonshine Base streams in real-time on most gaming hardware.';
-        recommendedModel = totalRamGb >= 16 ? 'onnx-community/moonshine-base-ONNX' : 'onnx-community/moonshine-tiny-ONNX';
+        recommendation = 'Windows — DirectML activates GPU acceleration (NVIDIA, AMD, Intel) via ONNX Runtime. Whisper Base streams in real-time on most gaming hardware with multilingual support.';
+        recommendedModel = 'Xenova/whisper-base';
     } else if (platform === 'linux') {
         tier = 'good';
-        recommendation = 'Linux — ONNX Runtime CPU with int8 quantization. Moonshine Base offers near real-time streaming.';
-        recommendedModel = 'onnx-community/moonshine-base-ONNX';
+        recommendation = 'Linux — ONNX Runtime CPU with int8 quantization. Whisper Base offers reliable multilingual transcription.';
+        recommendedModel = 'Xenova/whisper-base';
     } else {
         tier = 'limited';
-        recommendation = 'Limited hardware — Moonshine Tiny streams in real-time even on minimal CPUs.';
-        recommendedModel = 'onnx-community/moonshine-tiny-ONNX';
+        recommendation = 'Limited hardware — Whisper Base is the default. For minimal CPUs, consider Moonshine Tiny (English-only) for lower resource usage.';
+        recommendedModel = 'Xenova/whisper-base';
     }
 
     return {

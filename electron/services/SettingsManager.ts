@@ -157,6 +157,20 @@ export class SettingsManager {
             this.settings.screenUnderstandingMode = 'vision_first';
             this.saveSettings();
         }
+
+        // Migrate legacy default local STT model from Moonshine to Whisper Base.
+        // Moonshine is English-only; Whisper Base supports multilingual use cases.
+        const migrateModel = (key: keyof AppSettings) => {
+            const val = (this.settings as Record<string, unknown>)[key] as string | undefined;
+            if (val && val.startsWith('onnx-community/moonshine-')) {
+                console.warn(`[SettingsManager] Migrating legacy ${key} "${val}" → "Xenova/whisper-base"`);
+                (this.settings as Record<string, unknown>)[key] = 'Xenova/whisper-base';
+                this.saveSettings();
+            }
+        };
+        migrateModel('localWhisperModel');
+        migrateModel('localWhisperModelMic');
+        migrateModel('localWhisperModelSystem');
     }
 
     private saveSettings(): void {
