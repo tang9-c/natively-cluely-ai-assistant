@@ -4278,6 +4278,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   }
 
   /**
+   * Check if Doubao is available
+   */
+  public hasDoubao(): boolean {
+    return this.doubaoClient !== null;
+  }
+
+  /**
    * Stream with Groq using a specific prompt, with Gemini fallback
    * Used by mode-specific LLMs (RecapLLM, FollowUpLLM, WhatToAnswerLLM)
    * @param groqMessage - Message with Groq-optimized prompt
@@ -4550,12 +4557,31 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       }
     }
 
-    if (this.groqClient && tokenCount < 100000) {
+    // ATTEMPT 3: Doubao
+    if (this.hasDoubao()) {
+      try {
+        console.log(`[LLMHelper] Attempting Doubao for summary...`);
+        const text = await this.withTimeout(
+          this.generateWithDoubao(`Context:\n${context}`, systemPrompt),
+          45000,
+          'Doubao Summary'
+        );
+        if (text.trim().length > 0) {
+          console.log(`[LLMHelper] ✅ Doubao summary generated successfully.`);
+          return this.processResponse(text);
+        }
+      } catch (e: any) {
+        console.warn(`[LLMHelper] ⚠️ Doubao summary failed: ${e.message}. Falling back...`);
+      }
+    }
+
+    // ATTEMPT 4: Groq (token limit check)
+    if (this.hasGroq() && tokenCount < 100000) {
       console.log(`[LLMHelper] Attempting Groq for summary...`);
       try {
         const groqPrompt = groqSystemPrompt || systemPrompt;
         const response = await this.withTimeout(
-          this.groqClient.chat.completions.create({
+          this.groqClient!.chat.completions.create({
             model: GROQ_MODEL,
             messages: [
               { role: "system", content: groqPrompt },
@@ -4575,16 +4601,16 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           return this.processResponse(text);
         }
       } catch (e: any) {
-        console.warn(`[LLMHelper] ⚠️ Groq summary failed: ${e.message}. Falling back to Gemini...`);
+        console.warn(`[LLMHelper] ⚠️ Groq summary failed: ${e.message}. Falling back...`);
       }
-    } else {
-      if (tokenCount >= 100000) {
-        console.log(`[LLMHelper] Context too large for Groq (${tokenCount} tokens). Skipping straight to Gemini.`);
-      }
+    } else if (this.hasGroq() && tokenCount >= 100000) {
+      console.log(`[LLMHelper] Context too large for Groq (${tokenCount} tokens). Skipping Groq.`);
     }
 
-    // ATTEMPT 3: Gemini Flash (with 2 retries = 3 attempts total)
+    // ATTEMPT 5: Gemini Flash (with 2 retries = 3 attempts total)
+    let flashAttempted = false;
     if (this.client) {
+      flashAttempted = true;
       console.log(`[LLMHelper] Attempting Gemini Flash for summary...`);
       const contents = [{ text: `${systemPrompt}\n\nCONTEXT:\n${context}` }];
 
@@ -4606,15 +4632,15 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           }
         }
       }
-    } else {
-      console.log(`[LLMHelper] Gemini client not initialized — skipping Gemini Flash.`);
     }
 
-    // ATTEMPT 4: Gemini Pro
-    console.log(`[LLMHelper] ⚠️ Flash exhausted. Switching to Gemini Pro for robust retry...`);
-    const maxProRetries = 5;
-
+    // ATTEMPT 6: Gemini Pro (with retries)
     if (this.client) {
+      if (flashAttempted) {
+        console.log(`[LLMHelper] ⚠️ Flash exhausted. Switching to Gemini Pro for robust retry...`);
+      }
+      const maxProRetries = 5;
+
       for (let attempt = 1; attempt <= maxProRetries; attempt++) {
         try {
           console.log(`[LLMHelper] 🔄 Gemini Pro Attempt ${attempt}/${maxProRetries}...`);
@@ -4623,7 +4649,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             // @ts-ignore
             this.client.models.generateContent({
               model: GEMINI_PRO_MODEL,
-              contents: contents,
+              contents: [{ text: `${systemPrompt}\n\nCONTEXT:\n${context}` }],
               config: {
                 maxOutputTokens: MAX_OUTPUT_TOKENS,
                 temperature: 0.3,
@@ -4646,8 +4672,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           await new Promise(r => setTimeout(r, backoff));
         }
       }
-    } else {
-      console.log(`[LLMHelper] Gemini client not initialized — skipping Gemini Pro.`);
     }
 
     throw new Error("Failed to generate summary after all fallback attempts.");
