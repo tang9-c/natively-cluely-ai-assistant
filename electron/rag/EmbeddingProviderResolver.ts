@@ -9,6 +9,8 @@ import { ProviderScopeError, assertProviderDataScopes, type ProviderDataScopePol
 export interface AppAPIConfig {
   openaiKey?: string;
   geminiKey?: string;
+  geminiEmbeddingModel?: string;
+  geminiEmbeddingDims?: number;
   doubaoKey?: string;
   doubaoEmbeddingModel?: string;
   ollamaUrl?: string; // e.g. 'http://localhost:11434'
