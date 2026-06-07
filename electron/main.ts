@@ -417,7 +417,7 @@ export class AppState {
           const { isModelCached } = require('./audio/whisper/modelManager');
           const { modelPreloader } = require('./audio/whisper/modelPreloader');
           const { resolveInferenceConfig } = require('./audio/whisper/inferenceConfig');
-          const modelId = settingsManager.get('localWhisperModel') ?? 'Xenova/whisper-tiny.en';
+          const modelId = settingsManager.get('localWhisperModel') ?? 'Xenova/whisper-base';
           const { dtype } = resolveInferenceConfig();
           if (isModelCached(modelId, dtype)) {
             console.log(`[AppState] Preloading local Whisper model: ${modelId}`);
