@@ -726,11 +726,26 @@ export class AppState {
         const llmHelper = this.processingHelper.getLLMHelper();
 
         // generateContent function for LLM calls
+        // Join ALL content parts (some callers — e.g. live negotiation coaching —
+        // pass [{text: systemPrefix}, {text: prompt}]; reading only [0] dropped the
+        // prompt). Single-item callers (extraction, script) are unaffected.
+        const joinContents = (contents: any[]) =>
+          (Array.isArray(contents) ? contents : [contents])
+            .map((c: any) => (typeof c === 'string' ? c : c?.text || ''))
+            .filter(Boolean)
+            .join('\n\n');
         this.knowledgeOrchestrator.setGenerateContentFn(async (contents: any[]) => {
-          return await llmHelper.generateContentStructured(
-            contents[0]?.text || ''
-          );
+          return await llmHelper.generateContentStructured(joinContents(contents));
         });
+
+        // Low-latency generation for LIVE negotiation coaching (spoken in real
+        // time): Flash-first chain so the tactical note appears fast. The AOT
+        // negotiation script + all extraction keep the quality-first fn above.
+        if (typeof this.knowledgeOrchestrator.setLiveCoachingContentFn === 'function') {
+          this.knowledgeOrchestrator.setLiveCoachingContentFn(async (contents: any[]) => {
+            return await llmHelper.generateContentStructured(joinContents(contents), { preferFast: true });
+          });
+        }
 
         // Embedding function — lazily delegate to the cascaded EmbeddingPipeline
         // (OpenAI → Gemini → Ollama → Local bundled model).
