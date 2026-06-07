@@ -94,10 +94,10 @@ describe('FIX-009: modes:upload-reference-file hardening', () => {
     );
   });
 
-  test('still gates on Pro/trial before doing any work', () => {
+  test('no longer gates on Pro/trial — all features are unconditionally available', () => {
     const gateIdx = body.indexOf('isProOrTrialActive()');
+    assert.ok(gateIdx === -1, 'Pro/trial gate must be removed from handler');
     const showDialogIdx = body.indexOf('showOpenDialog');
-    assert.ok(gateIdx >= 0 && showDialogIdx >= 0);
-    assert.ok(gateIdx < showDialogIdx, 'Pro gate must run before opening the file dialog');
+    assert.ok(showDialogIdx >= 0, 'Handler must still open file dialog');
   });
 });

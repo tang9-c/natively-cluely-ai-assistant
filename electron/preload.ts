@@ -98,46 +98,6 @@ interface ElectronAPI {
     ibmWatsonRegion: string;
     hasSonioxKey: boolean;
   }>;
-  // Free Trial
-  startTrial: () => Promise<{
-    ok: boolean;
-    hasToken?: boolean;
-    started_at?: string;
-    expires_at?: string;
-    expired?: boolean;
-    already_used?: boolean;
-    converted_to?: string | null;
-    usage?: { ai: number; stt_seconds: number; search: number };
-    limits?: {
-      duration_ms: number;
-      ai_requests: number;
-      stt_minutes: number;
-      search_requests: number;
-    };
-    error?: string;
-    status?: number;
-  }>;
-  getTrialStatus: () => Promise<{
-    ok: boolean;
-    expired?: boolean;
-    remaining_ms?: number;
-    started_at?: string;
-    expires_at?: string;
-    converted_to?: string | null;
-    usage?: { ai: number; stt_seconds: number; search: number };
-    limits?: object;
-    error?: string;
-  }>;
-  getLocalTrial: () => Promise<{
-    hasToken: boolean;
-    trialClaimed?: boolean;
-    expiresAt?: string;
-    startedAt?: string;
-    expired?: boolean;
-  }>;
-  convertTrial: (choice: string) => Promise<{ ok: boolean }>;
-  endTrialByok: () => Promise<{ success: boolean; error?: string }>;
-  onTrialEnded: (cb: (data: { choice: string }) => void) => () => void;
   onModesActiveCleared: (cb: () => void) => () => void;
 
   // STT Provider Management
@@ -960,19 +920,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkPermissions: () => ipcRenderer.invoke('permissions:check'),
   requestMicPermission: () => ipcRenderer.invoke('permissions:request-mic'),
 
-  // Free Trial
-  startTrial: () => ipcRenderer.invoke('trial:start'),
-  getTrialStatus: () => ipcRenderer.invoke('trial:status'),
-  getLocalTrial: () => ipcRenderer.invoke('trial:get-local'),
-  convertTrial: (choice: string) => ipcRenderer.invoke('trial:convert', choice),
-  endTrialByok: () => ipcRenderer.invoke('trial:end-byok'),
-  wipeTrialProfileData: () => ipcRenderer.invoke('trial:wipe-profile-data'),
-  onTrialEnded: (cb: (data: { choice: string }) => void) => {
-    const sub = (_: any, data: any) => cb(data);
-    ipcRenderer.on('trial-ended', sub);
-    return () => ipcRenderer.removeListener('trial-ended', sub);
-  },
-
   // STT Provider Management
   setSttProvider: (
     provider:
@@ -1685,21 +1632,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('fetch-provider-models', provider, apiKey),
   setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao', modelId: string) =>
     ipcRenderer.invoke('set-provider-preferred-model', provider, modelId),
-
-  // License Management
-  licenseActivate: (key: string) => ipcRenderer.invoke('license:activate', key),
-  licenseCheckPremium: () => ipcRenderer.invoke('license:check-premium'),
-  licenseGetDetails: () => ipcRenderer.invoke('license:get-details'),
-  licenseCheckPremiumAsync: () => ipcRenderer.invoke('license:check-premium-async'),
-  licenseDeactivate: () => ipcRenderer.invoke('license:deactivate'),
-  licenseGetHardwareId: () => ipcRenderer.invoke('license:get-hardware-id'),
-  onLicenseStatusChanged: (callback: (data: { isPremium: boolean; plan?: string }) => void) => {
-    const subscription = (_: any, data: { isPremium: boolean; plan?: string }) => callback(data);
-    ipcRenderer.on('license-status-changed', subscription);
-    return () => {
-      ipcRenderer.removeListener('license-status-changed', subscription);
-    };
-  },
 
   onModesActiveCleared: (callback: () => void) => {
     const subscription = () => callback();

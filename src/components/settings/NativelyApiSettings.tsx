@@ -4,7 +4,6 @@ import {
   Brain,
   CalendarClock,
   CheckCircle,
-  Clock,
   Info,
   Loader2,
   Mic,
@@ -12,11 +11,9 @@ import {
   Search,
   Shield,
   Trash2,
-  Zap,
 } from 'lucide-react';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { NativelyLogoMark } from '../NativelyLogoMark';
-import { FreeTrialModal } from '../trial/FreeTrialModal';
 
 // ─── Types ───────────────────────────────────────────────────
 interface QuotaBucket {
@@ -85,80 +82,6 @@ function QuotaBar({
   );
 }
 
-// ─── Trial countdown (live, ticks every 500ms) ───────────────
-function TrialCountdown({ expiresAt }: { expiresAt: string }) {
-  const [remaining, setRemaining] = useState(() =>
-    Math.max(0, new Date(expiresAt).getTime() - Date.now()),
-  );
-  useEffect(() => {
-    const id = setInterval(() => {
-      setRemaining(Math.max(0, new Date(expiresAt).getTime() - Date.now()));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [expiresAt]);
-  const totalSec = Math.ceil(remaining / 1000);
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  const isWarning = remaining < 2 * 60 * 1000;
-  return (
-    <div
-      className={`flex items-center gap-1 ${isWarning ? 'text-amber-400' : 'text-text-tertiary'}`}
-    >
-      <Clock size={11} strokeWidth={2} />
-      <span className="text-[11px] font-mono font-semibold tabular-nums">
-        {remaining === 0 ? 'Ended' : `${m}:${s.toString().padStart(2, '0')}`}
-      </span>
-    </div>
-  );
-}
-
-// ─── Trial usage pill ─────────────────────────────────────────
-function TrialUsagePill({
-  icon: Icon,
-  used,
-  limit,
-  label,
-  unit,
-}: {
-  icon: React.ElementType;
-  used: number;
-  limit: number;
-  label: string;
-  unit: string;
-}) {
-  const pct = Math.min(100, (used / limit) * 100);
-  const isHigh = pct >= 80;
-  return (
-    <div className="bg-bg-input rounded-[10px] px-3 py-2.5 space-y-2 border border-border-subtle">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <Icon
-            size={12}
-            strokeWidth={2}
-            className={isHigh ? 'text-amber-400' : 'text-text-tertiary'}
-          />
-          <span className="text-[10.5px] text-text-secondary font-medium">{label}</span>
-        </div>
-        <span
-          className={`text-[12px] tabular-nums font-bold ${isHigh ? 'text-amber-400' : 'text-text-primary'}`}
-        >
-          {used}
-          <span className="text-[10px] font-medium text-text-tertiary">
-            /{limit}
-            {unit}
-          </span>
-        </span>
-      </div>
-      <div className="h-[4px] w-full bg-bg-surface rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-500 ${isHigh ? 'bg-amber-400' : 'bg-violet-500/70'}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 // ─── Card wrapper ────────────────────────────────────────────
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
@@ -181,22 +104,6 @@ export const NativelyApiSettings: React.FC = () => {
   const [usageData, setUsageData] = useState<UsageData | null>(null);
   const [usageError, setUsageError] = useState<string | null>(null);
   const [isLoadingUsage, setIsLoadingUsage] = useState(false);
-
-  // ── Free Trial state ──────────────────────────────────────
-  const [trialState, setTrialState] = useState<{
-    active: boolean;
-    expired: boolean;
-    expiresAt: string;
-    startedAt: string;
-    usage: { ai: number; stt_seconds: number; search: number };
-  } | null>(null);
-  // True while getLocalTrial is in flight — prevents the "start trial" card
-  // from flashing before we know whether a trial token exists.
-  const [isCheckingTrial, setIsCheckingTrial] = useState(true);
-  const [trialLoading, setTrialLoading] = useState(false);
-  const [trialError, setTrialError] = useState<string | null>(null);
-  const [showTrialModal, setShowTrialModal] = useState(false);
-  const trialPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -244,145 +151,6 @@ export const NativelyApiSettings: React.FC = () => {
   useEffect(() => {
     if (isSaved && !isLoading) fetchUsage();
   }, [isSaved, isLoading, fetchUsage]);
-
-  // ── Trial init + polling ──────────────────────────────────
-  const refreshTrial = useCallback(async () => {
-    const res = await window.electronAPI?.getTrialStatus?.();
-    if (!res?.ok) return;
-
-    localStorage.setItem('natively_trial_claimed', 'true');
-
-    setTrialState({
-      active: !(res.expired ?? false),
-      expired: res.expired ?? false,
-      expiresAt: res.expires_at ?? '',
-      startedAt: res.started_at ?? '',
-      usage: res.usage ?? { ai: 0, stt_seconds: 0, search: 0 },
-    });
-    if (res.expired) {
-      setShowTrialModal(true);
-      if (trialPollRef.current) {
-        clearInterval(trialPollRef.current);
-        trialPollRef.current = null;
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    // On mount: read local trial token (no network) to determine initial render state,
-    // then fetch live usage from server. Setting trialState from local data first
-    // prevents the "start trial" card from flashing while the server call is in flight.
-    (async () => {
-      try {
-        const local = await window.electronAPI?.getLocalTrial?.();
-        if (!local?.hasToken) {
-          if (local?.trialClaimed) localStorage.setItem('natively_trial_claimed', 'true');
-          return;
-        }
-
-        localStorage.setItem('natively_trial_claimed', 'true');
-
-        if (local.expired) {
-          // Token exists but expired locally — show modal immediately, confirm via server
-          setTrialState({
-            active: false,
-            expired: true,
-            expiresAt: local.expiresAt ?? '',
-            startedAt: local.startedAt ?? '',
-            usage: { ai: 0, stt_seconds: 0, search: 0 },
-          });
-          setShowTrialModal(true);
-          refreshTrial(); // updates usage counters in the modal
-          return;
-        }
-
-        // Set optimistic active state immediately from local data so the correct
-        // card renders before the server responds (prevents start-card flash).
-        // Usage counters start at 0 and are replaced by refreshTrial below.
-        setTrialState({
-          active: true,
-          expired: false,
-          expiresAt: local.expiresAt ?? '',
-          startedAt: local.startedAt ?? '',
-          usage: { ai: 0, stt_seconds: 0, search: 0 },
-        });
-
-        // Fetch live usage + start 15s polling (was 30s — halved so counters
-        // feel more responsive during an active session).
-        refreshTrial();
-        trialPollRef.current = setInterval(refreshTrial, 15_000);
-      } finally {
-        setIsCheckingTrial(false);
-      }
-    })();
-    return () => {
-      if (trialPollRef.current) clearInterval(trialPollRef.current);
-    };
-  }, [refreshTrial]);
-
-  const handleStartTrial = async () => {
-    setTrialLoading(true);
-    setTrialError(null);
-    try {
-      const res = await window.electronAPI?.startTrial?.();
-      if (!res?.ok) {
-        if (res?.error === 'trial_ip_limit' || res?.error === 'trial_start_rate_limited') {
-          localStorage.setItem('natively_trial_claimed', 'true');
-          setTrialState({
-            active: false,
-            expired: true,
-            expiresAt: '',
-            startedAt: '',
-            usage: { ai: 0, stt_seconds: 0, search: 0 },
-          });
-          return;
-        }
-        const msg =
-          res?.error === 'invalid_hwid'
-            ? '无法读取设备 ID。重启应用后重试。'
-            : res?.error || '无法启动试用，请重试。';
-        setTrialError(msg);
-        return;
-      }
-
-      localStorage.setItem('natively_trial_claimed', 'true');
-
-      if (res.already_used && res.expired) {
-        setTrialState({
-          active: false,
-          expired: true,
-          expiresAt: '',
-          startedAt: '',
-          usage: { ai: 0, stt_seconds: 0, search: 0 },
-        });
-        return;
-      }
-      setTrialState({
-        active: !(res.expired ?? false),
-        expired: res.expired ?? false,
-        expiresAt: res.expires_at ?? '',
-        startedAt: res.started_at ?? '',
-        usage: res.usage ?? { ai: 0, stt_seconds: 0, search: 0 },
-      });
-      if (!res.expired) {
-        trialPollRef.current = setInterval(refreshTrial, 30_000);
-      }
-    } catch (e: any) {
-      setTrialError(e.message || '网络错误');
-    } finally {
-      setTrialLoading(false);
-    }
-  };
-
-  const handleByok = async () => {
-    // Only wipe — modal transitions to DoneState, then onDone closes it
-    await window.electronAPI?.endTrialByok?.();
-  };
-
-  const handleTrialDone = () => {
-    setTrialState(null);
-    setShowTrialModal(false);
-  };
 
   const handleSave = async () => {
     if (!apiKey.trim() || apiKey.includes('•')) return;
@@ -589,175 +357,6 @@ export const NativelyApiSettings: React.FC = () => {
           </div>
         )}
       </div>
-
-      {/* ── Free Trial Modal (post-trial) ─────────────── */}
-      {showTrialModal && trialState && (
-        <FreeTrialModal usage={trialState.usage} onByok={handleByok} onDone={handleTrialDone} />
-      )}
-
-      {/* ── Active trial status card ──────────────────── */}
-      {trialState?.active &&
-        (() => {
-          const sttMin = (trialState.usage.stt_seconds / 60).toFixed(1);
-          return (
-            <Card className="shadow-sm border-violet-500/25">
-              <div className="px-5 pt-5 pb-5 space-y-4">
-                {/* Header — same layout as "Try Natively API free" start card */}
-                <div className="flex items-start gap-3.5">
-                  <div className="w-10 h-10 rounded-[11px] bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
-                    <NativelyLogoMark size={18} className="text-violet-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[13.5px] font-semibold text-text-primary tracking-tight">
-                        免费试用已激活
-                      </p>
-                      <TrialCountdown expiresAt={trialState.expiresAt} />
-                    </div>
-                    <p className="text-[10.5px] text-text-tertiary mt-1">
- {trialState.usage.ai} AI · {sttMin} min STT · {trialState.usage.search}{' '}
-                      次搜索已使用
-                    </p>
-                  </div>
-                </div>
-
-                {/* Usage pills */}
-                <div className="grid grid-cols-3 gap-2">
-                  <TrialUsagePill
-                    icon={Zap}
-                    used={trialState.usage.ai}
-                    limit={10}
-                    label="AI"
-                    unit=""
-                  />
-                  <TrialUsagePill
-                    icon={Mic}
-                    used={Math.round(trialState.usage.stt_seconds / 60)}
-                    limit={10}
-                    label="语音转文字"
-                    unit="m"
-                  />
-                  <TrialUsagePill
-                    icon={Search}
-                    used={trialState.usage.search}
-                    limit={2}
-                    label="搜索"
-                    unit=""
-                  />
-                </div>
-
-                {/* CTA */}
-                <button
-                  onClick={() => setShowTrialModal(true)}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-[9px] text-[12.5px] font-semibold bg-violet-600 hover:bg-violet-500 text-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] transition-all active:scale-[0.98] cursor-pointer"
-                >
-                  <ArrowUpRight size={13} strokeWidth={2.3} />
-                  Keep the momentum going
-                </button>
-              </div>
-            </Card>
-          );
-        })()}
-
-      {/* ── Free trial start card (no key, no active trial) ── */}
-      {!isLoading &&
-        !isSaved &&
-        !isCheckingTrial &&
-        (!trialState || (trialState.expired && !trialState.active)) &&
-        (() => {
-          const isClaimed =
-            trialState?.expired === true ||
-            localStorage.getItem('natively_trial_claimed') === 'true';
-
-          if (isClaimed) {
-            return null;
-          }
-
-          return (
-            <Card className="shadow-sm">
-              <div className="px-5 pt-5 pb-4 flex flex-col items-center justify-center text-center">
-                {/* Apple Promo Icon */}
-                <div className="w-[42px] h-[42px] mb-3 rounded-[12px] bg-bg-input border border-border-subtle shadow-[inset_0_1px_rgba(255,255,255,0.06),0_2px_8px_rgba(0,0,0,0.04)] flex items-center justify-center relative overflow-hidden">
-                  <NativelyLogoMark
-                    size={20}
-                    className={
-                      isClaimed ? 'text-text-tertiary' : 'text-text-primary drop-shadow-sm'
-                    }
-                  />
-                </div>
-
-                <h3 className="text-[14.5px] font-bold text-text-primary tracking-tight mb-1">
-                  Natively API. Try it free.
-                </h3>
-                <p className="text-[12px] text-text-secondary leading-snug px-4 mb-4">
-                  Experience managed text-to-speech, AI models, and real-time research without a
-                  subscription.
-                </p>
-
-                {/* Clean limits grid container */}
-                <div className="flex items-center justify-center gap-3.5 mb-5 text-[11.5px] font-medium text-text-primary bg-bg-input px-3.5 py-2 rounded-[8px] border border-border-subtle shadow-[inset_0_1px_rgba(255,255,255,0.02)]">
-                  <div className="flex flex-col items-center gap-1">
-                    <Clock size={14} strokeWidth={2} className="text-blue-500" />
-                    <span>30 min</span>
-                  </div>
-                  <div className="w-px h-5 bg-border-subtle/80" />
-                  <div className="flex flex-col items-center gap-1">
-                    <Brain size={14} strokeWidth={2} className="text-violet-500" />
-                    <span>10 reqs</span>
-                  </div>
-                  <div className="w-px h-5 bg-border-subtle/80" />
-                  <div className="flex flex-col items-center gap-1">
-                    <Mic size={14} strokeWidth={2} className="text-emerald-500" />
-                    <span>10m STT</span>
-                  </div>
-                  <div className="w-px h-5 bg-border-subtle/80" />
-                  <div className="flex flex-col items-center gap-1">
-                    <Search size={14} strokeWidth={2} className="text-orange-500" />
-                    <span>2 searches</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleStartTrial}
-                  disabled={trialLoading || isClaimed}
-                  className={`w-full max-w-[240px] flex items-center justify-center gap-2 py-2 rounded-full text-[13px] font-bold shadow-[0_1px_3px_rgba(0,0,0,0.1)] transition-all ${
-                    isClaimed
-                      ? 'bg-bg-input text-text-tertiary border border-border-subtle cursor-not-allowed'
-                      : 'bg-text-primary hover:bg-text-primary/90 text-bg-primary active:scale-[0.98]'
-                  }`}
-                >
-                  {trialLoading ? (
-                    <>
-                      <Loader2 size={13} className="animate-spin" /> 启动试用中...
-                    </>
-                  ) : isClaimed ? (
-                    '试用已被领取'
-                  ) : (
-                    '开始 10 分钟免费试用'
-                  )}
-                </button>
-
-                {/* Error Handling */}
-                {trialError && !isClaimed && (
-                  <div className="flex items-center gap-1.5 px-3 py-2 mt-3 bg-red-500/10 border border-red-500/20 rounded-[8px]">
-                    <AlertCircle size={13} className="text-red-500 shrink-0" strokeWidth={2} />
-                    <p className="text-[11.5px] text-red-500 font-medium">{trialError}</p>
-                  </div>
-                )}
-
-                <p className="text-[10.5px] text-text-tertiary font-medium mt-3">
-                 无需账号 — 绑定此设备。
-                </p>
-
-                <div className="w-[30px] h-px bg-border-subtle my-3" />
-
-                <p className="text-[11px] text-text-secondary font-medium">
-                  已有 API Key？在下方输入。
-                </p>
-              </div>
-            </Card>
-          );
-        })()}
 
       {/* ── Plans ────────────────────────────────────────── */}
       {!isSaved && PlansCard}

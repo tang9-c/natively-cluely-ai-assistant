@@ -1,6 +1,5 @@
 import WebSocket from 'ws';
 import { RECOGNITION_LANGUAGES, EnglishVariant } from '../config/languages';
-import { TRIAL_SENTINEL_KEY } from '../config/constants';
 import { streamingStttWsOptions } from './dnsHelpers';
 import { BaseSTT } from './BaseSTT';
 
@@ -269,15 +268,7 @@ export class NativelyProSTT extends BaseSTT {
                 audio_channels:      this._numChannels,
                 channel:             this.channel,
             };
-            if (this.apiKey === TRIAL_SENTINEL_KEY) {
-                try {
-                    const { CredentialsManager } = require('../services/CredentialsManager');
-                    const trialToken = CredentialsManager.getInstance().getTrialToken();
-                    if (trialToken) baseFrame.trial_token = trialToken;
-                } catch { /* CredentialsManager unavailable — connection will be rejected by server */ }
-            } else {
-                baseFrame.key = this.apiKey;
-            }
+            baseFrame.key = this.apiKey;
 
             ws.send(JSON.stringify(baseFrame));
         }));

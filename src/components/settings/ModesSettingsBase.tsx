@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   Check,
   ChevronRight,
-  Lock,
   Plus,
   Save,
   Settings,
@@ -13,10 +12,6 @@ import {
 
 interface ModesSettingsBaseProps {
   onClose: () => void;
-  isPremium: boolean;
-  isLoaded: boolean;
-  isTrialActive: boolean;
-  onOpenNativelyAPI: () => void;
 }
 
 interface ModeItem {
@@ -48,7 +43,6 @@ const TEMPLATE_LABELS: Record<string, string> = {
 
 export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
   onClose,
-  isPremium,
 }) => {
   const [modes, setModes] = useState<ModeItem[]>([]);
   const [selectedModeId, setSelectedModeId] = useState<string | null>(null);
@@ -124,13 +118,9 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
     const mode = modes.find((m) => m.id === modeId);
     if (!mode) return;
     if (mode.isActive) return;
-    if (!isPremium && mode.templateType !== 'general') {
-      setSaveError('切换到高级模式需要 Pro 订阅');
-      return;
-    }
     const result = await window.electronAPI?.modesSetActive?.(modeId);
-    if (result?.error === 'pro_required') {
-      setSaveError('切换到高级模式需要 Pro 订阅');
+    if (result?.error) {
+      setSaveError(result.error);
       return;
     }
     setActiveModeId(modeId);
@@ -142,10 +132,6 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
 
   const handleSave = async () => {
     if (!selectedMode) return;
-    if (!isPremium && selectedMode.templateType !== 'general') {
-      setSaveError('编辑高级模式需要 Pro 订阅');
-      return;
-    }
     setIsSaving(true);
     setSaveError(null);
     try {
@@ -154,7 +140,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
         customContext: editedContext.trim(),
       });
       if (result?.error) {
-        setSaveError(result.error === 'pro_required' ? '需要 Pro 订阅' : result.error);
+        setSaveError(result.error);
       } else {
         await loadModes();
       }
@@ -167,10 +153,6 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
 
   const handleDelete = async () => {
     if (!selectedMode) return;
-    if (!isPremium) {
-      setSaveError('删除模式需要 Pro 订阅');
-      return;
-    }
     const ok = window.confirm(`确定要删除模式 "${selectedMode.name}" 吗？此操作不可撤销。`);
     if (!ok) return;
     try {
@@ -190,8 +172,6 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
     selectedMode &&
     (editedName.trim() !== selectedMode.name ||
       editedContext.trim() !== selectedMode.customContext);
-
-  const canEditSelected = isPremium || selectedMode?.templateType === 'general';
 
   return (
     <div className="flex flex-col h-full bg-[#141414] text-text-primary">
@@ -217,8 +197,6 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
             {modes.map((mode) => {
               const isSelected = mode.id === selectedModeId;
               const isActive = mode.id === activeModeId;
-              const isGeneral = mode.templateType === 'general';
-              const isLocked = !isGeneral && !isPremium;
               return (
                 <button
                   key={mode.id}
@@ -234,9 +212,6 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                       <span className="text-xs font-medium truncate">
                         {mode.name}
                       </span>
-                      {isLocked && (
-                        <Lock size={10} className="opacity-40 shrink-0" />
-                      )}
                     </div>
                     <div className="text-[10px] text-text-tertiary mt-0.5">
                       {TEMPLATE_LABELS[mode.templateType] ?? mode.templateType}
@@ -261,23 +236,12 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
           <div className="p-2 border-t border-white/5 shrink-0">
             <button
               onClick={() => {
-                if (!isPremium) {
-                  setSaveError('创建新模式需要 Pro 订阅');
-                  return;
-                }
-                // In a full implementation this would open a create modal.
-                // For the base version we just show the locked message.
+                setSaveError('创建新模式功能即将推出');
               }}
-              disabled={!isPremium}
-              className={`w-full rounded-xl px-3 py-2.5 flex items-center justify-center gap-2 text-xs font-medium transition-all duration-200 ${
-                isPremium
-                  ? 'bg-accent-primary/10 text-accent-primary hover:bg-accent-primary/20'
-                  : 'bg-white/5 text-text-tertiary cursor-not-allowed'
-              }`}
+              className="w-full rounded-xl px-3 py-2.5 flex items-center justify-center gap-2 text-xs font-medium transition-all duration-200 bg-accent-primary/10 text-accent-primary hover:bg-accent-primary/20"
             >
               <Plus size={14} />
               <span>创建新模式</span>
-              {!isPremium && <Lock size={10} className="opacity-50" />}
             </button>
           </div>
         </div>
@@ -317,17 +281,8 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                     type="text"
                     value={editedName}
                     onChange={(e) => setEditedName(e.target.value)}
-                    disabled={!canEditSelected}
-                    className={`w-full bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary/50 transition-all ${
-                      !canEditSelected ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
+                    className="w-full bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary/50 transition-all"
                   />
-                  {!canEditSelected && (
-                    <p className="text-[10px] text-amber-500/80 mt-1 flex items-center gap-1">
-                      <Lock size={10} />
-                      编辑此模式需要 Pro 订阅
-                    </p>
-                  )}
                 </div>
 
                 {/* Custom context */}
@@ -338,12 +293,9 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                   <textarea
                     value={editedContext}
                     onChange={(e) => setEditedContext(e.target.value)}
-                    disabled={!canEditSelected}
                     rows={6}
                     placeholder="输入自定义指令，让 AI 更好地适应你的需求..."
-                    className={`w-full bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary/50 transition-all resize-none ${
-                      !canEditSelected ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
+                    className="w-full bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary/50 transition-all resize-none"
                   />
                 </div>
 
@@ -390,16 +342,10 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
               <div className="shrink-0 px-5 py-3 border-t border-white/5 flex items-center justify-between">
                 <button
                   onClick={handleDelete}
-                  disabled={!isPremium}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all duration-200 ${
-                    isPremium
-                      ? 'text-red-400 hover:bg-red-500/10'
-                      : 'text-text-tertiary cursor-not-allowed'
-                  }`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all duration-200 text-red-400 hover:bg-red-500/10"
                 >
                   <Trash2 size={13} />
                   删除
-                  {!isPremium && <Lock size={10} className="opacity-40" />}
                 </button>
                 <div className="flex items-center gap-2">
                   {hasChanges && (
@@ -407,9 +353,9 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                   )}
                   <button
                     onClick={handleSave}
-                    disabled={!hasChanges || isSaving || !canEditSelected}
+                    disabled={!hasChanges || isSaving}
                     className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
-                      hasChanges && canEditSelected && !isSaving
+                      hasChanges && !isSaving
                         ? 'bg-accent-primary text-white hover:bg-accent-primary/90 active:scale-[0.96]'
                         : 'bg-white/5 text-text-tertiary cursor-not-allowed'
                     }`}

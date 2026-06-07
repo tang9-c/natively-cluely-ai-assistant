@@ -12,7 +12,6 @@ import { CodexCliService } from './services/CodexCliService';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
 import { SkillsManager } from './services/SkillsManager';
 
-import { TRIAL_SENTINEL_KEY } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 
@@ -55,49 +54,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     });
   };
 
-  /**
-   * Returns true if the user has an active premium license OR an unexpired free trial.
-   * Used to gate profile intelligence features (resume upload, JD upload, company research, etc.).
-   */
-  const isProOrTrialActive = (): boolean => {
-    // 1. Full premium license (Dodo / Gumroad / Natively API subscription)
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      if (LicenseManager.getInstance().isPremium()) return true;
-    } catch {
-      /* premium module not available */
-    }
-
-    // 2. Active free trial (token present and not expired)
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm = CredentialsManager.getInstance();
-      const token = cm.getTrialToken();
-      if (!token) return false;
-      const expiresAt = cm.getTrialExpiresAt();
-      if (!expiresAt) return false;
-      return new Date(expiresAt).getTime() > Date.now();
-    } catch {
-      return false;
-    }
-  };
-
-  // Clears premium-only context when the pro license is lost.
-  const clearActiveModeOnLicenseLoss = (): void => {
-    try {
-      const { DatabaseManager } = require('./db/DatabaseManager');
-      const db = DatabaseManager.getInstance();
-      db.setActiveMode(null);
-      db.clearProfilePersona?.();
-      const llmHelper = appState.processingHelper?.getLLMHelper?.();
-      llmHelper?.setPersonaPrompt?.('');
-      broadcast('modes-active-cleared');
-      console.log('[IPC] Premium-only context cleared due to license loss');
-    } catch (e) {
-      /* non-fatal */
-    }
-  };
-
   // --- NEW Test Helper ---
   safeHandle('test-release-fetch', async () => {
     try {
@@ -124,83 +80,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (err: any) {
       console.error('[IPC] test-release-fetch failed:', err);
       return { success: false, error: err.message };
-    }
-  });
-
-  safeHandle('license:activate', async (event, key: string) => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      const result = await LicenseManager.getInstance().activateLicense(key);
-      if (result?.success) {
-        broadcast('license-status-changed', { isPremium: true });
-      }
-      return result;
-    } catch (err: any) {
-      // Only show generic message if the premium module itself is missing.
-      // activateLicense() returns {success:false, error} for all expected failures
-      // (bad key, network error, etc.) — it should never throw in normal operation.
-      console.error('[IPC] license:activate unexpected error:', err);
-      return { success: false, error: 'Premium features not available in this build.' };
-    }
-  });
-  safeHandle('license:check-premium', async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return LicenseManager.getInstance().isPremium();
-    } catch {
-      return false;
-    }
-  });
-
-  safeHandle('license:get-details', async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return LicenseManager.getInstance().getLicenseDetails();
-    } catch {
-      return { isPremium: false };
-    }
-  });
-  // Async variant: performs Dodo server-side revocation check on startup.
-  // Returns false only if the server definitively revokes the key.
-  // Network errors fail-open (returns cached sync result).
-  safeHandle('license:check-premium-async', async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return await LicenseManager.getInstance().isPremiumAsync();
-    } catch {
-      return false;
-    }
-  });
-  safeHandle('license:deactivate', async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      // deactivate() is async — it calls the Dodo server to free the activation slot
-      // before removing the local license file. Must be awaited.
-      await LicenseManager.getInstance().deactivate();
-      // Auto-disable knowledge mode when license is removed
-      try {
-        const orchestrator = appState.getKnowledgeOrchestrator();
-        if (orchestrator) {
-          orchestrator.setKnowledgeMode(false);
-          console.log('[IPC] Knowledge mode auto-disabled due to license deactivation');
-        }
-      } catch (e) {
-        /* ignore */
-      }
-      // Notify all windows so the license UI (ProGate, settings) refreshes immediately
-      clearActiveModeOnLicenseLoss();
-      broadcast('license-status-changed', { isPremium: false });
-    } catch {
-      /* LicenseManager not available */
-    }
-    return { success: true };
-  });
-  safeHandle('license:get-hardware-id', async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return LicenseManager.getInstance().getHardwareId();
-    } catch {
-      return 'unavailable';
     }
   });
 
@@ -1134,54 +1013,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         await appState.reconfigureSttProvider();
       }
 
-      // Auto-activate Natively Pro for pro/max/ultra API plans.
-      // Skips silently if the user already has a Gumroad/Dodo lifetime license.
-      if (apiKey) {
-        try {
-          const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-          const result = await LicenseManager.getInstance().activateWithApiKey(apiKey);
-          if (result.success) {
-            console.log('[IPC] set-natively-api-key: Pro auto-activated via API plan.');
-            // Notify all windows so the license UI refreshes immediately
-            broadcast('license-status-changed', { isPremium: true });
-          } else if (result.skipped) {
-            console.log(
-              '[IPC] set-natively-api-key: existing Gumroad/Dodo license preserved — Pro not overwritten.',
-            );
-          } else {
-            console.log('[IPC] set-natively-api-key: Pro not activated —', result.error);
-          }
-        } catch (e: any) {
-          // LicenseManager not available in this build — non-fatal
-          console.warn(
-            '[IPC] set-natively-api-key: LicenseManager unavailable for Pro auto-activation:',
-            e?.message,
-          );
-        }
-      } else {
-        // API key was cleared — deactivate any natively_api Pro license so premium is revoked.
-        try {
-          const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-          const lm = LicenseManager.getInstance();
-          // Only deactivate if the stored license is from a natively_api subscription.
-          // Never touch Gumroad/Dodo lifetime licenses here.
-          const details = lm.getLicenseDetails();
-          if (details.isPremium && details.provider === 'natively_api') {
-            await lm.deactivate();
-            console.log(
-              '[IPC] set-natively-api-key: key cleared — natively_api Pro license deactivated.',
-            );
-            clearActiveModeOnLicenseLoss();
-            broadcast('license-status-changed', { isPremium: false });
-          }
-        } catch (e: any) {
-          console.warn(
-            '[IPC] set-natively-api-key: LicenseManager unavailable for Pro deactivation on key clear:',
-            e?.message,
-          );
-        }
-      }
-
       return { success: true };
     } catch (error: any) {
       console.error('Error saving Natively API key:', error);
@@ -1236,240 +1067,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { ok: true };
   });
 
-  // ── Free Trial IPC ───────────────────────────────────────────────────────────
-
-  // Start or resume a free trial. Fetches HWID, calls server, persists token locally.
-  safeHandle('trial:start', async () => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm = CredentialsManager.getInstance();
-
-      // Get hardware ID for HWID-binding
-      let hwid = 'unavailable';
-      try {
-        const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-        hwid = LicenseManager.getInstance().getHardwareId() || 'unavailable';
-      } catch {
-        /* LicenseManager not available — fall back */
-      }
-
-      const res = await fetch('https://api.natively.software/v1/trial/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hwid }),
-        signal: AbortSignal.timeout(10_000),
-      });
-
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as any;
-        return { ok: false, error: body.error || 'request_failed', status: res.status };
-      }
-
-      const data = (await res.json()) as any;
-
-      if (data.ok && data.trial_token && !data.expired) {
-        cm.setTrialToken(data.trial_token, data.expires_at, data.started_at);
-
-        // Auto-configure natively as the model + STT provider during trial
-        const prevSttProvider = cm.getSttProvider();
-        cm.setNativelyApiKey(TRIAL_SENTINEL_KEY); // sentinel — activates natively model routing
-        const newSttProvider = cm.getSttProvider();
-        if (newSttProvider !== prevSttProvider) {
-          await appState.reconfigureSttProvider();
-        }
-        const llmHelper = appState.processingHelper?.getLLMHelper?.();
-        if (llmHelper) llmHelper.setNativelyKey(TRIAL_SENTINEL_KEY);
-      }
-
-      const { trial_token, ...safeData } = data;
-      return { ok: true, ...safeData, hasToken: Boolean(data.trial_token) };
-    } catch (error: any) {
-      console.error('[IPC] trial:start failed:', error);
-      return { ok: false, error: error.message || 'network_error' };
-    }
-  });
-
-  // Poll the server for live trial status (remaining time + usage counters).
-  safeHandle('trial:status', async () => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const token = CredentialsManager.getInstance().getTrialToken();
-      if (!token) return { ok: false, error: 'no_trial_token' };
-
-      const res = await fetch('https://api.natively.software/v1/trial/status', {
-        headers: { 'x-trial-token': token },
-        signal: AbortSignal.timeout(8_000),
-      });
-
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as any;
-        return { ok: false, error: body.error || 'request_failed', status: res.status };
-      }
-
-      return await res.json();
-    } catch (error: any) {
-      return { ok: false, error: error.message || 'network_error' };
-    }
-  });
-
-  // Return local trial state from credentials (no network call — safe for startup check).
-  safeHandle('trial:get-local', async () => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm = CredentialsManager.getInstance();
-      const token = cm.getTrialToken();
-      if (!token) return { hasToken: false, trialClaimed: cm.getTrialClaimed() };
-      return {
-        hasToken: true,
-        trialClaimed: true,
-        expiresAt: cm.getTrialExpiresAt(),
-        startedAt: cm.getTrialStartedAt(),
-        expired: cm.getTrialExpiresAt()
-          ? new Date(cm.getTrialExpiresAt()!).getTime() < Date.now()
-          : false,
-      };
-    } catch {
-      return { hasToken: false, trialClaimed: false };
-    }
-  });
-
-  // Record the user's post-trial choice in analytics and clean up local state.
-  safeHandle('trial:convert', async (_, choice: string) => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const token = CredentialsManager.getInstance().getTrialToken();
-      if (!token) return { ok: true }; // no token to report
-
-      await fetch('https://api.natively.software/v1/trial/convert', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-trial-token': token },
-        body: JSON.stringify({ choice }),
-        signal: AbortSignal.timeout(5_000),
-      }).catch(() => {}); // fire-and-forget — don't block local cleanup on network failure
-
-      return { ok: true };
-    } catch {
-      return { ok: true };
-    }
-  });
-
-  // End trial via BYOK path: wipe Pro-ingested data, clear trial token + natively key.
-  safeHandle('trial:end-byok', async () => {
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm = CredentialsManager.getInstance();
-
-      // 1. Fire-and-forget analytics (non-blocking)
-      const token = cm.getTrialToken();
-      if (token) {
-        fetch('https://api.natively.software/v1/trial/convert', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-trial-token': token },
-          body: JSON.stringify({ choice: 'byok' }),
-          signal: AbortSignal.timeout(4_000),
-        }).catch(() => {});
-      }
-
-      // 2. Clear trial token
-      cm.clearTrialToken();
-
-      // 3. Clear the trial sentinel key + revert model / STT to open defaults
-      cm.setNativelyApiKey('');
-      const llmHelper = appState.processingHelper?.getLLMHelper?.();
-      if (llmHelper) llmHelper.setNativelyKey(null);
-      await appState.reconfigureSttProvider();
-
-      // 4. Deactivate Pro license (removes license.enc)
-      try {
-        const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-        await LicenseManager.getInstance().deactivate();
-      } catch {
-        /* LicenseManager not available in this build */
-      }
-
-      // 5. Disable knowledge mode + wipe orchestrator in-memory caches for resume/JD
-      try {
-        const orchestrator = appState.getKnowledgeOrchestrator();
-        if (orchestrator) {
-          orchestrator.setKnowledgeMode(false);
-          const { DocType } = require('../premium/electron/knowledge/types');
-          orchestrator.deleteDocumentsByType(DocType.RESUME);
-          orchestrator.deleteDocumentsByType(DocType.JD);
-        }
-      } catch {
-        /* ignore */
-      }
-
-      // 6. Wipe Pro-specific cached data from local SQLite
-      //    Targets: company dossiers, knowledge docs (+ cascades), resume nodes, user profile
-      //    NOT wiped: meetings, transcripts, chunks (user's own recordings)
-      try {
-        const sqliteDb = DatabaseManager.getInstance().getDb();
-        if (sqliteDb) {
-          sqliteDb.exec(`
-            DELETE FROM company_dossiers;
-            DELETE FROM knowledge_documents;
-            DELETE FROM resume_nodes;
-            DELETE FROM user_profile;
-          `);
-          console.log('[IPC] trial:end-byok: Pro data wiped from SQLite');
-        }
-      } catch (dbErr: any) {
-        console.warn('[IPC] trial:end-byok: SQLite wipe partial error:', dbErr.message);
-      }
-
-      // 7. Notify all windows to refresh license + model state
-      clearActiveModeOnLicenseLoss();
-      broadcast('license-status-changed', { isPremium: false });
-      broadcast('trial-ended', { choice: 'byok' });
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('[IPC] trial:end-byok error:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  // Wipe only Pro profile data (resume + JD + company dossiers) without clearing
-  // trial token or natively key. Called automatically when trial expires so that
-  // profile intelligence data can't linger in SQLite after the trial window closes.
-  safeHandle('trial:wipe-profile-data', async () => {
-    try {
-      // 1. Disable knowledge mode + wipe orchestrator in-memory caches
-      try {
-        const orchestrator = appState.getKnowledgeOrchestrator();
-        if (orchestrator) {
-          orchestrator.setKnowledgeMode(false);
-          const { DocType } = require('../premium/electron/knowledge/types');
-          orchestrator.deleteDocumentsByType(DocType.RESUME);
-          orchestrator.deleteDocumentsByType(DocType.JD);
-        }
-      } catch {
-        /* ignore — orchestrator may not be initialised */
-      }
-
-      // 2. Wipe Pro-specific SQLite tables
-      //    NOT wiped: meetings, transcripts, audio chunks (user's own recordings)
-      try {
-        const sqliteDb = DatabaseManager.getInstance().getDb();
-        if (sqliteDb) {
-          sqliteDb.exec(`
-            DELETE FROM company_dossiers;
-            DELETE FROM knowledge_documents;
-            DELETE FROM resume_nodes;
-            DELETE FROM user_profile;
-          `);
-        }
-      } catch (dbErr: any) {
-        console.warn('[IPC] trial:wipe-profile-data: SQLite wipe partial error:', dbErr.message);
-      }
-
-      return { success: true };
-    } catch (error: any) {
-      console.error('[IPC] trial:wipe-profile-data error:', error);
-      return { success: false, error: error.message };
-    }
-  });
 
   // Custom Provider Handlers
   safeHandle('get-custom-providers', async () => {
@@ -3584,14 +3181,6 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:upload-resume', async (_, filePath: string) => {
     try {
-      // Premium gate: require active license or free trial for profile features
-      if (!isProOrTrialActive()) {
-        return {
-          success: false,
-          error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
-        };
-      }
       console.log(`[IPC] profile:upload-resume called with: ${filePath}`);
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
@@ -3631,14 +3220,6 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:set-mode', async (_, enabled: boolean) => {
     try {
-      // Premium gate: only allow enabling profile mode with active license or free trial
-      if (enabled && !isProOrTrialActive()) {
-        return {
-          success: false,
-          error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
-        };
-      }
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
         return { success: false, error: 'Knowledge engine not initialized' };
@@ -3701,14 +3282,6 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:upload-jd', async (_, filePath: string) => {
     try {
-      // Premium gate
-      if (!isProOrTrialActive()) {
-        return {
-          success: false,
-          error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
-        };
-      }
       console.log(`[IPC] profile:upload-jd called with: ${filePath}`);
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
@@ -3742,14 +3315,6 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:research-company', async (_, companyName: string) => {
     try {
-      // Premium gate
-      if (!isProOrTrialActive()) {
-        return {
-          success: false,
-          error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
-        };
-      }
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
         return { success: false, error: 'Knowledge engine not initialized' };
@@ -3771,12 +3336,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           const {
             NativelySearchProvider,
           } = require('../premium/electron/knowledge/NativelySearchProvider');
-          // Pass the real trial token when key is the __trial__ sentinel so the
-          // server can authenticate via x-trial-token instead of the invalid key.
-          const trialToken = nativelyKey === TRIAL_SENTINEL_KEY ? cm.getTrialToken() : undefined;
-          engine.setSearchProvider(
-            new NativelySearchProvider(nativelyKey, trialToken ?? undefined),
-          );
+          engine.setSearchProvider(new NativelySearchProvider(nativelyKey));
           console.log(
             '[IPC] Company research: using Natively API search (no Tavily key configured)',
           );
@@ -3809,14 +3369,6 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:generate-negotiation', async (_, force: boolean = false) => {
     try {
-      // Premium gate
-      if (!isProOrTrialActive()) {
-        return {
-          success: false,
-          error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
-        };
-      }
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
         return { success: false, error: 'Knowledge engine not initialized' };
@@ -3905,7 +3457,6 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:get-persona', async () => {
     try {
-      if (!isProOrTrialActive()) return { success: false, content: '', error: 'pro_required' };
       const content = DatabaseManager.getInstance().getPersona();
       const llmHelper = appState.processingHelper?.getLLMHelper?.();
       if (llmHelper?.setPersonaPrompt) llmHelper.setPersonaPrompt(content);
@@ -3917,7 +3468,6 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:save-persona', async (_, content: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       if (typeof content !== 'string') return { success: false, error: 'invalid_persona' };
       const trimmed = content.trim().slice(0, 4000);
       DatabaseManager.getInstance().savePersona(trimmed);
@@ -4011,7 +3561,6 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:create', async (_, params: { name: string; templateType: string }) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       const { ModesManager } = require('./services/ModesManager');
       const mode = ModesManager.getInstance().createMode({
         name: params.name,
@@ -4034,17 +3583,6 @@ export function initializeIpcHandlers(appState: AppState): void {
       try {
         const { ModesManager } = require('./services/ModesManager');
         const mgr = ModesManager.getInstance();
-        // Gate: changing templateType to a non-general template requires pro.
-        // Also gate if the existing mode is already non-general (editing a pro mode requires pro).
-        if (!isProOrTrialActive()) {
-          if (updates.templateType && updates.templateType !== 'general') {
-            return { success: false, error: 'pro_required' };
-          }
-          const existing = mgr.getModes().find((m: any) => m.id === id);
-          if (existing && existing.templateType !== 'general') {
-            return { success: false, error: 'pro_required' };
-          }
-        }
         mgr.updateMode(id, updates);
         return { success: true };
       } catch (e: any) {
@@ -4056,7 +3594,6 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:delete', async (_, id: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       const { ModesManager } = require('./services/ModesManager');
       ModesManager.getInstance().deleteMode(id);
       return { success: true };
@@ -4068,16 +3605,6 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:set-active', async (_, id: string | null) => {
     try {
-      // Allow clearing (null) or setting general mode without pro; all other modes require pro
-      if (id !== null) {
-        const { ModesManager } = require('./services/ModesManager');
-        const targetMode = ModesManager.getInstance()
-          .getModes()
-          .find((m: any) => m.id === id);
-        if (targetMode && targetMode.templateType !== 'general' && !isProOrTrialActive()) {
-          return { success: false, error: 'pro_required' };
-        }
-      }
       const { ModesManager } = require('./services/ModesManager');
       // BUG-MODE-BLEEDING fix: clear mode-specific session context BEFORE switching modes
       // so Interview mode resume/JD context doesn't bleed into the new mode's responses.
@@ -4140,7 +3667,6 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:upload-reference-file', async (_, modeId: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       // Server-side allow-list. The dialog filter is a hint to users — never
       // trust it for validation, since the user can rename a file or the
       // filter can be bypassed by selecting "All Files" in the dialog UI.
@@ -4324,7 +3850,6 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:delete-reference-file', async (_, id: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       const { ModesManager } = require('./services/ModesManager');
       ModesManager.getInstance().deleteReferenceFile(id);
       return { success: true };
@@ -4350,8 +3875,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     'modes:add-note-section',
     async (_, modeId: string, title: string, description: string) => {
       try {
-        if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
-        const { ModesManager } = require('./services/ModesManager');
+          const { ModesManager } = require('./services/ModesManager');
         const section = ModesManager.getInstance().addNoteSection({ modeId, title, description });
         return { success: true, section };
       } catch (e: any) {
@@ -4365,8 +3889,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     'modes:update-note-section',
     async (_, id: string, updates: { title?: string; description?: string }) => {
       try {
-        if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
-        const { ModesManager } = require('./services/ModesManager');
+          const { ModesManager } = require('./services/ModesManager');
         ModesManager.getInstance().updateNoteSection(id, updates);
         return { success: true };
       } catch (e: any) {
@@ -4378,7 +3901,6 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:delete-note-section', async (_, id: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       const { ModesManager } = require('./services/ModesManager');
       ModesManager.getInstance().deleteNoteSection(id);
       return { success: true };
@@ -4390,7 +3912,6 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:remove-all-note-sections', async (_, modeId: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       const { ModesManager } = require('./services/ModesManager');
       ModesManager.getInstance().removeAllNoteSections(modeId);
       return { success: true };
