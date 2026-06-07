@@ -1,6 +1,7 @@
 import { animate, AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion';
 import {
   ArrowRight,
+  Check,
   ChevronDown,
   Code,
   Copy,
@@ -8,12 +9,14 @@ import {
   Image,
   LayoutGrid,
   Lightbulb,
+  Lock,
   MessageSquare,
   Mic,
   Monitor,
   Pencil,
   PointerOff,
   RefreshCw,
+  Settings,
   ShieldCheck,
   SlidersHorizontal,
   X,
@@ -90,6 +93,7 @@ interface NativelyInterfaceProps {
   onEndMeeting?: () => void;
   overlayOpacity?: number;
   interfaceTheme?: MeetingInterfaceTheme;
+  onOpenModes?: () => void;
 }
 
 // PERF: HighlightedCode renders a single fenced code block. Hoisted to module
@@ -326,6 +330,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   onEndMeeting,
   overlayOpacity = OVERLAY_OPACITY_DEFAULT,
   interfaceTheme = 'default',
+  onOpenModes,
 }) => {
   const isLightTheme = useResolvedTheme() === 'light';
   const isGlassTheme = interfaceTheme === 'liquid-glass';
@@ -442,6 +447,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   // Active mode name (shown as a badge near the Modes button)
   const [activeModeLabel, setActiveModeLabel] = useState<string | null>(null);
+  const [modes, setModes] = useState<Array<{ id: string; name: string; templateType: string; isActive: boolean }>>([]);
+  const [isModeDropdownOpen, setIsModeDropdownOpen] = useState(false);
+  const [modeDropdownError, setModeDropdownError] = useState<string | null>(null);
+  const modeDropdownRef = useRef<HTMLDivElement>(null);
   const [llmProviderLabel, setLlmProviderLabel] = useState<string>('unknown');
   const [llmPrivacyLabel, setLlmPrivacyLabel] = useState<string>('Checking privacy route');
   const [screenContextStatus, setScreenContextStatus] = useState<
@@ -458,18 +467,42 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   );
 
   useEffect(() => {
-    // Load initial active mode name
+    // Load initial active mode name + mode list
     window.electronAPI
       ?.modesGetActive?.()
       .then((mode: { name: string } | null) => setActiveModeLabel(mode?.name ?? null))
+      .catch(() => {});
+    window.electronAPI
+      ?.modesGetAll?.()
+      .then((allModes: Array<{ id: string; name: string; templateType: string; isActive: boolean }>) =>
+        setModes(allModes.map((m) => ({ id: m.id, name: m.name, templateType: m.templateType, isActive: m.isActive }))),
+      )
       .catch(() => {});
     // Live-update whenever mode is activated/deactivated
     const unsub = window.electronAPI?.onModeChanged?.(
       (data: { id: string | null; name: string | null }) => {
         setActiveModeLabel(data.name);
+        // Refresh active state in the local list
+        setModes((prev) =>
+          prev.map((m) => ({
+            ...m,
+            isActive: data.id ? m.id === data.id : false,
+          })),
+        );
       },
     );
     return () => unsub?.();
+  }, []);
+
+  // Close mode dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (modeDropdownRef.current && !modeDropdownRef.current.contains(event.target as Node)) {
+        setIsModeDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   useEffect(() => {
@@ -3245,14 +3278,105 @@ Provide only the answer, nothing else.`;
               {isGlassTheme && <GlassEffectLayer parentRef={shellRef} cornerRadius={24} />}
 
               <div className="relative no-drag flex flex-wrap items-center justify-center gap-1.5 px-4 pt-3 pb-1">
-                <div
-                  className={`${statusPillBaseClass} overlay-text-primary`}
-                  title={
-                    activeModeLabel ? `Active mode: ${activeModeLabel}` : 'No active mode selected'
-                  }
-                >
-                  <LayoutGrid className="h-3 w-3 opacity-70" />
-                  <span>{activeModeLabel ? `Mode: ${activeModeLabel}` : 'General mode'}</span>
+                <div ref={modeDropdownRef} className="relative">
+                  <div
+                    className={`${statusPillBaseClass} overlay-text-primary cursor-pointer hover:opacity-80 transition-opacity`}
+                    title={
+                      activeModeLabel ? `Active mode: ${activeModeLabel}` : 'No active mode selected'
+                    }
+                    onClick={() => setIsModeDropdownOpen((prev) => !prev)}
+                  >
+                    <LayoutGrid className="h-3 w-3 opacity-70" />
+                    <span>{activeModeLabel ? `Mode: ${activeModeLabel}` : 'General mode'}</span>
+                    <ChevronDown
+                      size={12}
+                      className={`opacity-60 transition-transform duration-200 ${isModeDropdownOpen ? 'rotate-180' : ''}`}
+                    />
+                  </div>
+                  <AnimatePresence>
+                    {isModeDropdownOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 4, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                        transition={{ duration: 0.15, ease: 'easeOut' }}
+                        className="absolute top-full left-0 mt-1.5 w-60 z-50 rounded-xl border border-white/10 bg-[#1a1a1a] shadow-xl backdrop-blur-xl overflow-hidden"
+                      >
+                        <div className="max-h-64 overflow-y-auto p-1.5 space-y-0.5">
+                          {modes.length === 0 && (
+                            <div className="px-3 py-2 text-[11px] text-text-tertiary italic text-center">
+                              暂无模式
+                            </div>
+                          )}
+                          {modes.map((mode) => {
+                            const isSelected = mode.isActive;
+                            const isGeneral = mode.templateType === 'general';
+                            return (
+                              <button
+                                key={mode.id}
+                                onClick={async () => {
+                                  if (isSelected) {
+                                    setIsModeDropdownOpen(false);
+                                    setModeDropdownError(null);
+                                    return;
+                                  }
+                                  if (!isGeneral) {
+                                    // Pro check — attempt set-active and let backend gate it
+                                    const result = await window.electronAPI?.modesSetActive?.(mode.id);
+                                    if (result?.error === 'pro_required') {
+                                      setModeDropdownError('Pro 功能：切换到高级模式需要订阅');
+                                      return;
+                                    }
+                                  } else {
+                                    await window.electronAPI?.modesSetActive?.(mode.id);
+                                  }
+                                  setModeDropdownError(null);
+                                  setIsModeDropdownOpen(false);
+                                }}
+                                className={`w-full rounded-[10px] px-3 py-2 flex items-center justify-between transition-all duration-200 ${isSelected ? 'bg-bg-item-active text-text-primary' : 'hover:bg-bg-item-surface text-text-secondary hover:text-text-primary'}`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-xs font-medium truncate">{mode.name}</span>
+                                  {!isGeneral && (
+                                    <Lock size={10} className="opacity-50 shrink-0" />
+                                  )}
+                                </div>
+                                {isSelected && (
+                                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                                    <Check size={14} className="text-accent-primary shrink-0" strokeWidth={3} />
+                                  </motion.div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <AnimatePresence>
+                          {modeDropdownError && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="px-3 py-2 text-[11px] text-amber-400 bg-amber-400/10 border-t border-amber-400/10"
+                            >
+                              {modeDropdownError}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                        <div className="border-t border-white/5 p-1.5">
+                          <button
+                            onClick={() => {
+                              setIsModeDropdownOpen(false);
+                              onOpenModes?.();
+                            }}
+                            className="w-full rounded-[10px] px-3 py-2 flex items-center gap-2 text-[11px] text-text-tertiary hover:text-text-primary hover:bg-bg-item-surface transition-all duration-200"
+                          >
+                            <Settings size={12} />
+                            <span>管理模式...</span>
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
                 <div
                   className={`${statusPillBaseClass} ${getStatusToneClass(sttSummary.tone)}`}

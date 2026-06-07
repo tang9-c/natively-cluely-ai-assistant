@@ -502,6 +502,7 @@ const App: React.FC = () => {
                   onEndMeeting={handleEndMeeting}
                   overlayOpacity={overlayOpacity}
                   interfaceTheme={meetingInterfaceTheme}
+                  onOpenModes={() => openModesExclusive()}
                 />
               </div>
               <ToastViewport />
