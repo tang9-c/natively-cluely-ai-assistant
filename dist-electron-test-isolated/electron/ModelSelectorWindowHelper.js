@@ -12,8 +12,6 @@ const startUrl = isDev
     : `file://${node_path_1.default.join(electron_1.app.getAppPath(), "dist/index.html")}`;
 class ModelSelectorWindowHelper {
     window = null;
-    contentProtection = false;
-    opacityTimeout = null;
     // Store offsets relative to main window if needed, but absolute positioning is simpler for dropdowns
     lastBlurTime = 0;
     ignoreBlur = false;
@@ -60,32 +58,12 @@ class ModelSelectorWindowHelper {
         // Standard dropdown positioning
         this.window.setPosition(Math.round(x), Math.round(y));
         this.ensureVisibleOnScreen();
-        if (process.platform === 'win32' && this.contentProtection) {
-            this.window.setOpacity(0);
-            if (activate)
-                this.window.show();
-            else
-                this.window.showInactive();
-            this.window.setContentProtection(true);
-            if (this.opacityTimeout)
-                clearTimeout(this.opacityTimeout);
-            this.opacityTimeout = setTimeout(() => {
-                if (this.window && !this.window.isDestroyed()) {
-                    this.window.setOpacity(1);
-                    if (activate)
-                        this.window.focus();
-                }
-            }, 60);
-        }
-        else {
-            this.window.setContentProtection(this.contentProtection);
-            if (activate)
-                this.window.show();
-            else
-                this.window.showInactive();
-            if (activate)
-                this.window.focus();
-        }
+        if (activate)
+            this.window.show();
+        else
+            this.window.showInactive();
+        if (activate)
+            this.window.focus();
     }
     hideWindow() {
         if (this.window && !this.window.isDestroyed()) {
@@ -160,9 +138,6 @@ class ModelSelectorWindowHelper {
             // Initial defaults - will be updated in showWindow
             this.window.setHiddenInMissionControl(true);
         }
-        // Apply content protection for Undetectable Mode
-        console.log(`[ModelSelectorWindowHelper] Creating window with Content Protection: ${this.contentProtection}`);
-        this.window.setContentProtection(this.contentProtection);
         // Load with query param for routing
         const url = isDev
             ? `${startUrl}?window=model-selector`
@@ -243,23 +218,6 @@ class ModelSelectorWindowHelper {
             newY = bounds.y;
         }
         this.window.setPosition(newX, newY);
-    }
-    setContentProtection(enable) {
-        console.log(`[ModelSelectorWindowHelper] Setting content protection to: ${enable}`);
-        this.contentProtection = enable;
-        if (this.window && !this.window.isDestroyed()) {
-            this.window.setContentProtection(enable);
-        }
-    }
-    syncActivationPolicy() {
-        if (process.platform !== 'win32')
-            return;
-        if (!this.window || this.window.isDestroyed())
-            return;
-        this.window.setContentProtection(this.contentProtection);
-        if (this.window.isVisible()) {
-            this.window.setOpacity(1);
-        }
     }
 }
 exports.ModelSelectorWindowHelper = ModelSelectorWindowHelper;

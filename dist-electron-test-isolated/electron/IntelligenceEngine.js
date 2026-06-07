@@ -33,9 +33,7 @@ class IntelligenceEngine extends events_1.EventEmitter {
     answerLLM = null;
     assistLLM = null;
     clarifyLLM = null;
-    followUpLLM = null;
     recapLLM = null;
-    followUpQuestionsLLM = null;
     whatToAnswerLLM = null;
     codeHintLLM = null;
     brainstormLLM = null;
@@ -101,9 +99,7 @@ class IntelligenceEngine extends events_1.EventEmitter {
         this.answerLLM = new llm_1.AnswerLLM(this.llmHelper);
         this.assistLLM = new llm_1.AssistLLM(this.llmHelper);
         this.clarifyLLM = new llm_1.ClarifyLLM(this.llmHelper);
-        this.followUpLLM = new llm_1.FollowUpLLM(this.llmHelper);
         this.recapLLM = new llm_1.RecapLLM(this.llmHelper);
-        this.followUpQuestionsLLM = new llm_1.FollowUpQuestionsLLM(this.llmHelper);
         this.whatToAnswerLLM = new llm_1.WhatToAnswerLLM(this.llmHelper);
         this.codeHintLLM = new llm_1.CodeHintLLM(this.llmHelper);
         this.brainstormLLM = new llm_1.BrainstormLLM(this.llmHelper);
@@ -200,13 +196,6 @@ class IntelligenceEngine extends events_1.EventEmitter {
                 // Intentionally swallow — dynamic actions are auxiliary and
                 // must never break the answer pipeline.
                 console.warn('[IntelligenceEngine] detectAndEmitDynamicActions failed', err?.message);
-            }
-        }
-        // Check for follow-up intent if user is speaking
-        if (result && !skipRefinementCheck && result.role === 'user' && this.session.getLastAssistantMessage()) {
-            const { isRefinement, intent } = detectRefinementIntent(segment.text.trim());
-            if (isRefinement) {
-                this.runFollowUp(intent, segment.text.trim());
             }
         }
     }
@@ -347,9 +336,6 @@ class IntelligenceEngine extends events_1.EventEmitter {
                 return;
             case 'recap':
                 await this.runRecap();
-                return;
-            case 'follow_up_questions':
-                await this.runFollowUpQuestions();
                 return;
             case 'brainstorm':
                 await this.runBrainstorm(undefined, question);
@@ -565,70 +551,7 @@ class IntelligenceEngine extends events_1.EventEmitter {
         }
     }
     /**
-     * MODE 3: Follow-Up (Refinement)
-     * Modify the last assistant message
-     */
-    async runFollowUp(intent, userRequest) {
-        console.log(`[IntelligenceEngine] runFollowUp called with intent: ${intent}`);
-        const lastMsg = this.session.getLastAssistantMessage();
-        if (!lastMsg) {
-            console.warn('[IntelligenceEngine] No lastAssistantMessage found for follow-up');
-            return null;
-        }
-        this.setMode('follow_up');
-        try {
-            if (!this.followUpLLM) {
-                console.error('[IntelligenceEngine] FollowUpLLM not initialized');
-                this.setMode('idle');
-                return null;
-            }
-            const context = this.session.getFormattedContext(60);
-            const refinementRequest = userRequest || intent;
-            const generationId = ++this.currentGenerationId;
-            let fullRefined = "";
-            const stream = this.followUpLLM.generateStream(lastMsg, refinementRequest, context);
-            let streamAborted = false;
-            for await (const token of stream) {
-                if (this.currentGenerationId !== generationId) {
-                    console.log('[IntelligenceEngine] _follow_up stream aborted by new generation');
-                    await stream.return(undefined);
-                    streamAborted = true;
-                    break;
-                }
-                this.emit('refined_answer_token', token, intent);
-                fullRefined += token;
-            }
-            if (!streamAborted && fullRefined) {
-                this.session.addAssistantMessage(fullRefined);
-                this.emit('refined_answer', fullRefined, intent);
-                const intentMap = {
-                    'expand': 'Expand Answer',
-                    'rephrase': 'Rephrase Answer',
-                    'add_example': 'Add Example',
-                    'more_confident': 'Make More Confident',
-                    'more_casual': 'Make More Casual',
-                    'more_formal': 'Make More Formal',
-                    'simplify': 'Simplify Answer'
-                };
-                const displayQuestion = userRequest || intentMap[intent] || `Refining: ${intent}`;
-                this.session.pushUsage({
-                    type: 'followup',
-                    timestamp: Date.now(),
-                    question: displayQuestion,
-                    answer: fullRefined
-                });
-            }
-            this.setMode('idle');
-            return fullRefined;
-        }
-        catch (error) {
-            this.emit('error', error, 'follow_up');
-            this.setMode('idle');
-            return null;
-        }
-    }
-    /**
-     * MODE 4: Recap (Summary)
+     * MODE 3: Recap (Summary)
      * Neutral conversation summary
      */
     async runRecap() {
@@ -663,9 +586,7 @@ class IntelligenceEngine extends events_1.EventEmitter {
             // Only emit final if not aborted
             if (!streamAborted && fullSummary && this.currentGenerationId === generationId) {
                 this.emit('recap', fullSummary);
-                // Track recap as an assistant message so "make it shorter" / other
-                // refinements can target it via FollowUpLLM (which reads the last
-                // assistant message).
+                // Track recap as an assistant message.
                 this.session.addAssistantMessage(fullSummary);
                 this.session.pushUsage({
                     type: 'chat',
@@ -737,63 +658,6 @@ class IntelligenceEngine extends events_1.EventEmitter {
         }
         catch (error) {
             this.emit('error', error, 'clarify');
-            this.setMode('idle');
-            return null;
-        }
-    }
-    /**
-     * MODE 6: Follow-Up Questions
-     * Suggest strategic questions for the user to ask
-     */
-    async runFollowUpQuestions() {
-        console.log('[IntelligenceEngine] runFollowUpQuestions called');
-        this.setMode('follow_up_questions');
-        try {
-            if (!this.followUpQuestionsLLM) {
-                console.error('[IntelligenceEngine] FollowUpQuestionsLLM not initialized');
-                this.setMode('idle');
-                return null;
-            }
-            const context = this.session.getFormattedContext(120);
-            if (!context) {
-                console.warn('[IntelligenceEngine] No context available for follow-up questions');
-                this.setMode('idle');
-                return null;
-            }
-            const generationId = ++this.currentGenerationId;
-            let fullQuestions = "";
-            const stream = this.followUpQuestionsLLM.generateStream(context);
-            let streamAborted = false;
-            for await (const token of stream) {
-                if (this.currentGenerationId !== generationId) {
-                    console.log('[IntelligenceEngine] _follow_up_questions stream aborted by new generation');
-                    await stream.return(undefined);
-                    streamAborted = true;
-                    break;
-                }
-                this.emit('follow_up_questions_token', token);
-                fullQuestions += token;
-            }
-            if (streamAborted) {
-                this.setMode('idle');
-                return null;
-            }
-            if (fullQuestions && this.currentGenerationId === generationId) {
-                this.emit('follow_up_questions_update', fullQuestions);
-                this.session.pushUsage({
-                    type: 'followup_questions',
-                    timestamp: Date.now(),
-                    question: 'Generate Follow-up Questions',
-                    answer: fullQuestions
-                });
-            }
-            if (this.currentGenerationId === generationId) {
-                this.setMode('idle');
-            }
-            return fullQuestions;
-        }
-        catch (error) {
-            this.emit('error', error, 'follow_up_questions');
             this.setMode('idle');
             return null;
         }

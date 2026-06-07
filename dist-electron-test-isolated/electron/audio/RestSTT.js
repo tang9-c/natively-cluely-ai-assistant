@@ -16,10 +16,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RestSTT = void 0;
-const events_1 = require("events");
 const axios_1 = __importDefault(require("axios"));
 const form_data_1 = __importDefault(require("form-data"));
 const languages_1 = require("../config/languages");
+const BaseSTT_1 = require("./BaseSTT");
 const PROVIDER_CONFIGS = {
     groq: (apiKey, region, languageKey) => {
         const lang = (languageKey && languageKey !== 'auto') ? languages_1.RECOGNITION_LANGUAGES[languageKey]?.iso639 : undefined;
@@ -182,7 +182,7 @@ const MIN_BUFFER_BYTES = 4000;
 const SAFETY_NET_INTERVAL_MS = 10000;
 // Silence threshold - if RMS is below this, skip the upload
 const SILENCE_RMS_THRESHOLD = 50;
-class RestSTT extends events_1.EventEmitter {
+class RestSTT extends BaseSTT_1.BaseSTT {
     provider;
     apiKey;
     region;
@@ -190,12 +190,9 @@ class RestSTT extends events_1.EventEmitter {
     chunks = [];
     totalBufferedBytes = 0;
     safetyNetTimer = null;
-    isActive = false;
     isUploading = false;
     flushPending = false; // Bug #2 fix: queue flush when upload in progress
     // Audio config (must match SystemAudioCapture output)
-    sampleRate = 16000;
-    numChannels = 1;
     bitsPerSample = 16;
     constructor(provider, apiKey, modelOverride, region) {
         super();
@@ -220,19 +217,19 @@ class RestSTT extends events_1.EventEmitter {
      * Update sample rate to match the audio source
      */
     setSampleRate(rate) {
-        if (this.sampleRate === rate)
+        if (this._sampleRate === rate)
             return;
         console.log(`[RestSTT] Updating sample rate to ${rate}Hz`);
-        this.sampleRate = rate;
+        this._sampleRate = rate;
     }
     /**
      * Update channel count
      */
     setAudioChannelCount(count) {
-        if (this.numChannels === count)
+        if (this._numChannels === count)
             return;
         console.log(`[RestSTT] Updating channel count to ${count}`);
-        this.numChannels = count;
+        this._numChannels = count;
     }
     /**
      * Update recognition language
@@ -251,10 +248,10 @@ class RestSTT extends events_1.EventEmitter {
      * Start the upload timer
      */
     start() {
-        if (this.isActive)
+        if (this._isActive)
             return;
         console.log(`[RestSTT] Starting (${this.provider})...`);
-        this.isActive = true;
+        this._isActive = true;
         this.chunks = [];
         this.totalBufferedBytes = 0;
         // Safety-net timer: flush even during continuous speech to prevent
@@ -268,10 +265,10 @@ class RestSTT extends events_1.EventEmitter {
      * Stop the upload timer and flush remaining buffer
      */
     stop() {
-        if (!this.isActive)
+        if (!this._isActive)
             return;
         console.log(`[RestSTT] Stopping (${this.provider})...`);
-        this.isActive = false;
+        this._isActive = false;
         if (this.safetyNetTimer) {
             clearInterval(this.safetyNetTimer);
             this.safetyNetTimer = null;
@@ -283,7 +280,7 @@ class RestSTT extends events_1.EventEmitter {
      * Write raw PCM audio data to the internal buffer
      */
     write(audioData) {
-        if (!this.isActive)
+        if (!this._isActive)
             return;
         this.chunks.push(audioData);
         this.totalBufferedBytes += audioData.length;
@@ -294,13 +291,13 @@ class RestSTT extends events_1.EventEmitter {
      * word-breaks, so we flush immediately without adding redundant TS debouncing.
      */
     notifySpeechEnded() {
-        if (!this.isActive)
+        if (!this._isActive)
             return;
         console.log(`[RestSTT] Speech ended detected by native VAD — flushing buffer immediately`);
         this.flushAndUpload();
     }
     finalize() {
-        if (!this.isActive)
+        if (!this._isActive)
             return;
         console.log(`[RestSTT] Finalize — flushing buffer immediately`);
         this.flushAndUpload();
@@ -342,7 +339,7 @@ class RestSTT extends events_1.EventEmitter {
         // 6x smaller WAV file, reducing upload latency and keeping file sizes well
         // under the Groq/OpenAI 25MB limit even for 10-second safety-net flushes.
         const TARGET_RATE = 16_000;
-        const pcm16k = this.sampleRate === TARGET_RATE && this.numChannels === 1
+        const pcm16k = this._sampleRate === TARGET_RATE && this._numChannels === 1
             ? rawPcm
             : this.resampleTo16kHz(rawPcm);
         // Add WAV header — stamp with actual rate/channel after resampling (always 16kHz mono)
@@ -526,30 +523,30 @@ class RestSTT extends events_1.EventEmitter {
             inputS16[i] = raw.readInt16LE(i * 2);
         }
         // Already at target rate and mono — return as-is
-        if (this.sampleRate === TARGET_RATE && this.numChannels === 1) {
+        if (this._sampleRate === TARGET_RATE && this._numChannels === 1) {
             return Buffer.from(inputS16.buffer);
         }
         // Mix down multi-channel to mono
         let monoS16;
-        if (this.numChannels > 1) {
-            const monoLen = Math.floor(inputS16.length / this.numChannels);
+        if (this._numChannels > 1) {
+            const monoLen = Math.floor(inputS16.length / this._numChannels);
             monoS16 = new Int16Array(monoLen);
             for (let i = 0; i < monoLen; i++) {
                 let sum = 0;
-                for (let c = 0; c < this.numChannels; c++) {
-                    sum += inputS16[i * this.numChannels + c];
+                for (let c = 0; c < this._numChannels; c++) {
+                    sum += inputS16[i * this._numChannels + c];
                 }
-                monoS16[i] = Math.round(sum / this.numChannels);
+                monoS16[i] = Math.round(sum / this._numChannels);
             }
         }
         else {
             monoS16 = inputS16;
         }
         // Decimate to target rate
-        if (this.sampleRate === TARGET_RATE) {
+        if (this._sampleRate === TARGET_RATE) {
             return Buffer.from(monoS16.buffer);
         }
-        const factor = this.sampleRate / TARGET_RATE;
+        const factor = this._sampleRate / TARGET_RATE;
         const outLen = Math.floor(monoS16.length / factor);
         const outS16 = new Int16Array(outLen);
         for (let i = 0; i < outLen; i++) {

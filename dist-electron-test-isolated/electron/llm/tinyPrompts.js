@@ -4,7 +4,7 @@
 // Each TINY_* is <=800 tokens (~3200 chars). No XML, no nested rules, imperative voice.
 // Cloud models continue to use the full prompts in prompts.ts.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TINY_PROMPTS_SET = exports.TINY_MODE_TECHNICAL_INTERVIEW_PROMPT = exports.TINY_MODE_LECTURE_PROMPT = exports.TINY_MODE_TEAM_MEET_PROMPT = exports.TINY_MODE_RECRUITING_PROMPT = exports.TINY_MODE_SALES_PROMPT = exports.TINY_MODE_LOOKING_FOR_WORK_PROMPT = exports.TINY_MODE_GENERAL_PROMPT = exports.TINY_FOLLOWUP_EMAIL_PROMPT = exports.TINY_SUMMARY_JSON_PROMPT = exports.TINY_TITLE_PROMPT = exports.TINY_CODE_HINT_PROMPT = exports.TINY_CLARIFY_PROMPT = exports.TINY_BRAINSTORM_PROMPT = exports.TINY_FOLLOW_UP_QUESTIONS_PROMPT = exports.TINY_FOLLOWUP_PROMPT = exports.TINY_RECAP_PROMPT = exports.TINY_ASSIST_PROMPT = exports.TINY_WHAT_TO_ANSWER_PROMPT = exports.TINY_ANSWER_PROMPT = exports.TINY_SYSTEM_PROMPT = exports.TINY_CORE = void 0;
+exports.TINY_PROMPTS_SET = exports.TINY_MODE_TECHNICAL_INTERVIEW_PROMPT = exports.TINY_MODE_LECTURE_PROMPT = exports.TINY_MODE_TEAM_MEET_PROMPT = exports.TINY_MODE_RECRUITING_PROMPT = exports.TINY_MODE_SALES_PROMPT = exports.TINY_MODE_LOOKING_FOR_WORK_PROMPT = exports.TINY_MODE_GENERAL_PROMPT = exports.TINY_SUMMARY_JSON_PROMPT = exports.TINY_TITLE_PROMPT = exports.TINY_CODE_HINT_PROMPT = exports.TINY_CLARIFY_PROMPT = exports.TINY_BRAINSTORM_PROMPT = exports.TINY_FOLLOW_UP_QUESTIONS_PROMPT = exports.TINY_FOLLOWUP_PROMPT = exports.TINY_RECAP_PROMPT = exports.TINY_ASSIST_PROMPT = exports.TINY_WHAT_TO_ANSWER_PROMPT = exports.TINY_ANSWER_PROMPT = exports.TINY_SYSTEM_PROMPT = exports.TINY_CORE = void 0;
 exports.TINY_CORE = `You are Natively, an AI assistant by Evin John. Follow the active mode prompt for voice and shape.
 
 CORE RULES:
@@ -91,7 +91,6 @@ exports.TINY_TITLE_PROMPT = `Generate a concise 3-6 word title for this meeting 
 exports.TINY_SUMMARY_JSON_PROMPT = `Convert this conversation into concise meeting notes. Return ONLY valid JSON with this shape:
 {"summary": string, "keyPoints": string[], "actionItems": string[], "decisions": string[]}
 No markdown, no commentary. JSON only.`;
-exports.TINY_FOLLOWUP_EMAIL_PROMPT = `Write a short professional follow-up email after a meeting. 3-5 sentences. Friendly, specific, no fluff. Output the email body only — no subject line, no signature.`;
 exports.TINY_MODE_GENERAL_PROMPT = `${exports.TINY_CORE}
 
 VOICE: Adapt to context. If the input is a live interview/meeting turn, speak in first person as the user. If the input is a direct factual or coding question to you, answer it directly as an assistant.
@@ -209,8 +208,7 @@ Never write "Thinking:". Never add follow-up questions, edge cases, or extra sec
 // Keep in sync with the individual exports above.
 exports.TINY_PROMPTS_SET = new Set([
     exports.TINY_SYSTEM_PROMPT, exports.TINY_ANSWER_PROMPT, exports.TINY_WHAT_TO_ANSWER_PROMPT,
-    exports.TINY_ASSIST_PROMPT, exports.TINY_RECAP_PROMPT, exports.TINY_FOLLOWUP_PROMPT,
-    exports.TINY_FOLLOW_UP_QUESTIONS_PROMPT, exports.TINY_BRAINSTORM_PROMPT,
+    exports.TINY_ASSIST_PROMPT, exports.TINY_RECAP_PROMPT, exports.TINY_BRAINSTORM_PROMPT,
     exports.TINY_CLARIFY_PROMPT, exports.TINY_CODE_HINT_PROMPT,
 ]);
 //# sourceMappingURL=tinyPrompts.js.map

@@ -1,10 +1,44 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppState = void 0;
 const electron_1 = require("electron");
+const crypto = __importStar(require("crypto"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const electron_updater_1 = require("electron-updater");
@@ -101,20 +135,6 @@ async function ensureMacMicrophoneAccess(context) {
         return false;
     }
 }
-/**
- * Check macOS Screen Recording (kTCCServiceScreenCapture) permission status.
- *
- * Electron has no askForMediaAccess('screen') API — macOS only shows the TCC
- * dialog when the app actually calls a protected API (SCK / CoreAudio tap).
- * If the permission is 'denied', we cannot re-prompt; the user must re-enable
- * manually in System Settings → Privacy & Security → Screen Recording.
- *
- * Returns false only when the permission is explicitly 'denied'. All other
- * statuses ('granted', 'not-determined', 'restricted') return true because:
- *   - 'granted':         already allowed — nothing to do.
- *   - 'not-determined':  macOS will show the dialog when SCK/CoreAudio tap runs.
- *   - 'restricted':      managed device policy — nothing we can do programmatically.
- */
 function getMacScreenCaptureStatus() {
     if (process.platform !== 'darwin')
         return 'granted';
@@ -130,6 +150,29 @@ function getMacScreenCaptureStatus() {
     catch (error) {
         console.error('[Main] Failed to check screen recording permission:', error);
         return 'not-determined';
+    }
+}
+async function resolveMacScreenCaptureCapability(context) {
+    const status = getMacScreenCaptureStatus();
+    if (process.platform !== 'darwin' || !electron_1.app.isPackaged || status !== 'denied') {
+        return { status, capturable: true, effectiveDenied: false, sourceCount: 0 };
+    }
+    try {
+        const sources = await electron_1.desktopCapturer.getSources({
+            types: ['screen'],
+            thumbnailSize: { width: 1, height: 1 },
+        });
+        const sourceCount = sources.filter((source) => source.id.startsWith('screen:')).length;
+        const capturable = sourceCount > 0;
+        if (capturable) {
+            console.warn(`[Main] Screen Recording status is denied during ${context}, but capture probe succeeded; continuing without permission banner.`);
+        }
+        return { status, capturable, effectiveDenied: !capturable, sourceCount };
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`[Main] Screen Recording capture probe failed during ${context}: ${message}`);
+        return { status, capturable: false, effectiveDenied: true, sourceCount: 0, error: message };
     }
 }
 function formatPermissionMessage(reason, extra) {
@@ -200,13 +243,7 @@ const SystemAudioCapture_1 = require("./audio/SystemAudioCapture");
 const MicrophoneCapture_1 = require("./audio/MicrophoneCapture");
 const AudioDevices_1 = require("./audio/AudioDevices");
 const nativeModuleLoader_1 = require("./audio/nativeModuleLoader");
-const GoogleSTT_1 = require("./audio/GoogleSTT");
-const RestSTT_1 = require("./audio/RestSTT");
-const DeepgramStreamingSTT_1 = require("./audio/DeepgramStreamingSTT");
-const SonioxStreamingSTT_1 = require("./audio/SonioxStreamingSTT");
-const ElevenLabsStreamingSTT_1 = require("./audio/ElevenLabsStreamingSTT");
-const OpenAIStreamingSTT_1 = require("./audio/OpenAIStreamingSTT");
-const NativelyProSTT_1 = require("./audio/NativelyProSTT");
+const sttRegistry_1 = require("./audio/sttRegistry");
 const ThemeManager_1 = require("./ThemeManager");
 const RAGManager_1 = require("./rag/RAGManager");
 const DatabaseManager_1 = require("./db/DatabaseManager");
@@ -239,10 +276,8 @@ class AppState {
     knowledgeOrchestrator = null;
     tray = null;
     updateAvailable = false;
-    disguiseMode = 'none';
     // View management
     view = "queue";
-    isUndetectable = false;
     problemInfo = null; // Allow null
     hasDebugged = false;
     isMeetingActive = false; // Guard for session state leaks
@@ -268,9 +303,6 @@ class AppState {
     // first-chunk handler reads the freshly-detected native rate.
     _sysSttRateApplied = false;
     _micSttRateApplied = false;
-    _disguiseTimers = []; // Track forceUpdate timeouts
-    _dockDebounceTimer = null; // Debounce dock state changes
-    _dockReassertTimers = []; // Re-assert dock-hidden state after show+focus
     _ollamaBootstrapPromise = null;
     screenshotCaptureInProgress = false;
     // Processing events
@@ -291,11 +323,9 @@ class AppState {
     constructor() {
         // 1. Load boot-critical settings first (used by WindowHelpers)
         const settingsManager = SettingsManager_1.SettingsManager.getInstance();
-        this.isUndetectable = settingsManager.get('isUndetectable') ?? false;
-        this.disguiseMode = settingsManager.get('disguiseMode') ?? 'none';
         this._verboseLogging = settingsManager.get('verboseLogging') ?? false;
         (0, verboseLog_1.setVerboseLoggingFlag)(this._verboseLogging);
-        console.log(`[AppState] Initialized with isUndetectable=${this.isUndetectable}, disguiseMode=${this.disguiseMode}, verboseLogging=${this._verboseLogging}`);
+        console.log(`[AppState] Initialized with verboseLogging=${this._verboseLogging}`);
         // 2. Initialize Helpers with loaded state
         this.windowHelper = new WindowHelper_1.WindowHelper(this);
         this.settingsWindowHelper = new SettingsWindowHelper_1.SettingsWindowHelper();
@@ -304,10 +334,9 @@ class AppState {
         // 3. Initialize other helpers
         this.screenshotHelper = new ScreenshotHelper_1.ScreenshotHelper(this.view);
         this.processingHelper = new ProcessingHelper_1.ProcessingHelper(this);
-        this.windowHelper.setContentProtection(this.isUndetectable);
-        this.settingsWindowHelper.setContentProtection(this.isUndetectable);
-        this.modelSelectorWindowHelper.setContentProtection(this.isUndetectable);
-        this.cropperWindowHelper.setContentProtection(this.isUndetectable);
+        if (process.platform === 'win32' || process.platform === 'darwin') {
+            this.cropperWindowHelper.preload();
+        }
         if (process.platform === 'win32' || process.platform === 'darwin') {
             this.cropperWindowHelper.preload();
         }
@@ -379,11 +408,6 @@ class AppState {
                     const preview = await this.getImagePreview(screenshotPath);
                     // Ensure the window is visible so the user can see the response without stealing focus
                     this.showMainWindow(true);
-                    // win.focus() can cause macOS to re-activate the app. Re-hide the dock
-                    // if we are in undetectable mode.
-                    if (process.platform === 'darwin' && this.isUndetectable) {
-                        electron_1.app.dock.hide();
-                    }
                     const mainWindow = this.getMainWindow();
                     if (mainWindow) {
                         mainWindow.webContents.send("capture-and-process", {
@@ -626,9 +650,24 @@ class AppState {
                 // Wire up LLM functions
                 const llmHelper = this.processingHelper.getLLMHelper();
                 // generateContent function for LLM calls
+                // Join ALL content parts (some callers — e.g. live negotiation coaching —
+                // pass [{text: systemPrefix}, {text: prompt}]; reading only [0] dropped the
+                // prompt). Single-item callers (extraction, script) are unaffected.
+                const joinContents = (contents) => (Array.isArray(contents) ? contents : [contents])
+                    .map((c) => (typeof c === 'string' ? c : c?.text || ''))
+                    .filter(Boolean)
+                    .join('\n\n');
                 this.knowledgeOrchestrator.setGenerateContentFn(async (contents) => {
-                    return await llmHelper.generateContentStructured(contents[0]?.text || '');
+                    return await llmHelper.generateContentStructured(joinContents(contents));
                 });
+                // Low-latency generation for LIVE negotiation coaching (spoken in real
+                // time): Flash-first chain so the tactical note appears fast. The AOT
+                // negotiation script + all extraction keep the quality-first fn above.
+                if (typeof this.knowledgeOrchestrator.setLiveCoachingContentFn === 'function') {
+                    this.knowledgeOrchestrator.setLiveCoachingContentFn(async (contents) => {
+                        return await llmHelper.generateContentStructured(joinContents(contents));
+                    });
+                }
                 // Embedding function — lazily delegate to the cascaded EmbeddingPipeline
                 // (OpenAI → Gemini → Ollama → Local bundled model).
                 // We await waitForReady() so uploads during boot wait for the pipeline
@@ -866,125 +905,9 @@ class AppState {
             console.log(`[Main] STT provider is 'none' — audio capture will proceed but transcription is disabled.`);
             return null;
         }
-        let stt;
-        if (sttProvider === 'natively') {
-            const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
-            if (!nativelyKey) {
-                // Natively is Coming Soon — no key means degrade gracefully like every other provider
-                console.warn(`[Main] No Natively API Key configured for ${speaker}, falling back to GoogleSTT`);
-                stt = new GoogleSTT_1.GoogleSTT(speaker);
-            }
-            else {
-                // 'system' for interviewer (system audio), 'mic' for user (microphone).
-                // The server uses ${key}:${channel} as the session key so both streams
-                // can coexist without triggering concurrent_session_blocked.
-                stt = new NativelyProSTT_1.NativelyProSTT(nativelyKey, speaker === 'interviewer' ? 'system' : 'mic');
-            }
-        }
-        else if (sttProvider === 'deepgram') {
-            const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
-            if (apiKey) {
-                console.log(`[Main] Using DeepgramStreamingSTT for ${speaker}`);
-                stt = new DeepgramStreamingSTT_1.DeepgramStreamingSTT(apiKey);
-            }
-            else {
-                console.warn(`[Main] No API key for Deepgram STT, falling back to GoogleSTT`);
-                stt = new GoogleSTT_1.GoogleSTT(speaker);
-            }
-        }
-        else if (sttProvider === 'soniox') {
-            const apiKey = CredentialsManager.getInstance().getSonioxApiKey();
-            if (apiKey) {
-                console.log(`[Main] Using SonioxStreamingSTT for ${speaker}`);
-                stt = new SonioxStreamingSTT_1.SonioxStreamingSTT(apiKey);
-            }
-            else {
-                console.warn(`[Main] No API key for Soniox STT, falling back to GoogleSTT`);
-                stt = new GoogleSTT_1.GoogleSTT(speaker);
-            }
-        }
-        else if (sttProvider === 'elevenlabs') {
-            const apiKey = CredentialsManager.getInstance().getElevenLabsApiKey();
-            if (apiKey) {
-                console.log(`[Main] Using ElevenLabsStreamingSTT for ${speaker}`);
-                stt = new ElevenLabsStreamingSTT_1.ElevenLabsStreamingSTT(apiKey);
-            }
-            else {
-                console.warn(`[Main] No API key for ElevenLabs STT, falling back to GoogleSTT`);
-                stt = new GoogleSTT_1.GoogleSTT(speaker);
-            }
-        }
-        else if (sttProvider === 'openai') {
-            // OpenAI: WebSocket Realtime (gpt-4o-transcribe → gpt-4o-mini-transcribe) with whisper-1 REST fallback.
-            // If a custom OpenAI-compatible base URL is configured (e.g. Speaches), the STT class
-            // skips the Realtime WS path and uses REST against the custom endpoint.
-            const apiKey = CredentialsManager.getInstance().getOpenAiSttApiKey();
-            const baseUrl = CredentialsManager.getInstance().getOpenAiSttBaseUrl();
-            if (apiKey) {
-                console.log(`[Main] Using OpenAIStreamingSTT for ${speaker}${baseUrl ? ` (custom endpoint: ${baseUrl})` : ' (WebSocket+REST fallback)'}`);
-                stt = new OpenAIStreamingSTT_1.OpenAIStreamingSTT(apiKey, baseUrl);
-            }
-            else {
-                console.warn(`[Main] No API key for OpenAI STT, falling back to GoogleSTT`);
-                stt = new GoogleSTT_1.GoogleSTT(speaker);
-            }
-        }
-        else if (sttProvider === 'groq' || sttProvider === 'azure' || sttProvider === 'ibmwatson' || sttProvider === 'doubao' || sttProvider === 'doubao-auc') {
-            let apiKey;
-            let region;
-            let modelOverride;
-            if (sttProvider === 'groq') {
-                apiKey = CredentialsManager.getInstance().getGroqSttApiKey();
-                modelOverride = CredentialsManager.getInstance().getGroqSttModel();
-            }
-            else if (sttProvider === 'azure') {
-                apiKey = CredentialsManager.getInstance().getAzureApiKey();
-                region = CredentialsManager.getInstance().getAzureRegion();
-            }
-            else if (sttProvider === 'ibmwatson') {
-                apiKey = CredentialsManager.getInstance().getIbmWatsonApiKey();
-                region = CredentialsManager.getInstance().getIbmWatsonRegion();
-            }
-            else if (sttProvider === 'doubao') {
-                apiKey = CredentialsManager.getInstance().getDoubaoApiKey();
-            }
-            else if (sttProvider === 'doubao-auc') {
-                apiKey = CredentialsManager.getInstance().getDoubaoApiKey();
-            }
-            if (apiKey) {
-                console.log(`[Main] Using RestSTT (${sttProvider}) for ${speaker}`);
-                stt = new RestSTT_1.RestSTT(sttProvider, apiKey, modelOverride, region);
-            }
-            else {
-                console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
-                stt = new GoogleSTT_1.GoogleSTT(speaker);
-            }
-        }
-        else if (sttProvider === 'local-whisper') {
-            const { LocalWhisperSTT } = require('./audio/LocalWhisperSTT');
-            const sm = SettingsManager_1.SettingsManager.getInstance();
-            const globalModel = sm.get('localWhisperModel') ?? 'Xenova/whisper-tiny.en';
-            // Per-channel override: when enabled the two STT instances may load
-            // different models (e.g. Moonshine Tiny for mic, Moonshine Base for
-            // system audio). Falls back to globalModel if the per-channel slot is
-            // empty or the feature is disabled.
-            let modelId = globalModel;
-            if (sm.get('localWhisperPerChannelEnabled')) {
-                const override = speaker === 'interviewer'
-                    ? sm.get('localWhisperModelSystem')
-                    : sm.get('localWhisperModelMic');
-                if (override)
-                    modelId = override;
-            }
-            console.log(`[Main] Using LocalWhisperSTT for ${speaker}, model: ${modelId}`);
-            const lws = new LocalWhisperSTT(modelId);
-            // Channel label disambiguates the two concurrent instances in latency logs.
-            lws.setChannel(speaker === 'interviewer' ? 'system' : 'mic');
-            stt = lws;
-        }
-        else {
-            stt = new GoogleSTT_1.GoogleSTT(speaker);
-        }
+        const stt = (0, sttRegistry_1.createSTTProvider)(sttProvider, speaker);
+        if (!stt)
+            return null;
         stt.setRecognitionLanguage(sttLanguage);
         // Wire Transcript Events
         stt.on('transcript', (segment) => {
@@ -1020,9 +943,25 @@ class AppState {
             };
             helper.getLauncherWindow()?.webContents.send('native-audio-transcript', payload);
             helper.getOverlayWindow()?.webContents.send('native-audio-transcript', payload);
-            // Feed final recruiter (system audio) transcripts to negotiation tracker
+            // Feed final recruiter (system audio) transcripts to the premium
+            // negotiation tracker. Issue #272: gate by active mode template so the
+            // tracker never accumulates negotiation state in modes where salary is
+            // out of scope (technical-interview, team-meet, lecture). Output gating
+            // in LLMHelper is the primary defense; gating at the source stops state
+            // from carrying over to any future read site. Fails open if ModesManager
+            // is unavailable.
             if (segment.isFinal && speaker === 'interviewer') {
-                this.knowledgeOrchestrator?.feedInterviewerUtterance?.(segment.text);
+                let trackerFeedAllowed = true;
+                try {
+                    const { ModesManager } = require('./services/ModesManager');
+                    trackerFeedAllowed = ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed();
+                }
+                catch (_err) {
+                    // fail open — preserve existing behaviour for modes that need the tracker
+                }
+                if (trackerFeedAllowed) {
+                    this.knowledgeOrchestrator?.feedInterviewerUtterance?.(segment.text);
+                }
             }
         });
         // Consecutive failure counter — reset on any successful final transcript
@@ -1125,7 +1064,8 @@ class AppState {
         // Auto language detection: NativelyProSTT emits 'languageDetected' when the
         // backend resolves the language from the first audio batch. Notify the renderer
         // so the settings UI can show what was detected.
-        if (stt instanceof NativelyProSTT_1.NativelyProSTT) {
+        // Use duck-type check instead of instanceof to avoid importing NativelyProSTT.
+        if (typeof stt.setChannel === 'function') {
             stt.on('languageDetected', (bcp47) => {
                 console.log(`[Main] STT language auto-detected (${speaker}): ${bcp47}`);
                 const helper = this.getWindowHelper();
@@ -1448,20 +1388,14 @@ class AppState {
         // setupMicRecoveryHandler registers its own 'error' listener.
         this.setupMicRecoveryHandler();
     }
-    setupSystemAudioPipeline() {
+    async setupSystemAudioPipeline() {
         // REMOVED EARLY RETURN: if (this.systemAudioCapture && this.microphoneCapture) return; // Already initialized
         try {
             // 1. Initialize Captures if missing
             // If they already exist (e.g. from reconfigureAudio), they are already wired to write to this.googleSTT/User
             if (!this.systemAudioCapture) {
-                // Hard fast-fail when Screen Recording is explicitly denied. Without this
-                // guard, SystemAudioCapture spawns a Rust BG thread that tries CoreAudio
-                // Tap (fails immediately), then ScreenCaptureKit (10s timeout waiting on
-                // a permission callback that never fires), emits 'error', triggers the
-                // recovery handler 3x — total ~30s of dead air with no UI signal. By
-                // checking the TCC status up front we keep the meeting in mic-only mode
-                // and broadcast a clear banner so the user knows.
-                if (process.platform === 'darwin' && getMacScreenCaptureStatus() === 'denied') {
+                const screenCapability = await resolveMacScreenCaptureCapability('system audio pipeline setup');
+                if (screenCapability.effectiveDenied) {
                     console.warn('[Main] Skipping SystemAudioCapture init — Screen Recording permission denied. Meeting will run mic-only.');
                     this.broadcast('system-audio-permission-denied', formatPermissionMessage('screen-recording-denied'));
                     this.broadcastDeviceSelection({
@@ -1626,10 +1560,23 @@ class AppState {
             this.systemAudioCapture = null;
         }
         try {
-            this.systemAudioCapture = new SystemAudioCapture_1.SystemAudioCapture(this._lastRequestedOutputDeviceId);
-            this._sysSttRateApplied = false;
-            this.wireSystemCapture(this.systemAudioCapture, '(Resume)');
-            this.systemAudioCapture.start();
+            const screenCapability = await resolveMacScreenCaptureCapability('resume capture restart');
+            if (screenCapability.effectiveDenied) {
+                this.broadcast('system-audio-permission-denied', formatPermissionMessage('screen-recording-denied'));
+                this.broadcastDeviceSelection({
+                    kind: 'output',
+                    requested: this._lastRequestedOutputDeviceId || null,
+                    actual: null,
+                    fellBack: true,
+                    reason: 'screen-recording-permission-denied',
+                });
+            }
+            else {
+                this.systemAudioCapture = new SystemAudioCapture_1.SystemAudioCapture(this._lastRequestedOutputDeviceId);
+                this._sysSttRateApplied = false;
+                this.wireSystemCapture(this.systemAudioCapture, '(Resume)');
+                this.systemAudioCapture.start();
+            }
         }
         catch (err) {
             console.error('[Main] Resume: failed to restart system capture:', err);
@@ -1848,42 +1795,56 @@ class AppState {
             this.systemAudioCapture.destroy();
             this.systemAudioCapture = null;
         }
-        try {
-            console.log('[Main] Initializing SystemAudioCapture...');
-            this.systemAudioCapture = new SystemAudioCapture_1.SystemAudioCapture(wantedOutput);
-            this._sysSttRateApplied = false;
-            this.wireSystemCapture(this.systemAudioCapture, '(Reconfigured)');
-            console.log('[Main] SystemAudioCapture initialized.');
+        const screenCapability = await resolveMacScreenCaptureCapability('audio reconfigure');
+        if (screenCapability.effectiveDenied) {
+            console.warn('[Main] Skipping SystemAudioCapture reconfigure — Screen Recording permission denied. Meeting will run mic-only.');
+            this.broadcast('system-audio-permission-denied', formatPermissionMessage('screen-recording-denied'));
             this.broadcastDeviceSelection({
                 kind: 'output',
                 requested: wantedOutput || null,
-                actual: wantedOutput || 'default',
-                fellBack: false,
+                actual: null,
+                fellBack: true,
+                reason: 'screen-recording-permission-denied',
             });
         }
-        catch (err) {
-            console.warn('[Main] Failed to initialize SystemAudioCapture with preferred ID. Falling back to default.', err);
+        else {
             try {
-                this.systemAudioCapture = new SystemAudioCapture_1.SystemAudioCapture(); // Default
+                console.log('[Main] Initializing SystemAudioCapture...');
+                this.systemAudioCapture = new SystemAudioCapture_1.SystemAudioCapture(wantedOutput);
                 this._sysSttRateApplied = false;
-                this.wireSystemCapture(this.systemAudioCapture, '(Default)');
+                this.wireSystemCapture(this.systemAudioCapture, '(Reconfigured)');
+                console.log('[Main] SystemAudioCapture initialized.');
                 this.broadcastDeviceSelection({
                     kind: 'output',
                     requested: wantedOutput || null,
-                    actual: 'default',
-                    fellBack: true,
-                    reason: err?.message || 'unknown',
+                    actual: wantedOutput || 'default',
+                    fellBack: false,
                 });
             }
-            catch (err2) {
-                console.error('[Main] Failed to initialize SystemAudioCapture (Default):', err2);
-                this.broadcastDeviceSelection({
-                    kind: 'output',
-                    requested: wantedOutput || null,
-                    actual: null,
-                    fellBack: true,
-                    reason: `Both preferred and default failed: ${err2?.message || 'unknown'}`,
-                });
+            catch (err) {
+                console.warn('[Main] Failed to initialize SystemAudioCapture with preferred ID. Falling back to default.', err);
+                try {
+                    this.systemAudioCapture = new SystemAudioCapture_1.SystemAudioCapture(); // Default
+                    this._sysSttRateApplied = false;
+                    this.wireSystemCapture(this.systemAudioCapture, '(Default)');
+                    this.broadcastDeviceSelection({
+                        kind: 'output',
+                        requested: wantedOutput || null,
+                        actual: 'default',
+                        fellBack: true,
+                        reason: err?.message || 'unknown',
+                    });
+                }
+                catch (err2) {
+                    console.error('[Main] Failed to initialize SystemAudioCapture (Default):', err2);
+                    this.broadcastDeviceSelection({
+                        kind: 'output',
+                        requested: wantedOutput || null,
+                        actual: null,
+                        fellBack: true,
+                        reason: `Both preferred and default failed: ${err2?.message || 'unknown'}`,
+                    });
+                }
             }
         }
         // 2. Microphone (Input Capture)
@@ -1981,10 +1942,49 @@ class AppState {
         }
     }
     /**
+     * Serialization mutex for reconfigureSttProvider.
+     *
+     * Crash/hang fix (2026-06-05): a single "save Natively API key" action can
+     * fire up to TWO reconfigure calls back-to-back — one from the
+     * `set-natively-api-key` handler (which auto-promotes the STT provider to
+     * 'natively' and reconfigures), and one from the renderer's follow-up
+     * `set-stt-provider('natively')` call. Each call tears down and rebuilds the
+     * native captures (SystemAudioCapture / MicrophoneCapture → CoreAudio /
+     * ScreenCaptureKit / WASAPI). Two interleaved teardown+construct sequences
+     * against the same native device handles is a native-resource race that
+     * deadlocks the OS audio stack or crashes the process — manifesting as the
+     * "app hangs / freezes the system right after entering the key" reports on
+     * BOTH macOS and Windows (the bug is in this cross-platform JS orchestration,
+     * not in any OS-specific native code).
+     *
+     * Every other capture-mutating flow in this class is already guarded
+     * (`_systemAudioRecoveryInProgress`, `_defaultOutputSwitchInProgress`); this
+     * path was the one gap. We serialize rather than drop: the second caller
+     * genuinely needs to apply the latest provider config, so it awaits the
+     * in-flight reconfigure and then runs its own against fresh state.
+     */
+    _sttReconfigureChain = Promise.resolve();
+    /**
      * Reconfigure STT provider mid-session (called from IPC when user changes provider)
-     * Destroys existing STT instances and recreates them with the new provider
+     * Destroys existing STT instances and recreates them with the new provider.
+     *
+     * Concurrency: serialized via `_sttReconfigureChain`. Concurrent callers are
+     * queued and run one-at-a-time, so the native captures are never torn down /
+     * rebuilt in parallel. A throw in one queued reconfigure must not break the
+     * chain for the next caller, so the chain link swallows the error here and
+     * re-throws to THIS caller only.
      */
     async reconfigureSttProvider() {
+        const run = this._sttReconfigureChain.then(() => this._doReconfigureSttProvider(), 
+        // Previous link rejected — its error already surfaced to its own caller.
+        // Don't let it poison this link; proceed with our reconfigure.
+        () => this._doReconfigureSttProvider());
+        // Keep the chain alive regardless of this run's outcome so a failure never
+        // wedges all future reconfigures.
+        this._sttReconfigureChain = run.then(() => undefined, () => undefined);
+        return run;
+    }
+    async _doReconfigureSttProvider() {
         console.log('[Main] Reconfiguring STT Provider...');
         // RC-01 fix: pause audio captures FIRST so their EventEmitter queues drain
         // before we null-out the STT instances. Without this, buffered 'data' events
@@ -2009,7 +2009,7 @@ class AppState {
         // eagerly construct a MicrophoneCapture (which calls build_input_stream on
         // macOS and immediately triggers the orange mic indicator even without .play()).
         if (this.isMeetingActive) {
-            this.setupSystemAudioPipeline();
+            await this.setupSystemAudioPipeline();
             this.systemAudioCapture?.start();
             this.microphoneCapture?.start();
             this.googleSTT?.start();
@@ -2082,6 +2082,18 @@ class AppState {
                 oldCapture?.destroy();
                 this.systemAudioCapture = null;
                 this._sysSttRateApplied = false;
+                const screenCapability = await resolveMacScreenCaptureCapability('system audio recovery');
+                if (screenCapability.effectiveDenied) {
+                    this.broadcast('system-audio-permission-denied', formatPermissionMessage('screen-recording-denied'));
+                    this.broadcastDeviceSelection({
+                        kind: 'output',
+                        requested: this._lastRequestedOutputDeviceId || null,
+                        actual: null,
+                        fellBack: true,
+                        reason: 'screen-recording-permission-denied',
+                    });
+                    return;
+                }
                 const fresh = new SystemAudioCapture_1.SystemAudioCapture(this._lastRequestedOutputDeviceId);
                 this.systemAudioCapture = fresh;
                 this.wireSystemCapture(fresh, '(Recovery)');
@@ -2202,6 +2214,18 @@ class AppState {
             this._sysSttRateApplied = false;
             this._systemAudioRecoveryAttempts = 0;
             this._systemAudioConsecutiveFailures = 0;
+            const screenCapability = await resolveMacScreenCaptureCapability('default output route change');
+            if (screenCapability.effectiveDenied) {
+                this.broadcast('system-audio-permission-denied', formatPermissionMessage('screen-recording-denied'));
+                this.broadcastDeviceSelection({
+                    kind: 'output',
+                    requested: null,
+                    actual: null,
+                    fellBack: true,
+                    reason: 'screen-recording-permission-denied',
+                });
+                return;
+            }
             // Pass undefined (not the new device id) so CoreAudio picks up the new
             // default at construction time. This is intentional: binding to a
             // stable id would defeat the whole point of "follow the user's route".
@@ -2428,9 +2452,9 @@ class AppState {
         // explicit 'denied' — in that case warn the user but let the meeting continue
         // with microphone-only transcription.
         if (process.platform === 'darwin') {
-            const screenStatus = getMacScreenCaptureStatus();
-            console.log(`[Main] macOS screen recording permission status: ${screenStatus}`);
-            if (screenStatus === 'denied') {
+            const screenCapability = await resolveMacScreenCaptureCapability('meeting start');
+            console.log(`[Main] macOS screen recording permission status: ${screenCapability.status}; capturable=${screenCapability.capturable}; sources=${screenCapability.sourceCount}`);
+            if (screenCapability.effectiveDenied) {
                 // Permission was explicitly denied — warn the user via the UI but do NOT
                 // auto-open System Settings. Forcing that window open every meeting start
                 // is extremely disruptive, especially when mic transcription is still working.
@@ -2471,7 +2495,7 @@ class AppState {
             const { ModesManager } = require('./services/ModesManager');
             const activeMode = ModesManager.getInstance().getActiveMode();
             if (activeMode) {
-                const sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+                const sessionId = `session_${crypto.randomUUID()}`;
                 _meetingTelemetrySessionId = sessionId;
                 this.intelligenceManager.setDynamicActionContext({
                     sessionId,
@@ -2518,7 +2542,7 @@ class AppState {
                     await this.reconfigureAudio(metadata.audio.inputDeviceId, metadata.audio.outputDeviceId);
                 }
                 // LAZY INIT: Ensure pipeline is ready (if not reconfigured above)
-                this.setupSystemAudioPipeline();
+                await this.setupSystemAudioPipeline();
                 // Start System Audio
                 this.systemAudioCapture?.start();
                 this.googleSTT?.start();
@@ -2591,6 +2615,29 @@ class AppState {
         // threads joined. Calling switchToLauncher() here gets the show/hide
         // commands to the OS compositor before the main thread blocks.
         this.windowHelper.setWindowMode('launcher');
+        // ─── CLEAR THE OVERLAY TREE WHILE IT IS HIDDEN ─────────────────────────
+        // The overlay BrowserWindow is PERSISTENT — created once with show:false
+        // and thereafter only hide()/show()'d; its React tree is never unmounted
+        // between meetings. The line above just hid it. If we don't clear it now,
+        // the previous meeting's messages + expanded width survive into the next
+        // meeting and are briefly VISIBLE the instant startMeeting() show()s the
+        // window again — then torn down ON SCREEN (chat-list unmount + height
+        // recompute + the shellWidth→OS-resize shrink) when the start-side
+        // session-reset finally lands a few frames after show(). That on-screen
+        // teardown is the "old UI flashes, then a choppy collapse" the user sees.
+        //
+        // Clearing HERE — after the window is hidden, with a whole meeting of idle
+        // time before the next show() — means the overlay's mounted state is
+        // already the clean collapsed baseline by the next meeting, so its FIRST
+        // visible frame is clean and there is nothing to resize/tear down on
+        // screen. The renderer's onSessionReset handler does the full synchronous
+        // clear (messages, shellWidth→collapsed, code-expansion refs/timers); the
+        // only change is that it now runs while hidden instead of while visible.
+        //
+        // Safe: the overlay is already hidden above and shows nothing post-stop —
+        // trailing transcript finals (_isDraining), meeting save, and the
+        // title/summary all run against the DB / other windows, never this tree.
+        this.getWindowHelper().getOverlayWindow()?.webContents.send('session-reset');
         // ─── SYNCHRONOUS: things the user expects "right now" on Stop click ────
         // Captures are deferred-stop wrappers (see SystemAudioCapture.stop /
         // MicrophoneCapture.stop) — they flip the JS-side isRecording flag
@@ -3272,101 +3319,6 @@ class AppState {
     getHasDebugged() {
         return this.hasDebugged;
     }
-    setUndetectable(state) {
-        // Guard: skip if state hasn't actually changed to prevent
-        // duplicate dock hide/show cycles from renderer feedback loops
-        if (this.isUndetectable === state)
-            return;
-        console.log(`[Stealth] setUndetectable(${state}) called`);
-        this.isUndetectable = state;
-        this.windowHelper.setContentProtection(state);
-        this.settingsWindowHelper.setContentProtection(state);
-        this.modelSelectorWindowHelper.setContentProtection(state);
-        this.cropperWindowHelper.setContentProtection(state);
-        if (process.platform === 'win32') {
-            this.windowHelper.syncOverlayInteractionPolicy();
-            this.settingsWindowHelper.syncActivationPolicy();
-            this.modelSelectorWindowHelper.syncActivationPolicy();
-        }
-        // Persist state via SettingsManager
-        SettingsManager_1.SettingsManager.getInstance().set('isUndetectable', state);
-        // Cancel all pending disguise timers to prevent their app.setName() calls
-        // from re-registering the dock icon after we hide it
-        if (state) {
-            for (const timer of this._disguiseTimers) {
-                clearTimeout(timer);
-            }
-            this._disguiseTimers = [];
-        }
-        // Broadcast state change to all relevant windows
-        this._broadcastToAllWindows('undetectable-changed', state);
-        // --- STEALTH MODE LOGIC ---
-        // The dock hide/show is debounced: rapid toggles update isUndetectable immediately
-        // (so content protection, IPC broadcasts and the guard above are always current),
-        // but the actual macOS dock/tray/focus operation only fires once the user stops
-        // toggling. This eliminates the race where dock.show() + NSApp.activate() lingers
-        // after a subsequent dock.hide() call.
-        if (process.platform === 'darwin') {
-            if (this._dockDebounceTimer) {
-                clearTimeout(this._dockDebounceTimer);
-                this._dockDebounceTimer = null;
-            }
-            this._dockDebounceTimer = setTimeout(() => {
-                this._dockDebounceTimer = null;
-                // Read the settled state — may differ from the `state` captured above
-                // if the user toggled again before the timer fired.
-                const settled = this.isUndetectable;
-                const activeWindow = this.windowHelper.getMainWindow();
-                const settingsWindow = this.settingsWindowHelper.getSettingsWindow();
-                let targetFocusWindow = activeWindow;
-                if (settingsWindow && !settingsWindow.isDestroyed() && settingsWindow.isVisible()) {
-                    targetFocusWindow = settingsWindow;
-                }
-                const modelSelectorWindow = this.modelSelectorWindowHelper.getWindow();
-                const isModelSelectorVisible = modelSelectorWindow && !modelSelectorWindow.isDestroyed() && modelSelectorWindow.isVisible();
-                if (targetFocusWindow && targetFocusWindow === settingsWindow) {
-                    this.settingsWindowHelper.setIgnoreBlur(true);
-                }
-                if (isModelSelectorVisible) {
-                    this.modelSelectorWindowHelper.setIgnoreBlur(true);
-                }
-                if (settled) {
-                    // Capture whether Natively is currently the frontmost app BEFORE
-                    // dock.hide() — that call triggers an implicit macOS app-deactivation
-                    // which shifts keyboard focus to the next frontmost app (Chrome, etc.).
-                    const nativelyWasFocused = targetFocusWindow != null &&
-                        !targetFocusWindow.isDestroyed() &&
-                        targetFocusWindow.isFocused();
-                    console.log('[Stealth] Calling app.dock.hide()');
-                    electron_1.app.dock.hide();
-                    this.hideTray();
-                    // If Natively was the focused window when the user toggled stealth,
-                    // restore focus to our window after dock.hide() so macOS does not
-                    // hand control to Chrome / whatever is behind us.
-                    // We use win.focus() (not app.focus()) to avoid the heavy-handed
-                    // [NSApp activateIgnoringOtherApps:YES] side-effect.
-                    if (nativelyWasFocused && targetFocusWindow && !targetFocusWindow.isDestroyed()) {
-                        targetFocusWindow.focus();
-                    }
-                }
-                else {
-                    console.log('[Stealth] Calling app.dock.show()');
-                    electron_1.app.dock.show();
-                    this.showTray();
-                    // Do NOT call focus() — let the user's current app retain focus
-                }
-                if (targetFocusWindow && targetFocusWindow === settingsWindow) {
-                    setTimeout(() => { this.settingsWindowHelper.setIgnoreBlur(false); }, 500);
-                }
-                if (isModelSelectorVisible) {
-                    setTimeout(() => { this.modelSelectorWindowHelper.setIgnoreBlur(false); }, 500);
-                }
-            }, 150);
-        }
-    }
-    getUndetectable() {
-        return this.isUndetectable;
-    }
     // --- Mouse Passthrough (Adapted from public PR #113 — verify premium interaction) ---
     overlayMousePassthrough = false;
     setOverlayMousePassthrough(state) {
@@ -3401,153 +3353,6 @@ class AppState {
         // Notify all renderer windows so they can start/stop forwarding their console output
         this.broadcast('verbose-logging-changed', enabled);
     }
-    setDisguise(mode) {
-        this.disguiseMode = mode;
-        SettingsManager_1.SettingsManager.getInstance().set('disguiseMode', mode);
-        // Apply the disguise regardless of undetectable state
-        // (disguise affects Activity Monitor name via process.title,
-        //  dock icon only updates when NOT in stealth)
-        this._applyDisguise(mode);
-    }
-    applyInitialDisguise() {
-        this._applyDisguise(this.disguiseMode);
-    }
-    _applyDisguise(mode) {
-        let appName = "Natively";
-        let iconPath = "";
-        const isWin = process.platform === 'win32';
-        const isMac = process.platform === 'darwin';
-        switch (mode) {
-            case 'terminal':
-                appName = isWin ? "Command Prompt " : "Terminal ";
-                if (isWin) {
-                    iconPath = electron_1.app.isPackaged
-                        ? path_1.default.join(process.resourcesPath, "assets/fakeicon/win/terminal.png")
-                        : path_1.default.join(electron_1.app.getAppPath(), "assets/fakeicon/win/terminal.png");
-                }
-                else {
-                    iconPath = electron_1.app.isPackaged
-                        ? path_1.default.join(process.resourcesPath, "assets/fakeicon/mac/terminal.png")
-                        : path_1.default.join(electron_1.app.getAppPath(), "assets/fakeicon/mac/terminal.png");
-                }
-                break;
-            case 'settings':
-                appName = isWin ? "Settings " : "System Settings ";
-                if (isWin) {
-                    iconPath = electron_1.app.isPackaged
-                        ? path_1.default.join(process.resourcesPath, "assets/fakeicon/win/settings.png")
-                        : path_1.default.join(electron_1.app.getAppPath(), "assets/fakeicon/win/settings.png");
-                }
-                else {
-                    iconPath = electron_1.app.isPackaged
-                        ? path_1.default.join(process.resourcesPath, "assets/fakeicon/mac/settings.png")
-                        : path_1.default.join(electron_1.app.getAppPath(), "assets/fakeicon/mac/settings.png");
-                }
-                break;
-            case 'activity':
-                appName = isWin ? "Task Manager " : "Activity Monitor ";
-                if (isWin) {
-                    iconPath = electron_1.app.isPackaged
-                        ? path_1.default.join(process.resourcesPath, "assets/fakeicon/win/activity.png")
-                        : path_1.default.join(electron_1.app.getAppPath(), "assets/fakeicon/win/activity.png");
-                }
-                else {
-                    iconPath = electron_1.app.isPackaged
-                        ? path_1.default.join(process.resourcesPath, "assets/fakeicon/mac/activity.png")
-                        : path_1.default.join(electron_1.app.getAppPath(), "assets/fakeicon/mac/activity.png");
-                }
-                break;
-            case 'none':
-                appName = "Natively";
-                if (isMac) {
-                    iconPath = electron_1.app.isPackaged
-                        ? path_1.default.join(process.resourcesPath, "natively.icns")
-                        : path_1.default.join(electron_1.app.getAppPath(), "assets/natively.icns");
-                }
-                else if (isWin) {
-                    iconPath = electron_1.app.isPackaged
-                        ? path_1.default.join(process.resourcesPath, "assets/icons/win/icon.ico")
-                        : path_1.default.join(electron_1.app.getAppPath(), "assets/icons/win/icon.ico");
-                }
-                else {
-                    iconPath = electron_1.app.isPackaged
-                        ? path_1.default.join(process.resourcesPath, "icon.png")
-                        : path_1.default.join(electron_1.app.getAppPath(), "assets/icon.png");
-                }
-                break;
-        }
-        console.log(`[AppState] Applying disguise: ${mode} (${appName}) on ${process.platform}`);
-        // 1. Update process title (affects Activity Monitor / Task Manager)
-        process.title = appName;
-        // 2. Update app name (affects macOS Menu / Dock)
-        // Skip when undetectable — app.setName() causes macOS to re-register
-        // the app and re-show the dock icon even after dock.hide()
-        if (!this.isUndetectable) {
-            electron_1.app.setName(appName);
-        }
-        if (isMac) {
-            process.env.CFBundleName = appName.trim();
-        }
-        // 3. Update App User Model ID (Windows Taskbar grouping)
-        if (isWin) {
-            // Use unique AUMID per disguise to avoid grouping with the real app
-            electron_1.app.setAppUserModelId(`com.natively.assistant.${mode}`);
-        }
-        // 4. Update Icons
-        if (fs_1.default.existsSync(iconPath)) {
-            const image = electron_1.nativeImage.createFromPath(iconPath);
-            if (isMac) {
-                // Skip dock icon update when dock is hidden to avoid potential flicker
-                if (!this.isUndetectable) {
-                    electron_1.app.dock.setIcon(image);
-                }
-            }
-            else {
-                // Windows/Linux: Update all window icons
-                this.windowHelper.getLauncherWindow()?.setIcon(image);
-                this.windowHelper.getOverlayWindow()?.setIcon(image);
-                this.settingsWindowHelper.getSettingsWindow()?.setIcon(image);
-            }
-        }
-        else {
-            console.warn(`[AppState] Disguise icon not found: ${iconPath}`);
-        }
-        // 5. Update Window Titles
-        const launcher = this.windowHelper.getLauncherWindow();
-        if (launcher && !launcher.isDestroyed()) {
-            launcher.setTitle(appName.trim());
-            launcher.webContents.send('disguise-changed', mode);
-        }
-        const overlay = this.windowHelper.getOverlayWindow();
-        if (overlay && !overlay.isDestroyed()) {
-            overlay.setTitle(appName.trim());
-            overlay.webContents.send('disguise-changed', mode);
-        }
-        const settingsWin = this.settingsWindowHelper.getSettingsWindow();
-        if (settingsWin && !settingsWin.isDestroyed()) {
-            settingsWin.setTitle(appName.trim());
-            settingsWin.webContents.send('disguise-changed', mode);
-        }
-        // Cancel any stale forceUpdate timeouts from previous disguise changes
-        for (const timer of this._disguiseTimers) {
-            clearTimeout(timer);
-        }
-        this._disguiseTimers = [];
-        // Periodically re-assert process.title only — it can drift on some systems.
-        // NOTE: We intentionally do NOT call app.setName() here — it was already called
-        // synchronously above, and repeated calls on macOS cause the system to briefly
-        // show a second dock tile while re-registering the app identity.
-        const scheduleUpdate = (ms) => {
-            const ts = setTimeout(() => {
-                process.title = appName;
-                this._disguiseTimers = this._disguiseTimers.filter(t => t !== ts);
-            }, ms);
-            this._disguiseTimers.push(ts);
-        };
-        scheduleUpdate(200);
-        scheduleUpdate(1000);
-        scheduleUpdate(5000);
-    }
     // Helper: broadcast an IPC event to all windows
     _broadcastToAllWindows(channel, ...args) {
         const windows = [
@@ -3564,9 +3369,6 @@ class AppState {
                 win.webContents.send(channel, ...args);
             }
         }
-    }
-    getDisguise() {
-        return this.disguiseMode;
     }
 }
 exports.AppState = AppState;
@@ -3600,17 +3402,6 @@ async function initializeApp() {
     });
     // 2. Wait for app to be ready
     await electron_1.app.whenReady();
-    // 2a. PRE-EMPTIVE dock hide: must happen before ANY operation that causes macOS to
-    // register a dock entry (app.setName, BrowserWindow creation, etc.).
-    // We read isUndetectable directly from settings here — AppState singleton isn't
-    // constructed yet, so we cannot call appState.getUndetectable().
-    if (process.platform === 'darwin') {
-        // SettingsManager is already statically imported — no require() needed.
-        const isUndetectableOnStartup = SettingsManager_1.SettingsManager.getInstance().get('isUndetectable') ?? false;
-        if (isUndetectableOnStartup) {
-            electron_1.app.dock.hide();
-        }
-    }
     // 3. Initialize Managers
     // Phase 6 — bind TelemetryService to the Electron userData path. The
     // singleton was constructed with cwd-relative paths at module-load time
@@ -3648,8 +3439,8 @@ async function initializeApp() {
     }
     // Initialize IPC handlers before window creation
     (0, ipcHandlers_1.initializeIpcHandlers)(appState);
-    // Apply the full disguise payload (names, dock icon, AUMID) early
-    appState.applyInitialDisguise();
+    // 5. Initialize IPC handlers before window creation
+    (0, ipcHandlers_1.initializeIpcHandlers)(appState);
     // Start the Ollama lifecycle manager
     OllamaManager_1.OllamaManager.getInstance().init().catch(console.error);
     // NOTE: CredentialsManager.init() and loadStoredCredentials() are already called
@@ -3682,11 +3473,8 @@ async function initializeApp() {
         console.warn('[Init] STT pre-warm threw (non-fatal):', err);
     }
     appState.createWindow();
-    // Apply initial stealth state based on isUndetectable setting.
-    // NOTE: app.dock.hide() was already called pre-emptively before createWindow()
-    // when isUndetectable=true. Always create the tray as a recovery path — even in
-    // stealth mode the user needs a way to restore a hidden window (no dock, no tray
-    // would otherwise leave the window unrecoverable after a hide).
+    // Always create the tray as a recovery path — the user needs a way to restore a
+    // hidden window (no tray would otherwise leave the window unrecoverable after a hide).
     appState.showTray();
     // Register global shortcuts using KeybindManager
     KeybindManager_1.KeybindManager.getInstance().registerGlobalShortcuts();
@@ -3717,8 +3505,7 @@ async function initializeApp() {
     //   1. The Natively launcher window is visible and focused when the TCC dialog
     //      appears — macOS anchors the dialog to the frontmost app window on Ventura+.
     //      Without a visible window the dialog can appear behind other apps (Sequoia).
-    //   2. In stealth/undetectable mode the dock icon is hidden, but the window is
-    //      still visible — the dialog still has a surface to attach to.
+    //   2. The window is still visible — the dialog still has a surface to attach to.
     //
     // The 800ms delay lets the launcher's ready-to-show animation complete so the
     // window is fully composited before the system sheet appears above it.
@@ -3755,15 +3542,18 @@ async function initializeApp() {
                     // startMeeting() reads the status when the user actually tries to use audio.
                 }
                 else if (screenStatus === 'denied') {
-                    // Returning user who previously denied — show the banner immediately at startup
-                    // so they know system audio won't work before they even start a meeting.
-                    console.warn('[Init] Screen recording was previously denied — notifying UI banner.');
-                    const { BrowserWindow } = require('electron');
-                    BrowserWindow.getAllWindows().forEach((win) => {
-                        if (!win.isDestroyed()) {
-                            win.webContents.send('system-audio-permission-denied', 'Screen Recording is disabled. System audio capture will not work. Click "Open Settings" to enable it, then restart Natively.');
-                        }
-                    });
+                    const screenCapability = await resolveMacScreenCaptureCapability('startup permission check');
+                    if (screenCapability.effectiveDenied) {
+                        // Returning user who previously denied — show the banner immediately at startup
+                        // so they know system audio won't work before they even start a meeting.
+                        console.warn('[Init] Screen recording was previously denied — notifying UI banner.');
+                        const { BrowserWindow } = require('electron');
+                        BrowserWindow.getAllWindows().forEach((win) => {
+                            if (!win.isDestroyed()) {
+                                win.webContents.send('system-audio-permission-denied', formatPermissionMessage('screen-recording-denied'));
+                            }
+                        });
+                    }
                 }
                 else {
                     // 'granted' or 'restricted' — nothing to do.
@@ -3775,28 +3565,6 @@ async function initializeApp() {
             }
         }, 800);
     }
-    // Initialize CalendarManager
-    try {
-        const { CalendarManager } = require('./services/CalendarManager');
-        const calMgr = CalendarManager.getInstance();
-        calMgr.init();
-        calMgr.on('start-meeting-requested', (event) => {
-            console.log('[Main] Start meeting requested from calendar notification', event);
-            appState.centerAndShowWindow();
-            appState.startMeeting({
-                title: event.title,
-                calendarEventId: event.id,
-                source: 'calendar'
-            });
-        });
-        calMgr.on('open-requested', () => {
-            appState.centerAndShowWindow();
-        });
-        console.log('[Main] CalendarManager initialized');
-    }
-    catch (e) {
-        console.error('[Main] Failed to initialize CalendarManager:', e);
-    }
     // Recover unprocessed meetings (persistence check)
     appState.getIntelligenceManager().recoverUnprocessedMeetings().catch(err => {
         console.error('[Main] Failed to recover unprocessed meetings:', err);
@@ -3805,9 +3573,8 @@ async function initializeApp() {
     electron_1.app.on("activate", () => {
         console.log("App activated");
         if (process.platform === 'darwin') {
-            // Do NOT call dock.show() while a meeting is running — the dock icon
-            // appearing mid-meeting is a critical stealth failure.
-            if (!appState.getUndetectable() && !appState.getIsMeetingActive()) {
+            // Do NOT call dock.show() while a meeting is running.
+            if (!appState.getIsMeetingActive()) {
                 electron_1.app.dock.show();
             }
         }

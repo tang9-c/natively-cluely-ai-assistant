@@ -171,22 +171,11 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
         };
     },
     openExternal: (url) => electron_1.ipcRenderer.invoke('open-external', url),
-    setUndetectable: (state) => electron_1.ipcRenderer.invoke('set-undetectable', state),
-    getUndetectable: () => electron_1.ipcRenderer.invoke('get-undetectable'),
     setOverlayMousePassthrough: (enabled) => electron_1.ipcRenderer.invoke('set-overlay-mouse-passthrough', enabled),
     toggleOverlayMousePassthrough: () => electron_1.ipcRenderer.invoke('toggle-overlay-mouse-passthrough'),
     getOverlayMousePassthrough: () => electron_1.ipcRenderer.invoke('get-overlay-mouse-passthrough'),
     setOpenAtLogin: (open) => electron_1.ipcRenderer.invoke('set-open-at-login', open),
     getOpenAtLogin: () => electron_1.ipcRenderer.invoke('get-open-at-login'),
-    setDisguise: (mode) => electron_1.ipcRenderer.invoke('set-disguise', mode),
-    getDisguise: () => electron_1.ipcRenderer.invoke('get-disguise'),
-    onDisguiseChanged: (callback) => {
-        const subscription = (_, mode) => callback(mode);
-        electron_1.ipcRenderer.on('disguise-changed', subscription);
-        return () => {
-            electron_1.ipcRenderer.removeListener('disguise-changed', subscription);
-        };
-    },
     // Skills — local SKILL.md instructions surfaced in Settings and the overlay.
     skillsRefresh: () => electron_1.ipcRenderer.invoke('skills:list'),
     skillsOpenFolder: () => electron_1.ipcRenderer.invoke('skills:open-folder'),
@@ -273,6 +262,8 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
         return () => electron_1.ipcRenderer.removeListener('local-whisper-download-error', listener);
     },
     localWhisperPreload: (modelId) => electron_1.ipcRenderer.invoke('local-whisper-preload', modelId),
+    localWhisperGetChannelConfig: () => electron_1.ipcRenderer.invoke('local-whisper-get-channel-config'),
+    localWhisperSetChannelConfig: (cfg) => electron_1.ipcRenderer.invoke('local-whisper-set-channel-config', cfg),
     localWhisperGetHardware: () => electron_1.ipcRenderer.invoke('local-whisper-get-hardware'),
     // STT Config Events (Adapted from public PR #173 — verify premium interaction)
     onSttConfigChanged: (callback) => {
@@ -390,8 +381,6 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     generateClarify: () => electron_1.ipcRenderer.invoke('generate-clarify'),
     generateCodeHint: (imagePaths, problemStatement) => electron_1.ipcRenderer.invoke('generate-code-hint', imagePaths, problemStatement),
     generateBrainstorm: (imagePaths, problemStatement) => electron_1.ipcRenderer.invoke('generate-brainstorm', imagePaths, problemStatement),
-    generateFollowUp: (intent, userRequest) => electron_1.ipcRenderer.invoke('generate-follow-up', intent, userRequest),
-    generateFollowUpQuestions: () => electron_1.ipcRenderer.invoke('generate-follow-up-questions'),
     generateRecap: () => electron_1.ipcRenderer.invoke('generate-recap'),
     submitManualQuestion: (question) => electron_1.ipcRenderer.invoke('submit-manual-question', question),
     getIntelligenceContext: () => electron_1.ipcRenderer.invoke('get-intelligence-context'),
@@ -524,20 +513,6 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
             electron_1.ipcRenderer.removeListener('intelligence-clarify', subscription);
         };
     },
-    onIntelligenceFollowUpQuestionsToken: (callback) => {
-        const subscription = (_, data) => callback(data);
-        electron_1.ipcRenderer.on('intelligence-follow-up-questions-token', subscription);
-        return () => {
-            electron_1.ipcRenderer.removeListener('intelligence-follow-up-questions-token', subscription);
-        };
-    },
-    onIntelligenceFollowUpQuestionsUpdate: (callback) => {
-        const subscription = (_, data) => callback(data);
-        electron_1.ipcRenderer.on('intelligence-follow-up-questions-update', subscription);
-        return () => {
-            electron_1.ipcRenderer.removeListener('intelligence-follow-up-questions-update', subscription);
-        };
-    },
     onIntelligenceManualStarted: (callback) => {
         const subscription = () => callback();
         electron_1.ipcRenderer.on('intelligence-manual-started', subscription);
@@ -617,11 +592,6 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     saveCustomProvider: (provider) => electron_1.ipcRenderer.invoke('save-custom-provider', provider),
     getCustomProviders: () => electron_1.ipcRenderer.invoke('get-custom-providers'),
     deleteCustomProvider: (id) => electron_1.ipcRenderer.invoke('delete-custom-provider', id),
-    // Follow-up Email
-    generateFollowupEmail: (input) => electron_1.ipcRenderer.invoke('generate-followup-email', input),
-    extractEmailsFromTranscript: (transcript) => electron_1.ipcRenderer.invoke('extract-emails-from-transcript', transcript),
-    getCalendarAttendees: (eventId) => electron_1.ipcRenderer.invoke('get-calendar-attendees', eventId),
-    openMailto: (params) => electron_1.ipcRenderer.invoke('open-mailto', params),
     // Audio Test
     startAudioTest: (deviceId) => electron_1.ipcRenderer.invoke('start-audio-test', deviceId),
     stopAudioTest: () => electron_1.ipcRenderer.invoke('stop-audio-test'),
@@ -634,13 +604,6 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     },
     // Database
     flushDatabase: () => electron_1.ipcRenderer.invoke('flush-database'),
-    onUndetectableChanged: (callback) => {
-        const subscription = (_, state) => callback(state);
-        electron_1.ipcRenderer.on('undetectable-changed', subscription);
-        return () => {
-            electron_1.ipcRenderer.removeListener('undetectable-changed', subscription);
-        };
-    },
     onOverlayMousePassthroughChanged: (callback) => {
         const subscription = (_, enabled) => callback(enabled);
         electron_1.ipcRenderer.on('overlay-mouse-passthrough-changed', subscription);
@@ -686,12 +649,6 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
             electron_1.ipcRenderer.removeListener('theme:changed', subscription);
         };
     },
-    // Calendar API
-    calendarConnect: () => electron_1.ipcRenderer.invoke('calendar-connect'),
-    calendarDisconnect: () => electron_1.ipcRenderer.invoke('calendar-disconnect'),
-    getCalendarStatus: () => electron_1.ipcRenderer.invoke('get-calendar-status'),
-    getUpcomingEvents: () => electron_1.ipcRenderer.invoke('get-upcoming-events'),
-    calendarRefresh: () => electron_1.ipcRenderer.invoke('calendar-refresh'),
     // Auto-Update
     onUpdateAvailable: (callback) => {
         const subscription = (_, info) => callback(info);
@@ -802,10 +759,6 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
             electron_1.ipcRenderer.removeListener('global-shortcut', subscription);
         };
     },
-    // Donation API
-    getDonationStatus: () => electron_1.ipcRenderer.invoke('get-donation-status'),
-    markDonationToastShown: () => electron_1.ipcRenderer.invoke('mark-donation-toast-shown'),
-    setDonationComplete: () => electron_1.ipcRenderer.invoke('set-donation-complete'),
     // Profile Engine API
     profileUploadResume: (filePath) => electron_1.ipcRenderer.invoke('profile:upload-resume', filePath),
     profileGetStatus: () => electron_1.ipcRenderer.invoke('profile:get-status'),

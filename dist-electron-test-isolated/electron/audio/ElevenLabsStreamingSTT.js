@@ -37,23 +37,22 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ElevenLabsStreamingSTT = void 0;
-const events_1 = require("events");
 const ws_1 = __importDefault(require("ws"));
 const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 const languages_1 = require("../config/languages");
 const dnsHelpers_1 = require("./dnsHelpers");
+const BaseSTT_1 = require("./BaseSTT");
 const ELEVENLABS_WS_URL = 'wss://api.elevenlabs.io/v1/speech-to-text/realtime';
 // Cap reconnect attempts so a flapping network can't drive an indefinite WS
 // open-loop against ElevenLabs (storm risk + per-key rate-limit risk). After
 // the cap, emit 'error' so the orchestrator can surface a UI prompt; a
 // user-triggered restart via stop()/start() resets the counter to 0.
 const RECONNECT_MAX_ATTEMPTS = 10;
-class ElevenLabsStreamingSTT extends events_1.EventEmitter {
+class ElevenLabsStreamingSTT extends BaseSTT_1.BaseSTT {
     apiKey;
     ws = null;
-    isActive = false;
     shouldReconnect = false;
     reconnectAttempts = 0;
     reconnectTimer = null;
@@ -85,6 +84,8 @@ class ElevenLabsStreamingSTT extends events_1.EventEmitter {
         }
     }
     setSampleRate(rate) {
+        if (this.inputSampleRate === rate)
+            return;
         this.inputSampleRate = rate;
         console.log(`[ElevenLabsStreaming] Input sample rate set to ${rate}Hz`);
         // We always downsample to 16000Hz for ElevenLabs
@@ -97,21 +98,19 @@ class ElevenLabsStreamingSTT extends events_1.EventEmitter {
         if (this.languageCode !== newCode) {
             console.log(`[ElevenLabsStreaming] Language changed: ${this.languageCode || '(auto)'} -> ${newCode || '(auto)'}`);
             this.languageCode = newCode;
-            if (this.isActive) {
+            if (this._isActive) {
                 console.log('[ElevenLabsStreaming] Restarting session to apply new language...');
                 this.stop();
                 this.start();
             }
         }
     }
-    /** No-op - credentials passed via API key */
-    setCredentials(_path) { }
     start() {
-        if (this.isActive)
+        if (this._isActive)
             return;
         if (this.isConnecting)
             return; // Already mid-connect (prevents double-connect race)
-        this.isActive = true; // Set immediately so write() buffers audio during WS handshake
+        this._isActive = true; // Set immediately so write() buffers audio during WS handshake
         this.shouldReconnect = true;
         this.reconnectAttempts = 0;
         this.connect();
@@ -127,7 +126,7 @@ class ElevenLabsStreamingSTT extends events_1.EventEmitter {
             this.ws.close();
             this.ws = null;
         }
-        this.isActive = false;
+        this._isActive = false;
         this.isConnecting = false;
         this.isSessionReady = false;
         this.buffer = [];
@@ -140,7 +139,7 @@ class ElevenLabsStreamingSTT extends events_1.EventEmitter {
         console.log('[ElevenLabsStreaming] Stopped');
     }
     finalize() {
-        if (!this.isActive || !this.ws || this.ws.readyState !== ws_1.default.OPEN || !this.isSessionReady)
+        if (!this._isActive || !this.ws || this.ws.readyState !== ws_1.default.OPEN || !this.isSessionReady)
             return;
         if (this.pcmAccumulatorLen > 0) {
             const combined = new Int16Array(this.pcmAccumulatorLen);
@@ -169,7 +168,7 @@ class ElevenLabsStreamingSTT extends events_1.EventEmitter {
      * Note: Input from Natively DSP is 32-bit Float PCM (F32).
      */
     write(chunk) {
-        if (!this.isActive)
+        if (!this._isActive)
             return;
         if (!this.ws || this.ws.readyState !== ws_1.default.OPEN || !this.isSessionReady) {
             this.buffer.push(chunk);
@@ -261,7 +260,7 @@ class ElevenLabsStreamingSTT extends events_1.EventEmitter {
         this.ws.on('open', () => {
             // Guard: stop() calls removeAllListeners() before closing, so this handler
             // normally won't fire after stop(). But if there's a narrow race, bail out.
-            if (!this.isActive || !this.shouldReconnect) {
+            if (!this._isActive || !this.shouldReconnect) {
                 this.ws?.close();
                 this.ws = null;
                 this.isConnecting = false;
@@ -355,7 +354,7 @@ class ElevenLabsStreamingSTT extends events_1.EventEmitter {
             }
             else {
                 // If not reconnecting, mark session as truly inactive
-                this.isActive = false;
+                this._isActive = false;
             }
         });
         this.ws.on('error', (err) => {

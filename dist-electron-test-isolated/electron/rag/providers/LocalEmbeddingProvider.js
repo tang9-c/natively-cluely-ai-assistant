@@ -7,13 +7,17 @@ exports.LocalEmbeddingProvider = void 0;
 // @huggingface/transformers is ESM-only — must use dynamic import()
 const path_1 = __importDefault(require("path"));
 const electron_1 = require("electron");
+const embeddingSpace_1 = require("../embeddingSpace");
 class LocalEmbeddingProvider {
     name = 'local';
     dimensions = 384; // all-MiniLM-L6-v2
+    model = 'Xenova/all-MiniLM-L6-v2';
+    space;
     pipe = null;
     loadingPromise = null; // prevents concurrent init races
     modelPath;
     constructor() {
+        this.space = (0, embeddingSpace_1.embeddingSpaceKey)({ name: this.name, model: this.model, dimensions: this.dimensions });
         // Point to the bundled model inside the app's resources.
         // In dev: use app.getAppPath() so the path is independent of how esbuild
         // bundles this file (bundle: true inlines the provider into main.js, which

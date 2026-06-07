@@ -9,20 +9,17 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DeepgramStreamingSTT = void 0;
-const events_1 = require("events");
 const languages_1 = require("../config/languages");
+const BaseSTT_1 = require("./BaseSTT");
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 30000;
 const RECONNECT_MAX_ATTEMPTS = 10;
 const KEEPALIVE_INTERVAL_MS = 8000;
-class DeepgramStreamingSTT extends events_1.EventEmitter {
+class DeepgramStreamingSTT extends BaseSTT_1.BaseSTT {
     apiKey;
     live = null;
-    isActive = false;
     shouldReconnect = false;
     isOpen = false; // tracks whether SDK connection is in OPEN state
-    sampleRate = 16000;
-    numChannels = 1;
     languageCode = 'en';
     reconnectAttempts = 0;
     reconnectTimer = null;
@@ -34,19 +31,19 @@ class DeepgramStreamingSTT extends events_1.EventEmitter {
         this.apiKey = apiKey;
     }
     setSampleRate(rate) {
-        if (this.sampleRate === rate)
+        if (this._sampleRate === rate)
             return;
-        this.sampleRate = rate;
+        this._sampleRate = rate;
         console.log(`[DeepgramStreaming] Sample rate set to ${rate}`);
-        if (this.isActive)
+        if (this._isActive)
             this.restartStream();
     }
     setAudioChannelCount(count) {
-        if (this.numChannels === count)
+        if (this._numChannels === count)
             return;
-        this.numChannels = count;
+        this._numChannels = count;
         console.log(`[DeepgramStreaming] Channel count set to ${count}`);
-        if (this.isActive)
+        if (this._isActive)
             this.restartStream();
     }
     setRecognitionLanguage(key) {
@@ -55,7 +52,7 @@ class DeepgramStreamingSTT extends events_1.EventEmitter {
                 return;
             this.languageCode = 'multi';
             console.log('[DeepgramStreaming] Language set to multilingual (multi)');
-            if (this.isActive)
+            if (this._isActive)
                 this.restartStream();
             return;
         }
@@ -63,20 +60,19 @@ class DeepgramStreamingSTT extends events_1.EventEmitter {
         if (config && this.languageCode !== config.iso639) {
             this.languageCode = config.iso639;
             console.log(`[DeepgramStreaming] Language set to ${this.languageCode}`);
-            if (this.isActive)
+            if (this._isActive)
                 this.restartStream();
         }
     }
-    setCredentials(_path) { }
     restartStream() {
         console.log('[DeepgramStreaming] Restarting due to config change...');
         this.stop();
         this.start();
     }
     start() {
-        if (this.isActive)
+        if (this._isActive)
             return;
-        this.isActive = true;
+        this._isActive = true;
         this.shouldReconnect = true;
         this.reconnectAttempts = 0;
         this.connect();
@@ -93,14 +89,14 @@ class DeepgramStreamingSTT extends events_1.EventEmitter {
             }
             this.live = null;
         }
-        this.isActive = false;
+        this._isActive = false;
         this.isConnecting = false;
         this.isOpen = false;
         this.buffer = [];
         console.log('[DeepgramStreaming] Stopped');
     }
     finalize() {
-        if (!this.isActive || !this.isOpen || !this.live)
+        if (!this._isActive || !this.isOpen || !this.live)
             return;
         try {
             this.live.finalize();
@@ -111,7 +107,7 @@ class DeepgramStreamingSTT extends events_1.EventEmitter {
         }
     }
     write(chunk) {
-        if (!this.isActive)
+        if (!this._isActive)
             return;
         if (!this.isOpen) {
             this.buffer.push(chunk);
@@ -133,7 +129,7 @@ class DeepgramStreamingSTT extends events_1.EventEmitter {
         if (this.isConnecting)
             return;
         this.isConnecting = true;
-        console.log(`[DeepgramStreaming] Connecting (rate=${this.sampleRate}, ch=${this.numChannels}, lang=${this.languageCode})...`);
+        console.log(`[DeepgramStreaming] Connecting (rate=${this._sampleRate}, ch=${this._numChannels}, lang=${this.languageCode})...`);
         try {
             const { createClient, LiveTranscriptionEvents } = require('@deepgram/sdk');
             const deepgram = createClient(this.apiKey);
@@ -143,8 +139,8 @@ class DeepgramStreamingSTT extends events_1.EventEmitter {
                 smart_format: true,
                 interim_results: true,
                 encoding: 'linear16',
-                sample_rate: this.sampleRate,
-                channels: this.numChannels,
+                sample_rate: this._sampleRate,
+                channels: this._numChannels,
                 endpointing: 300,
                 utterance_end_ms: 1000,
                 vad_events: true,

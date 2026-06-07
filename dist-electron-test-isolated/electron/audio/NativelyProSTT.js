@@ -4,11 +4,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.NativelyProSTT = void 0;
-const events_1 = require("events");
 const ws_1 = __importDefault(require("ws"));
 const languages_1 = require("../config/languages");
 const constants_1 = require("../config/constants");
 const dnsHelpers_1 = require("./dnsHelpers");
+const BaseSTT_1 = require("./BaseSTT");
 /**
  * NativelyProSTT
  *
@@ -21,16 +21,13 @@ const dnsHelpers_1 = require("./dnsHelpers");
  *
  * All subsequent messages are binary LINEAR16 PCM audio.
  */
-class NativelyProSTT extends events_1.EventEmitter {
+class NativelyProSTT extends BaseSTT_1.BaseSTT {
     apiKey;
     channel; // 'system' | 'mic' — disambiguates concurrent streams per key
     ws = null;
-    isActive = false;
     isConnected = false;
     isConnecting = false;
     intentionalClose = false; // set true before deliberate closeUpstream() to suppress auto-reconnect
-    sampleRate = 16000;
-    audioChannels = 1;
     buffer = [];
     // Soft cap: at 48 kHz stereo / 20 ms frames a chunk is ~3.8 KB, so 500 chunks
     // ≈ 10 s of audio. Above this, the disconnect window has clearly exceeded
@@ -76,48 +73,24 @@ class NativelyProSTT extends events_1.EventEmitter {
     }
     // ── Configuration setters ─────────────────────────────────
     setSampleRate(rate) {
-        if (rate === this.sampleRate)
+        if (rate === this._sampleRate)
             return;
-        const previousRate = this.sampleRate;
-        this.sampleRate = rate;
+        const previousRate = this._sampleRate;
+        this._sampleRate = rate;
         console.log(`[NativelyProSTT:${this.channel}] Sample rate ${previousRate}Hz → ${rate}Hz`);
-        // Mid-stream rate change requires reconnection — but ONLY if the
-        // server has already confirmed the handshake (`isConnected === true`).
-        // Once the auth frame is committed at the old rate, the server feeds
-        // its upstream STT bytes-as-old-rate; switching the actual rate of the
-        // bytes without reconnecting produces sped-up/slowed-down garbage
-        // transcripts.
-        //
-        // The pre-handshake states do NOT need a reconnect:
-        //   - this.ws === null:           still in stagger or never started.
-        //                                 connect()'s open handler will read
-        //                                 the (now-updated) this.sampleRate.
-        //   - ws.readyState === CONNECTING: WS open, but auth frame not sent
-        //                                   yet (we send it in 'open'). Same
-        //                                   thing — the open handler reads the
-        //                                   updated rate.
-        // Reconnecting in either of these states tears down a connection that
-        // was about to use the right value anyway, costs us a 3s stagger
-        // round-trip (concurrent-key collision prevention), and surfaces an
-        // unsightly "WebSocket was closed before the connection was
-        // established" error in the logs. The system-channel STT was hitting
-        // this on every meeting start because Rust publishes its real device
-        // rate (48kHz on macOS CoreAudio Tap) ~5-7s after start(), which is
-        // exactly when the first chunk arrives — long before the server has
-        // confirmed the handshake.
-        if (this.isActive && this.isConnected) {
+        if (this._isActive && this.isConnected) {
             console.log(`[NativelyProSTT:${this.channel}] Rate changed mid-stream — reconnecting WS so server uses the new declared rate.`);
             this.reconnectAttempts = 0; // fresh session — reset backoff
             this.intentionalClose = true; // don't re-trigger via close handler
             this.closeUpstream();
-            // Same 250ms gap pattern as setRecognitionLanguage to avoid the
-            // server's concurrent_session_blocked race.
-            setTimeout(() => { if (this.isActive)
+            setTimeout(() => { if (this._isActive)
                 this.connect(); }, 250);
         }
     }
     setAudioChannelCount(count) {
-        this.audioChannels = count;
+        if (this._numChannels === count)
+            return;
+        this._numChannels = count;
     }
     /**
      * Converts the internal language key (e.g. "english-us", "russian")
@@ -144,20 +117,12 @@ class NativelyProSTT extends events_1.EventEmitter {
                 : [];
             console.log(`[NativelyProSTT] Language set: ${key} → ${this.languageBcp47}`, this.languageAlternates.length ? `(alts: ${this.languageAlternates.join(', ')})` : '');
         }
-        // Reconnect with new language if already running.
-        // Set intentionalClose=true so the ws.on('close') handler does NOT
-        // also schedule a reconnect — we call connect() ourselves below.
-        // Same gating as setSampleRate: only reconnect when the handshake has
-        // committed (isConnected). If we're still mid-connect, the upcoming
-        // 'open' handler will use the just-updated language fields.
-        if (this.isActive && this.isConnected) {
+        if (this._isActive && this.isConnected) {
             console.log('[NativelyProSTT] Language changed while active — reconnecting');
             this.reconnectAttempts = 0; // reset counter so the new session starts fresh
             this.intentionalClose = true;
             this.closeUpstream();
-            // Small delay so the server processes the old socket's close event before
-            // the new connection arrives — prevents concurrent_session_blocked race.
-            setTimeout(() => { if (this.isActive)
+            setTimeout(() => { if (this._isActive)
                 this.connect(); }, 250);
         }
     }
@@ -165,17 +130,16 @@ class NativelyProSTT extends events_1.EventEmitter {
     notifySpeechEnded() { }
     /** No-op — Natively API server finalizes via VAD; no client-side flush available */
     finalize() { }
-    setCredentials(_path) { }
     // ── Lifecycle ─────────────────────────────────────────────
     start() {
-        if (this.isActive)
+        if (this._isActive)
             return;
-        this.isActive = true;
+        this._isActive = true;
         this.reconnectAttempts = 0;
         this.connect();
     }
     stop() {
-        this.isActive = false;
+        this._isActive = false;
         this._chunksSent = 0;
         this.intentionalClose = false; // Reset so a subsequent start() can reconnect normally
         // Restore the configured language so the next start() uses the right handshake value.
@@ -198,7 +162,7 @@ class NativelyProSTT extends events_1.EventEmitter {
     }
     _chunksSent = 0;
     write(chunk) {
-        if (!this.isActive)
+        if (!this._isActive)
             return;
         if (!this.isConnected || !this.ws || this.ws.readyState !== ws_1.default.OPEN) {
             this.buffer.push(chunk);
@@ -229,7 +193,7 @@ class NativelyProSTT extends events_1.EventEmitter {
     }
     // ── Internal ──────────────────────────────────────────────
     connect(skipStagger = false) {
-        if (this.isConnecting || !this.isActive)
+        if (this.isConnecting || !this._isActive)
             return;
         if (!skipStagger) {
             // Stagger connections for the same key to avoid concurrent server collisions.
@@ -244,7 +208,7 @@ class NativelyProSTT extends events_1.EventEmitter {
                 console.log(`[NativelyProSTT:${this.channel}] Staggering connection ${staggerMs}ms (concurrent key collision prevention)`);
                 setTimeout(() => {
                     this.isConnecting = false;
-                    if (this.isActive)
+                    if (this._isActive)
                         this.connect(true);
                 }, staggerMs);
                 return;
@@ -275,7 +239,7 @@ class NativelyProSTT extends events_1.EventEmitter {
             handler();
         };
         ws.on('open', () => guard(() => {
-            if (!this.isActive) {
+            if (!this._isActive) {
                 ws.close();
                 return;
             }
@@ -283,10 +247,10 @@ class NativelyProSTT extends events_1.EventEmitter {
             // When the key is the trial sentinel, swap it for the real trial token
             // in the trial_token field — the server validates that separately.
             const baseFrame = {
-                sample_rate: this.sampleRate,
+                sample_rate: this._sampleRate,
                 language: this.languageBcp47,
                 language_alternates: this.languageAlternates,
-                audio_channels: this.audioChannels,
+                audio_channels: this._numChannels,
                 channel: this.channel,
             };
             if (this.apiKey === constants_1.TRIAL_SENTINEL_KEY) {
@@ -324,7 +288,7 @@ class NativelyProSTT extends events_1.EventEmitter {
                         msg.error === 'invalid_key_format' ||
                         msg.error === 'trial_expired' ||
                         msg.error === 'transcription_quota_exceeded') {
-                        this.isActive = false;
+                        this._isActive = false;
                     }
                     // concurrent_session_blocked is NOT fatal — it means the intentional
                     // reconnect (language/sample-rate change) arrived at the server before
@@ -364,10 +328,10 @@ class NativelyProSTT extends events_1.EventEmitter {
                     this.languageAlternates = [];
                     this.reconnectAttempts = 0; // fresh session — reset backoff counter
                     this.emit('languageDetected', detected);
-                    if (this.isActive && this.ws) {
+                    if (this._isActive && this.ws) {
                         this.intentionalClose = true;
                         this.closeUpstream();
-                        setTimeout(() => { if (this.isActive)
+                        setTimeout(() => { if (this._isActive)
                             this.connect(); }, 250);
                     }
                     return;
@@ -408,13 +372,13 @@ class NativelyProSTT extends events_1.EventEmitter {
                 this.intentionalClose = false;
                 return;
             }
-            if (this.isActive) {
+            if (this._isActive) {
                 this.scheduleReconnect();
             }
         }));
     }
     scheduleReconnect() {
-        if (!this.isActive)
+        if (!this._isActive)
             return;
         this._chunksSent = 0; // Reset per-session counter so chunk #N logs reflect the new session
         // Connection dropped before stability window — cancel the backoff reset
@@ -425,13 +389,13 @@ class NativelyProSTT extends events_1.EventEmitter {
         // DNS failures (ENOTFOUND / EAI_AGAIN) are transient network blips — the hostname
         // is valid and the server is healthy. Don't consume the exponential backoff counter;
         // just wait a fixed DNS_RETRY_MS and retry. This keeps retrying indefinitely while
-        // isActive is true, which is safe since the user explicitly started the session.
+        // _isActive is true, which is safe since the user explicitly started the session.
         if (this.isDnsFailure) {
             this.isDnsFailure = false; // clear so the next non-DNS error uses normal backoff
             console.warn(`[NativelyProSTT] DNS retry in ${this.DNS_RETRY_MS / 1000}s...`);
             this.reconnectTimer = setTimeout(() => {
                 this.reconnectTimer = null;
-                if (this.isActive)
+                if (this._isActive)
                     this.connect();
             }, this.DNS_RETRY_MS);
             return;
@@ -456,7 +420,7 @@ class NativelyProSTT extends events_1.EventEmitter {
         }
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
-            if (this.isActive)
+            if (this._isActive)
                 this.connect();
         }, delay);
     }

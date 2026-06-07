@@ -105,7 +105,7 @@ worker_threads_1.parentPort.on('message', (message) => {
                 break;
             }
             case 'nativeVecSearch': {
-                const { requestId, dbPath, extPath, queryBlob, dim, meetingId, providerName, limit, minSimilarity, fetchMultiplier } = message;
+                const { requestId, dbPath, extPath, queryBlob, dim, meetingId, spaceKey, limit, minSimilarity, fetchMultiplier } = message;
                 // P1-4: validate dim is a positive integer before interpolating into the table name.
                 // This worker runs in a separate thread and receives messages from the main process,
                 // so it operates at a trust boundary — the value must be validated here independently.
@@ -114,7 +114,7 @@ worker_threads_1.parentPort.on('message', (message) => {
                     break;
                 }
                 const db = getDb(dbPath, extPath);
-                const fetchLimit = (meetingId || providerName) ? limit * fetchMultiplier : limit;
+                const fetchLimit = (meetingId || spaceKey) ? limit * fetchMultiplier : limit;
                 const vecTable = `vec_chunks_${dim}`;
                 const vecRows = db.prepare(`
                     SELECT chunk_id, distance FROM ${vecTable}
@@ -132,9 +132,13 @@ worker_threads_1.parentPort.on('message', (message) => {
                     q += ' AND c.meeting_id = ?';
                     params.push(meetingId);
                 }
-                if (providerName) {
-                    q += ' AND m.embedding_provider = ?';
-                    params.push(providerName);
+                // Filter by composite embedding SPACE, not provider name. v1 and v2 Gemini
+                // are both provider='gemini' @ 768d, so a provider filter would leak v1
+                // vectors into v2 queries. A NULL space (not yet stamped / mid-reindex) is
+                // intentionally excluded → "empty, not wrong".
+                if (spaceKey) {
+                    q += ' AND m.embedding_space = ?';
+                    params.push(spaceKey);
                 }
                 const chunkRows = db.prepare(q).all(...params);
                 const chunkMap = new Map();
@@ -156,14 +160,14 @@ worker_threads_1.parentPort.on('message', (message) => {
                 break;
             }
             case 'nativeVecSearchSummaries': {
-                const { requestId, dbPath, extPath, queryBlob, dim, providerName, limit } = message;
+                const { requestId, dbPath, extPath, queryBlob, dim, spaceKey, limit } = message;
                 // P1-4: same integer validation as nativeVecSearch — worker trust boundary.
                 if (!Number.isInteger(dim) || dim <= 0 || dim > 65536) {
                     worker_threads_1.parentPort.postMessage({ type: 'error', requestId, error: `Invalid embedding dimension: ${dim}` });
                     break;
                 }
                 const db = getDb(dbPath, extPath);
-                const fetchLimit = providerName ? limit * 4 : limit;
+                const fetchLimit = spaceKey ? limit * 4 : limit;
                 const vecTable = `vec_summaries_${dim}`;
                 const vecRows = db.prepare(`
                     SELECT summary_id, distance FROM ${vecTable}
@@ -177,9 +181,10 @@ worker_threads_1.parentPort.on('message', (message) => {
                 const ph = ids.map(() => '?').join(',');
                 let sq = `SELECT s.* FROM chunk_summaries s JOIN meetings m ON s.meeting_id = m.id WHERE s.id IN (${ph})`;
                 const params = [...ids];
-                if (providerName) {
-                    sq += ' AND m.embedding_provider = ?';
-                    params.push(providerName);
+                // Filter by composite embedding SPACE, not provider name (see nativeVecSearch).
+                if (spaceKey) {
+                    sq += ' AND m.embedding_space = ?';
+                    params.push(spaceKey);
                 }
                 const summaryRows = db.prepare(sq).all(...params);
                 const summaryMap = new Map();

@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GoogleSTT = void 0;
 const speech_1 = require("@google-cloud/speech");
-const events_1 = require("events");
+const BaseSTT_1 = require("./BaseSTT");
 const languages_1 = require("../config/languages");
 /**
  * GoogleSTT
@@ -13,11 +13,10 @@ const languages_1 = require("../config/languages");
  * - Manages authentication via GOOGLE_APPLICATION_CREDENTIALS.
  * - Parses intermediate and final results.
  */
-class GoogleSTT extends events_1.EventEmitter {
+class GoogleSTT extends BaseSTT_1.BaseSTT {
     client;
     stream = null; // Stream type is complex in google-cloud libs
     isStreaming = false;
-    isActive = false;
     isFatalError = false;
     label = 'default';
     writeCount = 0;
@@ -62,7 +61,7 @@ class GoogleSTT extends events_1.EventEmitter {
             return;
         console.log(`[GoogleSTT/${this.label}] Updating Sample Rate to: ${rate}Hz`);
         this.sampleRateHertz = rate;
-        if (this.isStreaming || this.isActive) {
+        if (this.isStreaming || this._isActive) {
             console.warn(`[GoogleSTT/${this.label}] Config changed while active. Restarting stream...`);
             this.stop();
             this.start();
@@ -81,7 +80,7 @@ class GoogleSTT extends events_1.EventEmitter {
             return;
         console.log(`[GoogleSTT/${this.label}] Updating Channel Count to: ${count}`);
         this.audioChannelCount = count;
-        if (this.isStreaming || this.isActive) {
+        if (this.isStreaming || this._isActive) {
             console.warn(`[GoogleSTT/${this.label}] Config changed while active. Restarting stream...`);
             this.stop();
             this.start();
@@ -121,7 +120,7 @@ class GoogleSTT extends events_1.EventEmitter {
                 }
             }
             // Restart if active
-            if (this.isStreaming || this.isActive) {
+            if (this.isStreaming || this._isActive) {
                 console.log(`[GoogleSTT/${this.label}] Language changed while active. Restarting stream...`);
                 this.stop();
                 this.start();
@@ -130,19 +129,19 @@ class GoogleSTT extends events_1.EventEmitter {
         }, 250);
     }
     start() {
-        if (this.isActive)
+        if (this._isActive)
             return;
-        this.isActive = true;
+        this._isActive = true;
         this.isFatalError = false;
         this.writeCount = 0;
         console.log(`[GoogleSTT/${this.label}] Starting recognition stream (rate=${this.sampleRateHertz}Hz, ch=${this.audioChannelCount})...`);
         this.startStream();
     }
     stop() {
-        if (!this.isActive)
+        if (!this._isActive)
             return;
         console.log(`[GoogleSTT/${this.label}] Stopping stream (wrote ${this.writeCount} chunks total)...`);
-        this.isActive = false;
+        this._isActive = false;
         this.isStreaming = false;
         if (this.proactiveRestartTimer) {
             clearTimeout(this.proactiveRestartTimer);
@@ -155,7 +154,7 @@ class GoogleSTT extends events_1.EventEmitter {
         }
     }
     finalize() {
-        if (!this.isActive || !this.stream)
+        if (!this._isActive || !this.stream)
             return;
         console.log(`[GoogleSTT/${this.label}] Finalize — ending gRPC stream to flush final transcript`);
         try {
@@ -176,7 +175,7 @@ class GoogleSTT extends events_1.EventEmitter {
     proactiveRestartTimer = null;
     static PROACTIVE_RESTART_MS = 270_000; // 4 min 30 sec
     write(audioData) {
-        if (!this.isActive || this.isFatalError) {
+        if (!this._isActive || this.isFatalError) {
             // Only log occasionally to avoid spam
             if (this.writeCount === 0)
                 console.warn(`[GoogleSTT/${this.label}] write() called but isActive=false — data dropped`);
@@ -343,7 +342,7 @@ class GoogleSTT extends events_1.EventEmitter {
             clearTimeout(this.proactiveRestartTimer);
         this.proactiveRestartTimer = setTimeout(() => {
             this.proactiveRestartTimer = null;
-            if (!this.isActive)
+            if (!this._isActive)
                 return;
             console.log(`[GoogleSTT/${this.label}] Proactive stream restart at 4:30 to preempt Google's 305s limit`);
             if (this.stream) {

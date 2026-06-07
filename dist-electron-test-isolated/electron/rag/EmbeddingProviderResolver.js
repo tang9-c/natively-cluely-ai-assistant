@@ -8,6 +8,35 @@ const LocalEmbeddingProvider_1 = require("./providers/LocalEmbeddingProvider");
 const DoubaoEmbeddingProvider_1 = require("./providers/DoubaoEmbeddingProvider");
 const ProviderRouter_1 = require("../llm/ProviderRouter");
 class EmbeddingProviderResolver {
+    /** Cloud providers get a bounded probe-retry before we demote (hysteresis). */
+    static CLOUD_PROBE_ATTEMPTS = 3;
+    static CLOUD_PROBE_BACKOFF_MS = 400;
+    static CLOUD_PROVIDER_NAMES = new Set(['openai', 'gemini']);
+    /**
+     * Probe a provider's availability. For CLOUD providers (which require a real
+     * billed network round-trip), retry a few times with short backoff so a single
+     * transient 429 / timeout / network blip does NOT demote to the next candidate.
+     *
+     * WHY THIS MATTERS for the embedding-space migration: a spurious demotion
+     * (gemini → ollama) changes the active embedding SPACE, which persists to
+     * `last_embedding_space` and triggers a FULL billed re-index of the entire
+     * corpus — then reverts on the next launch when the cloud provider returns.
+     * Stabilizing the probe keeps the active space stable and avoids the thrash.
+     * Local/Ollama probes are cheap + deterministic, so they aren't retried.
+     */
+    static async probeAvailable(provider) {
+        const isCloud = EmbeddingProviderResolver.CLOUD_PROVIDER_NAMES.has(provider.name);
+        const attempts = isCloud ? EmbeddingProviderResolver.CLOUD_PROBE_ATTEMPTS : 1;
+        for (let i = 1; i <= attempts; i++) {
+            if (await provider.isAvailable())
+                return true;
+            if (i < attempts) {
+                console.log(`[EmbeddingProviderResolver] ${provider.name} probe ${i}/${attempts} failed — retrying (avoids spurious space-thrash demotion)...`);
+                await new Promise(r => setTimeout(r, EmbeddingProviderResolver.CLOUD_PROBE_BACKOFF_MS * i));
+            }
+        }
+        return false;
+    }
     /**
      * Returns the best available provider.
      * Runs isAvailable() checks in priority order.
@@ -68,7 +97,7 @@ class EmbeddingProviderResolver {
             candidates.push(new LocalEmbeddingProvider_1.LocalEmbeddingProvider()); // always last, always works
         }
         for (const provider of candidates) {
-            const available = await provider.isAvailable();
+            const available = await EmbeddingProviderResolver.probeAvailable(provider);
             if (available) {
                 console.log(`[EmbeddingProviderResolver] Selected provider: ${provider.name} (${provider.dimensions}d)`);
                 return provider;
