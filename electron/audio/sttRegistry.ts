@@ -131,7 +131,7 @@ export const STT_REGISTRY: Record<SttProviderId, RegistryEntry | undefined> = {
     name: 'LocalWhisperSTT',
     factory: (_key, speaker) => {
       const sm = SettingsManager.getInstance();
-      const globalModel = sm.get('localWhisperModel') ?? 'Xenova/whisper-tiny.en';
+      const globalModel = sm.get('localWhisperModel') ?? 'onnx-community/moonshine-tiny-ONNX';
       let modelId = globalModel;
       if (sm.get('localWhisperPerChannelEnabled')) {
         const override =
