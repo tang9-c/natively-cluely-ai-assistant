@@ -1,7 +1,10 @@
 import { IEmbeddingProvider } from './IEmbeddingProvider';
+import { embeddingSpaceKey } from '../embeddingSpace';
 
 export class DoubaoEmbeddingProvider implements IEmbeddingProvider {
   readonly name = 'doubao';
+  readonly model: string;
+  readonly space: string;
   dimensions: number; // Dynamically detected from actual API response
   private baseUrl = 'https://ark.cn-beijing.volces.com/api/v3';
 
@@ -9,11 +12,13 @@ export class DoubaoEmbeddingProvider implements IEmbeddingProvider {
     private apiKey: string,
     // Doubao Ark API: model should be an endpoint ID (e.g., ep-20260321165850-k9w7r), not a model name
     // If not provided, embedding will likely fail - user must configure a valid endpoint ID
-    private model?: string,
+    model?: string,
     private mrlDim?: number // Optional MRL dimension: 2048, 1024, 512, 256
   ) {
     // Start with a safe default; actual dimensions are detected at runtime via isAvailable()
     this.dimensions = this.mrlDim || 4096;
+    this.model = model || 'unknown';
+    this.space = embeddingSpaceKey({ name: this.name, model: this.model, dimensions: this.dimensions });
     // Log the configured model/endpoint ID for debugging
     console.log(`[DoubaoEmbedding] Configured model/endpoint: ${this.model || '(none - will likely fail)'}`);
   }

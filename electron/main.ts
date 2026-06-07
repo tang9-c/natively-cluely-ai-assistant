@@ -743,7 +743,7 @@ export class AppState {
         // negotiation script + all extraction keep the quality-first fn above.
         if (typeof this.knowledgeOrchestrator.setLiveCoachingContentFn === 'function') {
           this.knowledgeOrchestrator.setLiveCoachingContentFn(async (contents: any[]) => {
-            return await llmHelper.generateContentStructured(joinContents(contents), { preferFast: true });
+            return await llmHelper.generateContentStructured(joinContents(contents));
           });
         }
 
