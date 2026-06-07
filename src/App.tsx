@@ -10,24 +10,11 @@ import StartupSequence from "./components/StartupSequence"
 import { AnimatePresence, motion } from "framer-motion"
 import UpdateBanner from "./components/UpdateBanner"
 import { NativelyQuotaBanner } from "./components/NativelyQuotaBanner"
-import { FreeTrialBanner }      from "./components/trial/FreeTrialBanner"
-import { FreeTrialModal }       from "./components/trial/FreeTrialModal"
-import { TrialPromoToaster }    from "./components/trial/TrialPromoToaster"
 import { PermissionsToaster }   from "./components/onboarding/PermissionsToaster"
 import { AlertCircle } from "lucide-react"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
 import { isMac } from "./utils/platformUtils"
-import {
-  JDAwarenessToaster,
-  ProfileFeatureToaster,
-  PremiumPromoToaster,
-  RemoteCampaignToaster,
-  PremiumUpgradeModal,
-  NativelyApiPromoToaster,
-  MaxUltraUpgradeToaster,
-  useAdCampaigns
-} from './premium'
 import { analytics } from "./lib/analytics/analytics.service"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import ModesSettings from "./components/settings/ModesSettings"
@@ -118,11 +105,6 @@ const App: React.FC = () => {
     setIsSettingsOpen(false);
     setIsModesOpen(true);
   }, []);
-  const [showPremiumModal, setShowPremiumModal] = useState(false);
-  const [isPremiumActive, setIsPremiumActive] = useState(false);
-  const [hasLoadedLicense, setHasLoadedLicense] = useState(false);
-  const [planDetails, setPlanDetails] = useState<{ isPremium: boolean; plan?: string; provider?: string }>({ isPremium: false });
-
   // Overlay opacity — only meaningful when isOverlayWindow, but stored centrally
   // so it can be initialized once from localStorage and updated via IPC.
   const [overlayOpacity, setOverlayOpacity] = useState<number>(() => {
@@ -135,15 +117,8 @@ const App: React.FC = () => {
 
   const [meetingInterfaceTheme, setMeetingInterfaceThemeState] = useState<MeetingInterfaceTheme>(getMeetingInterfaceTheme);
 
-  // Profile state for ad targeting
-  const [hasProfile, setHasProfile] = useState(false);
   const [isLauncherMainView, setIsLauncherMainView] = useState(true);
 
-  // Initialize Ads Campaign Manager
-  const [appStartTime] = useState<number>(Date.now());
-  const [lastMeetingEndTime, setLastMeetingEndTime] = useState<number | null>(null);
-  const [isProcessingMeeting, setIsProcessingMeeting] = useState<boolean>(false);
-  
   // Ollama Auto-Pull State
   const [ollamaPullStatus, setOllamaPullStatus] = useState<'idle' | 'downloading' | 'complete' | 'failed'>('idle');
   const [ollamaPullPercent, setOllamaPullPercent] = useState<number>(0);
@@ -151,153 +126,26 @@ const App: React.FC = () => {
 
   // Re-index State
   const [incompatibleWarning, setIncompatibleWarning] = useState<{count: number; oldProvider: string; newProvider: string} | null>(null);
-  
-  // API check
-  const [hasNativelyApi, setHasNativelyApi] = useState<boolean>(false);
 
-  // ── Onboarding / promo toasters ───────────────────────────
+  // ── Onboarding ───────────────────────────
   const [showPermissionsToaster, setShowPermissionsToaster] = useState(false);
-  const [showTrialPromo,         setShowTrialPromo]         = useState(false);
-
-  // ── Free Trial global state ────────────────────────────────
-  const [activeTrial, setActiveTrial] = useState<{
-    expiresAt: string;
-    usage: { ai: number; stt_seconds: number; search: number };
-  } | null>(null);
-  const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(false);
-
-  const isAppReady = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !showStartup && !isSettingsOpen && isLauncherMainView && !isProfileOpen;
-  const { activeAd, dismissAd, previewAd } = useAdCampaigns(
-    planDetails,
-    hasProfile,
-    isAppReady,
-    appStartTime,
-    lastMeetingEndTime,
-    isProcessingMeeting,
-    hasNativelyApi
-  );
-
-  // Preview shortcuts — Ctrl/Cmd+Shift+1-5 force-show any ad card.
-  // Uses e.code so Shift doesn't remap the digit to a symbol ('!' etc.).
-  useEffect(() => {
-    const CODE_MAP: Record<string, string> = {
-      'Digit1': 'max_ultra_upgrade',
-      'Digit2': 'promo',
-      'Digit3': 'natively_api',
-      'Digit4': 'profile',
-      'Digit5': 'jd',
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || !e.shiftKey) return;
-      const ad = CODE_MAP[e.code];
-      if (!ad) return;
-      e.preventDefault();
-      previewAd(ad as any);
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [previewAd]);
 
   useEffect(() => {
     // Clean up old local storage
     localStorage.removeItem('useLegacyAudioBackend');
 
-    // Basic status check for campaign targeting
-    window.electronAPI?.profileGetStatus?.().then(s => setHasProfile(s?.hasProfile || false)).catch(() => {});
-    // Load full plan details for targeted ad delivery (plan tier + provider).
-    window.electronAPI?.licenseGetDetails?.()
-      .then(details => {
-        setPlanDetails(details ?? { isPremium: false });
-        setIsPremiumActive(details?.isPremium ?? false);
-        setHasLoadedLicense(true);
-      })
-      .catch(() => {
-        // Fallback: async premium check if licenseGetDetails is unavailable
-        const premiumCheck = window.electronAPI?.licenseCheckPremiumAsync ?? window.electronAPI?.licenseCheckPremium;
-        if (premiumCheck) {
-          premiumCheck().then((active: boolean) => {
-            setIsPremiumActive(active);
-            setPlanDetails({ isPremium: active });
-            setHasLoadedLicense(true);
-          }).catch(() => setHasLoadedLicense(true));
-        } else {
-          setHasLoadedLicense(true);
-        }
-      });
-
-    // Also check for Natively API key
-    window.electronAPI?.getStoredCredentials?.()
-      .then((creds) => setHasNativelyApi(!!creds?.hasNativelyKey))
-      .catch(() => {});
-
-    // ── Trial: check stored token and start polling if active ──
-    let trialPollId: ReturnType<typeof setInterval> | null = null;
-    let profileWiped = false; // guard: only wipe once per session
-    const checkTrial = async () => {
-      try {
-        const res = await window.electronAPI?.getTrialStatus?.();
-        if (!res?.ok) return;
-        if (res.expired) {
-          setActiveTrial(null);
-          // Auto-wipe profile data the first time expiry is detected so that
-          // resume/JD data doesn't linger in SQLite beyond the trial window.
-          if (!profileWiped) {
-            profileWiped = true;
-            window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
-          }
-          setShowTrialExpiredModal(true);
-          if (trialPollId) { clearInterval(trialPollId); trialPollId = null; }
-        } else {
-          setActiveTrial({
-            expiresAt: res.expires_at ?? '',
-            usage:     res.usage     ?? { ai: 0, stt_seconds: 0, search: 0 },
-          });
-        }
-      } catch { /* ignore — non-critical */ }
-    };
-    window.electronAPI?.getLocalTrial?.().then((local: any) => {
-      if (!local?.hasToken) return;
-      if (local.expired) {
-        // Already expired at launch — wipe immediately then show modal after a brief delay
-        if (!profileWiped) {
-          profileWiped = true;
-          window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
-        }
-        setTimeout(() => setShowTrialExpiredModal(true), 10_000);
-        return;
-      }
-      checkTrial();
-      trialPollId = setInterval(checkTrial, 30_000);
-    }).catch(() => {});
-
-    // Listen for trial-ended event (emitted by trial:end-byok IPC)
-    const removeTrialListener = window.electronAPI?.onTrialEnded?.(() => {
-      setActiveTrial(null);
-      setShowTrialExpiredModal(false);
-    });
-
-    // ── Onboarding toasters ──────────────────────────────────
+    // ── Onboarding ──────────────────────────────────
     if (isLauncherWindow || isDefault) {
       const permsShown = localStorage.getItem('natively_perms_shown_v1');
       if (!permsShown) {
         // First ever launch — show permissions toaster
         setShowPermissionsToaster(true);
-      } else {
-        // Subsequent launches — trial promo will self-gate via TrialPromoToaster
-        setShowTrialPromo(true);
       }
     }
 
     // Listen for open-settings-tab events from other windows (e.g. overlay Modes button)
     const removeOpenSettingsTab = window.electronAPI?.onOpenSettingsTab?.((tab: string) => {
       openSettingsExclusive(tab);
-    });
-
-    // Listen for meeting processing completion to trigger post-meeting ads
-    const removeMeetingsListener = window.electronAPI?.onMeetingsUpdated?.(() => {
-      console.log("[App.tsx] Meetings updated (processing finished), starting ad delay timer");
-      setIsProcessingMeeting(false);
-      setLastMeetingEndTime(Date.now());
     });
 
     // Listen for Ollama Auto-Pull Progress
@@ -325,21 +173,10 @@ const App: React.FC = () => {
       });
     }
 
-    // Listen for real-time license status changes (activation, revocation, deactivation)
-    const removeLicenseListener = window.electronAPI?.onLicenseStatusChanged?.((data) => {
-      setIsPremiumActive(data.isPremium);
-      setPlanDetails(prev => ({ ...prev, isPremium: data.isPremium, ...(data.plan ? { plan: data.plan } : {}) }));
-      setHasLoadedLicense(true);
-    });
-
     return () => {
-      if (removeMeetingsListener) removeMeetingsListener();
       if (removeProgress) removeProgress();
       if (removeComplete) removeComplete();
       if (removeWarning) removeWarning();
-      if (removeLicenseListener) removeLicenseListener();
-      if (trialPollId) clearInterval(trialPollId);
-      if (removeTrialListener) removeTrialListener();
       if (removeOpenSettingsTab) removeOpenSettingsTab();
     }
   }, []);
@@ -425,7 +262,6 @@ const App: React.FC = () => {
   const handleEndMeeting = () => {
     console.log("[App.tsx] handleEndMeeting triggered");
     analytics.trackMeetingEnded();
-    setIsProcessingMeeting(true);
 
     // Local bookkeeping that does not depend on the main process.
     const startStr = localStorage.getItem('natively_last_meeting_start');
@@ -591,7 +427,7 @@ const App: React.FC = () => {
                         }}
                         className="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-white/10 bg-[#141414]"
                       >
-                        <ModesSettings onClose={() => setIsModesOpen(false)} isPremium={isPremiumActive} isLoaded={hasLoadedLicense} isTrialActive={!!activeTrial} onOpenNativelyAPI={() => openSettingsExclusive('natively-api')} />
+                        <ModesSettings onClose={() => setIsModesOpen(false)} />
                       </motion.div>
                     </motion.div>
                   )}
@@ -679,131 +515,13 @@ const App: React.FC = () => {
       <UpdateBanner />
       <NativelyQuotaBanner />
 
-
-
-      {/* Free trial countdown banner — only in launcher window while trial is active */}
-      {(isLauncherWindow || isDefault) && activeTrial && (
-        <FreeTrialBanner
-          expiresAt={activeTrial.expiresAt}
-          usage={activeTrial.usage}
-          onUpgrade={() => openSettingsExclusive('api')}
-        />
-      )}
-
       {/* Permissions toaster — first ever launch */}
       <PermissionsToaster
         isOpen={showPermissionsToaster}
         onDismiss={() => {
           localStorage.setItem('natively_perms_shown_v1', '1');
           setShowPermissionsToaster(false);
-          // After permissions, allow trial promo on next launch
         }}
-      />
-
-      {/* Trial promo toaster — 5s after restart (self-gates via localStorage + conditions) */}
-      <TrialPromoToaster
-        isOpen={showTrialPromo}
-        hasNativelyKey={hasNativelyApi}
-        hasTrialToken={!!activeTrial}
-        onDismiss={() => setShowTrialPromo(false)}
-        onStartTrial={async () => {
-          const res = await window.electronAPI?.startTrial?.();
-          if (!res?.ok) throw new Error(res?.error || '无法开始试用');
-          if (res.expires_at) {
-            setActiveTrial({ expiresAt: res.expires_at, usage: res.usage ?? { ai: 0, stt_seconds: 0, search: 0 } });
-          }
-          setShowTrialPromo(false);
-        }}
-        onManualSetup={() => {
-          setShowTrialPromo(false);
-          openSettingsExclusive('api');
-        }}
-      />
-
-      {/* Post-trial upgrade modal — shown when trial expires */}
-      {(isLauncherWindow || isDefault) && showTrialExpiredModal && (
-        <FreeTrialModal
-          usage={activeTrial?.usage ?? { ai: 0, stt_seconds: 0, search: 0 }}
-          onByok={async () => {
-            await window.electronAPI?.endTrialByok?.();
-          }}
-          onStandard={async () => {
-            // Wipe resume + JD (orchestrator caches + SQLite) before checkout opens
-            await window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
-            // Revert active mode to none — Standard plan has no modes access
-            await window.electronAPI?.modesSetActive?.(null).catch(() => {});
-          }}
-          onDone={() => {
-            setShowTrialExpiredModal(false);
-            setActiveTrial(null);
-          }}
-        />
-      )}
-      {/* Ad toasters — render whenever activeAd is set (isLauncherMainView guard bypassed
-          when triggered via preview shortcut so the card always surfaces) */}
-      {(isLauncherMainView || !!activeAd) && !isSettingsOpen && (
-        <NativelyApiPromoToaster
-          isOpen={activeAd === 'natively_api'}
-          onDismiss={() => dismissAd('natively_api')}
-          onOpenSettings={(tab: string) => openSettingsExclusive(tab)}
-        />
-      )}
-      {(isLauncherMainView || !!activeAd) && (
-        <>
-          <ProfileFeatureToaster
-            isOpen={activeAd === 'profile'}
-            onDismiss={dismissAd}
-            onSetupProfile={() => openProfileExclusive()}
-          />
-          <JDAwarenessToaster
-            isOpen={activeAd === 'jd'}
-            onDismiss={dismissAd}
-            onSetupJD={() => openProfileExclusive()}
-          />
-          <PremiumPromoToaster
-            isOpen={activeAd === 'promo'}
-            onDismiss={dismissAd}
-            onUpgrade={() => {
-              setShowPremiumModal(true);
-            }}
-          />
-          <MaxUltraUpgradeToaster
-            isOpen={activeAd === 'max_ultra_upgrade'}
-            onDismiss={dismissAd}
-            onUpgrade={() => {
-              setShowPremiumModal(true);
-            }}
-          />
-
-          {/* Remote Campaigns Render Logic */}
-          <RemoteCampaignToaster
-            isOpen={typeof activeAd === 'object' && activeAd !== null}
-            campaign={typeof activeAd === 'object' && activeAd !== null ? activeAd : undefined as any}
-            onDismiss={dismissAd}
-          />
-        </>
-      )}
-
-      <PremiumUpgradeModal
-        isOpen={showPremiumModal}
-        onClose={() => setShowPremiumModal(false)}
-        isPremium={isPremiumActive}
-        onActivated={() => {
-          setIsPremiumActive(true);
-          // Refresh full plan details after activation so ad targeting reflects the new plan
-          window.electronAPI?.licenseGetDetails?.()
-            .then(d => setPlanDetails(d ?? { isPremium: true }))
-            .catch(() => setPlanDetails({ isPremium: true }));
-          setShowPremiumModal(false);
-          // If user activated during post-trial modal, close it — they have a plan now
-          setShowTrialExpiredModal(false);
-          setActiveTrial(null);
-          // After activation, open settings to Profile Intelligence
-          setTimeout(() => {
-            openProfileExclusive();
-          }, 300);
-        }}
-        onDeactivated={() => { setIsPremiumActive(false); setPlanDetails({ isPremium: false }); }}
       />
     </div>
     </ErrorBoundary>

@@ -1512,14 +1512,14 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                                 <div className="p-4 rounded-xl border bg-accent-primary/5 border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <CreditCard className="w-4 h-4 text-accent-primary" /> Pro Requirement
+                                        <CreditCard className="w-4 h-4 text-accent-primary" /> 功能说明
                                     </h4>
                                     <p className="text-[11px] text-text-secondary mb-2">
-                                        This is a Natively Pro feature.
+                                        Profile Intelligence 是 Natively 的核心功能，所有用户均可免费使用。
                                     </p>
                                     <ol className="text-[11px] text-text-secondary space-y-1 list-decimal pl-4 mb-0">
-                                        <li>Get a License at <button onClick={() => { (window as any).electronAPI?.openExternal('https://natively.software/') }} className="text-accent-primary hover:underline font-semibold">natively.software</button></li>
-                                        <li>Drop your Resume PDF in the UI to activate injection.</li>
+                                        <li>上传你的简历 PDF，AI 将基于你的真实经历回答问题。</li>
+                                        <li>上传职位描述（JD），AI 将针对该岗位进行精准回答。</li>
                                     </ol>
                                 </div>
                             </div>
@@ -1653,10 +1653,10 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
                             <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
-                                <Star size={14} /> Pro Feature
+                                <Star size={14} /> 专家模式
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Modes are locked behind Natively Pro. Free and trial users see only the General mode. Activate a license via <strong>Settings → Natively API</strong> to unlock all seven modes.
+                                Natively 提供 7 种专家模式：General、Sales、Recruiting、Team Meet、Looking for work、Technical Interview 和 Lecture。每个模式都有针对性的系统提示和笔记结构，帮助你在不同场景下获得最佳辅助。
                             </p>
                         </div>
                     </div>
