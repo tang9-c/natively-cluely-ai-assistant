@@ -27,7 +27,6 @@ import type { TranscriptTurn } from "./llm/transcriptCleaner"
 import { deepVariableReplacer, getByPath, injectImageIntoMessages } from './utils/curlUtils';
 import curl2Json from "@bany/curl-to-json";
 import { CustomProvider, CurlProvider } from './services/CredentialsManager';
-import { TRIAL_SENTINEL_KEY } from './config/constants';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import axios from 'axios';
@@ -1985,17 +1984,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (!nativelyKey) throw new Error('Natively API key not set');
 
     const endpointUrl = 'https://api.natively.software/v1/chat';
-    // When the key is the trial sentinel, authenticate with the real trial token
-    // instead — the server validates x-trial-token, not __trial__ as an API key.
-    const headers: any = { 'Content-Type': 'application/json' };
-    if (nativelyKey === TRIAL_SENTINEL_KEY) {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const trialToken = CredentialsManager.getInstance().getTrialToken();
-      if (!trialToken) throw new Error('Trial token not found');
-      headers['x-trial-token'] = trialToken;
-    } else {
-      headers['x-natively-key'] = nativelyKey;
-    }
+    const headers: any = { 'Content-Type': 'application/json', 'x-natively-key': nativelyKey };
 
     const body: any = { messages: [{ role: 'user', content: userMessage }] };
 
@@ -3347,19 +3336,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       if (images.length) body.images = images;
     }
 
-    // When the key is the trial sentinel, authenticate with the real trial token.
     const streamHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'text/event-stream',
+      'x-natively-key': nativelyKey,
     };
-    if (nativelyKey === TRIAL_SENTINEL_KEY) {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const trialToken = CredentialsManager.getInstance().getTrialToken();
-      if (!trialToken) throw new Error('Trial token not found');
-      streamHeaders['x-trial-token'] = trialToken;
-    } else {
-      streamHeaders['x-natively-key'] = nativelyKey;
-    }
 
     // Connect-only timeout: 10s to establish the TCP+TLS+HTTP handshake.
     // Once the server sends the first response byte (headers received), we clear
