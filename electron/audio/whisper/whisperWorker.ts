@@ -104,7 +104,8 @@ async function updatePromptCache(promptText: string): Promise<void> {
 // non-English audio as phonetic English. Force language='english' so the
 // behaviour is at least documented and consistent.
 const ENGLISH_ONLY_MODELS = new Set([
-  // Moonshine
+  // Moonshine — English-only by design
+  'onnx-community/moonshine-tiny-ONNX',
   'onnx-community/moonshine-base-ONNX',
   // Distil-Whisper — English-only checkpoints
   'distil-whisper/distil-small.en',
