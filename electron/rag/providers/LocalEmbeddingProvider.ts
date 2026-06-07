@@ -6,8 +6,8 @@ import { embeddingSpaceKey } from '../embeddingSpace';
 
 export class LocalEmbeddingProvider implements IEmbeddingProvider {
   readonly name = 'local';
-  readonly dimensions = 384; // all-MiniLM-L6-v2
-  readonly model = 'Xenova/all-MiniLM-L6-v2';
+  readonly dimensions = 384; // paraphrase-multilingual-MiniLM-L12-v2
+  readonly model = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
   readonly space: string;
 
   private pipe: any = null;
@@ -60,8 +60,9 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       env.allowRemoteModels = false;
       env.localModelPath = this.modelPath;
 
-      this.pipe = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+      this.pipe = await pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', {
         local_files_only: true,
+        model_file_name: 'model_int8',
       });
     })();
 
@@ -81,7 +82,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   }
 
   async embedQuery(text: string): Promise<number[]> {
-    return this.embed(text); // all-MiniLM-L6-v2 is symmetric
+    return this.embed(text); // paraphrase-multilingual-MiniLM-L12-v2 is symmetric
   }
 
   async embedBatch(texts: string[]): Promise<number[][]> {
