@@ -7,6 +7,7 @@
  * fallbacks are used instead. No build errors.
  */
 import React from 'react';
+import { ModesSettingsBase } from '../components/settings/ModesSettingsBase';
 
 // ─── No-op fallbacks ────────────────────────────────────────────────
 const NullComponent: React.FC<any> = () => null;
@@ -109,4 +110,4 @@ export const MaxUltraUpgradeToaster: React.FC<any> =
   get(_maxUltraUpgradeToaster, 'MaxUltraUpgradeToaster', NullComponent);
 
 export const ModesSettings: React.FC<any> =
-  get(_modesSettings, 'default', NullComponent);
+  get(_modesSettings, 'default', ModesSettingsBase);
