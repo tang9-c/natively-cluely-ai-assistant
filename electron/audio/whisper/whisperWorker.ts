@@ -105,7 +105,7 @@ async function updatePromptCache(promptText: string): Promise<void> {
 // behaviour is at least documented and consistent.
 const ENGLISH_ONLY_MODELS = new Set([
   // Moonshine — English-only by design
-  'onnx-community/moonshine-tiny-zh-ONNX',
+  'onnx-community/moonshine-tiny-ONNX',
   'onnx-community/moonshine-base-ONNX',
   // Distil-Whisper — English-only checkpoints
   'distil-whisper/distil-small.en',
