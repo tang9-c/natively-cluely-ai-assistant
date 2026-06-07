@@ -56,6 +56,7 @@ export function configureTransformersCache(): void {
     .then(({ env }) => {
       env.cacheDir = getModelsDir();
       env.allowRemoteModels = true;
+      env.remoteHost = (process.env.HF_ENDPOINT || 'https://hf-mirror.com/').replace(/\/$/, '') + '/';
     })
     .catch(() => {});
 }
