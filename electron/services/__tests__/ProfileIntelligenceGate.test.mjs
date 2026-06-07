@@ -1,13 +1,10 @@
 // electron/services/__tests__/ProfileIntelligenceGate.test.mjs
 //
-// Verifies the Profile Intelligence IPC handlers enforce the Pro/trial gate.
+// Verifies the Profile Intelligence IPC handlers are unconditionally
+// available (all Pro features are unlocked in the open-source build).
 // We test this at the source level (matching the existing ModeBleeding.test
 // pattern) because the IPC handlers themselves require an Electron app
 // runtime to instantiate.
-//
-// The contract is: every premium handler that ingests user data must call
-// isProOrTrialActive() before doing any work, and short-circuit to the
-// "Pro license required" error message otherwise.
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.resolve(__dirname, '../../ipcHandlers.ts');
 
-const GUARDED_HANDLERS = [
+const PROFILE_HANDLERS = [
   'profile:upload-resume',
   'profile:set-mode',
   'profile:upload-jd',
@@ -27,50 +24,31 @@ const GUARDED_HANDLERS = [
   'profile:generate-negotiation',
 ];
 
-describe('Profile Intelligence IPC: Pro/trial gate', () => {
+describe('Profile Intelligence IPC: all features unconditionally available', () => {
   const source = fs.readFileSync(SOURCE, 'utf8');
 
-  for (const handler of GUARDED_HANDLERS) {
-    test(`handler "${handler}" calls isProOrTrialActive() before doing work`, () => {
-      // Find the handler body — start at safeHandle("name", and run until the
-      // matching });
+  for (const handler of PROFILE_HANDLERS) {
+    test(`handler "${handler}" no longer gates on Pro/trial`, () => {
       const idx = findSafeHandle(source, handler);
       assert.ok(idx >= 0, `Handler ${handler} not found in ipcHandlers.ts`);
 
       const slice = sliceSafeHandleBlock(source, handler).slice(0, 3000);
 
-      // The gate call must appear before the orchestrator is invoked. We
-      // assert presence; ordering is verified by a separate index check.
       assert.ok(
-        slice.includes('isProOrTrialActive()'),
-        `Handler ${handler} must invoke isProOrTrialActive() to enforce the gate`
+        !slice.includes('isProOrTrialActive()'),
+        `Handler ${handler} must NOT invoke isProOrTrialActive() (Pro gate removed)`
       );
       assert.ok(
-        slice.includes('Pro license required'),
-        `Handler ${handler} must return the "Pro license required" error when gated out`
-      );
-
-      const gateIdx = slice.indexOf('isProOrTrialActive()');
-      const ingestIdx = Math.min(
-        ...['ingestDocument', 'getKnowledgeOrchestrator', 'setKnowledgeMode', 'generateNegotiation', 'getCompanyResearchEngine']
-          .map(s => {
-            const i = slice.indexOf(s);
-            return i >= 0 ? i : Number.MAX_SAFE_INTEGER;
-          })
-      );
-      assert.ok(
-        gateIdx < ingestIdx,
-        `Handler ${handler}: gate check (idx ${gateIdx}) must precede premium work (idx ${ingestIdx})`
+        !slice.includes('Pro license required'),
+        `Handler ${handler} must NOT return "Pro license required" error`
       );
     });
   }
 
-  test('profile:get-status returns safe defaults when premium is unavailable (does not call ingest)', () => {
+  test('profile:get-status returns safe defaults when orchestrator is missing', () => {
     const idx = findSafeHandle(source, 'profile:get-status');
     assert.ok(idx >= 0);
     const slice = sliceSafeHandleBlock(source, 'profile:get-status').slice(0, 1500);
-    // get-status is intentionally NOT gated (it just reports status) — it
-    // should return a falsy hasProfile when the orchestrator is missing.
     assert.ok(slice.includes('hasProfile: false'), 'profile:get-status must default to hasProfile=false when orchestrator missing');
   });
 });
