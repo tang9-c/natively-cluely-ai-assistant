@@ -40,7 +40,7 @@ export const LEGACY_PROVIDER_MODEL: Readonly<Record<string, string>> = {
   gemini: 'gemini-embedding-001',
   ollama: 'nomic-embed-text',
   openai: 'text-embedding-3-small',
-  local: 'xenova/all-minilm-l6-v2',
+  local: 'xenova/paraphrase-multilingual-minilm-l12-v2',
 };
 
 /**

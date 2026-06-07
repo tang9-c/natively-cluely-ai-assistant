@@ -15,9 +15,11 @@ async function downloadModels() {
     
     try {
         // 1. Embedding model (RAG)
-        console.log('[download-models] Downloading Xenova/all-MiniLM-L6-v2...');
-        await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-        console.log('[download-models] all-MiniLM-L6-v2 downloaded.');
+        console.log('[download-models] Downloading Xenova/paraphrase-multilingual-MiniLM-L12-v2...');
+        await pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', {
+            model_file_name: 'model_int8',
+        });
+        console.log('[download-models] paraphrase-multilingual-MiniLM-L12-v2 downloaded.');
 
         // 2. Zero-shot classification model (Intent Classifier)
         console.log('[download-models] Downloading Xenova/mobilebert-uncased-mnli...');
