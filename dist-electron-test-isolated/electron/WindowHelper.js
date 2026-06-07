@@ -27,7 +27,6 @@ class WindowHelper {
     // Track current window mode (persists even when overlay is hidden via Cmd+B)
     currentWindowMode = 'launcher';
     appState;
-    contentProtection = false;
     opacityTimeout = null;
     // Constants
     static OVERLAY_DEFAULT_WIDTH = 600;
@@ -53,18 +52,6 @@ class WindowHelper {
             return electron_1.screen.getDisplayMatching(this.overlayWindow.getBounds()).workArea;
         }
         return electron_1.screen.getPrimaryDisplay().workArea;
-    }
-    setContentProtection(enable) {
-        this.contentProtection = enable;
-        this.applyContentProtection(enable);
-    }
-    applyContentProtection(enable) {
-        const windows = [this.launcherWindow, this.overlayWindow];
-        windows.forEach((win) => {
-            if (win && !win.isDestroyed()) {
-                win.setContentProtection(enable);
-            }
-        });
     }
     setWindowDimensions(width, height) {
         const activeWindow = this.getMainWindow(); // Gets currently focused/relevant window
@@ -197,34 +184,21 @@ class WindowHelper {
             icon: (() => {
                 const isMac = process.platform === 'darwin';
                 const isWin = process.platform === 'win32';
-                const mode = this.appState.getDisguise();
-                if (mode === 'none') {
-                    if (isMac) {
-                        return electron_1.app.isPackaged
-                            ? node_path_1.default.join(process.resourcesPath, 'natively.icns')
-                            : node_path_1.default.resolve(__dirname, '../../assets/natively.icns');
-                    }
-                    else if (isWin) {
-                        return electron_1.app.isPackaged
-                            ? node_path_1.default.join(process.resourcesPath, 'assets/icons/win/icon.ico')
-                            : node_path_1.default.resolve(__dirname, '../../assets/icons/win/icon.ico');
-                    }
-                    else {
-                        return electron_1.app.isPackaged
-                            ? node_path_1.default.join(process.resourcesPath, 'icon.png')
-                            : node_path_1.default.resolve(__dirname, '../../assets/icon.png');
-                    }
+                if (isMac) {
+                    return electron_1.app.isPackaged
+                        ? node_path_1.default.join(process.resourcesPath, 'natively.icns')
+                        : node_path_1.default.resolve(__dirname, '../../assets/natively.icns');
                 }
-                // Disguise mode icons
-                let iconName = 'terminal.png';
-                if (mode === 'settings')
-                    iconName = 'settings.png';
-                if (mode === 'activity')
-                    iconName = 'activity.png';
-                const platformDir = isWin ? 'win' : 'mac';
-                return electron_1.app.isPackaged
-                    ? node_path_1.default.join(process.resourcesPath, `assets/fakeicon/${platformDir}/${iconName}`)
-                    : node_path_1.default.resolve(__dirname, `../../assets/fakeicon/${platformDir}/${iconName}`);
+                else if (isWin) {
+                    return electron_1.app.isPackaged
+                        ? node_path_1.default.join(process.resourcesPath, 'assets/icons/win/icon.ico')
+                        : node_path_1.default.resolve(__dirname, '../../assets/icons/win/icon.ico');
+                }
+                else {
+                    return electron_1.app.isPackaged
+                        ? node_path_1.default.join(process.resourcesPath, 'icon.png')
+                        : node_path_1.default.resolve(__dirname, '../../assets/icon.png');
+                }
             })(),
         };
         console.log(`[WindowHelper] Icon Path: ${launcherSettings.icon}`);
@@ -237,7 +211,6 @@ class WindowHelper {
             console.error('[WindowHelper] Failed to create BrowserWindow:', err);
             return;
         }
-        this.launcherWindow.setContentProtection(this.contentProtection);
         this.launcherWindow
             .loadURL(`${startUrl}?window=launcher`)
             .then(() => console.log('[WindowHelper] loadURL success'))
@@ -289,7 +262,6 @@ class WindowHelper {
             ...(isMac ? { type: 'panel' } : {}),
         };
         this.overlayWindow = new electron_1.BrowserWindow(overlaySettings);
-        this.overlayWindow.setContentProtection(this.contentProtection);
         if (process.platform === 'darwin') {
             this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
             this.overlayWindow.setHiddenInMissionControl(true);
@@ -358,9 +330,7 @@ class WindowHelper {
         // Suppress Windows system context menu on right-click (title bar)
         this.launcherWindow.on('system-context-menu', (e, point) => {
             e.preventDefault();
-            if (!this.appState.getUndetectable()) {
-                this.showContextMenu(this.launcherWindow, point);
-            }
+            this.showContextMenu(this.launcherWindow, point);
         });
         this.launcherWindow.on('move', () => {
             if (this.launcherWindow) {
@@ -418,9 +388,7 @@ class WindowHelper {
             });
             this.overlayWindow.on('system-context-menu', (e, point) => {
                 e.preventDefault();
-                if (!this.appState.getUndetectable()) {
-                    this.showContextMenu(this.overlayWindow, point);
-                }
+                this.showContextMenu(this.overlayWindow, point);
             });
             // Re-assert always-on-top on blur (Windows only). Screen-sharing tools
             // (Zoom, Lark, Teams, etc.) hook the DWM compositor and can demote even
@@ -496,7 +464,7 @@ class WindowHelper {
     }
     hideMainWindow() {
         // Do NOT call setOpacity(0) before hide() on macOS — it causes WindowServer to
-        // re-register the app as a regular window, breaking undetectable/stealth mode
+        // re-register the app as a regular window, breaking the panel's stealth behavior
         // (fixed in v2.0.8, regressed when opacity was re-added for screenshot flash).
         // Screenshot capture already waits 80ms after hide() for compositor flush.
         if (process.platform === 'win32') {
@@ -591,16 +559,11 @@ class WindowHelper {
         this.toggleMainWindow();
     }
     centerAndShowWindow() {
-        // If a meeting is active (overlay mode), bring the overlay up instead of the
-        // launcher — switching to the launcher during a meeting would expose it in the
-        // taskbar/dock and break stealth.
-        const stealthShow = this.appState.getUndetectable();
         if (this.currentWindowMode === 'overlay') {
-            // In undetectable mode, show without stealing focus from the foreground app.
-            this.switchToOverlay(stealthShow ? true : undefined);
+            this.switchToOverlay();
         }
         else {
-            this.switchToLauncher(stealthShow ? true : undefined);
+            this.switchToLauncher();
             this.launcherWindow?.center();
         }
     }
@@ -638,49 +601,24 @@ class WindowHelper {
                 };
             this.overlayWindow.setBounds(targetBounds);
             this.overlayBounds = this.overlayWindow.getBounds();
-            // Restore opacity before showing (it may have been zeroed by hideMainWindow).
-            if (process.platform === 'win32' && this.contentProtection) {
-                // Opacity Shield: Show at 0 opacity first to prevent frame leak
-                this.overlayWindow.setOpacity(0);
-                if (inactive)
-                    this.overlayWindow.showInactive();
-                else
-                    this.overlayWindow.show();
-                this.overlayWindow.setContentProtection(true);
-                // Small delay to ensure Windows DWM processes the flag before making it opaque
-                if (this.opacityTimeout)
-                    clearTimeout(this.opacityTimeout);
-                this.opacityTimeout = setTimeout(() => {
-                    if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-                        this.overlayWindow.setOpacity(1);
-                        // Re-assert z-order on Windows — DWM can silently demote the HWND after hide/show
-                        this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
-                        if (!inactive)
-                            this.overlayWindow.focus();
-                    }
-                }, 60);
+            // Restore opacity (may have been zeroed pre-screenshot by hideMainWindow)
+            this.overlayWindow.setOpacity(1);
+            // Re-assert z-order BEFORE show on Windows — DWM processes setAlwaysOnTop
+            // synchronously, so calling it before show() ensures the window lands at the
+            // correct z-level on first paint. Calling it after focus() would leave a brief
+            // window where the HWND is focused at the wrong z-level (issue #136).
+            // Skipped on macOS — calling setAlwaysOnTop triggers [NSApp activate] which
+            // steals focus from Zoom/browser even when showInactive() was used.
+            if (process.platform === 'win32') {
+                this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
             }
-            else {
-                // Restore opacity (may have been zeroed pre-screenshot by hideMainWindow)
-                this.overlayWindow.setOpacity(1);
-                this.overlayWindow.setContentProtection(this.contentProtection);
-                // Re-assert z-order BEFORE show on Windows — DWM processes setAlwaysOnTop
-                // synchronously, so calling it before show() ensures the window lands at the
-                // correct z-level on first paint. Calling it after focus() would leave a brief
-                // window where the HWND is focused at the wrong z-level (issue #136).
-                // Skipped on macOS — calling setAlwaysOnTop triggers [NSApp activate] which
-                // steals focus from Zoom/browser even when showInactive() was used.
-                if (process.platform === 'win32') {
-                    this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
-                }
-                if (inactive)
-                    this.overlayWindow.showInactive();
-                else
-                    this.overlayWindow.show();
-                // Only grab focus for explicit user-initiated shows (not shortcut/ghost shows)
-                if (!inactive)
-                    this.overlayWindow.focus();
-            }
+            if (inactive)
+                this.overlayWindow.showInactive();
+            else
+                this.overlayWindow.show();
+            // Only grab focus for explicit user-initiated shows (not shortcut/ghost shows)
+            if (!inactive)
+                this.overlayWindow.focus();
             this.isWindowVisible = true;
         }
         // Hide Launcher SECOND
@@ -694,35 +632,14 @@ class WindowHelper {
         KeybindManager_1.KeybindManager.getInstance().setMode('launcher'); // Adapted from public PR #123 — verify premium interaction
         // Show Launcher FIRST
         if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
-            if (process.platform === 'win32' && this.contentProtection) {
-                // Opacity Shield: Show at 0 opacity first
-                this.launcherWindow.setOpacity(0);
-                if (inactive)
-                    this.launcherWindow.showInactive();
-                else
-                    this.launcherWindow.show();
-                this.launcherWindow.setContentProtection(true);
-                if (this.opacityTimeout)
-                    clearTimeout(this.opacityTimeout);
-                this.opacityTimeout = setTimeout(() => {
-                    if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
-                        this.launcherWindow.setOpacity(1);
-                        if (!inactive)
-                            this.launcherWindow.focus();
-                    }
-                }, 60);
-            }
-            else {
-                // Restore opacity (may have been zeroed pre-screenshot by hideMainWindow)
-                this.launcherWindow.setOpacity(1);
-                this.launcherWindow.setContentProtection(this.contentProtection);
-                if (inactive)
-                    this.launcherWindow.showInactive();
-                else
-                    this.launcherWindow.show();
-                if (!inactive)
-                    this.launcherWindow.focus();
-            }
+            // Restore opacity (may have been zeroed pre-screenshot by hideMainWindow)
+            this.launcherWindow.setOpacity(1);
+            if (inactive)
+                this.launcherWindow.showInactive();
+            else
+                this.launcherWindow.show();
+            if (!inactive)
+                this.launcherWindow.focus();
             this.isWindowVisible = true;
         }
         // Hide Overlay SECOND

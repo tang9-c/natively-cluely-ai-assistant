@@ -21,10 +21,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SonioxStreamingSTT = void 0;
-const events_1 = require("events");
 const ws_1 = __importDefault(require("ws"));
 const languages_1 = require("../config/languages");
 const dnsHelpers_1 = require("./dnsHelpers");
+const BaseSTT_1 = require("./BaseSTT");
 const SONIOX_WEBSOCKET_URL = 'wss://stt-rt.soniox.com/transcribe-websocket';
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 30000;
@@ -34,14 +34,12 @@ const RECONNECT_MAX_DELAY_MS = 30000;
 // user-triggered restart via stop()/start() resets the counter to 0.
 const RECONNECT_MAX_ATTEMPTS = 10;
 const KEEPALIVE_INTERVAL_MS = 5000;
-class SonioxStreamingSTT extends events_1.EventEmitter {
+class SonioxStreamingSTT extends BaseSTT_1.BaseSTT {
     apiKey;
     ws = null;
-    isActive = false;
     shouldReconnect = false;
     configSent = false;
-    sampleRate = 16000;
-    numChannels = 1;
+    languageCode;
     reconnectAttempts = 0;
     reconnectTimer = null;
     keepAliveTimer = null;
@@ -55,11 +53,11 @@ class SonioxStreamingSTT extends events_1.EventEmitter {
     // Configuration (match GoogleSTT / DeepgramStreamingSTT interface)
     // =========================================================================
     setSampleRate(rate) {
-        if (this.sampleRate === rate)
+        if (this._sampleRate === rate)
             return;
-        this.sampleRate = rate;
+        this._sampleRate = rate;
         console.log(`[SonioxStreaming] Sample rate set to ${rate}`);
-        if (this.isActive) {
+        if (this._isActive) {
             console.log('[SonioxStreaming] Sample rate changed while active. Restarting...');
             // Save in-flight buffer so chunks captured between stop() and the new
             // WebSocket connect() are not silently discarded (matches Deepgram pattern)
@@ -72,17 +70,18 @@ class SonioxStreamingSTT extends events_1.EventEmitter {
         }
     }
     setAudioChannelCount(count) {
-        this.numChannels = count;
+        if (this._numChannels === count)
+            return;
+        this._numChannels = count;
         console.log(`[SonioxStreaming] Channel count set to ${count}`);
     }
-    languageCode;
     /** Set recognition language hint using ISO-639-1 code */
     setRecognitionLanguage(key) {
         const config = languages_1.RECOGNITION_LANGUAGES[key];
         if (config) {
             this.languageCode = config.iso639;
             console.log(`[SonioxStreaming] Language hint set to ${this.languageCode}`);
-            if (this.isActive) {
+            if (this._isActive) {
                 console.log('[SonioxStreaming] Language changed while active. Restarting...');
                 this.stop();
                 this.start();
@@ -93,8 +92,6 @@ class SonioxStreamingSTT extends events_1.EventEmitter {
             console.log(`[SonioxStreaming] Language hint set to auto`);
         }
     }
-    /** No-op — no Google credentials needed */
-    setCredentials(_path) { }
     /**
      * No-op for keywords — Soniox uses structured context instead.
      * Context is set via the initial config message.
@@ -104,9 +101,9 @@ class SonioxStreamingSTT extends events_1.EventEmitter {
     // Lifecycle
     // =========================================================================
     start() {
-        if (this.isActive)
+        if (this._isActive)
             return;
-        this.isActive = true; // Set immediately so write() buffers audio during WS handshake
+        this._isActive = true; // Set immediately so write() buffers audio during WS handshake
         this.shouldReconnect = true;
         this.reconnectAttempts = 0;
         this.connect();
@@ -127,7 +124,7 @@ class SonioxStreamingSTT extends events_1.EventEmitter {
             this.ws.close();
             this.ws = null;
         }
-        this.isActive = false;
+        this._isActive = false;
         this.isConnecting = false;
         this.configSent = false;
         this.buffer = [];
@@ -137,7 +134,7 @@ class SonioxStreamingSTT extends events_1.EventEmitter {
     // Audio Data
     // =========================================================================
     write(chunk) {
-        if (!this.isActive)
+        if (!this._isActive)
             return;
         if (!this.ws || this.ws.readyState !== ws_1.default.OPEN || !this.configSent) {
             this.buffer.push(chunk);
@@ -152,7 +149,7 @@ class SonioxStreamingSTT extends events_1.EventEmitter {
         this.ws.send(chunk);
     }
     finalize() {
-        if (!this.isActive || !this.ws || !this.configSent)
+        if (!this._isActive || !this.ws || !this.configSent)
             return;
         if (this.ws.readyState === ws_1.default.OPEN) {
             try {
@@ -171,7 +168,7 @@ class SonioxStreamingSTT extends events_1.EventEmitter {
         if (this.isConnecting)
             return;
         this.isConnecting = true;
-        console.log(`[SonioxStreaming] Connecting (rate=${this.sampleRate}, ch=${this.numChannels})...`);
+        console.log(`[SonioxStreaming] Connecting (rate=${this._sampleRate}, ch=${this._numChannels})...`);
         this.configSent = false;
         // streamingStttWsOptions: forces IPv4-only DNS lookup (sidesteps Node's
         // macOS dual-stack ENOTFOUND on IPv4-only CNAME chains) and caps the
@@ -181,7 +178,7 @@ class SonioxStreamingSTT extends events_1.EventEmitter {
             // Guard: stop() may have been called while the WS handshake was in flight.
             // shouldReconnect is set to false by stop() before ws is nulled, so it's a
             // reliable signal that we should abort here without crashing.
-            if (!this.shouldReconnect || !this.isActive) {
+            if (!this.shouldReconnect || !this._isActive) {
                 this.ws?.close();
                 this.ws = null;
                 this.isConnecting = false;
@@ -194,8 +191,8 @@ class SonioxStreamingSTT extends events_1.EventEmitter {
                 api_key: this.apiKey,
                 model: 'stt-rt-v4',
                 audio_format: 'pcm_s16le',
-                sample_rate: this.sampleRate,
-                num_channels: this.numChannels,
+                sample_rate: this._sampleRate,
+                num_channels: this._numChannels,
                 enable_language_identification: true,
                 enable_endpoint_detection: true,
             };
@@ -305,7 +302,7 @@ class SonioxStreamingSTT extends events_1.EventEmitter {
             }
             else {
                 // If not reconnecting, mark session as truly inactive
-                this.isActive = false;
+                this._isActive = false;
             }
         });
     }

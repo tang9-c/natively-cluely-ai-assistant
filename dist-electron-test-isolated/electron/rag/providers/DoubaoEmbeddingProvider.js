@@ -1,11 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DoubaoEmbeddingProvider = void 0;
+const embeddingSpace_1 = require("../embeddingSpace");
 class DoubaoEmbeddingProvider {
     apiKey;
-    model;
     mrlDim;
     name = 'doubao';
+    model;
+    space;
     dimensions; // Dynamically detected from actual API response
     baseUrl = 'https://ark.cn-beijing.volces.com/api/v3';
     constructor(apiKey, 
@@ -14,10 +16,11 @@ class DoubaoEmbeddingProvider {
     model, mrlDim // Optional MRL dimension: 2048, 1024, 512, 256
     ) {
         this.apiKey = apiKey;
-        this.model = model;
         this.mrlDim = mrlDim;
         // Start with a safe default; actual dimensions are detected at runtime via isAvailable()
         this.dimensions = this.mrlDim || 4096;
+        this.model = model || 'unknown';
+        this.space = (0, embeddingSpace_1.embeddingSpaceKey)({ name: this.name, model: this.model, dimensions: this.dimensions });
         // Log the configured model/endpoint ID for debugging
         console.log(`[DoubaoEmbedding] Configured model/endpoint: ${this.model || '(none - will likely fail)'}`);
     }

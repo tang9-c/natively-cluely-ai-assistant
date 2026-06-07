@@ -1,14 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OllamaEmbeddingProvider = void 0;
+const embeddingSpace_1 = require("../embeddingSpace");
 class OllamaEmbeddingProvider {
     baseUrl;
-    model;
     name = 'ollama';
     dimensions = 768; // nomic-embed-text outputs 768
+    model;
+    space;
     constructor(baseUrl = 'http://localhost:11434', model = 'nomic-embed-text') {
         this.baseUrl = baseUrl;
         this.model = model;
+        this.space = (0, embeddingSpace_1.embeddingSpaceKey)({ name: this.name, model: this.model, dimensions: this.dimensions });
     }
     async isAvailable() {
         try {

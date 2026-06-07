@@ -1,7 +1,42 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ModesManager = exports.TEMPLATE_NOTE_SECTIONS = exports.MODE_TEMPLATES = void 0;
 exports.encodeModeContextPayload = encodeModeContextPayload;
+exports.escapeXmlText = escapeXmlText;
+const crypto = __importStar(require("crypto"));
 const DatabaseManager_1 = require("../db/DatabaseManager");
 const ModeContextRetriever_1 = require("./ModeContextRetriever");
 const prompts_1 = require("../llm/prompts");
@@ -89,6 +124,14 @@ for (const [templateType, prompt] of Object.entries(TEMPLATE_SYSTEM_PROMPTS)) {
 function encodeModeContextPayload(value) {
     return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
 }
+function escapeXmlText(value) {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
 function rowToMode(row) {
     return {
         id: row.id,
@@ -158,32 +201,36 @@ class ModesManager {
         const row = DatabaseManager_1.DatabaseManager.getInstance().getActiveMode();
         return row ? rowToMode(row) : null;
     }
-    // Mode templates where a salary-negotiation coaching card would replace the
-    // user's expected answer with off-topic content. Technical interviews are
-    // coding/system-design only; team meetings and lectures have no salary
-    // scope. Issue #272: technical-interview users were getting one-line salary
-    // coaching cards instead of technical answers from the "What to Answer"
-    // button because the premium negotiation tracker fires on any interviewer
-    // utterance regardless of the active mode.
-    static NEGOTIATION_INCOMPATIBLE_TEMPLATES = new Set([
+    // Modes where the premium knowledge intercept (negotiation coaching, intro
+    // shortcut, premium-flavored systemPromptInjection/contextBlock) is OUT OF
+    // SCOPE and would replace the user's expected answer with off-topic content.
+    // Technical interviews are coding/system-design only; team meetings and
+    // lectures have no candidate/interview scope. Issue #272: technical-
+    // interview users were getting one-line salary coaching cards instead of
+    // technical answers because the premium tracker fires on any interviewer
+    // utterance regardless of the active mode. The fix also closes two sibling
+    // vectors of the same bug class — the intro-question shortcut and the
+    // premium prompt/context injection — by gating the whole intercept here.
+    static PREMIUM_INTERCEPT_INCOMPATIBLE_TEMPLATES = new Set([
         'technical-interview',
         'team-meet',
         'lecture',
     ]);
     /**
-     * True when negotiation coaching is contextually appropriate for the active
-     * mode. False for technical-interview, team-meet, and lecture — modes where
-     * a salary card mid-conversation overwrites the user's expected answer.
-     * Defaults to true when no mode is active.
+     * True when the premium knowledge intercept (negotiation coaching, intro
+     * shortcut, premium system-prompt/context injection) is contextually
+     * appropriate for the active mode. False for technical-interview, team-
+     * meet, and lecture — modes where premium-flavored interjections overwrite
+     * the user's expected answer. Defaults to true when no mode is active.
      */
-    isNegotiationCoachingAllowed() {
+    isPremiumKnowledgeInterceptAllowed() {
         const mode = this.getActiveMode();
         if (!mode)
             return true;
-        return !ModesManager.NEGOTIATION_INCOMPATIBLE_TEMPLATES.has(mode.templateType);
+        return !ModesManager.PREMIUM_INTERCEPT_INCOMPATIBLE_TEMPLATES.has(mode.templateType);
     }
     createMode(params) {
-        const id = `mode_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const id = `mode_${crypto.randomUUID()}`;
         DatabaseManager_1.DatabaseManager.getInstance().createMode({
             id,
             name: params.name,
@@ -193,7 +240,7 @@ class ModesManager {
         // Seed default note sections for this template type
         const defaultSections = exports.TEMPLATE_NOTE_SECTIONS[params.templateType] ?? [];
         defaultSections.forEach((s, i) => {
-            const sectionId = `ns_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`;
+            const sectionId = `ns_${crypto.randomUUID()}`;
             DatabaseManager_1.DatabaseManager.getInstance().addNoteSection({
                 id: sectionId,
                 modeId: id,
@@ -225,7 +272,7 @@ class ModesManager {
         return DatabaseManager_1.DatabaseManager.getInstance().getReferenceFiles(modeId).map(rowToFile);
     }
     addReferenceFile(params) {
-        const id = `ref_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const id = `ref_${crypto.randomUUID()}`;
         DatabaseManager_1.DatabaseManager.getInstance().addReferenceFile({
             id,
             modeId: params.modeId,
@@ -250,7 +297,7 @@ class ModesManager {
     addNoteSection(params) {
         const existingSections = this.getNoteSections(params.modeId);
         const sortOrder = existingSections.length;
-        const id = `ns_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const id = `ns_${crypto.randomUUID()}`;
         DatabaseManager_1.DatabaseManager.getInstance().addNoteSection({
             id,
             modeId: params.modeId,

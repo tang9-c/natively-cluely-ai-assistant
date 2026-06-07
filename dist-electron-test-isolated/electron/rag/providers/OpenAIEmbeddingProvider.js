@@ -1,14 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpenAIEmbeddingProvider = void 0;
+const embeddingSpace_1 = require("../embeddingSpace");
 class OpenAIEmbeddingProvider {
     apiKey;
-    model;
     name = 'openai';
     dimensions = 1536;
+    model;
+    space;
     constructor(apiKey, model = 'text-embedding-3-small') {
         this.apiKey = apiKey;
         this.model = model;
+        this.space = (0, embeddingSpace_1.embeddingSpaceKey)({ name: this.name, model: this.model, dimensions: this.dimensions });
     }
     async isAvailable() {
         // Fast check — just validate the key format and do a single test embed

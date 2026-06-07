@@ -13,7 +13,6 @@ const startUrl = isDev
 class SettingsWindowHelper {
     settingsWindow = null;
     windowHelper = null;
-    opacityTimeout = null;
     getSettingsWindow() {
         return this.settingsWindow;
     }
@@ -86,32 +85,12 @@ class SettingsWindowHelper {
         }
         // Ensure fully visible on screen
         this.ensureVisibleOnScreen();
-        if (process.platform === 'win32' && this.contentProtection) {
-            this.settingsWindow.setOpacity(0);
-            if (activate)
-                this.settingsWindow.show();
-            else
-                this.settingsWindow.showInactive();
-            this.settingsWindow.setContentProtection(true);
-            if (this.opacityTimeout)
-                clearTimeout(this.opacityTimeout);
-            this.opacityTimeout = setTimeout(() => {
-                if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
-                    this.settingsWindow.setOpacity(1);
-                    if (activate)
-                        this.settingsWindow.focus();
-                }
-            }, 60);
-        }
-        else {
-            this.settingsWindow.setContentProtection(this.contentProtection);
-            if (activate)
-                this.settingsWindow.show();
-            else
-                this.settingsWindow.showInactive();
-            if (activate)
-                this.settingsWindow.focus();
-        }
+        if (activate)
+            this.settingsWindow.show();
+        else
+            this.settingsWindow.showInactive();
+        if (activate)
+            this.settingsWindow.focus();
         this.emitVisibilityChange(true);
     }
     reposition(mainBounds) {
@@ -173,8 +152,7 @@ class SettingsWindowHelper {
             this.settingsWindow.setHiddenInMissionControl(true);
             this.settingsWindow.setAlwaysOnTop(true, "floating");
         }
-        console.log(`[SettingsWindowHelper] Creating Settings Window with Content Protection: ${this.contentProtection}`);
-        this.settingsWindow.setContentProtection(this.contentProtection);
+        console.log(`[SettingsWindowHelper] Creating Settings Window`);
         // Load with query param
         const settingsUrl = isDev
             ? `${startUrl}?window=settings`
@@ -244,24 +222,6 @@ class SettingsWindowHelper {
             newY = bounds.y + bounds.height - height;
         }
         this.settingsWindow.setPosition(newX, newY);
-    }
-    contentProtection = false; // Track state
-    setContentProtection(enable) {
-        console.log(`[SettingsWindowHelper] Setting content protection to: ${enable}`);
-        this.contentProtection = enable;
-        if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
-            this.settingsWindow.setContentProtection(enable);
-        }
-    }
-    syncActivationPolicy() {
-        if (process.platform !== 'win32')
-            return;
-        if (!this.settingsWindow || this.settingsWindow.isDestroyed())
-            return;
-        this.settingsWindow.setContentProtection(this.contentProtection);
-        if (this.settingsWindow.isVisible()) {
-            this.settingsWindow.setOpacity(1);
-        }
     }
 }
 exports.SettingsWindowHelper = SettingsWindowHelper;

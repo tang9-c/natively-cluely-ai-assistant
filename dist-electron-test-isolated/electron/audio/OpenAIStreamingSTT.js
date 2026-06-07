@@ -17,12 +17,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpenAIStreamingSTT = void 0;
-const events_1 = require("events");
 const ws_1 = __importDefault(require("ws"));
 const axios_1 = __importDefault(require("axios"));
 const form_data_1 = __importDefault(require("form-data"));
 const languages_1 = require("../config/languages");
 const dnsHelpers_1 = require("./dnsHelpers");
+const BaseSTT_1 = require("./BaseSTT");
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DEFAULT_OPENAI_BASE = 'https://api.openai.com';
 const REALTIME_WS_URL = 'wss://api.openai.com/v1/realtime?intent=transcription';
@@ -62,15 +62,13 @@ const REST_SAMPLE_RATE = 16_000; // whisper-1 REST accepts 16 kHz
 const BITS_PER_SAMPLE = 16;
 const NUM_CHANNELS = 1;
 // ─── Class ────────────────────────────────────────────────────────────────────
-class OpenAIStreamingSTT extends events_1.EventEmitter {
+class OpenAIStreamingSTT extends BaseSTT_1.BaseSTT {
     // Public config
     apiKey;
     languageKey = 'en';
     // Audio config (set from pipeline)
     inputSampleRate = 16_000;
-    numChannels = NUM_CHANNELS;
     // Lifecycle
-    isActive = false;
     isConnecting = false;
     shouldReconnect = false;
     // WebSocket state
@@ -133,7 +131,7 @@ class OpenAIStreamingSTT extends events_1.EventEmitter {
         // its next reconnect — which is the wrong behavior for a security-relevant
         // setter (e.g. rotation of a leaked key). Mirror setRecognitionLanguage's
         // close+reopen so a rotated key takes effect immediately.
-        if (changed && this.isActive && this.mode === 'ws') {
+        if (changed && this._isActive && this.mode === 'ws') {
             console.log('[OpenAIStreaming] Reconnecting WS to apply new API key');
             this._closeWs(true);
             this._connectWs();
@@ -146,28 +144,26 @@ class OpenAIStreamingSTT extends events_1.EventEmitter {
         console.log(`[OpenAIStreaming] Input sample rate set to ${rate}Hz`);
     }
     setAudioChannelCount(count) {
-        if (this.numChannels === count)
+        if (this._numChannels === count)
             return;
-        this.numChannels = count;
+        this._numChannels = count;
         console.log(`[OpenAIStreaming] Channel count set to ${count}`);
     }
     setRecognitionLanguage(key) {
         const prev = this.languageKey;
         this.languageKey = key;
-        if (key !== prev && this.isActive && this.mode === 'ws') {
+        if (key !== prev && this._isActive && this.mode === 'ws') {
             console.log(`[OpenAIStreaming] Language changed to ${key} — restarting WS session`);
             this._closeWs(true);
             this._connectWs();
         }
     }
-    /** No-op — no credential files needed */
-    setCredentials(_path) { }
     // ─── Lifecycle ────────────────────────────────────────────────────────────
     start() {
-        if (this.isActive)
+        if (this._isActive)
             return;
         console.log('[OpenAIStreaming] Starting...');
-        this.isActive = true;
+        this._isActive = true;
         this.shouldReconnect = true;
         this.wsModelIndex = 0;
         this.wsFailures = 0;
@@ -191,10 +187,10 @@ class OpenAIStreamingSTT extends events_1.EventEmitter {
         this._connectWs();
     }
     stop() {
-        if (!this.isActive)
+        if (!this._isActive)
             return;
         console.log('[OpenAIStreaming] Stopping...');
-        this.isActive = false;
+        this._isActive = false;
         this.shouldReconnect = false;
         // Flush any remaining buffered audio to the WS before closing so we
         // don't silently drop up to ~250ms of speech at the end of a session.
@@ -241,7 +237,7 @@ class OpenAIStreamingSTT extends events_1.EventEmitter {
         this.pcmAccumulatorLen = 0;
     }
     write(chunk) {
-        if (!this.isActive)
+        if (!this._isActive)
             return;
         if (this.mode === 'ws') {
             // Always push to ring-buffer while not yet connected (pre-buffer)
@@ -267,7 +263,7 @@ class OpenAIStreamingSTT extends events_1.EventEmitter {
      * On REST fallback path: triggers immediate flush.
      */
     notifySpeechEnded() {
-        if (!this.isActive)
+        if (!this._isActive)
             return;
         if (this.mode === 'rest') {
             console.log('[OpenAIStreaming][REST] Speech ended — flushing buffer');
@@ -276,7 +272,7 @@ class OpenAIStreamingSTT extends events_1.EventEmitter {
         // WebSocket path: server VAD handles this; nothing to do.
     }
     finalize() {
-        if (!this.isActive)
+        if (!this._isActive)
             return;
         if (this.mode === 'rest') {
             console.log('[OpenAIStreaming][REST] Finalize — flushing buffer');
@@ -463,7 +459,7 @@ class OpenAIStreamingSTT extends events_1.EventEmitter {
         // before removeAllListeners() drained. Without this guard, the late
         // frame would set isSessionReady=true and call _startKeepAlive(), leaking
         // a 20s setInterval against a class the caller thinks is shut down.
-        if (!this.isActive)
+        if (!this._isActive)
             return;
         switch (msg.type) {
             case 'transcription_session.created':
@@ -873,20 +869,20 @@ class OpenAIStreamingSTT extends events_1.EventEmitter {
         for (let i = 0; i < numSamples; i++) {
             inputS16[i] = chunk.readInt16LE(i * 2);
         }
-        if (this.inputSampleRate === targetRate && this.numChannels === 1) {
+        if (this.inputSampleRate === targetRate && this._numChannels === 1) {
             return Buffer.from(inputS16.buffer);
         }
         // Mix down multi-channel to mono first, then downsample
         let monoS16;
-        if (this.numChannels > 1) {
-            const monoLength = Math.floor(inputS16.length / this.numChannels);
+        if (this._numChannels > 1) {
+            const monoLength = Math.floor(inputS16.length / this._numChannels);
             monoS16 = new Int16Array(monoLength);
             for (let i = 0; i < monoLength; i++) {
                 let sum = 0;
-                for (let c = 0; c < this.numChannels; c++) {
-                    sum += inputS16[i * this.numChannels + c];
+                for (let c = 0; c < this._numChannels; c++) {
+                    sum += inputS16[i * this._numChannels + c];
                 }
-                monoS16[i] = Math.round(sum / this.numChannels);
+                monoS16[i] = Math.round(sum / this._numChannels);
             }
         }
         else {

@@ -4584,26 +4584,30 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
 
     // ATTEMPT 3: Gemini Flash (with 2 retries = 3 attempts total)
-    console.log(`[LLMHelper] Attempting Gemini Flash for summary...`);
-    const contents = [{ text: `${systemPrompt}\n\nCONTEXT:\n${context}` }];
+    if (this.client) {
+      console.log(`[LLMHelper] Attempting Gemini Flash for summary...`);
+      const contents = [{ text: `${systemPrompt}\n\nCONTEXT:\n${context}` }];
 
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const text = await this.withTimeout(
-          this.generateWithFlash(contents),
-          45000,
-          `Gemini Flash Summary (Attempt ${attempt})`
-        );
-        if (text.trim().length > 0) {
-          console.log(`[LLMHelper] ✅ Gemini Flash summary generated successfully (Attempt ${attempt}).`);
-          return this.processResponse(text);
-        }
-      } catch (e: any) {
-        console.warn(`[LLMHelper] ⚠️ Gemini Flash attempt ${attempt}/3 failed: ${e.message}`);
-        if (attempt < 3) {
-          await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const text = await this.withTimeout(
+            this.generateWithFlash(contents),
+            45000,
+            `Gemini Flash Summary (Attempt ${attempt})`
+          );
+          if (text.trim().length > 0) {
+            console.log(`[LLMHelper] ✅ Gemini Flash summary generated successfully (Attempt ${attempt}).`);
+            return this.processResponse(text);
+          }
+        } catch (e: any) {
+          console.warn(`[LLMHelper] ⚠️ Gemini Flash attempt ${attempt}/3 failed: ${e.message}`);
+          if (attempt < 3) {
+            await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
+          }
         }
       }
+    } else {
+      console.log(`[LLMHelper] Gemini client not initialized — skipping Gemini Flash.`);
     }
 
     // ATTEMPT 4: Gemini Pro

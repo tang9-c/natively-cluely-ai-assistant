@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.initializeIpcHandlers = initializeIpcHandlers;
+const crypto = __importStar(require("crypto"));
 const electron_1 = require("electron");
 const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
@@ -51,6 +52,33 @@ function initializeIpcHandlers(appState) {
     const safeHandle = (channel, listener) => {
         electron_1.ipcMain.removeHandler(channel);
         electron_1.ipcMain.handle(channel, listener);
+    };
+    /**
+     * Wraps an async handler so that any thrown error is caught and returned
+     * as `{ success: false, error: string }` instead of crashing the IPC channel.
+     * Handlers that already manage their own return shape can opt out.
+     */
+    const withResult = (fn) => {
+        return async (...args) => {
+            try {
+                return await fn(...args);
+            }
+            catch (error) {
+                console.error(`[IPC] ${fn.name || 'handler'} error:`, error);
+                return { success: false, error: error?.message || 'unknown_error' };
+            }
+        };
+    };
+    /**
+     * Broadcasts an event to all non-destroyed renderer windows.
+     * Replaces the repetitive `BrowserWindow.getAllWindows().forEach(...)` pattern.
+     */
+    const broadcast = (eventName, ...args) => {
+        electron_1.BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed()) {
+                win.webContents.send(eventName, ...args);
+            }
+        });
     };
     /**
      * Returns true if the user has an active premium license OR an unexpired free trial.
@@ -91,10 +119,7 @@ function initializeIpcHandlers(appState) {
             db.clearProfilePersona?.();
             const llmHelper = appState.processingHelper?.getLLMHelper?.();
             llmHelper?.setPersonaPrompt?.('');
-            electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed())
-                    win.webContents.send('modes-active-cleared');
-            });
+            broadcast('modes-active-cleared');
             console.log('[IPC] Premium-only context cleared due to license loss');
         }
         catch (e) {
@@ -134,10 +159,7 @@ function initializeIpcHandlers(appState) {
             const { LicenseManager } = require('../premium/electron/services/LicenseManager');
             const result = await LicenseManager.getInstance().activateLicense(key);
             if (result?.success) {
-                electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                    if (!win.isDestroyed())
-                        win.webContents.send('license-status-changed', { isPremium: true });
-                });
+                broadcast('license-status-changed', { isPremium: true });
             }
             return result;
         }
@@ -198,10 +220,7 @@ function initializeIpcHandlers(appState) {
             }
             // Notify all windows so the license UI (ProGate, settings) refreshes immediately
             clearActiveModeOnLicenseLoss();
-            electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed())
-                    win.webContents.send('license-status-changed', { isPremium: false });
-            });
+            broadcast('license-status-changed', { isPremium: false });
         }
         catch {
             /* LicenseManager not available */
@@ -383,26 +402,6 @@ function initializeIpcHandlers(appState) {
             // console.error("Error resetting queues:", error)
             return { success: false, error: error.message };
         }
-    });
-    // Donation IPC Handlers
-    safeHandle('get-donation-status', async () => {
-        const { DonationManager } = require('./DonationManager');
-        const manager = DonationManager.getInstance();
-        return {
-            shouldShow: manager.shouldShowToaster(),
-            hasDonated: manager.getDonationState().hasDonated,
-            lifetimeShows: manager.getDonationState().lifetimeShows,
-        };
-    });
-    safeHandle('mark-donation-toast-shown', async () => {
-        const { DonationManager } = require('./DonationManager');
-        DonationManager.getInstance().markAsShown();
-        return { success: true };
-    });
-    safeHandle('set-donation-complete', async () => {
-        const { DonationManager } = require('./DonationManager');
-        DonationManager.getInstance().setHasDonated(true);
-        return { success: true };
     });
     // Generate suggestion from transcript - Natively-style text-only reasoning
     safeHandle('generate-suggestion', async (event, context, lastQuestion) => {
@@ -662,28 +661,12 @@ function initializeIpcHandlers(appState) {
         const launcherWin = appState.getWindowHelper().getLauncherWindow();
         if (launcherWin && !launcherWin.isDestroyed()) {
             launcherWin.webContents.send('settings:open-tab', tab);
-            if (appState.getUndetectable()) {
-                launcherWin.showInactive();
-            }
-            else {
-                launcherWin.show();
-                launcherWin.focus();
-            }
+            launcherWin.show();
+            launcherWin.focus();
         }
     });
     safeHandle('close-settings-window', () => {
         appState.settingsWindowHelper.closeWindow();
-    });
-    safeHandle('set-undetectable', async (_, state) => {
-        appState.setUndetectable(state);
-        return { success: true };
-    });
-    safeHandle('set-disguise', async (_, mode) => {
-        appState.setDisguise(mode);
-        return { success: true };
-    });
-    safeHandle('get-undetectable', async () => {
-        return appState.getUndetectable();
     });
     // Adapted from public PR #113 — verify premium interaction
     safeHandle('set-overlay-mouse-passthrough', async (_, enabled) => {
@@ -697,9 +680,6 @@ function initializeIpcHandlers(appState) {
     safeHandle('get-overlay-mouse-passthrough', async () => {
         return appState.getOverlayMousePassthrough();
     });
-    safeHandle('get-disguise', async () => {
-        return appState.getDisguise();
-    });
     safeHandle('set-open-at-login', async (_, openAtLogin) => {
         electron_1.app.setLoginItemSettings({
             openAtLogin,
@@ -712,42 +692,98 @@ function initializeIpcHandlers(appState) {
         const settings = electron_1.app.getLoginItemSettings();
         return settings.openAtLogin;
     });
-    safeHandle('get-verbose-logging', async () => {
-        return appState.getVerboseLogging();
-    });
+    // ── Generic Settings Handlers ──────────────────────────────────────────────
+    // Replaces repetitive get-X / set-X pairs for simple SettingsManager passthroughs.
+    // Each entry: [channelSuffix, settingsKey, options]
+    //   - validator: optional (value) => boolean | string (error message)
+    //   - broadcastEvent: optional event name to fire after successful set
+    //   - getter: optional custom getter function
+    //   - setter: optional custom setter function
+    const SETTINGS_REGISTRY = [
+        { suffix: 'verbose-logging', key: 'verboseLogging', getter: () => appState.getVerboseLogging(), setter: (v) => appState.setVerboseLogging(v) },
+        {
+            suffix: 'meeting-retention',
+            key: 'meetingRetention',
+            validator: (v) => ['forever', '7d', '30d', 'never'].includes(v) || 'invalid_retention',
+            broadcastEvent: 'meeting-retention-changed',
+        },
+        {
+            suffix: 'provider-data-scopes',
+            key: 'providerDataScopes',
+            validator: (v) => {
+                if (!v || typeof v !== 'object')
+                    return 'invalid_scopes';
+                const allowed = new Set(['transcript', 'screenshots', 'reference_files', 'profile_history', 'embeddings', 'post_call_summary']);
+                for (const k of Object.keys(v))
+                    if (!allowed.has(k))
+                        return 'invalid_scopes';
+                return true;
+            },
+            broadcastEvent: 'provider-data-scopes-changed',
+        },
+        {
+            suffix: 'screen-understanding-mode',
+            key: 'screenUnderstandingMode',
+            validator: (v) => ['vision_first', 'vision_only', 'private_vision'].includes(v) || 'invalid_mode',
+            broadcastEvent: 'screen-understanding-mode-changed',
+            getter: () => SettingsManager_1.SettingsManager.getInstance().getScreenUnderstandingMode(),
+            setter: (v) => SettingsManager_1.SettingsManager.getInstance().setScreenUnderstandingMode(v),
+        },
+        {
+            suffix: 'technical-interview-vision-first',
+            key: 'technicalInterviewVisionFirst',
+            validator: (v) => typeof v === 'boolean' || 'invalid_value',
+            broadcastEvent: 'technical-interview-vision-first-changed',
+            getter: () => SettingsManager_1.SettingsManager.getInstance().getTechnicalInterviewVisionFirst(),
+        },
+    ];
+    for (const reg of SETTINGS_REGISTRY) {
+        safeHandle(`settings:get:${reg.suffix}`, async () => {
+            if (reg.getter)
+                return reg.getter();
+            return SettingsManager_1.SettingsManager.getInstance().get(reg.key) ?? null;
+        });
+        safeHandle(`settings:set:${reg.suffix}`, async (_, value) => {
+            if (reg.validator) {
+                const ok = reg.validator(value);
+                if (ok !== true)
+                    return { success: false, error: ok };
+            }
+            if (reg.setter) {
+                reg.setter(value);
+            }
+            else {
+                SettingsManager_1.SettingsManager.getInstance().set(reg.key, value);
+            }
+            if (reg.broadcastEvent) {
+                broadcast(reg.broadcastEvent, value);
+            }
+            return { success: true };
+        });
+    }
+    // Legacy aliases — map old direct channels to the new generic settings channels
+    safeHandle('get-verbose-logging', async () => appState.getVerboseLogging());
     safeHandle('set-verbose-logging', async (_, enabled) => {
         appState.setVerboseLogging(enabled);
         return { success: true };
     });
-    safeHandle('get-meeting-retention', async () => {
-        return SettingsManager_1.SettingsManager.getInstance().get('meetingRetention') ?? 'forever';
-    });
+    safeHandle('get-meeting-retention', async () => SettingsManager_1.SettingsManager.getInstance().get('meetingRetention') ?? 'forever');
     safeHandle('set-meeting-retention', async (_, retention) => {
         if (!['forever', '7d', '30d', 'never'].includes(retention)) {
             return { success: false, error: 'invalid_retention' };
         }
         SettingsManager_1.SettingsManager.getInstance().set('meetingRetention', retention);
-        electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-            if (!win.isDestroyed()) {
-                win.webContents.send('meeting-retention-changed', retention);
-            }
-        });
+        broadcast('meeting-retention-changed', retention);
         return { success: true };
     });
-    safeHandle('get-provider-data-scopes', async () => {
-        return SettingsManager_1.SettingsManager.getInstance().get('providerDataScopes') ?? {};
-    });
+    safeHandle('get-provider-data-scopes', async () => SettingsManager_1.SettingsManager.getInstance().get('providerDataScopes') ?? {});
     safeHandle('set-provider-data-scopes', async (_, scopes) => {
         if (!scopes || typeof scopes !== 'object') {
             return { success: false, error: 'invalid_scopes' };
         }
         const allowedKeys = new Set([
-            'transcript',
-            'screenshots',
-            'reference_files',
-            'profile_history',
-            'embeddings',
-            'post_call_summary',
+            'transcript', 'screenshots', 'reference_files',
+            'profile_history', 'embeddings', 'post_call_summary',
         ]);
         const sanitized = {};
         for (const [key, value] of Object.entries(scopes)) {
@@ -756,59 +792,34 @@ function initializeIpcHandlers(appState) {
             }
         }
         SettingsManager_1.SettingsManager.getInstance().set('providerDataScopes', sanitized);
-        electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-            if (!win.isDestroyed()) {
-                win.webContents.send('provider-data-scopes-changed', sanitized);
-            }
-        });
+        broadcast('provider-data-scopes-changed', sanitized);
         return { success: true };
     });
-    safeHandle('get-screen-understanding-mode', async () => {
-        return SettingsManager_1.SettingsManager.getInstance().getScreenUnderstandingMode();
-    });
+    safeHandle('get-screen-understanding-mode', async () => SettingsManager_1.SettingsManager.getInstance().getScreenUnderstandingMode());
     safeHandle('set-screen-understanding-mode', async (_, mode) => {
         if (!['vision_first', 'vision_only', 'private_vision'].includes(mode)) {
             return { success: false, error: 'invalid_mode' };
         }
         SettingsManager_1.SettingsManager.getInstance().setScreenUnderstandingMode(mode);
-        electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-            if (!win.isDestroyed()) {
-                win.webContents.send('screen-understanding-mode-changed', mode);
-            }
-        });
+        broadcast('screen-understanding-mode-changed', mode);
         return { success: true };
     });
-    safeHandle('get-technical-interview-vision-first', async () => {
-        return SettingsManager_1.SettingsManager.getInstance().getTechnicalInterviewVisionFirst();
-    });
+    safeHandle('get-technical-interview-vision-first', async () => SettingsManager_1.SettingsManager.getInstance().getTechnicalInterviewVisionFirst());
     safeHandle('set-technical-interview-vision-first', async (_, enabled) => {
         if (typeof enabled !== 'boolean') {
             return { success: false, error: 'invalid_value' };
         }
         SettingsManager_1.SettingsManager.getInstance().set('technicalInterviewVisionFirst', enabled);
-        electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-            if (!win.isDestroyed()) {
-                win.webContents.send('technical-interview-vision-first-changed', enabled);
-            }
-        });
+        broadcast('technical-interview-vision-first-changed', enabled);
         return { success: true };
     });
-    // Legacy alias for renderer builds that still call the old IPC name.
-    // Maps the deprecated technicalInterviewDirectVision channel onto the new
-    // technicalInterviewVisionFirst getter/setter so old renderer builds keep working.
-    safeHandle('get-technical-interview-direct-vision', async () => {
-        return SettingsManager_1.SettingsManager.getInstance().getTechnicalInterviewVisionFirst();
-    });
+    safeHandle('get-technical-interview-direct-vision', async () => SettingsManager_1.SettingsManager.getInstance().getTechnicalInterviewVisionFirst());
     safeHandle('set-technical-interview-direct-vision', async (_, enabled) => {
         if (typeof enabled !== 'boolean') {
             return { success: false, error: 'invalid_value' };
         }
         SettingsManager_1.SettingsManager.getInstance().set('technicalInterviewVisionFirst', enabled);
-        electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-            if (!win.isDestroyed()) {
-                win.webContents.send('technical-interview-vision-first-changed', enabled);
-            }
-        });
+        broadcast('technical-interview-vision-first-changed', enabled);
         return { success: true };
     });
     safeHandle('get-log-file-path', async () => {
@@ -908,29 +919,6 @@ function initializeIpcHandlers(appState) {
             return { success: false, error: error.message };
         }
     });
-    safeHandle('restart-ollama', async () => {
-        try {
-            // First try to kill it if it's running
-            await appState.processingHelper.getLLMHelper().forceRestartOllama();
-            // The forceRestartOllama now calls OllamaManager.getInstance().init() internally
-            // so we don't need to do it again here.
-            return true;
-        }
-        catch (error) {
-            console.error('[IPC restart-ollama] Failed to restart:', error);
-            return false;
-        }
-    });
-    safeHandle('ensure-ollama-running', async () => {
-        try {
-            const { OllamaManager } = require('./services/OllamaManager');
-            await OllamaManager.getInstance().init();
-            return { success: true };
-        }
-        catch (error) {
-            return { success: false, message: error.message };
-        }
-    });
     safeHandle('switch-to-gemini', async (_, apiKey, modelId) => {
         try {
             const llmHelper = appState.processingHelper.getLLMHelper();
@@ -947,120 +935,65 @@ function initializeIpcHandlers(appState) {
             return { success: false, error: error.message };
         }
     });
-    // Dedicated API key setters (for Settings UI Save buttons)
-    safeHandle('set-gemini-api-key', async (_, apiKey) => {
-        try {
-            const { CredentialsManager } = require('./services/CredentialsManager');
-            CredentialsManager.getInstance().setGeminiApiKey(apiKey);
-            // Also update the LLMHelper immediately
-            const llmHelper = appState.processingHelper.getLLMHelper();
-            llmHelper.setApiKey(apiKey);
-            // CQ-06 fix: cancel any in-flight LLM stream before swapping LLM clients.
-            // Use resetEngine() (NOT reset()) so session transcript is preserved mid-meeting.
-            // initializeLLMs() now also calls engine.reset() internally for double-safety.
-            appState.getIntelligenceManager().resetEngine();
-            // Re-init IntelligenceManager
-            appState.getIntelligenceManager().initializeLLMs();
-            return { success: true };
-        }
-        catch (error) {
-            console.error('Error saving Gemini API key:', error);
-            return { success: false, error: error.message };
-        }
-    });
-    safeHandle('set-groq-api-key', async (_, apiKey) => {
-        try {
-            const { CredentialsManager } = require('./services/CredentialsManager');
-            CredentialsManager.getInstance().setGroqApiKey(apiKey);
-            // Also update the LLMHelper immediately
-            const llmHelper = appState.processingHelper.getLLMHelper();
-            llmHelper.setGroqApiKey(apiKey);
-            // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
-            appState.getIntelligenceManager().resetEngine();
-            // Re-init IntelligenceManager
-            appState.getIntelligenceManager().initializeLLMs();
-            return { success: true };
-        }
-        catch (error) {
-            console.error('Error saving Groq API key:', error);
-            return { success: false, error: error.message };
-        }
-    });
-    safeHandle('set-openai-api-key', async (_, apiKey) => {
-        try {
-            const { CredentialsManager } = require('./services/CredentialsManager');
-            CredentialsManager.getInstance().setOpenaiApiKey(apiKey);
-            // Also update the LLMHelper immediately
-            const llmHelper = appState.processingHelper.getLLMHelper();
-            llmHelper.setOpenaiApiKey(apiKey);
-            // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
-            appState.getIntelligenceManager().resetEngine();
-            // Re-init IntelligenceManager
-            appState.getIntelligenceManager().initializeLLMs();
-            return { success: true };
-        }
-        catch (error) {
-            console.error('Error saving OpenAI API key:', error);
-            return { success: false, error: error.message };
-        }
-    });
-    safeHandle('set-claude-api-key', async (_, apiKey) => {
-        try {
-            const { CredentialsManager } = require('./services/CredentialsManager');
-            CredentialsManager.getInstance().setClaudeApiKey(apiKey);
-            // Also update the LLMHelper immediately
-            const llmHelper = appState.processingHelper.getLLMHelper();
-            llmHelper.setClaudeApiKey(apiKey);
-            // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
-            appState.getIntelligenceManager().resetEngine();
-            // Re-init IntelligenceManager
-            appState.getIntelligenceManager().initializeLLMs();
-            return { success: true };
-        }
-        catch (error) {
-            console.error('Error saving Claude API key:', error);
-            return { success: false, error: error.message };
-        }
-    });
+    // ── Generic LLM API Key Setters ────────────────────────────────────────────
+    // Replaces copy-pasted set-X-api-key handlers for providers that follow the same pattern:
+    //   1. Persist key in CredentialsManager
+    //   2. Update LLMHelper immediately
+    //   3. resetEngine() + initializeLLMs() (CQ-06 fix)
+    const LLM_KEY_REGISTRY = [
+        { channel: 'set-gemini-api-key', credMethod: 'setGeminiApiKey', llmMethod: 'setApiKey' },
+        { channel: 'set-groq-api-key', credMethod: 'setGroqApiKey', llmMethod: 'setGroqApiKey' },
+        { channel: 'set-openai-api-key', credMethod: 'setOpenaiApiKey', llmMethod: 'setOpenaiApiKey' },
+        { channel: 'set-claude-api-key', credMethod: 'setClaudeApiKey', llmMethod: 'setClaudeApiKey' },
+        {
+            channel: 'set-doubao-llm-api-key',
+            credMethod: 'setDoubaoLlmApiKey',
+            llmMethod: 'setDoubaoApiKey',
+            postSave: (apiKey) => {
+                const ragManager = appState.getRAGManager();
+                if (ragManager) {
+                    console.log('[IPC] Re-initializing RAG embedding pipeline with Doubao key');
+                    const { CredentialsManager } = require('./services/CredentialsManager');
+                    ragManager.initializeEmbeddings({
+                        openaiKey: CredentialsManager.getInstance().getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
+                        geminiKey: CredentialsManager.getInstance().getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
+                        doubaoKey: apiKey || process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY || undefined,
+                        ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
+                        providerDataScopes: (() => { try {
+                            const { SettingsManager } = require('./services/SettingsManager');
+                            return SettingsManager.getInstance().get('providerDataScopes');
+                        }
+                        catch {
+                            return undefined;
+                        } })()
+                    });
+                }
+            },
+        },
+    ];
+    for (const reg of LLM_KEY_REGISTRY) {
+        safeHandle(reg.channel, async (_, apiKey) => {
+            try {
+                const { CredentialsManager } = require('./services/CredentialsManager');
+                const cm = CredentialsManager.getInstance();
+                cm[reg.credMethod](apiKey);
+                const llmHelper = appState.processingHelper.getLLMHelper();
+                llmHelper[reg.llmMethod](apiKey);
+                reg.postSave?.(apiKey);
+                // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
+                appState.getIntelligenceManager().resetEngine();
+                appState.getIntelligenceManager().initializeLLMs();
+                return { success: true };
+            }
+            catch (error) {
+                console.error(`[IPC] ${reg.channel} error:`, error);
+                return { success: false, error: error.message };
+            }
+        });
+    }
     // ── Usage cache (60-second TTL, keyed by API key) ──────────────────────────
     const _usageCache = new Map();
     const USAGE_CACHE_TTL_MS = 60_000;
-    safeHandle('set-doubao-llm-api-key', async (_, apiKey) => {
-        try {
-            const { CredentialsManager } = require('./services/CredentialsManager');
-            CredentialsManager.getInstance().setDoubaoLlmApiKey(apiKey);
-            // Also update the LLMHelper immediately
-            const llmHelper = appState.processingHelper.getLLMHelper();
-            llmHelper.setDoubaoApiKey(apiKey);
-            // Re-initialize RAG embedding pipeline with new Doubao key
-            const ragManager = appState.getRAGManager();
-            if (ragManager) {
-                console.log('[IPC] Re-initializing RAG embedding pipeline with Doubao key');
-                ragManager.initializeEmbeddings({
-                    openaiKey: CredentialsManager.getInstance().getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
-                    geminiKey: CredentialsManager.getInstance().getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
-                    doubaoKey: apiKey || process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY || undefined,
-                    ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
-                    providerDataScopes: (() => { try {
-                        const { SettingsManager } = require('./services/SettingsManager');
-                        return SettingsManager.getInstance().get('providerDataScopes');
-                    }
-                    catch {
-                        return undefined;
-                    } })()
-                });
-            }
-            // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
-            appState.getIntelligenceManager().resetEngine();
-            // Re-init IntelligenceManager
-            appState.getIntelligenceManager().initializeLLMs();
-            return { success: true };
-        }
-        catch (error) {
-            console.error('Error saving Doubao LLM API key:', error);
-            return { success: false, error: error.message };
-        }
-    });
     safeHandle('set-natively-api-key', async (_, apiKey) => {
         try {
             const { CredentialsManager } = require('./services/CredentialsManager');
@@ -1074,10 +1007,7 @@ function initializeIpcHandlers(appState) {
             const defaultModel = cm.getDefaultModel();
             const providers = [...(cm.getCurlProviders() || []), ...(cm.getCustomProviders() || [])];
             llmHelper.setModel(defaultModel, providers);
-            electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed())
-                    win.webContents.send('model-changed', defaultModel);
-            });
+            broadcast('model-changed', defaultModel);
             // If setNativelyApiKey auto-promoted the STT provider to 'natively', reconfigure
             // the audio pipeline immediately — without this, the in-memory pipeline still uses
             // the old STT provider (e.g. Google) until the app restarts.
@@ -1095,10 +1025,7 @@ function initializeIpcHandlers(appState) {
                     if (result.success) {
                         console.log('[IPC] set-natively-api-key: Pro auto-activated via API plan.');
                         // Notify all windows so the license UI refreshes immediately
-                        electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                            if (!win.isDestroyed())
-                                win.webContents.send('license-status-changed', { isPremium: true });
-                        });
+                        broadcast('license-status-changed', { isPremium: true });
                     }
                     else if (result.skipped) {
                         console.log('[IPC] set-natively-api-key: existing Gumroad/Dodo license preserved — Pro not overwritten.');
@@ -1124,10 +1051,7 @@ function initializeIpcHandlers(appState) {
                         await lm.deactivate();
                         console.log('[IPC] set-natively-api-key: key cleared — natively_api Pro license deactivated.');
                         clearActiveModeOnLicenseLoss();
-                        electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                            if (!win.isDestroyed())
-                                win.webContents.send('license-status-changed', { isPremium: false });
-                        });
+                        broadcast('license-status-changed', { isPremium: false });
                     }
                 }
                 catch (e) {
@@ -1146,9 +1070,11 @@ function initializeIpcHandlers(appState) {
         }
     });
     safeHandle('get-natively-usage', async () => {
+        // Hoisted out of try so the catch block's stale-cache lookup can reach it.
+        let key;
         try {
             const { CredentialsManager } = require('./services/CredentialsManager');
-            const key = CredentialsManager.getInstance().getNativelyApiKey();
+            key = CredentialsManager.getInstance().getNativelyApiKey();
             if (!key)
                 return { ok: false, error: 'no_key' };
             // Return cached value if it's still fresh
@@ -1171,6 +1097,12 @@ function initializeIpcHandlers(appState) {
             return result;
         }
         catch (error) {
+            // On transient DNS/network failure, serve stale cache rather than showing an error.
+            // Railway uses 1s TTL on DNS records, so a momentary resolver hiccup causes ENOTFOUND
+            // even when the server is up. Stale quota data is far better than a broken UI.
+            const stale = key ? _usageCache.get(key) : undefined;
+            if (stale)
+                return { ...stale.data, stale: true };
             return { ok: false, error: error.message || 'network_error' };
         }
     });
@@ -1352,12 +1284,8 @@ function initializeIpcHandlers(appState) {
             }
             // 7. Notify all windows to refresh license + model state
             clearActiveModeOnLicenseLoss();
-            electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed()) {
-                    win.webContents.send('license-status-changed', { isPremium: false });
-                    win.webContents.send('trial-ended', { choice: 'byok' });
-                }
-            });
+            broadcast('license-status-changed', { isPremium: false });
+            broadcast('trial-ended', { choice: 'byok' });
             return { success: true };
         }
         catch (error) {
@@ -1485,59 +1413,6 @@ function initializeIpcHandlers(appState) {
         }
         catch (error) {
             console.error('Error switching to custom provider:', error);
-            return { success: false, error: error.message };
-        }
-    });
-    // cURL Provider Handlers
-    safeHandle('get-curl-providers', async () => {
-        try {
-            const { CredentialsManager } = require('./services/CredentialsManager');
-            return CredentialsManager.getInstance().getCurlProviders();
-        }
-        catch (error) {
-            console.error('Error getting curl providers:', error);
-            return [];
-        }
-    });
-    safeHandle('save-curl-provider', async (_, provider) => {
-        try {
-            const { CredentialsManager } = require('./services/CredentialsManager');
-            CredentialsManager.getInstance().saveCurlProvider(provider);
-            return { success: true };
-        }
-        catch (error) {
-            console.error('Error saving curl provider:', error);
-            return { success: false, error: error.message };
-        }
-    });
-    safeHandle('delete-curl-provider', async (_, id) => {
-        try {
-            const { CredentialsManager } = require('./services/CredentialsManager');
-            CredentialsManager.getInstance().deleteCurlProvider(id);
-            return { success: true };
-        }
-        catch (error) {
-            console.error('Error deleting curl provider:', error);
-            return { success: false, error: error.message };
-        }
-    });
-    safeHandle('switch-to-curl-provider', async (_, providerId) => {
-        try {
-            const { CredentialsManager } = require('./services/CredentialsManager');
-            const provider = CredentialsManager.getInstance()
-                .getCurlProviders()
-                .find((p) => p.id === providerId);
-            if (!provider) {
-                throw new Error('Provider not found');
-            }
-            const llmHelper = appState.processingHelper.getLLMHelper();
-            await llmHelper.switchToCurl(provider);
-            // Re-init IntelligenceManager (optional, but good for consistency)
-            appState.getIntelligenceManager().initializeLLMs();
-            return { success: true };
-        }
-        catch (error) {
-            console.error('Error switching to curl provider:', error);
             return { success: false, error: error.message };
         }
     });
@@ -1677,10 +1552,7 @@ function initializeIpcHandlers(appState) {
             // Reconfigure the audio pipeline to use the new STT provider
             await appState.reconfigureSttProvider();
             // Notify all windows so the settings UI reflects the change immediately
-            electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed())
-                    win.webContents.send('credentials-changed');
-            });
+            broadcast('credentials-changed');
             return { success: true };
         }
         catch (error) {
@@ -1701,10 +1573,7 @@ function initializeIpcHandlers(appState) {
         try {
             const { CredentialsManager } = require('./services/CredentialsManager');
             CredentialsManager.getInstance().setGroqSttApiKey(apiKey);
-            electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed())
-                    win.webContents.send('credentials-changed');
-            });
+            broadcast('credentials-changed');
             return { success: true };
         }
         catch (error) {
@@ -1716,10 +1585,7 @@ function initializeIpcHandlers(appState) {
         try {
             const { CredentialsManager } = require('./services/CredentialsManager');
             CredentialsManager.getInstance().setOpenAiSttApiKey(apiKey);
-            electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed())
-                    win.webContents.send('credentials-changed');
-            });
+            broadcast('credentials-changed');
             return { success: true };
         }
         catch (error) {
@@ -1734,10 +1600,7 @@ function initializeIpcHandlers(appState) {
             // Reconfigure the active pipeline so the new endpoint is used immediately,
             // matching the behavior of azure/ibmwatson region setters.
             await appState.reconfigureSttProvider();
-            electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed())
-                    win.webContents.send('credentials-changed');
-            });
+            broadcast('credentials-changed');
             return { success: true };
         }
         catch (error) {
@@ -1749,10 +1612,7 @@ function initializeIpcHandlers(appState) {
         try {
             const { CredentialsManager } = require('./services/CredentialsManager');
             CredentialsManager.getInstance().setDeepgramApiKey(apiKey);
-            electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed())
-                    win.webContents.send('credentials-changed');
-            });
+            broadcast('credentials-changed');
             return { success: true };
         }
         catch (error) {
@@ -1777,10 +1637,7 @@ function initializeIpcHandlers(appState) {
         try {
             const { CredentialsManager } = require('./services/CredentialsManager');
             CredentialsManager.getInstance().setElevenLabsApiKey(apiKey);
-            electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed())
-                    win.webContents.send('credentials-changed');
-            });
+            broadcast('credentials-changed');
             return { success: true };
         }
         catch (error) {
@@ -1827,10 +1684,7 @@ function initializeIpcHandlers(appState) {
         try {
             const { CredentialsManager } = require('./services/CredentialsManager');
             CredentialsManager.getInstance().setSonioxApiKey(apiKey);
-            electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed())
-                    win.webContents.send('credentials-changed');
-            });
+            broadcast('credentials-changed');
             return { success: true };
         }
         catch (error) {
@@ -1842,10 +1696,7 @@ function initializeIpcHandlers(appState) {
         try {
             const { CredentialsManager } = require('./services/CredentialsManager');
             CredentialsManager.getInstance().setDoubaoApiKey(apiKey);
-            electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed())
-                    win.webContents.send('credentials-changed');
-            });
+            broadcast('credentials-changed');
             return { success: true };
         }
         catch (error) {
@@ -2463,10 +2314,7 @@ function initializeIpcHandlers(appState) {
             llmHelper.setGroqFastTextMode(enabled);
             const { SettingsManager } = require('./services/SettingsManager');
             SettingsManager.getInstance().set('groqFastTextMode', enabled);
-            // Broadcast to all windows
-            electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                win.webContents.send('groq-fast-text-changed', enabled);
-            });
+            broadcast('groq-fast-text-changed', enabled);
             return { success: true };
         }
         catch (error) {
@@ -2535,11 +2383,7 @@ function initializeIpcHandlers(appState) {
             // Close the selector window if open
             appState.modelSelectorWindowHelper.hideWindow();
             // Broadcast to all windows so NativelyInterface can update its selector (session-only update)
-            electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed()) {
-                    win.webContents.send('model-changed', modelId);
-                }
-            });
+            broadcast('model-changed', modelId);
             return { success: true };
         }
         catch (error) {
@@ -2562,11 +2406,7 @@ function initializeIpcHandlers(appState) {
             // Close the selector window if open
             appState.modelSelectorWindowHelper.hideWindow();
             // Broadcast to all windows so NativelyInterface can update its selector
-            electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed()) {
-                    win.webContents.send('model-changed', modelId);
-                }
-            });
+            broadcast('model-changed', modelId);
             return { success: true };
         }
         catch (error) {
@@ -2970,41 +2810,15 @@ function initializeIpcHandlers(appState) {
         const { SettingsManager } = require('./services/SettingsManager');
         const sm = SettingsManager.getInstance();
         sm.set('actionButtonMode', mode);
-        electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-            if (!win.isDestroyed()) {
-                win.webContents.send('action-button-mode-changed', mode);
-            }
-        });
+        broadcast('action-button-mode-changed', mode);
         return { success: true };
     });
-    // MODE 3: Follow-Up (Refinement)
-    safeHandle('generate-follow-up', async (_, intent, userRequest) => {
-        try {
-            const intelligenceManager = appState.getIntelligenceManager();
-            const refined = await intelligenceManager.runFollowUp(intent, userRequest);
-            return { refined, intent };
-        }
-        catch (error) {
-            throw error;
-        }
-    });
-    // MODE 4: Recap (Summary)
+    // MODE 3: Recap (Summary)
     safeHandle('generate-recap', async () => {
         try {
             const intelligenceManager = appState.getIntelligenceManager();
             const summary = await intelligenceManager.runRecap();
             return { summary };
-        }
-        catch (error) {
-            throw error;
-        }
-    });
-    // MODE 6: Follow-Up Questions
-    safeHandle('generate-follow-up-questions', async () => {
-        try {
-            const intelligenceManager = appState.getIntelligenceManager();
-            const questions = await intelligenceManager.runFollowUpQuestions();
-            return { questions };
         }
         catch (error) {
             throw error;
@@ -3185,104 +2999,6 @@ function initializeIpcHandlers(appState) {
         return { success: true };
     });
     // ==========================================
-    // Calendar Integration Handlers
-    // ==========================================
-    safeHandle('calendar-connect', async () => {
-        try {
-            const { CalendarManager } = require('./services/CalendarManager');
-            await CalendarManager.getInstance().startAuthFlow();
-            return { success: true };
-        }
-        catch (error) {
-            console.error('Calendar auth error:', error);
-            return { success: false, error: error.message };
-        }
-    });
-    safeHandle('calendar-disconnect', async () => {
-        const { CalendarManager } = require('./services/CalendarManager');
-        await CalendarManager.getInstance().disconnect();
-        return { success: true };
-    });
-    safeHandle('get-calendar-status', async () => {
-        const { CalendarManager } = require('./services/CalendarManager');
-        return CalendarManager.getInstance().getConnectionStatus();
-    });
-    safeHandle('get-upcoming-events', async () => {
-        const { CalendarManager } = require('./services/CalendarManager');
-        return CalendarManager.getInstance().getUpcomingEvents();
-    });
-    safeHandle('calendar-refresh', async () => {
-        const { CalendarManager } = require('./services/CalendarManager');
-        await CalendarManager.getInstance().refreshState();
-        return { success: true };
-    });
-    // ==========================================
-    // Follow-up Email Handlers
-    // ==========================================
-    safeHandle('generate-followup-email', async (_, input) => {
-        try {
-            const { FOLLOWUP_EMAIL_PROMPT, GROQ_FOLLOWUP_EMAIL_PROMPT } = require('./llm/prompts');
-            const { buildFollowUpEmailPromptInput } = require('./utils/emailUtils');
-            const llmHelper = appState.processingHelper.getLLMHelper();
-            // Build the context string from input
-            const contextString = buildFollowUpEmailPromptInput(input);
-            // Build prompts
-            const geminiPrompt = `${FOLLOWUP_EMAIL_PROMPT}\n\nMEETING DETAILS:\n${contextString}`;
-            const groqPrompt = `${GROQ_FOLLOWUP_EMAIL_PROMPT}\n\nMEETING DETAILS:\n${contextString}`;
-            // Use chatWithGemini with alternateGroqMessage for fallback
-            const emailBody = await llmHelper.chatWithGemini(geminiPrompt, undefined, undefined, true, groqPrompt);
-            return emailBody;
-        }
-        catch (error) {
-            console.error('Error generating follow-up email:', error);
-            throw error;
-        }
-    });
-    safeHandle('extract-emails-from-transcript', async (_, transcript) => {
-        try {
-            const { extractEmailsFromTranscript } = require('./utils/emailUtils');
-            return extractEmailsFromTranscript(transcript);
-        }
-        catch (error) {
-            console.error('Error extracting emails:', error);
-            return [];
-        }
-    });
-    safeHandle('get-calendar-attendees', async (_, eventId) => {
-        try {
-            const { CalendarManager } = require('./services/CalendarManager');
-            const cm = CalendarManager.getInstance();
-            // Try to get attendees from the event
-            const events = await cm.getUpcomingEvents();
-            const event = events?.find((e) => e.id === eventId);
-            if (event && event.attendees) {
-                return event.attendees
-                    .map((a) => ({
-                    email: a.email,
-                    name: a.displayName || a.email?.split('@')[0] || '',
-                }))
-                    .filter((a) => a.email);
-            }
-            return [];
-        }
-        catch (error) {
-            console.error('Error getting calendar attendees:', error);
-            return [];
-        }
-    });
-    safeHandle('open-mailto', async (_, { to, subject, body }) => {
-        try {
-            const { buildMailtoLink } = require('./utils/emailUtils');
-            const mailtoUrl = buildMailtoLink(to, subject, body);
-            await electron_1.shell.openExternal(mailtoUrl);
-            return { success: true };
-        }
-        catch (error) {
-            console.error('Error opening mailto:', error);
-            return { success: false, error: error.message };
-        }
-    });
-    // ==========================================
     // RAG (Retrieval-Augmented Generation) Handlers
     // ==========================================
     // Store active query abort controllers for cancellation
@@ -3347,7 +3063,14 @@ function initializeIpcHandlers(appState) {
             return { fallback: true };
         }
         const abortController = new AbortController();
-        const queryKey = `live-${Date.now()}`;
+        // Date.now() alone collides when two queries fire in the same ms — the
+        // second `set` would overwrite the first AbortController, the first
+        // stream would become un-cancellable, and the `finally` `delete` would
+        // evict the wrong entry. UUID guarantees uniqueness.
+        // (Note: rag:cancel-query only matches `meeting-` and `global` prefixes,
+        // so `live-` keys aren't cancellable through that path — pre-existing
+        // behaviour, not regressed by this change.)
+        const queryKey = `live-${crypto.randomUUID()}`;
         activeRAGQueries.set(queryKey, abortController);
         try {
             const stream = ragManager.queryMeeting('live-meeting-current', query, abortController.signal);
@@ -3383,7 +3106,8 @@ function initializeIpcHandlers(appState) {
             return { fallback: true };
         }
         const abortController = new AbortController();
-        const queryKey = `global-${Date.now()}`;
+        // See live-${...} comment above for why Date.now() alone is unsafe.
+        const queryKey = `global-${crypto.randomUUID()}`;
         activeRAGQueries.set(queryKey, abortController);
         try {
             const stream = ragManager.queryGlobal(query, abortController.signal);
@@ -3816,12 +3540,7 @@ function initializeIpcHandlers(appState) {
         // Clamp to valid range
         const clamped = Math.min(1.0, Math.max(0.35, opacity));
         // Broadcast to all renderer windows so the overlay picks it up in real-time
-        electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-            if (!win.isDestroyed()) {
-                win.webContents.send('overlay-opacity-changed', clamped);
-            }
-        });
-        return;
+        broadcast('overlay-opacity-changed', clamped);
     });
     // ── Permissions ──────────────────────────────────────────────
     safeHandle('permissions:check', async () => {
@@ -3951,10 +3670,7 @@ function initializeIpcHandlers(appState) {
             // Broadcast mode change to all windows so indicators update immediately
             const activeMode = id ? ModesManager.getInstance().getActiveMode() : null;
             const activeName = activeMode?.name ?? null;
-            electron_1.BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed())
-                    win.webContents.send('mode-changed', { id, name: activeName });
-            });
+            broadcast('mode-changed', { id, name: activeName });
             // Phase 3 — re-bind dynamic action engine so the new mode's trigger pack
             // takes effect immediately. New (sessionId, modeId) pair flushes the per-
             // session store inside DynamicActionEngine, killing any old-mode candidates.
@@ -3962,7 +3678,7 @@ function initializeIpcHandlers(appState) {
                 const appStateIntMgr = appState.getIntelligenceManager();
                 if (appStateIntMgr && activeMode) {
                     appStateIntMgr.setDynamicActionContext({
-                        sessionId: `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                        sessionId: `session_${crypto.randomUUID()}`,
                         modeId: activeMode.id,
                         modeTemplateType: activeMode.templateType,
                     });

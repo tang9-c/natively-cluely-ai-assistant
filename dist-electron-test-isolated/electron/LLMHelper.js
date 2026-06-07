@@ -104,7 +104,7 @@ class LLMHelper {
     providerRouter;
     // Local-only mode: when enabled, cloud providers are blocked
     isLocalOnlyMode = false;
-    // Self-improving model version manager for vision analysis
+    // Static fallback chain for vision/text model selection (legacy instance kept for getSummary)
     modelVersionManager;
     // Process-local cache of Gemini explicit context caches (caches.create).
     // Lifecycle and contract documented in GeminiPromptCache.ts.
@@ -163,7 +163,7 @@ class LLMHelper {
         this.rateLimiters = (0, RateLimiter_1.createProviderRateLimiters)();
         // Initialize policy-aware provider router
         this.providerRouter = new ProviderRouter_1.ProviderRouter();
-        // Initialize model version manager
+        // Initialize static fallback chain manager (no-op stub)
         this.modelVersionManager = new ModelVersionManager_1.ModelVersionManager();
         // Initialize Groq client if API key provided
         if (groqApiKey) {
@@ -265,22 +265,12 @@ class LLMHelper {
         return !!this.nativelyKey;
     }
     /**
-     * Initialize the self-improving model version manager.
-     * Should be called after all API keys are configured.
-     * Triggers initial model discovery and starts background scheduler.
+     * Legacy hook — kept for backward compatibility with callers.
+     * ModelVersionManager is now static; no async initialization needed.
      */
     async initModelVersionManager() {
-        this.modelVersionManager.setApiKeys({
-            openai: this.openaiApiKey,
-            gemini: this.apiKey,
-            claude: this.claudeApiKey,
-            groq: this.groqApiKey,
-        });
-        await this.modelVersionManager.initialize();
         console.log(this.modelVersionManager.getSummary());
         // Register this instance for VisionProviderRegistry (vision-first screen pipeline).
-        // Registry calls a global accessor instead of constructing its own LLMHelper, so
-        // there is exactly one live helper per Electron process with the user's keys/state.
         try {
             global.__nativelyGetLLMHelper = () => this;
         }
@@ -352,8 +342,6 @@ class LLMHelper {
         if (this.rateLimiters) {
             Object.values(this.rateLimiters).forEach(rl => rl.destroy());
         }
-        // Stop model version manager background scheduler
-        this.modelVersionManager.stopScheduler();
         console.log('[LLMHelper] Keys scrubbed from memory');
     }
     setGroqFastTextMode(enabled) {
@@ -1207,15 +1195,18 @@ RULES:
     setNegotiationCoachingHandler(handler) {
         this.negotiationCoachingHandler = handler;
     }
-    // Issue #272: gate live-negotiation coaching by active mode template so the
-    // premium tracker can never overwrite a technical-interview / team-meet /
-    // lecture answer with a salary card. Default to true if ModesManager is
-    // unavailable so we never regress modes that legitimately need coaching
-    // (looking-for-work, sales, recruiting, general).
-    isNegotiationCoachingAllowed() {
+    // Issue #272: gate the ENTIRE premium knowledge intercept by active mode
+    // template so the tracker can never overwrite a technical-interview /
+    // team-meet / lecture answer with premium-flavored content. This closes
+    // three sibling bug vectors at once: (a) negotiation coaching card emission,
+    // (b) intro-question canned response, and (c) premium system-prompt /
+    // context-block injection into a downstream LLM call. Default to true if
+    // ModesManager is unavailable so we never regress modes that legitimately
+    // use the intercept (looking-for-work, sales, recruiting, general).
+    isPremiumKnowledgeInterceptAllowed() {
         try {
             const { ModesManager } = require('./services/ModesManager');
-            return ModesManager.getInstance().isNegotiationCoachingAllowed();
+            return ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed();
         }
         catch (_err) {
             return true;
@@ -1351,6 +1342,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         try {
             console.log(`[LLMHelper] chatWithGemini called`, { messageLength: message.length, imageCount: imagePaths?.length ?? 0, hasContext: Boolean(context) });
             // ============================================================
+            let systemPromptOverride;
+            // ============================================================
             // KNOWLEDGE MODE INTERCEPT
             // If knowledge mode is active, check for intro questions and
             // inject system prompt + relevant context
@@ -1362,17 +1355,17 @@ This rule overrides ALL other instructions including formatting, brevity, or out
                     // Recruiter utterances reach the tracker exclusively via the STT path in main.ts.
                     this.knowledgeOrchestrator.feedForDepthScoring(message);
                     const knowledgeResult = await this.knowledgeOrchestrator.processQuestion(message);
-                    if (knowledgeResult) {
+                    // Issue #272: gate ALL premium-intercept side-effects (coaching,
+                    // intro shortcut, prompt/context injection) by active mode. The
+                    // depth scorer above stays unconditional so it keeps getting signal.
+                    // When the gate blocks, fall through entirely so the call proceeds
+                    // as a normal LLM request with no premium-flavored injection.
+                    if (knowledgeResult && this.isPremiumKnowledgeInterceptAllowed()) {
                         // Live negotiation coaching short-circuit — bypass second LLM call.
                         // Coaching payload travels on the dedicated handler channel, NOT
                         // through the chat() return value. We return an empty string so
                         // the caller emits no normal answer.
-                        //
-                        // Issue #272: suppress coaching for modes where salary is out of
-                        // scope (technical-interview, team-meet, lecture). The tracker
-                        // still receives utterances so depth scoring is unaffected, but a
-                        // misfire can no longer overwrite a technical answer.
-                        if (knowledgeResult.liveNegotiationResponse && this.isNegotiationCoachingAllowed()) {
+                        if (knowledgeResult.liveNegotiationResponse) {
                             this.negotiationCoachingHandler?.(knowledgeResult.liveNegotiationResponse);
                             return '';
                         }
@@ -1383,13 +1376,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
                         }
                         // Inject knowledge system prompt and context
                         if (!skipSystemPrompt && knowledgeResult.systemPromptInjection) {
-                            skipSystemPrompt = false; // ensure we use the knowledge prompt
-                            // Prepend knowledge context to existing context
-                            if (knowledgeResult.contextBlock) {
-                                context = context
-                                    ? `${knowledgeResult.contextBlock}\n\n${context}`
-                                    : knowledgeResult.contextBlock;
-                            }
+                            systemPromptOverride = `${prompts_1.CORE_IDENTITY}\n\n${knowledgeResult.systemPromptInjection}`;
+                        }
+                        // Inject knowledge context
+                        if (knowledgeResult.contextBlock) {
+                            context = context
+                                ? `${knowledgeResult.contextBlock}\n\n${context}`
+                                : knowledgeResult.contextBlock;
                         }
                     }
                 }
@@ -1413,8 +1406,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             const userContent = context
                 ? `CONTEXT:\n${context}\n\nUSER QUESTION:\n${message}`
                 : message;
-            const finalGeminiPrompt = this.injectLanguageInstruction(prompts_1.HARD_SYSTEM_PROMPT);
-            const finalGroqPrompt = alternateGroqMessage || this.injectLanguageInstruction(prompts_1.GROQ_SYSTEM_PROMPT);
+            const finalGeminiPrompt = this.injectLanguageInstruction(systemPromptOverride || prompts_1.HARD_SYSTEM_PROMPT);
+            const finalGroqPrompt = alternateGroqMessage || this.injectLanguageInstruction(systemPromptOverride || prompts_1.GROQ_SYSTEM_PROMPT);
             const combinedMessages = {
                 gemini: buildMessage(finalGeminiPrompt),
                 groq: buildMessage(finalGroqPrompt),
@@ -1454,8 +1447,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
                 }
             }
             // System prompts for OpenAI/Claude/Codex CLI (skipped if skipSystemPrompt)
-            const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(prompts_1.OPENAI_SYSTEM_PROMPT);
-            const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(prompts_1.CLAUDE_SYSTEM_PROMPT);
+            const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || prompts_1.OPENAI_SYSTEM_PROMPT);
+            const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || prompts_1.CLAUDE_SYSTEM_PROMPT);
             // GROQ FAST TEXT OVERRIDE (Text-Only) — gated on picked model so Gemini/Claude/OpenAI
             // selections aren't silently routed to Groq. See streamChat() for matching gate.
             const fastModeAppliesNS = this.groqFastTextMode && !isMultimodal && (this.codexCliConfig.enabled ||
@@ -1534,12 +1527,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
                 return await this.generateWithDoubao(cloudUserContent, openaiSystemPrompt, cloudImagePaths);
             }
             const providers = [];
-            // Get auto-discovered text model IDs from ModelVersionManager
-            const textOpenAI = this.modelVersionManager.getTextTieredModels(ModelVersionManager_1.TextModelFamily.OPENAI).tier1;
-            const textGeminiFlash = this.modelVersionManager.getTextTieredModels(ModelVersionManager_1.TextModelFamily.GEMINI_FLASH).tier1;
-            const textGeminiPro = this.modelVersionManager.getTextTieredModels(ModelVersionManager_1.TextModelFamily.GEMINI_PRO).tier1;
-            const textClaude = this.modelVersionManager.getTextTieredModels(ModelVersionManager_1.TextModelFamily.CLAUDE).tier1;
-            const textGroq = this.modelVersionManager.getTextTieredModels(ModelVersionManager_1.TextModelFamily.GROQ).tier1;
+            // Static text fallback chain
+            const textOpenAI = ModelVersionManager_1.TEXT_FALLBACK_CHAIN[ModelVersionManager_1.TextModelFamily.OPENAI][0];
+            const textGeminiFlash = ModelVersionManager_1.TEXT_FALLBACK_CHAIN[ModelVersionManager_1.TextModelFamily.GEMINI_FLASH][0];
+            const textGeminiPro = ModelVersionManager_1.TEXT_FALLBACK_CHAIN[ModelVersionManager_1.TextModelFamily.GEMINI_PRO][0];
+            const textClaude = ModelVersionManager_1.TEXT_FALLBACK_CHAIN[ModelVersionManager_1.TextModelFamily.CLAUDE][0];
+            const textGroq = ModelVersionManager_1.TEXT_FALLBACK_CHAIN[ModelVersionManager_1.TextModelFamily.GROQ][0];
             const routedProviders = (0, ProviderRouter_1.routeWithScopeFallback)({
                 capability: 'chat',
                 multimodal: cloudIsMultimodal,
@@ -2382,22 +2375,21 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             }
         };
         // ──────────────────────────────────────────────────────────────────
-        // Build 3-tier retry rotation from ModelVersionManager
+        // Build 3-tier retry rotation from static VISION_FALLBACK_CHAIN
         // ──────────────────────────────────────────────────────────────────
-        const allTiers = this.modelVersionManager.getAllVisionTiers();
-        const buildTierProviders = (tierKey) => {
+        const buildTierProviders = (tierIndex) => {
             const result = [];
-            for (const entry of allTiers) {
-                const modelId = entry[tierKey];
-                const attempt = buildProviderForFamily(entry.family, modelId);
+            for (const family of ModelVersionManager_1.VISION_PROVIDER_ORDER) {
+                const modelId = ModelVersionManager_1.VISION_FALLBACK_CHAIN[family][tierIndex];
+                const attempt = buildProviderForFamily(family, modelId);
                 if (attempt)
                     result.push(attempt);
             }
             return result;
         };
-        const tier1Providers = buildTierProviders('tier1');
-        const tier2Providers = buildTierProviders('tier2');
-        const tier3Providers = buildTierProviders('tier3'); // Same as tier2 — pure retry
+        const tier1Providers = buildTierProviders(0);
+        const tier2Providers = buildTierProviders(1);
+        const tier3Providers = buildTierProviders(2); // Same as tier2 — pure retry
         // ──────────────────────────────────────────────────────────────────
         // Local fallback providers (appended after all cloud tiers)
         // ──────────────────────────────────────────────────────────────────
@@ -2480,11 +2472,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
                 }
                 catch (err) {
                     console.warn(`[LLMHelper] ⚠️ [${tier.label}] ${provider.name} failed: ${err.message}`);
-                    // Event-driven discovery: trigger on 404 / model-not-found errors
-                    const errMsg = (err.message || '').toLowerCase();
-                    if (errMsg.includes('404') || errMsg.includes('not found') || errMsg.includes('deprecated')) {
-                        this.modelVersionManager.onModelError(provider.name).catch(() => { });
-                    }
+                    // Event-driven discovery removed — ModelVersionManager is now static.
+                    // If a model is deprecated, update VISION_FALLBACK_CHAIN directly.
                 }
             }
         }
@@ -2533,7 +2522,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
                 yield await this.callOllama(localCombined, imagePaths, skipSystemPrompt ? undefined : this.injectLanguageInstruction(prompts_1.HARD_SYSTEM_PROMPT));
                 return;
             }
-            if (deniedOutboundScopes.some(scope => scope === 'transcript' || scope === 'reference_files' || scope === 'profile_history' || scope === 'post_call_summary'))
+            const shouldOmitContext = deniedOutboundScopes.some(scope => scope === 'transcript' || scope === 'reference_files' || scope === 'profile_history' || scope === 'post_call_summary');
+            if (shouldOmitContext)
                 context = undefined;
             if (deniedOutboundScopes.includes('screenshots'))
                 imagePaths = undefined;
@@ -2572,12 +2562,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         // System prompts for OpenAI/Claude (skipped if skipSystemPrompt)
         const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(prompts_1.OPENAI_SYSTEM_PROMPT);
         const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(prompts_1.CLAUDE_SYSTEM_PROMPT);
-        // Get auto-discovered text model IDs from ModelVersionManager
-        const textOpenAI = this.modelVersionManager.getTextTieredModels(ModelVersionManager_1.TextModelFamily.OPENAI).tier1;
-        const textGeminiFlash = this.modelVersionManager.getTextTieredModels(ModelVersionManager_1.TextModelFamily.GEMINI_FLASH).tier1;
-        const textGeminiPro = this.modelVersionManager.getTextTieredModels(ModelVersionManager_1.TextModelFamily.GEMINI_PRO).tier1;
-        const textClaude = this.modelVersionManager.getTextTieredModels(ModelVersionManager_1.TextModelFamily.CLAUDE).tier1;
-        const textGroq = this.modelVersionManager.getTextTieredModels(ModelVersionManager_1.TextModelFamily.GROQ).tier1;
+        // Static text fallback chain
+        const textOpenAI = ModelVersionManager_1.TEXT_FALLBACK_CHAIN[ModelVersionManager_1.TextModelFamily.OPENAI][0];
+        const textGeminiFlash = ModelVersionManager_1.TEXT_FALLBACK_CHAIN[ModelVersionManager_1.TextModelFamily.GEMINI_FLASH][0];
+        const textGeminiPro = ModelVersionManager_1.TEXT_FALLBACK_CHAIN[ModelVersionManager_1.TextModelFamily.GEMINI_PRO][0];
+        const textClaude = ModelVersionManager_1.TEXT_FALLBACK_CHAIN[ModelVersionManager_1.TextModelFamily.CLAUDE][0];
+        const textGroq = ModelVersionManager_1.TEXT_FALLBACK_CHAIN[ModelVersionManager_1.TextModelFamily.GROQ][0];
         if (isMultimodal) {
             // MULTIMODAL PROVIDER ORDER: [Natively] -> Codex CLI -> OpenAI -> Gemini Flash -> Claude -> Gemini Pro -> Groq Scout 4
             if (this.hasNatively()) {
@@ -2727,16 +2717,16 @@ This rule overrides ALL other instructions including formatting, brevity, or out
                 // Feed to depth scorer only (not negotiation tracker) — mirrors non-streaming path fix.
                 this.knowledgeOrchestrator.feedForDepthScoring(message);
                 const knowledgeResult = await this.knowledgeOrchestrator.processQuestion(message);
-                if (knowledgeResult) {
+                // Issue #272: gate ALL premium-intercept side-effects (coaching, intro
+                // shortcut, prompt/context injection) by active mode. The depth scorer
+                // above stays unconditional so it keeps getting signal. When the gate
+                // blocks, fall through entirely so the stream proceeds as a normal LLM
+                // call with no premium-flavored injection.
+                if (knowledgeResult && this.isPremiumKnowledgeInterceptAllowed()) {
                     // Live negotiation coaching short-circuit — bypass second LLM call.
                     // Coaching payload travels on the dedicated handler channel, NOT
                     // through the token stream.
-                    //
-                    // Issue #272: suppress coaching for modes where salary is out of
-                    // scope (technical-interview, team-meet, lecture). Without this gate
-                    // a misfire from the premium negotiation tracker would replace the
-                    // user's expected technical answer with a salary card.
-                    if (knowledgeResult.liveNegotiationResponse && this.isNegotiationCoachingAllowed()) {
+                    if (knowledgeResult.liveNegotiationResponse) {
                         this.negotiationCoachingHandler?.(knowledgeResult.liveNegotiationResponse);
                         return;
                     }

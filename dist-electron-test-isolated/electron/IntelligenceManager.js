@@ -121,17 +121,11 @@ class IntelligenceManager extends events_1.EventEmitter {
     async runWhatShouldISay(question, confidence, imagePaths, options) {
         return this.engine.runWhatShouldISay(question, confidence, imagePaths, options);
     }
-    async runFollowUp(intent, userRequest) {
-        return this.engine.runFollowUp(intent, userRequest);
-    }
     async runRecap() {
         return this.engine.runRecap();
     }
     async runClarify() {
         return this.engine.runClarify();
-    }
-    async runFollowUpQuestions() {
-        return this.engine.runFollowUpQuestions();
     }
     async runManualAnswer(question) {
         return this.engine.runManualAnswer(question);
