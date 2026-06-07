@@ -147,7 +147,7 @@ parentPort.on('message', async (msg: any) => {
       env.allowRemoteModels = true;
       // Use HF_ENDPOINT env var or default to hf-mirror.com (HuggingFace is
       // often unreachable from mainland China without a mirror).
-      env.remoteHost = (process.env.HF_ENDPOINT || 'https://hf-mirror.com/').replace(/\/$/, '') + '/';
+      env.remoteHost = (process.env.HF_ENDPOINT || 'https://modelscope.cn/models').replace(/\/$/, '') + '/';
 
       // Apply hardware-specific execution providers (CoreML, DirectML, CUDA, CPU)
       const providers: string[] = msg.executionProviders ?? ['cpu'];
