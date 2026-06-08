@@ -19,10 +19,12 @@ import { analytics } from "./lib/analytics/analytics.service"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import ModesSettings from "./components/settings/ModesSettings"
 import { ProfileIntelligenceSettings } from "./components/ProfileIntelligenceSettings"
+import { useResolvedTheme } from "./hooks/useResolvedTheme"
 
 const queryClient = new QueryClient()
 
 const App: React.FC = () => {
+  const isLightTheme = useResolvedTheme() === 'light';
   const isSettingsWindow = new URLSearchParams(window.location.search).get('window') === 'settings';
   const isLauncherWindow = new URLSearchParams(window.location.search).get('window') === 'launcher';
   const isOverlayWindow = new URLSearchParams(window.location.search).get('window') === 'overlay';
@@ -147,6 +149,9 @@ const App: React.FC = () => {
     const removeOpenSettingsTab = window.electronAPI?.onOpenSettingsTab?.((tab: string) => {
       openSettingsExclusive(tab);
     });
+    const removeOpenModesManager = window.electronAPI?.onOpenModesManager?.(() => {
+      openModesExclusive();
+    });
 
     // Listen for Ollama Auto-Pull Progress
     let removeProgress: (() => void) | undefined;
@@ -178,6 +183,7 @@ const App: React.FC = () => {
       if (removeComplete) removeComplete();
       if (removeWarning) removeWarning();
       if (removeOpenSettingsTab) removeOpenSettingsTab();
+      if (removeOpenModesManager) removeOpenModesManager();
     }
   }, []);
 
@@ -338,7 +344,9 @@ const App: React.FC = () => {
                   onEndMeeting={handleEndMeeting}
                   overlayOpacity={overlayOpacity}
                   interfaceTheme={meetingInterfaceTheme}
-                  onOpenModes={() => openModesExclusive()}
+                  onOpenModes={() => {
+                    window.electronAPI?.openModesManager?.();
+                  }}
                 />
               </div>
               <ToastViewport />
@@ -425,7 +433,11 @@ const App: React.FC = () => {
                           transformOrigin: 'center',
                           boxShadow: '0 30px 80px -20px rgba(0,0,0,0.65), 0 16px 40px -12px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06)',
                         }}
-                        className="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-white/10 bg-[#141414]"
+                        className={`w-[min(920px,calc(100vw-32px))] h-[min(720px,calc(100vh-32px))] max-w-[95vw] max-h-[calc(100vh-32px)] min-h-0 rounded-2xl overflow-hidden border ${
+                          isLightTheme
+                            ? 'border-black/10 bg-bg-card'
+                            : 'border-white/10 bg-bg-card'
+                        }`}
                       >
                         <ModesSettings onClose={() => setIsModesOpen(false)} />
                       </motion.div>
@@ -458,7 +470,11 @@ const App: React.FC = () => {
                           transformOrigin: 'center',
                           boxShadow: '0 30px 80px -20px rgba(0,0,0,0.65), 0 16px 40px -12px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06)',
                         }}
-                        className="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-white/10 bg-[#141414]"
+                        className={`w-[min(920px,calc(100vw-32px))] h-[min(720px,calc(100vh-32px))] max-w-[95vw] max-h-[calc(100vh-32px)] min-h-0 rounded-2xl overflow-hidden border ${
+                          isLightTheme
+                            ? 'border-black/10 bg-bg-card'
+                            : 'border-white/10 bg-bg-card'
+                        }`}
                       >
                         <ProfileIntelligenceSettings
                           onClose={() => setIsProfileOpen(false)}
