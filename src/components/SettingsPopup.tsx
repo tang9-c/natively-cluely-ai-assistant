@@ -3,10 +3,20 @@ import { MessageSquare, Camera, Zap, User, X } from 'lucide-react';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getModifierSymbol } from '../utils/platformUtils';
+import {
+    clampOverlayOpacity,
+    getDefaultOverlayOpacity,
+    getOverlayAppearance,
+} from '../lib/overlayAppearance';
 
 const SettingsPopup = () => {
     const { shortcuts } = useShortcuts();
     const isLightTheme = useResolvedTheme() === 'light';
+    const [overlayOpacity, setOverlayOpacity] = useState<number>(() => {
+        const stored = localStorage.getItem('natively_overlay_opacity');
+        const parsed = stored ? parseFloat(stored) : NaN;
+        return Number.isFinite(parsed) ? clampOverlayOpacity(parsed) : getDefaultOverlayOpacity();
+    });
     const [useGroqFastText, setUseGroqFastText] = useState(() => {
         return localStorage.getItem('natively_groq_fast_text') === 'true';
     });
@@ -68,6 +78,27 @@ const SettingsPopup = () => {
             });
             return () => unsubscribe();
         }
+    }, []);
+
+    useEffect(() => {
+        const handleStorage = () => {
+            const stored = localStorage.getItem('natively_overlay_opacity');
+            const parsed = stored ? parseFloat(stored) : NaN;
+            setOverlayOpacity(Number.isFinite(parsed) ? clampOverlayOpacity(parsed) : getDefaultOverlayOpacity());
+        };
+
+        window.addEventListener('storage', handleStorage);
+        const unsubscribe = window.electronAPI?.onThemeChanged?.(() => {
+            const stored = localStorage.getItem('natively_overlay_opacity');
+            if (!stored) {
+                setOverlayOpacity(getDefaultOverlayOpacity());
+            }
+        });
+
+        return () => {
+            window.removeEventListener('storage', handleStorage);
+            unsubscribe?.();
+        };
     }, []);
 
     useEffect(() => {
@@ -152,22 +183,27 @@ const SettingsPopup = () => {
         return () => observer.disconnect();
     }, []);
 
+    const popupAppearance = getOverlayAppearance(overlayOpacity, isLightTheme ? 'light' : 'dark');
     const popupPanelClass = isLightTheme
-        ? 'bg-[#F3F4F6]/92 border-black/10 shadow-black/10'
-        : 'bg-[#1E1E1E]/80 border-white/10 shadow-black/40';
+        ? 'shadow-black/10'
+        : 'shadow-black/40';
     const itemHoverClass = isLightTheme ? 'hover:bg-black/[0.04]' : 'hover:bg-white/5';
-    const labelInactiveClass = isLightTheme ? 'text-slate-700 group-hover:text-slate-900' : 'text-slate-400 group-hover:text-slate-200';
-    const iconInactiveClass = isLightTheme ? 'text-slate-500 group-hover:text-slate-700' : 'text-slate-500 group-hover:text-slate-300';
+    const labelInactiveClass = isLightTheme ? 'text-slate-800 group-hover:text-slate-950' : 'text-slate-200 group-hover:text-white';
+    const iconInactiveClass = isLightTheme ? 'text-slate-600 group-hover:text-slate-800' : 'text-slate-300 group-hover:text-white';
     const dividerClass = isLightTheme ? 'bg-black/[0.06]' : 'bg-white/[0.04]';
     const shortcutKeyClass = isLightTheme
-        ? 'border-black/10 bg-black/[0.04] text-slate-600'
-        : 'border-white/10 bg-white/5 text-slate-500';
+        ? 'border-black/10 bg-black/[0.05] text-slate-700'
+        : 'border-white/15 bg-white/10 text-slate-200';
     const defaultToggleTrackClass = isLightTheme ? 'bg-black/[0.22]' : 'bg-white/10';
     const toggleKnobClass = isLightTheme ? 'bg-white shadow-[0_1px_4px_rgba(0,0,0,0.18)]' : 'bg-black shadow-sm';
 
     return (
         <div className="w-fit h-fit bg-transparent flex flex-col">
-            <div ref={contentRef} className={`w-[200px] max-h-[320px] backdrop-blur-md border rounded-[16px] overflow-hidden shadow-2xl p-2 flex flex-col animate-scale-in origin-top-left relative ${popupPanelClass}`}>
+            <div
+                ref={contentRef}
+                className={`w-[200px] max-h-[320px] backdrop-blur-md border rounded-[16px] overflow-hidden shadow-2xl p-2 flex flex-col animate-scale-in origin-top-left relative ${popupPanelClass}`}
+                style={popupAppearance.shellStyle}
+            >
                 {/* Close Button */}
                 <button
                     onClick={() => {
@@ -296,9 +332,9 @@ const SettingsPopup = () => {
                 <div className={`flex items-center justify-between px-3 py-2 rounded-lg transition-colors duration-200 group interaction-base interaction-press ${itemHoverClass}`}>
                     <div className="flex items-center gap-3">
                         <MessageSquare className={`w-3.5 h-3.5 transition-colors ${iconInactiveClass}`} />
-                        <span className={`text-[12px] transition-colors ${labelInactiveClass}`}>Show/Hide</span>
+                        <span className={`text-[12px] font-medium transition-colors ${labelInactiveClass}`}>显示/隐藏</span>
                     </div>
-                    <div className="flex gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                    <div className="flex gap-1 opacity-90 group-hover:opacity-100 transition-opacity">
                         {/* Dynamic Keys for Toggle Visibility */}
                         {(shortcuts.toggleVisibility || [getModifierSymbol('cmd'), 'B']).map((key, index) => (
                             <div key={index} className={`px-1.5 py-0.5 rounded border text-[10px] font-medium min-w-[20px] text-center ${shortcutKeyClass}`}>
@@ -312,9 +348,9 @@ const SettingsPopup = () => {
                 <div className={`flex items-center justify-between px-3 py-2 rounded-lg transition-colors duration-200 group interaction-base interaction-press ${itemHoverClass}`}>
                     <div className="flex items-center gap-3">
                         <Camera className={`w-3.5 h-3.5 transition-colors ${iconInactiveClass}`} />
-                        <span className={`text-[12px] transition-colors ${labelInactiveClass}`}>截图</span>
+                        <span className={`text-[12px] font-medium transition-colors ${labelInactiveClass}`}>截图</span>
                     </div>
-                    <div className="flex gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                    <div className="flex gap-1 opacity-90 group-hover:opacity-100 transition-opacity">
                         {/* Dynamic Keys for Take Screenshot */}
                         {(shortcuts.takeScreenshot || [getModifierSymbol('cmd'), 'H']).map((key, index) => (
                             <div key={index} className={`px-1.5 py-0.5 rounded border text-[10px] font-medium min-w-[20px] text-center ${shortcutKeyClass}`}>

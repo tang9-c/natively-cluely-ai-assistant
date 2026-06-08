@@ -43,6 +43,23 @@ const TEMPLATE_LABELS: Record<string, string> = {
   lecture: '讲座',
 };
 
+const DEFAULT_TEMPLATE_NAMES: Record<string, string> = {
+  general: 'General',
+  sales: 'Sales',
+  recruiting: 'Recruiting',
+  'team-meet': 'Team Meet',
+  'looking-for-work': 'Looking for work',
+  'technical-interview': 'Technical Interview',
+  lecture: 'Lecture',
+};
+
+const getModeDisplayName = (mode: Pick<ModeItem, 'name' | 'templateType'>): string => {
+  const templateLabel = TEMPLATE_LABELS[mode.templateType];
+  const defaultName = DEFAULT_TEMPLATE_NAMES[mode.templateType];
+  if (templateLabel && mode.name === defaultName) return templateLabel;
+  return mode.name;
+};
+
 export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
   onClose,
 }) => {
@@ -244,7 +261,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-medium truncate">
-                        {mode.name}
+                        {getModeDisplayName(mode)}
                       </span>
                     </div>
                     <div className="text-[10px] text-text-tertiary mt-0.5">
@@ -333,7 +350,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                 {/* Active toggle */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-sm font-semibold">{selectedMode.name}</h3>
+                    <h3 className="text-sm font-semibold">{getModeDisplayName(selectedMode)}</h3>
                     <p className="text-[11px] text-text-tertiary mt-0.5">
                       {TEMPLATE_LABELS[selectedMode.templateType] ?? selectedMode.templateType}
                     </p>
