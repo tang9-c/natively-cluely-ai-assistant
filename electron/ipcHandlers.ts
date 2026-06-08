@@ -621,6 +621,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('modes:open-manager', () => {
+    const launcherWin = appState.getWindowHelper().getLauncherWindow();
+    appState.getWindowHelper().setWindowMode('launcher');
+    if (launcherWin && !launcherWin.isDestroyed()) {
+      launcherWin.webContents.send('modes:open-manager');
+      launcherWin.show();
+      launcherWin.focus();
+    }
+  });
+
   safeHandle('close-settings-window', () => {
     appState.settingsWindowHelper.closeWindow();
   });

@@ -98,7 +98,9 @@ export interface ElectronAPI {
   toggleAdvancedSettings: () => Promise<void>
   closeAdvancedSettings: () => Promise<void>
   openSettingsTab: (tab: string) => Promise<void>
+  openModesManager: () => Promise<void>
   onOpenSettingsTab: (callback: (tab: string) => void) => () => void
+  onOpenModesManager: (callback: () => void) => () => void
 
   // LLM Model Management
   getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini" | "custom" | "codex-cli" | "doubao"; model: string; isOllama: boolean }>
@@ -271,6 +273,7 @@ export interface ElectronAPI {
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>;
+  openModesManager: () => Promise<void>;
 
   // Groq Fast Text Mode
   getGroqFastTextMode: () => Promise<{ enabled: boolean }>;
@@ -297,6 +300,7 @@ export interface ElectronAPI {
 
   onGroqFastTextChanged: (callback: (enabled: boolean) => void) => () => void;
   onModelChanged: (callback: (modelId: string) => void) => () => void;
+  onOpenModesManager: (callback: () => void) => () => void;
 
   onOllamaPullProgress: (callback: (data: { status: string; percent: number }) => void) => () => void;
   onOllamaPullComplete: (callback: () => void) => () => void;

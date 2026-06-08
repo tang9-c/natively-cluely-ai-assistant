@@ -222,27 +222,27 @@ const getSttSummary = (
 ): { label: string; tone: 'ok' | 'warn' | 'error'; detail: string } => {
   if (notConfigured) {
     return {
-      label: 'STT not configured',
+      label: '语音转写未配置',
       tone: 'error',
-      detail: 'Open Audio settings to select a provider',
+      detail: '请打开音频设置选择服务商',
     };
   }
   if (userStatus === 'failed' || interviewerStatus === 'failed') {
     return {
-      label: 'STT needs attention',
+      label: '语音转写异常',
       tone: 'error',
       detail: `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`,
     };
   }
   if (userStatus === 'reconnecting' || interviewerStatus === 'reconnecting') {
     return {
-      label: 'STT reconnecting',
+      label: '语音转写重连中',
       tone: 'warn',
       detail: `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`,
     };
   }
   return {
-    label: 'STT healthy',
+    label: '语音转写正常',
     tone: 'ok',
     detail: `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`,
   };
@@ -288,7 +288,7 @@ const MessageRow = React.memo(
           >
             {msg.role === 'interviewer' && (
               <div className="flex items-center gap-1.5 mb-1 text-[10px] font-medium uppercase tracking-wider overlay-text-muted">
-                Interviewer
+                面试官
                 {msg.isStreaming && (
                   <span className="w-1 h-1 bg-green-500 rounded-full animate-pulse" />
                 )}
@@ -299,14 +299,14 @@ const MessageRow = React.memo(
                 className={`flex items-center gap-1 text-[10px] opacity-70 mb-1 border-b pb-1 ${isLightTheme ? 'border-black/10' : 'border-white/10'}`}
               >
                 <Image className="w-2.5 h-2.5" />
-                <span>Screenshot attached</span>
+                <span>已附带截图</span>
               </div>
             )}
             {msg.role === 'system' && !msg.isStreaming && (
               <button
                 onClick={() => onCopy(msg.text)}
                 className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
-                title="Copy to clipboard"
+                title="复制到剪贴板"
                 style={appearance.iconStyle}
               >
                 <Copy className="w-3.5 h-3.5" />
@@ -513,10 +513,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setLlmProviderLabel(formatProviderLabel(config.provider));
       setLlmPrivacyLabel(
         config.provider === 'ollama' || config.provider === 'codex-cli'
-          ? 'Local/private route'
+          ? '本地/私有路由'
           : config.provider === 'custom'
-            ? 'Custom endpoint route'
-            : 'Cloud LLM route',
+            ? '自定义端点路由'
+            : '云端 LLM 路由',
       );
     };
     loadLlmRoute();
@@ -3282,12 +3282,12 @@ Provide only the answer, nothing else.`;
                   <div
                     className={`${statusPillBaseClass} overlay-text-primary cursor-pointer hover:opacity-80 transition-opacity`}
                     title={
-                      activeModeLabel ? `Active mode: ${activeModeLabel}` : 'No active mode selected'
+                      activeModeLabel ? `当前模式：${activeModeLabel}` : '尚未选择模式'
                     }
                     onClick={() => setIsModeDropdownOpen((prev) => !prev)}
                   >
                     <LayoutGrid className="h-3 w-3 opacity-70" />
-                    <span>{activeModeLabel ? `Mode: ${activeModeLabel}` : 'General mode'}</span>
+                    <span>{activeModeLabel ? `模式：${activeModeLabel}` : '模式：通用'}</span>
                     <ChevronDown
                       size={12}
                       className={`opacity-60 transition-transform duration-200 ${isModeDropdownOpen ? 'rotate-180' : ''}`}
@@ -3300,7 +3300,11 @@ Provide only the answer, nothing else.`;
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 4, scale: 0.98 }}
                         transition={{ duration: 0.15, ease: 'easeOut' }}
-                        className="absolute top-full left-0 mt-1.5 w-60 z-50 rounded-xl border border-white/10 bg-[#1a1a1a] shadow-xl backdrop-blur-xl overflow-hidden"
+                        className={`absolute top-full left-0 mt-1.5 w-60 z-50 rounded-xl border shadow-xl backdrop-blur-xl overflow-hidden ${
+                          isLightTheme
+                            ? 'border-black/10 bg-bg-elevated'
+                            : 'border-white/10 bg-bg-elevated'
+                        }`}
                       >
                         <div className="max-h-64 overflow-y-auto p-1.5 space-y-0.5">
                           {modes.length === 0 && (
@@ -3397,62 +3401,62 @@ Provide only the answer, nothing else.`;
                   const visionSucceeded =
                     (latestUsedImageInput || screenContextStatus === 'available') && !visionFailed;
                   const failureLabelMap: Record<string, string> = {
-                    no_vision_provider: 'No vision provider',
-                    all_vision_failed: 'Vision failed',
-                    privacy_blocked: 'Private mode blocked vision',
-                    scope_blocked: 'Screenshots disabled',
-                    provider_timeout: 'Vision timed out',
+                    no_vision_provider: '未配置视觉服务',
+                    all_vision_failed: '视觉识别失败',
+                    privacy_blocked: '隐私模式阻止视觉',
+                    scope_blocked: '截图权限已禁用',
+                    provider_timeout: '视觉识别超时',
                   };
                   const failureLabel = latestVisionFailureReason
-                    ? failureLabelMap[latestVisionFailureReason] || 'Vision failed'
-                    : 'Vision failed';
+                    ? failureLabelMap[latestVisionFailureReason] || '视觉识别失败'
+                    : '视觉识别失败';
                   const failureTitleMap: Record<string, string> = {
                     no_vision_provider:
-                      'No vision-capable provider is configured. Add a Natively, OpenAI, Claude, Gemini, or Groq key — or configure a local Ollama vision model.',
+                      '当前未配置支持视觉的服务商。请添加 Natively、OpenAI、Claude、Gemini、Groq 密钥，或配置本地 Ollama 视觉模型。',
                     all_vision_failed:
-                      'All configured vision providers failed for this turn. Check provider quotas and try again.',
+                      '本轮所有已配置的视觉服务商都失败了，请检查额度后重试。',
                     privacy_blocked:
-                      'Private vision mode blocked cloud vision providers; no local vision provider is configured.',
+                      '隐私视觉模式阻止了云端视觉服务商，且当前未配置本地视觉模型。',
                     scope_blocked:
-                      'Screenshots are disabled for the current provider. Enable the screenshots scope in Settings.',
+                      '当前服务商未启用截图权限，请在设置中开启截图数据范围。',
                     provider_timeout:
-                      'Vision provider exceeded its per-call timeout; the chain moved on to the next provider.',
+                      '视觉服务商本次调用超时，系统已自动切换到下一个服务商。',
                   };
                   const failureTitle = latestVisionFailureReason
                     ? failureTitleMap[latestVisionFailureReason] ||
-                      'The vision provider failed for this turn.'
-                    : 'Screen vision did not return a result for this turn.';
+                      '本轮视觉识别失败。'
+                    : '本轮未获得屏幕视觉识别结果。';
                   const providerLabel = latestVisionProviderUsed
-                    ? `Vision: ${latestVisionProviderUsed}`
-                    : 'Vision input used';
+                    ? `视觉：${latestVisionProviderUsed}`
+                    : '已使用视觉输入';
                   const providerTitle =
                     latestVisionProviderUsed && latestVisionModelUsed
-                      ? `Latest answer used ${latestVisionProviderUsed} (${latestVisionModelUsed}) vision on the screenshot`
+                      ? `最近一次回答使用了 ${latestVisionProviderUsed}（${latestVisionModelUsed}）处理截图`
                       : latestVisionProviderUsed
-                        ? `Latest answer used ${latestVisionProviderUsed} vision on the screenshot`
-                        : 'The latest answer received direct image input from the attached screen';
+                        ? `最近一次回答使用了 ${latestVisionProviderUsed} 处理截图`
+                        : '最近一次回答直接使用了附带的屏幕截图';
                   return (
                     <div
                       className={`${statusPillBaseClass} ${visionFailed ? getStatusToneClass('warn') : visionSucceeded ? getStatusToneClass('ok') : 'overlay-text-primary'}`}
                       title={
                         attachedContext.length > 0
-                          ? 'Attached screenshots will be sent to the vision provider when you send this turn'
+                          ? '发送本轮消息时，会一并把附带截图交给视觉服务商处理'
                           : visionFailed
                             ? failureTitle
                             : visionSucceeded
                               ? providerTitle
-                              : 'No screen context attached'
+                              : '当前没有附带屏幕上下文'
                       }
                     >
                       <Monitor className="h-3 w-3 opacity-70" />
                       <span>
                         {attachedContext.length > 0
-                          ? `${attachedContext.length} screen attached`
+                          ? `已附带 ${attachedContext.length} 张截图`
                           : visionFailed
                             ? failureLabel
                             : visionSucceeded
                               ? providerLabel
-                              : 'No screen context'}
+                              : '无屏幕上下文'}
                       </span>
                     </div>
                   );
@@ -3488,8 +3492,8 @@ Provide only the answer, nothing else.`;
                       </div>
                       <span>
                         {systemAudioWarning.kind === 'screen-recording-permission'
-                          ? 'Screen Recording Permission Denied'
-                          : 'Audio Capture Issue'}
+                          ? '屏幕录制权限被拒绝'
+                          : '音频采集异常'}
                       </span>
                     </div>
                     <p className="text-[11px] text-yellow-600/70 dark:text-yellow-400/60 leading-snug pl-[26px]">
@@ -3513,7 +3517,7 @@ Provide only the answer, nothing else.`;
                         }}
                         className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm"
                       >
-                        Open Settings
+                        打开设置
                       </button>
                     ) : (
                       <button
@@ -3522,13 +3526,13 @@ Provide only the answer, nothing else.`;
                         }}
                         className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm"
                       >
-                        Open Settings
+                        打开设置
                       </button>
                     )}
                     <button
                       onClick={() => setSystemAudioWarning(null)}
                       className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-yellow-600/50 hover:text-yellow-700 dark:text-yellow-500/50 dark:hover:text-yellow-400 transition-colors absolute top-1 right-1 opacity-0 group-hover/warning:opacity-100"
-                      title="Dismiss"
+                      title="关闭"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -3556,10 +3560,10 @@ Provide only the answer, nothing else.`;
                           />
                         </svg>
                       </div>
-                      <span>Transcription Not Configured</span>
+                      <span>语音转写未配置</span>
                     </div>
                     <p className="text-[11px] text-orange-600/70 dark:text-orange-400/60 leading-snug pl-[26px]">
-                      No STT provider selected. Open Settings → Audio to pick one.
+                      尚未选择语音转写服务商。请打开“设置 → 音频”进行配置。
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -3569,12 +3573,12 @@ Provide only the answer, nothing else.`;
                       }}
                       className="px-3 py-1.5 rounded-lg bg-orange-500/15 hover:bg-orange-500/25 text-orange-700 dark:text-orange-500 text-[11px] font-semibold transition-all active:scale-95 border border-orange-500/20 shadow-sm"
                     >
-                      Open Settings
+                      打开设置
                     </button>
                     <button
                       onClick={() => setSttNotConfigured(false)}
                       className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-orange-600/50 hover:text-orange-700 dark:text-orange-500/50 dark:hover:text-orange-400 transition-colors absolute top-1 right-1 opacity-0 group-hover/stt-warning:opacity-100"
-                      title="Dismiss"
+                      title="关闭"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -3674,7 +3678,7 @@ Provide only the answer, nothing else.`;
                           className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
                           style={{ animationDelay: '300ms' }}
                         />
-                        <span className="text-[10px] text-emerald-400/70 ml-1">Listening...</span>
+                        <span className="text-[10px] text-emerald-400/70 ml-1">正在聆听...</span>
                       </div>
                     </div>
                   )}
@@ -3769,13 +3773,12 @@ Provide only the answer, nothing else.`;
                   >
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-[11px] font-medium overlay-text-primary">
-                        {attachedContext.length} screenshot{attachedContext.length > 1 ? 's' : ''}{' '}
-                        attached
+                        已附带 {attachedContext.length} 张截图
                       </span>
                       <button
                         onClick={() => setAttachedContext([])}
                         className="p-1 rounded-full transition-colors overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
-                        title="Remove all"
+                        title="全部移除"
                         style={appearance.iconStyle}
                       >
                         <X className="w-3.5 h-3.5" />
@@ -3786,7 +3789,7 @@ Provide only the answer, nothing else.`;
                         <div key={ctx.path} className="relative group/thumb flex-shrink-0">
                           <img
                             src={ctx.preview}
-                            alt={`Screenshot ${idx + 1}`}
+                            alt={`截图 ${idx + 1}`}
                             className={`h-10 w-auto rounded border ${isLightTheme ? 'border-black/15' : 'border-white/20'}`}
                           />
                           <button
@@ -3794,7 +3797,7 @@ Provide only the answer, nothing else.`;
                               setAttachedContext((prev) => prev.filter((_, i) => i !== idx))
                             }
                             className="absolute -top-1 -right-1 w-4 h-4 bg-red-500/80 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity"
-                            title="Remove"
+                            title="移除"
                           >
                             <X className="w-2.5 h-2.5 text-white" />
                           </button>
@@ -3825,7 +3828,7 @@ Provide only the answer, nothing else.`;
                   {/* Custom Rich Placeholder */}
                   {!inputValue && (
                     <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] overlay-text-muted">
-                      <span>Ask anything on screen or conversation, or</span>
+                      <span>可询问屏幕或对话内容，或按</span>
                       <div className="flex items-center gap-1 opacity-80">
                         {(
                           shortcuts.selectiveScreenshot || [getModifierSymbol('cmd'), 'Shift', 'H']
@@ -3841,7 +3844,7 @@ Provide only the answer, nothing else.`;
                           </React.Fragment>
                         ))}
                       </div>
-                      <span>for selective screenshot</span>
+                      <span>进行区域截图</span>
                     </div>
                   )}
 

@@ -407,7 +407,9 @@ interface ElectronAPI {
   onToggleExpand: (callback: () => void) => () => void;
   toggleAdvancedSettings: () => Promise<void>;
   openSettingsTab: (tab: string) => Promise<void>;
+  openModesManager: () => Promise<void>;
   onOpenSettingsTab: (callback: (tab: string) => void) => () => void;
+  onOpenModesManager: (callback: () => void) => () => void;
   setOverlayMousePassthrough: (enabled: boolean) => Promise<{ success: boolean }>;
   toggleOverlayMousePassthrough: () => Promise<{ success: boolean; enabled: boolean }>;
   getOverlayMousePassthrough: () => Promise<boolean>;
@@ -858,11 +860,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   toggleAdvancedSettings: () => ipcRenderer.invoke('toggle-advanced-settings'),
   openSettingsTab: (tab: string) => ipcRenderer.invoke('settings:open-tab', tab),
+  openModesManager: () => ipcRenderer.invoke('modes:open-manager'),
   onOpenSettingsTab: (callback: (tab: string) => void) => {
     const subscription = (_: any, tab: string) => callback(tab);
     ipcRenderer.on('settings:open-tab', subscription);
     return () => {
       ipcRenderer.removeListener('settings:open-tab', subscription);
+    };
+  },
+  onOpenModesManager: (callback: () => void) => {
+    const subscription = () => callback();
+    ipcRenderer.on('modes:open-manager', subscription);
+    return () => {
+      ipcRenderer.removeListener('modes:open-manager', subscription);
     };
   },
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
