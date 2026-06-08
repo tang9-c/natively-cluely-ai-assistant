@@ -3179,17 +3179,7 @@ Provide only the answer, nothing else.`;
       else if (action === 'scrollDown') inertialScrollRef.current?.kick('vert', 1);
       else if (action === 'scrollLeft') inertialScrollRef.current?.kick('horiz', -1);
       else if (action === 'scrollRight') inertialScrollRef.current?.kick('horiz', 1);
-      else if (action === 'focusInput') {
-        // Stealth-focus the chat input: the panel-type overlay (macOS) is
-        // already key without activating the app. We just need the input
-        // element to be the active DOM target so keystrokes land in it.
-        // Defer to next frame so an expand-from-collapsed has time to
-        // mount the input before .focus() runs.
-        setIsExpanded(true);
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => textInputRef.current?.focus());
-        });
-      } else if (action === 'processScreenshots') generalHandlers.processScreenshots();
+      else if (action === 'processScreenshots') generalHandlers.processScreenshots();
       else if (action === 'resetCancel') generalHandlers.resetCancel();
       else if (action === 'takeScreenshot') generalHandlers.takeScreenshot();
       else if (action === 'selectiveScreenshot') generalHandlers.selectiveScreenshot();
@@ -3221,22 +3211,6 @@ Provide only the answer, nothing else.`;
     };
     document.addEventListener('mousedown', onMouseDown);
     return () => document.removeEventListener('mousedown', onMouseDown);
-  }, []);
-
-  // ── Input-click DOM-focus block ──
-  //
-  // When the user clicks the chat input, the browser tries to focus the
-  // <input> element. That focus promotes the NSPanel to key window —
-  // which fires window.onblur on whatever app was previously focused
-  // (Zoom, browser, IDE). preventDefault() on mousedown blocks the focus
-  // attempt entirely, keeping the panel from stealing focus from the
-  // foreground app.
-  const blockInputFocus = useCallback((e: React.MouseEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    // Don't blur an already-focused element — that itself fires events.
-    if (document.activeElement === textInputRef.current) {
-      textInputRef.current?.blur();
-    }
   }, []);
 
   // ── Derived STT status for the rolling transcript indicator (interviewer channel) ──
@@ -3872,10 +3846,6 @@ Provide only the answer, nothing else.`;
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit()}
-                    // Block native DOM focus on click — the panel becoming
-                    // key window is exactly the signal coding-interview
-                    // platforms watch for via window.onblur on the parent.
-                    onMouseDown={blockInputFocus}
                     className={`w-full border focus:ring-1 rounded-xl pl-3 pr-10 py-2.5 focus:outline-none transition-all duration-200 ease-sculpted text-[13px] leading-relaxed ${inputClass}`}
                     style={appearance.inputStyle}
                   />

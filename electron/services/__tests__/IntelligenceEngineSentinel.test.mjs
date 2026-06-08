@@ -149,3 +149,27 @@ test('runWhatShouldISay still emits and stores real answers', async () => {
   assert.equal(session.getFullUsage()[0].answer, realAnswer);
   assert.equal(session.getFullTranscript().some(segment => segment.text === realAnswer), true);
 });
+
+test('runWhatShouldISay normalizes pathological line-by-line chinese answers', async () => {
+  const fragmented = '这是一个测试\n\n如果\n\n您\n\n有\n\n具体\n\n的\n\n问题\n\n或\n\n需要\n\n协助\n\n的\n\n事项\n\n，请\n\n告诉我';
+  const normalized = '这是一个测试如果您有具体的问题或需要协助的事项，请告诉我';
+  const { engine, session } = await makeEngineWithAnswer([fragmented]);
+  const finals = [];
+  engine.on('suggested_answer', answer => finals.push(answer));
+
+  const answer = await engine.runWhatShouldISay('test', 0.9, undefined, { skipCooldown: true });
+
+  assert.equal(answer, normalized);
+  assert.deepEqual(finals, [normalized]);
+  assert.equal(session.getFullUsage()[0].answer, normalized);
+});
+
+test('runWhatShouldISay preserves normal paragraph breaks', async () => {
+  const paragraphAnswer = '先确认目标。\n\n然后给出两个可选方案。';
+  const { engine, session } = await makeEngineWithAnswer([paragraphAnswer]);
+
+  const answer = await engine.runWhatShouldISay('test', 0.9, undefined, { skipCooldown: true });
+
+  assert.equal(answer, paragraphAnswer);
+  assert.equal(session.getFullUsage()[0].answer, paragraphAnswer);
+});
