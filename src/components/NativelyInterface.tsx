@@ -96,6 +96,33 @@ interface NativelyInterfaceProps {
   onOpenModes?: () => void;
 }
 
+const MODE_TEMPLATE_LABELS: Record<string, string> = {
+  general: '通用',
+  sales: '销售',
+  recruiting: '招聘',
+  'team-meet': '团队会议',
+  'looking-for-work': '求职',
+  'technical-interview': '技术面试',
+  lecture: '讲座',
+};
+
+const DEFAULT_MODE_NAMES: Record<string, string> = {
+  general: 'General',
+  sales: 'Sales',
+  recruiting: 'Recruiting',
+  'team-meet': 'Team Meet',
+  'looking-for-work': 'Looking for work',
+  'technical-interview': 'Technical Interview',
+  lecture: 'Lecture',
+};
+
+const getModeDisplayName = (mode: { name: string; templateType: string }): string => {
+  const templateLabel = MODE_TEMPLATE_LABELS[mode.templateType];
+  const defaultName = DEFAULT_MODE_NAMES[mode.templateType];
+  if (templateLabel && mode.name === defaultName) return templateLabel;
+  return mode.name;
+};
+
 // PERF: HighlightedCode renders a single fenced code block. Hoisted to module
 // scope and wrapped in React.memo so a parent re-render does not re-tokenize
 // existing code blocks. SyntaxHighlighter (Prism) has no internal render
@@ -465,6 +492,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [latestVisionFailureReason, setLatestVisionFailureReason] = useState<string | undefined>(
     undefined,
   );
+  const activeMode = modes.find((mode) => mode.isActive) ?? null;
+  const activeModeDisplayLabel = activeMode
+    ? getModeDisplayName(activeMode)
+    : activeModeLabel;
 
   useEffect(() => {
     // Load initial active mode name + mode list
@@ -881,8 +912,32 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const reportShellSize = useCallback(() => {
     if (!contentRef.current) return;
     const rect = contentRef.current.getBoundingClientRect();
-    const width = isExpandedRef.current ? STABLE_OVERLAY_WIDTH : Math.ceil(rect.width);
-    const height = Math.ceil(rect.height);
+    const childGap = 8; // Matches the root `gap-2` between TopPill and the shell.
+    const childHeights = Array.from(contentRef.current.children).reduce((sum, child, index) => {
+      const childHeight = Math.ceil((child as HTMLElement).getBoundingClientRect().height);
+      return sum + childHeight + (index > 0 ? childGap : 0);
+    }, 0);
+    const widthCandidates = [
+      rect.width,
+      contentRef.current.scrollWidth,
+      contentRef.current.offsetWidth,
+      shellRef.current?.scrollWidth ?? 0,
+      shellRef.current?.offsetWidth ?? 0,
+    ];
+    const heightCandidates = [
+      rect.height,
+      contentRef.current.scrollHeight,
+      contentRef.current.offsetHeight,
+      childHeights,
+      shellRef.current?.scrollHeight ?? 0,
+      shellRef.current?.offsetHeight ?? 0,
+    ];
+    const width = isExpandedRef.current
+      ? STABLE_OVERLAY_WIDTH
+      : Math.ceil(Math.max(...widthCandidates));
+    // A small buffer prevents transparent panel clipping from fractional layout
+    // and late font/render settling in the overlay window.
+    const height = Math.ceil(Math.max(...heightCandidates)) + 16;
     const api = window.electronAPI as any;
     if (api?.updateContentDimensionsCentered) {
       api.updateContentDimensionsCentered({ width, height });
@@ -3282,12 +3337,12 @@ Provide only the answer, nothing else.`;
                   <div
                     className={`${statusPillBaseClass} overlay-text-primary cursor-pointer hover:opacity-80 transition-opacity`}
                     title={
-                      activeModeLabel ? `当前模式：${activeModeLabel}` : '尚未选择模式'
+                      activeModeDisplayLabel ? `当前模式：${activeModeDisplayLabel}` : '尚未选择模式'
                     }
                     onClick={() => setIsModeDropdownOpen((prev) => !prev)}
                   >
                     <LayoutGrid className="h-3 w-3 opacity-70" />
-                    <span>{activeModeLabel ? `模式：${activeModeLabel}` : '模式：通用'}</span>
+                    <span>{activeModeDisplayLabel ? `模式：${activeModeDisplayLabel}` : '模式：通用'}</span>
                     <ChevronDown
                       size={12}
                       className={`opacity-60 transition-transform duration-200 ${isModeDropdownOpen ? 'rotate-180' : ''}`}
@@ -3340,7 +3395,7 @@ Provide only the answer, nothing else.`;
                                 className={`w-full rounded-[10px] px-3 py-2 flex items-center justify-between transition-all duration-200 ${isSelected ? 'bg-bg-item-active text-text-primary' : 'hover:bg-bg-item-surface text-text-secondary hover:text-text-primary'}`}
                               >
                                 <div className="flex items-center gap-2 min-w-0">
-                                  <span className="text-xs font-medium truncate">{mode.name}</span>
+                                  <span className="text-xs font-medium truncate">{getModeDisplayName(mode)}</span>
                                   {!isGeneral && (
                                     <Lock size={10} className="opacity-50 shrink-0" />
                                   )}
