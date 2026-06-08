@@ -1968,9 +1968,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     activeWhisperDownloads.add(modelId);
     try {
       const { Worker } = require('worker_threads');
-      const nodePath = require('path');
       const { buildWorkerInitMessage } = require('./audio/whisper/inferenceConfig');
-      const workerPath = nodePath.join(__dirname, 'audio', 'whisper', 'whisperWorker.js');
+      const { resolveWhisperWorkerPath } = require('./audio/whisper/workerPathResolver');
+      const workerPath = resolveWhisperWorkerPath();
       const w = new Worker(workerPath);
       const sender = event.sender;
       w.on('message', (msg: any) => {
