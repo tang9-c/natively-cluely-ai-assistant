@@ -10,6 +10,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 
 interface ModesSettingsBaseProps {
   onClose: () => void;
@@ -57,6 +58,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
   const [createError, setCreateError] = useState<string | null>(null);
   const createDropdownRef = useRef<HTMLDivElement>(null);
   const hasLoadedRef = useRef(false);
+  const isLight = useResolvedTheme() === 'light';
 
   const selectedMode = modes.find((m) => m.id === selectedModeId) ?? null;
 
@@ -206,16 +208,16 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
       editedContext.trim() !== selectedMode.customContext);
 
   return (
-    <div className="flex flex-col h-full bg-[#141414] text-text-primary">
+    <div className="flex flex-col h-full bg-bg-main text-text-primary">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle shrink-0">
         <div className="flex items-center gap-2.5">
           <Settings size={16} className="text-text-secondary" />
           <h2 className="text-sm font-semibold">模式设置</h2>
         </div>
         <button
           onClick={onClose}
-          className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-white/5 transition-colors"
+          className={`p-1.5 rounded-lg text-text-tertiary hover:text-text-primary transition-colors ${isLight ? 'hover:bg-black/5' : 'hover:bg-white/5'}`}
         >
           <X size={16} />
         </button>
@@ -224,7 +226,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
       {/* Body */}
       <div className="flex flex-1 min-h-0">
         {/* Left sidebar — mode list */}
-        <div className="w-[260px] border-r border-white/5 flex flex-col shrink-0">
+        <div className="w-[260px] border-r border-border-subtle flex flex-col shrink-0">
           <div className="flex-1 overflow-y-auto p-2 space-y-0.5 custom-scrollbar">
             {modes.map((mode) => {
               const isSelected = mode.id === selectedModeId;
@@ -236,7 +238,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                   className={`w-full rounded-xl px-3 py-2.5 flex items-center gap-2.5 transition-all duration-200 text-left ${
                     isSelected
                       ? 'bg-bg-item-active text-text-primary'
-                      : 'hover:bg-bg-item-surface text-text-secondary hover:text-text-primary'
+                      : `hover:bg-bg-item-surface text-text-secondary hover:text-text-primary`
                   }`}
                 >
                   <div className="flex-1 min-w-0">
@@ -265,7 +267,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
           </div>
 
           {/* Create mode button */}
-          <div className="p-2 border-t border-white/5 shrink-0 relative" ref={createDropdownRef}>
+          <div className="p-2 border-t border-border-subtle shrink-0 relative" ref={createDropdownRef}>
             <button
               onClick={() => {
                 setCreateError(null);
@@ -288,7 +290,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 4, scale: 0.96 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute left-2 right-2 bottom-full mb-1.5 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50"
+                  className="absolute left-2 right-2 bottom-full mb-1.5 bg-bg-elevated border border-border-subtle rounded-xl shadow-2xl overflow-hidden z-50"
                 >
                   <div className="p-1.5 space-y-0.5">
                     {Object.entries(TEMPLATE_LABELS).map(([type, label]) => {
@@ -301,7 +303,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                           className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all ${
                             exists
                               ? 'text-text-tertiary cursor-not-allowed opacity-50'
-                              : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
+                              : `text-text-secondary hover:text-text-primary ${isLight ? 'hover:bg-black/5' : 'hover:bg-white/5'}`
                           }`}
                         >
                           <div className="font-medium">{label}</div>
@@ -342,7 +344,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                     className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all duration-200 ${
                       selectedMode.id === activeModeId
                         ? 'bg-accent-primary/10 text-accent-primary cursor-default'
-                        : 'bg-white/5 text-text-secondary hover:bg-white/10 hover:text-text-primary'
+                        : `${isLight ? 'bg-black/5 hover:bg-black/10' : 'bg-white/5 hover:bg-white/10'} text-text-secondary hover:text-text-primary`
                     }`}
                   >
                     {selectedMode.id === activeModeId ? '当前活跃' : '设为活跃'}
@@ -416,7 +418,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
               </div>
 
               {/* Footer actions */}
-              <div className="shrink-0 px-5 py-3 border-t border-white/5 flex items-center justify-between">
+              <div className="shrink-0 px-5 py-3 border-t border-border-subtle flex items-center justify-between">
                 <button
                   onClick={handleDelete}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all duration-200 text-red-400 hover:bg-red-500/10"
@@ -434,7 +436,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                     className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
                       hasChanges && !isSaving
                         ? 'bg-accent-primary text-white hover:bg-accent-primary/90 active:scale-[0.96]'
-                        : 'bg-white/5 text-text-tertiary cursor-not-allowed'
+                        : `${isLight ? 'bg-black/5' : 'bg-white/5'} text-text-tertiary cursor-not-allowed`
                     }`}
                   >
                     {isSaving ? (
