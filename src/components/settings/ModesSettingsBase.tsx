@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Check,
+  ChevronDown,
   ChevronRight,
   Plus,
   Save,
@@ -52,6 +53,9 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [activeModeId, setActiveModeId] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const createDropdownRef = useRef<HTMLDivElement>(null);
   const hasLoadedRef = useRef(false);
 
   const selectedMode = modes.find((m) => m.id === selectedModeId) ?? null;
@@ -113,6 +117,34 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
       setSaveError(null);
     }
   }, [selectedModeId, selectedMode, loadNoteSections]);
+
+  // Close create dropdown on outside click
+  useEffect(() => {
+    if (!isCreating) return;
+    const handleClick = (e: MouseEvent) => {
+      if (createDropdownRef.current && !createDropdownRef.current.contains(e.target as Node)) {
+        setIsCreating(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [isCreating]);
+
+  const handleCreate = async (templateType: string, name: string) => {
+    setCreateError(null);
+    try {
+      const result = await window.electronAPI?.modesCreate?.({ name, templateType });
+      if (result?.error) {
+        setCreateError(result.error);
+      } else if (result?.success && result.mode) {
+        await loadModes();
+        setSelectedModeId(result.mode.id);
+        setIsCreating(false);
+      }
+    } catch (e: any) {
+      setCreateError(e.message ?? '创建失败');
+    }
+  };
 
   const handleSetActive = async (modeId: string) => {
     const mode = modes.find((m) => m.id === modeId);
@@ -233,16 +265,61 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
           </div>
 
           {/* Create mode button */}
-          <div className="p-2 border-t border-white/5 shrink-0">
+          <div className="p-2 border-t border-white/5 shrink-0 relative" ref={createDropdownRef}>
             <button
               onClick={() => {
-                setSaveError('创建新模式功能即将推出');
+                setCreateError(null);
+                setIsCreating((prev) => !prev);
               }}
               className="w-full rounded-xl px-3 py-2.5 flex items-center justify-center gap-2 text-xs font-medium transition-all duration-200 bg-accent-primary/10 text-accent-primary hover:bg-accent-primary/20"
             >
               <Plus size={14} />
               <span>创建新模式</span>
+              <ChevronDown
+                size={14}
+                className={`transition-transform duration-200 ${isCreating ? 'rotate-180' : ''}`}
+              />
             </button>
+
+            <AnimatePresence>
+              {isCreating && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 4, scale: 0.96 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute left-2 right-2 bottom-full mb-1.5 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50"
+                >
+                  <div className="p-1.5 space-y-0.5">
+                    {Object.entries(TEMPLATE_LABELS).map(([type, label]) => {
+                      const exists = modes.some((m) => m.templateType === type);
+                      return (
+                        <button
+                          key={type}
+                          onClick={() => handleCreate(type, label)}
+                          disabled={exists}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all ${
+                            exists
+                              ? 'text-text-tertiary cursor-not-allowed opacity-50'
+                              : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
+                          }`}
+                        >
+                          <div className="font-medium">{label}</div>
+                          <div className="text-[10px] text-text-tertiary mt-0.5">
+                            {exists ? '已存在' : type}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {createError && (
+                    <div className="px-3 pb-2 text-[11px] text-red-400">
+                      {createError}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 

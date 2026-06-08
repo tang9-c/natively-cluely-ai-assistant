@@ -8,6 +8,7 @@
  */
 import React from 'react';
 import { ModesSettingsBase } from '../components/settings/ModesSettingsBase';
+import { NegotiationCoachingCard as NegotiationCoachingCardFallback } from '../components/NegotiationCoachingCard';
 
 // ─── No-op fallbacks ────────────────────────────────────────────────
 const NullComponent: React.FC<any> = () => null;
@@ -40,4 +41,4 @@ export const ModesSettings: React.FC<any> =
   get(_modesSettings, 'default', ModesSettingsBase);
 
 export const NegotiationCoachingCard: React.FC<any> =
-  get(_negotiationCard, 'NegotiationCoachingCard', NullComponent);
+  get(_negotiationCard, 'NegotiationCoachingCard', NegotiationCoachingCardFallback);
