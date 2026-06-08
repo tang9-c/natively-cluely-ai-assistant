@@ -73,6 +73,10 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
   const [activeModeId, setActiveModeId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [addingSection, setAddingSection] = useState(false);
+  const [newSectionTitle, setNewSectionTitle] = useState('');
+  const [newSectionDesc, setNewSectionDesc] = useState('');
+  const [sectionError, setSectionError] = useState<string | null>(null);
   const createDropdownRef = useRef<HTMLDivElement>(null);
   const hasLoadedRef = useRef(false);
   const isLight = useResolvedTheme() === 'light';
@@ -216,6 +220,57 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
       }
     } catch (e: any) {
       setSaveError(e.message ?? '删除失败');
+    }
+  };
+
+  const handleAddNoteSection = async () => {
+    if (!selectedMode) return;
+    const title = newSectionTitle.trim();
+    const desc = newSectionDesc.trim();
+    if (!title) {
+      setSectionError('标题不能为空');
+      return;
+    }
+    try {
+      const result = await window.electronAPI?.modesAddNoteSection?.(selectedMode.id, title, desc);
+      if (result?.error) {
+        setSectionError(result.error);
+      } else {
+        setNewSectionTitle('');
+        setNewSectionDesc('');
+        setAddingSection(false);
+        setSectionError(null);
+        await loadNoteSections(selectedMode.id);
+      }
+    } catch (e: any) {
+      setSectionError(e.message ?? '添加失败');
+    }
+  };
+
+  const handleUpdateNoteSection = async (id: string, title: string, description: string) => {
+    if (!selectedMode) return;
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) return;
+    try {
+      await window.electronAPI?.modesUpdateNoteSection?.(id, {
+        title: trimmedTitle,
+        description: description.trim(),
+      });
+      await loadNoteSections(selectedMode.id);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleDeleteNoteSection = async (id: string, title: string) => {
+    if (!selectedMode) return;
+    const ok = window.confirm(`确定要删除笔记分区 "${title}" 吗？`);
+    if (!ok) return;
+    try {
+      await window.electronAPI?.modesDeleteNoteSection?.(id);
+      await loadNoteSections(selectedMode.id);
+    } catch {
+      // ignore
     }
   };
 
@@ -396,28 +451,107 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                 </div>
 
                 {/* Note sections */}
-                {noteSections.length > 0 && (
-                  <div>
-                    <label className="block text-[11px] font-medium text-text-secondary uppercase tracking-wide mb-2">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-[11px] font-medium text-text-secondary uppercase tracking-wide">
                       笔记分区
                     </label>
-                    <div className="space-y-2">
-                      {noteSections.map((section) => (
-                        <div
-                          key={section.id}
-                          className="bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5"
-                        >
-                          <div className="text-xs font-medium text-text-primary">
-                            {section.title}
-                          </div>
-                          <div className="text-[11px] text-text-tertiary mt-0.5">
-                            {section.description}
+                    <button
+                      onClick={() => {
+                        setAddingSection((prev) => !prev);
+                        setSectionError(null);
+                      }}
+                      className="flex items-center gap-1 text-[11px] font-medium text-accent-primary hover:text-accent-primary/80 transition-colors"
+                    >
+                      <Plus size={12} />
+                      {addingSection ? '取消' : '添加分区'}
+                    </button>
+                  </div>
+
+                  <AnimatePresence>
+                    {addingSection && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className="overflow-hidden mb-2"
+                      >
+                        <div className="bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5 space-y-2">
+                          <input
+                            type="text"
+                            value={newSectionTitle}
+                            onChange={(e) => setNewSectionTitle(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleAddNoteSection();
+                            }}
+                            placeholder="分区标题"
+                            className="w-full bg-transparent text-xs font-medium text-text-primary placeholder:text-text-tertiary outline-none"
+                          />
+                          <textarea
+                            value={newSectionDesc}
+                            onChange={(e) => setNewSectionDesc(e.target.value)}
+                            rows={2}
+                            placeholder="分区描述（告诉 AI 这里该放什么内容）"
+                            className="w-full bg-transparent text-[11px] text-text-secondary placeholder:text-text-tertiary outline-none resize-none"
+                          />
+                          <div className="flex items-center justify-between">
+                            {sectionError && (
+                              <span className="text-[11px] text-red-400">{sectionError}</span>
+                            )}
+                            <div className="flex-1" />
+                            <button
+                              onClick={handleAddNoteSection}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-accent-primary text-white hover:bg-accent-primary/90 transition-all"
+                            >
+                              <Check size={11} strokeWidth={3} />
+                              保存
+                            </button>
                           </div>
                         </div>
-                      ))}
-                    </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <div className="space-y-2">
+                    {noteSections.map((section) => (
+                      <motion.div
+                        key={section.id}
+                        layout
+                        className="bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5 group"
+                      >
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1 min-w-0 space-y-1.5">
+                            <input
+                              type="text"
+                              defaultValue={section.title}
+                              onBlur={(e) =>
+                                handleUpdateNoteSection(section.id, e.target.value, section.description)
+                              }
+                              className="w-full bg-transparent text-xs font-medium text-text-primary placeholder:text-text-tertiary outline-none focus:ring-0"
+                            />
+                            <textarea
+                              defaultValue={section.description}
+                              onBlur={(e) =>
+                                handleUpdateNoteSection(section.id, section.title, e.target.value)
+                              }
+                              rows={2}
+                              placeholder="分区描述"
+                              className="w-full bg-transparent text-[11px] text-text-secondary placeholder:text-text-tertiary outline-none focus:ring-0 resize-none"
+                            />
+                          </div>
+                          <button
+                            onClick={() => handleDeleteNoteSection(section.id, section.title)}
+                            className="shrink-0 p-1 rounded-md text-text-tertiary hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                            title="删除分区"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </motion.div>
+                    ))}
                   </div>
-                )}
+                </div>
 
                 {/* Error message */}
                 <AnimatePresence>
