@@ -1,0 +1,165 @@
+// electron/services/LocalModelManager.ts
+import path from 'path';
+import fs from 'fs';
+import { app } from 'electron';
+
+export interface LocalModelInfo {
+  id: string;
+  name: string;
+  description: string;
+  sizeMb: number;
+  task: string;
+  status: 'available' | 'missing' | 'downloading' | 'error';
+  errorMessage?: string;
+}
+
+interface ModelDefinition {
+  id: string;
+  name: string;
+  description: string;
+  sizeMb: number;
+  task: string;
+  requiredFiles: string[]; // relative to model root, e.g. 'onnx/model_int8.onnx'
+}
+
+const MODEL_DEFINITIONS: ModelDefinition[] = [
+  {
+    id: 'Xenova/paraphrase-multilingual-MiniLM-L12-v2',
+    name: '本地嵌入模型',
+    description: '用于本地 RAG 向量检索',
+    sizeMb: 129,
+    task: 'feature-extraction',
+    requiredFiles: ['onnx/model_int8.onnx'],
+  },
+  {
+    id: 'Xenova/mobilebert-uncased-mnli',
+    name: '意图分类模型',
+    description: '用于对话意图识别',
+    sizeMb: 121,
+    task: 'zero-shot-classification',
+    requiredFiles: ['onnx/model.onnx'],
+  },
+];
+
+function getModelsDir(): string {
+  return path.join(app.getPath('userData'), 'models');
+}
+
+function modelDir(modelId: string): string {
+  return path.join(getModelsDir(), modelId);
+}
+
+function isModelCached(def: ModelDefinition): boolean {
+  const dir = modelDir(def.id);
+  if (!fs.existsSync(dir)) return false;
+  return def.requiredFiles.every((f) => fs.existsSync(path.join(dir, f)));
+}
+
+export function getLocalModels(): LocalModelInfo[] {
+  return MODEL_DEFINITIONS.map((def) => ({
+    id: def.id,
+    name: def.name,
+    description: def.description,
+    sizeMb: def.sizeMb,
+    task: def.task,
+    status: isModelCached(def) ? 'available' : 'missing',
+  }));
+}
+
+export function deleteLocalModel(modelId: string): { success: boolean; error?: string } {
+  try {
+    const dir = modelDir(modelId);
+    if (fs.existsSync(dir)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
+// In-memory download tracking (single-process, sufficient for Electron main)
+const downloadStates = new Map<string, 'downloading' | 'error'>();
+
+export type DownloadProgressCallback = (modelId: string, progress: number) => void;
+export type DownloadCompleteCallback = (modelId: string) => void;
+export type DownloadErrorCallback = (modelId: string, error: string) => void;
+
+let onProgress: DownloadProgressCallback | null = null;
+let onComplete: DownloadCompleteCallback | null = null;
+let onError: DownloadErrorCallback | null = null;
+
+export function setDownloadCallbacks(
+  progress: DownloadProgressCallback,
+  complete: DownloadCompleteCallback,
+  error: DownloadErrorCallback,
+): void {
+  onProgress = progress;
+  onComplete = complete;
+  onError = error;
+}
+
+export async function startLocalModelDownload(modelId: string): Promise<{ success: boolean; error?: string }> {
+  const def = MODEL_DEFINITIONS.find((m) => m.id === modelId);
+  if (!def) return { success: false, error: `Unknown model: ${modelId}` };
+
+  if (downloadStates.get(modelId) === 'downloading') {
+    return { success: false, error: 'already-downloading' };
+  }
+
+  downloadStates.set(modelId, 'downloading');
+
+  try {
+    // Dynamic ESM import for @huggingface/transformers (ESM-only package)
+    const { pipeline, env } = await (new Function('return import("@huggingface/transformers")')()) as any;
+
+    env.cacheDir = getModelsDir();
+    env.allowRemoteModels = true;
+    env.remoteHost = (process.env.HF_ENDPOINT || 'https://modelscope.cn/models').replace(/\/$/, '') + '/';
+
+    // Per-file progress tracking for accurate average
+    const fileProgress = new Map<string, number>();
+    let lastPostedPct = 0;
+
+    await pipeline(def.task, def.id, {
+      local_files_only: false,
+      progress_callback: (data: any) => {
+        const key: string | undefined = data.file ?? data.name;
+        if (!key) return;
+        let val: number | null = null;
+        if (data.status === 'initiate' || data.status === 'download' || data.status === 'downloading') {
+          if (!fileProgress.has(key)) val = 0;
+        } else if (data.status === 'progress') {
+          const p = Number(data.progress);
+          if (!Number.isNaN(p)) val = Math.min(100, Math.max(0, p));
+        } else if (data.status === 'done') {
+          val = 100;
+        } else {
+          return;
+        }
+        if (val !== null) {
+          const prev = fileProgress.get(key) ?? 0;
+          fileProgress.set(key, Math.max(prev, val));
+        }
+        if (fileProgress.size === 0) return;
+        let sum = 0;
+        for (const v of fileProgress.values()) sum += v;
+        const avg = sum / fileProgress.size;
+        const rounded = Math.min(99, Math.floor(avg));
+        const next = Math.max(lastPostedPct, rounded);
+        if (next === lastPostedPct) return;
+        lastPostedPct = next;
+        onProgress?.(modelId, next);
+      },
+    });
+
+    downloadStates.delete(modelId);
+    onComplete?.(modelId);
+    return { success: true };
+  } catch (e: any) {
+    downloadStates.delete(modelId);
+    const msg = e?.message || String(e);
+    onError?.(modelId, msg);
+    return { success: false, error: msg };
+  }
+}
