@@ -163,11 +163,19 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     },
     toggleAdvancedSettings: () => electron_1.ipcRenderer.invoke('toggle-advanced-settings'),
     openSettingsTab: (tab) => electron_1.ipcRenderer.invoke('settings:open-tab', tab),
+    openModesManager: () => electron_1.ipcRenderer.invoke('modes:open-manager'),
     onOpenSettingsTab: (callback) => {
         const subscription = (_, tab) => callback(tab);
         electron_1.ipcRenderer.on('settings:open-tab', subscription);
         return () => {
             electron_1.ipcRenderer.removeListener('settings:open-tab', subscription);
+        };
+    },
+    onOpenModesManager: (callback) => {
+        const subscription = () => callback();
+        electron_1.ipcRenderer.on('modes:open-manager', subscription);
+        return () => {
+            electron_1.ipcRenderer.removeListener('modes:open-manager', subscription);
         };
     },
     openExternal: (url) => electron_1.ipcRenderer.invoke('open-external', url),
@@ -213,18 +221,6 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     // Permissions
     checkPermissions: () => electron_1.ipcRenderer.invoke('permissions:check'),
     requestMicPermission: () => electron_1.ipcRenderer.invoke('permissions:request-mic'),
-    // Free Trial
-    startTrial: () => electron_1.ipcRenderer.invoke('trial:start'),
-    getTrialStatus: () => electron_1.ipcRenderer.invoke('trial:status'),
-    getLocalTrial: () => electron_1.ipcRenderer.invoke('trial:get-local'),
-    convertTrial: (choice) => electron_1.ipcRenderer.invoke('trial:convert', choice),
-    endTrialByok: () => electron_1.ipcRenderer.invoke('trial:end-byok'),
-    wipeTrialProfileData: () => electron_1.ipcRenderer.invoke('trial:wipe-profile-data'),
-    onTrialEnded: (cb) => {
-        const sub = (_, data) => cb(data);
-        electron_1.ipcRenderer.on('trial-ended', sub);
-        return () => electron_1.ipcRenderer.removeListener('trial-ended', sub);
-    },
     // STT Provider Management
     setSttProvider: (provider) => electron_1.ipcRenderer.invoke('set-stt-provider', provider),
     getSttProvider: () => electron_1.ipcRenderer.invoke('get-stt-provider'),
@@ -265,6 +261,25 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     localWhisperGetChannelConfig: () => electron_1.ipcRenderer.invoke('local-whisper-get-channel-config'),
     localWhisperSetChannelConfig: (cfg) => electron_1.ipcRenderer.invoke('local-whisper-set-channel-config', cfg),
     localWhisperGetHardware: () => electron_1.ipcRenderer.invoke('local-whisper-get-hardware'),
+    // Local ONNX Models Management
+    localModelsGetList: () => electron_1.ipcRenderer.invoke('local-models-get-list'),
+    localModelsStartDownload: (modelId) => electron_1.ipcRenderer.invoke('local-models-start-download', modelId),
+    localModelsDeleteModel: (modelId) => electron_1.ipcRenderer.invoke('local-models-delete-model', modelId),
+    onLocalModelsDownloadProgress: (cb) => {
+        const listener = (_, data) => cb(data);
+        electron_1.ipcRenderer.on('local-models-download-progress', listener);
+        return () => electron_1.ipcRenderer.removeListener('local-models-download-progress', listener);
+    },
+    onLocalModelsDownloadComplete: (cb) => {
+        const listener = (_, data) => cb(data);
+        electron_1.ipcRenderer.on('local-models-download-complete', listener);
+        return () => electron_1.ipcRenderer.removeListener('local-models-download-complete', listener);
+    },
+    onLocalModelsDownloadError: (cb) => {
+        const listener = (_, data) => cb(data);
+        electron_1.ipcRenderer.on('local-models-download-error', listener);
+        return () => electron_1.ipcRenderer.removeListener('local-models-download-error', listener);
+    },
     // STT Config Events (Adapted from public PR #173 — verify premium interaction)
     onSttConfigChanged: (callback) => {
         const subscription = (_, data) => callback(data);
@@ -782,20 +797,6 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     // Dynamic Model Discovery
     fetchProviderModels: (provider, apiKey) => electron_1.ipcRenderer.invoke('fetch-provider-models', provider, apiKey),
     setProviderPreferredModel: (provider, modelId) => electron_1.ipcRenderer.invoke('set-provider-preferred-model', provider, modelId),
-    // License Management
-    licenseActivate: (key) => electron_1.ipcRenderer.invoke('license:activate', key),
-    licenseCheckPremium: () => electron_1.ipcRenderer.invoke('license:check-premium'),
-    licenseGetDetails: () => electron_1.ipcRenderer.invoke('license:get-details'),
-    licenseCheckPremiumAsync: () => electron_1.ipcRenderer.invoke('license:check-premium-async'),
-    licenseDeactivate: () => electron_1.ipcRenderer.invoke('license:deactivate'),
-    licenseGetHardwareId: () => electron_1.ipcRenderer.invoke('license:get-hardware-id'),
-    onLicenseStatusChanged: (callback) => {
-        const subscription = (_, data) => callback(data);
-        electron_1.ipcRenderer.on('license-status-changed', subscription);
-        return () => {
-            electron_1.ipcRenderer.removeListener('license-status-changed', subscription);
-        };
-    },
     onModesActiveCleared: (callback) => {
         const subscription = () => callback();
         electron_1.ipcRenderer.on('modes-active-cleared', subscription);

@@ -89,7 +89,7 @@ exports.STT_REGISTRY = {
         name: 'LocalWhisperSTT',
         factory: (_key, speaker) => {
             const sm = SettingsManager_1.SettingsManager.getInstance();
-            const globalModel = sm.get('localWhisperModel') ?? 'Xenova/whisper-tiny.en';
+            const globalModel = sm.get('localWhisperModel') ?? 'Xenova/whisper-base';
             let modelId = globalModel;
             if (sm.get('localWhisperPerChannelEnabled')) {
                 const override = speaker === 'interviewer'

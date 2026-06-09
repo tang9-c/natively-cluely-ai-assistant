@@ -69,6 +69,32 @@ class IntelligenceEngine extends events_1.EventEmitter {
         return normalized === 'nothing actionable right now'
             || normalized === 'nothing to capture right now';
     }
+    static normalizeSuggestedAnswer(answer) {
+        const normalized = answer.replace(/\r\n/g, '\n').trim();
+        const nonEmptyLines = normalized
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean);
+        if (nonEmptyLines.length < 4) {
+            return normalized.replace(/\n{3,}/g, '\n\n');
+        }
+        const shortLineCount = nonEmptyLines.filter((line) => line.length <= 6).length;
+        const mostlyShortLines = shortLineCount / nonEmptyLines.length >= 0.6;
+        const mostlyCjkFragments = nonEmptyLines.filter((line) => /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{P}\p{Zs}A-Za-z0-9]+$/u.test(line)).length /
+            nonEmptyLines.length >=
+            0.6;
+        if (!mostlyShortLines) {
+            return normalized.replace(/\n{3,}/g, '\n\n');
+        }
+        const joiner = mostlyCjkFragments ? '' : ' ';
+        return nonEmptyLines
+            .join(joiner)
+            .replace(/\s+([，。！？；：、,.!?;:])/g, '$1')
+            .replace(/([（《“‘(])\s+/g, '$1')
+            .replace(/\s+([）》”’)])/g, '$1')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
     constructor(llmHelper, session) {
         super();
         this.llmHelper = llmHelper;
@@ -513,6 +539,7 @@ class IntelligenceEngine extends events_1.EventEmitter {
             if (!fullAnswer || fullAnswer.trim().length < 5) {
                 fullAnswer = "Could you repeat that? I want to make sure I address your question properly.";
             }
+            fullAnswer = IntelligenceEngine.normalizeSuggestedAnswer(fullAnswer);
             if (IntelligenceEngine.isNonAnswerSentinel(fullAnswer)) {
                 if (isSpeculative) {
                     this.speculativeText = null;

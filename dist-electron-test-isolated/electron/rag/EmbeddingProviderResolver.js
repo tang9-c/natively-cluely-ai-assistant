@@ -45,6 +45,23 @@ class EmbeddingProviderResolver {
     static async resolve(config) {
         const candidates = [];
         let embeddingsDenied = false;
+        if (config.doubaoKey) {
+            try {
+                (0, ProviderRouter_1.assertProviderDataScopes)('doubao_embeddings', ['embeddings'], config.providerDataScopes);
+                // Use configured endpoint ID, then env var, then default
+                const doubaoModel = config.doubaoEmbeddingModel || process.env.DOUBAO_EMBEDDING_MODEL || undefined;
+                candidates.push(new DoubaoEmbeddingProvider_1.DoubaoEmbeddingProvider(config.doubaoKey, doubaoModel));
+            }
+            catch (error) {
+                if (error instanceof ProviderRouter_1.ProviderScopeError) {
+                    embeddingsDenied = true;
+                    console.warn('[ScopeFallback] embeddings denied for cloud; routing to Ollama');
+                }
+                else {
+                    throw error;
+                }
+            }
+        }
         if (config.openaiKey) {
             try {
                 (0, ProviderRouter_1.assertProviderDataScopes)('openai_embeddings', ['embeddings'], config.providerDataScopes);
@@ -64,23 +81,6 @@ class EmbeddingProviderResolver {
             try {
                 (0, ProviderRouter_1.assertProviderDataScopes)('gemini_embeddings', ['embeddings'], config.providerDataScopes);
                 candidates.push(new GeminiEmbeddingProvider_1.GeminiEmbeddingProvider(config.geminiKey));
-            }
-            catch (error) {
-                if (error instanceof ProviderRouter_1.ProviderScopeError) {
-                    embeddingsDenied = true;
-                    console.warn('[ScopeFallback] embeddings denied for cloud; routing to Ollama');
-                }
-                else {
-                    throw error;
-                }
-            }
-        }
-        if (config.doubaoKey) {
-            try {
-                (0, ProviderRouter_1.assertProviderDataScopes)('doubao_embeddings', ['embeddings'], config.providerDataScopes);
-                // Use configured endpoint ID, then env var, then default
-                const doubaoModel = config.doubaoEmbeddingModel || process.env.DOUBAO_EMBEDDING_MODEL || undefined;
-                candidates.push(new DoubaoEmbeddingProvider_1.DoubaoEmbeddingProvider(config.doubaoKey, doubaoModel));
             }
             catch (error) {
                 if (error instanceof ProviderRouter_1.ProviderScopeError) {

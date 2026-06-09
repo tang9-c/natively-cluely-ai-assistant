@@ -31,6 +31,7 @@ function buildVisionProviders(inputs) {
     const providers = [];
     const cloudAllowed = inputs.mode !== 'private_vision';
     if (cloudAllowed) {
+        providers.push(doubao(credentials, inputs));
         providers.push(natively(credentials, inputs));
         providers.push(openai(credentials, inputs));
         providers.push(geminiFlash(credentials, inputs));
@@ -45,6 +46,20 @@ function buildVisionProviders(inputs) {
     return providers.filter(p => p !== null);
 }
 // ─── Provider builders ────────────────────────────────────────────────────
+function doubao(creds, _inputs) {
+    const apiKey = creds.getDoubaoApiKey();
+    return {
+        id: 'doubao',
+        displayName: 'Doubao',
+        modelId: 'doubao-seed-2-0-lite-260215',
+        isLocal: false,
+        isConfigured: !!apiKey,
+        supportsVision: !!apiKey,
+        scopeAllowsScreenshots: true,
+        hint: 'doubao',
+        invoke: async (p) => callLLMHelperVision('doubao', p),
+    };
+}
 function natively(creds, _inputs) {
     const apiKey = creds.getNativelyApiKey();
     return {

@@ -6,7 +6,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.NativelyProSTT = void 0;
 const ws_1 = __importDefault(require("ws"));
 const languages_1 = require("../config/languages");
-const constants_1 = require("../config/constants");
 const dnsHelpers_1 = require("./dnsHelpers");
 const BaseSTT_1 = require("./BaseSTT");
 /**
@@ -253,18 +252,7 @@ class NativelyProSTT extends BaseSTT_1.BaseSTT {
                 audio_channels: this._numChannels,
                 channel: this.channel,
             };
-            if (this.apiKey === constants_1.TRIAL_SENTINEL_KEY) {
-                try {
-                    const { CredentialsManager } = require('../services/CredentialsManager');
-                    const trialToken = CredentialsManager.getInstance().getTrialToken();
-                    if (trialToken)
-                        baseFrame.trial_token = trialToken;
-                }
-                catch { /* CredentialsManager unavailable — connection will be rejected by server */ }
-            }
-            else {
-                baseFrame.key = this.apiKey;
-            }
+            baseFrame.key = this.apiKey;
             ws.send(JSON.stringify(baseFrame));
         }));
         ws.on('message', (data) => guard(() => {

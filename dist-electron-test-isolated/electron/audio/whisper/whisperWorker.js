@@ -102,7 +102,8 @@ async function updatePromptCache(promptText) {
 // non-English audio as phonetic English. Force language='english' so the
 // behaviour is at least documented and consistent.
 const ENGLISH_ONLY_MODELS = new Set([
-    // Moonshine
+    // Moonshine — English-only by design
+    'onnx-community/moonshine-tiny-ONNX',
     'onnx-community/moonshine-base-ONNX',
     // Distil-Whisper — English-only checkpoints
     'distil-whisper/distil-small.en',
@@ -139,6 +140,9 @@ worker_threads_1.parentPort.on('message', async (msg) => {
             const { pipeline, env } = await loadTransformers();
             env.cacheDir = msg.cacheDir;
             env.allowRemoteModels = true;
+            // Use HF_ENDPOINT env var or default to hf-mirror.com (HuggingFace is
+            // often unreachable from mainland China without a mirror).
+            env.remoteHost = (process.env.HF_ENDPOINT || 'https://modelscope.cn/models').replace(/\/$/, '') + '/';
             // Apply hardware-specific execution providers (CoreML, DirectML, CUDA, CPU)
             const providers = msg.executionProviders ?? ['cpu'];
             if (env.backends?.onnx) {

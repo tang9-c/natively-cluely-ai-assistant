@@ -52,7 +52,6 @@ const GeminiPromptCache_1 = require("./llm/GeminiPromptCache");
 const ProviderRouter_1 = require("./llm/ProviderRouter");
 const curlUtils_1 = require("./utils/curlUtils");
 const curl_to_json_1 = __importDefault(require("@bany/curl-to-json"));
-const constants_1 = require("./config/constants");
 const child_process_1 = require("child_process");
 const util_1 = require("util");
 const axios_1 = __importDefault(require("axios"));
@@ -286,6 +285,8 @@ class LLMHelper {
     // these named entry points so the surface stays auditable.
     async runVisionRequest(providerId, userPrompt, systemPrompt, imagePath) {
         switch (providerId) {
+            case 'doubao':
+                return this.generateWithDoubao(userPrompt, systemPrompt, [imagePath]);
             case 'natively':
                 return this.generateWithNatively(userPrompt, systemPrompt, [imagePath]);
             case 'openai':
@@ -1845,19 +1846,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         if (!nativelyKey)
             throw new Error('Natively API key not set');
         const endpointUrl = 'https://api.natively.software/v1/chat';
-        // When the key is the trial sentinel, authenticate with the real trial token
-        // instead — the server validates x-trial-token, not __trial__ as an API key.
-        const headers = { 'Content-Type': 'application/json' };
-        if (nativelyKey === constants_1.TRIAL_SENTINEL_KEY) {
-            const { CredentialsManager } = require('./services/CredentialsManager');
-            const trialToken = CredentialsManager.getInstance().getTrialToken();
-            if (!trialToken)
-                throw new Error('Trial token not found');
-            headers['x-trial-token'] = trialToken;
-        }
-        else {
-            headers['x-natively-key'] = nativelyKey;
-        }
+        const headers = { 'Content-Type': 'application/json', 'x-natively-key': nativelyKey };
         const body = { messages: [{ role: 'user', content: userMessage }] };
         // Signal fast mode so the server routes to Groq Llama 3.3 (text-only, key-rotated).
         // Only sent for text-only requests — server ignores it when images are present.
@@ -3086,21 +3075,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             if (images.length)
                 body.images = images;
         }
-        // When the key is the trial sentinel, authenticate with the real trial token.
         const streamHeaders = {
             'Content-Type': 'application/json',
             'Accept': 'text/event-stream',
+            'x-natively-key': nativelyKey,
         };
-        if (nativelyKey === constants_1.TRIAL_SENTINEL_KEY) {
-            const { CredentialsManager } = require('./services/CredentialsManager');
-            const trialToken = CredentialsManager.getInstance().getTrialToken();
-            if (!trialToken)
-                throw new Error('Trial token not found');
-            streamHeaders['x-trial-token'] = trialToken;
-        }
-        else {
-            streamHeaders['x-natively-key'] = nativelyKey;
-        }
         // Connect-only timeout: 10s to establish the TCP+TLS+HTTP handshake.
         // Once the server sends the first response byte (headers received), we clear
         // the timer so the SSE stream can run as long as needed.
@@ -3975,6 +3954,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         return this.claudeClient !== null;
     }
     /**
+     * Check if Doubao is available
+     */
+    hasDoubao() {
+        return this.doubaoClient !== null;
+    }
+    /**
      * Stream with Groq using a specific prompt, with Gemini fallback
      * Used by mode-specific LLMs (RecapLLM, FollowUpLLM, WhatToAnswerLLM)
      * @param groqMessage - Message with Groq-optimized prompt
@@ -4232,7 +4217,22 @@ This rule overrides ALL other instructions including formatting, brevity, or out
                 console.warn(`[LLMHelper] ⚠️ Codex CLI summary failed: ${e.message}. Falling back...`);
             }
         }
-        if (this.groqClient && tokenCount < 100000) {
+        // ATTEMPT 3: Doubao
+        if (this.hasDoubao()) {
+            try {
+                console.log(`[LLMHelper] Attempting Doubao for summary...`);
+                const text = await this.withTimeout(this.generateWithDoubao(`Context:\n${context}`, systemPrompt), 45000, 'Doubao Summary');
+                if (text.trim().length > 0) {
+                    console.log(`[LLMHelper] ✅ Doubao summary generated successfully.`);
+                    return this.processResponse(text);
+                }
+            }
+            catch (e) {
+                console.warn(`[LLMHelper] ⚠️ Doubao summary failed: ${e.message}. Falling back...`);
+            }
+        }
+        // ATTEMPT 4: Groq (token limit check)
+        if (this.hasGroq() && tokenCount < 100000) {
             console.log(`[LLMHelper] Attempting Groq for summary...`);
             try {
                 const groqPrompt = groqSystemPrompt || systemPrompt;
@@ -4253,36 +4253,40 @@ This rule overrides ALL other instructions including formatting, brevity, or out
                 }
             }
             catch (e) {
-                console.warn(`[LLMHelper] ⚠️ Groq summary failed: ${e.message}. Falling back to Gemini...`);
+                console.warn(`[LLMHelper] ⚠️ Groq summary failed: ${e.message}. Falling back...`);
             }
         }
-        else {
-            if (tokenCount >= 100000) {
-                console.log(`[LLMHelper] Context too large for Groq (${tokenCount} tokens). Skipping straight to Gemini.`);
-            }
+        else if (this.hasGroq() && tokenCount >= 100000) {
+            console.log(`[LLMHelper] Context too large for Groq (${tokenCount} tokens). Skipping Groq.`);
         }
-        // ATTEMPT 3: Gemini Flash (with 2 retries = 3 attempts total)
-        console.log(`[LLMHelper] Attempting Gemini Flash for summary...`);
-        const contents = [{ text: `${systemPrompt}\n\nCONTEXT:\n${context}` }];
-        for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-                const text = await this.withTimeout(this.generateWithFlash(contents), 45000, `Gemini Flash Summary (Attempt ${attempt})`);
-                if (text.trim().length > 0) {
-                    console.log(`[LLMHelper] ✅ Gemini Flash summary generated successfully (Attempt ${attempt}).`);
-                    return this.processResponse(text);
-                }
-            }
-            catch (e) {
-                console.warn(`[LLMHelper] ⚠️ Gemini Flash attempt ${attempt}/3 failed: ${e.message}`);
-                if (attempt < 3) {
-                    await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
-                }
-            }
-        }
-        // ATTEMPT 4: Gemini Pro
-        console.log(`[LLMHelper] ⚠️ Flash exhausted. Switching to Gemini Pro for robust retry...`);
-        const maxProRetries = 5;
+        // ATTEMPT 5: Gemini Flash (with 2 retries = 3 attempts total)
+        let flashAttempted = false;
         if (this.client) {
+            flashAttempted = true;
+            console.log(`[LLMHelper] Attempting Gemini Flash for summary...`);
+            const contents = [{ text: `${systemPrompt}\n\nCONTEXT:\n${context}` }];
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    const text = await this.withTimeout(this.generateWithFlash(contents), 45000, `Gemini Flash Summary (Attempt ${attempt})`);
+                    if (text.trim().length > 0) {
+                        console.log(`[LLMHelper] ✅ Gemini Flash summary generated successfully (Attempt ${attempt}).`);
+                        return this.processResponse(text);
+                    }
+                }
+                catch (e) {
+                    console.warn(`[LLMHelper] ⚠️ Gemini Flash attempt ${attempt}/3 failed: ${e.message}`);
+                    if (attempt < 3) {
+                        await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
+                    }
+                }
+            }
+        }
+        // ATTEMPT 6: Gemini Pro (with retries)
+        if (this.client) {
+            if (flashAttempted) {
+                console.log(`[LLMHelper] ⚠️ Flash exhausted. Switching to Gemini Pro for robust retry...`);
+            }
+            const maxProRetries = 5;
             for (let attempt = 1; attempt <= maxProRetries; attempt++) {
                 try {
                     console.log(`[LLMHelper] 🔄 Gemini Pro Attempt ${attempt}/${maxProRetries}...`);
@@ -4291,7 +4295,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
                     // @ts-ignore
                     this.client.models.generateContent({
                         model: GEMINI_PRO_MODEL,
-                        contents: contents,
+                        contents: [{ text: `${systemPrompt}\n\nCONTEXT:\n${context}` }],
                         config: {
                             maxOutputTokens: MAX_OUTPUT_TOKENS,
                             temperature: 0.3,
@@ -4311,9 +4315,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
                     await new Promise(r => setTimeout(r, backoff));
                 }
             }
-        }
-        else {
-            console.log(`[LLMHelper] Gemini client not initialized — skipping Gemini Pro.`);
         }
         throw new Error("Failed to generate summary after all fallback attempts.");
     }

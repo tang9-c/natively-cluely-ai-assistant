@@ -44,7 +44,7 @@ exports.LEGACY_PROVIDER_MODEL = {
     gemini: 'gemini-embedding-001',
     ollama: 'nomic-embed-text',
     openai: 'text-embedding-3-small',
-    local: 'xenova/all-minilm-l6-v2',
+    local: 'xenova/paraphrase-multilingual-minilm-l12-v2',
 };
 /**
  * Build the SQL `CASE embedding_provider WHEN ... THEN ... END` arms for the v16

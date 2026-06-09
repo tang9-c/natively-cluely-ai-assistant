@@ -190,11 +190,14 @@ class ModesManager {
         });
         return modes;
     }
-    // Seed the un-deletable General mode once at app init. Idempotent.
+    // Seed all seven built-in modes once at app init. Idempotent.
     ensureSeeded() {
         const modes = DatabaseManager_1.DatabaseManager.getInstance().getModes().map(rowToMode);
-        if (!modes.some(m => m.templateType === 'general')) {
-            this.createMode({ name: 'General', templateType: 'general' });
+        const existingTypes = new Set(modes.map(m => m.templateType));
+        for (const tmpl of exports.MODE_TEMPLATES) {
+            if (!existingTypes.has(tmpl.type)) {
+                this.createMode({ name: tmpl.label, templateType: tmpl.type });
+            }
         }
     }
     getActiveMode() {

@@ -10,8 +10,8 @@ const electron_1 = require("electron");
 const embeddingSpace_1 = require("../embeddingSpace");
 class LocalEmbeddingProvider {
     name = 'local';
-    dimensions = 384; // all-MiniLM-L6-v2
-    model = 'Xenova/all-MiniLM-L6-v2';
+    dimensions = 384; // paraphrase-multilingual-MiniLM-L12-v2
+    model = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
     space;
     pipe = null;
     loadingPromise = null; // prevents concurrent init races
@@ -23,7 +23,7 @@ class LocalEmbeddingProvider {
         // bundles this file (bundle: true inlines the provider into main.js, which
         // makes __dirname-relative paths fragile).
         // In prod: app.isPackaged = true → use process.resourcesPath (electron-builder extraResources).
-        this.modelPath = path_1.default.join(electron_1.app.isPackaged ? process.resourcesPath : path_1.default.join(electron_1.app.getAppPath(), 'resources'), 'models');
+        this.modelPath = path_1.default.join(electron_1.app.getPath('userData'), 'models');
     }
     async isAvailable() {
         // Local model is ALWAYS available after install — this is the guarantee
@@ -52,11 +52,13 @@ class LocalEmbeddingProvider {
             // packages like @huggingface/transformers. The new Function() trick is opaque
             // to the TypeScript compiler so it is left as a real import() call.
             const { pipeline, env } = await (new Function('return import("@huggingface/transformers")')());
-            // Tell transformers.js to use the local path, never download in production
-            env.allowRemoteModels = false;
-            env.localModelPath = this.modelPath;
-            this.pipe = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
-                local_files_only: true,
+            // Use userData/models as cache; allow remote download on first use
+            env.cacheDir = this.modelPath;
+            env.allowRemoteModels = true;
+            env.remoteHost = (process.env.HF_ENDPOINT || 'https://modelscope.cn/models').replace(/\/$/, '') + '/';
+            this.pipe = await pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', {
+                local_files_only: false,
+                model_file_name: 'model_int8',
             });
         })();
         try {
@@ -74,7 +76,7 @@ class LocalEmbeddingProvider {
         return Array.from(output.data);
     }
     async embedQuery(text) {
-        return this.embed(text); // all-MiniLM-L6-v2 is symmetric
+        return this.embed(text); // paraphrase-multilingual-MiniLM-L12-v2 is symmetric
     }
     async embedBatch(texts) {
         await this.ensureLoaded();

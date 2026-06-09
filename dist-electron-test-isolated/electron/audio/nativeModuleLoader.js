@@ -40,7 +40,8 @@ function validateNativeModule(mod) {
     for (const fn of SOFT_REQUIRED_METHODS) {
         if (typeof mod[fn] !== 'function') {
             console.warn(`[nativeModuleLoader] WARNING: optional method "${fn}" not found in binary — ` +
-                `Dodo license validation/deactivation will be unavailable until binary is rebuilt.`);
+                `Dodo license validation/deactivation will be unavailable until binary is rebuilt. ` +
+                `Run \`npm run build:native\` to refresh the Rust native module.`);
         }
     }
     // Functional smoke-test: actually call a cheap synchronous native function.
