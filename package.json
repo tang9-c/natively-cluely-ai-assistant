@@ -63,10 +63,6 @@
       {
         "from": "assets/natively.icns",
         "to": "natively.icns"
-      },
-      {
-        "from": "resources/models/",
-        "to": "models/"
       }
     ],
     "mac": {

@@ -253,3 +253,6 @@ refactor.js
 skills-lock.json
 windowswork.md.worktrees
 .worktrees/
+
+# Local ONNX models (downloaded at runtime)
+resources/models/Xenova/**/onnx/*.onnx
