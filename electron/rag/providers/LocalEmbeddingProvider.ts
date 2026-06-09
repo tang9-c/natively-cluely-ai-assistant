@@ -21,10 +21,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     // bundles this file (bundle: true inlines the provider into main.js, which
     // makes __dirname-relative paths fragile).
     // In prod: app.isPackaged = true → use process.resourcesPath (electron-builder extraResources).
-    this.modelPath = path.join(
-      app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'resources'),
-      'models'
-    );
+    this.modelPath = path.join(app.getPath('userData'), 'models');
   }
 
   async isAvailable(): Promise<boolean> {
@@ -56,12 +53,13 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       // to the TypeScript compiler so it is left as a real import() call.
       const { pipeline, env } = await (new Function('return import("@huggingface/transformers")')()) as any;
 
-      // Tell transformers.js to use the local path, never download in production
-      env.allowRemoteModels = false;
-      env.localModelPath = this.modelPath;
+      // Use userData/models as cache; allow remote download on first use
+      env.cacheDir = this.modelPath;
+      env.allowRemoteModels = true;
+      env.remoteHost = (process.env.HF_ENDPOINT || 'https://modelscope.cn/models').replace(/\/$/, '') + '/';
 
       this.pipe = await pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', {
-        local_files_only: true,
+        local_files_only: false,
         model_file_name: 'model_int8',
       });
     })();
