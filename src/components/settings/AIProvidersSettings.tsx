@@ -3,6 +3,7 @@ import { Plus, Trash2, Edit2, AlertCircle, CheckCircle, Save, ChevronDown, Check
 import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
+import { LocalModelsPanel } from '../LocalModelsPanel';
 
 interface CustomProvider {
     id: string;
@@ -1274,6 +1275,9 @@ export const AIProvidersSettings: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Local ONNX Models */}
+            <LocalModelsPanel />
             </div>
         </div>
     );
