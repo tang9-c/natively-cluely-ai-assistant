@@ -217,8 +217,8 @@ export const AIProvidersSettings: React.FC = () => {
                     setDefaultModel(result.model);
                 }
 
-                // Check Ollama
-                checkOllama();
+                // Ollama disabled by default — skip check
+                // checkOllama();
 
             } catch (e) {
                 console.error("Failed to load settings:", e);
@@ -251,17 +251,12 @@ export const AIProvidersSettings: React.FC = () => {
         }
     }, [credentialsLoaded, canUseFastMode, fastResponseMode]);
 
-    // Poll for Ollama status every 3 seconds requesting smart start on mount
-    useEffect(() => {
-        // Immediate "Smart Start" check
-        ensureOllamaStartup();
-
-        // Background polling for maintenance
-        const interval = setInterval(() => {
-            checkOllama(false);
-        }, 3000);
-        return () => clearInterval(interval);
-    }, []);
+    // Ollama polling disabled by default
+    // useEffect(() => {
+    //     ensureOllamaStartup();
+    //     const interval = setInterval(() => checkOllama(false), 3000);
+    //     return () => clearInterval(interval);
+    // }, []);
 
     // Load Screen Understanding (vision routing) settings
     useEffect(() => {
@@ -598,7 +593,8 @@ export const AIProvidersSettings: React.FC = () => {
                                 });
                             }
                             customProviders.forEach(p => opts.push({ id: p.id, name: p.name }));
-                            ollamaModels.forEach(m => opts.push({ id: `ollama-${m}`, name: `${m} (Local)` }));
+                            // Ollama models hidden by default
+                            // ollamaModels.forEach(m => opts.push({ id: `ollama-${m}`, name: `${m} (Local)` }));
 
                             if (defaultModel && !opts.find(o => o.id === defaultModel)) {
                                 opts.unshift({ id: defaultModel, name: prettifyModelId(defaultModel) });
@@ -891,7 +887,8 @@ export const AIProvidersSettings: React.FC = () => {
                 </div>
             </div>
 
-            {/* Local (Ollama) Providers */}
+            {/* Local (Ollama) Providers — hidden by default */}
+            {false && (
             <div className="space-y-5">
                 <div className="flex items-center justify-between mb-2">
                     <div>
@@ -902,7 +899,6 @@ export const AIProvidersSettings: React.FC = () => {
                         onClick={async () => {
                             setIsRefreshingOllama(true);
                             await checkOllama(false);
-                            // Add a small delay for visual feedback if the check is too fast
                             setTimeout(() => setIsRefreshingOllama(false), 500);
                         }}
                         className="p-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-input transition-colors"
@@ -970,6 +966,7 @@ export const AIProvidersSettings: React.FC = () => {
                     )}
                 </div>
             </div>
+            )}
 
             {/* Custom Providers */}
             <div className="space-y-5">

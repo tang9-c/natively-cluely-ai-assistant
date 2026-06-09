@@ -39,6 +39,7 @@ export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionP
   const cloudAllowed = inputs.mode !== 'private_vision';
 
   if (cloudAllowed) {
+    providers.push(doubao(credentials, inputs));
     providers.push(natively(credentials, inputs));
     providers.push(openai(credentials, inputs));
     providers.push(geminiFlash(credentials, inputs));
@@ -56,6 +57,21 @@ export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionP
 }
 
 // ─── Provider builders ────────────────────────────────────────────────────
+
+function doubao(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const apiKey = creds.getDoubaoApiKey();
+  return {
+    id: 'doubao',
+    displayName: 'Doubao',
+    modelId: 'doubao-seed-2-0-lite-260215',
+    isLocal: false,
+    isConfigured: !!apiKey,
+    supportsVision: !!apiKey,
+    scopeAllowsScreenshots: true,
+    hint: 'doubao',
+    invoke: async (p) => callLLMHelperVision('doubao', p),
+  };
+}
 
 function natively(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
   const apiKey = creds.getNativelyApiKey();

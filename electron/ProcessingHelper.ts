@@ -23,8 +23,8 @@ export class ProcessingHelper {
   constructor(appState: AppState) {
     this.appState = appState
 
-    // Check if user wants to use Ollama
-    const useOllama = process.env.USE_OLLAMA === "true"
+    // Check if user wants to use Ollama (defaults to false)
+    const useOllama = false
     const ollamaModel = process.env.OLLAMA_MODEL // Don't set default here, let LLMHelper auto-detect
     const ollamaUrl = process.env.OLLAMA_URL || "http://localhost:11434"
 
