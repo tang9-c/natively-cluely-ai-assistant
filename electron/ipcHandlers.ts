@@ -2001,6 +2001,41 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // --- Local ONNX Model Management ---
+  const {
+    getLocalModels,
+    startLocalModelDownload,
+    deleteLocalModel,
+    setDownloadCallbacks,
+  } = require('./services/LocalModelManager');
+
+  // Broadcast helpers for download events
+  const broadcastModelProgress = (modelId: string, progress: number) => {
+    broadcast('local-models-download-progress', { modelId, progress });
+  };
+  const broadcastModelComplete = (modelId: string) => {
+    broadcast('local-models-download-complete', { modelId });
+  };
+  const broadcastModelError = (modelId: string, error: string) => {
+    broadcast('local-models-download-error', { modelId, error });
+  };
+
+  setDownloadCallbacks(broadcastModelProgress, broadcastModelComplete, broadcastModelError);
+
+  safeHandle('local-models-get-list', async () => {
+    return { models: getLocalModels() };
+  });
+
+  safeHandle('local-models-start-download', async (_event, modelId: string) => {
+    // Fire-and-forget download; status updates via broadcast events
+    startLocalModelDownload(modelId).catch(() => {});
+    return { success: true };
+  });
+
+  safeHandle('local-models-delete-model', async (_event, modelId: string) => {
+    return deleteLocalModel(modelId);
+  });
+
   safeHandle('local-whisper-preload', async (_, modelId: string) => {
     try {
       const { modelPreloader } = require('./audio/whisper/modelPreloader');
