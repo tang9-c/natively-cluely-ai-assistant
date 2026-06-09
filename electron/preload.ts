@@ -152,6 +152,19 @@ interface ElectronAPI {
     recommendation: string;
     recommendedModel: string;
   }>;
+
+  // Local ONNX Models Management
+  localModelsGetList: () => Promise<{ models: any[] }>;
+  localModelsStartDownload: (modelId: string) => Promise<{ success: boolean; error?: string }>;
+  localModelsDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
+  onLocalModelsDownloadProgress: (
+    callback: (data: { modelId: string; progress: number }) => void,
+  ) => () => void;
+  onLocalModelsDownloadComplete: (callback: (data: { modelId: string }) => void) => () => void;
+  onLocalModelsDownloadError: (
+    callback: (data: { modelId: string; error: string }) => void,
+  ) => () => void;
+
   getSttProvider: () => Promise<string>;
   setGroqSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setOpenAiSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
@@ -995,6 +1008,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
   localWhisperSetChannelConfig: (cfg: { enabled?: boolean; micModelId?: string; systemModelId?: string }) =>
     ipcRenderer.invoke('local-whisper-set-channel-config', cfg),
   localWhisperGetHardware: () => ipcRenderer.invoke('local-whisper-get-hardware'),
+
+  // Local ONNX Models Management
+  localModelsGetList: () => ipcRenderer.invoke('local-models-get-list'),
+  localModelsStartDownload: (modelId: string) =>
+    ipcRenderer.invoke('local-models-start-download', modelId),
+  localModelsDeleteModel: (modelId: string) =>
+    ipcRenderer.invoke('local-models-delete-model', modelId),
+  onLocalModelsDownloadProgress: (cb: (data: { modelId: string; progress: number }) => void) => {
+    const listener = (_: any, data: any) => cb(data);
+    ipcRenderer.on('local-models-download-progress', listener);
+    return () => ipcRenderer.removeListener('local-models-download-progress', listener);
+  },
+  onLocalModelsDownloadComplete: (cb: (data: { modelId: string }) => void) => {
+    const listener = (_: any, data: any) => cb(data);
+    ipcRenderer.on('local-models-download-complete', listener);
+    return () => ipcRenderer.removeListener('local-models-download-complete', listener);
+  },
+  onLocalModelsDownloadError: (cb: (data: { modelId: string; error: string }) => void) => {
+    const listener = (_: any, data: any) => cb(data);
+    ipcRenderer.on('local-models-download-error', listener);
+    return () => ipcRenderer.removeListener('local-models-download-error', listener);
+  },
 
   // STT Config Events (Adapted from public PR #173 — verify premium interaction)
   onSttConfigChanged: (callback: (data: { configured: boolean; provider: string }) => void) => {
