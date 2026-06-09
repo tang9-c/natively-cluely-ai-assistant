@@ -68,6 +68,16 @@ import TopPill from './ui/TopPill';
 const REMARK_PLUGINS = [remarkGfm, remarkMath];
 const REHYPE_PLUGINS = [rehypeKatex];
 
+const shouldFlushPreviousStream = (
+  activeIntent: string | null,
+  incomingIntent: string,
+  activeMsgId: string | null,
+): boolean => {
+  if (!activeMsgId) return false;
+  if (activeIntent == null) return false;
+  return activeIntent !== incomingIntent;
+};
+
 interface Message {
   id: string;
   role: 'user' | 'system' | 'interviewer';
@@ -1305,6 +1315,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const streamingNodeRef   = useRef<HTMLDivElement | null>(null);
   const streamingTextRef   = useRef<string>('');
   const streamingMsgIdRef  = useRef<string | null>(null);
+  const streamingIntentRef = useRef<string | null>(null);
   const streamingRafRef    = useRef<number | null>(null);
 
   // Helper: render accumulated markdown to the streaming DOM node via RAF.
@@ -1326,14 +1337,22 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // Only the FIRST token of a stream calls setMessages (to mount the bubble).
   // Subsequent tokens bypass React entirely — zero re-renders mid-stream.
   const queueToken = useCallback((intent: string, token: string) => {
-    // If a new stream intent arrives while one is active, flush the current
-    // stream into React state so the rows don't bleed into each other.
-    if (streamingMsgIdRef.current !== null && streamingTextRef.current) {
+    // If a DIFFERENT stream intent arrives while one is active, flush the
+    // current stream into React state so rows don't bleed across intents.
+    if (
+      shouldFlushPreviousStream(
+        streamingIntentRef.current,
+        intent,
+        streamingMsgIdRef.current,
+      ) &&
+      streamingTextRef.current
+    ) {
       const prevText = streamingTextRef.current;
       const prevId   = streamingMsgIdRef.current;
       streamingNodeRef.current  = null;
       streamingTextRef.current  = '';
       streamingMsgIdRef.current = null;
+      streamingIntentRef.current = null;
       if (streamingRafRef.current !== null) {
         cancelAnimationFrame(streamingRafRef.current);
         streamingRafRef.current = null;
@@ -1352,6 +1371,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }
 
     streamingTextRef.current += token;
+    streamingIntentRef.current = intent;
 
     if (streamingMsgIdRef.current !== null) {
       // Mid-stream: write directly to DOM, schedule markdown render.
@@ -1369,6 +1389,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // First token: mount the bubble via setMessages, then RAF will render.
     const id = genMessageId();
     streamingMsgIdRef.current = id;
+    streamingIntentRef.current = intent;
     reactStartTransition(() => {
       setMessages((prev) => [
         ...prev,
@@ -1403,6 +1424,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     streamingNodeRef.current  = null;
     streamingTextRef.current  = '';
     streamingMsgIdRef.current = null;
+    streamingIntentRef.current = null;
     if (!text || !msgId) return;
     // NOT wrapped in startTransition — ordering must hold.
     setMessages((prev) => {
