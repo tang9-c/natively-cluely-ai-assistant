@@ -42,9 +42,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                 const custom = await window.electronAPI?.getCustomProviders() as CustomProvider[];
                 if (custom) setCustomProviders(custom);
 
-                // Load Ollama
-                const local = await window.electronAPI?.getAvailableOllamaModels() as string[];
-                if (local) setOllamaModels(local);
+                // Ollama disabled by default
+                // const local = await window.electronAPI?.getAvailableOllamaModels() as string[];
+                // if (local) setOllamaModels(local);
 
                 // Build dynamic cloud models from credentials
                 // @ts-ignore
@@ -129,12 +129,13 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                         >
                             Custom
                         </button>
-                        <button
+                        {/* Local tab hidden by default */}
+                        {/* <button
                             onClick={() => setActiveTab('local')}
                             className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${activeTab === 'local' ? 'text-accent-primary bg-bg-item-surface border-t-2 border-t-accent-primary' : 'text-text-secondary hover:text-text-primary'}`}
                         >
                             Local
-                        </button>
+                        </button> */}
                     </div>
 
                     {/* Content */}
@@ -195,8 +196,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                             </div>
                         )}
 
-                        {/* Local Models (Ollama) */}
-                        {activeTab === 'local' && (
+                        {/* Local Models (Ollama) — hidden by default */}
+                        {/* {activeTab === 'local' && (
                             <div className="space-y-1">
                                 {ollamaModels.length === 0 ? (
                                     <div className="text-center py-6 text-text-tertiary">
@@ -217,7 +218,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                                     ))
                                 )}
                             </div>
-                        )}
+                        )} */}
                     </div>
                 </div>
             )}

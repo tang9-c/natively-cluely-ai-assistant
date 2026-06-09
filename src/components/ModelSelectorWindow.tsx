@@ -46,32 +46,25 @@ const ModelSelectorWindow = () => {
                 // 3. Codex CLI
                 const codexCliConfig = await window.electronAPI?.getCodexCliConfig?.();
 
-                // 4. Ollama
-                let ollamaModels: string[] = [];
-                try {
-                    let oModels = await window.electronAPI?.getAvailableOllamaModels?.();
-
-                    // If no models found, try to fix/restart Ollama (server might be down)
-                    if (!oModels || oModels.length === 0) {
-                        try {
-                            // @ts-ignore
-                            if (window.electronAPI?.forceRestartOllama) {
-                                // @ts-ignore
-                                await window.electronAPI.forceRestartOllama();
-                                // Wait a moment for server to come up
-                                await new Promise(resolve => setTimeout(resolve, 1500));
-                                // Retry fetch
-                                oModels = await window.electronAPI?.getAvailableOllamaModels?.();
-                            }
-                        } catch (e) {
-                            console.warn("Retrying Ollama failed", e);
-                        }
-                    }
-
-                    if (oModels) ollamaModels = oModels;
-                } catch (e) {
-                    // Ignore ollama errors here
-                }
+                // 4. Ollama — disabled by default
+                const ollamaModels: string[] = [];
+                // try {
+                //     let oModels = await window.electronAPI?.getAvailableOllamaModels?.();
+                //     if (!oModels || oModels.length === 0) {
+                //         try {
+                //             if (window.electronAPI?.forceRestartOllama) {
+                //                 await window.electronAPI.forceRestartOllama();
+                //                 await new Promise(resolve => setTimeout(resolve, 1500));
+                //                 oModels = await window.electronAPI?.getAvailableOllamaModels?.();
+                //             }
+                //         } catch (e) {
+                //             console.warn("Retrying Ollama failed", e);
+                //         }
+                //     }
+                //     if (oModels) ollamaModels = oModels;
+                // } catch (e) {
+                //     // Ignore ollama errors here
+                // }
 
                 // Build the list
                 const models: ModelOption[] = [];
@@ -106,10 +99,10 @@ const ModelSelectorWindow = () => {
                     });
                 }
 
-                // Ollama
-                ollamaModels.forEach((m: string) => {
-                    models.push({ id: `ollama-${m}`, name: `${m} (Local)`, type: 'ollama' });
-                });
+                // Ollama — disabled by default
+                // ollamaModels.forEach((m: string) => {
+                //     models.push({ id: `ollama-${m}`, name: `${m} (Local)`, type: 'ollama' });
+                // });
 
                 localStorage.setItem('cached-models', JSON.stringify(models));
                 setAvailableModels(models);
