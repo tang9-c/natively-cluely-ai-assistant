@@ -27,19 +27,23 @@ export class OllamaBootstrap {
    */
   async ensureOllamaRunning(): Promise<boolean> {
     if (await this.isOllamaRunning()) return true;
-    
+
     // Try to start it
     try {
       const child = spawn('ollama', ['serve'], { detached: true, stdio: 'ignore' });
       child.on('error', (err) => {
-        console.error('[OllamaBootstrap] Failed to spawn ollama (not installed?):', err);
+        // ENOENT is expected if ollama is not installed — log at debug level only
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+          return;
+        }
+        console.error('[OllamaBootstrap] Failed to spawn ollama:', err);
       });
       child.unref();
     } catch (e) {
       console.error('[OllamaBootstrap] Synchronous error spawning ollama:', e);
       return false;
     }
-    
+
     // Wait up to 5 seconds for it to come up
     for (let i = 0; i < 10; i++) {
       await new Promise(r => setTimeout(r, 500));
