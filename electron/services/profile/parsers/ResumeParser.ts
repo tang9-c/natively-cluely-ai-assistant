@@ -108,6 +108,18 @@ export class ResumeParser {
   async parse(rawText: string): Promise<ResumeParsed> {
     const prompt = buildPrompt(rawText);
     const parsed = await this.llm.parse<any>(prompt, SCHEMA_DESCRIPTION);
-    return normalize(parsed);
+    const result = normalize(parsed);
+    // Defensive: if the model returns a skeleton with no real data, treat as failure
+    // so ParserLLM's retry loop gets a second attempt with stronger instructions.
+    const hasAnyData =
+      result.identity.name && result.identity.name !== 'Unknown' && result.identity.name.trim().length > 0 ||
+      result.skills.length > 0 ||
+      result.experience.length > 0 ||
+      result.projects.length > 0 ||
+      result.education.length > 0;
+    if (!hasAnyData) {
+      throw new Error('Parsed resume is empty — model returned skeleton with no extracted data');
+    }
+    return result;
   }
 }

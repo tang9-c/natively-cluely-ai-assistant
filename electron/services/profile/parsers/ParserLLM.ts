@@ -38,7 +38,7 @@ export class ParserLLM {
     for (let attempt = 0; attempt < 2; attempt++) {
       const promptForAttempt =
         attempt > 0
-          ? `${fullPrompt}\n\nYour previous response was not valid JSON. Please return ONLY a JSON object.`
+          ? `${fullPrompt}\n\nCRITICAL: Your previous response was empty or invalid. You MUST extract actual data from the provided text above. Do NOT return empty arrays or blank strings. Fill every field with real information found in the text.`
           : fullPrompt;
 
       try {
@@ -47,10 +47,12 @@ export class ParserLLM {
           PARSE_TIMEOUT_MS,
           'ParserLLM',
         );
+        console.log('[ParserLLM] Raw response length:', raw.length, 'preview:', raw.slice(0, 200));
         const candidate = extractJsonObject(raw);
         const parsed = JSON.parse(candidate) as T;
         return parsed;
       } catch (err: any) {
+        console.warn('[ParserLLM] Attempt', attempt + 1, 'failed:', err.message);
         lastError = err;
       }
     }
