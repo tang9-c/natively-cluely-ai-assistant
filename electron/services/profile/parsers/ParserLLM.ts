@@ -1,4 +1,4 @@
-const PARSE_TIMEOUT_MS = 15_000;
+const PARSE_TIMEOUT_MS = 60_000;
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
