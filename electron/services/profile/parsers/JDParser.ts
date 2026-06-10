@@ -56,6 +56,14 @@ export class JDParser {
   async parse(rawText: string): Promise<JDParsed> {
     const prompt = buildPrompt(rawText);
     const parsed = await this.llm.parse<any>(prompt, SCHEMA_DESCRIPTION);
-    return normalize(parsed);
+    const result = normalize(parsed);
+    const hasAnyData =
+      result.title && result.title !== 'Untitled Position' && result.title.trim().length > 0 ||
+      result.technologies.length > 0 ||
+      result.requirements.length > 0;
+    if (!hasAnyData) {
+      throw new Error('Parsed JD is empty — model returned skeleton with no extracted data');
+    }
+    return result;
   }
 }
