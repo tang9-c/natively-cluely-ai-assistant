@@ -2681,6 +2681,32 @@ Provide only the answer, nothing else.`;
         );
       }
 
+      if (msg.intent === 'clarify') {
+        return (
+          <div
+            className={`rounded-lg p-3 my-1 border ${subtleSurfaceClass}`}
+            style={appearance.subtleStyle}
+          >
+            <div
+              className={`flex items-center gap-2 mb-2 font-semibold text-xs uppercase tracking-wide ${isLightTheme ? 'text-violet-700' : 'text-violet-300'}`}
+            >
+              <span>Clarify</span>
+            </div>
+            <div
+              className={`text-[13px] leading-relaxed markdown-content ${isLightTheme ? 'text-slate-800' : 'text-slate-200'}`}
+            >
+              <ReactMarkdown
+                remarkPlugins={REMARK_PLUGINS}
+                rehypePlugins={REHYPE_PLUGINS}
+                components={mdComponents.standard}
+              >
+                {msg.text}
+              </ReactMarkdown>
+            </div>
+          </div>
+        );
+      }
+
       // Standard Text Messages (e.g. from User or Interviewer)
       // We still want basic markdown support here too
       return (
