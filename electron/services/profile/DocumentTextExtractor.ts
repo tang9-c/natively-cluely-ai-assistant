@@ -6,9 +6,12 @@ const PARSE_TIMEOUT_MS = 15_000;
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     p,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
-    ),
+    new Promise<T>((_, reject) => {
+      const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+      if (typeof (t as any).unref === 'function') {
+        (t as any).unref();
+      }
+    }),
   ]);
 }
 

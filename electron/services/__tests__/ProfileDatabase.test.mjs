@@ -11,7 +11,7 @@ describe('Profile Database schema and CRUD', () => {
       CREATE TABLE user_profile (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         structured_json TEXT NOT NULL,
-        compact_persona TEXT,
+        compact_persona TEXT NOT NULL DEFAULT '',
         created_at INTEGER NOT NULL
       );
       CREATE TABLE resume_nodes (

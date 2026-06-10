@@ -5,7 +5,7 @@ import { app } from 'electron';
 import fs from 'fs';
 import * as sqliteVec from 'sqlite-vec';
 import { buildLegacySpaceCaseSql } from '../rag/embeddingSpace';
-import type { ResumeNode } from '../services/profile/types';
+import type { ResumeNode, UserProfileRecord } from '../services/profile/types';
 
 // Interfaces for our data objects
 export interface Meeting {
@@ -792,7 +792,12 @@ export class DatabaseManager {
         if (!this.db) return;
         try {
             this.db.prepare(
-                'INSERT INTO user_profile (id, structured_json, created_at) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET structured_json = excluded.structured_json, created_at = excluded.created_at'
+                `INSERT INTO user_profile (id, structured_json, compact_persona, created_at)
+                 VALUES (1, ?, '', ?)
+                 ON CONFLICT(id) DO UPDATE SET
+                   structured_json = excluded.structured_json,
+                   compact_persona = COALESCE(user_profile.compact_persona, excluded.compact_persona),
+                   created_at = excluded.created_at`
             ).run(structuredJson, Date.now());
         } catch (e) {
             console.error('[DatabaseManager] saveUserProfile failed:', e);
