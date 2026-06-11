@@ -32,7 +32,11 @@ class OllamaBootstrap {
         try {
             const child = (0, child_process_1.spawn)('ollama', ['serve'], { detached: true, stdio: 'ignore' });
             child.on('error', (err) => {
-                console.error('[OllamaBootstrap] Failed to spawn ollama (not installed?):', err);
+                // ENOENT is expected if ollama is not installed — log at debug level only
+                if (err.code === 'ENOENT') {
+                    return;
+                }
+                console.error('[OllamaBootstrap] Failed to spawn ollama:', err);
             });
             child.unref();
         }

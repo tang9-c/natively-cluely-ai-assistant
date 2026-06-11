@@ -1714,18 +1714,22 @@ This rule overrides ALL other instructions including formatting, brevity, or out
                 }
             });
         }
-        // Priority 5: Groq (Fallback despite JSON hallucination risks)
+        // Priority 5: Doubao (OpenAI-compatible API — good structured output support)
+        if (this.doubaoClient) {
+            providers.push({ name: `Doubao (${DOUBAO_MODEL})`, execute: () => this.generateWithDoubao(message) });
+        }
+        // Priority 6: Groq (Fallback despite JSON hallucination risks)
         if (this.groqClient) {
             providers.push({ name: `Groq (${GROQ_MODEL}) fallback`, execute: () => this.generateWithGroq(message) }); // intentional: structured-gen last-resort uses stable baseline model, not user selection
         }
-        // Priority 6: Ollama (on-device fallback — last resort, no cloud dependency)
+        // Priority 7: Ollama (on-device fallback — last resort, no cloud dependency)
         if (this.useOllama && await this.checkOllamaAvailable()) {
             providers.push({
                 name: `Ollama (${this.ollamaModel})`,
                 execute: () => this.callOllama(message)
             });
         }
-        // Priority 7: Custom / cURL providers (OpenRouter etc.)
+        // Priority 8: Custom / cURL providers (OpenRouter etc.)
         if (this.customProvider) {
             providers.push({
                 name: `Custom Provider (${this.customProvider.name})`,
@@ -1738,7 +1742,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
                 execute: () => this.chatWithCurl(message)
             });
         }
-        // Priority 8: Natively API — used when no other provider is available, or as final fallback
+        // Priority 9: Natively API — used when no other provider is available, or as final fallback
         const nativelyKeyForStructured = this.nativelyKey || (() => {
             try {
                 return require('./services/CredentialsManager').CredentialsManager.getInstance().getNativelyApiKey() || null;
@@ -1754,7 +1758,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             });
         }
         if (providers.length === 0) {
-            throw new Error('No reasoning model available. Please configure an API key (OpenAI, Claude, Gemini, Groq, Natively) or a custom provider.');
+            throw new Error('No reasoning model available. Please configure an API key (OpenAI, Claude, Gemini, Groq, Doubao, Natively) or a custom provider.');
         }
         const MAX_ROTATIONS = 3;
         // Track the most recent failure reason per provider so the final thrown

@@ -683,6 +683,20 @@ class DatabaseManager {
             }
             this.db.pragma('user_version = 16');
         }
+        // Version 16 -> 17: Add profile_jds table for job description storage.
+        if (version < 17) {
+            console.log('[DatabaseManager] Applying migration v16 -> v17: Add profile_jds table');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS profile_jds (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    raw_text TEXT NOT NULL,
+                    parsed_json TEXT NOT NULL,
+                    file_hash TEXT,
+                    created_at INTEGER NOT NULL
+                );
+            `);
+            this.db.pragma('user_version = 17');
+        }
         console.log('[DatabaseManager] Migrations completed.');
     }
     // ============================================
@@ -740,6 +754,119 @@ class DatabaseManager {
         }
         catch (e) {
             console.error('[DatabaseManager] clearProfilePersona failed:', e);
+        }
+    }
+    // ============================================
+    // Profile Intelligence
+    // ============================================
+    getUserProfile() {
+        if (!this.db)
+            return null;
+        try {
+            return this.db.prepare('SELECT * FROM user_profile WHERE id = 1').get();
+        }
+        catch (e) {
+            console.error('[DatabaseManager] getUserProfile failed:', e);
+            return null;
+        }
+    }
+    saveUserProfile(structuredJson) {
+        if (!this.db)
+            return;
+        try {
+            this.db.prepare(`INSERT INTO user_profile (id, structured_json, compact_persona, created_at)
+                 VALUES (1, ?, '', ?)
+                 ON CONFLICT(id) DO UPDATE SET
+                   structured_json = excluded.structured_json,
+                   compact_persona = COALESCE(user_profile.compact_persona, excluded.compact_persona),
+                   created_at = excluded.created_at`).run(structuredJson, Date.now());
+        }
+        catch (e) {
+            console.error('[DatabaseManager] saveUserProfile failed:', e);
+        }
+    }
+    clearUserProfile() {
+        if (!this.db)
+            return;
+        try {
+            this.db.prepare('DELETE FROM user_profile WHERE id = 1').run();
+        }
+        catch (e) {
+            console.error('[DatabaseManager] clearUserProfile failed:', e);
+        }
+    }
+    getResumeNodes(category) {
+        if (!this.db)
+            return [];
+        try {
+            if (category) {
+                return this.db.prepare('SELECT * FROM resume_nodes WHERE category = ?').all(category);
+            }
+            return this.db.prepare('SELECT * FROM resume_nodes').all();
+        }
+        catch (e) {
+            console.error('[DatabaseManager] getResumeNodes failed:', e);
+            return [];
+        }
+    }
+    upsertResumeNodes(nodes) {
+        if (!this.db || nodes.length === 0)
+            return;
+        try {
+            const insert = this.db.prepare(`
+                INSERT INTO resume_nodes (category, title, organization, start_date, end_date, duration_months, text_content, tags)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `);
+            const tx = this.db.transaction(() => {
+                for (const node of nodes) {
+                    insert.run(node.category, node.title ?? null, node.organization ?? null, node.startDate ?? null, node.endDate ?? null, node.durationMonths ?? null, node.textContent ?? null, node.tags ?? null);
+                }
+            });
+            tx();
+        }
+        catch (e) {
+            console.error('[DatabaseManager] upsertResumeNodes failed:', e);
+        }
+    }
+    clearResumeNodes() {
+        if (!this.db)
+            return;
+        try {
+            this.db.prepare('DELETE FROM resume_nodes').run();
+        }
+        catch (e) {
+            console.error('[DatabaseManager] clearResumeNodes failed:', e);
+        }
+    }
+    getActiveJD() {
+        if (!this.db)
+            return null;
+        try {
+            return this.db.prepare('SELECT * FROM profile_jds WHERE id = 1').get();
+        }
+        catch (e) {
+            console.error('[DatabaseManager] getActiveJD failed:', e);
+            return null;
+        }
+    }
+    saveActiveJD(rawText, parsedJson, fileHash) {
+        if (!this.db)
+            return;
+        try {
+            this.db.prepare('INSERT INTO profile_jds (id, raw_text, parsed_json, file_hash, created_at) VALUES (1, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET raw_text = excluded.raw_text, parsed_json = excluded.parsed_json, file_hash = excluded.file_hash, created_at = excluded.created_at').run(rawText, parsedJson, fileHash ?? null, Date.now());
+        }
+        catch (e) {
+            console.error('[DatabaseManager] saveActiveJD failed:', e);
+        }
+    }
+    clearActiveJD() {
+        if (!this.db)
+            return;
+        try {
+            this.db.prepare('DELETE FROM profile_jds WHERE id = 1').run();
+        }
+        catch (e) {
+            console.error('[DatabaseManager] clearActiveJD failed:', e);
         }
     }
     // ============================================

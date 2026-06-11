@@ -2834,7 +2834,7 @@ function initializeIpcHandlers(appState) {
                     error: 'Knowledge engine not initialized. Please ensure API keys are configured.',
                 };
             }
-            const { DocType } = require('../premium/electron/knowledge/types');
+            const { DocType } = require('./services/profile/types');
             const result = await orchestrator.ingestDocument(filePath, DocType.RESUME);
             return result;
         }
@@ -2884,7 +2884,7 @@ function initializeIpcHandlers(appState) {
             if (!orchestrator) {
                 return { success: false, error: 'Knowledge engine not initialized' };
             }
-            const { DocType } = require('../premium/electron/knowledge/types');
+            const { DocType } = require('./services/profile/types');
             orchestrator.deleteDocumentsByType(DocType.RESUME);
             return { success: true };
         }
@@ -2931,7 +2931,7 @@ function initializeIpcHandlers(appState) {
                     error: 'Knowledge engine not initialized. Please ensure API keys are configured.',
                 };
             }
-            const { DocType } = require('../premium/electron/knowledge/types');
+            const { DocType } = require('./services/profile/types');
             const result = await orchestrator.ingestDocument(filePath, DocType.JD);
             return result;
         }
@@ -2946,7 +2946,7 @@ function initializeIpcHandlers(appState) {
             if (!orchestrator) {
                 return { success: false, error: 'Knowledge engine not initialized' };
             }
-            const { DocType } = require('../premium/electron/knowledge/types');
+            const { DocType } = require('./services/profile/types');
             orchestrator.deleteDocumentsByType(DocType.JD);
             return { success: true };
         }
@@ -2966,13 +2966,13 @@ function initializeIpcHandlers(appState) {
             const cm = CredentialsManager.getInstance();
             const tavilyApiKey = cm.getTavilyApiKey();
             if (tavilyApiKey) {
-                const { TavilySearchProvider, } = require('../premium/electron/knowledge/TavilySearchProvider');
+                const { TavilySearchProvider, } = require('./services/profile/search/TavilySearchProvider');
                 engine.setSearchProvider(new TavilySearchProvider(tavilyApiKey));
             }
             else {
                 const nativelyKey = cm.getNativelyApiKey();
                 if (nativelyKey) {
-                    const { NativelySearchProvider, } = require('../premium/electron/knowledge/NativelySearchProvider');
+                    const { NativelySearchProvider, } = require('./services/profile/search/NativelySearchProvider');
                     engine.setSearchProvider(new NativelySearchProvider(nativelyKey));
                     console.log('[IPC] Company research: using Natively API search (no Tavily key configured)');
                 }
