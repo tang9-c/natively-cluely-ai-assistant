@@ -12,8 +12,10 @@ import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
 import { HelpSettings } from './settings/HelpSettings';
 import { AIProvidersSettings } from './settings/AIProvidersSettings';
+import { NativelyApiSettings } from './settings/NativelyApiSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
 import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
+import { NativelyLogoMark } from './NativelyLogoMark';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { isMac } from '../utils/platformUtils';
@@ -355,7 +357,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     // Sync active tab when modal opens
     useEffect(() => {
         if (isOpen && initialTab) {
-            setActiveTab(initialTab === 'natively-api' ? 'general' : initialTab);
+            setActiveTab(initialTab);
         }
     }, [isOpen, initialTab]);
 
@@ -1359,6 +1361,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         <Monitor size={16} /> 通用
                                     </button>
                                     <button
+                                        onClick={() => setActiveTab('natively-api')}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'natively-api' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                    >
+                                        <NativelyLogoMark size={16} className={activeTab === 'natively-api' ? 'text-blue-500' : 'text-blue-500/70'} />
+                                        <span>Natively API</span>
+                                    </button>
+                                    <button
                                         onClick={() => setActiveTab('ai-providers')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'ai-providers' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
@@ -1944,6 +1953,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                             {activeTab === 'skills' && (
                                 <SkillsSettings />
                             )}
+                            {activeTab === 'natively-api' && (
+                                <NativelyApiSettings />
+                            )}
                             {activeTab === 'keybinds' && (
                                 <div className="space-y-5 animated fadeIn select-text pb-4">
                                     <div className="flex items-start justify-between">
@@ -2055,6 +2067,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     { id: 'scrollDown', label: 'Scroll Down', icon: <ArrowDown size={14} /> },
                                                     { id: 'scrollLeft', label: 'Scroll Left (code block)', icon: <ArrowLeft size={14} /> },
                                                     { id: 'scrollRight', label: 'Scroll Right (code block)', icon: <ArrowRight size={14} /> },
+                                                    { id: 'focusInput', label: 'Toggle Stealth Typing', icon: <MessageSquare size={14} /> },
                                                 ].map((item, i) => (
                                                     <div key={i} className="flex items-center justify-between py-1.5 group">
                                                         <div className="flex items-center gap-3">
@@ -2626,7 +2639,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
 
                             {activeTab === 'help' && (
-                                <HelpSettings />
+                                <HelpSettings onNavigate={setActiveTab} />
                             )}
 
                             {activeTab === 'about' && (

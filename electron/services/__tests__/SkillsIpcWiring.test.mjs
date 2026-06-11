@@ -160,6 +160,7 @@ test('generic LLM key setters notify renderers after save', () => {
   assert.match(loopSource, /broadcast\('credentials-changed'\)/);
 });
 
+
 // ---------------------------------------------------------------------------
 // 3. Runtime behaviour — SkillsManager.listSkills() seeds and returns the
 //    built-in humanize-ai-text skill. Uses the built `dist-electron` bundle

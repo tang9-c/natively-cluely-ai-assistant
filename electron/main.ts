@@ -722,10 +722,55 @@ export class AppState {
         const llmHelper = this.processingHelper.getLLMHelper();
         this.knowledgeOrchestrator.setLLMHelper(llmHelper);
 
-        // Attach orchestrator to LLMHelper so live negotiation coaching gate works
+        // generateContent function for LLM calls
+        // Join ALL content parts (some callers — e.g. live negotiation coaching —
+        // pass [{text: systemPrefix}, {text: prompt}]; reading only [0] dropped the
+        // prompt). Single-item callers (extraction, script) are unaffected.
+        const joinContents = (contents: any[]) =>
+          (Array.isArray(contents) ? contents : [contents])
+            .map((c: any) => (typeof c === 'string' ? c : c?.text || ''))
+            .filter(Boolean)
+            .join('\n\n');
+        this.knowledgeOrchestrator.setGenerateContentFn(async (contents: any[]) => {
+          return await llmHelper.generateContentStructured(joinContents(contents));
+        });
+
+        // Low-latency generation for LIVE negotiation coaching (spoken in real
+        // time): Flash-first chain so the tactical note appears fast. The AOT
+        // negotiation script + all extraction keep the quality-first fn above.
+        if (typeof this.knowledgeOrchestrator.setLiveCoachingContentFn === 'function') {
+          this.knowledgeOrchestrator.setLiveCoachingContentFn(async (contents: any[]) => {
+            return await llmHelper.generateContentStructured(joinContents(contents));
+          });
+        }
+
+        // Embedding function — lazily delegate to the cascaded EmbeddingPipeline
+        // (OpenAI → Gemini → Ollama → Local bundled model).
+        // We await waitForReady() so uploads during boot wait for the pipeline
+        // instead of immediately throwing 'not ready'.
+        const self = this;
+        this.knowledgeOrchestrator.setEmbedFn(async (text: string) => {
+          const pipeline = self.ragManager?.getEmbeddingPipeline();
+          if (!pipeline) throw new Error('RAG pipeline not available');
+          await pipeline.waitForReady();
+          return await pipeline.getEmbedding(text);
+        });
+        if (typeof this.knowledgeOrchestrator.setEmbedQueryFn === 'function') {
+          this.knowledgeOrchestrator.setEmbedQueryFn(async (text: string) => {
+            const pipeline = self.ragManager?.getEmbeddingPipeline();
+            if (!pipeline) throw new Error('RAG pipeline not available');
+            await pipeline.waitForReady();
+            return await pipeline.getEmbeddingForQuery(text);
+          });
+        }
+
+        // Attach KnowledgeOrchestrator to LLMHelper
         llmHelper.setKnowledgeOrchestrator(this.knowledgeOrchestrator);
 
         // Restore persisted toggle states so UI reflects what the user left them as.
+        // NOTE: groqFastTextMode is now restored unconditionally in the AppState constructor
+        // so it is not repeated here.
+
         const sm = SettingsManager.getInstance();
         if (sm.get('knowledgeMode')) {
           this.knowledgeOrchestrator.setKnowledgeMode(true);

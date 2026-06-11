@@ -237,6 +237,57 @@ export const AIProvidersSettings: React.FC = () => {
     // Load Initial Data
     useEffect(() => {
         reloadStoredCredentials();
+                        groq: creds.hasGroqKey,
+                        openai: creds.hasOpenaiKey,
+                        claude: creds.hasClaudeKey,
+                        doubao: creds.hasDoubaoKey || false,
+                        natively: creds.hasNativelyKey || false
+                    });
+                    // Load preferred models
+                    const pm: Record<string, string> = {};
+                    if (creds.geminiPreferredModel) pm.gemini = creds.geminiPreferredModel;
+                    if (creds.groqPreferredModel) pm.groq = creds.groqPreferredModel;
+                    if (creds.openaiPreferredModel) pm.openai = creds.openaiPreferredModel;
+                    if (creds.claudePreferredModel) pm.claude = creds.claudePreferredModel;
+                    if (creds.doubaoPreferredModel) pm.doubao = creds.doubaoPreferredModel;
+                    setPreferredModels(pm);
+                    if (creds.doubaoEmbeddingModel) setDoubaoEmbeddingModel(creds.doubaoEmbeddingModel);
+                }
+
+                // Now it's safe to read fast mode — hasStoredKey is already set so
+                // canUseFastMode will be correct when the enforcement effect runs.
+                // @ts-ignore
+                const cliConfig = await window.electronAPI?.getCodexCliConfig?.();
+                if (cliConfig) setCodexCliConfig(cliConfig);
+
+                const fastMode = await window.electronAPI?.getGroqFastTextMode();
+                if (fastMode) setFastResponseMode(fastMode.enabled);
+
+                // Mark credentials as fully loaded so the enforcement effect can fire
+                setCredentialsLoaded(true);
+
+                // @ts-ignore
+                const custom = await window.electronAPI?.getCustomProviders();
+                if (custom) {
+                    setCustomProviders(custom);
+                }
+
+                // Load persisted default model
+                // @ts-ignore
+                const result = await window.electronAPI?.getDefaultModel();
+                if (result && result.model) {
+                    setDefaultModel(result.model);
+                }
+
+                // Check Ollama
+                checkOllama();
+
+            } catch (e) {
+                console.error("Failed to load settings:", e);
+                setCredentialsLoaded(true); // Unblock even on error
+            }
+        };
+        loadCredentials();
 
         // Listen for changes from other windows (2-way sync)
         if (window.electronAPI?.onGroqFastTextChanged) {
@@ -278,6 +329,47 @@ export const AIProvidersSettings: React.FC = () => {
     //     const interval = setInterval(() => checkOllama(false), 3000);
     //     return () => clearInterval(interval);
     // }, []);
+
+    // Load Screen Understanding (vision routing) settings
+    useEffect(() => {
+        window.electronAPI?.getScreenUnderstandingMode?.().then(setScreenUnderstandingMode as any).catch(() => { });
+        (window.electronAPI as any)?.getTechnicalInterviewVisionFirst?.()
+            .then(setTechnicalInterviewVisionFirst)
+            .catch(() => {
+                // Fallback to deprecated alias if the renderer is talking to an older main process.
+                window.electronAPI?.getTechnicalInterviewDirectVision?.().then(setTechnicalInterviewVisionFirst).catch(() => { });
+            });
+    }, []);
+
+    useEffect(() => {
+        const api: any = window.electronAPI;
+        if (!api?.onScreenUnderstandingModeChanged) return;
+        const unsubscribe = api.onScreenUnderstandingModeChanged(setScreenUnderstandingMode);
+        return () => unsubscribe?.();
+    }, []);
+
+    useEffect(() => {
+        const api: any = window.electronAPI;
+        const handler = (enabled: boolean) => setTechnicalInterviewVisionFirst(enabled);
+        const unsub1 = api?.onTechnicalInterviewVisionFirstChanged?.(handler);
+        const unsub2 = api?.onTechnicalInterviewDirectVisionChanged?.(handler);
+        return () => {
+            unsub1?.();
+            unsub2?.();
+        };
+    }, []);
+
+    // Load Cloud Provider Data Scopes and subscribe to cross-window changes
+    useEffect(() => {
+        window.electronAPI?.getProviderDataScopes?.().then(setProviderDataScopes).catch(() => { });
+    }, []);
+
+    useEffect(() => {
+        if (window.electronAPI?.onProviderDataScopesChanged) {
+            const unsubscribe = window.electronAPI.onProviderDataScopesChanged(setProviderDataScopes);
+            return () => unsubscribe();
+        }
+    }, []);
 
     // Load Screen Understanding (vision routing) settings
     useEffect(() => {

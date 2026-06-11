@@ -21,7 +21,10 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     // bundles this file (bundle: true inlines the provider into main.js, which
     // makes __dirname-relative paths fragile).
     // In prod: app.isPackaged = true → use process.resourcesPath (electron-builder extraResources).
-    this.modelPath = path.join(app.getPath('userData'), 'models');
+    this.modelPath = path.join(
+      app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'resources'),
+      'models'
+    );
   }
 
   async isAvailable(): Promise<boolean> {
@@ -59,7 +62,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       env.remoteHost = (process.env.HF_ENDPOINT || 'https://modelscope.cn/models').replace(/\/$/, '') + '/';
 
       this.pipe = await pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', {
-        local_files_only: false,
+        local_files_only: true,
         model_file_name: 'model_int8',
       });
     })();
