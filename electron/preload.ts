@@ -86,6 +86,11 @@ interface ElectronAPI {
     hasOpenaiKey: boolean;
     hasClaudeKey: boolean;
     hasNativelyKey: boolean;
+    geminiKey?: string;
+    groqKey?: string;
+    openaiKey?: string;
+    claudeKey?: string;
+    doubaoKey?: string;
     googleServiceAccountPath: string | null;
     sttProvider: string;
     hasSttGroqKey: boolean;

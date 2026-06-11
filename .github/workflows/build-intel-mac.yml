@@ -58,6 +58,9 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
+      - name: Prepare unsigned macOS helper files
+        run: node scripts/prepare-unsigned-macos-release.js
+
       - name: Upload distributable artifacts
         uses: actions/upload-artifact@v5
         with:
@@ -67,5 +70,7 @@ jobs:
             release/*.dmg
             release/*.blockmap
             release/latest-mac.yml
+            release/OPEN-UNSIGNED-NATIVELY-MAC.sh
+            release/INSTALL-UNSIGNED-MACOS.txt
           if-no-files-found: error
           retention-days: 14

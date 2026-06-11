@@ -148,6 +148,18 @@ test('every preload ipcRenderer.invoke channel has a matching ipcMain.handle reg
     `Every preload invoke channel must have a matching handler. Missing: ${missing.join(', ')}`);
 });
 
+test('generic LLM key setters notify renderers after save', () => {
+  const handlers = read('electron/ipcHandlers.ts');
+  const loopStart = handlers.indexOf('  for (const reg of LLM_KEY_REGISTRY) {');
+  const loopEnd = handlers.indexOf('  // ── Usage cache', loopStart);
+
+  assert.ok(loopStart >= 0, 'generic LLM key setter loop should exist');
+  assert.ok(loopEnd > loopStart, 'generic LLM key setter loop should end before usage cache block');
+
+  const loopSource = handlers.slice(loopStart, loopEnd);
+  assert.match(loopSource, /broadcast\('credentials-changed'\)/);
+});
+
 // ---------------------------------------------------------------------------
 // 3. Runtime behaviour — SkillsManager.listSkills() seeds and returns the
 //    built-in humanize-ai-text skill. Uses the built `dist-electron` bundle

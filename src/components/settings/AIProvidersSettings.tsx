@@ -112,6 +112,18 @@ const CodexCliModelField: React.FC<{
 );
 
 export const AIProvidersSettings: React.FC = () => {
+    const MASKED_KEY = '•'.repeat(24);
+    const isMaskedCredentialValue = (value: string) => /^•+$/.test(value.trim());
+    const mergeMaskedValue = (currentValue: string, maskedValue?: string) => {
+        if (!maskedValue) {
+            return isMaskedCredentialValue(currentValue) ? '' : currentValue;
+        }
+        if (!currentValue || isMaskedCredentialValue(currentValue)) {
+            return maskedValue;
+        }
+        return currentValue;
+    };
+
     // --- Standard Providers ---
     const [apiKey, setApiKey] = useState('');
     const [groqApiKey, setGroqApiKey] = useState('');
@@ -163,70 +175,68 @@ export const AIProvidersSettings: React.FC = () => {
     // --- Cloud Provider Data Scopes (fail-closed cloud share controls) ---
     const [providerDataScopes, setProviderDataScopes] = useState<{ transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }>({});
 
+    const reloadStoredCredentials = async () => {
+        try {
+            // Load credentials FIRST so canUseFastMode is correct before we set fastResponseMode.
+            // If we set fastResponseMode before hasStoredKey is populated, the enforcement
+            // effect below fires with canUseFastMode=false and immediately resets fast mode
+            // to false — writing that reset back to SettingsManager on every startup.
+            // @ts-ignore
+            const creds = await window.electronAPI?.getStoredCredentials?.();
+            if (creds) {
+                setHasStoredKey({
+                    gemini: creds.hasGeminiKey,
+                    groq: creds.hasGroqKey,
+                    openai: creds.hasOpenaiKey,
+                    claude: creds.hasClaudeKey,
+                    doubao: creds.hasDoubaoKey || false,
+                    natively: creds.hasNativelyKey || false
+                });
+                setApiKey(prev => mergeMaskedValue(prev, creds.geminiKey));
+                setGroqApiKey(prev => mergeMaskedValue(prev, creds.groqKey));
+                setOpenaiApiKey(prev => mergeMaskedValue(prev, creds.openaiKey));
+                setClaudeApiKey(prev => mergeMaskedValue(prev, creds.claudeKey));
+                setDoubaoApiKey(prev => mergeMaskedValue(prev, creds.doubaoKey));
+                const pm: Record<string, string> = {};
+                if (creds.geminiPreferredModel) pm.gemini = creds.geminiPreferredModel;
+                if (creds.groqPreferredModel) pm.groq = creds.groqPreferredModel;
+                if (creds.openaiPreferredModel) pm.openai = creds.openaiPreferredModel;
+                if (creds.claudePreferredModel) pm.claude = creds.claudePreferredModel;
+                if (creds.doubaoPreferredModel) pm.doubao = creds.doubaoPreferredModel;
+                setPreferredModels(pm);
+                if (creds.doubaoEmbeddingModel) setDoubaoEmbeddingModel(creds.doubaoEmbeddingModel);
+            }
+
+            // @ts-ignore
+            const cliConfig = await window.electronAPI?.getCodexCliConfig?.();
+            if (cliConfig) setCodexCliConfig(cliConfig);
+
+            const fastMode = await window.electronAPI?.getGroqFastTextMode();
+            if (fastMode) setFastResponseMode(fastMode.enabled);
+
+            // @ts-ignore
+            const custom = await window.electronAPI?.getCustomProviders();
+            if (custom) {
+                setCustomProviders(custom);
+            }
+
+            // Load persisted default model
+            // @ts-ignore
+            const result = await window.electronAPI?.getDefaultModel();
+            if (result && result.model) {
+                setDefaultModel(result.model);
+            }
+
+            setCredentialsLoaded(true);
+        } catch (e) {
+            console.error("Failed to load settings:", e);
+            setCredentialsLoaded(true); // Unblock even on error
+        }
+    };
+
     // Load Initial Data
     useEffect(() => {
-        const loadCredentials = async () => {
-            try {
-                // Load credentials FIRST so canUseFastMode is correct before we set fastResponseMode.
-                // If we set fastResponseMode before hasStoredKey is populated, the enforcement
-                // effect below fires with canUseFastMode=false and immediately resets fast mode
-                // to false — writing that reset back to SettingsManager on every startup.
-                // @ts-ignore
-                const creds = await window.electronAPI?.getStoredCredentials?.();
-                if (creds) {
-                    setHasStoredKey({
-                        gemini: creds.hasGeminiKey,
-                        groq: creds.hasGroqKey,
-                        openai: creds.hasOpenaiKey,
-                        claude: creds.hasClaudeKey,
-                        doubao: creds.hasDoubaoKey || false,
-                        natively: creds.hasNativelyKey || false
-                    });
-                    // Load preferred models
-                    const pm: Record<string, string> = {};
-                    if (creds.geminiPreferredModel) pm.gemini = creds.geminiPreferredModel;
-                    if (creds.groqPreferredModel) pm.groq = creds.groqPreferredModel;
-                    if (creds.openaiPreferredModel) pm.openai = creds.openaiPreferredModel;
-                    if (creds.claudePreferredModel) pm.claude = creds.claudePreferredModel;
-                    if (creds.doubaoPreferredModel) pm.doubao = creds.doubaoPreferredModel;
-                    setPreferredModels(pm);
-                    if (creds.doubaoEmbeddingModel) setDoubaoEmbeddingModel(creds.doubaoEmbeddingModel);
-                }
-
-                // Now it's safe to read fast mode — hasStoredKey is already set so
-                // canUseFastMode will be correct when the enforcement effect runs.
-                // @ts-ignore
-                const cliConfig = await window.electronAPI?.getCodexCliConfig?.();
-                if (cliConfig) setCodexCliConfig(cliConfig);
-
-                const fastMode = await window.electronAPI?.getGroqFastTextMode();
-                if (fastMode) setFastResponseMode(fastMode.enabled);
-
-                // Mark credentials as fully loaded so the enforcement effect can fire
-                setCredentialsLoaded(true);
-
-                // @ts-ignore
-                const custom = await window.electronAPI?.getCustomProviders();
-                if (custom) {
-                    setCustomProviders(custom);
-                }
-
-                // Load persisted default model
-                // @ts-ignore
-                const result = await window.electronAPI?.getDefaultModel();
-                if (result && result.model) {
-                    setDefaultModel(result.model);
-                }
-
-                // Ollama disabled by default — skip check
-                // checkOllama();
-
-            } catch (e) {
-                console.error("Failed to load settings:", e);
-                setCredentialsLoaded(true); // Unblock even on error
-            }
-        };
-        loadCredentials();
+        reloadStoredCredentials();
 
         // Listen for changes from other windows (2-way sync)
         if (window.electronAPI?.onGroqFastTextChanged) {
@@ -237,6 +247,16 @@ export const AIProvidersSettings: React.FC = () => {
             });
             return () => unsubscribe();
         }
+    }, []);
+
+    useEffect(() => {
+        if (!window.electronAPI?.onCredentialsChanged) return;
+        const unsubscribe = window.electronAPI.onCredentialsChanged(() => {
+            reloadStoredCredentials().catch((error) => {
+                console.error('Failed to refresh credentials:', error);
+            });
+        });
+        return () => unsubscribe();
     }, []);
 
     // Effect to enforce fast mode disabled if neither Groq key nor Natively API is configured.
@@ -392,7 +412,7 @@ export const AIProvidersSettings: React.FC = () => {
     };
 
     const handleSaveKey = async (provider: string, key: string, setter: (val: string) => void) => {
-        if (!key.trim()) return;
+        if (!key.trim() || isMaskedCredentialValue(key)) return;
         setSavingStatus(prev => ({ ...prev, [provider]: true }));
         try {
             let result;
@@ -410,7 +430,7 @@ export const AIProvidersSettings: React.FC = () => {
             if (result && result.success) {
                 setSavedStatus(prev => ({ ...prev, [provider]: true }));
                 setHasStoredKey(prev => ({ ...prev, [provider]: true }));
-                setter('');
+                setter(MASKED_KEY);
                 setTimeout(() => setSavedStatus(prev => ({ ...prev, [provider]: false })), 2000);
             }
         } catch (e) {
@@ -445,8 +465,9 @@ export const AIProvidersSettings: React.FC = () => {
     };
 
     const handleTestConnection = async (provider: string, key: string) => {
+        const normalizedKey = isMaskedCredentialValue(key) ? '' : key;
         // Allow testing if key is provided OR if we have a stored key
-        if (!key.trim() && !hasStoredKey[provider]) {
+        if (!normalizedKey.trim() && !hasStoredKey[provider]) {
             return;
         }
         setTestStatus(prev => ({ ...prev, [provider]: 'testing' }));
@@ -454,7 +475,7 @@ export const AIProvidersSettings: React.FC = () => {
 
         try {
             // @ts-ignore
-            const result = await window.electronAPI.testLlmConnection(provider, key);
+            const result = await window.electronAPI.testLlmConnection(provider, normalizedKey);
             if (result.success) {
                 setTestStatus(prev => ({ ...prev, [provider]: 'success' }));
                 setTimeout(() => setTestStatus(prev => ({ ...prev, [provider]: 'idle' })), 3000);

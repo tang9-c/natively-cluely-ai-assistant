@@ -43,6 +43,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     keyUrl,
     onPreferredModelChange,
 }) => {
+    const isMaskedCredentialValue = (value: string) => /^•+$/.test(value.trim());
     const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
     const [isFetching, setIsFetching] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
@@ -58,7 +59,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
     // Auto-save API key after 5 seconds of inactivity
     useEffect(() => {
-        if (!apiKey.trim()) return;
+        if (!apiKey.trim() || isMaskedCredentialValue(apiKey)) return;
         const timer = setTimeout(() => {
             if (!savedRef.current && !savingRef.current) {
                 onSaveKey().catch(console.error);
@@ -89,12 +90,12 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
         try {
             // If a new key is entered, save it first
-            if (apiKey.trim()) {
+            if (apiKey.trim() && !isMaskedCredentialValue(apiKey)) {
                 await onSaveKey();
             }
 
             // Fetch models using the key (or stored key)
-            const keyToUse = apiKey.trim() || '';
+            const keyToUse = isMaskedCredentialValue(apiKey) ? '' : (apiKey.trim() || '');
             // @ts-ignore
             const result = await window.electronAPI?.fetchProviderModels(providerId, keyToUse);
 
@@ -168,7 +169,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                 />
                 <button
                     onClick={onSaveKey}
-                    disabled={savingStatus || !apiKey.trim()}
+                    disabled={savingStatus || !apiKey.trim() || isMaskedCredentialValue(apiKey)}
                     className={`px-5 py-2.5 rounded-lg text-xs font-medium transition-colors ${savedStatus
                         ? 'bg-green-500/20 text-green-400'
                         : 'bg-bg-input hover:bg-bg-secondary border border-border-subtle text-text-primary disabled:opacity-50'

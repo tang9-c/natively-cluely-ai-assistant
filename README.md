@@ -483,7 +483,13 @@ You explicitly control:
 > **macOS Users (Both Apple Silicon & Intel Macs supported):**
 >
 > 1.  **"Unidentified Developer"**: If you see this, Right-click the app > Select **Open** > Click **Open**.
-> 2.  **"App is Damaged"**: If you see this, run the command in Terminal based on your download:
+> 2.  **"App is Damaged"**: If your build artifact includes `OPEN-UNSIGNED-NATIVELY-MAC.sh`, run that script first. It removes the quarantine flag and opens the app for you.
+>
+>     ```bash
+>     ./OPEN-UNSIGNED-NATIVELY-MAC.sh
+>     ```
+>
+>     If the helper script is not available, run the command in Terminal based on your download:
 >
 >     **For .zip downloads:**
 >
