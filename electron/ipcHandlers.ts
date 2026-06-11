@@ -3308,7 +3308,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
-        filters: [{ name: '简历文件', extensions: ['pdf', 'docx', 'txt'] }],
+        filters: [{ name: '简历文件', extensions: ['pdf', 'docx', 'txt', 'md', 'markdown'] }],
       });
 
       if (result.canceled || result.filePaths.length === 0) {

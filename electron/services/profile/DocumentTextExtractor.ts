@@ -29,10 +29,10 @@ export class DocumentTextExtractor {
         raw = await this.extractPdf(filePath);
       } else if (ext === '.docx' || ext === '.doc') {
         raw = await this.extractDocx(filePath);
-      } else if (ext === '.txt') {
+      } else if (ext === '.txt' || ext === '.md' || ext === '.markdown') {
         raw = this.extractPlainText(filePath);
       } else {
-        throw new Error(`Unsupported file type "${ext}". Supported formats: PDF, DOCX, DOC, TXT.`);
+        throw new Error(`Unsupported file type "${ext}". Supported formats: PDF, DOCX, DOC, TXT, MD.`);
       }
     } catch (err: any) {
       if (err.message?.includes('Unsupported file type') || err.message?.includes('not a regular file')) {
