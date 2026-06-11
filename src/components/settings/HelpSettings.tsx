@@ -18,11 +18,11 @@ import nativelyIcon from '../icon.png';
 
 const CMD_SYMBOL = getModifierSymbol('cmd');
 const MOCK_BUTTONS = [
-    { icon: Pencil, label: 'What to answer?', kbd: `${CMD_SYMBOL}1`, color: 'blue' },
-    { icon: MessageSquare, label: 'Clarify', kbd: `${CMD_SYMBOL}2`, color: 'indigo' },
-    { icon: RefreshCw, label: 'Recap', kbd: `${CMD_SYMBOL}7`, color: 'amber' },
-    { icon: HelpCircle, label: 'Follow Up Question', kbd: `${CMD_SYMBOL}4`, color: 'teal' },
-    { icon: Zap, label: 'Answer', kbd: `${CMD_SYMBOL}5`, color: 'emerald' },
+    { icon: Pencil, label: '怎么回答？', kbd: `${CMD_SYMBOL}1`, color: 'blue' },
+    { icon: MessageSquare, label: '澄清', kbd: `${CMD_SYMBOL}2`, color: 'indigo' },
+    { icon: RefreshCw, label: '回顾', kbd: `${CMD_SYMBOL}7`, color: 'amber' },
+    { icon: HelpCircle, label: '跟进问题', kbd: `${CMD_SYMBOL}4`, color: 'teal' },
+    { icon: Zap, label: '回答', kbd: `${CMD_SYMBOL}5`, color: 'emerald' },
 ] as const;
 
 const colorMap: Record<string, string> = {
@@ -92,15 +92,15 @@ const MockAppInterface = () => {
                         <div className="flex justify-start">
                             <div className="max-w-[85%] px-4 py-3 text-[14px] leading-relaxed font-normal text-text-primary">
                                 <div className="flex items-center gap-1.5 mb-1 text-[10px] font-medium uppercase tracking-wider text-text-secondary opacity-70">
-                                    Interviewer
+                                    面试官
                                 </div>
-                                <span className="text-text-secondary italic">So how would you optimize the current algorithm?</span>
+                                <span className="text-text-secondary italic">那么你会如何优化当前算法？</span>
                             </div>
                         </div>
                         <div className="flex justify-end">
                             <div className="max-w-[72.25%] px-[13.6px] py-[10.2px] text-[14px] leading-relaxed whitespace-pre-wrap bg-blue-500/10 border border-blue-500/20 text-blue-500 rounded-[20px] rounded-tr-[4px] shadow-sm font-medium">
-                                <span className="font-semibold text-emerald-500 block mb-1 text-[12px]">🎯 Answer</span>
-                                A good approach would be to use a hash map to cache intermediate results and reduce time complexity to O(N).
+                                <span className="font-semibold text-emerald-500 block mb-1 text-[12px]">🎯 回答</span>
+                                一个好的方法是使用哈希映射来缓存中间结果，将时间复杂度降低到 O(N)。
                             </div>
                         </div>
                     </div>
@@ -123,7 +123,7 @@ const MockAppInterface = () => {
                         <div className="relative">
                             <div className="w-full border border-border-subtle rounded-xl pl-3 pr-10 py-2.5 text-[13px] leading-relaxed bg-bg-input shadow-inner flex items-center h-[46px]">
                                 <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] text-text-secondary opacity-60">
-                                    <span className="hidden sm:inline">Ask anything on screen or conversation, or</span>
+                                    <span className="hidden sm:inline">询问屏幕上或对话中的任何问题，或</span>
                                     <div className="flex items-center gap-1 opacity-80 sm:ml-0.5">
                                         <kbd className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center bg-bg-item-surface border-border-subtle text-text-primary shadow-sm">{getModifierSymbol('cmd')}</kbd>
                                         <span className="text-[10px]">+</span>
@@ -131,7 +131,7 @@ const MockAppInterface = () => {
                                         <span className="text-[10px]">+</span>
                                         <kbd className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center bg-bg-item-surface border-border-subtle text-text-primary shadow-sm">H</kbd>
                                     </div>
-                                    <span className="hidden sm:inline">for selective screenshot</span>
+                                    <span className="hidden sm:inline">进行选择性截图</span>
                                 </div>
                             </div>
                             <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-20 text-text-primary">
@@ -180,7 +180,7 @@ const MockMeetingInterfaceAnim = () => {
 
             {/* Header */}
             <div className="px-6 pt-5 pb-0 shrink-0">
-                <div className="text-xs text-text-tertiary font-medium mb-0.5">Today · 47 min</div>
+                <div className="text-xs text-text-tertiary font-medium mb-0.5">今天 · 47 分钟</div>
                 <h1 className="text-xl font-bold text-text-primary tracking-tight">系统设计面试</h1>
             </div>
 
@@ -194,7 +194,7 @@ const MockMeetingInterfaceAnim = () => {
                     ))}
                 </div>
                 <div className="flex items-center gap-1.5 text-xs font-medium text-text-secondary opacity-70">
-                    <Copy size={12} /> Copy full {tab}
+                    <Copy size={12} /> 复制完整{tab}
                 </div>
             </div>
 
@@ -211,7 +211,7 @@ const MockMeetingInterfaceAnim = () => {
                             <section className="mb-6">
                                 <h2 className="text-base font-semibold text-text-primary mb-3">行动项</h2>
                                 <ul className="space-y-3">
-                                    {['Draft Redis implementation constraints doc.', 'Schedule follow-up on Memcached benchmarks.'].map((item, i) => (
+                                    {['起草 Redis 实现约束文档。', '安排 Memcached 基准测试的跟进。'].map((item, i) => (
                                         <li key={i} className="flex items-start gap-3">
                                             <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary shrink-0" />
                                             <p className="text-sm text-text-secondary leading-relaxed">{item}</p>
@@ -223,7 +223,7 @@ const MockMeetingInterfaceAnim = () => {
                             <section>
                                 <h2 className="text-base font-semibold text-text-primary mb-3">关键点</h2>
                                 <ul className="space-y-3">
-                                    {['Redis chosen for sorted set support enabling O(log N) rate limiting.', 'Horizontal scaling via distributed cache layer discussed.'].map((item, i) => (
+                                    {['选择 Redis 是因为其有序集合支持，可实现 O(log N) 速率限制。', '讨论了通过分布式缓存层进行水平扩展。'].map((item, i) => (
                                         <li key={i} className="flex items-start gap-3">
                                             <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary shrink-0" />
                                             <p className="text-sm text-text-secondary leading-relaxed">{item}</p>
@@ -254,7 +254,7 @@ const MockMeetingInterfaceAnim = () => {
                         <motion.div key="usage" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }} className="space-y-4">
                             <div className="flex justify-end pt-2">
                                 <div className="bg-accent-primary text-white px-4 py-2 rounded-2xl rounded-tr-sm max-w-[75%] text-xs leading-relaxed shadow-sm">
-                                    Could you elaborate on the Redis rate limiting?
+                                    你能详细说明 Redis 速率限制吗？
                                 </div>
                             </div>
                             <div className="flex items-start gap-3">
@@ -263,7 +263,7 @@ const MockMeetingInterfaceAnim = () => {
                                 </div>
                                 <div>
                                     <div className="text-[10px] text-text-tertiary mb-1 font-medium">10:35 AM</div>
-                                    <p className="text-xs text-text-secondary leading-relaxed">You mentioned Redis Sorted Sets for the sliding rate window — efficient because it auto-expires stale records while keeping operations strictly O(log N).</p>
+                                    <p className="text-xs text-text-secondary leading-relaxed">你提到使用 Redis 有序集合来实现滑动速率窗口——高效是因为它能自动过期陈旧记录，同时保持操作严格为 O(log N)。</p>
                                 </div>
                             </div>
                         </motion.div>
@@ -300,15 +300,15 @@ const MockMeetingChatAnim = () => {
             <div className="p-5 space-y-5">
                 <div className="flex justify-end">
                     <div className="bg-accent-primary text-white px-4 py-2.5 rounded-2xl rounded-tr-sm max-w-[75%] text-sm leading-relaxed shadow-sm">
-                        What API dependencies did they mention?
+                        他们提到了哪些 API 依赖？
                     </div>
                 </div>
                 <div className="flex flex-col items-start">
                     <p className="text-sm text-text-primary leading-relaxed max-w-[85%]">
-                        Based on the transcript near 10:45 AM, they explicitly mentioned integrating <code className="bg-bg-tertiary px-1.5 py-0.5 rounded text-[12px] font-mono text-text-primary border border-border-subtle">Stripe 支付意向</code> to handle the recurring tier logic securely.
+                        根据上午 10:45 附近的转录，他们明确提到集成 <code className="bg-bg-tertiary px-1.5 py-0.5 rounded text-[12px] font-mono text-text-primary border border-border-subtle">Stripe 支付意向</code> 来安全地处理重复层级逻辑。
                     </p>
                     <div className="flex items-center gap-2 mt-2.5 text-xs text-text-tertiary">
-                        <Copy size={13} /> Copy message
+                        <Copy size={13} /> 复制消息
                     </div>
                 </div>
             </div>
@@ -339,10 +339,10 @@ const MockSearchPillAnim = () => {
                 {/* Results Panel mock */}
                 <div className="w-[480px]">
                     <div className="py-2">
-                        {/* Explore Section */}
+                        {/* 探索 Section */}
                         <div className="px-3 py-1">
                             <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">
-                                Explore
+                                探索
                             </div>
 
                             <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left bg-bg-item-active transition-colors">
@@ -359,15 +359,15 @@ const MockSearchPillAnim = () => {
                                     <Search size={12} className="text-text-secondary" />
                                 </div>
                                 <span className="text-[13px] text-text-secondary">
-                                    Search for <span className="text-text-primary">"System"</span>
+                                    搜索 "<span className="text-text-primary">"System"</span>
                                 </span>
                             </div>
                         </div>
 
-                        {/* Sessions Section */}
+                        {/* 会话 Section */}
                         <div className="px-3 py-1 mt-1">
                             <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">
-                                Sessions
+                                会话
                             </div>
 
                             <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left hover:bg-bg-item-hover transition-colors">
@@ -376,10 +376,10 @@ const MockSearchPillAnim = () => {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <div className="text-[13px] text-text-primary truncate">
-                                        System Design Interview
+                                        系统设计面试
                                     </div>
                                     <div className="text-[11px] text-text-tertiary">
-                                        Jan 12
+                                        1月12日
                                     </div>
                                 </div>
                             </div>
@@ -390,10 +390,10 @@ const MockSearchPillAnim = () => {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <div className="text-[13px] text-text-primary truncate">
-                                        System Architecture Sync
+                                        系统架构同步
                                     </div>
                                     <div className="text-[11px] text-text-tertiary">
-                                        Jan 08
+                                        1月08日
                                     </div>
                                 </div>
                             </div>
@@ -442,8 +442,8 @@ const MockPermissionsAnim = () => {
             </div>
             <div className="text-xs text-text-secondary text-center max-w-[280px]">
                 {isMac
-                    ? 'Natively requires Accessibility and Screen Recording permissions to analyze screen context.'
-                    : 'Natively will ask for microphone access the first time you start a meeting.'}
+                    ? 'Natively 需要辅助功能和屏幕录制权限来分析屏幕内容。'
+                    : 'Natively 会在你第一次开始会议时请求麦克风权限。'}
             </div>
         </div>
     );
@@ -489,7 +489,7 @@ const MockPillControlsAnim = () => {
                     <motion.div animate={{ rotate: windowShowing ? 0 : 180 }} transition={{ duration: 0.35, ease: 'easeInOut' }}>
                         <ChevronUp className="w-3 h-3 text-text-secondary" />
                     </motion.div>
-                    <span className="text-[11px] text-text-secondary font-medium">{windowShowing ? 'Hide' : 'Show'}</span>
+                    <span className="text-[11px] text-text-secondary font-medium">{windowShowing ? '隐藏' : '显示'}</span>
                 </div>
                 <ArrowRight className="w-3.5 h-3.5 text-text-tertiary shrink-0" />
                 <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -600,13 +600,13 @@ const MockProviderSelectionAnim = () => {
     }, []);
 
     const options = [
-        { id: 'natively', label: 'Natively API', badge: '', recommended: true, desc: 'Ultra-fast low latency transcription', color: 'indigo', icon: <img src={nativelyIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="Natively" /> },
-        { id: 'deepgram', label: 'Deepgram Nova-3', badge: 'Saved', recommended: false, desc: 'High-accuracy REST transcription', color: 'purple', icon: <Mic size={14} /> },
-        { id: 'google', label: 'Google Cloud', badge: 'Saved', recommended: false, desc: 'gRPC streaming via Service Account', color: 'blue', icon: <Mic size={14} /> },
-        { id: 'groq', label: 'Groq Whisper', badge: '', recommended: false, desc: 'Fast LPU whisper transcription', color: 'orange', icon: <Mic size={14} /> },
-        { id: 'azure', label: 'Azure Speech', badge: '', recommended: false, desc: 'Enterprise tier transcription', color: 'teal', icon: <Mic size={14} /> },
-        { id: 'soniox', label: 'Soniox', badge: '', recommended: false, desc: 'Medical-grade transcription', color: 'cyan', icon: <Mic size={14} /> },
-        { id: 'ibm', label: 'IBM Watson', badge: '', recommended: false, desc: 'Watson Speech-to-Text', color: 'indigo', icon: <Mic size={14} /> },
+        { id: 'natively', label: 'Natively API', badge: '', recommended: true, desc: '超低延迟实时转录', color: 'indigo', icon: <img src={nativelyIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="Natively" /> },
+        { id: 'deepgram', label: 'Deepgram Nova-3', badge: '已保存', recommended: false, desc: '高精度 REST 转录', color: 'purple', icon: <Mic size={14} /> },
+        { id: 'google', label: 'Google Cloud', badge: '已保存', recommended: false, desc: '通过 Service Account 的 gRPC 流式传输', color: 'blue', icon: <Mic size={14} /> },
+        { id: 'groq', label: 'Groq Whisper', badge: '', recommended: false, desc: '快速 LPU Whisper 转录', color: 'orange', icon: <Mic size={14} /> },
+        { id: 'azure', label: 'Azure Speech', badge: '', recommended: false, desc: '企业级转录', color: 'teal', icon: <Mic size={14} /> },
+        { id: 'soniox', label: 'Soniox', badge: '', recommended: false, desc: '医疗级转录', color: 'cyan', icon: <Mic size={14} /> },
+        { id: 'ibm', label: 'IBM Watson', badge: '', recommended: false, desc: 'Watson 语音转文字', color: 'indigo', icon: <Mic size={14} /> },
     ];
     const selected = options[0];
 
@@ -707,12 +707,12 @@ const MockApiKeyFlowAnim = () => {
                 <div className="flex gap-2">
                     <div className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary flex items-center shadow-inner">
                         <span className={stage > 0 ? "opacity-100" : "opacity-40"}>
-                            {stage > 0 ? "gsk_a8B2c..." : "Enter API key"}
+                            {stage > 0 ? "gsk_a8B2c..." : "输入 API 密钥"}
                         </span>
                         {stage === 0 && <motion.div animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="w-0.5 h-4 bg-accent-primary ml-0.5" />}
                     </div>
                     <div className="px-5 py-2 rounded-lg text-xs font-medium bg-bg-elevated border border-border-subtle flex items-center justify-center transition-colors shadow-sm">
-                        {stage === 1 ? <Check size={14} className="text-green-500" /> : 'Save'}
+                        {stage === 1 ? <Check size={14} className="text-green-500" /> : '保存'}
                     </div>
                 </div>
                 <div className="flex items-center justify-between mt-2">
@@ -720,7 +720,7 @@ const MockApiKeyFlowAnim = () => {
                         <div className="text-xs bg-bg-input px-3 py-1.5 rounded-md flex items-center gap-2 border border-border-subtle shadow-sm">
                             {stage === 2 ? <RefreshCw size={12} className="text-blue-500 animate-spin" /> : stage > 2 ? <Check size={12} className="text-green-500" /> : <Play size={12} className="text-text-tertiary" />}
                             <span className={stage > 2 ? "text-green-500" : "text-text-primary"}>
-                                {stage === 2 ? 'Testing...' : stage > 2 ? 'Connected' : 'Test API Key'}
+                                {stage === 2 ? '测试中...' : stage > 2 ? '已连接' : '测试 API 密钥'}
                             </span>
                         </div>
                     </div>
@@ -810,33 +810,33 @@ const SetupGuide = () => {
     const shift = getModifierSymbol('shift');
     const steps = [
         {
-            title: 'Grant Permissions',
+            title: '授予权限',
             desc: isMac
-                ? 'Enable Screen Recording and Accessibility for Natively in macOS Privacy & Security.'
-                : 'Approve the microphone prompt the first time you start a meeting (Settings → Privacy → Microphone).',
+                ? '在 macOS 隐私与安全性设置中为 Natively 启用屏幕录制和辅助功能。'
+                : '第一次开始会议时批准麦克风提示（设置 → 隐私 → 麦克风）。',
         },
         {
-            title: 'Set Up Audio',
-            desc: 'Open Settings → Audio and select Natively API, or paste a Deepgram or Google key.',
+            title: '设置音频',
+            desc: '打开设置 → 音频，选择 Natively API，或粘贴 Deepgram 或 Google 密钥。',
         },
         {
-            title: 'Connect an AI Model',
-            desc: 'Open Settings → AI Providers and choose a built-in model, or add a Groq or OpenRouter key.',
+            title: '连接 AI 模型',
+            desc: '打开设置 → AI 提供商，选择内置模型，或添加 Groq 或 OpenRouter 密钥。',
         },
         {
-            title: 'Personalize (Optional)',
-            desc: 'Drop your resume + JD in Profile Intelligence, link your Google Calendar, or pick a Mode tailored to your session.',
+            title: '个性化（可选）',
+            desc: '在档案智能中上传简历和职位描述，关联 Google 日历，或选择适合你会议的模式。',
         },
         {
-            title: "You're all set.",
+            title: '一切就绪。',
             desc: null,
         },
     ];
 
     const hotkeys = [
-        { label: 'Toggle', kbd: `${cmd}H` },
-        { label: 'Screenshot', kbd: `${cmd}${shift}H` },
-        { label: 'Chat', kbd: `${cmd}K` },
+        { label: '切换显示', kbd: `${cmd}H` },
+        { label: '截图', kbd: `${cmd}${shift}H` },
+        { label: '聊天', kbd: `${cmd}K` },
     ];
 
     return (
@@ -900,10 +900,10 @@ export const HelpSettings: React.FC = () => {
             <div className="mb-6 shrink-0">
                 <h2 className={`text-2xl font-bold text-text-primary flex items-center gap-3`}>
                     <HelpCircle className="w-6 h-6 text-accent-primary" />
-                    Help & Setup Guide
+                    帮助与设置指南
                 </h2>
                 <p className={`text-sm text-text-secondary mt-3 max-w-2xl`}>
-                    Learn how to deeply configure Natively. Everything from providing the right API scopes to executing conversational interviews seamlessly is covered below.
+                    了解如何深度配置 Natively。从提供正确的 API 权限到无缝执行对话式面试，以下内容全部涵盖。
                 </p>
             </div>
 
@@ -920,16 +920,16 @@ export const HelpSettings: React.FC = () => {
                     <div className="space-y-4">
                         <p>
                             {isMac
-                                ? 'Natively operates entirely on-device, but requires OS permissions to tap into your screen context and global keystrokes. Here is how your system should look:'
-                                : 'Natively operates entirely on-device. Windows will prompt you for microphone access the first time you start a meeting — no other OS permissions are required.'}
+                                ? 'Natively 完全在本地运行，但需要操作系统权限来访问屏幕内容和全局快捷键。你的系统设置应如下所示：'
+                                : 'Natively 完全在本地运行。Windows 会在你第一次开始会议时提示麦克风权限——不需要其他操作系统权限。'}
                         </p>
                         {isMac && <MockPermissionsAnim />}
                         <div className="space-y-3 mt-4">
-                            <h4 className="font-bold text-base text-text-primary border-b border-border-subtle pb-2">Hardware & Engine Configurations</h4>
+                            <h4 className="font-bold text-base text-text-primary border-b border-border-subtle pb-2">硬件与引擎配置</h4>
 
                             <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
                                 <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                    <Mic size={14} className="text-blue-500" /> Microphone & Speaker Loopback Selection
+                                    <Mic size={14} className="text-blue-500" /> 麦克风与扬声器回环选择
                                 </h5>
                                 <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
                                     Natively can capture both what you say and what you hear globally. At the top of the Audio Settings, use the Dropdowns to explicitly select your hardware Input (e.g. your physical microphone) and Output capture (what the speakers play). By default, Natively utilizes the <strong>系统默认</strong>, so audio routing will automatically follow your OS preferences.
@@ -943,15 +943,15 @@ export const HelpSettings: React.FC = () => {
                                             <Monitor size={14} className="text-accent-primary" /> ScreenCaptureKit (SCK)
                                         </h5>
                                         <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                            The recommended backend for macOS 13.0+. Uses Apple's modern, highly optimized internal framework for 0-latency loopback speaker capture securely.
+                                            macOS 13.0+ 推荐的后端。使用 Apple 现代的、高度优化的内部框架，安全地实现零延迟回环扬声器捕获。
                                         </p>
                                     </div>
                                     <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
                                         <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                            <Volume2 size={14} className="text-orange-500" /> CoreAudio (Legacy)
+                                            <Volume2 size={14} className="text-orange-500" /> CoreAudio ( legacy )
                                         </h5>
                                         <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                            Fallback engine for older hardware. Relies on internal device aggregation to trap output audio. Only use this if SCK repeatedly drops speaker packets.
+                                            旧硬件的备用引擎。依赖内部设备聚合来捕获输出音频。仅在 SCK 反复丢失扬声器数据包时使用。
                                         </p>
                                     </div>
                                 </div>
@@ -959,10 +959,10 @@ export const HelpSettings: React.FC = () => {
 
                             <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
                                 <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                    <Globe size={14} className="text-green-500" /> Language & Regional Accents
+                                    <Globe size={14} className="text-green-500" /> 语言与地区口音
                                 </h5>
                                 <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                    Below the provider list, you must specify the <strong>语言</strong> you will be speaking (e.g., English). Most importantly, ensure you select your specific regional <span className={kbdClass}>口音/地区</span> mapping (e.g., <em>en-US</em> vs <em>en-GB</em> vs <em>en-IN</em>) as STT backends use this map to vastly increase transcription accuracy logic based on regional inflections.
+                                    在提供商列表下方，你必须指定 <strong>语言</strong> 你将使用的语言（例如，中文）。最重要的是，确保选择你特定的地区 <span className={kbdClass}>口音/地区</span> 映射（例如， <em>en-US</em> vs <em>en-GB</em> vs <em>en-IN</em>），因为 STT 后端会根据此映射大幅提升基于地区变音的转录准确性。
                                 </p>
                             </div>
                         </div>
@@ -971,28 +971,28 @@ export const HelpSettings: React.FC = () => {
                             <div className="flex flex-col gap-3 mt-6">
                                 <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
                                     <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                        <Monitor className="w-4 h-4 text-accent-primary" /> Screen Recording
+                                        <Monitor className="w-4 h-4 text-accent-primary" /> 屏幕录制
                                     </h4>
-                                    <p className="text-xs opacity-90 mb-2">Provides Natively the ability to read your screen temporarily when you capture context.</p>
-                                    <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Screen Recording</p>
+                                    <p className="text-xs opacity-90 mb-2">让 Natively 在捕获上下文时临时读取你的屏幕。</p>
+                                    <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; 屏幕录制</p>
                                 </div>
 
                                 <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
                                     <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                        <Command className="w-4 h-4 text-purple-500" /> Accessibility
+                                        <Command className="w-4 h-4 text-purple-500" /> 辅助功能
                                     </h4>
-                                    <p className="text-xs opacity-90 mb-2">Required for Natively to detect the global keyboard shortcuts below, regardless of what window is focused.</p>
-                                    <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Accessibility</p>
+                                    <p className="text-xs opacity-90 mb-2">让 Natively 能够检测下方的全局键盘快捷键，无论当前聚焦哪个窗口。</p>
+                                    <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; 辅助功能</p>
                                 </div>
                             </div>
                         ) : (
                             <div className="flex flex-col gap-3 mt-6">
                                 <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
                                     <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                        <Mic className="w-4 h-4 text-blue-500" /> Microphone
+                                        <Mic className="w-4 h-4 text-blue-500" /> 麦克风
                                     </h4>
-                                    <p className="text-xs opacity-90 mb-2">Required to capture what you say during meetings. Windows prompts the first time you start a meeting.</p>
-                                    <p className="text-[11px] text-text-tertiary">Settings &gt; Privacy &gt; Microphone</p>
+                                    <p className="text-xs opacity-90 mb-2">用于捕获你在会议中说的话。Windows 会在你第一次开始会议时提示。</p>
+                                    <p className="text-[11px] text-text-tertiary">Settings &gt; Privacy &gt; 麦克风</p>
                                 </div>
                             </div>
                         )}
@@ -1021,7 +1021,7 @@ export const HelpSettings: React.FC = () => {
                                     <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.cloud.google.com/apis/credentials') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Uses a Service Account JSON instead of an API Key. You must build a GCP Project, activate the Cloud Speech API, and create a Service Account under IAM. Download the JSON Key, and drag-and-drop it into the box in the Audio Settings.
+                                    使用 Service Account JSON 而非 API 密钥。你必须创建一个 GCP 项目，激活 Cloud Speech API，并在 IAM 下创建 Service Account。下载 JSON 密钥，然后拖放到音频设置中的框内。
                                 </p>
                             </div>
 
@@ -1031,8 +1031,8 @@ export const HelpSettings: React.FC = () => {
                                     <button onClick={() => { (window as any).electronAPI?.openExternal('https://elevenlabs.io/app/settings/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    When creating a Custom API key for the "Conversational AI" streaming integration, you must explicitly enable <strong>convai.conversations.create</strong> and <strong>assistants.list</strong>.
-                                    Crucially, you must also allow <strong>Speech to Text: Access</strong> as seen below in the ElevenLabs UI:
+                                    为"对话式 AI"流式集成创建自定义 API 密钥时，你必须显式启用 <strong>convai.conversations.create</strong> 和 <strong>assistants.list</strong>。
+                                    关键的是，你还必须允许 <strong>Speech to Text: Access</strong>，如下方 ElevenLabs 界面所示：
                                 </p>
                                 <ElevenLabsPermissionsMock />
                             </div>
@@ -1043,7 +1043,7 @@ export const HelpSettings: React.FC = () => {
                                     <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.groq.com/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Provides ultra-fast Whisper responses via LPUs. Starts with <span className={kbdClass}>gsk_</span>. No special permissions required.
+                                    通过 LPU 提供超快速的 Whisper 响应。密钥以 <span className={kbdClass}>gsk_</span> 开头。不需要特殊权限。
                                 </p>
                             </div>
 
@@ -1053,7 +1053,7 @@ export const HelpSettings: React.FC = () => {
                                     <button onClick={() => { (window as any).electronAPI?.openExternal('https://platform.openai.com/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Uses standard OpenAI keys (<span className={kbdClass}>sk-</span>). Remember: this Audio key is isolated from your AI Generation key under "AI Providers".
+                                    使用标准 OpenAI 密钥（<span className={kbdClass}>sk-</span>）。注意：此音频密钥与"AI 提供商"下的 AI 生成密钥是独立的。
                                 </p>
                             </div>
 
@@ -1063,7 +1063,7 @@ export const HelpSettings: React.FC = () => {
                                     <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.deepgram.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Extremely accurate streaming transcription (Nova-2 model). Key is generated on-demand in the Deepgram Console.
+                                    极其精确的流式转录（Nova-2 模型）。密钥在 Deepgram 控制台中按需生成。
                                 </p>
                             </div>
 
@@ -1231,15 +1231,15 @@ export const HelpSettings: React.FC = () => {
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                             {([
-                                { Icon: Pencil, color: 'blue', title: 'What to Answer?', badge: null, bc: '', kbd: ['⌘', '1'], desc: 'Reads the active transcript and screen, then streams a precise response to read aloud.' },
-                                { Icon: Lightbulb, color: 'violet', title: 'Brainstorm', badge: 'Interview ON', bc: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', kbd: ['⌘', '3'], desc: 'Recap becomes Brainstorm when Interview Mode is ON — deep multi-step strategies.' },
-                                { Icon: HelpCircle, color: 'teal', title: 'Follow Up', badge: null, bc: '', kbd: ['⌘', '4'], desc: 'Suggests the next logical question to keep conversation flowing gracefully.' },
-                                { Icon: Zap, color: 'emerald', title: 'Answer Now', badge: null, bc: '', kbd: ['⌘', '5'], desc: 'Records your mic + screen context and fires an immediate AI query.' },
-                                { Icon: MessageSquare, color: 'indigo', title: 'Clarify', badge: null, bc: '', kbd: ['⌘', '2'], desc: 'Generates sharp probing questions from latent audio when a topic is unclear.' },
-                                { Icon: RefreshCw, color: 'amber', title: 'Recap', badge: 'Interview OFF', bc: 'bg-red-500/10 text-red-400 border-red-500/30', kbd: ['⌘', '3'], desc: 'Condenses the last 5 minutes into bullet points when you lose the thread.' },
-                                { Icon: Sparkles, color: 'sky', title: 'Code Hint', badge: null, bc: '', kbd: ['⌘', '6'], desc: 'Reads your screen and nudges you toward the correct code implementation.' },
-                                { Icon: Monitor, color: 'rose', title: 'Screenshot & Ask', badge: null, bc: '', kbd: ['⌘', '⇧', 'H'], desc: 'Forces a full-screen capture and immediately processes it through the LLM.' },
-                                { Icon: EyeOff, color: 'slate', title: 'Stealth Execute', badge: null, bc: '', kbd: ['⌘', '↵'], desc: 'Processes context in the background without ever revealing the interface.' },
+                                { Icon: Pencil, color: 'blue', title: '怎么回答？', badge: null, bc: '', kbd: ['⌘', '1'], desc: '读取当前转录内容和屏幕，然后流式生成精确的朗读回答。' },
+                                { Icon: Lightbulb, color: 'violet', title: '头脑风暴', badge: '面试开启', bc: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', kbd: ['⌘', '3'], desc: '当面试模式开启时，回顾变为头脑风暴——深度多步策略。' },
+                                { Icon: HelpCircle, color: 'teal', title: '跟进问题', badge: null, bc: '', kbd: ['⌘', '4'], desc: '建议下一个逻辑问题，让对话顺畅进行。' },
+                                { Icon: Zap, color: 'emerald', title: '立即回答', badge: null, bc: '', kbd: ['⌘', '5'], desc: '录制麦克风和屏幕内容，立即触发 AI 查询。' },
+                                { Icon: MessageSquare, color: 'indigo', title: '澄清', badge: null, bc: '', kbd: ['⌘', '2'], desc: '当话题不清楚时，从潜在音频中生成尖锐的探查问题。' },
+                                { Icon: RefreshCw, color: 'amber', title: '回顾', badge: '面试关闭', bc: 'bg-red-500/10 text-red-400 border-red-500/30', kbd: ['⌘', '3'], desc: '当你跟不上时，将过去 5 分钟的内容浓缩为要点。' },
+                                { Icon: Sparkles, color: 'sky', title: '代码提示', badge: null, bc: '', kbd: ['⌘', '6'], desc: '读取你的屏幕，引导你走向正确的代码实现。' },
+                                { Icon: Monitor, color: 'rose', title: '截图提问', badge: null, bc: '', kbd: ['⌘', '⇧', 'H'], desc: '强制全屏截图并立即通过大语言模型处理。' },
+                                { Icon: EyeOff, color: 'slate', title: '隐形执行', badge: null, bc: '', kbd: ['⌘', '↵'], desc: '在后台处理内容，从不显示界面。' },
                             ] as Array<{ Icon: React.ElementType; color: 'blue' | 'violet' | 'teal' | 'emerald' | 'indigo' | 'amber' | 'sky' | 'rose' | 'slate'; title: string; badge: string | null; bc: string; kbd: string[]; desc: string }>).map(({ Icon, color, title, badge, bc, kbd, desc }) => {
                                 const resolvedKbd = kbd.map(k =>
                                     k === '⌘' ? getModifierSymbol('cmd')
@@ -1312,7 +1312,7 @@ export const HelpSettings: React.FC = () => {
                                     <FileText className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" /> Summary Execution
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    Natively fires a local background job as soon as the meeting finishes to compress the entire raw audio transcript into clean, formatted markdown representing structural overviews and explicit action items.
+                                    会议一结束，Natively 就会触发本地后台任务 to compress the entire raw audio transcript into clean, formatted markdown representing structural overviews and explicit action items.
                                 </p>
                             </div>
 
@@ -1321,7 +1321,7 @@ export const HelpSettings: React.FC = () => {
                                     <Volume2 className="w-4 h-4 text-emerald-500 group-hover:scale-110 transition-transform" /> Raw Transcripts
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    Dive into the exact dialogue timeline. Speaker separation attempts to classify "Me" vs "Them" using volume thresholds, capturing everything physically said alongside timestamps.
+                                    深入精确的对话时间线。说话人分离尝试使用音量阈值区分"我"和"对方"，捕获所有实际说出的话及时间戳。
                                 </p>
                             </div>
 
@@ -1349,7 +1349,7 @@ export const HelpSettings: React.FC = () => {
                                         <Search className="w-4 h-4 text-orange-500 group-hover:scale-110 transition-transform" /> Contextual Semantic Search
                                     </h4>
                                     <p className="text-[12px] text-text-secondary leading-relaxed">
-                                        You don't need to craft long AI prompts. Simply ask, "What API dependencies did they list?" and the system injects the localized transcript from that specific timeline to provide highly-accurate responses dynamically.
+                                        你无需编写冗长的 AI 提示。只需问"他们列出了哪些 API 依赖？"，系统就会注入该特定时间线的局部转录内容，动态提供高度准确的回答。
                                     </p>
                                 </div>
 
@@ -1368,7 +1368,7 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="6. 全局搜索与快捷键" icon={<Search className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">Hit <span className={kbdClass}>{isMac ? 'Cmd+K' : 'Ctrl+K'}</span> anywhere on your computer to invoke the Natively Global Palette. This acts as your Spotlight overlay for interacting directly with the system backbone.</p>
+                        <p className="text-[13px]">按 <span className={kbdClass}>{isMac ? 'Cmd+K' : 'Ctrl+K'}</span> 在电脑任意位置唤出 Natively 全局面板。这相当于你的 Spotlight 覆盖层，用于直接与系统核心交互。</p>
 
                         <MockSearchPillAnim />
 
@@ -1378,7 +1378,7 @@ export const HelpSettings: React.FC = () => {
                                     <Briefcase className="w-4 h-4 text-sky-500 group-hover:scale-110 transition-transform" /> Instant Meeting Traversal
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    Typing any text instantly fuzzy matches across all your previous meeting titles, summaries, and internal files. Hitting enter jumps you straight into the intelligence viewer for that topic.
+                                    输入任何文本即可在所有历史会议标题、摘要和内部文件中进行即时模糊匹配。按回车键即可直接进入该主题的智能查看器。
                                 </p>
                             </div>
 
@@ -1554,12 +1554,12 @@ export const HelpSettings: React.FC = () => {
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <Sparkles className="w-4 h-4 text-amber-500" /> What to Put Here
+                                        <Sparkles className="w-4 h-4 text-amber-500" /> 这里写什么
                                     </h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Your company's product details or pricing</li>
+                                        <li>你公司的产品详情或定价</li>
                                         <li>招聘候选人流程备注</li>
-                                        <li>LeetCode / DSA patterns you prefer</li>
+                                        <li>你偏好的 LeetCode / 数据结构与算法模式</li>
                                         <li>个人格式或风格偏好</li>
                                     </ul>
                                 </div>
@@ -1570,16 +1570,16 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="8. 模式管理器" icon={<LayoutGrid className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">Modes let you assign a specialized AI persona to your session. Each mode has a tailored system prompt, a personal context area, reference files, and smart note template sections — so Natively behaves differently depending on whether you're in a sales call, a coding interview, or a team standup.</p>
+                        <p className="text-[13px]">模式让你为会话分配专门的 AI 角色。每个模式都有定制的系统提示词、个人上下文区域、参考文件和智能笔记模板分区——因此 Natively 会根据你是在销售电话、编码面试还是团队站会中表现出不同的行为。</p>
 
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                             {([
-                                { name: 'Interview', desc: 'STAR-format answers, behavioral stories, step-by-step coding hints.' },
-                                { name: 'Sales', desc: 'Objection handling, discovery questions, product pitch frameworks.' },
-                                { name: 'Recruiting', desc: 'Candidate assessment, JD cross-referencing, structured evaluation.' },
-                                { name: 'Team Meet', desc: 'Action items, announcements, blockers, decisions — auto-extracted.' },
-                                { name: 'Lecture', desc: 'Concept breakdowns, intuition-first explanations, formula notes.' },
-                                { name: 'Technical', desc: 'DSA / system design reasoning, edge cases, complexity analysis.' },
+                                { name: 'Interview', desc: 'STAR 格式回答、行为故事、分步编码提示。' },
+                                { name: 'Sales', desc: '异议处理、发现性问题、产品推销框架。' },
+                                { name: 'Recruiting', desc: '候选人评估、职位描述交叉参考、结构化评估。' },
+                                { name: 'Team Meet', desc: '行动项、公告、阻塞项、决策——自动提取。' },
+                                { name: 'Lecture', desc: '概念拆解、直觉优先的解释、公式笔记。' },
+                                { name: 'Technical', desc: '数据结构与算法/系统设计推理、边界情况、复杂度分析。' },
                             ] as Array<{ name: string; desc: string }>).map(({ name, desc }) => (
                                 <div key={name} className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h5 className="font-semibold text-sm text-text-primary mb-1">{name}</h5>
@@ -1594,8 +1594,8 @@ export const HelpSettings: React.FC = () => {
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary">打开管理器</h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Click the <strong>grid icon</strong> in the Launcher header</li>
-                                        <li>Or click the grid icon in the main interface toolbar</li>
+                                        <li>点击 <strong>网格图标</strong> 在启动器标题栏中</li>
+                                        <li>Or click the 网格图标 in the main interface toolbar</li>
                                         <li>需要 Natively 专业版许可证</li>
                                     </ul>
                                 </div>
@@ -1728,7 +1728,7 @@ export const HelpSettings: React.FC = () => {
                                 </p>
                                 <div className="p-2 border border-orange-500/20 bg-orange-500/5 rounded-lg">
                                     <p className="text-[10px] text-orange-400 m-0">
-                                        <strong>⚠️ Warning:</strong> This renders the Natively overlay completely unclickable. You MUST memorize the Global Hotkeys (e.g. <strong>{isMac ? 'Cmd' : 'Ctrl'}+Shift+Arrows</strong> to move, <strong>{isMac ? 'Cmd' : 'Ctrl'}+B</strong> to hide, <strong>{isMac ? 'Cmd' : 'Ctrl'}+1-7</strong> for actions) to control the application once this is active.
+                                        <strong>⚠️ Warning:</strong> 这将使 Natively 覆盖层完全不可点击。你必须记住全局热键（例如 <strong>{isMac ? 'Cmd' : 'Ctrl'}+Shift+Arrows</strong> 来移动， <strong>{isMac ? 'Cmd' : 'Ctrl'}+B</strong> 来隐藏， <strong>{isMac ? 'Cmd' : 'Ctrl'}+1-7</strong> 来执行操作）以在此激活后控制应用。
                                     </p>
                                 </div>
                             </div>
