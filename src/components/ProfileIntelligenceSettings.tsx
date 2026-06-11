@@ -437,17 +437,17 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
     }, []);
 
     const handleRemoveTavilyKey = async () => {
-        if (!confirm('Are you sure you want to remove your Tavily API key?')) return;
+        if (!confirm('确定要移除 Tavily API 密钥吗？')) return;
         try {
             const res = await window.electronAPI?.setTavilyApiKey?.('');
             if (res && res.success) {
                 setHasStoredTavilyKey(false);
                 setTavilyApiKey('');
             } else {
-                alert(res?.error || 'Failed to remove API key');
+                alert(res?.error || '移除 API 密钥失败');
             }
         } catch (e) {
-            alert('Error removing key');
+            alert('移除密钥时出错');
         }
     };
 
@@ -471,10 +471,9 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                     <div>
                         <div className="flex items-center gap-2.5 mb-1.5">
                             <h2 className="text-[22px] font-bold text-text-primary leading-none" style={{ letterSpacing: '-0.025em' }}>档案智能</h2>
-                            <span className="pi-beta-badge">测试版</span>
                         </div>
                         <p className="text-[13px] text-text-secondary" style={{ letterSpacing: '-0.005em' }}>
-                            Manage your persona, career history, and active job description
+                            管理你的专业形象、职业履历和当前职位描述
                         </p>
                     </div>
                 </div>
@@ -496,7 +495,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, ...spring }} className="mb-4 pt-2">
                             <h3 className="text-lg font-bold text-text-primary tracking-tight">专业身份</h3>
                             <p className="text-[13px] text-text-secondary mt-1">
-                                This engine constructs an intelligent representation of your career history and skills graph.
+                                该引擎会智能解析你的职业履历和技能图谱。
                             </p>
                         </motion.div>
 
@@ -514,10 +513,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         </div>
                                                         <div>
                                                             <h4 className="text-sm font-bold text-text-primary tracking-tight">
-                                                                {profileData?.identity?.name || 'Identity Node Inactive'}
+                                                                {profileData?.identity?.name || '身份节点未激活'}
                                                             </h4>
                                                             <p className="text-xs text-text-secondary mt-0.5 tracking-wide">
-                                                                {profileData?.identity?.email || 'Upload a resume to begin mapping.'}
+                                                                {profileData?.identity?.email || '上传简历开始解析'}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -526,16 +525,16 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         {profileStatus.hasProfile && (
                                                             <button
                                                                 onClick={async () => {
-                                                                    if (!confirm('Are you sure you want to delete your mapped persona? This will destroy all structured timeline data.')) return;
+                                                                    if (!confirm('确定要删除已解析的专业形象吗？这将清除所有结构化时间线数据。')) return;
                                                                     try {
                                                                         await window.electronAPI?.profileDelete?.();
                                                                         setProfileStatus({ hasProfile: false, profileMode: false });
                                                                         setProfileData(null);
-                                                                    } catch (e) { console.error('Failed to delete profile:', e); }
+                                                                    } catch (e) { console.error('删除档案失败：', e); }
                                                                 }}
                                                                 className="text-[12px] font-medium text-text-tertiary hover:text-red-500 transition-colors px-3 py-1.5 rounded-full hover:bg-red-500/10"
                                                             >
-                                                                Disconnect
+                                                                断开连接
                                                             </button>
                                                         )}
 
@@ -550,7 +549,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                         await window.electronAPI?.profileSetMode?.(newState);
                                                                         setProfileStatus(prev => ({ ...prev, profileMode: newState }));
                                                                     } catch (e) {
-                                                                        console.error('Failed to toggle profile mode:', e);
+                                                                        console.error('切换角色引擎失败：', e);
                                                                     }
                                                                 }}
                                                                 className={`w-9 h-5 rounded-full relative transition-colors ${!profileStatus.hasProfile ? 'opacity-40 cursor-not-allowed bg-bg-toggle-switch' : profileStatus.profileMode ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
@@ -597,7 +596,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                 {profileData?.skills && profileData.skills.length > 0 && (
                                                     <div className="mt-5">
                                                         <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-2">
-                                                            Top Skills
+                                                            核心技能
                                                         </div>
                                                         <div className="flex flex-wrap gap-1.5">
                                                             {profileData.skills.slice(0, 15).map((skill: string, i: number) => (
@@ -622,10 +621,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     </div>
                                                     <div className="min-w-0">
                                                         <h4 className="text-[15px] font-bold text-text-primary mb-1 tracking-tight">
-                                                            {profileStatus.hasProfile ? 'Overwrite Source Document' : 'Initialize Knowledge Base'}
+                                                            {profileStatus.hasProfile ? '覆盖源文件' : '初始化知识库'}
                                                         </h4>
                                                         <p className="text-xs text-text-secondary leading-relaxed pr-2">
-                                                            Provide a resume file to seed the intelligence engine.
+                                                            上传简历文件以初始化智能引擎。
                                                         </p>
                                                     </div>
                                                 </div>
@@ -657,7 +656,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     disabled={profileUploading}
                                                     className={`pi-upload-pill${profileStatus.hasProfile ? ' pi-upload-pill--secondary' : ''}`}
                                                     aria-busy={profileUploading}
-                                                    aria-label={profileUploading ? 'Ingesting resume' : 'Select resume file'}
+                                                    aria-label={profileUploading ? '正在解析简历' : '选择简历文件'}
                                                 >
                                                     {profileUploading && <span className="pi-upload-pill__fill" aria-hidden="true" />}
                                                     <span className="pi-upload-pill__content">
@@ -666,8 +665,8 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             : <Upload size={14} strokeWidth={2.5} />}
                                                         <span className="pi-upload-pill__label">
                                                             {profileUploading
-                                                                ? 'Ingesting · Processing structural semantics…'
-                                                                : profileStatus.hasProfile ? 'Replace resume file' : 'Select resume file'}
+                                                                ? '正在解析 · 处理结构语义…'
+                                                                : profileStatus.hasProfile ? '替换简历文件' : '选择简历文件'}
                                                         </span>
                                                     </span>
                                                     <span className="pi-upload-pill__ring">
@@ -695,7 +694,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     </div>
                                                     <div className="min-w-0 flex-1">
                                                         <h4 className="text-[15px] font-bold text-text-primary mb-1 tracking-tight">
-                                                            {profileData?.hasActiveJD ? `${profileData.activeJD?.title} @ ${profileData.activeJD?.company}` : 'Upload Job Description'}
+                                                            {profileData?.hasActiveJD ? `${profileData.activeJD?.title} @ ${profileData.activeJD?.company}` : '上传职位描述'}
                                                         </h4>
                                                         {profileData?.hasActiveJD ? (
                                                             <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -744,10 +743,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                 const data = await window.electronAPI?.profileGetProfile?.();
                                                                 if (data) setProfileData(data);
                                                             } else {
-                                                                setJdError(result?.error || 'JD upload failed');
+                                                                setJdError(result?.error || '职位描述上传失败');
                                                             }
                                                         } catch (e: any) {
-                                                            setJdError(e.message || 'JD upload failed');
+                                                            setJdError(e.message || '职位描述上传失败');
                                                         } finally {
                                                             setJdUploading(false);
                                                         }
@@ -756,7 +755,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     className={`pi-upload-pill${profileData?.hasActiveJD ? ' pi-upload-pill--secondary' : ''}`}
                                                     data-accent="blue"
                                                     aria-busy={jdUploading}
-                                                    aria-label={jdUploading ? 'Parsing job description' : (profileData?.hasActiveJD ? 'Replace job description' : 'Upload job description')}
+                                                    aria-label={jdUploading ? '正在解析职位描述' : (profileData?.hasActiveJD ? '替换职位描述' : '上传职位描述')}
                                                 >
                                                     {jdUploading && <span className="pi-upload-pill__fill" aria-hidden="true" />}
                                                     <span className="pi-upload-pill__content">
@@ -765,8 +764,8 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             : <Briefcase size={14} strokeWidth={2.5} />}
                                                         <span className="pi-upload-pill__label">
                                                             {jdUploading
-                                                                ? 'Parsing · Decoding JD structure…'
-                                                                : profileData?.hasActiveJD ? 'Replace job description' : 'Upload job description'}
+                                                                ? '正在解析 · 解码职位结构…'
+                                                                : profileData?.hasActiveJD ? '替换职位描述' : '上传职位描述'}
                                                         </span>
                                                     </span>
                                                     <span className="pi-upload-pill__ring">
@@ -797,12 +796,12 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             <h4 className="text-sm font-bold text-text-primary">自定义上下文</h4>
                                                             {customNotesSaved && (
                                                                 <span className="text-[9px] font-bold text-emerald-500 px-1.5 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20 uppercase tracking-wide flex items-center gap-1">
-                                                                    <Check size={8} /> Saved
+                                                                    <Check size={8} /> 已保存
                                                                 </span>
                                                             )}
                                                         </div>
                                                         <p className="text-[11px] text-text-secondary mt-0.5">
-                                                            Add any context the AI should know about you — saved across all sessions.
+                                                            添加 AI 需要了解的任何上下文 — 跨会话自动保存。
                                                         </p>
                                                     </div>
                                                 </div>
@@ -823,13 +822,13 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                 } catch (_) {}
                                                             }, 800);
                                                         }}
-                                                        placeholder={`Examples:\n• Q4 ARR was $2.1M, grew 40% YoY — use when pitching growth story\n• Solved LRU Cache (LeetCode 146) with O(1) get/put using HashMap + doubly linked list\n• I prefer concise, direct answers without filler phrases\n• My target salary is $180k base — don't go below $160k`}
+                                                        placeholder={`示例：\n• Q4 ARR 为 210 万美元，同比增长 40% — 在讲述增长故事时使用\n• 使用 HashMap + 双向链表实现了 LRU Cache (LeetCode 146)，get/put 均为 O(1)\n• 我喜欢简洁直接的回答，不需要填充词\n• 我的目标底薪是 130 万人民币 — 不要低于 115 万`}
                                                         rows={6}
                                                         className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2.5 text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/20 transition-all resize-none leading-relaxed"
                                                     />
                                                     <div className="flex items-center justify-between px-0.5">
                                                         <p className="text-[10px] text-text-tertiary">
-                                                            Auto-saved · Works with all modes and providers
+                                                            自动保存 · 适用于所有模式和提供商
                                                         </p>
                                                         <span className={`text-[10px] tabular-nums ${customNotes.length > 3600 ? 'text-amber-500' : 'text-text-tertiary'}`}>
                                                             {customNotes.length}/4000
@@ -850,12 +849,12 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             <h4 className="text-sm font-bold text-text-primary">AI 角色</h4>
                                                             {personaSaved && (
                                                                 <span className="text-[9px] font-bold text-emerald-500 px-1.5 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20 uppercase tracking-wide flex items-center gap-1">
-                                                                    <Check size={8} /> Updated
+                                                                    <Check size={8} /> 已更新
                                                                 </span>
                                                             )}
                                                         </div>
                                                         <p className="text-[11px] text-text-secondary mt-0.5">
-                                                            Set the AI's behavior, tone, and role across providers.
+                                                            设置 AI 的行为、语气和角色，适用于所有提供商。
                                                         </p>
                                                     </div>
                                                 </div>
@@ -877,13 +876,13 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             } catch (_) {}
                                                         }, 800);
                                                     }}
-                                                    placeholder="Example: You are a senior hiring manager. Keep answers concise and ask one focused follow-up when needed."
+                                                    placeholder="示例：你是一位资深招聘经理。回答保持简洁，并在需要时提出一个针对性的跟进问题。"
                                                     rows={5}
                                                     className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2.5 text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/20 transition-all resize-none leading-relaxed"
                                                 />
                                                 <div className="flex items-center justify-between px-0.5 mt-3">
                                                     <p className="text-[10px] text-text-tertiary">
-                                                        Auto-saved · Treated as user-provided context
+                                                        自动保存 · 作为用户提供的上下文处理
                                                     </p>
                                                     <span className={`text-[10px] tabular-nums ${persona.length > 3600 ? 'text-amber-500' : 'text-text-tertiary'}`}>
                                                         {persona.length}/4000
@@ -906,7 +905,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             )}
                                                         </div>
                                                         <p className="text-[11px] text-text-secondary mt-0.5">
-                                                            Powers live web search for company research.
+                                                            为公司调研提供实时网络搜索能力。
                                                         </p>
                                                     </div>
                                                 </div>
@@ -921,7 +920,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                     className="text-[10px] flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors bg-red-500/10 hover:bg-red-500/20 px-1.5 py-0.5 rounded"
                                                                     title="移除 API 密钥"
                                                                 >
-                                                                    <Trash2 size={10} strokeWidth={2} /> Remove
+                                                                    <Trash2 size={10} strokeWidth={2} /> 移除
                                                                 </button>
                                                             )}
                                                         </div>
@@ -929,7 +928,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             type="password"
                                                             value={tavilyApiKey}
                                                             onChange={(e) => { setTavilyApiKey(e.target.value); setTavilyError(''); }}
-                                                            placeholder={hasStoredTavilyKey ? '••••••••••••' : 'Enter Tavily API key (tvly-...)'}
+                                                            placeholder={hasStoredTavilyKey ? '••••••••••••' : '输入 Tavily API 密钥 (tvly-...)'}
                                                             className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/20 transition-all"
                                                         />
                                                     </div>
@@ -944,13 +943,13 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             try {
                                                                 const result = await window.electronAPI?.setTavilyApiKey?.(tavilyApiKey.trim());
                                                                 if (result && !result.success) {
-                                                                    setTavilyError(result.error ?? 'Failed to save API key.');
+                                                                    setTavilyError(result.error ?? '保存 API 密钥失败。');
                                                                 } else {
                                                                     setHasStoredTavilyKey(true);
                                                                     setTavilyApiKey('');
                                                                 }
                                                             } catch (e: any) {
-                                                                setTavilyError(e?.message ?? 'Unexpected error saving API key.');
+                                                                setTavilyError(e?.message ?? '保存 API 密钥时发生意外错误。');
                                                             } finally {
                                                                 setTavilySaving(false);
                                                             }
@@ -959,14 +958,14 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         primary={true}
                                                         className="w-full"
                                                     >
-                                                        {tavilySaving ? 'Saving...' : 'Save API Key'}
+                                                        {tavilySaving ? '保存中…' : '保存 API 密钥'}
                                                     </MagneticButton>
                                                 </div>
 
                                                 <div className="mt-3 flex items-start gap-2 px-3 py-2.5 bg-bg-input/50 rounded-lg">
                                                     <Info size={12} className="text-text-tertiary shrink-0 mt-0.5" />
                                                     <p className="text-[10px] text-text-tertiary leading-relaxed">
-                                                        If not provided, LLM general knowledge is used for company research, which may be outdated. Get your free API key at <span className="text-emerald-500/80 hover:text-emerald-400 underline underline-offset-2 cursor-pointer" onClick={() => window.electronAPI?.openExternal?.('https://app.tavily.com/home')}>app.tavily.com</span>. Keys start with <code className="text-emerald-500/80">tvly-</code>.
+                                                        如未提供，将使用大语言模型的一般知识进行公司调研，信息可能已过时。在 <span className="text-emerald-500/80 hover:text-emerald-400 underline underline-offset-2 cursor-pointer" onClick={() => window.electronAPI?.openExternal?.('https://app.tavily.com/home')}>app.tavily.com</span> 获取免费 API 密钥。密钥以 <code className="text-emerald-500/80">tvly-</code> 开头。
                                                     </p>
                                                 </div>
                                             </div>
@@ -983,12 +982,11 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         <div>
                                                             <div className="flex items-center gap-2">
                                                                 <h4 className="text-sm font-bold text-text-primary">
-                                                                    Company Intel: <span className="text-purple-400">{profileData.activeJD.company}</span>
+                                                                    公司情报：<span className="text-purple-400">{profileData.activeJD.company}</span>
                                                                 </h4>
-                                                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full tracking-widest uppercase bg-purple-500/15 text-purple-400 border border-purple-500/25">测试版</span>
                                                             </div>
                                                             <p className="text-[11px] text-text-secondary mt-0.5">
-                                                                {companyDossier ? 'Research complete' : 'Run research to get hiring strategy, salaries & competitors'}
+                                                                {companyDossier ? '调研完成' : '运行调研以获取招聘策略、薪资和竞争对手信息'}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -1006,7 +1004,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                     setCompanySearchQuotaExhausted(true);
                                                                 }
                                                             } catch (e) {
-                                                                console.error('Research failed:', e);
+                                                                console.error('调研失败：', e);
                                                             } finally {
                                                                 setCompanyResearching(false);
                                                             }
@@ -1014,7 +1012,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         disabled={companyResearching}
                                                     >
                                                         {companyResearching ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
-                                                        {companyResearching ? 'Researching...' : companyDossier ? 'Refresh' : 'Research Now'}
+                                                        {companyResearching ? '调研中…' : companyDossier ? '刷新' : '立即调研'}
                                                     </MagneticButton>
                                                 </div>
 
@@ -1023,8 +1021,8 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/8 border border-amber-500/20 text-[11px] text-amber-400 leading-relaxed">
                                                         <span className="shrink-0 mt-[1px]">⚠</span>
                                                         <span>
-                                                            Web search credits exhausted for this month — showing AI-only research instead.
-                                                            Resets next billing cycle or <span className="underline cursor-pointer" onClick={() => (window.electronAPI as any)?.openExternal?.('https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl')}>upgrade your plan</span>.
+                                                            本月网络搜索额度已用完 — 仅显示 AI 调研结果。
+                                                            将在下个计费周期重置，或<span className="underline cursor-pointer" onClick={() => (window.electronAPI as any)?.openExternal?.('https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl')}>升级你的计划</span>。
                                                         </span>
                                                     </div>
                                                 )}
@@ -1112,11 +1110,11 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                     {/* Sub-ratings grid */}
                                                                     <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                                                                         {[
-                                                                            { label: 'Work-Life Balance', key: 'work_life_balance' },
-                                                                            { label: 'Career Growth', key: 'career_growth' },
-                                                                            { label: 'Compensation', key: 'compensation' },
-                                                                            { label: 'Management', key: 'management' },
-                                                                            { label: 'Diversity & Inclusion', key: 'diversity' },
+                                                                            { label: '工作生活平衡', key: 'work_life_balance' },
+                                                                            { label: '职业成长', key: 'career_growth' },
+                                                                            { label: '薪酬待遇', key: 'compensation' },
+                                                                            { label: '管理风格', key: 'management' },
+                                                                            { label: '多元包容', key: 'diversity' },
                                                                         ].map(({ label, key }) => {
                                                                             const raw = (companyDossier.culture_ratings as any)[key];
                                                                             const val: number = typeof raw === 'number' ? raw : 0;
@@ -1189,7 +1187,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             <div>
                                                                 <div className="flex items-center gap-1.5 mb-2">
                                                                     <Gift size={11} className="text-emerald-400" />
-                                                                    <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide">Benefits & Perks</div>
+                                                                    <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide">福利与待遇</div>
                                                                 </div>
                                                                 <div className="flex flex-wrap gap-1.5">
                                                                     {companyDossier.benefits.map((b: string, i: number) => (
@@ -1236,17 +1234,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         {/* Sources count */}
                                                         {companyDossier.sources?.length > 0 && (
                                                             <div className="text-[10px] text-text-tertiary mt-2">
-                                                                Sources: {companyDossier.sources.filter(Boolean).length} references
+                                                                来源：{companyDossier.sources.filter(Boolean).length} 条引用
                                                             </div>
                                                         )}
 
-                                                        {/* Beta disclaimer */}
-                                                        <div className="mt-4 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-purple-500/5 border border-purple-500/15">
-                                                            <span className="text-purple-400/70 mt-px shrink-0">⚠</span>
-                                                            <p className="text-[10px] text-text-tertiary leading-relaxed">
-                                                                <span className="font-semibold text-purple-400/80">Beta feature.</span> Company research is AI-generated and may contain inaccuracies. Verify salary figures and hiring details independently before use.
-                                                            </p>
-                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
@@ -1274,7 +1265,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             <div>
                                                                 <h3 className="text-[13px] font-bold text-text-primary tracking-tight">谈判脚本</h3>
                                                                 <p className="text-[10px] text-text-tertiary mt-0.5 tracking-wide uppercase">
-                                                                    {negotiationScript ? `Tailored for ${profileData?.activeJD?.company || 'this role'}` : 'AI-powered salary coaching'}
+                                                                    {negotiationScript ? `为 ${profileData?.activeJD?.company || '该职位'} 定制` : 'AI 薪资谈判指导'}
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -1289,9 +1280,9 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                             if (result?.success && result.script) {
                                                                                 setNegotiationScript(result.script);
                                                                             } else {
-                                                                                setNegotiationError(result?.error || 'Failed to regenerate');
+                                                                                setNegotiationError(result?.error || '重新生成失败');
                                                                             }
-                                                                        } catch { setNegotiationError('Generation failed'); }
+                                                                        } catch { setNegotiationError('生成失败'); }
                                                                         finally { setNegotiationGenerating(false); }
                                                                     }}
                                                                     disabled={negotiationGenerating}
@@ -1311,9 +1302,9 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                             if (result?.success && result.script) {
                                                                                 setNegotiationScript(result.script);
                                                                             } else {
-                                                                                setNegotiationError(result?.error || 'Failed to generate');
+                                                                                setNegotiationError(result?.error || '生成失败');
                                                                             }
-                                                                        } catch { setNegotiationError('Generation failed'); }
+                                                                        } catch { setNegotiationError('生成失败'); }
                                                                         finally { setNegotiationGenerating(false); }
                                                                     }}
                                                                     disabled={negotiationGenerating}
@@ -1321,7 +1312,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                     style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(6,182,212,0.15) 100%)', border: '1px solid rgba(16,185,129,0.3)', color: '#34d399' }}
                                                                 >
                                                                     {negotiationGenerating ? <RefreshCw size={11} className="animate-spin" /> : <Sparkles size={11} />}
-                                                                    {negotiationGenerating ? 'Generating…' : 'Generate Script'}
+                                                                    {negotiationGenerating ? '生成中…' : '生成脚本'}
                                                                 </MagneticButton>
                                                             )}
                                                         </div>
@@ -1378,7 +1369,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                             {negotiationScript.salary_range.max.toLocaleString()}
                                                                         </div>
                                                                         {negotiationScript.sources?.length > 0 && (
-                                                                            <div className="text-[9px] text-text-tertiary mt-1">{negotiationScript.sources.length} market source{negotiationScript.sources.length > 1 ? 's' : ''}</div>
+                                                                            <div className="text-[9px] text-text-tertiary mt-1">{negotiationScript.sources.length} 个市场来源</div>
                                                                         )}
                                                                     </div>
                                                                     <span className={`text-[9px] font-bold px-2 py-1 rounded-full tracking-wide ${
@@ -1395,8 +1386,8 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             {[
                                                                 {
                                                                     step: '01',
-                                                                    label: 'Opening',
-                                                                    sublabel: 'When asked about salary expectations',
+                                                                    label: '开场',
+                                                                    sublabel: '当被问及薪资期望时',
                                                                     content: negotiationScript.opening_line,
                                                                     accent: '#10b981',
                                                                     accentBg: 'rgba(16,185,129,0.07)',
@@ -1405,8 +1396,8 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                 },
                                                                 {
                                                                     step: '02',
-                                                                    label: 'Justify Your Ask',
-                                                                    sublabel: 'Link your track record to the number',
+                                                                    label: '论证你的要价',
+                                                                    sublabel: '将你的业绩与数字关联',
                                                                     content: negotiationScript.justification,
                                                                     accent: '#60a5fa',
                                                                     accentBg: 'rgba(96,165,250,0.07)',
@@ -1415,8 +1406,8 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                 },
                                                                 {
                                                                     step: '03',
-                                                                    label: 'Counter & Hold',
-                                                                    sublabel: 'If they come back lower',
+                                                                    label: '反击与坚持',
+                                                                    sublabel: '如果对方报价更低',
                                                                     content: negotiationScript.counter_offer_fallback,
                                                                     accent: '#fb923c',
                                                                     accentBg: 'rgba(251,146,60,0.07)',
@@ -1427,7 +1418,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                 <div key={s.step} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${s.accentBorder}`, background: s.accentBg }}>
                                                                     <div className="flex items-center justify-between px-3.5 pt-3 pb-2">
                                                                         <div className="flex items-center gap-2">
-                                                                            <span className="text-[10px] font-black tracking-widest" style={{ color: s.accent, opacity: 0.6 }}>STEP {s.step}</span>
+                                                                            <span className="text-[10px] font-black tracking-widest" style={{ color: s.accent, opacity: 0.6 }}>步骤 {s.step}</span>
                                                                             <span className="text-[11px] font-bold text-text-primary">{s.label}</span>
                                                                         </div>
                                                                         <button
@@ -1436,7 +1427,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                             className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-medium transition-all hover:bg-bg-input text-text-tertiary hover:text-text-secondary"
                                                                         >
                                                                             <Check size={9} />
-                                                                            Copy
+                                                                            复制
                                                                         </button>
                                                                     </div>
                                                                     <p className="text-[10px] text-text-tertiary px-3.5 pb-2 -mt-1 tracking-wide">{s.sublabel}</p>

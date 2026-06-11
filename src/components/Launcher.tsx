@@ -416,18 +416,11 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                         <div className="flex-1 pt-[2px]">
                                             <h3 className="text-[14px] font-semibold tracking-[-0.015em] mb-1 flex items-center gap-2">
                                                 <span className={isLight ? 'text-slate-900' : 'text-slate-100'}>档案智能</span>
-                                                <span className={`text-[10px] font-medium px-1.5 py-[1px] rounded-[5px] ${
-                                                    isLight
-                                                    ? 'bg-blue-50 text-blue-600 border border-blue-100/50'
-                                                    : 'bg-blue-500/10 text-blue-400'
-                                                }`}>
-                                                    Beta
-                                                </span>
                                             </h3>
                                             <p className={`text-[12px] leading-[1.35] mb-3.5 tracking-[-0.01em] ${
                                                 isLight ? 'text-slate-500' : 'text-slate-400'
                                             }`}>
-                                                Manage your persona, career history, and active job description.
+                                                管理你的专业形象、职业履历和当前职位描述。
                                             </p>
                                             <div className="flex justify-end gap-1.5 isolate">
                                                 <button 
