@@ -982,6 +982,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // CQ-06 fix: cancel in-flight stream before re-init (engine only, not session)
         appState.getIntelligenceManager().resetEngine();
         appState.getIntelligenceManager().initializeLLMs();
+        broadcast('credentials-changed');
 
         return { success: true };
       } catch (error: any) {
@@ -1178,6 +1179,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       // Return masked versions for security (just indicate if set)
       const hasKey = (key?: string) => !!(key && key.trim().length > 0);
+      const masked = (key?: string) => (hasKey(key) ? '•'.repeat(24) : '');
 
       return {
         hasGeminiKey: hasKey(creds.geminiApiKey),
@@ -1186,6 +1188,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasClaudeKey: hasKey(creds.claudeApiKey),
         hasDoubaoKey: hasKey(creds.doubaoLlmApiKey),
         hasNativelyKey: hasKey(creds.nativelyApiKey),
+        geminiKey: masked(creds.geminiApiKey),
+        groqKey: masked(creds.groqApiKey),
+        openaiKey: masked(creds.openaiApiKey),
+        claudeKey: masked(creds.claudeApiKey),
+        doubaoKey: masked(creds.doubaoLlmApiKey),
         googleServiceAccountPath: creds.googleServiceAccountPath || null,
         sttProvider: creds.sttProvider || 'none',
         groqSttModel: creds.groqSttModel || 'whisper-large-v3-turbo',
@@ -1230,6 +1237,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasClaudeKey: false,
         hasDoubaoKey: false,
         hasNativelyKey: false,
+        geminiKey: '',
+        groqKey: '',
+        openaiKey: '',
+        claudeKey: '',
+        doubaoKey: '',
         googleServiceAccountPath: null,
         sttProvider: 'none',
         groqSttModel: 'whisper-large-v3-turbo',
