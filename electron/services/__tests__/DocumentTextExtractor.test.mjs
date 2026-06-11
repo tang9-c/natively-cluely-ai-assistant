@@ -36,6 +36,15 @@ describe('DocumentTextExtractor', () => {
     assert.equal(text, 'Hello World');
   });
 
+  it('extracts markdown text from a .md file', async () => {
+    const filePath = path.join(tmpDir, 'resume.md');
+    fs.writeFileSync(filePath, '# 唐九辰\n\n## 技能\n- Python\n- TypeScript\n\n[链接](https://example.com)', 'utf8');
+    const text = await DocumentTextExtractor.extract(filePath);
+    assert.ok(text.includes('唐九辰'));
+    assert.ok(text.includes('Python'));
+    assert.ok(text.includes('TypeScript'));
+  });
+
   it('rejects unsupported extensions', async () => {
     const filePath = path.join(tmpDir, 'resume.png');
     fs.writeFileSync(filePath, 'not used');
