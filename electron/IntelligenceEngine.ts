@@ -661,6 +661,7 @@ export class IntelligenceEngine extends EventEmitter {
 
             fullAnswer = IntelligenceEngine.normalizeSuggestedAnswer(fullAnswer);
 
+
             if (IntelligenceEngine.isNonAnswerSentinel(fullAnswer)) {
                 if (isSpeculative) {
                     this.speculativeText = null;

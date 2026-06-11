@@ -173,3 +173,4 @@ test('runWhatShouldISay preserves normal paragraph breaks', async () => {
   assert.equal(answer, paragraphAnswer);
   assert.equal(session.getFullUsage()[0].answer, paragraphAnswer);
 });
+
