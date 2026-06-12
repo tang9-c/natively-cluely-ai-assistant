@@ -61,9 +61,15 @@ export class EmbeddingProviderResolver {
     if (config.doubaoKey) {
       try {
         assertProviderDataScopes('doubao_embeddings', ['embeddings'], config.providerDataScopes);
-        // Use configured endpoint ID, then env var, then default
-        const doubaoModel = config.doubaoEmbeddingModel || process.env.DOUBAO_EMBEDDING_MODEL || undefined;
-        candidates.push(new DoubaoEmbeddingProvider(config.doubaoKey, doubaoModel));
+        // Use configured endpoint ID, then env var. Skip Doubao entirely if no
+        // endpoint ID is configured — the Ark API requires an endpoint ID, and
+        // probing with a missing/invalid one just produces a 404.
+        const doubaoModel = config.doubaoEmbeddingModel || process.env.DOUBAO_EMBEDDING_MODEL;
+        if (doubaoModel) {
+          candidates.push(new DoubaoEmbeddingProvider(config.doubaoKey, doubaoModel));
+        } else {
+          console.log('[EmbeddingProviderResolver] Doubao API key present but no embedding endpoint ID configured; skipping');
+        }
       } catch (error) {
         if (error instanceof ProviderScopeError) {
           embeddingsDenied = true;

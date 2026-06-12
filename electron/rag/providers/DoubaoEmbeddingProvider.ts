@@ -24,6 +24,12 @@ export class DoubaoEmbeddingProvider implements IEmbeddingProvider {
   }
 
   async isAvailable(): Promise<boolean> {
+    // Skip the network probe if no valid endpoint ID is configured
+    if (!this.model || this.model === 'unknown') {
+      console.warn('[DoubaoEmbedding] No endpoint ID configured; skipping availability probe');
+      return false;
+    }
+
     // Fast check — do a single test embed and detect dimensions from the response
     try {
       const emb = await this.embed('test');
