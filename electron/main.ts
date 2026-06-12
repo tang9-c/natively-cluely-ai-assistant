@@ -127,6 +127,12 @@ type MacScreenCaptureCapability = {
   error?: string;
 };
 
+type MacScreenCaptureProbe = {
+  capturable: boolean;
+  sourceCount: number;
+  error?: string;
+};
+
 function getMacScreenCaptureStatus(): MacScreenCaptureStatus {
   if (process.platform !== 'darwin') return 'granted';
 
@@ -145,11 +151,9 @@ function getMacScreenCaptureStatus(): MacScreenCaptureStatus {
   }
 }
 
-async function resolveMacScreenCaptureCapability(context: string): Promise<MacScreenCaptureCapability> {
-  const status = getMacScreenCaptureStatus();
-
-  if (process.platform !== 'darwin' || !app.isPackaged || status !== 'denied') {
-    return { status, capturable: true, effectiveDenied: false, sourceCount: 0 };
+async function probeMacScreenCaptureSources(context: string): Promise<MacScreenCaptureProbe> {
+  if (process.platform !== 'darwin' || !app.isPackaged) {
+    return { capturable: true, sourceCount: 0 };
   }
 
   try {
@@ -158,18 +162,32 @@ async function resolveMacScreenCaptureCapability(context: string): Promise<MacSc
       thumbnailSize: { width: 1, height: 1 },
     });
     const sourceCount = sources.filter((source) => source.id.startsWith('screen:')).length;
-    const capturable = sourceCount > 0;
-
-    if (capturable) {
-      console.warn(`[Main] Screen Recording status is denied during ${context}, but capture probe succeeded; continuing without permission banner.`);
-    }
-
-    return { status, capturable, effectiveDenied: !capturable, sourceCount };
+    return { capturable: sourceCount > 0, sourceCount };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`[Main] Screen Recording capture probe failed during ${context}: ${message}`);
-    return { status, capturable: false, effectiveDenied: true, sourceCount: 0, error: message };
+    return { capturable: false, sourceCount: 0, error: message };
   }
+}
+
+async function resolveMacScreenCaptureCapability(context: string): Promise<MacScreenCaptureCapability> {
+  const status = getMacScreenCaptureStatus();
+
+  if (process.platform !== 'darwin' || !app.isPackaged || status !== 'denied') {
+    return { status, capturable: true, effectiveDenied: false, sourceCount: 0 };
+  }
+
+  const probe = await probeMacScreenCaptureSources(context);
+  if (probe.capturable) {
+    console.warn(`[Main] Screen Recording status is denied during ${context}, but capture probe succeeded; continuing without permission banner.`);
+  }
+  return {
+    status,
+    capturable: probe.capturable,
+    effectiveDenied: !probe.capturable,
+    sourceCount: probe.sourceCount,
+    error: probe.error,
+  };
 }
 
 /**
@@ -188,6 +206,7 @@ async function resolveMacScreenCaptureCapability(context: string): Promise<MacSc
 type PermissionReason =
   | 'screen-recording-denied'
   | 'mac-screen-recording-revoked-rebuild'
+  | 'mac-system-audio-zero-fill'
   | 'mic-denied'
   | 'mic-zero-fill'
   | 'mac-same-device-input-output'
@@ -197,7 +216,7 @@ function formatPermissionMessage(reason: PermissionReason, extra?: { device?: st
   switch (reason) {
     case 'screen-recording-denied':
       return isMac
-        ? 'Screen Recording permission denied. Interviewer audio will not be captured. Enable in System Settings → Privacy & Security → Screen Recording, then restart the app.'
+        ? 'Screen Recording is not applied to this build yet. Interviewer audio will not be captured. Open System Settings → Privacy & Security → Screen Recording, toggle Natively off and back on, then restart the app.'
         : 'System audio capture is unavailable. Interviewer audio will not be captured. Check your audio device routing in Settings and restart the meeting.';
     case 'mac-screen-recording-revoked-rebuild':
       // Defense-in-depth: even though all call sites must be darwin-gated
@@ -206,6 +225,9 @@ function formatPermissionMessage(reason: PermissionReason, extra?: { device?: st
       // than leak macOS UI strings to Windows users.
       if (!isMac) return formatPermissionMessage('system-audio-stuck');
       return 'System audio is being captured but every sample is silent. This usually means macOS Screen Recording permission needs to be re-granted to this build of Natively. Open System Settings → Privacy & Security → Screen Recording, toggle Natively off and back on, then restart the app. (If you recently rebuilt or updated, the previous grant may not apply.)';
+    case 'mac-system-audio-zero-fill':
+      if (!isMac) return formatPermissionMessage('system-audio-stuck');
+      return 'System audio capture is running but every sample is silent. Check that the interviewer audio is actually playing through the selected output device. If the output route changed, re-select the speakers/headphones. If you recently rebuilt or updated Natively, re-toggle Screen Recording for Natively and restart the app.';
     case 'mic-denied':
       return isMac
         ? 'Microphone access denied. Please allow microphone access in System Settings → Privacy & Security → Microphone, then restart Natively.'
@@ -1257,24 +1279,28 @@ export class AppState {
           : null;
         if (sameDeviceName) {
           const msg = formatPermissionMessage('mac-same-device-input-output', { device: sameDeviceName });
+          const backend = capture.getBackendName();
           console.warn(`${prefix}SystemAudioCapture ${msg}`);
           this.broadcast('audio-capture-failed', {
             channel: 'system',
             message: msg,
             attempt: 0,
             maxAttempts: 3,
+            backend,
             terminal: false,
             stuck: true,
           });
           return;
         }
 
+        const backend = capture.getBackendName();
         console.warn(`${prefix}SystemAudioCapture produced 0 chunks in 8s — likely silent capture (route mismatch or permission revoked).`);
         this.broadcast('audio-capture-failed', {
           channel: 'system',
           message: formatPermissionMessage('system-audio-stuck'),
           attempt: 0,
           maxAttempts: 3,
+          backend,
           terminal: false,
           stuck: true,
         });
@@ -1329,10 +1355,11 @@ export class AppState {
       }
       if (!this._sysSttRateApplied && this.googleSTT && this.systemAudioCapture === capture) {
         const rate = capture.getSampleRate();
+        const backend = capture.getBackendName();
         this.googleSTT.setSampleRate(rate);
         this.googleSTT.setAudioChannelCount?.(1);
         this._sysSttRateApplied = true;
-        console.log(`${prefix}Interviewer STT rate locked from first chunk: ${rate}Hz`);
+        console.log(`${prefix}Interviewer STT rate locked from first chunk: ${rate}Hz (backend=${backend})`);
       }
       if (chunkCount <= 3 || chunkCount % 500 === 0) {
         console.log(`${prefix}SystemAudio->STT: chunk #${chunkCount}, ${chunk.length}B, googleSTT=${this.googleSTT ? 'active' : 'NULL'}`);
@@ -1358,15 +1385,7 @@ export class AppState {
           zerofillLatched = true;
         } else if (Date.now() - firstChunkAt >= ZEROFILL_OBSERVATION_MS) {
           zerofillTriggered = true;
-          console.warn(`${prefix}SystemAudio chunks all zero-filled for ${ZEROFILL_OBSERVATION_MS / 1000}s — TCC denial suspected (Screen Recording grant may not apply to this binary).`);
-          this.broadcast('audio-capture-failed', {
-            channel: 'system',
-            message: formatPermissionMessage('mac-screen-recording-revoked-rebuild'),
-            attempt: 0,
-            maxAttempts: 3,
-            terminal: false,
-            stuck: true,
-          });
+          void this.handleZeroFilledSystemAudio(capture, prefix, ZEROFILL_OBSERVATION_MS);
         }
       }
 
@@ -1382,6 +1401,60 @@ export class AppState {
     // setupAudioRecoveryHandler registers its own 'error' listener — do not
     // add a duplicate logger here or the same error reports twice.
     this.setupAudioRecoveryHandler();
+  }
+
+  private async handleZeroFilledSystemAudio(
+    capture: SystemAudioCapture,
+    prefix: string,
+    observationMs: number,
+  ): Promise<void> {
+    if (this.systemAudioCapture !== capture) return;
+    if (!this.isMeetingActive) return;
+
+    const sameDeviceName = process.platform === 'darwin'
+      ? this.detectSameInputOutputDevice()
+      : null;
+    if (sameDeviceName) {
+      const message = formatPermissionMessage('mac-same-device-input-output', { device: sameDeviceName });
+      const backend = capture.getBackendName();
+      console.warn(`${prefix}SystemAudio zero-fill matched same-device conflict: ${sameDeviceName}`);
+      this.broadcast('audio-capture-failed', {
+        channel: 'system',
+        message,
+        attempt: 0,
+        maxAttempts: 3,
+        backend,
+        terminal: false,
+        stuck: true,
+      });
+      return;
+    }
+
+    const screenCapability = await resolveMacScreenCaptureCapability('system audio zero-fill detector');
+    const screenProbe = await probeMacScreenCaptureSources('system audio zero-fill detector');
+    const nativeRate = capture.getNativeSampleRate();
+    const emittedRate = capture.getSampleRate();
+    const backend = capture.getBackendName();
+    console.warn(
+      `${prefix}SystemAudio chunks all zero-filled for ${observationMs / 1000}s — ` +
+      `backend=${backend} status=${screenCapability.status} capturable=${screenProbe.capturable} sources=${screenProbe.sourceCount} ` +
+      `emittedRate=${emittedRate}Hz nativeRate=${nativeRate || 0}Hz`
+    );
+
+    const message =
+      screenCapability.effectiveDenied || !screenProbe.capturable
+        ? formatPermissionMessage('mac-screen-recording-revoked-rebuild')
+        : formatPermissionMessage('mac-system-audio-zero-fill');
+
+    this.broadcast('audio-capture-failed', {
+      channel: 'system',
+      message,
+      attempt: 0,
+      maxAttempts: 3,
+      backend,
+      terminal: false,
+      stuck: true,
+    });
   }
 
   private wireMicCapture(capture: MicrophoneCapture, label: string = ''): void {
@@ -2200,8 +2273,10 @@ export class AppState {
         message: err.message,
         attempt: this._systemAudioRecoveryAttempts,
         maxAttempts: 3,
+        backend: this.systemAudioCapture?.getBackendName(),
       });
 
+      const oldCapture = this.systemAudioCapture;
       try {
         // Brief delay so the OS can release the device before re-acquisition
         await new Promise<void>(resolve => {
@@ -2219,7 +2294,6 @@ export class AppState {
         // destroy() (called via the new instance shadow) synchronously removes
         // listeners; the old monitor's stop/join still completes in setImmediate.
         // The new instance has its own fresh state so there's no race.
-        const oldCapture = this.systemAudioCapture;
         oldCapture?.destroy();
         this.systemAudioCapture = null;
         this._sysSttRateApplied = false;
@@ -2258,6 +2332,7 @@ export class AppState {
             message: `System audio capture gave up after 3 attempts. Last error: ${recoveryErr?.message || err.message}`,
             attempt: this._systemAudioRecoveryAttempts,
             maxAttempts: 3,
+            backend: oldCapture?.getBackendName(),
             terminal: true,
           });
         }
@@ -2733,7 +2808,7 @@ export class AppState {
         if (this._verboseLogging) {
           const requestedInput = metadata?.audio?.inputDeviceId || 'default';
           const requestedOutput = metadata?.audio?.outputDeviceId || 'default';
-          const backend = requestedOutput === 'sck' ? 'sck' : 'coreaudio';
+          const backend = this.systemAudioCapture?.getBackendName() || 'uninitialized';
           const sysRate = this.systemAudioCapture?.getSampleRate() || 48000;
           const micRate = this.microphoneCapture?.getSampleRate() || 48000;
           console.log(`[Main][debug] Audio pipeline: input=${requestedInput} output=${requestedOutput} backend=${backend} sysRate=${sysRate}Hz micRate=${micRate}Hz`);

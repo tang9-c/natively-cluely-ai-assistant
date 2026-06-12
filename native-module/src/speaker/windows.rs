@@ -33,6 +33,10 @@ impl SpeakerStream {
         self.actual_sample_rate
     }
 
+    pub fn backend_name(&self) -> &'static str {
+        "wasapi"
+    }
+
     pub fn take_consumer(&mut self) -> Option<HeapCons<f32>> {
         self.consumer.take()
     }

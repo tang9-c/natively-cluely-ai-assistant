@@ -133,6 +133,9 @@ pub struct SystemAudioCapture {
     /// Shared atomic NATIVE hardware rate (e.g. 48000). Kept for diagnostics and
     /// HFP/Bluetooth-degradation detection — distinct from the emitted rate above.
     native_sample_rate: Arc<AtomicU32>,
+    /// Best-effort backend label ("coreaudio", "sck", "wasapi") so the JS
+    /// diagnostics can report which native path actually initialized.
+    backend_name: Arc<std::sync::Mutex<String>>,
     device_id: Option<String>,
 }
 
@@ -150,6 +153,7 @@ impl SystemAudioCapture {
             // Native default 48kHz (standard macOS CoreAudio rate) until the
             // background thread reports the real hardware rate.
             native_sample_rate: Arc::new(AtomicU32::new(48000)),
+            backend_name: Arc::new(std::sync::Mutex::new(String::from("uninitialized"))),
             device_id,
         })
     }
@@ -166,6 +170,14 @@ impl SystemAudioCapture {
     #[napi]
     pub fn get_native_sample_rate(&self) -> u32 {
         self.native_sample_rate.load(Ordering::Acquire)
+    }
+
+    #[napi]
+    pub fn get_backend_name(&self) -> String {
+        self.backend_name
+            .lock()
+            .map(|name| name.clone())
+            .unwrap_or_else(|_| String::from("unknown"))
     }
 
     #[napi]
@@ -186,6 +198,7 @@ impl SystemAudioCapture {
         let stop_signal = self.stop_signal.clone();
         let sample_rate_shared = self.sample_rate.clone();
         let native_rate_shared = self.native_sample_rate.clone();
+        let backend_name_shared = self.backend_name.clone();
         let device_id = self.device_id.clone();
 
         // ALL init + DSP runs in background thread — start() returns INSTANTLY
@@ -230,6 +243,11 @@ impl SystemAudioCapture {
                     return;
                 }
             };
+
+            if let Ok(mut name) = backend_name_shared.lock() {
+                *name = stream.backend_name().to_string();
+            }
+            println!("[SystemAudioCapture] Using backend: {}", stream.backend_name());
             let mut consumer = match stream.take_consumer() {
                 Some(c) => c,
                 None => {

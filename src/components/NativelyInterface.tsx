@@ -859,6 +859,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   type SystemAudioWarning = {
     kind: 'screen-recording-permission' | 'audio-capture-failure';
     message: string;
+    backend?: string;
   };
   const [systemAudioWarning, setSystemAudioWarning] = useState<SystemAudioWarning | null>(null);
   useEffect(() => {
@@ -876,7 +877,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // recovery attempts shouldn't spam the banner since recovery
       // typically succeeds within ~1.5s.
       if (payload.terminal || payload.stuck) {
-        setSystemAudioWarning({ kind: 'audio-capture-failure', message: payload.message });
+        setSystemAudioWarning({
+          kind: 'audio-capture-failure',
+          message: payload.message,
+          backend: payload.backend,
+        });
         setIsExpanded(true);
       }
     });
@@ -3576,6 +3581,11 @@ Provide only the answer, nothing else.`;
                     <p className="text-[11px] text-yellow-600/70 dark:text-yellow-400/60 leading-snug pl-[26px]">
                       {systemAudioWarning.message}
                     </p>
+                    {systemAudioWarning.kind === 'audio-capture-failure' && systemAudioWarning.backend ? (
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-yellow-700/65 dark:text-yellow-400/55 leading-snug pl-[26px]">
+                        后端: {systemAudioWarning.backend}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {systemAudioWarning.kind === 'screen-recording-permission' ? (
