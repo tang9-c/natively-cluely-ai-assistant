@@ -173,7 +173,10 @@ export function truncateTranscriptToFit(
   transcript: TranscriptTurn[],
   budgetTokens: number
 ): TranscriptTurn[] {
-  if (!transcript?.length || budgetTokens <= 0) return transcript ?? [];
+  if (!transcript?.length) return [];
+  // A non-positive budget means the caller wants zero turns — return []
+  // (NOT the full transcript, which would silently blow past the budget).
+  if (budgetTokens <= 0) return [];
   const total = (turns: TranscriptTurn[]) => turns.reduce((s, t) => s + estimateTokens(t.text) + 6, 0);
   if (total(transcript) <= budgetTokens) return transcript;
   const kept = [...transcript];
