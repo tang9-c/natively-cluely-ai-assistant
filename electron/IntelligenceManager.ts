@@ -10,7 +10,7 @@
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
 import { SessionTracker } from './SessionTracker';
-import { IntelligenceEngine } from './IntelligenceEngine';
+import { IntelligenceEngine, ClarifyResult } from './IntelligenceEngine';
 import { MeetingPersistence } from './MeetingPersistence';
 import { ScreenContext } from './services/screen/types';
 
@@ -154,7 +154,7 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.runRecap();
     }
 
-    async runClarify(): Promise<string | null> {
+    async runClarify(): Promise<ClarifyResult> {
         return this.engine.runClarify();
     }
 

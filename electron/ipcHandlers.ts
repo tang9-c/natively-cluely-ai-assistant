@@ -2668,18 +2668,35 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('generate-clarify', async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
-      const clarification = await intelligenceManager.runClarify();
-      // If null returned without throwing, the engine already set mode to idle.
-      // We must still ensure the frontend un-sticks — emit an error so onIntelligenceError fires.
-      if (clarification === null) {
+      const result = await intelligenceManager.runClarify();
+      if (result.ok === false) {
+        // `result` is narrowed to the failure variant. We still re-bind to
+        // a const to keep the body of the switch readable.
+        const failure = result;
+        let message: string;
+        switch (failure.reason) {
+          case 'no_llm':
+            message = 'Clarify 模型未初始化。请打开 Settings → AI Providers 检查当前模型是否已配置可用的 API Key,然后重试。';
+            break;
+          case 'aborted':
+            message = '上一次的澄清请求还在生成中,已被新的请求取消。请稍候再试。';
+            break;
+          case 'empty':
+            message = 'Clarify 模型未返回内容,可能是网络问题或上游限流。请稍后重试。';
+            break;
+          case 'error':
+            message = `Clarify 请求失败:${failure.detail ?? '未知错误'}`;
+            break;
+        }
+        console.warn('[IPC] generate-clarify failed:', failure.reason, failure.detail ?? '');
         const win = appState.getMainWindow();
         win?.webContents.send('intelligence-error', {
-          error:
-            'Could not generate a clarifying question. Try again after some audio context is available.',
+          error: message,
           mode: 'clarify',
         });
+        return { clarification: null, reason: failure.reason };
       }
-      return { clarification };
+      return { clarification: result.clarification };
     } catch (error: any) {
       throw error;
     }

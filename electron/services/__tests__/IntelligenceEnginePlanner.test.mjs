@@ -110,7 +110,7 @@ test('handleSuggestionTrigger routes incomplete technical restatements to clarif
   let answerCalls = 0;
   engine.runClarify = async () => {
     clarifyCalls++;
-    return 'Could you clarify the exact input, output, and constraints?';
+    return { ok: true, clarification: 'Could you clarify the exact input, output, and constraints?' };
   };
   engine.whatToAnswerLLM = {
     async *generateStream() {
@@ -136,7 +136,7 @@ test('handleSuggestionTrigger still answers complete technical restatements', as
   let answerCalls = 0;
   engine.runClarify = async () => {
     clarifyCalls++;
-    return 'wrong path';
+    return { ok: false, reason: 'no_llm' };
   };
   engine.whatToAnswerLLM = {
     async *generateStream() {
@@ -154,4 +154,72 @@ test('handleSuggestionTrigger still answers complete technical restatements', as
   assert.equal(clarifyCalls, 0);
   assert.equal(answerCalls, 1);
   assert.equal(session.getFullUsage()[0].answer, answer);
+});
+
+test('runClarify returns { ok: false, reason: "no_llm" } when clarify LLM is not initialized', async () => {
+  const { engine } = await makeEngine();
+  // The constructor auto-runs initializeLLMs(), so explicitly null out
+  // clarifyLLM to exercise the "no_llm" branch.
+  engine.clarifyLLM = null;
+  const result = await engine.runClarify();
+  assert.deepEqual(result, { ok: false, reason: 'no_llm' });
+});
+
+test('runClarify returns { ok: false, reason: "aborted" } when a new generation supersedes it', async () => {
+  const { engine } = await makeEngine();
+  // Install a slow stream that yields one token at a time so we can race
+  // a new generationId in before it finishes.
+  engine.clarifyLLM = {
+    async *generateStream() {
+      yield 'partial';
+      // Block on a microtask boundary so the test can bump currentGenerationId
+      await new Promise(resolve => setImmediate(resolve));
+      yield 'rest of stream';
+    },
+  };
+  const first = engine.runClarify();
+  // Bump generationId to force the in-flight stream to abort.
+  // Access the private field via a cast — same engine instance.
+  engine['currentGenerationId'] = 999;
+  const result = await first;
+  assert.deepEqual(result, { ok: false, reason: 'aborted' });
+});
+
+test('runClarify returns { ok: false, reason: "empty" } when the stream yields no tokens', async () => {
+  const { engine } = await makeEngine();
+  engine.clarifyLLM = {
+    async *generateStream() {
+      // yield nothing — simulates a swallowed provider error in ClarifyLLM
+    },
+  };
+  const result = await engine.runClarify();
+  assert.deepEqual(result, { ok: false, reason: 'empty' });
+});
+
+test('runClarify returns { ok: true, clarification } on a normal stream', async () => {
+  const { engine } = await makeEngine();
+  engine.clarifyLLM = {
+    async *generateStream() {
+      yield 'What ';
+      yield 'are the constraints?';
+    },
+  };
+  const result = await engine.runClarify();
+  assert.deepEqual(result, { ok: true, clarification: 'What are the constraints?' });
+});
+
+test('runClarify returns { ok: false, reason: "error", detail } when the stream throws', async () => {
+  const { engine } = await makeEngine();
+  // Swallow the 'error' event — EventEmitter throws synchronously when
+  // emit('error', ...) fires with no listener attached.
+  engine.on('error', () => {});
+  engine.clarifyLLM = {
+    async *generateStream() {
+      throw new Error('provider 401');
+    },
+  };
+  const result = await engine.runClarify();
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'error');
+  assert.equal(result.detail, 'provider 401');
 });
