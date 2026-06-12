@@ -6,34 +6,17 @@
 // service-level tests cannot cover. Each test opens the actual Electron
 // window and asserts on real UI state.
 //
-// Skip conditions (each test is skip_if'd individually so one failure
-// doesn't cascade):
-//   - ELECTRON_APP_PORT not set  → dev server not running
-//   - CI=true                   → no display available in CI containers
-//
-// To run locally against the dev server:
-//   npm run dev  (in terminal 1)
-//   npx playwright test  (in terminal 2, from repo root)
-//
-// To run headless against a built app:
-//   npm run build && npm run start &
-//   sleep 5 && npx playwright test
+// To run locally:
+//   npm run test:e2e
 
-import { test, expect, skip } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 const CI = process.env.CI === 'true';
-const APP_PORT = parseInt(process.env.ELECTRON_APP_PORT ?? '0', 10);
 
 test.describe('FINDING-006: Natively E2E smoke', () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async () => {
     if (CI) {
       test.skip();
-      return;
-    }
-    // Guard: if no dev server is running, skip instead of failing
-    if (!APP_PORT) {
-      test.skip('Set ELECTRON_APP_PORT to the dev server port (e.g. 5173) before running E2E tests');
-      return;
     }
   });
 
@@ -44,9 +27,6 @@ test.describe('FINDING-006: Natively E2E smoke', () => {
       if (m.type() === 'error') errors.push(m.text());
     });
 
-    await page.goto(`http://localhost:${APP_PORT}`);
-    // Wait for the main content area — exact selector is app-specific.
-    // We wait for any element with the "app" or "root" identifier.
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000); // allow async init
 
@@ -56,15 +36,12 @@ test.describe('FINDING-006: Natively E2E smoke', () => {
   });
 
   test('main IPC channel responds to ping', async ({ page }) => {
-    if (!APP_PORT) test.skip();
-    await page.goto(`http://localhost:${APP_PORT}`);
     await page.waitForLoadState('networkidle');
 
-    // Evaluate a ping through the preload bridge (exposed as window.electronAPI).
-    // If the preload is loaded, window.electronAPI will be truthy.
+    // The preload bridge exposes window.electronAPI with a real IPC function.
     const hasPreload = await page.evaluate(() => {
-      return typeof (window as any).electronAPI?.ping === 'function'
-        || typeof (window as any).electron === 'object';
+      const api = (window as any).electronAPI;
+      return typeof api === 'object' && typeof api.getProviderDataScopes === 'function';
     });
 
     // A missing preload is a failure — the IPC contract is broken.
@@ -72,13 +49,11 @@ test.describe('FINDING-006: Natively E2E smoke', () => {
   });
 
   test('modes panel renders with mode list', async ({ page }) => {
-    if (!APP_PORT) test.skip();
-    await page.goto(`http://localhost:${APP_PORT}`);
     await page.waitForLoadState('networkidle');
 
     // Look for the modes panel — searches by text content typical of mode names.
-    // If the UI uses a specific element, update the selector accordingly.
-    const modePanelLocator = page.locator('text=/general|sales|recruiting|team-meet|looking-for-work|technical-interview|lecture/i');
+    // The UI currently displays localized Chinese labels for default modes.
+    const modePanelLocator = page.locator('text=/通用|销售|招聘|团队会议|求职|技术面试|讲座|General|Sales|Recruiting/i');
     const visible = await modePanelLocator.first().isVisible().catch(() => false);
 
     // The mode list may be lazy; give it more time before declaring missing.
@@ -90,8 +65,6 @@ test.describe('FINDING-006: Natively E2E smoke', () => {
   });
 
   test('settings panel opens and closes', async ({ page }) => {
-    if (!APP_PORT) test.skip();
-    await page.goto(`http://localhost:${APP_PORT}`);
     await page.waitForLoadState('networkidle');
 
     // Click the settings button/icon — placeholder selector.
