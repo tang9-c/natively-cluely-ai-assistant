@@ -28,19 +28,31 @@ const shellExecAsync = util.promisify(execShell);
  *
  * On non-Darwin platforms this is a no-op (always passes).
  */
-function assertScreenRecordingPermission(): void {
+async function assertScreenRecordingPermission(): Promise<void> {
   if (process.platform !== 'darwin') return;
   // In development mode, bypass the permission check so screenshots work without
   // needing the app to be in the TCC whitelist (same policy as the startup check in main.ts).
   if (!app.isPackaged) return;
   const status = systemPreferences.getMediaAccessStatus('screen');
+  const screenRecordingRebindMessage =
+    'macOS Screen Recording is not applied to this build yet. Open System Settings > Privacy & Security > Screen Recording, toggle Natively off and back on, then restart the app.';
   switch (status) {
     case 'granted':
       return;
     case 'denied':
+      try {
+        const sources = await desktopCapturer.getSources({
+          types: ['screen'],
+          thumbnailSize: { width: 1, height: 1 },
+        });
+        if (sources.some((source) => source.id.startsWith('screen:'))) {
+          return;
+        }
+      } catch {
+        // Ignore and fall through to the user-facing error below.
+      }
       throw new Error(
-        'Screen Recording permission is denied. Enable it in System Settings > ' +
-        'Privacy & Security > Screen Recording, then restart Natively.'
+        screenRecordingRebindMessage
       );
     case 'restricted':
       throw new Error(
@@ -54,7 +66,7 @@ function assertScreenRecordingPermission(): void {
       // appears behind other apps on macOS Sequoia). Tell the user to restart instead.
       throw new Error(
         'Screen Recording permission has not been granted yet. ' +
-        'Please restart Natively — you will be prompted to grant access on next launch.'
+        'Please restart Natively — macOS will prompt for access on next launch.'
       );
   }
 }
@@ -117,7 +129,7 @@ async function getDisplaysIntersectingSelection(
   // Guard: abort early with a clear message if screen recording is not allowed.
   // Without this check, getSources() returns black thumbnails silently — the same
   // production bug that affected single-display captures (issue #133).
-  assertScreenRecordingPermission();
+  await assertScreenRecordingPermission();
 
   const displays = screen.getAllDisplays();
   const selectionRight = selection.x + selection.width;
@@ -442,7 +454,7 @@ export class ScreenshotHelper {
     // Abort early if screen recording is not usable. assertScreenRecordingPermission()
     // covers all macOS TCC states (denied, restricted, not-determined) with clear
     // user-facing messages. On non-Darwin platforms this is a no-op.
-    assertScreenRecordingPermission();
+    await assertScreenRecordingPermission();
 
     let targetDisplay: Electron.Display;
 

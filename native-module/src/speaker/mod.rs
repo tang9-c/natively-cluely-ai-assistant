@@ -59,6 +59,9 @@ pub mod fallback {
         pub fn sample_rate(&self) -> u32 {
             unreachable!("SpeakerStream is never constructed on this platform")
         }
+        pub fn backend_name(&self) -> &'static str {
+            unreachable!("SpeakerStream is never constructed on this platform")
+        }
         pub fn take_consumer(&mut self) -> Option<HeapCons<f32>> {
             unreachable!("SpeakerStream is never constructed on this platform")
         }

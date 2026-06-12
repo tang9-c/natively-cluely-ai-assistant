@@ -75,6 +75,18 @@ export class SystemAudioCapture extends EventEmitter {
         return 0;
     }
 
+    public getBackendName(): string {
+        if (!this.monitor) return 'uninitialized';
+        try {
+            if (typeof this.monitor.getBackendName === 'function') {
+                return this.monitor.getBackendName();
+            }
+        } catch (e) {
+            console.warn('[SystemAudioCapture] getBackendName failed:', e);
+        }
+        return 'unknown';
+    }
+
     /**
      * Start capturing audio
      */

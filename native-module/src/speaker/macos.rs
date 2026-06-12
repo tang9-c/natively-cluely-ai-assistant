@@ -78,6 +78,13 @@ impl SpeakerStream {
         }
     }
 
+    pub fn backend_name(&self) -> &'static str {
+        match &self.backend {
+            BackendStream::CoreAudio(_) => "coreaudio",
+            BackendStream::Sck(_) => "sck",
+        }
+    }
+
     pub fn take_consumer(&mut self) -> Option<HeapCons<f32>> {
         match &mut self.backend {
             BackendStream::CoreAudio(s) => s.take_consumer(),

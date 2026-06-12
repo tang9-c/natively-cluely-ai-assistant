@@ -32,6 +32,7 @@ export interface NativeModule {
   isAccessibilityGranted?: () => boolean;
   SystemAudioCapture: new (deviceId?: string | null) => {
     getSampleRate(): number;
+    getBackendName?: () => string;
     start(callback: (...args: any[]) => any, onSpeechEnded?: (...args: any[]) => any): void;
     stop(): void;
   };
