@@ -2639,7 +2639,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
 
                             {activeTab === 'help' && (
-                                <HelpSettings onNavigate={setActiveTab} />
+                                <HelpSettings />
                             )}
 
                             {activeTab === 'about' && (
