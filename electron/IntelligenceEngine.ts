@@ -68,6 +68,19 @@ export interface IntelligenceModeEvents {
     'dynamic_action_emitted': (action: DynamicAction) => void;
 }
 
+/**
+ * Structured result for `runClarify()`.
+ *
+ * Replaces the previous `string | null` signature so callers (and ultimately
+ * the IPC layer) can surface a real failure reason to the user instead of
+ * papering over every failure with the misleading "no audio context" message.
+ */
+export type ClarifyFailureReason = 'no_llm' | 'aborted' | 'empty' | 'error';
+
+export type ClarifyResult =
+    | { ok: true; clarification: string }
+    | { ok: false; reason: ClarifyFailureReason; detail?: string };
+
 export class IntelligenceEngine extends EventEmitter {
     // Mode state
     private activeMode: IntelligenceMode = 'idle';
@@ -769,8 +782,13 @@ export class IntelligenceEngine extends EventEmitter {
     /**
      * MODE: Clarify
      * Ask a clarifying question to the interviewer
+     *
+     * Returns a structured `ClarifyResult` so the caller can distinguish the
+     * real failure reason (no LLM configured, aborted by a new request, empty
+     * stream, thrown error) instead of treating every failure as the same
+     * generic "no audio context" error.
      */
-    async runClarify(): Promise<string | null> {
+    async runClarify(): Promise<ClarifyResult> {
         console.log('[IntelligenceEngine] runClarify called');
         this.setMode('clarify');
 
@@ -778,7 +796,7 @@ export class IntelligenceEngine extends EventEmitter {
             if (!this.clarifyLLM) {
                 console.error('[IntelligenceEngine] ClarifyLLM not initialized');
                 this.setMode('idle');
-                return null;
+                return { ok: false, reason: 'no_llm' };
             }
 
             const rawContext = this.session.getFormattedContext(180);
@@ -803,7 +821,7 @@ export class IntelligenceEngine extends EventEmitter {
 
             if (streamAborted) {
                 this.setMode('idle');
-                return null;
+                return { ok: false, reason: 'aborted' };
             }
 
             // Only update history and emit final if not aborted
@@ -821,12 +839,22 @@ export class IntelligenceEngine extends EventEmitter {
             if (this.currentGenerationId === generationId) {
                 this.setMode('idle');
             }
-            return fullClarification;
+
+            if (!fullClarification) {
+                // Stream finished with no tokens — usually means the LLM provider
+                // errored and the inner `ClarifyLLM` swallowed it. Surface as
+                // 'empty' so the user sees a real message, not a false
+                // "audio context" hint.
+                return { ok: false, reason: 'empty' };
+            }
+
+            return { ok: true, clarification: fullClarification };
 
         } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error);
             this.emit('error', error as Error, 'clarify');
             this.setMode('idle');
-            return null;
+            return { ok: false, reason: 'error', detail };
         }
     }
 
