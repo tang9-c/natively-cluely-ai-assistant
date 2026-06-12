@@ -17,29 +17,19 @@
 // tests could not show on their own.
 //
 // To run locally:
-//   npm run dev              # Vite dev server on the configured port
-//   npm run electron:dev     # Electron main process pointing at the dev server
-//   ELECTRON_E2E=1 ELECTRON_APP_PORT=5173 npm run test:e2e:parity
-//
-// In CI, ELECTRON_E2E is unset so the spec auto-skips.
+//   npm run test:e2e
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 const E2E_ENABLED = process.env.ELECTRON_E2E === '1';
-const APP_PORT = parseInt(process.env.ELECTRON_APP_PORT ?? '0', 10);
 
 test.describe('Cluely-parity gap E2E evidence', () => {
   test.beforeEach(() => {
     if (!E2E_ENABLED) {
       test.skip(true, 'Set ELECTRON_E2E=1 to run live parity-gap evidence');
     }
-    if (!APP_PORT) {
-      test.skip(true, 'Set ELECTRON_APP_PORT (e.g. 5173) to the renderer port');
-    }
   });
-
   test('providerDataScopes round-trips through real IPC', async ({ page }) => {
-    await page.goto(`http://localhost:${APP_PORT}`);
     await page.waitForLoadState('networkidle');
 
     const before = await page.evaluate(async () => {
@@ -75,7 +65,6 @@ test.describe('Cluely-parity gap E2E evidence', () => {
   });
 
   test('meetingRetention round-trips through real IPC', async ({ page }) => {
-    await page.goto(`http://localhost:${APP_PORT}`);
     await page.waitForLoadState('networkidle');
 
     const initial = await page.evaluate(async () => {
@@ -100,7 +89,6 @@ test.describe('Cluely-parity gap E2E evidence', () => {
   });
 
   test('renderer exposes the gap-related preload APIs', async ({ page }) => {
-    await page.goto(`http://localhost:${APP_PORT}`);
     await page.waitForLoadState('networkidle');
 
     const apiSurface = await page.evaluate(() => {

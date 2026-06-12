@@ -1,10 +1,11 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
-  timeout: 30_000,
+  timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
+  workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     trace: 'on-first-retry',
@@ -12,17 +13,13 @@ export default defineConfig({
   },
   projects: [
     {
-      name: 'electron-chrome',
-      use: {
-        ...devices['Desktop Chrome'],
-        channel: undefined,
-      },
+      name: 'electron',
     },
   ],
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
+    command: 'npm run build:electron && npm run dev',
+    url: 'http://localhost:5180',
     reuseExistingServer: true,
-    timeout: 60_000,
+    timeout: 120_000,
   },
 });
