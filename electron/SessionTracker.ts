@@ -64,6 +64,10 @@ export class SessionTracker {
 
     // Track interim interviewer segment
     private lastInterimInterviewer: TranscriptSegment | null = null;
+    // Track interim user (mic) segment — mirrored path so stop-meeting can
+    // promote the user's last unfinalized utterance to final instead of
+    // silently dropping it. See flushInterimTranscript().
+    private lastInterimUser: TranscriptSegment | null = null;
 
     // Detected coding question from transcript or screenshot extraction
     private detectedCodingQuestion: string | null = null;
@@ -175,6 +179,7 @@ export class SessionTracker {
         this.lastAssistantMessage = null;
         this.assistantResponseHistory = [];
         this.lastInterimInterviewer = null;
+        this.lastInterimUser = null;
         console.log('[SessionTracker] Mode-specific session context cleared');
     }
 
@@ -312,10 +317,19 @@ export class SessionTracker {
      * Handle incoming transcript from native audio service
      */
     handleTranscript(segment: TranscriptSegment): { role: 'interviewer' | 'user' | 'assistant' } | null {
-        // Track interim segments for interviewer to prevent data loss on stop
+        // Track interim segments for both interviewer AND user to prevent
+        // data loss on stop — the interviewer path has always done this;
+        // user (mic) previously only logged and dropped the last interim
+        // segment on stop. Mirror the field so flushInterimTranscript() can
+        // promote the user's last unfinalized utterance to final.
         if (segment.speaker === 'user') {
             if (isVerboseLogging() && (Math.random() < 0.05 || segment.final)) {
                 console.log(`[SessionTracker] RX User Segment`, { final: segment.final, length: segment.text.length });
+            }
+            if (!segment.final) {
+                this.lastInterimUser = segment;
+            } else {
+                this.lastInterimUser = null;
             }
         }
         if (segment.speaker === 'interviewer') {
@@ -474,10 +488,16 @@ export class SessionTracker {
      */
     flushInterimTranscript(): void {
         if (this.lastInterimInterviewer) {
-            console.log('[SessionTracker] Force-saving pending interim transcript', { length: this.lastInterimInterviewer.text.length });
+            console.log('[SessionTracker] Force-saving pending interim interviewer transcript', { length: this.lastInterimInterviewer.text.length });
             const finalSegment = { ...this.lastInterimInterviewer, final: true };
             this.addTranscript(finalSegment);
             this.lastInterimInterviewer = null;
+        }
+        if (this.lastInterimUser) {
+            console.log('[SessionTracker] Force-saving pending interim user transcript', { length: this.lastInterimUser.text.length });
+            const finalSegment = { ...this.lastInterimUser, final: true };
+            this.addTranscript(finalSegment);
+            this.lastInterimUser = null;
         }
     }
 
@@ -494,6 +514,7 @@ export class SessionTracker {
         this.lastAssistantMessage = null;
         this.assistantResponseHistory = [];
         this.lastInterimInterviewer = null;
+        this.lastInterimUser = null;
         this.detectedCodingQuestion = null;
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
@@ -560,11 +581,40 @@ export class SessionTracker {
                     console.warn('[SessionTracker] Epoch summarization failed, using fallback marker');
                 }
             } else {
-                // BUG-03 fix: recapLLM not yet available — always push a plain marker so early
-                // context is not silently discarded with no record in transcriptEpochSummaries.
-                const marker = `[Earlier discussion (no LLM): ${oldEntries.length} segments summarized without transcript snippets.]`;
+                // BUG-03 fix: recapLLM not yet available — store a plain marker
+                // so early context is not silently discarded with no record in
+                // transcriptEpochSummaries.
+                // BUG-03 hardening: the previous marker only carried a segment
+                // count, dropping the actual text. Now we preserve a bounded
+                // inline digest (first 3 + last 3 segments, each truncated to
+                // 120 chars) so getFullSessionContext() still has something
+                // usable for the post-call summary, while staying well under
+                // any reasonable token budget.
+                const headTailCount = 3;
+                const perSegmentCharCap = 120;
+                const formatSegment = (seg: TranscriptSegment): string => {
+                    const role = this.mapSpeakerToRole(seg.speaker);
+                    const label = role === 'interviewer' ? 'INTERVIEWER' :
+                        role === 'user' ? 'ME' : 'ASSISTANT';
+                    const trimmed = (seg.text || '').trim();
+                    const clipped = trimmed.length > perSegmentCharCap
+                        ? `${trimmed.slice(0, perSegmentCharCap)}…`
+                        : trimmed;
+                    return `[${label}]: ${clipped}`;
+                };
+                const headEntries = oldEntries.slice(0, headTailCount).map(formatSegment);
+                const tailEntries = oldEntries.length > headTailCount
+                    ? oldEntries.slice(-headTailCount).map(formatSegment)
+                    : [];
+                const digestLines = [
+                    ...headEntries,
+                    ...(tailEntries.length ? ['…'] : []),
+                    ...tailEntries,
+                ];
+                const digest = digestLines.join(' | ');
+                const marker = `[Earlier discussion (no LLM, ${oldEntries.length} segments): ${digest}]`;
                 this.transcriptEpochSummaries.push(marker);
-                console.warn('[SessionTracker] recapLLM not available — storing plain epoch marker');
+                console.warn('[SessionTracker] recapLLM not available — storing plain epoch marker with inline digest');
             }
 
             // Cap epoch summaries to prevent LLM context window overflow
