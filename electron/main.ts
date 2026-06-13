@@ -302,6 +302,16 @@ interface SttStatusPayload {
   channel: 'user' | 'interviewer';
   reconnectAttempts?: number;
 }
+
+interface OutputRouteDiagnostics {
+  requestedOutputId: string | null;
+  requestedOutputName: string | null;
+  defaultOutputId: string | null;
+  defaultOutputName: string | null;
+  usingDefaultRoute: boolean;
+  selectedDiffersFromDefault: boolean;
+}
+
 type ScreenshotCaptureKind = 'full' | 'selective';
 
 interface ScreenshotCaptureSession {
@@ -1294,13 +1304,15 @@ export class AppState {
         }
 
         const backend = capture.getBackendName();
+        const routeDiagnostics = this.getOutputRouteDiagnostics();
         console.warn(`${prefix}SystemAudioCapture produced 0 chunks in 8s — likely silent capture (route mismatch or permission revoked).`);
         this.broadcast('audio-capture-failed', {
           channel: 'system',
-          message: formatPermissionMessage('system-audio-stuck'),
+          message: this.withOutputRouteHint(formatPermissionMessage('system-audio-stuck'), routeDiagnostics),
           attempt: 0,
           maxAttempts: 3,
           backend,
+          routeDiagnostics,
           terminal: false,
           stuck: true,
         });
@@ -1435,16 +1447,19 @@ export class AppState {
     const nativeRate = capture.getNativeSampleRate();
     const emittedRate = capture.getSampleRate();
     const backend = capture.getBackendName();
+    const routeDiagnostics = this.getOutputRouteDiagnostics();
     console.warn(
       `${prefix}SystemAudio chunks all zero-filled for ${observationMs / 1000}s — ` +
       `backend=${backend} status=${screenCapability.status} capturable=${screenProbe.capturable} sources=${screenProbe.sourceCount} ` +
-      `emittedRate=${emittedRate}Hz nativeRate=${nativeRate || 0}Hz`
+      `emittedRate=${emittedRate}Hz nativeRate=${nativeRate || 0}Hz ` +
+      `requestedOutput=${routeDiagnostics.requestedOutputId || '(default)'} defaultOutput=${routeDiagnostics.defaultOutputId || '(unknown)'}`
     );
 
-    const message =
+    const baseMessage =
       screenCapability.effectiveDenied || !screenProbe.capturable
         ? formatPermissionMessage('mac-screen-recording-revoked-rebuild')
         : formatPermissionMessage('mac-system-audio-zero-fill');
+    const message = this.withOutputRouteHint(baseMessage, routeDiagnostics);
 
     this.broadcast('audio-capture-failed', {
       channel: 'system',
@@ -1452,6 +1467,7 @@ export class AppState {
       attempt: 0,
       maxAttempts: 3,
       backend,
+      routeDiagnostics,
       terminal: false,
       stuck: true,
     });
@@ -1810,6 +1826,60 @@ export class AppState {
   }): void {
     console.log(`[Main] device-selection-applied:`, payload);
     this.broadcast('device-selection-applied', payload);
+  }
+
+  private getOutputRouteDiagnostics(): OutputRouteDiagnostics {
+    const requestedOutputId = this._lastRequestedOutputDeviceId || null;
+    let defaultOutputId: string | null = null;
+
+    try {
+      const NativeModule: any = loadNativeModule();
+      if (NativeModule && typeof NativeModule.getDefaultOutputDeviceId === 'function') {
+        defaultOutputId = NativeModule.getDefaultOutputDeviceId() || null;
+      }
+    } catch {
+      defaultOutputId = null;
+    }
+
+    let outputs: Array<{ id: string; name: string }> = [];
+    try {
+      outputs = AudioDevices.getOutputDevices();
+    } catch {
+      outputs = [];
+    }
+
+    const stripSuffix = (s: string) => s.replace(/:(input|output)$/i, '');
+    const sameOutput = (a: string | null, b: string | null) =>
+      !!a && !!b && stripSuffix(a).toLowerCase() === stripSuffix(b).toLowerCase();
+    const findName = (id: string | null): string | null => {
+      if (!id) return null;
+      const idBase = stripSuffix(id).toLowerCase();
+      return outputs.find(d => stripSuffix(d.id).toLowerCase() === idBase)?.name || null;
+    };
+
+    return {
+      requestedOutputId,
+      requestedOutputName: findName(requestedOutputId),
+      defaultOutputId,
+      defaultOutputName: findName(defaultOutputId),
+      usingDefaultRoute: !requestedOutputId,
+      selectedDiffersFromDefault: !!requestedOutputId && !!defaultOutputId && !sameOutput(requestedOutputId, defaultOutputId),
+    };
+  }
+
+  private withOutputRouteHint(message: string, route: OutputRouteDiagnostics): string {
+    const selected = route.requestedOutputName || route.requestedOutputId || 'Default output';
+    const currentDefault = route.defaultOutputName || route.defaultOutputId || 'unknown';
+
+    if (route.selectedDiffersFromDefault) {
+      return `${message} Natively is listening to "${selected}", while the system default output is "${currentDefault}". Make sure the meeting/interviewer audio is routed to "${selected}", or switch Natively's speaker setting back to Default.`;
+    }
+
+    if (route.usingDefaultRoute && route.defaultOutputName) {
+      return `${message} Current system default output: "${route.defaultOutputName}".`;
+    }
+
+    return message;
   }
 
   /**
