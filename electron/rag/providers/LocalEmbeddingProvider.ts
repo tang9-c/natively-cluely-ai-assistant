@@ -56,8 +56,10 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       // to the TypeScript compiler so it is left as a real import() call.
       const { pipeline, env } = await (new Function('return import("@huggingface/transformers")')()) as any;
 
-      // Use userData/models as cache; allow remote download on first use
+      // Point Transformers.js local lookup at the bundled model directory.
       env.cacheDir = this.modelPath;
+      env.localModelPath = this.modelPath;
+      env.allowLocalModels = true;
       env.allowRemoteModels = true;
       env.remoteHost = (process.env.HF_ENDPOINT || 'https://modelscope.cn/models').replace(/\/$/, '') + '/';
 
