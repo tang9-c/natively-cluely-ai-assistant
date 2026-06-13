@@ -10,6 +10,7 @@ export interface LocalModelInfo {
   sizeMb: number;
   task: string;
   status: 'available' | 'missing' | 'downloading' | 'error';
+  source?: 'downloaded' | 'bundled';
   errorMessage?: string;
 }
 
@@ -45,14 +46,31 @@ function getModelsDir(): string {
   return path.join(app.getPath('userData'), 'models');
 }
 
-function modelDir(modelId: string): string {
-  return path.join(getModelsDir(), modelId);
+function getBundledModelsDir(): string {
+  return path.join(
+    app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'resources'),
+    'models'
+  );
 }
 
-function isModelCached(def: ModelDefinition): boolean {
-  const dir = modelDir(def.id);
+function modelDir(rootDir: string, modelId: string): string {
+  return path.join(rootDir, modelId);
+}
+
+function hasModelFiles(rootDir: string, def: ModelDefinition): boolean {
+  const dir = modelDir(rootDir, def.id);
   if (!fs.existsSync(dir)) return false;
   return def.requiredFiles.every((f) => fs.existsSync(path.join(dir, f)));
+}
+
+function getModelStatus(def: ModelDefinition): Pick<LocalModelInfo, 'status' | 'source'> {
+  if (hasModelFiles(getModelsDir(), def)) {
+    return { status: 'available', source: 'downloaded' };
+  }
+  if (hasModelFiles(getBundledModelsDir(), def)) {
+    return { status: 'available', source: 'bundled' };
+  }
+  return { status: 'missing' };
 }
 
 export function getLocalModels(): LocalModelInfo[] {
@@ -62,13 +80,13 @@ export function getLocalModels(): LocalModelInfo[] {
     description: def.description,
     sizeMb: def.sizeMb,
     task: def.task,
-    status: isModelCached(def) ? 'available' : 'missing',
+    ...getModelStatus(def),
   }));
 }
 
 export function deleteLocalModel(modelId: string): { success: boolean; error?: string } {
   try {
-    const dir = modelDir(modelId);
+    const dir = modelDir(getModelsDir(), modelId);
     if (fs.existsSync(dir)) {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -114,6 +132,8 @@ export async function startLocalModelDownload(modelId: string): Promise<{ succes
     const { pipeline, env } = await (new Function('return import("@huggingface/transformers")')()) as any;
 
     env.cacheDir = getModelsDir();
+    env.localModelPath = getModelsDir();
+    env.allowLocalModels = true;
     env.allowRemoteModels = true;
     env.remoteHost = (process.env.HF_ENDPOINT || 'https://modelscope.cn/models').replace(/\/$/, '') + '/';
 

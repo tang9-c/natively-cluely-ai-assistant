@@ -1,4 +1,5 @@
 // @huggingface/transformers is ESM-only — must use dynamic import()
+import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
 import { IEmbeddingProvider } from './IEmbeddingProvider';
@@ -12,19 +13,23 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
 
   private pipe: any = null;
   private loadingPromise: Promise<void> | null = null; // prevents concurrent init races
-  private modelPath: string;
+  private modelPath: string | null = null;
 
   constructor() {
     this.space = embeddingSpaceKey({ name: this.name, model: this.model, dimensions: this.dimensions });
-    // Point to the bundled model inside the app's resources.
-    // In dev: use app.getAppPath() so the path is independent of how esbuild
-    // bundles this file (bundle: true inlines the provider into main.js, which
-    // makes __dirname-relative paths fragile).
-    // In prod: app.isPackaged = true → use process.resourcesPath (electron-builder extraResources).
-    this.modelPath = path.join(
+  }
+
+  private resolveModelPath(): string {
+    const downloadedModelsPath =
+      typeof app.getPath === 'function'
+        ? path.join(app.getPath('userData'), 'models')
+        : path.join(app.getAppPath(), 'resources', 'models');
+    const bundledModelsPath = path.join(
       app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'resources'),
       'models'
     );
+    const modelDir = path.join(downloadedModelsPath, this.model);
+    return fs.existsSync(modelDir) ? downloadedModelsPath : bundledModelsPath;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -55,8 +60,9 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       // packages like @huggingface/transformers. The new Function() trick is opaque
       // to the TypeScript compiler so it is left as a real import() call.
       const { pipeline, env } = await (new Function('return import("@huggingface/transformers")')()) as any;
+      this.modelPath = this.resolveModelPath();
 
-      // Point Transformers.js local lookup at the bundled model directory.
+      // Prefer downloaded userData models, but fall back to the bundled copy.
       env.cacheDir = this.modelPath;
       env.localModelPath = this.modelPath;
       env.allowLocalModels = true;

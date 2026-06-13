@@ -27,3 +27,20 @@ test('electron-builder packages bundled local models as extra resources', () => 
     'package.json build.extraResources must copy resources/models to Resources/models'
   );
 });
+
+test('LocalModelManager treats bundled resources models as installed', () => {
+  const src = read('electron/services/LocalModelManager.ts');
+
+  assert.match(src, /process\.resourcesPath/);
+  assert.match(src, /path\.join\(app\.getAppPath\(\), 'resources'\)/);
+  assert.match(src, /\.\.\.getModelStatus\(def\)/);
+});
+
+test('LocalEmbeddingProvider prefers downloaded userData models before bundled fallback', () => {
+  const src = read('electron/rag/providers/LocalEmbeddingProvider.ts');
+
+  assert.match(src, /app\.getPath\('userData'\), 'models'/);
+  assert.match(src, /process\.resourcesPath/);
+  assert.match(src, /fs\.existsSync/);
+  assert.match(src, /env\.localModelPath\s*=\s*this\.modelPath/);
+});
