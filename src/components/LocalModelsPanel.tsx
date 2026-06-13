@@ -9,6 +9,7 @@ interface ModelInfo {
   sizeMb: number;
   task: string;
   status: 'available' | 'missing' | 'downloading' | 'error';
+  source?: 'downloaded' | 'bundled';
   errorMessage?: string;
 }
 
@@ -128,6 +129,7 @@ export function LocalModelsPanel() {
           const isDownloading = model.status === 'downloading' || downloadingSet.has(model.id);
           const progress = downloadProgress[model.id] || 0;
           const isAvailable = model.status === 'available';
+          const canDelete = model.source === 'downloaded';
 
           return (
             <div
@@ -194,7 +196,7 @@ export function LocalModelsPanel() {
                   </button>
                 )}
 
-                {isAvailable && (
+                {isAvailable && canDelete && (
                   <button
                     onClick={() => handleDelete(model.id)}
                     className="p-2 rounded-[10px] text-text-tertiary hover:bg-red-500/10 hover:text-red-500 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.96]"
