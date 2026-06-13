@@ -57,6 +57,10 @@
     },
     "extraResources": [
       {
+        "from": "resources/models",
+        "to": "models"
+      },
+      {
         "from": "assets/",
         "to": "assets/"
       },
