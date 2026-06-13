@@ -146,6 +146,7 @@ export class MeetingPersistence {
     ): Promise<void> {
         let title = "Untitled Session";
         let summaryData: { overview?: string; actionItems: string[], keyPoints: string[], sections?: Array<{ title: string; bullets: string[] }> } = { actionItems: [], keyPoints: [] };
+        const hasSummarizableTranscript = data.transcript.length > 2;
         // Phase 6 — post_call_summary lifecycle telemetry. Wrapped in try/catch
         // around track calls so a telemetry sink fault never breaks persistence.
         const _postCallStart = Date.now();
@@ -173,7 +174,7 @@ export class MeetingPersistence {
 
         try {
             // Generate Title (only if not set by calendar)
-            if (!metadata || !metadata.title) {
+            if (hasSummarizableTranscript && (!metadata || !metadata.title)) {
                 const titlePrompt = `Generate a concise 3-6 word title for this meeting context. Output ONLY the title text. Do not use quotes or conversational filler.`;
                 const groqTitlePrompt = GROQ_TITLE_PROMPT;
 
@@ -241,7 +242,7 @@ export class MeetingPersistence {
             }
 
             // Generate Structured Summary
-            if (data.transcript.length > 2) {
+            if (hasSummarizableTranscript) {
                 const baseRules = `RULES:
 - Do NOT invent information not present in the context
 - You MAY infer implied action items or next steps if they are logical consequences of the discussion
