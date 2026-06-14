@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import packageJson from '../../package.json';
 import {
     X, Mic, Speaker, Monitor, Keyboard, User, LifeBuoy, LogOut, Upload,
@@ -350,6 +350,14 @@ interface SettingsOverlayProps {
     initialTab?: string;
 }
 
+type SttLanguageCompatibility = {
+    requestedLanguageKey: string;
+    effectiveLanguageKey: string;
+    willHonorSelection: boolean;
+    reasonCode: 'AUTO_NORMALIZED_TO_ENGLISH' | 'MODEL_ENGLISH_ONLY' | 'PROVIDER_LANGUAGE_UNSUPPORTED' | 'SUPPORTED';
+    message: string;
+};
+
 const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, initialTab = 'general' }) => {
     const isLight = useResolvedTheme() === 'light';
     const [activeTab, setActiveTab] = useState(initialTab);
@@ -465,6 +473,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [selectedSttGroup, setSelectedSttGroup] = useState('');
     const [availableLanguages, setAvailableLanguages] = useState<Record<string, any>>({});
     const [autoDetectedLanguage, setAutoDetectedLanguage] = useState<string | null>(null);
+    const [sttLanguageCompatibility, setSttLanguageCompatibility] = useState<SttLanguageCompatibility | null>(null);
 
     // AI Response Language
     const [aiResponseLanguage, setAiResponseLanguage] = useState('English');
@@ -677,6 +686,22 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         loadLanguages();
     }, []);
 
+    const refreshSttLanguageCompatibility = useCallback(async () => {
+        if (!window.electronAPI?.getSttLanguageCompatibility) return;
+        try {
+            const compatibility = await window.electronAPI.getSttLanguageCompatibility();
+            setSttLanguageCompatibility(compatibility);
+        } catch (error) {
+            console.error('[Settings] Failed to load STT language compatibility:', error);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (isOpen) {
+            refreshSttLanguageCompatibility();
+        }
+    }, [isOpen, refreshSttLanguageCompatibility]);
+
     const handleLanguageChange = async (key: string) => {
         setRecognitionLanguage(key);
         setAutoDetectedLanguage(null);  // always reset — new session may detect a different language
@@ -686,6 +711,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         if (window.electronAPI?.setRecognitionLanguage) {
             await window.electronAPI.setRecognitionLanguage(key);
         }
+        await refreshSttLanguageCompatibility();
     };
 
     const handleGroupChange = (group: string) => {
@@ -869,12 +895,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                     if (creds.sttDoubaoKey) setSttDoubaoKey(creds.sttDoubaoKey);
                     if (typeof creds.openAiSttBaseUrl === 'string') setSttOpenaiBaseUrl(creds.openAiSttBaseUrl);
                 }
+                await refreshSttLanguageCompatibility();
             } catch (e) {
                 console.error('Failed to load STT settings:', e);
             }
         };
         if (isOpen) loadSttSettings();
-    }, [isOpen]);
+    }, [isOpen, refreshSttLanguageCompatibility]);
 
     // PR #173: Live-reload settings whenever the backend broadcasts a credentials change
     // (e.g., when the user saves an STT key in a different window, or main fires it after
@@ -912,10 +939,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                     if (creds.sttDoubaoKey) setSttDoubaoKey(creds.sttDoubaoKey);
                     if (typeof creds.openAiSttBaseUrl === 'string') setSttOpenaiBaseUrl(creds.openAiSttBaseUrl);
                 }).catch(() => { /* silently ignore */ });
+                refreshSttLanguageCompatibility().catch(() => { /* silently ignore */ });
             }
         });
         return () => unsubscribe();
-    }, []); // mount-once: isOpen is checked inside the callback
+    }, [isOpen, refreshSttLanguageCompatibility]); // isOpen is checked inside the callback
 
     const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper') => {
         setSttProvider(provider);
@@ -926,6 +954,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         try {
             // @ts-ignore
             await window.electronAPI?.setSttProvider?.(provider);
+            await refreshSttLanguageCompatibility();
         } catch (e) {
             console.error('Failed to set STT provider:', e);
         }
@@ -2414,7 +2443,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                                             {/* Local Whisper Model Panel */}
                                             {sttProvider === 'local-whisper' && (
-                                                <LocalWhisperModelPanel />
+                                                <LocalWhisperModelPanel
+                                                    recognitionLanguage={recognitionLanguage}
+                                                    languageCompatibility={sttLanguageCompatibility}
+                                                    onConfigChanged={refreshSttLanguageCompatibility}
+                                                />
                                             )}
 
                                             {/* Recognition Language Family */}
@@ -2463,6 +2496,18 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     }
                                                 </p>
                                             </div>
+
+                                            {recognitionLanguage === 'chinese' && sttLanguageCompatibility && !sttLanguageCompatibility.willHonorSelection && (
+                                                <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3">
+                                                    <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-400" />
+                                                    <div className="min-w-0">
+                                                        <p className="text-xs font-semibold text-amber-200">当前实现不会按中文执行</p>
+                                                        <p className="mt-1 text-xs leading-relaxed text-amber-100/90">
+                                                            {sttLanguageCompatibility.message} 会议仍可继续，但这次中文识别不会按所选语言执行。
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 

@@ -134,7 +134,8 @@ function normalizeRecognitionLanguageForProvider(provider: string, languageKey: 
   // Persisted settings may still contain 'auto' from an earlier provider choice,
   // so normalize again at provider construction time, not only when the user
   // changes the dropdown live.
-  return languageKey === 'auto' && provider !== 'natively' ? 'english-us' : languageKey;
+  if (languageKey !== 'auto') return languageKey;
+  return provider !== 'natively' ? 'english-us' : languageKey;
 }
 
 function getMacScreenCaptureStatus(): MacScreenCaptureStatus {

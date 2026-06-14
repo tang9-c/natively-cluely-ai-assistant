@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { AudioDevices } from './audio/AudioDevices';
+import { resolveSttLanguageCompatibility } from './audio/sttLanguageCompatibility';
 import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manager
 import { AppState } from './main';
 import {
@@ -124,6 +125,22 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('get-stt-language', async () => {
     const { CredentialsManager } = require('./services/CredentialsManager');
     return CredentialsManager.getInstance().getSttLanguage();
+  });
+
+  safeHandle('get-stt-language-compatibility', async () => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    const sm = SettingsManager.getInstance();
+    return resolveSttLanguageCompatibility({
+      provider: cm.getSttProvider(),
+      requestedLanguageKey: cm.getSttLanguage(),
+      localWhisper: {
+        enabled: !!sm.get('localWhisperPerChannelEnabled'),
+        globalModelId: sm.get('localWhisperModel') ?? '',
+        micModelId: sm.get('localWhisperModelMic') ?? '',
+        systemModelId: sm.get('localWhisperModelSystem') ?? '',
+      },
+    });
   });
 
   safeHandle('get-ai-response-language', async () => {
@@ -1342,7 +1359,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         | 'soniox'
         | 'doubao'
         | 'doubao-auc'
-        | 'natively',
+        | 'natively'
+        | 'local-whisper',
     ) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
@@ -1935,6 +1953,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('local-whisper-set-model', async (_, modelId: string) => {
     try {
       SettingsManager.getInstance().set('localWhisperModel', modelId);
+      broadcast('credentials-changed');
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e.message };
@@ -1963,6 +1982,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (typeof cfg?.micModelId === 'string') sm.set('localWhisperModelMic', cfg.micModelId);
         if (typeof cfg?.systemModelId === 'string')
           sm.set('localWhisperModelSystem', cfg.systemModelId);
+        broadcast('credentials-changed');
         return { success: true };
       } catch (e: any) {
         return { success: false, error: e.message };
@@ -2404,6 +2424,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('set-recognition-language', async (_, key: string) => {
     appState.setRecognitionLanguage(key);
+    broadcast('credentials-changed');
     return { success: true };
   });
 
