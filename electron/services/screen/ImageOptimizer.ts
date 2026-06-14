@@ -32,6 +32,7 @@ export type ProviderHint =
   | 'claude'
   | 'gemini'
   | 'groq'
+  | 'doubao'
   | 'ollama'
   | 'natively'
   | 'codex'

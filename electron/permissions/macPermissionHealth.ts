@@ -210,7 +210,7 @@ export async function repairMacTccPermissions(scope: TccRepairScope): Promise<Tc
     };
   }
 
-  const bundleId = app.getBundleID();
+  const bundleId = (app as any).getBundleID?.() ?? app.getName();
   const services = getTccRepairServices(scope);
   const commandsRun: string[] = [];
 

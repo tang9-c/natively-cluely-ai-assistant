@@ -19,6 +19,7 @@ export type WhisperModelId =
   // Moonshine — purpose-built streaming ASR. Encoder caching + decoder state
   // reuse → ~100× lower latency than Whisper Large v3 at comparable WER.
   // English-only. MIT licensed.
+  | 'onnx-community/moonshine-tiny-ONNX'
   | 'onnx-community/moonshine-tiny-zh-ONNX'
   | 'onnx-community/moonshine-base-ONNX';
 

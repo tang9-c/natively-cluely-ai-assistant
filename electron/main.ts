@@ -186,6 +186,7 @@ type PermissionReason =
   | 'mac-screen-recording-revoked-rebuild'
   | 'mac-coreaudio-audio-capture-revoked'
   | 'mac-system-audio-zero-fill'
+  | 'system-audio-failure'
   | 'mic-denied'
   | 'mic-zero-fill'
   | 'mac-same-device-input-output'

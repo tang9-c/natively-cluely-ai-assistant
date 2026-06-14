@@ -436,7 +436,7 @@ FLAG SYSTEM (use in every answer):
 interface TestCase {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   run: () => Promise<TestResult>;
 }
 
@@ -446,7 +446,7 @@ interface TestResult {
   passed: boolean;
   durationMs: number;
   details: string;
-  stats?: Record<string, number | string>;
+  stats?: Record<string, number | string | boolean>;
 }
 
 // ── Test 1: ModeContextBlock truncation at 60K ─────────────────────────────────
