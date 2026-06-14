@@ -386,6 +386,8 @@ export class AppState {
   private _sckRouteIgnoredBroadcasted: boolean = false;
   private _screenTccRepairBannerShown: boolean = false;
   private _micTccRepairBannerShown: boolean = false;
+  private _meetingHasMicTranscript: boolean = false;
+  private _meetingHasAnyTranscript: boolean = false;
   private _ollamaBootstrapPromise: Promise<void> | null = null;
   private screenshotCaptureInProgress: boolean = false;
 
@@ -1065,6 +1067,11 @@ export class AppState {
           text: segment.text,
           timestamp: Date.now()
         }]);
+      }
+
+      if (segment.isFinal && segment.text.trim()) {
+        this._meetingHasAnyTranscript = true;
+        if (speaker === 'user') this._meetingHasMicTranscript = true;
       }
 
       const helper = this.getWindowHelper();
@@ -2925,6 +2932,8 @@ export class AppState {
     this._sckRouteIgnoredBroadcasted = false;
     this._screenTccRepairBannerShown = false;
     this._micTccRepairBannerShown = false;
+    this._meetingHasMicTranscript = false;
+    this._meetingHasAnyTranscript = false;
     if (this._systemAudioRecoveryTimer) {
       clearTimeout(this._systemAudioRecoveryTimer);
       this._systemAudioRecoveryTimer = null;
@@ -3087,6 +3096,9 @@ export class AppState {
 
   public async endMeeting(): Promise<void> {
     console.log('[Main] Ending Meeting...');
+    console.log(
+      `[Main] Meeting usability before stop: micTranscript=${this._meetingHasMicTranscript} anyTranscript=${this._meetingHasAnyTranscript}`,
+    );
 
     // Phase 6 — meeting_stop telemetry. Emit BEFORE any teardown so a crash
     // in stop logic still records the stop event.
