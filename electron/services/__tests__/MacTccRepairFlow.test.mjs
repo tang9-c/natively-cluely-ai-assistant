@@ -26,7 +26,7 @@ test('permissions IPC exposes health-aware check and repair endpoints', () => {
   assert.match(ipcHandlers, /screenHealth/);
   assert.match(ipcHandlers, /systemAudioHealth/);
   assert.match(ipcHandlers, /safeHandle\('permissions:repair-tcc'/);
-  assert.match(ipcHandlers, /app\.getBundleID\(\)/);
+  assert.match(ipcHandlers, /resolveMacBundleIdentifier/);
   assert.match(ipcHandlers, /tccutil/);
   assert.match(ipcHandlers, /ScreenCapture/);
   assert.match(ipcHandlers, /AudioCapture/);
@@ -48,6 +48,16 @@ test('TCC repair resets AudioCapture together with ScreenCapture for system audi
   assert.match(permissions, /scope === 'screen'[\s\S]*?ScreenCapture[\s\S]*?AudioCapture/);
   assert.match(permissions, /scope === 'both'[\s\S]*?ScreenCapture[\s\S]*?AudioCapture[\s\S]*?Microphone/);
   assert.match(ipcHandlers, /tccutil reset AudioCapture \$\{bundleId\}/);
+});
+
+test('TCC repair resolves a valid bundle identifier and never falls back to app name', () => {
+  const permissions = read('electron/permissions/macPermissionHealth.ts');
+
+  assert.match(permissions, /export function resolveMacBundleIdentifier/);
+  assert.match(permissions, /build\?: \{ appId\?: unknown \}/);
+  assert.match(permissions, /Ignoring invalid runtime bundle identifier/);
+  assert.match(permissions, /Unable to resolve a valid macOS bundle identifier for TCC repair/);
+  assert.doesNotMatch(permissions, /app\.getName\(\)/);
 });
 
 test('preload and renderer types expose repairTccPermission and health-rich permission payloads', () => {

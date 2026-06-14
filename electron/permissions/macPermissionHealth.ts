@@ -1,8 +1,11 @@
 import { app, desktopCapturer, systemPreferences } from 'electron';
 import { execFile as execFileCallback } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 import util from 'util';
 
 const execFileAsync = util.promisify(execFileCallback);
+let cachedConfiguredAppId: string | null | undefined;
 
 export type MacPermissionStatus = 'granted' | 'denied' | 'not-determined' | 'restricted';
 export type PermissionRecommendedFix = 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
@@ -199,6 +202,56 @@ function getTccRepairServices(scope: TccRepairScope): string[] {
   return ['Microphone'];
 }
 
+function isValidBundleIdentifier(value: string | null | undefined): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(value);
+}
+
+function readConfiguredAppId(): string | null {
+  if (cachedConfiguredAppId !== undefined) {
+    return cachedConfiguredAppId;
+  }
+
+  try {
+    const packageJsonPath = path.join(app.getAppPath(), 'package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as {
+      build?: { appId?: unknown };
+    };
+    const configuredAppId = packageJson.build?.appId;
+    cachedConfiguredAppId = typeof configuredAppId === 'string' ? configuredAppId : null;
+  } catch (error) {
+    cachedConfiguredAppId = null;
+    console.warn('[Permissions] Failed to read configured appId from package.json:', error);
+  }
+
+  return cachedConfiguredAppId;
+}
+
+export function resolveMacBundleIdentifier(): string | null {
+  if (process.platform !== 'darwin') {
+    return null;
+  }
+
+  const runtimeBundleId = (app as any).getBundleID?.();
+  if (isValidBundleIdentifier(runtimeBundleId)) {
+    return runtimeBundleId;
+  }
+
+  if (runtimeBundleId) {
+    console.warn(`[Permissions] Ignoring invalid runtime bundle identifier: ${runtimeBundleId}`);
+  }
+
+  const configuredAppId = readConfiguredAppId();
+  if (isValidBundleIdentifier(configuredAppId)) {
+    return configuredAppId;
+  }
+
+  if (configuredAppId) {
+    console.warn(`[Permissions] Ignoring invalid configured appId: ${configuredAppId}`);
+  }
+
+  return null;
+}
+
 export async function repairMacTccPermissions(scope: TccRepairScope): Promise<TccRepairResult> {
   if (process.platform !== 'darwin' || !app.isPackaged) {
     return {
@@ -210,7 +263,17 @@ export async function repairMacTccPermissions(scope: TccRepairScope): Promise<Tc
     };
   }
 
-  const bundleId = (app as any).getBundleID?.() ?? app.getName();
+  const bundleId = resolveMacBundleIdentifier();
+  if (!bundleId) {
+    return {
+      success: false,
+      bundleId: null,
+      commandsRun: [],
+      requiresRestart: false,
+      error: 'Unable to resolve a valid macOS bundle identifier for TCC repair.',
+    };
+  }
+
   const services = getTccRepairServices(scope);
   const commandsRun: string[] = [];
 
