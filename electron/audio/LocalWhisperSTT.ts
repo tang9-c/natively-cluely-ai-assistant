@@ -41,6 +41,7 @@ import { buildWorkerInitMessage } from './whisper/inferenceConfig';
 import { resolveWhisperWorkerPath } from './whisper/workerPathResolver';
 import type { WorkerOutMessage } from './whisper/types';
 import { BaseSTT } from './BaseSTT';
+import { RECOGNITION_LANGUAGES } from '../config/languages';
 
 export class LocalWhisperSTT extends BaseSTT {
     private readonly modelId: string;
@@ -166,7 +167,19 @@ export class LocalWhisperSTT extends BaseSTT {
 
     setSampleRate(rate: number): void { this.inputSampleRate = rate; }
     setAudioChannelCount(_count: number): void {}
-    setRecognitionLanguage(key: string): void { this.language = key || 'auto'; }
+    setRecognitionLanguage(key: string): void {
+        if (!key || key === 'auto') {
+            this.language = 'auto';
+            return;
+        }
+        const config = RECOGNITION_LANGUAGES[key];
+        if (!config) {
+            console.warn(`[LocalWhisperSTT] Unknown language key: ${key}, falling back to auto`);
+            this.language = 'auto';
+            return;
+        }
+        this.language = config.bcp47;
+    }
     setCredentials(_credPath: string): void {}
 
     /**
