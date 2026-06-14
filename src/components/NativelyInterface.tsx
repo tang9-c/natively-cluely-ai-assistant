@@ -3618,6 +3618,8 @@ Provide only the answer, nothing else.`;
                       <span>
                         {systemAudioWarning.kind === 'screen-recording-permission'
                           ? '屏幕录制权限被拒绝'
+                          : systemAudioWarning.code === 'CORE_AUDIO_TCC_RESET_REQUIRED'
+                            ? '系统音频录制权限需要修复'
                           : '音频采集异常'}
                       </span>
                     </div>

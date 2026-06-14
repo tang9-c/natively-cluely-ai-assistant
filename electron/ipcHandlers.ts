@@ -12,6 +12,7 @@ import {
   repairMacTccPermissions,
   resolveMacMicrophonePermissionHealth,
   resolveMacScreenPermissionHealth,
+  resolveMacSystemAudioPermissionHealth,
 } from './permissions/macPermissionHealth';
 import { CodexCliService } from './services/CodexCliService';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
@@ -3594,8 +3595,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       const mic = systemPreferences.getMediaAccessStatus('microphone');
       const screen = systemPreferences.getMediaAccessStatus('screen');
       const screenHealth = await resolveMacScreenPermissionHealth('permissions ipc check');
+      const systemAudioHealth = await resolveMacSystemAudioPermissionHealth('permissions ipc check');
       const microphoneHealth = resolveMacMicrophonePermissionHealth();
-      return { microphone: mic, screen, platform: 'darwin', screenHealth, microphoneHealth };
+      return { microphone: mic, screen, platform: 'darwin', screenHealth, systemAudioHealth, microphoneHealth };
     }
     // Windows/Linux: no TCC — permissions handled by OS at install/first-use time
     return {
@@ -3603,6 +3605,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       screen: 'granted',
       platform: process.platform,
       screenHealth: await resolveMacScreenPermissionHealth('permissions ipc check'),
+      systemAudioHealth: await resolveMacSystemAudioPermissionHealth('permissions ipc check'),
       microphoneHealth: resolveMacMicrophonePermissionHealth(),
     };
   });
@@ -3622,7 +3625,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       bundleId && process.platform === 'darwin'
         ? [
             ...(scope === 'screen' || scope === 'both'
-              ? [`tccutil reset ScreenCapture ${bundleId}`]
+              ? [`tccutil reset ScreenCapture ${bundleId}`, `tccutil reset AudioCapture ${bundleId}`]
               : []),
             ...(scope === 'microphone' || scope === 'both'
               ? [`tccutil reset Microphone ${bundleId}`]

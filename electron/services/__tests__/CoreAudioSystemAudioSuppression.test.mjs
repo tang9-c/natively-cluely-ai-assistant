@@ -36,3 +36,15 @@ test('system audio diagnostics distinguish raw capture from emitted STT silence'
   assert.match(nativeLib, /diagnostics\.record_raw\(&raw_batch\)/);
   assert.match(nativeLib, /diagnostics\.record_silence\(\)/);
 });
+
+test('coreaudio zero-fill is classified as repairable AudioCapture TCC failure', () => {
+  const main = read('electron/main.ts');
+  const types = read('src/types/electron.d.ts');
+  const ui = read('src/components/NativelyInterface.tsx');
+
+  assert.match(main, /CORE_AUDIO_TCC_RESET_REQUIRED/);
+  assert.match(main, /backend\s*===\s*['"]coreaudio['"]/);
+  assert.match(main, /broadcastCoreAudioTccRepairRequired/);
+  assert.match(types, /CORE_AUDIO_TCC_RESET_REQUIRED/);
+  assert.match(ui, /repair-and-restart/);
+});

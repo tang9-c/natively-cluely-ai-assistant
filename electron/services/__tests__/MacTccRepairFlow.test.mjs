@@ -24,11 +24,30 @@ test('permissions IPC exposes health-aware check and repair endpoints', () => {
   const ipcHandlers = read('electron/ipcHandlers.ts');
   assert.match(ipcHandlers, /safeHandle\('permissions:check'/);
   assert.match(ipcHandlers, /screenHealth/);
+  assert.match(ipcHandlers, /systemAudioHealth/);
   assert.match(ipcHandlers, /safeHandle\('permissions:repair-tcc'/);
   assert.match(ipcHandlers, /app\.getBundleID\(\)/);
   assert.match(ipcHandlers, /tccutil/);
   assert.match(ipcHandlers, /ScreenCapture/);
+  assert.match(ipcHandlers, /AudioCapture/);
   assert.match(ipcHandlers, /Microphone/);
+});
+
+test('development Electron plist patch declares system audio capture usage', () => {
+  const patcher = read('scripts/patch-electron-plist.js');
+
+  assert.match(patcher, /NSAudioCaptureUsageDescription/);
+  assert.match(patcher, /Natively needs system audio access to transcribe meeting audio\./);
+});
+
+test('TCC repair resets AudioCapture together with ScreenCapture for system audio', () => {
+  const permissions = read('electron/permissions/macPermissionHealth.ts');
+  const ipcHandlers = read('electron/ipcHandlers.ts');
+
+  assert.match(permissions, /AudioCapture/);
+  assert.match(permissions, /scope === 'screen'[\s\S]*?ScreenCapture[\s\S]*?AudioCapture/);
+  assert.match(permissions, /scope === 'both'[\s\S]*?ScreenCapture[\s\S]*?AudioCapture[\s\S]*?Microphone/);
+  assert.match(ipcHandlers, /tccutil reset AudioCapture \$\{bundleId\}/);
 });
 
 test('preload and renderer types expose repairTccPermission and health-rich permission payloads', () => {
@@ -39,6 +58,7 @@ test('preload and renderer types expose repairTccPermission and health-rich perm
   assert.match(preload, /ipcRenderer\.invoke\('permissions:repair-tcc'/);
   assert.match(types, /repairTccPermission: \(scope: 'screen' \| 'microphone' \| 'both'\)/);
   assert.match(types, /screenHealth:/);
+  assert.match(types, /systemAudioHealth:/);
   assert.match(types, /recommendedFix\?: 'open-settings' \| 'reset-tcc' \| 'restart-app' \| 'none'/);
   assert.match(types, /staleGrantSuspected\?: boolean/);
 });

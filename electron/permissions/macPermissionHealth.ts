@@ -7,6 +7,7 @@ const execFileAsync = util.promisify(execFileCallback);
 export type MacPermissionStatus = 'granted' | 'denied' | 'not-determined' | 'restricted';
 export type PermissionRecommendedFix = 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
 export type TccRepairScope = 'screen' | 'microphone' | 'both';
+export type MacSystemAudioBackend = 'coreaudio' | 'sck' | 'wasapi' | 'unknown';
 
 export interface MacPermissionHealth {
   status: MacPermissionStatus;
@@ -16,6 +17,11 @@ export interface MacPermissionHealth {
   recommendedFix: PermissionRecommendedFix;
   sourceCount: number;
   error?: string;
+}
+
+export interface MacSystemAudioPermissionHealth extends MacPermissionHealth {
+  backend: MacSystemAudioBackend;
+  services: string[];
 }
 
 export interface TccRepairResult {
@@ -171,6 +177,28 @@ export function resolveMacMicrophonePermissionHealth(): MacPermissionHealth {
   };
 }
 
+export async function resolveMacSystemAudioPermissionHealth(
+  context: string,
+  backend: MacSystemAudioBackend = 'unknown',
+): Promise<MacSystemAudioPermissionHealth> {
+  const screenHealth = await resolveMacScreenPermissionHealth(context);
+  return {
+    ...screenHealth,
+    backend,
+    services: process.platform === 'darwin' ? ['ScreenCapture', 'AudioCapture'] : [],
+  };
+}
+
+function getTccRepairServices(scope: TccRepairScope): string[] {
+  if (scope === 'both') {
+    return ['ScreenCapture', 'AudioCapture', 'Microphone'];
+  }
+  if (scope === 'screen') {
+    return ['ScreenCapture', 'AudioCapture'];
+  }
+  return ['Microphone'];
+}
+
 export async function repairMacTccPermissions(scope: TccRepairScope): Promise<TccRepairResult> {
   if (process.platform !== 'darwin' || !app.isPackaged) {
     return {
@@ -183,10 +211,7 @@ export async function repairMacTccPermissions(scope: TccRepairScope): Promise<Tc
   }
 
   const bundleId = app.getBundleID();
-  const services =
-    scope === 'both'
-      ? ['ScreenCapture', 'Microphone']
-      : [scope === 'screen' ? 'ScreenCapture' : 'Microphone'];
+  const services = getTccRepairServices(scope);
   const commandsRun: string[] = [];
 
   try {

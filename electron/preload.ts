@@ -236,6 +236,9 @@ interface ElectronAPI {
     callback: (payload: {
       channel: 'system' | 'mic';
       message: string;
+      code?: 'SCREEN_TCC_STALE_GRANTED' | 'SCREEN_TCC_RESET_REQUIRED' | 'CORE_AUDIO_TCC_RESET_REQUIRED' | 'MIC_TCC_STALE_GRANTED' | string;
+      recommendedFix?: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
+      staleGrantSuspected?: boolean;
       attempt: number;
       maxAttempts: number;
       backend?: string;
@@ -1165,7 +1168,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     callback: (payload: {
       channel: 'system' | 'mic';
       message: string;
-      code?: string;
+      code?: 'SCREEN_TCC_STALE_GRANTED' | 'SCREEN_TCC_RESET_REQUIRED' | 'CORE_AUDIO_TCC_RESET_REQUIRED' | 'MIC_TCC_STALE_GRANTED' | string;
       recommendedFix?: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
       staleGrantSuspected?: boolean;
       attempt: number;
