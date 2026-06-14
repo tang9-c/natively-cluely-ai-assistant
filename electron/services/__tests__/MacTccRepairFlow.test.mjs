@@ -1,0 +1,63 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(__dirname, '../../..');
+
+function read(rel) {
+  return fs.readFileSync(path.join(root, rel), 'utf8');
+}
+
+test('main and ScreenshotHelper share a dedicated mac permission health module', () => {
+  const main = read('electron/main.ts');
+  const screenshotHelper = read('electron/ScreenshotHelper.ts');
+
+  assert.match(main, /resolveMacScreenPermissionHealth/);
+  assert.match(screenshotHelper, /resolveMacScreenPermissionHealth/);
+  assert.doesNotMatch(screenshotHelper, /const status = systemPreferences\.getMediaAccessStatus\('screen'\);/);
+});
+
+test('permissions IPC exposes health-aware check and repair endpoints', () => {
+  const ipcHandlers = read('electron/ipcHandlers.ts');
+  assert.match(ipcHandlers, /safeHandle\('permissions:check'/);
+  assert.match(ipcHandlers, /screenHealth/);
+  assert.match(ipcHandlers, /safeHandle\('permissions:repair-tcc'/);
+  assert.match(ipcHandlers, /app\.getBundleID\(\)/);
+  assert.match(ipcHandlers, /tccutil/);
+  assert.match(ipcHandlers, /ScreenCapture/);
+  assert.match(ipcHandlers, /Microphone/);
+});
+
+test('preload and renderer types expose repairTccPermission and health-rich permission payloads', () => {
+  const preload = read('electron/preload.ts');
+  const types = read('src/types/electron.d.ts');
+
+  assert.match(preload, /repairTccPermission: \(/);
+  assert.match(preload, /ipcRenderer\.invoke\('permissions:repair-tcc'/);
+  assert.match(types, /repairTccPermission: \(scope: 'screen' \| 'microphone' \| 'both'\)/);
+  assert.match(types, /screenHealth:/);
+  assert.match(types, /recommendedFix\?: 'open-settings' \| 'reset-tcc' \| 'restart-app' \| 'none'/);
+  assert.match(types, /staleGrantSuspected\?: boolean/);
+});
+
+test('audio warning UI can branch to a repair-and-restart action for stale TCC grants', () => {
+  const ui = read('src/components/NativelyInterface.tsx');
+
+  assert.match(ui, /repair-and-restart/);
+  assert.match(ui, /修复权限并重启/);
+  assert.match(ui, /window\.electronAPI\?\.repairTccPermission\?/);
+  assert.match(ui, /recommendedFix/);
+  assert.match(ui, /staleGrantSuspected/);
+});
+
+test('permissions toaster uses effective screen health instead of only raw screen TCC status', () => {
+  const toaster = read('src/components/onboarding/PermissionsToaster.tsx');
+
+  assert.match(toaster, /screenHealth/);
+  assert.match(toaster, /effectiveGranted/);
+  assert.match(toaster, /recommendedFix/);
+  assert.doesNotMatch(toaster, /setScrStatus\(p\.screen\s+as PermStatus\)/);
+});

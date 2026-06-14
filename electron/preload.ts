@@ -956,6 +956,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Permissions
   checkPermissions: () => ipcRenderer.invoke('permissions:check'),
   requestMicPermission: () => ipcRenderer.invoke('permissions:request-mic'),
+  repairTccPermission: (scope: 'screen' | 'microphone' | 'both') =>
+    ipcRenderer.invoke('permissions:repair-tcc', scope),
+  restartAfterTccRepair: () => ipcRenderer.invoke('permissions:restart-after-repair'),
 
   // STT Provider Management
   setSttProvider: (
@@ -1163,6 +1166,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       channel: 'system' | 'mic';
       message: string;
       code?: string;
+      recommendedFix?: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
+      staleGrantSuspected?: boolean;
       attempt: number;
       maxAttempts: number;
       backend?: string;

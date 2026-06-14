@@ -121,8 +121,32 @@ export interface ElectronAPI {
   getNativelyUsage: () => Promise<{ ok: boolean; error?: string; plan?: string; quota?: { transcription: { used: number; limit: number; remaining: number }; ai: { used: number; limit: number; remaining: number }; search: { used: number; limit: number; remaining: number }; resets_at: string }; member_since?: string }>
   getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDoubaoKey?: boolean; hasDoubaoLlmKey?: boolean; geminiKey?: string; groqKey?: string; openaiKey?: string; claudeKey?: string; doubaoKey?: string; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; hasSonioxKey?: boolean; hasSttDoubaoKey?: boolean; hasDoubaoSttKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; doubaoPreferredModel?: string; doubaoEmbeddingModel?: string; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; sttDoubaoKey?: string; openAiSttBaseUrl?: string }>
   // Permissions
-  checkPermissions:     () => Promise<{ microphone: 'granted'|'denied'|'not-determined'|'restricted'; screen: 'granted'|'denied'|'not-determined'|'restricted'; platform: string }>
+  checkPermissions:     () => Promise<{
+    microphone: 'granted'|'denied'|'not-determined'|'restricted';
+    screen: 'granted'|'denied'|'not-determined'|'restricted';
+    platform: string;
+    screenHealth: {
+      status: 'granted'|'denied'|'not-determined'|'restricted';
+      capturable: boolean;
+      effectiveGranted: boolean;
+      staleGrantSuspected: boolean;
+      recommendedFix: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
+      sourceCount: number;
+      error?: string;
+    };
+    microphoneHealth: {
+      status: 'granted'|'denied'|'not-determined'|'restricted';
+      capturable: boolean;
+      effectiveGranted: boolean;
+      staleGrantSuspected: boolean;
+      recommendedFix: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
+      sourceCount: number;
+      error?: string;
+    };
+  }>
   requestMicPermission: () => Promise<boolean>
+  repairTccPermission: (scope: 'screen' | 'microphone' | 'both') => Promise<{ success: boolean; bundleId: string | null; commandsRun: string[]; requiresRestart: boolean; error?: string }>
+  restartAfterTccRepair: () => Promise<{ success: boolean }>
 
   // STT Provider Management
   setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively') => Promise<{ success: boolean; error?: string }>
@@ -167,7 +191,7 @@ export interface ElectronAPI {
   onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => () => void
   onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void
   onDeviceSelectionApplied: (callback: (payload: { kind: 'input' | 'output'; requested: string | null; actual: string | null; fellBack: boolean; reason?: string }) => void) => () => void
-  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; code?: string; attempt: number; maxAttempts: number; backend?: string; routeDiagnostics?: { requestedOutputId: string | null; requestedOutputName: string | null; defaultOutputId: string | null; defaultOutputName: string | null; usingDefaultRoute: boolean; selectedDiffersFromDefault: boolean }; terminal?: boolean; stuck?: boolean }) => void) => () => void
+  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; code?: string; recommendedFix?: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none'; staleGrantSuspected?: boolean; attempt: number; maxAttempts: number; backend?: string; routeDiagnostics?: { requestedOutputId: string | null; requestedOutputName: string | null; defaultOutputId: string | null; defaultOutputName: string | null; usingDefaultRoute: boolean; selectedDiffersFromDefault: boolean }; terminal?: boolean; stuck?: boolean }) => void) => () => void
 
   // STT Status Events
   onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void

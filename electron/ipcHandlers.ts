@@ -8,6 +8,11 @@ import * as path from 'path';
 import { AudioDevices } from './audio/AudioDevices';
 import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manager
 import { AppState } from './main';
+import {
+  repairMacTccPermissions,
+  resolveMacMicrophonePermissionHealth,
+  resolveMacScreenPermissionHealth,
+} from './permissions/macPermissionHealth';
 import { CodexCliService } from './services/CodexCliService';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
 import { SkillsManager } from './services/SkillsManager';
@@ -3588,10 +3593,18 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (process.platform === 'darwin') {
       const mic = systemPreferences.getMediaAccessStatus('microphone');
       const screen = systemPreferences.getMediaAccessStatus('screen');
-      return { microphone: mic, screen, platform: 'darwin' };
+      const screenHealth = await resolveMacScreenPermissionHealth('permissions ipc check');
+      const microphoneHealth = resolveMacMicrophonePermissionHealth();
+      return { microphone: mic, screen, platform: 'darwin', screenHealth, microphoneHealth };
     }
     // Windows/Linux: no TCC — permissions handled by OS at install/first-use time
-    return { microphone: 'granted', screen: 'granted', platform: process.platform };
+    return {
+      microphone: 'granted',
+      screen: 'granted',
+      platform: process.platform,
+      screenHealth: await resolveMacScreenPermissionHealth('permissions ipc check'),
+      microphoneHealth: resolveMacMicrophonePermissionHealth(),
+    };
   });
 
   safeHandle('permissions:request-mic', async () => {
@@ -3601,6 +3614,33 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch {
       return false;
     }
+  });
+
+  safeHandle('permissions:repair-tcc', async (_, scope: 'screen' | 'microphone' | 'both') => {
+    const bundleId = process.platform === 'darwin' ? app.getBundleID() : null;
+    const commandsPreview =
+      bundleId && process.platform === 'darwin'
+        ? [
+            ...(scope === 'screen' || scope === 'both'
+              ? [`tccutil reset ScreenCapture ${bundleId}`]
+              : []),
+            ...(scope === 'microphone' || scope === 'both'
+              ? [`tccutil reset Microphone ${bundleId}`]
+              : []),
+          ]
+        : [];
+    const result = await repairMacTccPermissions(scope);
+    return {
+      ...result,
+      bundleId: result.bundleId || bundleId,
+      commandsPreview,
+    };
+  });
+
+  safeHandle('permissions:restart-after-repair', async () => {
+    app.relaunch();
+    setImmediate(() => app.exit(0));
+    return { success: true };
   });
 
   // ==========================================
