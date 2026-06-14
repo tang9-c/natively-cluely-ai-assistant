@@ -129,6 +129,14 @@ type MacScreenCaptureCapability = {
   error?: string;
 };
 
+function normalizeRecognitionLanguageForProvider(provider: string, languageKey: string): string {
+  // 'auto' currently has a supported end-to-end meaning only for NativelyProSTT.
+  // Persisted settings may still contain 'auto' from an earlier provider choice,
+  // so normalize again at provider construction time, not only when the user
+  // changes the dropdown live.
+  return languageKey === 'auto' && provider !== 'natively' ? 'english-us' : languageKey;
+}
+
 function getMacScreenCaptureStatus(): MacScreenCaptureStatus {
   if (process.platform !== 'darwin') return 'granted';
 
@@ -1009,7 +1017,10 @@ export class AppState {
   private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider | null {
     const { CredentialsManager } = require('./services/CredentialsManager');
     const sttProvider = CredentialsManager.getInstance().getSttProvider();
-    const sttLanguage = CredentialsManager.getInstance().getSttLanguage();
+    const sttLanguage = normalizeRecognitionLanguageForProvider(
+      sttProvider,
+      CredentialsManager.getInstance().getSttLanguage(),
+    );
 
     // 'none' means the user has explicitly disabled STT (no provider selected).
     // Return null so the pipeline skips STT without falling back to Google.
@@ -3461,9 +3472,8 @@ export class AppState {
     const { CredentialsManager } = require('./services/CredentialsManager');
     CredentialsManager.getInstance().setSttLanguage(key);
 
-    // 'auto' is only meaningful for NativelyProSTT — other providers fall back to en-US.
     const sttProvider = CredentialsManager.getInstance().getSttProvider();
-    const effectiveKey = (key === 'auto' && sttProvider !== 'natively') ? 'english-us' : key;
+    const effectiveKey = normalizeRecognitionLanguageForProvider(sttProvider, key);
 
     this.googleSTT?.setRecognitionLanguage(effectiveKey);
     this.googleSTT_User?.setRecognitionLanguage(effectiveKey);

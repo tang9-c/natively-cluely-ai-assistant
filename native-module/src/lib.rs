@@ -56,6 +56,95 @@ fn i16_slice_to_le_bytes(samples: &[i16]) -> Vec<u8> {
     bytemuck::cast_slice::<i16, u8>(samples).to_vec()
 }
 
+#[inline]
+fn peak_f32(samples: &[f32]) -> f32 {
+    samples
+        .iter()
+        .fold(0.0_f32, |peak, sample| peak.max(sample.abs()))
+}
+
+#[inline]
+fn peak_i16(samples: &[i16]) -> i16 {
+    samples
+        .iter()
+        .fold(0_i16, |peak, sample| peak.max(sample.saturating_abs()))
+}
+
+#[derive(Debug)]
+struct SystemAudioDiagnostics {
+    window_started_at: Instant,
+    raw_samples: u64,
+    raw_peak: f32,
+    pcm_frames: u64,
+    pcm_peak: i16,
+    sent_frames: u64,
+    sent_peak: i16,
+    silence_frames: u64,
+    suppressed_frames: u64,
+}
+
+impl SystemAudioDiagnostics {
+    fn new() -> Self {
+        Self {
+            window_started_at: Instant::now(),
+            raw_samples: 0,
+            raw_peak: 0.0,
+            pcm_frames: 0,
+            pcm_peak: 0,
+            sent_frames: 0,
+            sent_peak: 0,
+            silence_frames: 0,
+            suppressed_frames: 0,
+        }
+    }
+
+    fn record_raw(&mut self, samples: &[f32]) {
+        self.raw_samples += samples.len() as u64;
+        self.raw_peak = self.raw_peak.max(peak_f32(samples));
+    }
+
+    fn record_pcm(&mut self, samples: &[i16]) {
+        self.pcm_frames += 1;
+        self.pcm_peak = self.pcm_peak.max(peak_i16(samples));
+    }
+
+    fn record_sent(&mut self, samples: &[i16]) {
+        self.sent_frames += 1;
+        self.sent_peak = self.sent_peak.max(peak_i16(samples));
+    }
+
+    fn record_silence(&mut self) {
+        self.silence_frames += 1;
+    }
+
+    fn record_suppressed(&mut self) {
+        self.suppressed_frames += 1;
+    }
+
+    fn maybe_log_and_reset(&mut self, backend: &str, native_rate: u32, emitted_rate: u32) {
+        if self.window_started_at.elapsed().as_secs() < 5 {
+            return;
+        }
+
+        println!(
+            "[SystemAudioCapture][diag] backend={} nativeRate={} emittedRate={} rawSamples={} rawPeak={:.6} pcmFrames={} pcmPeak={} sentFrames={} sentPeak={} silenceFrames={} suppressedFrames={}",
+            backend,
+            native_rate,
+            emitted_rate,
+            self.raw_samples,
+            self.raw_peak,
+            self.pcm_frames,
+            self.pcm_peak,
+            self.sent_frames,
+            self.sent_peak,
+            self.silence_frames,
+            self.suppressed_frames,
+        );
+
+        *self = Self::new();
+    }
+}
+
 /// Coalesces up to `CHUNK_BATCH_COUNT` Send/SendSilence DSP frames into a
 /// single tsfn (V8 boundary) call. Each tsfn invocation traverses the napi
 /// scheduler, allocates a JS Buffer wrapper, and dispatches an event-loop
@@ -231,10 +320,7 @@ impl SystemAudioCapture {
             let mut stream = match input.stream() {
                 Ok(s) => s,
                 Err(e) => {
-                    let msg = format!(
-                        "[SystemAudioCapture] FATAL: stream() failed: {}",
-                        e
-                    );
+                    let msg = format!("[SystemAudioCapture] FATAL: stream() failed: {}", e);
                     eprintln!("{}", msg);
                     tsfn.call(
                         Err(napi::Error::from_reason(msg)),
@@ -247,7 +333,10 @@ impl SystemAudioCapture {
             if let Ok(mut name) = backend_name_shared.lock() {
                 *name = stream.backend_name().to_string();
             }
-            println!("[SystemAudioCapture] Using backend: {}", stream.backend_name());
+            println!(
+                "[SystemAudioCapture] Using backend: {}",
+                stream.backend_name()
+            );
             let mut consumer = match stream.take_consumer() {
                 Some(c) => c,
                 None => {
@@ -275,13 +364,20 @@ impl SystemAudioCapture {
                 match Resampler::new(native_rate as f64) {
                     Ok(r) => Some(r),
                     Err(e) => {
-                        eprintln!("[SystemAudioCapture] Resampler init failed ({}); passthrough at {}Hz", e, native_rate);
+                        eprintln!(
+                            "[SystemAudioCapture] Resampler init failed ({}); passthrough at {}Hz",
+                            e, native_rate
+                        );
                         None
                     }
                 }
             };
             // The emitted rate is 16kHz when resampling, else the native rate.
-            let emitted_rate = if resampler.is_some() { CANONICAL_STT_RATE } else { native_rate };
+            let emitted_rate = if resampler.is_some() {
+                CANONICAL_STT_RATE
+            } else {
+                native_rate
+            };
             sample_rate_shared.store(emitted_rate, Ordering::Release);
             println!(
                 "[SystemAudioCapture] Background init complete. Native: {}Hz, Emitted: {}Hz. DSP starting.",
@@ -291,9 +387,14 @@ impl SystemAudioCapture {
             // 2. DSP loop with silence suppression + WebRTC VAD.
             // Suppressor operates on the EMITTED-rate stream, so its internal VAD
             // decimation is a no-op when emitted_rate == 16000.
+            let suppression_template = if stream.backend_name() == "coreaudio" {
+                SilenceSuppressionConfig::for_coreaudio_system_audio()
+            } else {
+                SilenceSuppressionConfig::for_system_audio()
+            };
             let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
                 native_sample_rate: emitted_rate,
-                ..SilenceSuppressionConfig::for_system_audio()
+                ..suppression_template
             });
 
             // 20ms chunks at the EMITTED rate (320 samples at 16kHz).
@@ -305,6 +406,8 @@ impl SystemAudioCapture {
             // PERF: coalesce up to CHUNK_BATCH_COUNT frames into one tsfn call.
             // Cuts V8 boundary crossings 3× with no perceptible STT-side latency.
             let mut emitter = BatchEmitter::new(chunk_size * 2);
+            let backend_name = stream.backend_name().to_string();
+            let mut diagnostics = SystemAudioDiagnostics::new();
 
             loop {
                 if stop_signal.load(Ordering::Relaxed) {
@@ -320,16 +423,22 @@ impl SystemAudioCapture {
                 // f32 -> i16 directly when passthrough. The resampler already
                 // returns 16kHz i16; passthrough scales f32 -> i16 at native rate.
                 if !raw_batch.is_empty() {
+                    diagnostics.record_raw(&raw_batch);
                     match resampler.as_mut() {
                         Some(r) => match r.resample_to_i16(&raw_batch) {
-                            Ok(out) => frame_buffer.extend_from_slice(&out),
+                            Ok(out) => {
+                                diagnostics.record_pcm(&out);
+                                frame_buffer.extend_from_slice(&out);
+                            }
                             Err(e) => eprintln!("[SystemAudioCapture] Resample error: {}", e),
                         },
                         None => {
+                            let before_len = frame_buffer.len();
                             for &f in &raw_batch {
                                 let scaled = (f * 32767.0).clamp(-32768.0, 32767.0);
                                 frame_buffer.push(scaled as i16);
                             }
+                            diagnostics.record_pcm(&frame_buffer[before_len..]);
                         }
                     }
                     raw_batch.clear();
@@ -344,15 +453,18 @@ impl SystemAudioCapture {
 
                     match action {
                         FrameAction::Send(data) => {
+                            diagnostics.record_sent(&data);
                             let bytes = i16_slice_to_le_bytes(&data);
                             emitter.push(&bytes, &tsfn);
                         }
                         FrameAction::SendSilence => {
+                            diagnostics.record_silence();
                             // Zero-filled bytes to keep streaming APIs alive.
                             let silence = vec![0u8; chunk_size * 2];
                             emitter.push(&silence, &tsfn);
                         }
                         FrameAction::Suppress => {
+                            diagnostics.record_suppressed();
                             // Do nothing — bandwidth saving. A pending partial
                             // batch can age out via the timeout check below.
                         }
@@ -372,6 +484,7 @@ impl SystemAudioCapture {
                 // Flush partial batch on timeout so trailing speech in light
                 // traffic isn't held up.
                 emitter.maybe_flush_timeout(&tsfn);
+                diagnostics.maybe_log_and_reset(&backend_name, native_rate, emitted_rate);
 
                 // Keep the sleep small so we quickly read the ring buffer
                 thread::sleep(Duration::from_millis(DSP_POLL_MS));
@@ -442,7 +555,11 @@ impl MicrophoneCapture {
         );
 
         // Emitted rate is canonical 16kHz unless native is already 16kHz.
-        let emitted_rate = if native_rate == CANONICAL_STT_RATE { native_rate } else { CANONICAL_STT_RATE };
+        let emitted_rate = if native_rate == CANONICAL_STT_RATE {
+            native_rate
+        } else {
+            CANONICAL_STT_RATE
+        };
 
         Ok(MicrophoneCapture {
             stop_signal: Arc::new(AtomicBool::new(false)),
@@ -488,7 +605,11 @@ impl MicrophoneCapture {
                 Ok(i) => {
                     let rate = i.sample_rate();
                     self.native_sample_rate.store(rate, Ordering::Release);
-                    let emitted = if rate == CANONICAL_STT_RATE { rate } else { CANONICAL_STT_RATE };
+                    let emitted = if rate == CANONICAL_STT_RATE {
+                        rate
+                    } else {
+                        CANONICAL_STT_RATE
+                    };
                     self.sample_rate.store(emitted, Ordering::Release);
                     self.input = Some(i);
                 }
@@ -511,7 +632,8 @@ impl MicrophoneCapture {
             .map_err(|e| napi::Error::from_reason(format!("{}", e)))?;
 
         let native_rate = input_ref.sample_rate();
-        self.native_sample_rate.store(native_rate, Ordering::Release);
+        self.native_sample_rate
+            .store(native_rate, Ordering::Release);
 
         let mut consumer = input_ref
             .take_consumer()
@@ -533,12 +655,19 @@ impl MicrophoneCapture {
                 match Resampler::new(native_rate as f64) {
                     Ok(r) => Some(r),
                     Err(e) => {
-                        eprintln!("[MicrophoneCapture] Resampler init failed ({}); passthrough at {}Hz", e, native_rate);
+                        eprintln!(
+                            "[MicrophoneCapture] Resampler init failed ({}); passthrough at {}Hz",
+                            e, native_rate
+                        );
                         None
                     }
                 }
             };
-            let emitted_rate = if resampler.is_some() { CANONICAL_STT_RATE } else { native_rate };
+            let emitted_rate = if resampler.is_some() {
+                CANONICAL_STT_RATE
+            } else {
+                native_rate
+            };
 
             let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
                 native_sample_rate: emitted_rate,

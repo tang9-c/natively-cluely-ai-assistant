@@ -86,6 +86,26 @@ impl SilenceSuppressionConfig {
         }
     }
 
+    /// Create config for CoreAudio system audio.
+    /// CoreAudio taps can deliver very low-amplitude but still valid far-end
+    /// speech, especially after per-device mixdown and native->16k resampling.
+    /// Using the generic system-audio threshold here can misclassify that quiet
+    /// signal as silence and replace it with zero keepalive frames, which then
+    /// looks identical to a dead capture path at the JS layer.
+    pub fn for_coreaudio_system_audio() -> Self {
+        Self {
+            speech_threshold_rms: 5.0,
+            speech_hangover: Duration::from_millis(800),
+            silence_keepalive_interval: Duration::from_millis(100),
+            adaptive_multiplier: 1.5,
+            adaptive_min_floor: 1.0,
+            ema_alpha: 0.02,
+            native_sample_rate: 48000,
+            use_vad: false,
+            vad_mode: VadMode::Quality, // ignored when use_vad is false
+        }
+    }
+
     /// Create config for microphone (standard).
     /// Uses Normal VAD mode instead of Aggressive because built-in microphones with heavy
     /// hardware DSP (like macOS Apple Silicon) sound "unnatural" to strict models (#128).
