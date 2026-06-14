@@ -6,6 +6,12 @@ import { loadNativeModule } from './nativeModuleLoader';
 const NativeModule: any = loadNativeModule();
 const { SystemAudioCapture: RustAudioCapture } = NativeModule || {};
 
+function createNativeUnavailableError(): Error {
+    const err = new Error('Native audio module is unavailable; cannot capture system audio.');
+    (err as any).code = 'NATIVE_AUDIO_MODULE_UNAVAILABLE';
+    return err;
+}
+
 export class SystemAudioCapture extends EventEmitter {
     private isRecording: boolean = false;
     private deviceId: string | null = null;
@@ -94,7 +100,9 @@ export class SystemAudioCapture extends EventEmitter {
         if (this.isRecording) return;
 
         if (!RustAudioCapture) {
-            console.error('[SystemAudioCapture] Cannot start: Rust module missing');
+            const err = createNativeUnavailableError();
+            console.error('[SystemAudioCapture] Cannot start:', err.message);
+            this.emit('error', err);
             return;
         }
 

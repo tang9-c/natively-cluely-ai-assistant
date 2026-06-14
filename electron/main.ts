@@ -312,6 +312,14 @@ interface OutputRouteDiagnostics {
   selectedDiffersFromDefault: boolean;
 }
 
+function isNativeAudioModuleUnavailable(err: unknown): boolean {
+  return Boolean(
+    err &&
+    typeof err === 'object' &&
+    (err as any).code === 'NATIVE_AUDIO_MODULE_UNAVAILABLE'
+  );
+}
+
 type ScreenshotCaptureKind = 'full' | 'selective';
 
 interface ScreenshotCaptureSession {
@@ -390,6 +398,7 @@ export class AppState {
   // first-chunk handler reads the freshly-detected native rate.
   private _sysSttRateApplied: boolean = false;
   private _micSttRateApplied: boolean = false;
+  private _sckRouteIgnoredBroadcasted: boolean = false;
   private _ollamaBootstrapPromise: Promise<void> | null = null;
   private screenshotCaptureInProgress: boolean = false;
 
@@ -1578,6 +1587,22 @@ export class AppState {
     this.setupMicRecoveryHandler();
   }
 
+  private broadcastNativeAudioModuleUnavailable(channel: 'system' | 'mic', err: unknown): void {
+    const message =
+      err instanceof Error && err.message
+        ? err.message
+        : 'Native audio module is unavailable. Rebuild or reinstall Natively for this Mac architecture, then restart the app.';
+    this.broadcast('audio-capture-failed', {
+      channel,
+      message,
+      code: 'NATIVE_AUDIO_MODULE_UNAVAILABLE',
+      attempt: 0,
+      maxAttempts: 0,
+      terminal: true,
+      stuck: false,
+    });
+  }
+
   private async setupSystemAudioPipeline(): Promise<void> {
     // REMOVED EARLY RETURN: if (this.systemAudioCapture && this.microphoneCapture) return; // Already initialized
 
@@ -1615,8 +1640,17 @@ export class AppState {
       }
 
       if (!this.microphoneCapture) {
-        this.microphoneCapture = new MicrophoneCapture();
-        this.wireMicCapture(this.microphoneCapture);
+        try {
+          this.microphoneCapture = new MicrophoneCapture();
+          this.wireMicCapture(this.microphoneCapture);
+        } catch (micErr) {
+          this.microphoneCapture = null;
+          if (isNativeAudioModuleUnavailable(micErr)) {
+            this.broadcastNativeAudioModuleUnavailable('mic', micErr);
+          } else {
+            throw micErr;
+          }
+        }
       }
 
       // 2. Initialize STT Services if missing
@@ -1882,6 +1916,40 @@ export class AppState {
     return message;
   }
 
+  private maybeBroadcastSckOutputRouteIgnored(capture: SystemAudioCapture | null = this.systemAudioCapture): void {
+    if (!capture || this._sckRouteIgnoredBroadcasted) return;
+    let backend = 'unknown';
+    try {
+      backend = capture.getBackendName();
+    } catch {
+      backend = 'unknown';
+    }
+    if (backend !== 'sck') return;
+
+    const routeDiagnostics = this.getOutputRouteDiagnostics();
+    if (!routeDiagnostics.requestedOutputId) return;
+
+    this._sckRouteIgnoredBroadcasted = true;
+    const selected = routeDiagnostics.requestedOutputName || routeDiagnostics.requestedOutputId;
+    const currentDefault = routeDiagnostics.defaultOutputName || routeDiagnostics.defaultOutputId || 'unknown';
+    const message =
+      `ScreenCaptureKit fallback is active and ignores the selected speaker "${selected}". ` +
+      `Interviewer audio is captured from global system audio instead. Current system default output: "${currentDefault}".`;
+
+    console.warn(`[Main] ${message}`);
+    this.broadcast('audio-capture-failed', {
+      channel: 'system',
+      message,
+      code: 'SCK_OUTPUT_ROUTE_IGNORED',
+      attempt: 0,
+      maxAttempts: 0,
+      backend,
+      routeDiagnostics,
+      terminal: false,
+      stuck: false,
+    });
+  }
+
   /**
    * Normalize a device id from the renderer/localStorage into the canonical
    * "use the system default" form (undefined). Treats null, empty string, and
@@ -2046,6 +2114,7 @@ export class AppState {
     // out mid-meeting.
     this._lastRequestedInputDeviceId = wantedInput;
     this._lastRequestedOutputDeviceId = wantedOutput;
+    this._sckRouteIgnoredBroadcasted = false;
     // Reset mic recovery counter for the new device choice.
     this._micRecoveryAttempts = 0;
 
@@ -2282,6 +2351,7 @@ export class AppState {
     if (this.isMeetingActive) {
       await this.setupSystemAudioPipeline();
       this.systemAudioCapture?.start();
+      this.maybeBroadcastSckOutputRouteIgnored();
       this.microphoneCapture?.start();
       this.googleSTT?.start();
       this.googleSTT_User?.start();
@@ -2315,6 +2385,11 @@ export class AppState {
 
     this.systemAudioCapture.on('error', async (err: Error) => {
       if (!this.isMeetingActive) return; // Only attempt recovery during active meetings
+
+      if (isNativeAudioModuleUnavailable(err)) {
+        this.broadcastNativeAudioModuleUnavailable('system', err);
+        return;
+      }
 
       const now = Date.now();
       this._systemAudioLastFailureAt = now;
@@ -2385,6 +2460,7 @@ export class AppState {
         this.systemAudioCapture = fresh;
         this.wireSystemCapture(fresh, '(Recovery)');
         fresh.start();
+        this.maybeBroadcastSckOutputRouteIgnored(fresh);
 
         this._systemAudioSuccessfulRestarts++;
         this._systemAudioConsecutiveFailures = 0;
@@ -2521,6 +2597,7 @@ export class AppState {
       this.systemAudioCapture = fresh;
       this.wireSystemCapture(fresh, '(RouteChanged)');
       fresh.start();
+      this.maybeBroadcastSckOutputRouteIgnored(fresh);
       // Tell the renderer what's happening so any "interviewer went silent"
       // banners can clear once chunks resume.
       this.broadcastDeviceSelection({
@@ -2551,6 +2628,11 @@ export class AppState {
 
     this.microphoneCapture.on('error', async (err: Error) => {
       if (!this.isMeetingActive) return;
+
+      if (isNativeAudioModuleUnavailable(err)) {
+        this.broadcastNativeAudioModuleUnavailable('mic', err);
+        return;
+      }
 
       if (this._micRecoveryInProgress || this._micRecoveryAttempts >= 3) {
         console.warn(
@@ -2739,6 +2821,7 @@ export class AppState {
     this._systemAudioRecoveryInProgress = false;
     this._systemAudioRecoveryAttempts = 0;
     this._systemAudioConsecutiveFailures = 0;
+    this._sckRouteIgnoredBroadcasted = false;
     if (this._systemAudioRecoveryTimer) {
       clearTimeout(this._systemAudioRecoveryTimer);
       this._systemAudioRecoveryTimer = null;
@@ -2857,6 +2940,7 @@ export class AppState {
 
         // Start System Audio
         this.systemAudioCapture?.start();
+        this.maybeBroadcastSckOutputRouteIgnored();
         this.googleSTT?.start();
 
         // Start Microphone
@@ -2978,12 +3062,12 @@ export class AppState {
 
     // ─── BACKGROUND: STT drain + meeting save + RAG embed ────────────────
     // Note: `isMeetingActive` was already flipped to false synchronously above
-    // (so the launcher UI updates instantly). `_isDraining` is true during the
-    // 250 ms grace window so the transcript handler keeps accepting trailing
-    // finals — without that, the user's last sentence vanishes. We expose the
-    // in-flight teardown as `_pendingTeardown` so a fast start→stop→start
-    // sequence awaits this completion in startMeeting() before booting a new
-    // session on the (still-shared) STT instances.
+    // (so the launcher UI updates instantly). `_isDraining` is true while
+    // providers flush trailing finals, so the transcript handler keeps
+    // accepting the user's last sentence. We expose the in-flight teardown as
+    // `_pendingTeardown` so a fast start→stop→start sequence awaits this
+    // completion in startMeeting() before booting a new session on the
+    // (still-shared) STT instances.
     const ragManager = this.ragManager;
     this._pendingTeardown = (async () => {
       try {
@@ -3008,9 +3092,10 @@ export class AppState {
           console.error('[Main] Failed to revert model:', e);
         }
 
-        // 1. Grace window for STT trailing finals (Google/Soniox/Deepgram all
-        //    reply to finalize() within 100–200ms). 250ms is conservative.
-        await new Promise(resolve => setTimeout(resolve, 250));
+        // 1. Provider-aware grace window for STT trailing finals. Cloud
+        //    providers keep the old short wait; local Whisper can need longer
+        //    on Intel CPUs because the final pass runs in a worker.
+        await this.drainSttFinalsForMeetingStop();
 
         // 2. Tear down STT sockets now that finals have arrived.
         this.googleSTT?.stop();
@@ -3048,6 +3133,17 @@ export class AppState {
     // endMeeting returns NOW — the IPC handler resolves and the renderer's
     // "Stop" button transitions instantly. Total endMeeting wall-clock time
     // is now bounded by the synchronous block above (~1–5ms typical).
+  }
+
+  private async drainSttFinalsForMeetingStop(): Promise<void> {
+    const providers = [this.googleSTT, this.googleSTT_User].filter(Boolean) as STTProvider[];
+    await Promise.all(providers.map(async (provider) => {
+      try {
+        await provider.drainFinals();
+      } catch (err) {
+        console.warn('[Main] STT drainFinals failed; continuing meeting save:', err);
+      }
+    }));
   }
 
   private async processCompletedMeetingForRAG(meetingId: string): Promise<void> {

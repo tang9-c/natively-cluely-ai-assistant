@@ -7,6 +7,12 @@ import { loadNativeModule } from './nativeModuleLoader';
 const NativeModule: any = loadNativeModule();
 const { MicrophoneCapture: RustMicCapture } = NativeModule || {};
 
+function createNativeUnavailableError(): Error {
+    const err = new Error('Native audio module is unavailable; cannot capture microphone audio.');
+    (err as any).code = 'NATIVE_AUDIO_MODULE_UNAVAILABLE';
+    return err;
+}
+
 export class MicrophoneCapture extends EventEmitter {
     private monitor: any = null;
     private isRecording: boolean = false;
@@ -34,7 +40,9 @@ export class MicrophoneCapture extends EventEmitter {
         super();
         this.deviceId = deviceId || null;
         if (!RustMicCapture) {
-            console.error('[MicrophoneCapture] Rust class implementation not found.');
+            const err = createNativeUnavailableError();
+            console.error('[MicrophoneCapture] Rust class implementation not found:', err.message);
+            throw err;
         } else {
             console.log(`[MicrophoneCapture] Initialized wrapper. Device ID: ${this.deviceId || 'default'}`);
             try {
@@ -88,7 +96,9 @@ export class MicrophoneCapture extends EventEmitter {
         if (this.isRecording) return;
 
         if (!RustMicCapture) {
-            console.error('[MicrophoneCapture] Cannot start: Rust module missing');
+            const err = createNativeUnavailableError();
+            console.error('[MicrophoneCapture] Cannot start:', err.message);
+            this.emit('error', err);
             return;
         }
 

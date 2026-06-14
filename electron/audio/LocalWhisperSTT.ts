@@ -294,6 +294,35 @@ export class LocalWhisperSTT extends BaseSTT {
         segs.forEach(s => this.dispatchFinal(s.samples));
     }
 
+    async drainFinals(timeoutMs: number = 5000): Promise<void> {
+        if (this._isActive && this.vad) {
+            this.isDrainingFinals = true;
+            this.finalize();
+        }
+
+        if (this.pendingAudio.length === 0 && this.drainingFinalsInFlight === 0) {
+            this.isDrainingFinals = false;
+            return;
+        }
+
+        await new Promise<void>((resolve) => {
+            const started = Date.now();
+            const timer = setInterval(() => {
+                const drained =
+                    this.pendingAudio.length === 0 &&
+                    this.drainingFinalsInFlight === 0;
+                const timedOut = Date.now() - started >= timeoutMs;
+                if (drained || timedOut) {
+                    clearInterval(timer);
+                    if (timedOut && !drained) {
+                        console.warn('[LocalWhisperSTT] Timed out draining final transcripts before meeting save');
+                    }
+                    resolve();
+                }
+            }, 50);
+        });
+    }
+
     /* ──────────────── Streaming inference loop ──────────────── */
 
     private startStreamingLoop(): void {
@@ -644,7 +673,12 @@ export class LocalWhisperSTT extends BaseSTT {
         // prompt for whichever transcribe arrives next).
         this.maybePushPromptToWorker();
         const queued = this.pendingAudio.splice(0);
-        queued.forEach(audio => this.sendTranscribe(audio, false));
+        queued.forEach(audio => {
+            if (this.isDrainingFinals) {
+                this.drainingFinalsInFlight++;
+            }
+            this.sendTranscribe(audio, false);
+        });
         if (this.isDrainingFinals && queued.length === 0 && this.drainingFinalsInFlight === 0 && this.worker) {
             this.beginWorkerTermination(this.worker);
         }
