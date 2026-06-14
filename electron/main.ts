@@ -1022,6 +1022,82 @@ export class AppState {
   private googleSTT: STTProvider | null = null; // Interviewer
   private googleSTT_User: STTProvider | null = null; // User
 
+  private getSttRuntimeDiagnostics(
+    speaker: 'interviewer' | 'user',
+    requestedLanguageOverride?: string,
+  ): {
+    speaker: 'interviewer' | 'user';
+    provider: string;
+    requestedLanguageKey: string;
+    effectiveLanguageKey: string;
+    willHonorSelection: boolean;
+    reasonCode: string;
+    perChannelEnabled: boolean;
+    activeModelId: string | null;
+    globalModelId: string | null;
+    micModelId: string | null;
+    systemModelId: string | null;
+  } {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { resolveSttLanguageCompatibility } = require('./audio/sttLanguageCompatibility');
+
+    const credentialsManager = CredentialsManager.getInstance();
+    const settingsManager = SettingsManager.getInstance();
+    const provider = credentialsManager.getSttProvider();
+    const requestedLanguageKey =
+      requestedLanguageOverride ?? credentialsManager.getSttLanguage() ?? 'english-us';
+    const perChannelEnabled = !!settingsManager.get('localWhisperPerChannelEnabled');
+    const globalModelId = settingsManager.get('localWhisperModel') ?? null;
+    const micModelId = settingsManager.get('localWhisperModelMic') ?? null;
+    const systemModelId = settingsManager.get('localWhisperModelSystem') ?? null;
+    const activeModelId =
+      provider === 'local-whisper'
+        ? perChannelEnabled
+          ? (speaker === 'interviewer' ? systemModelId : micModelId) || globalModelId || 'Xenova/whisper-base'
+          : globalModelId || 'Xenova/whisper-base'
+        : null;
+    const compatibility = resolveSttLanguageCompatibility({
+      provider,
+      requestedLanguageKey,
+      localWhisper: {
+        enabled: perChannelEnabled,
+        globalModelId: globalModelId ?? '',
+        micModelId: micModelId ?? '',
+        systemModelId: systemModelId ?? '',
+      },
+    });
+
+    return {
+      speaker,
+      provider,
+      requestedLanguageKey,
+      effectiveLanguageKey: compatibility.effectiveLanguageKey,
+      willHonorSelection: compatibility.willHonorSelection,
+      reasonCode: compatibility.reasonCode,
+      perChannelEnabled,
+      activeModelId,
+      globalModelId,
+      micModelId,
+      systemModelId,
+    };
+  }
+
+  private logSttRuntimeDiagnostics(
+    context: string,
+    speaker: 'interviewer' | 'user',
+    requestedLanguageOverride?: string,
+  ): void {
+    try {
+      const diagnostics = this.getSttRuntimeDiagnostics(speaker, requestedLanguageOverride);
+      console.log(`[Main] STT diagnostics (${context})`, diagnostics);
+    } catch (error: any) {
+      console.warn(
+        `[Main] Failed to collect STT diagnostics (${context}/${speaker}): ${error?.message || error}`,
+      );
+    }
+  }
+
   private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider | null {
     const { CredentialsManager } = require('./services/CredentialsManager');
     const sttProvider = CredentialsManager.getInstance().getSttProvider();
@@ -1029,6 +1105,7 @@ export class AppState {
       sttProvider,
       CredentialsManager.getInstance().getSttLanguage(),
     );
+    this.logSttRuntimeDiagnostics('create-stt-provider', speaker);
 
     // 'none' means the user has explicitly disabled STT (no provider selected).
     // Return null so the pipeline skips STT without falling back to Google.
@@ -2975,6 +3052,9 @@ export class AppState {
       // dialog itself when it first attempts to access screen content.
     }
 
+    this.logSttRuntimeDiagnostics('meeting-start', 'user');
+    this.logSttRuntimeDiagnostics('meeting-start', 'interviewer');
+
     // Reset overlay position BEFORE the switch so the new meeting starts in
     // a predictable centered position regardless of where the previous
     // session left it. (Moved up from below so setWindowMode('overlay') reads
@@ -3524,6 +3604,8 @@ export class AppState {
 
     const sttProvider = CredentialsManager.getInstance().getSttProvider();
     const effectiveKey = normalizeRecognitionLanguageForProvider(sttProvider, key);
+    this.logSttRuntimeDiagnostics('set-recognition-language', 'user', key);
+    this.logSttRuntimeDiagnostics('set-recognition-language', 'interviewer', key);
 
     this.googleSTT?.setRecognitionLanguage(effectiveKey);
     this.googleSTT_User?.setRecognitionLanguage(effectiveKey);
