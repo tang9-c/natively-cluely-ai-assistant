@@ -19,7 +19,25 @@ const originalLoad = (Module as any)._load;
 
 type LLMHelperConstructor = new (...args: any[]) => any;
 
-type PromptModule = Record<string, string>;
+type TinyPromptModule = {
+  TINY_MODE_GENERAL_PROMPT: string;
+  TINY_MODE_SALES_PROMPT: string;
+  TINY_MODE_RECRUITING_PROMPT: string;
+  TINY_MODE_TEAM_MEET_PROMPT: string;
+  TINY_MODE_LOOKING_FOR_WORK_PROMPT: string;
+  TINY_MODE_TECHNICAL_INTERVIEW_PROMPT: string;
+  TINY_MODE_LECTURE_PROMPT: string;
+};
+
+type PromptModule = {
+  MODE_GENERAL_PROMPT: string;
+  MODE_SALES_PROMPT: string;
+  MODE_RECRUITING_PROMPT: string;
+  MODE_TEAM_MEET_PROMPT: string;
+  MODE_LOOKING_FOR_WORK_PROMPT: string;
+  MODE_TECHNICAL_INTERVIEW_PROMPT: string;
+  MODE_LECTURE_PROMPT: string;
+};
 
 let promptModule: PromptModule | null = null;
 
@@ -706,7 +724,7 @@ async function modePromptFor(mode: string): Promise<string> {
   // of the cloud-tier prompts.ts. Selected by env vars so the default
   // cloud eval path is untouched.
   if (process.env.NATIVELY_EVAL_USE_OLLAMA === '1' || process.env.NATIVELY_EVAL_TIER === 'tiny') {
-    const tiny = await import('../llm/tinyPrompts') as Record<string, string>;
+    const tiny = await import('../llm/tinyPrompts') as unknown as TinyPromptModule;
     const byMode: Record<string, string> = {
       general: tiny.TINY_MODE_GENERAL_PROMPT,
       sales: tiny.TINY_MODE_SALES_PROMPT,
@@ -719,7 +737,7 @@ async function modePromptFor(mode: string): Promise<string> {
     return byMode[mode] ?? tiny.TINY_MODE_GENERAL_PROMPT;
   }
 
-  promptModule ??= await import('../llm/prompts') as PromptModule;
+  promptModule ??= await import('../llm/prompts') as unknown as PromptModule;
   const byMode: Record<string, string> = {
     general: promptModule.MODE_GENERAL_PROMPT,
     sales: promptModule.MODE_SALES_PROMPT,

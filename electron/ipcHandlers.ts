@@ -3620,7 +3620,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('permissions:repair-tcc', async (_, scope: 'screen' | 'microphone' | 'both') => {
-    const bundleId = process.platform === 'darwin' ? app.getBundleID() : null;
+    const bundleId = process.platform === 'darwin' ? (app as any).getBundleID?.() ?? app.getName() : null;
     const commandsPreview =
       bundleId && process.platform === 'darwin'
         ? [
