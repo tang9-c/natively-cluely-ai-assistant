@@ -252,7 +252,6 @@ const formatProviderLabel = (provider?: string | null): string => {
 
 const getSttSummary = (
   userStatus: 'connected' | 'reconnecting' | 'failed',
-  interviewerStatus: 'connected' | 'reconnecting' | 'failed',
   userProvider: string,
   interviewerProvider: string,
   notConfigured: boolean,
@@ -3360,7 +3359,6 @@ Provide only the answer, nothing else.`;
   );
   const sttSummary = getSttSummary(
     sttUserStatus,
-    sttInterviewerStatus,
     sttUserProvider,
     sttInterviewerProvider,
     sttNotConfigured,
