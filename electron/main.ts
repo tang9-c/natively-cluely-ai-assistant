@@ -184,6 +184,7 @@ async function resolveMacScreenCaptureCapability(context: string): Promise<MacSc
 type PermissionReason =
   | 'screen-recording-denied'
   | 'mac-screen-recording-revoked-rebuild'
+  | 'mac-coreaudio-audio-capture-revoked'
   | 'mac-system-audio-zero-fill'
   | 'mic-denied'
   | 'mic-zero-fill'
@@ -203,6 +204,9 @@ function formatPermissionMessage(reason: PermissionReason, extra?: { device?: st
       // than leak macOS UI strings to Windows users.
       if (!isMac) return formatPermissionMessage('system-audio-stuck');
       return 'System audio is being captured but every sample is silent. This usually means macOS Screen Recording permission needs to be re-granted to this build of Natively. Open System Settings → Privacy & Security → Screen Recording, toggle Natively off and back on, then restart the app. (If you recently rebuilt or updated, the previous grant may not apply.)';
+    case 'mac-coreaudio-audio-capture-revoked':
+      if (!isMac) return formatPermissionMessage('system-audio-stuck');
+      return 'CoreAudio system audio capture is running, but macOS is returning silent samples. This usually means the System Audio Recording permission cache no longer applies to this build of Natively. Repair permissions, restart Natively, then grant system audio recording again.';
     case 'mac-system-audio-zero-fill':
       if (!isMac) return formatPermissionMessage('system-audio-stuck');
       return 'System audio capture is running but every sample is silent. Check that the interviewer audio is actually playing through the selected output device. If the output route changed, re-select the speakers/headphones. If you recently rebuilt or updated Natively, re-toggle Screen Recording for Natively and restart the app.';
@@ -1447,16 +1451,25 @@ export class AppState {
       `requestedOutput=${routeDiagnostics.requestedOutputId || '(default)'} defaultOutput=${routeDiagnostics.defaultOutputId || '(unknown)'}`
     );
 
+    const coreAudioTccSuspected =
+      process.platform === 'darwin' &&
+      backend === 'coreaudio' &&
+      !screenCapability.effectiveDenied &&
+      screenCapability.capturable;
     const baseMessage =
       screenCapability.staleGrantSuspected
         ? this.getStaleScreenRecordingMessage()
         : screenCapability.effectiveDenied || !screenCapability.capturable
           ? this.getStaleScreenRecordingMessage()
-          : this.getSystemAudioZeroFillMessage();
+          : coreAudioTccSuspected
+            ? this.getCoreAudioTccRepairMessage()
+            : this.getSystemAudioZeroFillMessage();
     const message = this.withOutputRouteHint(baseMessage, routeDiagnostics);
 
     if (screenCapability.staleGrantSuspected) {
       this.broadcastScreenTccRepairRequired('SCREEN_TCC_RESET_REQUIRED', message, backend);
+    } else if (coreAudioTccSuspected) {
+      this.broadcastCoreAudioTccRepairRequired(message, backend);
     } else {
       this.broadcast('audio-capture-failed', {
         channel: 'system',
@@ -1602,6 +1615,23 @@ export class AppState {
     });
   }
 
+  private broadcastCoreAudioTccRepairRequired(message: string, backend?: string): void {
+    if (this._screenTccRepairBannerShown) return;
+    this._screenTccRepairBannerShown = true;
+    this.broadcast('audio-capture-failed', {
+      channel: 'system',
+      message,
+      code: 'CORE_AUDIO_TCC_RESET_REQUIRED',
+      recommendedFix: 'reset-tcc',
+      staleGrantSuspected: true,
+      attempt: 0,
+      maxAttempts: 0,
+      backend,
+      terminal: false,
+      stuck: true,
+    });
+  }
+
   private broadcastMicTccRepairRequired(message: string): void {
     if (this._micTccRepairBannerShown) return;
     this._micTccRepairBannerShown = true;
@@ -1622,6 +1652,12 @@ export class AppState {
     return process.platform === 'darwin'
       ? formatPermissionMessage('mac-screen-recording-revoked-rebuild')
       : formatPermissionMessage('screen-recording-denied');
+  }
+
+  private getCoreAudioTccRepairMessage(): string {
+    return process.platform === 'darwin'
+      ? formatPermissionMessage('mac-coreaudio-audio-capture-revoked')
+      : formatPermissionMessage('system-audio-stuck');
   }
 
   private getSystemAudioZeroFillMessage(): string {

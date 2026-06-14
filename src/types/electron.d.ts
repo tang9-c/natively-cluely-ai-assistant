@@ -134,6 +134,17 @@ export interface ElectronAPI {
       sourceCount: number;
       error?: string;
     };
+    systemAudioHealth: {
+      status: 'granted'|'denied'|'not-determined'|'restricted';
+      backend: 'coreaudio' | 'sck' | 'wasapi' | 'unknown';
+      services: string[];
+      capturable: boolean;
+      effectiveGranted: boolean;
+      staleGrantSuspected: boolean;
+      recommendedFix: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
+      sourceCount: number;
+      error?: string;
+    };
     microphoneHealth: {
       status: 'granted'|'denied'|'not-determined'|'restricted';
       capturable: boolean;
@@ -191,7 +202,7 @@ export interface ElectronAPI {
   onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => () => void
   onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void
   onDeviceSelectionApplied: (callback: (payload: { kind: 'input' | 'output'; requested: string | null; actual: string | null; fellBack: boolean; reason?: string }) => void) => () => void
-  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; code?: string; recommendedFix?: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none'; staleGrantSuspected?: boolean; attempt: number; maxAttempts: number; backend?: string; routeDiagnostics?: { requestedOutputId: string | null; requestedOutputName: string | null; defaultOutputId: string | null; defaultOutputName: string | null; usingDefaultRoute: boolean; selectedDiffersFromDefault: boolean }; terminal?: boolean; stuck?: boolean }) => void) => () => void
+  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; code?: 'SCREEN_TCC_STALE_GRANTED' | 'SCREEN_TCC_RESET_REQUIRED' | 'CORE_AUDIO_TCC_RESET_REQUIRED' | 'MIC_TCC_STALE_GRANTED' | string; recommendedFix?: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none'; staleGrantSuspected?: boolean; attempt: number; maxAttempts: number; backend?: string; routeDiagnostics?: { requestedOutputId: string | null; requestedOutputName: string | null; defaultOutputId: string | null; defaultOutputName: string | null; usingDefaultRoute: boolean; selectedDiffersFromDefault: boolean }; terminal?: boolean; stuck?: boolean }) => void) => () => void
 
   // STT Status Events
   onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
