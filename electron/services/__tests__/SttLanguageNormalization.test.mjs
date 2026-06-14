@@ -15,7 +15,8 @@ test('main normalizes persisted auto STT language before provider construction',
   const src = read('electron/main.ts');
 
   assert.match(src, /function normalizeRecognitionLanguageForProvider\(provider: string, languageKey: string\)/);
-  assert.match(src, /return languageKey === 'auto' && provider !== 'natively' \? 'english-us' : languageKey;/);
+  assert.match(src, /if \(languageKey !== 'auto'\) return languageKey;/);
+  assert.match(src, /return provider !== 'natively' \? 'english-us' : languageKey;/);
   assert.match(
     src,
     /const sttLanguage = normalizeRecognitionLanguageForProvider\(\s*sttProvider,\s*CredentialsManager\.getInstance\(\)\.getSttLanguage\(\),\s*\);/,
@@ -30,4 +31,24 @@ test('live language changes reuse the same normalization helper', () => {
     src,
     /const effectiveKey = \(key === 'auto' && sttProvider !== 'natively'\) \? 'english-us' : key;/,
   );
+});
+
+test('explicit Chinese selections are not normalized away from Chinese in main.ts', () => {
+  const src = read('electron/main.ts');
+
+  assert.doesNotMatch(src, /languageKey === ['"]chinese['"][\s\S]{0,120}english-us/);
+  assert.doesNotMatch(src, /key === ['"]chinese['"][\s\S]{0,120}english-us/);
+});
+
+test('settings overlay wires a dedicated STT language compatibility warning', () => {
+  const ui = read('src/components/SettingsOverlay.tsx');
+  const preload = read('electron/preload.ts');
+  const types = read('src/types/electron.d.ts');
+
+  assert.match(ui, /getSttLanguageCompatibility/);
+  assert.match(ui, /willHonorSelection/);
+  assert.match(ui, /这次中文识别不会按所选语言执行|当前实现不会按中文执行/);
+  assert.match(preload, /getSttLanguageCompatibility:/);
+  assert.match(types, /getSttLanguageCompatibility: \(\) => Promise<\{/);
+  assert.match(types, /reasonCode: 'AUTO_NORMALIZED_TO_ENGLISH' \| 'MODEL_ENGLISH_ONLY' \| 'PROVIDER_LANGUAGE_UNSUPPORTED' \| 'SUPPORTED'/);
 });

@@ -32,6 +32,20 @@ interface ChannelConfig {
     globalModelId: string;
 }
 
+interface LanguageCompatibility {
+    requestedLanguageKey: string;
+    effectiveLanguageKey: string;
+    willHonorSelection: boolean;
+    reasonCode: 'AUTO_NORMALIZED_TO_ENGLISH' | 'MODEL_ENGLISH_ONLY' | 'PROVIDER_LANGUAGE_UNSUPPORTED' | 'SUPPORTED';
+    message: string;
+}
+
+interface LocalWhisperModelPanelProps {
+    recognitionLanguage?: string;
+    languageCompatibility?: LanguageCompatibility | null;
+    onConfigChanged?: () => void | Promise<void>;
+}
+
 const electronAPI = (window as any).electronAPI;
 
 function PremiumSelect({ label, value, options, onChange, placeholder }: any) {
@@ -95,7 +109,11 @@ function PremiumSelect({ label, value, options, onChange, placeholder }: any) {
     );
 }
 
-export function LocalWhisperModelPanel() {
+export function LocalWhisperModelPanel({
+    recognitionLanguage,
+    languageCompatibility,
+    onConfigChanged
+}: LocalWhisperModelPanelProps) {
     const [models, setModels] = useState<ModelInfo[]>([]);
     const [hardware, setHardware] = useState<HardwareInfo | null>(null);
     const [config, setConfig] = useState<ChannelConfig>({
@@ -145,7 +163,8 @@ export function LocalWhisperModelPanel() {
                     
                     if (needsUpdate) {
                         setConfig(newCfg);
-                        electronAPI?.localWhisperSetChannelConfig?.(newCfg);
+                        await electronAPI?.localWhisperSetChannelConfig?.(newCfg);
+                        await onConfigChanged?.();
                     }
                 }
             }
@@ -197,27 +216,32 @@ export function LocalWhisperModelPanel() {
     const handleDelete = async (modelId: string) => {
         await electronAPI?.localWhisperDeleteModel?.(modelId);
         await loadData();
+        await onConfigChanged?.();
     };
 
     const toggleDualChannel = async (enabled: boolean) => {
         const newCfg = { ...config, enabled };
         setConfig(newCfg);
         await electronAPI?.localWhisperSetChannelConfig?.({ enabled });
+        await onConfigChanged?.();
     };
 
     const setGlobalModel = async (modelId: string) => {
         setConfig(prev => ({ ...prev, globalModelId: modelId }));
         await electronAPI?.localWhisperSetModel?.(modelId);
+        await onConfigChanged?.();
     };
 
     const setMicModel = async (modelId: string) => {
         setConfig(prev => ({ ...prev, micModelId: modelId }));
         await electronAPI?.localWhisperSetChannelConfig?.({ micModelId: modelId });
+        await onConfigChanged?.();
     };
 
     const setSystemModel = async (modelId: string) => {
         setConfig(prev => ({ ...prev, systemModelId: modelId }));
         await electronAPI?.localWhisperSetChannelConfig?.({ systemModelId: modelId });
+        await onConfigChanged?.();
     };
 
     if (loading) {
@@ -233,6 +257,16 @@ export function LocalWhisperModelPanel() {
                     <h3 className="text-sm font-semibold text-text-primary">本地引擎配置</h3>
                     <p className="text-xs text-text-secondary mt-1 leading-relaxed">Select the AI models you want to use for Speech-to-Text inference.</p>
                 </div>
+
+                {recognitionLanguage === 'chinese' && languageCompatibility && !languageCompatibility.willHonorSelection && (
+                    <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3">
+                        <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-400" />
+                        <div className="min-w-0">
+                            <p className="text-xs font-semibold text-amber-200">Chinese 设置当前不会按中文生效</p>
+                            <p className="mt-1 text-xs leading-relaxed text-amber-100/90">{languageCompatibility.message}</p>
+                        </div>
+                    </div>
+                )}
 
                 <label className="flex items-center justify-between p-3.5 rounded-xl border border-border-subtle bg-bg-elevated/30 hover:bg-bg-elevated transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] cursor-pointer group mb-5 active:scale-[0.99]">
                     <input 
@@ -330,6 +364,9 @@ export function LocalWhisperModelPanel() {
                                         <span className="flex items-center gap-1.5"><HardDrive size={13} className="opacity-70" /> {model.sizeMb} MB</span>
                                         <span className="flex items-center gap-1.5"><Zap size={13} className="opacity-70" /> {model.speed}</span>
                                         <span className="flex items-center gap-1.5"><Check size={13} className="opacity-70" /> {model.accuracy} acc</span>
+                                        <span className={`inline-flex items-center rounded-[4px] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${model.multilingual ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                            {model.multilingual ? '多语言' : '仅英语'}
+                                        </span>
                                     </div>
                                     
                                     {isDownloading && (

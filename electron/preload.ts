@@ -220,6 +220,13 @@ interface ElectronAPI {
   getAiResponseLanguages: () => Promise<Array<{ label: string; code: string }>>;
   setAiResponseLanguage: (language: string) => Promise<{ success: boolean; error?: string }>;
   getSttLanguage: () => Promise<string>;
+  getSttLanguageCompatibility: () => Promise<{
+    requestedLanguageKey: string;
+    effectiveLanguageKey: string;
+    willHonorSelection: boolean;
+    reasonCode: 'AUTO_NORMALIZED_TO_ENGLISH' | 'MODEL_ENGLISH_ONLY' | 'PROVIDER_LANGUAGE_UNSUPPORTED' | 'SUPPORTED';
+    message: string;
+  }>;
   getAiResponseLanguage: () => Promise<string>;
   onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => () => void;
   onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void;
@@ -1134,6 +1141,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAiResponseLanguage: (language: string) =>
     ipcRenderer.invoke('set-ai-response-language', language),
   getSttLanguage: () => ipcRenderer.invoke('get-stt-language'),
+  getSttLanguageCompatibility: () => ipcRenderer.invoke('get-stt-language-compatibility'),
   getAiResponseLanguage: () => ipcRenderer.invoke('get-ai-response-language'),
   onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => {
     const subscription = (_: any, bcp47: string) => callback(bcp47);
