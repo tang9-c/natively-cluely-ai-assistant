@@ -123,12 +123,8 @@ type MacScreenCaptureCapability = {
   status: MacScreenCaptureStatus;
   capturable: boolean;
   effectiveDenied: boolean;
-  sourceCount: number;
-  error?: string;
-};
-
-type MacScreenCaptureProbe = {
-  capturable: boolean;
+  staleGrantSuspected: boolean;
+  recommendedFix: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
   sourceCount: number;
   error?: string;
 };
@@ -151,42 +147,16 @@ function getMacScreenCaptureStatus(): MacScreenCaptureStatus {
   }
 }
 
-async function probeMacScreenCaptureSources(context: string): Promise<MacScreenCaptureProbe> {
-  if (process.platform !== 'darwin' || !app.isPackaged) {
-    return { capturable: true, sourceCount: 0 };
-  }
-
-  try {
-    const sources = await desktopCapturer.getSources({
-      types: ['screen'],
-      thumbnailSize: { width: 1, height: 1 },
-    });
-    const sourceCount = sources.filter((source) => source.id.startsWith('screen:')).length;
-    return { capturable: sourceCount > 0, sourceCount };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[Main] Screen Recording capture probe failed during ${context}: ${message}`);
-    return { capturable: false, sourceCount: 0, error: message };
-  }
-}
-
 async function resolveMacScreenCaptureCapability(context: string): Promise<MacScreenCaptureCapability> {
-  const status = getMacScreenCaptureStatus();
-
-  if (process.platform !== 'darwin' || !app.isPackaged || status !== 'denied') {
-    return { status, capturable: true, effectiveDenied: false, sourceCount: 0 };
-  }
-
-  const probe = await probeMacScreenCaptureSources(context);
-  if (probe.capturable) {
-    console.warn(`[Main] Screen Recording status is denied during ${context}, but capture probe succeeded; continuing without permission banner.`);
-  }
+  const health = await resolveMacScreenPermissionHealth(context);
   return {
-    status,
-    capturable: probe.capturable,
-    effectiveDenied: !probe.capturable,
-    sourceCount: probe.sourceCount,
-    error: probe.error,
+    status: health.status,
+    capturable: health.capturable,
+    effectiveDenied: !health.effectiveGranted,
+    staleGrantSuspected: health.staleGrantSuspected,
+    recommendedFix: health.recommendedFix,
+    sourceCount: health.sourceCount,
+    error: health.error,
   };
 }
 
@@ -288,6 +258,7 @@ import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
 import { warmupIntentClassifier } from "./llm"
+import { resolveMacScreenPermissionHealth } from "./permissions/macPermissionHealth"
 
 /** Unified type for all STT providers */
 type STTProvider = BaseSTT;
@@ -399,6 +370,8 @@ export class AppState {
   private _sysSttRateApplied: boolean = false;
   private _micSttRateApplied: boolean = false;
   private _sckRouteIgnoredBroadcasted: boolean = false;
+  private _screenTccRepairBannerShown: boolean = false;
+  private _micTccRepairBannerShown: boolean = false;
   private _ollamaBootstrapPromise: Promise<void> | null = null;
   private screenshotCaptureInProgress: boolean = false;
 
@@ -1452,34 +1425,39 @@ export class AppState {
     }
 
     const screenCapability = await resolveMacScreenCaptureCapability('system audio zero-fill detector');
-    const screenProbe = await probeMacScreenCaptureSources('system audio zero-fill detector');
     const nativeRate = capture.getNativeSampleRate();
     const emittedRate = capture.getSampleRate();
     const backend = capture.getBackendName();
     const routeDiagnostics = this.getOutputRouteDiagnostics();
     console.warn(
       `${prefix}SystemAudio chunks all zero-filled for ${observationMs / 1000}s — ` +
-      `backend=${backend} status=${screenCapability.status} capturable=${screenProbe.capturable} sources=${screenProbe.sourceCount} ` +
+      `backend=${backend} status=${screenCapability.status} capturable=${screenCapability.capturable} sources=${screenCapability.sourceCount} ` +
       `emittedRate=${emittedRate}Hz nativeRate=${nativeRate || 0}Hz ` +
       `requestedOutput=${routeDiagnostics.requestedOutputId || '(default)'} defaultOutput=${routeDiagnostics.defaultOutputId || '(unknown)'}`
     );
 
     const baseMessage =
-      screenCapability.effectiveDenied || !screenProbe.capturable
-        ? formatPermissionMessage('mac-screen-recording-revoked-rebuild')
-        : formatPermissionMessage('mac-system-audio-zero-fill');
+      screenCapability.staleGrantSuspected
+        ? this.getStaleScreenRecordingMessage()
+        : screenCapability.effectiveDenied || !screenCapability.capturable
+          ? this.getStaleScreenRecordingMessage()
+          : this.getSystemAudioZeroFillMessage();
     const message = this.withOutputRouteHint(baseMessage, routeDiagnostics);
 
-    this.broadcast('audio-capture-failed', {
-      channel: 'system',
-      message,
-      attempt: 0,
-      maxAttempts: 3,
-      backend,
-      routeDiagnostics,
-      terminal: false,
-      stuck: true,
-    });
+    if (screenCapability.staleGrantSuspected) {
+      this.broadcastScreenTccRepairRequired('SCREEN_TCC_RESET_REQUIRED', message, backend);
+    } else {
+      this.broadcast('audio-capture-failed', {
+        channel: 'system',
+        message,
+        attempt: 0,
+        maxAttempts: 3,
+        backend,
+        routeDiagnostics,
+        terminal: false,
+        stuck: true,
+      });
+    }
   }
 
   private wireMicCapture(capture: MicrophoneCapture, label: string = ''): void {
@@ -1563,14 +1541,7 @@ export class AppState {
         } else if (now - firstChunkAt >= ZEROFILL_OBSERVATION_MS) {
           zerofillTriggered = true;
           console.warn(`${prefix}Mic chunks all zero-filled for ${ZEROFILL_OBSERVATION_MS / 1000}s — TCC denial or device-mute suspected.`);
-          this.broadcast('audio-capture-failed', {
-            channel: 'mic',
-            message: formatPermissionMessage('mic-zero-fill'),
-            attempt: 0,
-            maxAttempts: 3,
-            terminal: false,
-            stuck: true,
-          });
+          this.broadcastMicTccRepairRequired(formatPermissionMessage('mic-zero-fill'));
         }
       }
 
@@ -1603,6 +1574,51 @@ export class AppState {
     });
   }
 
+  private broadcastScreenTccRepairRequired(code: 'SCREEN_TCC_STALE_GRANTED' | 'SCREEN_TCC_RESET_REQUIRED', message: string, backend?: string): void {
+    if (this._screenTccRepairBannerShown) return;
+    this._screenTccRepairBannerShown = true;
+    this.broadcast('audio-capture-failed', {
+      channel: 'system',
+      message,
+      code,
+      recommendedFix: 'reset-tcc',
+      staleGrantSuspected: true,
+      attempt: 0,
+      maxAttempts: 0,
+      backend,
+      terminal: false,
+      stuck: true,
+    });
+  }
+
+  private broadcastMicTccRepairRequired(message: string): void {
+    if (this._micTccRepairBannerShown) return;
+    this._micTccRepairBannerShown = true;
+    this.broadcast('audio-capture-failed', {
+      channel: 'mic',
+      message,
+      code: 'MIC_TCC_STALE_GRANTED',
+      recommendedFix: 'reset-tcc',
+      staleGrantSuspected: true,
+      attempt: 0,
+      maxAttempts: 0,
+      terminal: false,
+      stuck: true,
+    });
+  }
+
+  private getStaleScreenRecordingMessage(): string {
+    return process.platform === 'darwin'
+      ? formatPermissionMessage('mac-screen-recording-revoked-rebuild')
+      : formatPermissionMessage('screen-recording-denied');
+  }
+
+  private getSystemAudioZeroFillMessage(): string {
+    return process.platform === 'darwin'
+      ? formatPermissionMessage('mac-system-audio-zero-fill')
+      : formatPermissionMessage('system-audio-failure');
+  }
+
   private async setupSystemAudioPipeline(): Promise<void> {
     // REMOVED EARLY RETURN: if (this.systemAudioCapture && this.microphoneCapture) return; // Already initialized
 
@@ -1612,15 +1628,21 @@ export class AppState {
       if (!this.systemAudioCapture) {
         const screenCapability = await resolveMacScreenCaptureCapability('system audio pipeline setup');
         if (screenCapability.effectiveDenied) {
-          console.warn('[Main] Skipping SystemAudioCapture init — Screen Recording permission denied. Meeting will run mic-only.');
-          this.broadcast('system-audio-permission-denied',
-            formatPermissionMessage('screen-recording-denied'));
+          if (screenCapability.staleGrantSuspected) {
+            const message = this.getStaleScreenRecordingMessage();
+            console.warn('[Main] Skipping SystemAudioCapture init — stale Screen Recording grant suspected. Meeting will run mic-only.');
+            this.broadcastScreenTccRepairRequired('SCREEN_TCC_STALE_GRANTED', message);
+          } else {
+            console.warn('[Main] Skipping SystemAudioCapture init — Screen Recording permission denied. Meeting will run mic-only.');
+            this.broadcast('system-audio-permission-denied',
+              formatPermissionMessage('screen-recording-denied'));
+          }
           this.broadcastDeviceSelection({
             kind: 'output',
             requested: null,
             actual: null,
             fellBack: true,
-            reason: 'screen-recording-permission-denied',
+            reason: screenCapability.staleGrantSuspected ? 'screen-recording-stale-grant' : 'screen-recording-permission-denied',
           });
         } else {
           this.systemAudioCapture = new SystemAudioCapture();
@@ -1790,13 +1812,23 @@ export class AppState {
     try {
       const screenCapability = await resolveMacScreenCaptureCapability('resume capture restart');
       if (screenCapability.effectiveDenied) {
-        this.broadcast('system-audio-permission-denied', formatPermissionMessage('screen-recording-denied'));
+        if (screenCapability.staleGrantSuspected) {
+          const message = this.getStaleScreenRecordingMessage();
+          this.broadcastScreenTccRepairRequired('SCREEN_TCC_STALE_GRANTED', message);
+        } else {
+          this.broadcast(
+            'system-audio-permission-denied',
+            formatPermissionMessage('screen-recording-denied'),
+          );
+        }
         this.broadcastDeviceSelection({
           kind: 'output',
           requested: this._lastRequestedOutputDeviceId || null,
           actual: null,
           fellBack: true,
-          reason: 'screen-recording-permission-denied',
+          reason: screenCapability.staleGrantSuspected
+            ? 'screen-recording-stale-grant'
+            : 'screen-recording-permission-denied',
         });
       } else {
         this.systemAudioCapture = new SystemAudioCapture(this._lastRequestedOutputDeviceId);
@@ -2129,15 +2161,21 @@ export class AppState {
 
     const screenCapability = await resolveMacScreenCaptureCapability('audio reconfigure');
     if (screenCapability.effectiveDenied) {
-      console.warn('[Main] Skipping SystemAudioCapture reconfigure — Screen Recording permission denied. Meeting will run mic-only.');
-      this.broadcast('system-audio-permission-denied',
-        formatPermissionMessage('screen-recording-denied'));
+      if (screenCapability.staleGrantSuspected) {
+        const message = this.getStaleScreenRecordingMessage();
+        console.warn('[Main] Skipping SystemAudioCapture reconfigure — stale Screen Recording grant suspected. Meeting will run mic-only.');
+        this.broadcastScreenTccRepairRequired('SCREEN_TCC_STALE_GRANTED', message);
+      } else {
+        console.warn('[Main] Skipping SystemAudioCapture reconfigure — Screen Recording permission denied. Meeting will run mic-only.');
+        this.broadcast('system-audio-permission-denied',
+          formatPermissionMessage('screen-recording-denied'));
+      }
       this.broadcastDeviceSelection({
         kind: 'output',
         requested: wantedOutput || null,
         actual: null,
         fellBack: true,
-        reason: 'screen-recording-permission-denied',
+        reason: screenCapability.staleGrantSuspected ? 'screen-recording-stale-grant' : 'screen-recording-permission-denied',
       });
     } else {
       try {
@@ -2445,13 +2483,20 @@ export class AppState {
 
         const screenCapability = await resolveMacScreenCaptureCapability('system audio recovery');
         if (screenCapability.effectiveDenied) {
-          this.broadcast('system-audio-permission-denied', formatPermissionMessage('screen-recording-denied'));
+          if (screenCapability.staleGrantSuspected) {
+            this.broadcastScreenTccRepairRequired(
+              'SCREEN_TCC_STALE_GRANTED',
+              this.getStaleScreenRecordingMessage(),
+            );
+          } else {
+            this.broadcast('system-audio-permission-denied', formatPermissionMessage('screen-recording-denied'));
+          }
           this.broadcastDeviceSelection({
             kind: 'output',
             requested: this._lastRequestedOutputDeviceId || null,
             actual: null,
             fellBack: true,
-            reason: 'screen-recording-permission-denied',
+            reason: screenCapability.staleGrantSuspected ? 'screen-recording-stale-grant' : 'screen-recording-permission-denied',
           });
           return;
         }
@@ -2579,13 +2624,20 @@ export class AppState {
 
       const screenCapability = await resolveMacScreenCaptureCapability('default output route change');
       if (screenCapability.effectiveDenied) {
-        this.broadcast('system-audio-permission-denied', formatPermissionMessage('screen-recording-denied'));
+        if (screenCapability.staleGrantSuspected) {
+          this.broadcastScreenTccRepairRequired(
+            'SCREEN_TCC_STALE_GRANTED',
+            this.getStaleScreenRecordingMessage(),
+          );
+        } else {
+          this.broadcast('system-audio-permission-denied', formatPermissionMessage('screen-recording-denied'));
+        }
         this.broadcastDeviceSelection({
           kind: 'output',
           requested: null,
           actual: null,
           fellBack: true,
-          reason: 'screen-recording-permission-denied',
+          reason: screenCapability.staleGrantSuspected ? 'screen-recording-stale-grant' : 'screen-recording-permission-denied',
         });
         return;
       }
@@ -2822,6 +2874,8 @@ export class AppState {
     this._systemAudioRecoveryAttempts = 0;
     this._systemAudioConsecutiveFailures = 0;
     this._sckRouteIgnoredBroadcasted = false;
+    this._screenTccRepairBannerShown = false;
+    this._micTccRepairBannerShown = false;
     if (this._systemAudioRecoveryTimer) {
       clearTimeout(this._systemAudioRecoveryTimer);
       this._systemAudioRecoveryTimer = null;
@@ -2843,13 +2897,19 @@ export class AppState {
       const screenCapability = await resolveMacScreenCaptureCapability('meeting start');
       console.log(`[Main] macOS screen recording permission status: ${screenCapability.status}; capturable=${screenCapability.capturable}; sources=${screenCapability.sourceCount}`);
       if (screenCapability.effectiveDenied) {
-        // Permission was explicitly denied — warn the user via the UI but do NOT
-        // auto-open System Settings. Forcing that window open every meeting start
-        // is extremely disruptive, especially when mic transcription is still working.
-        // The UI will show a non-blocking banner; the user can fix it deliberately.
-        const message = formatPermissionMessage('screen-recording-denied');
-        console.warn('[Main]', message);
-        this.broadcast('system-audio-permission-denied', message);
+        if (screenCapability.staleGrantSuspected) {
+          const message = this.getStaleScreenRecordingMessage();
+          console.warn('[Main]', message);
+          this.broadcastScreenTccRepairRequired('SCREEN_TCC_STALE_GRANTED', message);
+        } else {
+          // Permission was explicitly denied — warn the user via the UI but do NOT
+          // auto-open System Settings. Forcing that window open every meeting start
+          // is extremely disruptive, especially when mic transcription is still working.
+          // The UI will show a non-blocking banner; the user can fix it deliberately.
+          const message = formatPermissionMessage('screen-recording-denied');
+          console.warn('[Main]', message);
+          this.broadcast('system-audio-permission-denied', message);
+        }
         // NOTE: Do NOT call shell.openExternal() here — it hijacks focus on every meeting
         // start. The UI banner (system-audio-permission-denied IPC event) handles this.
       }

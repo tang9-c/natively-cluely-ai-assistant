@@ -860,8 +860,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     kind: 'screen-recording-permission' | 'audio-capture-failure';
     message: string;
     backend?: string;
+    code?: string;
+    recommendedFix?: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
+    staleGrantSuspected?: boolean;
   };
+  const systemAudioRepairAction = 'repair-and-restart';
   const [systemAudioWarning, setSystemAudioWarning] = useState<SystemAudioWarning | null>(null);
+  const [isRepairingTcc, setIsRepairingTcc] = useState(false);
   useEffect(() => {
     const unsub = window.electronAPI?.onSystemAudioPermissionDenied?.((message: string) => {
       setSystemAudioWarning({ kind: 'screen-recording-permission', message });
@@ -876,17 +881,55 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // Only surface terminal failures or the stuck signal — transient
       // recovery attempts shouldn't spam the banner since recovery
       // typically succeeds within ~1.5s.
-      if (payload.terminal || payload.stuck) {
+      if (payload.terminal || payload.stuck || payload.recommendedFix === 'reset-tcc' || payload.staleGrantSuspected) {
         setSystemAudioWarning({
           kind: 'audio-capture-failure',
           message: payload.message,
           backend: payload.backend,
+          code: payload.code,
+          recommendedFix: payload.recommendedFix,
+          staleGrantSuspected: payload.staleGrantSuspected,
         });
         setIsExpanded(true);
       }
     });
     return () => unsub?.();
   }, []);
+
+  const handleRepairTccPermission = useCallback(async () => {
+    if (isRepairingTcc) return;
+    setIsRepairingTcc(true);
+    try {
+      const result = await window.electronAPI?.repairTccPermission?.('screen');
+      if (!result?.success) {
+        setSystemAudioWarning((prev) =>
+          prev
+            ? {
+                ...prev,
+                message: result?.error || '权限缓存修复失败，请手动在系统设置中重新授予权限。',
+              }
+            : prev,
+        );
+        return;
+      }
+
+      const shouldRestart = window.confirm('权限缓存已清理。立即重启 Natively 以重新触发 macOS 授权吗？');
+      if (shouldRestart) {
+        await window.electronAPI?.restartAfterTccRepair?.();
+      } else {
+        setSystemAudioWarning((prev) =>
+          prev
+            ? {
+                ...prev,
+                message: '权限缓存已清理。请手动重启 Natively 以重新触发 macOS 授权。',
+              }
+            : prev,
+        );
+      }
+    } finally {
+      setIsRepairingTcc(false);
+    }
+  }, [isRepairingTcc]);
 
   // PR #173: STT not configured warning — shown when provider is 'none' during a meeting
   const [sttNotConfigured, setSttNotConfigured] = useState(false);
@@ -3605,6 +3648,14 @@ Provide only the answer, nothing else.`;
                         className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm"
                       >
                         打开设置
+                      </button>
+                    ) : systemAudioWarning.recommendedFix === 'reset-tcc' || systemAudioWarning.staleGrantSuspected ? (
+                      <button
+                        onClick={handleRepairTccPermission}
+                        data-action={systemAudioRepairAction}
+                        className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm"
+                      >
+                        {isRepairingTcc ? '修复中...' : '修复权限并重启'}
                       </button>
                     ) : (
                       <button

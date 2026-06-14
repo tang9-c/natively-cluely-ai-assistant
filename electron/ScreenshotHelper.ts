@@ -2,11 +2,12 @@
 
 import path from "node:path"
 import fs from "node:fs"
-import { app, desktopCapturer, screen, systemPreferences } from "electron"
+import { app, desktopCapturer, screen } from "electron"
 import { v4 as uuidv4 } from "uuid"
 import util from "util"
 import sharp from "sharp"
 import { exec as execShell } from "child_process"
+import { resolveMacScreenPermissionHealth } from "./permissions/macPermissionHealth"
 
 // Module-level: promisified shell exec created once per process lifetime.
 // Uses the shell-capable exec variant (not execFile) because Linux screenshot
@@ -33,40 +34,28 @@ async function assertScreenRecordingPermission(): Promise<void> {
   // In development mode, bypass the permission check so screenshots work without
   // needing the app to be in the TCC whitelist (same policy as the startup check in main.ts).
   if (!app.isPackaged) return;
-  const status = systemPreferences.getMediaAccessStatus('screen');
   const screenRecordingRebindMessage =
     'macOS Screen Recording is not applied to this build yet. Open System Settings > Privacy & Security > Screen Recording, toggle Natively off and back on, then restart the app.';
-  switch (status) {
-    case 'granted':
-      return;
-    case 'denied':
-      try {
-        const sources = await desktopCapturer.getSources({
-          types: ['screen'],
-          thumbnailSize: { width: 1, height: 1 },
-        });
-        if (sources.some((source) => source.id.startsWith('screen:'))) {
-          return;
-        }
-      } catch {
-        // Ignore and fall through to the user-facing error below.
-      }
-      throw new Error(
-        screenRecordingRebindMessage
-      );
-    case 'restricted':
-      throw new Error(
-        'Screen Recording is restricted by a device policy (MDM or parental controls). ' +
-        'Contact your administrator to allow screen capture.'
-      );
-    case 'not-determined':
-      // The one-time TCC prompt should have fired at app startup (initializeApp).
-      // If we land here it means the prompt was cancelled/failed — a second
-      // getSources() call without a focused window will create a worse UX (dialog
-      // appears behind other apps on macOS Sequoia). Tell the user to restart instead.
+  const screenHealth = await resolveMacScreenPermissionHealth('screenshot helper');
+
+  if (screenHealth.effectiveGranted) {
+    return;
+  }
+
+  switch (screenHealth.recommendedFix) {
+    case 'reset-tcc':
+      throw new Error(screenRecordingRebindMessage);
+    case 'open-settings':
+      throw new Error(screenRecordingRebindMessage);
+    case 'restart-app':
       throw new Error(
         'Screen Recording permission has not been granted yet. ' +
         'Please restart Natively — macOS will prompt for access on next launch.'
+      );
+    default:
+      throw new Error(
+        'Screen Recording is restricted by a device policy (MDM or parental controls). ' +
+        'Contact your administrator to allow screen capture.'
       );
   }
 }

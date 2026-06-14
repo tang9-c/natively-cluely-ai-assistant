@@ -57,7 +57,9 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   const [platform,   setPlatform]   = useState<string>('darwin');
   const [micStatus,  setMicStatus]  = useState<PermStatus>('loading');
   const [scrStatus,  setScrStatus]  = useState<PermStatus>('loading');
+  const [screenRecommendedFix, setScreenRecommendedFix] = useState<'open-settings' | 'reset-tcc' | 'restart-app' | 'none'>('none');
   const [requesting, setRequesting] = useState(false);
+  const [repairing,  setRepairing]  = useState(false);
   const reduced = useReducedMotion() ?? false;
 
   const refreshStatus = useCallback(async () => {
@@ -66,10 +68,19 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
       if (!p) return;
       setPlatform(p.platform);
       setMicStatus(p.microphone as PermStatus);
-      setScrStatus(p.screen     as PermStatus);
+      const screenHealth = p.screenHealth;
+      setScreenRecommendedFix(screenHealth?.recommendedFix || 'none');
+      setScrStatus(
+        screenHealth?.effectiveGranted
+          ? 'granted'
+          : screenHealth?.staleGrantSuspected
+            ? 'denied'
+            : (p.screen as PermStatus),
+      );
     } catch {
       setMicStatus('not-determined');
       setScrStatus('not-determined');
+      setScreenRecommendedFix('none');
     }
   }, []);
 
@@ -103,6 +114,22 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
     // construct the URL on Windows so a future regression cannot leak it.
     if (platform !== 'darwin') return;
     window.electronAPI?.openExternal?.('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+  };
+
+  const handleScreenRepair = async () => {
+    setRepairing(true);
+    try {
+      const result = await window.electronAPI?.repairTccPermission?.('screen');
+      if (result?.success && result.requiresRestart) {
+        const shouldRestart = window.confirm('权限缓存已清理。立即重启 Natively 以重新触发 macOS 授权吗？');
+        if (shouldRestart) {
+          await window.electronAPI?.restartAfterTccRepair?.();
+        }
+      }
+      await refreshStatus();
+    } finally {
+      setRepairing(false);
+    }
   };
 
   const handleDismiss = () => {
@@ -227,9 +254,9 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                       description="用于捕获会议内容"
                       status={scrStatus}
                       platform={platform}
-                      actionLabel="打开设置"
-                      actionIcon={ExternalLink}
-                      onAction={openScreenSettings}
+                      actionLabel={screenRecommendedFix === 'reset-tcc' ? (repairing ? '修复中...' : '修复并重启') : '打开设置'}
+                      actionIcon={screenRecommendedFix === 'reset-tcc' ? ArrowRight : ExternalLink}
+                      onAction={screenRecommendedFix === 'reset-tcc' ? handleScreenRepair : openScreenSettings}
                       reduced={reduced}
                     />
                   )}
