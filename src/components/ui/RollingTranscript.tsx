@@ -37,9 +37,9 @@ const RollingTranscript: React.FC<RollingTranscriptProps> = ({
     const intProvider = interviewerChannel?.provider;
     const micProvider = microphoneChannel?.provider;
 
-    const anyFailed = intStatus === 'failed' || micStatus === 'failed';
-    const anyReconnecting = intStatus === 'reconnecting' || micStatus === 'reconnecting';
-    const isNormal = !anyFailed && !anyReconnecting && micStatus === 'connected';
+    const anyFailed = micStatus === 'failed';
+    const anyReconnecting = micStatus === 'reconnecting';
+    const isNormal = !anyFailed && !anyReconnecting;
 
     const intErrorCategory: SttErrorCategory | null = (intStatus === 'failed' && intError)
         ? categorizeSttError(intError)

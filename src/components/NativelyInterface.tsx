@@ -257,6 +257,7 @@ const getSttSummary = (
   interviewerProvider: string,
   notConfigured: boolean,
 ): { label: string; tone: 'ok' | 'warn' | 'error'; detail: string } => {
+  const detail = `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`;
   if (notConfigured) {
     return {
       label: '语音转写未配置',
@@ -264,24 +265,24 @@ const getSttSummary = (
       detail: '请打开音频设置选择服务商',
     };
   }
-  if (userStatus === 'failed' || interviewerStatus === 'failed') {
+  if (userStatus === 'failed') {
     return {
       label: '语音转写异常',
       tone: 'error',
-      detail: `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`,
+      detail,
     };
   }
-  if (userStatus === 'reconnecting' || interviewerStatus === 'reconnecting') {
+  if (userStatus === 'reconnecting') {
     return {
       label: '语音转写重连中',
       tone: 'warn',
-      detail: `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`,
+      detail,
     };
   }
   return {
     label: '语音转写正常',
     tone: 'ok',
-    detail: `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`,
+    detail,
   };
 };
 
@@ -387,6 +388,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   >('connected');
   const [sttInterviewerError, setSttInterviewerError] = useState<string>('');
   const [sttInterviewerProvider, setSttInterviewerProvider] = useState<string>('');
+  const sttUserStatusRef = useRef<'connected' | 'reconnecting' | 'failed'>('connected');
+  const micCaptureFailureRef = useRef(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [conversationContext, setConversationContext] = useState<string>('');
@@ -868,7 +871,47 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [systemAudioWarning, setSystemAudioWarning] = useState<SystemAudioWarning | null>(null);
   const [isRepairingTcc, setIsRepairingTcc] = useState(false);
   useEffect(() => {
+    sttUserStatusRef.current = sttUserStatus;
+    if (sttUserStatus === 'connected') {
+      micCaptureFailureRef.current = false;
+    }
+    if (sttUserStatus === 'failed') {
+      micCaptureFailureRef.current = true;
+    }
+  }, [sttUserStatus]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.getMeetingActive || !window.electronAPI?.onMeetingStateChanged) return;
+
+    let mounted = true;
+    window.electronAPI
+      .getMeetingActive()
+      .then((isActive) => {
+        if (!mounted || !isActive) return;
+        setSystemAudioWarning(null);
+        setRollingTranscript('');
+        setIsInterviewerSpeaking(false);
+        micCaptureFailureRef.current = false;
+      })
+      .catch(() => {});
+
+    const unsub = window.electronAPI.onMeetingStateChanged(({ isActive }) => {
+      if (!isActive) return;
+      setSystemAudioWarning(null);
+      setRollingTranscript('');
+      setIsInterviewerSpeaking(false);
+      micCaptureFailureRef.current = false;
+    });
+
+    return () => {
+      mounted = false;
+      unsub?.();
+    };
+  }, []);
+
+  useEffect(() => {
     const unsub = window.electronAPI?.onSystemAudioPermissionDenied?.((message: string) => {
+      if (!micCaptureFailureRef.current && sttUserStatusRef.current !== 'failed') return;
       setSystemAudioWarning({ kind: 'screen-recording-permission', message });
       setIsExpanded(true); // Force overlay open so user sees the warning
     });
@@ -877,7 +920,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   useEffect(() => {
     const unsub = window.electronAPI?.onAudioCaptureFailed?.((payload) => {
-      if (payload.channel !== 'system') return; // mic failures already shown via STT status
+      if (payload.channel === 'mic') {
+        micCaptureFailureRef.current = true;
+        return;
+      }
+      if (!micCaptureFailureRef.current && sttUserStatusRef.current !== 'failed') return;
       // Only surface terminal failures or the stuck signal — transient
       // recovery attempts shouldn't spam the banner since recovery
       // typically succeeds within ~1.5s.
@@ -1533,16 +1580,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           return; // Don't add to messages while recording
         }
 
-        // Ignore user mic transcripts when not recording
-        // Only interviewer (system audio) transcripts should appear in chat
-        if (transcript.speaker === 'user') {
-          return; // Skip user mic input - only relevant when Answer button is active
-        }
-
-        // Only show interviewer (system audio) transcripts in rolling bar
-        if (transcript.speaker !== 'interviewer') {
+        if (transcript.speaker !== 'interviewer' && transcript.speaker !== 'user') {
           return; // Safety check for any other speaker types
         }
+
+        const speakerLabel = transcript.speaker === 'user' ? 'Me' : 'Interviewer';
 
         // Route to rolling transcript bar - accumulate text continuously
         setIsInterviewerSpeaking(!transcript.final);
@@ -1551,7 +1593,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           // Append finalized text to accumulated transcript
           setRollingTranscript((prev) => {
             const separator = prev ? '  ·  ' : '';
-            return prev + separator + transcript.text;
+            return prev + separator + `${speakerLabel}: ${transcript.text}`;
           });
 
           // Clear speaking indicator after pause
@@ -1564,7 +1606,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             // Find where previous finalized content ends (look for last separator)
             const lastSeparator = prev.lastIndexOf('  ·  ');
             const accumulated = lastSeparator >= 0 ? prev.substring(0, lastSeparator + 5) : '';
-            return accumulated + transcript.text;
+            return accumulated + `${speakerLabel}: ${transcript.text}`;
           });
         }
       }),
