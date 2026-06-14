@@ -10,6 +10,7 @@ import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manag
 import { AppState } from './main';
 import {
   repairMacTccPermissions,
+  resolveMacBundleIdentifier,
   resolveMacMicrophonePermissionHealth,
   resolveMacScreenPermissionHealth,
   resolveMacSystemAudioPermissionHealth,
@@ -3620,7 +3621,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('permissions:repair-tcc', async (_, scope: 'screen' | 'microphone' | 'both') => {
-    const bundleId = process.platform === 'darwin' ? (app as any).getBundleID?.() ?? app.getName() : null;
+    const bundleId = process.platform === 'darwin' ? resolveMacBundleIdentifier() : null;
     const commandsPreview =
       bundleId && process.platform === 'darwin'
         ? [
