@@ -76,6 +76,13 @@ export abstract class BaseSTT extends EventEmitter {
     /** Force a final transcript flush. REST providers upload buffered audio. */
     finalize(): void { }
 
+    /** Flush pending final transcripts before a meeting snapshot is taken. */
+    drainFinals(timeoutMs?: number): Promise<void> {
+        this.finalize();
+        timeoutMs ??= 250;
+        return new Promise(resolve => setTimeout(resolve, timeoutMs));
+    }
+
     /** Called by the native VAD when speech ends. REST providers flush immediately. */
     notifySpeechEnded(): void { }
 

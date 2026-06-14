@@ -1162,9 +1162,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     callback: (payload: {
       channel: 'system' | 'mic';
       message: string;
+      code?: string;
       attempt: number;
       maxAttempts: number;
       backend?: string;
+      routeDiagnostics?: {
+        requestedOutputId: string | null;
+        requestedOutputName: string | null;
+        defaultOutputId: string | null;
+        defaultOutputName: string | null;
+        usingDefaultRoute: boolean;
+        selectedDiffersFromDefault: boolean;
+      };
       terminal?: boolean;
       stuck?: boolean;
     }) => void,
