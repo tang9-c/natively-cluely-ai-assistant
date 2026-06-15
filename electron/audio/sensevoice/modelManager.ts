@@ -18,6 +18,9 @@ const MODEL_CATALOG: SenseVoiceModelInfo[] = [
 ];
 
 export function getSenseVoiceModelsDir(): string {
+  if (process.env.SENSEVOICE_MODELS_DIR) {
+    return process.env.SENSEVOICE_MODELS_DIR;
+  }
   const { app } = require('electron');
   return path.join(app.getPath('userData'), 'sensevoice-models');
 }
