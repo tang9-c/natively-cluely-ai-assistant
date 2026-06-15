@@ -1360,7 +1360,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         | 'doubao'
         | 'doubao-auc'
         | 'natively'
-        | 'local-whisper',
+        | 'local-whisper'
+        | 'local-sensevoice',
     ) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
@@ -2104,6 +2105,82 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('local-whisper-get-hardware', () => {
     const { detectHardware } = require('./audio/whisper/hardwareDetect');
     return detectHardware();
+  });
+
+  // ==========================================
+  // Local SenseVoice STT Handlers
+  // ==========================================
+
+  const activeSenseVoiceDownloads = new Set<string>();
+
+  safeHandle('local-sensevoice-get-models', async () => {
+    try {
+      const { getAvailableSenseVoiceModels, SENSEVOICE_DEFAULT_MODEL_ID } = require('./audio/sensevoice/modelManager');
+      return {
+        models: getAvailableSenseVoiceModels(),
+        activeModelId: SENSEVOICE_DEFAULT_MODEL_ID,
+      };
+    } catch (e: any) {
+      console.error('[IPC] local-sensevoice-get-models error:', e.message);
+      return { models: [], activeModelId: '' };
+    }
+  });
+
+  safeHandle('local-sensevoice-delete-model', async (_, modelId: string) => {
+    try {
+      const { deleteSenseVoiceModel } = require('./audio/sensevoice/modelManager');
+      deleteSenseVoiceModel(modelId);
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  safeHandle('local-sensevoice-start-download', async (event, modelId: string) => {
+    if (activeSenseVoiceDownloads.has(modelId)) {
+      return { success: false, error: 'already-downloading' };
+    }
+    activeSenseVoiceDownloads.add(modelId);
+    const sender = event.sender;
+    try {
+      const { downloadSenseVoiceModel } = require('./audio/sensevoice/modelDownloader');
+      downloadSenseVoiceModel(modelId, (progress: number) => {
+        if (!sender.isDestroyed()) {
+          sender.send('local-sensevoice-download-progress', { modelId, progress });
+        }
+      })
+        .then(() => {
+          activeSenseVoiceDownloads.delete(modelId);
+          if (!sender.isDestroyed()) {
+            sender.send('local-sensevoice-download-complete', { modelId });
+          }
+        })
+        .catch((err: Error) => {
+          activeSenseVoiceDownloads.delete(modelId);
+          if (!sender.isDestroyed()) {
+            sender.send('local-sensevoice-download-error', { modelId, error: err.message });
+          }
+        });
+      return { success: true };
+    } catch (e: any) {
+      activeSenseVoiceDownloads.delete(modelId);
+      if (!sender.isDestroyed()) {
+        sender.send('local-sensevoice-download-error', { modelId, error: e.message });
+      }
+      return { success: false, error: e.message };
+    }
+  });
+
+  safeHandle('local-sensevoice-preload', async (_, modelId: string) => {
+    try {
+      const { isSenseVoiceModelCached } = require('./audio/sensevoice/modelManager');
+      if (!isSenseVoiceModelCached(modelId)) {
+        return { success: false, reason: 'model-not-cached' };
+      }
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
   });
 
   safeHandle(

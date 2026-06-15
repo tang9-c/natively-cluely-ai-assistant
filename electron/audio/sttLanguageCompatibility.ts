@@ -17,7 +17,8 @@ export type SttProviderId =
   | 'ibmwatson'
   | 'doubao'
   | 'doubao-auc'
-  | 'local-whisper';
+  | 'local-whisper'
+  | 'local-sensevoice';
 
 export interface LocalWhisperChannelConfig {
   enabled: boolean;
@@ -68,10 +69,23 @@ const EXPLICIT_LANGUAGE_PROVIDERS = new Set<SttProviderId>([
   'doubao',
   'doubao-auc',
   'local-whisper',
+  'local-sensevoice',
+]);
+
+const SENSEVOICE_SUPPORTED_LANGUAGE_KEYS = new Set([
+  'chinese',
+  'english-us',
+  'english-uk',
+  'english-in',
+  'english-au',
+  'english-ca',
+  'japanese',
+  'korean',
 ]);
 
 export function normalizeRecognitionLanguageForProvider(provider: string, languageKey: string): string {
   if (languageKey !== 'auto') return languageKey;
+  if (provider === 'local-sensevoice') return 'chinese';
   return provider !== 'natively' ? 'english-us' : languageKey;
 }
 
@@ -141,6 +155,20 @@ export function resolveSttLanguageCompatibility(
         message: `当前本地 Whisper 模型仅支持英文，Chinese 设置不会生效：${details}。会议仍可继续，但这次中文识别不会按所选语言执行。`,
       };
     }
+  }
+
+  if (
+    requestedLanguageKey !== 'auto' &&
+    provider === 'local-sensevoice' &&
+    !SENSEVOICE_SUPPORTED_LANGUAGE_KEYS.has(requestedLanguageKey)
+  ) {
+    return {
+      requestedLanguageKey,
+      effectiveLanguageKey: 'chinese',
+      willHonorSelection: false,
+      reasonCode: 'PROVIDER_LANGUAGE_UNSUPPORTED',
+      message: 'Local SenseVoice 当前主要支持中文、英文、日语和韩语；该语言会回退到中文优先识别。',
+    };
   }
 
   if (requestedLanguageKey !== 'auto' && !EXPLICIT_LANGUAGE_PROVIDERS.has(provider)) {
