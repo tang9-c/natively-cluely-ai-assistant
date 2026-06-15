@@ -241,6 +241,7 @@
     "remark-math": "^6.0.0",
     "screenshot-desktop": "^1.15.0",
     "sharp": "^0.34.5",
+    "sherpa-onnx-node": "^1.13.2",
     "sqlite-vec": "^0.1.7-alpha.2",
     "sqlite3": "^5.1.7",
     "tailwind-merge": "^2.5.4",

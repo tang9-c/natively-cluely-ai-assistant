@@ -120,7 +120,8 @@ interface ElectronAPI {
       | 'doubao'
       | 'doubao-auc'
       | 'natively'
-      | 'local-whisper',
+      | 'local-whisper'
+      | 'local-sensevoice',
   ) => Promise<{ success: boolean; error?: string }>;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
   localWhisperSetModel: (modelId: string) => Promise<{ success: boolean }>;
@@ -134,6 +135,19 @@ interface ElectronAPI {
     callback: (data: { modelId: string; error: string }) => void,
   ) => () => void;
   localWhisperPreload: (
+    modelId?: string,
+  ) => Promise<{ success: boolean; reason?: string; error?: string }>;
+  localSenseVoiceGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
+  localSenseVoiceDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
+  localSenseVoiceStartDownload: (modelId: string) => Promise<{ success: boolean; error?: string }>;
+  onLocalSenseVoiceDownloadProgress: (
+    callback: (data: { modelId: string; progress: number }) => void,
+  ) => () => void;
+  onLocalSenseVoiceDownloadComplete: (callback: (data: { modelId: string }) => void) => () => void;
+  onLocalSenseVoiceDownloadError: (
+    callback: (data: { modelId: string; error: string }) => void,
+  ) => () => void;
+  localSenseVoicePreload: (
     modelId?: string,
   ) => Promise<{ success: boolean; reason?: string; error?: string }>;
   localWhisperGetChannelConfig: () => Promise<{
@@ -985,7 +999,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       | 'doubao'
       | 'doubao-auc'
       | 'natively'
-      | 'local-whisper',
+      | 'local-whisper'
+      | 'local-sensevoice',
   ) => ipcRenderer.invoke('set-stt-provider', provider),
   getSttProvider: () => ipcRenderer.invoke('get-stt-provider'),
   setGroqSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-groq-stt-api-key', apiKey),
@@ -1031,6 +1046,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('local-whisper-download-error', listener);
   },
   localWhisperPreload: (modelId?: string) => ipcRenderer.invoke('local-whisper-preload', modelId),
+  localSenseVoiceGetModels: () => ipcRenderer.invoke('local-sensevoice-get-models'),
+  localSenseVoiceDeleteModel: (modelId: string) =>
+    ipcRenderer.invoke('local-sensevoice-delete-model', modelId),
+  localSenseVoiceStartDownload: (modelId: string) =>
+    ipcRenderer.invoke('local-sensevoice-start-download', modelId),
+  onLocalSenseVoiceDownloadProgress: (cb: (data: { modelId: string; progress: number }) => void) => {
+    const listener = (_: any, data: any) => cb(data);
+    ipcRenderer.on('local-sensevoice-download-progress', listener);
+    return () => ipcRenderer.removeListener('local-sensevoice-download-progress', listener);
+  },
+  onLocalSenseVoiceDownloadComplete: (cb: (data: { modelId: string }) => void) => {
+    const listener = (_: any, data: any) => cb(data);
+    ipcRenderer.on('local-sensevoice-download-complete', listener);
+    return () => ipcRenderer.removeListener('local-sensevoice-download-complete', listener);
+  },
+  onLocalSenseVoiceDownloadError: (cb: (data: { modelId: string; error: string }) => void) => {
+    const listener = (_: any, data: any) => cb(data);
+    ipcRenderer.on('local-sensevoice-download-error', listener);
+    return () => ipcRenderer.removeListener('local-sensevoice-download-error', listener);
+  },
+  localSenseVoicePreload: (modelId?: string) => ipcRenderer.invoke('local-sensevoice-preload', modelId),
   localWhisperGetChannelConfig: () => ipcRenderer.invoke('local-whisper-get-channel-config'),
   localWhisperSetChannelConfig: (cfg: { enabled?: boolean; micModelId?: string; systemModelId?: string }) =>
     ipcRenderer.invoke('local-whisper-set-channel-config', cfg),

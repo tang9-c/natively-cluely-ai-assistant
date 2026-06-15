@@ -3,7 +3,7 @@
  * Configuration for STT providers (Google gRPC, REST, WebSocket)
  */
 
-export type SttProviderId = 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'doubao' | 'doubao-auc' | 'natively';
+export type SttProviderId = 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'doubao' | 'doubao-auc' | 'natively' | 'local-sensevoice';
 
 export interface SttProviderConfig {
     id: SttProviderId;
@@ -148,9 +148,18 @@ export const STT_PROVIDERS: Record<SttProviderId, SttProviderConfig> = {
         authHeader: () => ({}),
         responseContentPath: '',
     },
+    'local-sensevoice': {
+        id: 'local-sensevoice',
+        name: 'Local SenseVoice',
+        description: 'Local Chinese-first SenseVoice Small via sherpa-onnx',
+        endpoint: '',
+        model: 'sensevoice-small',
+        uploadType: 'binary',
+        authHeader: () => ({}),
+        responseContentPath: 'text',
+    },
 };
 
 export const STT_PROVIDER_OPTIONS = Object.values(STT_PROVIDERS);
 
 export const DEFAULT_STT_PROVIDER: SttProviderId = 'google';
-

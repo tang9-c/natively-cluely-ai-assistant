@@ -34,7 +34,8 @@ type SttProviderId =
   | 'ibmwatson'
   | 'doubao'
   | 'doubao-auc'
-  | 'local-whisper';
+  | 'local-whisper'
+  | 'local-sensevoice';
 
 interface RegistryEntry {
   /** Human-readable name for logs */
@@ -144,6 +145,16 @@ export const STT_REGISTRY: Record<SttProviderId, RegistryEntry | undefined> = {
       const lws = new LocalWhisperSTT(modelId);
       lws.setChannel(speaker === 'interviewer' ? 'system' : 'mic');
       return lws;
+    },
+  },
+
+  'local-sensevoice': {
+    name: 'LocalSenseVoiceSTT',
+    factory: (_key, speaker) => {
+      const { LocalSenseVoiceSTT } = require('./sensevoice/LocalSenseVoiceSTT');
+      const sv = new LocalSenseVoiceSTT();
+      sv.setChannel(speaker === 'interviewer' ? 'system' : 'mic');
+      return sv;
     },
   },
 };
