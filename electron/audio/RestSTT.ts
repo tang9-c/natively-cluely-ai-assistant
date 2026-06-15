@@ -15,6 +15,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { BaseSTT } from './BaseSTT';
+import { extractDoubaoAucTranscript, transcribeDoubaoAucFile } from './doubaoAucClient';
 
 export type RestSttProvider = 'groq' | 'openai' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'doubao' | 'doubao-auc';
 
@@ -171,15 +172,7 @@ const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
                     },
                 };
             },
-            extractTranscript: (data: any) => {
-                if (typeof data === 'string') return data;
-                // AUC API returns results in resp_speech_info or result
-                const result = data?.result || data?.resp_speech_info;
-                if (Array.isArray(result) && result.length > 0) {
-                    return result.map((item: any) => item?.text || item?.transcription || '').join(' ');
-                }
-                return data?.text || data?.transcription || '';
-            },
+            extractTranscript: extractDoubaoAucTranscript,
         };
     },
 };
@@ -208,6 +201,7 @@ export class RestSTT extends BaseSTT {
     private safetyNetTimer: NodeJS.Timeout | null = null;
     private isUploading = false;
     private flushPending = false;  // Bug #2 fix: queue flush when upload in progress
+    private currentUploadPromise: Promise<void> | null = null;
 
     // Audio config (must match SystemAudioCapture output)
     private bitsPerSample = 16;
@@ -281,7 +275,7 @@ export class RestSTT extends BaseSTT {
         // unbounded buffer growth and Whisper API file-size/timeout errors.
         // Primary flush is driven by Rust speech_ended events.
         this.safetyNetTimer = setInterval(() => {
-            this.flushAndUpload();
+            void this.flushAndUpload();
         }, SAFETY_NET_INTERVAL_MS);
     }
 
@@ -300,7 +294,7 @@ export class RestSTT extends BaseSTT {
         }
 
         // Flush remaining audio
-        this.flushAndUpload();
+        void this.flushAndUpload();
     }
 
     /**
@@ -321,13 +315,36 @@ export class RestSTT extends BaseSTT {
         if (!this._isActive) return;
 
         console.log(`[RestSTT] Speech ended detected by native VAD — flushing buffer immediately`);
-        this.flushAndUpload();
+        void this.flushAndUpload();
     }
 
     finalize(): void {
         if (!this._isActive) return;
         console.log(`[RestSTT] Finalize — flushing buffer immediately`);
-        this.flushAndUpload();
+        void this.flushAndUpload();
+    }
+
+    async drainFinals(timeoutMs: number = 5000): Promise<void> {
+        this.finalize();
+
+        const startedAt = Date.now();
+        while (this.isUploading || this.flushPending || this.currentUploadPromise) {
+            const remainingMs = timeoutMs - (Date.now() - startedAt);
+            if (remainingMs <= 0) {
+                console.warn(`[RestSTT] drainFinals timed out after ${timeoutMs}ms; continuing with pending upload`);
+                return;
+            }
+
+            const inFlight = this.currentUploadPromise;
+            if (inFlight) {
+                await Promise.race([
+                    inFlight.catch((): void => undefined),
+                    new Promise<void>(resolve => setTimeout(resolve, Math.min(remainingMs, 50))),
+                ]);
+            } else {
+                await new Promise<void>(resolve => setTimeout(resolve, Math.min(remainingMs, 50)));
+            }
+        }
     }
 
     /**
@@ -340,14 +357,14 @@ export class RestSTT extends BaseSTT {
         // Bug #2 fix: if currently uploading, queue a flush for when it completes
         if (this.isUploading) {
             this.flushPending = true;
-            return;
+            return this.currentUploadPromise ?? Promise.resolve();
         }
 
         // Reset safety-net timer to prevent double-flush
         if (this.safetyNetTimer) {
             clearInterval(this.safetyNetTimer);
             this.safetyNetTimer = setInterval(() => {
-                this.flushAndUpload();
+                void this.flushAndUpload();
             }, SAFETY_NET_INTERVAL_MS);
         }
 
@@ -380,8 +397,7 @@ export class RestSTT extends BaseSTT {
         const wavBuffer = this.addWavHeader(pcm16k, TARGET_RATE);
 
         this.isUploading = true;
-
-        try {
+        const uploadPromise = (async () => {
             const transcript = await this.uploadAudio(wavBuffer);
 
             if (transcript && transcript.trim().length > 0) {
@@ -392,18 +408,26 @@ export class RestSTT extends BaseSTT {
                     confidence: 1.0,
                 });
             }
-        } catch (err) {
-            console.error(`[RestSTT] Upload error:`, err);
-            this.emit('error', err instanceof Error ? err : new Error(String(err)));
-        } finally {
-            this.isUploading = false;
+        })()
+            .catch(err => {
+                console.error(`[RestSTT] Upload error:`, err);
+                this.emit('error', err instanceof Error ? err : new Error(String(err)));
+            })
+            .finally(() => {
+                this.isUploading = false;
+                if (this.currentUploadPromise === uploadPromise) {
+                    this.currentUploadPromise = null;
+                }
 
-            // Bug #2 fix: if a flush was requested while we were uploading, process it now
-            if (this.flushPending) {
-                this.flushPending = false;
-                this.flushAndUpload();
-            }
-        }
+                // Bug #2 fix: if a flush was requested while we were uploading, process it now
+                if (this.flushPending) {
+                    this.flushPending = false;
+                    void this.flushAndUpload();
+                }
+            });
+
+        this.currentUploadPromise = uploadPromise;
+        return uploadPromise;
     }
 
     /**
@@ -486,87 +510,15 @@ export class RestSTT extends BaseSTT {
             ? this.config.buildRequestBody(audioBase64, mimeType)
             : { audio: audioBase64 };
 
-        // Generate unique request ID
-        const requestId = `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-
-        // Step 1: Submit the task
-        const submitResponse = await axios.post(submitEndpoint, requestBody, {
-            headers: {
-                ...this.config.authHeader,
-                'Content-Type': 'application/json',
-                'X-Api-Request-Id': requestId,
-                'X-Api-Sequence': '-1',
-            },
-            timeout: 30000,
+        return transcribeDoubaoAucFile({
+            submitEndpoint,
+            queryEndpoint,
+            authHeader: this.config.authHeader,
+            requestBody,
+            extractTranscript: this.config.extractTranscript,
+            post: (url, body, options) => axios.post(url, body, options),
+            logger: console,
         });
-
-        console.log('[RestSTT] Doubao AUC submit response:', submitResponse.data);
-        console.log('[RestSTT] Doubao AUC submit headers:', submitResponse.headers);
-
-        // Check response status from headers (Doubao AUC specific)
-        const submitStatusCode = submitResponse.headers['x-api-status-code'];
-        if (submitStatusCode && submitStatusCode !== '20000000') {
-            throw new Error(`Doubao AUC submit failed with status: ${submitStatusCode}, message: ${submitResponse.headers['x-api-message'] || 'Unknown'}`);
-        }
-
-        // Check if result is immediately available
-        const immediateResult = this.config.extractTranscript(submitResponse.data);
-        if (immediateResult && immediateResult.trim().length > 0) {
-            return immediateResult;
-        }
-
-        // Step 2: Poll for results (if task_id is returned)
-        const taskId = submitResponse.data?.task_id || submitResponse.data?.id;
-        const xTtLogid = submitResponse.headers['x-tt-logid'];
-        if (!taskId) {
-            // No task_id, try to extract from submit response directly
-            return immediateResult;
-        }
-
-        // Poll for results (max 30 seconds, 500ms intervals)
-        const maxAttempts = 60;
-        const intervalMs = 500;
-
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
-            await new Promise(resolve => setTimeout(resolve, intervalMs));
-
-            const queryHeaders: any = {
-                ...this.config.authHeader,
-                'Content-Type': 'application/json',
-                'X-Api-Request-Id': requestId,
-            };
-            
-            // Pass x-tt-logid if available (required by Doubao AUC)
-            if (xTtLogid) {
-                queryHeaders['X-Tt-Logid'] = xTtLogid;
-            }
-
-            const queryResponse = await axios.post(queryEndpoint, {}, {
-                headers: queryHeaders,
-                timeout: 15000,
-            });
-
-            console.log(`[RestSTT] Doubao AUC query attempt ${attempt + 1}:`, queryResponse.data);
-            console.log(`[RestSTT] Doubao AUC query headers:`, queryResponse.headers);
-
-            // Check query status from headers
-            const queryStatusCode = queryResponse.headers['x-api-status-code'];
-            if (queryStatusCode === '20000000') {
-                // Task finished successfully
-                const result = this.config.extractTranscript(queryResponse.data);
-                if (result && result.trim().length > 0) {
-                    return result;
-                }
-                // If no text extracted but status is success, return empty
-                return '';
-            } else if (queryStatusCode !== '20000001' && queryStatusCode !== '20000002') {
-                // Task failed (not processing or queued)
-                throw new Error(`Doubao AUC task failed with status: ${queryStatusCode}, message: ${queryResponse.headers['x-api-message'] || 'Unknown'}`);
-            }
-            // Status 20000001 or 20000002 means still processing, continue polling
-        }
-
-        throw new Error('Doubao AUC transcription timed out after 30 seconds');
     }
 
     /**
