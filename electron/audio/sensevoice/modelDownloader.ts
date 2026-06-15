@@ -6,13 +6,13 @@ import { getSenseVoiceModelDir } from './modelManager';
 import { SENSEVOICE_DEFAULT_MODEL_ID, type SenseVoiceModelId } from './types';
 
 const REQUIRED_FILES = ['model.int8.onnx', 'tokens.txt'] as const;
-const MODELSCOPE_SENSEVOICE_REPO_ID =
-  'chriscrs/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17';
 const DEFAULT_ENDPOINTS = ['https://huggingface.co', 'https://hf-mirror.com'] as const;
-const DEFAULT_FILE_BASE_URLS = [
-  `https://www.modelscope.cn/models/${MODELSCOPE_SENSEVOICE_REPO_ID}/resolve/master`,
-] as const;
+const DEFAULT_FILE_BASE_URLS = ['https://feigenbaum.cdn.bcebos.com/onnx'] as const;
 const REQUEST_TIMEOUT_MS = 15000;
+const DOWNLOAD_HEADERS = {
+  'User-Agent': 'Natively/2.7 SenseVoiceModelDownloader',
+  Accept: 'application/octet-stream,*/*',
+};
 
 type ProgressCallback = (progress: number) => void;
 
@@ -27,6 +27,17 @@ function configuredFileBaseUrls(): string[] {
     .split(',')
     .map(normalizeEndpoint)
     .filter(Boolean);
+}
+
+function defaultFileBaseUrls(): string[] {
+  const configured = process.env.SENSEVOICE_DEFAULT_MODEL_FILE_BASE_URLS;
+  if (configured) {
+    return configured
+      .split(',')
+      .map(normalizeEndpoint)
+      .filter(Boolean);
+  }
+  return [...DEFAULT_FILE_BASE_URLS];
 }
 
 function downloadFileBaseUrls(modelId: string): string[] {
@@ -46,7 +57,7 @@ function downloadFileBaseUrls(modelId: string): string[] {
   }
   return [
     ...DEFAULT_ENDPOINTS.map(endpoint => `${endpoint}/${modelId}/resolve/main`),
-    ...DEFAULT_FILE_BASE_URLS,
+    ...defaultFileBaseUrls(),
   ];
 }
 
@@ -69,7 +80,7 @@ function downloadFile(url: string, destination: string, onBytes: (bytes: number,
     const request = (target: string, redirectCount = 0) => {
       const parsed = new URL(target);
       const client = parsed.protocol === 'http:' ? http : https;
-      const req = client.get(parsed, (res) => {
+      const req = client.get(parsed, { headers: DOWNLOAD_HEADERS }, (res) => {
         const status = res.statusCode ?? 0;
         if (status >= 300 && status < 400 && res.headers.location) {
           res.resume();
