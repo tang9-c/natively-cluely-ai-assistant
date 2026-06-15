@@ -1,9 +1,10 @@
 /**
  * Energy-based Voice Activity Detection (VAD) at 16 kHz.
  *
- * Uses 30ms windows (480 samples), RMS threshold 0.008,
- * 700ms hangover (~23 frames), 250ms min speech duration (~8 frames),
- * and 15000ms max segment duration (force-flush).
+ * Defaults to 30ms windows (480 samples), RMS threshold 0.008,
+ * 300ms hangover (~10 frames), 120ms min speech duration (~4 frames),
+ * and 15000ms max segment duration (force-flush). Callers can pass a
+ * channel-specific profile for quieter system-audio sources.
  */
 
 export interface SpeechSegment {
@@ -12,10 +13,16 @@ export interface SpeechSegment {
 }
 
 const WINDOW_SIZE = 480;       // 30ms at 16kHz
-const RMS_THRESHOLD = 0.008;
-const HANGOVER_FRAMES = 10;    // ~300ms — must be shorter than Rust SilenceSuppressor hangover (500ms)
-const MIN_SPEECH_FRAMES = 4;   // ~120ms minimum to avoid transcribing tiny noise bursts
+const DEFAULT_RMS_THRESHOLD = 0.008;
+const DEFAULT_HANGOVER_FRAMES = 10;    // ~300ms — must be shorter than Rust SilenceSuppressor hangover (500ms)
+const DEFAULT_MIN_SPEECH_FRAMES = 4;   // ~120ms minimum to avoid transcribing tiny noise bursts
 const MAX_SPEECH_MS = 15000;
+
+export interface VadProcessorOptions {
+  rmsThreshold?: number;
+  hangoverFrames?: number;
+  minSpeechFrames?: number;
+}
 
 function rms(samples: Float32Array, start: number, end: number): number {
   let sum = 0;
@@ -37,6 +44,15 @@ export class VadProcessor {
   // closes (or closes-and-reopens) within a single buffer — boolean
   // edge-detection on isInSpeech() can miss those cases.
   private segmentIdCounter = 0;
+  private readonly rmsThreshold: number;
+  private readonly hangoverFrames: number;
+  private readonly minSpeechFrames: number;
+
+  constructor(options: VadProcessorOptions = {}) {
+    this.rmsThreshold = options.rmsThreshold ?? DEFAULT_RMS_THRESHOLD;
+    this.hangoverFrames = options.hangoverFrames ?? DEFAULT_HANGOVER_FRAMES;
+    this.minSpeechFrames = options.minSpeechFrames ?? DEFAULT_MIN_SPEECH_FRAMES;
+  }
 
   push(samples: Float32Array): SpeechSegment[] {
     const segments: SpeechSegment[] = [];
@@ -60,10 +76,10 @@ export class VadProcessor {
       offset += WINDOW_SIZE;
 
       const energy = rms(window, 0, window.length);
-      const isSpeech = energy >= RMS_THRESHOLD;
+      const isSpeech = energy >= this.rmsThreshold;
 
       if (isSpeech) {
-        this.hangoverCount = HANGOVER_FRAMES;
+        this.hangoverCount = this.hangoverFrames;
         if (!this.inSpeech) {
           this.inSpeech = true;
           this.speechFrameCount = 0;
@@ -89,7 +105,7 @@ export class VadProcessor {
           this.resetSpeech();
         } else if (this.hangoverCount <= 0) {
           // End of speech
-          if (this.speechFrameCount >= MIN_SPEECH_FRAMES) {
+          if (this.speechFrameCount >= this.minSpeechFrames) {
             const seg = this.buildSegment();
             if (seg) segments.push(seg);
           }
@@ -153,7 +169,7 @@ export class VadProcessor {
       this.speechBuffer = tail;
       this.speechFrameCount = tail.length;
       this.speechDurationMs = tail.length * 30;
-      this.hangoverCount = HANGOVER_FRAMES;
+      this.hangoverCount = this.hangoverFrames;
       // Tail-keep starts a NEW logical segment (caller should re-stamp any
       // per-segment timers) — bump the id so callers detect the boundary.
       this.segmentIdCounter++;
@@ -178,7 +194,7 @@ export class VadProcessor {
 
   flush(): SpeechSegment[] {
     const segments: SpeechSegment[] = [];
-    if (this.inSpeech && this.speechFrameCount >= MIN_SPEECH_FRAMES) {
+    if (this.inSpeech && this.speechFrameCount >= this.minSpeechFrames) {
       const seg = this.buildSegment();
       if (seg) segments.push(seg);
     }

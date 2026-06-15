@@ -268,6 +268,7 @@ import { AudioDevices } from "./audio/AudioDevices"
 import { loadNativeModule } from "./audio/nativeModuleLoader"
 import { BaseSTT } from "./audio/BaseSTT"
 import { createSTTProvider } from "./audio/sttRegistry"
+import { normalizePcm16Chunk, measurePcm16Level } from "./audio/audioLevelNormalizer"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
@@ -1341,6 +1342,19 @@ export class AppState {
   private wireSystemCapture(capture: SystemAudioCapture, label: string = ''): void {
     const prefix = label ? `[Main] ${label} ` : '[Main] ';
     let chunkCount = 0;
+    let levelLogCount = 0;
+    let gainAppliedCount = 0;
+    const shouldNormalizeChineseSystemAudio = (() => {
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const cm = CredentialsManager.getInstance();
+        const provider = cm.getSttProvider();
+        const language = normalizeRecognitionLanguageForProvider(provider, cm.getSttLanguage());
+        return provider === 'local-whisper' && language === 'chinese';
+      } catch {
+        return false;
+      }
+    })();
     // Watchdog: if no chunks arrive within 8s of capture start, the most likely
     // causes are (a) Screen Recording permission was revoked between the TCC
     // check and SCK init, (b) the meeting app routes audio to a device the
@@ -1484,7 +1498,25 @@ export class AppState {
         }
       }
 
-      this.googleSTT?.write(chunk);
+      let sttChunk = chunk;
+      if (shouldNormalizeChineseSystemAudio) {
+        const normalized = normalizePcm16Chunk(chunk, {
+          targetRms: 0.015,
+          maxGain: 4,
+          silenceRms: 0.0005,
+        });
+        sttChunk = normalized.chunk;
+        if (normalized.gain > 1) gainAppliedCount++;
+        if (levelLogCount < 5 || chunkCount % 500 === 0) {
+          const after = normalized.gain > 1 ? measurePcm16Level(sttChunk) : normalized.before;
+          console.log(
+            `${prefix}SystemAudio level: rms=${normalized.before.rms.toFixed(5)} peak=${normalized.before.peak.toFixed(5)} gain=${normalized.gain.toFixed(2)} afterRms=${after.rms.toFixed(5)} gainApplied=${gainAppliedCount}`,
+          );
+          levelLogCount++;
+        }
+      }
+
+      this.googleSTT?.write(sttChunk);
     });
     capture.on('sample_rate_changed', (rate: number) => {
       console.log(`${prefix}SystemAudioCapture rate updated dynamically to ${rate}Hz`);
