@@ -20,12 +20,14 @@ export interface SenseVoiceWorkerInitMessage {
   modelFile: string;
   tokensFile: string;
   numThreads: number;
+  verboseLogging?: boolean;
 }
 
 export interface SenseVoiceWorkerTranscribeMessage {
   type: 'transcribe';
   taskId: string;
   samples: Float32Array;
+  verboseLogging?: boolean;
 }
 
 export type SenseVoiceWorkerInMessage =
