@@ -27,6 +27,16 @@ function close(server) {
   return new Promise((resolve) => server.close(resolve));
 }
 
+test('SenseVoice downloader includes the user-controlled BOS CDN in default sources', () => {
+  const source = fs.readFileSync(
+    path.resolve(__dirname, '../../../electron/audio/sensevoice/modelDownloader.ts'),
+    'utf8',
+  );
+
+  assert.match(source, /https:\/\/feigenbaum\.cdn\.bcebos\.com\/onnx/);
+  assert.doesNotMatch(source, /www\.modelscope\.cn\/models\/chriscrs/);
+});
+
 test('SenseVoice downloader falls back to the next endpoint when the first endpoint fails', async (t) => {
   const modelsDir = makeTempDir();
   const failingServer = http.createServer((_, res) => {
@@ -164,4 +174,57 @@ test('SenseVoice downloader redacts signed query parameters from download errors
       return true;
     },
   );
+});
+
+test('SenseVoice downloader keeps download headers when following redirects', async (t) => {
+  const modelsDir = makeTempDir();
+  const server = http.createServer((req, res) => {
+    if (req.url?.startsWith('/source/model.int8.onnx')) {
+      res.writeHead(302, { location: '/cdn/model.int8.onnx?auth_key=private' });
+      res.end();
+      return;
+    }
+    if (req.url?.startsWith('/source/tokens.txt')) {
+      res.writeHead(302, { location: '/cdn/tokens.txt?auth_key=private' });
+      res.end();
+      return;
+    }
+    if (req.url?.startsWith('/cdn/')) {
+      const userAgent = req.headers['user-agent'] ?? '';
+      const accept = req.headers.accept ?? '';
+      if (!String(userAgent).includes('Natively') || !String(accept).includes('*/*')) {
+        res.writeHead(403);
+        res.end('forbidden');
+        return;
+      }
+      const filename = req.url.includes('model.int8.onnx') ? 'model.int8.onnx' : 'tokens.txt';
+      res.writeHead(200, { 'content-length': String(filename.length) });
+      res.end(filename);
+      return;
+    }
+    res.writeHead(404);
+    res.end('missing');
+  });
+
+  const port = await listen(server);
+  t.after(async () => {
+    await close(server);
+    fs.rmSync(modelsDir, { recursive: true, force: true });
+    delete process.env.SENSEVOICE_MODELS_DIR;
+    delete process.env.SENSEVOICE_MODEL_ENDPOINTS;
+    delete process.env.SENSEVOICE_MODEL_FILE_BASE_URLS;
+  });
+
+  process.env.SENSEVOICE_MODELS_DIR = modelsDir;
+  process.env.SENSEVOICE_MODEL_FILE_BASE_URLS = `http://127.0.0.1:${port}/source`;
+
+  const { downloadSenseVoiceModel } = await loadDownloader();
+  await downloadSenseVoiceModel();
+
+  const modelDir = path.join(
+    modelsDir,
+    'csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17',
+  );
+  assert.equal(fs.readFileSync(path.join(modelDir, 'model.int8.onnx'), 'utf8'), 'model.int8.onnx');
+  assert.equal(fs.readFileSync(path.join(modelDir, 'tokens.txt'), 'utf8'), 'tokens.txt');
 });
