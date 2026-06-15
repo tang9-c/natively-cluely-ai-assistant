@@ -10,6 +10,7 @@ import {
 import { resolveSenseVoiceModelFiles } from './modelManager';
 import { resolveSenseVoiceWorkerPath } from './workerPathResolver';
 import { cleanSenseVoiceText } from './textCleaner';
+import { isVerboseLogging } from '../../verboseLog';
 
 type SenseVoiceWorkerLike = {
   on(event: 'message', listener: (message: SenseVoiceWorkerOutMessage) => void): SenseVoiceWorkerLike;
@@ -18,6 +19,11 @@ type SenseVoiceWorkerLike = {
   postMessage(message: any, transferList?: any[]): void;
   terminate(): Promise<number> | void;
 };
+
+function debugLog(event: string, metadata: Record<string, unknown> = {}): void {
+  if (!isVerboseLogging()) return;
+  console.log(`[LocalSenseVoiceSTT] ${event}`, metadata);
+}
 
 export interface LocalSenseVoiceSTTOptions {
   modelId?: SenseVoiceModelId;
@@ -72,6 +78,12 @@ export class LocalSenseVoiceSTT extends BaseSTT {
 
   start(): void {
     if (this._isActive) return;
+    debugLog('start', {
+      modelId: this.modelId,
+      channel: this.channelLabel || '(unset)',
+      inputSampleRate: this.inputSampleRate,
+      numThreads: this.numThreads,
+    });
     this._isActive = true;
     this.workerReady = false;
     this.pendingAudio = [];
@@ -82,6 +94,12 @@ export class LocalSenseVoiceSTT extends BaseSTT {
 
   stop(): void {
     if (!this._isActive) return;
+    debugLog('stop', {
+      channel: this.channelLabel || '(unset)',
+      pendingAudio: this.pendingAudio.length,
+      inFlightTasks: this.inFlightTasks,
+      workerReady: this.workerReady,
+    });
     this._isActive = false;
     if (this.gapFlushTimer) {
       clearTimeout(this.gapFlushTimer);
@@ -101,15 +119,28 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     if (!this._isActive || !this.vad) return;
     const f32 = resampleToF32(chunk, this.inputSampleRate);
     const segments = this.vad.push(f32);
+    debugLog('write', {
+      channel: this.channelLabel || '(unset)',
+      chunkBytes: chunk.length,
+      sampleCount: f32.length,
+      emittedSegments: segments.length,
+      pendingAudio: this.pendingAudio.length,
+    });
     segments.forEach(segment => this.dispatchFinal(segment.samples));
     this.resetGapFlushTimer();
   }
 
   notifySpeechEnded(): void {
+    debugLog('speech-ended', { channel: this.channelLabel || '(unset)' });
     this.flushVad();
   }
 
   finalize(): void {
+    debugLog('finalize', {
+      channel: this.channelLabel || '(unset)',
+      pendingAudio: this.pendingAudio.length,
+      inFlightTasks: this.inFlightTasks,
+    });
     this.flushVad();
   }
 
@@ -117,6 +148,12 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     if (this._isActive) {
       this.finalize();
     }
+
+    debugLog('drain-start', {
+      timeoutMs,
+      pendingAudio: this.pendingAudio.length,
+      inFlightTasks: this.inFlightTasks,
+    });
 
     if (this.pendingAudio.length === 0 && this.inFlightTasks === 0) return;
 
@@ -130,6 +167,11 @@ export class LocalSenseVoiceSTT extends BaseSTT {
           if (timedOut && !drained) {
             console.warn('[LocalSenseVoiceSTT] Timed out draining final transcripts before meeting save');
           }
+          debugLog('drain-complete', {
+            timedOut,
+            pendingAudio: this.pendingAudio.length,
+            inFlightTasks: this.inFlightTasks,
+          });
           resolve();
         }
       }, 50);
@@ -151,14 +193,21 @@ export class LocalSenseVoiceSTT extends BaseSTT {
   private spawnWorker(): void {
     const worker = this.workerFactory ? this.workerFactory() : new Worker(resolveSenseVoiceWorkerPath());
     this.worker = worker;
+    debugLog('worker-spawn', {
+      modelId: this.modelId,
+      channel: this.channelLabel || '(unset)',
+      customWorkerFactory: !!this.workerFactory,
+    });
 
     worker.on('message', (message) => this.handleWorkerMessage(message));
     worker.on('error', (error) => {
+      debugLog('worker-error', { message: error.message });
       this.emit('error', error);
       this.pendingAudio = [];
       this.inFlightTasks = 0;
     });
     worker.on('exit', (code) => {
+      debugLog('worker-exit', { code, active: this._isActive });
       if (code !== 0 && this._isActive) {
         this.emit('error', new Error(`SenseVoice worker exited with code ${code}`));
       }
@@ -167,18 +216,26 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     const files = this.modelFiles ?? (this.workerFactory
       ? { modelDir: '', modelFile: '', tokensFile: '' }
       : resolveSenseVoiceModelFiles(this.modelId));
+    debugLog('worker-init', {
+      modelId: this.modelId,
+      modelFileConfigured: !!files.modelFile,
+      tokensFileConfigured: !!files.tokensFile,
+      numThreads: this.numThreads,
+    });
     worker.postMessage({
       type: 'init',
       modelDir: files.modelDir,
       modelFile: files.modelFile,
       tokensFile: files.tokensFile,
       numThreads: this.numThreads,
+      verboseLogging: isVerboseLogging(),
     });
   }
 
   private handleWorkerMessage(message: SenseVoiceWorkerOutMessage): void {
     if (message.type === 'ready') {
       this.workerReady = true;
+      debugLog('worker-ready', { pendingAudio: this.pendingAudio.length });
       this.flushPendingAudio();
       return;
     }
@@ -186,6 +243,12 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     if (message.type === 'result') {
       this.inFlightTasks = Math.max(0, this.inFlightTasks - 1);
       const text = cleanSenseVoiceText(message.text);
+      debugLog('worker-result', {
+        taskId: message.taskId,
+        textLength: text.length,
+        pendingAudio: this.pendingAudio.length,
+        inFlightTasks: this.inFlightTasks,
+      });
       if (text) {
         this.emit('transcript', {
           text,
@@ -204,6 +267,12 @@ export class LocalSenseVoiceSTT extends BaseSTT {
         this.pendingAudio = [];
         this.inFlightTasks = 0;
       }
+      debugLog('worker-message-error', {
+        taskId: message.taskId || '(init)',
+        message: message.message,
+        pendingAudio: this.pendingAudio.length,
+        inFlightTasks: this.inFlightTasks,
+      });
       this.emit('error', new Error(message.message));
       this.flushPendingAudio();
     }
@@ -216,11 +285,17 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       this.gapFlushTimer = null;
     }
     const segments = this.vad.flush();
+    debugLog('vad-flush', { emittedSegments: segments.length });
     segments.forEach(segment => this.dispatchFinal(segment.samples));
   }
 
   private dispatchFinal(samples: Float32Array): void {
     if (samples.length === 0) return;
+    debugLog('queue-final', {
+      sampleCount: samples.length,
+      pendingBefore: this.pendingAudio.length,
+      workerReady: this.workerReady,
+    });
     this.pendingAudio.push(samples.slice());
     this.flushPendingAudio();
   }
@@ -232,11 +307,18 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       if (!samples) continue;
       const taskId = `sensevoice-${++this.taskCounter}`;
       this.inFlightTasks++;
+      debugLog('dispatch-final', {
+        taskId,
+        sampleCount: samples.length,
+        pendingAudio: this.pendingAudio.length,
+        inFlightTasks: this.inFlightTasks,
+      });
       this.worker.postMessage(
         {
           type: 'transcribe',
           taskId,
           samples,
+          verboseLogging: isVerboseLogging(),
         },
         [samples.buffer],
       );
