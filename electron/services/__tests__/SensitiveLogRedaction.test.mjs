@@ -18,9 +18,11 @@ test('SessionTracker logs transcript and assistant message metadata without text
   assert.match(source, /addAssistantMessage called`, \{ length: text\.length \}/);
   assert.match(source, /RX User Segment`, \{ final: segment\.final, length: segment\.text\.length \}/);
   assert.match(source, /RX Interviewer Segment`, \{ final: segment\.final, length: segment\.text\.length \}/);
-  assert.match(source, /Force-saving pending interim transcript', \{ length: this\.lastInterimInterviewer\.text\.length \}/);
+  assert.match(source, /Force-saving pending interim interviewer transcript', \{ length: this\.lastInterimInterviewer\.text\.length \}/);
+  assert.match(source, /Force-saving pending interim user transcript', \{ length: this\.lastInterimUser\.text\.length \}/);
   assert.doesNotMatch(source, /console\.log[\s\S]{0,120}substring\(/);
   assert.doesNotMatch(source, /Force-saving pending interim transcript:', this\.lastInterimInterviewer\.text/);
+  assert.doesNotMatch(source, /Force-saving pending interim user transcript:', this\.lastInterimUser\.text/);
   assert.doesNotMatch(source, /transcriptEpochSummaries\.push\([^\n]*(substring|\.text)/);
   assert.doesNotMatch(source, /Earlier discussion[^`]*\$\{oldEntries\.slice/);
 });
