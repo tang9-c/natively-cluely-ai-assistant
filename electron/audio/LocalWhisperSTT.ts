@@ -33,7 +33,7 @@
 
 import { Worker } from 'worker_threads';
 import { resampleToF32 } from './whisper/audioResampler';
-import { VadProcessor } from './whisper/vadProcessor';
+import { VadProcessor, VadProcessorOptions } from './whisper/vadProcessor';
 import { filterHallucination } from './whisper/hallucinationFilter';
 import { configureTransformersCache } from './whisper/modelManager';
 import { modelPreloader } from './whisper/modelPreloader';
@@ -182,6 +182,17 @@ export class LocalWhisperSTT extends BaseSTT {
     }
     setCredentials(_credPath: string): void {}
 
+    private resolveVadOptions(): VadProcessorOptions {
+        if (this.channelLabel === 'system' && this.language.startsWith('zh')) {
+            return {
+                rmsThreshold: 0.004,
+                hangoverFrames: 18,
+                minSpeechFrames: 3,
+            };
+        }
+        return {};
+    }
+
     /**
      * Optional human-readable channel label (e.g. 'mic', 'system') for log
      * disambiguation when both LocalWhisperSTT instances use the same model.
@@ -217,7 +228,7 @@ export class LocalWhisperSTT extends BaseSTT {
         this.isDrainingFinals = false;
         this.drainingFinalsInFlight = 0;
         this._isActive = true;
-        this.vad = new VadProcessor();
+        this.vad = new VadProcessor(this.resolveVadOptions());
         this.spawnWorker();
         this.startStreamingLoop();
     }
