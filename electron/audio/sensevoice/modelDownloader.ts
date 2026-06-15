@@ -6,7 +6,12 @@ import { getSenseVoiceModelDir } from './modelManager';
 import { SENSEVOICE_DEFAULT_MODEL_ID, type SenseVoiceModelId } from './types';
 
 const REQUIRED_FILES = ['model.int8.onnx', 'tokens.txt'] as const;
+const MODELSCOPE_SENSEVOICE_REPO_ID =
+  'chriscrs/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17';
 const DEFAULT_ENDPOINTS = ['https://huggingface.co', 'https://hf-mirror.com'] as const;
+const DEFAULT_FILE_BASE_URLS = [
+  `https://www.modelscope.cn/models/${MODELSCOPE_SENSEVOICE_REPO_ID}/resolve/master`,
+] as const;
 const REQUEST_TIMEOUT_MS = 15000;
 
 type ProgressCallback = (progress: number) => void;
@@ -15,22 +20,47 @@ function normalizeEndpoint(endpoint: string): string {
   return endpoint.trim().replace(/\/$/, '');
 }
 
-function downloadEndpoints(): string[] {
+function configuredFileBaseUrls(): string[] {
+  const configured = process.env.SENSEVOICE_MODEL_FILE_BASE_URLS;
+  if (!configured) return [];
+  return configured
+    .split(',')
+    .map(normalizeEndpoint)
+    .filter(Boolean);
+}
+
+function downloadFileBaseUrls(modelId: string): string[] {
+  const configuredBases = configuredFileBaseUrls();
+  if (configuredBases.length > 0) return configuredBases;
+
   const configured = process.env.SENSEVOICE_MODEL_ENDPOINTS;
   if (configured) {
     return configured
       .split(',')
       .map(normalizeEndpoint)
+      .map(endpoint => `${endpoint}/${modelId}/resolve/main`)
       .filter(Boolean);
   }
   if (process.env.HF_ENDPOINT) {
-    return [normalizeEndpoint(process.env.HF_ENDPOINT)];
+    return [`${normalizeEndpoint(process.env.HF_ENDPOINT)}/${modelId}/resolve/main`];
   }
-  return [...DEFAULT_ENDPOINTS];
+  return [
+    ...DEFAULT_ENDPOINTS.map(endpoint => `${endpoint}/${modelId}/resolve/main`),
+    ...DEFAULT_FILE_BASE_URLS,
+  ];
 }
 
-function fileUrl(endpoint: string, modelId: string, filename: string): string {
-  return `${endpoint}/${modelId}/resolve/main/${filename}`;
+function fileUrl(fileBaseUrl: string, filename: string): string {
+  return `${fileBaseUrl}/${filename}`;
+}
+
+function safeUrlForError(value: string): string {
+  try {
+    const parsed = new URL(value);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return value;
+  }
 }
 
 function downloadFile(url: string, destination: string, onBytes: (bytes: number, total?: number) => void): Promise<void> {
@@ -44,7 +74,7 @@ function downloadFile(url: string, destination: string, onBytes: (bytes: number,
         if (status >= 300 && status < 400 && res.headers.location) {
           res.resume();
           if (redirectCount >= 5) {
-            reject(new Error(`Too many redirects while downloading ${url}`));
+            reject(new Error(`Too many redirects while downloading ${safeUrlForError(url)}`));
             return;
           }
           request(new URL(res.headers.location, parsed).toString(), redirectCount + 1);
@@ -52,7 +82,7 @@ function downloadFile(url: string, destination: string, onBytes: (bytes: number,
         }
         if (status < 200 || status >= 300) {
           res.resume();
-          reject(new Error(`Download failed with HTTP ${status}: ${target}`));
+          reject(new Error(`Download failed with HTTP ${status}: ${safeUrlForError(target)}`));
           return;
         }
 
@@ -74,7 +104,7 @@ function downloadFile(url: string, destination: string, onBytes: (bytes: number,
         });
       });
       req.setTimeout(REQUEST_TIMEOUT_MS, () => {
-        req.destroy(new Error(`Download timed out after ${REQUEST_TIMEOUT_MS / 1000}s: ${target}`));
+        req.destroy(new Error(`Download timed out after ${REQUEST_TIMEOUT_MS / 1000}s: ${safeUrlForError(target)}`));
       });
       req.on('error', (error) => {
         fs.rmSync(tmp, { force: true });
@@ -91,22 +121,22 @@ async function downloadFileWithFallback(
   destination: string,
   onBytes: (bytes: number, total?: number) => void,
 ): Promise<void> {
-  const endpoints = downloadEndpoints();
-  if (endpoints.length === 0) {
-    throw new Error('No SenseVoice model download endpoints configured');
+  const fileBaseUrls = downloadFileBaseUrls(modelId);
+  if (fileBaseUrls.length === 0) {
+    throw new Error('No SenseVoice model download sources configured');
   }
 
   const errors: string[] = [];
-  for (const endpoint of endpoints) {
+  for (const fileBaseUrl of fileBaseUrls) {
     try {
-      await downloadFile(fileUrl(endpoint, modelId, filename), destination, onBytes);
+      await downloadFile(fileUrl(fileBaseUrl, filename), destination, onBytes);
       return;
     } catch (error: any) {
-      errors.push(`${endpoint}: ${error?.message ?? String(error)}`);
+      errors.push(`${safeUrlForError(fileBaseUrl)}: ${error?.message ?? String(error)}`);
     }
   }
 
-  throw new Error(`Failed to download ${filename}. Tried ${endpoints.length} endpoint(s): ${errors.join(' | ')}`);
+  throw new Error(`Failed to download ${filename}. Tried ${fileBaseUrls.length} source(s): ${errors.join(' | ')}`);
 }
 
 export async function downloadSenseVoiceModel(
