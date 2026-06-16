@@ -221,6 +221,10 @@ export class IntelligenceEngine extends EventEmitter {
         return new Set(text.toLowerCase().match(/\b\w+\b/g) ?? []);
     }
 
+    private static cjkCharCount(text: string): number {
+        return text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu)?.length ?? 0;
+    }
+
     // Returns a score in [0,1] that accounts for partial-to-final comparisons.
     // Pure Jaccard underestimates similarity when the speculative text is a prefix of the final
     // transcript (e.g., "Can you walk me through" vs. "Can you walk me through your design process?").
@@ -238,8 +242,9 @@ export class IntelligenceEngine extends EventEmitter {
     }
 
     private static hasQuestionSignal(text: string): boolean {
-        if (text.trimEnd().endsWith('?')) return true;
-        return /\b(what|how|why|where|when|which|who|can you|could you|tell me|explain|describe|walk me through|talk me through)\b/i.test(text);
+        if (/[?？]\s*$/.test(text)) return true;
+        return /\b(what|how|why|where|when|which|who|can you|could you|tell me|explain|describe|walk me through|talk me through)\b/i.test(text)
+            || /(什么|怎么|如何|为什么|为何|哪里|什么时候|哪一个|哪个|谁|能不能|可以|可否|请问|解释|说明|描述|讲一下|说一下|介绍一下|展开讲讲|怎么看|你认为|考虑一下|你的问题|我的经验|类似案例|类似情况|类似问题)/u.test(text);
     }
 
     // Fires speculative LLM inference on a stable high-confidence interviewer partial.
@@ -251,9 +256,11 @@ export class IntelligenceEngine extends EventEmitter {
         const text = segment.text;
         const confidence = segment.confidence ?? 0;
         const words = text.trim().split(/\s+/).filter(Boolean);
+        const hasEnoughContent = words.length >= this.SPECULATIVE_MIN_WORDS ||
+            IntelligenceEngine.cjkCharCount(text) >= 12;
         if (
             confidence < this.SPECULATIVE_MIN_CONFIDENCE ||
-            words.length < this.SPECULATIVE_MIN_WORDS ||
+            !hasEnoughContent ||
             !IntelligenceEngine.hasQuestionSignal(text)
         ) return;
 
@@ -281,14 +288,12 @@ export class IntelligenceEngine extends EventEmitter {
         const result = this.session.handleTranscript(segment);
         this.lastTranscriptTime = Date.now();
 
-        if (segment.speaker === 'interviewer') {
-            if (!segment.final) {
-                this.maybeSpeculate(segment);
-            } else if (this.speculativeTimer !== null) {
-                // Final arrived — cancel debounce; handleSuggestionTrigger will do Jaccard check
-                clearTimeout(this.speculativeTimer);
-                this.speculativeTimer = null;
-            }
+        if (segment.speaker !== 'assistant' && !segment.final) {
+            this.maybeSpeculate(segment);
+        } else if (segment.final && this.speculativeTimer !== null) {
+            // Final arrived — cancel debounce; handleSuggestionTrigger will do Jaccard check
+            clearTimeout(this.speculativeTimer);
+            this.speculativeTimer = null;
         }
 
         // Phase 3: detect dynamic action triggers on every final segment.
@@ -587,18 +592,26 @@ export class IntelligenceEngine extends EventEmitter {
 
             const contextItems = this.session.getContext(180);
 
-            // Inject latest interim transcript if available
-            const lastInterim = this.session.getLastInterimInterviewer();
-            if (lastInterim && lastInterim.text.trim().length > 0) {
+            // Inject latest interim transcript if available.
+            const pendingInterims = [
+                { role: 'interviewer' as const, segment: this.session.getLastInterimInterviewer() },
+                { role: 'user' as const, segment: this.session.getLastInterimUser() },
+            ]
+                .filter((entry): entry is { role: 'interviewer' | 'user'; segment: TranscriptSegment } =>
+                    Boolean(entry.segment && entry.segment.text.trim().length > 0))
+                .sort((a, b) => b.segment.timestamp - a.segment.timestamp);
+            const latestInterim = pendingInterims[0];
+            if (latestInterim) {
+                const { role, segment: lastInterim } = latestInterim;
                 const lastItem = contextItems[contextItems.length - 1];
                 const isDuplicate = lastItem &&
-                    lastItem.role === 'interviewer' &&
+                    lastItem.role === role &&
                     (lastItem.text === lastInterim.text || Math.abs(lastItem.timestamp - lastInterim.timestamp) < 1000);
 
                 if (!isDuplicate) {
                     console.log(`[IntelligenceEngine] Injecting interim transcript`, { length: lastInterim.text.length });
                     contextItems.push({
-                        role: 'interviewer',
+                        role,
                         text: lastInterim.text,
                         timestamp: lastInterim.timestamp
                     });

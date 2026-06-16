@@ -387,6 +387,10 @@ export class SessionTracker {
         return this.lastInterimInterviewer;
     }
 
+    getLastInterimUser(): TranscriptSegment | null {
+        return this.lastInterimUser;
+    }
+
     /**
      * Get formatted context string for LLM prompts
      */

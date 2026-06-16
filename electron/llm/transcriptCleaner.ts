@@ -23,6 +23,10 @@ const ACKNOWLEDGEMENTS = new Set([
     'cool', 'great', 'nice', 'perfect', 'alright', 'all right'
 ]);
 
+function cjkCharCount(text: string): number {
+    return text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu)?.length ?? 0;
+}
+
 /**
  * Clean a single turn's text
  * Removes fillers, acknowledgements, and cleans up formatting
@@ -58,6 +62,10 @@ function cleanText(text: string): string {
 function isMeaningfulTurn(turn: TranscriptTurn, cleanedText: string): boolean {
     // Always keep interviewer speech (priority)
     if (turn.role === 'interviewer' && cleanedText.length >= 5) {
+        return true;
+    }
+
+    if (cjkCharCount(cleanedText) >= 8 && cleanedText.length >= 10) {
         return true;
     }
 
