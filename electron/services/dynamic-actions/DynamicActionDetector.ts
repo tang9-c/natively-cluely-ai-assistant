@@ -11,11 +11,14 @@ export interface ActionTrigger {
     };
 }
 
+const zh = (...terms: string[]): RegExp => new RegExp(terms.join('|'), 'i');
+
 const GENERAL_TRIGGERS: ActionTrigger[] = [
     {
         type: 'general_assistance_request',
         patterns: [
             /\b(can you help me|help me with|what should I say|how should I respond|how do I answer)\b/i,
+            zh('帮我想一下', '我该怎么说', '我该怎么回答', '怎么回应', '怎么答'),
         ],
         priority: 0.82,
         label: 'Suggest response',
@@ -25,7 +28,10 @@ const GENERAL_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'general_summarize',
-        patterns: [/\b(summarize this|recap this|quick summary|what did they say|what was decided)\b/i],
+        patterns: [
+            /\b(summarize this|recap this|quick summary|what did they say|what was decided)\b/i,
+            zh('总结一下', '复盘一下', '简单总结', '他们刚才说了什么', '刚才决定了什么'),
+        ],
         priority: 0.78,
         label: 'Summarize discussion',
         promptInstruction:
@@ -34,7 +40,10 @@ const GENERAL_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'general_explain',
-        patterns: [/\b(explain that|what does that mean|break that down|in simple terms)\b/i],
+        patterns: [
+            /\b(explain that|what does that mean|break that down|in simple terms)\b/i,
+            zh('解释一下', '这是什么意思', '拆解一下', '简单说', '通俗一点'),
+        ],
         priority: 0.76,
         label: 'Explain clearly',
         promptInstruction:
@@ -46,7 +55,10 @@ const GENERAL_TRIGGERS: ActionTrigger[] = [
 const NEGOTIATION_TRIGGERS: ActionTrigger[] = [
     {
         type: 'budget_probe',
-        patterns: [/\b(what'?s your budget|budget range|target price|price range|how much can you spend)\b/i],
+        patterns: [
+            /\b(what'?s your budget|budget range|target price|price range|how much can you spend)\b/i,
+            zh('预算是多少', '预算范围', '目标价格', '价格范围', '能花多少钱'),
+        ],
         priority: 0.88,
         label: 'Handle budget probe',
         promptInstruction:
@@ -55,7 +67,10 @@ const NEGOTIATION_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'price_pushback',
-        patterns: [/\b(price is too high|too expensive|can you do better|lower the price|discount|cheaper)\b/i],
+        patterns: [
+            /\b(price is too high|too expensive|can you do better|lower the price|discount|cheaper)\b/i,
+            zh('价格太高', '太贵', '能不能便宜', '降价', '折扣', '优惠'),
+        ],
         priority: 0.9,
         label: 'Counter price pushback',
         promptInstruction:
@@ -64,7 +79,10 @@ const NEGOTIATION_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'final_offer',
-        patterns: [/\b(final offer|best and final|take it or leave it|last offer|walk away)\b/i],
+        patterns: [
+            /\b(final offer|best and final|take it or leave it|last offer|walk away)\b/i,
+            zh('最终报价', '最后报价', '一口价', '接受就接受', '不接受就算了', '只能这样'),
+        ],
         priority: 0.92,
         label: 'Respond to final offer',
         promptInstruction:
@@ -77,7 +95,10 @@ const NEGOTIATION_TRIGGERS: ActionTrigger[] = [
 const SALES_TRIGGERS: ActionTrigger[] = [
     {
         type: 'pricing_objection',
-        patterns: [/\b(expensive|too much|budget|price|cost|afford)\b/i],
+        patterns: [
+            /\b(expensive|too much|budget|price|cost|afford)\b/i,
+            zh('太贵', '价格高', '预算不够', '成本', '费用', '负担不起'),
+        ],
         priority: 0.9,
         label: 'Handle pricing objection',
         promptInstruction:
@@ -86,7 +107,10 @@ const SALES_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'competitor_mention',
-        patterns: [/\b(Gong|Chorus|ZoomInfo|Salesloft|Outreach|Clari|yeah\.pm)\b/i],
+        patterns: [
+            /\b(Gong|Chorus|ZoomInfo|Salesloft|Outreach|Clari|yeah\.pm)\b/i,
+            zh('竞品', '竞争对手', '别家', '其他供应商', '其他产品'),
+        ],
         priority: 0.85,
         label: 'Handle competitor comparison',
         promptInstruction:
@@ -95,7 +119,10 @@ const SALES_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'buying_signal',
-        patterns: [/\b(ready to move|send contract|legal review|next steps|schedule|finalize)\b/i],
+        patterns: [
+            /\b(ready to move|send contract|legal review|next steps|schedule|finalize)\b/i,
+            zh('准备推进', '发合同', '法务审核', '下一步', '安排时间', '敲定'),
+        ],
         priority: 0.95,
         label: 'Seize buying signal',
         promptInstruction:
@@ -104,7 +131,10 @@ const SALES_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'roi_question',
-        patterns: [/\b(ROI|return on investment|business case|payback|prove the value|value case)\b/i],
+        patterns: [
+            /\b(ROI|return on investment|business case|payback|prove the value|value case)\b/i,
+            zh('投资回报', '回报率', '商业价值', '多久回本', '证明价值', '效果怎么衡量'),
+        ],
         priority: 0.88,
         label: 'Build ROI case',
         promptInstruction:
@@ -113,7 +143,10 @@ const SALES_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'pricing_request',
-        patterns: [/\b(send me pricing|pricing page|quote|proposal|commercials|what does it cost)\b/i],
+        patterns: [
+            /\b(send me pricing|pricing page|quote|proposal|commercials|what does it cost)\b/i,
+            zh('发我报价', '报价单', '价格页', '方案报价', '商务条款', '多少钱'),
+        ],
         priority: 0.86,
         label: 'Frame pricing request',
         promptInstruction:
@@ -126,7 +159,10 @@ const SALES_TRIGGERS: ActionTrigger[] = [
 const RECRUITING_TRIGGERS: ActionTrigger[] = [
     {
         type: 'candidate_concern',
-        patterns: [/\b(visa|relocation|compensation|offer|start date|security|remote|hybrid)\b/i],
+        patterns: [
+            /\b(visa|relocation|compensation|offer|start date|security|remote|hybrid)\b/i,
+            zh('签证', '搬迁', '薪资', 'offer', '入职时间', '安全审查', '远程', '混合办公'),
+        ],
         priority: 0.85,
         label: 'Address candidate concern',
         promptInstruction:
@@ -135,7 +171,10 @@ const RECRUITING_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'strong_fit_signal',
-        patterns: [/\b(excited|love this|exactly what|great fit|perfect match)\b/i],
+        patterns: [
+            /\b(excited|love this|exactly what|great fit|perfect match)\b/i,
+            zh('很感兴趣', '很喜欢', '正好符合', '很匹配', '非常适合'),
+        ],
         priority: 0.9,
         label: 'Reinforce positive signal',
         promptInstruction:
@@ -144,7 +183,10 @@ const RECRUITING_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'candidate_experience_probe',
-        patterns: [/\b(tell me about your experience|walk me through your background|why this role|why are you interested)\b/i],
+        patterns: [
+            /\b(tell me about your experience|walk me through your background|why this role|why are you interested)\b/i,
+            zh('讲讲你的经验', '介绍一下你的背景', '为什么这个岗位', '为什么感兴趣'),
+        ],
         priority: 0.84,
         label: 'Guide candidate story',
         promptInstruction:
@@ -159,6 +201,7 @@ const TEAM_TRIGGERS: ActionTrigger[] = [
         type: 'action_item',
         patterns: [
             /\b(I'll do|I'll send|need to follow up|action item|assigned to|deadline|by Friday|by Monday)\b/i,
+            zh('我来做', '我会发', '需要跟进', '行动项', '分配给', '截止', '周五前', '周一前'),
         ],
         priority: 0.9,
         label: 'Capture action item',
@@ -168,7 +211,10 @@ const TEAM_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'decision_point',
-        patterns: [/\b(decided|going with|let's go|final decision|approved|confirmed)\b/i],
+        patterns: [
+            /\b(decided|going with|let's go|final decision|approved|confirmed)\b/i,
+            zh('决定了', '就选', '我们定', '最终决定', '批准', '确认'),
+        ],
         priority: 0.85,
         label: 'Confirm decision',
         promptInstruction: 'You are in Team Meeting mode. Summarize the decision that was made.',
@@ -176,7 +222,10 @@ const TEAM_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'blocker_check',
-        patterns: [/\b(any blockers|blocked by|stuck on|risk to timeline|what's blocking|dependency)\b/i],
+        patterns: [
+            /\b(any blockers|blocked by|stuck on|risk to timeline|what's blocking|dependency)\b/i,
+            zh('有什么阻塞', '被卡住', '卡在哪', '风险', '依赖', '影响进度'),
+        ],
         priority: 0.84,
         label: 'Clarify blocker',
         promptInstruction:
@@ -185,7 +234,10 @@ const TEAM_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'owner_deadline_check',
-        patterns: [/\b(who owns this|owner for this|by when|timeline|ETA|due date)\b/i],
+        patterns: [
+            /\b(who owns this|owner for this|by when|timeline|ETA|due date)\b/i,
+            zh('谁负责', '负责人是谁', '什么时候', '时间线', '预计什么时候', '截止日期'),
+        ],
         priority: 0.83,
         label: 'Lock owner and deadline',
         promptInstruction:
@@ -200,6 +252,7 @@ const INTERVIEW_TRIGGERS: ActionTrigger[] = [
         type: 'behavioral_question',
         patterns: [
             /\b(tell me about a time|describe a situation|STAR|leadership|challenge|succeeded|failed)\b/i,
+            zh('讲一个例子', '描述一次', 'STAR', '领导力', '挑战', '成功', '失败'),
         ],
         priority: 0.9,
         label: 'Answer with STAR story',
@@ -209,7 +262,10 @@ const INTERVIEW_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'intro_pitch',
-        patterns: [/\b(tell me about yourself|walk me through your resume|introduce yourself)\b/i],
+        patterns: [
+            /\b(tell me about yourself|walk me through your resume|introduce yourself)\b/i,
+            zh('介绍一下你自己', '讲讲你的简历', '自我介绍', '介绍你的经历'),
+        ],
         priority: 0.88,
         label: 'Craft intro pitch',
         promptInstruction:
@@ -218,7 +274,10 @@ const INTERVIEW_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'company_motivation',
-        patterns: [/\b(why this company|why do you want to work here|why us|what interests you about us)\b/i],
+        patterns: [
+            /\b(why this company|why do you want to work here|why us|what interests you about us)\b/i,
+            zh('为什么我们公司', '为什么想来', '为什么选择我们', '对我们哪里感兴趣'),
+        ],
         priority: 0.86,
         label: 'Answer company motivation',
         promptInstruction:
@@ -227,7 +286,10 @@ const INTERVIEW_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'weakness_question',
-        patterns: [/\b(strengths and weaknesses|biggest weakness|area for improvement|weakness)\b/i],
+        patterns: [
+            /\b(strengths and weaknesses|biggest weakness|area for improvement|weakness)\b/i,
+            zh('优缺点', '最大的缺点', '需要改进', '短板', '不足'),
+        ],
         priority: 0.84,
         label: 'Handle weakness question',
         promptInstruction:
@@ -240,7 +302,10 @@ const INTERVIEW_TRIGGERS: ActionTrigger[] = [
 const LECTURE_TRIGGERS: ActionTrigger[] = [
     {
         type: 'concept_explanation',
-        patterns: [/\b(this is called|definition|define|formula|theorem|principle|concept|explain the concept)\b/i],
+        patterns: [
+            /\b(this is called|definition|define|formula|theorem|principle|concept|explain the concept)\b/i,
+            zh('这个叫', '定义', '公式', '定理', '原则', '概念', '解释这个概念'),
+        ],
         priority: 0.85,
         label: 'Explain concept',
         promptInstruction:
@@ -249,7 +314,10 @@ const LECTURE_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'worked_example',
-        patterns: [/\b(example of|for example|worked example|sample problem|practice problem)\b/i],
+        patterns: [
+            /\b(example of|for example|worked example|sample problem|practice problem)\b/i,
+            zh('举个例子', '比如', '例题', '样例题', '练习题'),
+        ],
         priority: 0.82,
         label: 'Create worked example',
         promptInstruction:
@@ -262,7 +330,10 @@ const LECTURE_TRIGGERS: ActionTrigger[] = [
 const TECHNICAL_TRIGGERS: ActionTrigger[] = [
     {
         type: 'coding_problem',
-        patterns: [/\b(implement|write code|solve|function|algorithm|data structure)\b/i],
+        patterns: [
+            /\b(implement|write code|solve|function|algorithm|data structure)\b/i,
+            zh('实现', '写代码', '解这道题', '函数', '算法', '数据结构'),
+        ],
         priority: 0.95,
         label: 'Solve coding problem',
         promptInstruction:
@@ -271,7 +342,10 @@ const TECHNICAL_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'screen_coding_problem',
-        patterns: [/\b(screen|visible|shown|popup|error message|output|on screen)\b/i],
+        patterns: [
+            /\b(screen|visible|shown|popup|error message|output|on screen)\b/i,
+            zh('屏幕', '能看到', '显示', '弹窗', '错误信息', '输出', '画面上'),
+        ],
         priority: 0.92,
         label: 'Answer from screen',
         promptInstruction:
@@ -279,7 +353,10 @@ const TECHNICAL_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'complexity_analysis',
-        patterns: [/\b(time complexity|space complexity|big o|runtime|optimize|more efficient)\b/i],
+        patterns: [
+            /\b(time complexity|space complexity|big o|runtime|optimize|more efficient)\b/i,
+            zh('时间复杂度', '空间复杂度', '大O', '运行时间', '优化', '更高效'),
+        ],
         priority: 0.9,
         label: 'Analyze complexity',
         promptInstruction:
@@ -288,7 +365,10 @@ const TECHNICAL_TRIGGERS: ActionTrigger[] = [
     },
     {
         type: 'system_design_prompt',
-        patterns: [/\b(design a system|system design|architecture|scale to|distributed|throughput)\b/i],
+        patterns: [
+            /\b(design a system|system design|architecture|scale to|distributed|throughput)\b/i,
+            zh('设计一个系统', '系统设计', '架构', '扩展到', '分布式', '吞吐量'),
+        ],
         priority: 0.89,
         label: 'Structure system design',
         promptInstruction:
