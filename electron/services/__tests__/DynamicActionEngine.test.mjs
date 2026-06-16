@@ -348,6 +348,54 @@ test('expanded trigger packs cover canonical Cluely-style phrases across modes',
   }
 });
 
+test('Chinese trigger packs create dynamic actions across modes', async () => {
+  const { DynamicActionEngine } = await loadModules();
+
+  const cases = [
+    ['sales', '这个价格太贵了，我们预算不够。', 'pricing_objection'],
+    ['team_meeting', '我来做这个，周五前发给大家。', 'action_item'],
+    ['interview', '请介绍一下你自己。', 'intro_pitch'],
+    ['technical_interview', '请实现一个函数解决这道算法题。', 'coding_problem'],
+    ['negotiation', '这个是我们的最终报价，只能这样了。', 'final_offer'],
+    ['general', '帮我想一下我该怎么回答。', 'general_assistance_request'],
+    ['recruiting', '这个岗位支持远程或者混合办公吗？', 'candidate_concern'],
+    ['lecture', '能不能解释一下这个概念？', 'concept_explanation'],
+  ];
+
+  for (const [modeTemplateType, transcript, expectedType] of cases) {
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript,
+      speaker: 'Speaker',
+      modeTemplateType,
+      modeId: `mode_${modeTemplateType}`,
+      sessionId: `session_zh_${modeTemplateType}_${expectedType}`,
+    });
+
+    assert.ok(
+      actions.some(action => action.type === expectedType),
+      `Expected ${expectedType} for ${modeTemplateType}: ${transcript}`
+    );
+  }
+});
+
+test('Chinese trigger packs do not create technical actions in sales mode', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = engine.detectActions({
+    transcript: '请实现一个函数解决这道算法题。',
+    speaker: 'Prospect',
+    modeTemplateType: 'sales',
+    modeId: 'mode_sales',
+    sessionId: 'session_zh_sales_no_technical_bleed',
+  });
+
+  assert.equal(actions.some(action => action.type === 'coding_problem'), false);
+  assert.equal(actions.some(action => action.type === 'complexity_analysis'), false);
+  assert.equal(actions.some(action => action.type === 'system_design_prompt'), false);
+});
+
 test('expanded trigger packs do not bleed between negotiation, sales, and interview modes', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
