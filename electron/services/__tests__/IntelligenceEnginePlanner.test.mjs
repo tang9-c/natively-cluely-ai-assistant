@@ -23,6 +23,83 @@ async function makeEngine() {
   return { engine, session };
 }
 
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+test('interim user questions trigger speculative what-to-say inference', async () => {
+  const { engine } = await makeEngine();
+  let answerCalls = 0;
+  let preparedTranscript = '';
+  engine.whatToAnswerLLM = {
+    async *generateStream(transcript) {
+      answerCalls++;
+      preparedTranscript = transcript;
+      yield 'I would answer with a concise example from my backend experience.';
+    },
+  };
+
+  engine.handleTranscript({
+    speaker: 'user',
+    text: 'Can you help me explain my backend experience with a similar migration project?',
+    timestamp: Date.now(),
+    final: false,
+    confidence: 0.96,
+  });
+
+  await wait(500);
+
+  assert.equal(answerCalls, 1);
+  assert.match(preparedTranscript, /\[ME\]: can you help me explain my backend experience/);
+});
+
+test('interim Chinese questions trigger speculative what-to-say inference without spaces', async () => {
+  const { engine } = await makeEngine();
+  let answerCalls = 0;
+  engine.whatToAnswerLLM = {
+    async *generateStream() {
+      answerCalls++;
+      yield '可以先说明项目背景，再讲你的具体贡献和结果。';
+    },
+  };
+
+  engine.handleTranscript({
+    speaker: 'interviewer',
+    text: '你能不能解释一下这个项目为什么这样设计以及你的贡献是什么？',
+    timestamp: Date.now(),
+    final: false,
+    confidence: 0.95,
+  });
+
+  await wait(500);
+
+  assert.equal(answerCalls, 1);
+});
+
+test('Chinese informational cue phrases trigger speculative what-to-say inference', async () => {
+  const { engine } = await makeEngine();
+  let answerCalls = 0;
+  let preparedTranscript = '';
+  engine.whatToAnswerLLM = {
+    async *generateStream(transcript) {
+      answerCalls++;
+      preparedTranscript = transcript;
+      yield '可以结合类似案例，先回答结论，再补充你的经验。';
+    },
+  };
+
+  engine.handleTranscript({
+    speaker: 'user',
+    text: '考虑一下类似案例和我的经验，这种类似情况应该怎么回答比较好',
+    timestamp: Date.now(),
+    final: false,
+    confidence: 0.94,
+  });
+
+  await wait(500);
+
+  assert.equal(answerCalls, 1);
+  assert.match(preparedTranscript, /\[ME\]: 考虑一下类似案例和我的经验/);
+});
+
 test('handleSuggestionTrigger stays silent for low confidence without emitting or storing history', async () => {
   const { engine, session } = await makeEngine();
   let answerCalls = 0;
