@@ -51,7 +51,9 @@ import {
   OVERLAY_OPACITY_DEFAULT,
 } from '../lib/overlayAppearance';
 import { NegotiationCoachingCard } from '../premium';
-import type { DynamicActionPayload, NativeAudioTranscriptPayload, TranscriptEmotion } from '../types/electron';
+import { SENSEVOICE_EMOTION_LABELS } from '../../shared/senseVoiceEmotion';
+import type { TranscriptEmotion } from '../../shared/senseVoiceEmotion';
+import type { DynamicActionPayload, NativeAudioTranscriptPayload } from '../types/electron';
 import { genMessageId } from '../utils/messageId';
 import { getCodexCliModelDisplayName } from '../utils/modelUtils';
 import { getModifierSymbol, isMac } from '../utils/platformUtils';
@@ -131,15 +133,6 @@ const getModeDisplayName = (mode: { name: string; templateType: string }): strin
   const defaultName = DEFAULT_MODE_NAMES[mode.templateType];
   if (templateLabel && mode.name === defaultName) return templateLabel;
   return mode.name;
-};
-
-const SENSEVOICE_EMOTION_LABELS: Record<TranscriptEmotion, string> = {
-  happy: '开心',
-  sad: '悲伤',
-  angry: '愤怒',
-  fearful: '害怕',
-  disgusted: '厌恶',
-  surprised: '惊讶',
 };
 
 // PERF: HighlightedCode renders a single fenced code block. Hoisted to module

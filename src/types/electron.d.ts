@@ -1,3 +1,6 @@
+import type { TranscriptEmotion } from '../../shared/senseVoiceEmotion'
+export type { TranscriptEmotion } from '../../shared/senseVoiceEmotion'
+
 // Phase 3 — DynamicActionPayload mirrors electron/services/dynamic-actions/DynamicAction.ts.
 // Kept as a structural interface (not a class import) to preserve the strict main↔renderer
 // type boundary — the renderer never imports from electron/* directly.
@@ -31,8 +34,6 @@ export interface DynamicActionPayload {
     tone: string
   }
 }
-
-export type TranscriptEmotion = 'happy' | 'sad' | 'angry' | 'fearful' | 'disgusted' | 'surprised'
 
 export interface NativeAudioTranscriptPayload {
   speaker: string

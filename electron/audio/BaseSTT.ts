@@ -24,8 +24,7 @@
  */
 
 import { EventEmitter } from 'events';
-
-export type TranscriptEmotion = 'happy' | 'sad' | 'angry' | 'fearful' | 'disgusted' | 'surprised';
+import type { TranscriptEmotion } from '../../shared/senseVoiceEmotion';
 
 export interface TranscriptSegment {
     text: string;

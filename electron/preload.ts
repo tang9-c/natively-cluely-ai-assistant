@@ -1,6 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-
-type TranscriptEmotion = 'happy' | 'sad' | 'angry' | 'fearful' | 'disgusted' | 'surprised';
+import type { TranscriptEmotion } from '../shared/senseVoiceEmotion';
 
 // Types for the exposed Electron API
 interface ElectronAPI {

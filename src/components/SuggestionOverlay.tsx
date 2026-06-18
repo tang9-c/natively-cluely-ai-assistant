@@ -1,20 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import type { NativeAudioTranscriptPayload, TranscriptEmotion } from '../types/electron';
+import React, { useState, useEffect, useRef } from 'react';
+import { SENSEVOICE_EMOTION_LABELS } from '../../shared/senseVoiceEmotion';
+import type { TranscriptEmotion } from '../../shared/senseVoiceEmotion';
+import type { NativeAudioTranscriptPayload } from '../types/electron';
 
 interface SuggestionOverlayProps {
     className?: string;
 }
 
 type Transcript = NativeAudioTranscriptPayload;
-
-const SENSEVOICE_EMOTION_LABELS: Record<TranscriptEmotion, string> = {
-    happy: '开心',
-    sad: '悲伤',
-    angry: '愤怒',
-    fearful: '害怕',
-    disgusted: '厌恶',
-    surprised: '惊讶',
-};
 
 interface GeneratedSuggestion {
     question: string;
@@ -30,12 +23,30 @@ export const SuggestionOverlay: React.FC<SuggestionOverlayProps> = ({ className 
     const [isConnected, setIsConnected] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [currentTranscript, setCurrentTranscript] = useState<Transcript | null>(null);
+    const [displayedEmotion, setDisplayedEmotion] = useState<TranscriptEmotion | null>(null);
     const [suggestion, setSuggestion] = useState<GeneratedSuggestion | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const emotionClearTimerRef = useRef<number | null>(null);
 
     useEffect(() => {
         // Subscribe to native audio events
         const cleanups: (() => void)[] = [];
+
+        const clearDisplayedEmotion = () => {
+            if (emotionClearTimerRef.current !== null) {
+                window.clearTimeout(emotionClearTimerRef.current);
+                emotionClearTimerRef.current = null;
+            }
+            setDisplayedEmotion(null);
+        };
+
+        const showDisplayedEmotion = (emotion: TranscriptEmotion) => {
+            if (emotionClearTimerRef.current !== null) {
+                window.clearTimeout(emotionClearTimerRef.current);
+            }
+            setDisplayedEmotion(emotion);
+            emotionClearTimerRef.current = window.setTimeout(() => setDisplayedEmotion(null), 4000);
+        };
 
         // Connection status
         cleanups.push(
@@ -56,9 +67,14 @@ export const SuggestionOverlay: React.FC<SuggestionOverlayProps> = ({ className 
         cleanups.push(
             window.electronAPI.onNativeAudioTranscript((transcript) => {
                 setCurrentTranscript(transcript);
+                if (transcript.emotion && transcript.emotionSource === 'sensevoice') {
+                    showDisplayedEmotion(transcript.emotion);
+                } else {
+                    clearDisplayedEmotion();
+                }
                 // Clear after a delay if it's a final transcript
                 if (transcript.final) {
-                    setTimeout(() => setCurrentTranscript(null), 3000);
+                    window.setTimeout(() => setCurrentTranscript(null), 3000);
                 }
             })
         );
@@ -88,6 +104,9 @@ export const SuggestionOverlay: React.FC<SuggestionOverlayProps> = ({ className 
         );
 
         return () => {
+            if (emotionClearTimerRef.current !== null) {
+                window.clearTimeout(emotionClearTimerRef.current);
+            }
             cleanups.forEach(cleanup => cleanup());
         };
     }, []);
@@ -114,9 +133,9 @@ export const SuggestionOverlay: React.FC<SuggestionOverlayProps> = ({ className 
                         <span className="text-xs font-medium text-blue-400">
                             {currentTranscript.speaker === 'interviewer' ? '🎤 面试官' : '👤 你'}
                         </span>
-                        {currentTranscript.emotion && currentTranscript.emotionSource === 'sensevoice' && (
+                        {displayedEmotion && (
                             <span className="rounded border border-amber-400/20 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-200">
-                                情绪 {SENSEVOICE_EMOTION_LABELS[currentTranscript.emotion]}
+                                情绪 {SENSEVOICE_EMOTION_LABELS[displayedEmotion]}
                             </span>
                         )}
                         {!currentTranscript.final && (

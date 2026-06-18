@@ -32,6 +32,38 @@ test('launcher and suggestion overlay render transient non-neutral emotion badge
   assert.match(launcher, /setDetectedEmotion/);
   assert.match(launcher, /情绪/);
   assert.match(overlay, /SENSEVOICE_EMOTION_LABELS/);
-  assert.match(overlay, /currentTranscript\.emotion/);
+  assert.match(overlay, /displayedEmotion/);
   assert.match(overlay, /情绪/);
+});
+
+test('suggestion overlay clears SenseVoice emotion badge independently of transcript bubble', () => {
+  const overlay = read('src/components/SuggestionOverlay.tsx');
+
+  assert.match(overlay, /displayedEmotion/);
+  assert.match(overlay, /emotionClearTimerRef/);
+  assert.match(overlay, /window\.setTimeout\(\(\) => setDisplayedEmotion\(null\), 4000\)/);
+  assert.match(overlay, /window\.clearTimeout\(emotionClearTimerRef\.current\)/);
+});
+
+test('SenseVoice emotion types and labels come from one shared dictionary', () => {
+  const shared = read('shared/senseVoiceEmotion.ts');
+  const baseStt = read('electron/audio/BaseSTT.ts');
+  const cleaner = read('electron/audio/sensevoice/textCleaner.ts');
+  const preload = read('electron/preload.ts');
+  const rendererTypes = read('src/types/electron.d.ts');
+  const launcher = read('src/components/NativelyInterface.tsx');
+  const overlay = read('src/components/SuggestionOverlay.tsx');
+
+  assert.match(shared, /export const SENSEVOICE_EMOTIONS/);
+  assert.match(shared, /export type TranscriptEmotion/);
+  assert.match(shared, /export const SENSEVOICE_EMOTION_LABELS/);
+  assert.match(shared, /export const SENSEVOICE_EMOTION_TAGS/);
+
+  assert.doesNotMatch(baseStt, /export type TranscriptEmotion = 'happy'/);
+  assert.doesNotMatch(cleaner, /export type SenseVoiceEmotion =\s*\n\s*\| 'happy'/);
+  assert.doesNotMatch(preload, /type TranscriptEmotion = 'happy'/);
+  assert.doesNotMatch(rendererTypes, /export type TranscriptEmotion = 'happy'/);
+
+  assert.doesNotMatch(launcher, /const SENSEVOICE_EMOTION_LABELS: Record/);
+  assert.doesNotMatch(overlay, /const SENSEVOICE_EMOTION_LABELS: Record/);
 });
