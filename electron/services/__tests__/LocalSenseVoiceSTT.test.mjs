@@ -87,3 +87,27 @@ test('LocalSenseVoiceSTT drainFinals waits for in-flight recognition', async () 
   assert.ok(elapsedMs >= 90);
   assert.equal(transcripts[0]?.text, '最终中文转写。');
 });
+
+test('LocalSenseVoiceSTT emits SenseVoice emotion metadata without polluting transcript text', async () => {
+  const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+  const worker = new FakeSenseVoiceWorker({ text: '<|zh|><|ANGRY|><|Speech|>这个不对。' });
+  const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+  const transcripts = [];
+  stt.on('transcript', event => transcripts.push(event));
+
+  stt.start();
+  stt.write(loudPcm());
+  stt.notifySpeechEnded();
+  await stt.drainFinals(1000);
+  stt.stop();
+
+  assert.deepEqual(transcripts, [
+    {
+      text: '这个不对。',
+      isFinal: true,
+      confidence: 0.9,
+      emotion: 'angry',
+      emotionSource: 'sensevoice',
+    },
+  ]);
+});

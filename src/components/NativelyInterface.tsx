@@ -51,7 +51,7 @@ import {
   OVERLAY_OPACITY_DEFAULT,
 } from '../lib/overlayAppearance';
 import { NegotiationCoachingCard } from '../premium';
-import type { DynamicActionPayload } from '../types/electron';
+import type { DynamicActionPayload, NativeAudioTranscriptPayload, TranscriptEmotion } from '../types/electron';
 import { genMessageId } from '../utils/messageId';
 import { getCodexCliModelDisplayName } from '../utils/modelUtils';
 import { getModifierSymbol, isMac } from '../utils/platformUtils';
@@ -131,6 +131,15 @@ const getModeDisplayName = (mode: { name: string; templateType: string }): strin
   const defaultName = DEFAULT_MODE_NAMES[mode.templateType];
   if (templateLabel && mode.name === defaultName) return templateLabel;
   return mode.name;
+};
+
+const SENSEVOICE_EMOTION_LABELS: Record<TranscriptEmotion, string> = {
+  happy: '开心',
+  sad: '悲伤',
+  angry: '愤怒',
+  fearful: '害怕',
+  disgusted: '厌恶',
+  surprised: '惊讶',
 };
 
 // PERF: HighlightedCode renders a single fenced code block. Hoisted to module
@@ -440,6 +449,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   const [rollingTranscript, setRollingTranscript] = useState(''); // For interviewer rolling text bar
   const [isInterviewerSpeaking, setIsInterviewerSpeaking] = useState(false); // Track if actively speaking
+  const [detectedEmotion, setDetectedEmotion] = useState<{
+    emotion: TranscriptEmotion;
+    label: string;
+    speaker: string;
+    receivedAt: number;
+  } | null>(null);
+  const emotionClearTimerRef = useRef<number | null>(null);
   const [voiceInput, setVoiceInput] = useState(''); // Accumulated user voice input
   const voiceInputRef = useRef<string>(''); // Ref for capturing in async handlers
   const textInputRef = useRef<HTMLInputElement>(null); // Ref for input focus
@@ -455,6 +471,26 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const rafDimUpdateRef = useRef<number | null>(null);
   const codeExpandedRef = useRef(false);
   const animationControlsRef = useRef<ReturnType<typeof animate> | null>(null);
+  const showSenseVoiceEmotion = useCallback((transcript: NativeAudioTranscriptPayload) => {
+    if (!transcript.emotion || transcript.emotionSource !== 'sensevoice') return;
+    const label = SENSEVOICE_EMOTION_LABELS[transcript.emotion];
+    if (!label) return;
+
+    if (emotionClearTimerRef.current !== null) {
+      window.clearTimeout(emotionClearTimerRef.current);
+    }
+
+    setDetectedEmotion({
+      emotion: transcript.emotion,
+      label,
+      speaker: transcript.speaker === 'user' ? '你' : '面试官',
+      receivedAt: Date.now(),
+    });
+    emotionClearTimerRef.current = window.setTimeout(() => {
+      setDetectedEmotion(null);
+      emotionClearTimerRef.current = null;
+    }, 4000);
+  }, []);
   // Stability gate for code-visibility transitions. Scroll fires at ~60Hz;
   // without this, fast scrolls cancel and restart the 0.7s tween repeatedly,
   // producing stutter (and sometimes a snap when start≈target). The pending
@@ -1559,6 +1595,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Real-time Transcripts
     cleanups.push(
       window.electronAPI.onNativeAudioTranscript((transcript) => {
+        showSenseVoiceEmotion(transcript);
+
         // When Answer button is active, capture USER transcripts for voice input
         // Use ref to avoid stale closure issue
         if (isRecordingRef.current && transcript.speaker === 'user') {
@@ -1853,7 +1891,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }),
     );
     return () => cleanups.forEach((fn) => fn());
-  }, [isExpanded]);
+  }, [isExpanded, showSenseVoiceEmotion]);
+
+  useEffect(() => {
+    return () => {
+      if (emotionClearTimerRef.current !== null) {
+        window.clearTimeout(emotionClearTimerRef.current);
+      }
+    };
+  }, []);
 
   // Stable mount-only effect for screenshot listeners.
   // These MUST NOT be inside the [isExpanded] effect — when a screenshot is
@@ -3765,6 +3811,25 @@ Provide only the answer, nothing else.`;
                   </div>
                 </div>
               )}
+
+              <AnimatePresence>
+                {detectedEmotion && (
+                  <motion.div
+                    key={`${detectedEmotion.emotion}-${detectedEmotion.receivedAt}`}
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.18 }}
+                    className="w-full flex justify-center px-4 pb-1"
+                  >
+                    <div className="inline-flex items-center gap-1.5 rounded-md border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-700 shadow-sm dark:text-amber-200">
+                      <span className="text-amber-500/80">情绪</span>
+                      <span>{detectedEmotion.speaker}</span>
+                      <span>{detectedEmotion.label}</span>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Phase 3 — Dynamic action card row (Cluely-style live triggers).
                                 Appears between status pills and rolling transcript so users see

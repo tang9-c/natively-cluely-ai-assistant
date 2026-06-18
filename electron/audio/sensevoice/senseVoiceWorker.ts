@@ -1,5 +1,4 @@
 import { parentPort } from 'worker_threads';
-import { cleanSenseVoiceText } from './textCleaner';
 import type { SenseVoiceWorkerInMessage } from './types';
 import { isVerboseLogging } from '../../verboseLog';
 
@@ -45,7 +44,7 @@ function transcribe(samples: Float32Array): string {
   stream.acceptWaveform({ samples, sampleRate: 16000 });
   recognizer.decode(stream);
   const result = recognizer.getResult(stream);
-  const text = cleanSenseVoiceText(result?.text ?? '');
+  const text = result?.text ?? '';
   debugLog('transcribe-complete', {
     sampleCount: samples.length,
     durationMs: Date.now() - startedAt,

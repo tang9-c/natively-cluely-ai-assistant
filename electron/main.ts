@@ -1121,7 +1121,13 @@ export class AppState {
     stt.setRecognitionLanguage(sttLanguage);
 
     // Wire Transcript Events
-    stt.on('transcript', (segment: { text: string, isFinal: boolean, confidence: number }) => {
+    stt.on('transcript', (segment: {
+      text: string,
+      isFinal: boolean,
+      confidence: number,
+      emotion?: 'happy' | 'sad' | 'angry' | 'fearful' | 'disgusted' | 'surprised',
+      emotionSource?: 'sensevoice'
+    }) => {
       // Accept transcripts while a meeting is active OR while we're draining
       // trailing finals after Stop. `_isDraining` covers the ~250 ms grace
       // window between Stop click and STT socket close so the user's last
@@ -1158,7 +1164,9 @@ export class AppState {
         text: segment.text,
         timestamp: Date.now(),
         final: segment.isFinal,
-        confidence: segment.confidence
+        confidence: segment.confidence,
+        emotion: segment.emotion,
+        emotionSource: segment.emotionSource
       };
       helper.getLauncherWindow()?.webContents.send('native-audio-transcript', payload);
       helper.getOverlayWindow()?.webContents.send('native-audio-transcript', payload);

@@ -27,3 +27,30 @@ test('SenseVoice text cleaner preserves readable mixed Chinese and English text'
     '我们今天 review the roadmap。'
   );
 });
+
+test('SenseVoice parser extracts non-neutral emotion while keeping text clean', async () => {
+  const { parseSenseVoiceOutput } = await loadTextCleaner();
+
+  assert.deepEqual(
+    parseSenseVoiceOutput('<|zh|><|HAPPY|><|Speech|>你好'),
+    {
+      text: '你好',
+      language: 'zh',
+      emotion: 'happy',
+      events: ['speech'],
+    }
+  );
+});
+
+test('SenseVoice parser hides neutral emotion from UI payload', async () => {
+  const { parseSenseVoiceOutput } = await loadTextCleaner();
+
+  assert.deepEqual(
+    parseSenseVoiceOutput('<|zh|><|NEUTRAL|><|Speech|>你好'),
+    {
+      text: '你好',
+      language: 'zh',
+      events: ['speech'],
+    }
+  );
+});

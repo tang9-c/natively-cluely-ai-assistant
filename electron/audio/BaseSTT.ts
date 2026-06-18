@@ -25,10 +25,14 @@
 
 import { EventEmitter } from 'events';
 
+export type TranscriptEmotion = 'happy' | 'sad' | 'angry' | 'fearful' | 'disgusted' | 'surprised';
+
 export interface TranscriptSegment {
     text: string;
     isFinal: boolean;
     confidence: number;
+    emotion?: TranscriptEmotion;
+    emotionSource?: 'sensevoice';
 }
 
 export interface SttWarning {
