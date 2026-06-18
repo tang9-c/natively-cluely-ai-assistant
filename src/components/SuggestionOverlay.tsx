@@ -1,14 +1,20 @@
 import React, { useState, useEffect } from 'react';
+import type { NativeAudioTranscriptPayload, TranscriptEmotion } from '../types/electron';
 
 interface SuggestionOverlayProps {
     className?: string;
 }
 
-interface Transcript {
-    speaker: string;
-    text: string;
-    final: boolean;
-}
+type Transcript = NativeAudioTranscriptPayload;
+
+const SENSEVOICE_EMOTION_LABELS: Record<TranscriptEmotion, string> = {
+    happy: '开心',
+    sad: '悲伤',
+    angry: '愤怒',
+    fearful: '害怕',
+    disgusted: '厌恶',
+    surprised: '惊讶',
+};
 
 interface GeneratedSuggestion {
     question: string;
@@ -108,6 +114,11 @@ export const SuggestionOverlay: React.FC<SuggestionOverlayProps> = ({ className 
                         <span className="text-xs font-medium text-blue-400">
                             {currentTranscript.speaker === 'interviewer' ? '🎤 面试官' : '👤 你'}
                         </span>
+                        {currentTranscript.emotion && currentTranscript.emotionSource === 'sensevoice' && (
+                            <span className="rounded border border-amber-400/20 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-200">
+                                情绪 {SENSEVOICE_EMOTION_LABELS[currentTranscript.emotion]}
+                            </span>
+                        )}
                         {!currentTranscript.final && (
  <span className="text-xs text-gray-500 animate-pulse">聆听中...</span>
                         )}

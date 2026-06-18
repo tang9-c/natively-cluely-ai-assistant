@@ -32,6 +32,16 @@ export interface DynamicActionPayload {
   }
 }
 
+export type TranscriptEmotion = 'happy' | 'sad' | 'angry' | 'fearful' | 'disgusted' | 'surprised'
+
+export interface NativeAudioTranscriptPayload {
+  speaker: string
+  text: string
+  final: boolean
+  emotion?: TranscriptEmotion
+  emotionSource?: 'sensevoice'
+}
+
 export interface ElectronAPI {
   updateContentDimensions: (dimensions: {
     width: number
@@ -191,7 +201,7 @@ export interface ElectronAPI {
   onCredentialsChanged: (callback: () => void) => () => void
 
   // Native Audio Service Events
-  onNativeAudioTranscript: (callback: (transcript: { speaker: string; text: string; final: boolean }) => void) => () => void
+  onNativeAudioTranscript: (callback: (transcript: NativeAudioTranscriptPayload) => void) => () => void
   onNativeAudioSuggestion: (callback: (suggestion: { context: string; lastQuestion: string; confidence: number }) => void) => () => void
   onNativeAudioConnected: (callback: () => void) => () => void
   onNativeAudioDisconnected: (callback: () => void) => () => void

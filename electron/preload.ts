@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+type TranscriptEmotion = 'happy' | 'sad' | 'angry' | 'fearful' | 'disgusted' | 'surprised';
+
 // Types for the exposed Electron API
 interface ElectronAPI {
   updateContentDimensions: (dimensions: { width: number; height: number }) => Promise<void>;
@@ -215,7 +217,13 @@ interface ElectronAPI {
 
   // Native Audio Service Events
   onNativeAudioTranscript: (
-    callback: (transcript: { speaker: string; text: string; final: boolean }) => void,
+    callback: (transcript: {
+      speaker: string;
+      text: string;
+      final: boolean;
+      emotion?: TranscriptEmotion;
+      emotionSource?: 'sensevoice';
+    }) => void,
   ) => () => void;
   onNativeAudioSuggestion: (
     callback: (suggestion: { context: string; lastQuestion: string; confidence: number }) => void,
@@ -1112,7 +1120,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Native Audio Service Events
   onNativeAudioTranscript: (
-    callback: (transcript: { speaker: string; text: string; final: boolean }) => void,
+    callback: (transcript: {
+      speaker: string;
+      text: string;
+      final: boolean;
+      emotion?: TranscriptEmotion;
+      emotionSource?: 'sensevoice';
+    }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('native-audio-transcript', subscription);

@@ -9,7 +9,7 @@ import {
 } from './types';
 import { resolveSenseVoiceModelFiles } from './modelManager';
 import { resolveSenseVoiceWorkerPath } from './workerPathResolver';
-import { cleanSenseVoiceText } from './textCleaner';
+import { parseSenseVoiceOutput } from './textCleaner';
 import { isVerboseLogging } from '../../verboseLog';
 
 type SenseVoiceWorkerLike = {
@@ -242,10 +242,12 @@ export class LocalSenseVoiceSTT extends BaseSTT {
 
     if (message.type === 'result') {
       this.inFlightTasks = Math.max(0, this.inFlightTasks - 1);
-      const text = cleanSenseVoiceText(message.text);
+      const parsed = parseSenseVoiceOutput(message.text);
+      const { text } = parsed;
       debugLog('worker-result', {
         taskId: message.taskId,
         textLength: text.length,
+        emotion: parsed.emotion,
         pendingAudio: this.pendingAudio.length,
         inFlightTasks: this.inFlightTasks,
       });
@@ -254,6 +256,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
           text,
           isFinal: true,
           confidence: 0.9,
+          ...(parsed.emotion ? { emotion: parsed.emotion, emotionSource: 'sensevoice' as const } : {}),
         });
       }
       this.flushPendingAudio();
