@@ -266,7 +266,7 @@ import { SystemAudioCapture } from "./audio/SystemAudioCapture"
 import { MicrophoneCapture } from "./audio/MicrophoneCapture"
 import { AudioDevices } from "./audio/AudioDevices"
 import { loadNativeModule } from "./audio/nativeModuleLoader"
-import { BaseSTT } from "./audio/BaseSTT"
+import { BaseSTT, type TranscriptSegment } from "./audio/BaseSTT"
 import { createSTTProvider } from "./audio/sttRegistry"
 import { normalizePcm16Chunk, measurePcm16Level } from "./audio/audioLevelNormalizer"
 import { ThemeManager } from "./ThemeManager"
@@ -1121,13 +1121,7 @@ export class AppState {
     stt.setRecognitionLanguage(sttLanguage);
 
     // Wire Transcript Events
-    stt.on('transcript', (segment: {
-      text: string,
-      isFinal: boolean,
-      confidence: number,
-      emotion?: 'happy' | 'sad' | 'angry' | 'fearful' | 'disgusted' | 'surprised',
-      emotionSource?: 'sensevoice'
-    }) => {
+    stt.on('transcript', (segment: TranscriptSegment) => {
       // Accept transcripts while a meeting is active OR while we're draining
       // trailing finals after Stop. `_isDraining` covers the ~250 ms grace
       // window between Stop click and STT socket close so the user's last

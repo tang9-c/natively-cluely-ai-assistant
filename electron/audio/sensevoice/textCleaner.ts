@@ -1,10 +1,5 @@
-export type SenseVoiceEmotion =
-  | 'happy'
-  | 'sad'
-  | 'angry'
-  | 'fearful'
-  | 'disgusted'
-  | 'surprised';
+import { SENSEVOICE_EMOTION_TAGS } from '../../../shared/senseVoiceEmotion';
+import type { SenseVoiceEmotion } from '../../../shared/senseVoiceEmotion';
 
 export interface ParsedSenseVoiceOutput {
   text: string;
@@ -12,16 +7,6 @@ export interface ParsedSenseVoiceOutput {
   emotion?: SenseVoiceEmotion;
   events?: string[];
 }
-
-const EMOTION_TAGS: Record<string, SenseVoiceEmotion | undefined> = {
-  HAPPY: 'happy',
-  SAD: 'sad',
-  ANGRY: 'angry',
-  FEARFUL: 'fearful',
-  DISGUSTED: 'disgusted',
-  SURPRISED: 'surprised',
-  NEUTRAL: undefined,
-};
 
 const LANGUAGE_TAGS = new Set(['zh', 'en', 'ja', 'ko', 'yue']);
 
@@ -52,8 +37,8 @@ export function parseSenseVoiceOutput(rawText: string): ParsedSenseVoiceOutput {
       continue;
     }
 
-    if (upper in EMOTION_TAGS) {
-      const emotion = EMOTION_TAGS[upper];
+    if (upper in SENSEVOICE_EMOTION_TAGS) {
+      const emotion = SENSEVOICE_EMOTION_TAGS[upper];
       if (emotion) parsed.emotion = emotion;
       continue;
     }
