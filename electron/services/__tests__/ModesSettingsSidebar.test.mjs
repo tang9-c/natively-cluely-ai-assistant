@@ -97,13 +97,15 @@ test('ModesSettingsBase exposes the full official mode settings surface', () => 
   ].forEach((api) => assert.match(modesSettingsSource, new RegExp(api)));
 });
 
-test('ModesSettingsBase shows visible sidebar fallbacks instead of a blank mode list', () => {
-  assert.match(modesSettingsSource, /setLoadError/);
-  assert.match(modesSettingsSource, /模式列表加载失败/);
-  assert.match(modesSettingsSource, /暂无模式/);
-  assert.match(modesSettingsSource, /onClick=\{loadModes\}/);
-  assert.match(modesSettingsSource, /重试/);
-  assert.match(modesSettingsSource, /刷新/);
+test('ModesSettingsBase sidebar renders mode list and exposes a reload hook', () => {
+  // The setLoadError / retry / refresh sidebar fallbacks from 9dc86cf were
+  // deliberately reverted in ca67943, so this test no longer asserts their
+  // presence. We instead lock in the still-current invariants: the sidebar
+  // renders a button per mode and loadModes() is exposed as the refresh hook
+  // (used by handleCreate/handleSave/handleDelete).
+  assert.match(modesSettingsSource, /modes\.map\(\(mode\)/);
+  assert.match(modesSettingsSource, /onClick=\{\(\) => setSelectedModeId\(mode\.id\)\}/);
+  assert.match(modesSettingsSource, /await loadModes\(\)/);
 });
 
 test('General mode defaults keep the original summary note sections', () => {
