@@ -3,6 +3,7 @@ import * as crypto from "crypto"
 import path from "path"
 import fs from "fs"
 import { autoUpdater } from "electron-updater"
+import type { ProfileOrchestratorRuntime } from "./services/profile/ProfileOrchestratorContract"
 if (!app.isPackaged) {
   require('dotenv').config();
 }
@@ -748,10 +749,11 @@ export class AppState {
       const sqliteDb = db.getDb();
 
       if (sqliteDb && ProfileOrchestratorClass) {
-        this.knowledgeOrchestrator = new ProfileOrchestratorClass();
+        this.knowledgeOrchestrator = new ProfileOrchestratorClass() as ProfileOrchestratorRuntime;
+        const knowledgeOrchestrator = this.knowledgeOrchestrator as ProfileOrchestratorRuntime;
 
         const llmHelper = this.processingHelper.getLLMHelper();
-        this.knowledgeOrchestrator.setLLMHelper(llmHelper);
+        knowledgeOrchestrator.setLLMHelper(llmHelper);
 
         // generateContent function for LLM calls
         // Join ALL content parts (some callers — e.g. live negotiation coaching —
@@ -762,38 +764,34 @@ export class AppState {
             .map((c: any) => (typeof c === 'string' ? c : c?.text || ''))
             .filter(Boolean)
             .join('\n\n');
-        this.knowledgeOrchestrator.setGenerateContentFn(async (contents: any[]) => {
+        knowledgeOrchestrator.setGenerateContentFn(async (contents: any[]) => {
           return await llmHelper.generateContentStructured(joinContents(contents));
         });
 
         // Low-latency generation for LIVE negotiation coaching (spoken in real
         // time): Flash-first chain so the tactical note appears fast. The AOT
         // negotiation script + all extraction keep the quality-first fn above.
-        if (typeof this.knowledgeOrchestrator.setLiveCoachingContentFn === 'function') {
-          this.knowledgeOrchestrator.setLiveCoachingContentFn(async (contents: any[]) => {
-            return await llmHelper.generateContentStructured(joinContents(contents));
-          });
-        }
+        knowledgeOrchestrator.setLiveCoachingContentFn(async (contents: any[]) => {
+          return await llmHelper.generateContentStructured(joinContents(contents));
+        });
 
         // Embedding function — lazily delegate to the cascaded EmbeddingPipeline
         // (OpenAI → Gemini → Ollama → Local bundled model).
         // We await waitForReady() so uploads during boot wait for the pipeline
         // instead of immediately throwing 'not ready'.
         const self = this;
-        this.knowledgeOrchestrator.setEmbedFn(async (text: string) => {
+        knowledgeOrchestrator.setEmbedFn(async (text: string) => {
           const pipeline = self.ragManager?.getEmbeddingPipeline();
           if (!pipeline) throw new Error('RAG pipeline not available');
           await pipeline.waitForReady();
           return await pipeline.getEmbedding(text);
         });
-        if (typeof this.knowledgeOrchestrator.setEmbedQueryFn === 'function') {
-          this.knowledgeOrchestrator.setEmbedQueryFn(async (text: string) => {
-            const pipeline = self.ragManager?.getEmbeddingPipeline();
-            if (!pipeline) throw new Error('RAG pipeline not available');
-            await pipeline.waitForReady();
-            return await pipeline.getEmbeddingForQuery(text);
-          });
-        }
+        knowledgeOrchestrator.setEmbedQueryFn(async (text: string) => {
+          const pipeline = self.ragManager?.getEmbeddingPipeline();
+          if (!pipeline) throw new Error('RAG pipeline not available');
+          await pipeline.waitForReady();
+          return await pipeline.getEmbeddingForQuery(text);
+        });
 
         // Attach KnowledgeOrchestrator to LLMHelper
         llmHelper.setKnowledgeOrchestrator(this.knowledgeOrchestrator);
@@ -804,14 +802,14 @@ export class AppState {
 
         const sm = SettingsManager.getInstance();
         if (sm.get('knowledgeMode')) {
-          this.knowledgeOrchestrator.setKnowledgeMode(true);
+          knowledgeOrchestrator.setKnowledgeMode(true);
           console.log('[AppState] Knowledge mode restored from settings');
         }
 
         // Restore custom notes so orchestrator has them from first request
         const savedNotes = DatabaseManager.getInstance().getCustomNotes();
         if (savedNotes) {
-          this.knowledgeOrchestrator.setCustomNotes(savedNotes);
+          knowledgeOrchestrator.setCustomNotes(savedNotes);
           llmHelper.setCustomNotes(savedNotes);
           console.log('[AppState] Custom notes restored');
         }

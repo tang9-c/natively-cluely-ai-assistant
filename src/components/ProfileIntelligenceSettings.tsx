@@ -6,6 +6,8 @@ import {
 import { ProfileVisualizer } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { motion, AnimatePresence } from 'framer-motion';
+import { MasterProfileSection } from './profile/MasterProfileSection';
+import { ScenarioSection } from './profile/ScenarioSection';
 
 const spring = { type: "spring" as const, stiffness: 100, damping: 20 };
 
@@ -495,8 +497,13 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, ...spring }} className="mb-4 pt-2">
                             <h3 className="text-lg font-bold text-text-primary tracking-tight">专业身份</h3>
                             <p className="text-[13px] text-text-secondary mt-1">
-                                该引擎会智能解析你的职业履历和技能图谱。
+                                统一管理跨销售、面试、讲座、团队会议和通用场景复用的档案资料。
                             </p>
+                        </motion.div>
+
+                        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18, ...spring }} className="space-y-4">
+                            <MasterProfileSection />
+                            <ScenarioSection />
                         </motion.div>
 
                                     <BezelCard delay={0.2}>

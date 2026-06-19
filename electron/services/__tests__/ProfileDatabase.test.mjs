@@ -1,6 +1,7 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import Database from 'better-sqlite3';
+import { DatabaseManager } from '../../../dist-electron/electron/db/DatabaseManager.js';
 
 describe('Profile Database schema and CRUD', () => {
   let db;
@@ -32,6 +33,31 @@ describe('Profile Database schema and CRUD', () => {
         parsed_json TEXT NOT NULL,
         file_hash TEXT,
         created_at INTEGER NOT NULL
+      );
+      CREATE TABLE modes (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        template_type TEXT NOT NULL DEFAULT 'general',
+        custom_context TEXT NOT NULL DEFAULT '',
+        is_active INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE mode_reference_files (
+        id TEXT PRIMARY KEY,
+        mode_id TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        content TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(mode_id) REFERENCES modes(id) ON DELETE CASCADE
+      );
+      CREATE TABLE mode_reference_file_metadata (
+        reference_file_id TEXT PRIMARY KEY,
+        scenario_type TEXT NOT NULL,
+        doc_subtype TEXT NOT NULL,
+        parsed_json TEXT,
+        file_hash TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY(reference_file_id) REFERENCES mode_reference_files(id) ON DELETE CASCADE
       );
     `);
   });
@@ -74,5 +100,35 @@ describe('Profile Database schema and CRUD', () => {
     const rows = db.prepare('SELECT * FROM profile_jds').all();
     assert.equal(rows.length, 1);
     assert.equal(JSON.parse(rows[0].parsed_json).title, 'Second');
+  });
+
+  it('stores scenario metadata for existing mode reference files', () => {
+    const manager = Object.create(DatabaseManager.prototype);
+    manager.db = db;
+
+    const modeId = 'mode_sales';
+    const fileId = 'ref_customer';
+    db.prepare('INSERT INTO modes (id, name, template_type, custom_context, is_active) VALUES (?, ?, ?, ?, 1)')
+      .run(modeId, 'Sales', 'sales', '');
+    db.prepare('INSERT INTO mode_reference_files (id, mode_id, file_name, content) VALUES (?, ?, ?, ?)')
+      .run(fileId, modeId, 'customer.md', 'Acme wants SOC2 and rollout help.');
+
+    manager.upsertModeReferenceFileMetadata({
+      referenceFileId: fileId,
+      scenarioType: 'sales',
+      docSubtype: 'customer-profile',
+      parsedJson: JSON.stringify({ account: 'Acme' }),
+      fileHash: 'hash-acme',
+    });
+
+    const row = manager.getModeReferenceFileMetadata(fileId);
+    assert.equal(row.scenario_type, 'sales');
+    assert.equal(row.doc_subtype, 'customer-profile');
+    assert.equal(row.parsed_json, JSON.stringify({ account: 'Acme' }));
+    assert.equal(row.file_hash, 'hash-acme');
+
+    const rows = manager.getModeReferenceFileMetadataForMode(modeId);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].reference_file_id, fileId);
   });
 });

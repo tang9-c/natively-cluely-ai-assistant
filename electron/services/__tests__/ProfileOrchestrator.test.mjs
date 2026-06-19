@@ -123,4 +123,23 @@ describe('ProfileOrchestrator', () => {
     const result = await orchestrator.ingestDocument(filePath, DocType.RESUME);
     assert.equal(result.success, false);
   });
+
+  it('exposes runtime methods used by main and LLMHelper', () => {
+    for (const method of [
+      'setLLMHelper',
+      'setKnowledgeMode',
+      'isKnowledgeMode',
+      'processQuestion',
+      'feedForDepthScoring',
+      'feedInterviewerUtterance',
+      'setGenerateContentFn',
+      'setLiveCoachingContentFn',
+      'setEmbedFn',
+      'setEmbedQueryFn',
+      'setCustomNotes',
+      'getCustomNotes',
+    ]) {
+      assert.equal(typeof orchestrator[method], 'function', `${method} must exist`);
+    }
+  });
 });

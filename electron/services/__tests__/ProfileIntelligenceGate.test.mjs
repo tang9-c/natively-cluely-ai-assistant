@@ -22,6 +22,13 @@ const PROFILE_HANDLERS = [
   'profile:upload-jd',
   'profile:research-company',
   'profile:generate-negotiation',
+  'profile:get-active-scenario',
+  'profile:list-documents',
+  'profile:upload-document',
+  'profile:update-document-subtype',
+  'profile:delete-document',
+  'profile:get-master-profile',
+  'profile:update-master-profile',
 ];
 
 describe('Profile Intelligence IPC: all features unconditionally available', () => {
@@ -63,5 +70,17 @@ describe('Profile Intelligence: resume + JD storage tables exist in the schema',
 
   test('resume_nodes table is declared', () => {
     assert.ok(dbSource.includes('CREATE TABLE IF NOT EXISTS resume_nodes'));
+  });
+
+  test('profile_jds table is declared', () => {
+    assert.ok(dbSource.includes('CREATE TABLE IF NOT EXISTS profile_jds'));
+  });
+
+  test('profile_master table is declared', () => {
+    assert.ok(dbSource.includes('CREATE TABLE IF NOT EXISTS profile_master'));
+  });
+
+  test('mode_reference_file_metadata table is declared', () => {
+    assert.ok(dbSource.includes('CREATE TABLE IF NOT EXISTS mode_reference_file_metadata'));
   });
 });

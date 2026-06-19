@@ -714,6 +714,39 @@ export class DatabaseManager {
             this.db.pragma('user_version = 17');
         }
 
+        // Version 17 -> 18: Add generalized profile master + scenario metadata for mode reference files.
+        if (version < 18) {
+            console.log('[DatabaseManager] Applying migration v17 -> v18: Add profile master + mode reference metadata');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS profile_master (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    display_name TEXT,
+                    headline TEXT,
+                    summary TEXT NOT NULL DEFAULT '',
+                    contact_info_json TEXT NOT NULL DEFAULT '{}',
+                    experience_json TEXT NOT NULL DEFAULT '[]',
+                    skills_json TEXT NOT NULL DEFAULT '[]',
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                );
+
+                INSERT OR IGNORE INTO profile_master (id, summary) VALUES (1, '');
+
+                CREATE TABLE IF NOT EXISTS mode_reference_file_metadata (
+                    reference_file_id TEXT PRIMARY KEY,
+                    scenario_type TEXT NOT NULL,
+                    doc_subtype TEXT NOT NULL,
+                    parsed_json TEXT,
+                    file_hash TEXT,
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    FOREIGN KEY(reference_file_id) REFERENCES mode_reference_files(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_mode_ref_meta_scenario
+                    ON mode_reference_file_metadata (scenario_type, doc_subtype);
+            `);
+            this.db.pragma('user_version = 18');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -892,6 +925,52 @@ export class DatabaseManager {
         }
     }
 
+    public getProfileMaster(): any | null {
+        if (!this.db) return null;
+        try {
+            return this.db.prepare('SELECT * FROM profile_master WHERE id = 1').get() as any | null;
+        } catch (e) {
+            console.error('[DatabaseManager] getProfileMaster failed:', e);
+            return null;
+        }
+    }
+
+    public updateProfileMaster(input: {
+        displayName?: string | null;
+        headline?: string | null;
+        summary?: string;
+        contactInfoJson?: string;
+        experienceJson?: string;
+        skillsJson?: string;
+    }): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare(`
+                INSERT INTO profile_master
+                    (id, display_name, headline, summary, contact_info_json, experience_json, skills_json, updated_at)
+                VALUES (1, ?, ?, ?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(id) DO UPDATE SET
+                    display_name = excluded.display_name,
+                    headline = excluded.headline,
+                    summary = excluded.summary,
+                    contact_info_json = excluded.contact_info_json,
+                    experience_json = excluded.experience_json,
+                    skills_json = excluded.skills_json,
+                    updated_at = excluded.updated_at
+            `).run(
+                input.displayName ?? null,
+                input.headline ?? null,
+                input.summary ?? '',
+                input.contactInfoJson ?? '{}',
+                input.experienceJson ?? '[]',
+                input.skillsJson ?? '[]',
+            );
+        } catch (e) {
+            console.error('[DatabaseManager] updateProfileMaster failed:', e);
+            throw e;
+        }
+    }
+
     // ============================================
     // Modes CRUD
     // ============================================
@@ -1001,6 +1080,66 @@ export class DatabaseManager {
             this.db.prepare('DELETE FROM mode_reference_files WHERE id = ?').run(id);
         } catch (e) {
             console.error('[DatabaseManager] deleteReferenceFile failed:', e);
+        }
+    }
+
+    public upsertModeReferenceFileMetadata(input: {
+        referenceFileId: string;
+        scenarioType: string;
+        docSubtype: string;
+        parsedJson?: string | null;
+        fileHash?: string | null;
+    }): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare(`
+                INSERT INTO mode_reference_file_metadata
+                    (reference_file_id, scenario_type, doc_subtype, parsed_json, file_hash, updated_at)
+                VALUES (?, ?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(reference_file_id) DO UPDATE SET
+                    scenario_type = excluded.scenario_type,
+                    doc_subtype = excluded.doc_subtype,
+                    parsed_json = excluded.parsed_json,
+                    file_hash = excluded.file_hash,
+                    updated_at = excluded.updated_at
+            `).run(
+                input.referenceFileId,
+                input.scenarioType,
+                input.docSubtype,
+                input.parsedJson ?? null,
+                input.fileHash ?? null,
+            );
+        } catch (e) {
+            console.error('[DatabaseManager] upsertModeReferenceFileMetadata failed:', e);
+            throw e;
+        }
+    }
+
+    public getModeReferenceFileMetadata(referenceFileId: string): any | null {
+        if (!this.db) return null;
+        try {
+            return this.db.prepare(
+                'SELECT * FROM mode_reference_file_metadata WHERE reference_file_id = ?'
+            ).get(referenceFileId) ?? null;
+        } catch (e) {
+            console.error('[DatabaseManager] getModeReferenceFileMetadata failed:', e);
+            return null;
+        }
+    }
+
+    public getModeReferenceFileMetadataForMode(modeId: string): any[] {
+        if (!this.db) return [];
+        try {
+            return this.db.prepare(`
+                SELECT m.*
+                FROM mode_reference_file_metadata m
+                INNER JOIN mode_reference_files f ON f.id = m.reference_file_id
+                WHERE f.mode_id = ?
+                ORDER BY f.created_at ASC
+            `).all(modeId);
+        } catch (e) {
+            console.error('[DatabaseManager] getModeReferenceFileMetadataForMode failed:', e);
+            return [];
         }
     }
 
