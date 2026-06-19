@@ -142,4 +142,21 @@ describe('ProfileOrchestrator', () => {
       assert.equal(typeof orchestrator[method], 'function', `${method} must exist`);
     }
   });
+
+  // Task 2: processQuestion must use static import, not dynamic require.
+  it('processQuestion uses static import (no dynamic require)', () => {
+    const source = fs.readFileSync(
+      path.resolve(__dirname, '../profile/ProfileOrchestrator.ts'),
+      'utf8',
+    );
+    assert.ok(
+      !/require\s*\(\s*['"]\.\/ScenarioContextService['"]\s*\)/.test(source),
+      'ProfileOrchestrator must NOT use dynamic require for ScenarioContextService',
+    );
+    assert.match(
+      source,
+      /import\s*\{[^}]*\bScenarioContextService\b[^}]*\}\s*from\s*['"]\.\/ScenarioContextService['"]/,
+      'ProfileOrchestrator must statically import ScenarioContextService',
+    );
+  });
 });
