@@ -42,7 +42,7 @@ function installModeWithReferenceFile({ templateType, fileName, content, metadat
       parsed_json: metadata.parsedJson ?? null,
       file_hash: metadata.fileHash ?? null,
     }],
-    getUserProfile: () => null,
+    getProfileMaster: () => null,
     getPersona: () => '',
     },
   };
@@ -70,7 +70,7 @@ describe('ScenarioContextService', () => {
       },
       db: {
         getModeReferenceFileMetadataForMode: () => [],
-        getUserProfile: () => null,
+        getProfileMaster: () => null,
         getPersona: () => '',
       },
     });
@@ -148,8 +148,13 @@ describe('ScenarioContextService', () => {
       content: 'short content',
       metadata: { scenarioType: 'sales', docSubtype: 'case-study' },
     });
-    deps.db.getUserProfile = () => ({
-      structured_json: JSON.stringify({ name: 'X', description: 'D'.repeat(500) }),
+    deps.db.getProfileMaster = () => ({
+      display_name: 'X',
+      headline: '',
+      summary: 'D'.repeat(500),
+      contact_info_json: '{}',
+      experience_json: '[]',
+      skills_json: '[]',
     });
 
     const { ScenarioContextService } = cjsRequire(servicePath);
@@ -168,6 +173,84 @@ describe('ScenarioContextService', () => {
       'master profile JSON should be meaningfully truncated (got ' +
         masterMatch[1].length +
         ' chars, expected well below the 500-char raw payload)',
+    );
+  });
+
+  // Task 3: buildMasterProfileBlock must read profile_master, not user_profile.
+  test('buildMasterProfileBlock reads profile_master with all fields', async () => {
+    const deps = installModeWithReferenceFile({
+      templateType: 'sales',
+      fileName: 'short.md',
+      content: 'short content',
+      metadata: { scenarioType: 'sales', docSubtype: 'case-study' },
+    });
+    deps.db.getProfileMaster = () => ({
+      display_name: 'Alice',
+      headline: 'Senior Engineer',
+      summary: 'Backend specialist with 8 years of experience.',
+      contact_info_json: JSON.stringify({ email: 'alice@example.com' }),
+      experience_json: JSON.stringify([{ title: 'Senior Eng', org: 'Acme', start: '2020-01' }]),
+      skills_json: JSON.stringify([{ name: 'TypeScript' }, { name: 'Rust' }]),
+    });
+
+    const { ScenarioContextService } = cjsRequire(servicePath);
+    const service = new ScenarioContextService(deps);
+    const result = await service.buildForRequest({ query: 'q' });
+
+    assert.match(result.contextBlock, /<profile_master/);
+    assert.match(result.contextBlock, /Alice/);
+    assert.match(result.contextBlock, /Senior Engineer/);
+    assert.match(result.contextBlock, /Backend specialist/);
+    assert.match(result.contextBlock, /Senior Eng/);
+    assert.match(result.contextBlock, /TypeScript/);
+    assert.match(result.contextBlock, /alice@example\.com/);
+    assert.ok(result.dataScopes.includes('profile_history'));
+  });
+
+  test('buildMasterProfileBlock omits block when profile_master is empty', async () => {
+    const deps = installModeWithReferenceFile({
+      templateType: 'sales',
+      fileName: 'short.md',
+      content: 'short content',
+      metadata: { scenarioType: 'sales', docSubtype: 'case-study' },
+    });
+    // Default seed: empty display_name, empty headline, empty summary, empty arrays
+    deps.db.getProfileMaster = () => ({
+      display_name: null,
+      headline: null,
+      summary: '',
+      contact_info_json: '{}',
+      experience_json: '[]',
+      skills_json: '[]',
+    });
+
+    const { ScenarioContextService } = cjsRequire(servicePath);
+    const service = new ScenarioContextService(deps);
+    const result = await service.buildForRequest({ query: 'q' });
+
+    assert.ok(
+      !result.contextBlock.includes('<profile_master'),
+      'profile_master block should be omitted when all fields are empty',
+    );
+  });
+
+  test('buildMasterProfileBlock handles missing getProfileMaster method gracefully', async () => {
+    const deps = installModeWithReferenceFile({
+      templateType: 'sales',
+      fileName: 'short.md',
+      content: 'short content',
+      metadata: { scenarioType: 'sales', docSubtype: 'case-study' },
+    });
+    // Older db stub without getProfileMaster — service should not crash
+    deps.db = { ...deps.db, getProfileMaster: undefined };
+
+    const { ScenarioContextService } = cjsRequire(servicePath);
+    const service = new ScenarioContextService(deps);
+    const result = await service.buildForRequest({ query: 'q' });
+
+    assert.ok(
+      !result.contextBlock.includes('<profile_master'),
+      'profile_master block should be omitted when db.getProfileMaster is missing',
     );
   });
 });

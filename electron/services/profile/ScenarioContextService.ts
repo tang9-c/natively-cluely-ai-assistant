@@ -182,14 +182,37 @@ export class ScenarioContextService {
   }
 
   private buildMasterProfileBlock(db: DatabaseManager): string {
-    if (typeof (db as any).getUserProfile !== 'function') return '';
-    const profile = (db as any).getUserProfile();
-    if (!profile?.structured_json) return '';
+    // Task 3: read from profile_master (the structured profile_master table),
+    // not from user_profile.structured_json. The legacy user_profile table is
+    // dropped by the v19 migration; the new master profile is the single source
+    // of truth and is edited through MasterProfileSection in the UI.
+    const profile = typeof db.getProfileMaster === 'function' ? db.getProfileMaster() : null;
+    if (!profile) return '';
 
-    const parsed = safeJsonParse(profile.structured_json);
-    if (!parsed) return '';
+    const displayName = (profile.display_name ?? '').toString().trim();
+    const headline = (profile.headline ?? '').toString().trim();
+    const summary = (profile.summary ?? '').toString().trim();
+    const experience = safeJsonParse(profile.experience_json);
+    const skills = safeJsonParse(profile.skills_json);
+    const contactInfo = safeJsonParse(profile.contact_info_json);
 
-    const payload = JSON.stringify(parsed).slice(0, this.masterProfileMaxChars);
+    const hasContent =
+      displayName.length > 0 ||
+      headline.length > 0 ||
+      summary.length > 0 ||
+      (Array.isArray(experience) && experience.length > 0) ||
+      (Array.isArray(skills) && skills.length > 0);
+    if (!hasContent) return '';
+
+    const payload = JSON.stringify({
+      display_name: displayName,
+      headline,
+      summary,
+      contact_info: contactInfo ?? {},
+      experience: Array.isArray(experience) ? experience : [],
+      skills: Array.isArray(skills) ? skills : [],
+    }).slice(0, this.masterProfileMaxChars);
+
     return `<profile_master format="json">${escapeXml(payload)}</profile_master>`;
   }
 }
