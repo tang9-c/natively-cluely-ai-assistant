@@ -1,0 +1,95 @@
+// electron/services/research/__tests__/ResearchDossierBuilder.test.mjs
+import { test, describe, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const cjsRequire = createRequire(import.meta.url);
+const builderPath = path.resolve(
+  __dirname, '../../../../dist-electron/electron/services/research/ResearchDossierBuilder.js',
+);
+
+function makeMockLlm(responses) {
+  let callIdx = 0;
+  return {
+    generateStructured: async (prompt, schema) => {
+      const r = responses[callIdx++];
+      if (r instanceof Error) throw r;
+      return r;
+    },
+  };
+}
+
+describe('ResearchDossierBuilder', () => {
+  test('build() with sources marks dossier.source = "tavily"', async () => {
+    const validDossier = {
+      schemaVersion: '1.0', companyName: 'Apple', generatedAt: '', expiresAt: '',
+      source: 'tavily',
+      financials: { summary: 's', details: [{ text: 'f' }], confidence: 'high' },
+      business: { summary: 's', details: [], confidence: 'high' },
+      strategy: { summary: 's', details: [], confidence: 'high' },
+      people: { summary: 's', details: [], confidence: 'high' },
+      infrastructure: { summary: 's', details: [], confidence: 'high' },
+      procurement: { summary: 's', details: [], confidence: 'high' },
+      sources: [{ index: 1, title: 't', url: 'https://x', snippet: 's' }],
+    };
+    const llm = makeMockLlm([validDossier]);
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    const out = await b.build('Apple', [{ title: 't', url: 'https://x', content: 's' }]);
+    assert.equal(out.source, 'tavily');
+    assert.equal(out.financials.confidence, 'high');
+  });
+
+  test('build() with empty sources marks dossier.source = "llm-fallback"', async () => {
+    const llmDossier = {
+      schemaVersion: '1.0', companyName: 'Apple', generatedAt: '', expiresAt: '',
+      source: 'tavily',
+      financials: { summary: 's', details: [], confidence: 'high' },
+      business: { summary: 's', details: [], confidence: 'high' },
+      strategy: { summary: 's', details: [], confidence: 'high' },
+      people: { summary: 's', details: [], confidence: 'high' },
+      infrastructure: { summary: 's', details: [], confidence: 'high' },
+      procurement: { summary: 's', details: [], confidence: 'high' },
+      sources: [],
+    };
+    const llm = makeMockLlm([llmDossier]);
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    const out = await b.build('Apple', []);
+    assert.equal(out.source, 'llm-fallback');
+  });
+
+  test('build() retries once when LLM returns invalid shape', async () => {
+    const validDossier = {
+      schemaVersion: '1.0', companyName: 'X', generatedAt: '', expiresAt: '',
+      source: 'tavily',
+      financials: { summary: 's', details: [], confidence: 'high' },
+      business: { summary: 's', details: [], confidence: 'high' },
+      strategy: { summary: 's', details: [], confidence: 'high' },
+      people: { summary: 's', details: [], confidence: 'high' },
+      infrastructure: { summary: 's', details: [], confidence: 'high' },
+      procurement: { summary: 's', details: [], confidence: 'high' },
+      sources: [],
+    };
+    const llm = {
+      generateStructured: async () => {
+        if (!llm._called) { llm._called = true; throw new Error('invalid shape'); }
+        return validDossier;
+      },
+    };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    const out = await b.build('X', []);
+    assert.equal(out.companyName, 'X');
+  });
+
+  test('build() throws LlmInvalidFormatError after retry exhaustion', async () => {
+    const llm = { generateStructured: async () => { throw new Error('still bad'); } };
+    const { ResearchDossierBuilder, LlmInvalidFormatError } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    await assert.rejects(() => b.build('X', []), (err) => err instanceof LlmInvalidFormatError);
+  });
+});
