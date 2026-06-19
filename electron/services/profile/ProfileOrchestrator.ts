@@ -10,8 +10,6 @@ import { JDParser } from './parsers/JDParser';
 import { ScenarioContextService } from './ScenarioContextService';
 import { redactForLog } from '../../utils/redactForLog';
 import type {
-  EmbedFn,
-  GenerateContentFn,
   KnowledgeResult,
   ProfileOrchestratorRuntime,
 } from './ProfileOrchestratorContract';
@@ -34,10 +32,11 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
   private jdParser: JDParser | null = null;
   private activeMode = false;
   private customNotes = '';
-  private generateContentFn: GenerateContentFn | null = null;
-  private liveCoachingContentFn: GenerateContentFn | null = null;
-  private embedFn: EmbedFn | null = null;
-  private embedQueryFn: EmbedFn | null = null;
+  // Task 6: the four setXxxFn callbacks (generateContentFn,
+  // liveCoachingContentFn, embedFn, embedQueryFn) were dead injection
+  // surfaces — main.ts set them, the orchestrator stored them, nothing
+  // read them. They were remnants of a "knowledge subsystem" design that
+  // never landed. Removed in Task 6 along with their setters below.
 
   setLLMHelper(llmHelper: any): void {
     const parserLLM = new ParserLLM(llmHelper);
@@ -160,22 +159,6 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
   feedInterviewerUtterance(_message: string): void {
     // Reserved for live coaching/negotiation state. Scenario-aware injection is
     // request-scoped for now, so no transcript state is accumulated here.
-  }
-
-  setGenerateContentFn(fn: GenerateContentFn): void {
-    this.generateContentFn = fn;
-  }
-
-  setLiveCoachingContentFn(fn: GenerateContentFn): void {
-    this.liveCoachingContentFn = fn;
-  }
-
-  setEmbedFn(fn: EmbedFn): void {
-    this.embedFn = fn;
-  }
-
-  setEmbedQueryFn(fn: EmbedFn): void {
-    this.embedQueryFn = fn;
   }
 
   async processQuestion(message: string): Promise<KnowledgeResult | null> {

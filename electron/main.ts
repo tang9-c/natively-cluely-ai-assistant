@@ -757,41 +757,12 @@ export class AppState {
 
         // generateContent function for LLM calls
         // Join ALL content parts (some callers — e.g. live negotiation coaching —
-        // pass [{text: systemPrefix}, {text: prompt}]; reading only [0] dropped the
-        // prompt). Single-item callers (extraction, script) are unaffected.
-        const joinContents = (contents: any[]) =>
-          (Array.isArray(contents) ? contents : [contents])
-            .map((c: any) => (typeof c === 'string' ? c : c?.text || ''))
-            .filter(Boolean)
-            .join('\n\n');
-        knowledgeOrchestrator.setGenerateContentFn(async (contents: any[]) => {
-          return await llmHelper.generateContentStructured(joinContents(contents));
-        });
-
-        // Low-latency generation for LIVE negotiation coaching (spoken in real
-        // time): Flash-first chain so the tactical note appears fast. The AOT
-        // negotiation script + all extraction keep the quality-first fn above.
-        knowledgeOrchestrator.setLiveCoachingContentFn(async (contents: any[]) => {
-          return await llmHelper.generateContentStructured(joinContents(contents));
-        });
-
-        // Embedding function — lazily delegate to the cascaded EmbeddingPipeline
-        // (OpenAI → Gemini → Ollama → Local bundled model).
-        // We await waitForReady() so uploads during boot wait for the pipeline
-        // instead of immediately throwing 'not ready'.
-        const self = this;
-        knowledgeOrchestrator.setEmbedFn(async (text: string) => {
-          const pipeline = self.ragManager?.getEmbeddingPipeline();
-          if (!pipeline) throw new Error('RAG pipeline not available');
-          await pipeline.waitForReady();
-          return await pipeline.getEmbedding(text);
-        });
-        knowledgeOrchestrator.setEmbedQueryFn(async (text: string) => {
-          const pipeline = self.ragManager?.getEmbeddingPipeline();
-          if (!pipeline) throw new Error('RAG pipeline not available');
-          await pipeline.waitForReady();
-          return await pipeline.getEmbeddingForQuery(text);
-        });
+        // Task 6: removed setGenerateContentFn / setLiveCoachingContentFn /
+        // setEmbedFn / setEmbedQueryFn calls. These four injection surfaces
+        // were dead — ProfileOrchestrator stored the references but never
+        // consumed them. They were remnants of a "knowledge subsystem"
+        // design that never landed. The `joinContents` helper above is also
+        // no longer referenced and is removed with the rest of the block.
 
         // Attach KnowledgeOrchestrator to LLMHelper
         llmHelper.setKnowledgeOrchestrator(this.knowledgeOrchestrator);
