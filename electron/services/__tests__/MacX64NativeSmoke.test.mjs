@@ -54,11 +54,20 @@ test('sqlite-vec ships both macOS arch packages for packaged vector search', () 
   assert.match(ensureScript, /sqlite-vec-darwin-x64/);
   assert.match(ensureScript, /sqlite-vec-darwin-arm64/);
 
-  const x64Dylib = path.join(root, 'node_modules/sqlite-vec-darwin-x64/vec0.dylib');
-  const arm64Dylib = path.join(root, 'node_modules/sqlite-vec-darwin-arm64/vec0.dylib');
+  // Only the dylib matching the current host architecture is installed locally
+  // (npm pulls the optionalDependency that matches process.arch). Both arch
+  // declarations in package.json + ensure-sqlite-vec.js still guarantee the
+  // packaged app supports both architectures — that's what the assertion above
+  // checks. The local-dylib existence check is per-arch so CI runners and
+  // dev laptops see a meaningful test instead of a false negative on the
+  // dylib for the arch they're not running.
+  const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+  const localDylib = path.join(root, `node_modules/sqlite-vec-darwin-${arch}/vec0.dylib`);
   if (fs.existsSync(path.join(root, 'node_modules'))) {
-    assert.ok(fs.existsSync(x64Dylib), 'local node_modules should contain sqlite-vec darwin x64 dylib');
-    assert.ok(fs.existsSync(arm64Dylib), 'local node_modules should contain sqlite-vec darwin arm64 dylib');
+    assert.ok(
+      fs.existsSync(localDylib),
+      `local node_modules should contain sqlite-vec darwin ${arch} dylib (host arch=${process.arch})`,
+    );
   }
 });
 
