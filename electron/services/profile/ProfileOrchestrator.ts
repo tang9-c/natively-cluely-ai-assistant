@@ -7,6 +7,7 @@ import { DocumentTextExtractor } from './DocumentTextExtractor';
 import { ParserLLM } from './parsers/ParserLLM';
 import { ResumeParser } from './parsers/ResumeParser';
 import { JDParser } from './parsers/JDParser';
+import { ScenarioContextService } from './ScenarioContextService';
 import { redactForLog } from '../../utils/redactForLog';
 import type {
   EmbedFn,
@@ -171,25 +172,20 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
 
   async processQuestion(message: string): Promise<KnowledgeResult | null> {
     if (!this.activeMode) return null;
-    try {
-      const { ScenarioContextService } = require('./ScenarioContextService');
-      const service = new ScenarioContextService();
-      const result = await service.buildForRequest({
-        query: message,
-        includeSystemPrompt: true,
-      });
-      if (!result?.contextBlock && !result?.systemPromptSuffix) return null;
-      return {
-        systemPromptInjection: result.systemPromptSuffix,
-        contextBlock: result.contextBlock,
-        dataScopes: result.dataScopes,
-      };
-    } catch (error: any) {
-      if (error?.code !== 'MODULE_NOT_FOUND') {
-        console.warn('[ProfileOrchestrator] processQuestion failed:', redactForLog([error]));
-      }
-      return null;
-    }
+    // Task 2: static import (replaces dynamic require).
+    // Task 5 will additionally remove the early-return guard above and the
+    // error-swallowing try/catch so failures propagate to LLMHelper.
+    const service = new ScenarioContextService();
+    const result = await service.buildForRequest({
+      query: message,
+      includeSystemPrompt: true,
+    });
+    if (!result?.contextBlock && !result?.systemPromptSuffix) return null;
+    return {
+      systemPromptInjection: result.systemPromptSuffix,
+      contextBlock: result.contextBlock,
+      dataScopes: result.dataScopes,
+    };
   }
 
   deleteDocumentsByType(docType: DocType): void {
