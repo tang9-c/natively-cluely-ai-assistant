@@ -1,7 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import type { DocType, JDParsed, ProfileData, ResumeNode, ResumeParsed } from './types';
+import type { DocType, JDParsed, ProfileData, ResumeParsed } from './types';
 import { ProfileDatabase } from './ProfileDatabase';
 import { DocumentTextExtractor } from './DocumentTextExtractor';
 import { ParserLLM } from './parsers/ParserLLM';
@@ -49,6 +49,7 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
     filePath: string,
     docType: DocType,
   ): Promise<{ success: boolean; error?: string }> {
+    let destPath: string | null = null;
     try {
       const rawText = await DocumentTextExtractor.extract(filePath);
       if (!rawText || rawText.trim().length === 0) {
@@ -61,30 +62,42 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
       }
       const ext = path.extname(filePath);
       const prefix = docType === 'resume' ? 'resume' : 'jd';
-      const destPath = path.join(uploadsDir, `${prefix}-${Date.now()}${ext}`);
+      destPath = path.join(uploadsDir, `${prefix}-${Date.now()}${ext}`);
       fs.copyFileSync(filePath, destPath);
 
-      if (docType === 'resume') {
-        if (!this.resumeParser) {
-          return { success: false, error: 'Knowledge engine not initialized' };
+      // Task 4: parsing + DB write must roll back together. If anything throws
+      // after we copied the file, we unlink the copy so the uploads directory
+      // doesn't accumulate orphan files from failed parses.
+      try {
+        if (docType === 'resume') {
+          if (!this.resumeParser) {
+            throw new Error('Knowledge engine not initialized');
+          }
+          const parsed = await withTimeout(
+            this.resumeParser.parse(rawText),
+            60_000,
+            'Resume parse',
+          );
+          // Atomic write to profile_master via better-sqlite3 transaction.
+          this.db.saveResumeToMaster(parsed);
+        } else if (docType === 'job_description') {
+          if (!this.jdParser) {
+            throw new Error('Knowledge engine not initialized');
+          }
+          const parsed = await withTimeout(
+            this.jdParser.parse(rawText),
+            60_000,
+            'JD parse',
+          );
+          this.db.saveJD(rawText, parsed);
         }
-        const parsed = await withTimeout(
-          this.resumeParser.parse(rawText),
-          60_000,
-          'Resume parse',
-        );
-        this.db.saveResume(parsed);
-        this.db.saveResumeNodes(this.buildResumeNodes(parsed));
-      } else if (docType === 'job_description') {
-        if (!this.jdParser) {
-          return { success: false, error: 'Knowledge engine not initialized' };
+      } catch (innerError) {
+        // Parse or save failed — unlink the copied file so the user does
+        // not accumulate junk uploads from failed attempts.
+        if (destPath) {
+          try { fs.unlinkSync(destPath); } catch { /* best effort */ }
         }
-        const parsed = await withTimeout(
-          this.jdParser.parse(rawText),
-          60_000,
-          'JD parse',
-        );
-        this.db.saveJD(rawText, parsed);
+        throw innerError;
       }
 
       return { success: true };
@@ -112,16 +125,11 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
     activeMode: boolean;
     resumeSummary?: { name?: string; role?: string; totalExperienceYears?: number };
   } {
-    const profile = this.db.getUserProfile();
-    const hasResume = !!profile;
+    // Task 4: read from profile_master (via synthesized ResumeParsed). The
+    // legacy user_profile.structured_json path is gone (table dropped in v19).
+    const parsed = this.db.getMasterAsResume();
+    const hasResume = !!parsed;
     if (!hasResume) {
-      return { hasResume: false, activeMode: this.activeMode };
-    }
-
-    let parsed: ResumeParsed;
-    try {
-      parsed = JSON.parse(profile.structured_json) as ResumeParsed;
-    } catch {
       return { hasResume: false, activeMode: this.activeMode };
     }
 
@@ -190,22 +198,17 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
 
   deleteDocumentsByType(docType: DocType): void {
     if (docType === 'resume') {
-      this.db.clearResume();
+      this.db.clearMasterResume();
     } else if (docType === 'job_description') {
       this.db.clearJD();
     }
   }
 
   getProfileData(): ProfileData | null {
-    const profile = this.db.getUserProfile();
-    if (!profile) return null;
-
-    let parsed: ResumeParsed;
-    try {
-      parsed = JSON.parse(profile.structured_json) as ResumeParsed;
-    } catch {
-      return null;
-    }
+    // Task 4: synthesize ResumeParsed from profile_master instead of reading
+    // the dropped user_profile.structured_json.
+    const parsed = this.db.getMasterAsResume();
+    if (!parsed) return null;
 
     const activeJD = this.db.getActiveJD();
     const hasActiveJD = !!activeJD;
@@ -242,36 +245,6 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
     } catch {
       return path.join(os.tmpdir(), 'profile-uploads');
     }
-  }
-
-  private buildResumeNodes(parsed: ResumeParsed): ResumeNode[] {
-    const nodes: ResumeNode[] = [];
-    for (const exp of parsed.experience ?? []) {
-      nodes.push({
-        category: 'experience',
-        title: exp.title,
-        organization: exp.organization,
-        startDate: exp.start,
-        endDate: exp.end,
-        textContent: exp.description,
-      });
-    }
-    for (const proj of parsed.projects ?? []) {
-      nodes.push({
-        category: 'project',
-        title: proj.name,
-        textContent: proj.description,
-      });
-    }
-    for (const edu of parsed.education ?? []) {
-      nodes.push({
-        category: 'education',
-        title: edu.degree,
-        organization: edu.institution,
-        textContent: edu.year,
-      });
-    }
-    return nodes;
   }
 
   private computeExperienceYears(

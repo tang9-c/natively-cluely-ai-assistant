@@ -91,6 +91,24 @@ export class DatabaseManager {
     }
 
     /**
+     * Task 4: expose better-sqlite3 transactions so callers (e.g.
+     * ProfileDatabase.saveResumeToMaster) can wrap multi-step writes
+     * atomically. Returns a no-op wrapper when the database failed to open,
+     * matching the existing `if (!this.db) return null` pattern used
+     * throughout this class — callers get "best effort" semantics and never
+     * see a crash from a missing db.
+     */
+    public transaction<T extends (...args: any[]) => unknown>(fn: T): T {
+        if (!this.db) {
+            // db unavailable — best-effort: still run fn once, no rollback safety
+            return ((...args: any[]) => fn(...args)) as unknown as T;
+        }
+        // better-sqlite3's transaction() returns the same callable wrapped in
+        // a Transaction object, but the runtime shape is still T-compatible.
+        return this.db.transaction(fn) as unknown as T;
+    }
+
+    /**
      * Translate an init failure into a single, actionable log line. The most
      * common fatal cause is a native-module architecture mismatch (an x86_64
      * better-sqlite3 binary loaded under the arm64 Electron runtime, typically
