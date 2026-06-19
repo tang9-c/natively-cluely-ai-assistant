@@ -426,7 +426,9 @@ export interface ElectronAPI {
   // JD & Research API
   profileUploadJD: (filePath: string) => Promise<{ success: boolean; error?: string }>
   profileDeleteJD: () => Promise<{ success: boolean; error?: string }>
-  profileResearchCompany: (companyName: string) => Promise<{ success: boolean; dossier?: any; error?: string; searchQuotaExhausted?: boolean }>
+  profileResearchCompany: (companyName: string, options?: { forceRefresh?: boolean }) => Promise<{ success: boolean; dossier?: any; error?: string; searchQuotaExhausted?: boolean }>
+  profileClearResearchCache: () => Promise<{ success: boolean; deleted?: number; error?: string }>
+  testTavilyApiKey: (key: string) => Promise<{ valid: boolean; reason?: string; quotaLow?: boolean; message?: string }>
   profileGenerateNegotiation: (force?: boolean) => Promise<{ success: boolean; script?: any; error?: string }>
   profileGetNegotiationState: () => Promise<{ success: boolean; state?: any; isActive?: boolean; error?: string }>
   profileResetNegotiation: () => Promise<{ success: boolean; error?: string }>
