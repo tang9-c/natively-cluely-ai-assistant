@@ -3652,16 +3652,65 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('profile:research-company', async (_: unknown, _companyName: string) => {
-    // Company research engine is not yet implemented in the runtime contract.
-    // Return a clear "feature not available" response so the renderer does not
-    // crash. See electron/services/profile/ProfileOrchestrator.ts.
-    return {
-      success: false,
-      error:
-        'Company research is not yet available. The research engine is queued for a future release.',
-    };
+  safeHandle('profile:clear-research-cache', async () => {
+    try {
+      const orchestrator = appState.getKnowledgeOrchestrator();
+      if (!orchestrator) {
+        return { success: false, deleted: 0, error: 'Knowledge engine not initialized' };
+      }
+      const engine = orchestrator.getCompanyResearchEngine();
+      const deleted = await engine.clearCache();
+      return { success: true, deleted };
+    } catch (error: any) {
+      console.error('[ipcHandlers] profile:clear-research-cache failed:', redactForLog([error]));
+      return { success: false, deleted: 0, error: error?.message ?? 'unknown error' };
+    }
   });
+
+  safeHandle('profile:test-tavily-key', async (_: unknown, key: string) => {
+    try {
+      const res = await fetch('https://api.tavily.com/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: key, query: 'test', max_results: 1 }),
+      });
+      if (res.status === 401 || res.status === 403) {
+        return { valid: false, reason: 'invalid_key' };
+      }
+      if (res.status === 429) return { valid: true, quotaLow: true };
+      return { valid: res.ok };
+    } catch (err: any) {
+      return { valid: false, reason: 'network_error', message: err?.message };
+    }
+  });
+
+  safeHandle(
+    'profile:research-company',
+    async (
+      _: unknown,
+      companyName: string,
+      options: { forceRefresh?: boolean } = {},
+    ) => {
+      try {
+        const orchestrator = appState.getKnowledgeOrchestrator();
+        if (!orchestrator) {
+          return {
+            success: false,
+            errorCode: 'DB_ERROR',
+            error: 'Knowledge engine not initialized',
+          };
+        }
+        return await orchestrator.runCompanyResearch(companyName, options);
+      } catch (err: any) {
+        console.error('[ipcHandlers] profile:research-company failed:', redactForLog([err]));
+        return {
+          success: false,
+          errorCode: 'DB_ERROR',
+          error: 'Internal error: ' + (err?.message ?? 'unknown'),
+        };
+      }
+    },
+  );
 
   safeHandle('profile:generate-negotiation', async (_: unknown, _force: boolean = false) => {
     // On-demand negotiation script generation is not yet implemented.
