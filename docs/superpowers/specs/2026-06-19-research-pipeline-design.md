@@ -30,10 +30,11 @@ Natively 项目中的 "公司情报调研"（Company Research）功能在源码�
 ## Non-Goals
 
 - **追问/对话功能**：dossier 一次性输出，不支持 followup 问题
-- **多语言 dossier**：本期仅英文 dossier（用户输入公司名→英文报告）
+- **多语言**：dossier 默认跟随用户输入语言（用户输入中文公司名→中文报告）；不做跨语言翻译
 - **多模态调研**：不解析图片、视频、PDF 中的信息
 - **离线模式**：必须联网（Tavily + LLM API）
 - **可视化图表**：dossier 用 bullet points + 引用链接，不画图
+- **重新设计 `TavilySearchProvider` 接口**：原 placeholder 文件存在但接口设计未定义，本期一并重新设计接口（覆盖原文件）
 
 ## User Decisions (8 项澄清)
 
@@ -88,6 +89,7 @@ tests/e2e/
 | `electron/services/profile/ProfileOrchestrator.ts` | 新增 `getCompanyResearchEngine()` 和 `runCompanyResearch(companyName, opts)` |
 | `electron/ipcHandlers.ts:3655` | 替换 stub 为真实实现 |
 | `electron/preload.ts:602,1769` | 新增 `forceRefresh` 选项，更新类型 |
+| `electron/preload.ts` | 新增 `profileClearResearchCache()`、`testTavilyApiKey(key)` 桥接 |
 | `electron/db/DatabaseManager.ts` | v18 migration：新增 `company_research_cache` 表 |
 | `src/types/electron.d.ts:429` | 更新 `ProfileResearchCompanyResponse` 类型（新增 `cached`, `forceRefresh`） |
 | `src/App.tsx` | 注册 `ResearchPanel` 路由 + 监听 `open-research-panel` 事件 |
