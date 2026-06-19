@@ -231,24 +231,6 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
     };
   }
 
-  getCompanyResearchEngine(): null {
-    return null;
-  }
-
-  getNegotiationTracker(): null {
-    return null;
-  }
-
-  getNegotiationScript(): null {
-    return null;
-  }
-
-  async generateNegotiationScriptOnDemand(): Promise<null> {
-    return null;
-  }
-
-  resetNegotiationSession(): void {}
-
   setCustomNotes(content: string): void {
     this.customNotes = typeof content === 'string' ? content : '';
   }
