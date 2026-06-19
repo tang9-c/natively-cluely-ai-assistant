@@ -19,6 +19,7 @@ import { analytics } from "./lib/analytics/analytics.service"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import ModesSettings from "./components/settings/ModesSettings"
 import { ProfileIntelligenceSettings } from "./components/ProfileIntelligenceSettings"
+import { ResearchPanel } from "./components/research/ResearchPanel"
 import { useResolvedTheme } from "./hooks/useResolvedTheme"
 
 const queryClient = new QueryClient()
@@ -91,6 +92,8 @@ const App: React.FC = () => {
   const [settingsInitialTab, setSettingsInitialTab] = useState<string>('general');
   const [isModesOpen, setIsModesOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isResearchPanelOpen, setIsResearchPanelOpen] = useState(false);
+  const [researchInitialName, setResearchInitialName] = useState('');
   const openSettingsExclusive = useCallback((tab: string = 'general') => {
     setIsModesOpen(false);
     setIsProfileOpen(false);
@@ -213,6 +216,17 @@ const App: React.FC = () => {
     const handleStorage = () => setMeetingInterfaceThemeState(getMeetingInterfaceTheme());
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  // Listen for open-research-panel events (from ProfileIntelligenceSettings quick action)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ companyName: string }>).detail;
+      setResearchInitialName(detail?.companyName ?? '');
+      setIsResearchPanelOpen(true);
+    };
+    window.addEventListener('open-research-panel', handler);
+    return () => window.removeEventListener('open-research-panel', handler);
   }, []);
 
 
@@ -406,6 +420,11 @@ const App: React.FC = () => {
                     setIsSettingsOpen(false);
                   }}
                   initialTab={settingsInitialTab}
+                />
+                <ResearchPanel
+                  isOpen={isResearchPanelOpen}
+                  initialCompanyName={researchInitialName}
+                  onClose={() => setIsResearchPanelOpen(false)}
                 />
                 <AnimatePresence>
                   {isModesOpen && (
