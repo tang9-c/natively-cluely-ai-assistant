@@ -832,6 +832,30 @@ export class DatabaseManager {
             this.db.pragma('user_version = 19');
         }
 
+        // Version 19 -> 20: Add company_research_cache table for the Research Pipeline.
+        // Task 2 (Research Pipeline): caches generated company dossiers keyed by company
+        // name with a 24h TTL. expires_at index supports the daily prune sweep
+        // (pruneCompanyResearchCache) and schema_version lets the cache layer invalidate
+        // entries when the dossier schema changes.
+        if (version < 20) {
+            console.log('[DatabaseManager] Applying migration v19 -> v20: Add company_research_cache table');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS company_research_cache (
+                    company_name TEXT PRIMARY KEY,
+                    company_name_display TEXT NOT NULL,
+                    dossier_json TEXT NOT NULL,
+                    generated_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    schema_version TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_company_research_expires
+                    ON company_research_cache(expires_at);
+            `);
+            this.db.pragma('user_version = 20');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -1322,6 +1346,83 @@ export class DatabaseManager {
             stmt.run(key);
         } catch (error) {
             console.error(`[DatabaseManager] Failed to delete app_state for key: ${key}`, error);
+        }
+    }
+
+    // ============================================
+    // Company Research Cache (Research Pipeline)
+    // ============================================
+
+    public upsertCompanyResearchCache(row: {
+        companyName: string;
+        companyNameDisplay: string;
+        dossierJson: string;
+        generatedAt: string;
+        expiresAt: string;
+        source: string;
+        schemaVersion: string;
+    }): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare(`
+                INSERT OR REPLACE INTO company_research_cache
+                    (company_name, company_name_display, dossier_json,
+                     generated_at, expires_at, source, schema_version)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                row.companyName,
+                row.companyNameDisplay,
+                row.dossierJson,
+                row.generatedAt,
+                row.expiresAt,
+                row.source,
+                row.schemaVersion,
+            );
+        } catch (error) {
+            console.error(`[DatabaseManager] upsertCompanyResearchCache failed for "${row.companyName}":`, error);
+        }
+    }
+
+    public getCompanyResearchCache(companyName: string): {
+        dossier_json: string;
+        expires_at: string;
+        schema_version: string;
+    } | null {
+        if (!this.db) return null;
+        try {
+            const row = this.db.prepare(`
+                SELECT dossier_json, expires_at, schema_version
+                FROM company_research_cache
+                WHERE company_name = ?
+            `).get(companyName) as { dossier_json: string; expires_at: string; schema_version: string } | undefined;
+            return row ?? null;
+        } catch (error) {
+            console.error(`[DatabaseManager] getCompanyResearchCache failed for "${companyName}":`, error);
+            return null;
+        }
+    }
+
+    public pruneCompanyResearchCache(): number {
+        if (!this.db) return 0;
+        try {
+            const result = this.db.prepare(`
+                DELETE FROM company_research_cache WHERE expires_at < ?
+            `).run(new Date().toISOString());
+            return result.changes;
+        } catch (error) {
+            console.error('[DatabaseManager] pruneCompanyResearchCache failed:', error);
+            return 0;
+        }
+    }
+
+    public deleteAllCompanyResearchCache(): number {
+        if (!this.db) return 0;
+        try {
+            const result = this.db.prepare('DELETE FROM company_research_cache').run();
+            return result.changes;
+        } catch (error) {
+            console.error('[DatabaseManager] deleteAllCompanyResearchCache failed:', error);
+            return 0;
         }
     }
 
