@@ -1247,6 +1247,19 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
 
                                                     </div>
                                                 )}
+
+                                                {/* Quick-action: open full ResearchPanel */}
+                                                <div className="mt-4 pt-3 border-t border-border-subtle">
+                                                    <button
+                                                        onClick={() => window.dispatchEvent(new CustomEvent(
+                                                            'open-research-panel',
+                                                            { detail: { companyName: profileData.activeJD.company } },
+                                                        ))}
+                                                        className="text-xs text-accent-primary hover:underline inline-flex items-center gap-1"
+                                                    >
+                                                        在新面板中调研此公司 →
+                                                    </button>
+                                                </div>
                                             </div>
                                         </BezelCard>
                                     )}
