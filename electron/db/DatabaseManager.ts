@@ -8,6 +8,12 @@ import { buildLegacySpaceCaseSql } from '../rag/embeddingSpace';
 import type { ResumeNode, UserProfileRecord } from '../services/profile/types';
 
 // Interfaces for our data objects
+export interface CompanyResearchCacheRow {
+    dossier_json: string;
+    expires_at: string;
+    schema_version: string;
+}
+
 export interface Meeting {
     id: string;
     title: string;
@@ -833,10 +839,9 @@ export class DatabaseManager {
         }
 
         // Version 19 -> 20: Add company_research_cache table for the Research Pipeline.
-        // Task 2 (Research Pipeline): caches generated company dossiers keyed by company
-        // name with a 24h TTL. expires_at index supports the daily prune sweep
-        // (pruneCompanyResearchCache) and schema_version lets the cache layer invalidate
-        // entries when the dossier schema changes.
+        // Caches generated company dossiers keyed by company name with 24h TTL.
+        // company_name is the normalized cache key; company_name_display preserves the user's original casing.
+        // generated_at / expires_at: ISO 8601 UTC strings (Date.toISOString()).
         if (version < 20) {
             console.log('[DatabaseManager] Applying migration v19 -> v20: Add company_research_cache table');
             this.db.exec(`
@@ -1380,21 +1385,18 @@ export class DatabaseManager {
             );
         } catch (error) {
             console.error(`[DatabaseManager] upsertCompanyResearchCache failed for "${row.companyName}":`, error);
+            throw error;
         }
     }
 
-    public getCompanyResearchCache(companyName: string): {
-        dossier_json: string;
-        expires_at: string;
-        schema_version: string;
-    } | null {
+    public getCompanyResearchCache(companyName: string): CompanyResearchCacheRow | null {
         if (!this.db) return null;
         try {
             const row = this.db.prepare(`
                 SELECT dossier_json, expires_at, schema_version
                 FROM company_research_cache
                 WHERE company_name = ?
-            `).get(companyName) as { dossier_json: string; expires_at: string; schema_version: string } | undefined;
+            `).get(companyName) as CompanyResearchCacheRow | undefined;
             return row ?? null;
         } catch (error) {
             console.error(`[DatabaseManager] getCompanyResearchCache failed for "${companyName}":`, error);
