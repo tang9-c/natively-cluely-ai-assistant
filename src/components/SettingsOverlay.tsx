@@ -14,6 +14,7 @@ import { HelpSettings } from './settings/HelpSettings';
 import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { NativelyApiSettings } from './settings/NativelyApiSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
+import { ResearchTabBody } from './settings/ResearchTabBody';
 import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
 import { LocalSenseVoiceModelPanel } from './LocalSenseVoiceModelPanel';
 import { NativelyLogoMark } from './NativelyLogoMark';
@@ -1404,6 +1405,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         <FlaskConical size={16} /> AI 提供商
                                     </button>
                                     <button
+                                        onClick={() => setActiveTab('research')}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'research' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                    >
+                                        <Search size={16} /> Research
+                                    </button>
+                                    <button
                                         onClick={() => setActiveTab('skills')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'skills' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
@@ -1982,6 +1989,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                             )}
                             {activeTab === 'skills' && (
                                 <SkillsSettings />
+                            )}
+                            {activeTab === 'research' && (
+                                <ResearchTabBody />
                             )}
                             {activeTab === 'natively-api' && (
                                 <NativelyApiSettings />
