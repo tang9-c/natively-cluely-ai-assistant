@@ -3840,6 +3840,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { ModesManager } = require('./services/ModesManager');
       const mgr = ModesManager.getInstance();
+      mgr.ensureSeeded();
       const modes = mgr.getModes();
       // Attach reference file counts
       return modes.map((m: any) => ({
