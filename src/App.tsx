@@ -433,7 +433,7 @@ const App: React.FC = () => {
                           transformOrigin: 'center',
                           boxShadow: '0 30px 80px -20px rgba(0,0,0,0.65), 0 16px 40px -12px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06)',
                         }}
-                        className={`w-[min(920px,calc(100vw-32px))] h-[min(720px,calc(100vh-32px))] max-w-[95vw] max-h-[calc(100vh-32px)] min-h-0 rounded-2xl overflow-hidden border ${
+                        className={`w-[min(1780px,calc(100vw-12px))] h-[min(1390px,calc(100vh-12px))] max-w-[calc(100vw-12px)] max-h-[calc(100vh-12px)] min-h-0 rounded-[28px] overflow-hidden border ${
                           isLightTheme
                             ? 'border-black/10 bg-bg-card'
                             : 'border-white/10 bg-bg-card'
