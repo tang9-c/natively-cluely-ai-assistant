@@ -135,14 +135,66 @@ describe('ProfileOrchestrator', () => {
       'processQuestion',
       'feedForDepthScoring',
       'feedInterviewerUtterance',
-      'setGenerateContentFn',
-      'setLiveCoachingContentFn',
-      'setEmbedFn',
-      'setEmbedQueryFn',
       'setCustomNotes',
       'getCustomNotes',
     ]) {
       assert.equal(typeof orchestrator[method], 'function', `${method} must exist`);
+    }
+  });
+
+  // Task 6: the four setXxxFn methods are gone. They were dead injection
+  // surfaces (main.ts set them, the orchestrator stored them, nothing read
+  // them). Their absence is the fix.
+  it('ProfileOrchestrator no longer exposes the four dead setXxxFn methods', () => {
+    for (const method of [
+      'setGenerateContentFn',
+      'setLiveCoachingContentFn',
+      'setEmbedFn',
+      'setEmbedQueryFn',
+    ]) {
+      assert.equal(
+        typeof orchestrator[method],
+        'undefined',
+        `${method} must be removed`,
+      );
+    }
+  });
+
+  it('ProfileOrchestratorContract no longer declares removed callbacks', () => {
+    const source = fs.readFileSync(
+      path.resolve(__dirname, '../profile/ProfileOrchestratorContract.ts'),
+      'utf8',
+    );
+    for (const name of [
+      'setGenerateContentFn',
+      'setLiveCoachingContentFn',
+      'setEmbedFn',
+      'setEmbedQueryFn',
+      'GenerateContentFn',
+      'EmbedFn',
+    ]) {
+      assert.ok(
+        !source.includes(name),
+        `Contract must not declare ${name}`,
+      );
+    }
+  });
+
+  it('main.ts no longer calls the four removed setXxxFn methods', () => {
+    const source = fs.readFileSync(
+      path.resolve(__dirname, '../../main.ts'),
+      'utf8',
+    );
+    for (const call of [
+      'knowledgeOrchestrator.setGenerateContentFn',
+      'knowledgeOrchestrator.setLiveCoachingContentFn',
+      'knowledgeOrchestrator.setEmbedFn',
+      'knowledgeOrchestrator.setEmbedQueryFn',
+    ]) {
+      assert.ok(
+        !source.includes(call),
+        `main.ts must not call ${call}`,
+      );
     }
   });
 

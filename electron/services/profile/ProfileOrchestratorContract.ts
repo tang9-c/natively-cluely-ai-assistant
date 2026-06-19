@@ -1,7 +1,10 @@
 import type { ProviderDataScope } from '../../llm/ProviderRouter';
 
-export type GenerateContentFn = (contents: unknown[]) => Promise<unknown>;
-export type EmbedFn = (text: string) => Promise<number[]>;
+// Task 6: removed two type aliases and four setters from
+// ProfileOrchestrator. They were dead injection surfaces — main.ts set them,
+// the orchestrator stored the references, nothing read them. The runtime
+// contract below intentionally lists only the methods that are actually
+// invoked from LLMHelper.
 
 export interface KnowledgeResult {
   isIntroQuestion?: boolean;
@@ -19,10 +22,6 @@ export interface ProfileOrchestratorRuntime {
   processQuestion(message: string): Promise<KnowledgeResult | null>;
   feedForDepthScoring(message: string): void;
   feedInterviewerUtterance(message: string): void;
-  setGenerateContentFn(fn: GenerateContentFn): void;
-  setLiveCoachingContentFn(fn: GenerateContentFn): void;
-  setEmbedFn(fn: EmbedFn): void;
-  setEmbedQueryFn(fn: EmbedFn): void;
   setCustomNotes(content: string): void;
   getCustomNotes(): string;
 }
