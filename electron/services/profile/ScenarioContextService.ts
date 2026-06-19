@@ -74,7 +74,7 @@ export class ScenarioContextService {
   }
 
   async buildForRequest(input: BuildForRequestInput): Promise<ScenarioContextBuildResult> {
-    const activeMode = this.modesManager.getActiveMode();
+    const activeMode = this.resolveScenarioMode();
     if (!activeMode) {
       return { systemPromptSuffix: '', contextBlock: '', dataScopes: [] };
     }
@@ -135,6 +135,21 @@ export class ScenarioContextService {
       contextBlock: contextParts.join('\n\n'),
       dataScopes: Array.from(dataScopes),
     };
+  }
+
+  private resolveScenarioMode(): any | null {
+    const activeMode = this.modesManager.getActiveMode();
+    if (activeMode) return activeMode;
+
+    if (typeof (this.modesManager as any).ensureSeeded === 'function') {
+      (this.modesManager as any).ensureSeeded();
+    }
+    if (typeof (this.modesManager as any).getModes !== 'function') {
+      return null;
+    }
+    return (this.modesManager as any)
+      .getModes()
+      .find((mode: any) => mode?.templateType === 'general') ?? null;
   }
 
   private async getRetrievedModeContext(

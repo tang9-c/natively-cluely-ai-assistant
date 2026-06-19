@@ -106,4 +106,17 @@ describe('ScenarioRegistry', () => {
       }
     }
   });
+
+  test('falls back to general scenario for unknown or missing template types', () => {
+    const registry = ScenarioRegistry.createDefault();
+
+    assert.deepEqual(registry.resolveByTemplateType(undefined), {
+      templateType: 'general',
+      scenarioType: 'general',
+    });
+    assert.deepEqual(registry.resolveByTemplateType('custom-discovery'), {
+      templateType: 'general',
+      scenarioType: 'general',
+    });
+  });
 });

@@ -3461,18 +3461,26 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { ModesManager } = require('./services/ModesManager');
       const { ScenarioRegistry } = require('./services/profile/scenarios/registry');
       const modesManager = ModesManager.getInstance();
-      const mode = modesManager.getActiveMode();
-      if (!mode) return { success: true, scenario: null };
+      modesManager.ensureSeeded?.();
+      const mode = modesManager.getActiveMode()
+        ?? modesManager.getModes().find((candidate: any) => candidate.templateType === 'general');
       const registry = ScenarioRegistry.createDefault();
-      const resolution = registry.resolveByTemplateType(mode.templateType);
+      const resolution = registry.resolveByTemplateType(mode?.templateType);
       const adapter = registry.get(resolution.scenarioType);
       return {
         success: true,
         scenario: {
           ...resolution,
+          modeId: mode?.id ?? null,
+          modeName: mode?.name ?? adapter.label,
           displayName: adapter.label,
           supportedDocSubtypes: adapter.supportedDocSubtypes,
           cards: adapter.cards,
+          adapter: {
+            label: adapter.label,
+            supportedDocSubtypes: adapter.supportedDocSubtypes,
+            cards: adapter.cards,
+          },
         },
       };
     } catch (error: any) {
@@ -3485,17 +3493,26 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { ModesManager } = require('./services/ModesManager');
       const modesManager = ModesManager.getInstance();
+      modesManager.ensureSeeded?.();
       const mode = params?.modeId
         ? modesManager.getModes().find((m: any) => m.id === params.modeId)
-        : modesManager.getActiveMode();
+        : modesManager.getActiveMode()
+          ?? modesManager.getModes().find((candidate: any) => candidate.templateType === 'general');
       if (!mode) return { success: true, documents: [] };
       const db = DatabaseManager.getInstance();
       const metadataRows = db.getModeReferenceFileMetadataForMode(mode.id);
       const metadataByFileId = new Map(metadataRows.map((row: any) => [row.reference_file_id, row]));
-      const documents = modesManager.getReferenceFiles(mode.id).map((file: any) => ({
-        ...file,
-        metadata: metadataByFileId.get(file.id) ?? null,
-      }));
+      const documents = modesManager.getReferenceFiles(mode.id).map((file: any) => {
+        const metadata = metadataByFileId.get(file.id) ?? null;
+        return {
+          ...file,
+          metadata,
+          scenarioType: metadata?.scenario_type,
+          scenario_type: metadata?.scenario_type,
+          docSubtype: metadata?.doc_subtype,
+          doc_subtype: metadata?.doc_subtype,
+        };
+      });
       return { success: true, documents };
     } catch (error: any) {
       console.error('[IPC] profile:list-documents error:', redactForLog([error]));
@@ -3512,7 +3529,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { ScenarioRegistry } = require('./services/profile/scenarios/registry');
       const { DocumentTextExtractor } = require('./services/profile/DocumentTextExtractor');
       const modesManager = ModesManager.getInstance();
-      const mode = modesManager.getActiveMode();
+      modesManager.ensureSeeded?.();
+      const mode = modesManager.getActiveMode()
+        ?? modesManager.getModes().find((candidate: any) => candidate.templateType === 'general');
       if (!mode) return { success: false, error: 'No active mode selected' };
       const rawText = await DocumentTextExtractor.extract(params.filePath);
       const fileName = path.basename(params.filePath);
@@ -3540,7 +3559,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       const { ModesManager } = require('./services/ModesManager');
       const { ScenarioRegistry } = require('./services/profile/scenarios/registry');
-      const mode = ModesManager.getInstance().getActiveMode();
+      const modesManager = ModesManager.getInstance();
+      modesManager.ensureSeeded?.();
+      const mode = modesManager.getActiveMode()
+        ?? modesManager.getModes().find((candidate: any) => candidate.templateType === 'general');
       if (!mode) return { success: false, error: 'No active mode selected' };
       const resolution = ScenarioRegistry.createDefault().resolveByTemplateType(mode.templateType);
       DatabaseManager.getInstance().upsertModeReferenceFileMetadata({
