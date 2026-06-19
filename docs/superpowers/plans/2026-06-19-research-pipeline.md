@@ -2791,3 +2791,38 @@ git commit -m "chore(research): post-verification cleanup"
 - Error codes: `INVALID_INPUT`, `TAVILY_KEY_MISSING`, `TAVILY_QUOTA_EXHAUSTED`, `TAVILY_INVALID_KEY`, `LLM_FAILED`, `LLM_INVALID_FORMAT`, `DB_ERROR` — used consistently across engine, IPC, hook, UI
 
 **No spec gap identified.**
+
+---
+
+## Implementation Status (post-execution, 2026-06-19)
+
+All 28 tasks complete. See `git log 03b322c..HEAD` for the 28-commit implementation history.
+
+**Deviations accepted during implementation:**
+
+1. **Cache constructor signature (Task 6)** — Plan specified `DbAdapter` interface (4 CRUD methods from Task 2); subagent chose direct better-sqlite3 connection for simpler test/migration path. **Result:** Task 2's `getCompanyResearchCache` / `upsertCompanyResearchCache` / `pruneCompanyResearchCache` / `deleteAllCompanyResearchCache` methods are now dead code (still defined, never called). Acceptable since they don't break anything and could be used by future modules.
+
+2. **Duck-typing for error classes (Task 10)** — esbuild's `bundle: true` produces a separate copy of `TavilyError`/`TavilyQuotaError`/`TavilyAuthError` inside `CompanyResearchEngine.js`, breaking `instanceof` cross-module checks. Subagent switched to `err.name === 'TavilyQuotaError'` duck-typing. Documented in code comments.
+
+3. **Hook test framework (Tasks 18-19)** — Plan specified Vitest + `@testing-library/react`; project has neither installed (uses `node:test` for everything). Subagent used `node:test` + a "drift test" pattern that mirrors the hook's state machine and asserts shared markers. 8 tests pass.
+
+4. **E2E Settings test skipped (Task 27)** — The Settings window opens as a separate `BrowserWindow` (per project's `?window=settings` multi-window architecture), so the launcher-only Playwright fixture can't navigate to it. Test gracefully `test.skip`s with descriptive reason. The 3 other E2E tests pass.
+
+**Task 17 (Phase 1 Manual Smoke Check) — completed with note:**
+
+Per user decision, Task 17's GUI smoke check was not executed in the headless subagent environment. The functional paths it would have validated are covered by:
+- Task 16 integration test (cold start → cache hit → force refresh, 3 tests)
+- 5 backend unit test files (TavilySearchProvider: 5 tests, CompanyResearchCache: 7 tests, ResearchDossierBuilder: 4 tests, CompanyResearchEngine: 7 tests, ProfileOrchestrator.Research: 3 tests)
+
+To complete manual verification, the user should run locally with display:
+```bash
+npm start
+# Then in the app:
+# 1. Settings → Research → configure Tavily API key
+# 2. ProfileIntelligenceSettings → "在新面板中调研此公司"
+# 3. Enter a company name → verify 6-dimension dossier
+# 4. Search again → verify "缓存中" label
+# 5. Click "强制刷新" → verify generatedAt updates
+```
+
+**Final test results:** 760 tests, 743 pass, 0 fail, 17 pre-existing skipped. Renderer + Electron typecheck clean.
