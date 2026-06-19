@@ -47,4 +47,22 @@ export class ProfileDatabase {
   clearJD(): void {
     this.db.clearActiveJD();
   }
+
+  upsertModeReferenceFileMetadata(input: {
+    referenceFileId: string;
+    scenarioType: string;
+    docSubtype: string;
+    parsedJson?: string | null;
+    fileHash?: string | null;
+  }): void {
+    this.db.upsertModeReferenceFileMetadata(input);
+  }
+
+  getModeReferenceFileMetadata(referenceFileId: string): any | null {
+    return this.db.getModeReferenceFileMetadata(referenceFileId);
+  }
+
+  getModeReferenceFileMetadataForMode(modeId: string): any[] {
+    return this.db.getModeReferenceFileMetadataForMode(modeId);
+  }
 }

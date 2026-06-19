@@ -227,7 +227,7 @@ export interface ElectronAPI {
   onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => () => void
   onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void
   onDeviceSelectionApplied: (callback: (payload: { kind: 'input' | 'output'; requested: string | null; actual: string | null; fellBack: boolean; reason?: string }) => void) => () => void
-  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; code?: 'SCREEN_TCC_STALE_GRANTED' | 'SCREEN_TCC_RESET_REQUIRED' | 'CORE_AUDIO_TCC_RESET_REQUIRED' | 'MIC_TCC_STALE_GRANTED' | string; recommendedFix?: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none'; staleGrantSuspected?: boolean; attempt: number; maxAttempts: number; backend?: string; routeDiagnostics?: { requestedOutputId: string | null; requestedOutputName: string | null; defaultOutputId: string | null; defaultOutputName: string | null; usingDefaultRoute: boolean; selectedDiffersFromDefault: boolean }; terminal?: boolean; stuck?: boolean }) => void) => () => void
+  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; code?: string; recommendedFix?: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none'; staleGrantSuspected?: boolean; attempt: number; maxAttempts: number; backend?: string; routeDiagnostics?: { requestedOutputId: string | null; requestedOutputName: string | null; defaultOutputId: string | null; defaultOutputName: string | null; usingDefaultRoute: boolean; selectedDiffersFromDefault: boolean }; terminal?: boolean; stuck?: boolean }) => void) => () => void
 
   // STT Status Events
   onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
@@ -415,6 +415,13 @@ export interface ElectronAPI {
   profileDelete: () => Promise<{ success: boolean; error?: string }>
   profileGetProfile: () => Promise<any>
   profileSelectFile: () => Promise<{ success?: boolean; cancelled?: boolean; filePath?: string; error?: string }>
+  profileGetActiveScenario: () => Promise<{ success: boolean; scenario?: any; error?: string }>
+  profileListDocuments: (params?: { modeId?: string }) => Promise<{ success: boolean; documents: any[]; error?: string }>
+  profileUploadDocument: (params: { filePath: string; docSubtype: string }) => Promise<{ success: boolean; id?: string; error?: string }>
+  profileUpdateDocumentSubtype: (params: { referenceFileId: string; docSubtype: string }) => Promise<{ success: boolean; error?: string }>
+  profileDeleteDocument: (params: { referenceFileId: string }) => Promise<{ success: boolean; error?: string }>
+  profileGetMasterProfile: () => Promise<{ success: boolean; profile?: any; error?: string }>
+  profileUpdateMasterProfile: (profile: any) => Promise<{ success: boolean; error?: string }>
 
   // JD & Research API
   profileUploadJD: (filePath: string) => Promise<{ success: boolean; error?: string }>

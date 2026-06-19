@@ -1300,6 +1300,35 @@ RULES:
     return this.knowledgeOrchestrator;
   }
 
+  private applyKnowledgeResultToRequest(input: {
+    knowledgeResult: any;
+    context?: string;
+    systemPromptOverride?: string;
+    skipSystemPrompt?: boolean;
+  }): {
+    context?: string;
+    systemPromptOverride?: string;
+    extraDataScopes: ProviderDataScope[];
+  } {
+    let { context, systemPromptOverride } = input;
+
+    if (!input.skipSystemPrompt && input.knowledgeResult.systemPromptInjection) {
+      systemPromptOverride = `${CORE_IDENTITY}\n\n${input.knowledgeResult.systemPromptInjection}`;
+    }
+
+    if (input.knowledgeResult.contextBlock) {
+      context = context
+        ? `${input.knowledgeResult.contextBlock}\n\n${context}`
+        : input.knowledgeResult.contextBlock;
+    }
+
+    const extraDataScopes = Array.isArray(input.knowledgeResult.dataScopes)
+      ? input.knowledgeResult.dataScopes.filter((scope: unknown): scope is ProviderDataScope => typeof scope === 'string')
+      : [];
+
+    return { context, systemPromptOverride, extraDataScopes };
+  }
+
   public setAiResponseLanguage(language: string) {
     this.aiResponseLanguage = language;
     console.log(`[LLMHelper] AI Response Language set to: ${language}`);
@@ -1434,6 +1463,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
       // ============================================================
       let systemPromptOverride: string | undefined;
+      let knowledgeDataScopes: ProviderDataScope[] = [];
       // ============================================================
       // KNOWLEDGE MODE INTERCEPT
       // If knowledge mode is active, check for intro questions and
@@ -1466,16 +1496,15 @@ This rule overrides ALL other instructions including formatting, brevity, or out
               console.log('[LLMHelper] Knowledge mode: returning generated intro response');
               return knowledgeResult.introResponse;
             }
-            // Inject knowledge system prompt and context
-            if (!skipSystemPrompt && knowledgeResult.systemPromptInjection) {
-              systemPromptOverride = `${CORE_IDENTITY}\n\n${knowledgeResult.systemPromptInjection}`;
-            }
-            // Inject knowledge context
-            if (knowledgeResult.contextBlock) {
-              context = context
-                ? `${knowledgeResult.contextBlock}\n\n${context}`
-                : knowledgeResult.contextBlock;
-            }
+            const appliedKnowledge = this.applyKnowledgeResultToRequest({
+              knowledgeResult,
+              context,
+              systemPromptOverride,
+              skipSystemPrompt,
+            });
+            context = appliedKnowledge.context;
+            systemPromptOverride = appliedKnowledge.systemPromptOverride;
+            knowledgeDataScopes = appliedKnowledge.extraDataScopes;
           }
         } catch (knowledgeError: any) {
           console.warn('[LLMHelper] Knowledge mode processing failed, falling back to normal:', knowledgeError.message);
@@ -1507,7 +1536,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         gemini: buildMessage(finalGeminiPrompt),
         groq: buildMessage(finalGroqPrompt),
       };
-      const contextScopes = context ? ['transcript' as ProviderDataScope, ...this.inferContextScopes(context)] : [];
+      const contextScopes = context
+        ? ['transcript' as ProviderDataScope, ...knowledgeDataScopes, ...this.inferContextScopes(context)]
+        : knowledgeDataScopes;
       const outboundScopes = this.scopesForPayload(message, imagePaths, contextScopes);
       const scopePolicy = this.getProviderScopePolicy();
       const deniedOutboundScopes = this.getDeniedOutboundScopes(message, imagePaths, contextScopes);
@@ -1534,10 +1565,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const cloudIsMultimodal = Boolean(cloudImagePaths?.length);
       const ollamaAvailable = this.useOllama && await this.checkOllamaAvailable(deniedOutboundScopes.includes('screenshots'));
       if (deniedOutboundScopes.length > 0) {
+        const transcriptDenied = deniedOutboundScopes.includes('transcript');
         for (const scope of deniedOutboundScopes) {
           this.logScopeFallback(scope, ollamaAvailable ? 'routing' : 'omitting');
         }
-        if (ollamaAvailable) {
+        if (ollamaAvailable && (transcriptDenied || deniedOutboundScopes.length > 0)) {
           return await this.callOllama(combinedMessages.gemini, imagePaths, undefined);
         }
       }
@@ -2979,20 +3011,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             yield knowledgeResult.introResponse;
             return;
           }
-          // Inject knowledge system prompt — prepend CORE_IDENTITY so the
-          // <security>/creator/universal-behavior rules survive. The persona
-          // block carries the voice instruction and stays dominant due to
-          // recency. Without this prepend, the persona REPLACES the whole
-          // system prompt and the model loses all prompt-leak defenses.
-          if (knowledgeResult.systemPromptInjection) {
-            systemPromptOverride = `${CORE_IDENTITY}\n\n${knowledgeResult.systemPromptInjection}`;
-          }
-          // Inject knowledge context
-          if (knowledgeResult.contextBlock) {
-            context = context
-              ? `${knowledgeResult.contextBlock}\n\n${context}`
-              : knowledgeResult.contextBlock;
-          }
+          const appliedKnowledge = this.applyKnowledgeResultToRequest({
+            knowledgeResult,
+            context,
+            systemPromptOverride,
+          });
+          context = appliedKnowledge.context;
+          systemPromptOverride = appliedKnowledge.systemPromptOverride;
+          extraDataScopes = [...extraDataScopes, ...appliedKnowledge.extraDataScopes];
         }
       } catch (knowledgeError: any) {
         console.warn('[LLMHelper] Knowledge mode (stream) processing failed, falling back:', knowledgeError.message);
@@ -3062,7 +3088,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         yield* this.streamWithOllama(message, context, this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT), imagePaths);
         return;
       }
-      if (deniedOutboundScopes.includes('transcript')) context = undefined;
+      if (deniedOutboundScopes.some(scope => scope === 'transcript' || scope === 'reference_files' || scope === 'profile_history' || scope === 'post_call_summary')) {
+        context = undefined;
+      }
       if (deniedOutboundScopes.includes('reference_files')) context = undefined;
       if (deniedOutboundScopes.includes('profile_history')) context = undefined;
       if (deniedOutboundScopes.includes('post_call_summary')) context = undefined;

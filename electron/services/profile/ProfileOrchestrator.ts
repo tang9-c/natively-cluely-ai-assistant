@@ -8,6 +8,12 @@ import { ParserLLM } from './parsers/ParserLLM';
 import { ResumeParser } from './parsers/ResumeParser';
 import { JDParser } from './parsers/JDParser';
 import { redactForLog } from '../../utils/redactForLog';
+import type {
+  EmbedFn,
+  GenerateContentFn,
+  KnowledgeResult,
+  ProfileOrchestratorRuntime,
+} from './ProfileOrchestratorContract';
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -21,12 +27,16 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   ]);
 }
 
-export class ProfileOrchestrator {
+export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
   private db = new ProfileDatabase();
   private resumeParser: ResumeParser | null = null;
   private jdParser: JDParser | null = null;
   private activeMode = false;
   private customNotes = '';
+  private generateContentFn: GenerateContentFn | null = null;
+  private liveCoachingContentFn: GenerateContentFn | null = null;
+  private embedFn: EmbedFn | null = null;
+  private embedQueryFn: EmbedFn | null = null;
 
   setLLMHelper(llmHelper: any): void {
     const parserLLM = new ParserLLM(llmHelper);
@@ -127,6 +137,59 @@ export class ProfileOrchestrator {
 
   setKnowledgeMode(enabled: boolean): void {
     this.activeMode = enabled;
+  }
+
+  isKnowledgeMode(): boolean {
+    return this.activeMode;
+  }
+
+  feedForDepthScoring(_message: string): void {
+    // Reserved for the restored knowledge-depth scorer. Kept as a no-op so
+    // LLMHelper can call the runtime contract without optional chaining drift.
+  }
+
+  feedInterviewerUtterance(_message: string): void {
+    // Reserved for live coaching/negotiation state. Scenario-aware injection is
+    // request-scoped for now, so no transcript state is accumulated here.
+  }
+
+  setGenerateContentFn(fn: GenerateContentFn): void {
+    this.generateContentFn = fn;
+  }
+
+  setLiveCoachingContentFn(fn: GenerateContentFn): void {
+    this.liveCoachingContentFn = fn;
+  }
+
+  setEmbedFn(fn: EmbedFn): void {
+    this.embedFn = fn;
+  }
+
+  setEmbedQueryFn(fn: EmbedFn): void {
+    this.embedQueryFn = fn;
+  }
+
+  async processQuestion(message: string): Promise<KnowledgeResult | null> {
+    if (!this.activeMode) return null;
+    try {
+      const { ScenarioContextService } = require('./ScenarioContextService');
+      const service = new ScenarioContextService();
+      const result = await service.buildForRequest({
+        query: message,
+        includeSystemPrompt: true,
+      });
+      if (!result?.contextBlock && !result?.systemPromptSuffix) return null;
+      return {
+        systemPromptInjection: result.systemPromptSuffix,
+        contextBlock: result.contextBlock,
+        dataScopes: result.dataScopes,
+      };
+    } catch (error: any) {
+      if (error?.code !== 'MODULE_NOT_FOUND') {
+        console.warn('[ProfileOrchestrator] processQuestion failed:', redactForLog([error]));
+      }
+      return null;
+    }
   }
 
   deleteDocumentsByType(docType: DocType): void {

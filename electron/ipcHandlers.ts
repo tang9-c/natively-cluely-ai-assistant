@@ -22,6 +22,7 @@ import { SkillsManager } from './services/SkillsManager';
 
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
+import { redactForLog } from './utils/redactForLog';
 
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (
@@ -3451,6 +3452,143 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true, filePath: result.filePaths[0] };
     } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('profile:get-active-scenario', async () => {
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      const { ScenarioRegistry } = require('./services/profile/scenarios/registry');
+      const modesManager = ModesManager.getInstance();
+      const mode = modesManager.getActiveMode();
+      if (!mode) return { success: true, scenario: null };
+      const registry = ScenarioRegistry.createDefault();
+      const resolution = registry.resolveByTemplateType(mode.templateType);
+      const adapter = registry.get(resolution.scenarioType);
+      return {
+        success: true,
+        scenario: {
+          ...resolution,
+          displayName: adapter.label,
+          supportedDocSubtypes: adapter.supportedDocSubtypes,
+          cards: adapter.cards,
+        },
+      };
+    } catch (error: any) {
+      console.error('[IPC] profile:get-active-scenario error:', redactForLog([error]));
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('profile:list-documents', async (_, params?: { modeId?: string }) => {
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      const modesManager = ModesManager.getInstance();
+      const mode = params?.modeId
+        ? modesManager.getModes().find((m: any) => m.id === params.modeId)
+        : modesManager.getActiveMode();
+      if (!mode) return { success: true, documents: [] };
+      const db = DatabaseManager.getInstance();
+      const metadataRows = db.getModeReferenceFileMetadataForMode(mode.id);
+      const metadataByFileId = new Map(metadataRows.map((row: any) => [row.reference_file_id, row]));
+      const documents = modesManager.getReferenceFiles(mode.id).map((file: any) => ({
+        ...file,
+        metadata: metadataByFileId.get(file.id) ?? null,
+      }));
+      return { success: true, documents };
+    } catch (error: any) {
+      console.error('[IPC] profile:list-documents error:', redactForLog([error]));
+      return { success: false, documents: [], error: error.message };
+    }
+  });
+
+  safeHandle('profile:upload-document', async (_, params: { filePath: string; docSubtype: string }) => {
+    try {
+      if (!params?.filePath || !params?.docSubtype) {
+        return { success: false, error: 'invalid_document_upload' };
+      }
+      const { ModesManager } = require('./services/ModesManager');
+      const { ScenarioRegistry } = require('./services/profile/scenarios/registry');
+      const { DocumentTextExtractor } = require('./services/profile/DocumentTextExtractor');
+      const modesManager = ModesManager.getInstance();
+      const mode = modesManager.getActiveMode();
+      if (!mode) return { success: false, error: 'No active mode selected' };
+      const rawText = await DocumentTextExtractor.extract(params.filePath);
+      const fileName = path.basename(params.filePath);
+      const added = modesManager.addReferenceFile({ modeId: mode.id, fileName, content: rawText });
+      const referenceFileId = added.id;
+      const registry = ScenarioRegistry.createDefault();
+      const resolution = registry.resolveByTemplateType(mode.templateType);
+      DatabaseManager.getInstance().upsertModeReferenceFileMetadata({
+        referenceFileId,
+        scenarioType: resolution.scenarioType,
+        docSubtype: params.docSubtype,
+        fileHash: crypto.createHash('sha256').update(rawText).digest('hex'),
+      });
+      return { success: true, id: referenceFileId };
+    } catch (error: any) {
+      console.error('[IPC] profile:upload-document error:', redactForLog([error]));
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('profile:update-document-subtype', async (_, params: { referenceFileId: string; docSubtype: string }) => {
+    try {
+      if (!params?.referenceFileId || !params?.docSubtype) {
+        return { success: false, error: 'invalid_document_metadata' };
+      }
+      const { ModesManager } = require('./services/ModesManager');
+      const { ScenarioRegistry } = require('./services/profile/scenarios/registry');
+      const mode = ModesManager.getInstance().getActiveMode();
+      if (!mode) return { success: false, error: 'No active mode selected' };
+      const resolution = ScenarioRegistry.createDefault().resolveByTemplateType(mode.templateType);
+      DatabaseManager.getInstance().upsertModeReferenceFileMetadata({
+        referenceFileId: params.referenceFileId,
+        scenarioType: resolution.scenarioType,
+        docSubtype: params.docSubtype,
+      });
+      return { success: true };
+    } catch (error: any) {
+      console.error('[IPC] profile:update-document-subtype error:', redactForLog([error]));
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('profile:delete-document', async (_, params: { referenceFileId: string }) => {
+    try {
+      if (!params?.referenceFileId) return { success: false, error: 'invalid_reference_file' };
+      const { ModesManager } = require('./services/ModesManager');
+      ModesManager.getInstance().deleteReferenceFile(params.referenceFileId);
+      return { success: true };
+    } catch (error: any) {
+      console.error('[IPC] profile:delete-document error:', redactForLog([error]));
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('profile:get-master-profile', async () => {
+    try {
+      return { success: true, profile: DatabaseManager.getInstance().getProfileMaster() };
+    } catch (error: any) {
+      console.error('[IPC] profile:get-master-profile error:', redactForLog([error]));
+      return { success: false, profile: null, error: error.message };
+    }
+  });
+
+  safeHandle('profile:update-master-profile', async (_, profile: any) => {
+    try {
+      DatabaseManager.getInstance().updateProfileMaster({
+        displayName: profile?.displayName ?? null,
+        headline: profile?.headline ?? null,
+        summary: typeof profile?.summary === 'string' ? profile.summary.slice(0, 4000) : '',
+        contactInfoJson: JSON.stringify(profile?.contactInfo ?? {}),
+        experienceJson: JSON.stringify(Array.isArray(profile?.experience) ? profile.experience : []),
+        skillsJson: JSON.stringify(Array.isArray(profile?.skills) ? profile.skills : []),
+      });
+      return { success: true };
+    } catch (error: any) {
+      console.error('[IPC] profile:update-master-profile error:', redactForLog([error]));
       return { success: false, error: error.message };
     }
   });

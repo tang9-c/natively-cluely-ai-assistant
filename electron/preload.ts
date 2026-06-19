@@ -264,7 +264,7 @@ interface ElectronAPI {
     callback: (payload: {
       channel: 'system' | 'mic';
       message: string;
-      code?: 'SCREEN_TCC_STALE_GRANTED' | 'SCREEN_TCC_RESET_REQUIRED' | 'CORE_AUDIO_TCC_RESET_REQUIRED' | 'MIC_TCC_STALE_GRANTED' | string;
+      code?: string;
       recommendedFix?: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
       staleGrantSuspected?: boolean;
       attempt: number;
@@ -588,6 +588,13 @@ interface ElectronAPI {
     filePath?: string;
     error?: string;
   }>;
+  profileGetActiveScenario: () => Promise<{ success: boolean; scenario?: any; error?: string }>;
+  profileListDocuments: (params?: { modeId?: string }) => Promise<{ success: boolean; documents: any[]; error?: string }>;
+  profileUploadDocument: (params: { filePath: string; docSubtype: string }) => Promise<{ success: boolean; id?: string; error?: string }>;
+  profileUpdateDocumentSubtype: (params: { referenceFileId: string; docSubtype: string }) => Promise<{ success: boolean; error?: string }>;
+  profileDeleteDocument: (params: { referenceFileId: string }) => Promise<{ success: boolean; error?: string }>;
+  profileGetMasterProfile: () => Promise<{ success: boolean; profile?: any; error?: string }>;
+  profileUpdateMasterProfile: (profile: any) => Promise<{ success: boolean; error?: string }>;
 
   // JD & Research API
   profileUploadJD: (filePath: string) => Promise<{ success: boolean; error?: string }>;
@@ -1225,7 +1232,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     callback: (payload: {
       channel: 'system' | 'mic';
       message: string;
-      code?: 'SCREEN_TCC_STALE_GRANTED' | 'SCREEN_TCC_RESET_REQUIRED' | 'CORE_AUDIO_TCC_RESET_REQUIRED' | 'MIC_TCC_STALE_GRANTED' | string;
+      code?: string;
       recommendedFix?: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
       staleGrantSuspected?: boolean;
       attempt: number;
@@ -1743,6 +1750,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   profileDelete: () => ipcRenderer.invoke('profile:delete'),
   profileGetProfile: () => ipcRenderer.invoke('profile:get-profile'),
   profileSelectFile: () => ipcRenderer.invoke('profile:select-file'),
+  profileGetActiveScenario: () => ipcRenderer.invoke('profile:get-active-scenario'),
+  profileListDocuments: (params?: { modeId?: string }) =>
+    ipcRenderer.invoke('profile:list-documents', params),
+  profileUploadDocument: (params: { filePath: string; docSubtype: string }) =>
+    ipcRenderer.invoke('profile:upload-document', params),
+  profileUpdateDocumentSubtype: (params: { referenceFileId: string; docSubtype: string }) =>
+    ipcRenderer.invoke('profile:update-document-subtype', params),
+  profileDeleteDocument: (params: { referenceFileId: string }) =>
+    ipcRenderer.invoke('profile:delete-document', params),
+  profileGetMasterProfile: () => ipcRenderer.invoke('profile:get-master-profile'),
+  profileUpdateMasterProfile: (profile: any) =>
+    ipcRenderer.invoke('profile:update-master-profile', profile),
 
   // JD & Research API
   profileUploadJD: (filePath: string) => ipcRenderer.invoke('profile:upload-jd', filePath),
