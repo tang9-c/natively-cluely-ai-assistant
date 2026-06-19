@@ -9,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cjsRequire = createRequire(import.meta.url);
 
 const providerPath = path.resolve(
-  __dirname, '../../../dist-electron/electron/services/research/TavilySearchProvider.js',
+  __dirname, '../../../../dist-electron/electron/services/research/TavilySearchProvider.js',
 );
 
 describe('TavilySearchProvider', () => {
