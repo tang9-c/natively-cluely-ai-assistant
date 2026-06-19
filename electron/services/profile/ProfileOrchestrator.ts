@@ -179,10 +179,17 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
   }
 
   async processQuestion(message: string): Promise<KnowledgeResult | null> {
-    if (!this.activeMode) return null;
-    // Task 2: static import (replaces dynamic require).
-    // Task 5 will additionally remove the early-return guard above and the
-    // error-swallowing try/catch so failures propagate to LLMHelper.
+    // Task 5: removed the early-return on !activeMode. The caller (LLMHelper)
+    // already gates this call behind isKnowledgeMode(), so the redundant
+    // guard here only served to silently disable injection when no active
+    // mode was selected. ScenarioContextService.buildForRequest now falls
+    // back to the 'general' templateType via resolveScenarioMode(), so a
+    // knowledge-mode call without a chosen mode still injects the master
+    // profile + persona (the request-scoped scenario context) instead of
+    // returning null.
+    //
+    // Errors from buildForRequest now propagate to LLMHelper's outer
+    // try/catch, which logs and degrades gracefully to a normal LLM call.
     const service = new ScenarioContextService();
     const result = await service.buildForRequest({
       query: message,
