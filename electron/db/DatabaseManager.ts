@@ -747,6 +747,73 @@ export class DatabaseManager {
             this.db.pragma('user_version = 18');
         }
 
+        // Version 18 -> 19: Migrate user_profile to profile_master, drop legacy tables.
+        // user_profile.structured_json (raw ResumeParsed) was the only consumer of
+        // getUserProfile(). ScenarioContextService now reads profile_master, so we
+        // fold any pre-existing structured_json into profile_master (only when the
+        // master is still empty so we never clobber user edits) and drop both legacy
+        // tables. resume_nodes has been dead since the original orchestrator work;
+        // its embedding BLOB column was never written.
+        if (version < 19) {
+            console.log('[DatabaseManager] Applying migration v18 -> v19: Drop legacy user_profile + resume_nodes');
+
+            try {
+                const old = this.db.prepare(
+                    'SELECT structured_json FROM user_profile WHERE id = 1'
+                ).get() as { structured_json: string } | undefined;
+
+                const master = this.db.prepare(
+                    'SELECT display_name, headline, summary FROM profile_master WHERE id = 1'
+                ).get() as { display_name?: string | null; headline?: string | null; summary?: string | null } | undefined;
+
+                const masterIsEmpty = !master
+                    || (!master.display_name && !master.headline && !(master.summary && master.summary.length > 0));
+
+                if (old?.structured_json && masterIsEmpty) {
+                    try {
+                        const parsed = JSON.parse(old.structured_json);
+                        this.db.prepare(
+                            `UPDATE profile_master
+                                SET display_name = ?,
+                                    headline = ?,
+                                    summary = ?,
+                                    contact_info_json = ?,
+                                    experience_json = ?,
+                                    skills_json = ?,
+                                    updated_at = datetime('now')
+                              WHERE id = 1`
+                        ).run(
+                            parsed?.identity?.name ?? null,
+                            parsed?.identity?.role ?? null,
+                            parsed?.summary ?? '',
+                            JSON.stringify(parsed?.identity?.contact ?? {}),
+                            JSON.stringify(parsed?.experience ?? []),
+                            JSON.stringify(parsed?.skills ?? []),
+                        );
+                        console.log('[DatabaseManager] v19: migrated user_profile.structured_json to profile_master');
+                    } catch (parseErr) {
+                        console.warn('[DatabaseManager] v19: structured_json parse failed, skipping data migration', parseErr);
+                    }
+                }
+            } catch (e) {
+                // user_profile may already be absent (fresh install or earlier manual cleanup)
+                console.warn('[DatabaseManager] v19: user_profile migration step skipped', e);
+            }
+
+            try {
+                this.db.exec('DROP TABLE IF EXISTS user_profile');
+            } catch (e) {
+                console.warn('[DatabaseManager] v19: DROP user_profile failed', e);
+            }
+            try {
+                this.db.exec('DROP TABLE IF EXISTS resume_nodes');
+            } catch (e) {
+                console.warn('[DatabaseManager] v19: DROP resume_nodes failed', e);
+            }
+
+            this.db.pragma('user_version = 19');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
