@@ -3630,114 +3630,41 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('profile:research-company', async (_, companyName: string) => {
-    try {
-      const orchestrator = appState.getKnowledgeOrchestrator();
-      if (!orchestrator) {
-        return { success: false, error: 'Knowledge engine not initialized' };
-      }
-      const engine = orchestrator.getCompanyResearchEngine();
-
-      // Wire search provider: Tavily (user key) → Natively API (fallback) → none (LLM-only)
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm = CredentialsManager.getInstance();
-      const tavilyApiKey = cm.getTavilyApiKey();
-      if (tavilyApiKey) {
-        const {
-          TavilySearchProvider,
-        } = require('./services/profile/search/TavilySearchProvider');
-        engine.setSearchProvider(new TavilySearchProvider(tavilyApiKey));
-      } else {
-        const nativelyKey = cm.getNativelyApiKey();
-        if (nativelyKey) {
-          const {
-            NativelySearchProvider,
-          } = require('./services/profile/search/NativelySearchProvider');
-          engine.setSearchProvider(new NativelySearchProvider(nativelyKey));
-          console.log(
-            '[IPC] Company research: using Natively API search (no Tavily key configured)',
-          );
-        }
-      }
-
-      // Build full JD context so the dossier is tailored to the exact role
-      const profileData = orchestrator.getProfileData();
-      const activeJD = profileData?.activeJD;
-      const jdCtx = activeJD
-        ? {
-            title: activeJD.title,
-            location: activeJD.location,
-            level: activeJD.level,
-            technologies: activeJD.technologies,
-            requirements: activeJD.requirements,
-            keywords: activeJD.keywords,
-            compensation_hint: activeJD.compensation_hint,
-            min_years_experience: activeJD.min_years_experience,
-          }
-        : {};
-      const dossier = await engine.researchCompany(companyName, jdCtx, true);
-      const searchQuotaExhausted = (engine.searchProvider as any)?.quotaExhausted === true;
-      return { success: true, dossier, searchQuotaExhausted };
-    } catch (error: any) {
-      console.error('[IPC] profile:research-company error:', error);
-      return { success: false, error: error.message };
-    }
+  safeHandle('profile:research-company', async (_: unknown, _companyName: string) => {
+    // Company research engine is not yet implemented in the runtime contract.
+    // Return a clear "feature not available" response so the renderer does not
+    // crash. See electron/services/profile/ProfileOrchestrator.ts.
+    return {
+      success: false,
+      error:
+        'Company research is not yet available. The research engine is queued for a future release.',
+    };
   });
 
-  safeHandle('profile:generate-negotiation', async (_, force: boolean = false) => {
-    try {
-      const orchestrator = appState.getKnowledgeOrchestrator();
-      if (!orchestrator) {
-        return { success: false, error: 'Knowledge engine not initialized' };
-      }
-      const status = orchestrator.getStatus();
-      if (!status.hasResume) {
-        return { success: false, error: 'No resume loaded' };
-      }
-
-      // Use cache unless force-regenerating
-      let script = force ? null : orchestrator.getNegotiationScript();
-      if (!script) {
-        script = await orchestrator.generateNegotiationScriptOnDemand();
-      }
-      if (!script) {
-        return {
-          success: false,
-          error:
-            'Could not generate negotiation script. Ensure a resume and job description are uploaded.',
-        };
-      }
-      return { success: true, script };
-    } catch (error: any) {
-      console.error('[IPC] profile:generate-negotiation error:', error);
-      return { success: false, error: error.message };
-    }
+  safeHandle('profile:generate-negotiation', async (_: unknown, _force: boolean = false) => {
+    // On-demand negotiation script generation is not yet implemented.
+    return {
+      success: false,
+      error:
+        'Negotiation script generation is not yet available. This feature is queued for a future release.',
+    };
   });
 
   safeHandle('profile:get-negotiation-state', async () => {
-    try {
-      const orchestrator = appState.getKnowledgeOrchestrator();
-      if (!orchestrator) return { success: false, error: 'Engine not ready' };
-      const tracker = orchestrator.getNegotiationTracker();
-      return {
-        success: true,
-        state: tracker.getState(),
-        isActive: tracker.isActive(),
-      };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
+    // Negotiation tracker is not yet implemented.
+    return {
+      success: false,
+      state: null,
+      isActive: false,
+      error:
+        'Negotiation tracking is not yet available. This feature is queued for a future release.',
+    };
   });
 
   safeHandle('profile:reset-negotiation', async () => {
-    try {
-      const orchestrator = appState.getKnowledgeOrchestrator();
-      if (!orchestrator) return { success: false };
-      orchestrator.resetNegotiationSession();
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
+    // Negotiation session reset is a no-op while the tracker is not
+    // implemented. Return success so the renderer can clear any local state.
+    return { success: true };
   });
 
   // ==========================================
