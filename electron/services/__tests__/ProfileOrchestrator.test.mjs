@@ -86,9 +86,12 @@ describe('ProfileOrchestrator', () => {
 
     const profile = orchestrator.getProfileData();
     assert.equal(profile.identity.name, 'Alice');
+    // Task 4: profile_master no longer persists projects/education fields —
+    // only display_name/headline/summary/contact/experience/skills. Counts
+    // for projects/education drop to zero as a consequence.
     assert.equal(profile.experienceCount, 1);
-    assert.equal(profile.projectCount, 1);
-    assert.equal(profile.nodeCount, 3);
+    assert.equal(profile.projectCount, 0);
+    assert.equal(profile.nodeCount, 1);
     assert.deepEqual(profile.skills, ['TypeScript']);
   });
 
@@ -158,5 +161,80 @@ describe('ProfileOrchestrator', () => {
       /import\s*\{[^}]*\bScenarioContextService\b[^}]*\}\s*from\s*['"]\.\/ScenarioContextService['"]/,
       'ProfileOrchestrator must statically import ScenarioContextService',
     );
+  });
+
+  // Task 4: ingestDocument must roll back the file copy when parsing fails.
+  it('ingestDocument rolls back file copy when resume parsing throws', async () => {
+    const orch2 = new ProfileOrchestrator();
+    orch2.deleteDocumentsByType(DocType.RESUME);
+    orch2.setLLMHelper({
+      generateContentStructured: async () => {
+        throw new Error('simulated parser failure');
+      },
+    });
+
+    const filePath = path.join(tmpDir, 'broken.txt');
+    fs.writeFileSync(filePath, 'garbage content');
+
+    const beforeUploads = fs.readdirSync(
+      fs.realpathSync(path.join(tmpDir, '..')),
+      { withFileTypes: false },
+    ).length;
+    void beforeUploads;
+
+    // Locate the uploads dir this orchestrator will use
+    const electronApp = require('electron').app;
+    const uploadsDir = path.join(electronApp.getPath('userData'), 'profile-uploads');
+    const before = fs.existsSync(uploadsDir) ? fs.readdirSync(uploadsDir) : [];
+
+    const result = await orch2.ingestDocument(filePath, DocType.RESUME);
+    assert.equal(result.success, false);
+    assert.match(result.error ?? '', /simulated parser failure|parser|parse|Could not/i);
+
+    // File copy must have been rolled back
+    const after = fs.existsSync(uploadsDir) ? fs.readdirSync(uploadsDir) : [];
+    const newFiles = after.filter((f) => !before.includes(f));
+    assert.equal(newFiles.length, 0, 'failed ingest must not leave orphan file copies');
+  });
+
+  // Task 4: ingestDocument uses saveResumeToMaster, not legacy saveResume path.
+  it('ingestDocument writes resume data via saveResumeToMaster (profile_master columns)', async () => {
+    const orch3 = new ProfileOrchestrator();
+    orch3.deleteDocumentsByType(DocType.RESUME);
+
+    let callIndex = 0;
+    const responses = [
+      JSON.stringify({
+        identity: { name: 'Bob', email: 'bob@example.com' },
+        skills: ['Python', 'Go'],
+        experience: [{ title: 'Backend Eng', organization: 'BigCo', start: '2021-01' }],
+        projects: [],
+        education: [],
+      }),
+    ];
+    orch3.setLLMHelper({
+      generateContentStructured: async () => {
+        const idx = callIndex;
+        callIndex += 1;
+        return responses[idx] ?? '{}';
+      },
+    });
+
+    const filePath = path.join(tmpDir, 'bob.txt');
+    fs.writeFileSync(filePath, 'Bob is a backend engineer.');
+    const result = await orch3.ingestDocument(filePath, DocType.RESUME);
+    assert.equal(result.success, true);
+
+    // Verify the master record exists with translated columns
+    const status = orch3.getStatus();
+    assert.equal(status.hasResume, true);
+    assert.equal(status.resumeSummary.name, 'Bob');
+    assert.equal(status.resumeSummary.role, 'Backend Eng');
+
+    const profile = orch3.getProfileData();
+    assert.equal(profile.identity.name, 'Bob');
+    assert.equal(profile.identity.email, 'bob@example.com');
+    assert.equal(profile.experienceCount, 1);
+    assert.deepEqual(profile.skills, ['Python', 'Go']);
   });
 });
