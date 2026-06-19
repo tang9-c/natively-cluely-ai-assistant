@@ -270,7 +270,12 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
         llm: {
           generateStructured: async (prompt, schema) => {
             if (!this.llmHelper) throw new Error('LLM not initialized');
-            return await this.llmHelper.generateStructuredContent(prompt, schema);
+            // LLMHelper exposes generateContentStructured(message) which returns a JSON
+            // string. Parse it and validate against the Zod schema (the schema's
+            // .parse() will throw on invalid shape, which the builder catches and
+            // retries per its 1-retry policy).
+            const raw = await this.llmHelper.generateContentStructured(prompt);
+            return schema.parse(JSON.parse(raw));
           },
         },
       });
