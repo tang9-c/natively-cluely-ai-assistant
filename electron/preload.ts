@@ -601,7 +601,15 @@ interface ElectronAPI {
   profileDeleteJD: () => Promise<{ success: boolean; error?: string }>;
   profileResearchCompany: (
     companyName: string,
-  ) => Promise<{ success: boolean; dossier?: any; error?: string }>;
+    options?: { forceRefresh?: boolean },
+  ) => Promise<{ success: boolean; dossier?: any; error?: string; searchQuotaExhausted?: boolean }>;
+  profileClearResearchCache: () => Promise<{ success: boolean; deleted?: number; error?: string }>;
+  testTavilyApiKey: (key: string) => Promise<{
+    valid: boolean;
+    reason?: string;
+    quotaLow?: boolean;
+    message?: string;
+  }>;
   profileGenerateNegotiation: (
     force?: boolean,
   ) => Promise<{ success: boolean; script?: any; error?: string }>;
@@ -1766,8 +1774,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // JD & Research API
   profileUploadJD: (filePath: string) => ipcRenderer.invoke('profile:upload-jd', filePath),
   profileDeleteJD: () => ipcRenderer.invoke('profile:delete-jd'),
-  profileResearchCompany: (companyName: string) =>
-    ipcRenderer.invoke('profile:research-company', companyName),
+  profileResearchCompany: (companyName: string, options?: { forceRefresh?: boolean }) =>
+    ipcRenderer.invoke('profile:research-company', companyName, options),
+  profileClearResearchCache: () => ipcRenderer.invoke('profile:clear-research-cache'),
+  testTavilyApiKey: (key: string) => ipcRenderer.invoke('profile:test-tavily-key', key),
   profileGenerateNegotiation: (force?: boolean) =>
     ipcRenderer.invoke('profile:generate-negotiation', force),
   profileGetNegotiationState: () => ipcRenderer.invoke('profile:get-negotiation-state'),
