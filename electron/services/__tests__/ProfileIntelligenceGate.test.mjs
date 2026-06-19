@@ -60,17 +60,9 @@ describe('Profile Intelligence IPC: all features unconditionally available', () 
   });
 });
 
-describe('Profile Intelligence: resume + JD storage tables exist in the schema', () => {
+describe('Profile Intelligence: current schema tables exist in the schema', () => {
   const dbPath = path.resolve(__dirname, '../../db/DatabaseManager.ts');
   const dbSource = fs.readFileSync(dbPath, 'utf8');
-
-  test('user_profile table is declared', () => {
-    assert.ok(dbSource.includes('CREATE TABLE IF NOT EXISTS user_profile'));
-  });
-
-  test('resume_nodes table is declared', () => {
-    assert.ok(dbSource.includes('CREATE TABLE IF NOT EXISTS resume_nodes'));
-  });
 
   test('profile_jds table is declared', () => {
     assert.ok(dbSource.includes('CREATE TABLE IF NOT EXISTS profile_jds'));
@@ -82,5 +74,53 @@ describe('Profile Intelligence: resume + JD storage tables exist in the schema',
 
   test('mode_reference_file_metadata table is declared', () => {
     assert.ok(dbSource.includes('CREATE TABLE IF NOT EXISTS mode_reference_file_metadata'));
+  });
+
+  // The legacy user_profile + resume_nodes tables are still declared in the
+  // initial v1 migration for backward compatibility with old databases. The
+  // v19 migration drops them after folding structured_json into profile_master.
+
+  test('v18 -> v19 migration is registered', () => {
+    assert.match(
+      dbSource,
+      /if\s*\(\s*version\s*<\s*19\s*\)/,
+      'DatabaseManager must register a v19 migration that drops user_profile and resume_nodes',
+    );
+  });
+
+  test('v19 migration drops user_profile table', () => {
+    assert.match(
+      dbSource,
+      /DROP\s+TABLE\s+IF\s+EXISTS\s+user_profile/,
+      'v19 migration must DROP user_profile',
+    );
+  });
+
+  test('v19 migration drops resume_nodes table', () => {
+    assert.match(
+      dbSource,
+      /DROP\s+TABLE\s+IF\s+EXISTS\s+resume_nodes/,
+      'v19 migration must DROP resume_nodes',
+    );
+  });
+
+  test('v19 migration folds structured_json into profile_master', () => {
+    assert.match(
+      dbSource,
+      /UPDATE\s+profile_master[\s\S]*display_name[\s\S]*experience_json/s,
+      'v19 migration must UPDATE profile_master from user_profile.structured_json',
+    );
+  });
+
+  test('v19 migration is idempotent: skips migration when master is non-empty', () => {
+    // Source must guard the UPDATE so user-edited profile_master data is
+    // never clobbered by stale structured_json during migration.
+    const v19Block = dbSource.match(/if\s*\(\s*version\s*<\s*19\s*\)[\s\S]*?user_version\s*=\s*19/);
+    assert.ok(v19Block, 'v19 migration block must exist');
+    assert.match(
+      v19Block[0],
+      /masterIsEmpty|!\s*master|!\s*master\?\./,
+      'v19 migration must check whether profile_master is empty before overwriting',
+    );
   });
 });
