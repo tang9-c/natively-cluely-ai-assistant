@@ -23,5 +23,17 @@ test('endMeeting always clears draining state after background teardown', () => 
 });
 
 test('endMeeting keeps draining enabled during STT grace window', () => {
-  assert.match(endMeetingSource, /this\._isDraining = true;[\s\S]*await new Promise\(resolve => setTimeout\(resolve, 250\)\);/);
+  // The original implementation blocked endMeeting with a synchronous 250 ms
+  // setTimeout so trailing STT finals could arrive. That has since been
+  // rewritten as an async IIFE on `_pendingTeardown` so endMeeting returns
+  // ~1 ms after Stop click and the renderer can paint the launcher
+  // immediately. The semantic guarantee — `_isDraining` stays true while the
+  // STT drain runs — is preserved by setting `_isDraining = true;` up front
+  // and clearing it only inside the IIFE's `finally` block (asserted by the
+  // previous test). Here we verify the draining flag is set before the
+  // background teardown that performs the actual STT drain.
+  assert.match(
+    endMeetingSource,
+    /this\._isDraining = true;[\s\S]*this\._pendingTeardown = \(async[\s\S]*drainSttFinalsForMeetingStop/,
+  );
 });
