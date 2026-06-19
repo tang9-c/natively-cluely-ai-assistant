@@ -10,6 +10,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 
 interface ModesSettingsBaseProps {
   onClose: () => void;
@@ -78,6 +79,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
   const [sectionError, setSectionError] = useState<string | null>(null);
   const createDropdownRef = useRef<HTMLDivElement>(null);
   const hasLoadedRef = useRef(false);
+  const isLight = useResolvedTheme() === 'light';
 
   const selectedMode = modes.find((m) => m.id === selectedModeId) ?? null;
 
@@ -98,7 +100,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
       setActiveModeId(active?.id ?? null);
       if (!hasLoadedRef.current) {
         hasLoadedRef.current = true;
-        setSelectedModeId(mapped[0]?.id ?? active?.id ?? null);
+        setSelectedModeId(active?.id ?? mapped[0]?.id ?? null);
       }
     } catch {
       // ignore
@@ -278,19 +280,18 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
       editedContext.trim() !== selectedMode.customContext);
 
   return (
-    <div className="flex h-full flex-col bg-[#f7f7f8] text-[#111827]">
+    <div className="flex flex-col h-full bg-bg-main text-text-primary">
       {/* Header */}
-      <div className="flex h-[118px] shrink-0 items-center justify-between border-b border-[#dedfe2] px-12">
-        <div className="flex items-center gap-7">
-          <Settings size={30} strokeWidth={2.4} className="text-[#6b7280]" />
-          <h2 className="text-[28px] font-semibold leading-none text-[#111827]">模式设置</h2>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle shrink-0">
+        <div className="flex items-center gap-2.5">
+          <Settings size={16} className="text-text-secondary" />
+          <h2 className="text-sm font-semibold">模式设置</h2>
         </div>
         <button
           onClick={onClose}
-          className="rounded-full p-3 text-[#9ca3af] transition-colors hover:bg-black/[0.04] hover:text-[#6b7280]"
-          aria-label="关闭模式设置"
+          className={`p-1.5 rounded-lg text-text-tertiary hover:text-text-primary transition-colors ${isLight ? 'hover:bg-black/5' : 'hover:bg-white/5'}`}
         >
-          <X size={30} strokeWidth={2.1} />
+          <X size={16} />
         </button>
       </div>
 
@@ -306,32 +307,31 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                 <button
                   key={mode.id}
                   onClick={() => setSelectedModeId(mode.id)}
-                  className={`flex h-[103px] w-full items-center gap-6 rounded-[22px] px-6 text-left transition-colors duration-150 ${
+                  className={`w-full rounded-xl px-3 py-2.5 flex items-center gap-2.5 transition-all duration-200 text-left ${
                     isSelected
-                      ? 'bg-[#e7ecfb] text-[#111827]'
-                      : 'text-[#6b7280] hover:bg-black/[0.035] hover:text-[#374151]'
+                      ? 'bg-bg-item-active text-text-primary'
+                      : `hover:bg-bg-item-surface text-text-secondary hover:text-text-primary`
                   }`}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3">
-                      <span className="truncate text-[24px] font-semibold leading-none">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-medium truncate">
                         {getModeDisplayName(mode)}
                       </span>
                     </div>
-                    <div className="mt-3 text-[20px] leading-none text-[#9ca3af]">
+                    <div className="text-[10px] text-text-tertiary mt-0.5">
                       {TEMPLATE_LABELS[mode.templateType] ?? mode.templateType}
                     </div>
                   </div>
                   {isActive && (
-                    <span className="inline-flex shrink-0 items-center gap-2 text-[20px] font-semibold leading-none text-[#2563eb]">
-                      <Check size={21} strokeWidth={3} />
+                    <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium text-accent-primary bg-accent-primary/10 px-1.5 py-0.5 rounded-md">
+                      <Check size={10} strokeWidth={3} />
                       活跃
                     </span>
                   )}
                   <ChevronRight
-                    size={28}
-                    strokeWidth={2.2}
-                    className="shrink-0 text-[#b8bec8]"
+                    size={14}
+                    className={`shrink-0 opacity-40 ${isSelected ? 'opacity-100' : ''}`}
                   />
                 </button>
               );
@@ -339,18 +339,18 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
           </div>
 
           {/* Create mode button */}
-          <div className="relative flex h-[105px] shrink-0 items-center border-t border-[#dedfe2] px-[162px]" ref={createDropdownRef}>
+          <div className="p-2 border-t border-border-subtle shrink-0 relative" ref={createDropdownRef}>
             <button
               onClick={() => {
                 setCreateError(null);
                 setIsCreating((prev) => !prev);
               }}
-              className="flex items-center justify-center gap-4 whitespace-nowrap rounded-2xl px-0 py-3 text-[22px] font-semibold leading-none text-[#2563eb] transition-colors hover:text-[#1d4ed8]"
+              className="w-full rounded-xl px-3 py-2.5 flex items-center justify-center gap-2 text-xs font-medium transition-all duration-200 bg-accent-primary/10 text-accent-primary hover:bg-accent-primary/20"
             >
-              <Plus size={26} strokeWidth={2.1} />
+              <Plus size={14} />
               <span>创建新模式</span>
               <ChevronDown
-                size={22}
+                size={14}
                 className={`transition-transform duration-200 ${isCreating ? 'rotate-180' : ''}`}
               />
             </button>
@@ -362,9 +362,9 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 4, scale: 0.96 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute bottom-full left-6 right-6 z-50 mb-3 overflow-hidden rounded-[22px] border border-[#dedfe2] bg-white shadow-2xl"
+                  className="absolute left-2 right-2 bottom-full mb-1.5 bg-bg-elevated border border-border-subtle rounded-xl shadow-2xl overflow-hidden z-50"
                 >
-                  <div className="space-y-1 p-2">
+                  <div className="p-1.5 space-y-0.5">
                     {Object.entries(TEMPLATE_LABELS).map(([type, label]) => {
                       const exists = modes.some((m) => m.templateType === type);
                       return (
@@ -372,14 +372,14 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                           key={type}
                           onClick={() => handleCreate(type, label)}
                           disabled={exists}
-                          className={`w-full rounded-[16px] px-5 py-4 text-left text-[18px] transition-colors ${
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all ${
                             exists
-                              ? 'cursor-not-allowed text-[#b8bec8]'
-                              : 'text-[#4b5563] hover:bg-[#f3f4f6] hover:text-[#111827]'
+                              ? 'text-text-tertiary cursor-not-allowed opacity-50'
+                              : `text-text-secondary hover:text-text-primary ${isLight ? 'hover:bg-black/5' : 'hover:bg-white/5'}`
                           }`}
                         >
                           <div className="font-medium">{label}</div>
-                          <div className="mt-1 text-[14px] text-[#9ca3af]">
+                          <div className="text-[10px] text-text-tertiary mt-0.5">
                             {exists ? '已存在' : type}
                           </div>
                         </button>
@@ -387,7 +387,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                     })}
                   </div>
                   {createError && (
-                    <div className="px-5 pb-4 text-[15px] text-red-500">
+                    <div className="px-3 pb-2 text-[11px] text-red-400">
                       {createError}
                     </div>
                   )}
@@ -398,62 +398,62 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
         </div>
 
         {/* Right panel — mode details */}
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex-1 flex flex-col min-w-0">
           {selectedMode ? (
             <>
-              <div className="custom-scrollbar flex-1 space-y-10 overflow-y-auto px-10 py-10">
+              <div className="flex-1 overflow-y-auto p-5 space-y-5 custom-scrollbar">
                 {/* Active toggle */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-[28px] font-semibold leading-none text-[#111827]">{getModeDisplayName(selectedMode)}</h3>
-                    <p className="mt-4 text-[23px] leading-none text-[#9ca3af]">
+                    <h3 className="text-sm font-semibold">{getModeDisplayName(selectedMode)}</h3>
+                    <p className="text-[11px] text-text-tertiary mt-0.5">
                       {TEMPLATE_LABELS[selectedMode.templateType] ?? selectedMode.templateType}
                     </p>
                   </div>
                   <button
                     onClick={() => handleSetActive(selectedMode.id)}
                     disabled={selectedMode.id === activeModeId}
-                    className={`h-[55px] rounded-[16px] px-7 text-[20px] font-semibold transition-colors duration-150 ${
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all duration-200 ${
                       selectedMode.id === activeModeId
-                        ? 'cursor-default bg-[#eef0f4] text-[#8b93a1]'
-                        : 'bg-[#eceef2] text-[#6b7280] hover:bg-[#e2e5ea] hover:text-[#374151]'
+                        ? 'bg-accent-primary/10 text-accent-primary cursor-default'
+                        : `${isLight ? 'bg-black/5 hover:bg-black/10' : 'bg-white/5 hover:bg-white/10'} text-text-secondary hover:text-text-primary`
                     }`}
                   >
-                    设为活跃
+                    {selectedMode.id === activeModeId ? '当前活跃' : '设为活跃'}
                   </button>
                 </div>
 
                 {/* Name input */}
                 <div>
-                  <label className="mb-4 block text-[23px] font-semibold leading-none text-[#6b7280]">
+                  <label className="block text-[11px] font-medium text-text-secondary uppercase tracking-wide mb-1.5">
                     模式名称
                   </label>
                   <input
                     type="text"
                     value={editedName}
                     onChange={(e) => setEditedName(e.target.value)}
-                    className="h-[82px] w-full rounded-[22px] border border-[#dedfe2] bg-white px-7 text-[30px] font-normal text-[#111827] outline-none transition-colors placeholder:text-[#a8afbb] focus:border-[#9bb8ff] focus:ring-4 focus:ring-[#2563eb]/10"
+                    className="w-full bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary/50 transition-all"
                   />
                 </div>
 
                 {/* Custom context */}
                 <div>
-                  <label className="mb-4 block text-[23px] font-semibold leading-none text-[#6b7280]">
+                  <label className="block text-[11px] font-medium text-text-secondary uppercase tracking-wide mb-1.5">
                     自定义上下文
                   </label>
                   <textarea
                     value={editedContext}
                     onChange={(e) => setEditedContext(e.target.value)}
-                    rows={7}
+                    rows={6}
                     placeholder="输入自定义指令，让 AI 更好地适应你的需求..."
-                    className="h-[274px] w-full resize-none rounded-[22px] border border-[#dedfe2] bg-white px-7 py-6 text-[25px] leading-relaxed text-[#111827] outline-none transition-colors placeholder:text-[#a8afbb] focus:border-[#9bb8ff] focus:ring-4 focus:ring-[#2563eb]/10"
+                    className="w-full bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary/50 transition-all resize-none"
                   />
                 </div>
 
                 {/* Note sections */}
                 <div>
-                  <div className="mb-4 flex items-center justify-between">
-                    <label className="block text-[23px] font-semibold leading-none text-[#6b7280]">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-[11px] font-medium text-text-secondary uppercase tracking-wide">
                       笔记分区
                     </label>
                     <button
@@ -461,9 +461,9 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                         setAddingSection((prev) => !prev);
                         setSectionError(null);
                       }}
-                      className="flex items-center gap-3 text-[22px] font-semibold leading-none text-[#2563eb] transition-colors hover:text-[#1d4ed8]"
+                      className="flex items-center gap-1 text-[11px] font-medium text-accent-primary hover:text-accent-primary/80 transition-colors"
                     >
-                      <Plus size={25} strokeWidth={2.2} />
+                      <Plus size={12} />
                       {addingSection ? '取消' : '添加分区'}
                     </button>
                   </div>
@@ -475,9 +475,9 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
                         transition={{ duration: 0.15 }}
-                        className="mb-5 overflow-hidden"
+                        className="overflow-hidden mb-2"
                       >
-                        <div className="space-y-4 rounded-[22px] border border-[#dedfe2] bg-white px-7 py-6">
+                        <div className="bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5 space-y-2">
                           <input
                             type="text"
                             value={newSectionTitle}
@@ -486,25 +486,25 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                               if (e.key === 'Enter') handleAddNoteSection();
                             }}
                             placeholder="分区标题"
-                            className="w-full bg-transparent text-[22px] font-semibold text-[#111827] outline-none placeholder:text-[#a8afbb]"
+                            className="w-full bg-transparent text-xs font-medium text-text-primary placeholder:text-text-tertiary outline-none"
                           />
                           <textarea
                             value={newSectionDesc}
                             onChange={(e) => setNewSectionDesc(e.target.value)}
                             rows={2}
                             placeholder="分区描述（告诉 AI 这里该放什么内容）"
-                            className="w-full resize-none bg-transparent text-[19px] leading-relaxed text-[#6b7280] outline-none placeholder:text-[#a8afbb]"
+                            className="w-full bg-transparent text-[11px] text-text-secondary placeholder:text-text-tertiary outline-none resize-none"
                           />
                           <div className="flex items-center justify-between">
                             {sectionError && (
-                              <span className="text-[16px] text-red-500">{sectionError}</span>
+                              <span className="text-[11px] text-red-400">{sectionError}</span>
                             )}
                             <div className="flex-1" />
                             <button
                               onClick={handleAddNoteSection}
-                              className="flex items-center gap-2 rounded-xl bg-[#2563eb] px-5 py-2.5 text-[17px] font-semibold text-white transition-colors hover:bg-[#1d4ed8]"
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-accent-primary text-white hover:bg-accent-primary/90 transition-all"
                             >
-                              <Check size={16} strokeWidth={3} />
+                              <Check size={11} strokeWidth={3} />
                               保存
                             </button>
                           </div>
@@ -513,22 +513,22 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                     )}
                   </AnimatePresence>
 
-                  <div className="space-y-[18px]">
+                  <div className="space-y-2">
                     {noteSections.map((section) => (
                       <motion.div
                         key={section.id}
                         layout
-                        className="group rounded-[22px] border border-[#dedfe2] bg-white px-7 py-7"
+                        className="bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5 group"
                       >
-                        <div className="flex items-start gap-5">
-                          <div className="min-w-0 flex-1 space-y-5">
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1 min-w-0 space-y-1.5">
                             <input
                               type="text"
                               defaultValue={section.title}
                               onBlur={(e) =>
                                 handleUpdateNoteSection(section.id, e.target.value, section.description)
                               }
-                              className="w-full bg-transparent text-[24px] font-semibold leading-none text-[#111827] outline-none placeholder:text-[#a8afbb] focus:ring-0"
+                              className="w-full bg-transparent text-xs font-medium text-text-primary placeholder:text-text-tertiary outline-none focus:ring-0"
                             />
                             <textarea
                               defaultValue={section.description}
@@ -537,15 +537,15 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                               }
                               rows={2}
                               placeholder="分区描述"
-                              className="w-full resize-none bg-transparent text-[22px] leading-relaxed text-[#6b7280] outline-none placeholder:text-[#a8afbb] focus:ring-0"
+                              className="w-full bg-transparent text-[11px] text-text-secondary placeholder:text-text-tertiary outline-none focus:ring-0 resize-none"
                             />
                           </div>
                           <button
                             onClick={() => handleDeleteNoteSection(section.id, section.title)}
-                            className="shrink-0 rounded-xl p-2 text-[#b8bec8] opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                            className="shrink-0 p-1 rounded-md text-text-tertiary hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
                             title="删除分区"
                           >
-                            <Trash2 size={20} />
+                            <Trash2 size={13} />
                           </button>
                         </div>
                       </motion.div>
@@ -560,7 +560,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                       initial={{ opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -4 }}
-                      className="rounded-[18px] border border-red-200 bg-red-50 px-6 py-4 text-[17px] text-red-600"
+                      className="bg-red-500/10 border border-red-500/20 rounded-xl px-3.5 py-2.5 text-xs text-red-400"
                     >
                       {saveError}
                     </motion.div>
@@ -569,25 +569,25 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
               </div>
 
               {/* Footer actions */}
-              <div className="flex h-[105px] shrink-0 items-center justify-between border-t border-[#dedfe2] px-16">
+              <div className="shrink-0 px-5 py-3 border-t border-border-subtle flex items-center justify-between">
                 <button
                   onClick={handleDelete}
-                  className="flex items-center gap-4 rounded-2xl px-0 py-3 text-[22px] font-semibold leading-none text-[#ef4444] transition-colors hover:text-[#dc2626]"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all duration-200 text-red-400 hover:bg-red-500/10"
                 >
-                  <Trash2 size={25} strokeWidth={2.1} />
+                  <Trash2 size={13} />
                   删除
                 </button>
                 <div className="flex items-center gap-2">
                   {hasChanges && (
-                    <span className="mr-3 text-[16px] text-[#9ca3af]">有未保存的更改</span>
+                    <span className="text-[10px] text-text-tertiary">有未保存的更改</span>
                   )}
                   <button
                     onClick={handleSave}
                     disabled={!hasChanges || isSaving}
-                    className={`flex h-[62px] items-center gap-4 rounded-[22px] px-8 text-[22px] font-semibold leading-none transition-colors duration-150 ${
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
                       hasChanges && !isSaving
-                        ? 'bg-[#2563eb] text-white hover:bg-[#1d4ed8] active:scale-[0.98]'
-                        : 'cursor-not-allowed bg-[#eceef2] text-[#9ca3af]'
+                        ? 'bg-accent-primary text-white hover:bg-accent-primary/90 active:scale-[0.96]'
+                        : `${isLight ? 'bg-black/5' : 'bg-white/5'} text-text-tertiary cursor-not-allowed`
                     }`}
                   >
                     {isSaving ? (
@@ -596,13 +596,13 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                           animate={{ rotate: 360 }}
                           transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
                         >
-                          <Save size={24} />
+                          <Save size={13} />
                         </motion.div>
                         保存中...
                       </>
                     ) : (
                       <>
-                        <Save size={24} />
+                        <Save size={13} />
                         保存
                       </>
                     )}
@@ -611,7 +611,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
               </div>
             </>
           ) : (
-            <div className="flex flex-1 items-center justify-center text-[22px] text-[#9ca3af]">
+            <div className="flex-1 flex items-center justify-center text-text-tertiary text-sm">
               选择一个模式以查看详情
             </div>
           )}
