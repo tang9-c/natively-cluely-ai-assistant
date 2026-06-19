@@ -77,6 +77,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
   const [newSectionTitle, setNewSectionTitle] = useState('');
   const [newSectionDesc, setNewSectionDesc] = useState('');
   const [sectionError, setSectionError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const createDropdownRef = useRef<HTMLDivElement>(null);
   const hasLoadedRef = useRef(false);
   const isLight = useResolvedTheme() === 'light';
@@ -85,8 +86,13 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
 
   const loadModes = useCallback(async () => {
     try {
+      setLoadError(null);
       const all = await window.electronAPI?.modesGetAll?.();
-      if (!all) return;
+      if (!all) {
+        setLoadError('模式 IPC 未就绪，请稍后重试。');
+        setModes([]);
+        return;
+      }
       const mapped: ModeItem[] = all.map((m) => ({
         id: m.id,
         name: m.name,
@@ -102,8 +108,9 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
         hasLoadedRef.current = true;
         setSelectedModeId(active?.id ?? mapped[0]?.id ?? null);
       }
-    } catch {
-      // ignore
+    } catch (error: any) {
+      setLoadError(error?.message ?? '模式列表加载失败');
+      setModes([]);
     }
   }, []);
 
@@ -300,7 +307,33 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
         {/* Left sidebar — mode list */}
         <div className="w-[260px] border-r border-border-subtle flex flex-col shrink-0">
           <div className="flex-1 overflow-y-auto p-2 space-y-0.5 custom-scrollbar">
-            {modes.map((mode) => {
+            {loadError && (
+              <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-3 text-[11px] text-red-400">
+                <div className="font-medium">模式列表加载失败</div>
+                <div className="mt-1 leading-relaxed text-red-400/80">{loadError}</div>
+                <button
+                  onClick={loadModes}
+                  className="mt-2 rounded-lg bg-red-500/10 px-2 py-1 text-[11px] font-medium text-red-300 hover:bg-red-500/20"
+                >
+                  重试
+                </button>
+              </div>
+            )}
+
+            {!loadError && modes.length === 0 && (
+              <div className="rounded-xl border border-border-subtle bg-bg-input/60 px-3 py-4 text-[11px] text-text-tertiary">
+                <div className="font-medium text-text-secondary">暂无模式</div>
+                <div className="mt-1 leading-relaxed">默认模式尚未初始化，请刷新列表。</div>
+                <button
+                  onClick={loadModes}
+                  className="mt-2 rounded-lg bg-accent-primary/10 px-2 py-1 text-[11px] font-medium text-accent-primary hover:bg-accent-primary/20"
+                >
+                  刷新
+                </button>
+              </div>
+            )}
+
+            {!loadError && modes.map((mode) => {
               const isSelected = mode.id === selectedModeId;
               const isActive = mode.id === activeModeId;
               return (
