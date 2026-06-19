@@ -13,6 +13,24 @@ import type {
   KnowledgeResult,
   ProfileOrchestratorRuntime,
 } from './ProfileOrchestratorContract';
+import { CompanyResearchEngine } from '../research/CompanyResearchEngine';
+import { TavilySearchProvider } from '../research/TavilySearchProvider';
+import { CompanyResearchCache } from '../research/CompanyResearchCache';
+import { ResearchDossierBuilder } from '../research/ResearchDossierBuilder';
+import { CredentialsManager } from '../CredentialsManager';
+import type { ProfileResearchCompanyResponse } from '../research/types';
+
+// Use a runtime require() so test stubs on the cached module exports
+// object are visible to the orchestrator. esbuild inlines static
+// `require()` calls into the bundle, but a dynamic expression built
+// from a runtime variable is preserved as a real Node `require()` call
+// at runtime, which goes through the module cache.
+function readCredentialsModule(): any {
+  const moduleMod = require('module') as typeof import('module');
+  const dynamicRequire = moduleMod.createRequire(__filename);
+  const modPath = ['..', 'CredentialsManager'].join('/');
+  return dynamicRequire(modPath);
+}
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -32,6 +50,8 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
   private jdParser: JDParser | null = null;
   private activeMode = false;
   private customNotes = '';
+  private llmHelper: any = null;
+  researchEngine: CompanyResearchEngine | null = null;
   // Task 6: the four setXxxFn callbacks (generateContentFn,
   // liveCoachingContentFn, embedFn, embedQueryFn) were dead injection
   // surfaces — main.ts set them, the orchestrator stored them, nothing
@@ -39,9 +59,12 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
   // never landed. Removed in Task 6 along with their setters below.
 
   setLLMHelper(llmHelper: any): void {
+    this.llmHelper = llmHelper;
     const parserLLM = new ParserLLM(llmHelper);
     this.resumeParser = new ResumeParser(parserLLM);
     this.jdParser = new JDParser(parserLLM);
+    // Invalidate engine so it picks up the LLMHelper
+    this.researchEngine = null;
   }
 
   async ingestDocument(
@@ -226,6 +249,51 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
 
   getCustomNotes(): string {
     return this.customNotes;
+  }
+
+  getCompanyResearchEngine(): CompanyResearchEngine {
+    if (!this.researchEngine) {
+      const credsMod = readCredentialsModule();
+      const apiKey =
+        credsMod?.getTavilyApiKey?.() ??
+        process.env.TAVILY_API_KEY ??
+        '';
+      const search = new TavilySearchProvider({ apiKey });
+      // ProfileDatabase → DatabaseManager → better-sqlite3 Database.
+      // CompanyResearchCache needs the raw better-sqlite3 connection (duck-typed
+      // .prepare / .exec). Reach through both layers via `as any` so we don't
+      // have to widen ProfileDatabase's public surface just for this consumer.
+      const dbManager = (this.db as any)?.db ?? (this.db as any);
+      const rawConn = dbManager?.getDb?.() ?? dbManager;
+      const cache = new CompanyResearchCache({ db: rawConn });
+      const builder = new ResearchDossierBuilder({
+        llm: {
+          generateStructured: async (prompt, schema) => {
+            if (!this.llmHelper) throw new Error('LLM not initialized');
+            return await this.llmHelper.generateStructuredContent(prompt, schema);
+          },
+        },
+      });
+      this.researchEngine = new CompanyResearchEngine({ cache, search, builder });
+    }
+    return this.researchEngine;
+  }
+
+  async runCompanyResearch(
+    companyName: string,
+    options: { forceRefresh?: boolean; onProgress?: (p: any) => void } = {},
+  ): Promise<ProfileResearchCompanyResponse> {
+    const credsMod = readCredentialsModule();
+    const apiKey = credsMod?.getTavilyApiKey?.();
+    if (!apiKey) {
+      return {
+        success: false,
+        errorCode: 'TAVILY_KEY_MISSING',
+        error: '请在 Settings → Research 中配置 Tavily API key',
+      };
+    }
+    const engine = this.getCompanyResearchEngine();
+    return engine.research(companyName, options);
   }
 
   private getUploadsDir(): string {
