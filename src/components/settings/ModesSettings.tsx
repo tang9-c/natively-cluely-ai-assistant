@@ -1,11 +1,7 @@
 /**
- * ModesSettings — public stub
+ * ModesSettings — official local implementation.
  *
- * The implementation lives in the private premium/ submodule.
- * This file re-exports it via the premium loader so that callers
- * in src/ never need to know where the real code lives.
- *
- * In an open-source build (no premium/ folder), the premium loader
- * returns a NullComponent and this panel simply renders nothing.
+ * Keep this entrypoint wired directly to ModesSettingsBase so the settings
+ * panel cannot be silently replaced by an optional external directory.
  */
-export { ModesSettings as default } from '../../premium';
+export { ModesSettingsBase as default } from './ModesSettingsBase';

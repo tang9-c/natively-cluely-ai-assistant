@@ -3,7 +3,7 @@ import {
     X, RefreshCw, Upload, Briefcase, Trash2, Pencil, Check, Globe,
     Building2, Search, AlertCircle, Gift, Info, Star, Sparkles, User, ArrowUpRight
 } from 'lucide-react';
-import { ProfileVisualizer } from '../premium';
+import { ProfileVisualizer } from './profile/ProfileVisualizer';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MasterProfileSection } from './profile/MasterProfileSection';

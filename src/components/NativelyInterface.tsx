@@ -50,7 +50,7 @@ import {
   getOverlayAppearance,
   OVERLAY_OPACITY_DEFAULT,
 } from '../lib/overlayAppearance';
-import { NegotiationCoachingCard } from '../premium';
+import { NegotiationCoachingCard } from './NegotiationCoachingCard';
 import { SENSEVOICE_EMOTION_LABELS } from '../../shared/senseVoiceEmotion';
 import type { TranscriptEmotion } from '../../shared/senseVoiceEmotion';
 import type { DynamicActionPayload, NativeAudioTranscriptPayload } from '../types/electron';
