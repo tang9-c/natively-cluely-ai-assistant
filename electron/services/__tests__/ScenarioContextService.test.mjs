@@ -49,6 +49,39 @@ function installModeWithReferenceFile({ templateType, fileName, content, metadat
 }
 
 describe('ScenarioContextService', () => {
+  test('falls back to general mode when no active mode is selected', async () => {
+    const generalMode = {
+      id: 'mode_general',
+      name: 'General',
+      templateType: 'general',
+      customContext: '',
+      isActive: false,
+      createdAt: '2026-06-18T00:00:00.000Z',
+    };
+
+    const { ScenarioContextService } = cjsRequire(servicePath);
+    const service = new ScenarioContextService({
+      modesManager: {
+        getActiveMode: () => null,
+        getModes: () => [generalMode],
+        getReferenceFiles: () => [],
+        buildRetrievedActiveModeContextBlockHybrid: async () => '',
+        buildRetrievedActiveModeContextBlock: () => '',
+      },
+      db: {
+        getModeReferenceFileMetadataForMode: () => [],
+        getUserProfile: () => null,
+        getPersona: () => '',
+      },
+    });
+
+    const result = await service.buildForRequest({ query: 'q', includeSystemPrompt: true });
+
+    assert.match(result.systemPromptSuffix, /general scenario/i);
+    assert.equal(result.contextBlock, '');
+    assert.deepEqual(result.dataScopes, []);
+  });
+
   test('builds sales context from active mode reference files and metadata', async () => {
     const deps = installModeWithReferenceFile({
       templateType: 'sales',

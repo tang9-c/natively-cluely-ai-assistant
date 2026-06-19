@@ -36,6 +36,11 @@ const DEFAULT_TEMPLATE_RESOLUTIONS: Record<ModeTemplateType, ScenarioResolution>
   },
 };
 
+const DEFAULT_GENERAL_RESOLUTION: ScenarioResolution = {
+  templateType: 'general',
+  scenarioType: 'general',
+};
+
 export class ScenarioRegistry {
   private readonly adaptersByType: Map<ScenarioType, ScenarioAdapter>;
 
@@ -62,7 +67,8 @@ export class ScenarioRegistry {
     return Array.from(this.adaptersByType.values());
   }
 
-  resolveByTemplateType(templateType: ModeTemplateType): ScenarioResolution {
-    return this.templateResolutions[templateType];
+  resolveByTemplateType(templateType?: string | null): ScenarioResolution {
+    if (!templateType) return DEFAULT_GENERAL_RESOLUTION;
+    return this.templateResolutions[templateType as ModeTemplateType] ?? DEFAULT_GENERAL_RESOLUTION;
   }
 }
