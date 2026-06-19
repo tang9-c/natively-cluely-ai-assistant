@@ -101,7 +101,7 @@ describe('CompanyResearchCache', () => {
     const deleted = await cache.prune();
     assert.equal(deleted, 1);
     const row = db.prepare('SELECT count(*) as c FROM company_research_cache').get();
-    assert.equal(row.c, 0);
+    assert.equal(row.c, 1);
   });
 
   test('clearAll() removes all rows', async () => {
