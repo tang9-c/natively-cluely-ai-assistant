@@ -46,7 +46,15 @@ function readCredentialsModule(): any {
 }
 
 function resolveTavilyApiKey(credsMod: any): string | undefined {
-  return credsMod?.getTavilyApiKey?.() ?? process.env.TAVILY_API_KEY ?? undefined;
+  // Tests stub getTavilyApiKey directly onto the cached module exports object.
+  // In production the module exports the CredentialsManager class, so read from
+  // the singleton instance.
+  return (
+    credsMod?.getTavilyApiKey?.() ??
+    credsMod?.CredentialsManager?.getInstance()?.getTavilyApiKey() ??
+    process.env.TAVILY_API_KEY ??
+    undefined
+  );
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
