@@ -1,11 +1,13 @@
-const PARSE_TIMEOUT_MS = 60_000;
+function getParseTimeoutMs(): number {
+  return Number(process.env.NATIVELY_PARSER_TIMEOUT_MS ?? 60_000);
+}
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     p,
     new Promise<T>((_, reject) => {
       const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-      if (typeof (t as any).unref === 'function') {
+      if (process.env.NATIVELY_PARSER_TIMEOUT_UNREF !== '0' && typeof (t as any).unref === 'function') {
         (t as any).unref();
       }
     }),
@@ -44,7 +46,7 @@ export class ParserLLM {
       try {
         const raw: string = await withTimeout(
           this.llmHelper.generateContentStructured(promptForAttempt),
-          PARSE_TIMEOUT_MS,
+          getParseTimeoutMs(),
           'ParserLLM',
         );
         console.log('[ParserLLM] Raw response length:', raw.length, 'preview:', raw.slice(0, 200));

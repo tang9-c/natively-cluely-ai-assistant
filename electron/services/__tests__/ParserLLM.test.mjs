@@ -48,10 +48,28 @@ describe('ParserLLM', () => {
   });
 
   it('times out when generateContentStructured hangs', async () => {
+    const previousTimeout = process.env.NATIVELY_PARSER_TIMEOUT_MS;
+    const previousUnref = process.env.NATIVELY_PARSER_TIMEOUT_UNREF;
+    process.env.NATIVELY_PARSER_TIMEOUT_MS = '10';
+    process.env.NATIVELY_PARSER_TIMEOUT_UNREF = '0';
+
     const mockHelper = {
       generateContentStructured: () => new Promise(() => {}),
     };
     const parser = new ParserLLM(mockHelper);
-    await assert.rejects(() => parser.parse('prompt', 'schema'), /timed out/);
+    try {
+      await assert.rejects(() => parser.parse('prompt', 'schema'), /timed out/);
+    } finally {
+      if (previousTimeout === undefined) {
+        delete process.env.NATIVELY_PARSER_TIMEOUT_MS;
+      } else {
+        process.env.NATIVELY_PARSER_TIMEOUT_MS = previousTimeout;
+      }
+      if (previousUnref === undefined) {
+        delete process.env.NATIVELY_PARSER_TIMEOUT_UNREF;
+      } else {
+        process.env.NATIVELY_PARSER_TIMEOUT_UNREF = previousUnref;
+      }
+    }
   });
 });
