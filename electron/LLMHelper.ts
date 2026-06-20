@@ -1498,6 +1498,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     try {
       console.log(`[LLMHelper] chatWithGemini called`, { messageLength: message.length, imageCount: imagePaths?.length ?? 0, hasContext: Boolean(context) })
 
+      const profileContext = this.buildProfileContext();
+      if (profileContext) {
+        context = context ? `${profileContext}\n\n${context}` : profileContext;
+      }
+
       // ============================================================
       let systemPromptOverride: string | undefined;
       let knowledgeDataScopes: ProviderDataScope[] = [];
