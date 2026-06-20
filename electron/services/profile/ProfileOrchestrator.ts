@@ -259,12 +259,12 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
         process.env.TAVILY_API_KEY ??
         '';
       const search = new TavilySearchProvider({ apiKey });
-      // ProfileDatabase → DatabaseManager → better-sqlite3 Database.
-      // CompanyResearchCache needs the raw better-sqlite3 connection (duck-typed
-      // .prepare / .exec). Reach through both layers via `as any` so we don't
-      // have to widen ProfileDatabase's public surface just for this consumer.
-      const dbManager = (this.db as any)?.db ?? (this.db as any);
-      const rawConn = dbManager?.getDb?.() ?? dbManager;
+      const rawConn = this.db.getRawDb();
+      if (!rawConn) {
+        throw new Error(
+          'Database not initialized. Company research requires a local SQLite database.',
+        );
+      }
       const cache = new CompanyResearchCache({ db: rawConn });
       const builder = new ResearchDossierBuilder({
         llm: {

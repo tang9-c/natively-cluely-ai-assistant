@@ -232,6 +232,7 @@ templog*.txt
 dodollm.txt
 temp_code_expansion/
 cluelyprompts/
+test-results/
 # Added by code-review-graph
 .code-review-graph/
 pitch-deck.html
