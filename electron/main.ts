@@ -620,11 +620,18 @@ export class AppState {
         timeoutMs: settingsManager.get('codexCliTimeoutMs') || 60_000,
         sandboxMode: settingsManager.get('codexCliSandboxMode') || 'read-only',
       });
-      // Restore custom notes for non-premium path
+      // Restore custom notes and persona for non-premium path
       try {
         const savedNotes = DatabaseManager.getInstance().getCustomNotes();
         if (savedNotes) {
           llmHelper.setCustomNotes(savedNotes);
+        }
+      } catch (_) {}
+      try {
+        const savedPersona = DatabaseManager.getInstance().getPersona();
+        if (savedPersona) {
+          llmHelper.setPersonaPrompt(savedPersona);
+          console.log('[AppState] Persona restored');
         }
       } catch (_) {}
     }
