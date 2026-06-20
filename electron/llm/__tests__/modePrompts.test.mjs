@@ -18,23 +18,23 @@ const MODE_PROMPTS = {
 };
 
 const MODE_CONTRACT_TERMS = {
-  general: ['universal meeting', 'conversation copilot', 'adapt', 'RECENT QUESTION'],
-  sales: ['seller', 'prospect', 'OBJECTION DETECTED', 'pricing', 'Case study'],
-  recruiting: ['interviewer', 'candidate', 'hiring manager', 'lean no', 'rehearsed'],
-  'team-meet': ['CAPTURE', 'action items', 'decisions', 'blockers', 'status'],
-  'looking-for-work': ['candidate', 'job interview', 'resume', 'STAR', 'salary'],
-  'technical-interview': ['technical interview', 'coding', 'system design', 'dry-run', 'complexity', 'edge case'],
-  lecture: ['student', 'lecture', 'study-partner', 'concept', 'homework', 'reading'],
+  general: ['全能的会议与对话副驾驶', '感知对话内容', '最近的问题'],
+  sales: ['销售方', '潜在客户', '反对意见', '价格', '案例研究'],
+  recruiting: ['面试官', '候选人', '招聘经理', 'lean no', '排练过'],
+  'team-meet': ['记录', '行动项', '决策', '阻碍', '状态'],
+  'looking-for-work': ['候选人', '面试', '简历', '薪资'],
+  'technical-interview': ['技术面试', '编程', '系统设计', '复杂度', 'Edge cases'],
+  lecture: ['学生', '讲座', '学习伙伴', '概念', '作业', '学科'],
 };
 
 const UNIQUE_MODE_TERMS = {
-  general: ['conversation copilot'],
-  sales: ['prospect', 'objection'],
-  recruiting: ['hiring manager', 'candidate'],
-  'team-meet': ['action items', 'blockers'],
-  'looking-for-work': ['job interview', 'resume'],
-  'technical-interview': ['coding', 'system design'],
-  lecture: ['lecture', 'study-partner'],
+  general: ['全能的会议与对话副驾驶'],
+  sales: ['潜在客户', '反对意见'],
+  recruiting: ['招聘经理', '候选人'],
+  'team-meet': ['行动项', '阻碍'],
+  'looking-for-work': ['面试', '简历'],
+  'technical-interview': ['编程', '系统设计'],
+  lecture: ['讲座', '学习伙伴'],
 };
 
 function assertIncludesAll(text, terms, label) {
@@ -78,9 +78,9 @@ test('mode prompts prevent reference-file hallucination for absent file-specific
     ], modeType);
   }
 
-  assertIncludesAll(MODE_PROMPTS.general, ['Do not invent formulas', 'file-specific recommendations'], 'general');
-  assertIncludesAll(MODE_PROMPTS.sales, ['customer proof point', 'ROI metric', 'inventing one'], 'sales');
-  assertIncludesAll(MODE_PROMPTS['technical-interview'], ['requested algorithm', 'study-note recommendation'], 'technical-interview');
+  assertIncludesAll(MODE_PROMPTS.general, ['不要发明公式', '文件中不存在的特定建议'], 'general');
+  assertIncludesAll(MODE_PROMPTS.sales, ['客户证明点', 'ROI指标', '不在提供的材料中'], 'sales');
+  assertIncludesAll(MODE_PROMPTS['technical-interview'], ['请求的算法', '学习笔记建议', '在提供的材料中不存在'], 'technical-interview');
 });
 
 test('each mode prompt carries its own mode-specific behavior contract', () => {
@@ -103,43 +103,43 @@ test('mode prompts are meaningfully distinct rather than flattened generic advic
 });
 
 test('profile-aware modes mention candidate/profile grounding without requiring every mode to overfit resume data', () => {
-  assertIncludesAll(MODE_PROMPTS['looking-for-work'], ['<candidate_experience>', 'resume', 'do not invent', 'salary_intelligence'], 'looking-for-work');
-  assertIncludesAll(MODE_PROMPTS['technical-interview'], ['<candidate_experience>', 'technical interview', 'salary_intelligence'], 'technical-interview');
-  assertIncludesAll(MODE_PROMPTS.general, ['<candidate_experience>', 'do not invent', 'salary_intelligence'], 'general');
+  assertIncludesAll(MODE_PROMPTS['looking-for-work'], ['<candidate_experience>', '简历', '不要编造', 'salary_intelligence'], 'looking-for-work');
+  assertIncludesAll(MODE_PROMPTS['technical-interview'], ['<candidate_experience>', '技术面试', 'salary_intelligence'], 'technical-interview');
+  assertIncludesAll(MODE_PROMPTS.general, ['<candidate_experience>', '不要编造', 'salary_intelligence'], 'general');
 });
 
 test('looking-for-work prompt stabilizes no-overclaim behavior with few-shot examples', () => {
   assertIncludesAll(MODE_PROMPTS['looking-for-work'], [
     '<no_overclaim_examples>',
-    'No context behavioral question',
-    'Weak context with role or project but no metrics',
-    'JD skill absent from profile context',
+    '无上下文行为问题',
+    '有角色或项目但无指标的弱上下文',
+    '个人资料上下文中缺少JD技能',
     "I don't have specific past experience loaded right now. I can frame this honestly as a small, relevant example if that matches my background:",
-    'The impact was qualitative',
-    'not quantified',
+    '影响是定性的',
+    '未量化',
     "I wouldn't want to overstate that",
-    'use the exact no-context admission opener',
-    'behavioral, intro, fit, motivation, or accomplishment-based answer',
-    'do not invent a current role, company, title, dates, or accomplishments',
-    'without profile context, avoid invented accomplishments',
+    '使用确切的无上下文承认开场白',
+    '行为、介绍、匹配、动机或成就',
+    '不要编造当前角色、公司、头衔、日期或成就',
+    '没有个人资料上下文时，避免编造成就',
   ], 'looking-for-work');
 });
 
 test('mode formatting contracts prevent coachy meta-output in live suggestions', () => {
-  assertIncludesAll(MODE_PROMPTS.sales, ['DO NOT use meta-labels', 'No preamble', 'Under 3 sentences'], 'sales');
-  assertIncludesAll(MODE_PROMPTS['looking-for-work'], ['first person', 'No preamble', 'ready to deliver'], 'looking-for-work');
-  assertIncludesAll(MODE_PROMPTS['technical-interview'], ['glance-and-go', 'fenced', 'complexity'], 'technical-interview');
-  assertIncludesAll(MODE_PROMPTS.recruiting, ['Do NOT speak as the candidate', 'third-person observer'], 'recruiting');
-  assertIncludesAll(MODE_PROMPTS.lecture, ['NOT the student speaking', 'plain language'], 'lecture');
+  assertIncludesAll(MODE_PROMPTS.sales, ['不要使用', '元标签', '少于3句'], 'sales');
+  assertIncludesAll(MODE_PROMPTS['looking-for-work'], ['第一人称', '无填充开场白', '作为候选人发言'], 'looking-for-work');
+  assertIncludesAll(MODE_PROMPTS['technical-interview'], ['glance-and-go', '围栏代码块', '复杂度'], 'technical-interview');
+  assertIncludesAll(MODE_PROMPTS.recruiting, ['你不是以候选人身份发言', '第三方观察者'], 'recruiting');
+  assertIncludesAll(MODE_PROMPTS.lecture, ['你不是学生在发言', 'plain language'], 'lecture');
 });
 
 test('team meeting capture examples stay schematic and do not seed names or companies', () => {
   assertIncludesAll(MODE_PROMPTS['team-meet'], [
-    'Example output shapes only',
-    'Replace bracketed slots with facts only when stated in the meeting',
-    '[stated owner]',
-    '[decision stated in transcript]',
-    '[risk or blocker stated in transcript]',
+    '仅作为示例输出格式',
+    '仅在会议中陈述时才替换括号内容',
+    '[陈述的负责人]',
+    '[转录中陈述的决策]',
+    '[转录中陈述的风险或阻碍]',
   ], 'team-meet');
 
   assert.doesNotMatch(MODE_PROMPTS['team-meet'], /Sarah|Stripe|Q3 deck|Oct 15/);
@@ -147,9 +147,9 @@ test('team meeting capture examples stay schematic and do not seed names or comp
 
 test('looking-for-work examples require grounding and avoid concrete invented detail', () => {
   assertIncludesAll(MODE_PROMPTS['looking-for-work'], [
-    'use the exact no-context admission opener before any illustrative example',
-    'avoid invented accomplishments',
-    'never fabricate percentages, dollar amounts, durations, or scale figures',
+    '在任何说明性例子之前使用确切的无上下文承认开场白',
+    '避免编造成就',
+    '永远不要编造百分比、美元金额、持续时间或规模数字',
   ], 'looking-for-work');
 
   assert.doesNotMatch(MODE_PROMPTS['looking-for-work'], /grew the channel significantly over a focused timeline/);
