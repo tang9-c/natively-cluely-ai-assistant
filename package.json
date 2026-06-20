@@ -20,6 +20,7 @@
     "start": "npm run app:dev",
     "dist": "npm run app:build",
     "build:native": "node scripts/build-native.js",
+    "rebuild:native": "npx electron-rebuild -f -w better-sqlite3,keytar",
     "test": "npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron --experimental-test-module-mocks --test $(find electron/services/__tests__ -name '*.test.mjs') $(find electron/llm/__tests__ -name '*.test.mjs') $(find electron/rag/__tests__ -name '*.test.mjs')",
     "test:modes": "npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron --test $(find electron/services/__tests__ -name 'Mode*.test.mjs') electron/services/__tests__/ProfileIntelligenceGate.test.mjs electron/services/__tests__/NativelyApiE2E.test.mjs",
     "test:modes:no-build": "ELECTRON_RUN_AS_NODE=1 npx electron --test $(find electron/services/__tests__ -name 'Mode*.test.mjs') electron/services/__tests__/ProfileIntelligenceGate.test.mjs electron/services/__tests__/NativelyApiE2E.test.mjs",

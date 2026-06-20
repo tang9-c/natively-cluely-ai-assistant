@@ -125,14 +125,14 @@ export class DatabaseManager {
         const msg = err?.message || String(error);
         const isArchMismatch =
             err?.code === 'ERR_DLOPEN_FAILED' ||
-            /incompatible architecture|ERR_DLOPEN_FAILED|mach-o/i.test(msg);
+            /incompatible architecture|ERR_DLOPEN_FAILED|mach-o|was compiled against a different Node.js version|ABI|NODE_MODULE_VERSION/i.test(msg);
 
         if (isArchMismatch) {
             console.error(
                 '[DatabaseManager] FATAL: native module (better-sqlite3) failed to load — the compiled ' +
-                'binary architecture does not match the Electron runtime. Local database is DISABLED ' +
+                'binary does not match the Electron runtime (architecture or Node ABI mismatch). Local database is DISABLED ' +
                 '(meeting history, modes, and notes will not persist this session).\n' +
-                '  Fix: run `npm run rebuild:native` from a native (non-Rosetta) terminal, then restart the app.'
+                '  Fix: run `npm run rebuild:native`, then restart the app.'
             );
         } else {
             console.error(

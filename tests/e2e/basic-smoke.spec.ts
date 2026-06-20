@@ -51,17 +51,23 @@ test.describe('FINDING-006: Natively E2E smoke', () => {
   test('modes panel renders with mode list', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 
-    // Look for the modes panel — searches by text content typical of mode names.
-    // The UI currently displays localized Chinese labels for default modes.
+    // Open the modes manager through the IPC bridge. This is more reliable than
+    // clicking toolbar buttons because it works regardless of whether the active
+    // window is the launcher or the meeting overlay, and it bypasses first-run
+    // onboarding/permission dialogs that may intercept pointer events.
+    await page.evaluate(async () => {
+      const api = (window as any).electronAPI;
+      if (api && typeof api.openModesManager === 'function') {
+        await api.openModesManager();
+      }
+    });
+
+    // Wait for the modal to render and load the mode list.
+    await expect(page.locator('text=模式设置').first()).toBeVisible();
+
+    // The sidebar should display localized Chinese labels for default modes.
     const modePanelLocator = page.locator('text=/通用|销售|招聘|团队会议|求职|技术面试|讲座|General|Sales|Recruiting/i');
-    const visible = await modePanelLocator.first().isVisible().catch(() => false);
-
-    // The mode list may be lazy; give it more time before declaring missing.
-    if (!visible) {
-      await page.waitForTimeout(3000);
-    }
-
-    expect(visible).toBe(true);
+    await expect(modePanelLocator.first()).toBeVisible();
   });
 
   test('settings panel opens and closes', async ({ page }) => {
