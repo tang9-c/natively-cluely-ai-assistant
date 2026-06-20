@@ -41,15 +41,23 @@ const credsPath = path.resolve(
 
 describe('ProfileOrchestrator — Research integration', () => {
   let origGetKey;
+  let origTavilyEnv;
 
   beforeEach(() => {
     const creds = cjsRequire(credsPath);
     origGetKey = creds.getTavilyApiKey;
+    origTavilyEnv = process.env.TAVILY_API_KEY;
+    delete process.env.TAVILY_API_KEY;
   });
 
   const restoreCreds = () => {
     const creds = cjsRequire(credsPath);
     creds.getTavilyApiKey = origGetKey;
+    if (origTavilyEnv !== undefined) {
+      process.env.TAVILY_API_KEY = origTavilyEnv;
+    } else {
+      delete process.env.TAVILY_API_KEY;
+    }
   };
 
   test('runCompanyResearch() returns TAVILY_KEY_MISSING when no key configured', async () => {
@@ -71,6 +79,23 @@ describe('ProfileOrchestrator — Research integration', () => {
     const { ProfileOrchestrator } = cjsRequire(orchestratorPath);
     const o = new ProfileOrchestrator();
     // Inject a stub engine to bypass the real one
+    o.researchEngine = {
+      research: async (name) => ({ success: true, dossier: { companyName: name }, cached: false }),
+      clearCache: async () => 0,
+    };
+    const r = await o.runCompanyResearch('Apple');
+    assert.equal(r.success, true);
+    assert.equal(r.dossier.companyName, 'Apple');
+    restoreCreds();
+  });
+
+  test('runCompanyResearch() falls back to TAVILY_API_KEY env var when no stored key', async () => {
+    const creds = cjsRequire(credsPath);
+    creds.getTavilyApiKey = () => null;
+    process.env.TAVILY_API_KEY = 'tvly-env';
+
+    const { ProfileOrchestrator } = cjsRequire(orchestratorPath);
+    const o = new ProfileOrchestrator();
     o.researchEngine = {
       research: async (name) => ({ success: true, dossier: { companyName: name }, cached: false }),
       clearCache: async () => 0,

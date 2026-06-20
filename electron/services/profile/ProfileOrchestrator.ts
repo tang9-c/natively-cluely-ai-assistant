@@ -45,6 +45,10 @@ function readCredentialsModule(): any {
   return dynamicRequire(path.join(__dirname, '..', 'CredentialsManager'));
 }
 
+function resolveTavilyApiKey(credsMod: any): string | undefined {
+  return credsMod?.getTavilyApiKey?.() ?? process.env.TAVILY_API_KEY ?? undefined;
+}
+
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     p,
@@ -258,10 +262,7 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
   getCompanyResearchEngine(): CompanyResearchEngine {
     if (!this.researchEngine) {
       const credsMod = readCredentialsModule();
-      const apiKey =
-        credsMod?.getTavilyApiKey?.() ??
-        process.env.TAVILY_API_KEY ??
-        '';
+      const apiKey = resolveTavilyApiKey(credsMod) ?? '';
       const search = new TavilySearchProvider({ apiKey });
       const rawConn = this.db.getRawDb();
       if (!rawConn) {
@@ -293,7 +294,7 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
     options: { forceRefresh?: boolean; onProgress?: (p: any) => void } = {},
   ): Promise<ProfileResearchCompanyResponse> {
     const credsMod = readCredentialsModule();
-    const apiKey = credsMod?.getTavilyApiKey?.();
+    const apiKey = resolveTavilyApiKey(credsMod);
     if (!apiKey) {
       return {
         success: false,
