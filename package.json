@@ -30,7 +30,6 @@
     "test:e2e": "ELECTRON_E2E=1 npx playwright test",
     "test:e2e:headed": "ELECTRON_E2E=1 npx playwright test --headed",
     "test:e2e:parity": "ELECTRON_E2E=1 ELECTRON_APP_PORT=${ELECTRON_APP_PORT:-5173} npx playwright test tests/e2e/parity-gaps-evidence.spec.ts",
-    "test:e2e:screen-understanding": "npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron natively-api/tests/screen-understanding-live.e2e.mjs",
     "bench:screen-understanding": "npm run build:electron && node scripts/bench-screen-understanding.mjs"
   },
   "build": {
