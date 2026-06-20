@@ -52,6 +52,22 @@ build({
   },
   logLevel: 'warning',
 }).then(() => {
+  // pdf-parse (via pdfjs-dist) loads its worker from a relative "./pdf.worker.mjs"
+  // path at runtime. Bundle the worker next to the packed electron output so the
+  // production app can parse PDFs without "Cannot find module 'pdf.worker.mjs'".
+  const pdfWorkerSource = path.resolve(
+    rootDir,
+    'node_modules/pdf-parse/dist/pdf-parse/cjs/pdf.worker.mjs',
+  );
+  const pdfWorkerDest = path.resolve(outDir, 'electron/pdf.worker.mjs');
+  if (fs.existsSync(pdfWorkerSource)) {
+    fs.mkdirSync(path.dirname(pdfWorkerDest), { recursive: true });
+    fs.copyFileSync(pdfWorkerSource, pdfWorkerDest);
+    console.log('[build-electron] Copied pdf.worker.mjs');
+  } else {
+    console.warn('[build-electron] pdf.worker.mjs not found; PDF parsing may fail in production');
+  }
+
   console.log(`[build-electron] Done in ${Date.now() - start}ms`);
 }).catch((err) => {
   console.error('[build-electron] Build failed:', err.message);
