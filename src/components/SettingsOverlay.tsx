@@ -1143,18 +1143,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         }
     };
 
-    const handleRemoveTavilyKey = async () => {
-        if (!confirm('Are you sure you want to remove the Tavily API Key?')) return;
-
-        try {
-            await window.electronAPI?.setTavilyApiKey?.('');
-
-
-        } catch (e) {
-            console.error('Failed to remove Tavily API key:', e);
-        }
-    };
-
     const handleTestSttConnection = async () => {
         if (sttProvider === 'none' || sttProvider === 'google' || sttProvider === 'natively' || sttProvider === 'local-whisper' || sttProvider === 'local-sensevoice') return;
 
