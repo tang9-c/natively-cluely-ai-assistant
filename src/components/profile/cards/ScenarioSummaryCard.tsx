@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Plus, Trash2 } from 'lucide-react';
+import { FileText, Plus, Search, Trash2 } from 'lucide-react';
 
 import type { ScenarioCard, ScenarioDocument } from '../types';
 
@@ -13,6 +13,32 @@ interface ScenarioSummaryCardProps {
 
 function getDocumentTitle(document: ScenarioDocument): string {
     return document.title || document.fileName || document.path?.split('/').pop() || '场景资料';
+}
+
+function openResearchPanel(companyName: string): void {
+    window.dispatchEvent(
+        new CustomEvent('open-research-panel', { detail: { companyName } }),
+    );
+}
+
+function CompanyResearchAction({ companyName }: { companyName?: string }) {
+    if (companyName) {
+        return (
+            <button
+                type="button"
+                onClick={() => openResearchPanel(companyName)}
+                className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-accent-primary transition-colors hover:bg-accent-primary/10"
+                title={`调研 ${companyName}`}
+            >
+                <Search size={11} />
+                调研
+            </button>
+        );
+    }
+
+    return (
+        <span className="shrink-0 text-[11px] text-text-tertiary">未识别到公司名称</span>
+    );
 }
 
 export function ScenarioSummaryCard({
@@ -61,6 +87,9 @@ export function ScenarioSummaryCard({
                                 <p className="min-w-0 flex-1 truncate text-[12px] font-medium text-text-primary">
                                     {getDocumentTitle(document)}
                                 </p>
+                                {card.docSubtype === 'company-research' && (
+                                    <CompanyResearchAction companyName={document.parsedJson?.companyName} />
+                                )}
                                 <button
                                     type="button"
                                     onClick={() => onDelete(document)}

@@ -59,6 +59,7 @@ export interface ScenarioDocument {
     created_at?: string;
     updatedAt?: string;
     updated_at?: string;
+    parsedJson?: { companyName?: string } | null;
 }
 
 export interface MasterProfile {

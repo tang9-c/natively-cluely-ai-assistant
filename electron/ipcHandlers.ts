@@ -24,6 +24,8 @@ import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 import type { ResearchProgress } from './services/research/types';
 import { redactForLog } from './utils/redactForLog';
+import { ParserLLM } from './services/profile/parsers/ParserLLM';
+import { CompanyNameExtractor } from './services/profile/extractors/CompanyNameExtractor';
 
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (
@@ -3540,11 +3542,27 @@ export function initializeIpcHandlers(appState: AppState): void {
       const referenceFileId = added.id;
       const registry = ScenarioRegistry.createDefault();
       const resolution = registry.resolveByTemplateType(mode.templateType);
+
+      let parsedJson: string | undefined;
+      const llmHelper = appState.processingHelper?.getLLMHelper?.();
+      if (llmHelper) {
+        try {
+          const extractor = new CompanyNameExtractor(new ParserLLM(llmHelper));
+          const companyName = await extractor.extract(rawText, params.docSubtype);
+          if (companyName) {
+            parsedJson = JSON.stringify({ companyName });
+          }
+        } catch (extractionError: any) {
+          console.warn('[IPC] profile:upload-document company extraction failed:', extractionError.message);
+        }
+      }
+
       DatabaseManager.getInstance().upsertModeReferenceFileMetadata({
         referenceFileId,
         scenarioType: resolution.scenarioType,
         docSubtype: params.docSubtype,
         fileHash: crypto.createHash('sha256').update(rawText).digest('hex'),
+        parsedJson,
       });
       return { success: true, id: referenceFileId };
     } catch (error: any) {
