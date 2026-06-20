@@ -110,6 +110,13 @@ const App: React.FC = () => {
     setIsSettingsOpen(false);
     setIsModesOpen(true);
   }, []);
+  const openResearchExclusive = useCallback(() => {
+    setIsProfileOpen(false);
+    setIsSettingsOpen(false);
+    setIsModesOpen(false);
+    setResearchInitialName('');
+    setIsResearchPanelOpen(true);
+  }, []);
   // Overlay opacity — only meaningful when isOverlayWindow, but stored centrally
   // so it can be initialized once from localStorage and updated via IPC.
   const [overlayOpacity, setOverlayOpacity] = useState<number>(() => {
@@ -408,6 +415,7 @@ const App: React.FC = () => {
                     onOpenSettings={(tab = 'general') => openSettingsExclusive(tab)}
                     onOpenProfile={() => openProfileExclusive()}
                     onOpenModes={() => openModesExclusive()}
+                    onOpenResearch={() => openResearchExclusive()}
                     onPageChange={setIsLauncherMainView}
                     ollamaPullStatus={ollamaPullStatus}
                     ollamaPullPercent={ollamaPullPercent}
