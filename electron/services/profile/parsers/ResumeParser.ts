@@ -5,7 +5,7 @@ const SCHEMA_DESCRIPTION = `
 Extract a resume into this JSON schema:
 {
   "identity": {
-    "name": string (required),
+    "name": string (required - the person's full name, NEVER "Unknown" or empty),
     "email": string | undefined,
     "phone": string | undefined,
     "location": string | undefined,
@@ -36,21 +36,35 @@ Extract a resume into this JSON schema:
     }
   ] (required)
 }
+
+CRITICAL: The identity.name field must contain the actual full name found in the resume. Do NOT use placeholders like "Unknown" or empty strings. If the name is not clearly present, extract the best candidate from the header/contact section.
 `;
 
-function buildPrompt(rawText: string): string {
-  return [
+function buildPrompt(rawText: string, attempt: number): string {
+  const base = [
     'You are a resume parser. Read the resume text below and extract structured information.',
     'Be concise. Dates should use YYYY-MM format when available.',
     '',
     '--- RESUME TEXT ---',
     rawText.slice(0, 24_000),
   ].join('\n');
+
+  if (attempt === 0) return base;
+
+  return `${base}\n\nCRITICAL: Your previous response was missing the candidate's real full name or contained placeholder values like "Unknown". You MUST extract the actual person's full name from the resume header or contact section. Do NOT return "Unknown" or empty strings. Fill every field with real information found in the text.`;
 }
 
 function normalize(parsed: any): ResumeParsed {
+  const rawName = parsed?.identity?.name;
+  // Treat LLM fallback placeholders as missing so the retry loop gets a chance
+  // to extract the real name from the resume text.
+  const normalizedName =
+    rawName && typeof rawName === 'string' && rawName.trim() && rawName.trim().toLowerCase() !== 'unknown'
+      ? rawName.trim()
+      : '';
+
   const identity = {
-    name: String(parsed?.identity?.name ?? 'Unknown'),
+    name: normalizedName || 'Unknown',
     email: parsed?.identity?.email ? String(parsed.identity.email) : undefined,
     phone: parsed?.identity?.phone ? String(parsed.identity.phone) : undefined,
     location: parsed?.identity?.location ? String(parsed.identity.location) : undefined,
@@ -102,24 +116,33 @@ function normalize(parsed: any): ResumeParsed {
   };
 }
 
+function isValidResult(result: ResumeParsed): boolean {
+  const hasValidName =
+    result.identity.name &&
+    result.identity.name !== 'Unknown' &&
+    result.identity.name.trim().length > 0;
+  return hasValidName;
+}
+
 export class ResumeParser {
   constructor(private llm: ParserLLM) {}
 
   async parse(rawText: string): Promise<ResumeParsed> {
-    const prompt = buildPrompt(rawText);
-    const parsed = await this.llm.parse<any>(prompt, SCHEMA_DESCRIPTION);
-    const result = normalize(parsed);
-    // Defensive: if the model returns a skeleton with no real data, treat as failure
-    // so ParserLLM's retry loop gets a second attempt with stronger instructions.
-    const hasAnyData =
-      result.identity.name && result.identity.name !== 'Unknown' && result.identity.name.trim().length > 0 ||
-      result.skills.length > 0 ||
-      result.experience.length > 0 ||
-      result.projects.length > 0 ||
-      result.education.length > 0;
-    if (!hasAnyData) {
-      throw new Error('Parsed resume is empty — model returned skeleton with no extracted data');
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const prompt = buildPrompt(rawText, attempt);
+        const parsed = await this.llm.parse<any>(prompt, SCHEMA_DESCRIPTION);
+        const result = normalize(parsed);
+        if (isValidResult(result)) {
+          return result;
+        }
+        throw new Error('Parsed resume is empty — model returned skeleton with no extracted data');
+      } catch (error: any) {
+        console.warn('[ResumeParser] Attempt', attempt + 1, 'failed:', error.message);
+        lastError = error;
+      }
     }
-    return result;
+    throw lastError ?? new Error('Could not parse resume after multiple attempts');
   }
 }

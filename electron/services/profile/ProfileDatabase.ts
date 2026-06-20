@@ -80,8 +80,11 @@ export class ProfileDatabase {
     const contact = safeJsonObject(master.contact_info_json);
 
     // If everything is empty, treat as "no resume" so UI shows zero state.
+    // Also treat placeholder names like "Unknown" as empty so they don't leak
+    // into the UI when parsing failed silently.
+    const isRealName = displayName.length > 0 && displayName.toLowerCase() !== 'unknown';
     const hasContent =
-      displayName.length > 0 ||
+      isRealName ||
       headline.length > 0 ||
       summary.length > 0 ||
       experience.length > 0 ||
@@ -90,7 +93,7 @@ export class ProfileDatabase {
 
     return {
       identity: {
-        name: displayName || 'Unknown',
+        name: isRealName ? displayName : 'Unknown',
         email: contact.email,
         phone: contact.phone,
         location: contact.location,
