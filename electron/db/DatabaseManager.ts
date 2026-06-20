@@ -571,9 +571,9 @@ export class DatabaseManager {
                 : null;
             if (modeExists && !existing) {
                 const defaultSections = [
-                    { title: 'Summary',      description: 'High-level summary of the conversation.' },
-                    { title: 'Action items', description: 'Tasks and follow-ups identified.' },
-                    { title: 'Key points',   description: 'Important points discussed.' },
+                    { title: '摘要',      description: '对话的高级摘要。' },
+                    { title: '行动项', description: '识别出的任务和后续跟进。' },
+                    { title: '要点',   description: '讨论中的重要观点。' },
                 ];
                 const insertSection = this.db.prepare(
                     'INSERT OR IGNORE INTO mode_note_sections (id, mode_id, title, description, sort_order) VALUES (?, ?, ?, ?, ?)'
@@ -590,51 +590,51 @@ export class DatabaseManager {
             console.log('[DatabaseManager] Applying migration v12 → v13: Backfill missing mode note sections');
             const BACKFILL_SECTIONS: Record<string, Array<{ title: string; description: string }>> = {
                 general: [
-                    { title: 'Summary',      description: 'High-level summary of the conversation.' },
-                    { title: 'Action items', description: 'Tasks and follow-ups identified.' },
-                    { title: 'Key points',   description: 'Important points discussed.' },
+                    { title: '摘要',      description: '对话的高级摘要。' },
+                    { title: '行动项', description: '识别出的任务和后续跟进。' },
+                    { title: '要点',   description: '讨论中的重要观点。' },
                 ],
                 'looking-for-work': [
-                    { title: 'Follow-up actions',       description: 'Next interview steps or additional materials I said I would send if applicable.' },
-                    { title: 'Overview',                description: 'Overview of the interview, the company, and general structure.' },
-                    { title: 'Questions and responses', description: 'All questions asked to me during the interview and answers that gave.' },
-                    { title: 'Areas to improve',        description: 'What I could have done better during the interview.' },
-                    { title: 'Role details',            description: 'Anything discussed about the position, salary expectations, etc.' },
+                    { title: '后续行动',       description: '下一步面试安排，或我承诺会发送的额外材料。' },
+                    { title: '概览',                description: '面试、公司和整体流程的概览。' },
+                    { title: '问题与回答',  description: '面试中问到的所有问题以及我给出的回答。' },
+                    { title: '改进空间',        description: '我在面试中可以做得更好的地方。' },
+                    { title: '岗位细节',            description: '关于职位、薪资期望等讨论到的任何内容。' },
                 ],
                 sales: [
-                    { title: 'Action Items',        description: 'All action items that were said I would do after the meeting.' },
-                    { title: 'Outcome',             description: 'Did I close the sale and what was the outcome of the conversation.' },
-                    { title: 'Prospect background', description: 'Background and context on who I was selling to.' },
-                    { title: 'Discovery',           description: 'What the prospect said during discovery.' },
-                    { title: 'Product',             description: "How I pitched the product and the prospect's reaction." },
-                    { title: 'Objections',          description: 'Objections from the prospect if there were any.' },
+                    { title: '行动项',         description: '我在会议后需要完成的所有行动项。' },
+                    { title: '结果',              description: '是否成交以及对话的结果。' },
+                    { title: '客户背景',   description: '我向其销售的对象的背景信息。' },
+                    { title: '需求发现',             description: '客户在需求发现阶段说了什么。' },
+                    { title: '产品',             description: '我是如何介绍产品的，以及客户的反应。' },
+                    { title: '异议',             description: '客户提出的任何异议。' },
                 ],
                 recruiting: [
-                    { title: 'Action Items',          description: 'All action items that I have to do after the meeting.' },
-                    { title: 'Experience and skills', description: "Candidate's previous work experience and skills discussed." },
-                    { title: 'Quality of responses',  description: 'If there were questions asked, how well and how accurately the candidate answered each question.' },
-                    { title: 'Interest in company',   description: 'What the candidate said about their interest in the company.' },
-                    { title: 'Role expectations',     description: 'Anything discussed about the position, salary expectations, etc.' },
+                    { title: '行动项',          description: '我在会议后必须完成的所有行动项。' },
+                    { title: '经验与技能',  description: '讨论到的候选人的先前工作经验和技能。' },
+                    { title: '回答质量',   description: '如果有提问，候选人每个问题回答得有多好、多准确。' },
+                    { title: '对公司的兴趣',    description: '候选人对其公司兴趣的描述。' },
+                    { title: '岗位期望',      description: '关于职位、薪资期望等讨论到的任何内容。' },
                 ],
                 'team-meet': [
-                    { title: 'Action Items',           description: 'All action items that were said I would do after the meeting.' },
-                    { title: 'Announcements',          description: 'Any team-wide announcements from the meeting.' },
-                    { title: 'Team updates',           description: "Each team member's progress, accomplishments, and current focus." },
-                    { title: 'Challenges or blockers', description: 'Any issues or obstacles raised that may affect progress.' },
-                    { title: 'Decisions made',         description: 'Key decisions or agreements reached during the meeting.' },
+                    { title: '行动项',           description: '我在会议后需要完成的所有行动项。' },
+                    { title: '公告',           description: '会议中的任何团队公告。' },
+                    { title: '团队更新',            description: '每位团队成员的进展、成果和当前重点。' },
+                    { title: '挑战或阻塞',  description: '任何可能影响进展的问题或障碍。' },
+                    { title: '已做决策',         description: '会议中达成的关键决策或共识。' },
                 ],
                 lecture: [
-                    { title: 'Follow-up work', description: 'Follow-up reading, assignments, or tasks to complete.' },
-                    { title: 'Topic',          description: 'Main subject or theme of the lecture.' },
-                    { title: 'Key concepts',   description: 'Core ideas or frameworks covered.' },
-                    { title: 'Content',        description: 'All content from the lecture with incredibly detailed bullet notes.' },
+                    { title: '后续作业',  description: '课后阅读、作业或需要完成的任务。' },
+                    { title: '主题',           description: '讲座的主要科目或主题。' },
+                    { title: '核心概念',    description: '涵盖的核心思想或框架。' },
+                    { title: '内容',           description: '讲座的全部内容，用非常详细的要点笔记记录。' },
                 ],
                 'technical-interview': [
-                    { title: 'Problems covered', description: 'Each problem asked, the approach used, and the outcome.' },
-                    { title: 'Concepts tested',  description: 'Key algorithms, data structures, or system design concepts that came up.' },
-                    { title: 'What went well',   description: 'Approaches or explanations that landed well.' },
-                    { title: 'Areas to study',   description: 'Topics or gaps identified that need more preparation.' },
-                    { title: 'Action items',     description: 'Follow-up steps — e.g. send code, study specific topics, await next round.' },
+                    { title: '覆盖的问题',  description: '每个被问到的问题、使用的方法和结果。' },
+                    { title: '考察的概念',   description: '涉及的关键算法、数据结构或系统设计概念。' },
+                    { title: '表现出色之处',    description: '哪些方法或解释效果不错。' },
+                    { title: '待学习领域',    description: '识别出的需要更多准备的主题或知识缺口。' },
+                    { title: '行动项',      description: '后续步骤——例如发送代码、学习特定主题、等待下一轮。' },
                 ],
             };
 
@@ -859,6 +859,82 @@ export class DatabaseManager {
                     ON company_research_cache(expires_at);
             `);
             this.db.pragma('user_version = 20');
+        }
+
+        // Version 20 -> 21: Translate all mode note sections to Chinese.
+        // This overwrites every section belonging to a template mode with the
+        // current Chinese defaults, regardless of whether the user previously
+        // customized them.
+        if (version < 21) {
+            console.log('[DatabaseManager] Applying migration v20 -> v21: Translate mode note sections to Chinese');
+            const chineseSections: Record<string, Array<{ title: string; description: string }>> = {
+                general: [
+                    { title: '摘要', description: '对话的高级摘要。' },
+                    { title: '行动项', description: '识别出的任务和后续跟进。' },
+                    { title: '要点', description: '讨论中的重要观点。' },
+                ],
+                'looking-for-work': [
+                    { title: '后续行动', description: '下一步面试安排，或我承诺会发送的额外材料。' },
+                    { title: '概览', description: '面试、公司和整体流程的概览。' },
+                    { title: '问题与回答', description: '面试中问到的所有问题以及我给出的回答。' },
+                    { title: '改进空间', description: '我在面试中可以做得更好的地方。' },
+                    { title: '岗位细节', description: '关于职位、薪资期望等讨论到的任何内容。' },
+                ],
+                sales: [
+                    { title: '行动项', description: '我在会议后需要完成的所有行动项。' },
+                    { title: '结果', description: '是否成交以及对话的结果。' },
+                    { title: '客户背景', description: '我向其销售的对象的背景信息。' },
+                    { title: '需求发现', description: '客户在需求发现阶段说了什么。' },
+                    { title: '产品', description: '我是如何介绍产品的，以及客户的反应。' },
+                    { title: '异议', description: '客户提出的任何异议。' },
+                ],
+                recruiting: [
+                    { title: '行动项', description: '我在会议后必须完成的所有行动项。' },
+                    { title: '经验与技能', description: '讨论到的候选人的先前工作经验和技能。' },
+                    { title: '回答质量', description: '如果有提问，候选人每个问题回答得有多好、多准确。' },
+                    { title: '对公司的兴趣', description: '候选人对其公司兴趣的描述。' },
+                    { title: '岗位期望', description: '关于职位、薪资期望等讨论到的任何内容。' },
+                ],
+                'team-meet': [
+                    { title: '行动项', description: '我在会议后需要完成的所有行动项。' },
+                    { title: '公告', description: '会议中的任何团队公告。' },
+                    { title: '团队更新', description: '每位团队成员的进展、成果和当前重点。' },
+                    { title: '挑战或阻塞', description: '任何可能影响进展的问题或障碍。' },
+                    { title: '已做决策', description: '会议中达成的关键决策或共识。' },
+                ],
+                lecture: [
+                    { title: '后续作业', description: '课后阅读、作业或需要完成的任务。' },
+                    { title: '主题', description: '讲座的主要科目或主题。' },
+                    { title: '核心概念', description: '涵盖的核心思想或框架。' },
+                    { title: '内容', description: '讲座的全部内容，用非常详细的要点笔记记录。' },
+                ],
+                'technical-interview': [
+                    { title: '覆盖的问题', description: '每个被问到的问题、使用的方法和结果。' },
+                    { title: '考察的概念', description: '涉及的关键算法、数据结构或系统设计概念。' },
+                    { title: '表现出色之处', description: '哪些方法或解释效果不错。' },
+                    { title: '待学习领域', description: '识别出的需要更多准备的主题或知识缺口。' },
+                    { title: '行动项', description: '后续步骤——例如发送代码、学习特定主题、等待下一轮。' },
+                ],
+            };
+
+            const modes = this.db.prepare('SELECT id, template_type FROM modes').all() as Array<{ id: string; template_type: string }>;
+            const deleteSections = this.db.prepare('DELETE FROM mode_note_sections WHERE mode_id = ?');
+            const insertSection = this.db.prepare(
+                'INSERT INTO mode_note_sections (id, mode_id, title, description, sort_order) VALUES (?, ?, ?, ?, ?)'
+            );
+
+            for (const mode of modes) {
+                const sections = chineseSections[mode.template_type] ?? [];
+                if (sections.length === 0) continue;
+
+                deleteSections.run(mode.id);
+                sections.forEach((s, i) => {
+                    insertSection.run(`ns_cn_${mode.id}_${i}`, mode.id, s.title, s.description, i);
+                });
+                console.log(`[DatabaseManager] Translated ${sections.length} sections for mode "${mode.id}" (${mode.template_type})`);
+            }
+
+            this.db.pragma('user_version = 21');
         }
 
         console.log('[DatabaseManager] Migrations completed.');

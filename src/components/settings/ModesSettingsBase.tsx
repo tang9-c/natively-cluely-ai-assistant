@@ -11,6 +11,11 @@ import {
   X,
 } from 'lucide-react';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
+import {
+  DEFAULT_MODE_NAMES,
+  getModeDisplayName,
+  MODE_TEMPLATE_LABELS,
+} from '../../lib/modeTemplateMeta';
 
 interface ModesSettingsBaseProps {
   onClose: () => void;
@@ -32,33 +37,6 @@ interface NoteSection {
   description: string;
   sortOrder: number;
 }
-
-const TEMPLATE_LABELS: Record<string, string> = {
-  general: '通用',
-  sales: '销售',
-  recruiting: '招聘',
-  'team-meet': '团队会议',
-  'looking-for-work': '求职',
-  'technical-interview': '技术面试',
-  lecture: '讲座',
-};
-
-const DEFAULT_TEMPLATE_NAMES: Record<string, string> = {
-  general: 'General',
-  sales: 'Sales',
-  recruiting: 'Recruiting',
-  'team-meet': 'Team Meet',
-  'looking-for-work': 'Looking for work',
-  'technical-interview': 'Technical Interview',
-  lecture: 'Lecture',
-};
-
-const getModeDisplayName = (mode: Pick<ModeItem, 'name' | 'templateType'>): string => {
-  const templateLabel = TEMPLATE_LABELS[mode.templateType];
-  const defaultName = DEFAULT_TEMPLATE_NAMES[mode.templateType];
-  if (templateLabel && mode.name === defaultName) return templateLabel;
-  return mode.name;
-};
 
 export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
   onClose,
@@ -320,7 +298,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                       </span>
                     </div>
                     <div className="text-[10px] text-text-tertiary mt-0.5">
-                      {TEMPLATE_LABELS[mode.templateType] ?? mode.templateType}
+                      {MODE_TEMPLATE_LABELS[mode.templateType] ?? mode.templateType}
                     </div>
                   </div>
                   {isActive && (
@@ -365,7 +343,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                   className="absolute left-2 right-2 bottom-full mb-1.5 bg-bg-elevated border border-border-subtle rounded-xl shadow-2xl overflow-hidden z-50"
                 >
                   <div className="p-1.5 space-y-0.5">
-                    {Object.entries(TEMPLATE_LABELS).map(([type, label]) => {
+                    {Object.entries(MODE_TEMPLATE_LABELS).map(([type, label]) => {
                       const exists = modes.some((m) => m.templateType === type);
                       return (
                         <button
@@ -407,7 +385,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                   <div>
                     <h3 className="text-sm font-semibold">{getModeDisplayName(selectedMode)}</h3>
                     <p className="text-[11px] text-text-tertiary mt-0.5">
-                      {TEMPLATE_LABELS[selectedMode.templateType] ?? selectedMode.templateType}
+                      {MODE_TEMPLATE_LABELS[selectedMode.templateType] ?? selectedMode.templateType}
                     </p>
                   </div>
                   <button

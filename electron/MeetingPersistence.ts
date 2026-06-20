@@ -243,16 +243,16 @@ export class MeetingPersistence {
 
             // Generate Structured Summary
             if (hasSummarizableTranscript) {
-                const baseRules = `RULES:
-- Do NOT invent information not present in the context
-- You MAY infer implied action items or next steps if they are logical consequences of the discussion
-- Do NOT explain or define concepts mentioned
-- Do NOT use filler phrases like "The meeting covered..." or "Discussed various..."
-- Do NOT mention transcripts, AI, or summaries
-- Do NOT sound like an AI assistant
-- Sound like a senior PM's internal notes
+                const baseRules = `规则：
+- 不要编造上下文中不存在的信息
+- 可以推断讨论中合理隐含的行动项或后续步骤
+- 不要解释或定义提到的概念
+- 不要使用“会议涵盖了……”或“讨论了各种……”等空话
+- 不要提及转录、AI 或摘要
+- 不要听起来像 AI 助手
+- 像一位资深产品经理的内部笔记
 
-STYLE: Calm, neutral, professional, skim-friendly. Short bullets, no sub-bullets.`;
+风格：冷静、中立、专业、便于速览。短 bullet，不使用子 bullet。`;
 
                 let summaryPrompt: string;
                 let groqSummaryPrompt: string;
@@ -268,17 +268,17 @@ STYLE: Calm, neutral, professional, skim-friendly. Short bullets, no sub-bullets
                         .map(s => `    "${s.title}": []`)
                         .join(',\n');
 
-                    summaryPrompt = `You are a silent meeting note-taker. Extract structured notes from the conversation transcript below.
+                    summaryPrompt = `你是一位静默的会议记录员。从下面的对话转录中提取结构化笔记。
 ${modeContextBlock}
 ${baseRules}
 
-SECTIONS TO FILL (extract only what is present in the transcript):
+需要填充的分区（只提取转录中实际存在的内容）：
 ${sectionList}
 
-Return ONLY valid JSON — no markdown fences, no comments, no extra keys. Each section value is an array of concise factual bullet strings taken directly from the conversation. Use [] if a section has no relevant content.
+只返回合法的 JSON——不要 markdown 围栏、不要注释、不要额外 key。每个分区的值是一个字符串数组，数组元素是直接摘自对话的简洁事实 bullet。如果某个分区没有相关内容，使用 []。
 
 {
-  "overview": "1-2 sentence summary of what was discussed",
+  "overview": "1-2 句话概括讨论内容",
   "sections": {
 ${sectionKeys}
   }
@@ -287,15 +287,15 @@ ${sectionKeys}
                     groqSummaryPrompt = summaryPrompt;
                 } else {
                     // Default generic notes
-                    summaryPrompt = `You are a silent meeting summarizer. Convert this conversation into concise internal meeting notes.
+                    summaryPrompt = `你是一位静默的会议总结员。将这段对话转换为简洁的内部会议笔记。
 
 ${baseRules}
 
-Return ONLY valid JSON (no markdown code blocks):
+只返回合法 JSON（不要 markdown 代码块）：
 {
-  "overview": "1-2 sentence description of what was discussed",
-  "keyPoints": ["3-6 specific bullets - each = one concrete topic or point discussed"],
-  "actionItems": ["specific next steps, assigned tasks, or implied follow-ups. If absolutely none found, return empty array"]
+  "overview": "1-2 句话描述讨论内容",
+  "keyPoints": ["3-6 个具体 bullet——每个 bullet 等于一个具体话题或观点"],
+  "actionItems": ["具体的后续步骤、分配的任务或隐含的跟进事项。如果确实没有，返回空数组"]
 }`;
                     groqSummaryPrompt = GROQ_SUMMARY_JSON_PROMPT;
                 }

@@ -112,22 +112,22 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
 
         if (activeTab === 'summary' && meeting.detailedSummary) {
             textToCopy = `
-Meeting: ${meeting.title}
-Date: ${new Date(meeting.date).toLocaleDateString()}
+会议：${meeting.title}
+日期：${new Date(meeting.date).toLocaleDateString()}
 
-OVERVIEW:
+概述：
 ${meeting.detailedSummary.overview || ''}
 
-ACTION ITEMS:
-${meeting.detailedSummary.actionItems?.map(item => `- ${item}`).join('\n') || 'None'}
+行动项：
+${meeting.detailedSummary.actionItems?.map(item => `- ${item}`).join('\n') || '无'}
 
-KEY POINTS:
-${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'None'}
+要点：
+${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || '无'}
             `.trim();
         } else if (activeTab === 'transcript' && meeting.transcript) {
-            textToCopy = meeting.transcript.map(t => `[${formatTime(t.timestamp)}] ${t.speaker === 'user' ? 'Me' : 'Them'}: ${t.text}`).join('\n');
+            textToCopy = meeting.transcript.map(t => `[${formatTime(t.timestamp)}] ${t.speaker === 'user' ? '我' : '对方'}: ${t.text}`).join('\n');
         } else if (activeTab === 'usage' && meeting.usage) {
-            textToCopy = meeting.usage.map(u => `Q: ${u.question || ''}\nA: ${u.answer || ''}`).join('\n\n');
+            textToCopy = meeting.usage.map(u => `问：${u.question || ''}\n答：${u.answer || ''}`).join('\n\n');
         }
 
         if (!textToCopy) return;
@@ -236,7 +236,11 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                     {/* Designing Tabs to match reference 1:1 (Dark Pill Container) */}
                     <div className="flex items-center justify-between mb-8">
                         <div className={`p-1 rounded-xl inline-flex items-center gap-0.5 ${isLight ? 'bg-[#E5E5EA] border border-black/[0.04]' : 'bg-[#121214] border border-white/[0.08]'}`}>
-                            {['summary', 'transcript', 'usage'].map((tab) => (
+                            {[
+                                { key: 'summary', label: '摘要' },
+                                { key: 'transcript', label: '转录' },
+                                { key: 'usage', label: '使用记录' },
+                            ].map(({ key: tab, label }) => (
                                 <button
                                     key={tab}
                                     onClick={() => setActiveTab(tab as any)}
@@ -253,7 +257,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             transition={{ type: "spring", stiffness: 400, damping: 30 }}
                                         />
                                     )}
-                                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                    {label}
                                 </button>
                             ))}
                         </div>
@@ -300,7 +304,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     <section className="mb-8">
                                         <div className="flex items-center justify-between mb-4">
                                             <EditableTextBlock
-                                                initialValue={meeting.detailedSummary?.actionItemsTitle || 'Action Items'}
+                                                initialValue={meeting.detailedSummary?.actionItemsTitle || '行动项'}
                                                 onSave={(val) => {
                                                     setMeeting(prev => ({
                                                         ...prev,
@@ -345,7 +349,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     <section>
                                         <div className="flex items-center justify-between mb-4">
                                             <EditableTextBlock
-                                                initialValue={meeting.detailedSummary?.keyPointsTitle || 'Key Points'}
+                                                initialValue={meeting.detailedSummary?.keyPointsTitle || '要点'}
                                                 onSave={(val) => {
                                                     setMeeting(prev => ({
                                                         ...prev,
@@ -494,14 +498,14 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         console.log('Filtered Transcript:', filteredTranscript);
 
                                         if (filteredTranscript.length === 0) {
-                                            return <p className="text-text-tertiary">No transcript available.</p>;
+                                            return <p className="text-text-tertiary">没有可用的转录。</p>;
                                         }
 
                                         return filteredTranscript.map((entry, i) => (
                                             <div key={i} className="group">
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <span className="text-xs font-semibold text-text-secondary">
-                                                        {entry.speaker === 'user' ? 'Me' : 'Them'}
+                                                        {entry.speaker === 'user' ? '我' : '对方'}
                                                     </span>
                                                     <span className="text-xs text-text-tertiary font-mono">{entry.timestamp ? formatTime(entry.timestamp) : '0:00'}</span>
                                                 </div>
@@ -598,7 +602,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         )}
                                     </div>
                                 ))}
-                                {!meeting.usage?.length && <p className="text-text-tertiary">No usage history.</p>}
+                                {!meeting.usage?.length && <p className="text-text-tertiary">没有使用记录。</p>}
                             </motion.section>
                         )}
                     </div>

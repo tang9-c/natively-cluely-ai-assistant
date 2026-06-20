@@ -169,8 +169,8 @@ test('active mode prompt suffix strips shared prompt prelude exactly once', () =
   const suffix = ModesManager.getInstance().getActiveModeSystemPromptSuffix();
 
   assert.ok(suffix.includes('<mode_definition>'));
-  assert.ok(suffix.includes('deal'));
-  assert.ok(suffix.includes('objection'));
+  assert.ok(suffix.includes('成交'));
+  assert.ok(suffix.includes('反对意见'));
   assert.ok(!suffix.startsWith(promptsMod.SHARED_MODE_PREFIX));
   assert.ok(!suffix.startsWith(promptsMod.SHARED_MODE_PREFIX_SHORT));
   assert.equal((suffix.match(/<core_identity>/g) ?? []).length, 0);
