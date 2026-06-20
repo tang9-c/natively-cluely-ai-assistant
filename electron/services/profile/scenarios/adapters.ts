@@ -82,7 +82,7 @@ function createAdapter(params: {
 
 export const salesScenarioAdapter = createAdapter({
   type: 'sales',
-  label: 'Sales',
+  label: '销售',
   supportedDocSubtypes: [
     'customer-profile',
     'product-intro',
@@ -91,18 +91,18 @@ export const salesScenarioAdapter = createAdapter({
     'pricing-objections',
   ],
   cards: [
-    card('customer-profile', 'Customer profile', 'Prospect background, stakeholders, pains, and buying context.', 'customer-profile'),
-    card('product-intro', 'Product intro', 'Positioning, product capabilities, and demo notes.', 'product-intro'),
-    card('solution-brief', 'Solution brief', 'Recommended solution shape and value proof.', 'solution-brief'),
-    card('case-study', 'Case study', 'Relevant customer evidence and outcomes.', 'case-study'),
-    card('pricing-objections', 'Pricing objections', 'Pricing, procurement, and objection handling notes.', 'pricing-objections'),
+    card('customer-profile', '客户档案', '潜在客户背景、关键干系人、痛点与采购语境。', 'customer-profile'),
+    card('product-intro', '产品介绍', '产品定位、核心能力与演示要点。', 'product-intro'),
+    card('solution-brief', '方案简介', '推荐方案形态与价值证明。', 'solution-brief'),
+    card('case-study', '客户案例', '相关客户证据与落地成果。', 'case-study'),
+    card('pricing-objections', '定价与异议', '价格、采购流程与异议处理话术。', 'pricing-objections'),
   ],
   systemPromptSuffix: 'You are helping the user in a sales scenario. Use customer, product, solution, case study, pricing, and objection materials as grounding context.',
 });
 
 export const interviewScenarioAdapter = createAdapter({
   type: 'interview',
-  label: 'Interview',
+  label: '面试',
   supportedDocSubtypes: [
     'candidate-profile',
     'candidate-resume',
@@ -116,16 +116,16 @@ export const interviewScenarioAdapter = createAdapter({
     'practice-problem',
   ],
   cards: [
-    card('candidate-profile', 'Candidate profile', 'Candidate background, goals, strengths, and positioning notes.', 'candidate-profile'),
-    card('candidate-resume', 'Candidate resume', 'Candidate resume, work history, and experience evidence.', 'candidate-resume'),
-    card('job-description', 'Job description', 'Role requirements, responsibilities, and evaluation criteria.', 'job-description'),
-    card('company-research', 'Company research', 'Company, team, product, and market context.', 'company-research'),
-    card('negotiation-script', 'Negotiation script', 'Compensation, offer, and negotiation talking points.', 'negotiation-script'),
-    card('scorecard', 'Scorecard', 'Evaluation criteria, competencies, and rating guidance.', 'scorecard'),
-    card('followup-script', 'Follow-up script', 'Candidate follow-up, next steps, and closing language.', 'followup-script'),
-    card('technical-spec', 'Technical spec', 'Technical prompt, architecture context, and constraints.', 'technical-spec'),
-    card('rubric', 'Rubric', 'Technical evaluation rubric and success criteria.', 'rubric'),
-    card('practice-problem', 'Practice problem', 'Practice question, sample constraints, and preparation notes.', 'practice-problem'),
+    card('candidate-profile', '候选人档案', '候选人背景、目标、优势与定位说明。', 'candidate-profile'),
+    card('candidate-resume', '候选人简历', '候选人简历、工作经历与经验佐证。', 'candidate-resume'),
+    card('job-description', '职位描述', '岗位要求、职责与评估标准。', 'job-description'),
+    card('company-research', '公司调研', '公司、团队、产品与行业背景。', 'company-research'),
+    card('negotiation-script', '谈判话术', '薪酬、 offer 与谈判要点。', 'negotiation-script'),
+    card('scorecard', '评分卡', '评估维度、胜任力与打分指引。', 'scorecard'),
+    card('followup-script', '跟进话术', '候选人跟进、下一步与收尾用语。', 'followup-script'),
+    card('technical-spec', '技术规范', '技术题目、架构背景与约束条件。', 'technical-spec'),
+    card('rubric', '评分标准', '技术评估标准与成功指标。', 'rubric'),
+    card('practice-problem', '练习题', '练习题目、示例约束与准备要点。', 'practice-problem'),
   ],
   systemPromptSuffix: (resolution) => {
     if (resolution.subScenario === 'recruiter') {
@@ -140,23 +140,23 @@ export const interviewScenarioAdapter = createAdapter({
 
 export const lectureScenarioAdapter = createAdapter({
   type: 'lecture',
-  label: 'Lecture',
+  label: '讲座',
   supportedDocSubtypes: [
     'audience-profile',
     'outline',
     'references',
   ],
   cards: [
-    card('audience-profile', 'Audience profile', 'Audience level, goals, and learning context.', 'audience-profile'),
-    card('outline', 'Outline', 'Lecture structure, topics, and sequencing.', 'outline'),
-    card('references', 'References', 'Readings, citations, and supporting material.', 'references'),
+    card('audience-profile', '听众画像', '听众水平、目标与学习背景。', 'audience-profile'),
+    card('outline', '讲纲', '讲座结构、主题与顺序安排。', 'outline'),
+    card('references', '参考资料', '阅读材料、引用与辅助资料。', 'references'),
   ],
   systemPromptSuffix: 'You are helping the user in a lecture scenario. Use audience profile, outline, and reference materials as grounding context.',
 });
 
 export const teamMeetScenarioAdapter = createAdapter({
   type: 'team-meet',
-  label: 'Team meet',
+  label: '团队会议',
   supportedDocSubtypes: [
     'attendees',
     'agenda',
@@ -164,24 +164,24 @@ export const teamMeetScenarioAdapter = createAdapter({
     'references',
   ],
   cards: [
-    card('attendees', 'Attendees', 'Participants, roles, responsibilities, and stakeholder context.', 'attendees'),
-    card('agenda', 'Agenda', 'Meeting agenda and expected discussion topics.', 'agenda'),
-    card('decision-log', 'Decision log', 'Prior decisions, rationale, and open questions.', 'decision-log'),
-    card('references', 'References', 'Supporting materials, links, and project context.', 'references'),
+    card('attendees', '与会人员', '参会者、角色、职责与干系人背景。', 'attendees'),
+    card('agenda', '会议议程', '会议议程与预期讨论主题。', 'agenda'),
+    card('decision-log', '决策记录', '既往决策、依据与待决问题。', 'decision-log'),
+    card('references', '参考资料', '支持材料、链接与项目背景。', 'references'),
   ],
   systemPromptSuffix: 'You are helping the user in a team meeting scenario. Use attendee, agenda, decision log, and reference materials as grounding context.',
 });
 
 export const generalScenarioAdapter = createAdapter({
   type: 'general',
-  label: 'General',
+  label: '通用',
   supportedDocSubtypes: [
     'references',
     'context-note',
   ],
   cards: [
-    card('references', 'References', 'General reference material for the conversation.', 'references'),
-    card('context-note', 'Context note', 'Notes, constraints, and prior discussion context.', 'context-note'),
+    card('references', '参考资料', '对话通用参考材料。', 'references'),
+    card('context-note', '背景备注', '备注、约束与前期讨论背景。', 'context-note'),
   ],
   systemPromptSuffix: 'You are helping the user in a general scenario. Use reference materials and context notes as grounding context.',
 });
