@@ -22,8 +22,6 @@ export function ScenarioSummaryCard({
     onUpload,
     onDelete,
 }: ScenarioSummaryCardProps) {
-    const latestDocument = documents[0];
-
     return (
         <div className="flex h-full min-h-[148px] flex-col rounded-lg border border-border-subtle bg-bg-input/45 p-4">
             <div className="flex items-start justify-between gap-3">
@@ -43,29 +41,7 @@ export function ScenarioSummaryCard({
             </div>
 
             <div className="mt-auto pt-4">
-                {latestDocument ? (
-                    <div className="rounded-md border border-border-subtle bg-bg-surface/70 px-3 py-2">
-                        <div className="flex items-center gap-2">
-                            <FileText size={14} className="shrink-0 text-text-tertiary" />
-                            <p className="min-w-0 flex-1 truncate text-[12px] font-medium text-text-primary">
-                                {getDocumentTitle(latestDocument)}
-                            </p>
-                            <button
-                                type="button"
-                                onClick={() => onDelete(latestDocument)}
-                                className="rounded-full p-1 text-text-tertiary transition-colors hover:bg-red-500/10 hover:text-red-500"
-                                aria-label={`删除 ${getDocumentTitle(latestDocument)}`}
-                            >
-                                <Trash2 size={12} />
-                            </button>
-                        </div>
-                        {documents.length > 1 && (
-                            <p className="mt-1 pl-5 text-[10px] text-text-tertiary">
-                                另有 {documents.length - 1} 份资料
-                            </p>
-                        )}
-                    </div>
-                ) : (
+                {documents.length === 0 ? (
                     <button
                         type="button"
                         onClick={() => onUpload(card.docSubtype)}
@@ -74,6 +50,28 @@ export function ScenarioSummaryCard({
                     >
                         {uploading ? '正在加入资料...' : '添加场景资料'}
                     </button>
+                ) : (
+                    <div className="space-y-2">
+                        {documents.map((document) => (
+                            <div
+                                key={document.id}
+                                className="group flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface/70 px-3 py-2"
+                            >
+                                <FileText size={14} className="shrink-0 text-text-tertiary" />
+                                <p className="min-w-0 flex-1 truncate text-[12px] font-medium text-text-primary">
+                                    {getDocumentTitle(document)}
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => onDelete(document)}
+                                    className="rounded-full p-1 text-text-tertiary opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"
+                                    aria-label={`删除 ${getDocumentTitle(document)}`}
+                                >
+                                    <Trash2 size={12} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
                 )}
             </div>
         </div>
