@@ -17,21 +17,21 @@ import { CompanyResearchEngine } from '../research/CompanyResearchEngine';
 import { TavilySearchProvider } from '../research/TavilySearchProvider';
 import { CompanyResearchCache } from '../research/CompanyResearchCache';
 import { ResearchDossierBuilder } from '../research/ResearchDossierBuilder';
-import { CredentialsManager } from '../CredentialsManager';
 import type { ProfileResearchCompanyResponse } from '../research/types';
 
-// Use a runtime require() so test stubs on the cached module exports
-// object are visible to the orchestrator. esbuild inlines static
-// `require()` calls into the bundle, but a dynamic expression built
-// from a runtime variable is preserved as a real Node `require()` call
-// at runtime, which goes through the module cache.
+// In the bundled app, CredentialsManager is inlined into main.js and initialized
+// there. Expose that singleton globally so this module (which may be loaded from
+// a separate bundle by tests or may also be inlined by esbuild) reads from the
+// same initialized instance in production. Falls back to a dynamic require so
+// tests can still stub the cached module exports object.
 function readCredentialsModule(): any {
+  const globalSingleton = (globalThis as any).__credentialsManagerSingleton;
+  if (globalSingleton) {
+    return { CredentialsManager: { getInstance: () => globalSingleton } };
+  }
+
   const moduleMod = require('module') as typeof import('module');
   const dynamicRequire = moduleMod.createRequire(__filename);
-  // In tests/source __filename points to this file, so ../CredentialsManager resolves
-  // to electron/services/CredentialsManager. In the bundled app esbuild inlines this
-  // module into main.js, so __dirname becomes dist-electron/electron and we need
-  // ./services/CredentialsManager instead.
   const candidates = [
     path.join(__dirname, '..', 'CredentialsManager'),
     path.join(__dirname, 'services', 'CredentialsManager'),
@@ -41,14 +41,13 @@ function readCredentialsModule(): any {
       return dynamicRequire(candidate);
     } catch {}
   }
-  // Fallback that preserves the original error message if nothing resolves.
   return dynamicRequire(path.join(__dirname, '..', 'CredentialsManager'));
 }
 
 function resolveTavilyApiKey(credsMod: any): string | undefined {
   // Tests stub getTavilyApiKey directly onto the cached module exports object.
   // In production the module exports the CredentialsManager class, so read from
-  // the singleton instance.
+  // the singleton instance (which main.ts initializes and exposes globally).
   return (
     credsMod?.getTavilyApiKey?.() ??
     credsMod?.CredentialsManager?.getInstance()?.getTavilyApiKey() ??

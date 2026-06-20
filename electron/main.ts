@@ -4189,7 +4189,9 @@ async function initializeApp() {
   // Initialize CredentialsManager and load keys explicitly
   // This fixes the issue where keys (especially in production) aren't loaded in time for RAG/LLM
   const { CredentialsManager } = require('./services/CredentialsManager');
-  CredentialsManager.getInstance().init();
+  const credentialsManagerSingleton = CredentialsManager.getInstance();
+  credentialsManagerSingleton.init();
+  (globalThis as any).__credentialsManagerSingleton = credentialsManagerSingleton;
 
   // 4. Initialize State
   const appState = AppState.getInstance()
