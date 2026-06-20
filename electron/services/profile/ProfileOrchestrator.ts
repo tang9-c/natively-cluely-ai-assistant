@@ -28,8 +28,21 @@ import type { ProfileResearchCompanyResponse } from '../research/types';
 function readCredentialsModule(): any {
   const moduleMod = require('module') as typeof import('module');
   const dynamicRequire = moduleMod.createRequire(__filename);
-  const modPath = ['..', 'CredentialsManager'].join('/');
-  return dynamicRequire(modPath);
+  // In tests/source __filename points to this file, so ../CredentialsManager resolves
+  // to electron/services/CredentialsManager. In the bundled app esbuild inlines this
+  // module into main.js, so __dirname becomes dist-electron/electron and we need
+  // ./services/CredentialsManager instead.
+  const candidates = [
+    path.join(__dirname, '..', 'CredentialsManager'),
+    path.join(__dirname, 'services', 'CredentialsManager'),
+  ];
+  for (const candidate of candidates) {
+    try {
+      return dynamicRequire(candidate);
+    } catch {}
+  }
+  // Fallback that preserves the original error message if nothing resolves.
+  return dynamicRequire(path.join(__dirname, '..', 'CredentialsManager'));
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
