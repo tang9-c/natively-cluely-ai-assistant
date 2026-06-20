@@ -777,10 +777,9 @@ export class AppState {
           console.log('[AppState] Knowledge mode restored from settings');
         }
 
-        // Restore custom notes so orchestrator has them from first request
+        // Restore custom notes so LLMHelper has them from first request
         const savedNotes = DatabaseManager.getInstance().getCustomNotes();
         if (savedNotes) {
-          knowledgeOrchestrator.setCustomNotes(savedNotes);
           llmHelper.setCustomNotes(savedNotes);
           console.log('[AppState] Custom notes restored');
         }

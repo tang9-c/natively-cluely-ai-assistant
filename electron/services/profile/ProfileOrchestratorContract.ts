@@ -22,6 +22,4 @@ export interface ProfileOrchestratorRuntime {
   processQuestion(message: string): Promise<KnowledgeResult | null>;
   feedForDepthScoring(message: string): void;
   feedInterviewerUtterance(message: string): void;
-  setCustomNotes(content: string): void;
-  getCustomNotes(): string;
 }

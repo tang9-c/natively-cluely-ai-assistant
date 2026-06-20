@@ -49,7 +49,6 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
   private resumeParser: ResumeParser | null = null;
   private jdParser: JDParser | null = null;
   private activeMode = false;
-  private customNotes = '';
   private llmHelper: any = null;
   researchEngine: CompanyResearchEngine | null = null;
   // Task 6: the four setXxxFn callbacks (generateContentFn,
@@ -241,14 +240,6 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
       hasActiveJD,
       activeJD: hasActiveJD ? activeJD : undefined,
     };
-  }
-
-  setCustomNotes(content: string): void {
-    this.customNotes = typeof content === 'string' ? content : '';
-  }
-
-  getCustomNotes(): string {
-    return this.customNotes;
   }
 
   getCompanyResearchEngine(): CompanyResearchEngine {
