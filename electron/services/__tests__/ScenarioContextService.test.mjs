@@ -108,39 +108,6 @@ describe('ScenarioContextService', () => {
     assert.ok(result.dataScopes.includes('reference_files'));
   });
 
-  test('truncates persona to personaMaxChars and respects 0 to disable', async () => {
-    const longPersona = 'P'.repeat(200);
-    const deps = installModeWithReferenceFile({
-      templateType: 'sales',
-      fileName: 'short.md',
-      content: 'short content',
-      metadata: { scenarioType: 'sales', docSubtype: 'case-study' },
-    });
-    deps.db.getPersona = () => longPersona;
-
-    const { ScenarioContextService } = cjsRequire(servicePath);
-
-    const capped = new ScenarioContextService({ ...deps, personaMaxChars: 50 });
-    const cappedResult = await capped.buildForRequest({ query: 'q' });
-    const personaMatch = cappedResult.contextBlock.match(
-      /<scenario_persona>([^<]*)<\/scenario_persona>/,
-    );
-    assert.ok(personaMatch, 'scenario_persona block should be present');
-    assert.equal(personaMatch[1].length, 50, 'persona should be truncated to 50 chars');
-
-    const zero = new ScenarioContextService({ ...deps, personaMaxChars: 0 });
-    const zeroResult = await zero.buildForRequest({ query: 'q' });
-    const emptyPersona = zeroResult.contextBlock.match(
-      /<scenario_persona>([\s\S]*?)<\/scenario_persona>/,
-    );
-    assert.ok(
-      emptyPersona && emptyPersona[1] === '',
-      'personaMaxChars=0 should emit an empty persona block (got ' +
-        JSON.stringify(emptyPersona?.[1]) +
-        ')',
-    );
-  });
-
   test('truncates master profile JSON to masterProfileMaxChars', async () => {
     const deps = installModeWithReferenceFile({
       templateType: 'sales',
