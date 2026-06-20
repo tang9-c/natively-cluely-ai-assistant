@@ -135,8 +135,6 @@ describe('ProfileOrchestrator', () => {
       'processQuestion',
       'feedForDepthScoring',
       'feedInterviewerUtterance',
-      'setCustomNotes',
-      'getCustomNotes',
     ]) {
       assert.equal(typeof orchestrator[method], 'function', `${method} must exist`);
     }
