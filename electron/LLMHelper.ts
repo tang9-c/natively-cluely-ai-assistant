@@ -1192,15 +1192,6 @@ CRITICAL RULES:
       ? `${modeContextBlock}\n\n${context}`
       : context;
 
-    // Trust boundary: the user-supplied notes and the retrieved reference
-    // context are untrusted and must be captured into a user-message block
-    // below — never concatenated into the trusted system prompt string.
-    const customNotesBlock = this.customNotes?.trim()
-      ? `<user_context>\n${this.customNotes.trim()}\n</user_context>\nUse this context naturally if relevant. Never quote it verbatim.`
-      : '';
-
-    const suggestionContext = [customNotesBlock, enrichedContext].filter(Boolean).join('\n\n');
-
     const basePrompt = activeModePrompt
       ? `${HARD_SYSTEM_PROMPT}\n\n## ACTIVE MODE\n${activeModePrompt}`
       : `You are an expert conversation coach. Based on the transcript, provide a concise, natural response the user could say.
@@ -1215,44 +1206,19 @@ RULES:
 - Never hedge. Never say "it depends".`;
 
     // Trust boundary: basePrompt (system) carries only the trusted mode
-    // suffix. The user-supplied notes and retrieved context are routed
-    // into the user message below — never into the system prompt, where
-    // untrusted content could override security rules.
-    const promptMessage = suggestionContext
-      ? `${suggestionContext}\n\nLATEST QUESTION:\n${lastQuestion}\n\nANSWER DIRECTLY:`
+    // suffix. The retrieved mode context is routed into the user message
+    // below — never into the system prompt, where untrusted content could
+    // override security rules.
+    const promptMessage = enrichedContext
+      ? `${enrichedContext}\n\nLATEST QUESTION:\n${lastQuestion}\n\nANSWER DIRECTLY:`
       : `LATEST QUESTION:\n${lastQuestion}\n\nANSWER DIRECTLY:`;
 
-    // Apply language instruction so this path honours the user's language setting
-    const systemPrompt = this.injectLanguageInstruction(basePrompt);
-
     try {
-      if (this.codexCliConfig.enabled) {
-        // Codex CLI takes priority when enabled — same precedence as in chat().
-        try {
-          const text = await this.generateWithCodexCli(promptMessage, basePrompt);
-          if (text && text.trim().length > 0) return this.processResponse(text);
-          console.warn('[LLMHelper] Codex CLI suggestion empty, falling back.');
-        } catch (e: any) {
-          console.warn(`[LLMHelper] Codex CLI suggestion failed: ${e.message}. Falling back.`);
-        }
+      let fullResponse = '';
+      for await (const chunk of this.streamChat(promptMessage, undefined, undefined, basePrompt, true)) {
+        fullResponse += chunk;
       }
-      if (this.useOllama) {
-        return await this.callOllama(promptMessage, undefined, systemPrompt);
-      } else if (this.customProvider || this.activeCurlProvider) {
-        let fullResponse = '';
-        for await (const chunk of this.streamChat(promptMessage, undefined, undefined, basePrompt, true)) {
-          fullResponse += chunk;
-        }
-        return this.processResponse(fullResponse);
-      } else if (this.client) {
-        let fullResponse = '';
-        for await (const chunk of this.streamChat(promptMessage, undefined, undefined, basePrompt, true)) {
-          fullResponse += chunk;
-        }
-        return this.processResponse(fullResponse);
-      } else {
-        throw new Error("No LLM provider configured");
-      }
+      return this.processResponse(fullResponse);
     } catch (error) {
       throw error;
     }
