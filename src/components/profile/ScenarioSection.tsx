@@ -15,6 +15,22 @@ function scenarioTitle(scenario?: ActiveScenario | null): string {
     return label;
 }
 
+function parseParsedJson(value: unknown): { companyName?: string } | null {
+    if (typeof value !== 'string' || !value.trim()) return null;
+    try {
+        const parsed = JSON.parse(value);
+        if (parsed && typeof parsed === 'object') {
+            const companyName = parsed.companyName;
+            if (typeof companyName === 'string' && companyName.trim().length > 0) {
+                return { companyName: companyName.trim() };
+            }
+        }
+    } catch {
+        // ignore malformed JSON
+    }
+    return null;
+}
+
 export function ScenarioSection() {
     const [scenario, setScenario] = useState<ActiveScenario | null>(null);
     const [documents, setDocuments] = useState<ScenarioDocument[]>([]);
@@ -41,7 +57,11 @@ export function ScenarioSection() {
                 setError(docsResult?.error || '无法读取场景资料');
                 return;
             }
-            setDocuments(docsResult.documents || []);
+            const docs = docsResult.documents || [];
+            setDocuments(docs.map((document) => ({
+                ...document,
+                parsedJson: parseParsedJson(document.metadata?.parsed_json),
+            })));
         } catch (event: any) {
             setError(event?.message || '场景资料加载失败');
         } finally {
