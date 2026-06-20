@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
 import icon from "./icon.png";
@@ -114,11 +114,16 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     // Keybinds
     const { isShortcutPressed } = useShortcuts();
     const isLight = useResolvedTheme() === 'light';
+    const seededRef = useRef(false);
+
     useEffect(() => {
         let mounted = true;
         console.log("Launcher mounted");
-        // Seed demo data if needed (safe to call always — runs ONCE on mount)
-        if (window.electronAPI && window.electronAPI.seedDemo) {
+        // Seed demo data if needed (safe to call always — runs ONCE per window session).
+        // Guard with a ref because React 18 StrictMode mounts the component twice in
+        // development, which would otherwise log the "already exists" message twice.
+        if (!seededRef.current && window.electronAPI && window.electronAPI.seedDemo) {
+            seededRef.current = true;
             window.electronAPI.seedDemo().catch(err => console.error("Failed to seed demo:", err));
         }
 
