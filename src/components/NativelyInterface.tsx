@@ -108,32 +108,11 @@ interface NativelyInterfaceProps {
   onOpenModes?: () => void;
 }
 
-const MODE_TEMPLATE_LABELS: Record<string, string> = {
-  general: '通用',
-  sales: '销售',
-  recruiting: '招聘',
-  'team-meet': '团队会议',
-  'looking-for-work': '求职',
-  'technical-interview': '技术面试',
-  lecture: '讲座',
-};
-
-const DEFAULT_MODE_NAMES: Record<string, string> = {
-  general: 'General',
-  sales: 'Sales',
-  recruiting: 'Recruiting',
-  'team-meet': 'Team Meet',
-  'looking-for-work': 'Looking for work',
-  'technical-interview': 'Technical Interview',
-  lecture: 'Lecture',
-};
-
-const getModeDisplayName = (mode: { name: string; templateType: string }): string => {
-  const templateLabel = MODE_TEMPLATE_LABELS[mode.templateType];
-  const defaultName = DEFAULT_MODE_NAMES[mode.templateType];
-  if (templateLabel && mode.name === defaultName) return templateLabel;
-  return mode.name;
-};
+import {
+  DEFAULT_MODE_NAMES,
+  getModeDisplayName,
+  MODE_TEMPLATE_LABELS,
+} from '../lib/modeTemplateMeta';
 
 // PERF: HighlightedCode renders a single fenced code block. Hoisted to module
 // scope and wrapped in React.memo so a parent re-render does not re-tokenize

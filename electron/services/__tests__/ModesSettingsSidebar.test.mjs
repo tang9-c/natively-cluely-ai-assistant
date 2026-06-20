@@ -111,9 +111,9 @@ test('ModesSettingsBase sidebar renders mode list and exposes a reload hook', ()
 test('General mode defaults keep the original summary note sections', () => {
   assert.match(modesManagerSource, /TEMPLATE_NOTE_SECTIONS/);
   assert.match(modesManagerSource, /general:\s*\[/);
-  assert.match(modesManagerSource, /title:\s*'Summary'/);
-  assert.match(modesManagerSource, /title:\s*'Action items'/);
-  assert.match(modesManagerSource, /title:\s*'Key points'/);
+  assert.match(modesManagerSource, /title:\s*'摘要'/);
+  assert.match(modesManagerSource, /title:\s*'行动项'/);
+  assert.match(modesManagerSource, /title:\s*'要点'/);
 
   const createModeIndex = modesManagerSource.indexOf('public createMode');
   const templateSectionsIndex = modesManagerSource.indexOf('TEMPLATE_NOTE_SECTIONS[params.templateType]', createModeIndex);
