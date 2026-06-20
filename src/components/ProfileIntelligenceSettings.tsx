@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    X, RefreshCw, Upload, Briefcase, Trash2, Pencil, Check, Globe,
-    Building2, Search, AlertCircle, Gift, Info, Star, Sparkles, User, ArrowUpRight
+    X, RefreshCw, Upload, Briefcase, Trash2, Pencil, Check,
+    Building2, Search, AlertCircle, Gift, Star, Sparkles, User, ArrowUpRight
 } from 'lucide-react';
 import { ProfileVisualizer } from './profile/ProfileVisualizer';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -399,10 +399,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
     const [companyResearching, setCompanyResearching] = useState(false);
     const [companyDossier, setCompanyDossier] = useState<any>(null);
     const [companySearchQuotaExhausted, setCompanySearchQuotaExhausted] = useState(false);
-    const [tavilyApiKey, setTavilyApiKey] = useState('');
-    const [hasStoredTavilyKey, setHasStoredTavilyKey] = useState(false);
-    const [tavilySaving, setTavilySaving] = useState(false);
-    const [tavilyError, setTavilyError] = useState('');
     const [negotiationScript, setNegotiationScript] = useState<any>(null);
     const [negotiationGenerating, setNegotiationGenerating] = useState(false);
     const [negotiationError, setNegotiationError] = useState('');
@@ -423,13 +419,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
         window.electronAPI?.profileGetNotes?.().then((res: any) => {
             if (res?.success) setCustomNotes(res.content ?? '');
         }).catch(() => { });
-
-        // Tavily key check
-        window.electronAPI?.getStoredCredentials?.().then((creds: any) => {
-            if (creds && creds.hasTavilyKey) {
-                setHasStoredTavilyKey(true);
-            }
-        }).catch(() => {});
     }, []);
 
     useEffect(() => {
@@ -437,21 +426,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
             if (res?.success) setPersona(res.content ?? '');
         }).catch(() => { });
     }, []);
-
-    const handleRemoveTavilyKey = async () => {
-        if (!confirm('确定要移除 Tavily API 密钥吗？')) return;
-        try {
-            const res = await window.electronAPI?.setTavilyApiKey?.('');
-            if (res && res.success) {
-                setHasStoredTavilyKey(false);
-                setTavilyApiKey('');
-            } else {
-                alert(res?.error || '移除 API 密钥失败');
-            }
-        } catch (e) {
-            alert('移除密钥时出错');
-        }
-    };
 
     return (
         <div
@@ -894,86 +868,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     <span className={`text-[10px] tabular-nums ${persona.length > 3600 ? 'text-amber-500' : 'text-text-tertiary'}`}>
                                                         {persona.length}/4000
                                                     </span>
-                                                </div>
-                                            </div>
-                                        </BezelCard>
-
-                                    <BezelCard delay={0.4}>
-                                            <div className="p-5">
-                                                <div className="flex items-center gap-4 mb-4">
-                                                    <div className="w-10 h-10 rounded-lg bg-bg-input border border-border-subtle flex items-center justify-center text-emerald-500 shrink-0">
-                                                        <Globe size={20} />
-                                                    </div>
-                                                    <div>
-                                                        <div className="flex items-center gap-2">
-                                                            <h4 className="text-sm font-bold text-text-primary">Tavily 搜索 API</h4>
-                                                            {hasStoredTavilyKey && (
-                                                                <span className="text-[9px] font-bold text-emerald-500 px-1.5 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20 uppercase tracking-wide">已连接</span>
-                                                            )}
-                                                        </div>
-                                                        <p className="text-[11px] text-text-secondary mt-0.5">
-                                                            为公司调研提供实时网络搜索能力。
-                                                        </p>
-                                                    </div>
-                                                </div>
-
-                                                <div className="space-y-3">
-                                                    <div>
-                                                        <div className="flex justify-between items-center mb-1.5">
-                                                            <label className="text-[10px] font-semibold text-text-secondary uppercase tracking-wide block">API 密钥</label>
-                                                            {hasStoredTavilyKey && (
-                                                                <button
-                                                                    onClick={handleRemoveTavilyKey}
-                                                                    className="text-[10px] flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors bg-red-500/10 hover:bg-red-500/20 px-1.5 py-0.5 rounded"
-                                                                    title="移除 API 密钥"
-                                                                >
-                                                                    <Trash2 size={10} strokeWidth={2} /> 移除
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                        <input
-                                                            type="password"
-                                                            value={tavilyApiKey}
-                                                            onChange={(e) => { setTavilyApiKey(e.target.value); setTavilyError(''); }}
-                                                            placeholder={hasStoredTavilyKey ? '••••••••••••' : '输入 Tavily API 密钥 (tvly-...)'}
-                                                            className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/20 transition-all"
-                                                        />
-                                                    </div>
-                                                    {tavilyError && (
-                                                        <p className="text-[10px] text-red-400 px-1">{tavilyError}</p>
-                                                    )}
-                                                    <MagneticButton
-                                                        onClick={async () => {
-                                                            if (!tavilyApiKey.trim()) return;
-                                                            setTavilyError('');
-                                                            setTavilySaving(true);
-                                                            try {
-                                                                const result = await window.electronAPI?.setTavilyApiKey?.(tavilyApiKey.trim());
-                                                                if (result && !result.success) {
-                                                                    setTavilyError(result.error ?? '保存 API 密钥失败。');
-                                                                } else {
-                                                                    setHasStoredTavilyKey(true);
-                                                                    setTavilyApiKey('');
-                                                                }
-                                                            } catch (e: any) {
-                                                                setTavilyError(e?.message ?? '保存 API 密钥时发生意外错误。');
-                                                            } finally {
-                                                                setTavilySaving(false);
-                                                            }
-                                                        }}
-                                                        disabled={tavilySaving || !tavilyApiKey.trim()}
-                                                        primary={true}
-                                                        className="w-full"
-                                                    >
-                                                        {tavilySaving ? '保存中…' : '保存 API 密钥'}
-                                                    </MagneticButton>
-                                                </div>
-
-                                                <div className="mt-3 flex items-start gap-2 px-3 py-2.5 bg-bg-input/50 rounded-lg">
-                                                    <Info size={12} className="text-text-tertiary shrink-0 mt-0.5" />
-                                                    <p className="text-[10px] text-text-tertiary leading-relaxed">
-                                                        如未提供，将使用大语言模型的一般知识进行公司调研，信息可能已过时。在 <span className="text-emerald-500/80 hover:text-emerald-400 underline underline-offset-2 cursor-pointer" onClick={() => window.electronAPI?.openExternal?.('https://app.tavily.com/home')}>app.tavily.com</span> 获取免费 API 密钥。密钥以 <code className="text-emerald-500/80">tvly-</code> 开头。
-                                                    </p>
                                                 </div>
                                             </div>
                                         </BezelCard>
