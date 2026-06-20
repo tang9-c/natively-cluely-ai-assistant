@@ -70,6 +70,23 @@ describe('TavilySearchProvider', () => {
     restoreFetch();
   });
 
+  test('search() filters out results with invalid URLs', async () => {
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      results: [
+        { title: 'Valid', url: 'https://apple.com/valid', content: 'ok' },
+        { title: 'Empty URL', url: '', content: 'bad' },
+        { title: 'Relative URL', url: '/path', content: 'bad' },
+        { title: 'No URL field', content: 'bad' },
+      ],
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+    const { TavilySearchProvider } = cjsRequire(providerPath);
+    const p = new TavilySearchProvider({ apiKey: 'k', fetchImpl: globalThis.fetch });
+    const results = await p.search(['x']);
+    assert.equal(results.length, 1);
+    assert.equal(results[0].title, 'Valid');
+    restoreFetch();
+  });
+
   test('search() dedupes results by URL across multiple queries', async () => {
     globalThis.fetch = async () => new Response(JSON.stringify({
       results: [

@@ -23,6 +23,7 @@ import { SkillsManager } from './services/SkillsManager';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 import type { ResearchProgress } from './services/research/types';
+import { LlmInvalidFormatError } from './services/research/ResearchDossierBuilder';
 import { redactForLog } from './utils/redactForLog';
 import { ParserLLM } from './services/profile/parsers/ParserLLM';
 import { CompanyNameExtractor } from './services/profile/extractors/CompanyNameExtractor';
@@ -3737,6 +3738,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         });
       } catch (err: any) {
         console.error('[ipcHandlers] profile:research-company failed:', redactForLog([err]));
+        if (err instanceof LlmInvalidFormatError) {
+          return {
+            success: false,
+            errorCode: 'LLM_INVALID_FORMAT',
+            error: err?.message ?? 'AI 返回的报告格式不正确',
+          };
+        }
         return {
           success: false,
           errorCode: 'DB_ERROR',

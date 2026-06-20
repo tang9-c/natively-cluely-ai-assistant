@@ -83,11 +83,13 @@ export class TavilySearchProvider {
       if (!res.ok) throw new TavilyNetworkError(`HTTP ${res.status}`);
       const json: any = await res.json();
       const results = Array.isArray(json?.results) ? json.results : [];
-      return results.map((r: any) => ({
-        title: String(r.title ?? ''),
-        url: String(r.url ?? ''),
-        content: String(r.content ?? '').slice(0, 1000),
-      }));
+      return results
+        .filter((r: any) => isValidUrl(String(r.url ?? '')))
+        .map((r: any) => ({
+          title: String(r.title ?? ''),
+          url: String(r.url ?? ''),
+          content: String(r.content ?? '').slice(0, 1000),
+        }));
     } catch (err: any) {
       if (err instanceof TavilyError) throw err;
       if (err?.name === 'AbortError') {
@@ -98,5 +100,14 @@ export class TavilySearchProvider {
     } finally {
       clearTimeout(timer);
     }
+  }
+}
+
+function isValidUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
   }
 }
