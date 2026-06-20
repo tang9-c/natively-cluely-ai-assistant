@@ -75,7 +75,7 @@ export class ResearchDossierBuilder {
         lastErr = err;
       }
     }
-    if (lastErr) throw new LlmInvalidFormatError();
+    if (lastErr) throw new LlmInvalidFormatError(formatZodError(lastErr));
     const valid = DossierSchema.parse(parsed);
 
     const now = new Date().toISOString();
@@ -125,6 +125,14 @@ ${isFallback ? '⚠️ No external sources available. Answer from training knowl
 Sources:
 ${sourceBlock}
 
-Respond with JSON matching the schema. For each bullet, optionally include "citation" (1-based index into the sources above).`;
+Respond with JSON matching the schema. For each bullet, optionally include "citation" (1-based index into the sources above). Every "url" in sources must be a valid HTTP/HTTPS URL. Do not invent URLs; only use the URLs provided above.`;
   }
+}
+
+function formatZodError(err: unknown): string {
+  if (err instanceof z.ZodError) {
+    const issues = err.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
+    return `LLM returned invalid dossier shape (${issues})`;
+  }
+  return 'LLM returned invalid dossier shape';
 }
