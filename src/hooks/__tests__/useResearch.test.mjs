@@ -61,19 +61,24 @@ test('useResearch.ts compiles with TypeScript', () => {
 function makeUseResearchShim() {
   function useResearch() {
     let stage = 'idle';
+    let progressStage = null;
     let dossier = null;
     let cached = false;
     let error = null;
     let errorCode = null;
     let quotaExhausted = false;
+    let currentRequestId = null;
 
     async function research(name, opts) {
+      const requestId = Math.random().toString(36).slice(2);
+      currentRequestId = requestId;
       stage = 'loading';
+      progressStage = 'cache-check';
       error = null;
       errorCode = null;
       quotaExhausted = false;
       try {
-        const res = await window.electronAPI.profileResearchCompany(name, opts);
+        const res = await window.electronAPI.profileResearchCompany(name, { ...opts, requestId });
         if (res.success && res.dossier) {
           dossier = res.dossier;
           cached = !!res.cached;
@@ -87,11 +92,15 @@ function makeUseResearchShim() {
       } catch (err) {
         error = err?.message ?? 'IPC failed';
         stage = 'error';
+      } finally {
+        currentRequestId = null;
       }
     }
 
     function reset() {
+      currentRequestId = null;
       stage = 'idle';
+      progressStage = null;
       dossier = null;
       cached = false;
       error = null;
@@ -99,7 +108,7 @@ function makeUseResearchShim() {
       quotaExhausted = false;
     }
 
-    return { get stage() { return stage; }, get dossier() { return dossier; }, get cached() { return cached; }, get error() { return error; }, get errorCode() { return errorCode; }, get quotaExhausted() { return quotaExhausted; }, research, reset };
+    return { get stage() { return stage; }, get progressStage() { return progressStage; }, get dossier() { return dossier; }, get cached() { return cached; }, get error() { return error; }, get errorCode() { return errorCode; }, get quotaExhausted() { return quotaExhausted; }, research, reset };
   }
   return useResearch;
 }
@@ -143,8 +152,8 @@ test('hook body matches the test mirror (no silent drift)', () => {
   // Quota mapping + IPC call must appear on both sides.
   assert.ok(sourceResearchBody.includes('setQuotaExhausted(!!res.searchQuotaExhausted)'), 'source missing quota mapping');
   assert.ok(mirrorResearchBody.includes('quotaExhausted = !!res.searchQuotaExhausted'), 'mirror missing quota mapping');
-  assert.ok(sourceResearchBody.includes('window.electronAPI.profileResearchCompany(name, opts)'), 'source missing IPC call');
-  assert.ok(mirrorResearchBody.includes('window.electronAPI.profileResearchCompany(name, opts)'), 'mirror missing IPC call');
+  assert.ok(sourceResearchBody.includes('window.electronAPI.profileResearchCompany(name, {'), 'source missing IPC call');
+  assert.ok(mirrorResearchBody.includes('window.electronAPI.profileResearchCompany(name, { ...opts, requestId })'), 'mirror missing IPC call');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -156,6 +165,7 @@ function installMock(profileResearchCompany) {
   globalThis.window.electronAPI = {
     profileResearchCompany,
     profileClearResearchCache: async () => ({ success: true, deleted: 0 }),
+    onResearchProgressChanged: () => () => {},
   };
 }
 
@@ -215,7 +225,9 @@ describe('useResearch — state machine', () => {
     });
     const result = useResearch();
     await result.research('Apple', { forceRefresh: true });
-    assert.deepEqual(receivedArgs, ['Apple', { forceRefresh: true }]);
+    assert.equal(receivedArgs[0], 'Apple');
+    assert.equal(receivedArgs[1].forceRefresh, true);
+    assert.ok(typeof receivedArgs[1].requestId === 'string' && receivedArgs[1].requestId.length > 0, 'requestId must be generated');
   });
 
   test('reset() returns the hook to idle state', async () => {

@@ -8,6 +8,15 @@ export class ProfileDatabase {
     this.db = DatabaseManager.getInstance();
   }
 
+  /**
+   * Expose the raw better-sqlite3 connection for consumers that need
+   * direct SQL access (e.g. CompanyResearchCache). Returns null when
+   * the database failed to initialize so callers can fail explicitly.
+   */
+  getRawDb(): import('better-sqlite3').Database | null {
+    return this.db.getDb();
+  }
+
   getUserProfile(): UserProfileRecord | null {
     // Legacy facade — returns null now that user_profile has been dropped.
     // ProfileOrchestrator no longer relies on this; it uses getMasterAsResume().

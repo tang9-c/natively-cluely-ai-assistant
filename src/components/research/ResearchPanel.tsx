@@ -77,7 +77,9 @@ export function ResearchPanel({ isOpen, initialCompanyName = '', onClose }: Prop
                 initialValue={initialCompanyName}
               />
 
-              {r.stage === 'loading' && <ResearchProgress currentStage="synthesizing" />}
+              {r.stage === 'loading' && (
+                <ResearchProgress currentStage={r.progressStage ?? 'cache-check'} />
+              )}
 
               {r.stage === 'error' && r.error && (
                 <div className="mt-4">

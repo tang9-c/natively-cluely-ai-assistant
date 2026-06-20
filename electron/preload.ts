@@ -2,6 +2,19 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { TranscriptEmotion } from '../shared/senseVoiceEmotion';
 
 // Types for the exposed Electron API
+type ResearchProgressStage =
+  | 'cache-check'
+  | 'searching'
+  | 'synthesizing'
+  | 'done'
+  | 'error';
+
+interface ResearchProgressPayload {
+  requestId?: string;
+  stage: ResearchProgressStage;
+  message: string;
+}
+
 interface ElectronAPI {
   updateContentDimensions: (dimensions: { width: number; height: number }) => Promise<void>;
   updateContentDimensionsCentered: (dimensions: { width: number; height: number }) => Promise<void>;
@@ -601,8 +614,9 @@ interface ElectronAPI {
   profileDeleteJD: () => Promise<{ success: boolean; error?: string }>;
   profileResearchCompany: (
     companyName: string,
-    options?: { forceRefresh?: boolean },
+    options?: { forceRefresh?: boolean; requestId?: string },
   ) => Promise<{ success: boolean; dossier?: any; error?: string; searchQuotaExhausted?: boolean }>;
+  onResearchProgressChanged: (callback: (data: ResearchProgressPayload) => void) => () => void;
   profileClearResearchCache: () => Promise<{ success: boolean; deleted?: number; error?: string }>;
   testTavilyApiKey: (key: string) => Promise<{
     valid: boolean;
@@ -1873,6 +1887,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('technical-interview-vision-first-changed', subscription);
     return () => {
       ipcRenderer.removeListener('technical-interview-vision-first-changed', subscription);
+    };
+  },
+  onResearchProgressChanged: (callback: (data: ResearchProgressPayload) => void) => {
+    const subscription = (_: any, data: ResearchProgressPayload) => callback(data);
+    ipcRenderer.on('research-progress-changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('research-progress-changed', subscription);
     };
   },
   getLogFilePath: () => ipcRenderer.invoke('get-log-file-path'),

@@ -22,6 +22,7 @@ import { SkillsManager } from './services/SkillsManager';
 
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
+import type { ResearchProgress } from './services/research/types';
 import { redactForLog } from './utils/redactForLog';
 
 export function initializeIpcHandlers(appState: AppState): void {
@@ -3689,7 +3690,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     async (
       _: unknown,
       companyName: string,
-      options: { forceRefresh?: boolean } = {},
+      options: { forceRefresh?: boolean; requestId?: string } = {},
     ) => {
       try {
         const orchestrator = appState.getKnowledgeOrchestrator();
@@ -3700,7 +3701,22 @@ export function initializeIpcHandlers(appState: AppState): void {
             error: 'Knowledge engine not initialized',
           };
         }
-        return await orchestrator.runCompanyResearch(companyName, options);
+
+        const { requestId } = options;
+        const onProgress = requestId
+          ? (p: ResearchProgress) => {
+              broadcast('research-progress-changed', {
+                requestId,
+                stage: p.stage,
+                message: p.message,
+              });
+            }
+          : undefined;
+
+        return await orchestrator.runCompanyResearch(companyName, {
+          ...options,
+          onProgress,
+        });
       } catch (err: any) {
         console.error('[ipcHandlers] profile:research-company failed:', redactForLog([err]));
         return {
