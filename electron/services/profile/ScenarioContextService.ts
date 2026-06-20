@@ -15,8 +15,6 @@ interface ScenarioContextServiceDeps {
   modesManager?: ModesManager;
   db?: DatabaseManager;
   registry?: ScenarioRegistry;
-  /** Maximum characters of the user persona to inject into the context block. */
-  personaMaxChars?: number;
   /** Maximum characters of the master profile JSON to inject into the context block. */
   masterProfileMaxChars?: number;
 }
@@ -56,17 +54,12 @@ export class ScenarioContextService {
   private readonly registry: ScenarioRegistry;
   private readonly modesManager: ModesManager;
   private readonly db: DatabaseManager;
-  private readonly personaMaxChars: number;
   private readonly masterProfileMaxChars: number;
 
   constructor(deps: ScenarioContextServiceDeps = {}) {
     this.registry = deps.registry ?? ScenarioRegistry.createDefault();
     this.modesManager = deps.modesManager ?? ModesManager.getInstance();
     this.db = deps.db ?? DatabaseManager.getInstance();
-    this.personaMaxChars =
-      typeof deps.personaMaxChars === 'number' && deps.personaMaxChars >= 0
-        ? deps.personaMaxChars
-        : DEFAULT_CONTEXT_CHARS;
     this.masterProfileMaxChars =
       typeof deps.masterProfileMaxChars === 'number' && deps.masterProfileMaxChars >= 0
         ? deps.masterProfileMaxChars
@@ -119,12 +112,6 @@ export class ScenarioContextService {
     const masterProfile = this.buildMasterProfileBlock(this.db);
     if (masterProfile) {
       contextParts.push(masterProfile);
-      dataScopes.add('profile_history');
-    }
-
-    const persona = typeof (this.db as any).getPersona === 'function' ? (this.db as any).getPersona() : '';
-    if (persona?.trim()) {
-      contextParts.push(`<scenario_persona>${escapeXml(persona.trim().slice(0, this.personaMaxChars))}</scenario_persona>`);
       dataScopes.add('profile_history');
     }
 
