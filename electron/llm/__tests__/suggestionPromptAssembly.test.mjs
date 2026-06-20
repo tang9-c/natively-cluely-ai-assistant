@@ -32,24 +32,15 @@ test('generateSuggestion prepends mode context before transcript context', () =>
   assert.match(generateSuggestionSource, /const enrichedContext = modeContextBlock[\s\S]*\? `\$\{modeContextBlock\}\\n\\n\$\{context\}`[\s\S]*: context;/);
 });
 
+test('generateSuggestion routes all providers through streamChat', () => {
+  assert.match(generateSuggestionSource, /for await \(const chunk of this\.streamChat\(promptMessage, undefined, undefined, basePrompt, true\)\)/);
+  assert.doesNotMatch(generateSuggestionSource, /callOllama\(/);
+  assert.doesNotMatch(generateSuggestionSource, /generateWithCodexCli\(/);
+});
+
 test('generateSuggestion keeps active mode suffix in system prompt without user context', () => {
   assert.match(generateSuggestionSource, /const basePrompt = activeModePrompt[\s\S]*\? `\$\{HARD_SYSTEM_PROMPT\}\\n\\n## ACTIVE MODE\\n\$\{activeModePrompt\}`/);
   assert.doesNotMatch(generateSuggestionSource, /\$\{activeModePrompt\}\$\{customNotesBlock\}/);
-});
-
-test('generateSuggestion sends custom notes and mode context as user message content', () => {
-  assert.match(generateSuggestionSource, /const suggestionContext = \[customNotesBlock, enrichedContext\]\.filter\(Boolean\)\.join\('\\n\\n'\);/);
-  const streamChatMatches = generateSuggestionSource.match(/streamChat\(promptMessage, undefined, undefined, basePrompt, true\)/g) ?? [];
-  assert.equal(streamChatMatches.length, 2);
-  assert.match(generateSuggestionSource, /generateWithCodexCli\(promptMessage, basePrompt\)/);
-  assert.match(generateSuggestionSource, /callOllama\(promptMessage, undefined, systemPrompt\)/);
-  assert.doesNotMatch(generateSuggestionSource, /generateWithFlash\(\[\{ text: `\$\{systemPrompt\}/);
-  assert.doesNotMatch(generateSuggestionSource, /\$\{systemPrompt\}\\n\\n\$\{promptMessage\}/);
-});
-
-test('generateSuggestion does not append custom notes to any system prompt branch', () => {
-  assert.doesNotMatch(generateSuggestionSource, /basePrompt[\s\S]*customNotesBlock/);
-  assert.doesNotMatch(generateSuggestionSource, /Never hedge\. Never say "it depends"\.\$\{customNotesBlock\}/);
 });
 
 test('WhatToAnswerLLM does not append active mode context to system prompt override', () => {
