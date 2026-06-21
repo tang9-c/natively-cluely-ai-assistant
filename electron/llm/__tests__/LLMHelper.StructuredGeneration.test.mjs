@@ -64,4 +64,38 @@ describe('LLMHelper structured generation', () => {
     assert.equal(result, '{"ok":true}');
     assert.equal(capturedBody.max_completion_tokens, 8192);
   });
+
+  // Phase 4.1 (debug session): regression guard for the company-research
+  // structured-generation path. The Lite Doubao model can't complete a
+  // research-sized prompt within the 35s per-provider budget; switching to
+  // the Pro tier is the documented fix.
+  test('generateContentStructured() routes company-research to Doubao Pro model', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    let capturedBody = null;
+    helper.doubaoClient = {
+      chat: {
+        completions: {
+          create: async (body) => {
+            capturedBody = body;
+            return { choices: [{ message: { content: '{"ok":true}' } }] };
+          },
+        },
+      },
+    };
+
+    await helper.generateContentStructured('return json', {
+      taskLabel: 'company-research',
+      perProviderTimeoutMs: 1000,
+      maxOutputTokens: 2048,
+      maxRotations: 1,
+    });
+
+    assert.ok(capturedBody, 'Doubao client was not called');
+    assert.equal(
+      capturedBody.model,
+      'doubao-1-5-pro-32k-250115',
+      'company-research must route to the Doubao Pro model, not the Lite tier',
+    );
+  });
 });
