@@ -45,7 +45,9 @@ describe('CompanyResearchCache', () => {
   test('put() then get() round-trips a dossier', async () => {
     const dossier = {
       schemaVersion: '1.0', companyName: 'Apple', generatedAt: '2026-06-19T00:00:00Z',
-      expiresAt: '2026-06-20T00:00:00Z', source: 'tavily',
+      // Use a far-future expiry so the assertion `isExpired() === false` is
+      // not at the mercy of wall-clock time advancing past a hardcoded date.
+      expiresAt: '2099-01-01T00:00:00Z', source: 'tavily',
       financials: { summary: 's', details: [], confidence: 'high' },
       business: { summary: 's', details: [], confidence: 'high' },
       strategy: { summary: 's', details: [], confidence: 'high' },
