@@ -415,13 +415,7 @@ class ZeroShotClassifier {
             }
 
             const intent = labelMap[topLabel] || 'general';
-            console.log(`[IntentClassifier] SLM classified`, {
-                intent,
-                confidence: topScore,
-                textLength: text.length,
-                labelSet: isChinese ? 'zh' : 'en',
-                modeTemplateType: modeTemplateType ?? 'general',
-            });
+            console.log(`[IntentClassifier] SLM classified`, { intent, confidence: topScore, textLength: text.length });
 
             return {
                 intent,

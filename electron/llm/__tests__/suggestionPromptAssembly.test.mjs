@@ -185,6 +185,85 @@ test('WhatToAnswerLLM sends dynamic action prompt instruction as user content', 
   assert.doesNotMatch(systemPromptOverride, /DYNAMIC_ACTION_PROMPT_INSTRUCTION_SENTINEL/);
 });
 
+test('WhatToAnswerLLM uses structured mode event for RAG query and prompt context', async () => {
+  const { WhatToAnswerLLM } = require(distWhatToAnswerPath);
+  const calls = [];
+  const retrievalCalls = [];
+
+  const llmHelper = {
+    getCapabilities: () => ({ outputBudgetTokens: 2000 }),
+    getPromptTier: () => 'full',
+    fitContextForCurrentModel: text => text,
+    async *streamChat(...args) {
+      calls.push(args);
+      yield 'ok';
+    },
+  };
+  const modesManager = {
+    getActiveModeSystemPromptSuffix: () => 'TRUSTED_MODE_SUFFIX_SENTINEL',
+    buildRetrievedActiveModeContextBlockHybrid: async (query, transcript, tokenBudget) => {
+      retrievalCalls.push({ query, transcript, tokenBudget });
+      return '<active_mode_retrieved_context>ROI playbook and pricing guardrails</active_mode_retrieved_context>';
+    },
+    buildRetrievedActiveModeContextBlock: () => '',
+    buildActiveModeContextBlock: () => '',
+  };
+  const modeEvent = {
+    modeTemplateType: 'sales',
+    intent: 'pricing_objection',
+    confidence: 0.92,
+    latestTurn: '这个价格太高了, 老板可能不会批',
+    emotion: 'angry',
+    emotionSource: 'sensevoice',
+    language: 'zh',
+    keyEntities: ['价格', '老板', '审批'],
+    retrievalQuery: 'sales pricing_objection 价格 老板 审批 这个价格太高了 angry zh',
+    autoSurfacePolicy: 'auto',
+    promptInstruction: 'Handle pricing objection in Chinese.',
+  };
+
+  const answerer = new WhatToAnswerLLM(llmHelper, modesManager);
+  const chunks = [];
+  for await (const chunk of answerer.generateStream(
+    'RECENT_TRANSCRIPT_SENTINEL',
+    undefined,
+    { intent: 'handle_objection', confidence: 0.92, answerShape: 'acknowledge and reframe' },
+    undefined,
+    undefined,
+    modeEvent.promptInstruction,
+    undefined,
+    modeEvent,
+  )) {
+    chunks.push(chunk);
+  }
+
+  assert.deepEqual(chunks, ['ok']);
+  assert.equal(retrievalCalls.length, 1);
+  assert.match(retrievalCalls[0].query, /sales/);
+  assert.match(retrievalCalls[0].query, /pricing_objection/);
+  assert.match(retrievalCalls[0].query, /价格/);
+  assert.match(retrievalCalls[0].query, /angry/);
+  assert.match(retrievalCalls[0].query, /zh/);
+  assert.equal(retrievalCalls[0].transcript, 'RECENT_TRANSCRIPT_SENTINEL');
+  assert.equal(calls.length, 1);
+
+  const [message, _imagePaths, context, systemPromptOverride] = calls[0];
+  assert.equal(context, undefined);
+  assert.match(message, /<language_context>/);
+  assert.match(message, /zh/);
+  assert.match(message, /<mode_event_context>/);
+  assert.match(message, /pricing_objection/);
+  assert.match(message, /这个价格太高了/);
+  assert.match(message, /<emotion_context>/);
+  assert.match(message, /angry/);
+  assert.match(message, /<key_entities>/);
+  assert.match(message, /价格/);
+  assert.match(message, /ROI playbook and pricing guardrails/);
+  assert.match(message, /RECENT_TRANSCRIPT_SENTINEL/);
+  assert.doesNotMatch(systemPromptOverride, /pricing_objection/);
+  assert.doesNotMatch(systemPromptOverride, /这个价格太高了/);
+});
+
 test('WhatToAnswerLLM assembles runtime intent, prior responses, and screen context as user content', async () => {
   const { WhatToAnswerLLM } = require(distWhatToAnswerPath);
   const calls = [];

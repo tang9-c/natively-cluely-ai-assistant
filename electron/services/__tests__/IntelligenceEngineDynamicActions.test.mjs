@@ -82,6 +82,49 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(pricing.evidenceRefs[0].source, 'transcript');
   });
 
+  test('high-confidence final dynamic action auto-triggers What Should I Say with prompt instruction', async () => {
+    const { engine } = await makeEngine();
+    const emitted = [];
+    const autoRuns = [];
+    engine.on('dynamic_action_emitted', (action) => emitted.push(action));
+    engine.runWhatShouldISay = async (...args) => {
+      autoRuns.push(args);
+      return 'auto-answer';
+    };
+
+    engine.setDynamicActionContext({
+      sessionId: 'sess-auto',
+      modeId: 'mode-sales',
+      modeTemplateType: 'sales',
+    });
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: '这个价格太高了, 老板可能不会批',
+      timestamp: Date.now(),
+      final: true,
+      emotion: 'angry',
+      emotionSource: 'sensevoice',
+    }, true);
+
+    assert.ok(emitted.length >= 1, 'dynamic action should still be emitted for UI state');
+    const autoAction = emitted.find(a => a.type === 'pricing_objection');
+    assert.ok(autoAction, 'expected pricing_objection action');
+    assert.equal(autoAction.autoSurfacePolicy, 'auto');
+    assert.equal(autoAction.autoTriggerEligible, true);
+    assert.ok(autoAction.promptInstruction.includes('Sales mode'));
+    assert.equal(autoRuns.length, 1, 'high-confidence final action should auto-trigger main answer flow');
+    assert.equal(autoRuns[0][0], undefined, 'auto-trigger should use transcript context, not a synthetic question');
+    assert.equal(autoRuns[0][1], autoAction.confidence);
+    assert.equal(autoRuns[0][2], undefined);
+    assert.equal(autoRuns[0][3].skipCooldown, true);
+    assert.equal(autoRuns[0][3].promptInstruction, autoAction.promptInstruction);
+    assert.equal(autoRuns[0][3].modeEvent.intent, 'pricing_objection');
+    assert.equal(autoRuns[0][3].modeEvent.modeTemplateType, 'sales');
+    assert.equal(autoRuns[0][3].modeEvent.emotion, 'angry');
+    assert.match(autoRuns[0][3].modeEvent.latestTurn, /价格太高/);
+  });
+
   test('non-final transcript does not emit dynamic actions', async () => {
     const { engine } = await makeEngine();
     const emitted = [];

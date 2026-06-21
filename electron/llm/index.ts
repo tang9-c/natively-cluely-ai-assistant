@@ -8,6 +8,7 @@ export { ClarifyLLM } from "./ClarifyLLM";
 export { CodeHintLLM } from "./CodeHintLLM";
 export { RecapLLM } from "./RecapLLM";
 export { WhatToAnswerLLM } from "./WhatToAnswerLLM";
+export type { ModeEventContext } from "./WhatToAnswerLLM";
 export { clampResponse, validateResponse } from "./postProcessor";
 export {
     cleanTranscript,
