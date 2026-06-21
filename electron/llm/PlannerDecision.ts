@@ -76,7 +76,7 @@ function intentSupportsAnswer(intent?: ConversationIntent, modeTemplateType?: st
         // shared cross-mode
         case 'define_term':
         case 'advance_dialog':
-            return mode !== 'silence'; // always answerable
+            return true;
         // recruiting extras
         case 'evaluate_answer':
         case 'request_example':

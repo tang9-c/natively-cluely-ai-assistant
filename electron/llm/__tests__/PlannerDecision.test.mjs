@@ -95,3 +95,37 @@ test('PlannerDecision routes strategy and visual problem context to brainstorm',
   assert.equal(visualDecision.kind, 'brainstorm');
   assert.equal(visualDecision.reason, 'visual_problem_context');
 });
+
+test('PlannerDecision mode-aware intent gating keeps silence silent and mode intents scoped', async () => {
+  const silence = await decide({
+    triggerQuestion: 'not actionable filler',
+    intentResult: { intent: 'silence', confidence: 0.95, answerShape: 'silent' },
+    modeTemplateType: 'sales',
+  });
+  const teamActionInTeamMeet = await decide({
+    triggerQuestion: 'owner and deadline captured',
+    intentResult: { intent: 'capture_action', confidence: 0.92, answerShape: 'capture' },
+    modeTemplateType: 'team-meet',
+  });
+  const teamActionInSales = await decide({
+    triggerQuestion: 'owner and deadline captured',
+    intentResult: { intent: 'capture_action', confidence: 0.92, answerShape: 'capture' },
+    modeTemplateType: 'sales',
+  });
+  const objectionInSales = await decide({
+    triggerQuestion: 'price pushback statement',
+    intentResult: { intent: 'handle_objection', confidence: 0.92, answerShape: 'objection' },
+    modeTemplateType: 'sales',
+  });
+  const objectionInTeamMeet = await decide({
+    triggerQuestion: 'price pushback statement',
+    intentResult: { intent: 'handle_objection', confidence: 0.92, answerShape: 'objection' },
+    modeTemplateType: 'team-meet',
+  });
+
+  assert.equal(silence.kind, 'silent');
+  assert.equal(teamActionInTeamMeet.kind, 'answer');
+  assert.equal(teamActionInSales.kind, 'silent');
+  assert.equal(objectionInSales.kind, 'answer');
+  assert.equal(objectionInTeamMeet.kind, 'silent');
+});

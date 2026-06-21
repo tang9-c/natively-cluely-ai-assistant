@@ -14,6 +14,7 @@ import {
 import type { ModeEventContext } from './llm';
 import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEngine';
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
+import { buildAutoSurfaceFingerprint } from './services/dynamic-actions/ModeEventUtils';
 import { ScreenContext } from './services/screen/types';
 
 // Mode types
@@ -128,6 +129,7 @@ export class IntelligenceEngine extends EventEmitter {
     private currentDynamicActionModeId: string | null = null;
     private currentDynamicActionTemplateType: string | null = null;
     private autoSurfaceFingerprints: Set<string> = new Set();
+    private static readonly MAX_AUTO_SURFACE_FINGERPRINTS = 200;
 
     private static isNonAnswerSentinel(answer: string): boolean {
         const normalized = answer.trim().toLowerCase().replace(/[.!?]+$/g, '');
@@ -165,6 +167,16 @@ export class IntelligenceEngine extends EventEmitter {
             .replace(/\s+([）》”’)])/g, '$1')
             .replace(/\n{3,}/g, '\n\n')
             .trim();
+    }
+
+    private rememberAutoSurfaceFingerprint(fingerprint: string): boolean {
+        if (this.autoSurfaceFingerprints.has(fingerprint)) return false;
+        this.autoSurfaceFingerprints.add(fingerprint);
+        if (this.autoSurfaceFingerprints.size > IntelligenceEngine.MAX_AUTO_SURFACE_FINGERPRINTS) {
+            const oldest = this.autoSurfaceFingerprints.values().next().value;
+            if (oldest) this.autoSurfaceFingerprints.delete(oldest);
+        }
+        return true;
     }
 
     constructor(llmHelper: LLMHelper, session: SessionTracker) {
@@ -399,14 +411,20 @@ export class IntelligenceEngine extends EventEmitter {
         );
         if (!autoAction) return;
         if (this.activeMode !== 'idle' && this.activeMode !== 'assist') return;
+        if (autoAction.modeTemplateType !== this.currentDynamicActionTemplateType) {
+            console.warn('[IntelligenceEngine] dynamic action mode drift; skipping auto-surface', {
+                actionMode: autoAction.modeTemplateType,
+                currentMode: this.currentDynamicActionTemplateType,
+            });
+            return;
+        }
 
-        const fingerprint = [
-            autoAction.modeTemplateType,
-            autoAction.type,
-            autoAction.latestTurn || text,
-        ].join('|').toLowerCase();
-        if (this.autoSurfaceFingerprints.has(fingerprint)) return;
-        this.autoSurfaceFingerprints.add(fingerprint);
+        const fingerprint = buildAutoSurfaceFingerprint({
+            modeTemplateType: autoAction.modeTemplateType,
+            intent: autoAction.type,
+            latestTurn: autoAction.latestTurn || text,
+        });
+        if (!this.rememberAutoSurfaceFingerprint(fingerprint)) return;
 
         const modeEvent: ModeEventContext = {
             modeTemplateType: autoAction.modeTemplateType,
