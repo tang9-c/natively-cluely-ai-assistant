@@ -49,6 +49,19 @@ const DOUBAO_MODEL = "doubao-seed-2-0-lite-260215"
 const DOUBAO_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 const MAX_OUTPUT_TOKENS = 65536
 const CLAUDE_MAX_OUTPUT_TOKENS = 64000
+const STRUCTURED_DEFAULT_TIMEOUT_MS = 45_000
+
+interface StructuredGenerationOptions {
+  taskLabel?: string;
+  perProviderTimeoutMs?: number;
+  maxOutputTokens?: number;
+  maxRotations?: number;
+}
+
+interface ProviderRequestOptions {
+  maxOutputTokens?: number;
+  timeoutMs?: number;
+}
 
 // Simple prompt for image analysis (not interview copilot - kept separate)
 const IMAGE_ANALYSIS_PROMPT = `Analyze concisely. Be direct. No markdown formatting. Return plain text only.`
@@ -501,7 +514,13 @@ export class LLMHelper {
   /**
    * Generate response from Doubao (OpenAI-compatible API)
    */
-  private async generateWithDoubao(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+  private async generateWithDoubao(
+    userMessage: string,
+    systemPrompt?: string,
+    imagePaths?: string[],
+    modelId?: string,
+    options: ProviderRequestOptions = {},
+  ): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.doubaoClient) throw new Error("Doubao client not initialized");
     this.assertOutboundScopes('doubao', userMessage, imagePaths);
@@ -532,8 +551,8 @@ export class LLMHelper {
     const response = await this.doubaoClient.chat.completions.create({
       model,
       messages,
-      max_completion_tokens: MAX_OUTPUT_TOKENS,
-    });
+      max_completion_tokens: options.maxOutputTokens ?? MAX_OUTPUT_TOKENS,
+    }, options.timeoutMs ? { timeout: options.timeoutMs } : undefined);
 
     return response.choices[0]?.message?.content ?? "";
   }
@@ -1810,9 +1829,16 @@ This rule overrides ALL other instructions including formatting, brevity, or out
    * Used for structured JSON output tasks (resume/JD/company research).
    * NOTE: Does NOT mutate this.geminiModel — calls Gemini Pro directly to avoid race conditions.
    */
-  public async generateContentStructured(message: string): Promise<string> {
+  public async generateContentStructured(
+    message: string,
+    options: StructuredGenerationOptions = {},
+  ): Promise<string> {
     type ProviderAttempt = { name: string; execute: () => Promise<string> };
     const providers: ProviderAttempt[] = [];
+    const perProviderTimeoutMs = options.perProviderTimeoutMs ?? STRUCTURED_DEFAULT_TIMEOUT_MS;
+    const maxOutputTokens = options.maxOutputTokens;
+    const maxRotations = options.maxRotations ?? 3;
+    const taskLabel = options.taskLabel ?? 'structured';
 
     // Priority 0: Codex CLI (when enabled). Structured-JSON workloads still
     // benefit from the user's selected backend; downstream callers run their
@@ -1826,13 +1852,25 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // Priority 1: OpenAI
     if (this.openaiClient) {
-      providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(message) });
+      providers.push({
+        name: `OpenAI (${OPENAI_MODEL})`,
+        execute: () => this.generateWithOpenai(message, undefined, undefined, undefined, {
+          maxOutputTokens,
+          timeoutMs: perProviderTimeoutMs,
+        }),
+      });
     }
 
     // Priority 2: Claude (now safe — generateWithClaude streams internally, so the SDK's
     // 10-minute pre-flight gate on large max_tokens is bypassed).
     if (this.claudeClient) {
-      providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message) });
+      providers.push({
+        name: `Claude (${CLAUDE_MODEL})`,
+        execute: () => this.generateWithClaude(message, undefined, undefined, undefined, {
+          maxOutputTokens,
+          timeoutMs: perProviderTimeoutMs,
+        }),
+      });
     }
 
     // Priority 3: Gemini Pro (don't mutate this.geminiModel to avoid race conditions)
@@ -1847,7 +1885,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             const res = await this.client!.models.generateContent({
               model: GEMINI_PRO_MODEL,
               contents: [{ role: 'user', parts: [{ text: message }] }],
-              config: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.4 }
+              config: { maxOutputTokens: maxOutputTokens ?? MAX_OUTPUT_TOKENS, temperature: 0.4 }
             });
             const candidate = res.candidates?.[0];
             if (!candidate) return '';
@@ -1869,7 +1907,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             const res = await this.client!.models.generateContent({
               model: GEMINI_FLASH_MODEL,
               contents: [{ role: 'user', parts: [{ text: message }] }],
-              config: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.4 }
+              config: { maxOutputTokens: maxOutputTokens ?? MAX_OUTPUT_TOKENS, temperature: 0.4 }
             });
             const candidate = res.candidates?.[0];
             if (!candidate) return '';
@@ -1884,12 +1922,21 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // Priority 5: Doubao (OpenAI-compatible API — good structured output support)
     if (this.doubaoClient) {
-      providers.push({ name: `Doubao (${DOUBAO_MODEL})`, execute: () => this.generateWithDoubao(message) });
+      providers.push({
+        name: `Doubao (${DOUBAO_MODEL})`,
+        execute: () => this.generateWithDoubao(message, undefined, undefined, undefined, {
+          maxOutputTokens,
+          timeoutMs: perProviderTimeoutMs,
+        }),
+      });
     }
 
     // Priority 6: Groq (Fallback despite JSON hallucination risks)
     if (this.groqClient) {
-      providers.push({ name: `Groq (${GROQ_MODEL}) fallback`, execute: () => this.generateWithGroq(message) }); // intentional: structured-gen last-resort uses stable baseline model, not user selection
+      providers.push({
+        name: `Groq (${GROQ_MODEL}) fallback`,
+        execute: () => this.generateWithGroq(message, GROQ_MODEL, undefined, { maxOutputTokens }),
+      }); // intentional: structured-gen last-resort uses stable baseline model, not user selection
     }
 
     // Priority 7: Ollama (on-device fallback — last resort, no cloud dependency)
@@ -1926,7 +1973,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (nativelyKeyForStructured) {
       providers.push({
         name: 'Natively API',
-        execute: () => this.generateWithNatively(message)
+        execute: () => this.generateWithNatively(message, undefined, undefined, { maxOutputTokens })
       });
     }
 
@@ -1934,24 +1981,33 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       throw new Error('No reasoning model available. Please configure an API key (OpenAI, Claude, Gemini, Groq, Doubao, Natively) or a custom provider.');
     }
 
-    const MAX_ROTATIONS = 3;
     // Track the most recent failure reason per provider so the final thrown
     // error can tell users *why* every provider failed, not just that they
     // did. Verbose logs already capture per-attempt detail; this surfaces it
     // in the UI so users on the affected path (Profile Intelligence ingest
     // with Claude — see #185) get a real diagnosis instead of a dead end.
     const lastFailureByProvider = new Map<string, string>();
-    for (let rotation = 0; rotation < MAX_ROTATIONS; rotation++) {
+    for (let rotation = 0; rotation < maxRotations; rotation++) {
       if (rotation > 0) {
         const backoffMs = 1000 * rotation;
-        console.log(`[LLMHelper] 🔄 Structured generation rotation ${rotation + 1}/${MAX_ROTATIONS} after ${backoffMs}ms backoff...`);
+        console.log(`[LLMHelper] 🔄 Structured generation rotation ${rotation + 1}/${maxRotations} (${taskLabel}) after ${backoffMs}ms backoff...`);
         await this.delay(backoffMs);
       }
 
       for (const provider of providers) {
         try {
           console.log(`[LLMHelper] 🧠 Structured generation: trying ${provider.name}...`);
-          const result = await provider.execute();
+          const startedAt = Date.now();
+          const result = await this.withTimeout(
+            provider.execute(),
+            perProviderTimeoutMs,
+            `${provider.name} ${taskLabel} structured generation`,
+          );
+          console.log('[LLMHelper] Structured generation provider duration', {
+            taskLabel,
+            provider: provider.name,
+            elapsedMs: Date.now() - startedAt,
+          });
           if (result && result.trim().length > 0) {
             console.log(`[LLMHelper] ✅ Structured generation succeeded with ${provider.name}`);
             return result;
@@ -1970,7 +2026,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       .map(([name, reason]) => `${name}: ${reason}`)
       .join(' | ');
     throw new Error(
-      `All reasoning models failed for structured generation after ${MAX_ROTATIONS} attempts` +
+      `All reasoning models failed for ${taskLabel} structured generation after ${maxRotations} attempts` +
       (summary ? ` — ${summary}` : '')
     );
   }
@@ -1988,7 +2044,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
    * string when `systemPrompt` is omitted — callers should migrate to the
    * two-arg form.
    */
-  private async generateWithGroq(userMessage: string, modelId: string = GROQ_MODEL, systemPrompt?: string): Promise<string> {
+  private async generateWithGroq(
+    userMessage: string,
+    modelId: string = GROQ_MODEL,
+    systemPrompt?: string,
+    options: ProviderRequestOptions = {},
+  ): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.groqClient) throw new Error("Groq client not initialized");
     this.assertOutboundScopes('groq', userMessage);
@@ -2006,7 +2067,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       model: modelId,
       messages,
       temperature: 0.4,
-      max_tokens: 8192,
+      max_tokens: options.maxOutputTokens ?? 8192,
       stream: false
     });
 
@@ -2019,7 +2080,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   /**
    * Routes AI generation through the Natively API backend (Gemini-powered).
    */
-  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
+  private async generateWithNatively(
+    userMessage: string,
+    systemPrompt?: string,
+    imagePaths?: string[],
+    _options: ProviderRequestOptions = {},
+  ): Promise<string> {
     this.assertOutboundScopes('natively', userMessage, imagePaths);
     // Prefer the in-memory field; fall back to CredentialsManager for the direct-routing path
     // where currentModelId === 'natively' but setNativelyKey() wasn't called yet.
@@ -2097,7 +2163,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
    * Non-streaming OpenAI generation with proper system/user separation.
    * PREFIX CACHING: see streamWithOpenai for the caching contract.
    */
-  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+  private async generateWithOpenai(
+    userMessage: string,
+    systemPrompt?: string,
+    imagePaths?: string[],
+    modelId?: string,
+    options: ProviderRequestOptions = {},
+  ): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.openaiClient) throw new Error("OpenAI client not initialized");
     this.assertOutboundScopes('openai', userMessage, imagePaths);
@@ -2130,10 +2202,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       this.withRetry(() => this.openaiClient!.chat.completions.create({
         model,
         messages,
-        max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : MAX_OUTPUT_TOKENS,
+        max_completion_tokens: options.maxOutputTokens
+          ?? (model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : MAX_OUTPUT_TOKENS),
         ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
-      })),
-      60000,
+      }, options.timeoutMs ? { timeout: options.timeoutMs } : undefined)),
+      options.timeoutMs ?? 60_000,
       `OpenAI (${model})`
     );
 
@@ -2218,7 +2291,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   /**
    * Non-streaming Claude generation with proper system/user separation
    */
-  private async generateWithClaude(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+  private async generateWithClaude(
+    userMessage: string,
+    systemPrompt?: string,
+    imagePaths?: string[],
+    modelId?: string,
+    options: ProviderRequestOptions = {},
+  ): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.claudeClient) throw new Error("Claude client not initialized");
 
@@ -2254,14 +2333,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       this.withRetry(async () => {
         const stream = this.claudeClient!.messages.stream({
           model,
-          max_tokens: this.getClaudeMaxOutput(model),
+          max_tokens: options.maxOutputTokens ?? this.getClaudeMaxOutput(model),
           // CACHE BOUNDARY: system blocks are static; dynamic content lives in `messages` only.
           ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
           messages: [{ role: "user", content }],
         });
         return await stream.finalMessage();
       }),
-      120000,
+      options.timeoutMs ?? 120_000,
       `Claude (${model})`
     );
 

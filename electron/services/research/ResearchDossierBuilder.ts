@@ -13,7 +13,16 @@ export class LlmInvalidFormatError extends Error {
 }
 
 export interface LlmAdapter {
-  generateStructured(prompt: string, schema: z.ZodTypeAny): Promise<unknown>;
+  generateStructured(
+    prompt: string,
+    schema: z.ZodTypeAny,
+    options?: {
+      taskLabel?: string;
+      perProviderTimeoutMs?: number;
+      maxOutputTokens?: number;
+      maxRotations?: number;
+    },
+  ): Promise<unknown>;
 }
 
 interface BuilderOpts {
@@ -83,7 +92,12 @@ export class ResearchDossierBuilder {
     for (let attempt = 0; attempt < 2; attempt++) {
       onAttempt?.(attempt + 1); // 1-based: 1, then 2
       try {
-        const raw = await this.opts.llm.generateStructured(prompt, DossierSchema);
+        const raw = await this.opts.llm.generateStructured(prompt, DossierSchema, {
+          taskLabel: 'company-research',
+          perProviderTimeoutMs: 35_000,
+          maxOutputTokens: 8_192,
+          maxRotations: 1,
+        });
         parsed = DossierSchema.parse(parseStructuredPayload(raw));
         lastErr = null;
         break;

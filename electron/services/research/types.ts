@@ -53,6 +53,7 @@ export type ResearchErrorCode =
   | 'TAVILY_INVALID_KEY'
   | 'TAVILY_NETWORK_ERROR'
   | 'LLM_FAILED'
+  | 'LLM_TIMEOUT'
   | 'LLM_INVALID_FORMAT'
   | 'DB_ERROR';
 
