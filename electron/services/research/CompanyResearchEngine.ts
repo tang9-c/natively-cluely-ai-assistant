@@ -17,14 +17,26 @@ interface SearchAdapter {
 }
 
 interface BuilderAdapter {
-  build(companyName: string, sources: Array<{ title: string; url: string; content: string }>): Promise<CompanyDossier>;
+  build(
+    companyName: string,
+    sources: Array<{ title: string; url: string; content: string }>,
+    opts?: { onAttempt?: (attempt: number) => void },
+  ): Promise<CompanyDossier>;
 }
 
 interface EngineOpts {
   cache: CacheAdapter;
   search: SearchAdapter;
   builder: BuilderAdapter;
+  /**
+   * Outer timeout (ms) for the synthesis stage. Defaults to 60_000.
+   * Bounds the user-visible stall when the underlying LLM call hangs.
+   */
+  synthesisTimeoutMs?: number;
 }
+
+/** Default synthesis timeout — prevents indefinite spinner during LLM hang. */
+export const DEFAULT_SYNTHESIS_TIMEOUT_MS = 60_000;
 
 interface ResearchOpts {
   forceRefresh?: boolean;
@@ -76,7 +88,31 @@ export class CompanyResearchEngine {
     }
 
     progress({ stage: 'synthesizing', message: '正在综合 AI 报告...' });
-    const dossier = await this.opts.builder.build(trimmed, sources);
+    let dossier: CompanyDossier;
+    try {
+      dossier = await this.withSynthesisTimeout(
+        this.opts.builder.build(trimmed, sources, {
+          onAttempt: (n) => progress({
+            stage: 'synthesizing',
+            message: n === 1 ? '正在综合 AI 报告...' : `AI 综合重试中 (${n}/2)...`,
+          }),
+        }),
+        this.opts.synthesisTimeoutMs ?? DEFAULT_SYNTHESIS_TIMEOUT_MS,
+      );
+    } catch (err) {
+      // Map any timeout/non-Error throw to a typed LLM_INVALID_FORMAT so the
+      // IPC layer can render a useful message instead of "DB_ERROR".
+      const name = (err as { name?: string } | null)?.name;
+      const isTimeout = name === 'AbortError' || /timed?\s*out/i.test(String((err as Error)?.message ?? ''));
+      const code = isTimeout ? 'LLM_INVALID_FORMAT' : 'LLM_FAILED';
+      return {
+        success: false,
+        errorCode: code,
+        error: isTimeout
+          ? 'AI 综合超时，请稍后重试或检查 LLM provider 配置'
+          : (err as Error)?.message ?? 'AI 综合失败',
+      };
+    }
 
     await this.opts.cache.put(trimmed, dossier);
     progress({ stage: 'done', message: '完成' });
@@ -88,6 +124,37 @@ export class CompanyResearchEngine {
       return await this.opts.cache.clearAll();
     }
     return 0;
+  }
+
+  /**
+   * Race the synthesis promise against an AbortController-driven timeout.
+   * On timeout, the AbortError propagates so callers can distinguish it
+   * from LLM-content failures and surface a useful message.
+   */
+  private async withSynthesisTimeout<T>(p: Promise<T>, timeoutMs: number): Promise<T> {
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return p;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      // We can't pass the AbortSignal into the builder (it doesn't accept one),
+      // so we just race the promise against a timeout reject. The builder's
+      // internal work is not cancelled — but the caller gets a fast error and
+      // can show "synthesis timed out" instead of a frozen spinner.
+      return await new Promise<T>((resolve, reject) => {
+        const onAbort = () => reject(new Error(`Synthesis timed out after ${timeoutMs}ms`));
+        if (controller.signal.aborted) {
+          onAbort();
+          return;
+        }
+        controller.signal.addEventListener('abort', onAbort, { once: true });
+        p.then(
+          (v) => { clearTimeout(timer); resolve(v); },
+          (e) => { clearTimeout(timer); reject(e); },
+        );
+      });
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private buildQueries(companyName: string): string[] {
