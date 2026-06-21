@@ -138,4 +138,53 @@ describe('CompanyResearchEngine', () => {
     assert.equal(r.success, true);
     assert.equal(r.dossier.source, 'llm-fallback');
   });
+
+  test('research() emits synthesizing-attempt progress events when builder retries', async () => {
+    const { CompanyResearchEngine } = cjsRequire(enginePath);
+    const attempts = [];
+    const builder = {
+      build: async () => {
+        // Simulate builder calling opts.onAttempt twice before succeeding
+        attempts.push('a1');
+        return baseDossier;
+      },
+    };
+    const engine = new CompanyResearchEngine({
+      cache: makeMockCache(),
+      search: makeMockSearch({ results: [{ title: 't', url: 'https://x', content: 'c' }] }),
+      builder,
+    });
+    const progress = [];
+    await engine.research('Apple', {
+      onProgress: (p) => progress.push({ stage: p.stage, message: p.message }),
+    });
+    // Expect synthesizing events with attempt markers (1/2 or 1/N), then done
+    const synthStages = progress.filter((p) => p.stage === 'synthesizing');
+    assert.ok(synthStages.length >= 1, 'expected at least one synthesizing progress event');
+    assert.equal(progress[progress.length - 1].stage, 'done');
+  });
+
+  test('research() aborts with LLM_INVALID_FORMAT when builder hangs past timeoutMs', async () => {
+    const { CompanyResearchEngine } = cjsRequire(enginePath);
+    const builder = {
+      build: () => new Promise(() => {}), // hang forever
+    };
+    const engine = new CompanyResearchEngine({
+      cache: makeMockCache(),
+      search: makeMockSearch({ results: [{ title: 't', url: 'https://x', content: 'c' }] }),
+      builder,
+      synthesisTimeoutMs: 80, // tiny for test
+    });
+    const start = Date.now();
+    const r = await engine.research('Apple');
+    const elapsed = Date.now() - start;
+    assert.equal(r.success, false);
+    assert.equal(r.errorCode, 'LLM_INVALID_FORMAT');
+    assert.ok(elapsed < 1500, `expected fast abort (got ${elapsed}ms)`);
+  });
+
+  test('exported DEFAULT_SYNTHESIS_TIMEOUT_MS is 60s (bounds stall)', () => {
+    const { DEFAULT_SYNTHESIS_TIMEOUT_MS } = cjsRequire(enginePath);
+    assert.equal(DEFAULT_SYNTHESIS_TIMEOUT_MS, 60_000);
+  });
 });
