@@ -46,6 +46,10 @@ const GROQ_MODEL = "llama-3.3-70b-versatile"
 const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
 const DOUBAO_MODEL = "doubao-seed-2-0-lite-260215"
+// Doubao Pro tier — used for structured generation (research dossiers, etc.)
+// where the Lite tier's per-token throughput cannot complete the prompt within
+// the per-provider budget. Streaming chat and vision continue to use Lite.
+const DOUBAO_PRO_MODEL = "doubao-1-5-pro-32k-250115"
 const DOUBAO_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 const MAX_OUTPUT_TOKENS = 65536
 const CLAUDE_MAX_OUTPUT_TOKENS = 64000
@@ -1920,11 +1924,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       });
     }
 
-    // Priority 5: Doubao (OpenAI-compatible API — good structured output support)
+    // Priority 5: Doubao Pro (Lite tier cannot complete research-sized structured
+    // generation within the per-provider budget — see debug session 2026-06-21).
     if (this.doubaoClient) {
       providers.push({
-        name: `Doubao (${DOUBAO_MODEL})`,
-        execute: () => this.generateWithDoubao(message, undefined, undefined, undefined, {
+        name: `Doubao Pro (${DOUBAO_PRO_MODEL})`,
+        execute: () => this.generateWithDoubao(message, undefined, undefined, DOUBAO_PRO_MODEL, {
           maxOutputTokens,
           timeoutMs: perProviderTimeoutMs,
         }),

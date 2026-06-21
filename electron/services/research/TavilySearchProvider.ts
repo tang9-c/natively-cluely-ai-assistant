@@ -44,7 +44,10 @@ export class TavilySearchProvider {
     this.apiKey = opts.apiKey;
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.timeoutMs = opts.timeoutMs ?? 10_000;
-    this.maxResultsPerQuery = opts.maxResultsPerQuery ?? 5;
+    // Reduced from 5 → 2 (debug session 2026-06-21): the previous default combined
+    // with 6 buildQueries() calls produced ~30 sources, making the LLM prompt too
+    // large for the per-provider timeout. 6 × 2 = ~10 sources fits comfortably.
+    this.maxResultsPerQuery = opts.maxResultsPerQuery ?? 2;
   }
 
   async search(queries: string[]): Promise<TavilyRawResult[]> {

@@ -95,7 +95,11 @@ export class ResearchDossierBuilder {
         const raw = await this.opts.llm.generateStructured(prompt, DossierSchema, {
           taskLabel: 'company-research',
           perProviderTimeoutMs: 35_000,
-          maxOutputTokens: 8_192,
+          // Reduced from 8_192 → 2_048 (debug session 2026-06-21): 8K ceiling
+          // forced the model to consume the entire token budget generating filler,
+          // never producing a valid JSON dossier within the 35s timeout. Actual
+          // 6-dimension dossier fits in ~1,100 tokens; 2_048 leaves headroom.
+          maxOutputTokens: 2_048,
           maxRotations: 1,
         });
         parsed = DossierSchema.parse(parseStructuredPayload(raw));

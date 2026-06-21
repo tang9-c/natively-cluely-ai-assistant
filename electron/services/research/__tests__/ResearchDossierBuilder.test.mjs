@@ -213,7 +213,10 @@ describe('ResearchDossierBuilder', () => {
     assert.equal(out.companyName, 'IBM');
     assert.equal(capturedOptions.taskLabel, 'company-research');
     assert.equal(capturedOptions.perProviderTimeoutMs, 35_000);
-    assert.equal(capturedOptions.maxOutputTokens, 8_192);
+    // Reduced 8_192 → 2_048 in the same debug session that introduced the Pro
+    // model swap; the LLM diagnostic showed the dossier fits in ~1,100 tokens
+    // and the larger ceiling caused the model to consume the entire budget.
+    assert.equal(capturedOptions.maxOutputTokens, 2_048);
     assert.equal(capturedOptions.maxRotations, 1);
   });
 });
