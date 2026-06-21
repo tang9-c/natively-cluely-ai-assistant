@@ -817,6 +817,21 @@ export const AIProvidersSettings: React.FC = () => {
                     />
                     {/* Doubao Embedding Endpoint ID */}
                     <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle mt-3">
+                        {/* Active warning when Doubao API key is set but embedding endpoint ID is missing.
+                         * Without this, the embedding pipeline silently demotes to the bundled local
+                         * 384d model and the user has no signal that RAG quality is degraded.
+                         * See EmbeddingProviderResolver.ts:71 (the `; skipping` log). */}
+                        {hasStoredKey.doubao && !doubaoEmbeddingModel && (
+                            <div className="mb-3 flex items-start gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-[11px] text-yellow-200">
+                                <AlertCircle size={14} className="mt-0.5 shrink-0 text-yellow-400" />
+                                <div className="leading-relaxed">
+                                    <div className="font-medium">Doubao API key 已配置，但缺少 Embedding Endpoint ID</div>
+                                    <div className="text-yellow-300/80 mt-0.5">
+                                        RAG 向量搜索将自动降级到本地 384d 模型，质量与速度均受影响。填写下方 Endpoint ID 可恢复 Doubao 云端 embedding。
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         <div className="mb-2 flex items-center justify-between">
                             <label className="flex items-center text-xs font-medium text-text-primary uppercase tracking-wide">
                                 Doubao Embedding Endpoint ID
@@ -829,7 +844,7 @@ export const AIProvidersSettings: React.FC = () => {
                                 type="text"
                                 value={doubaoEmbeddingModel}
                                 onChange={(e) => setDoubaoEmbeddingModel(e.target.value)}
-                                placeholder="ep-20260321165850-k9w7r"
+                                placeholder="ep-20260321165850-k9w7r  ←  在方舟控制台创建 Embedding 推理接入点后复制"
                                 className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary font-mono focus:outline-none focus:border-accent-primary transition-colors"
                             />
                             <button
@@ -851,7 +866,7 @@ export const AIProvidersSettings: React.FC = () => {
                             </button>
                         </div>
                         <p className="text-[10px] text-text-secondary mt-2">
-                            在<a href="https://console.volcengine.com/ark/region:ark+cn-beijing/model" target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:underline">方舟控制台</a>创建 Embedding 推理接入点，复制 Endpoint ID（以 ep- 开头）粘贴到此处。
+                            在<a href="https://console.volcengine.com/ark/region:ark+cn-beijing/model" target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:underline">方舟控制台</a>创建 Embedding 推理接入点，复制 Endpoint ID（以 <code className="bg-bg-input px-1 rounded">ep-</code> 开头）粘贴到此处。
                         </p>
                     </div>
 
