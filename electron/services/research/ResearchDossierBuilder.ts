@@ -83,7 +83,8 @@ export class ResearchDossierBuilder {
     for (let attempt = 0; attempt < 2; attempt++) {
       onAttempt?.(attempt + 1); // 1-based: 1, then 2
       try {
-        parsed = await this.opts.llm.generateStructured(prompt, DossierSchema);
+        const raw = await this.opts.llm.generateStructured(prompt, DossierSchema);
+        parsed = DossierSchema.parse(parseStructuredPayload(raw));
         lastErr = null;
         break;
       } catch (err) {
@@ -91,7 +92,7 @@ export class ResearchDossierBuilder {
       }
     }
     if (lastErr) throw new LlmInvalidFormatError(formatZodError(lastErr));
-    const valid = DossierSchema.parse(parsed);
+    const valid = parsed;
 
     const now = new Date().toISOString();
     const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -149,5 +150,65 @@ function formatZodError(err: unknown): string {
     const issues = err.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
     return `LLM returned invalid dossier shape (${issues})`;
   }
+  if (err instanceof SyntaxError) {
+    return `LLM returned invalid dossier JSON (${err.message})`;
+  }
+  if (err instanceof Error && err.message) {
+    return `LLM returned invalid dossier shape (${err.message})`;
+  }
   return 'LLM returned invalid dossier shape';
+}
+
+function parseStructuredPayload(raw: unknown): unknown {
+  if (typeof raw !== 'string') return raw;
+
+  const cleaned = stripMarkdownFence(raw.trim());
+  try {
+    return JSON.parse(cleaned);
+  } catch (directErr) {
+    const extracted = extractFirstJsonObject(cleaned);
+    if (!extracted) throw directErr;
+    return JSON.parse(extracted);
+  }
+}
+
+function stripMarkdownFence(text: string): string {
+  const fenceMatch = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return fenceMatch ? fenceMatch[1].trim() : text;
+}
+
+function extractFirstJsonObject(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === '{') {
+      depth += 1;
+    } else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(start, i + 1);
+      }
+    }
+  }
+
+  return null;
 }
