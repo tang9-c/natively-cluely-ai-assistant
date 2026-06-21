@@ -92,4 +92,53 @@ describe('ResearchDossierBuilder', () => {
     const b = new ResearchDossierBuilder({ llm });
     await assert.rejects(() => b.build('X', []), (err) => err instanceof LlmInvalidFormatError);
   });
+
+  test('build() invokes onAttempt before each LLM call (1-based, max 2)', async () => {
+    const calls = [];
+    let llmCallCount = 0;
+    const validDossier = {
+      schemaVersion: '1.0', companyName: 'X', generatedAt: '', expiresAt: '',
+      source: 'tavily',
+      financials: { summary: 's', details: [], confidence: 'high' },
+      business: { summary: 's', details: [], confidence: 'high' },
+      strategy: { summary: 's', details: [], confidence: 'high' },
+      people: { summary: 's', details: [], confidence: 'high' },
+      infrastructure: { summary: 's', details: [], confidence: 'high' },
+      procurement: { summary: 's', details: [], confidence: 'high' },
+      sources: [],
+    };
+    const llm = {
+      generateStructured: async () => {
+        llmCallCount += 1;
+        if (llmCallCount === 1) throw new Error('retry me');
+        return validDossier;
+      },
+    };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({
+      llm,
+      onAttempt: (n) => calls.push(`attempt:${n}`),
+    });
+    await b.build('X', []);
+    assert.deepEqual(calls.filter((c) => c.startsWith('attempt:')), ['attempt:1', 'attempt:2']);
+  });
+
+  test('build() does not invoke onAttempt when onAttempt not provided (back-compat)', async () => {
+    const validDossier = {
+      schemaVersion: '1.0', companyName: 'X', generatedAt: '', expiresAt: '',
+      source: 'tavily',
+      financials: { summary: 's', details: [], confidence: 'high' },
+      business: { summary: 's', details: [], confidence: 'high' },
+      strategy: { summary: 's', details: [], confidence: 'high' },
+      people: { summary: 's', details: [], confidence: 'high' },
+      infrastructure: { summary: 's', details: [], confidence: 'high' },
+      procurement: { summary: 's', details: [], confidence: 'high' },
+      sources: [],
+    };
+    const llm = { generateStructured: async () => validDossier };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm }); // no onAttempt
+    const out = await b.build('X', []);
+    assert.equal(out.companyName, 'X');
+  });
 });
