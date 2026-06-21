@@ -43,6 +43,51 @@ describe('ResearchDossierBuilder', () => {
     assert.equal(out.financials.confidence, 'high');
   });
 
+  test('build() accepts provider responses wrapped in markdown JSON fences', async () => {
+    const validDossier = {
+      schemaVersion: '1.0', companyName: 'IBM',
+      financials: { summary: 's', details: [{ text: 'f', citation: 1 }], confidence: 'high' },
+      business: { summary: 's', details: [], confidence: 'high' },
+      strategy: { summary: 's', details: [], confidence: 'high' },
+      people: { summary: 's', details: [], confidence: 'high' },
+      infrastructure: { summary: 's', details: [], confidence: 'high' },
+      procurement: { summary: 's', details: [], confidence: 'high' },
+      sources: [{ index: 1, title: 't', url: 'https://x.example', snippet: 's' }],
+    };
+    const llm = {
+      generateStructured: async () => `\`\`\`json\n${JSON.stringify(validDossier)}\n\`\`\``,
+    };
+
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    const out = await b.build('IBM', [{ title: 't', url: 'https://x.example', content: 's' }]);
+    assert.equal(out.companyName, 'IBM');
+    assert.equal(out.financials.details[0].citation, 1);
+  });
+
+  test('build() extracts the first complete JSON object from prose-wrapped responses', async () => {
+    const validDossier = {
+      schemaVersion: '1.0', companyName: 'IBM',
+      financials: { summary: 's', details: [{ text: 'uses {braces} in text' }], confidence: 'high' },
+      business: { summary: 's', details: [], confidence: 'high' },
+      strategy: { summary: 's', details: [], confidence: 'high' },
+      people: { summary: 's', details: [], confidence: 'high' },
+      infrastructure: { summary: 's', details: [], confidence: 'high' },
+      procurement: { summary: 's', details: [], confidence: 'high' },
+      sources: [],
+    };
+    const llm = {
+      generateStructured: async () => `Here is the dossier:\n${JSON.stringify(validDossier)}\nDone.`,
+    };
+
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    const out = await b.build('IBM', []);
+    assert.equal(out.companyName, 'IBM');
+    assert.equal(out.financials.details[0].text, 'uses {braces} in text');
+    assert.equal(out.source, 'llm-fallback');
+  });
+
   test('build() with empty sources marks dossier.source = "llm-fallback"', async () => {
     const llmDossier = {
       schemaVersion: '1.0', companyName: 'Apple', generatedAt: '', expiresAt: '',
