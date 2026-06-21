@@ -444,7 +444,8 @@ export class IntelligenceEngine extends EventEmitter {
         const intentResult = await classifyIntent(
             lastInterviewerTurn,
             preparedTranscript,
-            this.session.getAssistantResponseHistory().length
+            this.session.getAssistantResponseHistory().length,
+            this.currentDynamicActionTemplateType,
         );
         const detectedCodingQuestion = this.session.getDetectedCodingQuestion();
 
@@ -458,6 +459,7 @@ export class IntelligenceEngine extends EventEmitter {
             now: Date.now(),
             lastTriggerTime: this.lastTriggerTime,
             cooldownMs: this.triggerCooldown,
+            modeTemplateType: this.currentDynamicActionTemplateType,
         });
     }
 
@@ -636,7 +638,8 @@ export class IntelligenceEngine extends EventEmitter {
             const intentResult = await classifyIntent(
                 lastInterviewerTurn,
                 preparedTranscript,
-                this.session.getAssistantResponseHistory().length
+                this.session.getAssistantResponseHistory().length,
+                this.currentDynamicActionTemplateType,
             );
 
             const screenContext = options?.screenContext;
@@ -644,6 +647,8 @@ export class IntelligenceEngine extends EventEmitter {
                 previousResponses: temporalContext.previousResponses.length,
                 tone: temporalContext.toneSignals[0]?.type || 'neutral',
                 intent: intentResult.intent,
+                intentConfidence: intentResult.confidence,
+                modeTemplateType: this.currentDynamicActionTemplateType ?? 'general',
                 imageCount: imagePaths?.length || 0,
                 screenOcrAvailable: Boolean(screenContext?.ocrText),
                 screenOcrTextLength: screenContext?.ocrText?.length || 0,

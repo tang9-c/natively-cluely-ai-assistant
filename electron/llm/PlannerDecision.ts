@@ -13,6 +13,14 @@ export interface PlannerInput {
     now?: number;
     lastTriggerTime?: number;
     cooldownMs?: number;
+    /**
+     * Active mode template (`ModesManager.ModeTemplateType` kebab-case string).
+     * When set, mode-aware intent gating kicks in (e.g. a `capture_action`
+     * intent only routes to `kind: 'answer'` when the active mode is
+     * `team-meet`). When omitted, falls back to the legacy mode-agnostic
+     * behaviour (any of the 7 interview intents is answerable).
+     */
+    modeTemplateType?: string | null;
 }
 
 export interface PlannerDecision {
@@ -37,14 +45,58 @@ function hasQuestionSignal(text: string): boolean {
     return text.endsWith('?') || QUESTION_PATTERN.test(text);
 }
 
-function intentSupportsAnswer(intent?: ConversationIntent): boolean {
-    return intent === 'coding'
+function intentSupportsAnswer(intent?: ConversationIntent, modeTemplateType?: string | null): boolean {
+    if (!intent) return false;
+
+    // Silence is never answerable regardless of mode — it's the "no action"
+    // signal. The 7 original interview intents plus general are answerable
+    // by default (preserves the original behaviour).
+    if (intent === 'silence') return false;
+    if (intent === 'coding'
         || intent === 'behavioral'
         || intent === 'deep_dive'
         || intent === 'example_request'
         || intent === 'follow_up'
         || intent === 'clarification'
-        || intent === 'general';
+        || intent === 'general') {
+        return true;
+    }
+
+    // Mode-specific intents are answerable only when their mode is active.
+    // This prevents, e.g., a `capture_action` intent from triggering an
+    // answer when the user is in `sales` mode and a stray regex hit slipped
+    // through the gates.
+    const mode = modeTemplateType ?? 'general';
+    switch (intent) {
+        // sales
+        case 'handle_objection':
+        case 'seize_signal':
+        case 'discovery_probe':
+            return mode === 'sales';
+        // shared cross-mode
+        case 'define_term':
+        case 'advance_dialog':
+            return mode !== 'silence'; // always answerable
+        // recruiting extras
+        case 'evaluate_answer':
+        case 'request_example':
+            return mode === 'recruiting';
+        // team-meet
+        case 'capture_action':
+        case 'capture_decision':
+        case 'capture_risk':
+        case 'status_update':
+            return mode === 'team-meet';
+        // lecture
+        case 'explain_concept':
+        case 'render_formula':
+        case 'answer_class_question':
+            return mode === 'lecture';
+        // summary_probe is intentionally NOT answerable (existing behaviour)
+        case 'summary_probe':
+            return false;
+    }
+    return false;
 }
 
 export function planNextAssistantAction(input: PlannerInput): PlannerDecision {
@@ -86,7 +138,7 @@ export function planNextAssistantAction(input: PlannerInput): PlannerDecision {
         return { kind: 'brainstorm', reason: input.hasImages ? 'visual_problem_context' : 'strategy_request', confidence };
     }
 
-    if (intentSupportsAnswer(input.intentResult?.intent) || hasQuestionSignal(text)) {
+    if (intentSupportsAnswer(input.intentResult?.intent, input.modeTemplateType) || hasQuestionSignal(text)) {
         return { kind: 'answer', reason: 'answerable_question', confidence };
     }
 
