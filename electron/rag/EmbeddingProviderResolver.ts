@@ -51,13 +51,30 @@ export class EmbeddingProviderResolver {
   /**
    * Returns the best available provider.
    * Runs isAvailable() checks in priority order.
-   * Local model is the unconditional fallback — always last.
+   *
+   * Priority order is LOCAL-FIRST: bundled local model → local Ollama →
+   * cloud providers (Doubao / OpenAI / Gemini). Cloud providers are only
+   * tried as a fallback when local options are unavailable, to keep embedding
+   * compute on-device by default for privacy, latency, and cost reasons.
+   *
+   * Hysteresis (probe-retry) is still applied between CLOUD providers to
+   * avoid spurious space-thrash demotion between two clouds — see
+   * probeAvailable(). Local probes are cheap + deterministic, so they don't
+   * need retry.
    */
   static async resolve(config: AppAPIConfig): Promise<IEmbeddingProvider> {
     const candidates: IEmbeddingProvider[] = [];
 
     let embeddingsDenied = false;
 
+    // --- Local-first: bundled on-device model (always available post-install) ---
+    if (!embeddingsDenied) {
+      candidates.push(new LocalEmbeddingProvider());
+    }
+    // --- Local Ollama (if running + model pulled) ---
+    candidates.push(new OllamaEmbeddingProvider(config.ollamaUrl || 'http://localhost:11434'));
+
+    // --- Cloud fallback: only reached when local providers above are unavailable ---
     if (config.doubaoKey) {
       try {
         assertProviderDataScopes('doubao_embeddings', ['embeddings'], config.providerDataScopes);
@@ -104,11 +121,6 @@ export class EmbeddingProviderResolver {
           throw error;
         }
       }
-    }
-
-    candidates.push(new OllamaEmbeddingProvider(config.ollamaUrl || 'http://localhost:11434'));
-    if (!embeddingsDenied) {
-      candidates.push(new LocalEmbeddingProvider()); // always last, always works
     }
 
     for (const provider of candidates) {
