@@ -24,7 +24,12 @@ export type { TemporalContext, AssistantResponse } from "./TemporalContextBuilde
 export {
     classifyIntent,
     getAnswerShapeGuidance,
-    warmupIntentClassifier
+    getAnswerShapeForMode,
+    getShapeForMode,
+    isModeInterviewFamily,
+    detectIntentByPattern,
+    warmupIntentClassifier,
+    isPrimarilyChinese,
 } from "./IntentClassifier";
 export type { ConversationIntent, IntentResult } from "./IntentClassifier";
 export { planNextAssistantAction } from "./PlannerDecision";
