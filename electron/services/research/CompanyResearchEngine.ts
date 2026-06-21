@@ -104,7 +104,7 @@ export class CompanyResearchEngine {
       // IPC layer can render a useful message instead of "DB_ERROR".
       const name = (err as { name?: string } | null)?.name;
       const isTimeout = name === 'AbortError' || /timed?\s*out/i.test(String((err as Error)?.message ?? ''));
-      const code = isTimeout ? 'LLM_INVALID_FORMAT' : 'LLM_FAILED';
+      const code = isTimeout ? 'LLM_TIMEOUT' : 'LLM_FAILED';
       return {
         success: false,
         errorCode: code,

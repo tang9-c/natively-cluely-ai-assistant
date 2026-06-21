@@ -186,4 +186,34 @@ describe('ResearchDossierBuilder', () => {
     const out = await b.build('X', []);
     assert.equal(out.companyName, 'X');
   });
+
+  test('build() passes company-research structured generation budget to the LLM adapter', async () => {
+    let capturedOptions = null;
+    const validDossier = {
+      schemaVersion: '1.0', companyName: 'IBM',
+      financials: { summary: 's', details: [], confidence: 'high' },
+      business: { summary: 's', details: [], confidence: 'high' },
+      strategy: { summary: 's', details: [], confidence: 'high' },
+      people: { summary: 's', details: [], confidence: 'high' },
+      infrastructure: { summary: 's', details: [], confidence: 'high' },
+      procurement: { summary: 's', details: [], confidence: 'high' },
+      sources: [],
+    };
+    const llm = {
+      generateStructured: async (_prompt, _schema, options) => {
+        capturedOptions = options;
+        return validDossier;
+      },
+    };
+
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    const out = await b.build('IBM', []);
+
+    assert.equal(out.companyName, 'IBM');
+    assert.equal(capturedOptions.taskLabel, 'company-research');
+    assert.equal(capturedOptions.perProviderTimeoutMs, 35_000);
+    assert.equal(capturedOptions.maxOutputTokens, 8_192);
+    assert.equal(capturedOptions.maxRotations, 1);
+  });
 });

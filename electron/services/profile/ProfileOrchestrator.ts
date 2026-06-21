@@ -280,11 +280,11 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
       const cache = new CompanyResearchCache({ db: rawConn });
       const builder = new ResearchDossierBuilder({
         llm: {
-          generateStructured: async (prompt) => {
+          generateStructured: async (prompt, _schema, options) => {
             if (!this.llmHelper) throw new Error('LLM not initialized');
             // LLMHelper returns provider text. ResearchDossierBuilder owns JSON
             // extraction and schema validation so all providers share one boundary.
-            return await this.llmHelper.generateContentStructured(prompt);
+            return await this.llmHelper.generateContentStructured(prompt, options);
           },
         },
       });

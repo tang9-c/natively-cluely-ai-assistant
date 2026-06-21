@@ -78,6 +78,29 @@ describe('CompanyResearchEngine', () => {
     assert.equal(r.cached, false);
   });
 
+  test('research() synthesizes Tavily search results instead of treating LLM as only a Tavily fallback', async () => {
+    const { CompanyResearchEngine } = cjsRequire(enginePath);
+    const tavilySources = [{ title: 'IBM Annual Report', url: 'https://ibm.com/report', content: 'IBM source' }];
+    let builderArgs = null;
+    const builder = {
+      build: async (companyName, sources) => {
+        builderArgs = { companyName, sources };
+        return baseDossier;
+      },
+    };
+    const engine = new CompanyResearchEngine({
+      cache: makeMockCache(),
+      search: makeMockSearch({ results: tavilySources }),
+      builder,
+    });
+
+    const r = await engine.research('IBM');
+
+    assert.equal(r.success, true);
+    assert.equal(builderArgs.companyName, 'IBM');
+    assert.deepEqual(builderArgs.sources, tavilySources);
+  });
+
   test('research() returns INVALID_INPUT for empty companyName', async () => {
     const { CompanyResearchEngine } = cjsRequire(enginePath);
     const engine = new CompanyResearchEngine({
@@ -164,7 +187,7 @@ describe('CompanyResearchEngine', () => {
     assert.equal(progress[progress.length - 1].stage, 'done');
   });
 
-  test('research() aborts with LLM_INVALID_FORMAT when builder hangs past timeoutMs', async () => {
+  test('research() aborts with LLM_TIMEOUT when builder hangs past timeoutMs', async () => {
     const { CompanyResearchEngine } = cjsRequire(enginePath);
     const builder = {
       build: () => new Promise(() => {}), // hang forever
@@ -179,7 +202,7 @@ describe('CompanyResearchEngine', () => {
     const r = await engine.research('Apple');
     const elapsed = Date.now() - start;
     assert.equal(r.success, false);
-    assert.equal(r.errorCode, 'LLM_INVALID_FORMAT');
+    assert.equal(r.errorCode, 'LLM_TIMEOUT');
     assert.ok(elapsed < 1500, `expected fast abort (got ${elapsed}ms)`);
   });
 
