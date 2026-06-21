@@ -16,7 +16,15 @@ export interface LlmAdapter {
   generateStructured(prompt: string, schema: z.ZodTypeAny): Promise<unknown>;
 }
 
-interface BuilderOpts { llm: LlmAdapter; }
+interface BuilderOpts {
+  llm: LlmAdapter;
+  /**
+   * Optional callback fired before each LLM attempt (1-based, up to 2 attempts).
+   * Used by CompanyResearchEngine to surface progress events during synthesis
+   * so the UI is not silent while the LLM is being polled.
+   */
+  onAttempt?: (attempt: number) => void;
+}
 
 const BulletSchema = z.object({
   text: z.string(),
@@ -54,6 +62,7 @@ export class ResearchDossierBuilder {
   async build(
     companyName: string,
     rawSources: Array<{ title: string; url: string; content: string }>,
+    opts?: { onAttempt?: (attempt: number) => void },
   ): Promise<CompanyDossier> {
     const sources: ResearchSource[] = rawSources.map((r, i) => ({
       index: i + 1,
@@ -64,9 +73,15 @@ export class ResearchDossierBuilder {
     const isFallback = sources.length === 0;
     const prompt = this.buildPrompt(companyName, sources, isFallback);
 
+    // Per-call opts.onAttempt takes precedence over the constructor-provided one,
+    // so callers (e.g. CompanyResearchEngine) can inject a forwarder without
+    // rebuilding the builder.
+    const onAttempt = opts?.onAttempt ?? this.opts.onAttempt;
+
     let parsed: any;
     let lastErr: unknown = null;
     for (let attempt = 0; attempt < 2; attempt++) {
+      onAttempt?.(attempt + 1); // 1-based: 1, then 2
       try {
         parsed = await this.opts.llm.generateStructured(prompt, DossierSchema);
         lastErr = null;
