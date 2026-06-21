@@ -12,6 +12,8 @@ export interface TranscriptSegment {
     timestamp: number;
     final: boolean;
     confidence?: number;
+    emotion?: string;
+    emotionSource?: string;
 }
 
 export interface SuggestionTrigger {
@@ -25,6 +27,8 @@ export interface ContextItem {
     role: 'interviewer' | 'user' | 'assistant';
     text: string;
     timestamp: number;
+    emotion?: string;
+    emotionSource?: string;
 }
 
 export interface AssistantResponse {
@@ -231,7 +235,9 @@ export class SessionTracker {
         this.contextItems.push({
             role,
             text,
-            timestamp: segment.timestamp
+            timestamp: segment.timestamp,
+            emotion: segment.emotion,
+            emotionSource: segment.emotionSource,
         });
 
         this.evictOldEntries();

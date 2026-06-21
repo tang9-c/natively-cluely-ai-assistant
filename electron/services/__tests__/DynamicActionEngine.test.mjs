@@ -69,7 +69,64 @@ test('Competitor mention (Gong) detected creates competitor_mention action', asy
   assert.equal(competitorAction.status, 'candidate');
 });
 
-test('Action item pattern detected creates action_item action', async () => {
+test('All seven real mode template keys have matching trigger packs', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const cases = [
+    {
+      modeTemplateType: 'general',
+      transcript: '帮我想一下我该怎么回应这个问题',
+      expectedType: 'general_assistance_request',
+    },
+    {
+      modeTemplateType: 'sales',
+      transcript: '这个价格太高了, 能不能便宜点?',
+      expectedType: 'pricing_objection',
+    },
+    {
+      modeTemplateType: 'recruiting',
+      transcript: '你能不能举一个具体的例子?',
+      expectedType: 'candidate_experience_probe',
+    },
+    {
+      modeTemplateType: 'team-meet',
+      transcript: '我来负责这个行动项, 周五前完成',
+      expectedType: 'action_item',
+    },
+    {
+      modeTemplateType: 'looking-for-work',
+      transcript: 'Tell me about a time you led a team through a difficult challenge.',
+      expectedType: 'behavioral_question',
+    },
+    {
+      modeTemplateType: 'technical-interview',
+      transcript: 'Please implement a function to solve this algorithm problem.',
+      expectedType: 'coding_problem',
+    },
+    {
+      modeTemplateType: 'lecture',
+      transcript: '这个叫做贝叶斯定理, 公式是这样的',
+      expectedType: 'concept_explanation',
+    },
+  ];
+
+  for (const item of cases) {
+    const actions = engine.detectActions({
+      transcript: item.transcript,
+      speaker: 'speaker',
+      modeTemplateType: item.modeTemplateType,
+      modeId: `mode_${item.modeTemplateType}`,
+      sessionId: `session_${item.modeTemplateType}`,
+    });
+    assert.ok(
+      actions.some(action => action.type === item.expectedType),
+      `${item.modeTemplateType} should emit ${item.expectedType}; got ${actions.map(a => a.type).join(', ')}`,
+    );
+  }
+});
+
+test('Action item pattern detected creates action_item action with real team-meet key', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
 
@@ -77,7 +134,7 @@ test('Action item pattern detected creates action_item action', async () => {
   const actions = engine.detectActions({
     transcript,
     speaker: 'Team Member',
-    modeTemplateType: 'team_meeting',
+    modeTemplateType: 'team-meet',
     modeId: 'mode_team_1',
     sessionId: 'session_456',
   });
@@ -88,7 +145,7 @@ test('Action item pattern detected creates action_item action', async () => {
   assert.equal(actionItemAction.label, 'Capture action item');
 });
 
-test('Behavioral question pattern creates STAR action', async () => {
+test('Behavioral question pattern creates STAR action with real looking-for-work key', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
 
@@ -96,7 +153,7 @@ test('Behavioral question pattern creates STAR action', async () => {
   const actions = engine.detectActions({
     transcript,
     speaker: 'Interviewer',
-    modeTemplateType: 'interview',
+    modeTemplateType: 'looking-for-work',
     modeId: 'mode_interview_1',
     sessionId: 'session_789',
   });

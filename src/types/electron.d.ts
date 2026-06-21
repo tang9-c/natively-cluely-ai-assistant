@@ -28,6 +28,16 @@ export interface DynamicActionPayload {
   createdAt: number
   expiresAt?: number
   promptInstruction: string
+  sourceIntent?: string
+  latestTurn?: string
+  language?: string
+  emotion?: string
+  emotionSource?: string
+  keyEntities?: string[]
+  retrievalQuery?: string
+  autoSurfacePolicy?: 'auto' | 'card' | 'silent'
+  autoTriggerEligible?: boolean
+  autoTriggerReason?: string
   answerStyle?: {
     maxWords: number
     format: 'bullets' | 'short_script' | 'code' | 'checklist' | 'summary'

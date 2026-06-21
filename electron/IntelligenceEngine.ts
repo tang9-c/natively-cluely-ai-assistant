@@ -11,6 +11,7 @@ import {
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, planNextAssistantAction, PlannerDecision
 } from './llm';
+import type { ModeEventContext } from './llm';
 import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEngine';
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
 import { ScreenContext } from './services/screen/types';
@@ -126,6 +127,7 @@ export class IntelligenceEngine extends EventEmitter {
     private currentSessionId: string | null = null;
     private currentDynamicActionModeId: string | null = null;
     private currentDynamicActionTemplateType: string | null = null;
+    private autoSurfaceFingerprints: Set<string> = new Set();
 
     private static isNonAnswerSentinel(answer: string): boolean {
         const normalized = answer.trim().toLowerCase().replace(/[.!?]+$/g, '');
@@ -331,6 +333,7 @@ export class IntelligenceEngine extends EventEmitter {
         // If session changed, drop store so we don't bleed actions across meetings.
         if (this.currentSessionId && this.currentSessionId !== sessionId) {
             this.dynamicActionEngine = new DynamicActionEngine();
+            this.autoSurfaceFingerprints.clear();
         }
         this.currentSessionId = sessionId;
         this.currentDynamicActionModeId = modeId;
@@ -342,6 +345,7 @@ export class IntelligenceEngine extends EventEmitter {
         this.currentDynamicActionModeId = null;
         this.currentDynamicActionTemplateType = null;
         this.dynamicActionEngine = null;
+        this.autoSurfaceFingerprints.clear();
     }
 
     acceptDynamicAction(actionId: string): DynamicAction | null {
@@ -378,6 +382,8 @@ export class IntelligenceEngine extends EventEmitter {
             modeTemplateType: this.currentDynamicActionTemplateType,
             modeId: this.currentDynamicActionModeId,
             sessionId: this.currentSessionId,
+            emotion: segment.emotion,
+            emotionSource: segment.emotionSource,
         });
 
         // The store dedupes within the per-session store, so each emitted action
@@ -385,6 +391,42 @@ export class IntelligenceEngine extends EventEmitter {
         for (const action of newActions) {
             this.emit('dynamic_action_emitted', action);
         }
+
+        const autoAction = newActions.find(action =>
+            action.autoTriggerEligible === true &&
+            action.autoSurfacePolicy === 'auto' &&
+            action.confidence >= 0.9
+        );
+        if (!autoAction) return;
+        if (this.activeMode !== 'idle' && this.activeMode !== 'assist') return;
+
+        const fingerprint = [
+            autoAction.modeTemplateType,
+            autoAction.type,
+            autoAction.latestTurn || text,
+        ].join('|').toLowerCase();
+        if (this.autoSurfaceFingerprints.has(fingerprint)) return;
+        this.autoSurfaceFingerprints.add(fingerprint);
+
+        const modeEvent: ModeEventContext = {
+            modeTemplateType: autoAction.modeTemplateType,
+            intent: autoAction.sourceIntent || autoAction.type,
+            confidence: autoAction.confidence,
+            latestTurn: autoAction.latestTurn || text,
+            emotion: autoAction.emotion,
+            emotionSource: autoAction.emotionSource,
+            language: autoAction.language,
+            keyEntities: autoAction.keyEntities,
+            retrievalQuery: autoAction.retrievalQuery,
+            autoSurfacePolicy: autoAction.autoSurfacePolicy,
+            promptInstruction: autoAction.promptInstruction,
+            answerShape: autoAction.answerStyle?.format,
+        };
+        this.runWhatShouldISay(undefined, autoAction.confidence, undefined, {
+            skipCooldown: true,
+            promptInstruction: autoAction.promptInstruction,
+            modeEvent,
+        }).catch(err => console.error('[IntelligenceEngine] Dynamic action auto-surface failed:', err));
     }
 
     /**
@@ -539,7 +581,7 @@ export class IntelligenceEngine extends EventEmitter {
      * Manual trigger - uses clean transcript pipeline for question inference
      * NEVER returns null - always provides a usable response
      */
-    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string } }): Promise<string | null> {
+    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; modeEvent?: ModeEventContext }): Promise<string | null> {
         const now = Date.now();
         const isSpeculative = options?.speculative === true;
         const skipCooldown = options?.skipCooldown === true;
@@ -658,7 +700,7 @@ export class IntelligenceEngine extends EventEmitter {
             let fullAnswer = "";
             // RC-03 fix: hold a reference to the generator so we can call .return()
             // to properly terminate the network request when a new generation starts.
-            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill);
+            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, options?.modeEvent);
             let streamAborted = false;
 
             for await (const token of stream) {

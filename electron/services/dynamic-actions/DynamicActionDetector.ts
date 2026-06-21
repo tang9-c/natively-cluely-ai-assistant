@@ -97,7 +97,7 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         type: 'pricing_objection',
         patterns: [
             /\b(expensive|too much|budget|price|cost|afford)\b/i,
-            zh('太贵', '价格高', '预算不够', '成本', '费用', '负担不起'),
+            zh('太贵', '价格高', '价格太高', '报价太高', '预算不够', '成本', '费用', '负担不起'),
         ],
         priority: 0.9,
         label: 'Handle pricing objection',
@@ -184,8 +184,8 @@ const RECRUITING_TRIGGERS: ActionTrigger[] = [
     {
         type: 'candidate_experience_probe',
         patterns: [
-            /\b(tell me about your experience|walk me through your background|why this role|why are you interested)\b/i,
-            zh('讲讲你的经验', '介绍一下你的背景', '为什么这个岗位', '为什么感兴趣'),
+            /\b(tell me about your experience|walk me through your background|why this role|why are you interested|specific example|concrete example|give me an example)\b/i,
+            zh('讲讲你的经验', '介绍一下你的背景', '为什么这个岗位', '为什么感兴趣', '具体的例子', '举个具体例子', '举一个例子'),
         ],
         priority: 0.84,
         label: 'Guide candidate story',
@@ -382,9 +382,12 @@ export const MODE_TRIGGERS: Record<string, ActionTrigger[]> = {
     negotiation: NEGOTIATION_TRIGGERS,
     sales: SALES_TRIGGERS,
     recruiting: RECRUITING_TRIGGERS,
+    'team-meet': TEAM_TRIGGERS,
     team_meeting: TEAM_TRIGGERS,
+    'looking-for-work': INTERVIEW_TRIGGERS,
     interview: INTERVIEW_TRIGGERS,
     lecture: LECTURE_TRIGGERS,
+    'technical-interview': TECHNICAL_TRIGGERS,
     technical_interview: TECHNICAL_TRIGGERS,
 };
 

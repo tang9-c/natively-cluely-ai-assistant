@@ -1,4 +1,5 @@
 export type ActionStatus = 'candidate' | 'shown' | 'accepted' | 'dismissed' | 'completed' | 'expired';
+export type AutoSurfacePolicy = 'auto' | 'card' | 'silent';
 
 export interface EvidenceRef {
     source: 'transcript' | 'screen' | 'reference' | 'meeting_history';
@@ -24,6 +25,21 @@ export interface DynamicAction {
     createdAt: number;
     expiresAt?: number;
     promptInstruction: string;
+    /**
+     * Mode-aware event metadata used by the main answer flow. The intent label
+     * directs the answer shape, but the LLM receives this richer packet instead
+     * of an isolated keyword.
+     */
+    sourceIntent?: string;
+    latestTurn?: string;
+    language?: string;
+    emotion?: string;
+    emotionSource?: string;
+    keyEntities?: string[];
+    retrievalQuery?: string;
+    autoSurfacePolicy?: AutoSurfacePolicy;
+    autoTriggerEligible?: boolean;
+    autoTriggerReason?: string;
     answerStyle?: {
         maxWords: number;
         format: 'bullets' | 'short_script' | 'code' | 'checklist' | 'summary';
