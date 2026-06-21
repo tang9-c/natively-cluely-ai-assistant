@@ -125,6 +125,33 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.match(autoRuns[0][3].modeEvent.latestTurn, /价格太高/);
   });
 
+  test('same high-confidence dynamic action evidence auto-triggers main answer only once', async () => {
+    const { engine } = await makeEngine();
+    const autoRuns = [];
+    engine.runWhatShouldISay = async (...args) => {
+      autoRuns.push(args);
+      return 'auto-answer';
+    };
+
+    engine.setDynamicActionContext({
+      sessionId: 'sess-auto-dedupe',
+      modeId: 'mode-sales',
+      modeTemplateType: 'sales',
+    });
+
+    const segment = {
+      speaker: 'interviewer',
+      text: '这个价格太高了, 老板可能不会批',
+      timestamp: Date.now(),
+      final: true,
+    };
+
+    engine.handleTranscript(segment, true);
+    engine.handleTranscript({ ...segment, timestamp: segment.timestamp + 100 }, true);
+
+    assert.equal(autoRuns.length, 1);
+  });
+
   test('non-final transcript does not emit dynamic actions', async () => {
     const { engine } = await makeEngine();
     const emitted = [];

@@ -229,6 +229,14 @@ describe('Tier 1 regex coverage: recruiting mode (extras only — falls through 
       `recruiting behavioral fallthrough hits ${behavioralHits}/2 < 2 (full miss list: ${JSON.stringify(misses)})`,
     );
   });
+
+  test('recruiting dispatch prefers recruiting-specific request_example before interview fallback', () => {
+    const requestExample = detectIntentByPattern('你能不能举一个具体的例子?', 'recruiting');
+    const behavioralFallback = detectIntentByPattern('Tell me about a time you led a team.', 'recruiting');
+
+    assert.equal(requestExample?.intent, 'request_example');
+    assert.equal(behavioralFallback?.intent, 'behavioral');
+  });
 });
 
 // ---------------------------------------------------------------------------
