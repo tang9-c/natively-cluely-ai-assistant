@@ -3,8 +3,10 @@
 // Micro step that runs before answer generation
 //
 // Two-tier classification:
-//   1. Regex fast-path (< 1ms) for common patterns
-//   2. Local SLM fallback (zero-shot, ~10-50ms) for messy/ambiguous speech
+//   1. Regex fast-path (< 1ms) for common patterns (English + Chinese)
+//   2. Local multilingual SLM (mdeberta-v3 XNLI, ~80-150ms) for messy/ambiguous
+//      speech. Label set is selected based on the input language to maximize
+//      zero-shot accuracy.
 
 import path from 'path';
 import { app } from 'electron';
@@ -45,10 +47,10 @@ const INTENT_ANSWER_SHAPES: Record<ConversationIntent, string> = {
 // ========================
 
 /**
- * Candidate labels for zero-shot classification.
- * These map to ConversationIntent types.
+ * Candidate labels for zero-shot classification (English).
+ * Used when the input is detected as English.
  */
-const ZERO_SHOT_LABELS: Record<string, ConversationIntent> = {
+const ZERO_SHOT_LABELS_EN: Record<string, ConversationIntent> = {
     'asking for clarification or explanation': 'clarification',
     'asking about what happened next or follow-up': 'follow_up',
     'requesting more detail or deeper explanation': 'deep_dive',
@@ -59,7 +61,46 @@ const ZERO_SHOT_LABELS: Record<string, ConversationIntent> = {
     'general conversation or question': 'general',
 };
 
-const ZERO_SHOT_LABEL_KEYS = Object.keys(ZERO_SHOT_LABELS);
+/**
+ * Candidate labels for zero-shot classification (Chinese).
+ * Used when the input is detected as Chinese. The multilingual XNLI model
+ * (mdeberta-v3-base-xnli-multilingual-nli-2mil7) understands Chinese labels
+ * natively, so we can ask the model in the same language as the user.
+ */
+const ZERO_SHOT_LABELS_ZH: Record<string, ConversationIntent> = {
+    '请求澄清或解释说明': 'clarification',
+    '询问接下来发生什么或追问': 'follow_up',
+    '请求更详细或更深入的解释': 'deep_dive',
+    '询问个人经历或行为例子': 'behavioral',
+    '请求具体例子': 'example_request',
+    '总结或确认理解': 'summary_probe',
+    '询问代码、编程或实现': 'coding',
+    '一般性对话或问题': 'general',
+};
+
+/**
+ * Heuristic: detect whether the input text is primarily Chinese.
+ *
+ * Returns true when CJK Unified Ideographs (U+4E00..U+9FFF) make up at
+ * least `threshold` of the *meaningful* content — defined as the original
+ * text with ASCII whitespace + common punctuation stripped out. This avoids
+ * the over-permissive `cjk.length >= 1` heuristic that would mislabel
+ * mixed inputs like "OK 你好 yes" as Chinese on the strength of a single
+ * CJK character.
+ *
+ * The threshold is exposed for tests and future tuning; production callers
+ * should use the default (0.3).
+ */
+export function isPrimarilyChinese(text: string, threshold = 0.3): boolean {
+    if (!text) return false;
+    const cjkChars = text.match(/[一-鿿]/g);
+    if (!cjkChars || cjkChars.length === 0) return false;
+    // Strip whitespace, ASCII punctuation, and fullwidth punctuation so they
+    // don't dilute the CJK ratio.
+    const stripped = text.replace(/[\s　-〿.,!?;:'"()\[\]{}<>—\-]/g, '');
+    if (stripped.length === 0) return false;
+    return cjkChars.length / stripped.length >= threshold;
+}
 
 /** Minimum confidence from the SLM to trust its classification */
 const SLM_CONFIDENCE_THRESHOLD = 0.35;
@@ -84,7 +125,8 @@ class ZeroShotClassifier {
 
     /**
      * Lazy-load the zero-shot classification model.
-     * Uses Xenova/mobilebert-uncased-mnli — tiny (~100MB quantized), fast (~10-50ms inference).
+     * Uses Xenova/mdeberta-v3-base-xnli-multilingual-nli-2mil7 — multilingual NLI,
+     * supports Chinese / English / 100+ languages. ~280MB, ~80-150ms inference.
      */
     private async ensureLoaded(): Promise<void> {
         if (this.pipe) return;
@@ -105,10 +147,10 @@ class ZeroShotClassifier {
                 env.cacheDir = path.join(app.getPath('userData'), 'models');
                 env.remoteHost = (process.env.HF_ENDPOINT || 'https://modelscope.cn/models').replace(/\/$/, '') + '/';
 
-                console.log('[IntentClassifier] Loading zero-shot classifier (mobilebert-uncased-mnli)...');
+                console.log('[IntentClassifier] Loading zero-shot classifier (mdeberta-v3-base-xnli-multilingual-nli-2mil7)...');
                 this.pipe = await pipeline(
                     'zero-shot-classification',
-                    'Xenova/mobilebert-uncased-mnli',
+                    'Xenova/mdeberta-v3-base-xnli-multilingual-nli-2mil7',
                     { local_files_only: false }
                 );
                 console.log('[IntentClassifier] Zero-shot classifier loaded successfully.');
@@ -128,6 +170,7 @@ class ZeroShotClassifier {
 
     /**
      * Classify text using the zero-shot model.
+     * Picks the label set (English or Chinese) based on the input language.
      * Returns null if the model isn't loaded or classification fails.
      */
     async classify(text: string): Promise<IntentResult | null> {
@@ -135,7 +178,14 @@ class ZeroShotClassifier {
         if (!this.pipe) return null;
 
         try {
-            const result = await this.pipe(text, ZERO_SHOT_LABEL_KEYS, {
+            // Pick the label set that matches the input language. The
+            // multilingual XNLI model understands both, but matching the
+            // candidate labels to the input language yields noticeably
+            // higher zero-shot accuracy.
+            const labelMap = isPrimarilyChinese(text) ? ZERO_SHOT_LABELS_ZH : ZERO_SHOT_LABELS_EN;
+            const labelKeys = Object.keys(labelMap);
+
+            const result = await this.pipe(text, labelKeys, {
                 multi_label: false,
             });
 
@@ -147,8 +197,13 @@ class ZeroShotClassifier {
                 return null; // Not confident enough
             }
 
-            const intent = ZERO_SHOT_LABELS[topLabel] || 'general';
-            console.log(`[IntentClassifier] SLM classified`, { intent, confidence: topScore, textLength: text.length });
+            const intent = labelMap[topLabel] || 'general';
+            console.log(`[IntentClassifier] SLM classified`, {
+                intent,
+                confidence: topScore,
+                textLength: text.length,
+                labelSet: isPrimarilyChinese(text) ? 'zh' : 'en',
+            });
 
             return {
                 intent,
@@ -178,41 +233,50 @@ class ZeroShotClassifier {
  * Pattern-based intent detection (fast, no model call)
  * For common patterns this is sufficient
  */
-function detectIntentByPattern(lastInterviewerTurn: string): IntentResult | null {
+export function detectIntentByPattern(lastInterviewerTurn: string): IntentResult | null {
     const text = lastInterviewerTurn.toLowerCase().trim();
 
-    // Clarification patterns
-    if (/(can you explain|what do you mean|clarify|could you elaborate on that specific)/i.test(text)) {
+    // Clarification patterns (English + Chinese)
+    // NOTE: "详细讲" is intentionally NOT here — it's the deep_dive cue. Keep
+    // this list to short follow-up clarifications only.
+    if (/(can you explain|what do you mean|clarify|could you elaborate on that specific)/i.test(text)
+        || /(能解释|什么意思|怎么讲|具体说|澄清|说明下|解释一下|怎么理解)/.test(text)) {
         return { intent: 'clarification', confidence: 0.9, answerShape: INTENT_ANSWER_SHAPES.clarification };
     }
 
-    // Follow-up patterns  
-    if (/(what happened|then what|and after that|what.s next|how did that go)/i.test(text)) {
+    // Follow-up patterns (English + Chinese)
+    if (/(what happened|then what|and after that|what.s next|how did that go)/i.test(text)
+        || /(后来呢|后来怎样|然后呢|接下来|后来如何|然后怎样|之后呢|结果呢|接下来呢|后来怎么了)/.test(text)) {
         return { intent: 'follow_up', confidence: 0.85, answerShape: INTENT_ANSWER_SHAPES.follow_up };
     }
 
-    // Deep dive patterns
-    if (/(tell me more|dive deeper|explain further|walk me through|how does that work)/i.test(text)) {
+    // Deep dive patterns (English + Chinese)
+    if (/(tell me more|dive deeper|explain further|walk me through|how does that work)/i.test(text)
+        || /(详细讲|深入讲|展开讲|讲详细点|具体讲讲|解释清楚|讲清楚|细说|细讲|多说一些|再多说|再讲讲|深入解释)/.test(text)) {
         return { intent: 'deep_dive', confidence: 0.85, answerShape: INTENT_ANSWER_SHAPES.deep_dive };
     }
 
-    // Behavioral patterns
-    if (/(give me an example|tell me about a time|describe a situation|when have you|share an experience)/i.test(text)) {
+    // Behavioral patterns (English + Chinese)
+    if (/(give me an example|tell me about a time|describe a situation|when have you|share an experience)/i.test(text)
+        || /(举个例子|讲个例子|举一个例子|讲讲你以前|讲讲你当时|你曾经|描述一下当时|讲讲一次|讲讲你过去|讲讲你的经历|有没有类似的例子|讲个故事)/.test(text)) {
         return { intent: 'behavioral', confidence: 0.9, answerShape: INTENT_ANSWER_SHAPES.behavioral };
     }
 
-    // Example request patterns
-    if (/(for example|concrete example|specific instance|like what|such as)/i.test(text)) {
+    // Example request patterns (English + Chinese)
+    if (/(for example|concrete example|specific instance|like what|such as)/i.test(text)
+        || /(比如|例如|具体例子|举个实例|像什么|类似的|像这样的|什么例子|具体说一说|讲个具体例子)/.test(text)) {
         return { intent: 'example_request', confidence: 0.85, answerShape: INTENT_ANSWER_SHAPES.example_request };
     }
 
-    // Summary probe patterns
-    if (/(so to summarize|in summary|so basically|so you.re saying|let me make sure)/i.test(text)) {
+    // Summary probe patterns (English + Chinese)
+    if (/(so to summarize|in summary|so basically|so you.re saying|let me make sure)/i.test(text)
+        || /(总结一下|概括一下|简单总结|简要说一下|总体来说|总的来说|综上所述|归纳一下|总结下|总结总结)/.test(text)) {
         return { intent: 'summary_probe', confidence: 0.85, answerShape: INTENT_ANSWER_SHAPES.summary_probe };
     }
 
-    // Coding patterns (Broad detection for programming/implementation)
-    if (/(write code|program|implement|function for|algorithm|how to code|setup a .* project|using .* library|debug this|snippet|boilerplate|example of .* in .*|optimize|refactor|best practice for .* code|utility method|component for|logic for)/i.test(text)) {
+    // Coding patterns (Broad detection for programming/implementation) (English + Chinese)
+    if (/(write code|program|implement|function for|algorithm|how to code|setup a .* project|using .* library|debug this|snippet|boilerplate|example of .* in .*|optimize|refactor|best practice for .* code|utility method|component for|logic for)/i.test(text)
+        || /(写代码|写一下代码|实现一下|解这道题|解一下|代码怎么写|这个算法|怎么实现|实现这个|怎么写|如何实现|用.*实现|.*的代码|调试|优化|重构|怎么优化|怎么调试)/.test(text)) {
         return { intent: 'coding', confidence: 0.9, answerShape: INTENT_ANSWER_SHAPES.coding };
     }
 
