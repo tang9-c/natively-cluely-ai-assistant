@@ -690,6 +690,11 @@ interface ElectronAPI {
     enabled: boolean,
   ) => Promise<{ success: boolean; error?: string }>;
   onTechnicalInterviewVisionFirstChanged: (callback: (enabled: boolean) => void) => () => void;
+  getLocalIntentEnhancementEnabled: () => Promise<boolean>;
+  setLocalIntentEnhancementEnabled: (
+    enabled: boolean,
+  ) => Promise<{ success: boolean; error?: string }>;
+  onLocalIntentEnhancementEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
   /** @deprecated alias for technicalInterviewVisionFirst — retained so older renderer builds keep working. */
   getTechnicalInterviewDirectVision: () => Promise<boolean>;
   /** @deprecated alias for technicalInterviewVisionFirst — retained so older renderer builds keep working. */
@@ -1875,6 +1880,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('technical-interview-vision-first-changed', subscription);
     return () => {
       ipcRenderer.removeListener('technical-interview-vision-first-changed', subscription);
+    };
+  },
+  getLocalIntentEnhancementEnabled: () =>
+    ipcRenderer.invoke('get-local-intent-enhancement-enabled'),
+  setLocalIntentEnhancementEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('set-local-intent-enhancement-enabled', enabled),
+  onLocalIntentEnhancementEnabledChanged: (callback: (enabled: boolean) => void) => {
+    const subscription = (_: any, enabled: boolean) => callback(enabled);
+    ipcRenderer.on('local-intent-enhancement-enabled-changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('local-intent-enhancement-enabled-changed', subscription);
     };
   },
   // Deprecated aliases — kept so renderer builds compiled against the old API keep working.

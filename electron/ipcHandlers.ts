@@ -741,6 +741,13 @@ export function initializeIpcHandlers(appState: AppState): void {
       broadcastEvent: 'technical-interview-vision-first-changed',
       getter: () => SettingsManager.getInstance().getTechnicalInterviewVisionFirst(),
     },
+    {
+      suffix: 'local-intent-enhancement-enabled',
+      key: 'localIntentEnhancementEnabled',
+      validator: (v) => typeof v === 'boolean' || 'invalid_value',
+      broadcastEvent: 'local-intent-enhancement-enabled-changed',
+      getter: () => SettingsManager.getInstance().getLocalIntentEnhancementEnabled(),
+    },
   ];
 
   for (const reg of SETTINGS_REGISTRY) {
@@ -827,6 +834,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
     SettingsManager.getInstance().set('technicalInterviewVisionFirst', enabled);
     broadcast('technical-interview-vision-first-changed', enabled);
+    return { success: true };
+  });
+  safeHandle('get-local-intent-enhancement-enabled', async () =>
+    SettingsManager.getInstance().getLocalIntentEnhancementEnabled(),
+  );
+  safeHandle('set-local-intent-enhancement-enabled', async (_, enabled: boolean) => {
+    if (typeof enabled !== 'boolean') {
+      return { success: false, error: 'invalid_value' };
+    }
+    SettingsManager.getInstance().set('localIntentEnhancementEnabled', enabled);
+    broadcast('local-intent-enhancement-enabled-changed', enabled);
     return { success: true };
   });
   safeHandle('get-technical-interview-direct-vision', async () =>

@@ -42,6 +42,8 @@ test('LocalModelManager requires the intent classifier int8 artifact, not fp32 m
   assert.match(src, /INTENT_CLASSIFIER_MODEL_ARTIFACT\.requiredRelativePath/);
   assert.match(src, /buildIntentClassifierPipelineOptions\(\)/);
   assert.match(src, /validateIntentClassifierModelArtifact\(rootDir\)/);
+  assert.match(src, /optional-enhancement/);
+  assert.match(src, /本地多语言意图增强（可选）/);
   assert.doesNotMatch(src, /requiredFiles:\s*\['onnx\/model\.onnx'\]/);
 });
 
@@ -54,12 +56,36 @@ test('LocalEmbeddingProvider prefers downloaded userData models before bundled f
   assert.match(src, /env\.localModelPath\s*=\s*this\.modelPath/);
 });
 
-test('download-models pins multilingual intent classifier download to model_int8.onnx', () => {
+test('download-models does not install optional multilingual intent classifier by default', () => {
   const src = read('scripts/download-models.js');
 
-  assert.match(src, /mdeberta-v3-base-xnli-multilingual-nli-2mil7/);
-  assert.match(src, /model_file_name:\s*'model'/);
-  assert.match(src, /dtype:\s*'int8'/);
-  assert.match(src, /onnx\/model_int8\.onnx/);
+  assert.doesNotMatch(src, /mdeberta-v3-base-xnli-multilingual-nli-2mil7/);
+  assert.doesNotMatch(src, /onnx\/model_int8\.onnx/);
   assert.doesNotMatch(src, /Downloading Xenova\/mobilebert-uncased-mnli/);
+});
+
+test('LocalModelsPanel labels optional intent model separately from base models', () => {
+  const src = read('src/components/LocalModelsPanel.tsx');
+
+  assert.match(src, /基础本地模型/);
+  assert.match(src, /可选增强包/);
+  assert.match(src, /未开启时不会影响默认中文意图识别/);
+  assert.match(src, /getLocalIntentEnhancementEnabled/);
+  assert.match(src, /setLocalIntentEnhancementEnabled/);
+});
+
+test('local intent enhancement setting is exposed through SettingsManager, IPC, and preload', () => {
+  const settings = read('electron/services/SettingsManager.ts');
+  const ipc = read('electron/ipcHandlers.ts');
+  const preload = read('electron/preload.ts');
+  const types = read('src/types/electron.d.ts');
+
+  assert.match(settings, /localIntentEnhancementEnabled\?: boolean/);
+  assert.match(settings, /getLocalIntentEnhancementEnabled\(\): boolean/);
+  assert.match(ipc, /get-local-intent-enhancement-enabled/);
+  assert.match(ipc, /set-local-intent-enhancement-enabled/);
+  assert.match(preload, /getLocalIntentEnhancementEnabled/);
+  assert.match(preload, /setLocalIntentEnhancementEnabled/);
+  assert.match(types, /getLocalIntentEnhancementEnabled/);
+  assert.match(types, /setLocalIntentEnhancementEnabled/);
 });
