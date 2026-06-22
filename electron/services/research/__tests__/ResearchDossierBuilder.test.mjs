@@ -460,13 +460,25 @@ describe('ResearchDossierBuilder', () => {
     };
     const { ResearchDossierBuilder } = cjsRequire(builderPath);
     const b = new ResearchDossierBuilder({ llm });
-    // Pass non-empty sources so maybeDowngrade does not force all confidence to 'low'.
-    const out = await b.build('Apple', [{ title: 't', url: 'https://x.example', content: 's' }]);
-    // The returned dossier reflects normalized output — bullets became details,
-    // Chinese confidence became enum, schemaVersion/companyName/sources were
-    // injected. These assertions verify the normalize behavior end-to-end; the
-    // capturedOptions assertion in Step 4 of the implementer will verify the
-    // rule-list return shape separately.
+    // Spy on console.log so we can observe the [Research] stage=normalize line
+    // emitted by researchLog(). This indirectly verifies that normalizeDossier
+    // returned the expected rule identifiers, since `normalizeDossier` is not
+    // exported from the module and the `rules` array is internal to build().
+    const originalLog = console.log;
+    const lines = [];
+    console.log = (...args) => {
+      lines.push(args.join(' '));
+      originalLog(...args);
+    };
+    let out;
+    try {
+      // Pass non-empty sources so maybeDowngrade does not force all confidence to 'low'.
+      out = await b.build('Apple', [{ title: 't', url: 'https://x.example', content: 's' }]);
+    } finally {
+      console.log = originalLog;
+    }
+    // End-to-end normalize behavior: bullets → details, Chinese → enum,
+    // schemaVersion/companyName/sources injected.
     assert.equal(out.financials.details[0].text, 'a');
     assert.equal(out.financials.confidence, 'high');
     assert.equal(out.business.confidence, 'high');
@@ -474,5 +486,20 @@ describe('ResearchDossierBuilder', () => {
     assert.equal(out.companyName, 'Apple');
     // Sanity: the request still carries the structured-generation budget.
     assert.equal(capturedOptions.taskLabel, 'company-research');
+    // Verify the [Research] stage=normalize log line lists each rule that fired.
+    const normalizeLine = lines.find((l) => l.includes('[Research] stage=normalize'));
+    assert.ok(normalizeLine, `expected a [Research] stage=normalize log line, got: ${JSON.stringify(lines)}`);
+    for (const ruleId of [
+      'bullets→details',
+      'zh-confidence→enum',
+      'inject-schemaVersion',
+      'inject-companyName',
+      'inject-sources',
+    ]) {
+      assert.ok(
+        normalizeLine.includes(ruleId),
+        `expected rule ${ruleId} in normalize log line, got: ${normalizeLine}`,
+      );
+    }
   });
 });

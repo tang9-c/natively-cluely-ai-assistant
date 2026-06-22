@@ -109,7 +109,6 @@ export class ResearchDossierBuilder {
 
     let parsed: any;
     let lastErr: unknown = null;
-    let lastNormalizeRules: string[] = [];
     for (let attempt = 0; attempt < 2; attempt++) {
       onAttempt?.(attempt + 1); // 1-based: 1, then 2
       try {
@@ -148,7 +147,6 @@ export class ResearchDossierBuilder {
         // normalizeDossier fixes both, plus injects schemaVersion and
         // companyName when the model omits them (it currently does for both).
         const { normalized, rules } = normalizeDossier(parseStructuredPayload(raw), companyName);
-        lastNormalizeRules = rules;
         researchLog('normalize', { attempt: attempt + 1, rules: rules.length ? rules : '(none)' });
         parsed = DossierSchema.parse(normalized);
         lastErr = null;
