@@ -507,4 +507,52 @@ describe('ResearchDossierBuilder', () => {
       );
     }
   });
+
+  // Debug session 2026-06-22 (正浩创新 sample): LLM emitted `citation: null`
+  // for bullets it had no source to cite. Zod's `.optional()` accepts
+  // `undefined` but rejects `null`, producing 11 invalid_type errors across
+  // 5 dimensions. Schema now uses `.nullish()` AND normalizeBullets deletes
+  // null citations so the diff loop in normalizeDossier can report the rule.
+  test('build() accepts citation:null in bullet details and logs null-citation→undefined', async () => {
+    const llmDossier = {
+      financials: { summary: 's', details: [{ text: 'a', citation: null }, { text: 'b' }], confidence: 'high' },
+      business: { summary: 's', details: [], confidence: 'high' },
+      strategy: { summary: 's', details: [], confidence: 'high' },
+      people: { summary: 's', details: [], confidence: 'high' },
+      infrastructure: { summary: 's', details: [], confidence: 'high' },
+      procurement: { summary: 's', details: [], confidence: 'high' },
+      sources: [{ index: 1, title: 't', url: 'https://x.example', snippet: 's' }],
+    };
+    const llm = { generateStructured: async () => llmDossier };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    // Spy on console.log so we can capture the [Research] stage=normalize line.
+    const originalLog = console.log;
+    const lines = [];
+    console.log = (...args) => {
+      lines.push(args.join(' '));
+      originalLog(...args);
+    };
+    let out;
+    try {
+      // Pass non-empty sources so maybeDowngrade does not force confidence to 'low'.
+      out = await b.build('Apple', [{ title: 't', url: 'https://x.example', content: 's' }]);
+    } finally {
+      console.log = originalLog;
+    }
+    // The first bullet had citation:null; normalize drops it so the property
+    // is undefined on the returned dossier (and absent after JSON serialization).
+    assert.ok(out.financials.details[0]);
+    assert.equal(out.financials.details[0].text, 'a');
+    assert.equal(out.financials.details[0].citation, undefined);
+    // The second bullet had no citation to begin with; it stays undefined.
+    assert.equal(out.financials.details[1].citation, undefined);
+    // Verify the [Research] stage=normalize log line reports the rule.
+    const normalizeLine = lines.find((l) => l.includes('[Research] stage=normalize'));
+    assert.ok(normalizeLine, `expected a [Research] stage=normalize log line, got: ${JSON.stringify(lines)}`);
+    assert.ok(
+      normalizeLine.includes('null-citation→undefined'),
+      `expected rule null-citation→undefined in normalize log line, got: ${normalizeLine}`,
+    );
+  });
 });
