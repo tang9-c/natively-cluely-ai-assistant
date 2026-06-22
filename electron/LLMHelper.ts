@@ -1936,13 +1936,17 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       });
     }
 
-    // Priority 6: Groq (Fallback despite JSON hallucination risks)
-    if (this.groqClient) {
-      providers.push({
-        name: `Groq (${GROQ_MODEL}) fallback`,
-        execute: () => this.generateWithGroq(message, GROQ_MODEL, undefined, { maxOutputTokens }),
-      }); // intentional: structured-gen last-resort uses stable baseline model, not user selection
-    }
+    // Priority 6: Groq — REMOVED from structured-generation chain (debug
+    // session 2026-06-22). `llama-3.3-70b-versatile` returns 403 in this
+    // environment (model retired / key revoked), which previously caused a
+    // Doubao-timeout → Groq-403 → Doubao-timeout → Groq-403 loop in
+    // ResearchDossierBuilder. Chat / streaming paths (`generateWithGroq`)
+    // still use Groq; only the structured chain is narrowed.
+    //
+    // If Groq returns to service, re-enable this block AND update the 7+
+    // hardcoded references elsewhere (see [[company-research-provider-status]]
+    // — single-PR fix is incomplete). The default model name will also need
+    // to be re-verified against the current Groq model catalog.
 
     // Priority 7: Ollama (on-device fallback — last resort, no cloud dependency)
     if (this.useOllama && await this.checkOllamaAvailable()) {
