@@ -56,7 +56,9 @@ interface BuilderOpts {
 
 const BulletSchema = z.object({
   text: z.string(),
-  citation: z.number().int().positive().optional(),
+  // .nullish() = .nullable().optional(): accept positive int, null, or absent.
+  // LLM emits `citation: null` when it has no source to cite; .optional() rejected that.
+  citation: z.number().int().positive().nullish(),
 });
 
 const DimensionSchema = z.object({
@@ -302,7 +304,13 @@ function normalizeBullets(arr: unknown): unknown[] {
   if (!Array.isArray(arr)) return [];
   return arr.map((item) => {
     if (typeof item === 'string') return { text: item };
-    if (item && typeof item === 'object') return item;
+    if (item && typeof item === 'object') {
+      const obj = { ...(item as Record<string, unknown>) };
+      if (obj.citation === null) {
+        delete obj.citation; // null becomes undefined for Zod (which now allows both)
+      }
+      return obj;
+    }
     return { text: String(item) };
   });
 }
@@ -408,6 +416,22 @@ function normalizeDossier(parsed: unknown, fallbackCompanyName: string): { norma
       if (typeof bObj.confidence === 'string' && bObj.confidence !== bObj.confidence.toLowerCase()
           && aObj.confidence === bObj.confidence.toLowerCase()) {
         rules.push('case-normalize');
+      }
+      // Detect `citation: null` → undefined normalization. If any bullet in the
+      // before-snapshot had a null citation and the after-snapshot does not
+      // (because normalizeBullets deleted it), record the rule exactly once
+      // for this dimension. Compare at the bullet level so multiple null
+      // citations on one dimension still log the rule once.
+      if (Array.isArray(bObj.details) && Array.isArray(aObj.details)) {
+        const hadNullCitation = bObj.details.some(
+          (b) => b && typeof b === 'object' && (b as Record<string, unknown>).citation === null,
+        );
+        const stillHasNullCitation = aObj.details.some(
+          (a) => a && typeof a === 'object' && (a as Record<string, unknown>).citation === null,
+        );
+        if (hadNullCitation && !stillHasNullCitation) {
+          rules.push('null-citation→undefined');
+        }
       }
     }
   }
