@@ -36,6 +36,15 @@ const LANG_MAP: Record<string, string | null> = {
 
 let pipe: any = null;
 let loadedModelId = '';
+// Per-init CoreML → CPU fallback gate. Apple Silicon on macOS 14+ has
+// reproducible CoreML EP init failures (Microsoft onnxruntime issue tracker
+// has multiple reports) that previously caused the entire init to throw and
+// the host to mis-report "model not found". We retry once with cpu-only on
+// the first failure so a flaky CoreML EP doesn't brick local STT on
+// otherwise-healthy Apple Silicon machines. Reset at the top of every init
+// so a model swap gets a fresh chance (a model that crashes CoreML today
+// might still work tomorrow after a runtime upgrade).
+let triedCpuFallback = false;
 
 // Tokenized prompt cache — populated by `setPrompt` messages, reused by
 // every subsequent transcribe. Cleared on model swap.
@@ -130,6 +139,8 @@ async function loadTransformers(): Promise<{ pipeline: any; env: any }> {
 
 parentPort.on('message', async (msg: any) => {
   if (msg.type === 'init') {
+    // Reset per-init CoreML→cpu retry gate. See comment on declaration.
+    triedCpuFallback = false;
     // Validate required fields BEFORE entering the try/catch so the error
     // surfaces as a structured `error` postMessage rather than an unhandled
     // worker throw (which would leave the host's workerReady stuck false).
@@ -223,6 +234,47 @@ parentPort.on('message', async (msg: any) => {
 
       parentPort!.postMessage({ type: 'ready' });
     } catch (e: any) {
+      // CoreML EP fallback: Apple Silicon on macOS 14+ has reproducible CoreML
+      // EP init failures. If our requested providers included coreml AND we
+      // haven't already attempted the cpu-only fallback this init, retry with
+      // env.backends.onnx.executionProviders = ['cpu'] before reporting the
+      // error to the host. Keeps local STT usable on otherwise-healthy
+      // machines where CoreML just happens to be broken.
+      const providers: string[] = msg.executionProviders ?? ['cpu'];
+      const coremlRequested = providers.some((p) => p.toLowerCase() === 'coreml');
+      if (coremlRequested && !triedCpuFallback) {
+        triedCpuFallback = true;
+        console.warn(
+          `[WhisperWorker] Providers ${providers.join(',')} failed, retrying with cpu-only:`,
+          e?.message ?? e,
+        );
+        try {
+          // Reach back into the previously-loaded transformers module via a
+          // second dynamic import — cheap because it's already in module cache,
+          // and avoids storing pipeline/env on the outer closure for this
+          // single retry path.
+          const { pipeline: retryPipeline, env: retryEnv } = await loadTransformers();
+          retryEnv.backends.onnx.executionProviders = ['cpu'];
+          pipe = await retryPipeline('automatic-speech-recognition', msg.modelId, {
+            dtype: msg.dtype,
+          });
+          loadedModelId = msg.modelId;
+          cachedPromptText = '';
+          cachedPromptIds = null;
+          console.log(`[WhisperWorker] Loaded ${msg.modelId} on cpu-only after CoreML fallback`);
+          parentPort!.postMessage({ type: 'ready' });
+          return;
+        } catch (retryErr: any) {
+          // Both attempts failed — surface a combined error so the host can
+          // distinguish "CoreML broken + cpu broken" from "model file missing".
+          parentPort!.postMessage({
+            type: 'error',
+            message: `Failed to load model: CoreML EP failed (${e?.message ?? e}); cpu fallback also failed (${retryErr?.message ?? retryErr})`,
+          });
+          return;
+        }
+      }
+
       parentPort!.postMessage({
         type: 'error',
         message: `Failed to load model: ${e.message}`,

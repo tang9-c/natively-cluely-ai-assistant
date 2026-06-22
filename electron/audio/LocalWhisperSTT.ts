@@ -681,9 +681,17 @@ export class LocalWhisperSTT extends BaseSTT {
                     this.streamingNextDelayMs = this.streamingIntervalBaseMs;
                 }
                 if (msg.message.includes('Failed to load model')) {
-                    this.emit('error', new Error(
-                        'Local Whisper model not found. Please download a model in Settings → Audio.'
-                    ));
+                    // Distinguish CoreML EP failures (covered by whisperWorker
+                    // fallback; this only fires when both CoreML AND cpu-only
+                    // attempts failed) from a plain missing-model-file. The
+                    // previous generic "model not found" message masked the
+                    // real cause on Apple Silicon and sent users hunting for a
+                    // model that was already on disk.
+                    const isCoreMlFailure = /coreml/i.test(msg.message);
+                    const hint = isCoreMlFailure
+                        ? 'Local Whisper failed to initialize: CoreML execution provider is broken on this Mac and the CPU fallback also failed. Try restarting, or open Settings → Audio → Local Whisper and pick a smaller model.'
+                        : 'Local Whisper model not found. Please download a model in Settings → Audio.';
+                    this.emit('error', new Error(hint));
                 }
             }
         });
