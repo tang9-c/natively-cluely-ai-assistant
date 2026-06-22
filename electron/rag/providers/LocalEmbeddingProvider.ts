@@ -14,6 +14,12 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   private pipe: any = null;
   private loadingPromise: Promise<void> | null = null; // prevents concurrent init races
   private modelPath: string | null = null;
+  // Mirrors the IntentClassifierWorker pattern: once Transformers.js WASM
+  // init has failed (missing binding, proxy blocked, etc.), don't keep
+  // retrying on every embed() call — surface the failure so callers can
+  // switch to a cloud provider instead of paying the multi-second WASM
+  // boot cost on every RAG retrieval.
+  private loadFailed = false;
 
   constructor() {
     this.space = embeddingSpaceKey({ name: this.name, model: this.model, dimensions: this.dimensions });
@@ -46,6 +52,14 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   private async ensureLoaded(): Promise<void> {
     if (this.pipe) return;
 
+    // If a previous load attempt already failed, fail fast instead of paying
+    // the full WASM boot cost again. EmbeddingPipeline catches this in
+    // isAvailable() (returns false) and RAGManager falls through to whatever
+    // cloud provider is configured.
+    if (this.loadFailed) {
+      throw new Error('[LocalEmbeddingProvider] Local embedding load previously failed; cloud provider required');
+    }
+
     // If another caller already kicked off loading, wait for that same promise
     // rather than launching a second concurrent pipeline() call.
     if (this.loadingPromise) {
@@ -61,6 +75,15 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       // to the TypeScript compiler so it is left as a real import() call.
       const { pipeline, env } = await (new Function('return import("@huggingface/transformers")')()) as any;
       this.modelPath = this.resolveModelPath();
+
+      // Route ONNX/WASM through a worker thread. Without this, transformers.js
+      // loads WASM on the main thread where Electron's main-process origin
+      // policy + V8 sandboxing can block the cross-origin WASM fetch on first
+      // boot, which previously caused ensureLoaded() to throw on every cold
+      // start and propagate as a hard RAG init failure (no cloud fallback).
+      if (env.backends?.onnx?.wasm) {
+        env.backends.onnx.wasm.proxy = true;
+      }
 
       // Prefer downloaded userData models, but fall back to the bundled copy.
       env.cacheDir = this.modelPath;
@@ -78,8 +101,11 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     try {
       await this.loadingPromise;
     } catch (e) {
-      // Reset so a future call can retry
+      // Reset so a future call can retry, but mark the provider as
+      // permanently-failed-for-this-process so embed() callers don't pay the
+      // WASM boot cost on every RAG retrieval after a failed first init.
       this.loadingPromise = null;
+      this.loadFailed = true;
       throw e;
     }
   }
