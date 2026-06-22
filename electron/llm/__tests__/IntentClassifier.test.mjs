@@ -120,3 +120,19 @@ describe('IntentClassifier.isPrimarilyChinese (language detection)', () => {
     assert.equal(isPrimarilyChinese('你好，世界！'), true);
   });
 });
+
+describe('IntentClassifier.classifyIntent public API', () => {
+  test('returns regex fast-path result without needing SLM fallback', async () => {
+    const { classifyIntent } = loadModule();
+    const r = await classifyIntent('Can you explain that?', '[INTERVIEWER]: Can you explain that?', 0, 'general');
+    assert.equal(r.intent, 'clarification');
+    assert.ok(r.confidence >= 0.8);
+  });
+
+  test('falls back to context when no latest interviewer turn exists', async () => {
+    const { classifyIntent } = loadModule();
+    const r = await classifyIntent(null, '[INTERVIEWER]: hello', 0, 'sales');
+    assert.equal(r.intent, 'general');
+    assert.equal(r.confidence, 0.5);
+  });
+});

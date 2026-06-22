@@ -8,8 +8,7 @@
 //      speech. Label set is selected based on the input language to maximize
 //      zero-shot accuracy.
 
-import path from 'path';
-import { app } from 'electron';
+import { getIntentClassifierProcessHost } from './IntentClassifierProcessHost';
 
 export type ConversationIntent =
     // ===== Original 7 interview-centric intents (preserved for backward compat) =====
@@ -314,129 +313,6 @@ export function isPrimarilyChinese(text: string, threshold = 0.3): boolean {
     return cjkChars.length / stripped.length >= threshold;
 }
 
-/** Minimum confidence from the SLM to trust its classification */
-const SLM_CONFIDENCE_THRESHOLD = 0.35;
-
-/**
- * Singleton lazy-loaded zero-shot classifier using @huggingface/transformers
- */
-class ZeroShotClassifier {
-    private static instance: ZeroShotClassifier | null = null;
-    private pipe: any = null;
-    private loadingPromise: Promise<void> | null = null;
-    private loadFailed = false;
-
-    private constructor() {}
-
-    static getInstance(): ZeroShotClassifier {
-        if (!ZeroShotClassifier.instance) {
-            ZeroShotClassifier.instance = new ZeroShotClassifier();
-        }
-        return ZeroShotClassifier.instance;
-    }
-
-    /**
-     * Lazy-load the zero-shot classification model.
-     * Uses Xenova/mdeberta-v3-base-xnli-multilingual-nli-2mil7 — multilingual NLI,
-     * supports Chinese / English / 100+ languages. ~280MB, ~80-150ms inference.
-     */
-    private async ensureLoaded(): Promise<void> {
-        if (this.pipe) return;
-        if (this.loadFailed) return;
-
-        if (this.loadingPromise) {
-            await this.loadingPromise;
-            return;
-        }
-
-        this.loadingPromise = (async () => {
-            try {
-                // Bypass TypeScript converting import() to require() for ESM packages
-                const { pipeline, env } = await new Function("return import('@huggingface/transformers')")();
-
-                // Use userData/models as cache; allow remote download on first use
-                env.allowRemoteModels = true;
-                env.cacheDir = path.join(app.getPath('userData'), 'models');
-                env.remoteHost = (process.env.HF_ENDPOINT || 'https://modelscope.cn/models').replace(/\/$/, '') + '/';
-
-                console.log('[IntentClassifier] Loading zero-shot classifier (mdeberta-v3-base-xnli-multilingual-nli-2mil7)...');
-                this.pipe = await pipeline(
-                    'zero-shot-classification',
-                    'Xenova/mdeberta-v3-base-xnli-multilingual-nli-2mil7',
-                    { local_files_only: false }
-                );
-                console.log('[IntentClassifier] Zero-shot classifier loaded successfully.');
-            } catch (e) {
-                console.warn('[IntentClassifier] Failed to load zero-shot model, regex-only fallback:', e);
-                this.loadFailed = true;
-                this.pipe = null;
-            }
-        })();
-
-        try {
-            await this.loadingPromise;
-        } catch {
-            this.loadingPromise = null;
-        }
-    }
-
-    /**
-     * Classify text using the zero-shot model.
-     *
-     * Picks the label set based on the active mode AND the input language.
-     * The label set is narrowed per-mode so the SLM sees only the intents
-     * relevant to the current scenario, raising zero-shot accuracy.
-     *
-     * `modeTemplateType` is optional: when omitted (or unknown), falls back
-     * to the original 8-intent general label set. The active mode is also
-     * used to resolve the per-mode answer shape.
-     *
-     * Returns null if the model isn't loaded or classification fails.
-     */
-    async classify(text: string, modeTemplateType?: string | null): Promise<IntentResult | null> {
-        await this.ensureLoaded();
-        if (!this.pipe) return null;
-
-        try {
-            const isChinese = isPrimarilyChinese(text);
-            const labelMap = getLabelMapForMode(modeTemplateType, isChinese);
-            const labelKeys = Object.keys(labelMap);
-
-            const result = await this.pipe(text, labelKeys, {
-                multi_label: false,
-            });
-
-            // result has { labels: string[], scores: number[] }
-            const topLabel = result.labels[0];
-            const topScore = result.scores[0];
-
-            if (topScore < SLM_CONFIDENCE_THRESHOLD) {
-                return null; // Not confident enough
-            }
-
-            const intent = labelMap[topLabel] || 'general';
-            console.log(`[IntentClassifier] SLM classified`, { intent, confidence: topScore, textLength: text.length });
-
-            return {
-                intent,
-                confidence: topScore,
-                answerShape: getAnswerShapeForMode(modeTemplateType, intent),
-            };
-        } catch (e) {
-            console.warn('[IntentClassifier] SLM classification error:', e);
-            return null;
-        }
-    }
-
-    /**
-     * Warm up the model in background (non-blocking).
-     * Call this early in app lifecycle to avoid cold-start latency.
-     */
-    warmup(): void {
-        this.ensureLoaded().catch(() => {});
-    }
-}
-
 // ========================
 // Regex Fast-Path
 // ========================
@@ -727,7 +603,7 @@ export async function classifyIntent(
 
         // Tier 2: Try zero-shot SLM (if regex didn't match)
         if (lastInterviewerTurn.trim().length > 5) {
-            const slmResult = await ZeroShotClassifier.getInstance().classify(lastInterviewerTurn, modeTemplateType);
+            const slmResult = await getIntentClassifierProcessHost().classify(lastInterviewerTurn, modeTemplateType);
             if (slmResult) {
                 return slmResult;
             }
@@ -753,5 +629,5 @@ export function getAnswerShapeGuidance(intent: ConversationIntent): string {
  * Call this during app initialization to avoid cold-start on first classification.
  */
 export function warmupIntentClassifier(): void {
-    ZeroShotClassifier.getInstance().warmup();
+    getIntentClassifierProcessHost().warmup();
 }
