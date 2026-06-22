@@ -20,6 +20,16 @@ test('dynamic action accept uses promptInstruction instead of display label/manu
   assert.doesNotMatch(mountSource, /handleManualSubmitRef\.current/);
 });
 
+test('dynamic action card presents detected intent and confidence to the user', () => {
+  const source = read('src/components/dynamic-actions/DynamicActionCard.tsx');
+
+  assert.match(source, /检测到/);
+  assert.match(source, /confidencePct/);
+  assert.match(source, /pricing_objection:\s*'价格异议'/);
+  assert.match(source, /buying_signal:\s*'推进信号'/);
+  assert.match(source, /action\.sourceIntent\s*\?\?\s*action\.type/);
+});
+
 test('generate-what-to-say IPC forwards promptInstruction option to IntelligenceManager', () => {
   const source = read('electron/ipcHandlers.ts');
   const handlerSource = sliceSafeHandleBlock(source, 'generate-what-to-say');

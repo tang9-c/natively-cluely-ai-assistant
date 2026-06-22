@@ -10,6 +10,24 @@ interface Props {
   onDismiss: (actionId: string) => void
 }
 
+const INTENT_LABELS: Record<string, string> = {
+  pricing_objection: '价格异议',
+  buying_signal: '推进信号',
+  price_pushback: '价格异议',
+  pricing_request: '询价请求',
+  budget_probe: '预算试探',
+  competitor_mention: '竞品比较',
+  roi_question: 'ROI 询问',
+  final_offer: '最终报价',
+  discovery_question: '需求探索',
+  action_item: '行动项',
+  decision: '决策',
+  risk: '风险',
+  formula: '公式',
+  concept: '概念解释',
+  coding_question: '技术问题',
+}
+
 // Single dynamic action card. Compact, glass-styled, dismissible.
 // Primary card (highest priority) gets a subtle accent + shortcut hint.
 // Cards are intentionally lightweight — clicking accept fires the parent
@@ -24,6 +42,7 @@ export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, onAccept
     : evidenceText
 
   const confidencePct = Math.round((action.confidence ?? 0) * 100)
+  const detectedIntent = INTENT_LABELS[action.sourceIntent ?? action.type] ?? action.label
 
   return (
     <motion.div
@@ -57,12 +76,14 @@ export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, onAccept
       </div>
 
       <div className="flex flex-col flex-1 min-w-0 leading-tight">
-        <div className="flex items-baseline gap-2">
-          <span className="text-[12px] font-semibold overlay-text-primary truncate">{action.label}</span>
+        <div className="flex items-baseline gap-1.5 min-w-0">
+          <span className="text-[10px] font-medium text-blue-200/75 shrink-0">检测到</span>
+          <span className="text-[12px] font-semibold overlay-text-primary truncate">{detectedIntent}</span>
           {confidencePct > 0 && (
             <span className="text-[10px] tabular-nums text-white/40 shrink-0">{confidencePct}%</span>
           )}
         </div>
+        <span className="text-[10.5px] text-white/50 truncate">{action.label}</span>
         {evidenceSnippet && (
           <span className="text-[10.5px] text-white/55 truncate">"{evidenceSnippet}"</span>
         )}
