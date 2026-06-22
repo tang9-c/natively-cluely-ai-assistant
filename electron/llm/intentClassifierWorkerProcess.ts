@@ -37,9 +37,41 @@ let pipe: PipelineFn | null = null;
 let loadingPromise: Promise<void> | null = null;
 let loadFailed = false;
 
+// @huggingface/transformers 3.8.1 declares onnxruntime-node@1.21.0, while
+// the app may override it for other native ONNX paths. Treat a native binding
+// load failure as a disabled optional enhancement rather than letting the
+// isolated worker crash during Transformers.js import.
+const TRANSFORMERS_EXPECTED_ONNXRUNTIME_NODE = '1.21.0';
+
 function send(message: unknown): void {
     if (typeof process.send === 'function') {
         process.send(message);
+    }
+}
+
+function preflightOnnxRuntimeNode(): { ok: true; installedVersion: string } | { ok: false; error: string } {
+    try {
+        const runtimeRequire = new Function('specifier', 'return require(specifier)') as (specifier: string) => any;
+        const ort = runtimeRequire('onnxruntime-node');
+        const installedVersion = runtimeRequire('onnxruntime-node/package.json')?.version ?? 'unknown';
+        if (typeof ort?.InferenceSession?.create !== 'function') {
+            return {
+                ok: false,
+                error: `onnxruntime-node ${installedVersion} loaded without InferenceSession.create`,
+            };
+        }
+        if (installedVersion !== TRANSFORMERS_EXPECTED_ONNXRUNTIME_NODE) {
+            console.warn('[IntentClassifierWorker] onnxruntime-node version differs from Transformers.js pin', {
+                installedVersion,
+                expectedVersion: TRANSFORMERS_EXPECTED_ONNXRUNTIME_NODE,
+            });
+        }
+        return { ok: true, installedVersion };
+    } catch (error) {
+        return {
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+        };
     }
 }
 
@@ -52,6 +84,11 @@ async function ensureLoaded(cacheDir: string, remoteHost: string): Promise<void>
 
     loadingPromise = (async () => {
         try {
+            const ortPreflight = preflightOnnxRuntimeNode();
+            if (ortPreflight.ok === false) {
+                throw new Error(`onnxruntime-node preflight failed before Transformers.js import: ${ortPreflight.error}`);
+            }
+
             const { pipeline, env } = await new Function("return import('@huggingface/transformers')")();
 
             env.allowRemoteModels = true;
@@ -63,6 +100,7 @@ async function ensureLoaded(cacheDir: string, remoteHost: string): Promise<void>
                 modelId: INTENT_CLASSIFIER_MODEL_ARTIFACT.modelId,
                 dtype: pipelineOptions.dtype,
                 modelFileName: pipelineOptions.model_file_name,
+                onnxRuntimeNodeVersion: ortPreflight.installedVersion,
             });
 
             pipe = await pipeline(

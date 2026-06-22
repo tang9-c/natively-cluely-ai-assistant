@@ -39,6 +39,21 @@ describe('IntentClassifier process isolation', () => {
     assert.doesNotMatch(worker, /app\.getPath\(/);
   });
 
+  test('isolated worker preflights onnxruntime-node before importing Transformers.js', () => {
+    const worker = read('electron/llm/intentClassifierWorkerProcess.ts');
+    const preflightIndex = worker.indexOf('preflightOnnxRuntimeNode()');
+    const importIndex = worker.indexOf('import(\'@huggingface/transformers\')');
+
+    assert.ok(preflightIndex >= 0, 'worker should define and call onnxruntime-node preflight');
+    assert.ok(importIndex >= 0, 'worker should dynamically import Transformers.js');
+    assert.ok(preflightIndex < importIndex, 'preflight must run before Transformers.js import');
+    assert.match(worker, /new Function\('specifier', 'return require\(specifier\)'\)/);
+    assert.match(worker, /runtimeRequire\('onnxruntime-node'\)/);
+    assert.match(worker, /runtimeRequire\('onnxruntime-node\/package\.json'\)/);
+    assert.match(worker, /InferenceSession\?\.create/);
+    assert.match(worker, /TRANSFORMERS_EXPECTED_ONNXRUNTIME_NODE/);
+  });
+
   test('shared classifier metadata stays free of Electron and native model imports', () => {
     const shared = read('electron/llm/IntentClassifierShared.ts');
 
