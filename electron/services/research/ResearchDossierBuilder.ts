@@ -102,11 +102,30 @@ export class ResearchDossierBuilder {
           maxOutputTokens: 2_048,
           maxRotations: 1,
         });
-        parsed = DossierSchema.parse(parseStructuredPayload(raw));
+        // Normalize LLM output before schema validation. Real samples from
+        // debug session 2026-06-22 (Doubao Pro on a Chinese prompt) show two
+        // consistent deviations from the documented schema:
+        //   1. `bullets` (noun) instead of `details` — the prompt uses
+        //      "3-7 bullets" and the model names the field accordingly.
+        //   2. confidence in Chinese (高/中/低) instead of the enum
+        //      ('high'|'medium'|'low') — the prompt is Chinese and the model
+        //      mirrors the prompt's language.
+        // normalizeDossier fixes both, plus injects schemaVersion and
+        // companyName when the model omits them (it currently does for both).
+        parsed = DossierSchema.parse(normalizeDossier(parseStructuredPayload(raw), companyName));
         lastErr = null;
         break;
       } catch (err) {
         lastErr = err;
+        // Smart retry (debug session 2026-06-22): if attempt 1 timed out,
+        // the underlying cause is provider slowness and retrying just burns
+        // another full per-provider timeout — observed 45s + 45s = 90s of
+        // waiting for the same outcome. Surface LLM_TIMEOUT immediately.
+        // Non-timeout errors (schema, network, etc.) still retry because
+        // they're more likely to be transient or prompt-tweakable.
+        if (isTimeoutError(err)) {
+          break;
+        }
       }
     }
     if (lastErr) throw new LlmInvalidFormatError(formatZodError(lastErr));
@@ -146,7 +165,7 @@ export class ResearchDossierBuilder {
       : sources.map((s) => `[${s.index}] ${s.title} — ${s.url}\n${s.snippet}`).join('\n\n');
     return `You are a company research analyst. Produce a 6-dimension dossier for "${companyName}".
 
-Dimensions (each must have summary + 3-7 bullets + confidence):
+Dimensions (each must have summary + 3-5 bullets + confidence):
 1. financials — size, revenue, growth, R&D
 2. business — products, customers, target markets
 3. strategy — expansion plans, hiring hotspots, transformation
@@ -159,7 +178,26 @@ ${isFallback ? '⚠️ No external sources available. Answer from training knowl
 Sources:
 ${sourceBlock}
 
-Respond with JSON matching the schema. For each bullet, optionally include "citation" (1-based index into the sources above). Every "url" in sources must be a valid HTTP/HTTPS URL. Do not invent URLs; only use the URLs provided above.`;
+Respond with JSON matching the schema EXACTLY. Required structure:
+
+{
+  "schemaVersion": "1.0",
+  "companyName": "${companyName}",
+  "financials":    { "summary": "...", "details": [...], "confidence": "high" },
+  "business":       { "summary": "...", "details": [...], "confidence": "high" },
+  "strategy":       { "summary": "...", "details": [...], "confidence": "high" },
+  "people":         { "summary": "...", "details": [...], "confidence": "high" },
+  "infrastructure": { "summary": "...", "details": [...], "confidence": "high" },
+  "procurement":    { "summary": "...", "details": [...], "confidence": "high" },
+  "sources":        [ { "index": 1, "title": "...", "url": "https://...", "snippet": "..." } ]
+}
+
+Field rules — these are STRICT, the schema validation will reject mismatches:
+- Each bullet array MUST be named "details" (NOT "bullets" / "items" / "points").
+- Each "confidence" MUST be exactly one of: "high", "medium", "low" (lowercase English).
+- "details" entries MUST be { "text": string, "citation"?: number }.
+- Include the top-level "schemaVersion" and "companyName" fields above.
+- Every "url" in sources must be a valid HTTP/HTTPS URL. Do not invent URLs.`;
   }
 }
 
@@ -175,6 +213,119 @@ function formatZodError(err: unknown): string {
     return `LLM returned invalid dossier shape (${err.message})`;
   }
   return 'LLM returned invalid dossier shape';
+}
+
+// Map of Chinese confidence words to the schema's English enum values.
+const CONFIDENCE_ZH_TO_ENUM: Record<string, 'high' | 'medium' | 'low'> = {
+  高: 'high',
+  中: 'medium',
+  低: 'low',
+};
+
+function normalizeConfidence(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  const lower = trimmed.toLowerCase();
+  // Accept valid enum values, with any casing — debug session 2026-06-22
+  // saw "Low" / "HIGH" / "Medium" from the same model in adjacent runs.
+  if (lower === 'high' || lower === 'medium' || lower === 'low') return lower;
+  return CONFIDENCE_ZH_TO_ENUM[trimmed] ?? value;
+}
+
+function normalizeBullets(arr: unknown): unknown[] {
+  if (!Array.isArray(arr)) return [];
+  return arr.map((item) => {
+    if (typeof item === 'string') return { text: item };
+    if (item && typeof item === 'object') return item;
+    return { text: String(item) };
+  });
+}
+
+function normalizeDimension(dim: unknown): unknown {
+  if (!dim || typeof dim !== 'object') return dim;
+  const obj = { ...(dim as Record<string, unknown>) };
+  // Alias: LLM (Doubao on Chinese prompts) emits `bullets` for the array of
+  // bullet points. Keep `details` if the model already used it.
+  const bulletsArr = Array.isArray(obj.details) ? obj.details : obj.bullets;
+  if (!Array.isArray(obj.details) && Array.isArray(obj.bullets)) {
+    delete obj.bullets;
+  }
+  obj.details = normalizeBullets(bulletsArr);
+  obj.confidence = normalizeConfidence(obj.confidence);
+  return obj;
+}
+
+// Canonical dimension keys in the order the prompt lists them.
+const DIMENSION_KEYS = ['financials', 'business', 'strategy', 'people', 'infrastructure', 'procurement'] as const;
+
+/**
+ * Recognise a per-provider timeout so the builder can skip retry on attempt 1
+ * (debug session 2026-06-22). LLMHelper formats timeout errors as
+ * `<provider> <task> structured generation timed out after <N>ms`.
+ * Match a space (or end-of-string) on either side of "timed?out" so we
+ * don't false-positive on user content like "non-timeout".
+ */
+function isTimeoutError(err: unknown): boolean {
+  const msg = String((err as { message?: unknown })?.message ?? err ?? '');
+  return /(?:^|\s)timed?\s*out(?:\s|$)/i.test(msg);
+}
+
+/**
+ * Unwrap the `{ company, dimensions: [{name, summary, bullets, confidence}] }`
+ * shape the model sometimes emits on retry. The retry run is non-deterministic
+ * (debug session 2026-06-22, third sample), so we recognize this layout by
+ * its structural signature rather than relying on the prompt alone.
+ */
+function unwrapDimensionsWrapper(parsed: Record<string, unknown>): Record<string, unknown> {
+  const dims = parsed.dimensions;
+  if (!Array.isArray(dims)) return parsed;
+  const out: Record<string, unknown> = { ...parsed };
+  delete out.dimensions;
+  for (const dim of dims) {
+    if (!dim || typeof dim !== 'object') continue;
+    const name = (dim as Record<string, unknown>).name;
+    if (typeof name === 'string' && (DIMENSION_KEYS as readonly string[]).includes(name)) {
+      // Strip the `name` field — the canonical layout uses the dimension key
+      // directly as the property name on the top-level object.
+      const { name: _unused, ...rest } = dim as Record<string, unknown>;
+      out[name] = rest;
+    }
+  }
+  return out;
+}
+
+/**
+ * Normalize an LLM-emitted dossier payload before schema validation.
+ *
+ * Deviations observed in production (debug session 2026-06-22, Doubao Pro):
+ *  1. The model uses `bullets` instead of `details` for the bullet array.
+ *  2. The bullets array is sometimes `string[]` instead of `{text,...}[]`.
+ *  3. Confidence arrives as Chinese (高/中/低) or in mixed case ("Low").
+ *  4. On retry, the model emits a wrapper shape:
+ *     `{ company, dimensions: [{ name, summary, bullets, confidence }, ...] }`.
+ *  5. The model often omits top-level `schemaVersion` and `companyName`.
+ *
+ * Each rule is regression-tested; this is the single source of truth.
+ */
+function normalizeDossier(parsed: unknown, fallbackCompanyName: string): unknown {
+  if (!parsed || typeof parsed !== 'object') return parsed;
+  let out = { ...(parsed as Record<string, unknown>) };
+  // Detect and unwrap the {company, dimensions:[...]} wrapper shape.
+  if (Array.isArray(out.dimensions)) {
+    out = unwrapDimensionsWrapper(out);
+  }
+  for (const key of DIMENSION_KEYS) {
+    if (key in out) out[key] = normalizeDimension(out[key]);
+  }
+  if (typeof out.schemaVersion !== 'string') out.schemaVersion = DOSSIER_SCHEMA_VERSION;
+  if (typeof out.companyName !== 'string' || !out.companyName) {
+    out.companyName = fallbackCompanyName;
+  }
+  // Model almost never emits `sources` (debug session 2026-06-22). Default
+  // to [] so schema validation passes; build() will set source="llm-fallback"
+  // when there are no Tavily sources, which is the correct UX outcome here.
+  if (!Array.isArray(out.sources)) out.sources = [];
+  return out;
 }
 
 function parseStructuredPayload(raw: unknown): unknown {

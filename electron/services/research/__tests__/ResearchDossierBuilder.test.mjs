@@ -107,7 +107,38 @@ describe('ResearchDossierBuilder', () => {
     assert.equal(out.source, 'llm-fallback');
   });
 
-  test('build() retries once when LLM returns invalid shape', async () => {
+  // Debug session 2026-06-22: when attempt 1 times out (LLM is slow),
+  // retrying with attempt 2 wastes another full per-provider timeout —
+  // observed 45s + 45s = 90s of waiting for the same outcome. The builder
+  // must surface LLM_TIMEOUT immediately on attempt 1 timeout, with no
+  // second LLM call.
+  test('build() does NOT retry when attempt 1 throws a timeout', async () => {
+    let calls = 0;
+    const llm = {
+      generateStructured: async () => {
+        calls++;
+        throw new Error('Doubao Pro company-research structured generation timed out after 45000ms');
+      },
+    };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    const started = Date.now();
+    await assert.rejects(
+      () => b.build('Apple', [{ title: 't', url: 'https://x.example', content: 's' }]),
+      /timed out|invalid dossier/i,
+    );
+    const elapsed = Date.now() - started;
+    assert.equal(calls, 1, 'attempt 1 must NOT be retried on timeout');
+    // No full per-provider timeout budget consumed: should complete in well
+    // under the 45s per-provider budget since the mock throws synchronously.
+    assert.ok(elapsed < 5_000, `expected fast failure, took ${elapsed}ms`);
+  });
+
+  // Schema-shape failures (non-timeout) should still retry — normalize catches
+  // most cases but if a new LLM shape slips past, retry is the second line of
+  // defense.
+  test('build() DOES retry when attempt 1 throws a non-timeout error', async () => {
+    let calls = 0;
     const validDossier = {
       schemaVersion: '1.0', companyName: 'X', generatedAt: '', expiresAt: '',
       source: 'tavily',
@@ -121,13 +152,15 @@ describe('ResearchDossierBuilder', () => {
     };
     const llm = {
       generateStructured: async () => {
-        if (!llm._called) { llm._called = true; throw new Error('invalid shape'); }
+        calls++;
+        if (calls === 1) throw new Error('some non-timeout LLM error');
         return validDossier;
       },
     };
     const { ResearchDossierBuilder } = cjsRequire(builderPath);
     const b = new ResearchDossierBuilder({ llm });
-    const out = await b.build('X', []);
+    const out = await b.build('X', [{ title: 't', url: 'https://x.example', content: 's' }]);
+    assert.equal(calls, 2, 'non-timeout errors must still trigger attempt 2');
     assert.equal(out.companyName, 'X');
   });
 
@@ -136,6 +169,131 @@ describe('ResearchDossierBuilder', () => {
     const { ResearchDossierBuilder, LlmInvalidFormatError } = cjsRequire(builderPath);
     const b = new ResearchDossierBuilder({ llm });
     await assert.rejects(() => b.build('X', []), (err) => err instanceof LlmInvalidFormatError);
+  });
+
+  // Regression guard 2026-06-22: Doubao Pro (zh-prompt) returned `bullets`
+  // instead of `details` and Chinese confidence ("高") instead of the enum
+  // ('high'|'medium'|'low'). The builder must normalize both before schema
+  // validation, otherwise it throws LlmInvalidFormatError on every call.
+  test('build() accepts LLM output with `bullets` alias for `details`', async () => {
+    const llmDossier = {
+      financials: { summary: 's', bullets: [{ text: 'a' }, { text: 'b' }], confidence: 'high' },
+      business: { summary: 's', bullets: [], confidence: 'high' },
+      strategy: { summary: 's', bullets: [], confidence: 'high' },
+      people: { summary: 's', bullets: [], confidence: 'high' },
+      infrastructure: { summary: 's', bullets: [], confidence: 'high' },
+      procurement: { summary: 's', bullets: [], confidence: 'high' },
+    };
+    const llm = { generateStructured: async () => llmDossier };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    // Non-empty sources so maybeDowngrade does not force everything to "low".
+    const out = await b.build('Apple', [{ title: 't', url: 'https://x.example', content: 's' }]);
+    assert.equal(out.financials.details.length, 2);
+    assert.equal(out.financials.details[0].text, 'a');
+  });
+
+  test('build() normalizes Chinese confidence values to enum', async () => {
+    const llmDossier = {
+      financials: { summary: 's', details: [], confidence: '高' },
+      business: { summary: 's', details: [], confidence: '中' },
+      strategy: { summary: 's', details: [], confidence: '低' },
+      people: { summary: 's', details: [], confidence: 'high' },
+      infrastructure: { summary: 's', details: [], confidence: 'medium' },
+      procurement: { summary: 's', details: [], confidence: 'low' },
+    };
+    const llm = { generateStructured: async () => llmDossier };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    const out = await b.build('Apple', [{ title: 't', url: 'https://x.example', content: 's' }]);
+    assert.equal(out.financials.confidence, 'high');
+    assert.equal(out.business.confidence, 'medium');
+    assert.equal(out.strategy.confidence, 'low');
+    assert.equal(out.people.confidence, 'high');
+  });
+
+  test('build() injects schemaVersion and companyName when LLM omits them', async () => {
+    const llmDossier = {
+      financials: { summary: 's', details: [], confidence: 'high' },
+      business: { summary: 's', details: [], confidence: 'high' },
+      strategy: { summary: 's', details: [], confidence: 'high' },
+      people: { summary: 's', details: [], confidence: 'high' },
+      infrastructure: { summary: 's', details: [], confidence: 'high' },
+      procurement: { summary: 's', details: [], confidence: 'high' },
+      sources: [],
+    };
+    const llm = { generateStructured: async () => llmDossier };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    const out = await b.build('Apple', []);
+    assert.equal(out.schemaVersion, '1.0');
+    assert.equal(out.companyName, 'Apple');
+  });
+
+  // Debug session 2026-06-22 (third sample, 安吉尔): the model returned a
+  // completely different top-level shape on retry — { company, dimensions:
+  // [{name, summary, bullets, confidence}, ...] } instead of the documented
+  // flat {financials, business, ...}. The normalizer must unwrap this.
+  test('build() unwraps {company, dimensions:[{name,...}]} wrapper shape', async () => {
+    const llmWrapper = {
+      company: '安吉尔',
+      dimensions: [
+        { name: 'financials', summary: 'a', bullets: [{ text: 'f1' }], confidence: 'low' },
+        { name: 'business', summary: 'b', bullets: [{ text: 'b1' }], confidence: 'high' },
+        { name: 'strategy', summary: 'c', bullets: [], confidence: 'medium' },
+        { name: 'people', summary: 'd', bullets: [], confidence: 'low' },
+        { name: 'infrastructure', summary: 'e', bullets: [], confidence: 'high' },
+        { name: 'procurement', summary: 'f', bullets: [], confidence: 'low' },
+      ],
+    };
+    const llm = { generateStructured: async () => llmWrapper };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    const out = await b.build('安吉尔', [{ title: 't', url: 'https://x.example', content: 's' }]);
+    assert.equal(out.financials.summary, 'a');
+    assert.equal(out.business.confidence, 'high');
+    assert.equal(out.financials.details[0].text, 'f1');
+  });
+
+  // Debug session 2026-06-22 (third sample, attempt=1): bullets were a
+  // string[] instead of {text, citation?} objects. The normalizer wraps
+  // each string into {text: ...}.
+  test('build() wraps string[] bullets into {text} objects', async () => {
+    const llmDossier = {
+      financials: { summary: 's', bullets: ['first fact', 'second fact'], confidence: 'low' },
+      business: { summary: 's', bullets: [], confidence: 'high' },
+      strategy: { summary: 's', bullets: [], confidence: 'high' },
+      people: { summary: 's', bullets: [], confidence: 'high' },
+      infrastructure: { summary: 's', bullets: [], confidence: 'high' },
+      procurement: { summary: 's', bullets: [], confidence: 'high' },
+    };
+    const llm = { generateStructured: async () => llmDossier };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    const out = await b.build('Apple', [{ title: 't', url: 'https://x.example', content: 's' }]);
+    assert.equal(out.financials.details.length, 2);
+    assert.equal(out.financials.details[0].text, 'first fact');
+    assert.equal(out.financials.details[1].text, 'second fact');
+  });
+
+  // Debug session 2026-06-22 (third sample): confidence arrived as "Low"
+  // (capitalized) and "HIGH" (uppercase). Normalize must be case-insensitive.
+  test('build() normalizes confidence case-insensitively', async () => {
+    const llmDossier = {
+      financials: { summary: 's', details: [], confidence: 'Low' },
+      business: { summary: 's', details: [], confidence: 'HIGH' },
+      strategy: { summary: 's', details: [], confidence: 'medium' },
+      people: { summary: 's', details: [], confidence: 'low' },
+      infrastructure: { summary: 's', details: [], confidence: 'Medium' },
+      procurement: { summary: 's', details: [], confidence: 'low' },
+    };
+    const llm = { generateStructured: async () => llmDossier };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    const out = await b.build('Apple', [{ title: 't', url: 'https://x.example', content: 's' }]);
+    assert.equal(out.financials.confidence, 'low');
+    assert.equal(out.business.confidence, 'high');
+    assert.equal(out.infrastructure.confidence, 'medium');
   });
 
   test('build() invokes onAttempt before each LLM call (1-based, max 2)', async () => {
