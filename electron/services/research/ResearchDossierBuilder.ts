@@ -94,7 +94,12 @@ export class ResearchDossierBuilder {
       try {
         const raw = await this.opts.llm.generateStructured(prompt, DossierSchema, {
           taskLabel: 'company-research',
-          perProviderTimeoutMs: 35_000,
+          // Raised 45_000 → 90_000 (debug session 2026-06-22, follow-up): user
+          // observed random timeouts where the LLM call took 45-90s. 90s gives
+          // 30-60s headroom over the slow end without making a hung request block
+          // forever. Synthesis budget (120s) accommodates one 90s call + buffer;
+          // the smart retry still skips attempt 2 on timeout (no second 90s wait).
+          perProviderTimeoutMs: 90_000,
           // Reduced from 8_192 → 2_048 (debug session 2026-06-21): 8K ceiling
           // forced the model to consume the entire token budget generating filler,
           // never producing a valid JSON dossier within the 35s timeout. Actual
