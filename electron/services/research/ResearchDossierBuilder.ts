@@ -144,7 +144,11 @@ export class ResearchDossierBuilder {
       companyName: valid.companyName || companyName,
       generatedAt: now,
       expiresAt: expires,
-      source: isFallback ? 'llm-fallback' : 'tavily',
+      // source reflects what actually produced the dossier: 'tavily' only
+      // if Tavily returned sources AND the LLM echoed them back in the
+      // normalized dossier. If LLM omits sources, the dossier is effectively
+      // an LLM-only synthesis regardless of whether Tavily was consulted.
+      source: isFallback || valid.sources.length === 0 ? 'llm-fallback' : 'tavily',
       financials: this.maybeDowngrade(valid.financials, isFallback),
       business: this.maybeDowngrade(valid.business, isFallback),
       strategy: this.maybeDowngrade(valid.strategy, isFallback),
@@ -266,13 +270,15 @@ const DIMENSION_KEYS = ['financials', 'business', 'strategy', 'people', 'infrast
 /**
  * Recognise a per-provider timeout so the builder can skip retry on attempt 1
  * (debug session 2026-06-22). LLMHelper formats timeout errors as
- * `<provider> <task> structured generation timed out after <N>ms`.
- * Match a space (or end-of-string) on either side of "timed?out" so we
- * don't false-positive on user content like "non-timeout".
+ * `<provider.name> <taskLabel> structured generation timed out after <N>ms`
+ * (see `LLMHelper.withTimeout`). Match that exact substring — looser patterns
+ * like `/(?:^|\s)timed?\s*out/i` false-positive on user content ("non timeout")
+ * and on unrelated network errors ("request timeout exceeded"), causing the
+ * builder to skip retry and surface LLM_TIMEOUT when a retry could have worked.
  */
 function isTimeoutError(err: unknown): boolean {
   const msg = String((err as { message?: unknown })?.message ?? err ?? '');
-  return /(?:^|\s)timed?\s*out(?:\s|$)/i.test(msg);
+  return /\bstructured generation timed out after \d+ms\b/i.test(msg);
 }
 
 /**

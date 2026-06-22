@@ -212,6 +212,61 @@ describe('ResearchDossierBuilder', () => {
     assert.equal(out.people.confidence, 'high');
   });
 
+  // Regression guard 2026-06-22 (final review I1): a non-timeout error that
+  // happens to contain the word "timeout" (e.g. a network "request timeout
+  // exceeded" or user-content "non timeout") must NOT be treated as the
+  // per-provider timeout. Treating it as such skips attempt 2 and surfaces
+  // LLM_TIMEOUT to the user when a retry would have succeeded. The regex in
+  // isTimeoutError() must match the exact LLMHelper.withTimeout format only.
+  test('build() DOES retry when attempt 1 throws a non-timeout error containing "timeout"', async () => {
+    let calls = 0;
+    const validDossier = {
+      schemaVersion: '1.0', companyName: 'X', generatedAt: '', expiresAt: '',
+      source: 'tavily',
+      financials: { summary: 's', details: [], confidence: 'high' },
+      business: { summary: 's', details: [], confidence: 'high' },
+      strategy: { summary: 's', details: [], confidence: 'high' },
+      people: { summary: 's', details: [], confidence: 'high' },
+      infrastructure: { summary: 's', details: [], confidence: 'high' },
+      procurement: { summary: 's', details: [], confidence: 'high' },
+      sources: [{ index: 1, title: 't', url: 'https://x.example', snippet: 's' }],
+    };
+    const llm = {
+      generateStructured: async () => {
+        calls++;
+        if (calls === 1) throw new Error('network: request timeout exceeded after 5000ms');
+        return validDossier;
+      },
+    };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    const out = await b.build('X', [{ title: 't', url: 'https://x.example', content: 's' }]);
+    assert.equal(calls, 2, 'network "timeout" must not be treated as per-provider timeout');
+    assert.equal(out.companyName, 'X');
+  });
+
+  // Regression guard 2026-06-22 (final review I3): when LLM omits sources in
+  // the dossier even though Tavily provided them, source must be 'llm-fallback'
+  // (not 'tavily'). Otherwise the UI shows a Tavily badge with no links.
+  test('build() marks source=llm-fallback when LLM omits sources (non-empty Tavily input)', async () => {
+    const llmDossier = {
+      schemaVersion: '1.0', companyName: 'X',
+      financials: { summary: 's', details: [], confidence: 'high' },
+      business: { summary: 's', details: [], confidence: 'high' },
+      strategy: { summary: 's', details: [], confidence: 'high' },
+      people: { summary: 's', details: [], confidence: 'high' },
+      infrastructure: { summary: 's', details: [], confidence: 'high' },
+      procurement: { summary: 's', details: [], confidence: 'high' },
+      // sources intentionally omitted — normalize injects []; source must
+      // downgrade to llm-fallback.
+    };
+    const llm = { generateStructured: async () => llmDossier };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    const out = await b.build('X', [{ title: 't', url: 'https://x.example', content: 's' }]);
+    assert.equal(out.source, 'llm-fallback', 'LLM-omitted sources must downgrade source to llm-fallback');
+  });
+
   test('build() injects schemaVersion and companyName when LLM omits them', async () => {
     const llmDossier = {
       financials: { summary: 's', details: [], confidence: 'high' },
