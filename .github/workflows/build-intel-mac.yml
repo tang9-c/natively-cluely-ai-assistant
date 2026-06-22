@@ -7,9 +7,9 @@
 # (Intel x86_64) hosted runner is severely under-provisioned and can sit
 # queued for 30+ minutes. macos-latest (arm64) runners allocate much
 # faster; we use them and cross-compile the Rust native module +
-# better-sqlite3 + keytar + sharp to x86_64-apple-darwin via
-# NATIVELY_BUILD_ALL_MAC_ARCHES=1. electron-builder then packages the
-# x64-only artifact (--mac --x64).
+# better-sqlite3 + keytar + sherpa-onnx-node + sharp to
+# x86_64-apple-darwin via NATIVELY_BUILD_ALL_MAC_ARCHES=1.
+# electron-builder then packages the x64-only artifact (--mac --x64).
 #
 # Tuning notes:
 #   - To switch to native x86_64 (when macos-13 is reliable again),
