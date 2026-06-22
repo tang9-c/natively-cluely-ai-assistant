@@ -121,18 +121,31 @@ export class ResearchDossierBuilder {
           // forever. Synthesis budget (120s) accommodates one 90s call + buffer;
           // the smart retry still skips attempt 2 on timeout (no second 90s wait).
           perProviderTimeoutMs: 90_000,
-          // Reduced from 8_192 → 2_048 (debug session 2026-06-21): 8K ceiling
-          // forced the model to consume the entire token budget generating filler,
-          // never producing a valid JSON dossier within the 35s timeout. Actual
-          // 6-dimension dossier fits in ~1,100 tokens; 2_048 leaves headroom.
-          maxOutputTokens: 2_048,
+          // Token budget history (debug sessions 2026-06-21 / 2026-06-22):
+          //   8_192 → reduced to 2_048 on 2026-06-21 because the 8K ceiling
+          //     forced the model to consume the entire token budget generating
+          //     filler, never producing a valid JSON dossier within the 35s
+          //     timeout.
+          //   2_048 → raised to 4_096 on 2026-06-22 because the model is now
+          //     producing real content (not filler): 安克创新 dossier was 4,900+
+          //     characters (~1,800-2,000 tokens) on first attempt, pushing past
+          //     the 2_048 ceiling and causing JSON.parse failures with messages
+          //     like "Unterminated string in JSON at position 4899". The two
+          //     attempts failed at different positions (4899 / 5160) because
+          //     the LLM produces variable-length output and gets cut off at
+          //     the 2,048-token wall each time. Historical baseline (TEMP
+          //     DEBUG logs) showed successful parses at raw_len 3,558 / 3,719 /
+          //     4,625 chars (~1,300-1,700 tokens). 4_096 provides headroom for
+          //     the real-world upper bound observed today while still bounded
+          //     well below the 8K failure ceiling. Do NOT raise back to 8_192.
+          maxOutputTokens: 4_096,
           maxRotations: 1,
         });
         researchLog('llm-call', {
           attempt: attempt + 1,
           provider: 'Doubao Pro (doubao-1-5-pro-32k-250115)',
           promptChars: prompt.length,
-          maxTokens: 2_048,
+          maxTokens: 4_096,
           durationMs: Date.now() - llmStartedAt,
           result: 'success',
         });
@@ -156,7 +169,7 @@ export class ResearchDossierBuilder {
           attempt: attempt + 1,
           provider: 'Doubao Pro (doubao-1-5-pro-32k-250115)',
           promptChars: prompt.length,
-          maxTokens: 2_048,
+          maxTokens: 4_096,
           result: isTimeoutError(err) ? 'timeout' : 'error',
           failure: (err as Error)?.message ?? String(err),
         });
@@ -421,9 +434,64 @@ function parseStructuredPayload(raw: unknown): unknown {
     return JSON.parse(cleaned);
   } catch (directErr) {
     const extracted = extractFirstJsonObject(cleaned);
-    if (!extracted) throw directErr;
-    return JSON.parse(extracted);
+    if (!extracted) {
+      parseFailedLog(cleaned, directErr);
+      throw directErr;
+    }
+    try {
+      return JSON.parse(extracted);
+    } catch (extractErr) {
+      parseFailedLog(extracted, extractErr);
+      throw extractErr;
+    }
   }
+}
+
+/**
+ * Emit a one-line structured log when JSON.parse fails on LLM output, capturing
+ * just the 80 chars on either side of the reported error position so a
+ * maintainer can see exactly what shape (truncation, malformed bracket,
+ * unexpected character) produced the failure. Never logs the full `raw`.
+ *
+ * Dev-only via the same lazy `app?.isPackaged` guard pattern as researchLog:
+ * tests running under ELECTRON_RUN_AS_NODE get the stub `app` object where
+ * `isPackaged` is `undefined` (falsy), so this helper remains observable in
+ * dev and a no-op in production. No-op when `raw` is not a string.
+ *
+ * `position` is reported by V8's SyntaxError message (e.g. "in JSON at
+ * position 4899 (line 71 column 255)"). We extract the position by regex;
+ * if it cannot be found we emit `position=unknown` and skip the before/after
+ * context fields so the log line shape stays stable.
+ */
+function parseFailedLog(raw: string, err: unknown): void {
+  if (app?.isPackaged) return;
+  const msg = (err as { message?: unknown })?.message;
+  if (typeof msg !== 'string') {
+    console.log('[Research] stage=parse-failed position=unknown');
+    return;
+  }
+  const posMatch = msg.match(/position\s+(\d+)/i);
+  const lineColMatch = msg.match(/\(line\s+(\d+)\s+column\s+(\d+)\)/i);
+  if (!posMatch) {
+    console.log('[Research] stage=parse-failed position=unknown');
+    return;
+  }
+  const position = Number(posMatch[1]);
+  const start = Math.max(0, position - 80);
+  const end = Math.min(raw.length, position + 80);
+  // Substring spans across the error position; embedded newlines inside the
+  // window are intentional — they let the maintainer see the actual LLM
+  // output shape (including any literal "\n" the model may have emitted)
+  // rather than a "cleaned" view that hides the problem.
+  const contextBefore = raw.slice(start, position);
+  const contextAfter = raw.slice(position, end);
+  const fields: string[] = [`position=${position}`];
+  if (lineColMatch) {
+    fields.push(`line=${lineColMatch[1]}`, `column=${lineColMatch[2]}`);
+  }
+  fields.push(`contextBefore=${JSON.stringify(contextBefore)}`);
+  fields.push(`contextAfter=${JSON.stringify(contextAfter)}`);
+  console.log(`[Research] stage=parse-failed ${fields.join(' ')}`);
 }
 
 function stripMarkdownFence(text: string): string {

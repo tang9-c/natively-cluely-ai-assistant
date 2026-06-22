@@ -431,10 +431,15 @@ describe('ResearchDossierBuilder', () => {
     // forever. Synthesis budget (120s) accommodates one 90s call + buffer;
     // the smart retry still skips attempt 2 on timeout (no second 90s wait).
     assert.equal(capturedOptions.perProviderTimeoutMs, 90_000);
-    // Reduced 8_192 → 2_048 in the same debug session that introduced the Pro
-    // model swap; the LLM diagnostic showed the dossier fits in ~1,100 tokens
-    // and the larger ceiling caused the model to consume the entire budget.
-    assert.equal(capturedOptions.maxOutputTokens, 2_048);
+    // Token budget history (debug sessions 2026-06-21 / 2026-06-22):
+    //   8_192 → 2_048 (2026-06-21): 8K ceiling forced the model to consume
+    //     the entire budget generating filler.
+    //   2_048 → 4_096 (2026-06-22): the Pro model is now producing real
+    //     content; 安克创新 dossier hit 4,900+ chars and tripped JSON.parse
+    //     with "Unterminated string" inside the budget wall. 4_096 gives
+    //     headroom for real-world output while staying well below the 8K
+    //     failure ceiling. Do NOT raise back to 8_192.
+    assert.equal(capturedOptions.maxOutputTokens, 4_096);
     assert.equal(capturedOptions.maxRotations, 1);
   });
 
