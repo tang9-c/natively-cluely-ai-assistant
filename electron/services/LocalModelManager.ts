@@ -2,6 +2,11 @@
 import path from 'path';
 import fs from 'fs';
 import { app } from 'electron';
+import {
+  INTENT_CLASSIFIER_MODEL_ARTIFACT,
+  buildIntentClassifierPipelineOptions,
+  validateIntentClassifierModelArtifact,
+} from '../llm/IntentClassifierModelArtifact';
 
 export interface LocalModelInfo {
   id: string;
@@ -21,6 +26,8 @@ interface ModelDefinition {
   sizeMb: number;
   task: string;
   requiredFiles: string[]; // relative to model root, e.g. 'onnx/model_int8.onnx'
+  pipelineOptions?: Record<string, unknown>;
+  validate?: (rootDir: string) => { ok: boolean; error?: string };
 }
 
 const MODEL_DEFINITIONS: ModelDefinition[] = [
@@ -33,12 +40,14 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     requiredFiles: ['onnx/model_int8.onnx'],
   },
   {
-    id: 'Xenova/mdeberta-v3-base-xnli-multilingual-nli-2mil7',
+    id: INTENT_CLASSIFIER_MODEL_ARTIFACT.modelId,
     name: '意图分类模型（多语言）',
     description: '用于中文/英文/多语言对话意图识别',
     sizeMb: 280,
     task: 'zero-shot-classification',
-    requiredFiles: ['onnx/model.onnx'],
+    requiredFiles: [INTENT_CLASSIFIER_MODEL_ARTIFACT.requiredRelativePath],
+    pipelineOptions: buildIntentClassifierPipelineOptions(),
+    validate: (rootDir) => validateIntentClassifierModelArtifact(rootDir),
   },
 ];
 
@@ -60,6 +69,9 @@ function modelDir(rootDir: string, modelId: string): string {
 function hasModelFiles(rootDir: string, def: ModelDefinition): boolean {
   const dir = modelDir(rootDir, def.id);
   if (!fs.existsSync(dir)) return false;
+  if (def.validate) {
+    return def.validate(rootDir).ok;
+  }
   return def.requiredFiles.every((f) => fs.existsSync(path.join(dir, f)));
 }
 
@@ -143,6 +155,7 @@ export async function startLocalModelDownload(modelId: string): Promise<{ succes
 
     await pipeline(def.task, def.id, {
       local_files_only: false,
+      ...(def.pipelineOptions ?? {}),
       progress_callback: (data: any) => {
         const key: string | undefined = data.file ?? data.name;
         if (!key) return;
@@ -172,6 +185,13 @@ export async function startLocalModelDownload(modelId: string): Promise<{ succes
         onProgress?.(modelId, next);
       },
     });
+
+    if (def.validate) {
+      const validation = def.validate(getModelsDir());
+      if (!validation.ok) {
+        throw new Error(validation.error || `Downloaded model failed artifact validation: ${modelId}`);
+      }
+    }
 
     downloadStates.delete(modelId);
     onComplete?.(modelId);

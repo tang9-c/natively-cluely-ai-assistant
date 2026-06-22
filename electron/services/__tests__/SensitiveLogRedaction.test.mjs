@@ -71,7 +71,7 @@ test('STT providers log transcript metadata without transcript text', () => {
 test('IPC and meeting summary logs avoid answer and LLM response snippets', () => {
   const ipc = read('electron/ipcHandlers.ts');
   const persistence = read('electron/MeetingPersistence.ts');
-  const intent = read('electron/llm/IntentClassifier.ts');
+  const intentWorker = read('electron/llm/intentClassifierWorkerProcess.ts');
 
   assert.match(ipc, /gemini - chat response received`, \{ length: result\?\.length \?\? 0 \}/);
   assert.match(ipc, /Updated IntelligenceManager\.Last message`,[\s\S]{0,120}length: intelligenceManager\.getLastAssistantMessage\(\)\?\.length \?\? 0/);
@@ -83,6 +83,6 @@ test('IPC and meeting summary logs avoid answer and LLM response snippets', () =
   assert.doesNotMatch(persistence, /Raw LLM summary response/);
   assert.doesNotMatch(persistence, /Raw response:', jsonStr\.substring/);
 
-  assert.match(intent, /SLM classified`, \{ intent, confidence: topScore, textLength: text\.length \}/);
-  assert.doesNotMatch(intent, /text\.substring\(/);
+  assert.match(intentWorker, /SLM classified', \{\s*intent,\s*confidence: topScore,\s*textLength: request\.text\.length,/);
+  assert.doesNotMatch(intentWorker, /text\.substring\(/);
 });
