@@ -370,7 +370,12 @@ describe('ResearchDossierBuilder', () => {
 
     assert.equal(out.companyName, 'IBM');
     assert.equal(capturedOptions.taskLabel, 'company-research');
-    assert.equal(capturedOptions.perProviderTimeoutMs, 35_000);
+    // Raised 45_000 → 90_000 (debug session 2026-06-22, follow-up): user
+    // observed random timeouts where the LLM call took 45-90s. 90s gives
+    // 30-60s headroom over the slow end without making a hung request block
+    // forever. Synthesis budget (120s) accommodates one 90s call + buffer;
+    // the smart retry still skips attempt 2 on timeout (no second 90s wait).
+    assert.equal(capturedOptions.perProviderTimeoutMs, 90_000);
     // Reduced 8_192 → 2_048 in the same debug session that introduced the Pro
     // model swap; the LLM diagnostic showed the dossier fits in ~1,100 tokens
     // and the larger ceiling caused the model to consume the entire budget.
