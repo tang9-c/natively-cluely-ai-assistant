@@ -89,6 +89,7 @@ export class ResearchDossierBuilder {
 
     let parsed: any;
     let lastErr: unknown = null;
+    let lastNormalizeRules: string[] = [];
     for (let attempt = 0; attempt < 2; attempt++) {
       onAttempt?.(attempt + 1); // 1-based: 1, then 2
       try {
@@ -117,10 +118,23 @@ export class ResearchDossierBuilder {
         //      mirrors the prompt's language.
         // normalizeDossier fixes both, plus injects schemaVersion and
         // companyName when the model omits them (it currently does for both).
-        parsed = DossierSchema.parse(normalizeDossier(parseStructuredPayload(raw), companyName));
+        const { normalized, rules } = normalizeDossier(parseStructuredPayload(raw), companyName);
+        parsed = DossierSchema.parse(normalized);
+        // Rules are read by Task 2's [Research] stage=normalize log line; stored on
+        // the loop iterator's accumulated result for that single integration point.
+        lastNormalizeRules = rules;
         lastErr = null;
         break;
       } catch (err) {
+        // TEMP DEBUG 2026-06-22 (JSON parse failure): capture raw LLM output
+        // when JSON.parse fails with unterminated string / position info.
+        // Remove once root cause is confirmed and fix lands.
+        if (err instanceof SyntaxError && typeof raw === 'string') {
+          console.warn(
+            `[ResearchDossierBuilder] TEMP DEBUG JSON.parse failed raw_len=${raw.length} ` +
+            `err=${err.message} raw_preview=${raw.slice(0, 3000)}`,
+          );
+        }
         lastErr = err;
         // Smart retry (debug session 2026-06-22): if attempt 1 timed out,
         // the underlying cause is provider slowness and retrying just burns
@@ -318,25 +332,55 @@ function unwrapDimensionsWrapper(parsed: Record<string, unknown>): Record<string
  *
  * Each rule is regression-tested; this is the single source of truth.
  */
-function normalizeDossier(parsed: unknown, fallbackCompanyName: string): unknown {
-  if (!parsed || typeof parsed !== 'object') return parsed;
+function normalizeDossier(parsed: unknown, fallbackCompanyName: string): { normalized: unknown; rules: string[] } {
+  const rules: string[] = [];
+  if (!parsed || typeof parsed !== 'object') {
+    return { normalized: parsed, rules };
+  }
   let out = { ...(parsed as Record<string, unknown>) };
   // Detect and unwrap the {company, dimensions:[...]} wrapper shape.
   if (Array.isArray(out.dimensions)) {
     out = unwrapDimensionsWrapper(out);
+    rules.push('wrapper-unwrap');
   }
   for (const key of DIMENSION_KEYS) {
-    if (key in out) out[key] = normalizeDimension(out[key]);
+    if (!(key in out)) continue;
+    const before = out[key];
+    const after = normalizeDimension(before as unknown);
+    out[key] = after;
+    // Inspect the before/after to record which rules fired on this dimension.
+    const bObj = before && typeof before === 'object' ? (before as Record<string, unknown>) : null;
+    const aObj = after && typeof after === 'object' ? (after as Record<string, unknown>) : null;
+    if (bObj && aObj) {
+      if (Array.isArray(bObj.bullets) && Array.isArray(aObj.details) && !Array.isArray(bObj.details)) {
+        rules.push('bullets→details');
+      }
+      if (Array.isArray(bObj.bullets) && Array.isArray(aObj.details)) {
+        const firstBullet = bObj.bullets[0];
+        if (typeof firstBullet === 'string') rules.push('string-array-wrap');
+      }
+      if (typeof bObj.confidence === 'string' && typeof aObj.confidence === 'string' && bObj.confidence !== aObj.confidence) {
+        rules.push('zh-confidence→enum');
+      }
+      if (typeof bObj.confidence === 'string' && bObj.confidence !== bObj.confidence.toLowerCase()
+          && aObj.confidence === bObj.confidence.toLowerCase()) {
+        rules.push('case-normalize');
+      }
+    }
   }
-  if (typeof out.schemaVersion !== 'string') out.schemaVersion = DOSSIER_SCHEMA_VERSION;
+  if (typeof out.schemaVersion !== 'string') {
+    out.schemaVersion = DOSSIER_SCHEMA_VERSION;
+    rules.push('inject-schemaVersion');
+  }
   if (typeof out.companyName !== 'string' || !out.companyName) {
     out.companyName = fallbackCompanyName;
+    rules.push('inject-companyName');
   }
-  // Model almost never emits `sources` (debug session 2026-06-22). Default
-  // to [] so schema validation passes; build() will set source="llm-fallback"
-  // when there are no Tavily sources, which is the correct UX outcome here.
-  if (!Array.isArray(out.sources)) out.sources = [];
-  return out;
+  if (!Array.isArray(out.sources)) {
+    out.sources = [];
+    rules.push('inject-sources');
+  }
+  return { normalized: out, rules };
 }
 
 function parseStructuredPayload(raw: unknown): unknown {

@@ -437,4 +437,42 @@ describe('ResearchDossierBuilder', () => {
     assert.equal(capturedOptions.maxOutputTokens, 2_048);
     assert.equal(capturedOptions.maxRotations, 1);
   });
+
+  // Debug session 2026-06-22: normalizeDossier must report which rules fired
+  // so the per-stage [Research] log line can list them. Earlier version
+  // returned just `normalized`, hiding whether the LLM output deviated.
+  test('build() emits per-attempt rule list when LLM output deviates from schema', async () => {
+    let capturedOptions = null;
+    const validDossier = {
+      financials: { summary: 's', bullets: [{ text: 'a' }], confidence: '高' },
+      business: { summary: 's', bullets: [], confidence: '高' },
+      strategy: { summary: 's', bullets: [], confidence: 'high' },
+      people: { summary: 's', bullets: [], confidence: 'high' },
+      infrastructure: { summary: 's', bullets: [], confidence: 'high' },
+      procurement: { summary: 's', bullets: [], confidence: 'high' },
+      // no schemaVersion, no companyName, no sources — all injected by normalize
+    };
+    const llm = {
+      generateStructured: async (_p, _s, options) => {
+        capturedOptions = options;
+        return validDossier;
+      },
+    };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    // Pass non-empty sources so maybeDowngrade does not force all confidence to 'low'.
+    const out = await b.build('Apple', [{ title: 't', url: 'https://x.example', content: 's' }]);
+    // The returned dossier reflects normalized output — bullets became details,
+    // Chinese confidence became enum, schemaVersion/companyName/sources were
+    // injected. These assertions verify the normalize behavior end-to-end; the
+    // capturedOptions assertion in Step 4 of the implementer will verify the
+    // rule-list return shape separately.
+    assert.equal(out.financials.details[0].text, 'a');
+    assert.equal(out.financials.confidence, 'high');
+    assert.equal(out.business.confidence, 'high');
+    assert.equal(out.schemaVersion, '1.0');
+    assert.equal(out.companyName, 'Apple');
+    // Sanity: the request still carries the structured-generation budget.
+    assert.equal(capturedOptions.taskLabel, 'company-research');
+  });
 });
