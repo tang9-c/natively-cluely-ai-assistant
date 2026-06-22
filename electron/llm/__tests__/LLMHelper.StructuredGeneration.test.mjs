@@ -19,6 +19,13 @@ describe('LLMHelper structured generation', () => {
         },
       },
     };
+    // Regression guard: the Doubao-timeout → Groq-fallback path that this test
+    // previously covered was removed in debug session 2026-06-22 because Groq
+    // (llama-3.3-70b-versatile) returns 403 in this environment. The chain
+    // now must surface a structured "All reasoning models failed" error
+    // quickly instead of hanging on the per-provider timeout. The new
+    // behavior under test is: per-provider timeout is respected (no hang)
+    // AND the function throws rather than silently rotating forever.
     helper.groqClient = {
       chat: {
         completions: {
@@ -28,15 +35,21 @@ describe('LLMHelper structured generation', () => {
     };
 
     const started = Date.now();
-    const result = await helper.generateContentStructured('return json', {
-      taskLabel: 'test',
-      perProviderTimeoutMs: 40,
-      maxOutputTokens: 128,
-      maxRotations: 1,
-    });
-
-    assert.equal(result, '{"ok":true}');
-    assert.ok(Date.now() - started < 1000);
+    await assert.rejects(
+      helper.generateContentStructured('return json', {
+        taskLabel: 'test',
+        perProviderTimeoutMs: 40,
+        maxOutputTokens: 128,
+        maxRotations: 1,
+      }),
+      /All reasoning models failed/,
+    );
+    // Per-provider timeout must fire promptly; without the fix the chain
+    // would loop forever through the hung Doubao provider.
+    assert.ok(
+      Date.now() - started < 2000,
+      `expected fast failure, took ${Date.now() - started}ms`,
+    );
   });
 
   test('generateContentStructured() passes Research-sized max output tokens to Doubao', async () => {
@@ -63,6 +76,50 @@ describe('LLMHelper structured generation', () => {
 
     assert.equal(result, '{"ok":true}');
     assert.equal(capturedBody.max_completion_tokens, 8192);
+  });
+
+  // Phase 4.4 (debug session 2026-06-22): regression guard for the
+  // structured-generation chain. Groq's `llama-3.3-70b-versatile` returns 403
+  // in this environment (model retired / key revoked). It must NOT be part of
+  // the structured-generation provider chain — removing it prevents the
+  // Doubao-timeout → Groq-403 loop that the ResearchDossierBuilder hits.
+  // Chat / streaming paths are unaffected; they keep using Groq.
+  test('generateContentStructured() does NOT call Groq even when groqClient is configured', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    let groqCalls = 0;
+    // Doubao hangs (mirrors the real 35s-timeout symptom). Without the
+    // removal fix, the chain would fall through to Groq after the timeout;
+    // with the fix, Groq must stay at zero calls.
+    helper.doubaoClient = {
+      chat: {
+        completions: {
+          create: () => new Promise(() => {}),
+        },
+      },
+    };
+    helper.groqClient = {
+      chat: {
+        completions: {
+          create: async () => {
+            groqCalls++;
+            return { choices: [{ message: { content: '{"ok":true}' } }] };
+          },
+        },
+      },
+    };
+
+    await assert.rejects(
+      helper.generateContentStructured('return json', {
+        taskLabel: 'company-research',
+        perProviderTimeoutMs: 30,
+        maxOutputTokens: 2048,
+        maxRotations: 1,
+      }),
+      /All reasoning models failed/,
+    );
+
+    assert.equal(groqCalls, 0, 'Groq must not be invoked from generateContentStructured');
   });
 
   // Phase 4.1 (debug session): regression guard for the company-research
