@@ -1,9 +1,28 @@
 // electron/services/research/ResearchDossierBuilder.ts
+import { app } from 'electron';
 import { z } from 'zod';
 import type {
   CompanyDossier, ResearchDimension, ResearchSource,
 } from './types';
 import { DOSSIER_SCHEMA_VERSION } from './types';
+
+/**
+ * Emit a one-line structured log for a research-pipeline stage.
+ * Format: `[Research] stage=<name> <key>=<value> ...`
+ * No-op when packaged (production). Do NOT pass raw LLM content here.
+ *
+ * `app.isPackaged` is read lazily inside the helper (not at module load) so
+ * tests running under ELECTRON_RUN_AS_NODE — where the `electron` module
+ * exports a stub without a real `app` — do not crash on import. When `app`
+ * is unavailable (test-only), we treat the environment as dev and emit.
+ */
+function researchLog(stage: string, fields: Record<string, unknown>): void {
+  if (app?.isPackaged) return;
+  const flat = Object.entries(fields)
+    .map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`)
+    .join(' ');
+  console.log(`[Research] stage=${stage} ${flat}`);
+}
 
 export class LlmInvalidFormatError extends Error {
   constructor(message = 'LLM returned invalid dossier shape') {
@@ -73,6 +92,7 @@ export class ResearchDossierBuilder {
     rawSources: Array<{ title: string; url: string; content: string }>,
     opts?: { onAttempt?: (attempt: number) => void },
   ): Promise<CompanyDossier> {
+    const buildStartedAt = Date.now();
     const sources: ResearchSource[] = rawSources.map((r, i) => ({
       index: i + 1,
       title: r.title,
@@ -93,6 +113,7 @@ export class ResearchDossierBuilder {
     for (let attempt = 0; attempt < 2; attempt++) {
       onAttempt?.(attempt + 1); // 1-based: 1, then 2
       try {
+        const llmStartedAt = Date.now();
         const raw = await this.opts.llm.generateStructured(prompt, DossierSchema, {
           taskLabel: 'company-research',
           // Raised 45_000 → 90_000 (debug session 2026-06-22, follow-up): user
@@ -108,6 +129,14 @@ export class ResearchDossierBuilder {
           maxOutputTokens: 2_048,
           maxRotations: 1,
         });
+        researchLog('llm-call', {
+          attempt: attempt + 1,
+          provider: 'Doubao Pro (doubao-1-5-pro-32k-250115)',
+          promptChars: prompt.length,
+          maxTokens: 2_048,
+          durationMs: Date.now() - llmStartedAt,
+          result: 'success',
+        });
         // Normalize LLM output before schema validation. Real samples from
         // debug session 2026-06-22 (Doubao Pro on a Chinese prompt) show two
         // consistent deviations from the documented schema:
@@ -119,22 +148,20 @@ export class ResearchDossierBuilder {
         // normalizeDossier fixes both, plus injects schemaVersion and
         // companyName when the model omits them (it currently does for both).
         const { normalized, rules } = normalizeDossier(parseStructuredPayload(raw), companyName);
-        parsed = DossierSchema.parse(normalized);
-        // Rules are read by Task 2's [Research] stage=normalize log line; stored on
-        // the loop iterator's accumulated result for that single integration point.
         lastNormalizeRules = rules;
+        researchLog('normalize', { attempt: attempt + 1, rules: rules.length ? rules : '(none)' });
+        parsed = DossierSchema.parse(normalized);
         lastErr = null;
         break;
       } catch (err) {
-        // TEMP DEBUG 2026-06-22 (JSON parse failure): capture raw LLM output
-        // when JSON.parse fails with unterminated string / position info.
-        // Remove once root cause is confirmed and fix lands.
-        if (err instanceof SyntaxError && typeof raw === 'string') {
-          console.warn(
-            `[ResearchDossierBuilder] TEMP DEBUG JSON.parse failed raw_len=${raw.length} ` +
-            `err=${err.message} raw_preview=${raw.slice(0, 3000)}`,
-          );
-        }
+        researchLog('llm-call', {
+          attempt: attempt + 1,
+          provider: 'Doubao Pro (doubao-1-5-pro-32k-250115)',
+          promptChars: prompt.length,
+          maxTokens: 2_048,
+          result: isTimeoutError(err) ? 'timeout' : 'error',
+          failure: (err as Error)?.message ?? String(err),
+        });
         lastErr = err;
         // Smart retry (debug session 2026-06-22): if attempt 1 timed out,
         // the underlying cause is provider slowness and retrying just burns
@@ -147,6 +174,11 @@ export class ResearchDossierBuilder {
         }
       }
     }
+    researchLog('build', {
+      result: lastErr ? 'failure' : 'success',
+      dimensions: lastErr ? '0/6' : '6/6',
+      durationMs: Date.now() - buildStartedAt,
+    });
     if (lastErr) throw new LlmInvalidFormatError(formatZodError(lastErr));
     const valid = parsed;
 
