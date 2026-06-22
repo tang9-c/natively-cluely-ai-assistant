@@ -35,8 +35,15 @@ interface EngineOpts {
   synthesisTimeoutMs?: number;
 }
 
-/** Default synthesis timeout — prevents indefinite spinner during LLM hang. */
-export const DEFAULT_SYNTHESIS_TIMEOUT_MS = 60_000;
+/** Default synthesis timeout — prevents indefinite spinner during LLM hang.
+ *  Raised 60_000 → 120_000 (debug session 2026-06-22): the builder retries
+ *  up to twice on schema-mismatch, each attempt being a 45s LLM call
+ *  (ResearchDossierBuilder.perProviderTimeoutMs). 60s could not accommodate
+ *  two slow attempts × 45s + parse overhead, so the second attempt was
+ *  aborted mid-flight and the user saw "LLM_TIMEOUT". 120s gives the retry
+ *  loop headroom while still bounding a true hang.
+ */
+export const DEFAULT_SYNTHESIS_TIMEOUT_MS = 120_000;
 
 interface ResearchOpts {
   forceRefresh?: boolean;

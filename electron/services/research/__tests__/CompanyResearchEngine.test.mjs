@@ -208,6 +208,10 @@ describe('CompanyResearchEngine', () => {
 
   test('exported DEFAULT_SYNTHESIS_TIMEOUT_MS is 60s (bounds stall)', () => {
     const { DEFAULT_SYNTHESIS_TIMEOUT_MS } = cjsRequire(enginePath);
-    assert.equal(DEFAULT_SYNTHESIS_TIMEOUT_MS, 60_000);
+    // Raised 60_000 → 120_000 (debug session 2026-06-22): two real runs took
+    // 33.9s and 31.1s, plus parse + retry round-trip — the prior 60s budget
+    // could not accommodate two attempts × ~35s without aborting the second
+    // attempt mid-flight, surfacing LLM_TIMEOUT to the user.
+    assert.equal(DEFAULT_SYNTHESIS_TIMEOUT_MS, 120_000);
   });
 });
