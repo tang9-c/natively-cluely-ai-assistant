@@ -12,10 +12,17 @@ import {
     AssistantResponse as LLMAssistantResponse, classifyIntent, planNextAssistantAction, PlannerDecision
 } from './llm';
 import type { ModeEventContext } from './llm';
+import type {
+    CloudIntentClassifierInput,
+    CloudIntentClassifierResult,
+    IntentClassificationOptions,
+} from './llm/IntentClassifier';
 import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEngine';
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
 import { buildAutoSurfaceFingerprint } from './services/dynamic-actions/ModeEventUtils';
 import { ScreenContext } from './services/screen/types';
+import { SettingsManager } from './services/SettingsManager';
+import { isLocalIntentClassifierAvailable } from './services/LocalModelManager';
 
 // Mode types
 export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'recap' | 'clarify' | 'manual' | 'code_hint' | 'brainstorm';
@@ -177,6 +184,77 @@ export class IntelligenceEngine extends EventEmitter {
             if (oldest) this.autoSurfaceFingerprints.delete(oldest);
         }
         return true;
+    }
+
+    private buildIntentClassificationOptions(): IntentClassificationOptions {
+        let providerDataScopes: IntentClassificationOptions['providerDataScopes'];
+        let localIntentEnhancementEnabled = false;
+        let localIntentEnhancementAvailable = false;
+
+        try {
+            const settings = SettingsManager.getInstance();
+            providerDataScopes = settings.get('providerDataScopes');
+            localIntentEnhancementEnabled = settings.getLocalIntentEnhancementEnabled();
+            localIntentEnhancementAvailable = isLocalIntentClassifierAvailable();
+        } catch (error) {
+            console.warn('[IntelligenceEngine] Intent settings unavailable', {
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+
+        return {
+            providerDataScopes,
+            localIntentEnhancementEnabled,
+            localIntentEnhancementAvailable,
+            cloudIntentClassifier: (input) => this.classifyIntentWithCloud(input),
+        };
+    }
+
+    private async classifyIntentWithCloud(
+        input: CloudIntentClassifierInput,
+    ): Promise<CloudIntentClassifierResult | null> {
+        const candidateSet = new Set(input.candidateIntents);
+        const prompt = [
+            '你是会议实时助手的意图分类器，只返回 JSON，不生成回答建议。',
+            '根据最新一句中文原文、最近短上下文、当前模式、候选 intent 和轻量实体，选择最合适的 intent。',
+            '只能从 candidateIntents 中选择 intent。confidence 必须是 0 到 1 的数字。',
+            '如果证据不足，选择 general 或 silence，并降低 confidence。',
+            '',
+            `modeTemplateType: ${input.modeTemplateType ?? 'general'}`,
+            `candidateIntents: ${JSON.stringify(input.candidateIntents)}`,
+            `keyEntities: ${JSON.stringify(input.keyEntities)}`,
+            `latestTurn: ${JSON.stringify(input.latestTurn)}`,
+            `recentTranscript: ${JSON.stringify(input.recentTranscript.slice(-1600))}`,
+            '',
+            '返回格式: {"intent":"...","confidence":0.0}',
+        ].join('\n');
+
+        try {
+            const raw = await this.llmHelper.generateContentStructured(prompt, {
+                taskLabel: 'intent-classification',
+                maxOutputTokens: 96,
+                perProviderTimeoutMs: 2500,
+                maxRotations: 1,
+            });
+            const jsonText = raw.match(/\{[\s\S]*\}/)?.[0];
+            if (!jsonText) return null;
+
+            const parsed = JSON.parse(jsonText) as Partial<CloudIntentClassifierResult>;
+            const intent = parsed.intent;
+            const confidence = Number(parsed.confidence);
+            if (!intent || !candidateSet.has(intent) || !Number.isFinite(confidence)) {
+                return null;
+            }
+            return {
+                intent,
+                confidence: Math.max(0, Math.min(1, confidence)),
+            };
+        } catch (error) {
+            console.warn('[IntelligenceEngine] Cloud intent classifier failed', {
+                error: error instanceof Error ? error.message : String(error),
+            });
+            return null;
+        }
     }
 
     constructor(llmHelper: LLMHelper, session: SessionTracker) {
@@ -506,6 +584,7 @@ export class IntelligenceEngine extends EventEmitter {
             preparedTranscript,
             this.session.getAssistantResponseHistory().length,
             this.currentDynamicActionTemplateType,
+            this.buildIntentClassificationOptions(),
         );
         const detectedCodingQuestion = this.session.getDetectedCodingQuestion();
 
@@ -700,6 +779,7 @@ export class IntelligenceEngine extends EventEmitter {
                 preparedTranscript,
                 this.session.getAssistantResponseHistory().length,
                 this.currentDynamicActionTemplateType,
+                this.buildIntentClassificationOptions(),
             );
 
             const screenContext = options?.screenContext;

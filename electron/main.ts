@@ -274,6 +274,7 @@ import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
 import { warmupIntentClassifier } from "./llm"
+import { isLocalIntentClassifierAvailable } from "./services/LocalModelManager"
 import { resolveMacScreenPermissionHealth } from "./permissions/macPermissionHealth"
 
 /** Unified type for all STT providers */
@@ -645,8 +646,12 @@ export class AppState {
 
     this.setupIntelligenceEvents()
 
-    // Pre-warm the zero-shot intent classifier in background
-    warmupIntentClassifier();
+    // Optional only: do not load the large local intent model unless the user
+    // explicitly enabled the offline/multilingual enhancement pack.
+    warmupIntentClassifier({
+      localIntentEnhancementEnabled: settingsManager.getLocalIntentEnhancementEnabled(),
+      localIntentEnhancementAvailable: isLocalIntentClassifierAvailable(),
+    });
 
     // Setup Ollama IPC
     this.setupOllamaIpcHandlers()

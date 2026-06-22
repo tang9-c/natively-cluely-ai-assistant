@@ -48,6 +48,10 @@ export interface AppSettings {
     // When true (default) and the active mode is a technical / coding interview, prefer
     // direct vision LLM over structured-extract-then-answer for lowest latency.
     technicalInterviewVisionFirst?: boolean;
+    // Optional offline/multilingual intent enhancement. Defaults to false so
+    // Chinese intent recognition uses rules + cloud fallback without pulling
+    // the large local mDeBERTa artifact.
+    localIntentEnhancementEnabled?: boolean;
 }
 
 export const VALID_SCREEN_UNDERSTANDING_MODES = ['vision_first', 'vision_only', 'private_vision'] as const;
@@ -113,6 +117,10 @@ export class SettingsManager {
 
     public getTechnicalInterviewVisionFirst(): boolean {
         return this.settings.technicalInterviewVisionFirst !== false;
+    }
+
+    public getLocalIntentEnhancementEnabled(): boolean {
+        return this.settings.localIntentEnhancementEnabled === true;
     }
 
     private loadSettings(): void {

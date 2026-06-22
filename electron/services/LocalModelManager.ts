@@ -14,6 +14,8 @@ export interface LocalModelInfo {
   description: string;
   sizeMb: number;
   task: string;
+  category?: 'base' | 'optional-enhancement';
+  requiresExplicitEnable?: boolean;
   status: 'available' | 'missing' | 'downloading' | 'error';
   source?: 'downloaded' | 'bundled';
   errorMessage?: string;
@@ -25,6 +27,8 @@ interface ModelDefinition {
   description: string;
   sizeMb: number;
   task: string;
+  category?: 'base' | 'optional-enhancement';
+  requiresExplicitEnable?: boolean;
   requiredFiles: string[]; // relative to model root, e.g. 'onnx/model_int8.onnx'
   pipelineOptions?: Record<string, unknown>;
   validate?: (rootDir: string) => { ok: boolean; error?: string };
@@ -37,14 +41,17 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     description: '用于本地 RAG 向量检索',
     sizeMb: 129,
     task: 'feature-extraction',
+    category: 'base',
     requiredFiles: ['onnx/model_int8.onnx'],
   },
   {
     id: INTENT_CLASSIFIER_MODEL_ARTIFACT.modelId,
-    name: '意图分类模型（多语言）',
-    description: '用于中文/英文/多语言对话意图识别',
-    sizeMb: 280,
+    name: '本地多语言意图增强（可选）',
+    description: '仅离线/隐私优先时需要；未开启时不会影响默认中文意图识别',
+    sizeMb: 317,
     task: 'zero-shot-classification',
+    category: 'optional-enhancement',
+    requiresExplicitEnable: true,
     requiredFiles: [INTENT_CLASSIFIER_MODEL_ARTIFACT.requiredRelativePath],
     pipelineOptions: buildIntentClassifierPipelineOptions(),
     validate: (rootDir) => validateIntentClassifierModelArtifact(rootDir),
@@ -92,8 +99,15 @@ export function getLocalModels(): LocalModelInfo[] {
     description: def.description,
     sizeMb: def.sizeMb,
     task: def.task,
+    category: def.category ?? 'base',
+    requiresExplicitEnable: def.requiresExplicitEnable,
     ...getModelStatus(def),
   }));
+}
+
+export function isLocalIntentClassifierAvailable(): boolean {
+  const def = MODEL_DEFINITIONS.find((model) => model.id === INTENT_CLASSIFIER_MODEL_ARTIFACT.modelId);
+  return Boolean(def && getModelStatus(def).status === 'available');
 }
 
 export function deleteLocalModel(modelId: string): { success: boolean; error?: string } {

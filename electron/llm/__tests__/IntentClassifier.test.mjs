@@ -124,9 +124,24 @@ describe('IntentClassifier.isPrimarilyChinese (language detection)', () => {
 describe('IntentClassifier.classifyIntent public API', () => {
   test('returns regex fast-path result without needing SLM fallback', async () => {
     const { classifyIntent } = loadModule();
-    const r = await classifyIntent('Can you explain that?', '[INTERVIEWER]: Can you explain that?', 0, 'general');
+    let cloudCalls = 0;
+    let localCalls = 0;
+    const r = await classifyIntent('能解释一下吗', '[INTERVIEWER]: 能解释一下吗', 0, 'general', {
+      cloudIntentClassifier: async () => {
+        cloudCalls += 1;
+        return { intent: 'general', confidence: 0.5 };
+      },
+      localIntentEnhancementEnabled: true,
+      localIntentEnhancementAvailable: true,
+      localIntentClassifier: async () => {
+        localCalls += 1;
+        return { intent: 'general', confidence: 0.5, answerShape: 'x' };
+      },
+    });
     assert.equal(r.intent, 'clarification');
     assert.ok(r.confidence >= 0.8);
+    assert.equal(cloudCalls, 0);
+    assert.equal(localCalls, 0);
   });
 
   test('falls back to context when no latest interviewer turn exists', async () => {
@@ -134,5 +149,124 @@ describe('IntentClassifier.classifyIntent public API', () => {
     const r = await classifyIntent(null, '[INTERVIEWER]: hello', 0, 'sales');
     assert.equal(r.intent, 'general');
     assert.equal(r.confidence, 0.5);
+  });
+
+  test('uses cloud fallback for low-confidence Chinese turns before optional local SLM', async () => {
+    const { classifyIntent } = loadModule();
+    let localCalls = 0;
+    const r = await classifyIntent('这个方向让我有点犹豫', '[INTERVIEWER]: 这个方向让我有点犹豫', 0, 'sales', {
+      cloudIntentClassifier: async (input) => {
+        assert.equal(input.latestTurn, '这个方向让我有点犹豫');
+        assert.equal(input.modeTemplateType, 'sales');
+        assert.equal(input.language, 'zh');
+        assert.ok(input.candidateIntents.includes('discovery_probe'));
+        return { intent: 'discovery_probe', confidence: 0.81 };
+      },
+      localIntentEnhancementEnabled: true,
+      localIntentEnhancementAvailable: true,
+      localIntentClassifier: async () => {
+        localCalls += 1;
+        return { intent: 'general', confidence: 0.5, answerShape: 'x' };
+      },
+    });
+
+    assert.equal(r.intent, 'discovery_probe');
+    assert.equal(r.confidence, 0.81);
+    assert.equal(localCalls, 0);
+  });
+
+  test('skips cloud fallback when transcript scope is disabled', async () => {
+    const { classifyIntent } = loadModule();
+    let cloudCalls = 0;
+    let localCalls = 0;
+    const r = await classifyIntent('这个方向让我有点犹豫', '[INTERVIEWER]: 这个方向让我有点犹豫', 0, 'sales', {
+      providerDataScopes: { transcript: false },
+      cloudIntentClassifier: async () => {
+        cloudCalls += 1;
+        return { intent: 'discovery_probe', confidence: 0.8 };
+      },
+      localIntentEnhancementEnabled: true,
+      localIntentEnhancementAvailable: true,
+      localIntentClassifier: async () => {
+        localCalls += 1;
+        return { intent: 'discovery_probe', confidence: 0.72, answerShape: 'local' };
+      },
+    });
+
+    assert.equal(cloudCalls, 0);
+    assert.equal(localCalls, 1);
+    assert.equal(r.intent, 'discovery_probe');
+  });
+
+  test('does not call local SLM unless local intent enhancement is enabled', async () => {
+    const { classifyIntent } = loadModule();
+    let localCalls = 0;
+    const r = await classifyIntent('这个方向让我有点犹豫', '[INTERVIEWER]: 这个方向让我有点犹豫', 0, 'sales', {
+      localIntentEnhancementEnabled: false,
+      localIntentClassifier: async () => {
+        localCalls += 1;
+        return { intent: 'discovery_probe', confidence: 0.72, answerShape: 'local' };
+      },
+    });
+
+    assert.equal(localCalls, 0);
+    assert.equal(r.intent, 'general');
+    assert.equal(r.confidence, 0.5);
+  });
+
+  test('calls optional local SLM when enhancement is enabled and cloud is unavailable', async () => {
+    const { classifyIntent } = loadModule();
+    let localCalls = 0;
+    const r = await classifyIntent('这个方向让我有点犹豫', '[INTERVIEWER]: 这个方向让我有点犹豫', 0, 'sales', {
+      localIntentEnhancementEnabled: true,
+      localIntentEnhancementAvailable: true,
+      localIntentClassifier: async () => {
+        localCalls += 1;
+        return { intent: 'discovery_probe', confidence: 0.72, answerShape: 'local' };
+      },
+    });
+
+    assert.equal(localCalls, 1);
+    assert.equal(r.intent, 'discovery_probe');
+  });
+
+  test('does not call optional local SLM when enhancement is enabled but artifact is unavailable', async () => {
+    const { classifyIntent } = loadModule();
+    let localCalls = 0;
+    const r = await classifyIntent('这个方向让我有点犹豫', '[INTERVIEWER]: 这个方向让我有点犹豫', 0, 'sales', {
+      localIntentEnhancementEnabled: true,
+      localIntentEnhancementAvailable: false,
+      localIntentClassifier: async () => {
+        localCalls += 1;
+        return { intent: 'discovery_probe', confidence: 0.72, answerShape: 'local' };
+      },
+    });
+
+    assert.equal(localCalls, 0);
+    assert.equal(r.intent, 'general');
+  });
+
+  test('warmup is no-op by default and only runs when local enhancement is enabled', () => {
+    const { warmupIntentClassifier } = loadModule();
+    let calls = 0;
+    warmupIntentClassifier({
+      localIntentEnhancementEnabled: false,
+      localWarmup: () => { calls += 1; },
+    });
+    assert.equal(calls, 0);
+
+    warmupIntentClassifier({
+      localIntentEnhancementEnabled: true,
+      localIntentEnhancementAvailable: false,
+      localWarmup: () => { calls += 1; },
+    });
+    assert.equal(calls, 0);
+
+    warmupIntentClassifier({
+      localIntentEnhancementEnabled: true,
+      localIntentEnhancementAvailable: true,
+      localWarmup: () => { calls += 1; },
+    });
+    assert.equal(calls, 1);
   });
 });

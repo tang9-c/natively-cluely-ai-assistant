@@ -2,13 +2,16 @@
 // Lightweight intent classification for "What should I say?"
 // Micro step that runs before answer generation
 //
-// Two-tier classification:
-//   1. Regex fast-path (< 1ms) for common patterns (English + Chinese)
-//   2. Local multilingual SLM (mdeberta-v3 XNLI, ~80-150ms) for messy/ambiguous
-//      speech. Label set is selected based on the input language to maximize
-//      zero-shot accuracy.
+// Chinese-first classification:
+//   1. Mode-aware rules and lightweight entity/language checks.
+//   2. Cloud intent fallback for low-confidence Chinese turns when transcript
+//      data scope allows it.
+//   3. Optional local multilingual mDeBERTa enhancement only when explicitly
+//      enabled by the user.
+//   4. Context heuristic fallback.
 
 import { getIntentClassifierProcessHost } from './IntentClassifierProcessHost';
+import type { ProviderDataScopePolicy } from './ProviderRouter';
 
 export type ConversationIntent =
     // ===== Original 7 interview-centric intents (preserved for backward compat) =====
@@ -52,6 +55,34 @@ export interface IntentResult {
     intent: ConversationIntent;
     confidence: number;
     answerShape: string;
+}
+
+export interface CloudIntentClassifierInput {
+    latestTurn: string;
+    recentTranscript: string;
+    modeTemplateType?: string | null;
+    candidateIntents: ConversationIntent[];
+    language: 'zh';
+    keyEntities: string[];
+}
+
+export interface CloudIntentClassifierResult {
+    intent: ConversationIntent;
+    confidence: number;
+}
+
+export interface IntentClassificationOptions {
+    providerDataScopes?: ProviderDataScopePolicy;
+    cloudIntentClassifier?: (input: CloudIntentClassifierInput) => Promise<CloudIntentClassifierResult | null>;
+    localIntentEnhancementEnabled?: boolean;
+    localIntentEnhancementAvailable?: boolean;
+    localIntentClassifier?: (text: string, modeTemplateType?: string | null) => Promise<IntentResult | null>;
+}
+
+export interface IntentWarmupOptions {
+    localIntentEnhancementEnabled?: boolean;
+    localIntentEnhancementAvailable?: boolean;
+    localWarmup?: () => void;
 }
 
 /**
@@ -571,6 +602,79 @@ function detectIntentByContext(
     return { intent: 'general', confidence: 0.5, answerShape: getAnswerShapeForMode(modeTemplateType, 'general') };
 }
 
+function getCandidateIntentsForMode(modeTemplateType?: string | null): ConversationIntent[] {
+    const mode = modeTemplateType ?? 'general';
+    switch (mode) {
+        case 'sales':
+            return ['handle_objection', 'seize_signal', 'discovery_probe', 'define_term', 'advance_dialog', 'general', 'silence'];
+        case 'recruiting':
+            return ['evaluate_answer', 'request_example', 'clarification', 'follow_up', 'deep_dive', 'define_term', 'general', 'silence'];
+        case 'team-meet':
+            return ['capture_action', 'capture_decision', 'capture_risk', 'status_update', 'advance_dialog', 'general', 'silence'];
+        case 'lecture':
+            return ['explain_concept', 'render_formula', 'answer_class_question', 'define_term', 'advance_dialog', 'general', 'silence'];
+        case 'technical-interview':
+            return ['coding', 'clarification', 'deep_dive', 'follow_up', 'example_request', 'define_term', 'general', 'silence'];
+        case 'looking-for-work':
+        case 'general':
+        default:
+            return ['clarification', 'follow_up', 'deep_dive', 'behavioral', 'example_request', 'summary_probe', 'coding', 'define_term', 'advance_dialog', 'general', 'silence'];
+    }
+}
+
+function extractLightweightEntities(text: string): string[] {
+    const entities = new Set<string>();
+    const patterns = [
+        /[A-Za-z][A-Za-z0-9_+#.-]{1,30}/g,
+        /\d+(?:\.\d+)?\s*(?:%|元|万|美元|天|周|个月|年)/g,
+        /(?:今天|明天|后天|本周|下周|月底|年底|周[一二三四五六日天])/g,
+        /(?:合同|报价|预算|价格|采购|法务|风险|阻塞|决策|行动项|公式|定理|复杂度|系统设计)/g,
+    ];
+
+    for (const pattern of patterns) {
+        for (const match of text.matchAll(pattern)) {
+            const value = match[0]?.trim();
+            if (value) entities.add(value);
+            if (entities.size >= 12) return Array.from(entities);
+        }
+    }
+
+    return Array.from(entities);
+}
+
+async function classifyWithCloudFallback(
+    latestTurn: string,
+    recentTranscript: string,
+    modeTemplateType: string | null | undefined,
+    options: IntentClassificationOptions,
+): Promise<IntentResult | null> {
+    if (!options.cloudIntentClassifier) return null;
+    if (options.providerDataScopes?.transcript === false) return null;
+    if (!isPrimarilyChinese(latestTurn)) return null;
+
+    try {
+        const result = await options.cloudIntentClassifier({
+            latestTurn,
+            recentTranscript,
+            modeTemplateType,
+            candidateIntents: getCandidateIntentsForMode(modeTemplateType),
+            language: 'zh',
+            keyEntities: extractLightweightEntities(`${latestTurn}\n${recentTranscript}`),
+        });
+        if (!result || result.confidence < 0.5) return null;
+        return {
+            intent: result.intent,
+            confidence: result.confidence,
+            answerShape: getAnswerShapeForMode(modeTemplateType, result.intent),
+        };
+    } catch (error) {
+        console.warn('[IntentClassifier] Cloud fallback failed', {
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+    }
+}
+
 // ========================
 // Public API
 // ========================
@@ -578,11 +682,11 @@ function detectIntentByContext(
 /**
  * Main intent classification function (async)
  *
- * Three-tier priority:
+ * Default priority:
  *   1. Regex fast-path (< 1ms, high confidence) — mode-aware
- *   2. Zero-shot SLM fallback (~80-150ms, medium-high confidence) — narrowed
- *      per-mode label set
- *   3. Context-based heuristic (0ms, low confidence)
+ *   2. Cloud intent fallback for Chinese low-confidence turns
+ *   3. Optional local zero-shot SLM when explicitly enabled
+ *   4. Context-based heuristic (0ms, low confidence)
  *
  * `modeTemplateType` is the kebab-case `ModesManager.ModeTemplateType`. When
  * omitted or unknown, behavior is identical to the previous
@@ -593,6 +697,7 @@ export async function classifyIntent(
     recentTranscript: string,
     assistantMessageCount: number,
     modeTemplateType?: string | null,
+    options: IntentClassificationOptions = {},
 ): Promise<IntentResult> {
     // Tier 1: Try regex-based first (high confidence, instant)
     if (lastInterviewerTurn) {
@@ -601,16 +706,26 @@ export async function classifyIntent(
             return patternResult;
         }
 
-        // Tier 2: Try zero-shot SLM (if regex didn't match)
+        // Tier 2: Cloud intent fallback for Chinese low-confidence turns.
+        const cloudResult = await classifyWithCloudFallback(lastInterviewerTurn, recentTranscript, modeTemplateType, options);
+        if (cloudResult) {
+            return cloudResult;
+        }
+
+        // Tier 3: Optional local zero-shot SLM. Disabled by default because
+        // the multilingual model is a large optional offline enhancement.
         if (lastInterviewerTurn.trim().length > 5) {
-            const slmResult = await getIntentClassifierProcessHost().classify(lastInterviewerTurn, modeTemplateType);
-            if (slmResult) {
-                return slmResult;
+            const localClassifier = options.localIntentClassifier ?? ((text, mode) => getIntentClassifierProcessHost().classify(text, mode));
+            if (options.localIntentEnhancementEnabled === true && options.localIntentEnhancementAvailable === true) {
+                const slmResult = await localClassifier(lastInterviewerTurn, modeTemplateType);
+                if (slmResult) {
+                    return slmResult;
+                }
             }
         }
     }
 
-    // Tier 3: Fall back to context-based heuristic
+    // Tier 4: Fall back to context-based heuristic
     return detectIntentByContext(recentTranscript, assistantMessageCount, modeTemplateType);
 }
 
@@ -625,9 +740,13 @@ export function getAnswerShapeGuidance(intent: ConversationIntent): string {
 }
 
 /**
- * Pre-warm the SLM model in background.
- * Call this during app initialization to avoid cold-start on first classification.
+ * Pre-warm the optional local SLM model in background.
+ * No-op unless the user enabled local intent enhancement and the artifact is
+ * already installed.
  */
-export function warmupIntentClassifier(): void {
-    getIntentClassifierProcessHost().warmup();
+export function warmupIntentClassifier(options: IntentWarmupOptions = {}): void {
+    if (options.localIntentEnhancementEnabled !== true) return;
+    if (options.localIntentEnhancementAvailable !== true) return;
+    const warmup = options.localWarmup ?? (() => getIntentClassifierProcessHost().warmup());
+    warmup();
 }
