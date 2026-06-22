@@ -71,10 +71,22 @@ test('sqlite-vec ships both macOS arch packages for packaged vector search', () 
   }
 });
 
-test('postinstall rebuilds Electron ABI native dependencies that affect Intel meeting persistence', () => {
+test('postinstall rebuilds Electron ABI native dependencies that affect Intel meeting persistence and Chinese STT', () => {
   const pkg = readJson('package.json');
-  assert.match(pkg.scripts.postinstall, /electron-rebuild -f -w better-sqlite3,keytar/);
+  assert.match(pkg.scripts.postinstall, /electron-rebuild -f -w better-sqlite3,keytar,sherpa-onnx-node/);
+  assert.match(pkg.scripts.postinstall, /node scripts\/ensure-sherpa-onnx-darwin\.js/);
+  assert.match(pkg.scripts['rebuild:native'], /electron-rebuild -f -w better-sqlite3,keytar,sherpa-onnx-node/);
+  assert.match(pkg.scripts['rebuild:native'], /node scripts\/ensure-sherpa-onnx-darwin\.js/);
   assert.equal(pkg.dependencies['better-sqlite3'], '12.6.2');
+  assert.equal(pkg.dependencies['sherpa-onnx-node'], '^1.13.2');
   assert.equal(pkg.dependencies['onnxruntime-node'], '1.22.0');
   assert.equal(pkg.overrides['onnxruntime-node'], '1.22.0');
+
+  const worker = read('electron/audio/sensevoice/senseVoiceWorker.ts');
+  assert.match(worker, /require\('sherpa-onnx-node'\)/);
+
+  const ensureSherpa = read('scripts/ensure-sherpa-onnx-darwin.js');
+  assert.match(ensureSherpa, /sherpa-onnx-darwin-x64/);
+  assert.match(ensureSherpa, /sherpa-onnx-darwin-arm64/);
+  assert.match(ensureSherpa, /sherpa-onnx\.node/);
 });
