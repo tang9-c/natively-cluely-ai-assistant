@@ -1,10 +1,29 @@
 // electron/services/research/CompanyResearchEngine.ts
+import { app } from 'electron';
 import type {
   CompanyDossier, ProfileResearchCompanyResponse, ResearchProgress,
 } from './types';
 import type { TavilySearchProvider } from './TavilySearchProvider';
 import type { CompanyResearchCache } from './CompanyResearchCache';
 import type { ResearchDossierBuilder } from './ResearchDossierBuilder';
+
+/**
+ * Emit a one-line structured log for a research-pipeline stage.
+ * Format: `[Research] stage=<name> <key>=<value> ...`
+ * No-op when packaged (production). Do NOT pass raw LLM content here.
+ *
+ * `app.isPackaged` is read lazily inside the helper (not at module load) so
+ * tests running under ELECTRON_RUN_AS_NODE — where the `electron` module
+ * exports a stub without a real `app` — do not crash on import. When `app`
+ * is unavailable (test-only), we treat the environment as dev and emit.
+ */
+function researchLog(stage: string, fields: Record<string, unknown>): void {
+  if (app?.isPackaged) return;
+  const flat = Object.entries(fields)
+    .map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`)
+    .join(' ');
+  console.log(`[Research] stage=${stage} ${flat}`);
+}
 
 interface CacheAdapter {
   get(companyName: string): Promise<{ dossier: CompanyDossier; isExpired: () => boolean } | null>;
@@ -54,6 +73,7 @@ export class CompanyResearchEngine {
   constructor(private readonly opts: EngineOpts) {}
 
   async research(companyName: string, opts: ResearchOpts = {}): Promise<ProfileResearchCompanyResponse> {
+    const researchStartedAt = Date.now();
     const trimmed = (companyName ?? '').trim();
     if (!trimmed || trimmed.length > 100) {
       return { success: false, errorCode: 'INVALID_INPUT',
@@ -62,31 +82,46 @@ export class CompanyResearchEngine {
 
     const progress = (p: ResearchProgress) => opts.onProgress?.(p);
 
+    researchLog('request', { company: trimmed, forceRefresh: !!opts.forceRefresh });
+
     progress({ stage: 'cache-check', message: '正在检查缓存...' });
+    const cacheStartedAt = Date.now();
+    let cached: { dossier: CompanyDossier; isExpired: () => boolean } | null = null;
     if (!opts.forceRefresh) {
-      const cached = await this.opts.cache.get(trimmed);
-      if (cached && !cached.isExpired()) {
-        progress({ stage: 'done', message: '缓存命中' });
-        return { success: true, dossier: cached.dossier, cached: true };
-      }
+      cached = await this.opts.cache.get(trimmed);
     }
+    if (cached && !cached.isExpired()) {
+      researchLog('cache-check', { result: 'hit', durationMs: Date.now() - cacheStartedAt });
+      researchLog('total', { result: 'success', durationMs: Date.now() - researchStartedAt, source: 'cache-hit' });
+      progress({ stage: 'done', message: '缓存命中' });
+      return { success: true, dossier: cached.dossier, cached: true };
+    }
+    researchLog('cache-check', { result: 'miss', durationMs: Date.now() - cacheStartedAt });
 
     progress({ stage: 'searching', message: '正在搜索...' });
     const queries = this.buildQueries(trimmed);
+    const searchStartedAt = Date.now();
     let sources: Array<{ title: string; url: string; content: string }> = [];
     try {
       sources = await this.opts.search.search(queries);
+      researchLog('tavily-search', {
+        queries: queries.length,
+        results: sources.length,
+        durationMs: Date.now() - searchStartedAt,
+      });
     } catch (err) {
       // Use err.name duck-typing instead of `instanceof` because esbuild's
       // bundling produces a separate copy of the TavilyError class inside
       // this module, so cross-module instanceof checks would fail.
       const errName = (err as { name?: string } | null)?.name;
       if (errName === 'TavilyQuotaError') {
+        researchLog('total', { result: 'failure', durationMs: Date.now() - researchStartedAt, errorCode: 'TAVILY_QUOTA_EXHAUSTED' });
         return { success: false, searchQuotaExhausted: true,
           errorCode: 'TAVILY_QUOTA_EXHAUSTED',
           error: 'Tavily 搜索额度已用完，请在 Tavily 控制台升级或等待下月重置' };
       }
       if (errName === 'TavilyAuthError') {
+        researchLog('total', { result: 'failure', durationMs: Date.now() - researchStartedAt, errorCode: 'TAVILY_INVALID_KEY' });
         return { success: false, errorCode: 'TAVILY_INVALID_KEY',
           error: 'Tavily API key 无效，请检查设置' };
       }
@@ -112,6 +147,7 @@ export class CompanyResearchEngine {
       const name = (err as { name?: string } | null)?.name;
       const isTimeout = name === 'AbortError' || /timed?\s*out/i.test(String((err as Error)?.message ?? ''));
       const code = isTimeout ? 'LLM_TIMEOUT' : 'LLM_FAILED';
+      researchLog('total', { result: 'failure', durationMs: Date.now() - researchStartedAt, errorCode: code });
       return {
         success: false,
         errorCode: code,
@@ -121,6 +157,11 @@ export class CompanyResearchEngine {
       };
     }
 
+    researchLog('total', {
+      result: 'success',
+      durationMs: Date.now() - researchStartedAt,
+      source: dossier.source,
+    });
     await this.opts.cache.put(trimmed, dossier);
     progress({ stage: 'done', message: '完成' });
     return { success: true, dossier, cached: false };
