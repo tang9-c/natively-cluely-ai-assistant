@@ -454,12 +454,22 @@ function parseStructuredPayload(raw: unknown): unknown {
   if (typeof raw !== 'string') return raw;
 
   const cleaned = stripMarkdownFence(raw.trim());
+  // Sanitize raw control characters (ASCII 0x00-0x1F) that appear INSIDE JSON
+  // string literals — Doubao Pro on Chinese prompts emits pretty-printed JSON
+  // where long string values (multi-line `summary` fields, bullet text) carry
+  // raw \n / \t bytes inside the quoted value. RFC 8259 §7 forbids unescaped
+  // control chars in strings, so V8's JSON.parse rejects the payload with
+  // "Bad control character in string literal in JSON at position N" (debug
+  // session 2026-06-23, 麦科田 sample — position 3064 line 117 col 32). Control
+  // characters that appear OUTSIDE strings (whitespace between fields) are
+  // left alone so pretty-printed JSON still parses correctly.
+  const sanitized = sanitizeControlCharsInStrings(cleaned);
   try {
-    return JSON.parse(cleaned);
+    return JSON.parse(sanitized);
   } catch (directErr) {
-    const extracted = extractFirstJsonObject(cleaned);
+    const extracted = extractFirstJsonObject(sanitized);
     if (!extracted) {
-      parseFailedLog(cleaned, directErr);
+      parseFailedLog(sanitized, directErr);
       throw directErr;
     }
     try {
@@ -469,6 +479,88 @@ function parseStructuredPayload(raw: unknown): unknown {
       throw extractErr;
     }
   }
+}
+
+/**
+ * Walk a JSON-like string and escape raw control characters (ASCII 0x00-0x1F)
+ * that appear INSIDE string literals. The walker tracks `inString` / `escaped`
+ * state using the same rules as `extractFirstJsonObject`, so already-escaped
+ * sequences (e.g. the two-byte literal `\n` written as backslash + n) are
+ * preserved untouched — we only rewrite raw control bytes that the LLM wrote
+ * as raw bytes inside the string body.
+ *
+ * Escaping map (RFC 8259 §7):
+ *   0x09 (TAB) → `\t`,  0x0A (LF) → `\n`,  0x0D (CR) → `\r`,
+ *   other 0x00-0x1F → `\u00XX` (e.g. 0x01 → ``).
+ *
+ * Control characters OUTSIDE strings are passed through verbatim — JSON
+ * allows raw whitespace (SPACE / TAB / LF / CR) between tokens, and rewriting
+ * it would change the JSON rather than repair it. If the walker encounters
+ * something that looks like JSON (a `{` or `[` between strings) it continues
+ * tracking depth normally; we never need to track depth here because we're
+ * only transforming bytes inside strings, not validating structure.
+ *
+ * Edge cases handled:
+ *  - `\\` inside a string is a backslash escape, not a string terminator
+ *    (the `escaped` flag consumes the next byte unconditionally).
+ *  - `\"` inside a string is an escaped quote — `escaped` is set by the
+ *    preceding backslash so the `"` is treated as content, not terminator.
+ *  - Already-escaped `\n` (two chars: backslash + n) is NOT a control char
+ *    — the backslash byte is 0x5C and 'n' is 0x6E, both > 0x1F, so the
+ *    walker passes them through. After JSON.parse re-interprets the escape
+ *    the result is a real newline byte in the JS string, matching the
+ *    LLM's intent.
+ */
+function sanitizeControlCharsInStrings(text: string): string {
+  let inString = false;
+  let escaped = false;
+  let out = '';
+  let dirty = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const code = ch.charCodeAt(0);
+    if (inString) {
+      if (escaped) {
+        // The previous char was a backslash — this byte is escaped content
+        // (including a literal `"`, `\`, `/`, `b`, `f`, `n`, `r`, `t`, `u`,
+        // or any other byte). Pass it through untouched and clear `escaped`.
+        out += ch;
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\') {
+        out += ch;
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = false;
+        out += ch;
+        continue;
+      }
+      if (code < 0x20) {
+        // Raw control char inside a string literal — emit the JSON escape
+        // sequence and mark the output dirty so we only allocate a new
+        // string when we actually rewrote something (fast path for the
+        // common case of well-formed LLM output that has no control chars).
+        dirty = true;
+        if (code === 0x09) out += '\\t';
+        else if (code === 0x0A) out += '\\n';
+        else if (code === 0x0D) out += '\\r';
+        else out += `\\u${code.toString(16).padStart(4, '0')}`;
+        continue;
+      }
+      out += ch;
+      continue;
+    }
+    // Outside a string: only a `"` opens one. Backslashes and control bytes
+    // here are just JSON whitespace and pass through verbatim.
+    if (ch === '"') {
+      inString = true;
+    }
+    out += ch;
+  }
+  return dirty ? out : text;
 }
 
 /**

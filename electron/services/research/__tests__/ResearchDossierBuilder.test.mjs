@@ -508,7 +508,141 @@ describe('ResearchDossierBuilder', () => {
     }
   });
 
-  // Debug session 2026-06-22 (正浩创新 sample): LLM emitted `citation: null`
+  // Debug session 2026-06-23 (麦科田 sample, position 3064 line 117 col 32):
+  // Doubao Pro emitted pretty-printed JSON where long string values
+  // (e.g. multi-line `summary` fields) contained LITERAL raw newlines inside
+  // the string literal — invalid per RFC 8259 §7. V8's JSON.parse rejects the
+  // payload with `Bad control character in string literal in JSON at position N`
+  // and the dossier is rejected as `LLM_FAILED`. The parser must sanitize
+  // these raw control characters (escape them as \n / \t / \r / \u00XX) when
+  // they appear inside JSON string literals before handing off to JSON.parse.
+  // This test reproduces that exact LLM-output shape end-to-end through
+  // `build()` (LLM returns the raw string, not a parsed object) so we catch
+  // regressions in the sanitizer, not just in JSON.parse itself.
+  test('build() accepts LLM output with raw newline characters inside JSON string values', async () => {
+    // Hand-craft a raw LLM response that mirrors what Doubao Pro produces on
+    // Chinese prompts: pretty-printed JSON, multi-line `summary` strings with
+    // raw \n bytes inside the quoted value. Position 3064 in the real sample
+    // is inside the 4th dimension's `summary` — reproducing here at smaller
+    // scale is enough to exercise the sanitizer path end-to-end.
+    const rawLlmOutput = [
+      '{',
+      '  "schemaVersion": "1.0",',
+      '  "companyName": "麦科田",',
+      '  "financials": {',
+      // raw LF inside the string literal — invalid JSON, exactly the
+      // production failure mode.
+      '    "summary": "麦科田是一家医疗器械公司，\n营收持续增长。",',
+      '    "details": [ { "text": "医疗器械制造" } ],',
+      '    "confidence": "high"',
+      '  },',
+      '  "business":    { "summary": "s", "details": [], "confidence": "high" },',
+      '  "strategy":    { "summary": "s", "details": [], "confidence": "high" },',
+      '  "people":      { "summary": "s", "details": [], "confidence": "high" },',
+      '  "infrastructure": { "summary": "s", "details": [], "confidence": "high" },',
+      '  "procurement": { "summary": "s", "details": [], "confidence": "high" },',
+      '  "sources": []',
+      '}',
+    ].join('\n');
+
+    // Sanity check the fixture itself: JSON.parse on the unfixed raw output
+    // must throw the same V8 error the production logs show. If this stops
+    // throwing in a future Node version, the sanitizer is no longer needed
+    // and this test (and the sanitizer) can be deleted.
+    assert.throws(
+      () => JSON.parse(rawLlmOutput),
+      /Bad control character in string literal/,
+      'fixture must reproduce the production parse failure mode',
+    );
+
+    const llm = { generateStructured: async () => rawLlmOutput };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    const out = await b.build('麦科田', [{ title: 't', url: 'https://x.example', content: 's' }]);
+
+    // The raw LF inside `summary` should have been escaped to a 2-char \n
+    // sequence by the sanitizer, parsed back, and the newline must survive
+    // in the resulting string. (JSON.parse re-interprets \n escape sequences
+    // back into the original newline byte in the resulting JS string.)
+    assert.equal(out.financials.summary, '麦科田是一家医疗器械公司，\n营收持续增长。');
+    assert.equal(out.financials.details[0].text, '医疗器械制造');
+    assert.equal(out.companyName, '麦科田');
+  });
+
+  // Debug session 2026-06-23: same root cause as above, but the raw control
+  // character appears inside a bullet's `text` field. This is the most
+  // common shape in practice (LLMs put pretty line breaks inside long bullet
+  // descriptions as well as summaries). The sanitizer must handle nested
+  // string values, not just top-level ones.
+  test('build() accepts LLM output with raw tab characters inside nested bullet text', async () => {
+    const rawLlmOutput = [
+      '{',
+      '  "schemaVersion": "1.0",',
+      '  "companyName": "X",',
+      '  "financials": {',
+      // Raw TAB (0x09) inside the bullet text — also a "Bad control character".
+      '    "summary": "ok",',
+      '    "details": [ { "text": "first\tsecond\tthird" } ],',
+      '    "confidence": "high"',
+      '  },',
+      '  "business":    { "summary": "s", "details": [], "confidence": "high" },',
+      '  "strategy":    { "summary": "s", "details": [], "confidence": "high" },',
+      '  "people":      { "summary": "s", "details": [], "confidence": "high" },',
+      '  "infrastructure": { "summary": "s", "details": [], "confidence": "high" },',
+      '  "procurement": { "summary": "s", "details": [], "confidence": "high" },',
+      '  "sources": []',
+      '}',
+    ].join('\n');
+
+    assert.throws(
+      () => JSON.parse(rawLlmOutput),
+      /Bad control character in string literal/,
+      'fixture must reproduce the production parse failure mode',
+    );
+
+    const llm = { generateStructured: async () => rawLlmOutput };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    const out = await b.build('X', [{ title: 't', url: 'https://x.example', content: 's' }]);
+    assert.equal(out.financials.details[0].text, 'first\tsecond\tthird');
+  });
+
+  // Debug session 2026-06-23: regression guard. The sanitizer must NOT
+  // touch control characters that appear OUTSIDE string literals (between
+  // tokens, in whitespace). Pretty-printed JSON relies on raw \n between
+  // fields being preserved as-is. Naively escaping every control char in
+  // the entire payload would break that and JSON.parse would fail with a
+  // different error.
+  test('build() preserves raw newlines outside JSON string literals (between fields)', async () => {
+    // Construct a payload identical to the tab-in-bullet test, but with all
+    // string contents valid. The raw newlines between fields are the only
+    // control chars and they live OUTSIDE strings — the sanitizer must
+    // leave them alone.
+    const rawLlmOutput = [
+      '{',
+      '  "schemaVersion": "1.0",',
+      '  "companyName": "X",',
+      '  "financials":    { "summary": "s", "details": [], "confidence": "high" },',
+      '  "business":      { "summary": "s", "details": [], "confidence": "high" },',
+      '  "strategy":      { "summary": "s", "details": [], "confidence": "high" },',
+      '  "people":        { "summary": "s", "details": [], "confidence": "high" },',
+      '  "infrastructure": { "summary": "s", "details": [], "confidence": "high" },',
+      '  "procurement":   { "summary": "s", "details": [], "confidence": "high" },',
+      '  "sources": []',
+      '}',
+    ].join('\n');
+
+    const llm = { generateStructured: async () => rawLlmOutput };
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+    // Should succeed without throwing — pretty-printed JSON (raw \n between
+    // fields, no control chars inside strings) is already valid.
+    const out = await b.build('X', [{ title: 't', url: 'https://x.example', content: 's' }]);
+    assert.equal(out.companyName, 'X');
+    assert.equal(out.sources.length, 0);
+  });
+
+  // Debug session 2026-06-23 (正浩创新 sample): LLM emitted `citation: null`
   // for bullets it had no source to cite. Zod's `.optional()` accepts
   // `undefined` but rejects `null`, producing 11 invalid_type errors across
   // 5 dimensions. Schema now uses `.nullish()` AND normalizeBullets deletes
