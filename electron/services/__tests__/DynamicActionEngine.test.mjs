@@ -675,3 +675,713 @@ test('findRecentActionForIntent maps classifier intent to active dynamic action'
   assert.equal(matching?.confirmedIntent, 'handle_objection');
   assert.equal(nonMatching, null);
 });
+
+// ============================================================================
+// Per-Trigger fixtures (one block per mode, covers every ActionTrigger).
+// Each fixture asserts: type matches, label matches trigger.label,
+// priority is preserved end-to-end.
+// ============================================================================
+
+function findAction(actions, type) {
+  return actions.find((a) => a.type === type);
+}
+
+describe('ActionTrigger fixtures — general mode', () => {
+  test('general_assistance_request (zh) → priority 0.82', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '帮我想一下我该怎么回应这个问题',
+      modeTemplateType: 'general', modeId: 'm_g', sessionId: 's_g_assist',
+    });
+    const a = findAction(actions, 'general_assistance_request');
+    assert.ok(a, 'expected general_assistance_request');
+    assert.equal(a.label, 'Suggest response');
+    assert.equal(a.priority, 0.82);
+    assert.equal(a.confidence, 0.82);
+  });
+
+  test('general_assistance_request (en) → priority 0.82', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: 'Can you help me figure out how to respond?',
+      modeTemplateType: 'general', modeId: 'm_g', sessionId: 's_g_assist_en',
+    });
+    const a = findAction(actions, 'general_assistance_request');
+    assert.ok(a);
+    assert.equal(a.priority, 0.82);
+  });
+
+  test('general_summarize (zh) → priority 0.78', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '总结一下刚才讨论了什么',
+      modeTemplateType: 'general', modeId: 'm_g', sessionId: 's_g_sum',
+    });
+    const a = findAction(actions, 'general_summarize');
+    assert.ok(a);
+    assert.equal(a.label, 'Summarize discussion');
+    assert.equal(a.priority, 0.78);
+  });
+
+  test('general_summarize (en) → priority 0.78', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: 'Quick summary of what they said, please.',
+      modeTemplateType: 'general', modeId: 'm_g', sessionId: 's_g_sum_en',
+    });
+    const a = findAction(actions, 'general_summarize');
+    assert.ok(a);
+    assert.equal(a.priority, 0.78);
+  });
+
+  test('general_explain (zh) → priority 0.76', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '能通俗一点解释一下这是什么意思',
+      modeTemplateType: 'general', modeId: 'm_g', sessionId: 's_g_exp',
+    });
+    const a = findAction(actions, 'general_explain');
+    assert.ok(a);
+    assert.equal(a.label, 'Explain clearly');
+    assert.equal(a.priority, 0.76);
+  });
+
+  test('general_explain (en) → priority 0.76', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: 'Can you break that down in simple terms?',
+      modeTemplateType: 'general', modeId: 'm_g', sessionId: 's_g_exp_en',
+    });
+    const a = findAction(actions, 'general_explain');
+    assert.ok(a);
+    assert.equal(a.priority, 0.76);
+  });
+});
+
+describe('ActionTrigger fixtures — negotiation mode', () => {
+  test('budget_probe (zh) → priority 0.88', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '你们的预算是多少?',
+      modeTemplateType: 'negotiation', modeId: 'm_n', sessionId: 's_n_bp',
+    });
+    const a = findAction(actions, 'budget_probe');
+    assert.ok(a);
+    assert.equal(a.label, 'Handle budget probe');
+    assert.equal(a.priority, 0.88);
+  });
+
+  test('budget_probe (en) → priority 0.88', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: "What's your budget range for this engagement?",
+      modeTemplateType: 'negotiation', modeId: 'm_n', sessionId: 's_n_bp_en',
+    });
+    const a = findAction(actions, 'budget_probe');
+    assert.ok(a);
+    assert.equal(a.priority, 0.88);
+  });
+
+  test('price_pushback (zh) → priority 0.9', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '价格太高了,能打个折吗?',
+      modeTemplateType: 'negotiation', modeId: 'm_n', sessionId: 's_n_pp',
+    });
+    const a = findAction(actions, 'price_pushback');
+    assert.ok(a);
+    assert.equal(a.label, 'Counter price pushback');
+    assert.equal(a.priority, 0.9);
+  });
+
+  test('price_pushback (en) → priority 0.9', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: 'The price is too high — can you do better?',
+      modeTemplateType: 'negotiation', modeId: 'm_n', sessionId: 's_n_pp_en',
+    });
+    const a = findAction(actions, 'price_pushback');
+    assert.ok(a);
+    assert.equal(a.priority, 0.9);
+  });
+
+  test('final_offer (zh) → priority 0.92', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '这是我们的最终报价,接受就接受',
+      modeTemplateType: 'negotiation', modeId: 'm_n', sessionId: 's_n_fo',
+    });
+    const a = findAction(actions, 'final_offer');
+    assert.ok(a);
+    assert.equal(a.label, 'Respond to final offer');
+    assert.equal(a.priority, 0.92);
+  });
+
+  test('final_offer (en) → priority 0.92', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: 'This is our final offer — take it or leave it.',
+      modeTemplateType: 'negotiation', modeId: 'm_n', sessionId: 's_n_fo_en',
+    });
+    const a = findAction(actions, 'final_offer');
+    assert.ok(a);
+    assert.equal(a.priority, 0.92);
+  });
+});
+
+describe('ActionTrigger fixtures — sales mode', () => {
+  test('pricing_objection (zh) → priority 0.9', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '这个价格太高了,能不能便宜点?',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_po',
+    });
+    const a = findAction(actions, 'pricing_objection');
+    assert.ok(a);
+    assert.equal(a.label, 'Handle pricing objection');
+    assert.equal(a.priority, 0.9);
+  });
+
+  test('competitor_mention (en: Gong) → priority 0.85', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: "We're already using Gong for our sales calls.",
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_cm',
+    });
+    const a = findAction(actions, 'competitor_mention');
+    assert.ok(a);
+    assert.equal(a.label, 'Handle competitor comparison');
+    assert.equal(a.priority, 0.85);
+  });
+
+  test('buying_signal (zh: 敲定) → priority 0.95', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '那我们就敲定吧,准备签合同',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_bs',
+    });
+    const a = findAction(actions, 'buying_signal');
+    assert.ok(a);
+    assert.equal(a.label, 'Seize buying signal');
+    assert.equal(a.priority, 0.95);
+  });
+
+  test('roi_question (en: ROI) → priority 0.88', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: 'What is the ROI on this and the payback period?',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_roi',
+    });
+    const a = findAction(actions, 'roi_question');
+    assert.ok(a);
+    assert.equal(a.label, 'Build ROI case');
+    assert.equal(a.priority, 0.88);
+  });
+
+  test('pricing_request (zh: 报价) → priority 0.86', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '请发我报价单',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_pr',
+    });
+    const a = findAction(actions, 'pricing_request');
+    assert.ok(a);
+    assert.equal(a.label, 'Frame pricing request');
+    assert.equal(a.priority, 0.86);
+  });
+});
+
+describe('ActionTrigger fixtures — recruiting mode', () => {
+  test('candidate_concern (zh: 签证) → priority 0.85', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '我比较担心签证和入职时间的问题',
+      modeTemplateType: 'recruiting', modeId: 'm_r', sessionId: 's_r_cc',
+    });
+    const a = findAction(actions, 'candidate_concern');
+    assert.ok(a);
+    assert.equal(a.label, 'Address candidate concern');
+    assert.equal(a.priority, 0.85);
+  });
+
+  test('strong_fit_signal (zh: 很匹配) → priority 0.9', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '这个岗位很匹配,我很感兴趣',
+      modeTemplateType: 'recruiting', modeId: 'm_r', sessionId: 's_r_sf',
+    });
+    const a = findAction(actions, 'strong_fit_signal');
+    assert.ok(a);
+    assert.equal(a.label, 'Reinforce positive signal');
+    assert.equal(a.priority, 0.9);
+  });
+
+  test('candidate_experience_probe (zh: 举一个具体例子) → priority 0.84', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '你能举一个具体的例子吗?',
+      modeTemplateType: 'recruiting', modeId: 'm_r', sessionId: 's_r_cep',
+    });
+    const a = findAction(actions, 'candidate_experience_probe');
+    assert.ok(a);
+    assert.equal(a.label, 'Guide candidate story');
+    assert.equal(a.priority, 0.84);
+  });
+});
+
+describe('ActionTrigger fixtures — team-meet mode', () => {
+  test('action_item (zh: 我来负责) → priority 0.9', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '这件事我来负责,周五前完成',
+      modeTemplateType: 'team-meet', modeId: 'm_tm', sessionId: 's_tm_ai',
+    });
+    const a = findAction(actions, 'action_item');
+    assert.ok(a);
+    assert.equal(a.label, 'Capture action item');
+    assert.equal(a.priority, 0.9);
+  });
+
+  test('decision_point (zh: 决定了) → priority 0.85', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '我们决定了用方案 A',
+      modeTemplateType: 'team-meet', modeId: 'm_tm', sessionId: 's_tm_dp',
+    });
+    const a = findAction(actions, 'decision_point');
+    assert.ok(a);
+    assert.equal(a.label, 'Confirm decision');
+    assert.equal(a.priority, 0.85);
+  });
+
+  test('blocker_check (zh: 阻塞) → priority 0.84', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '现在有什么阻塞吗?',
+      modeTemplateType: 'team-meet', modeId: 'm_tm', sessionId: 's_tm_bc',
+    });
+    const a = findAction(actions, 'blocker_check');
+    assert.ok(a);
+    assert.equal(a.label, 'Clarify blocker');
+    assert.equal(a.priority, 0.84);
+  });
+
+  test('owner_deadline_check (zh: 谁负责) → priority 0.83', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '这件事谁负责?截止日期是什么时候?',
+      modeTemplateType: 'team-meet', modeId: 'm_tm', sessionId: 's_tm_od',
+    });
+    const a = findAction(actions, 'owner_deadline_check');
+    assert.ok(a);
+    assert.equal(a.label, 'Lock owner and deadline');
+    assert.equal(a.priority, 0.83);
+  });
+});
+
+describe('ActionTrigger fixtures — looking-for-work / interview mode', () => {
+  test('behavioral_question (en: STAR) → priority 0.9', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: 'Tell me about a time you led a team through a difficult challenge.',
+      modeTemplateType: 'looking-for-work', modeId: 'm_iw', sessionId: 's_iw_bq',
+    });
+    const a = findAction(actions, 'behavioral_question');
+    assert.ok(a);
+    assert.equal(a.label, 'Answer with STAR story');
+    assert.equal(a.priority, 0.9);
+  });
+
+  test('intro_pitch (zh: 自我介绍) → priority 0.88', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '请介绍一下你自己',
+      modeTemplateType: 'looking-for-work', modeId: 'm_iw', sessionId: 's_iw_ip',
+    });
+    const a = findAction(actions, 'intro_pitch');
+    assert.ok(a);
+    assert.equal(a.label, 'Craft intro pitch');
+    assert.equal(a.priority, 0.88);
+  });
+
+  test('company_motivation (en: why us) → priority 0.86', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: 'Why do you want to work here? What interests you about us?',
+      modeTemplateType: 'looking-for-work', modeId: 'm_iw', sessionId: 's_iw_cm',
+    });
+    const a = findAction(actions, 'company_motivation');
+    assert.ok(a);
+    assert.equal(a.label, 'Answer company motivation');
+    assert.equal(a.priority, 0.86);
+  });
+
+  test('weakness_question (zh: 缺点) → priority 0.84', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '你的最大缺点是什么?',
+      modeTemplateType: 'looking-for-work', modeId: 'm_iw', sessionId: 's_iw_wq',
+    });
+    const a = findAction(actions, 'weakness_question');
+    assert.ok(a);
+    assert.equal(a.label, 'Handle weakness question');
+    assert.equal(a.priority, 0.84);
+  });
+});
+
+describe('ActionTrigger fixtures — lecture mode', () => {
+  test('concept_explanation (zh: 这个叫) → priority 0.85', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '这个叫做贝叶斯定理',
+      modeTemplateType: 'lecture', modeId: 'm_l', sessionId: 's_l_ce',
+    });
+    const a = findAction(actions, 'concept_explanation');
+    assert.ok(a);
+    assert.equal(a.label, 'Explain concept');
+    assert.equal(a.priority, 0.85);
+  });
+
+  test('worked_example (zh: 举个例子) → priority 0.82', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '我们举个例子来理解这个概念',
+      modeTemplateType: 'lecture', modeId: 'm_l', sessionId: 's_l_we',
+    });
+    const a = findAction(actions, 'worked_example');
+    assert.ok(a);
+    assert.equal(a.label, 'Create worked example');
+    assert.equal(a.priority, 0.82);
+  });
+});
+
+describe('ActionTrigger fixtures — technical-interview mode', () => {
+  test('coding_problem (zh: 实现) → priority 0.95', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '请实现一个二叉树的层序遍历算法',
+      modeTemplateType: 'technical-interview', modeId: 'm_ti', sessionId: 's_ti_cp',
+    });
+    const a = findAction(actions, 'coding_problem');
+    assert.ok(a);
+    assert.equal(a.label, 'Solve coding problem');
+    assert.equal(a.priority, 0.95);
+  });
+
+  test('screen_coding_problem (en: shown on screen) → priority 0.92', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: 'The problem shown on screen asks for a function.',
+      modeTemplateType: 'technical-interview', modeId: 'm_ti', sessionId: 's_ti_sc',
+    });
+    const a = findAction(actions, 'screen_coding_problem');
+    assert.ok(a);
+    assert.equal(a.label, 'Answer from screen');
+    assert.equal(a.priority, 0.92);
+  });
+
+  test('complexity_analysis (zh: 时间复杂度) → priority 0.9', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '请分析这个解法的时间复杂度',
+      modeTemplateType: 'technical-interview', modeId: 'm_ti', sessionId: 's_ti_ca',
+    });
+    const a = findAction(actions, 'complexity_analysis');
+    assert.ok(a);
+    assert.equal(a.label, 'Analyze complexity');
+    assert.equal(a.priority, 0.9);
+  });
+
+  test('system_design_prompt (en: design a system) → priority 0.89', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: 'Design a system to scale to 1M requests per second.',
+      modeTemplateType: 'technical-interview', modeId: 'm_ti', sessionId: 's_ti_sd',
+    });
+    const a = findAction(actions, 'system_design_prompt');
+    assert.ok(a);
+    assert.equal(a.label, 'Structure system design');
+    assert.equal(a.priority, 0.89);
+  });
+});
+
+// ============================================================================
+// Priority propagation: trigger.priority → action.priority (and confidence).
+// ============================================================================
+
+describe('DynamicActionEngine priority propagation', () => {
+  test('detectActions: action.priority === trigger.priority', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const cases = [
+      { mode: 'sales', transcript: '我们准备签合同了', expectedType: 'buying_signal', expectedPriority: 0.95 },
+      { mode: 'sales', transcript: 'This is too expensive.', expectedType: 'pricing_objection', expectedPriority: 0.9 },
+      { mode: 'team-meet', transcript: "I'll handle it by Friday.", expectedType: 'action_item', expectedPriority: 0.9 },
+      { mode: 'lecture', transcript: 'This is called Bayes theorem.', expectedType: 'concept_explanation', expectedPriority: 0.85 },
+    ];
+    for (const c of cases) {
+      const actions = engine.detectActions({
+        transcript: c.transcript,
+        modeTemplateType: c.mode, modeId: `m_${c.mode}`, sessionId: `s_${c.mode}_${c.expectedType}`,
+      });
+      const a = findAction(actions, c.expectedType);
+      assert.ok(a, `${c.mode}/${c.expectedType} should fire`);
+      assert.equal(a.priority, c.expectedPriority, `${c.expectedType} priority`);
+      assert.equal(a.confidence, c.expectedPriority, `${c.expectedType} confidence`);
+    }
+  });
+
+  test('getTopActions: returns actions sorted by priority descending', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const sessionId = 's_priority_sort';
+    engine.detectActions({
+      transcript: '价格太高,太贵了',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId,
+    });
+    const top = engine.getTopActions(sessionId);
+    for (let i = 1; i < top.length; i++) {
+      assert.ok(top[i - 1].priority >= top[i].priority, `priority descending at ${i}`);
+    }
+  });
+});
+
+// ============================================================================
+// Deduplication: same trigger within 120s window suppressed.
+// ============================================================================
+
+describe('DynamicActionEngine deduplication', () => {
+  test('same trigger called twice within window → store has only one action', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const sessionId = 's_dedup_twice';
+    const params = {
+      transcript: 'The price is too high for our budget.',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId,
+    };
+    const a1 = engine.detectActions(params);
+    const a2 = engine.detectActions(params);
+    assert.ok(a1.length > 0, 'first call should emit');
+    assert.equal(a2.length, 0, 'second call within window should be suppressed');
+    const stored = engine.getStore().getAllActions(sessionId);
+    const pricing = stored.filter((x) => x.type === 'pricing_objection');
+    assert.equal(pricing.length, 1, 'exactly one pricing_objection stored');
+  });
+
+  test('different trigger types in same session are NOT deduped against each other', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const sessionId = 's_dedup_distinct';
+    engine.detectActions({
+      transcript: 'The price is too expensive.',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId,
+    });
+    engine.detectActions({
+      transcript: 'We are ready to move forward.',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId,
+    });
+    const stored = engine.getStore().getAllActions(sessionId);
+    assert.equal(stored.length, 2, 'two distinct triggers → two stored actions');
+  });
+
+  test('dismissed action can be re-detected (dismissed is excluded from dedup window)', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const sessionId = 's_dedup_dismiss';
+    const transcript = 'This is too expensive for us.';
+    const first = engine.detectActions({
+      transcript, modeTemplateType: 'sales', modeId: 'm_s', sessionId,
+    });
+    assert.ok(first.length > 0);
+    engine.dismissAction(first[0].id);
+    const second = engine.detectActions({
+      transcript, modeTemplateType: 'sales', modeId: 'm_s', sessionId,
+    });
+    assert.ok(second.length > 0, 'after dismiss, same trigger should re-fire');
+  });
+});
+
+// ============================================================================
+// Emotion propagation: params.emotion → action.emotion + action.emotionSource
+// ============================================================================
+
+describe('DynamicActionEngine emotion propagation', () => {
+  test('detectActions: action.emotion reflects params.emotion', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: 'The price is too expensive for our budget.',
+      speaker: 'Prospect',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_emo_detect',
+      emotion: 'angry',
+      emotionSource: 'sensevoice',
+    });
+    const a = findAction(actions, 'pricing_objection');
+    assert.ok(a);
+    assert.equal(a.emotion, 'angry');
+    assert.equal(a.emotionSource, 'sensevoice');
+  });
+
+  test('detectActions: no emotion param → action.emotion is undefined', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: 'The price is too expensive.',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_emo_none',
+    });
+    const a = findAction(actions, 'pricing_objection');
+    assert.ok(a);
+    assert.equal(a.emotion, undefined);
+    assert.equal(a.emotionSource, undefined);
+  });
+
+  test('assessSignals: emotion carries into action when set', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.assessSignals({
+      transcript: 'The price is too expensive.',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_emo_assess',
+      emotion: 'sad',
+      emotionSource: 'sensevoice',
+    });
+    assert.ok(actions.length > 0);
+    assert.equal(actions[0].emotion, 'sad');
+    assert.equal(actions[0].emotionSource, 'sensevoice');
+  });
+});
+
+// ============================================================================
+// REGRESSION: 3 consecutive identical triggers in the same session
+// must NOT produce 3 duplicate DynamicActions.
+// ============================================================================
+
+describe('DynamicActionEngine regression — 3 consecutive identical triggers', () => {
+  test('detectActions: 3 identical sales triggers → 1 stored action', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const sessionId = 's_regression_3x_sales';
+    const transcript = 'The price is too expensive for our budget.';
+    const params = {
+      transcript, speaker: 'Prospect',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId,
+    };
+    const turn1 = engine.detectActions(params);
+    const turn2 = engine.detectActions(params);
+    const turn3 = engine.detectActions(params);
+
+    assert.equal(turn1.length, 1, 'turn 1: 1 action emitted');
+    assert.equal(turn2.length, 0, 'turn 2: deduped (0 emitted)');
+    assert.equal(turn3.length, 0, 'turn 3: deduped (0 emitted)');
+
+    const stored = engine.getStore().getAllActions(sessionId);
+    assert.equal(stored.length, 1, 'only one DynamicAction in store across 3 turns');
+    assert.equal(stored[0].type, 'pricing_objection');
+  });
+
+  test('detectActions: 3 identical team-meet action_item → 1 stored action', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const sessionId = 's_regression_3x_team';
+    const transcript = "I'll handle it by Friday.";
+    const params = {
+      transcript, speaker: 'Team member',
+      modeTemplateType: 'team-meet', modeId: 'm_tm', sessionId,
+    };
+    const turn1 = engine.detectActions(params);
+    const turn2 = engine.detectActions(params);
+    const turn3 = engine.detectActions(params);
+
+    assert.equal(turn1.length, 1, 'turn 1: 1 action emitted');
+    assert.equal(turn2.length, 0, 'turn 2: deduped');
+    assert.equal(turn3.length, 0, 'turn 3: deduped');
+
+    const stored = engine.getStore().getAllActions(sessionId);
+    assert.equal(stored.length, 1, 'only one DynamicAction in store across 3 turns');
+    assert.equal(stored[0].type, 'action_item');
+  });
+
+  test('assessSignals: 3 identical triggers with classifier intent → no duplicate store', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const sessionId = 's_regression_3x_assess';
+    const intentResult = { intent: 'handle_objection', confidence: 0.92, answerShape: 'x' };
+
+    const turn1 = engine.assessSignals({
+      transcript: '太贵了',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId, intentResult, now: 1_000,
+    });
+    const turn2 = engine.assessSignals({
+      transcript: '太贵了',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId, intentResult, now: 2_000,
+    });
+    const turn3 = engine.assessSignals({
+      transcript: '太贵了',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId, intentResult, now: 3_000,
+    });
+
+    assert.equal(turn1.length, 1, 'turn 1: 1 action emitted');
+    assert.equal(turn2.length, 0, 'turn 2: deduped');
+    assert.equal(turn3.length, 0, 'turn 3: deduped');
+
+    const stored = engine.getStore().getAllActions(sessionId);
+    assert.equal(stored.length, 1, 'only one DynamicAction in store across 3 turns');
+  });
+
+  test('detectActions: 3 identical in DIFFERENT sessions → 3 stored actions', async () => {
+    // Negative case: dedup is per-session, so different sessions must NOT collapse.
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const transcript = 'The price is too expensive.';
+    const a1 = engine.detectActions({
+      transcript, modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_neg_1',
+    });
+    const a2 = engine.detectActions({
+      transcript, modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_neg_2',
+    });
+    const a3 = engine.detectActions({
+      transcript, modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_neg_3',
+    });
+    assert.equal(a1.length, 1);
+    assert.equal(a2.length, 1);
+    assert.equal(a3.length, 1);
+    const total =
+      engine.getStore().getAllActions('s_neg_1').length +
+      engine.getStore().getAllActions('s_neg_2').length +
+      engine.getStore().getAllActions('s_neg_3').length;
+    assert.equal(total, 3, 'dedup is per-session, not global');
+  });
+});
