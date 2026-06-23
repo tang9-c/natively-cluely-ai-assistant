@@ -27,6 +27,7 @@ type TinyPromptModule = {
   TINY_MODE_LOOKING_FOR_WORK_PROMPT: string;
   TINY_MODE_TECHNICAL_INTERVIEW_PROMPT: string;
   TINY_MODE_LECTURE_PROMPT: string;
+  TINY_MODE_FDE_PROMPT: string;
 };
 
 type PromptModule = {
@@ -37,6 +38,7 @@ type PromptModule = {
   MODE_LOOKING_FOR_WORK_PROMPT: string;
   MODE_TECHNICAL_INTERVIEW_PROMPT: string;
   MODE_LECTURE_PROMPT: string;
+  MODE_FDE_PROMPT: string;
 };
 
 let promptModule: PromptModule | null = null;
@@ -733,6 +735,7 @@ async function modePromptFor(mode: string): Promise<string> {
       'looking-for-work': tiny.TINY_MODE_LOOKING_FOR_WORK_PROMPT,
       'technical-interview': tiny.TINY_MODE_TECHNICAL_INTERVIEW_PROMPT,
       lecture: tiny.TINY_MODE_LECTURE_PROMPT,
+      fde: tiny.TINY_MODE_FDE_PROMPT,
     };
     return byMode[mode] ?? tiny.TINY_MODE_GENERAL_PROMPT;
   }
@@ -746,6 +749,7 @@ async function modePromptFor(mode: string): Promise<string> {
     'looking-for-work': promptModule.MODE_LOOKING_FOR_WORK_PROMPT,
     'technical-interview': promptModule.MODE_TECHNICAL_INTERVIEW_PROMPT,
     lecture: promptModule.MODE_LECTURE_PROMPT,
+    fde: promptModule.MODE_FDE_PROMPT,
   };
   return byMode[mode] ?? promptModule.MODE_GENERAL_PROMPT;
 }
