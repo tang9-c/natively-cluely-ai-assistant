@@ -5,6 +5,7 @@ import {
     MODE_GENERAL_PROMPT,
     MODE_LOOKING_FOR_WORK_PROMPT,
     MODE_SALES_PROMPT,
+    MODE_FDE_PROMPT,
     MODE_RECRUITING_PROMPT,
     MODE_TEAM_MEET_PROMPT,
     MODE_LECTURE_PROMPT,
@@ -124,13 +125,14 @@ export const TEMPLATE_NOTE_SECTIONS: Record<ModeTemplateType, Array<{ title: str
     ],
 };
 
-const TEMPLATE_SYSTEM_PROMPTS: Partial<Record<ModeTemplateType, string>> = {
+const TEMPLATE_SYSTEM_PROMPTS: Record<ModeTemplateType, string> = {
     // General = universal adaptive copilot (own prompt, not technical interview)
     general: MODE_GENERAL_PROMPT,
     'technical-interview': MODE_TECHNICAL_INTERVIEW_PROMPT,
 
     'looking-for-work': MODE_LOOKING_FOR_WORK_PROMPT,
     sales: MODE_SALES_PROMPT,
+    fde: MODE_FDE_PROMPT,
     recruiting: MODE_RECRUITING_PROMPT,
     'team-meet': MODE_TEAM_MEET_PROMPT,
     lecture: MODE_LECTURE_PROMPT,

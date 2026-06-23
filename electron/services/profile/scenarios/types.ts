@@ -4,6 +4,7 @@ import type { ModeTemplateType } from '../../ModesManager';
 export type ScenarioType =
   | 'general'
   | 'sales'
+  | 'fde'
   | 'interview'
   | 'lecture'
   | 'team-meet';
@@ -15,6 +16,11 @@ export type InterviewSubScenario =
 
 export type ScenarioDocSubtype =
   | 'customer-profile'
+  | 'customer-architecture'
+  | 'customer-workflow'
+  | 'security-requirements'
+  | 'prototype-scope'
+  | 'delivery-risk'
   | 'product-intro'
   | 'solution-brief'
   | 'case-study'
