@@ -267,10 +267,9 @@ const getSttSummary = (
 };
 
 const getStatusToneClass = (tone: 'ok' | 'warn' | 'error'): string => {
-  if (tone === 'error') return 'text-rose-600 dark:text-rose-300 border-rose-500/20 bg-rose-500/10';
-  if (tone === 'warn')
-    return 'text-amber-600 dark:text-amber-300 border-amber-500/20 bg-amber-500/10';
-  return 'text-emerald-600 dark:text-emerald-300 border-emerald-500/20 bg-emerald-500/10';
+  if (tone === 'error') return 'overlay-status-error';
+  if (tone === 'warn') return 'overlay-status-warn';
+  return 'overlay-status-ok';
 };
 
 const MessageRow = React.memo(
@@ -3875,7 +3874,7 @@ Provide only the answer, nothing else.`;
                       {/* Live transcription preview */}
                       {(manualTranscript || voiceInput) && (
                         <div className="max-w-[85%] px-3.5 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-[18px] rounded-tr-[4px]">
-                          <span className="text-[13px] text-emerald-300">
+                          <span className="text-[13px] overlay-status-ok-text">
                             {voiceInput}
                             {voiceInput && manualTranscript ? ' ' : ''}
                             {manualTranscript}
@@ -3895,7 +3894,7 @@ Provide only the answer, nothing else.`;
                           className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
                           style={{ animationDelay: '300ms' }}
                         />
-                        <span className="text-[10px] text-emerald-400/70 ml-1">正在聆听...</span>
+                        <span className="text-[10px] overlay-status-ok-text opacity-80 ml-1">正在聆听...</span>
                       </div>
                     </div>
                   )}

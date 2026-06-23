@@ -88,6 +88,15 @@
   --overlay-text-muted: rgba(255, 255, 255, 0.7);
   --overlay-text-placeholder: rgba(255, 255, 255, 0.58);
   --overlay-text-strong: #ffffff;
+  --overlay-status-ok-text: #6ee7b7;
+  --overlay-status-ok-bg: rgba(16, 185, 129, 0.14);
+  --overlay-status-ok-border: rgba(16, 185, 129, 0.28);
+  --overlay-status-warn-text: #fcd34d;
+  --overlay-status-warn-bg: rgba(245, 158, 11, 0.14);
+  --overlay-status-warn-border: rgba(245, 158, 11, 0.28);
+  --overlay-status-error-text: #fda4af;
+  --overlay-status-error-bg: rgba(244, 63, 94, 0.14);
+  --overlay-status-error-border: rgba(244, 63, 94, 0.28);
   --overlay-shell-blur: calc(2px + (var(--overlay-opacity) * 18px));
   --overlay-pill-blur: calc(1px + (var(--overlay-opacity) * 12px));
   --overlay-transcript-blur: calc(var(--overlay-opacity) * 6px);
@@ -177,6 +186,15 @@
   --overlay-text-muted:      rgba(107, 114, 128, 0.90);
   --overlay-text-placeholder:rgba(156, 163, 175, 0.90);
   --overlay-text-strong:     #111827;
+  --overlay-status-ok-text:  #047857;
+  --overlay-status-ok-bg:    rgba(16, 185, 129, 0.12);
+  --overlay-status-ok-border:rgba(16, 185, 129, 0.26);
+  --overlay-status-warn-text:#92400e;
+  --overlay-status-warn-bg:  rgba(245, 158, 11, 0.13);
+  --overlay-status-warn-border: rgba(245, 158, 11, 0.28);
+  --overlay-status-error-text:#be123c;
+  --overlay-status-error-bg: rgba(244, 63, 94, 0.12);
+  --overlay-status-error-border: rgba(244, 63, 94, 0.26);
   --overlay-shell-blur:      calc(2px + (var(--overlay-opacity) * 18px));
   --overlay-pill-blur:       calc(2px + (var(--overlay-opacity) * 12px));
   --overlay-transcript-blur: calc(var(--overlay-opacity) * 5px);
@@ -218,36 +236,98 @@
    The transparent-window Electron context means backdrop-filter shows real
    screen content — giving authentic glass refraction for free.
    ─────────────────────────────────────────────────────────────────────── */
-[data-interface-theme="liquid-glass"],
-[data-theme='light'] [data-interface-theme="liquid-glass"] {
-  /* Force white text regardless of system theme — glass always reads dark */
-  --overlay-text-primary:     rgba(255, 255, 255, 0.96);
-  --overlay-text-secondary:   rgba(255, 255, 255, 0.82);
-  --overlay-text-muted:       rgba(255, 255, 255, 0.60);
-  --overlay-text-placeholder: rgba(255, 255, 255, 0.40);
+[data-interface-theme="liquid-glass"] {
+  /* Dark liquid glass: high-contrast white text over a real dark substrate. */
+  --overlay-text-primary:     rgba(255, 255, 255, 0.97);
+  --overlay-text-secondary:   rgba(255, 255, 255, 0.86);
+  --overlay-text-muted:       rgba(255, 255, 255, 0.72);
+  --overlay-text-placeholder: rgba(255, 255, 255, 0.58);
   --overlay-text-strong:      #ffffff;
+  --overlay-status-ok-text:   #9ff3d2;
+  --overlay-status-ok-bg:     rgb(16 185 129 / calc(0.16 + (var(--overlay-opacity) * 0.08)));
+  --overlay-status-ok-border: rgb(16 185 129 / calc(0.30 + (var(--overlay-opacity) * 0.10)));
+  --overlay-status-warn-text: #ffe08a;
+  --overlay-status-warn-bg:   rgb(245 158 11 / calc(0.16 + (var(--overlay-opacity) * 0.08)));
+  --overlay-status-warn-border: rgb(245 158 11 / calc(0.30 + (var(--overlay-opacity) * 0.10)));
+  --overlay-status-error-text:#ffb4c0;
+  --overlay-status-error-bg:  rgb(244 63 94 / calc(0.15 + (var(--overlay-opacity) * 0.08)));
+  --overlay-status-error-border: rgb(244 63 94 / calc(0.30 + (var(--overlay-opacity) * 0.10)));
 
-  /* Glass surfaces — near-transparent white tints */
-  --overlay-panel-bg:           rgba(255, 255, 255, 0.055);
+  /* Opacity-aware glass substrate tokens. Liquid glass must never rely only on
+     the unknown desktop backdrop for contrast. */
+  --glass-shell-base:         rgb(12 18 32 / calc(0.58 + (var(--overlay-opacity) * 0.24)));
+  --glass-shell-sheen-strong: rgba(255, 255, 255, 0.16);
+  --glass-shell-sheen-mid:    rgba(255, 255, 255, 0.07);
+  --glass-shell-sheen-soft:   rgba(255, 255, 255, 0.04);
+  --glass-shell-shadow:       rgba(0, 0, 0, 0.55);
+  --glass-pill-base:          rgb(255 255 255 / calc(0.04 + (var(--overlay-opacity) * 0.04)));
+  --glass-surface-base:       rgb(255 255 255 / calc(0.035 + (var(--overlay-opacity) * 0.045)));
+  --glass-surface-hover-base: rgb(255 255 255 / calc(0.055 + (var(--overlay-opacity) * 0.06)));
+  --glass-input-base:         rgb(255 255 255 / calc(0.035 + (var(--overlay-opacity) * 0.04)));
+  --glass-input-hover-base:   rgb(255 255 255 / calc(0.055 + (var(--overlay-opacity) * 0.055)));
+  --glass-input-focus-base:   rgb(255 255 255 / calc(0.07 + (var(--overlay-opacity) * 0.065)));
+  --glass-transcript-bg:      rgb(0 0 0 / calc(0.10 + (var(--overlay-opacity) * 0.12)));
+
+  --overlay-panel-bg:           var(--glass-shell-base);
   --overlay-border:             rgba(255, 255, 255, 0.18);
   --overlay-border-soft:        rgba(255, 255, 255, 0.10);
-  --overlay-chip-bg:            rgba(255, 255, 255, 0.10);
-  --overlay-chip-hover-bg:      rgba(255, 255, 255, 0.18);
-  --overlay-input-bg:           rgba(255, 255, 255, 0.07);
-  --overlay-input-hover-bg:     rgba(255, 255, 255, 0.12);
-  --overlay-input-focus-bg:     rgba(255, 255, 255, 0.14);
-  --overlay-control-bg:         rgba(255, 255, 255, 0.07);
-  --overlay-control-hover-bg:   rgba(255, 255, 255, 0.13);
-  --overlay-icon-bg:            rgba(255, 255, 255, 0.07);
-  --overlay-icon-hover-bg:      rgba(255, 255, 255, 0.15);
-  --overlay-code-bg:            rgba(0, 0, 0, 0.22);
-  --overlay-code-border:        rgba(255, 255, 255, 0.08);
-  --overlay-code-header-bg:     rgba(0, 0, 0, 0.18);
+  --overlay-chip-bg:            var(--glass-surface-base);
+  --overlay-chip-hover-bg:      var(--glass-surface-hover-base);
+  --overlay-input-bg:           var(--glass-input-base);
+  --overlay-input-hover-bg:     var(--glass-input-hover-base);
+  --overlay-input-focus-bg:     var(--glass-input-focus-base);
+  --overlay-control-bg:         var(--glass-surface-base);
+  --overlay-control-hover-bg:   var(--glass-surface-hover-base);
+  --overlay-icon-bg:            var(--glass-surface-base);
+  --overlay-icon-hover-bg:      var(--glass-surface-hover-base);
+  --overlay-code-bg:            rgba(0, 0, 0, 0.30);
+  --overlay-code-border:        rgba(255, 255, 255, 0.10);
+  --overlay-code-header-bg:     rgba(0, 0, 0, 0.22);
   --overlay-inline-code-bg:     rgba(255, 255, 255, 0.10);
   --overlay-panel-shadow:       rgba(0, 0, 0, 0.28);
   --overlay-pill-shadow:        rgba(0, 0, 0, 0.20);
   --overlay-shell-blur:         48px;
   --overlay-pill-blur:          28px;
+}
+
+[data-theme='light'] [data-interface-theme="liquid-glass"] {
+  /* Light liquid glass: dark text over a frosted light substrate. */
+  --overlay-text-primary:     rgba(17, 24, 39, 0.96);
+  --overlay-text-secondary:   rgba(31, 41, 55, 0.88);
+  --overlay-text-muted:       rgba(55, 65, 81, 0.78);
+  --overlay-text-placeholder: rgba(75, 85, 99, 0.68);
+  --overlay-text-strong:      #111827;
+  --overlay-status-ok-text:   #065f46;
+  --overlay-status-ok-bg:     rgb(16 185 129 / calc(0.13 + (var(--overlay-opacity) * 0.08)));
+  --overlay-status-ok-border: rgb(16 185 129 / calc(0.26 + (var(--overlay-opacity) * 0.08)));
+  --overlay-status-warn-text: #78350f;
+  --overlay-status-warn-bg:   rgb(245 158 11 / calc(0.14 + (var(--overlay-opacity) * 0.08)));
+  --overlay-status-warn-border: rgb(245 158 11 / calc(0.26 + (var(--overlay-opacity) * 0.08)));
+  --overlay-status-error-text:#9f1239;
+  --overlay-status-error-bg:  rgb(244 63 94 / calc(0.12 + (var(--overlay-opacity) * 0.08)));
+  --overlay-status-error-border: rgb(244 63 94 / calc(0.24 + (var(--overlay-opacity) * 0.08)));
+
+  --glass-shell-base:         rgb(245 249 255 / calc(0.64 + (var(--overlay-opacity) * 0.26)));
+  --glass-shell-sheen-strong: rgba(255, 255, 255, 0.62);
+  --glass-shell-sheen-mid:    rgba(255, 255, 255, 0.32);
+  --glass-shell-sheen-soft:   rgba(255, 255, 255, 0.20);
+  --glass-shell-shadow:       rgba(15, 23, 42, 0.16);
+  --glass-pill-base:          rgb(255 255 255 / calc(0.40 + (var(--overlay-opacity) * 0.36)));
+  --glass-surface-base:       rgb(255 255 255 / calc(0.34 + (var(--overlay-opacity) * 0.34)));
+  --glass-surface-hover-base: rgb(255 255 255 / calc(0.48 + (var(--overlay-opacity) * 0.34)));
+  --glass-input-base:         rgb(248 251 255 / calc(0.42 + (var(--overlay-opacity) * 0.36)));
+  --glass-input-hover-base:   rgb(248 251 255 / calc(0.54 + (var(--overlay-opacity) * 0.34)));
+  --glass-input-focus-base:   rgb(239 246 255 / calc(0.62 + (var(--overlay-opacity) * 0.30)));
+  --glass-transcript-bg:      rgb(255 255 255 / calc(0.36 + (var(--overlay-opacity) * 0.32)));
+
+  --overlay-border:             rgba(15, 23, 42, 0.14);
+  --overlay-border-soft:        rgba(15, 23, 42, 0.10);
+  --overlay-code-bg:            rgba(248, 250, 252, 0.78);
+  --overlay-code-border:        rgba(15, 23, 42, 0.10);
+  --overlay-code-header-bg:     rgba(241, 245, 249, 0.82);
+  --overlay-inline-code-bg:     rgba(219, 234, 254, 0.62);
+  --overlay-panel-shadow:       rgba(15, 23, 42, 0.12);
+  --overlay-pill-shadow:        rgba(15, 23, 42, 0.10);
 }
 
 /* Glass shell — pure CSS liquid-glass.
@@ -277,19 +357,19 @@
 [data-interface-theme="liquid-glass"] .overlay-shell-surface {
   background:
     linear-gradient(135deg,
-      rgba(255, 255, 255, 0.16) 0%,
-      rgba(255, 255, 255, 0.07) 45%,
-      rgba(255, 255, 255, 0.04) 65%,
-      rgba(255, 255, 255, 0.12) 100%
+      var(--glass-shell-sheen-strong) 0%,
+      var(--glass-shell-sheen-mid) 45%,
+      var(--glass-shell-sheen-soft) 65%,
+      var(--glass-shell-sheen-mid) 100%
     ),
-    rgba(12, 18, 32, 0.70) !important;
+    var(--glass-shell-base) !important;
   border-color: transparent !important;
   backdrop-filter: blur(20px) saturate(165%) !important;
   -webkit-backdrop-filter: blur(20px) saturate(165%) !important;
   box-shadow:
     inset 0 1.5px 0 rgba(255, 255, 255, 0.44),
     inset 0 0 0 1px rgba(255, 255, 255, 0.13),
-    0 28px 72px rgba(0, 0, 0, 0.55),
+    0 28px 72px var(--glass-shell-shadow),
     0 8px 22px rgba(0, 0, 0, 0.30) !important;
   position: relative;
 }
@@ -340,7 +420,7 @@
       rgba(255, 255, 255, 0.06) 45%,
       rgba(255, 255, 255, 0.10) 100%
     ),
-    rgba(255, 255, 255, 0.06) !important;
+    var(--glass-pill-base) !important;
   border-color: transparent !important;
   backdrop-filter: blur(20px) saturate(170%) !important;
   -webkit-backdrop-filter: blur(20px) saturate(170%) !important;
@@ -354,7 +434,9 @@
 
 /* Transcript divider — subtle rule */
 [data-interface-theme="liquid-glass"] .overlay-transcript-surface {
-  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+  background: var(--glass-transcript-bg) !important;
+  border-bottom-color: var(--overlay-border-soft) !important;
+  border-radius: 999px;
 }
 
 /* Code blocks — dark tinted glass with jelly rim, for code readability */
@@ -384,7 +466,7 @@
       rgba(255, 255, 255, 0.04) 60%,
       rgba(255, 255, 255, 0.08) 100%
     ),
-    rgba(255, 255, 255, 0.05) !important;
+    var(--overlay-chip-bg) !important;
   border-color: transparent !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.45),
@@ -404,7 +486,7 @@
       rgba(255, 255, 255, 0.06) 60%,
       rgba(255, 255, 255, 0.12) 100%
     ),
-    rgba(255, 255, 255, 0.08) !important;
+    var(--overlay-chip-hover-bg) !important;
   border-color: transparent !important;
   transform: translateY(-1px);
   box-shadow:
@@ -431,7 +513,7 @@
       rgba(255, 255, 255, 0.03) 50%,
       rgba(255, 255, 255, 0.06) 100%
     ),
-    rgba(255, 255, 255, 0.04) !important;
+    var(--overlay-input-bg) !important;
   border-color: transparent !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.30),
@@ -441,6 +523,13 @@
 }
 
 [data-interface-theme="liquid-glass"] .overlay-input-surface:hover {
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.13) 0%,
+      rgba(255, 255, 255, 0.04) 50%,
+      rgba(255, 255, 255, 0.08) 100%
+    ),
+    var(--overlay-input-hover-bg) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.40),
     inset 0 -0.5px 0 rgba(0, 0, 0, 0.08),
@@ -450,6 +539,13 @@
 
 [data-interface-theme="liquid-glass"] .overlay-input-surface:focus,
 [data-interface-theme="liquid-glass"] .overlay-input-surface:focus-within {
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.16) 0%,
+      rgba(255, 255, 255, 0.05) 50%,
+      rgba(255, 255, 255, 0.10) 100%
+    ),
+    var(--overlay-input-focus-bg) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.50),
     inset 0 -0.5px 0 rgba(0, 0, 0, 0.10),
@@ -465,7 +561,7 @@
       rgba(255, 255, 255, 0.04) 55%,
       rgba(255, 255, 255, 0.08) 100%
     ),
-    rgba(255, 255, 255, 0.05) !important;
+    var(--overlay-control-bg) !important;
   border-color: transparent !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.40),
@@ -484,7 +580,7 @@
       rgba(255, 255, 255, 0.05) 55%,
       rgba(255, 255, 255, 0.10) 100%
     ),
-    rgba(255, 255, 255, 0.07) !important;
+    var(--overlay-control-hover-bg) !important;
   transform: translateY(-0.5px);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
@@ -501,7 +597,7 @@
       rgba(255, 255, 255, 0.06) 60%,
       rgba(255, 255, 255, 0.10) 100%
     ),
-    rgba(255, 255, 255, 0.06) !important;
+    var(--overlay-icon-bg) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.50),
     inset 0 -1px 0 rgba(0, 0, 0, 0.10),
@@ -521,7 +617,7 @@
       rgba(255, 255, 255, 0.08) 60%,
       rgba(255, 255, 255, 0.14) 100%
     ),
-    rgba(255, 255, 255, 0.10) !important;
+    var(--overlay-icon-hover-bg) !important;
   transform: translateY(-1px);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.68),
@@ -667,7 +763,7 @@
       rgba(255, 255, 255, 0.03) 50%,
       rgba(255, 255, 255, 0.07) 100%
     ),
-    rgba(255, 255, 255, 0.04) !important;
+    var(--glass-surface-base) !important;
   border-color: transparent !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.34),
@@ -1113,6 +1209,36 @@ body {
 
 .overlay-input-text::placeholder {
   color: var(--overlay-text-placeholder);
+}
+
+.overlay-status-ok {
+  color: var(--overlay-status-ok-text);
+  background: var(--overlay-status-ok-bg);
+  border-color: var(--overlay-status-ok-border);
+}
+
+.overlay-status-warn {
+  color: var(--overlay-status-warn-text);
+  background: var(--overlay-status-warn-bg);
+  border-color: var(--overlay-status-warn-border);
+}
+
+.overlay-status-error {
+  color: var(--overlay-status-error-text);
+  background: var(--overlay-status-error-bg);
+  border-color: var(--overlay-status-error-border);
+}
+
+.overlay-status-ok-text {
+  color: var(--overlay-status-ok-text);
+}
+
+.overlay-status-warn-text {
+  color: var(--overlay-status-warn-text);
+}
+
+.overlay-status-error-text {
+  color: var(--overlay-status-error-text);
 }
 
 /* Interaction Utilities - Reusable */
