@@ -121,7 +121,10 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         type: 'buying_signal',
         patterns: [
             /\b(ready to move|send contract|legal review|next steps|schedule|finalize)\b/i,
-            zh('准备推进', '发合同', '法务审核', '下一步', '安排时间', '敲定'),
+            // Debug session 2026-06-23: bare `准备签` (e.g. "我们准备签合同了")
+            // wasn't in the alternation; only `准备推进` matched. Common close-to-
+            // closing phrasing like 准备签 / 准备签合同 / 准备签一下 slipped past.
+            zh('准备签', '准备推进', '发合同', '法务审核', '下一步', '安排时间', '敲定'),
         ],
         priority: 0.95,
         label: 'Seize buying signal',
@@ -288,7 +291,12 @@ const INTERVIEW_TRIGGERS: ActionTrigger[] = [
         type: 'weakness_question',
         patterns: [
             /\b(strengths and weaknesses|biggest weakness|area for improvement|weakness)\b/i,
-            zh('优缺点', '最大的缺点', '需要改进', '短板', '不足'),
+            // Debug session 2026-06-23: bare `缺点` (the canonical "what's your
+            // weakness?" opener in Chinese interviews) wasn't in the alternation;
+            // only the longer phrases like `优缺点` / `最大的缺点` matched.
+            // `你的最大缺点是什么?` and `讲讲你的缺点` slipped past, missing the
+            // most common Chinese weakness-question phrasing.
+            zh('缺点', '优缺点', '最大的缺点', '需要改进', '短板', '不足'),
         ],
         priority: 0.84,
         label: 'Handle weakness question',
