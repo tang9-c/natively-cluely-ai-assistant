@@ -15,6 +15,7 @@ const MODE_PROMPTS = {
   'looking-for-work': prompts.MODE_LOOKING_FOR_WORK_PROMPT,
   'technical-interview': prompts.MODE_TECHNICAL_INTERVIEW_PROMPT,
   lecture: prompts.MODE_LECTURE_PROMPT,
+  fde: prompts.MODE_FDE_PROMPT,
 };
 
 const MODE_CONTRACT_TERMS = {
@@ -25,6 +26,7 @@ const MODE_CONTRACT_TERMS = {
   'looking-for-work': ['候选人', '面试', '简历', '薪资'],
   'technical-interview': ['技术面试', '编程', '系统设计', '复杂度', 'Edge cases'],
   lecture: ['学生', '讲座', '学习伙伴', '概念', '作业', '学科'],
+  fde: ['前线部署工程师', '客户现场', '捕捉模式', '现场发言模式', '风险', '验证步骤'],
 };
 
 const UNIQUE_MODE_TERMS = {
@@ -35,6 +37,7 @@ const UNIQUE_MODE_TERMS = {
   'looking-for-work': ['面试', '简历'],
   'technical-interview': ['编程', '系统设计'],
   lecture: ['讲座', '学习伙伴'],
+  fde: ['前线部署工程师', '现场发言模式'],
 };
 
 function assertIncludesAll(text, terms, label) {
@@ -100,6 +103,7 @@ test('mode prompts are meaningfully distinct rather than flattened generic advic
   assert.ok(!MODE_PROMPTS['team-meet'].includes('OBJECTION DETECTED'));
   assert.ok(!MODE_PROMPTS.recruiting.includes('Output IS what the candidate says aloud'));
   assert.ok(!MODE_PROMPTS.lecture.includes('You are the seller\'s spoken voice'));
+  assert.ok(!MODE_PROMPTS.fde.includes('全能的会议与对话副驾驶'));
 });
 
 test('profile-aware modes mention candidate/profile grounding without requiring every mode to overfit resume data', () => {
