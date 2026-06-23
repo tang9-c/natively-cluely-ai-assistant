@@ -7,6 +7,7 @@
 export const MODE_TEMPLATE_LABELS: Record<string, string> = {
   general: '通用',
   sales: '销售',
+  fde: 'FDE',
   recruiting: '招聘',
   'team-meet': '团队会议',
   'looking-for-work': '求职',
@@ -21,6 +22,7 @@ export const MODE_TEMPLATE_LABELS: Record<string, string> = {
 export const DEFAULT_MODE_NAMES: Record<string, string> = {
   general: '通用',
   sales: '销售',
+  fde: 'FDE',
   recruiting: '招聘',
   'team-meet': '团队会议',
   'looking-for-work': '求职',

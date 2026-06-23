@@ -16,6 +16,7 @@ const { ModesManager, MODE_TEMPLATES, TEMPLATE_NOTE_SECTIONS } = modesMod;
 const EXPECTED_MODE_TYPES = [
   'general',
   'sales',
+  'fde',
   'recruiting',
   'team-meet',
   'looking-for-work',
@@ -122,9 +123,9 @@ beforeEach(() => {
   installDb(makeDb());
 });
 
-test('MODE_TEMPLATES enumerates exactly the seven production modes in UI order', () => {
+test('MODE_TEMPLATES enumerates exactly the eight production modes in UI order', () => {
   assert.deepEqual(MODE_TEMPLATES.map(mode => mode.type), EXPECTED_MODE_TYPES);
-  assert.equal(new Set(MODE_TEMPLATES.map(mode => mode.type)).size, 7);
+  assert.equal(new Set(MODE_TEMPLATES.map(mode => mode.type)).size, 8);
   for (const mode of MODE_TEMPLATES) {
     assert.equal(typeof mode.label, 'string');
     assert.ok(mode.label.length > 0);
@@ -288,7 +289,7 @@ test('isPremiumKnowledgeInterceptAllowed gates the whole premium intercept by ac
   );
 
   const INTERCEPT_ALLOWED = new Set(['general', 'sales', 'recruiting', 'looking-for-work']);
-  const INTERCEPT_BLOCKED = new Set(['technical-interview', 'team-meet', 'lecture']);
+  const INTERCEPT_BLOCKED = new Set(['fde', 'technical-interview', 'team-meet', 'lecture']);
 
   // Every production mode must land on one side of the gate — guards against
   // a future template silently inheriting the wrong default.
