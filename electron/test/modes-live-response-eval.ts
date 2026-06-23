@@ -721,6 +721,16 @@ function selectedScenarios(): EvalScenario[] {
   return ids?.length ? scenarios.filter(scenario => ids.includes(scenario.id)) : scenarios;
 }
 
+function promptForKnownMode(mode: string, byMode: Record<string, string>): string {
+  const prompt = byMode[mode];
+  if (prompt) {
+    return prompt;
+  }
+
+  const availableModes = Object.keys(byMode).sort();
+  throw new Error(`Unknown mode "${mode}". Available modes: ${availableModes.join(', ')}`);
+}
+
 async function modePromptFor(mode: string): Promise<string> {
   // Tiny-tier path (local small models): exercise tinyPrompts.ts instead
   // of the cloud-tier prompts.ts. Selected by env vars so the default
@@ -737,7 +747,7 @@ async function modePromptFor(mode: string): Promise<string> {
       lecture: tiny.TINY_MODE_LECTURE_PROMPT,
       fde: tiny.TINY_MODE_FDE_PROMPT,
     };
-    return byMode[mode] ?? tiny.TINY_MODE_GENERAL_PROMPT;
+    return promptForKnownMode(mode, byMode);
   }
 
   promptModule ??= await import('../llm/prompts') as unknown as PromptModule;
@@ -751,7 +761,7 @@ async function modePromptFor(mode: string): Promise<string> {
     lecture: promptModule.MODE_LECTURE_PROMPT,
     fde: promptModule.MODE_FDE_PROMPT,
   };
-  return byMode[mode] ?? promptModule.MODE_GENERAL_PROMPT;
+  return promptForKnownMode(mode, byMode);
 }
 
 async function buildHelper(): Promise<any> {
