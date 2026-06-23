@@ -193,6 +193,62 @@ describe('ModeHybridRetriever', () => {
     assert.strictEqual(result.chunks[0].vectorScore, 0, 'Vector score should be 0 in fallback');
   });
 
+  test('Fallback lexical retrieval matches Chinese sales case-study terms', async () => {
+    const { ModeHybridRetriever } = await loadRetriever();
+
+    mockEmbeddingPipeline.isReady = mock.fn(() => false);
+
+    const retriever = new ModeHybridRetriever(mockDb, mockVectorStore, mockEmbeddingPipeline);
+    const files = [{
+      id: 'file_zh_case',
+      modeId: 'mode_sales',
+      fileName: '客户案例.md',
+      content: '价格异议案例：客户担心产品报价太高。回应时引用 Acme 案例，说明上线 30 天降低成本 20%。',
+      createdAt: new Date().toISOString()
+    }];
+
+    const result = await retriever.retrieve({
+      query: '客户说价格太高，需要产品案例证明价值',
+      modeId: 'mode_sales',
+      files,
+      tokenBudget: 1000,
+      topK: 3,
+      hasTranscript: true
+    });
+
+    assert.strictEqual(result.usedFallback, true);
+    assert.strictEqual(result.usedHybrid, false);
+    assert.ok(result.chunks.length > 0, 'Chinese query should retrieve via lexical fallback');
+    assert.match(result.formattedContext, /Acme 案例/);
+  });
+
+  test('Mixed Chinese-English retrieval query uses entities such as ROI, Acme, and 价格', async () => {
+    const { ModeHybridRetriever } = await loadRetriever();
+
+    mockEmbeddingPipeline.isReady = mock.fn(() => false);
+
+    const retriever = new ModeHybridRetriever(mockDb, mockVectorStore, mockEmbeddingPipeline);
+    const files = [{
+      id: 'file_roi_case',
+      modeId: 'mode_sales',
+      fileName: 'roi-case.md',
+      content: 'Acme ROI 案例：当客户关注价格和回本周期时，强调产品上线后减少人工成本。',
+      createdAt: new Date().toISOString()
+    }];
+
+    const result = await retriever.retrieve({
+      query: 'mode:sales\nintent:pricing_objection\nentities:Acme, ROI, 价格\nlatestTurn:客户说产品价格太高，需要案例证明 ROI',
+      modeId: 'mode_sales',
+      files,
+      tokenBudget: 1000,
+      topK: 3,
+      hasTranscript: true
+    });
+
+    assert.ok(result.chunks.length > 0, 'Mixed retrievalQuery should match entity-rich Chinese reference');
+    assert.match(result.formattedContext, /Acme ROI 案例/);
+  });
+
   // Test 9: Combined score combines FTS + vector correctly
   test('Combined score combines FTS + vector correctly', async () => {
     const { ModeHybridRetriever } = await loadRetriever();

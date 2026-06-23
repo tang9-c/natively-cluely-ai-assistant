@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { ModeEventContext } from './llm';
 import type { TranscriptEmotion } from '../shared/senseVoiceEmotion';
 
 // Types for the exposed Electron API
@@ -312,7 +313,7 @@ interface ElectronAPI {
   generateWhatToSay: (
     question?: string,
     imagePaths?: string[],
-    options?: { promptInstruction?: string; persist?: boolean; source?: string },
+    options?: { promptInstruction?: string; persist?: boolean; source?: string; modeEvent?: ModeEventContext },
   ) => Promise<{
     answer: string | null;
     question?: string;
@@ -1306,7 +1307,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateWhatToSay: (
     question?: string,
     imagePaths?: string[],
-    options?: { promptInstruction?: string; persist?: boolean; source?: string },
+    options?: { promptInstruction?: string; persist?: boolean; source?: string; modeEvent?: ModeEventContext },
   ) => ipcRenderer.invoke('generate-what-to-say', question, imagePaths, options),
   generateClarify: () => ipcRenderer.invoke('generate-clarify'),
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) =>

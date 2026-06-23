@@ -42,10 +42,14 @@ const ACTION_PATTERNS = [
   /\b(?:i|we|you|he|she|they|[A-Z][a-z]+)\s+(?:will|should|need to|needs to|must|can|could)\s+(.+?)(?:\s+(?:by|before|on|after)\s+([^.!?]+))?[.!?]?$/i,
   /\b(?:action|todo|follow up):\s*(.+?)(?:\s+(?:by|before|on|after)\s+([^.!?]+))?[.!?]?$/i,
   /\b(?:send|share|schedule|book|prepare|review|follow up|circle back|introduce|email)\s+(.+?)(?:\s+(?:by|before|on|after)\s+([^.!?]+))?[.!?]?$/i,
+  /(?:下一步|后续|会后)?(?:请|麻烦|需要|可以)?(?:你们|我们|我)?\s*(发(?:一个)?案例和报价单|发(?:一个)?案例|发报价单|发送案例和报价单|发送案例|发送报价单|安排时间看合同|安排时间|跟进合同|发合同)(?:[，,。.!；;]|$)/u,
 ];
 
 const OWNER_PATTERN = /\b(I|we|you|he|she|they|[A-Z][a-z]+)\s+(?:will|should|need to|needs to|must|can|could)\b/;
 const DEADLINE_PATTERN = /\b(?:by|before|on|after)\s+([^.!?]+)$/i;
+const ZH_DEADLINE_PATTERN = /(今天|明天|后天|本周|下周|周[一二三四五六日天]|星期[一二三四五六日天]|月底|季度末)前?/u;
+const SALES_OBJECTION_PATTERN = /\b(price|pricing|cost|expensive|competitor|budget|too much|not sure)\b|(?:价格|报价|预算|成本|费用|太贵|竞品|竞争对手|不确定)/i;
+const SALES_NEXT_STEP_PATTERN = /\b(next step|follow up|send|schedule|pilot|trial|contract|proposal)\b|(?:下一步|跟进|发送|发|安排|试点|试用|合同|报价单|方案|案例)/i;
 
 export function buildPostCallEnhancements(params: {
   transcript: PostCallTranscriptSegment[];
@@ -93,7 +97,7 @@ export function extractStructuredActionItems(
       const match = text.match(pattern);
       if (!match) continue;
       const owner = text.match(OWNER_PATTERN)?.[1];
-      const deadline = match[2] ?? text.match(DEADLINE_PATTERN)?.[1];
+      const deadline = match[2] ?? text.match(DEADLINE_PATTERN)?.[1] ?? text.match(ZH_DEADLINE_PATTERN)?.[0];
       addItem(match[1] ?? text, segment.timestamp, normalizeOwner(owner), deadline);
       break;
     }
@@ -151,10 +155,10 @@ export function generateCoachingInsights(
   };
 
   if (modeTemplateType === 'sales') {
-    const hasObjection = /\b(price|pricing|cost|expensive|competitor|budget|too much|not sure)\b/i.test(text);
-    const hasNextStep = /\b(next step|follow up|send|schedule|pilot|trial|contract|proposal)\b/i.test(text);
+    const hasObjection = SALES_OBJECTION_PATTERN.test(text);
+    const hasNextStep = SALES_NEXT_STEP_PATTERN.test(text);
     if (hasObjection && !sectionHasContent(summaryData, 'Objections')) {
-      add('missed_objection', 'Objection may need a clearer note', 'The conversation included objection language, but the objection section is empty.', 'opportunity', firstMatch(text, /[^.!?]*(?:price|pricing|cost|expensive|competitor|budget|too much|not sure)[^.!?]*/i));
+      add('missed_objection', 'Objection may need a clearer note', 'The conversation included objection language, but the objection section is empty.', 'opportunity', firstMatch(text, /[^。！？.!?]*(?:price|pricing|cost|expensive|competitor|budget|too much|not sure|价格|报价|预算|成本|费用|太贵|竞品|竞争对手|不确定)[^。！？.!?]*/i));
     }
     if (!hasNextStep) {
       add('missing_next_step', 'Next step was not explicit', 'Consider ending sales calls with a concrete owner and follow-up date.', 'opportunity');

@@ -53,7 +53,7 @@ import {
 import { NegotiationCoachingCard } from './NegotiationCoachingCard';
 import { SENSEVOICE_EMOTION_LABELS } from '../../shared/senseVoiceEmotion';
 import type { TranscriptEmotion } from '../../shared/senseVoiceEmotion';
-import type { DynamicActionPayload, NativeAudioTranscriptPayload } from '../types/electron';
+import type { DynamicActionModeEvent, DynamicActionPayload, NativeAudioTranscriptPayload } from '../types/electron';
 import { genMessageId } from '../utils/messageId';
 import { getCodexCliModelDisplayName } from '../utils/modelUtils';
 import { getModifierSymbol, isMac } from '../utils/platformUtils';
@@ -1940,7 +1940,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   const handleWhatToSay = async (
     promptInstruction?: string | React.MouseEvent,
-    generationOptions?: { source?: string; persist?: boolean },
+    generationOptions?: { source?: string; persist?: boolean; modeEvent?: DynamicActionModeEvent },
   ) => {
     const dynamicPromptInstruction =
       typeof promptInstruction === 'string' ? promptInstruction : undefined;
@@ -3815,10 +3815,11 @@ Provide only the answer, nothing else.`;
                                 actionable suggestions in their primary scan path. Bar self-hides
                                 when no actions are present. */}
               <DynamicActionBar
-                onAcceptAction={(action: DynamicActionPayload) => {
+                onAcceptAction={(action: DynamicActionPayload, options) => {
                   void handleWhatToSay(action.promptInstruction, {
                     source: 'dynamic_action',
                     persist: false,
+                    modeEvent: options.modeEvent,
                   });
                 }}
               />

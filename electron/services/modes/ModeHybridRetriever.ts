@@ -29,6 +29,11 @@ const CHUNK_WORDS = 140;
 const CHUNK_OVERLAP = 30;
 const MIN_COMBINED_SCORE = 0.15;
 const FTS_WEIGHT = 0.4;  // alpha for combined score: alpha * fts + (1-alpha) * vector
+const CJK_RETRIEVAL_TERMS = [
+    '价格', '产品', '案例', '报价', '报价单', '预算', '成本', '合同', 'roi',
+    '竞品', '上线', '回本', '价值', '客户', '异议', '法务', '审批', '折扣',
+    '费用', '采购', '实施', '部署', '续约', '试点', '试用',
+];
 
 function encodePayload(value: unknown): string {
     return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
@@ -40,13 +45,37 @@ function estimateTokens(text: string): number {
 
 // Simple word tokenization (matching ModeContextRetriever for FTS compatibility).
 function wordsOf(text: string): string[] {
-    return text
+    const normalized = text
         .toLowerCase()
         .replace(/['']s\b/g, '')
-        .replace(/['']/g, '')
-        .replace(/[^a-z0-9\s-]/g, ' ')
-        .split(/\s+/)
-        .filter(word => word.length > 2);
+        .replace(/['']/g, '');
+    const tokens = new Set<string>();
+
+    for (const word of normalized.match(/[a-z0-9][a-z0-9-]{1,}/g) ?? []) {
+        if (word.length > 2) tokens.add(word);
+    }
+
+    for (const sequence of text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu) ?? []) {
+        if (sequence.length <= 8) tokens.add(sequence);
+        for (let i = 0; i < sequence.length - 1; i++) {
+            tokens.add(sequence.slice(i, i + 2));
+        }
+        for (let i = 0; i < sequence.length - 2; i++) {
+            tokens.add(sequence.slice(i, i + 3));
+        }
+    }
+
+    for (const term of CJK_RETRIEVAL_TERMS) {
+        if (normalized.includes(term.toLowerCase())) {
+            tokens.add(term.toLowerCase());
+        }
+    }
+
+    return Array.from(tokens);
+}
+
+function hasCjkText(text: string): boolean {
+    return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(text);
 }
 
 interface ChunkCandidate {
@@ -241,13 +270,14 @@ export class ModeHybridRetriever {
         const adaptiveThreshold = hasTranscript
             ? MIN_COMBINED_SCORE
             : MIN_COMBINED_SCORE * Math.min(1, queryWords.size / 5);
+        const relevanceThreshold = hasCjkText(queryText) ? adaptiveThreshold * 0.55 : adaptiveThreshold;
 
         let candidates: ChunkCandidate[] = [];
 
         // Try hybrid retrieval first, fall back to lexical-only
         if (this.isEmbeddingAvailable()) {
             try {
-                candidates = await this.performHybridRetrieval(allCandidates, queryWords, queryText, adaptiveThreshold);
+                candidates = await this.performHybridRetrieval(allCandidates, queryWords, queryText, relevanceThreshold);
             } catch (error) {
                 console.warn('[ModeHybridRetriever] Hybrid retrieval failed, falling back to lexical:', error);
                 this.emitFallbackTelemetry({
@@ -257,7 +287,7 @@ export class ModeHybridRetriever {
                     modeId: params.modeId,
                     errorClass: error instanceof Error ? error.constructor.name : typeof error,
                 });
-                candidates = this.performLexicalRetrieval(allCandidates, queryWords, adaptiveThreshold);
+                candidates = this.performLexicalRetrieval(allCandidates, queryWords, relevanceThreshold);
             }
         } else {
             console.warn('[ModeHybridRetriever] Embedding provider unavailable, using lexical fallback');
@@ -267,7 +297,7 @@ export class ModeHybridRetriever {
                 queryTokenCount: queryWords.size,
                 modeId: params.modeId,
             });
-            candidates = this.performLexicalRetrieval(allCandidates, queryWords, adaptiveThreshold);
+            candidates = this.performLexicalRetrieval(allCandidates, queryWords, relevanceThreshold);
         }
 
         // Sort by combined score descending
