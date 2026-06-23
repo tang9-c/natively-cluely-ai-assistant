@@ -90,6 +90,10 @@ export type ClarifyResult =
     | { ok: true; clarification: string }
     | { ok: false; reason: ClarifyFailureReason; detail?: string };
 
+const WHAT_TO_ANSWER_FALLBACK = "Could you repeat that? I want to make sure I address your question properly.";
+const WHAT_TO_ANSWER_LABEL_EN = 'What to Answer';
+const WHAT_TO_ANSWER_LABEL_ZH = '待回答内容';
+
 export class IntelligenceEngine extends EventEmitter {
     // Mode state
     private activeMode: IntelligenceMode = 'idle';
@@ -140,9 +144,17 @@ export class IntelligenceEngine extends EventEmitter {
     private intentClassificationOptionsForTest: IntentClassificationOptions | null = null;
 
     private static isNonAnswerSentinel(answer: string): boolean {
-        const normalized = answer.trim().toLowerCase().replace(/[.!?]+$/g, '');
+        const normalized = answer.trim().toLowerCase().replace(/[.!?。！？\s]+$/g, '');
         return normalized === 'nothing actionable right now'
-            || normalized === 'nothing to capture right now';
+            || normalized === 'nothing to capture right now'
+            || normalized === WHAT_TO_ANSWER_FALLBACK.toLowerCase().replace(/[.!?。！？\s]+$/g, '');
+    }
+
+    private static inferUsageQuestionLabel(question: string | undefined, transcript: string): string {
+        if (question?.trim()) return question.trim();
+        return IntelligenceEngine.cjkCharCount(transcript) > 0
+            ? WHAT_TO_ANSWER_LABEL_ZH
+            : WHAT_TO_ANSWER_LABEL_EN;
     }
 
     private static normalizeSuggestedAnswer(answer: string): string {
@@ -759,14 +771,14 @@ export class IntelligenceEngine extends EventEmitter {
                     this.speculativeTextExpiry = Infinity;
                     this.lastTriggerTime = Date.now();
                     this.setMode('idle');
-                    return answer || "Could you repeat that? I want to make sure I address your question properly.";
+                    return answer || WHAT_TO_ANSWER_FALLBACK;
                 }
                 if (answer) {
                     this.session.addAssistantMessage(answer);
                     this.emit('suggested_answer', answer, question || 'inferred', confidence);
                 }
                 this.setMode('idle');
-                return answer || "Could you repeat that? I want to make sure I address your question properly.";
+                return answer || WHAT_TO_ANSWER_FALLBACK;
             }
 
             const contextItems = this.session.getContext(180);
@@ -865,7 +877,7 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (!fullAnswer || fullAnswer.trim().length < 5) {
-                fullAnswer = "Could you repeat that? I want to make sure I address your question properly.";
+                fullAnswer = WHAT_TO_ANSWER_FALLBACK;
             }
 
             fullAnswer = IntelligenceEngine.normalizeSuggestedAnswer(fullAnswer);
@@ -888,17 +900,19 @@ export class IntelligenceEngine extends EventEmitter {
                 return fullAnswer;
             }
 
-            this.emit('suggested_answer_token', fullAnswer, question || 'inferred', confidence);
+            const usageQuestion = IntelligenceEngine.inferUsageQuestionLabel(question, preparedTranscript);
+
+            this.emit('suggested_answer_token', fullAnswer, usageQuestion, confidence);
             this.session.addAssistantMessage(fullAnswer);
 
             this.session.pushUsage({
                 type: 'assist',
                 timestamp: Date.now(),
-                question: question || 'What to Answer',
+                question: usageQuestion,
                 answer: fullAnswer
             });
 
-            this.emit('suggested_answer', fullAnswer, question || 'What to Answer', confidence);
+            this.emit('suggested_answer', fullAnswer, usageQuestion, confidence);
 
             this.setMode('idle');
             return fullAnswer;
@@ -907,7 +921,7 @@ export class IntelligenceEngine extends EventEmitter {
             if (isSpeculative) { this.speculativeText = null; this.speculativeTextExpiry = Infinity; }
             this.emit('error', error as Error, 'what_to_say');
             this.setMode('idle');
-            return "Could you repeat that? I want to make sure I address your question properly.";
+            return WHAT_TO_ANSWER_FALLBACK;
         }
     }
 

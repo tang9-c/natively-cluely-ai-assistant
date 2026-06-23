@@ -71,6 +71,21 @@ test('runWhatShouldISay suppresses normalized sentinel variants', async () => {
   assert.deepEqual(session.getFullUsage(), []);
 });
 
+test('runWhatShouldISay suppresses provider fallback repeat prompt from usage history', async () => {
+  const fallback = 'Could you repeat that? I want to make sure I address your question properly.';
+  const { engine, session } = await makeEngineWithAnswer([fallback]);
+  const events = [];
+  engine.on('suggested_answer_token', token => events.push(['token', token]));
+  engine.on('suggested_answer', answer => events.push(['final', answer]));
+
+  const answer = await engine.runWhatShouldISay(undefined, 0.9, undefined, { skipCooldown: true });
+
+  assert.equal(answer, null);
+  assert.deepEqual(events, []);
+  assert.deepEqual(session.getFullUsage(), []);
+  assert.equal(session.getFullTranscript().some(segment => segment.text === fallback), false);
+});
+
 test('runWhatShouldISay does not suppress near-match real answers', async () => {
   const nearMatch = 'Nothing actionable right now, but I can ask a clarifying question.';
   const { engine, session } = await makeEngineWithAnswer([nearMatch]);
@@ -150,6 +165,27 @@ test('runWhatShouldISay still emits and stores real answers', async () => {
   assert.equal(session.getFullTranscript().some(segment => segment.text === realAnswer), true);
 });
 
+test('runWhatShouldISay labels inferred Chinese usage questions in Chinese', async () => {
+  const realAnswer = '我会先用一句话回答结论，然后补充一个具体例子。';
+  const { engine, session } = await makeEngineWithAnswer([realAnswer]);
+  const finals = [];
+  engine.on('suggested_answer', (_answer, question) => finals.push(question));
+
+  session.handleTranscript({
+    speaker: 'interviewer',
+    text: '你能不能说明一下这个方案的取舍，以及为什么这样设计？',
+    timestamp: Date.now(),
+    final: true,
+    confidence: 0.95,
+  });
+
+  const answer = await engine.runWhatShouldISay(undefined, 0.9, undefined, { skipCooldown: true });
+
+  assert.equal(answer, realAnswer);
+  assert.equal(session.getFullUsage()[0].question, '待回答内容');
+  assert.deepEqual(finals, ['待回答内容']);
+});
+
 test('runWhatShouldISay normalizes pathological line-by-line chinese answers', async () => {
   const fragmented = '这是一个测试\n\n如果\n\n您\n\n有\n\n具体\n\n的\n\n问题\n\n或\n\n需要\n\n协助\n\n的\n\n事项\n\n，请\n\n告诉我';
   const normalized = '这是一个测试如果您有具体的问题或需要协助的事项，请告诉我';
@@ -173,4 +209,3 @@ test('runWhatShouldISay preserves normal paragraph breaks', async () => {
   assert.equal(answer, paragraphAnswer);
   assert.equal(session.getFullUsage()[0].answer, paragraphAnswer);
 });
-
