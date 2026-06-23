@@ -12,6 +12,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
 
 // --- Fix 1: technical-two-sum-clean-impl ----------------------------------
 // The mustInclude pattern must accept `target - <ANY identifier>`, not just
@@ -361,5 +362,20 @@ describe('mode-specific micro-rule invariants', () => {
     assert.doesNotMatch(tiny.TINY_CORE, /lowball/i);
     assert.doesNotMatch(tiny.TINY_CORE, /amortized constant/i);
     assert.doesNotMatch(tiny.TINY_CORE, /use the other candidate/i);
+  });
+});
+
+describe('modePromptFor unknown mode handling', () => {
+  test('fails fast instead of falling back to general prompt', async () => {
+    const evalHarnessPath = path.resolve(__dirname, '../modes-live-response-eval.ts');
+    const source = await fs.readFile(evalHarnessPath, 'utf8');
+
+    assert.doesNotMatch(
+      source,
+      /return byMode\[mode\] \?\? (?:tiny\.)?T?MODE_GENERAL_PROMPT;/,
+    );
+    assert.match(source, /Unknown mode "\$\{mode\}"/);
+    assert.match(source, /Available modes: \$\{availableModes\.join\(', '\)\}/);
+    assert.match(source, /throw new Error\(/);
   });
 });
