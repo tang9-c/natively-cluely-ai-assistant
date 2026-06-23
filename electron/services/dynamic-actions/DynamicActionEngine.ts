@@ -173,6 +173,26 @@ export class DynamicActionEngine {
             .slice(0, 3);
     }
 
+    findRecentActionForIntent(params: {
+        sessionId: string;
+        modeTemplateType: string;
+        intent: string;
+        maxAgeMs?: number;
+        now?: number;
+    }): DynamicAction | null {
+        const actionType = this.mapIntentToActionType(params.modeTemplateType, params.intent);
+        if (!actionType) return null;
+        const now = params.now ?? Date.now();
+        const maxAgeMs = params.maxAgeMs ?? 120_000;
+
+        return this.store.getActiveActions(params.sessionId)
+            .filter(action =>
+                action.modeTemplateType === params.modeTemplateType &&
+                action.type === actionType &&
+                now - action.createdAt <= maxAgeMs)
+            .sort((a, b) => b.confidence - a.confidence)[0] ?? null;
+    }
+
     acceptAction(actionId: string): DynamicAction | null {
         const action = this.store.getAction(actionId);
         if (action) {

@@ -610,6 +610,20 @@ export class IntelligenceEngine extends EventEmitter {
             this.currentDynamicActionTemplateType,
             this.buildIntentClassificationOptions(),
         );
+        const activeDynamicAction = this.dynamicActionEngine && this.currentSessionId && this.currentDynamicActionTemplateType
+            ? this.dynamicActionEngine.findRecentActionForIntent({
+                sessionId: this.currentSessionId,
+                modeTemplateType: this.currentDynamicActionTemplateType,
+                intent: intentResult.intent,
+            })
+            : null;
+        if (activeDynamicAction) {
+            return {
+                kind: 'silent',
+                reason: 'dynamic_action_already_active',
+                confidence: Math.max(trigger.confidence, activeDynamicAction.confidence, intentResult.confidence),
+            };
+        }
         const detectedCodingQuestion = this.session.getDetectedCodingQuestion();
 
         return planNextAssistantAction({
