@@ -185,7 +185,7 @@ const RECRUITING_TRIGGERS: ActionTrigger[] = [
         type: 'candidate_experience_probe',
         patterns: [
             /\b(tell me about your experience|walk me through your background|why this role|why are you interested|specific example|concrete example|give me an example)\b/i,
-            zh('讲讲你的经验', '介绍一下你的背景', '为什么这个岗位', '为什么感兴趣', '具体的例子', '举个具体例子', '举一个例子'),
+            zh('讲讲你的经验', '介绍一下你的背景', '为什么这个岗位', '为什么感兴趣', '具体的例子', '举个具体例子', '举一个具体例子', '举一个例子'),
         ],
         priority: 0.84,
         label: 'Guide candidate story',

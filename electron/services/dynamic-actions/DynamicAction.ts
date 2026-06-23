@@ -1,5 +1,7 @@
 export type ActionStatus = 'candidate' | 'shown' | 'accepted' | 'dismissed' | 'completed' | 'expired';
 export type AutoSurfacePolicy = 'auto' | 'card' | 'silent';
+export type SignalStatus = 'candidate' | 'confirmed' | 'cooling_down' | 'expired';
+export type SignalConfirmationSource = 'trigger' | 'cloud_intent' | 'local_intent' | 'heuristic';
 
 export interface EvidenceRef {
     source: 'transcript' | 'screen' | 'reference' | 'meeting_history';
@@ -40,6 +42,10 @@ export interface DynamicAction {
     autoSurfacePolicy?: AutoSurfacePolicy;
     autoTriggerEligible?: boolean;
     autoTriggerReason?: string;
+    signalStatus?: SignalStatus;
+    evidenceCount?: number;
+    confirmationSource?: SignalConfirmationSource;
+    confirmedIntent?: string;
     answerStyle?: {
         maxWords: number;
         format: 'bullets' | 'short_script' | 'code' | 'checklist' | 'summary';

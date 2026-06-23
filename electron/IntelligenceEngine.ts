@@ -137,6 +137,7 @@ export class IntelligenceEngine extends EventEmitter {
     private currentDynamicActionTemplateType: string | null = null;
     private autoSurfaceFingerprints: Set<string> = new Set();
     private static readonly MAX_AUTO_SURFACE_FINGERPRINTS = 200;
+    private intentClassificationOptionsForTest: IntentClassificationOptions | null = null;
 
     private static isNonAnswerSentinel(answer: string): boolean {
         const normalized = answer.trim().toLowerCase().replace(/[.!?]+$/g, '');
@@ -187,6 +188,9 @@ export class IntelligenceEngine extends EventEmitter {
     }
 
     private buildIntentClassificationOptions(): IntentClassificationOptions {
+        if (this.intentClassificationOptionsForTest) {
+            return this.intentClassificationOptionsForTest;
+        }
         let providerDataScopes: IntentClassificationOptions['providerDataScopes'];
         let localIntentEnhancementEnabled = false;
         let localIntentEnhancementAvailable = false;
@@ -388,18 +392,13 @@ export class IntelligenceEngine extends EventEmitter {
             this.speculativeTimer = null;
         }
 
-        // Phase 3: detect dynamic action triggers on every final segment.
-        // Wrapped in try/catch so a regex bug or store fault never breaks the
-        // primary transcript path. No-op when engine has no active session
-        // or when current mode has no trigger pack registered.
+        // Phase 3: confirm dynamic action triggers on every final segment.
+        // Fire-and-forget by design: intent confirmation is auxiliary and must
+        // never block or break the primary transcript path.
         if (segment.final) {
-            try {
-                this.detectAndEmitDynamicActions(segment);
-            } catch (err) {
-                // Intentionally swallow — dynamic actions are auxiliary and
-                // must never break the answer pipeline.
-                console.warn('[IntelligenceEngine] detectAndEmitDynamicActions failed', (err as Error)?.message);
-            }
+            this.detectConfirmAndEmitDynamicActions(segment).catch((err) => {
+                console.warn('[IntelligenceEngine] detectConfirmAndEmitDynamicActions failed', (err as Error)?.message);
+            });
         }
 
     }
@@ -458,15 +457,39 @@ export class IntelligenceEngine extends EventEmitter {
         this.dynamicActionEngine = engine;
     }
 
-    private detectAndEmitDynamicActions(segment: TranscriptSegment): void {
+    _setIntentClassificationOptionsForTest(options: IntentClassificationOptions | null): void {
+        this.intentClassificationOptionsForTest = options;
+    }
+
+    private async detectConfirmAndEmitDynamicActions(segment: TranscriptSegment): Promise<void> {
         if (!this.dynamicActionEngine || !this.currentSessionId
             || !this.currentDynamicActionModeId || !this.currentDynamicActionTemplateType) {
+            return;
+        }
+        if (segment.speaker !== 'interviewer' && segment.speaker !== 'user') {
             return;
         }
         const text = (segment.text || '').trim();
         if (!text) return;
 
-        const newActions = this.dynamicActionEngine.detectActions({
+        const contextItems = this.session.getContext(180);
+        const preparedTranscript = prepareTranscriptForWhatToAnswer(contextItems.map(item => ({
+            role: item.role,
+            text: item.text,
+            timestamp: item.timestamp,
+        })), 12);
+        const intentResult = await classifyIntent(
+            text,
+            preparedTranscript,
+            this.session.getAssistantResponseHistory().length,
+            this.currentDynamicActionTemplateType,
+            {
+                ...this.buildIntentClassificationOptions(),
+                cloudFirst: true,
+            },
+        );
+
+        const newActions = this.dynamicActionEngine.assessSignals({
             transcript: text,
             speaker: segment.speaker,
             modeTemplateType: this.currentDynamicActionTemplateType,
@@ -474,6 +497,7 @@ export class IntelligenceEngine extends EventEmitter {
             sessionId: this.currentSessionId,
             emotion: segment.emotion,
             emotionSource: segment.emotionSource,
+            intentResult,
         });
 
         // The store dedupes within the per-session store, so each emitted action
