@@ -253,6 +253,16 @@ console.error = (...args: any[]) => {
   } catch { }
 };
 
+const originalAppQuit = app.quit.bind(app);
+app.quit = (() => {
+  const stack = new Error('app.quit call stack').stack
+    ?.split('\n')
+    .slice(1)
+    .join('\n');
+  console.warn('[Main] app.quit requested', stack || '(no stack)');
+  return originalAppQuit();
+}) as typeof app.quit;
+
 import { initializeIpcHandlers } from "./ipcHandlers"
 import { WindowHelper } from "./WindowHelper"
 import { SettingsWindowHelper } from "./SettingsWindowHelper"
@@ -4190,6 +4200,16 @@ async function initializeApp() {
   } catch (err) {
     console.warn('[Init] TelemetryService configure threw (non-fatal):', err);
   }
+
+  const macOSVersion =
+    typeof (process as any).getSystemVersion === 'function'
+      ? (process as any).getSystemVersion()
+      : 'unknown';
+  console.log(
+    `[Init] Runtime platform=${process.platform} arch=${process.arch} ` +
+      `electron=${process.versions.electron ?? 'unknown'} node=${process.versions.node} ` +
+      `macOS=${macOSVersion} packaged=${app.isPackaged}`,
+  );
 
   // Initialize CredentialsManager and load keys explicitly
   // This fixes the issue where keys (especially in production) aren't loaded in time for RAG/LLM

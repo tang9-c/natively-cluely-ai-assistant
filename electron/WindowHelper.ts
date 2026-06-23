@@ -26,6 +26,8 @@ export class WindowHelper {
   private launcherPosition: { x: number; y: number } | null = null;
   private launcherSize: { width: number; height: number } | null = null;
   private overlayBounds: Electron.Rectangle | null = null;
+  private overlayRendererReady = false;
+  private pendingOverlayShowInactive: boolean | null = null;
   // Track current window mode (persists even when overlay is hidden via Cmd+B)
   private currentWindowMode: 'launcher' | 'overlay' = 'launcher';
 
@@ -351,6 +353,25 @@ export class WindowHelper {
       this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
     }
 
+    this.overlayWindow.webContents.on('did-finish-load', () => {
+      this.overlayRendererReady = true;
+      console.log('[WindowHelper] Overlay renderer loaded');
+      if (this.pendingOverlayShowInactive !== null) {
+        const inactive = this.pendingOverlayShowInactive;
+        this.pendingOverlayShowInactive = null;
+        this.switchToOverlay(inactive);
+      }
+    });
+
+    this.overlayWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      console.error(`[WindowHelper] Overlay did-fail-load: ${errorCode} ${errorDescription}`);
+    });
+
+    this.overlayWindow.webContents.on('render-process-gone', (_event, details) => {
+      console.error('[WindowHelper] Overlay render-process-gone:', details);
+      this.overlayRendererReady = false;
+    });
+
     this.overlayWindow.loadURL(`${startUrl}?window=overlay`).catch((e) => {
       console.error('[WindowHelper] Failed to load Overlay URL:', e);
     });
@@ -631,6 +652,12 @@ export class WindowHelper {
     console.log(`[WindowHelper] Switching to OVERLAY (inactive: ${!!inactive})`);
     this.currentWindowMode = 'overlay';
     KeybindManager.getInstance().setMode('overlay'); // Adapted from public PR #123 — verify premium interaction
+
+    if (this.overlayWindow && !this.overlayWindow.isDestroyed() && !this.overlayRendererReady) {
+      this.pendingOverlayShowInactive = !!inactive;
+      console.warn('[WindowHelper] Overlay renderer not ready; deferring show until did-finish-load');
+      return;
+    }
 
     // Tell the overlay renderer to expand to full size (e.g. after being minimised)
     this.overlayWindow?.webContents.send('ensure-expanded');
