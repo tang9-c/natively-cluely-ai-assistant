@@ -119,3 +119,66 @@ test('ModeContextRetriever lexical fallback retrieves Chinese sales case-study s
   assert.match(result.formattedContext, /Acme 案例/);
   assert.match(result.formattedContext, /降低成本 20%/);
 });
+
+test('ModeContextRetriever lexical fallback retrieves Chinese reference snippets across non-sales modes', async () => {
+  const { ModeContextRetriever } = await loadRetriever();
+  const retriever = new ModeContextRetriever();
+  const cases = [
+    {
+      templateType: 'recruiting',
+      query: '候选人担心签证和入职时间，需要岗位 JD 信息',
+      content: '招聘资料：候选人常问签证、入职时间、岗位 JD 和搬迁政策。',
+      expected: /岗位 JD/,
+    },
+    {
+      templateType: 'looking-for-work',
+      query: '面试官要求自我介绍和简历项目例子',
+      content: '面试资料：自我介绍要连接简历项目、岗位动机和个人经验，避免泛泛而谈。',
+      expected: /简历项目/,
+    },
+    {
+      templateType: 'team-meet',
+      query: '记录行动项负责人和截止日期风险',
+      content: '会议资料：行动项要包含负责人、截止日期和风险；阻塞依赖需要单独标记。',
+      expected: /负责人/,
+    },
+    {
+      templateType: 'lecture',
+      query: '解释公式定理并记录作业例题',
+      content: '课堂资料：公式和定理需要配例题；作业是阅读第三章并完成测验。',
+      expected: /阅读第三章/,
+    },
+    {
+      templateType: 'technical-interview',
+      query: '讲解算法复杂度和系统设计权衡',
+      content: '技术面试资料：算法题说明复杂度；系统设计要讨论 API、数据库、缓存和吞吐量。',
+      expected: /系统设计/,
+    },
+  ];
+
+  for (const item of cases) {
+    const activeMode = {
+      ...mode,
+      id: `mode_${item.templateType}`,
+      name: item.templateType,
+      templateType: item.templateType,
+      customContext: '',
+    };
+    const result = retriever.retrieve(activeMode, [
+      {
+        id: `file_${item.templateType}`,
+        modeId: activeMode.id,
+        fileName: `${item.templateType}.md`,
+        content: item.content,
+        createdAt: 'now',
+      },
+    ], {
+      query: item.query,
+      tokenBudget: 500,
+    });
+
+    assert.equal(result.usedFallback, false, `${item.templateType} should retrieve Chinese context`);
+    assert.equal(result.snippets.length > 0, true, `${item.templateType} should include snippets`);
+    assert.match(result.formattedContext, item.expected);
+  }
+});
