@@ -1,12 +1,16 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
-import { X, Zap, ChevronRight } from 'lucide-react'
+import { X, Zap } from 'lucide-react'
 import type { DynamicActionPayload } from '@/types/electron'
+
+export type DynamicActionCardStatus = 'idle' | 'countdown' | 'generating' | 'cancelled'
 
 interface Props {
   action: DynamicActionPayload
   isPrimary: boolean
-  onAccept: (action: DynamicActionPayload) => void
+  status?: DynamicActionCardStatus
+  countdownSeconds?: number
+  onAccept: (action: DynamicActionPayload) => void | Promise<void>
   onDismiss: (actionId: string) => void
 }
 
@@ -46,12 +50,16 @@ const INTENT_LABELS: Record<string, string> = {
   system_design_prompt: '系统设计题',
 }
 
-// Single dynamic action card. Compact, glass-styled, dismissible.
-// Primary card (highest priority) gets a subtle accent + shortcut hint.
-// Cards are intentionally lightweight — clicking accept fires the parent
-// callback which is responsible for kicking off the answer stream so the
-// card itself stays presentation-only.
-export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, onAccept, onDismiss }) => {
+// Single dynamic action card. Compact, glass-styled, dismissible, and explicit:
+// users can accept with the card, the primary CTA, or Tab on the primary card.
+export const DynamicActionCard: React.FC<Props> = ({
+  action,
+  isPrimary,
+  status = 'idle',
+  countdownSeconds,
+  onAccept,
+  onDismiss,
+}) => {
   const [busy, setBusy] = useState(false)
   const evidence = action.evidenceRefs?.[0]
   const evidenceText = evidence?.text?.trim() ?? ''
@@ -61,6 +69,26 @@ export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, onAccept
 
   const confidencePct = Math.round((action.confidence ?? 0) * 100)
   const detectedIntent = INTENT_LABELS[action.sourceIntent ?? action.type] ?? action.label
+  const isGenerating = busy || status === 'generating'
+  const isCountdown = status === 'countdown'
+  const statusText = isGenerating
+    ? '正在生成'
+    : isCountdown
+      ? `${Math.max(1, countdownSeconds ?? 5)} 秒后自动生成`
+      : status === 'cancelled'
+        ? '已取消'
+        : '检测到行动项'
+  const buttonLabel = isGenerating ? '正在生成' : isCountdown ? '立即生成' : '生成回答'
+
+  const accept = async () => {
+    if (isGenerating || status === 'cancelled') return
+    setBusy(true)
+    try {
+      await onAccept(action)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <motion.div
@@ -70,64 +98,70 @@ export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, onAccept
       exit={{ opacity: 0, y: -8, scale: 0.97 }}
       transition={{ duration: 0.16, ease: 'easeOut' }}
       className={[
-        'group relative flex items-stretch gap-2 px-2.5 py-2 rounded-[12px]',
-        'border backdrop-blur-md no-drag select-none',
+        'group relative flex items-stretch gap-2.5 px-2.5 py-2 rounded-[12px]',
+        'border backdrop-blur-md no-drag select-none shadow-lg shadow-black/15',
         isPrimary
-          ? 'border-blue-400/40 bg-blue-500/8 hover:bg-blue-500/12'
-          : 'border-white/10 bg-white/5 hover:bg-white/8',
+          ? 'border-sky-300/65 bg-slate-950/78 hover:bg-slate-950/84'
+          : 'border-white/24 bg-slate-950/68 hover:bg-slate-950/76',
         'transition-colors duration-150 cursor-pointer',
       ].join(' ')}
-      onClick={async () => {
-        if (busy) return
-        setBusy(true)
-        try {
-          await onAccept(action)
-        } finally {
-          setBusy(false)
-        }
+      onClick={() => {
+        void accept()
       }}
       title={action.description ?? action.label}
       data-testid={`dynamic-action-card-${action.id}`}
     >
-      <div className="flex items-center justify-center w-7 h-7 rounded-full bg-white/8 shrink-0">
-        <Zap className={`w-3.5 h-3.5 ${isPrimary ? 'text-blue-300' : 'text-white/70'}`} />
+      <div className="flex items-center justify-center w-7 h-7 rounded-full bg-sky-400/22 border border-sky-200/30 shrink-0">
+        <Zap className={`w-3.5 h-3.5 ${isPrimary ? 'text-sky-100' : 'text-sky-200'}`} />
       </div>
 
       <div className="flex flex-col flex-1 min-w-0 leading-tight">
         <div className="flex items-baseline gap-1.5 min-w-0">
-          <span className="text-[10px] font-medium text-blue-200/75 shrink-0">检测到</span>
+          <span className="text-[10px] font-semibold text-sky-100 shrink-0">{statusText}</span>
           <span className="text-[12px] font-semibold overlay-text-primary truncate">{detectedIntent}</span>
           {confidencePct > 0 && (
-            <span className="text-[10px] tabular-nums text-white/40 shrink-0">{confidencePct}%</span>
+            <span className="text-[10px] tabular-nums text-white/80 shrink-0">{confidencePct}%</span>
           )}
           {(action.evidenceCount ?? 0) > 1 && (
-            <span className="text-[10px] tabular-nums text-white/35 shrink-0">{action.evidenceCount}条证据</span>
+            <span className="text-[10px] tabular-nums text-white/72 shrink-0">{action.evidenceCount}条证据</span>
           )}
         </div>
-        <span className="text-[10.5px] text-white/50 truncate">{action.label}</span>
+        <span className="text-[10.5px] text-white/78 truncate">{action.label}</span>
         {evidenceSnippet && (
-          <span className="text-[10.5px] text-white/55 truncate">"{evidenceSnippet}"</span>
+          <span className="text-[10.5px] text-white/74 truncate">"{evidenceSnippet}"</span>
         )}
       </div>
 
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center gap-1.5 shrink-0">
         {isPrimary && (
-          <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium text-white/60 bg-white/8 border border-white/10">
-            Tab
+          <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold text-white/88 bg-white/14 border border-white/24">
+            Tab 生成
           </kbd>
         )}
-        <ChevronRight className="w-3.5 h-3.5 text-white/40 group-hover:text-white/70 transition-colors" />
+        <button
+          type="button"
+          disabled={isGenerating || status === 'cancelled'}
+          onClick={(e) => {
+            e.stopPropagation()
+            void accept()
+          }}
+          className="inline-flex h-7 items-center justify-center rounded-md border border-sky-200/45 bg-sky-500 px-2.5 text-[11px] font-semibold text-white shadow-sm shadow-sky-950/25 transition-colors hover:bg-sky-400 disabled:cursor-default disabled:border-sky-200/25 disabled:bg-sky-700 disabled:text-white/82"
+          aria-label={`${buttonLabel}: ${action.label}`}
+        >
+          {buttonLabel}
+        </button>
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation()
             onDismiss(action.id)
           }}
-          className="ml-0.5 p-1 rounded-full text-white/30 hover:text-white/70 hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100"
-          title="忽略"
+          className="inline-flex h-7 items-center justify-center gap-1 rounded-md border border-white/24 bg-white/14 px-2 text-[11px] font-medium text-white/86 transition-colors hover:bg-white/22 hover:text-white"
+          title={isCountdown ? '取消' : '忽略'}
           aria-label={`Dismiss ${action.label}`}
         >
           <X className="w-3 h-3" />
+          <span>{isCountdown ? '取消' : '忽略'}</span>
         </button>
       </div>
     </motion.div>

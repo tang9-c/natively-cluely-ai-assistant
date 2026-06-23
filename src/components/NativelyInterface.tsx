@@ -1938,7 +1938,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Optional: Trigger a small toast or state change for visual feedback
   }, []);
 
-  const handleWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {
+  const handleWhatToSay = async (
+    promptInstruction?: string | React.MouseEvent,
+    generationOptions?: { source?: string; persist?: boolean },
+  ) => {
     const dynamicPromptInstruction =
       typeof promptInstruction === 'string' ? promptInstruction : undefined;
     setIsExpanded(true);
@@ -1978,7 +1981,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       const result = await window.electronAPI.generateWhatToSay(
         undefined,
         currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
-        dynamicPromptInstruction ? { promptInstruction: dynamicPromptInstruction } : undefined,
+        dynamicPromptInstruction || generationOptions
+          ? {
+              promptInstruction: dynamicPromptInstruction,
+              ...generationOptions,
+            }
+          : undefined,
       );
       setScreenContextStatus(result.screenContextStatus || 'not_available');
       setLatestUsedImageInput(Boolean(result.usedImageInput));
@@ -3808,7 +3816,10 @@ Provide only the answer, nothing else.`;
                                 when no actions are present. */}
               <DynamicActionBar
                 onAcceptAction={(action: DynamicActionPayload) => {
-                  void handleWhatToSay(action.promptInstruction);
+                  void handleWhatToSay(action.promptInstruction, {
+                    source: 'dynamic_action',
+                    persist: false,
+                  });
                 }}
               />
 

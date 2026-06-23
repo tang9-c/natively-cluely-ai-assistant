@@ -95,7 +95,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(pricing.evidenceRefs[0].source, 'transcript');
   });
 
-  test('repeated high-confidence Chinese dynamic action auto-triggers What Should I Say with prompt instruction', async () => {
+  test('repeated high-confidence Chinese dynamic action emits auto card without direct What Should I Say run', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: [
         '{"intent":"handle_objection","confidence":0.92}',
@@ -146,19 +146,10 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(autoAction.autoSurfacePolicy, 'auto');
     assert.equal(autoAction.autoTriggerEligible, true);
     assert.ok(autoAction.promptInstruction.includes('Sales mode'));
-    assert.equal(autoRuns.length, 1, 'high-confidence final action should auto-trigger main answer flow');
-    assert.equal(autoRuns[0][0], undefined, 'auto-trigger should use transcript context, not a synthetic question');
-    assert.equal(autoRuns[0][1], autoAction.confidence);
-    assert.equal(autoRuns[0][2], undefined);
-    assert.equal(autoRuns[0][3].skipCooldown, true);
-    assert.equal(autoRuns[0][3].promptInstruction, autoAction.promptInstruction);
-    assert.equal(autoRuns[0][3].modeEvent.intent, 'pricing_objection');
-    assert.equal(autoRuns[0][3].modeEvent.modeTemplateType, 'sales');
-    assert.equal(autoRuns[0][3].modeEvent.emotion, 'angry');
-    assert.match(autoRuns[0][3].modeEvent.latestTurn, /价格太高|报价太高/);
+    assert.equal(autoRuns.length, 0, 'renderer countdown should trigger answer flow, not main process auto-run');
   });
 
-  test('same high-confidence dynamic action evidence auto-triggers main answer only once', async () => {
+  test('same high-confidence dynamic action evidence does not direct-run main answer repeatedly', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: [
         '{"intent":"handle_objection","confidence":0.92}',
@@ -190,7 +181,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     engine.handleTranscript({ ...segment, timestamp: segment.timestamp + 100 }, true);
     await waitForAsyncSignals();
 
-    assert.equal(autoRuns.length, 1);
+    assert.equal(autoRuns.length, 0);
   });
 
   test('active dynamic action suppresses duplicate suggestion-trigger answer for same sales intent', async () => {

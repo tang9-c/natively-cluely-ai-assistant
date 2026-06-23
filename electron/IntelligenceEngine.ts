@@ -19,7 +19,6 @@ import type {
 } from './llm/IntentClassifier';
 import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEngine';
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
-import { buildAutoSurfaceFingerprint } from './services/dynamic-actions/ModeEventUtils';
 import { ScreenContext } from './services/screen/types';
 import { SettingsManager } from './services/SettingsManager';
 import { isLocalIntentClassifierAvailable } from './services/LocalModelManager';
@@ -139,8 +138,6 @@ export class IntelligenceEngine extends EventEmitter {
     private currentSessionId: string | null = null;
     private currentDynamicActionModeId: string | null = null;
     private currentDynamicActionTemplateType: string | null = null;
-    private autoSurfaceFingerprints: Set<string> = new Set();
-    private static readonly MAX_AUTO_SURFACE_FINGERPRINTS = 200;
     private intentClassificationOptionsForTest: IntentClassificationOptions | null = null;
 
     private static isNonAnswerSentinel(answer: string): boolean {
@@ -187,16 +184,6 @@ export class IntelligenceEngine extends EventEmitter {
             .replace(/\s+([）》”’)])/g, '$1')
             .replace(/\n{3,}/g, '\n\n')
             .trim();
-    }
-
-    private rememberAutoSurfaceFingerprint(fingerprint: string): boolean {
-        if (this.autoSurfaceFingerprints.has(fingerprint)) return false;
-        this.autoSurfaceFingerprints.add(fingerprint);
-        if (this.autoSurfaceFingerprints.size > IntelligenceEngine.MAX_AUTO_SURFACE_FINGERPRINTS) {
-            const oldest = this.autoSurfaceFingerprints.values().next().value;
-            if (oldest) this.autoSurfaceFingerprints.delete(oldest);
-        }
-        return true;
     }
 
     private buildIntentClassificationOptions(): IntentClassificationOptions {
@@ -434,7 +421,6 @@ export class IntelligenceEngine extends EventEmitter {
         // If session changed, drop store so we don't bleed actions across meetings.
         if (this.currentSessionId && this.currentSessionId !== sessionId) {
             this.dynamicActionEngine = new DynamicActionEngine();
-            this.autoSurfaceFingerprints.clear();
         }
         this.currentSessionId = sessionId;
         this.currentDynamicActionModeId = modeId;
@@ -446,7 +432,6 @@ export class IntelligenceEngine extends EventEmitter {
         this.currentDynamicActionModeId = null;
         this.currentDynamicActionTemplateType = null;
         this.dynamicActionEngine = null;
-        this.autoSurfaceFingerprints.clear();
     }
 
     acceptDynamicAction(actionId: string): DynamicAction | null {
@@ -517,48 +502,6 @@ export class IntelligenceEngine extends EventEmitter {
         for (const action of newActions) {
             this.emit('dynamic_action_emitted', action);
         }
-
-        const autoAction = newActions.find(action =>
-            action.autoTriggerEligible === true &&
-            action.autoSurfacePolicy === 'auto' &&
-            action.confidence >= 0.9
-        );
-        if (!autoAction) return;
-        if (this.activeMode !== 'idle' && this.activeMode !== 'assist') return;
-        if (autoAction.modeTemplateType !== this.currentDynamicActionTemplateType) {
-            console.warn('[IntelligenceEngine] dynamic action mode drift; skipping auto-surface', {
-                actionMode: autoAction.modeTemplateType,
-                currentMode: this.currentDynamicActionTemplateType,
-            });
-            return;
-        }
-
-        const fingerprint = buildAutoSurfaceFingerprint({
-            modeTemplateType: autoAction.modeTemplateType,
-            intent: autoAction.type,
-            latestTurn: autoAction.latestTurn || text,
-        });
-        if (!this.rememberAutoSurfaceFingerprint(fingerprint)) return;
-
-        const modeEvent: ModeEventContext = {
-            modeTemplateType: autoAction.modeTemplateType,
-            intent: autoAction.sourceIntent || autoAction.type,
-            confidence: autoAction.confidence,
-            latestTurn: autoAction.latestTurn || text,
-            emotion: autoAction.emotion,
-            emotionSource: autoAction.emotionSource,
-            language: autoAction.language,
-            keyEntities: autoAction.keyEntities,
-            retrievalQuery: autoAction.retrievalQuery,
-            autoSurfacePolicy: autoAction.autoSurfacePolicy,
-            promptInstruction: autoAction.promptInstruction,
-            answerShape: autoAction.answerStyle?.format,
-        };
-        this.runWhatShouldISay(undefined, autoAction.confidence, undefined, {
-            skipCooldown: true,
-            promptInstruction: autoAction.promptInstruction,
-            modeEvent,
-        }).catch(err => console.error('[IntelligenceEngine] Dynamic action auto-surface failed:', err));
     }
 
     /**
@@ -728,10 +671,11 @@ export class IntelligenceEngine extends EventEmitter {
      * Manual trigger - uses clean transcript pipeline for question inference
      * NEVER returns null - always provides a usable response
      */
-    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; modeEvent?: ModeEventContext }): Promise<string | null> {
+    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; persist?: boolean; source?: string; activeSkill?: { id: string; name: string; promptBlock: string }; modeEvent?: ModeEventContext }): Promise<string | null> {
         const now = Date.now();
         const isSpeculative = options?.speculative === true;
         const skipCooldown = options?.skipCooldown === true;
+        const shouldPersist = options?.persist !== false;
 
         // Cooldown bypass: explicit images (user intent), speculative pre-fetch, or test harness.
         const hasImages = imagePaths && imagePaths.length > 0;
@@ -774,7 +718,9 @@ export class IntelligenceEngine extends EventEmitter {
                     return answer || WHAT_TO_ANSWER_FALLBACK;
                 }
                 if (answer) {
-                    this.session.addAssistantMessage(answer);
+                    if (shouldPersist) {
+                        this.session.addAssistantMessage(answer);
+                    }
                     this.emit('suggested_answer', answer, question || 'inferred', confidence);
                 }
                 this.setMode('idle');
@@ -903,14 +849,16 @@ export class IntelligenceEngine extends EventEmitter {
             const usageQuestion = IntelligenceEngine.inferUsageQuestionLabel(question, preparedTranscript);
 
             this.emit('suggested_answer_token', fullAnswer, usageQuestion, confidence);
-            this.session.addAssistantMessage(fullAnswer);
 
-            this.session.pushUsage({
-                type: 'assist',
-                timestamp: Date.now(),
-                question: usageQuestion,
-                answer: fullAnswer
-            });
+            if (shouldPersist) {
+                this.session.addAssistantMessage(fullAnswer);
+                this.session.pushUsage({
+                    type: 'assist',
+                    timestamp: Date.now(),
+                    question: usageQuestion,
+                    answer: fullAnswer
+                });
+            }
 
             this.emit('suggested_answer', fullAnswer, usageQuestion, confidence);
 

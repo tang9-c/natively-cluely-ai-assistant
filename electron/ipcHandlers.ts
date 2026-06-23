@@ -2650,7 +2650,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       _,
       question?: string,
       imagePaths?: string[],
-      options?: { promptInstruction?: string },
+      options?: { promptInstruction?: string; persist?: boolean; source?: string },
     ) => {
       try {
         let screenContext: any;
@@ -2768,6 +2768,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             promptInstruction:
               typeof options?.promptInstruction === 'string'
                 ? options.promptInstruction
+                : undefined,
+            persist: options?.persist === false ? false : undefined,
+            source:
+              typeof options?.source === 'string'
+                ? options.source
                 : undefined,
           },
         );
