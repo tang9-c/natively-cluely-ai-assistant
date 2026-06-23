@@ -11,12 +11,12 @@
 //   → runVisionFallback() — first non-empty success wins
 //   → classify result into a ScreenUnderstandingResult
 //
-// What this service NO LONGER does (legacy OCR pivot, 2026-05-17):
-//   - Tesseract OCR. Removed from the default path. The old OcrProviderManager
-//     still exists for tests but is not invoked here.
-//   - "OCR-first, vision when warranted" branching. Vision is always the path.
-//   - Modes 'auto' / 'ocr_only' / 'private' (with local OCR). Replaced by
-//     vision_first / vision_only / private_vision (see SettingsManager).
+// What this service NO LONGER does (legacy local-recognition pivot, 2026-05-17):
+//   - Local text-recognition pipeline. Removed from the default path. The
+//     legacy provider manager still exists for tests but is not invoked here.
+//   - "Recognition-first, vision when warranted" branching. Vision is always the path.
+//   - Modes 'auto' / 'recognition_only' / 'private' (with local recognition).
+//     Replaced by vision_first / vision_only / private_vision (see SettingsManager).
 //
 // What this service intentionally does NOT do:
 //   - Hold provider API clients. Those live in LLMHelper. We declare a thin

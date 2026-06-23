@@ -1,4 +1,4 @@
-import { test, beforeEach } from 'node:test';
+import { test, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
