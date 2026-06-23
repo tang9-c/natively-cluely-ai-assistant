@@ -22,11 +22,59 @@ import { SkillsManager } from './services/SkillsManager';
 
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
+import type { ModeEventContext } from './llm';
 import type { ResearchProgress } from './services/research/types';
 import { LlmInvalidFormatError } from './services/research/ResearchDossierBuilder';
 import { redactForLog } from './utils/redactForLog';
 import { ParserLLM } from './services/profile/parsers/ParserLLM';
 import { CompanyNameExtractor } from './services/profile/extractors/CompanyNameExtractor';
+
+function sanitizeModeEvent(modeEvent: unknown): ModeEventContext | undefined {
+  if (!modeEvent || typeof modeEvent !== 'object') return undefined;
+
+  const raw = modeEvent as Record<string, unknown>;
+  const cleaned: ModeEventContext = {};
+  const assignString = (key: keyof ModeEventContext) => {
+    const value = raw[key];
+    if (typeof value !== 'string') return;
+    const trimmed = value.trim();
+    if (trimmed) {
+      (cleaned as Record<string, string>)[key] = trimmed.slice(0, 4000);
+    }
+  };
+
+  for (const key of [
+    'modeTemplateType',
+    'intent',
+    'latestTurn',
+    'emotion',
+    'emotionSource',
+    'language',
+    'retrievalQuery',
+    'autoSurfacePolicy',
+    'promptInstruction',
+    'answerShape',
+  ] as const) {
+    assignString(key);
+  }
+
+  if (typeof raw.confidence === 'number' && Number.isFinite(raw.confidence)) {
+    cleaned.confidence = raw.confidence;
+  }
+
+  if (Array.isArray(raw.keyEntities)) {
+    const keyEntities = raw.keyEntities
+      .filter((entity): entity is string => typeof entity === 'string')
+      .map((entity) => entity.trim())
+      .filter(Boolean)
+      .slice(0, 12);
+    if (keyEntities.length > 0) {
+      cleaned.keyEntities = keyEntities;
+    }
+  }
+
+  return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+}
 
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (
@@ -2650,7 +2698,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       _,
       question?: string,
       imagePaths?: string[],
-      options?: { promptInstruction?: string; persist?: boolean; source?: string },
+      options?: { promptInstruction?: string; persist?: boolean; source?: string; modeEvent?: ModeEventContext },
     ) => {
       try {
         let screenContext: any;
@@ -2774,6 +2822,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               typeof options?.source === 'string'
                 ? options.source
                 : undefined,
+            modeEvent: sanitizeModeEvent(options?.modeEvent),
           },
         );
         return {

@@ -18,8 +18,27 @@ test('dynamic action accept uses promptInstruction instead of display label/manu
   assert.match(mountSource, /handleWhatToSay\(action\.promptInstruction,\s*\{/);
   assert.match(mountSource, /source:\s*'dynamic_action'/);
   assert.match(mountSource, /persist:\s*false/);
+  assert.match(mountSource, /modeEvent:\s*options\.modeEvent/);
   assert.doesNotMatch(mountSource, /setInputValue\(action\.label\)/);
   assert.doesNotMatch(mountSource, /handleManualSubmitRef\.current/);
+});
+
+test('dynamic action accept forwards modeEvent retrieval metadata', () => {
+  const bar = read('src/components/dynamic-actions/DynamicActionBar.tsx');
+  const interfaceSource = read('src/components/NativelyInterface.tsx');
+
+  assert.match(bar, /type DynamicActionModeEvent/);
+  assert.match(bar, /modeTemplateType:\s*action\.modeTemplateType/);
+  assert.match(bar, /intent:\s*action\.sourceIntent\s*\|\|\s*action\.type/);
+  assert.match(bar, /confidence:\s*action\.confidence/);
+  assert.match(bar, /latestTurn:\s*action\.latestTurn/);
+  assert.match(bar, /keyEntities:\s*action\.keyEntities/);
+  assert.match(bar, /retrievalQuery:\s*action\.retrievalQuery/);
+  assert.match(bar, /autoSurfacePolicy:\s*action\.autoSurfacePolicy/);
+  assert.match(bar, /promptInstruction:\s*action\.promptInstruction/);
+  assert.match(bar, /answerShape:\s*action\.answerStyle\?\.format/);
+  assert.match(bar, /modeEvent:\s*buildDynamicActionModeEvent\(action\)/);
+  assert.match(interfaceSource, /generationOptions\?: \{ source\?: string; persist\?: boolean; modeEvent\?: DynamicActionModeEvent \}/);
 });
 
 test('dynamic action card presents detected intent and confidence to the user', () => {
@@ -64,19 +83,21 @@ test('generate-what-to-say IPC forwards promptInstruction option to Intelligence
   const handlerSource = sliceSafeHandleBlock(source, 'generate-what-to-say');
   assert.ok(findSafeHandle(source, 'generate-what-to-say') >= 0, 'generate-what-to-say handler should exist');
 
-  assert.match(handlerSource, /options\?: \{ promptInstruction\?: string; persist\?: boolean; source\?: string \}/);
+  assert.match(handlerSource, /options\?: \{ promptInstruction\?: string; persist\?: boolean; source\?: string; modeEvent\?: ModeEventContext \}/);
   assert.match(handlerSource, /promptInstruction:[\s\S]{0,120}typeof options\?\.promptInstruction === 'string'[\s\S]{0,80}options\.promptInstruction[\s\S]{0,40}: undefined/);
   assert.match(handlerSource, /persist:[\s\S]{0,120}options\?\.persist === false[\s\S]{0,40}\? false[\s\S]{0,40}: undefined/);
   assert.match(handlerSource, /source:[\s\S]{0,120}typeof options\?\.source === 'string'[\s\S]{0,80}options\.source[\s\S]{0,40}: undefined/);
+  assert.match(handlerSource, /modeEvent:[\s\S]{0,120}sanitizeModeEvent\(options\?\.modeEvent\)/);
 });
 
 test('preload and renderer type expose dynamic action generation options', () => {
   const preload = read('electron/preload.ts');
   const types = read('src/types/electron.d.ts');
 
-  assert.match(preload, /generateWhatToSay:[\s\S]{0,240}options\?: \{ promptInstruction\?: string; persist\?: boolean; source\?: string \}/);
+  assert.match(preload, /generateWhatToSay:[\s\S]{0,300}options\?: \{ promptInstruction\?: string; persist\?: boolean; source\?: string; modeEvent\?: ModeEventContext \}/);
   assert.match(preload, /ipcRenderer\.invoke\(['"]generate-what-to-say['"], question, imagePaths, options\)/);
-  assert.match(types, /generateWhatToSay:[\s\S]{0,240}options\?: \{ promptInstruction\?: string; persist\?: boolean; source\?: string \}/);
+  assert.match(types, /export interface DynamicActionModeEvent/);
+  assert.match(types, /generateWhatToSay:[\s\S]{0,300}options\?: \{ promptInstruction\?: string; persist\?: boolean; source\?: string; modeEvent\?: DynamicActionModeEvent \}/);
 });
 
 test('runWhatShouldISay can emit dynamic action answers without persistence', () => {

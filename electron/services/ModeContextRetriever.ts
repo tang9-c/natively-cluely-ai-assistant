@@ -37,6 +37,11 @@ const DEFAULT_TOP_K = 6;
 const MIN_RELEVANCE_SCORE = 0.18;
 const CHUNK_WORDS = 140;
 const CHUNK_OVERLAP = 30;
+const CJK_RETRIEVAL_TERMS = [
+    '价格', '产品', '案例', '报价', '报价单', '预算', '成本', '合同', 'roi',
+    '竞品', '上线', '回本', '价值', '客户', '异议', '法务', '审批', '折扣',
+    '费用', '采购', '实施', '部署', '续约', '试点', '试用',
+];
 
 function encodePayload(value: unknown): string {
     return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
@@ -47,7 +52,7 @@ function estimateTokens(text: string): number {
 }
 
 function wordsOf(text: string): string[] {
-    return text
+    const normalized = text
         .toLowerCase()
         // English possessive: collapse "Green's" → "green", "interviewer's" →
         // "interviewer". Symmetrically strips the `'s` suffix on both query
@@ -59,9 +64,33 @@ function wordsOf(text: string): string[] {
         // drop them so the word stays one token ("dont", "cant") rather than
         // being split into a dropped single-char fragment.
         .replace(/['’]/g, '')
-        .replace(/[^a-z0-9\s-]/g, ' ')
-        .split(/\s+/)
-        .filter(word => word.length > 2);
+    const tokens = new Set<string>();
+
+    for (const word of normalized.match(/[a-z0-9][a-z0-9-]{1,}/g) ?? []) {
+        if (word.length > 2) tokens.add(word);
+    }
+
+    for (const sequence of text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu) ?? []) {
+        if (sequence.length <= 8) tokens.add(sequence);
+        for (let i = 0; i < sequence.length - 1; i++) {
+            tokens.add(sequence.slice(i, i + 2));
+        }
+        for (let i = 0; i < sequence.length - 2; i++) {
+            tokens.add(sequence.slice(i, i + 3));
+        }
+    }
+
+    for (const term of CJK_RETRIEVAL_TERMS) {
+        if (normalized.includes(term.toLowerCase())) {
+            tokens.add(term.toLowerCase());
+        }
+    }
+
+    return Array.from(tokens);
+}
+
+function hasCjkText(text: string): boolean {
+    return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(text);
 }
 
 function chunkText(content: string): string[] {
@@ -144,12 +173,13 @@ export class ModeContextRetriever {
         const adaptiveThreshold = hasTranscript
             ? MIN_RELEVANCE_SCORE
             : MIN_RELEVANCE_SCORE * Math.min(1, queryWords.size / 5);
+        const relevanceThreshold = hasCjkText(queryText) ? adaptiveThreshold * 0.55 : adaptiveThreshold;
 
         const candidates: ModeRetrievedSnippet[] = [];
         for (const source of sources) {
             for (const chunk of chunkText(source.content)) {
                 const score = scoreChunk(queryWords, chunk);
-                if (score < adaptiveThreshold) continue;
+                if (score < relevanceThreshold) continue;
                 candidates.push({
                     sourceId: source.id,
                     sourceType: source.type,

@@ -57,6 +57,31 @@ test('generateCoachingInsights flags sales objection with no captured objection 
   assert.ok(insights.some(insight => insight.evidence?.includes('pricing is too expensive')));
 });
 
+test('generateCoachingInsights flags Chinese sales objection with no captured objection section', () => {
+  const insights = generateCoachingInsights([
+    { speaker: 'interviewer', text: '这个价格太高了，我们预算不够。', timestamp: 1 },
+    { speaker: 'user', text: '我会发一个案例给你。', timestamp: 2 },
+  ], 'sales', { sections: [{ title: 'Objections', bullets: [] }] });
+
+  assert.ok(insights.some(insight => insight.type === 'missed_objection'));
+  assert.ok(insights.some(insight => insight.evidence?.includes('价格太高')));
+});
+
+test('buildPostCallEnhancements extracts Chinese sales next steps into follow-up draft', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'sales',
+    transcript: [
+      { speaker: 'interviewer', text: '下一步请发案例和报价单，我们再安排时间看合同。', timestamp: 10 },
+    ],
+    summaryData: { overview: '客户要求补充案例和报价。', actionItems: [] },
+  });
+
+  assert.ok(result.actionItemsStructured.some(item => /发案例和报价单/.test(item.text)));
+  assert.match(result.followUpDraft, /Next steps:/);
+  assert.match(result.followUpDraft, /发案例和报价单/);
+  assert.ok(!result.coachingInsights.some(insight => insight.type === 'missing_next_step'));
+});
+
 test('generateCoachingInsights uses mode-specific coaching rules', () => {
   const recruiting = generateCoachingInsights([
     { speaker: 'interviewer', text: 'Tell me about your backend work.', timestamp: 1 },

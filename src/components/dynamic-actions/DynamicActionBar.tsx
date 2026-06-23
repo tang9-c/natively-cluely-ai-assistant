@@ -1,4 +1,7 @@
-import type { DynamicActionPayload } from '@/types/electron';
+import type {
+  DynamicActionModeEvent as ElectronDynamicActionModeEvent,
+  DynamicActionPayload,
+} from '@/types/electron';
 import { AnimatePresence } from 'framer-motion';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DynamicActionCard, type DynamicActionCardStatus } from './DynamicActionCard';
@@ -9,7 +12,10 @@ const AUTO_TRIGGER_MIN_CONFIDENCE = 0.9;
 type DynamicActionGenerationOptions = {
   source: 'dynamic_action';
   persist: false;
+  modeEvent: DynamicActionModeEvent;
 };
+
+type DynamicActionModeEvent = ElectronDynamicActionModeEvent;
 
 type DynamicActionView = DynamicActionPayload & {
   uiStatus?: DynamicActionCardStatus;
@@ -20,6 +26,21 @@ const isSemiAutoAction = (action: DynamicActionPayload): boolean =>
   action.autoTriggerEligible === true &&
   action.autoSurfacePolicy === 'auto' &&
   action.confidence >= AUTO_TRIGGER_MIN_CONFIDENCE;
+
+const buildDynamicActionModeEvent = (action: DynamicActionPayload): DynamicActionModeEvent => ({
+  modeTemplateType: action.modeTemplateType,
+  intent: action.sourceIntent || action.type,
+  confidence: action.confidence,
+  latestTurn: action.latestTurn,
+  emotion: action.emotion,
+  emotionSource: action.emotionSource,
+  language: action.language,
+  keyEntities: action.keyEntities,
+  retrievalQuery: action.retrievalQuery,
+  autoSurfacePolicy: action.autoSurfacePolicy,
+  promptInstruction: action.promptInstruction,
+  answerShape: action.answerStyle?.format,
+});
 
 interface Props {
   // Called when the user accepts (or hits Tab on the primary). Parent should
@@ -78,7 +99,11 @@ export const DynamicActionBar: React.FC<Props> = ({
       } catch {
         /* swallow — the parent answer flow is the source of truth */
       }
-      onAcceptAction(action, { source: 'dynamic_action', persist: false });
+      onAcceptAction(action, {
+        source: 'dynamic_action',
+        persist: false,
+        modeEvent: buildDynamicActionModeEvent(action),
+      });
       setActions((prev) => prev.filter((a) => a.id !== action.id));
     },
     [clearAutoTimer, clearDismissRemovalTimer, onAcceptAction],

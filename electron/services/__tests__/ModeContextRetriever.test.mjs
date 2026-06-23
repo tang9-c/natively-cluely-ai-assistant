@@ -97,3 +97,25 @@ test('ModeContextRetriever includes reference grounding guard with retrieved sni
   assert.match(result.formattedContext, /do not reconstruct it from general knowledge/);
   assert.match(result.formattedContext, /formula-sheet\.md/);
 });
+
+test('ModeContextRetriever lexical fallback retrieves Chinese sales case-study snippets', async () => {
+  const { ModeContextRetriever } = await loadRetriever();
+  const retriever = new ModeContextRetriever();
+  const result = retriever.retrieve(mode, [
+    {
+      id: 'file_zh_case',
+      modeId: mode.id,
+      fileName: '客户案例.md',
+      content: '价格异议案例：客户担心产品报价太高。回应时引用 Acme 案例，说明上线 30 天降低成本 20%。',
+      createdAt: 'now',
+    },
+  ], {
+    query: '客户说价格太高，需要产品案例证明价值',
+    tokenBudget: 500,
+  });
+
+  assert.equal(result.usedFallback, false);
+  assert.equal(result.snippets.length > 0, true);
+  assert.match(result.formattedContext, /Acme 案例/);
+  assert.match(result.formattedContext, /降低成本 20%/);
+});
