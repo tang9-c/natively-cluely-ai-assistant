@@ -35,7 +35,7 @@ export class DynamicActionEngine {
         const now = Date.now();
         const candidateActions: DynamicAction[] = [];
         const language = params.language || detectLanguage(transcript);
-        const keyEntities = extractKeyEntities(transcript);
+        const keyEntities = extractKeyEntities(transcript, modeTemplateType);
 
         // Detect triggers using regex patterns
         const matchedTriggers = this.detector.detectTriggers({ transcript, modeTemplateType });
@@ -85,7 +85,7 @@ export class DynamicActionEngine {
         const { transcript, speaker, modeTemplateType, modeId, sessionId } = params;
         const now = params.now ?? Date.now();
         const language = params.language || detectLanguage(transcript);
-        const keyEntities = extractKeyEntities(transcript);
+        const keyEntities = extractKeyEntities(transcript, modeTemplateType);
         const candidateActions: DynamicAction[] = [];
         const matchedTriggers = this.detector.detectTriggers({ transcript, modeTemplateType });
         const triggerCandidates = matchedTriggers.map(({ trigger, match }) => ({

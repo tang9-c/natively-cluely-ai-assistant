@@ -82,6 +82,59 @@ test('buildPostCallEnhancements extracts Chinese sales next steps into follow-up
   assert.ok(!result.coachingInsights.some(insight => insight.type === 'missing_next_step'));
 });
 
+test('buildPostCallEnhancements extracts Chinese team-meet actions and coaching signals', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'team-meet',
+    transcript: [
+      { speaker: 'speaker', text: '这个任务我来负责，周五前完成。我们决定用 Postgres。现在有个前端依赖风险。', timestamp: 10 },
+    ],
+    summaryData: { overview: '团队确定了负责人和技术选择。', actionItems: [] },
+  });
+
+  assert.ok(result.actionItemsStructured.some(item => /我来负责/.test(item.text)));
+  assert.ok(result.actionItemsStructured.some(item => item.deadline === '周五前'));
+  assert.ok(result.coachingInsights.some(insight => insight.type === 'decision_captured'));
+  assert.ok(result.coachingInsights.some(insight => insight.type === 'risk_captured'));
+  assert.ok(!result.coachingInsights.some(insight => insight.type === 'missing_ownership'));
+});
+
+test('buildPostCallEnhancements handles Chinese recruiting logistics and follow-up', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'recruiting',
+    transcript: [
+      { speaker: 'candidate', text: '候选人问薪资、签证和入职时间，后续请安排下一轮面试并发 JD。', timestamp: 20 },
+    ],
+    summaryData: { overview: '候选人关注 logistics。', actionItems: [] },
+  });
+
+  assert.ok(result.actionItemsStructured.some(item => /安排下一轮面试/.test(item.text)));
+  assert.ok(result.actionItemsStructured.some(item => /发 JD/.test(item.text)));
+  assert.ok(!result.coachingInsights.some(insight => insight.type === 'missing_logistics'));
+});
+
+test('generateCoachingInsights flags Chinese lecture study follow-up', () => {
+  const insights = generateCoachingInsights([
+    { speaker: 'teacher', text: '今天作业是阅读第三章，下周有测验。', timestamp: 30 },
+  ], 'lecture');
+
+  assert.ok(insights.some(insight => insight.type === 'study_follow_up'));
+  assert.ok(insights.some(insight => /阅读第三章/.test(insight.evidence || '')));
+});
+
+test('generateCoachingInsights flags Chinese interview and technical uncertainty patterns', () => {
+  const interview = generateCoachingInsights([
+    { speaker: 'candidate', text: '我不确定这个回答，可以补一个项目例子。', timestamp: 40 },
+  ], 'looking-for-work');
+  const technical = generateCoachingInsights([
+    { speaker: 'candidate', text: '我不会这个优化，复杂度还不确定。', timestamp: 50 },
+  ], 'technical-interview');
+
+  assert.ok(interview.some(insight => insight.type === 'uncertainty_pattern'));
+  assert.ok(interview.some(insight => /不确定/.test(insight.evidence || '')));
+  assert.ok(technical.some(insight => insight.type === 'uncertainty_pattern'));
+  assert.ok(technical.some(insight => /不会/.test(insight.evidence || '')));
+});
+
 test('generateCoachingInsights uses mode-specific coaching rules', () => {
   const recruiting = generateCoachingInsights([
     { speaker: 'interviewer', text: 'Tell me about your backend work.', timestamp: 1 },

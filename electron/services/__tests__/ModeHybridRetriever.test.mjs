@@ -249,6 +249,68 @@ describe('ModeHybridRetriever', () => {
     assert.match(result.formattedContext, /Acme ROI 案例/);
   });
 
+  test('Fallback lexical retrieval matches Chinese reference files across non-sales modes', async () => {
+    const { ModeHybridRetriever } = await loadRetriever();
+
+    mockEmbeddingPipeline.isReady = mock.fn(() => false);
+
+    const retriever = new ModeHybridRetriever(mockDb, mockVectorStore, mockEmbeddingPipeline);
+    const cases = [
+      {
+        modeId: 'mode_recruiting',
+        query: '候选人担心签证和入职时间，需要岗位 JD 信息',
+        content: '招聘资料：候选人常问签证、入职时间、岗位 JD 和搬迁政策。',
+        expected: /岗位 JD/,
+      },
+      {
+        modeId: 'mode_looking_for_work',
+        query: '面试官要求自我介绍和简历项目例子',
+        content: '面试资料：自我介绍要连接简历项目、岗位动机和个人经验，避免泛泛而谈。',
+        expected: /简历项目/,
+      },
+      {
+        modeId: 'mode_team_meet',
+        query: '记录行动项负责人和截止日期风险',
+        content: '会议资料：行动项要包含负责人、截止日期和风险；阻塞依赖需要单独标记。',
+        expected: /负责人/,
+      },
+      {
+        modeId: 'mode_lecture',
+        query: '解释公式定理并记录作业例题',
+        content: '课堂资料：公式和定理需要配例题；作业是阅读第三章并完成测验。',
+        expected: /阅读第三章/,
+      },
+      {
+        modeId: 'mode_technical_interview',
+        query: '讲解算法复杂度和系统设计权衡',
+        content: '技术面试资料：算法题说明复杂度；系统设计要讨论 API、数据库、缓存和吞吐量。',
+        expected: /系统设计/,
+      },
+    ];
+
+    for (const item of cases) {
+      const result = await retriever.retrieve({
+        query: item.query,
+        modeId: item.modeId,
+        files: [{
+          id: `file_${item.modeId}`,
+          modeId: item.modeId,
+          fileName: `${item.modeId}.md`,
+          content: item.content,
+          createdAt: new Date().toISOString(),
+        }],
+        tokenBudget: 1000,
+        topK: 3,
+        hasTranscript: true
+      });
+
+      assert.strictEqual(result.usedFallback, true);
+      assert.strictEqual(result.usedHybrid, false);
+      assert.ok(result.chunks.length > 0, `${item.modeId} should retrieve via lexical fallback`);
+      assert.match(result.formattedContext, item.expected);
+    }
+  });
+
   // Test 9: Combined score combines FTS + vector correctly
   test('Combined score combines FTS + vector correctly', async () => {
     const { ModeHybridRetriever } = await loadRetriever();

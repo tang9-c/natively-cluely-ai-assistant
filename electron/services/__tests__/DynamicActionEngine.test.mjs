@@ -126,6 +126,44 @@ test('All seven real mode template keys have matching trigger packs', async () =
   }
 });
 
+test('dynamic action retrievalQuery uses active-mode entity extraction', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const recruitingActions = engine.detectActions({
+    transcript: '候选人担心签证和入职时间，想确认岗位 JD 和搬迁政策。',
+    speaker: 'candidate',
+    modeTemplateType: 'recruiting',
+    modeId: 'mode_recruiting',
+    sessionId: 'session_recruiting_entities',
+  });
+  const recruitingAction = recruitingActions.find(action => action.type === 'candidate_concern');
+  assert.ok(recruitingAction);
+  assert.ok(recruitingAction.keyEntities?.includes('候选人'));
+  assert.ok(recruitingAction.keyEntities?.includes('签证'));
+  assert.ok(recruitingAction.keyEntities?.includes('入职时间'));
+  assert.match(recruitingAction.retrievalQuery || '', /entities:.*候选人.*签证.*入职时间/);
+  assert.equal(recruitingAction.keyEntities?.includes('价格'), false);
+
+  const salesActions = engine.detectActions({
+    transcript: '客户说价格太高，需要 Acme 案例证明 ROI，不想听候选人简历。',
+    speaker: 'prospect',
+    modeTemplateType: 'sales',
+    modeId: 'mode_sales',
+    sessionId: 'session_sales_entities',
+  });
+  const salesAction = salesActions.find(action => action.type === 'pricing_objection');
+  assert.ok(salesAction);
+  assert.ok(salesAction.keyEntities?.includes('价格'));
+  assert.ok(salesAction.keyEntities?.includes('案例'));
+  assert.ok(salesAction.keyEntities?.includes('ROI'));
+  assert.match(salesAction.retrievalQuery || '', /^entities:.*价格/m);
+  assert.match(salesAction.retrievalQuery || '', /^entities:.*案例/m);
+  assert.match(salesAction.retrievalQuery || '', /^entities:.*ROI/m);
+  assert.equal(salesAction.keyEntities?.includes('候选人'), false);
+  assert.equal(salesAction.keyEntities?.includes('简历'), false);
+});
+
 test('Action item pattern detected creates action_item action with real team-meet key', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
