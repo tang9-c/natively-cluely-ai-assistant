@@ -43,7 +43,13 @@ const baseDossier = (source = 'tavily') => ({
   people: { summary: '', details: [], confidence: 'high' },
   infrastructure: { summary: '', details: [], confidence: 'high' },
   procurement: { summary: '', details: [], confidence: 'high' },
-  sources: [],
+  // Non-empty sources — the source-label guard in ResearchDossierBuilder
+  // (a69f590 "tie source label to sources count") downgrades to 'llm-fallback'
+  // when the LLM echoes back an empty sources array. Mocking the LLM as if it
+  // echoed the Tavily hit keeps source='tavily' end-to-end, matching the test
+  // intent. See ResearchDossierBuilder.test.mjs:36-41 / :55-57 for the same
+  // fixture pattern (non-empty sources paired with source='tavily' assertion).
+  sources: [{ index: 1, title: 'Apple', url: 'https://apple.com', snippet: 'Tech co' }],
 });
 
 describe('CompanyResearchFlow — end-to-end', () => {
