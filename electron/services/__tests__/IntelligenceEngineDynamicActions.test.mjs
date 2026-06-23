@@ -193,6 +193,49 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(autoRuns.length, 1);
   });
 
+  test('active dynamic action suppresses duplicate suggestion-trigger answer for same sales intent', async () => {
+    const helper = new StubLLMHelper({
+      structuredResponses: [
+        '{"intent":"handle_objection","confidence":0.92}',
+        '{"intent":"handle_objection","confidence":0.92}',
+      ],
+    });
+    const { engine } = await makeEngine(helper);
+    const emitted = [];
+    const answerRuns = [];
+    engine.on('dynamic_action_emitted', (action) => emitted.push(action));
+    engine.runWhatShouldISay = async (...args) => {
+      answerRuns.push(args);
+      return 'duplicate-answer';
+    };
+
+    engine.setDynamicActionContext({
+      sessionId: 'sess-suppress',
+      modeId: 'mode-sales',
+      modeTemplateType: 'sales',
+    });
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: '这个价格太高了, 我们预算不够',
+      timestamp: Date.now(),
+      final: true,
+      emotion: 'angry',
+      emotionSource: 'sensevoice',
+    }, true);
+    await waitForAsyncSignals();
+
+    const pricing = emitted.find(a => a.type === 'pricing_objection');
+    assert.ok(pricing, 'expected dynamic action card for pricing objection');
+
+    await engine.handleSuggestionTrigger({
+      lastQuestion: '这个价格太高了, 我们预算不够',
+      confidence: 0.92,
+    });
+
+    assert.equal(answerRuns.length, 0, 'planner should not emit a duplicate answer when a matching dynamic action is active');
+  });
+
   test('final Chinese transcript uses cloud-first intent confirmation for dynamic actions', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: ['{"intent":"seize_signal","confidence":0.96}'],

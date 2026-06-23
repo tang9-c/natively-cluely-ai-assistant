@@ -642,3 +642,36 @@ test('assessSignals requires repeated evidence before auto-surfacing ordinary ob
   assert.equal(second[0]?.autoTriggerEligible, true);
   assert.ok((second[0]?.evidenceCount ?? 0) >= 2);
 });
+
+test('findRecentActionForIntent maps classifier intent to active dynamic action', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+  const sessionId = 'session_find_intent';
+
+  engine.assessSignals({
+    transcript: '这个价格太高了',
+    speaker: 'interviewer',
+    modeTemplateType: 'sales',
+    modeId: 'mode_sales',
+    sessionId,
+    intentResult: { intent: 'handle_objection', confidence: 0.92, answerShape: '处理异议' },
+    now: 10_000,
+  });
+
+  const matching = engine.findRecentActionForIntent({
+    sessionId,
+    modeTemplateType: 'sales',
+    intent: 'handle_objection',
+    now: 11_000,
+  });
+  const nonMatching = engine.findRecentActionForIntent({
+    sessionId,
+    modeTemplateType: 'sales',
+    intent: 'seize_signal',
+    now: 11_000,
+  });
+
+  assert.equal(matching?.type, 'pricing_objection');
+  assert.equal(matching?.confirmedIntent, 'handle_objection');
+  assert.equal(nonMatching, null);
+});
