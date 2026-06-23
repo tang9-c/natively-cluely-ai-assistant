@@ -2,10 +2,14 @@ import type { ModeTemplateType } from '../../ModesManager';
 import { defaultScenarioAdapters } from './adapters';
 import type { ScenarioAdapter, ScenarioResolution, ScenarioType } from './types';
 
-const DEFAULT_TEMPLATE_RESOLUTIONS: Partial<Record<ModeTemplateType, ScenarioResolution>> = {
+const DEFAULT_TEMPLATE_RESOLUTIONS: Record<ModeTemplateType, ScenarioResolution> = {
   sales: {
     templateType: 'sales',
     scenarioType: 'sales',
+  },
+  fde: {
+    templateType: 'fde',
+    scenarioType: 'fde',
   },
   'looking-for-work': {
     templateType: 'looking-for-work',
@@ -46,7 +50,7 @@ export class ScenarioRegistry {
 
   constructor(
     adapters: ScenarioAdapter[],
-    private readonly templateResolutions: Partial<Record<ModeTemplateType, ScenarioResolution>>,
+    private readonly templateResolutions: Record<ModeTemplateType, ScenarioResolution>,
   ) {
     this.adaptersByType = new Map(adapters.map((adapter) => [adapter.type, adapter]));
   }

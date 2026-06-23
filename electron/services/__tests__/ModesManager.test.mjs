@@ -149,6 +149,7 @@ test('all mode prompts start with a shared prefix so duplicate-token stripping w
   const promptByMode = {
     general: promptsMod.MODE_GENERAL_PROMPT,
     sales: promptsMod.MODE_SALES_PROMPT,
+    fde: promptsMod.MODE_FDE_PROMPT,
     recruiting: promptsMod.MODE_RECRUITING_PROMPT,
     'team-meet': promptsMod.MODE_TEAM_MEET_PROMPT,
     'looking-for-work': promptsMod.MODE_LOOKING_FOR_WORK_PROMPT,
