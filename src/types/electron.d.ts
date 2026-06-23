@@ -263,7 +263,7 @@ export interface ElectronAPI {
 
   // Intelligence Mode IPC
   generateAssist: () => Promise<{ insight: string | null }>
-  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string }) => Promise<{
+  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string; persist?: boolean; source?: string }) => Promise<{
     answer: string | null;
     question?: string;
     error?: string;

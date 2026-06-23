@@ -15,7 +15,9 @@ test('dynamic action accept uses promptInstruction instead of display label/manu
   assert.ok(mountStart >= 0, 'DynamicActionBar should be mounted');
   const mountSource = source.slice(mountStart, source.indexOf('/>', mountStart) + 2);
 
-  assert.match(mountSource, /handleWhatToSay\(action\.promptInstruction\)/);
+  assert.match(mountSource, /handleWhatToSay\(action\.promptInstruction,\s*\{/);
+  assert.match(mountSource, /source:\s*'dynamic_action'/);
+  assert.match(mountSource, /persist:\s*false/);
   assert.doesNotMatch(mountSource, /setInputValue\(action\.label\)/);
   assert.doesNotMatch(mountSource, /handleManualSubmitRef\.current/);
 });
@@ -30,20 +32,58 @@ test('dynamic action card presents detected intent and confidence to the user', 
   assert.match(source, /action\.sourceIntent\s*\?\?\s*action\.type/);
 });
 
+test('dynamic action card exposes visible generation and cancel controls', () => {
+  const source = read('src/components/dynamic-actions/DynamicActionCard.tsx');
+
+  assert.match(source, /生成回答|立即生成/);
+  assert.match(source, /取消|忽略/);
+  assert.match(source, /Tab 生成/);
+  assert.match(source, /秒后自动生成/);
+  assert.match(source, /正在生成/);
+  assert.doesNotMatch(source, /opacity-0\s+group-hover:opacity-100/);
+  assert.doesNotMatch(source, /text-white\/(?:30|40)/);
+  assert.doesNotMatch(source, /bg-white\/8/);
+});
+
+test('dynamic action bar owns semi-auto countdown and dedupes generation', () => {
+  const source = read('src/components/dynamic-actions/DynamicActionBar.tsx');
+
+  assert.match(source, /AUTO_TRIGGER_DELAY_MS\s*=\s*5000/);
+  assert.match(source, /AUTO_TRIGGER_MIN_CONFIDENCE\s*=\s*0\.9/);
+  assert.match(source, /autoTriggerEligible\s*===\s*true/);
+  assert.match(source, /autoSurfacePolicy\s*===\s*'auto'/);
+  assert.match(source, /confidence[\s\S]{0,80}>=\s*AUTO_TRIGGER_MIN_CONFIDENCE/);
+  assert.match(source, /setTimeout/);
+  assert.match(source, /clearTimeout/);
+  assert.match(source, /triggeringIdsRef/);
+  assert.match(source, /dismissDynamicAction/);
+});
+
 test('generate-what-to-say IPC forwards promptInstruction option to IntelligenceManager', () => {
   const source = read('electron/ipcHandlers.ts');
   const handlerSource = sliceSafeHandleBlock(source, 'generate-what-to-say');
   assert.ok(findSafeHandle(source, 'generate-what-to-say') >= 0, 'generate-what-to-say handler should exist');
 
-  assert.match(handlerSource, /options\?: \{ promptInstruction\?: string \}/);
+  assert.match(handlerSource, /options\?: \{ promptInstruction\?: string; persist\?: boolean; source\?: string \}/);
   assert.match(handlerSource, /promptInstruction:[\s\S]{0,120}typeof options\?\.promptInstruction === 'string'[\s\S]{0,80}options\.promptInstruction[\s\S]{0,40}: undefined/);
+  assert.match(handlerSource, /persist:[\s\S]{0,120}options\?\.persist === false[\s\S]{0,40}\? false[\s\S]{0,40}: undefined/);
+  assert.match(handlerSource, /source:[\s\S]{0,120}typeof options\?\.source === 'string'[\s\S]{0,80}options\.source[\s\S]{0,40}: undefined/);
 });
 
-test('preload and renderer type expose promptInstruction option on generateWhatToSay', () => {
+test('preload and renderer type expose dynamic action generation options', () => {
   const preload = read('electron/preload.ts');
   const types = read('src/types/electron.d.ts');
 
-  assert.match(preload, /generateWhatToSay:[\s\S]{0,200}options\?: \{ promptInstruction\?: string \}/);
+  assert.match(preload, /generateWhatToSay:[\s\S]{0,240}options\?: \{ promptInstruction\?: string; persist\?: boolean; source\?: string \}/);
   assert.match(preload, /ipcRenderer\.invoke\(['"]generate-what-to-say['"], question, imagePaths, options\)/);
-  assert.match(types, /generateWhatToSay:[\s\S]{0,200}options\?: \{ promptInstruction\?: string \}/);
+  assert.match(types, /generateWhatToSay:[\s\S]{0,240}options\?: \{ promptInstruction\?: string; persist\?: boolean; source\?: string \}/);
+});
+
+test('runWhatShouldISay can emit dynamic action answers without persistence', () => {
+  const source = read('electron/IntelligenceEngine.ts');
+
+  assert.match(source, /persist\?: boolean/);
+  assert.match(source, /const shouldPersist = options\?\.persist !== false/);
+  assert.match(source, /if \(shouldPersist\)[\s\S]{0,160}this\.session\.addAssistantMessage/);
+  assert.match(source, /if \(shouldPersist\)[\s\S]{0,220}this\.session\.pushUsage/);
 });

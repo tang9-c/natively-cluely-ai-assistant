@@ -1,12 +1,30 @@
 import type { DynamicActionPayload } from '@/types/electron';
 import { AnimatePresence } from 'framer-motion';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { DynamicActionCard } from './DynamicActionCard';
+import { DynamicActionCard, type DynamicActionCardStatus } from './DynamicActionCard';
+
+const AUTO_TRIGGER_DELAY_MS = 5000;
+const AUTO_TRIGGER_MIN_CONFIDENCE = 0.9;
+
+type DynamicActionGenerationOptions = {
+  source: 'dynamic_action';
+  persist: false;
+};
+
+type DynamicActionView = DynamicActionPayload & {
+  uiStatus?: DynamicActionCardStatus;
+  autoTriggerAt?: number;
+};
+
+const isSemiAutoAction = (action: DynamicActionPayload): boolean =>
+  action.autoTriggerEligible === true &&
+  action.autoSurfacePolicy === 'auto' &&
+  action.confidence >= AUTO_TRIGGER_MIN_CONFIDENCE;
 
 interface Props {
   // Called when the user accepts (or hits Tab on the primary). Parent should
   // kick off the live answer stream using action.promptInstruction.
-  onAcceptAction: (action: DynamicActionPayload) => void;
+  onAcceptAction: (action: DynamicActionPayload, options: DynamicActionGenerationOptions) => void;
   // Optional: max actions to keep visible. Cluely-style cap at 3.
   maxVisible?: number;
   // Optional: how long actions stay visible without user interaction (ms).
@@ -23,46 +41,104 @@ export const DynamicActionBar: React.FC<Props> = ({
   maxVisible = 3,
   staleAfterMs = 60_000,
 }) => {
-  const [actions, setActions] = useState<DynamicActionPayload[]>([]);
+  const [actions, setActions] = useState<DynamicActionView[]>([]);
   const actionsRef = useRef(actions);
+  const autoTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const dismissRemovalTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const triggeringIdsRef = useRef<Set<string>>(new Set());
   actionsRef.current = actions;
 
-  const handleIncoming = useCallback(
-    (action: DynamicActionPayload) => {
-      setActions((prev) => {
-        // Dedupe by id (engine has already deduped at backend, but renderer
-        // may receive late-arriving duplicates after a window restore).
-        if (prev.some((a) => a.id === action.id)) return prev;
-        // Sort by priority desc, then createdAt desc (newer first when tied).
-        const next = [...prev, action]
-          .filter((a) => Date.now() - a.createdAt < staleAfterMs)
-          .sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt);
-        return next.slice(0, maxVisible * 2); // keep a small buffer past the visible cap
-      });
-    },
-    [staleAfterMs, maxVisible],
-  );
+  const clearAutoTimer = useCallback((id: string) => {
+    const timer = autoTimersRef.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      autoTimersRef.current.delete(id);
+    }
+  }, []);
 
-  const dismiss = useCallback((id: string) => {
-    setActions((prev) => prev.filter((a) => a.id !== id));
-    window.electronAPI?.dismissDynamicAction?.(id).catch(() => {
-      /* swallow */
-    });
+  const clearDismissRemovalTimer = useCallback((id: string) => {
+    const timer = dismissRemovalTimersRef.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      dismissRemovalTimersRef.current.delete(id);
+    }
   }, []);
 
   const accept = useCallback(
     async (action: DynamicActionPayload) => {
-      // Optimistically remove from the bar so the user gets immediate feedback.
-      setActions((prev) => prev.filter((a) => a.id !== action.id));
+      if (triggeringIdsRef.current.has(action.id)) return;
+      triggeringIdsRef.current.add(action.id);
+      clearAutoTimer(action.id);
+      clearDismissRemovalTimer(action.id);
+      setActions((prev) =>
+        prev.map((a) => (a.id === action.id ? { ...a, uiStatus: 'generating' } : a)),
+      );
       try {
         await window.electronAPI?.acceptDynamicAction?.(action.id);
       } catch {
         /* swallow — the parent answer flow is the source of truth */
       }
-      onAcceptAction(action);
+      onAcceptAction(action, { source: 'dynamic_action', persist: false });
+      setActions((prev) => prev.filter((a) => a.id !== action.id));
     },
-    [onAcceptAction],
+    [clearAutoTimer, clearDismissRemovalTimer, onAcceptAction],
   );
+
+  const scheduleAutoTrigger = useCallback(
+    (action: DynamicActionView) => {
+      if (!isSemiAutoAction(action) || autoTimersRef.current.has(action.id)) return;
+      const timer = setTimeout(() => {
+        autoTimersRef.current.delete(action.id);
+        const current = actionsRef.current.find((a) => a.id === action.id);
+        if (!current || current.uiStatus === 'cancelled') return;
+        void accept(current);
+      }, AUTO_TRIGGER_DELAY_MS);
+      autoTimersRef.current.set(action.id, timer);
+    },
+    [accept],
+  );
+
+  const handleIncoming = useCallback(
+    (action: DynamicActionPayload) => {
+      const isAuto = isSemiAutoAction(action);
+      const actionView: DynamicActionView = isAuto
+        ? {
+            ...action,
+            uiStatus: 'countdown',
+            autoTriggerAt: Date.now() + AUTO_TRIGGER_DELAY_MS,
+          }
+        : action;
+      setActions((prev) => {
+        // Dedupe by id (engine has already deduped at backend, but renderer
+        // may receive late-arriving duplicates after a window restore).
+        if (prev.some((a) => a.id === action.id)) return prev;
+        // Sort by priority desc, then createdAt desc (newer first when tied).
+        const next = [...prev, actionView]
+          .filter((a) => Date.now() - a.createdAt < staleAfterMs)
+          .sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt);
+        return next.slice(0, maxVisible * 2); // keep a small buffer past the visible cap
+      });
+      if (isAuto) scheduleAutoTrigger(actionView);
+    },
+    [staleAfterMs, maxVisible, scheduleAutoTrigger],
+  );
+
+  const dismiss = useCallback((id: string) => {
+    clearAutoTimer(id);
+    triggeringIdsRef.current.delete(id);
+    clearDismissRemovalTimer(id);
+    setActions((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, uiStatus: 'cancelled' } : a)),
+    );
+    const removalTimer = setTimeout(() => {
+      dismissRemovalTimersRef.current.delete(id);
+      setActions((prev) => prev.filter((a) => a.id !== id));
+    }, 650);
+    dismissRemovalTimersRef.current.set(id, removalTimer);
+    window.electronAPI?.dismissDynamicAction?.(id).catch(() => {
+      /* swallow */
+    });
+  }, [clearAutoTimer, clearDismissRemovalTimer]);
 
   // Subscribe to push from main process
   useEffect(() => {
@@ -77,6 +153,16 @@ export const DynamicActionBar: React.FC<Props> = ({
       }
     };
   }, [handleIncoming]);
+
+  useEffect(() => {
+    return () => {
+      autoTimersRef.current.forEach((timer) => clearTimeout(timer));
+      autoTimersRef.current.clear();
+      dismissRemovalTimersRef.current.forEach((timer) => clearTimeout(timer));
+      dismissRemovalTimersRef.current.clear();
+      triggeringIdsRef.current.clear();
+    };
+  }, []);
 
   // Keyboard: Tab accepts primary
   useEffect(() => {
@@ -97,17 +183,36 @@ export const DynamicActionBar: React.FC<Props> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [accept, maxVisible]);
 
+  useEffect(() => {
+    if (!actions.some((a) => a.uiStatus === 'countdown')) return;
+    const t = setInterval(() => {
+      setActions((prev) => prev.map((action) => {
+        if (action.uiStatus !== 'countdown' || !action.autoTriggerAt) return action;
+        if (action.autoTriggerAt <= Date.now()) {
+          return { ...action, uiStatus: 'generating' };
+        }
+        return { ...action };
+      }));
+    }, 1_000);
+    return () => clearInterval(t);
+  }, [actions]);
+
   // Periodic stale prune (cheap) — only run when actions exist
   useEffect(() => {
     if (actions.length === 0) return;
     const t = setInterval(() => {
       setActions((prev) => {
         if (prev.length === 0) return prev;
-        return prev.filter((a) => Date.now() - a.createdAt < staleAfterMs);
+        const fresh = prev.filter((a) => Date.now() - a.createdAt < staleAfterMs);
+        const freshIds = new Set(fresh.map((a) => a.id));
+        prev.forEach((a) => {
+          if (!freshIds.has(a.id)) clearAutoTimer(a.id);
+        });
+        return fresh;
       });
     }, 5_000);
     return () => clearInterval(t);
-  }, [staleAfterMs, actions.length]);
+  }, [staleAfterMs, actions.length, clearAutoTimer]);
 
   const visible = useMemo(() => actions.slice(0, maxVisible), [actions, maxVisible]);
 
@@ -125,6 +230,10 @@ export const DynamicActionBar: React.FC<Props> = ({
             key={a.id}
             action={a}
             isPrimary={i === 0}
+            status={a.uiStatus}
+            countdownSeconds={
+              a.autoTriggerAt ? Math.ceil(Math.max(0, a.autoTriggerAt - Date.now()) / 1000) : undefined
+            }
             onAccept={accept}
             onDismiss={dismiss}
           />
