@@ -74,6 +74,7 @@ export interface CloudIntentClassifierResult {
 export interface IntentClassificationOptions {
     providerDataScopes?: ProviderDataScopePolicy;
     cloudIntentClassifier?: (input: CloudIntentClassifierInput) => Promise<CloudIntentClassifierResult | null>;
+    cloudFirst?: boolean;
     localIntentEnhancementEnabled?: boolean;
     localIntentEnhancementAvailable?: boolean;
     localIntentClassifier?: (text: string, modeTemplateType?: string | null) => Promise<IntentResult | null>;
@@ -701,15 +702,24 @@ export async function classifyIntent(
 ): Promise<IntentResult> {
     // Tier 1: Try regex-based first (high confidence, instant)
     if (lastInterviewerTurn) {
+        if (options.cloudFirst === true) {
+            const cloudFirstResult = await classifyWithCloudFallback(lastInterviewerTurn, recentTranscript, modeTemplateType, options);
+            if (cloudFirstResult) {
+                return cloudFirstResult;
+            }
+        }
+
         const patternResult = detectIntentByPattern(lastInterviewerTurn, modeTemplateType);
         if (patternResult) {
             return patternResult;
         }
 
         // Tier 2: Cloud intent fallback for Chinese low-confidence turns.
-        const cloudResult = await classifyWithCloudFallback(lastInterviewerTurn, recentTranscript, modeTemplateType, options);
-        if (cloudResult) {
-            return cloudResult;
+        if (options.cloudFirst !== true) {
+            const cloudResult = await classifyWithCloudFallback(lastInterviewerTurn, recentTranscript, modeTemplateType, options);
+            if (cloudResult) {
+                return cloudResult;
+            }
         }
 
         // Tier 3: Optional local zero-shot SLM. Disabled by default because

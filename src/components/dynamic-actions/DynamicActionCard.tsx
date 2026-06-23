@@ -11,6 +11,9 @@ interface Props {
 }
 
 const INTENT_LABELS: Record<string, string> = {
+  general_assistance_request: '回应请求',
+  general_summarize: '总结请求',
+  general_explain: '概念解释',
   pricing_objection: '价格异议',
   buying_signal: '推进信号',
   price_pushback: '价格异议',
@@ -20,12 +23,27 @@ const INTENT_LABELS: Record<string, string> = {
   roi_question: 'ROI 询问',
   final_offer: '最终报价',
   discovery_question: '需求探索',
+  candidate_concern: '候选人顾虑',
+  strong_fit_signal: '强匹配信号',
+  candidate_experience_probe: '经验追问',
   action_item: '行动项',
-  decision: '决策',
+  decision_point: '决策确认',
   risk: '风险',
+  blocker_check: '阻塞风险',
+  owner_deadline_check: '负责人和截止时间',
+  behavioral_question: '行为面试题',
+  intro_pitch: '自我介绍',
+  company_motivation: '求职动机',
+  weakness_question: '优缺点问题',
   formula: '公式',
+  worked_example: '例题讲解',
   concept: '概念解释',
+  concept_explanation: '概念解释',
   coding_question: '技术问题',
+  coding_problem: '编程题',
+  screen_coding_problem: '屏幕代码题',
+  complexity_analysis: '复杂度分析',
+  system_design_prompt: '系统设计题',
 }
 
 // Single dynamic action card. Compact, glass-styled, dismissible.
@@ -81,6 +99,9 @@ export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, onAccept
           <span className="text-[12px] font-semibold overlay-text-primary truncate">{detectedIntent}</span>
           {confidencePct > 0 && (
             <span className="text-[10px] tabular-nums text-white/40 shrink-0">{confidencePct}%</span>
+          )}
+          {(action.evidenceCount ?? 0) > 1 && (
+            <span className="text-[10px] tabular-nums text-white/35 shrink-0">{action.evidenceCount}条证据</span>
           )}
         </div>
         <span className="text-[10.5px] text-white/50 truncate">{action.label}</span>

@@ -531,3 +531,114 @@ test('dismissed action can be re-detected after user dismissal', async () => {
   assert.ok(secondBatch.length > 0, 'Dismissal should not permanently suppress future matching actions');
   assert.notEqual(secondBatch[0].id, first.id);
 });
+
+test('assessSignals covers seven real modes with Chinese-first confirmed actions', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const cases = [
+    ['general', '帮我想一下我该怎么回应客户刚才的问题', 'general_assistance_request'],
+    ['general', '这个概念能不能简单说一下', 'general_explain'],
+    ['sales', '这个价格太高了, 我们预算不够', 'pricing_objection'],
+    ['sales', '我们准备推进, 你们发合同给法务审核吧', 'buying_signal'],
+    ['recruiting', '候选人问薪资和远程办公政策怎么回答', 'candidate_concern'],
+    ['recruiting', '你能举一个具体例子说明过往经验吗', 'candidate_experience_probe'],
+    ['team-meet', '这个行动项我来做, 周五前发出去', 'action_item'],
+    ['team-meet', '我们最终决定就选第二个方案', 'decision_point'],
+    ['looking-for-work', '讲一个你面对挑战最后成功的例子', 'behavioral_question'],
+    ['looking-for-work', '请先自我介绍一下你的经历', 'intro_pitch'],
+    ['technical-interview', '请实现一个函数来解这道算法题', 'coding_problem'],
+    ['technical-interview', '这个算法的时间复杂度和空间复杂度是多少', 'complexity_analysis'],
+    ['lecture', '这个叫贝叶斯定理, 公式是这样的', 'concept_explanation'],
+    ['lecture', '我们来看一个例题, 分步骤做一遍', 'worked_example'],
+  ];
+
+  for (const [modeTemplateType, transcript, expectedType] of cases) {
+    const actions = engine.assessSignals({
+      transcript,
+      speaker: 'interviewer',
+      modeTemplateType,
+      modeId: `mode_${modeTemplateType}`,
+      sessionId: `session_${modeTemplateType}_${expectedType}`,
+      intentResult: { intent: 'general', confidence: 0.82, answerShape: '中文回答' },
+      now: Date.now(),
+    });
+    assert.ok(
+      actions.some(action => action.type === expectedType && action.signalStatus === 'confirmed'),
+      `${modeTemplateType} should confirm ${expectedType}; got ${actions.map(a => `${a.type}:${a.signalStatus}`).join(', ')}`,
+    );
+  }
+});
+
+test('assessSignals uses classifier intent to synthesize high-confidence sales action without regex match', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = engine.assessSignals({
+    transcript: '这个方案我们内部还要和老板确认一下投入产出',
+    speaker: 'interviewer',
+    modeTemplateType: 'sales',
+    modeId: 'mode_sales',
+    sessionId: 'session_synth',
+    intentResult: { intent: 'handle_objection', confidence: 0.91, answerShape: '处理异议' },
+    emotion: 'angry',
+    emotionSource: 'sensevoice',
+    now: 10_000,
+  });
+
+  const action = actions.find(a => a.type === 'pricing_objection');
+  assert.ok(action, `expected synthesized pricing_objection; got ${actions.map(a => a.type).join(', ')}`);
+  assert.equal(action.confirmationSource, 'cloud_intent');
+  assert.equal(action.confirmedIntent, 'handle_objection');
+  assert.equal(action.emotion, 'angry');
+});
+
+test('assessSignals keeps sub-threshold signals out of top actions', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+  const sessionId = 'session_subthreshold';
+
+  const actions = engine.assessSignals({
+    transcript: '这个价格可能有一点点高',
+    speaker: 'interviewer',
+    modeTemplateType: 'sales',
+    modeId: 'mode_sales',
+    sessionId,
+    intentResult: { intent: 'handle_objection', confidence: 0.52, answerShape: '处理异议' },
+    now: 10_000,
+  });
+
+  assert.equal(actions.length, 0);
+  assert.equal(engine.getTopActions(sessionId).length, 0);
+});
+
+test('assessSignals requires repeated evidence before auto-surfacing ordinary objections', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+  const sessionId = 'session_auto_after_repeat';
+
+  const first = engine.assessSignals({
+    transcript: '这个价格太高了',
+    speaker: 'interviewer',
+    modeTemplateType: 'sales',
+    modeId: 'mode_sales',
+    sessionId,
+    intentResult: { intent: 'handle_objection', confidence: 0.9, answerShape: '处理异议' },
+    now: 10_000,
+  });
+  const second = engine.assessSignals({
+    transcript: '我们老板肯定会觉得报价太高',
+    speaker: 'interviewer',
+    modeTemplateType: 'sales',
+    modeId: 'mode_sales',
+    sessionId,
+    intentResult: { intent: 'handle_objection', confidence: 0.92, answerShape: '处理异议' },
+    now: 30_000,
+  });
+
+  assert.equal(first[0]?.autoSurfacePolicy, 'card');
+  assert.equal(first[0]?.autoTriggerEligible, false);
+  assert.equal(second[0]?.autoSurfacePolicy, 'auto');
+  assert.equal(second[0]?.autoTriggerEligible, true);
+  assert.ok((second[0]?.evidenceCount ?? 0) >= 2);
+});

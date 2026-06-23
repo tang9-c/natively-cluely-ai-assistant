@@ -53,6 +53,10 @@ export class DynamicActionStore {
                 existing.status !== 'dismissed' &&
                 existing.createdAt > windowStart
             ) {
+                if (newAction.autoSurfacePolicy === 'auto' && existing.autoSurfacePolicy !== 'auto') {
+                    existing.status = 'expired';
+                    continue;
+                }
                 return null; // Suppress duplicate
             }
         }

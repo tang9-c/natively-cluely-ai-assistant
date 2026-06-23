@@ -38,6 +38,10 @@ export interface DynamicActionPayload {
   autoSurfacePolicy?: 'auto' | 'card' | 'silent'
   autoTriggerEligible?: boolean
   autoTriggerReason?: string
+  signalStatus?: 'candidate' | 'confirmed' | 'cooling_down' | 'expired'
+  evidenceCount?: number
+  confirmationSource?: 'trigger' | 'cloud_intent' | 'local_intent' | 'heuristic'
+  confirmedIntent?: string
   answerStyle?: {
     maxWords: number
     format: 'bullets' | 'short_script' | 'code' | 'checklist' | 'summary'
