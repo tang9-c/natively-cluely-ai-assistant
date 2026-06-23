@@ -486,7 +486,13 @@ function detectInterviewIntentByPattern(text: string): IntentResult | null {
  */
 function detectSalesIntentByPattern(text: string): IntentResult | null {
     // 1. Buying signal — strongest purchase intent
-    if (/(ready to move|ready to sign|send (over )?the contract|send (over )?a (proposal|quote)|let'?s move forward|next steps|finalize|sign the deal|legal review|procurement|when can we start|let'?s get started|let'?s (kick ?off|schedule))/i.test(text)
+    // Debug session 2026-06-23: the previous alternation only accepted
+    // `send (over )?the contract` and `send (over )?a (proposal|quote)`, missing
+    // the common `send over the proposal` phrasing (article `the` instead of `a`).
+    // Unified to `send (over )?(the|a) (contract|proposal|quote)` to accept all
+    // four combinations: send the/a contract/proposal/quote, with or without
+    // the `over` particle.
+    if (/(ready to move|ready to sign|send (over )?(the|a) (contract|proposal|quote)|let'?s move forward|next steps|finalize|sign the deal|legal review|procurement|when can we start|let'?s get started|let'?s (kick ?off|schedule))/i.test(text)
         || /(准备签|准备推进|准备敲定|准备开始|发合同|发报价|法务审核|采购流程|下一步怎么走|下一步是|敲定|签合同|推进到|往下走|启动)/.test(text)) {
         return { intent: 'seize_signal', confidence: 0.95, answerShape: getAnswerShapeForMode('sales', 'seize_signal') };
     }
@@ -513,9 +519,19 @@ function detectSalesIntentByPattern(text: string): IntentResult | null {
  * risks, and status updates as discrete intents.
  */
 function detectTeamMeetIntentByPattern(text: string): IntentResult | null {
-    // 1. Action item — ownership + commitment
+    // 1. Action item — ownership + commitment.
+    // Debug session 2026-06-23: removed three overly-broad Chinese tokens that
+    // were shadowing later, more-specific intents:
+    //   - `截止` shadowed status_update's `截止日期` (e.g. "截止日期是什么时候?")
+    //   - `完成` shadowed capture_risk's `等.*完成` (e.g. "有个依赖要等前端完成")
+    //   - `上线` shadowed capture_risk's `延期` (e.g. "上线日期要延期了")
+    // The remaining tokens all directly express "I own this" + a deadline,
+    // which is the real action-item signal. Bare `截止`/`完成`/`上线` are not
+    // action-item markers by themselves — they only become meaningful when
+    // paired with a verb (周五前完成) or in compound phrases (截止日期),
+    // which is where capture_risk / status_update own them.
     if (/(i'?ll (do|send|handle|own|take|follow up|write|ship|PR|merge)|I'?m gonna|let me .* by|action item|to-do|assigned to|owner is|@.* (please )?(do|own|handle)|I can have .* by|by (monday|tuesday|wednesday|thursday|friday|EOD|EOW|next week))/i.test(text)
-        || /(我来做|我来发|我来负责|我来处理|我跟进|我写|我来 PR|我提|我合|交给我|我包了|分配给|让.*来|让.*做|行动项|待办|跟进项|截止|周五前|周一前|下周三前|今天内|尽快|尽快.*交|完成|上线|交付)/.test(text)) {
+        || /(我来做|我来发|我来负责|我来处理|我跟进|我写|我来 PR|我提|我合|交给我|我包了|分配给|让.*来|让.*做|行动项|待办|跟进项|周五前|周一前|下周三前|今天内|尽快|尽快.*交|交付)/.test(text)) {
         return { intent: 'capture_action', confidence: 0.92, answerShape: getAnswerShapeForMode('team-meet', 'capture_action') };
     }
     // 2. Decision — explicit "we decided"
