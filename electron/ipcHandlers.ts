@@ -25,6 +25,7 @@ import { CHAT_MODE_PROMPT } from './llm/prompts';
 import type { ModeEventContext } from './llm';
 import type { ResearchProgress } from './services/research/types';
 import { LlmInvalidFormatError } from './services/research/ResearchDossierBuilder';
+import { getOpenAtLoginForPlatform, setOpenAtLoginForPlatform } from './utils/loginItemSettings';
 import { redactForLog } from './utils/redactForLog';
 import { ParserLLM } from './services/profile/parsers/ParserLLM';
 import { CompanyNameExtractor } from './services/profile/extractors/CompanyNameExtractor';
@@ -728,17 +729,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('set-open-at-login', async (_, openAtLogin: boolean) => {
-    app.setLoginItemSettings({
-      openAtLogin,
-      openAsHidden: false,
-      path: app.getPath('exe'), // Explicitly point to executable for production reliability
-    });
+    setOpenAtLoginForPlatform(app, openAtLogin);
     return { success: true };
   });
 
   safeHandle('get-open-at-login', async () => {
-    const settings = app.getLoginItemSettings();
-    return settings.openAtLogin;
+    return getOpenAtLoginForPlatform(app);
   });
 
   // ── Generic Settings Handlers ──────────────────────────────────────────────

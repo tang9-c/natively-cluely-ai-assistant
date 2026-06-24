@@ -11,7 +11,7 @@
     "build:electron:tsc": "tsc -p electron/tsconfig.json",
     "typecheck:electron": "tsc -p electron/tsconfig.json --noEmit",
     "preview": "vite preview",
-    "postinstall": "cross-env SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm rebuild sharp && electron-rebuild -f -w better-sqlite3,keytar,sherpa-onnx-node && node scripts/download-models.js && node scripts/ensure-sqlite-vec.js && node scripts/ensure-sherpa-onnx-darwin.js && node scripts/patch-electron-plist.js",
+    "postinstall": "node scripts/postinstall.js",
     "ensure:native": "node scripts/ensure-native-artifact.js",
     "electron:dev": "npm run ensure:native && npm run build:electron && cross-env NODE_ENV=development electron .",
     "electron:build": "npm run ensure:native && npm run build:electron && cross-env NODE_ENV=production electron .",
@@ -21,7 +21,7 @@
     "start": "npm run app:dev",
     "dist": "npm run app:build",
     "build:native": "node scripts/build-native.js",
-    "rebuild:native": "npx electron-rebuild -f -w better-sqlite3,keytar,sherpa-onnx-node && node scripts/ensure-sherpa-onnx-darwin.js",
+    "rebuild:native": "npx electron-rebuild -f -w better-sqlite3,keytar,sherpa-onnx-node && node scripts/ensure-sqlite-vec.js",
     "test": "npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron --experimental-test-module-mocks --test $(find electron/services/__tests__ -name '*.test.mjs') $(find electron/llm/__tests__ -name '*.test.mjs') $(find electron/rag/__tests__ -name '*.test.mjs')",
     "test:modes": "npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron --test $(find electron/services/__tests__ -name 'Mode*.test.mjs') electron/services/__tests__/ProfileIntelligenceGate.test.mjs electron/services/__tests__/NativelyApiE2E.test.mjs",
     "test:modes:no-build": "ELECTRON_RUN_AS_NODE=1 npx electron --test $(find electron/services/__tests__ -name 'Mode*.test.mjs') electron/services/__tests__/ProfileIntelligenceGate.test.mjs electron/services/__tests__/NativelyApiE2E.test.mjs",
@@ -50,7 +50,8 @@
     ],
     "asarUnpack": [
       "**/*.node",
-      "**/*.dylib"
+      "**/*.dylib",
+      "**/*.dll"
     ],
     "directories": {
       "output": "release",
@@ -102,8 +103,7 @@
         {
           "target": "nsis",
           "arch": [
-            "x64",
-            "ia32"
+            "x64"
           ]
         },
         {
@@ -255,7 +255,8 @@
   },
   "optionalDependencies": {
     "sqlite-vec-darwin-arm64": "^0.1.7-alpha.2",
-    "sqlite-vec-darwin-x64": "^0.1.7-alpha.2"
+    "sqlite-vec-darwin-x64": "^0.1.7-alpha.2",
+    "sqlite-vec-windows-x64": "^0.1.7-alpha.2"
   },
   "overrides": {
     "onnxruntime-node": "1.22.0"
