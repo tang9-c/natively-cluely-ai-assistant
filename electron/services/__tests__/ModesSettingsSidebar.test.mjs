@@ -87,6 +87,8 @@ test('ModesSettingsBase exposes the full official mode settings surface', () => 
     '模式名称',
     '自定义上下文',
     '意图词',
+    '关键词不能包含逗号',
+    '每组最多 2000 字符',
     '恢复默认意图词',
     '笔记分区',
     '添加分区',
@@ -113,6 +115,7 @@ test('mode IPC and preload expose intent keyword settings', () => {
   assert.match(preloadSource, /modesResetIntentKeywords/);
   assert.match(electronTypesSource, /intentKeywords/);
   assert.match(electronTypesSource, /modesResetIntentKeywords/);
+  assert.match(modesSettingsSource, /maxLength=\{MAX_INTENT_KEYWORDS_CSV_LENGTH\}/);
 
   const updateBlock = sliceSafeHandleBlock(ipcHandlersSource, 'modes:update');
   assert.match(updateBlock, /intentKeywords/);

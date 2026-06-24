@@ -17,7 +17,7 @@ const intentDefaultsMod = await import(pathToFileURL(intentDefaultsPath).href);
 
 const { ModesManager, MODE_TEMPLATES, TEMPLATE_NOTE_SECTIONS } = modesMod;
 const { DatabaseManager } = databaseMod;
-const { DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE } = intentDefaultsMod;
+const { DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE, MAX_INTENT_KEYWORDS_CSV_LENGTH } = intentDefaultsMod;
 
 const EXPECTED_MODE_TYPES = [
   'general',
@@ -48,6 +48,7 @@ function makeDb({ modes = [], files = [], intentKeywords = [] } = {}) {
     files: [...files],
     intentKeywords: [...intentKeywords],
     sections: [],
+    seedDefaultIntentKeywordsCalls: [],
     getModes() {
       return this.modes;
     },
@@ -85,6 +86,7 @@ function makeDb({ modes = [], files = [], intentKeywords = [] } = {}) {
       this.upsertIntentKeywords(modeId, DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE[templateType] ?? []);
     },
     seedDefaultIntentKeywordsForMode(modeId, templateType) {
+      this.seedDefaultIntentKeywordsCalls.push([modeId, templateType]);
       const defaults = DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE[templateType] ?? [];
       for (const row of defaults) {
         if (!this.intentKeywords.some(existing => existing.mode_id === modeId && existing.intent === row.intent)) {
@@ -216,6 +218,48 @@ test('updateMode persists intent keyword edits without affecting other modes', (
     ],
   );
   assert.ok(db.getIntentKeywords(team.id).some(row => row.intent === 'capture_action'));
+});
+
+test('getModes hydrates fallback intent keywords without writing to the database', () => {
+  installDb(makeDb({
+    modes: [modeRow({ id: 'sales-mode', template_type: 'sales' })],
+    intentKeywords: [],
+  }));
+
+  const modes = ModesManager.getInstance().getModes();
+
+  assert.ok(modes[0].intentKeywords.some(row => row.intent === 'seize_signal'));
+  assert.deepEqual(db.getIntentKeywords('sales-mode'), []);
+  assert.deepEqual(db.seedDefaultIntentKeywordsCalls, []);
+});
+
+test('updateMode filters malformed intent keyword rows before persisting', () => {
+  const sales = ModesManager.getInstance().createMode({ name: 'Sales', templateType: 'sales' });
+
+  ModesManager.getInstance().updateMode(sales.id, {
+    intentKeywords: [
+      { intent: 'evil_intent', keywordsCsv: 'pwned' },
+      { intent: 'seize_signal', keywordsCsv: '马上采购,马上采购,, 准备签 ' },
+    ],
+  });
+
+  assert.deepEqual(
+    db.getIntentKeywords(sales.id).map(row => [row.intent, row.keywords_csv]),
+    [['seize_signal', '马上采购,准备签']],
+  );
+});
+
+test('updateMode caps oversized intent keyword CSV before persisting', () => {
+  const sales = ModesManager.getInstance().createMode({ name: 'Sales', templateType: 'sales' });
+  const hugeKeyword = 'x'.repeat(MAX_INTENT_KEYWORDS_CSV_LENGTH + 500);
+
+  ModesManager.getInstance().updateMode(sales.id, {
+    intentKeywords: [{ intent: 'seize_signal', keywordsCsv: hugeKeyword }],
+  });
+
+  const [row] = db.getIntentKeywords(sales.id);
+  assert.equal(row.intent, 'seize_signal');
+  assert.equal(row.keywords_csv.length, MAX_INTENT_KEYWORDS_CSV_LENGTH);
 });
 
 test('resetModeIntentKeywords restores template defaults for one mode', () => {

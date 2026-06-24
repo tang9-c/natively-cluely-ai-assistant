@@ -37,6 +37,8 @@ interface IntentKeywordSetting {
   keywordsCsv: string;
 }
 
+const MAX_INTENT_KEYWORDS_CSV_LENGTH = 2000;
+
 interface NoteSection {
   id: string;
   modeId: string;
@@ -263,8 +265,9 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
   };
 
   const handleIntentKeywordChange = (intent: string, keywordsCsv: string) => {
+    const cappedKeywordsCsv = keywordsCsv.slice(0, MAX_INTENT_KEYWORDS_CSV_LENGTH);
     setEditedIntentKeywords((prev) =>
-      prev.map((row) => (row.intent === intent ? { ...row, keywordsCsv } : row)),
+      prev.map((row) => (row.intent === intent ? { ...row, keywordsCsv: cappedKeywordsCsv } : row)),
     );
   };
 
@@ -535,7 +538,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                         意图词
                       </label>
                       <p className="text-[10px] text-text-tertiary mt-0.5">
-                        多个词用英文逗号分隔
+                        多个词用英文逗号分隔；关键词不能包含逗号；每组最多 2000 字符
                       </p>
                     </div>
                     <button
@@ -565,6 +568,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                         <textarea
                           value={row.keywordsCsv}
                           onChange={(e) => handleIntentKeywordChange(row.intent, e.target.value)}
+                          maxLength={MAX_INTENT_KEYWORDS_CSV_LENGTH}
                           rows={2}
                           placeholder="例如：太贵,预算不够,竞品"
                           className="w-full bg-transparent text-[11px] text-text-secondary placeholder:text-text-tertiary outline-none resize-none"

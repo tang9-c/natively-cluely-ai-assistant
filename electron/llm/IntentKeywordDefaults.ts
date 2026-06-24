@@ -7,6 +7,8 @@ export interface IntentKeywordConfig {
 
 export type IntentKeywordMap = Partial<Record<ConversationIntent, string[]>>;
 
+export const MAX_INTENT_KEYWORDS_CSV_LENGTH = 2000;
+
 const INTERVIEW_KEYWORDS: IntentKeywordConfig[] = [
     { intent: 'clarification', keywordsCsv: 'can you explain,what do you mean,clarify,could you elaborate on that specific,能解释,什么意思,怎么讲,具体说,澄清,说明下,解释一下,怎么理解' },
     { intent: 'follow_up', keywordsCsv: 'what happened,then what,and after that,what.s next,how did that go,后来呢,后来怎样,然后呢,接下来,后来如何,然后怎样,之后呢,结果呢,接下来呢,后来怎么了' },
@@ -54,6 +56,14 @@ export const INTENT_MATCH_ORDER_BY_TEMPLATE: Record<string, ConversationIntent[]
     'team-meet': ['capture_action', 'capture_decision', 'capture_risk', 'status_update'],
     lecture: ['explain_concept', 'render_formula', 'answer_class_question'],
 };
+
+export const VALID_INTENT_KEYWORD_INTENTS: ReadonlySet<ConversationIntent> = new Set(
+    Object.values(INTENT_MATCH_ORDER_BY_TEMPLATE).flat(),
+);
+
+export function isValidIntentKeywordIntent(intent: string): intent is ConversationIntent {
+    return VALID_INTENT_KEYWORD_INTENTS.has(intent as ConversationIntent);
+}
 
 export function normalizeIntentKeywordsCsv(csv: string): string[] {
     const seen = new Set<string>();

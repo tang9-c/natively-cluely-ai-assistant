@@ -3,6 +3,8 @@ import { DatabaseManager } from '../db/DatabaseManager';
 import { ModeContextRetriever } from './ModeContextRetriever';
 import {
     DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE,
+    MAX_INTENT_KEYWORDS_CSV_LENGTH,
+    isValidIntentKeywordIntent,
     normalizeIntentKeywordsCsv,
     type IntentKeywordConfig,
 } from '../llm/IntentKeywordDefaults';
@@ -191,6 +193,15 @@ function rowToIntentKeyword(row: any): IntentKeywordConfig {
     };
 }
 
+function sanitizeIntentKeywordRows(rows: IntentKeywordConfig[]): IntentKeywordConfig[] {
+    return rows
+        .filter(row => isValidIntentKeywordIntent(row.intent))
+        .map(row => ({
+            intent: row.intent,
+            keywordsCsv: normalizeIntentKeywordsCsv(row.keywordsCsv.slice(0, MAX_INTENT_KEYWORDS_CSV_LENGTH)).join(','),
+        }));
+}
+
 function rowToFile(row: any): ModeReferenceFile {
     return {
         id: row.id,
@@ -343,10 +354,7 @@ export class ModesManager {
         const db = ModesManager.getDatabase();
         db.updateMode(id, updates);
         if (updates.intentKeywords !== undefined) {
-            db.upsertIntentKeywords(id, updates.intentKeywords.map(row => ({
-                intent: row.intent,
-                keywordsCsv: normalizeIntentKeywordsCsv(row.keywordsCsv).join(','),
-            })));
+            db.upsertIntentKeywords(id, sanitizeIntentKeywordRows(updates.intentKeywords));
         }
     }
 
@@ -367,15 +375,15 @@ export class ModesManager {
     }
 
     public getIntentKeywords(modeId: string): IntentKeywordConfig[] {
-        return ModesManager.getDatabase().getIntentKeywords(modeId).map(rowToIntentKeyword);
+        return ModesManager.getDatabase().getIntentKeywords(modeId)
+            .map(rowToIntentKeyword)
+            .filter(row => isValidIntentKeywordIntent(row.intent));
     }
 
     private hydrateModeIntentKeywords(mode: Mode, db = ModesManager.getDatabase()): Mode {
-        let intentKeywords = db.getIntentKeywords?.(mode.id).map(rowToIntentKeyword) ?? [];
-        if (intentKeywords.length === 0) {
-            db.seedDefaultIntentKeywordsForMode?.(mode.id, mode.templateType);
-            intentKeywords = db.getIntentKeywords?.(mode.id).map(rowToIntentKeyword) ?? [];
-        }
+        let intentKeywords = db.getIntentKeywords?.(mode.id)
+            .map(rowToIntentKeyword)
+            .filter(row => isValidIntentKeywordIntent(row.intent)) ?? [];
         if (intentKeywords.length === 0) {
             intentKeywords = DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE[mode.templateType] ?? DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE.general;
         }
