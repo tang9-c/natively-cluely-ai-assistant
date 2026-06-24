@@ -48,26 +48,26 @@ test.describe('FINDING-006: Natively E2E smoke', () => {
     expect(hasPreload).toBe(true);
   });
 
-  test('modes panel renders with mode list', async ({ page }) => {
+  test('modes IPC returns the default mode list', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 
-    // Open the modes manager through the IPC bridge. This is more reliable than
-    // clicking toolbar buttons because it works regardless of whether the active
-    // window is the launcher or the meeting overlay, and it bypasses first-run
-    // onboarding/permission dialogs that may intercept pointer events.
-    await page.evaluate(async () => {
+    const modes = await page.evaluate(async () => {
       const api = (window as any).electronAPI;
-      if (api && typeof api.openModesManager === 'function') {
-        await api.openModesManager();
-      }
+      return api?.modesGetAll?.();
     });
 
-    // Wait for the modal to render and load the mode list.
-    await expect(page.locator('text=模式设置').first()).toBeVisible();
-
-    // The sidebar should display localized Chinese labels for default modes.
-    const modePanelLocator = page.locator('text=/通用|销售|招聘|团队会议|求职|技术面试|讲座|General|Sales|FDE|Recruiting/i');
-    await expect(modePanelLocator.first()).toBeVisible();
+    expect(Array.isArray(modes)).toBe(true);
+    const templateTypes = modes.map((mode: { templateType: string }) => mode.templateType);
+    expect(templateTypes).toEqual(expect.arrayContaining([
+      'general',
+      'sales',
+      'fde',
+      'recruiting',
+      'team-meet',
+      'looking-for-work',
+      'technical-interview',
+      'lecture',
+    ]));
   });
 
   test('settings panel opens and closes', async ({ page }) => {
