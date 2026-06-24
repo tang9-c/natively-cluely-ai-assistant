@@ -44,6 +44,18 @@ impl SpeakerStream {
     pub fn data_ready_signal(&self) -> Arc<(Mutex<bool>, Condvar)> {
         self.data_ready.clone()
     }
+
+    pub fn pause(&mut self) {
+        // WASAPI loopback capture is owned by the capture thread. The current
+        // shutdown boundary is Drop; pause is a no-op for API parity with macOS.
+    }
+
+    pub fn resume(&mut self) -> Result<()> {
+        // The Windows stream remains active until Drop. Returning Ok keeps the
+        // cross-platform control path consistent without spawning a second
+        // capture thread.
+        Ok(())
+    }
 }
 
 // LIMITATION: We currently only capture from the eMultimedia/eConsole default
@@ -184,8 +196,13 @@ impl SpeakerInput {
             let device = match device_id.as_deref() {
                 Some(id) if !id.is_empty() => match find_device_by_id(&Direction::Render, id) {
                     Some(d) => d,
-                    None => get_default_device(&Direction::Render)
-                        .map_err(|e| anyhow::anyhow!("device '{}' not found and default lookup failed: {}", id, e))?,
+                    None => get_default_device(&Direction::Render).map_err(|e| {
+                        anyhow::anyhow!(
+                            "device '{}' not found and default lookup failed: {}",
+                            id,
+                            e
+                        )
+                    })?,
                 },
                 _ => get_default_device(&Direction::Render)
                     .map_err(|e| anyhow::anyhow!("default render device unavailable: {}", e))?,

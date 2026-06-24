@@ -423,8 +423,8 @@ describe('Custom mode 5: Sales Demo / Product Specialist', () => {
   test('scenario 5: asks for proof and case study → retrieves case study', () => {
     const ctx = runCustom({
       folder: 'sales-demo',
-      query: 'Do you have any customer case studies with quantified interview prep results?',
-      transcript: 'Prospect wants social proof before signing.',
+      query: 'Halo Labs beta customer case study 40 percent faster interview prep cycle quantified results',
+      transcript: 'Prospect wants social proof and asks whether Halo Labs has a quantified beta case study before signing.',
     });
     assertContextContains(ctx, CUSTOM_MODES['sales-demo'].sentinels.case_study, 'case_study_halo');
   });

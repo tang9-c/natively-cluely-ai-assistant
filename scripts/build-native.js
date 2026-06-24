@@ -129,14 +129,23 @@ if (os.platform() === 'darwin') {
 
 } else {
   console.log(`Building for current platform: ${os.platform()}`);
+
+  if (os.platform() === 'win32') {
+    const target = 'x86_64-pc-windows-msvc';
+    try {
+      runCommand(`rustup target add ${target}`);
+    } catch (err) {
+      console.warn(`Warning: Could not configure rust target ${target}. Continuing anyway.`);
+    }
+
+    runCommand(`npx napi build --platform --target ${target} --release`);
+    verifyArtifacts(['index.win32-x64-msvc.node']);
+    process.exit(0);
+  }
+
   runCommand('npx napi build --platform --release');
 
   const artifactMap = {
-    win32: {
-      x64: ['index.win32-x64-msvc.node'],
-      ia32: ['index.win32-ia32-msvc.node'],
-      arm64: ['index.win32-arm64-msvc.node'],
-    },
     linux: {
       x64: ['index.linux-x64-gnu.node'],
       arm64: ['index.linux-arm64-gnu.node'],

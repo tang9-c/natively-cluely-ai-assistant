@@ -28,15 +28,26 @@ jobs:
           cache: npm
 
       - name: Install dependencies
+        shell: bash
         run: npm install
 
+      - name: Typecheck Electron main process
+        shell: bash
+        run: npm run typecheck:electron
+
+      - name: Run Windows packaging smoke tests
+        shell: bash
+        run: ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/__tests__/WindowsPackagingSmoke.test.mjs
+
       - name: Build renderer, main, and native module
+        shell: bash
         run: |
           npm run build
           npm run build:electron
           npm run build:native
 
       - name: Package x64 with electron-builder
+        shell: bash
         run: npx electron-builder --win --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"

@@ -40,7 +40,11 @@ test('native build script verifies the Windows x64 napi artifact', () => {
   const buildNativeScript = readRepoFile('scripts', 'build-native.js');
 
   assert.ok(
-    buildNativeScript.includes("x64: ['index.win32-x64-msvc.node']"),
+    buildNativeScript.includes("verifyArtifacts(['index.win32-x64-msvc.node'])"),
     'Expected build:native to verify the Windows x64 native module artifact'
+  );
+  assert.ok(
+    buildNativeScript.includes("const target = 'x86_64-pc-windows-msvc'"),
+    'Expected build:native to explicitly target Windows x64 MSVC'
   );
 });

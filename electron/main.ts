@@ -4,6 +4,7 @@ import path from "path"
 import fs from "fs"
 import { autoUpdater } from "electron-updater"
 import type { ProfileOrchestratorRuntime } from "./services/profile/ProfileOrchestratorContract"
+import { formatAcceleratorForPlatform, quitAcceleratorForPlatform } from "./utils/platformAccelerators"
 if (!app.isPackaged) {
   require('dotenv').config();
 }
@@ -439,10 +440,6 @@ export class AppState {
     // 3. Initialize other helpers
     this.screenshotHelper = new ScreenshotHelper(this.view)
     this.processingHelper = new ProcessingHelper(this)
-
-    if (process.platform === 'win32' || process.platform === 'darwin') {
-      this.cropperWindowHelper.preload();
-    }
 
     if (process.platform === 'win32' || process.platform === 'darwin') {
       this.cropperWindowHelper.preload();
@@ -4006,21 +4003,11 @@ export class AppState {
     // Update tooltip for verification
     this.tray.setToolTip('Natively');
 
-    // Helper to format accelerator for display (e.g. CommandOrControl+H -> Cmd+H)
-    const formatAccel = (accel: string) => {
-      return accel
-        .replace('CommandOrControl', 'Cmd')
-        .replace('Command', 'Cmd')
-        .replace('Control', 'Ctrl')
-        .replace('OrControl', '') // Cleanup just in case
-        .replace(/\+/g, '+');
-    };
-
-    const displayScreenshot = formatAccel(screenshotAccel);
+    const displayScreenshot = formatAcceleratorForPlatform(screenshotAccel);
     // We can also get the toggle visibility shortcut if desired
     const toggleKb = keybindManager.getKeybind('general:toggle-visibility');
     const toggleAccel = toggleKb || 'CommandOrControl+B';
-    const displayToggle = formatAccel(toggleAccel);
+    const displayToggle = formatAcceleratorForPlatform(toggleAccel);
 
     const contextMenu = Menu.buildFromTemplate([
       {
@@ -4062,7 +4049,7 @@ export class AppState {
       },
       {
         label: '退出',
-        accelerator: 'Command+Q',
+        accelerator: quitAcceleratorForPlatform(),
         click: () => {
           app.quit()
         }
