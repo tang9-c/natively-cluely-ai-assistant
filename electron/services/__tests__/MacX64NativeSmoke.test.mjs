@@ -38,6 +38,21 @@ test('native build script produces both macOS native-module artifacts when relea
   assert.match(src, /verifyArtifacts\(macTargets\.map/);
 });
 
+test('dev Electron startup preflights the native audio artifact before launching', () => {
+  const pkg = readJson('package.json');
+  const preflight = read('scripts/ensure-native-artifact.js');
+
+  assert.match(pkg.scripts['ensure:native'], /node scripts\/ensure-native-artifact\.js/);
+  assert.match(pkg.scripts['electron:dev'], /npm run ensure:native && npm run build:electron/);
+  assert.match(pkg.scripts['electron:build'], /npm run ensure:native && npm run build:electron/);
+  assert.match(preflight, /index\.darwin-arm64\.node/);
+  assert.match(preflight, /index\.darwin-x64\.node/);
+  assert.match(preflight, /NATIVELY_SKIP_NATIVE_CHECK/);
+  assert.match(preflight, /Full Xcode is required/);
+  assert.match(preflight, /sudo xcode-select -s \/Applications\/Xcode\.app\/Contents\/Developer/);
+  assert.match(preflight, /npm run build:native/);
+});
+
 test('native module loader knows the macOS Intel binary name and uses app.asar.unpacked first in packaged app', () => {
   const src = read('electron/audio/nativeModuleLoader.ts');
   assert.match(src, /darwin: \{ x64: 'index\.darwin-x64\.node', arm64: 'index\.darwin-arm64\.node' \}/);
