@@ -1,0 +1,53 @@
+# Build a 64-bit Windows distributable of Natively on GitHub Actions.
+#
+# Trigger: manual (workflow_dispatch) only. Run from the Actions tab in
+# the GitHub UI, or with `gh workflow run build-windows-x64`.
+#
+# This workflow mirrors the Intel Mac release path, but runs on a native
+# Windows runner so napi-rs emits index.win32-x64-msvc.node and
+# electron-builder packages the x64 Windows installers.
+
+name: Build Windows x64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows-x64:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build renderer, main, and native module
+        run: |
+          npm run build
+          npm run build:electron
+          npm run build:native
+
+      - name: Package x64 with electron-builder
+        run: npx electron-builder --win --x64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Upload distributable artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: natively-windows-x64-${{ github.run_id }}
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
+          if-no-files-found: error
+          retention-days: 14
