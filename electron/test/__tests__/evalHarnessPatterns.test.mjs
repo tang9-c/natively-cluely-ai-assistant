@@ -354,6 +354,15 @@ describe('mode-specific micro-rule invariants', () => {
     assert.match(tiny.TINY_MODE_LECTURE_PROMPT, /📝/);
   });
 
+  test('TINY_MODE_FDE_PROMPT preserves validation, non-overpromise, and emotion rules', () => {
+    assert.match(tiny.TINY_MODE_FDE_PROMPT, /structured capture/i);
+    assert.match(tiny.TINY_MODE_FDE_PROMPT, /verification step/i);
+    assert.match(tiny.TINY_MODE_FDE_PROMPT, /Do not overpromise/i);
+    assert.match(tiny.TINY_MODE_FDE_PROMPT, /PII|SOC2|HIPAA|GDPR/i);
+    assert.match(tiny.TINY_MODE_FDE_PROMPT, /EMOTION SIGNALS/i);
+    assert.match(tiny.TINY_MODE_FDE_PROMPT, /frustrated|skeptical|urgent/i);
+  });
+
   test('TINY_CORE did NOT absorb the mode-specific micro-rules (no bloat)', () => {
     // Each of these phrases must live only in its mode prompt, not in CORE,
     // so future authors do not put them in CORE and re-introduce bloat.
@@ -362,6 +371,7 @@ describe('mode-specific micro-rule invariants', () => {
     assert.doesNotMatch(tiny.TINY_CORE, /lowball/i);
     assert.doesNotMatch(tiny.TINY_CORE, /amortized constant/i);
     assert.doesNotMatch(tiny.TINY_CORE, /use the other candidate/i);
+    assert.doesNotMatch(tiny.TINY_CORE, /Do not overpromise/i);
   });
 });
 
