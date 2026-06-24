@@ -3455,7 +3455,7 @@ Provide only the answer, nothing else.`;
             />
             <motion.div
               ref={shellRef}
-              className={`relative max-w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}
+              className={`relative max-w-full backdrop-blur-2xl border rounded-[24px] ${isModeDropdownOpen ? 'overflow-visible' : 'overflow-hidden'} flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}
               style={{
                 ...appearance.shellStyle,
                 width: shellWidth,
@@ -3496,7 +3496,7 @@ Provide only the answer, nothing else.`;
                             : 'border-white/10 bg-bg-elevated'
                         }`}
                       >
-                        <div className="max-h-64 overflow-y-auto p-1.5 space-y-0.5">
+                        <div className="max-h-[min(22rem,calc(100vh-7rem))] overflow-y-auto p-1 space-y-0.5">
                           {modes.length === 0 && (
                             <div className="px-3 py-2 text-[11px] text-text-tertiary italic text-center">
                               暂无模式
@@ -3527,7 +3527,7 @@ Provide only the answer, nothing else.`;
                                   setModeDropdownError(null);
                                   setIsModeDropdownOpen(false);
                                 }}
-                                className={`w-full rounded-[10px] px-3 py-2 flex items-center justify-between transition-all duration-200 ${isSelected ? 'bg-bg-item-active text-text-primary' : 'hover:bg-bg-item-surface text-text-secondary hover:text-text-primary'}`}
+                                className={`w-full rounded-[10px] px-3 py-1.5 min-h-7 flex items-center justify-between transition-all duration-200 ${isSelected ? 'bg-bg-item-active text-text-primary' : 'hover:bg-bg-item-surface text-text-secondary hover:text-text-primary'}`}
                               >
                                 <div className="flex items-center gap-2 min-w-0">
                                   <span className="text-xs font-medium truncate">{getModeDisplayName(mode)}</span>
