@@ -54,14 +54,36 @@ function buildPrompt(rawText: string, attempt: number): string {
   return `${base}\n\nCRITICAL: Your previous response was missing the candidate's real full name or contained placeholder values like "Unknown". You MUST extract the actual person's full name from the resume header or contact section. Do NOT return "Unknown" or empty strings. Fill every field with real information found in the text.`;
 }
 
+// Reject names that look like a single character or contain organization
+// keywords. This catches LLM hallucinations where it picked a single character
+// from a company name (e.g. extracting "安" from "阿里巴巴") or returned the
+// company itself. When this returns false, isValidResult() will fail and the
+// outer parse() loop will retry the LLM call with an extra emphasis prompt.
+function looksLikePlausibleName(raw: string | undefined | null): boolean {
+  if (typeof raw !== 'string') return false;
+  const cleaned = raw.trim();
+  if (!cleaned) return false;
+  if (cleaned.length < 2) return false; // 中文姓名至少 2 字
+  if (cleaned.toLowerCase() === 'unknown') return false;
+  // 含公司/组织特征词 → 大概率是公司名误识
+  if (/(公司|集团|有限|科技|股份|工作室|事务所|实验室|研究院|Studio|LLC|Inc\.?|Ltd\.?|Corp\.?|Co\.?|Company|Holdings|Group|Industries|Innovation|Solutions|Networks|Systems|Limited|Ventures|Labs|Capital|Partners|Technologies|巴巴)/i.test(cleaned)) {
+    return false;
+  }
+  return true;
+}
+
 function normalize(parsed: any): ResumeParsed {
   const rawName = parsed?.identity?.name;
-  // Treat LLM fallback placeholders as missing so the retry loop gets a chance
-  // to extract the real name from the resume text.
-  const normalizedName =
-    rawName && typeof rawName === 'string' && rawName.trim() && rawName.trim().toLowerCase() !== 'unknown'
-      ? rawName.trim()
-      : '';
+  // 额外保险:如果 LLM 返回的字符串恰好等于某段工作经历的公司名,也是误识
+  const orgNames: string[] = Array.isArray(parsed?.experience)
+    ? parsed.experience.map((e: any) => String(e?.organization ?? '')).filter(Boolean)
+    : [];
+  const looksPlausible = looksLikePlausibleName(rawName)
+    && !orgNames.includes(rawName?.trim?.() ?? '');
+
+  // Treat LLM fallback placeholders and implausible names as missing so the
+  // retry loop gets a chance to extract the real name from the resume text.
+  const normalizedName = looksPlausible ? rawName!.trim() : '';
 
   const identity = {
     name: normalizedName || 'Unknown',
