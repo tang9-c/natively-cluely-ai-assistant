@@ -1,0 +1,6 @@
+{
+  "pilot": "workflow approval assistant",
+  "success_metric": "Pilot success metric: reduce approval cycle time by 30 percent",
+  "phase_one": ["Salesforce read", "Snowflake query", "CSV export review"],
+  "out_of_scope": ["automated production writes", "cross-region deployment"]
+}

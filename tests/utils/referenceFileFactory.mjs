@@ -33,6 +33,13 @@ export const SENTINELS = {
     playbook: 'Buying signal: ask about annual seats',
     pipeline: 'Enterprise pilot conversion 28%',
   },
+  fde: {
+    architecture: 'Customer architecture uses Salesforce, Snowflake, and Okta SSO',
+    workflow: 'Approval handoff currently takes 3 manual spreadsheet steps',
+    security: 'PII must be redacted from debug logs before export',
+    prototype: 'Pilot success metric: reduce approval cycle time by 30 percent',
+    risk: 'Delivery risk FDE-7: API owner is unconfirmed',
+  },
   recruiting: {
     jd: 'Backend Platform role requires Kafka, PostgreSQL, and incident response ownership',
     rubric: 'Score thresholds: 4=strong yes',
