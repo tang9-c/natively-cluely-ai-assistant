@@ -112,6 +112,35 @@ test('buildPostCallEnhancements handles Chinese recruiting logistics and follow-
   assert.ok(!result.coachingInsights.some(insight => insight.type === 'missing_logistics'));
 });
 
+test('fde post-call insights flag customer goal without success metric', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'fde',
+    transcript: [
+      { speaker: 'Customer', text: '我们的目标是减少人工审批工作，但暂时还没定义上线后怎么衡量。', timestamp: 1 },
+    ],
+    summaryData: { sections: [] },
+  });
+
+  assert.ok(result.coachingInsights.some(insight => insight.type === 'missing_success_metric'));
+  assert.ok(result.coachingInsights.some(insight => insight.type === 'missing_delivery_next_step'));
+});
+
+test('fde post-call insights detect integration ownership, security, scope, and emotion signals', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'fde',
+    transcript: [
+      { speaker: 'Customer', text: '我们担心 PII 出现在日志里，而且能不能也在第一阶段接 Salesforce 和 Slack？', timestamp: 1 },
+    ],
+    summaryData: { sections: [] },
+  });
+
+  assert.ok(result.coachingInsights.some(insight => insight.type === 'missing_integration_owner'));
+  assert.ok(result.coachingInsights.some(insight => insight.type === 'security_risk_captured'));
+  assert.ok(result.coachingInsights.some(insight => insight.type === 'scope_change_detected'));
+  assert.ok(result.coachingInsights.some(insight => insight.type === 'emotion_signal_detected'));
+  assert.match(result.followUpDraft, /^Hi,/);
+});
+
 test('generateCoachingInsights flags Chinese lecture study follow-up', () => {
   const insights = generateCoachingInsights([
     { speaker: 'teacher', text: '今天作业是阅读第三章，下周有测验。', timestamp: 30 },

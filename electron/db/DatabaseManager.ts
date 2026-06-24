@@ -937,6 +937,55 @@ export class DatabaseManager {
             this.db.pragma('user_version = 21');
         }
 
+        // Version 21 -> 22: Seed the FDE template mode and its note sections for existing databases.
+        if (version < 22) {
+            console.log('[DatabaseManager] Applying migration v21 -> v22: Seed FDE mode for existing databases');
+            const defaultFdeModeId = 'mode_fde_default';
+            const fdeSections = [
+                { title: '客户目标', description: '客户想达成的业务结果、成功指标和决策背景。' },
+                { title: '现场工作流', description: '客户当前如何完成这件事，涉及哪些角色、输入、输出和交接。' },
+                { title: '痛点与阻塞', description: '重复劳动、系统限制、数据缺口、流程摩擦和失败成本。' },
+                { title: '系统与数据约束', description: '集成系统、API、权限、SSO、数据源、安全和合规约束。' },
+                { title: '方案假设', description: '现场形成的技术方案、原型方向、待验证假设和成功门槛。' },
+                { title: '风险与未知项', description: '尚未确认、可能影响交付、范围或上线计划的事项。' },
+                { title: '行动项', description: '会后要推进的负责人、截止时间、所需资料和交付物。' },
+            ];
+
+            const existingFdeMode = this.db.prepare(
+                'SELECT id FROM modes WHERE template_type = ? LIMIT 1'
+            ).get('fde') as { id: string } | undefined;
+
+            if (!existingFdeMode) {
+                this.db.prepare(`
+                    INSERT OR IGNORE INTO modes (id, name, template_type, custom_context, is_active)
+                    VALUES (?, ?, ?, ?, 0)
+                `).run(defaultFdeModeId, 'FDE', 'fde', '');
+            }
+
+            const fdeMode = this.db.prepare(
+                'SELECT id FROM modes WHERE template_type = ? LIMIT 1'
+            ).get('fde') as { id: string } | undefined;
+
+            if (fdeMode) {
+                const hasSection = this.db.prepare(
+                    'SELECT id FROM mode_note_sections WHERE mode_id = ? LIMIT 1'
+                ).get(fdeMode.id);
+
+                if (!hasSection) {
+                    const insertSection = this.db.prepare(
+                        'INSERT OR IGNORE INTO mode_note_sections (id, mode_id, title, description, sort_order) VALUES (?, ?, ?, ?, ?)'
+                    );
+
+                    fdeSections.forEach((section, index) => {
+                        insertSection.run(`ns_fde_${fdeMode.id}_${index}`, fdeMode.id, section.title, section.description, index);
+                    });
+                    console.log(`[DatabaseManager] Seeded ${fdeSections.length} FDE sections for mode "${fdeMode.id}"`);
+                }
+            }
+
+            this.db.pragma('user_version = 22');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 

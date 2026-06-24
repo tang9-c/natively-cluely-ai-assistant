@@ -43,6 +43,14 @@ export function buildSalesNegotiationContext() {
   ].join('\n');
 }
 
+export function buildFdeCustomerSiteContext() {
+  return [
+    'Customer: Meridian Health Operations.',
+    'Meeting: on-site workflow discovery with Ops, IT, Security, and Data teams.',
+    'Internal FDE note: do not commit to production timeline until API owner and PII logging constraints are validated.',
+  ].join('\n');
+}
+
 export function buildRecruitingScreenContext() {
   return [
     'Candidate: ATS-7321 (referral channel).',

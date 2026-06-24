@@ -56,6 +56,13 @@ const TEAM_DECISION_PATTERN = /\b(decided|approved|confirmed|final decision)\b|(
 const TEAM_RISK_PATTERN = /\b(blocker|blocked|risk|dependency|behind schedule)\b|(?:风险|阻塞|依赖|延期|卡住|影响进度)/i;
 const LECTURE_STUDY_PATTERN = /\b(homework|assignment|read|chapter|due|exam|quiz)\b|(?:作业|阅读|章节|第[一二三四五六七八九十\d]+章|考试|测验|例题)/i;
 const INTERVIEW_UNCERTAINTY_PATTERN = /\b(i don'?t know|not sure|maybe|i think)\b|(?:不确定|不会|不太会|没有把握|需要优化|复杂度|补(?:一个)?项目例子)/i;
+const FDE_GOAL_PATTERN = /\b(goal|business goal|success metric|KPI|ROI|outcome)\b|(?:目标|业务目标|成功标准|成功指标|业务结果|希望达到)/i;
+const FDE_SUCCESS_METRIC_PATTERN = /\b(success metric|KPI|measure|target|baseline)\b|(?:成功指标|基线|目标值|指标)/i;
+const FDE_INTEGRATION_PATTERN = /\b(API|integration|CRM|Salesforce|HubSpot|SSO|SAML|OAuth|webhook|database|warehouse|Slack)\b|(?:集成|接口|数据源|权限|同步|数据库|第一阶段接)/i;
+const FDE_SECURITY_PATTERN = /\b(PII|SOC2|HIPAA|GDPR|security|privacy|audit|compliance|data residency)\b|(?:安全|隐私|敏感数据|审计|合规|脱敏|数据驻留|日志)/i;
+const FDE_SCOPE_CHANGE_PATTERN = /\b(also|additionally|phase|nice to have|scope)\b|(?:顺便|能不能也|另外还要|第一阶段|第二阶段|范围|优先级)/i;
+const FDE_NEXT_STEP_PATTERN = /\b(next step|owner|deadline|pilot|POC|prototype|validation|validate|prepare)\b|(?:下一步|负责人|截止|试点|原型|验证|会后)/i;
+const FDE_EMOTION_PATTERN = /\b(worried|concerned|frustrated|skeptical|urgent|deadline|excited|hesitant)\b|(?:担心|怕|太慢|出错|确定吗|真的吗|月底前|老板在催|很有用|再看看)/i;
 
 export function buildPostCallEnhancements(params: {
   transcript: PostCallTranscriptSegment[];
@@ -125,7 +132,7 @@ export function buildFollowUpDraft(
   actionItems: StructuredActionItem[],
   summaryData?: { overview?: string; keyPoints?: string[]; sections?: Array<{ title: string; bullets: string[] }> }
 ): string {
-  const greeting = modeTemplateType === 'sales' || modeTemplateType === 'recruiting'
+  const greeting = modeTemplateType === 'sales' || modeTemplateType === 'recruiting' || modeTemplateType === 'fde'
     ? 'Hi,'
     : 'Hi team,';
   const lines = [greeting, '', 'Thanks for the conversation today.'];
@@ -180,6 +187,30 @@ export function generateCoachingInsights(
   } else if (modeTemplateType === 'looking-for-work' || modeTemplateType === 'technical-interview') {
     if (INTERVIEW_UNCERTAINTY_PATTERN.test(text)) {
       add('uncertainty_pattern', 'Uncertainty appeared in answers', 'Review these moments and prepare a tighter explanation or fallback answer.', 'info', firstMatch(text, /[^。！？.!?]*(?:i don'?t know|not sure|maybe|i think|不确定|不会|不太会|没有把握|需要优化|复杂度|补(?:一个)?项目例子)[^。！？.!?]*/i));
+    }
+  } else if (modeTemplateType === 'fde') {
+    const hasGoal = FDE_GOAL_PATTERN.test(text);
+    const hasSuccessMetric = FDE_SUCCESS_METRIC_PATTERN.test(text);
+    const hasIntegration = FDE_INTEGRATION_PATTERN.test(text);
+    const hasNextStep = FDE_NEXT_STEP_PATTERN.test(text);
+
+    if (hasGoal && !hasSuccessMetric) {
+      add('missing_success_metric', 'Success metric may be unclear', 'The customer stated a goal, but no measurable success metric was captured.', 'opportunity');
+    }
+    if (hasIntegration && !hasNextStep) {
+      add('missing_integration_owner', 'Integration follow-up may need an owner', 'The conversation included systems or integration work, but no validation owner or next step was explicit.', 'opportunity');
+    }
+    if (FDE_SECURITY_PATTERN.test(text)) {
+      add('security_risk_captured', 'Security or compliance signal captured', 'The customer raised a security, privacy, or compliance concern that should be tracked through delivery.', 'info', firstMatch(text, /[^。！？.!?]*(?:PII|SOC2|HIPAA|GDPR|security|privacy|audit|compliance|data residency|安全|隐私|敏感数据|审计|合规|脱敏|数据驻留|日志)[^。！？.!?]*/i));
+    }
+    if (FDE_SCOPE_CHANGE_PATTERN.test(text)) {
+      add('scope_change_detected', 'Scope change signal detected', 'The customer introduced possible additional scope. Confirm priority and phase before committing.', 'opportunity', firstMatch(text, /[^。！？.!?]*(?:also|additionally|phase|nice to have|scope|顺便|能不能也|另外还要|第一阶段|第二阶段|范围|优先级)[^。！？.!?]*/i));
+    }
+    if (!hasNextStep) {
+      add('missing_delivery_next_step', 'Delivery next step was not explicit', 'FDE meetings should end with a concrete validation step, owner, and expected artifact.', 'opportunity');
+    }
+    if (FDE_EMOTION_PATTERN.test(text)) {
+      add('emotion_signal_detected', 'Customer emotion signal detected', 'The customer expressed concern, frustration, urgency, skepticism, excitement, or hesitation. Reflect this in the follow-up and risk plan.', 'info');
     }
   } else if (modeTemplateType === 'team-meet') {
     if (TEAM_DECISION_PATTERN.test(text)) {

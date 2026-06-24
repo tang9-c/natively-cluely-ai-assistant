@@ -21,6 +21,7 @@ import { SENTINELS, loadReferenceFiles, foreignSentinels } from '../../../tests/
 import {
   buildLookingForWorkContext,
   buildSalesNegotiationContext,
+  buildFdeCustomerSiteContext,
   buildRecruitingScreenContext,
   buildLectureContext,
   buildTechnicalInterviewContext,
@@ -190,6 +191,63 @@ describe('Mode: sales — five realistic sales scenarios', () => {
       query: 'what was the enterprise pilot conversion in Q1',
     });
     assertSentinelInRetrieval(result, SENTINELS.sales.pipeline);
+  });
+});
+
+describe('Mode: fde — five realistic customer-site deployment scenarios', () => {
+  const folder = 'fde';
+  const template = 'fde';
+  const ctx = buildFdeCustomerSiteContext();
+
+  test('1. Architecture discovery — Salesforce Snowflake Okta', () => {
+    const result = runWith({
+      modeFolder: folder,
+      templateType: template,
+      customContext: ctx,
+      query: 'what systems do we need to integrate with for the customer workflow',
+    });
+    assertSentinelInRetrieval(result, SENTINELS.fde.architecture);
+    assertNoForeignSentinels(result, 'fde');
+  });
+
+  test('2. Workflow discovery — manual spreadsheet handoff', () => {
+    const result = runWith({
+      modeFolder: folder,
+      templateType: template,
+      customContext: ctx,
+      query: 'capture the current approval workflow and manual handoff pain',
+    });
+    assertSentinelInRetrieval(result, SENTINELS.fde.workflow);
+  });
+
+  test('3. Security concern — PII logging', () => {
+    const result = runWith({
+      modeFolder: folder,
+      templateType: template,
+      customContext: ctx,
+      query: 'security asks what happens to PII in debug logs',
+    });
+    assertSentinelInRetrieval(result, SENTINELS.fde.security);
+  });
+
+  test('4. Prototype scope — pilot success metric', () => {
+    const result = runWith({
+      modeFolder: folder,
+      templateType: template,
+      customContext: ctx,
+      query: 'what should we use as the pilot success metric',
+    });
+    assertSentinelInRetrieval(result, SENTINELS.fde.prototype);
+  });
+
+  test('5. Delivery risk — API owner missing', () => {
+    const result = runWith({
+      modeFolder: folder,
+      templateType: template,
+      customContext: ctx,
+      query: 'what is delivery risk FDE-7 and is the API owner confirmed before committing timeline',
+    });
+    assertSentinelInRetrieval(result, SENTINELS.fde.risk);
   });
 });
 

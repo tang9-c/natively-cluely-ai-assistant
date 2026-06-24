@@ -5,6 +5,7 @@ import {
     MODE_GENERAL_PROMPT,
     MODE_LOOKING_FOR_WORK_PROMPT,
     MODE_SALES_PROMPT,
+    MODE_FDE_PROMPT,
     MODE_RECRUITING_PROMPT,
     MODE_TEAM_MEET_PROMPT,
     MODE_LECTURE_PROMPT,
@@ -17,6 +18,7 @@ export type ModeTemplateType =
     | 'general'
     | 'looking-for-work'
     | 'sales'
+    | 'fde'
     | 'recruiting'
     | 'team-meet'
     | 'lecture'
@@ -55,6 +57,7 @@ export const MODE_TEMPLATES: Array<{
 }> = [
     { type: 'general',              label: '通用',              description: '适用于任何会议或对话的通用智能助手。' },
     { type: 'sales',                label: '销售',              description: '通过策略性需求发现和异议处理来促成交易。' },
+    { type: 'fde',                  label: 'FDE',               description: '支持前线部署工程师完成客户现场多人会议、需求澄清、技术约束识别与交付推进。' },
     { type: 'recruiting',           label: '招聘',              description: '通过结构化面试洞察来评估候选人。' },
     { type: 'team-meet',            label: '团队会议',          description: '跟踪会议中的行动项和关键决策。' },
     { type: 'looking-for-work',     label: '求职',              description: '自信、清晰地回答面试问题。' },
@@ -83,6 +86,15 @@ export const TEMPLATE_NOTE_SECTIONS: Record<ModeTemplateType, Array<{ title: str
         { title: '需求发现',           description: '客户在需求发现阶段说了什么。' },
         { title: '产品',           description: '我是如何介绍产品的，以及客户的反应。' },
         { title: '异议',           description: '客户提出的任何异议。' },
+    ],
+    fde: [
+        { title: '客户目标', description: '客户想达成的业务结果、成功指标和决策背景。' },
+        { title: '现场工作流', description: '客户当前如何完成这件事，涉及哪些角色、输入、输出和交接。' },
+        { title: '痛点与阻塞', description: '重复劳动、系统限制、数据缺口、流程摩擦和失败成本。' },
+        { title: '系统与数据约束', description: '集成系统、API、权限、SSO、数据源、安全和合规约束。' },
+        { title: '方案假设', description: '现场形成的技术方案、原型方向、待验证假设和成功门槛。' },
+        { title: '风险与未知项', description: '尚未确认、可能影响交付、范围或上线计划的事项。' },
+        { title: '行动项', description: '会后要推进的负责人、截止时间、所需资料和交付物。' },
     ],
     recruiting: [
         { title: '行动项',          description: '我在会议后必须完成的所有行动项。' },
@@ -120,6 +132,7 @@ const TEMPLATE_SYSTEM_PROMPTS: Record<ModeTemplateType, string> = {
 
     'looking-for-work': MODE_LOOKING_FOR_WORK_PROMPT,
     sales: MODE_SALES_PROMPT,
+    fde: MODE_FDE_PROMPT,
     recruiting: MODE_RECRUITING_PROMPT,
     'team-meet': MODE_TEAM_MEET_PROMPT,
     lecture: MODE_LECTURE_PROMPT,
@@ -245,6 +258,7 @@ export class ModesManager {
     // vectors of the same bug class — the intro-question shortcut and the
     // premium prompt/context injection — by gating the whole intercept here.
     private static readonly PREMIUM_INTERCEPT_INCOMPATIBLE_TEMPLATES: ReadonlySet<ModeTemplateType> = new Set([
+        'fde',
         'technical-interview',
         'team-meet',
         'lecture',
