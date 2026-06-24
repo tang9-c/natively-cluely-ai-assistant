@@ -28,6 +28,17 @@ test('windows package config ships x64 native dependencies outside asar', () => 
   assert.ok(pkg.build.asarUnpack.includes('**/*.dll'), '.dll files must be unpacked outside app.asar on Windows');
 });
 
+test('windows package dependencies do not include stale aliases that electron-builder cannot stat', () => {
+  const pkg = readJson('package.json');
+  const lock = readJson('package-lock.json');
+
+  assert.equal(pkg.dependencies['@tanstack/react-query'], '^5.100.10');
+  assert.equal(pkg.dependencies['react-query'], undefined);
+  assert.equal(lock.packages['@tanstack/react-query@^5.100.10'], undefined);
+  assert.equal(lock.packages[''].dependencies['react-query'], undefined);
+  assert.equal(lock.packages['node_modules/react-query'], undefined);
+});
+
 test('sqlite-vec package names include the real Windows x64 package', () => {
   const pkg = readJson('package.json');
   const ensureScript = read('scripts/ensure-sqlite-vec.js');
