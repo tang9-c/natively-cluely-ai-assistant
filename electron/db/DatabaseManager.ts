@@ -5,6 +5,10 @@ import { app } from 'electron';
 import fs from 'fs';
 import * as sqliteVec from 'sqlite-vec';
 import { buildLegacySpaceCaseSql } from '../rag/embeddingSpace';
+import {
+    DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE,
+    type IntentKeywordConfig,
+} from '../llm/IntentKeywordDefaults';
 import type { ResumeNode, UserProfileRecord } from '../services/profile/types';
 
 // Interfaces for our data objects
@@ -986,6 +990,37 @@ export class DatabaseManager {
             this.db.pragma('user_version = 22');
         }
 
+        // Version 22 -> 23: Store per-mode intent keyword defaults for editable mode settings.
+        if (version < 23) {
+            console.log('[DatabaseManager] Applying migration v22 -> v23: Add mode intent keyword settings');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS mode_intent_keywords (
+                    id TEXT PRIMARY KEY,
+                    mode_id TEXT NOT NULL,
+                    intent TEXT NOT NULL,
+                    keywords_csv TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(mode_id, intent),
+                    FOREIGN KEY(mode_id) REFERENCES modes(id) ON DELETE CASCADE
+                );
+            `);
+
+            const modes = this.db.prepare('SELECT id, template_type FROM modes').all() as Array<{ id: string; template_type: string }>;
+            const insertKeyword = this.db.prepare(`
+                INSERT OR IGNORE INTO mode_intent_keywords
+                    (id, mode_id, intent, keywords_csv, updated_at)
+                VALUES (?, ?, ?, ?, datetime('now'))
+            `);
+            for (const mode of modes) {
+                const defaults = DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE[mode.template_type] ?? DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE.general;
+                for (const row of defaults) {
+                    insertKeyword.run(`ik_${mode.id}_${row.intent}`, mode.id, row.intent, row.keywordsCsv);
+                }
+            }
+            this.db.pragma('user_version = 23');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -1261,6 +1296,60 @@ export class DatabaseManager {
         } catch (e) {
             console.error('[DatabaseManager] updateMode failed:', e);
         }
+    }
+
+    public getIntentKeywords(modeId: string): any[] {
+        if (!this.db) return [];
+        try {
+            return this.db.prepare(
+                'SELECT * FROM mode_intent_keywords WHERE mode_id = ? ORDER BY created_at ASC, intent ASC'
+            ).all(modeId);
+        } catch (e) {
+            console.error('[DatabaseManager] getIntentKeywords failed:', e);
+            return [];
+        }
+    }
+
+    public upsertIntentKeywords(modeId: string, rows: IntentKeywordConfig[]): void {
+        if (!this.db) return;
+        try {
+            const txn = this.db.transaction(() => {
+                this.db!.prepare('DELETE FROM mode_intent_keywords WHERE mode_id = ?').run(modeId);
+                const insert = this.db!.prepare(`
+                    INSERT INTO mode_intent_keywords
+                        (id, mode_id, intent, keywords_csv, updated_at)
+                    VALUES (?, ?, ?, ?, datetime('now'))
+                `);
+                for (const row of rows) {
+                    insert.run(`ik_${modeId}_${row.intent}`, modeId, row.intent, row.keywordsCsv);
+                }
+            });
+            txn();
+        } catch (e) {
+            console.error('[DatabaseManager] upsertIntentKeywords failed:', e);
+        }
+    }
+
+    public seedDefaultIntentKeywordsForMode(modeId: string, templateType: string): void {
+        if (!this.db) return;
+        try {
+            const defaults = DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE[templateType] ?? DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE.general;
+            const insert = this.db.prepare(`
+                INSERT OR IGNORE INTO mode_intent_keywords
+                    (id, mode_id, intent, keywords_csv, updated_at)
+                VALUES (?, ?, ?, ?, datetime('now'))
+            `);
+            for (const row of defaults) {
+                insert.run(`ik_${modeId}_${row.intent}`, modeId, row.intent, row.keywordsCsv);
+            }
+        } catch (e) {
+            console.error('[DatabaseManager] seedDefaultIntentKeywordsForMode failed:', e);
+        }
+    }
+
+    public resetIntentKeywords(modeId: string, templateType: string): void {
+        const defaults = DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE[templateType] ?? DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE.general;
+        this.upsertIntentKeywords(modeId, defaults);
     }
 
     public deleteMode(id: string): void {

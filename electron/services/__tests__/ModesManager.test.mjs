@@ -7,11 +7,17 @@ import { performance } from 'node:perf_hooks';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const modesPath = path.resolve(__dirname, '../../../dist-electron/electron/services/ModesManager.js');
 const promptsPath = path.resolve(__dirname, '../../../dist-electron/electron/llm/prompts.js');
+const databasePath = path.resolve(__dirname, '../../../dist-electron/electron/db/DatabaseManager.js');
+const intentDefaultsPath = path.resolve(__dirname, '../../../dist-electron/electron/llm/IntentKeywordDefaults.js');
 
 const modesMod = await import(pathToFileURL(modesPath).href);
 const promptsMod = await import(pathToFileURL(promptsPath).href);
+const databaseMod = await import(pathToFileURL(databasePath).href);
+const intentDefaultsMod = await import(pathToFileURL(intentDefaultsPath).href);
 
 const { ModesManager, MODE_TEMPLATES, TEMPLATE_NOTE_SECTIONS } = modesMod;
+const { DatabaseManager } = databaseMod;
+const { DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE } = intentDefaultsMod;
 
 const EXPECTED_MODE_TYPES = [
   'general',
@@ -36,10 +42,11 @@ function referenceRow({ id, mode_id, file_name, content, created_at = BASE_TIME 
   return { id, mode_id, file_name, content, created_at };
 }
 
-function makeDb({ modes = [], files = [] } = {}) {
+function makeDb({ modes = [], files = [], intentKeywords = [] } = {}) {
   return {
     modes: [...modes],
     files: [...files],
+    intentKeywords: [...intentKeywords],
     sections: [],
     getModes() {
       return this.modes;
@@ -57,6 +64,40 @@ function makeDb({ modes = [], files = [] } = {}) {
         template_type: mode.templateType,
         custom_context: mode.customContext,
       }));
+    },
+    getIntentKeywords(modeId) {
+      return this.intentKeywords.filter(row => row.mode_id === modeId);
+    },
+    upsertIntentKeywords(modeId, rows) {
+      this.intentKeywords = this.intentKeywords.filter(row => row.mode_id !== modeId);
+      for (const row of rows) {
+        this.intentKeywords.push({
+          id: `${modeId}_${row.intent}`,
+          mode_id: modeId,
+          intent: row.intent,
+          keywords_csv: row.keywordsCsv,
+          created_at: BASE_TIME,
+          updated_at: BASE_TIME,
+        });
+      }
+    },
+    resetIntentKeywords(modeId, templateType) {
+      this.upsertIntentKeywords(modeId, DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE[templateType] ?? []);
+    },
+    seedDefaultIntentKeywordsForMode(modeId, templateType) {
+      const defaults = DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE[templateType] ?? [];
+      for (const row of defaults) {
+        if (!this.intentKeywords.some(existing => existing.mode_id === modeId && existing.intent === row.intent)) {
+          this.intentKeywords.push({
+            id: `${modeId}_${row.intent}`,
+            mode_id: modeId,
+            intent: row.intent,
+            keywords_csv: row.keywordsCsv,
+            created_at: BASE_TIME,
+            updated_at: BASE_TIME,
+          });
+        }
+      }
     },
     addReferenceFile(file) {
       this.files.push(referenceRow({
@@ -98,6 +139,8 @@ function makeDb({ modes = [], files = [] } = {}) {
 
 function installDb(dbState) {
   db = dbState;
+  ModesManager.__setDatabaseForTests?.(db);
+  DatabaseManager.getInstance = () => db;
   const manager = ModesManager.getInstance();
   manager.getActiveMode = () => {
     const row = db.getActiveMode();
@@ -143,6 +186,49 @@ test('every production mode has seeded note sections for meeting summaries', () 
       assert.ok(section.description.trim(), `${modeType} section description should not be empty`);
     }
   }
+});
+
+test('createMode seeds default intent keywords for the selected template', () => {
+  const created = ModesManager.getInstance().createMode({ name: 'Sales', templateType: 'sales' });
+  const rows = db.getIntentKeywords(created.id);
+
+  assert.ok(rows.some(row => row.intent === 'seize_signal' && row.keywords_csv.includes('准备签')));
+  assert.ok(rows.some(row => row.intent === 'handle_objection' && row.keywords_csv.includes('太贵')));
+  assert.ok(rows.some(row => row.intent === 'discovery_probe' && row.keywords_csv.includes('痛点是什么')));
+});
+
+test('updateMode persists intent keyword edits without affecting other modes', () => {
+  const sales = ModesManager.getInstance().createMode({ name: 'Sales', templateType: 'sales' });
+  const team = ModesManager.getInstance().createMode({ name: 'Team', templateType: 'team-meet' });
+
+  ModesManager.getInstance().updateMode(sales.id, {
+    intentKeywords: [
+      { intent: 'seize_signal', keywordsCsv: '马上采购,准备签' },
+      { intent: 'handle_objection', keywordsCsv: '' },
+    ],
+  });
+
+  assert.deepEqual(
+    db.getIntentKeywords(sales.id).map(row => [row.intent, row.keywords_csv]).sort(),
+    [
+      ['handle_objection', ''],
+      ['seize_signal', '马上采购,准备签'],
+    ],
+  );
+  assert.ok(db.getIntentKeywords(team.id).some(row => row.intent === 'capture_action'));
+});
+
+test('resetModeIntentKeywords restores template defaults for one mode', () => {
+  const sales = ModesManager.getInstance().createMode({ name: 'Sales', templateType: 'sales' });
+  ModesManager.getInstance().updateMode(sales.id, {
+    intentKeywords: [{ intent: 'seize_signal', keywordsCsv: '马上采购' }],
+  });
+
+  ModesManager.getInstance().resetModeIntentKeywords(sales.id);
+
+  const rows = db.getIntentKeywords(sales.id);
+  assert.ok(rows.some(row => row.intent === 'seize_signal' && row.keywords_csv.includes('准备签')));
+  assert.equal(rows.some(row => row.keywords_csv === '马上采购'), false);
 });
 
 test('all mode prompts start with a shared prefix so duplicate-token stripping works', () => {

@@ -286,6 +286,28 @@ function assertIntent(result, expectedIntent, minConfidence = 0.7, label = '') {
 }
 
 describe('IntentClassifier.detectIntentByPattern — sales mode', () => {
+  test('custom intent keywords override the sales fast-path without regex exposure', () => {
+    const { detectIntentByPattern } = loadModule();
+    const r = detectIntentByPattern('客户说他们马上采购', 'sales', {
+      seize_signal: ['马上采购'],
+      handle_objection: [],
+      discovery_probe: [],
+    });
+
+    assertIntent(r, 'seize_signal', 0.9, 'seize_signal/custom-keyword');
+  });
+
+  test('empty custom keyword list disables that intent fast-path and falls through', () => {
+    const { detectIntentByPattern } = loadModule();
+    const r = detectIntentByPattern('这个方案太贵了', 'sales', {
+      handle_objection: [],
+      seize_signal: [],
+      discovery_probe: [],
+    });
+
+    assert.equal(r, null);
+  });
+
   // ---- seize_signal (priority over objection) — confidence 0.95
   test('Chinese: 准备签合同 → seize_signal', () => {
     const { detectIntentByPattern } = loadModule();

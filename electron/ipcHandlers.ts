@@ -4041,7 +4041,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     async (
       _,
       id: string,
-      updates: { name?: string; templateType?: string; customContext?: string },
+      updates: { name?: string; templateType?: string; customContext?: string; intentKeywords?: Array<{ intent: any; keywordsCsv: string }> },
     ) => {
       try {
         const { ModesManager } = require('./services/ModesManager');
@@ -4054,6 +4054,17 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     },
   );
+
+  safeHandle('modes:reset-intent-keywords', async (_, id: string) => {
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      const intentKeywords = ModesManager.getInstance().resetModeIntentKeywords(id);
+      return { success: true, intentKeywords };
+    } catch (e: any) {
+      console.error('[IPC] modes:reset-intent-keywords error:', e);
+      return { success: false, error: e.message };
+    }
+  });
 
   safeHandle('modes:delete', async (_, id: string) => {
     try {

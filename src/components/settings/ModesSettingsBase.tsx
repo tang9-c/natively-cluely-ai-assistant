@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   Plus,
+  RotateCcw,
   Save,
   Settings,
   Trash2,
@@ -26,8 +27,14 @@ interface ModeItem {
   name: string;
   templateType: string;
   customContext: string;
+  intentKeywords: IntentKeywordSetting[];
   isActive: boolean;
   createdAt: string;
+}
+
+interface IntentKeywordSetting {
+  intent: string;
+  keywordsCsv: string;
 }
 
 interface NoteSection {
@@ -38,6 +45,70 @@ interface NoteSection {
   sortOrder: number;
 }
 
+const INTENT_LABELS: Record<string, string> = {
+  clarification: '澄清解释',
+  follow_up: '继续追问',
+  deep_dive: '深入展开',
+  behavioral: '行为问题',
+  example_request: '具体例子',
+  summary_probe: '总结确认',
+  coding: '代码实现',
+  request_example: '要求举例',
+  seize_signal: '购买信号',
+  handle_objection: '异议处理',
+  discovery_probe: '需求发现',
+  capture_action: '行动项',
+  capture_decision: '决策',
+  capture_risk: '风险阻塞',
+  status_update: '状态更新',
+  explain_concept: '概念解释',
+  render_formula: '公式推导',
+  answer_class_question: '课堂提问',
+};
+
+const INTENT_DESCRIPTIONS: Record<string, string> = {
+  clarification: '对方要求解释、澄清或说明',
+  follow_up: '对方追问后续或结果',
+  deep_dive: '对方要求更深入说明',
+  behavioral: '对方询问过往经历或故事',
+  example_request: '对方要求具体例子',
+  summary_probe: '对方在总结或确认理解',
+  coding: '对方要求代码、算法或实现',
+  request_example: '面试官要求候选人举具体例子',
+  seize_signal: '客户表达推进、采购或签约意向',
+  handle_objection: '客户提出价格、竞品、预算等异议',
+  discovery_probe: '客户讨论痛点、流程、ROI 或需求',
+  capture_action: '会议中出现负责人、截止时间或待办',
+  capture_decision: '会议中确认决策或共识',
+  capture_risk: '会议中出现风险、依赖或阻塞',
+  status_update: '对方询问进度、状态或负责人',
+  explain_concept: '讲座中引入术语、概念或定义',
+  render_formula: '讲座中出现公式、方程或推导',
+  answer_class_question: '讲师向全班提问',
+};
+
+function normalizeKeywordsCsv(csv: string): string {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const raw of csv.split(',')) {
+    const keyword = raw.trim();
+    if (!keyword) continue;
+    const key = keyword.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(keyword);
+  }
+  return normalized.join(',');
+}
+
+function serializeIntentKeywords(rows: IntentKeywordSetting[]): string {
+  return JSON.stringify(
+    [...rows]
+      .map((row) => ({ intent: row.intent, keywordsCsv: normalizeKeywordsCsv(row.keywordsCsv) }))
+      .sort((a, b) => a.intent.localeCompare(b.intent)),
+  );
+}
+
 export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
   onClose,
 }) => {
@@ -46,6 +117,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
   const [noteSections, setNoteSections] = useState<NoteSection[]>([]);
   const [editedName, setEditedName] = useState('');
   const [editedContext, setEditedContext] = useState('');
+  const [editedIntentKeywords, setEditedIntentKeywords] = useState<IntentKeywordSetting[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [activeModeId, setActiveModeId] = useState<string | null>(null);
@@ -70,6 +142,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
         name: m.name,
         templateType: m.templateType,
         customContext: m.customContext,
+        intentKeywords: m.intentKeywords ?? [],
         isActive: m.isActive,
         createdAt: m.createdAt,
       }));
@@ -114,6 +187,7 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
     if (selectedMode) {
       setEditedName(selectedMode.name);
       setEditedContext(selectedMode.customContext);
+      setEditedIntentKeywords(selectedMode.intentKeywords ?? []);
       loadNoteSections(selectedMode.id);
       setSaveError(null);
     }
@@ -171,6 +245,10 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
       const result = await window.electronAPI?.modesUpdate?.(selectedMode.id, {
         name: editedName.trim(),
         customContext: editedContext.trim(),
+        intentKeywords: editedIntentKeywords.map((row) => ({
+          intent: row.intent,
+          keywordsCsv: normalizeKeywordsCsv(row.keywordsCsv),
+        })),
       });
       if (result?.error) {
         setSaveError(result.error);
@@ -182,6 +260,26 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleIntentKeywordChange = (intent: string, keywordsCsv: string) => {
+    setEditedIntentKeywords((prev) =>
+      prev.map((row) => (row.intent === intent ? { ...row, keywordsCsv } : row)),
+    );
+  };
+
+  const handleResetIntentKeywords = async () => {
+    if (!selectedMode) return;
+    const result = await window.electronAPI?.modesResetIntentKeywords?.(selectedMode.id);
+    if (result?.error) {
+      setSaveError(result.error);
+      return;
+    }
+    if (result?.intentKeywords) {
+      setEditedIntentKeywords(result.intentKeywords);
+    }
+    await loadModes();
+    setSaveError(null);
   };
 
   const handleDelete = async () => {
@@ -255,7 +353,8 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
   const hasChanges =
     selectedMode &&
     (editedName.trim() !== selectedMode.name ||
-      editedContext.trim() !== selectedMode.customContext);
+      editedContext.trim() !== selectedMode.customContext ||
+      serializeIntentKeywords(editedIntentKeywords) !== serializeIntentKeywords(selectedMode.intentKeywords ?? []));
 
   return (
     <div className="flex flex-col h-full bg-bg-main text-text-primary">
@@ -426,6 +525,53 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                     placeholder="输入自定义指令，让 AI 更好地适应你的需求..."
                     className="w-full bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary/50 transition-all resize-none"
                   />
+                </div>
+
+                {/* Intent keywords */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <label className="block text-[11px] font-medium text-text-secondary uppercase tracking-wide">
+                        意图词
+                      </label>
+                      <p className="text-[10px] text-text-tertiary mt-0.5">
+                        多个词用英文逗号分隔
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleResetIntentKeywords}
+                      className="flex items-center gap-1 text-[11px] font-medium text-text-secondary hover:text-accent-primary transition-colors"
+                    >
+                      <RotateCcw size={12} />
+                      恢复默认意图词
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {editedIntentKeywords.map((row) => (
+                      <div
+                        key={row.intent}
+                        className="bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5"
+                      >
+                        <div className="flex items-center justify-between gap-3 mb-1.5">
+                          <div className="min-w-0">
+                            <div className="text-xs font-medium text-text-primary">
+                              {INTENT_LABELS[row.intent] ?? row.intent}
+                            </div>
+                            <div className="text-[10px] text-text-tertiary">
+                              {INTENT_DESCRIPTIONS[row.intent] ?? row.intent}
+                            </div>
+                          </div>
+                        </div>
+                        <textarea
+                          value={row.keywordsCsv}
+                          onChange={(e) => handleIntentKeywordChange(row.intent, e.target.value)}
+                          rows={2}
+                          placeholder="例如：太贵,预算不够,竞品"
+                          className="w-full bg-transparent text-[11px] text-text-secondary placeholder:text-text-tertiary outline-none resize-none"
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Note sections */}

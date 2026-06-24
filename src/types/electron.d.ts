@@ -64,6 +64,11 @@ export interface DynamicActionModeEvent {
   answerShape?: string
 }
 
+export interface ModeIntentKeywordSetting {
+  intent: string
+  keywordsCsv: string
+}
+
 export type ResearchProgressStage =
   | 'cache-check'
   | 'searching'
@@ -306,10 +311,11 @@ export interface ElectronAPI {
   onModeChanged: (callback: (data: { id: string | null; name: string | null }) => void) => () => void
 
   // Modes
-  modesGetAll: () => Promise<Array<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string; referenceFileCount: number }>>
-  modesGetActive: () => Promise<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string } | null>
+  modesGetAll: () => Promise<Array<{ id: string; name: string; templateType: string; customContext: string; intentKeywords: ModeIntentKeywordSetting[]; isActive: boolean; createdAt: string; referenceFileCount: number }>>
+  modesGetActive: () => Promise<{ id: string; name: string; templateType: string; customContext: string; intentKeywords: ModeIntentKeywordSetting[]; isActive: boolean; createdAt: string } | null>
   modesCreate: (params: { name: string; templateType: string }) => Promise<{ success: boolean; mode?: any; error?: string }>
-  modesUpdate: (id: string, updates: { name?: string; templateType?: string; customContext?: string }) => Promise<{ success: boolean; error?: string }>
+  modesUpdate: (id: string, updates: { name?: string; templateType?: string; customContext?: string; intentKeywords?: ModeIntentKeywordSetting[] }) => Promise<{ success: boolean; error?: string }>
+  modesResetIntentKeywords: (id: string) => Promise<{ success: boolean; intentKeywords?: ModeIntentKeywordSetting[]; error?: string }>
   modesDelete: (id: string) => Promise<{ success: boolean; error?: string }>
   modesSetActive: (id: string | null) => Promise<{ success: boolean; error?: string }>
   modesGetReferenceFiles: (modeId: string) => Promise<Array<{ id: string; modeId: string; fileName: string; content: string; createdAt: string }>>

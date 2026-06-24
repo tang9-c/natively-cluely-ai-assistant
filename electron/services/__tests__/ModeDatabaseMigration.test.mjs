@@ -9,6 +9,21 @@ const dbPath = path.resolve(__dirname, '../../db/DatabaseManager.ts');
 const dbSource = fs.readFileSync(dbPath, 'utf8');
 
 describe('Mode database migrations', () => {
+  test('v22 -> v23 migration creates per-mode intent keyword defaults', () => {
+    assert.match(
+      dbSource,
+      /if\s*\(\s*version\s*<\s*23\s*\)/,
+      'DatabaseManager must register a v23 migration for mode intent keywords',
+    );
+    const v23Block = dbSource.match(/if\s*\(\s*version\s*<\s*23\s*\)[\s\S]*?user_version\s*=\s*23/);
+    assert.ok(v23Block, 'v23 migration block must exist');
+    assert.match(v23Block[0], /CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+mode_intent_keywords/i);
+    assert.match(v23Block[0], /UNIQUE\s*\(\s*mode_id\s*,\s*intent\s*\)/i);
+    assert.match(v23Block[0], /FOREIGN\s+KEY\s*\(\s*mode_id\s*\)\s+REFERENCES\s+modes\s*\(\s*id\s*\)\s+ON\s+DELETE\s+CASCADE/i);
+    assert.match(v23Block[0], /DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE/);
+    assert.match(v23Block[0], /INSERT\s+OR\s+IGNORE\s+INTO\s+mode_intent_keywords/i);
+  });
+
   test('v21 -> v22 migration is registered for FDE seed backfill', () => {
     assert.match(
       dbSource,

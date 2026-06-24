@@ -22,6 +22,8 @@ import { DynamicAction } from './services/dynamic-actions/DynamicAction';
 import { ScreenContext } from './services/screen/types';
 import { SettingsManager } from './services/SettingsManager';
 import { isLocalIntentClassifierAvailable } from './services/LocalModelManager';
+import { ModesManager } from './services/ModesManager';
+import { keywordRowsToMap } from './llm/IntentKeywordDefaults';
 
 // Mode types
 export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'recap' | 'clarify' | 'manual' | 'code_hint' | 'brainstorm';
@@ -193,12 +195,17 @@ export class IntelligenceEngine extends EventEmitter {
         let providerDataScopes: IntentClassificationOptions['providerDataScopes'];
         let localIntentEnhancementEnabled = false;
         let localIntentEnhancementAvailable = false;
+        let customIntentKeywords: IntentClassificationOptions['customIntentKeywords'];
 
         try {
             const settings = SettingsManager.getInstance();
             providerDataScopes = settings.get('providerDataScopes');
             localIntentEnhancementEnabled = settings.getLocalIntentEnhancementEnabled();
             localIntentEnhancementAvailable = isLocalIntentClassifierAvailable();
+            const activeMode = ModesManager.getInstance().getActiveMode();
+            if (activeMode?.intentKeywords?.length) {
+                customIntentKeywords = keywordRowsToMap(activeMode.intentKeywords);
+            }
         } catch (error) {
             console.warn('[IntelligenceEngine] Intent settings unavailable', {
                 error: error instanceof Error ? error.message : String(error),
@@ -209,6 +216,7 @@ export class IntelligenceEngine extends EventEmitter {
             providerDataScopes,
             localIntentEnhancementEnabled,
             localIntentEnhancementAvailable,
+            customIntentKeywords,
             cloudIntentClassifier: (input) => this.classifyIntentWithCloud(input),
         };
     }

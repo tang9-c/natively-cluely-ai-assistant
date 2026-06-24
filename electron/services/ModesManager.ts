@@ -2,6 +2,11 @@ import * as crypto from 'crypto';
 import { DatabaseManager } from '../db/DatabaseManager';
 import { ModeContextRetriever } from './ModeContextRetriever';
 import {
+    DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE,
+    normalizeIntentKeywordsCsv,
+    type IntentKeywordConfig,
+} from '../llm/IntentKeywordDefaults';
+import {
     MODE_GENERAL_PROMPT,
     MODE_LOOKING_FOR_WORK_PROMPT,
     MODE_SALES_PROMPT,
@@ -29,6 +34,7 @@ export interface Mode {
     name: string;
     templateType: ModeTemplateType;
     customContext: string;
+    intentKeywords: IntentKeywordConfig[];
     isActive: boolean;
     createdAt: string;
 }
@@ -172,8 +178,16 @@ function rowToMode(row: any): Mode {
         name: row.name,
         templateType: row.template_type as ModeTemplateType,
         customContext: row.custom_context ?? '',
+        intentKeywords: row.intentKeywords ?? [],
         isActive: row.is_active === 1,
         createdAt: row.created_at,
+    };
+}
+
+function rowToIntentKeyword(row: any): IntentKeywordConfig {
+    return {
+        intent: row.intent,
+        keywordsCsv: row.keywords_csv ?? '',
     };
 }
 
@@ -200,6 +214,7 @@ function rowToSection(row: any): ModeNoteSection {
 
 export class ModesManager {
     private static instance: ModesManager;
+    private static databaseOverride: DatabaseManager | null = null;
     private readonly modeContextRetriever = new ModeContextRetriever();
 
     private constructor() {}
@@ -211,10 +226,19 @@ export class ModesManager {
         return ModesManager.instance;
     }
 
+    public static __setDatabaseForTests(db: DatabaseManager | null): void {
+        ModesManager.databaseOverride = db;
+    }
+
+    private static getDatabase(): DatabaseManager {
+        return ModesManager.databaseOverride ?? DatabaseManager.getInstance();
+    }
+
     // ── Modes ─────────────────────────────────────────────────────
 
     public getModes(): Mode[] {
-        const modes = DatabaseManager.getInstance().getModes().map(rowToMode);
+        const db = ModesManager.getDatabase();
+        const modes = db.getModes().map((row: any) => this.hydrateModeIntentKeywords(rowToMode(row), db));
 
         // Always enforce 'general' at the very top of the list.
         // L1: id is the secondary sort key for stable ordering when two modes
@@ -233,18 +257,23 @@ export class ModesManager {
 
     // Seed all seven built-in modes once at app init. Idempotent.
     public ensureSeeded(): void {
-        const modes = DatabaseManager.getInstance().getModes().map(rowToMode);
+        const db = ModesManager.getDatabase();
+        const modes = db.getModes().map(rowToMode);
         const existingTypes = new Set(modes.map(m => m.templateType));
         for (const tmpl of MODE_TEMPLATES) {
             if (!existingTypes.has(tmpl.type)) {
                 this.createMode({ name: tmpl.label, templateType: tmpl.type });
             }
         }
+        for (const mode of db.getModes().map(rowToMode)) {
+            db.seedDefaultIntentKeywordsForMode?.(mode.id, mode.templateType);
+        }
     }
 
     public getActiveMode(): Mode | null {
-        const row = DatabaseManager.getInstance().getActiveMode();
-        return row ? rowToMode(row) : null;
+        const db = ModesManager.getDatabase();
+        const row = db.getActiveMode();
+        return row ? this.hydrateModeIntentKeywords(rowToMode(row), db) : null;
     }
 
     // Modes where the premium knowledge intercept (negotiation coaching, intro
@@ -279,17 +308,19 @@ export class ModesManager {
 
     public createMode(params: { name: string; templateType: ModeTemplateType }): Mode {
         const id = `mode_${crypto.randomUUID()}`;
-        DatabaseManager.getInstance().createMode({
+        const db = ModesManager.getDatabase();
+        db.createMode({
             id,
             name: params.name,
             templateType: params.templateType,
             customContext: '',
         });
+        db.seedDefaultIntentKeywordsForMode?.(id, params.templateType);
         // Seed default note sections for this template type
         const defaultSections = TEMPLATE_NOTE_SECTIONS[params.templateType] ?? [];
         defaultSections.forEach((s, i) => {
             const sectionId = `ns_${crypto.randomUUID()}`;
-            DatabaseManager.getInstance().addNoteSection({
+            db.addNoteSection({
                 id: sectionId,
                 modeId: id,
                 title: s.title,
@@ -302,32 +333,64 @@ export class ModesManager {
             name: params.name,
             templateType: params.templateType,
             customContext: '',
+            intentKeywords: this.getIntentKeywords(id),
             isActive: false,
             createdAt: new Date().toISOString(),
         };
     }
 
-    public updateMode(id: string, updates: { name?: string; templateType?: ModeTemplateType; customContext?: string }): void {
-        DatabaseManager.getInstance().updateMode(id, updates);
+    public updateMode(id: string, updates: { name?: string; templateType?: ModeTemplateType; customContext?: string; intentKeywords?: IntentKeywordConfig[] }): void {
+        const db = ModesManager.getDatabase();
+        db.updateMode(id, updates);
+        if (updates.intentKeywords !== undefined) {
+            db.upsertIntentKeywords(id, updates.intentKeywords.map(row => ({
+                intent: row.intent,
+                keywordsCsv: normalizeIntentKeywordsCsv(row.keywordsCsv).join(','),
+            })));
+        }
+    }
+
+    public resetModeIntentKeywords(id: string): IntentKeywordConfig[] {
+        const mode = this.getModes().find(m => m.id === id);
+        if (!mode) return [];
+        const db = ModesManager.getDatabase();
+        db.resetIntentKeywords(id, mode.templateType);
+        return this.getIntentKeywords(id);
     }
 
     public deleteMode(id: string): void {
-        DatabaseManager.getInstance().deleteMode(id);
+        ModesManager.getDatabase().deleteMode(id);
     }
 
     public setActiveMode(id: string | null): void {
-        DatabaseManager.getInstance().setActiveMode(id);
+        ModesManager.getDatabase().setActiveMode(id);
+    }
+
+    public getIntentKeywords(modeId: string): IntentKeywordConfig[] {
+        return ModesManager.getDatabase().getIntentKeywords(modeId).map(rowToIntentKeyword);
+    }
+
+    private hydrateModeIntentKeywords(mode: Mode, db = ModesManager.getDatabase()): Mode {
+        let intentKeywords = db.getIntentKeywords?.(mode.id).map(rowToIntentKeyword) ?? [];
+        if (intentKeywords.length === 0) {
+            db.seedDefaultIntentKeywordsForMode?.(mode.id, mode.templateType);
+            intentKeywords = db.getIntentKeywords?.(mode.id).map(rowToIntentKeyword) ?? [];
+        }
+        if (intentKeywords.length === 0) {
+            intentKeywords = DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE[mode.templateType] ?? DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE.general;
+        }
+        return { ...mode, intentKeywords };
     }
 
     // ── Reference Files ───────────────────────────────────────────
 
     public getReferenceFiles(modeId: string): ModeReferenceFile[] {
-        return DatabaseManager.getInstance().getReferenceFiles(modeId).map(rowToFile);
+        return ModesManager.getDatabase().getReferenceFiles(modeId).map(rowToFile);
     }
 
     public addReferenceFile(params: { modeId: string; fileName: string; content: string }): ModeReferenceFile {
         const id = `ref_${crypto.randomUUID()}`;
-        DatabaseManager.getInstance().addReferenceFile({
+        ModesManager.getDatabase().addReferenceFile({
             id,
             modeId: params.modeId,
             fileName: params.fileName,
@@ -343,20 +406,20 @@ export class ModesManager {
     }
 
     public deleteReferenceFile(id: string): void {
-        DatabaseManager.getInstance().deleteReferenceFile(id);
+        ModesManager.getDatabase().deleteReferenceFile(id);
     }
 
     // ── Note Sections ─────────────────────────────────────────────
 
     public getNoteSections(modeId: string): ModeNoteSection[] {
-        return DatabaseManager.getInstance().getNoteSections(modeId).map(rowToSection);
+        return ModesManager.getDatabase().getNoteSections(modeId).map(rowToSection);
     }
 
     public addNoteSection(params: { modeId: string; title: string; description: string }): ModeNoteSection {
         const existingSections = this.getNoteSections(params.modeId);
         const sortOrder = existingSections.length;
         const id = `ns_${crypto.randomUUID()}`;
-        DatabaseManager.getInstance().addNoteSection({
+        ModesManager.getDatabase().addNoteSection({
             id,
             modeId: params.modeId,
             title: params.title,
@@ -374,15 +437,15 @@ export class ModesManager {
     }
 
     public updateNoteSection(id: string, updates: { title?: string; description?: string }): void {
-        DatabaseManager.getInstance().updateNoteSection(id, updates);
+        ModesManager.getDatabase().updateNoteSection(id, updates);
     }
 
     public deleteNoteSection(id: string): void {
-        DatabaseManager.getInstance().deleteNoteSection(id);
+        ModesManager.getDatabase().deleteNoteSection(id);
     }
 
     public removeAllNoteSections(modeId: string): void {
-        DatabaseManager.getInstance().deleteAllNoteSections(modeId);
+        ModesManager.getDatabase().deleteAllNoteSections(modeId);
     }
 
     // ── LLM Context ───────────────────────────────────────────────

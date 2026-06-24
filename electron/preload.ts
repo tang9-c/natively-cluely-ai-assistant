@@ -728,6 +728,7 @@ interface ElectronAPI {
       name: string;
       templateType: string;
       customContext: string;
+      intentKeywords: Array<{ intent: string; keywordsCsv: string }>;
       isActive: boolean;
       createdAt: string;
       referenceFileCount: number;
@@ -738,6 +739,7 @@ interface ElectronAPI {
     name: string;
     templateType: string;
     customContext: string;
+    intentKeywords: Array<{ intent: string; keywordsCsv: string }>;
     isActive: boolean;
     createdAt: string;
   } | null>;
@@ -747,8 +749,11 @@ interface ElectronAPI {
   }) => Promise<{ success: boolean; mode?: any; error?: string }>;
   modesUpdate: (
     id: string,
-    updates: { name?: string; templateType?: string; customContext?: string },
+    updates: { name?: string; templateType?: string; customContext?: string; intentKeywords?: Array<{ intent: string; keywordsCsv: string }> },
   ) => Promise<{ success: boolean; error?: string }>;
+  modesResetIntentKeywords: (
+    id: string,
+  ) => Promise<{ success: boolean; intentKeywords?: Array<{ intent: string; keywordsCsv: string }>; error?: string }>;
   modesDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
   modesSetActive: (id: string | null) => Promise<{ success: boolean; error?: string }>;
   modesGetReferenceFiles: (
@@ -1944,8 +1949,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('modes:create', params),
   modesUpdate: (
     id: string,
-    updates: { name?: string; templateType?: string; customContext?: string },
+    updates: { name?: string; templateType?: string; customContext?: string; intentKeywords?: Array<{ intent: string; keywordsCsv: string }> },
   ) => ipcRenderer.invoke('modes:update', id, updates),
+  modesResetIntentKeywords: (id: string) => ipcRenderer.invoke('modes:reset-intent-keywords', id),
   modesDelete: (id: string) => ipcRenderer.invoke('modes:delete', id),
   modesSetActive: (id: string | null) => ipcRenderer.invoke('modes:set-active', id),
   modesGetReferenceFiles: (modeId: string) =>

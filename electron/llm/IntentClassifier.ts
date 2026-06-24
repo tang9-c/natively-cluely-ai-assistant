@@ -11,6 +11,10 @@
 //   4. Context heuristic fallback.
 
 import { getIntentClassifierProcessHost } from './IntentClassifierProcessHost';
+import {
+    matchIntentKeywords,
+    type IntentKeywordMap,
+} from './IntentKeywordDefaults';
 import type { ProviderDataScopePolicy } from './ProviderRouter';
 
 export type ConversationIntent =
@@ -78,6 +82,7 @@ export interface IntentClassificationOptions {
     localIntentEnhancementEnabled?: boolean;
     localIntentEnhancementAvailable?: boolean;
     localIntentClassifier?: (text: string, modeTemplateType?: string | null) => Promise<IntentResult | null>;
+    customIntentKeywords?: IntentKeywordMap;
 }
 
 export interface IntentWarmupOptions {
@@ -363,9 +368,16 @@ export function isPrimarilyChinese(text: string, threshold = 0.3): boolean {
 export function detectIntentByPattern(
     lastInterviewerTurn: string,
     modeTemplateType?: string | null,
+    customIntentKeywords?: IntentKeywordMap,
 ): IntentResult | null {
     const text = lastInterviewerTurn.toLowerCase().trim();
     const mode = modeTemplateType ?? 'general';
+    if (customIntentKeywords) {
+        const intent = matchIntentKeywords(text, mode, customIntentKeywords);
+        return intent
+            ? { intent, confidence: confidenceForKeywordIntent(intent), answerShape: getAnswerShapeForMode(mode, intent) }
+            : null;
+    }
 
     // Interview-family modes: 7-intent regex (default behaviour, preserved).
     if (isModeInterviewFamily(mode)) {
@@ -389,6 +401,36 @@ export function detectIntentByPattern(
         default:
             // Unknown mode — be conservative, use the interview family.
             return detectInterviewIntentByPattern(text);
+    }
+}
+
+function confidenceForKeywordIntent(intent: ConversationIntent): number {
+    switch (intent) {
+        case 'seize_signal':
+            return 0.95;
+        case 'handle_objection':
+        case 'capture_action':
+            return 0.92;
+        case 'capture_decision':
+        case 'explain_concept':
+        case 'render_formula':
+        case 'coding':
+        case 'behavioral':
+        case 'clarification':
+            return 0.9;
+        case 'capture_risk':
+        case 'request_example':
+            return 0.88;
+        case 'discovery_probe':
+        case 'status_update':
+        case 'answer_class_question':
+        case 'follow_up':
+        case 'deep_dive':
+        case 'example_request':
+        case 'summary_probe':
+            return 0.85;
+        default:
+            return 0.75;
     }
 }
 
@@ -725,7 +767,7 @@ export async function classifyIntent(
             }
         }
 
-        const patternResult = detectIntentByPattern(lastInterviewerTurn, modeTemplateType);
+        const patternResult = detectIntentByPattern(lastInterviewerTurn, modeTemplateType, options.customIntentKeywords);
         if (patternResult) {
             return patternResult;
         }

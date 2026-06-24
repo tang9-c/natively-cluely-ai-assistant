@@ -21,6 +21,14 @@ const modesManagerSource = fs.readFileSync(
   path.resolve(__dirname, '../ModesManager.ts'),
   'utf8',
 );
+const preloadSource = fs.readFileSync(
+  path.resolve(__dirname, '../../preload.ts'),
+  'utf8',
+);
+const electronTypesSource = fs.readFileSync(
+  path.join(repoRoot, 'src/types/electron.d.ts'),
+  'utf8',
+);
 const electronTsconfigSource = fs.readFileSync(
   path.resolve(__dirname, '../../tsconfig.json'),
   'utf8',
@@ -78,6 +86,8 @@ test('ModesSettingsBase exposes the full official mode settings surface', () => 
     '当前活跃',
     '模式名称',
     '自定义上下文',
+    '意图词',
+    '恢复默认意图词',
     '笔记分区',
     '添加分区',
     '删除',
@@ -88,6 +98,7 @@ test('ModesSettingsBase exposes the full official mode settings surface', () => 
     'modesGetAll',
     'modesCreate',
     'modesUpdate',
+    'modesResetIntentKeywords',
     'modesDelete',
     'modesSetActive',
     'modesGetNoteSections',
@@ -95,6 +106,17 @@ test('ModesSettingsBase exposes the full official mode settings surface', () => 
     'modesUpdateNoteSection',
     'modesDeleteNoteSection',
   ].forEach((api) => assert.match(modesSettingsSource, new RegExp(api)));
+});
+
+test('mode IPC and preload expose intent keyword settings', () => {
+  assert.match(preloadSource, /intentKeywords/);
+  assert.match(preloadSource, /modesResetIntentKeywords/);
+  assert.match(electronTypesSource, /intentKeywords/);
+  assert.match(electronTypesSource, /modesResetIntentKeywords/);
+
+  const updateBlock = sliceSafeHandleBlock(ipcHandlersSource, 'modes:update');
+  assert.match(updateBlock, /intentKeywords/);
+  assert.match(ipcHandlersSource, /modes:reset-intent-keywords/);
 });
 
 test('ModesSettingsBase sidebar renders mode list and exposes a reload hook', () => {
