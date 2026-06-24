@@ -66,7 +66,7 @@ test.describe('FINDING-006: Natively E2E smoke', () => {
     await expect(page.locator('text=模式设置').first()).toBeVisible();
 
     // The sidebar should display localized Chinese labels for default modes.
-    const modePanelLocator = page.locator('text=/通用|销售|招聘|团队会议|求职|技术面试|讲座|General|Sales|Recruiting/i');
+    const modePanelLocator = page.locator('text=/通用|销售|招聘|团队会议|求职|技术面试|讲座|General|Sales|FDE|Recruiting/i');
     await expect(modePanelLocator.first()).toBeVisible();
   });
 

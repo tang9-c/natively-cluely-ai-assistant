@@ -1576,6 +1576,7 @@ export const HelpSettings: React.FC = () => {
                             {([
                                 { name: 'Interview', desc: 'STAR 格式回答、行为故事、分步编码提示。' },
                                 { name: 'Sales', desc: '异议处理、发现性问题、产品推销框架。' },
+                                { name: 'FDE', desc: '客户现场发现、多人会议事实捕捉、交付风险与下一步推进。' },
                                 { name: 'Recruiting', desc: '候选人评估、职位描述交叉参考、结构化评估。' },
                                 { name: 'Team Meet', desc: '行动项、公告、阻塞项、决策——自动提取。' },
                                 { name: 'Lecture', desc: '概念拆解、直觉优先的解释、公式笔记。' },
@@ -1634,7 +1635,7 @@ export const HelpSettings: React.FC = () => {
                                 <Star size={14} /> 专家模式
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Natively 提供 7 种专家模式：General、Sales、Recruiting、Team Meet、Looking for work、Technical Interview 和 Lecture。每个模式都有针对性的系统提示和笔记结构，帮助你在不同场景下获得最佳辅助。
+                                Natively 提供 8 种专家模式：General、Sales、FDE、Recruiting、Team Meet、Looking for work、Technical Interview 和 Lecture。每个模式都有针对性的系统提示和笔记结构，帮助你在不同场景下获得最佳辅助。
                             </p>
                         </div>
                     </div>
