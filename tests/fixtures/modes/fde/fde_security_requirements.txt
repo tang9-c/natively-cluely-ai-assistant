@@ -1,0 +1,4 @@
+Security requirements:
+- PII must be redacted from debug logs before export.
+- Access requires least-privilege role mapping.
+- Audit logs must show user, timestamp, and exported fields.

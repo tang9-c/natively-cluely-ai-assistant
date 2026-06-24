@@ -10,6 +10,10 @@ describe('ScenarioRegistry', () => {
       templateType: 'sales',
       scenarioType: 'sales',
     });
+    assert.deepEqual(registry.resolveByTemplateType('fde'), {
+      templateType: 'fde',
+      scenarioType: 'fde',
+    });
     assert.deepEqual(registry.resolveByTemplateType('looking-for-work'), {
       templateType: 'looking-for-work',
       scenarioType: 'interview',
@@ -48,6 +52,16 @@ describe('ScenarioRegistry', () => {
       'case-study',
       'pricing-objections',
     ]);
+  });
+
+  test('fde adapter exposes customer-site delivery document subtypes', () => {
+    const adapter = ScenarioRegistry.createDefault().get('fde');
+    assert.equal(adapter.label, 'FDE');
+    assert.ok(adapter.supportedDocSubtypes.includes('customer-architecture'));
+    assert.ok(adapter.supportedDocSubtypes.includes('customer-workflow'));
+    assert.ok(adapter.supportedDocSubtypes.includes('security-requirements'));
+    assert.ok(adapter.supportedDocSubtypes.includes('prototype-scope'));
+    assert.ok(adapter.supportedDocSubtypes.includes('delivery-risk'));
   });
 
   test('scenario adapters expose document subtypes from the scenario matrix', () => {

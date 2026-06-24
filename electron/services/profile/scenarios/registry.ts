@@ -7,6 +7,10 @@ const DEFAULT_TEMPLATE_RESOLUTIONS: Record<ModeTemplateType, ScenarioResolution>
     templateType: 'sales',
     scenarioType: 'sales',
   },
+  fde: {
+    templateType: 'fde',
+    scenarioType: 'fde',
+  },
   'looking-for-work': {
     templateType: 'looking-for-work',
     scenarioType: 'interview',

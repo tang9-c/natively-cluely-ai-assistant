@@ -1,0 +1,4 @@
+step,owner,system,pain
+intake,Ops lead,spreadsheet,Approval handoff currently takes 3 manual spreadsheet steps
+review,Manager,email,status is hard to audit
+export,Analyst,CSV,manual export often misses late updates

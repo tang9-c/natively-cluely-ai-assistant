@@ -100,6 +100,30 @@ export const salesScenarioAdapter = createAdapter({
   systemPromptSuffix: 'You are helping the user in a sales scenario. Use customer, product, solution, case study, pricing, and objection materials as grounding context.',
 });
 
+export const fdeScenarioAdapter = createAdapter({
+  type: 'fde',
+  label: 'FDE',
+  supportedDocSubtypes: [
+    'customer-profile',
+    'customer-architecture',
+    'customer-workflow',
+    'security-requirements',
+    'prototype-scope',
+    'delivery-risk',
+    'solution-brief',
+  ],
+  cards: [
+    card('customer-profile', '客户档案', '客户组织背景、关键干系人、目标和决策语境。', 'customer-profile'),
+    card('customer-architecture', '客户架构', '系统清单、数据流、API、SSO、权限和部署边界。', 'customer-architecture'),
+    card('customer-workflow', '现场工作流', '当前流程、角色、输入输出、人工步骤和交接点。', 'customer-workflow'),
+    card('security-requirements', '安全要求', 'PII、合规、审计、日志、数据驻留和访问控制要求。', 'security-requirements'),
+    card('prototype-scope', '原型范围', 'MVP、试点范围、上线门槛、成功指标和验证步骤。', 'prototype-scope'),
+    card('delivery-risk', '交付风险', '阻塞项、依赖、未知项、owner 缺口和时间线风险。', 'delivery-risk'),
+    card('solution-brief', '方案简介', '推荐方案、交付路径和客户现场验证计划。', 'solution-brief'),
+  ],
+  systemPromptSuffix: 'You are helping the user in a forward-deployed engineering customer-site scenario. Use customer architecture, workflow, security, prototype scope, delivery risk, and solution materials as grounding context.',
+});
+
 export const interviewScenarioAdapter = createAdapter({
   type: 'interview',
   label: '面试',
@@ -188,6 +212,7 @@ export const generalScenarioAdapter = createAdapter({
 
 export const defaultScenarioAdapters: ScenarioAdapter[] = [
   salesScenarioAdapter,
+  fdeScenarioAdapter,
   interviewScenarioAdapter,
   lectureScenarioAdapter,
   teamMeetScenarioAdapter,
