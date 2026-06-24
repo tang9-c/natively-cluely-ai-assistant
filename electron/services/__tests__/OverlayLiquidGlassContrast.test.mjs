@@ -49,3 +49,18 @@ test('meeting status pills use overlay semantic tokens instead of fixed tailwind
   assert.doesNotMatch(nativelyInterface, /return 'text-rose-600/);
   assert.doesNotMatch(nativelyInterface, /return 'text-emerald-600/);
 });
+
+test('mode dropdown is not clipped when all built-in modes are visible', () => {
+  assert.match(
+    nativelyInterface,
+    /\$\{isModeDropdownOpen \? 'overflow-visible' : 'overflow-hidden'\}/,
+    'overlay shell must stop clipping while the mode dropdown is open',
+  );
+  assert.match(
+    nativelyInterface,
+    /max-h-\[min\(22rem,calc\(100vh-7rem\)\)\]/,
+    'mode list should use a viewport-aware height large enough for the eight built-in modes',
+  );
+  assert.match(nativelyInterface, /py-1\.5 min-h-7/);
+  assert.doesNotMatch(nativelyInterface, /max-h-64 overflow-y-auto p-1\.5 space-y-0\.5/);
+});
