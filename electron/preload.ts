@@ -138,6 +138,8 @@ interface ElectronAPI {
       | 'local-whisper'
       | 'local-sensevoice',
   ) => Promise<{ success: boolean; error?: string }>;
+  getSpeakerSeparationMode: () => Promise<'auto' | 'off'>;
+  setSpeakerSeparationMode: (mode: 'auto' | 'off') => Promise<{ success: boolean; error?: string }>;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
   localWhisperSetModel: (modelId: string) => Promise<{ success: boolean }>;
   localWhisperDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
@@ -1050,6 +1052,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       | 'local-sensevoice',
   ) => ipcRenderer.invoke('set-stt-provider', provider),
   getSttProvider: () => ipcRenderer.invoke('get-stt-provider'),
+  getSpeakerSeparationMode: () => ipcRenderer.invoke('get-speaker-separation-mode'),
+  setSpeakerSeparationMode: (mode: 'auto' | 'off') =>
+    ipcRenderer.invoke('set-speaker-separation-mode', mode),
   setGroqSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-groq-stt-api-key', apiKey),
   setOpenAiSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-openai-stt-api-key', apiKey),
   setOpenAiSttBaseUrl: (url: string) => ipcRenderer.invoke('set-openai-stt-base-url', url),
@@ -1875,6 +1880,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('screen-understanding-mode-changed', subscription);
     return () => {
       ipcRenderer.removeListener('screen-understanding-mode-changed', subscription);
+    };
+  },
+  onSpeakerSeparationModeChanged: (callback: (mode: 'auto' | 'off') => void) => {
+    const subscription = (_: any, mode: 'auto' | 'off') => callback(mode);
+    ipcRenderer.on('speaker-separation-mode-changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('speaker-separation-mode-changed', subscription);
     };
   },
   getTechnicalInterviewVisionFirst: () =>

@@ -15,9 +15,16 @@ import axios from 'axios';
 import FormData from 'form-data';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { BaseSTT } from './BaseSTT';
-import { extractDoubaoAucTranscript, transcribeDoubaoAucFile } from './doubaoAucClient';
+import { extractDoubaoAucTranscript, extractDoubaoAucTranscription, transcribeDoubaoAucFile, type DoubaoAucTranscriptionResult } from './doubaoAucClient';
+import { SpeakerDiarizationAligner } from './SpeakerDiarizationAligner';
 
 export type RestSttProvider = 'groq' | 'openai' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'doubao' | 'doubao-auc';
+export type SpeakerSeparationMode = 'auto' | 'off';
+
+interface RestSttOptions {
+    speakerSeparationMode?: SpeakerSeparationMode;
+    speaker?: 'interviewer' | 'user';
+}
 
 interface RestSttProviderConfig {
     endpoint: string;
@@ -33,9 +40,11 @@ interface RestSttProviderConfig {
     queryEndpoint?: string;
     /** For async providers: build the request body from audio buffer */
     buildRequestBody?: (audioBase64: string, mimeType: string) => any;
+    supportsDiarization?: boolean;
+    diarizationMode?: 'none' | 'provider-utterances';
 }
 
-type ProviderConfigFactory = (apiKey: string, region?: string, languageKey?: string) => RestSttProviderConfig;
+type ProviderConfigFactory = (apiKey: string, region?: string, languageKey?: string, options?: RestSttOptions) => RestSttProviderConfig;
 
 const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
     groq: (apiKey, region, languageKey) => {
@@ -134,12 +143,16 @@ const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
             },
         };
     },
-    'doubao-auc': (apiKey, region, languageKey) => {
+    'doubao-auc': (apiKey, region, languageKey, options) => {
         // New console API uses single X-Api-Key header (no more AppId|AccessKey)
         const authHeader: Record<string, string> = {
             'X-Api-Key': apiKey.trim(),
             'X-Api-Resource-Id': 'volc.seedasr.auc',
         };
+        const lang = (languageKey && languageKey !== 'auto') ? RECOGNITION_LANGUAGES[languageKey]?.bcp47 : undefined;
+        const speakerSeparationMode = options?.speakerSeparationMode ?? 'auto';
+        const languageSupportsSpeakerSeparation = !lang || lang === 'zh-CN';
+        const enableSpeakerSeparation = speakerSeparationMode === 'auto' && languageSupportsSpeakerSeparation;
 
         return {
             endpoint: 'https://openspeech-direct.zijieapi.com/api/v3/auc/bigmodel',
@@ -148,6 +161,8 @@ const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
             uploadType: 'json',
             submitEndpoint: 'https://openspeech-direct.zijieapi.com/api/v3/auc/bigmodel/submit',
             queryEndpoint: 'https://openspeech-direct.zijieapi.com/api/v3/auc/bigmodel/query',
+            supportsDiarization: true,
+            diarizationMode: 'provider-utterances',
             buildRequestBody: (audioBase64: string, mimeType: string) => {
                 const format = mimeType.includes('wav') ? 'wav' : mimeType.includes('mp3') ? 'mp3' : 'wav';
                 return {
@@ -159,13 +174,15 @@ const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
                         rate: 16000,
                         bits: 16,
                         channel: 1,
+                        ...(lang ? { language: lang } : {}),
                     },
                     request: {
                         model_name: 'bigmodel',
                         enable_itn: true,
                         enable_punc: true,
                         enable_ddc: false,
-                        enable_speaker_info: false,
+                        enable_speaker_info: enableSpeakerSeparation,
+                        ...(enableSpeakerSeparation ? { ssd_version: '200' } : {}),
                         enable_channel_split: false,
                         show_utterances: true,
                         vad_segment: true,
@@ -195,6 +212,8 @@ export class RestSTT extends BaseSTT {
     private apiKey: string;
     private region?: string;
     private config: RestSttProviderConfig;
+    private options: RestSttOptions;
+    private diarizationAligner: SpeakerDiarizationAligner;
 
     private chunks: Buffer[] = [];
     private totalBufferedBytes = 0;
@@ -206,12 +225,14 @@ export class RestSTT extends BaseSTT {
     // Audio config (must match SystemAudioCapture output)
     private bitsPerSample = 16;
 
-    constructor(provider: RestSttProvider, apiKey: string, modelOverride?: string, region?: string) {
+    constructor(provider: RestSttProvider, apiKey: string, modelOverride?: string, region?: string, options: RestSttOptions = {}) {
         super();
         this.provider = provider;
         this.apiKey = apiKey;
         this.region = region;
-        this.config = PROVIDER_CONFIGS[provider](apiKey, region);
+        this.options = { speaker: 'interviewer', ...options };
+        this.config = PROVIDER_CONFIGS[provider](apiKey, region, undefined, this.options);
+        this.diarizationAligner = new SpeakerDiarizationAligner(this.options.speaker || 'interviewer');
         if (modelOverride) {
             this.config.model = modelOverride;
         }
@@ -223,7 +244,7 @@ export class RestSTT extends BaseSTT {
      */
     setApiKey(apiKey: string): void {
         this.apiKey = apiKey;
-        this.config = PROVIDER_CONFIGS[this.provider](apiKey, this.region);
+        this.config = PROVIDER_CONFIGS[this.provider](apiKey, this.region, this._languageKey, this.options);
         console.log(`[RestSTT] API key updated for ${this.provider}`);
     }
 
@@ -249,8 +270,9 @@ export class RestSTT extends BaseSTT {
      * Update recognition language
      */
     setRecognitionLanguage(key: string): void {
+        this._languageKey = key;
         console.log(`[RestSTT] Updating recognition language to: ${key}`);
-        this.config = PROVIDER_CONFIGS[this.provider](this.apiKey, this.region, key);
+        this.config = PROVIDER_CONFIGS[this.provider](this.apiKey, this.region, key, this.options);
     }
 
     /**
@@ -399,15 +421,7 @@ export class RestSTT extends BaseSTT {
         this.isUploading = true;
         const uploadPromise = (async () => {
             const transcript = await this.uploadAudio(wavBuffer);
-
-            if (transcript && transcript.trim().length > 0) {
-                console.log(`[RestSTT] Transcript received`, { length: transcript.trim().length });
-                this.emit('transcript', {
-                    text: transcript.trim(),
-                    isFinal: true,
-                    confidence: 1.0,
-                });
-            }
+            this.emitUploadResult(transcript);
         })()
             .catch(err => {
                 console.error(`[RestSTT] Upload error:`, err);
@@ -433,7 +447,42 @@ export class RestSTT extends BaseSTT {
     /**
      * Upload WAV audio to the REST endpoint
      */
-    private async uploadAudio(wavBuffer: Buffer): Promise<string> {
+    private emitUploadResult(transcript: string | DoubaoAucTranscriptionResult): void {
+        if (typeof transcript === 'string') {
+            if (transcript && transcript.trim().length > 0) {
+                console.log(`[RestSTT] Transcript received`, { length: transcript.trim().length });
+                this.emit('transcript', {
+                    text: transcript.trim(),
+                    isFinal: true,
+                    confidence: 1.0,
+                });
+            }
+            return;
+        }
+
+        if (!transcript || !Array.isArray(transcript.utterances)) return;
+        const aligned = this.diarizationAligner.align({
+            utterances: transcript.utterances,
+            emitAfterMs: 0,
+        });
+
+        for (const utterance of aligned) {
+            if (!utterance.text.trim()) continue;
+            this.emit('transcript', {
+                text: utterance.text.trim(),
+                isFinal: true,
+                confidence: 1.0,
+                speakerId: utterance.speakerId,
+                speakerLabel: utterance.speakerLabel,
+                providerSpeakerId: utterance.providerSpeakerId,
+                diarizationProvider: 'doubao-auc',
+                startTimestampMs: utterance.startMs,
+                endTimestampMs: utterance.endMs,
+            });
+        }
+    }
+
+    private async uploadAudio(wavBuffer: Buffer): Promise<string | DoubaoAucTranscriptionResult> {
         if (this.config.uploadType === 'binary') {
             return this.uploadBinary(wavBuffer);
         }
@@ -497,7 +546,7 @@ export class RestSTT extends BaseSTT {
      * Upload via JSON body with Base64 audio (Doubao AUC)
      * Two-step async process: submit -> query for results
      */
-    private async uploadJson(wavBuffer: Buffer): Promise<string> {
+    private async uploadJson(wavBuffer: Buffer): Promise<string | DoubaoAucTranscriptionResult> {
         const submitEndpoint = this.config.submitEndpoint || this.config.endpoint;
         const queryEndpoint = this.config.queryEndpoint || this.config.endpoint;
 
@@ -509,6 +558,23 @@ export class RestSTT extends BaseSTT {
         const requestBody = this.config.buildRequestBody
             ? this.config.buildRequestBody(audioBase64, mimeType)
             : { audio: audioBase64 };
+
+        if (this.config.supportsDiarization && requestBody?.request?.enable_speaker_info) {
+            const jsonText = await transcribeDoubaoAucFile({
+                submitEndpoint,
+                queryEndpoint,
+                authHeader: this.config.authHeader,
+                requestBody,
+                extractTranscript: (data: any) => JSON.stringify(extractDoubaoAucTranscription(data)),
+                post: (url, body, options) => axios.post(url, body, options),
+                logger: console,
+            });
+            try {
+                return JSON.parse(jsonText) as DoubaoAucTranscriptionResult;
+            } catch {
+                return jsonText;
+            }
+        }
 
         return transcribeDoubaoAucFile({
             submitEndpoint,

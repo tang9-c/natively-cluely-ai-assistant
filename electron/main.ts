@@ -1117,20 +1117,31 @@ export class AppState {
         return;
       }
 
-      this.intelligenceManager.handleTranscript({
+      const receivedAt = Date.now();
+      const transcriptPayload = {
         speaker: speaker,
+        speakerId: segment.speakerId,
+        speakerLabel: segment.speakerLabel,
+        providerSpeakerId: segment.providerSpeakerId,
+        diarizationProvider: segment.diarizationProvider,
         text: segment.text,
-        timestamp: Date.now(),
+        timestamp: receivedAt,
         final: segment.isFinal,
-        confidence: segment.confidence
-      });
+        confidence: segment.confidence,
+        startTimestampMs: segment.startTimestampMs,
+        endTimestampMs: segment.endTimestampMs,
+        emotion: segment.emotion,
+        emotionSource: segment.emotionSource
+      };
+
+      this.intelligenceManager.handleTranscript(transcriptPayload);
 
       // Feed final transcript to JIT RAG indexer
       if (segment.isFinal && this.ragManager) {
         this.ragManager.feedLiveTranscript([{
           speaker: speaker,
           text: segment.text,
-          timestamp: Date.now()
+          timestamp: receivedAt
         }]);
       }
 
@@ -1140,17 +1151,8 @@ export class AppState {
       }
 
       const helper = this.getWindowHelper();
-      const payload = {
-        speaker: speaker,
-        text: segment.text,
-        timestamp: Date.now(),
-        final: segment.isFinal,
-        confidence: segment.confidence,
-        emotion: segment.emotion,
-        emotionSource: segment.emotionSource
-      };
-      helper.getLauncherWindow()?.webContents.send('native-audio-transcript', payload);
-      helper.getOverlayWindow()?.webContents.send('native-audio-transcript', payload);
+      helper.getLauncherWindow()?.webContents.send('native-audio-transcript', transcriptPayload);
+      helper.getOverlayWindow()?.webContents.send('native-audio-transcript', transcriptPayload);
 
       // Feed final recruiter (system audio) transcripts to the premium
       // negotiation tracker. Issue #272: gate by active mode template so the

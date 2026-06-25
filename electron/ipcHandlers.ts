@@ -792,6 +792,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       broadcastEvent: 'local-intent-enhancement-enabled-changed',
       getter: () => SettingsManager.getInstance().getLocalIntentEnhancementEnabled(),
     },
+    {
+      suffix: 'speaker-separation-mode',
+      key: 'speakerSeparationMode',
+      validator: (v) => ['auto', 'off'].includes(v) || 'invalid_mode',
+      broadcastEvent: 'speaker-separation-mode-changed',
+      getter: () => SettingsManager.getInstance().getSpeakerSeparationMode(),
+      setter: (v) => SettingsManager.getInstance().setSpeakerSeparationMode(v),
+    },
   ];
 
   for (const reg of SETTINGS_REGISTRY) {
@@ -889,6 +897,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
     SettingsManager.getInstance().set('localIntentEnhancementEnabled', enabled);
     broadcast('local-intent-enhancement-enabled-changed', enabled);
+    return { success: true };
+  });
+  safeHandle('get-speaker-separation-mode', async () =>
+    SettingsManager.getInstance().getSpeakerSeparationMode(),
+  );
+  safeHandle('set-speaker-separation-mode', async (_, mode: 'auto' | 'off') => {
+    if (!['auto', 'off'].includes(mode)) {
+      return { success: false, error: 'invalid_mode' };
+    }
+    SettingsManager.getInstance().setSpeakerSeparationMode(mode);
+    broadcast('speaker-separation-mode-changed', mode);
     return { success: true };
   });
   safeHandle('get-technical-interview-direct-vision', async () =>

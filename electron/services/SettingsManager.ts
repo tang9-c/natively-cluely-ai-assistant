@@ -52,6 +52,7 @@ export interface AppSettings {
     // Chinese intent recognition uses rules + cloud fallback without pulling
     // the large local mDeBERTa artifact.
     localIntentEnhancementEnabled?: boolean;
+    speakerSeparationMode?: 'auto' | 'off';
 }
 
 export const VALID_SCREEN_UNDERSTANDING_MODES = ['vision_first', 'vision_only', 'private_vision'] as const;
@@ -121,6 +122,18 @@ export class SettingsManager {
 
     public getLocalIntentEnhancementEnabled(): boolean {
         return this.settings.localIntentEnhancementEnabled === true;
+    }
+
+    public getSpeakerSeparationMode(): 'auto' | 'off' {
+        return this.settings.speakerSeparationMode === 'off' ? 'off' : 'auto';
+    }
+
+    public setSpeakerSeparationMode(mode: 'auto' | 'off'): void {
+        if (!['auto', 'off'].includes(mode)) {
+            throw new Error(`[SettingsManager] Invalid speakerSeparationMode: ${mode}`);
+        }
+        this.settings.speakerSeparationMode = mode;
+        this.saveSettings();
     }
 
     private loadSettings(): void {

@@ -125,7 +125,13 @@ export const STT_REGISTRY: Record<SttProviderId, RegistryEntry | undefined> = {
   'doubao-auc': {
     name: 'RestSTT (Doubao AUC)',
     needsKey: 'getDoubaoApiKey',
-    factory: (key) => new RestSTT('doubao-auc', key),
+    extraConfig: () => ({
+      speakerSeparationMode: SettingsManager.getInstance().getSpeakerSeparationMode(),
+    }),
+    factory: (key, speaker, extra?: Record<string, string | undefined>) => {
+      const speakerSeparationMode = extra?.speakerSeparationMode === 'off' ? 'off' : 'auto';
+      return new RestSTT('doubao-auc', key, undefined, undefined, { speaker, speakerSeparationMode });
+    },
   },
 
   'local-whisper': {

@@ -837,6 +837,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [sttTestOnlyVerified, setSttTestOnlyVerified] = useState(false);
     const [sttSaving, setSttSaving] = useState(false);
     const [sttSaved, setSttSaved] = useState(false);
+    const [speakerSeparationMode, setSpeakerSeparationMode] = useState<'auto' | 'off'>('auto');
     const [googleServiceAccountPath, setGoogleServiceAccountPath] = useState<string | null>(null);
     const [hasNativelyKey, setHasNativelyKey] = useState(false);
     const [hasStoredSttGroqKey, setHasStoredSttGroqKey] = useState(false);
@@ -897,6 +898,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                     if (creds.sttDoubaoKey) setSttDoubaoKey(creds.sttDoubaoKey);
                     if (typeof creds.openAiSttBaseUrl === 'string') setSttOpenaiBaseUrl(creds.openAiSttBaseUrl);
                 }
+                const mode = await window.electronAPI?.getSpeakerSeparationMode?.();
+                if (mode === 'auto' || mode === 'off') setSpeakerSeparationMode(mode);
                 await refreshSttLanguageCompatibility();
             } catch (e) {
                 console.error('Failed to load STT settings:', e);
@@ -941,6 +944,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                     if (creds.sttDoubaoKey) setSttDoubaoKey(creds.sttDoubaoKey);
                     if (typeof creds.openAiSttBaseUrl === 'string') setSttOpenaiBaseUrl(creds.openAiSttBaseUrl);
                 }).catch(() => { /* silently ignore */ });
+                window.electronAPI?.getSpeakerSeparationMode?.()
+                    .then((mode) => {
+                        if (mode === 'auto' || mode === 'off') setSpeakerSeparationMode(mode);
+                    })
+                    .catch(() => { /* silently ignore */ });
                 refreshSttLanguageCompatibility().catch(() => { /* silently ignore */ });
             }
         });
@@ -961,6 +969,28 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             console.error('Failed to set STT provider:', e);
         }
     };
+
+    const handleSpeakerSeparationModeChange = async (mode: 'auto' | 'off') => {
+        setSpeakerSeparationMode(mode);
+        try {
+            const result = await window.electronAPI?.setSpeakerSeparationMode?.(mode);
+            if (result && !result.success) {
+                console.error('Failed to set speaker separation mode:', result.error);
+            }
+        } catch (e) {
+            console.error('Failed to set speaker separation mode:', e);
+        }
+    };
+
+    const speakerSeparationSupported =
+        sttProvider === 'doubao-auc' &&
+        (recognitionLanguage === 'auto' || recognitionLanguage === '' || recognitionLanguage === 'chinese' || /^zh[-_]/i.test(recognitionLanguage));
+    const speakerSeparationStatus: 'off' | 'on' | 'unavailable' =
+        speakerSeparationMode === 'off'
+            ? 'off'
+            : speakerSeparationSupported
+                ? 'on'
+                : 'unavailable';
 
     const handleSttKeySubmit = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc', key: string) => {
         if (!key.trim()) return;
@@ -2453,6 +2483,42 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             {sttProvider === 'local-sensevoice' && (
                                                 <LocalSenseVoiceModelPanel />
                                             )}
+
+                                            <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
+                                                <div className="flex items-center justify-between gap-4">
+                                                    <div>
+                                                        <label className="text-xs font-medium text-text-secondary block">Speaker separation</label>
+                                                        <p className={`text-[11px] mt-1 ${speakerSeparationStatus === 'unavailable'
+                                                            ? 'text-amber-400/90'
+                                                            : speakerSeparationStatus === 'off'
+                                                                ? 'text-text-tertiary'
+                                                                : 'text-green-400'
+                                                            }`}>
+                                                            {speakerSeparationStatus === 'off'
+                                                                ? 'Speaker separation off'
+                                                                : speakerSeparationStatus === 'on'
+                                                                    ? 'Speaker separation on for Doubao AUC'
+                                                                    : 'Speaker separation unavailable for this transcription provider'}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex rounded-lg bg-bg-input border border-border-subtle p-1">
+                                                        {(['auto', 'off'] as const).map((mode) => (
+                                                            <button
+                                                                key={mode}
+                                                                type="button"
+                                                                onClick={() => handleSpeakerSeparationModeChange(mode)}
+                                                                disabled={sttProvider === 'none'}
+                                                                className={`min-w-[64px] rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${speakerSeparationMode === mode
+                                                                    ? 'bg-accent-primary text-white'
+                                                                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-elevated'
+                                                                    }`}
+                                                            >
+                                                                {mode === 'auto' ? 'Auto' : 'Off'}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
 
                                             {/* Recognition Language Family */}
                                             <CustomSelect

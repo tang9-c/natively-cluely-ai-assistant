@@ -38,8 +38,14 @@ export interface Meeting {
     };
     transcript?: Array<{
         speaker: string;
+        speakerId?: string;
+        speakerLabel?: string;
+        providerSpeakerId?: string;
+        diarizationProvider?: 'doubao-auc';
         text: string;
         timestamp: number;
+        startTimestampMs?: number;
+        endTimestampMs?: number;
     }>;
     usage?: Array<{
         type: 'assist' | 'followup' | 'chat' | 'followup_questions';
@@ -234,8 +240,14 @@ export class DatabaseManager {
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     meeting_id TEXT,
                     speaker TEXT,
+                    speaker_id TEXT,
+                    speaker_label TEXT,
+                    provider_speaker_id TEXT,
+                    diarization_provider TEXT,
                     content TEXT,
                     timestamp_ms INTEGER,
+                    start_timestamp_ms INTEGER,
+                    end_timestamp_ms INTEGER,
                     FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
                 );
 
@@ -1019,6 +1031,23 @@ export class DatabaseManager {
                 }
             }
             this.db.pragma('user_version = 23');
+        }
+
+        // Version 23 -> 24: Preserve optional speaker diarization metadata on transcripts.
+        if (version < 24) {
+            console.log('[DatabaseManager] Applying migration v23 -> v24: Add speaker diarization transcript columns');
+            const columnsToAdd = [
+                'ALTER TABLE transcripts ADD COLUMN speaker_id TEXT',
+                'ALTER TABLE transcripts ADD COLUMN speaker_label TEXT',
+                'ALTER TABLE transcripts ADD COLUMN provider_speaker_id TEXT',
+                'ALTER TABLE transcripts ADD COLUMN diarization_provider TEXT',
+                'ALTER TABLE transcripts ADD COLUMN start_timestamp_ms INTEGER',
+                'ALTER TABLE transcripts ADD COLUMN end_timestamp_ms INTEGER',
+            ];
+            for (const sql of columnsToAdd) {
+                try { this.db.exec(sql); } catch (e) { /* Column already exists */ }
+            }
+            this.db.pragma('user_version = 24');
         }
 
         console.log('[DatabaseManager] Migrations completed.');
@@ -1821,8 +1850,11 @@ export class DatabaseManager {
         `);
 
         const insertTranscript = this.db.prepare(`
-            INSERT INTO transcripts (meeting_id, speaker, content, timestamp_ms)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO transcripts (
+                meeting_id, speaker, speaker_id, speaker_label, provider_speaker_id,
+                diarization_provider, content, timestamp_ms, start_timestamp_ms, end_timestamp_ms
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         const insertInteraction = this.db.prepare(`
@@ -1855,8 +1887,14 @@ export class DatabaseManager {
                     insertTranscript.run(
                         meeting.id,
                         segment.speaker,
+                        segment.speakerId || null,
+                        segment.speakerLabel || null,
+                        segment.providerSpeakerId || null,
+                        segment.diarizationProvider || null,
                         segment.text,
-                        segment.timestamp
+                        segment.timestamp,
+                        segment.startTimestampMs ?? null,
+                        segment.endTimestampMs ?? null
                     );
                 }
             }
@@ -2015,8 +2053,14 @@ export class DatabaseManager {
 
         const transcript = transcriptRows.map(row => ({
             speaker: row.speaker,
+            speakerId: row.speaker_id || undefined,
+            speakerLabel: row.speaker_label || undefined,
+            providerSpeakerId: row.provider_speaker_id || undefined,
+            diarizationProvider: row.diarization_provider === 'doubao-auc' ? 'doubao-auc' as const : undefined,
             text: row.content,
-            timestamp: row.timestamp_ms
+            timestamp: row.timestamp_ms,
+            startTimestampMs: row.start_timestamp_ms ?? undefined,
+            endTimestampMs: row.end_timestamp_ms ?? undefined
         }));
 
         const usage = usageRows.map(row => {

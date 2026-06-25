@@ -30,6 +30,12 @@ export interface TranscriptSegment {
     text: string;
     isFinal: boolean;
     confidence: number;
+    speakerId?: string;
+    speakerLabel?: string;
+    providerSpeakerId?: string;
+    diarizationProvider?: 'doubao-auc';
+    startTimestampMs?: number;
+    endTimestampMs?: number;
     emotion?: TranscriptEmotion;
     emotionSource?: 'sensevoice';
 }

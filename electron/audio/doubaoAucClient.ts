@@ -24,6 +24,18 @@ export interface DoubaoAucTranscribeOptions {
     logger?: Pick<Console, 'log'>;
 }
 
+export interface DoubaoAucUtterance {
+    text: string;
+    startMs?: number;
+    endMs?: number;
+    providerSpeakerId?: string;
+}
+
+export interface DoubaoAucTranscriptionResult {
+    text: string;
+    utterances: DoubaoAucUtterance[];
+}
+
 const AUC_STATUS_OK = '20000000';
 const AUC_STATUS_PROCESSING = new Set(['20000001', '20000002']);
 const AUC_STATUS_SILENT = '20000003';
@@ -44,6 +56,26 @@ function readHeader(headers: Record<string, any>, name: string): string | undefi
 function wait(ms: number): Promise<void> {
     if (ms <= 0) return Promise.resolve();
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function readNumber(value: any): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim().length > 0) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : undefined;
+    }
+    return undefined;
+}
+
+function readSpeakerId(item: any): string | undefined {
+    const value = item?.speaker_id
+        ?? item?.speakerId
+        ?? item?.speaker
+        ?? item?.additions?.speaker_id
+        ?? item?.additions?.speakerId
+        ?? item?.additions?.speaker;
+    if (value == null || value === '') return undefined;
+    return String(value);
 }
 
 export function extractDoubaoAucTranscript(data: any): string {
@@ -69,6 +101,44 @@ export function extractDoubaoAucTranscript(data: any): string {
     }
 
     return data?.text || data?.transcription || '';
+}
+
+export function extractDoubaoAucTranscription(data: any): DoubaoAucTranscriptionResult {
+    if (typeof data === 'string') {
+        return { text: data, utterances: data.trim() ? [{ text: data }] : [] };
+    }
+
+    const result = data?.result || data?.resp_speech_info;
+    const utteranceSource = Array.isArray(data?.result?.utterances)
+        ? data.result.utterances
+        : Array.isArray(result)
+            ? result
+            : [];
+
+    const utterances: DoubaoAucUtterance[] = utteranceSource
+        .map((item: any): DoubaoAucUtterance | null => {
+            const text = item?.text || item?.transcription || '';
+            if (!text) return null;
+            return {
+                text,
+                startMs: readNumber(item?.start_time ?? item?.startMs),
+                endMs: readNumber(item?.end_time ?? item?.endMs),
+                providerSpeakerId: readSpeakerId(item),
+            };
+        })
+        .filter((item: DoubaoAucUtterance | null): item is DoubaoAucUtterance => item !== null);
+
+    const text = typeof data?.result?.text === 'string'
+        ? data.result.text
+        : typeof data?.text === 'string'
+            ? data.text
+            : utterances.map((item: DoubaoAucUtterance) => item.text).join(' ');
+
+    if (utterances.length === 0 && text.trim().length > 0) {
+        return { text, utterances: [{ text }] };
+    }
+
+    return { text, utterances };
 }
 
 export async function transcribeDoubaoAucFile(options: DoubaoAucTranscribeOptions): Promise<string> {

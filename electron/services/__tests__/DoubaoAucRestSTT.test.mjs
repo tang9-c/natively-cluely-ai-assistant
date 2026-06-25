@@ -107,6 +107,28 @@ test('Doubao AUC keeps polling through pending status and joins utterances', asy
     assert.equal(calls.length, 3);
 });
 
+test('Doubao AUC extracts structured utterances with provider speaker ids', async () => {
+    const { extractDoubaoAucTranscription } = await loadClient();
+
+    const result = extractDoubaoAucTranscription({
+        result: {
+            text: '你好。我们看预算。',
+            utterances: [
+                { text: '你好。', start_time: 0, end_time: 900, speaker_id: '1' },
+                { text: '我们看预算。', start_time: 1100, end_time: 2400, additions: { speaker: '2' } },
+            ],
+        },
+    });
+
+    assert.deepEqual(result, {
+        text: '你好。我们看预算。',
+        utterances: [
+            { text: '你好。', startMs: 0, endMs: 900, providerSpeakerId: '1' },
+            { text: '我们看预算。', startMs: 1100, endMs: 2400, providerSpeakerId: '2' },
+        ],
+    });
+});
+
 test('Doubao AUC returns empty text for silent status without throwing', async () => {
     const { transcribeDoubaoAucFile, extractDoubaoAucTranscript } = await loadClient();
     const post = async (url) => {
@@ -178,6 +200,79 @@ test('RestSTT drainFinals waits for an in-flight file upload to emit final trans
             text: '最终转写文本',
             isFinal: true,
             confidence: 1,
+        },
+    ]);
+});
+
+test('RestSTT Doubao AUC auto mode enables speaker separation for supported language', async () => {
+    const { RestSTT } = await loadRestSTT();
+    const stt = new RestSTT('doubao-auc', 'test-api-key');
+    stt.setRecognitionLanguage('auto');
+
+    const requestBody = stt.config.buildRequestBody(Buffer.from('wav').toString('base64'), 'audio/wav');
+
+    assert.equal(requestBody.request.enable_speaker_info, true);
+    assert.equal(requestBody.request.ssd_version, '200');
+    assert.equal(requestBody.request.show_utterances, true);
+});
+
+test('RestSTT Doubao AUC off mode disables speaker separation', async () => {
+    const { RestSTT } = await loadRestSTT();
+    const stt = new RestSTT('doubao-auc', 'test-api-key', undefined, undefined, {
+        speakerSeparationMode: 'off',
+    });
+
+    const requestBody = stt.config.buildRequestBody(Buffer.from('wav').toString('base64'), 'audio/wav');
+
+    assert.equal(requestBody.request.enable_speaker_info, false);
+    assert.equal(Object.hasOwn(requestBody.request, 'ssd_version'), false);
+});
+
+test('RestSTT emits structured Doubao AUC utterances with stable speaker metadata', async () => {
+    const { RestSTT } = await loadRestSTT();
+    const stt = new RestSTT('doubao-auc', 'test-api-key');
+    const transcripts = [];
+    const rawPcm = Buffer.alloc(8000);
+    for (let offset = 0; offset < rawPcm.length; offset += 2) {
+        rawPcm.writeInt16LE(1000, offset);
+    }
+
+    stt.uploadAudio = async () => ({
+        text: '你好。我们看预算。',
+        utterances: [
+            { text: '你好。', startMs: 0, endMs: 900, providerSpeakerId: '1' },
+            { text: '我们看预算。', startMs: 1100, endMs: 2400, providerSpeakerId: '2' },
+        ],
+    });
+    stt.on('transcript', event => transcripts.push(event));
+
+    stt.start();
+    stt.write(rawPcm);
+    await stt.drainFinals(1000);
+    stt.stop();
+
+    assert.deepEqual(transcripts, [
+        {
+            text: '你好。',
+            isFinal: true,
+            confidence: 1,
+            speakerId: 'interviewer-1',
+            speakerLabel: 'Interviewer 1',
+            providerSpeakerId: '1',
+            diarizationProvider: 'doubao-auc',
+            startTimestampMs: 0,
+            endTimestampMs: 900,
+        },
+        {
+            text: '我们看预算。',
+            isFinal: true,
+            confidence: 1,
+            speakerId: 'interviewer-2',
+            speakerLabel: 'Interviewer 2',
+            providerSpeakerId: '2',
+            diarizationProvider: 'doubao-auc',
+            startTimestampMs: 1100,
+            endTimestampMs: 2400,
         },
     ]);
 });

@@ -84,8 +84,16 @@ export interface ResearchProgressPayload {
 
 export interface NativeAudioTranscriptPayload {
   speaker: string
+  speakerId?: string
+  speakerLabel?: string
+  providerSpeakerId?: string
+  diarizationProvider?: 'doubao-auc'
   text: string
+  timestamp?: number
   final: boolean
+  confidence?: number
+  startTimestampMs?: number
+  endTimestampMs?: number
   emotion?: TranscriptEmotion
   emotionSource?: 'sensevoice'
 }
@@ -220,6 +228,8 @@ export interface ElectronAPI {
   // STT Provider Management
   setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper' | 'local-sensevoice') => Promise<{ success: boolean; error?: string }>
   getSttProvider: () => Promise<string>
+  getSpeakerSeparationMode: () => Promise<'auto' | 'off'>
+  setSpeakerSeparationMode: (mode: 'auto' | 'off') => Promise<{ success: boolean; error?: string }>
   localSenseVoiceGetModels: () => Promise<{ models: any[]; activeModelId: string }>
   localSenseVoiceDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>
   localSenseVoiceStartDownload: (modelId: string) => Promise<{ success: boolean; error?: string }>
@@ -509,6 +519,7 @@ export interface ElectronAPI {
   getScreenUnderstandingMode: () => Promise<'vision_first' | 'vision_only' | 'private_vision'>;
   setScreenUnderstandingMode: (mode: 'vision_first' | 'vision_only' | 'private_vision') => Promise<{ success: boolean; error?: string }>;
   onScreenUnderstandingModeChanged: (callback: (mode: 'vision_first' | 'vision_only' | 'private_vision') => void) => () => void;
+  onSpeakerSeparationModeChanged: (callback: (mode: 'auto' | 'off') => void) => () => void;
   getTechnicalInterviewVisionFirst: () => Promise<boolean>;
   setTechnicalInterviewVisionFirst: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   onTechnicalInterviewVisionFirstChanged: (callback: (enabled: boolean) => void) => () => void;

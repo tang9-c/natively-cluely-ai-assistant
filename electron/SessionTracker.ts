@@ -8,10 +8,16 @@ import { isVerboseLogging } from './verboseLog';
 export interface TranscriptSegment {
     marker?: string;
     speaker: string;
+    speakerId?: string;
+    speakerLabel?: string;
+    providerSpeakerId?: string;
+    diarizationProvider?: 'doubao-auc';
     text: string;
     timestamp: number;
     final: boolean;
     confidence?: number;
+    startTimestampMs?: number;
+    endTimestampMs?: number;
     emotion?: string;
     emotionSource?: string;
 }
@@ -27,6 +33,8 @@ export interface ContextItem {
     role: 'interviewer' | 'user' | 'assistant';
     text: string;
     timestamp: number;
+    speakerId?: string;
+    speakerLabel?: string;
     emotion?: string;
     emotionSource?: string;
 }
@@ -236,6 +244,8 @@ export class SessionTracker {
             role,
             text,
             timestamp: segment.timestamp,
+            speakerId: segment.speakerId,
+            speakerLabel: segment.speakerLabel,
             emotion: segment.emotion,
             emotionSource: segment.emotionSource,
         });

@@ -1592,7 +1592,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           return; // Safety check for any other speaker types
         }
 
-        const speakerLabel = transcript.speaker === 'user' ? 'Me' : 'Interviewer';
+        const speakerLabel = transcript.speakerLabel || (transcript.speaker === 'user' ? 'Me' : 'Interviewer');
 
         // Route to rolling transcript bar - accumulate text continuously
         setIsInterviewerSpeaking(!transcript.final);
