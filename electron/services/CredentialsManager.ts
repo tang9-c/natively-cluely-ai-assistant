@@ -119,6 +119,12 @@ export class CredentialsManager {
 
     public getSttProvider(): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper' | 'local-sensevoice' {
         const provider = this.credentials.sttProvider || 'none';
+        if (provider === 'doubao') {
+            this.credentials.sttProvider = 'doubao-auc';
+            this.saveCredentials();
+            console.log('[CredentialsManager] Self-healed sttProvider: doubao→doubao-auc (Doubao AUC is the implemented STT path)');
+            return 'doubao-auc';
+        }
         // Self-heal: if provider is 'none' but a Natively key exists, the user is in a
         // broken state (key cleared then re-entered via a path that skipped auto-promote,
         // or credentials restored from backup). Silently restore to 'natively' so STT works.
@@ -285,6 +291,9 @@ export class CredentialsManager {
     }
 
     public setSttProvider(provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper' | 'local-sensevoice'): void {
+        if (provider === 'doubao') {
+            provider = 'doubao-auc';
+        }
         this.credentials.sttProvider = provider;
         this.saveCredentials();
         console.log(`[CredentialsManager] STT Provider set to: ${provider}`);

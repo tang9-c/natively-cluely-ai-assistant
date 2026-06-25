@@ -48,14 +48,20 @@ test('Doubao AUC registry passes speaker separation mode and channel into RestST
     assert.match(registry, /new RestSTT\('doubao-auc', key, undefined, undefined, \{ speaker, speakerSeparationMode/);
 });
 
-test('Doubao provider choices distinguish API capability without implying different API keys', () => {
+test('settings exposes only implemented Doubao AUC provider for speaker separation', () => {
     const settings = read('src/components/SettingsOverlay.tsx');
 
-    assert.match(settings, /Doubao Streaming ASR/);
-    assert.match(settings, /Same Doubao API key; streaming ASR, no speaker separation/);
     assert.match(settings, /Doubao AUC \(Speaker separation\)/);
     assert.match(settings, /Same Doubao API key; AUC BigModel with speaker separation/);
-    assert.match(settings, /use Doubao AUC \(Speaker separation\) with the same key/);
+    assert.doesNotMatch(settings, /Doubao Streaming ASR/);
+    assert.doesNotMatch(settings, /id: 'doubao', label:/);
+});
+
+test('legacy Doubao STT provider is normalized to Doubao AUC', () => {
+    const credentials = read('electron/services/CredentialsManager.ts');
+
+    assert.match(credentials, /provider === 'doubao'/);
+    assert.match(credentials, /sttProvider = 'doubao-auc'/);
 });
 
 test('transcript persistence preserves optional speaker diarization metadata', () => {

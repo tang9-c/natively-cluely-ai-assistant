@@ -873,7 +873,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 // @ts-ignore
                 const creds = await window.electronAPI?.getStoredCredentials?.();
                 if (creds) {
-                    setSttProvider(creds.sttProvider || 'none');
+                    setSttProvider(creds.sttProvider === 'doubao' ? 'doubao-auc' : creds.sttProvider || 'none');
                     if (creds.groqSttModel) setGroqSttModel(creds.groqSttModel);
                     setGoogleServiceAccountPath(creds.googleServiceAccountPath);
                     setHasStoredSttGroqKey(creds.hasSttGroqKey);
@@ -918,7 +918,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 // Re-fetch credentials silently — purely additive, no state reset
                 window.electronAPI?.getStoredCredentials?.().then((creds: any) => {
                     if (!creds) return;
-                    setSttProvider(creds.sttProvider || 'none');
+                    setSttProvider(creds.sttProvider === 'doubao' ? 'doubao-auc' : creds.sttProvider || 'none');
                     if (creds.groqSttModel) setGroqSttModel(creds.groqSttModel);
                     setHasNativelyKey(creds.hasNativelyKey || false);
                     setHasStoredSttGroqKey(creds.hasSttGroqKey);
@@ -956,6 +956,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     }, [isOpen, refreshSttLanguageCompatibility]); // isOpen is checked inside the callback
 
     const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper' | 'local-sensevoice') => {
+        provider = provider === 'doubao' ? 'doubao-auc' : provider;
         setSttProvider(provider);
         setIsSttDropdownOpen(false);
         setSttTestStatus('idle');
@@ -980,14 +981,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         } catch (e) {
             console.error('Failed to set speaker separation mode:', e);
         }
-    };
-
-    const formatSttConnectionError = (provider: string, error?: string) => {
-        const message = error || 'Connection failed';
-        if (provider === 'doubao' && /api key/i.test(message)) {
-            return `${message}. If you are validating speaker separation, use Doubao AUC (Speaker separation) with the same key; Streaming ASR does not expose speaker separation.`;
-        }
-        return message;
     };
 
     const speakerSeparationSupported =
@@ -1029,7 +1022,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
             if (!testResult?.success) {
                 setSttTestStatus('error');
-                setSttTestError(formatSttConnectionError(provider, testResult?.error || 'Validation failed. Key not saved.'));
+                setSttTestError(testResult?.error || 'Validation failed. Key not saved.');
                 setSttSaving(false);
                 return; // Stop save
             }
@@ -1210,12 +1203,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             } else {
                 setSttTestStatus('error');
                 setSttTestOnlyVerified(false);
-                setSttTestError(formatSttConnectionError(sttProvider, result?.error || 'Connection failed'));
+                setSttTestError(result?.error || 'Connection failed');
             }
         } catch (e: any) {
             setSttTestStatus('error');
             setSttTestOnlyVerified(false);
-            setSttTestError(formatSttConnectionError(sttProvider, e.message || 'Test failed'));
+            setSttTestError(e.message || 'Test failed');
         }
     };
 
@@ -2200,7 +2193,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             { id: 'azure', label: 'Azure Speech', badge: hasStoredAzureKey ? 'Saved' : null, desc: 'Microsoft Cognitive Services STT', color: 'cyan', icon: <Mic size={14} /> },
                                                             { id: 'ibmwatson', label: 'IBM Watson', badge: hasStoredIbmWatsonKey ? 'Saved' : null, desc: 'IBM Watson cloud STT service', color: 'indigo', icon: <Mic size={14} /> },
                                                             { id: 'soniox', label: 'Soniox', badge: hasStoredSonioxKey ? 'Saved' : null, recommended: true, desc: '60+ languages, multilingual, domain context', color: 'cyan', icon: <Mic size={14} /> },
-                                                            { id: 'doubao', label: 'Doubao Streaming ASR', badge: hasStoredDoubaoKey ? 'Saved' : null, desc: 'Same Doubao API key; streaming ASR, no speaker separation', color: 'orange', icon: <Mic size={14} /> },
                                                             { id: 'doubao-auc', label: 'Doubao AUC (Speaker separation)', badge: hasStoredDoubaoKey ? 'Saved' : null, desc: 'Same Doubao API key; AUC BigModel with speaker separation', color: 'orange', icon: <Mic size={14} /> },
                                                             { id: 'local-whisper', label: 'Local Whisper', badge: null, desc: 'Privacy-first: runs 100% on your device', color: 'green', icon: <Cpu size={14} /> },
                                                             { id: 'local-sensevoice', label: 'Local SenseVoice', badge: null, desc: 'Chinese-first local STT', color: 'green', icon: <Cpu size={14} /> },
