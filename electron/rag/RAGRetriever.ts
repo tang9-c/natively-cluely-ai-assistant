@@ -1,6 +1,10 @@
 import { VectorStore, ScoredChunk } from './VectorStore';
 import { EmbeddingPipeline } from './EmbeddingPipeline';
 import { formatChunkForContext } from './SemanticChunker';
+import { keywordCoverage } from './RagLexical';
+
+const HYBRID_LEXICAL_WEIGHT = 0.4;
+const HYBRID_VECTOR_WEIGHT = 0.6;
 
 /**
  * Query intent types for biasing retrieval strategy
@@ -19,6 +23,8 @@ export interface RetrievalOptions {
     topK?: number;                // Initial retrieval count (default: 8)
     recencyWeight?: number;       // 0-1, how much to weight recent (default: 0.3)
     intent?: QueryIntent;         // Override detected intent
+    recentTranscriptTurns?: string[];
+    modeIntent?: string;
 }
 
 export interface RetrievedContext {
@@ -27,6 +33,15 @@ export interface RetrievedContext {
     totalTokens: number;
     meetingIds: string[];
     intent: QueryIntent;          // Detected query intent for prompt hints
+    retrievalQuery: string;
+    citations: Array<{
+        sourceType: 'current_meeting' | 'historical_meeting';
+        sourceId: string;
+        chunkId: number;
+        score: number;
+        title?: string;
+        timestamp?: number | null;
+    }>;
 }
 
 
@@ -65,11 +80,15 @@ export class RAGRetriever {
 
         // Detect query intent (can be overridden)
         const intent = overrideIntent || this.detectIntent(query);
+        const retrievalQuery = this.buildRetrievalQuery(query, {
+            recentTranscriptTurns: options.recentTranscriptTurns,
+            modeIntent: options.modeIntent ?? intent,
+        });
 
         // 1. Embed the query
         let queryEmbedding: number[];
         try {
-            queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(query);
+            queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(retrievalQuery);
         } catch (error) {
             console.error('[RAGRetriever] Failed to embed query:', error);
             // Return empty context on embedding failure
@@ -78,18 +97,25 @@ export class RAGRetriever {
                 formattedContext: '',
                 totalTokens: 0,
                 meetingIds: [],
-                intent
+                intent,
+                retrievalQuery,
+                citations: []
             };
         }
 
-        // 2. Retrieve candidates (over-fetch for reranking)
+        // 2. Retrieve candidates with hybrid vector + lexical search.
         const spaceKey = this.embeddingPipeline.getActiveSpaceKey();
-        let candidates = await this.vectorStore.searchSimilar(queryEmbedding, {
+        const vectorCandidates = await this.vectorStore.searchSimilar(queryEmbedding, {
             meetingId,
             limit: topK * 2,
             minSimilarity: 0.25,
             spaceKey
         });
+        const lexicalCandidates = await this.vectorStore.searchLexical(retrievalQuery, {
+            meetingId,
+            limit: topK * 2,
+        });
+        let candidates = this.mergeHybridCandidates(vectorCandidates, lexicalCandidates, retrievalQuery);
 
         if (candidates.length === 0) {
             console.log('[RAGRetriever] No similar chunks found');
@@ -98,7 +124,9 @@ export class RAGRetriever {
                 formattedContext: '',
                 totalTokens: 0,
                 meetingIds: [],
-                intent
+                intent,
+                retrievalQuery,
+                citations: []
             };
         }
 
@@ -141,7 +169,9 @@ export class RAGRetriever {
             formattedContext,
             totalTokens,
             meetingIds: [...new Set(selected.map(c => c.meetingId))],
-            intent
+            intent,
+            retrievalQuery,
+            citations: this.buildCitations(selected, meetingId ? 'current_meeting' : 'historical_meeting')
         };
     }
 
@@ -162,11 +192,15 @@ export class RAGRetriever {
 
         // Detect query intent
         const intent = overrideIntent || this.detectIntent(query);
+        const retrievalQuery = this.buildRetrievalQuery(query, {
+            recentTranscriptTurns: options.recentTranscriptTurns,
+            modeIntent: options.modeIntent ?? intent,
+        });
 
         // Embed query
         let queryEmbedding: number[];
         try {
-            queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(query);
+            queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(retrievalQuery);
         } catch (error) {
             console.error('[RAGRetriever] Failed to embed query:', error);
             return {
@@ -174,17 +208,23 @@ export class RAGRetriever {
                 formattedContext: '',
                 totalTokens: 0,
                 meetingIds: [],
-                intent
+                intent,
+                retrievalQuery,
+                citations: []
             };
         }
 
         // Search both chunks and summaries
         const spaceKey = this.embeddingPipeline.getActiveSpaceKey();
-        const chunkResults = await this.vectorStore.searchSimilar(queryEmbedding, {
+        const vectorChunkResults = await this.vectorStore.searchSimilar(queryEmbedding, {
             limit: topK * 2,
             minSimilarity: 0.25,
             spaceKey
         });
+        const lexicalChunkResults = await this.vectorStore.searchLexical(retrievalQuery, {
+            limit: topK * 2,
+        });
+        const chunkResults = this.mergeHybridCandidates(vectorChunkResults, lexicalChunkResults, retrievalQuery);
 
         const summaryResults = await this.vectorStore.searchSummaries(queryEmbedding, 5, spaceKey);
 
@@ -247,8 +287,59 @@ export class RAGRetriever {
             formattedContext: contextParts.join('\n\n'),
             totalTokens,
             meetingIds: [...byMeeting.keys()],
-            intent
+            intent,
+            retrievalQuery,
+            citations: this.buildCitations(selected, 'historical_meeting')
         };
+    }
+
+    buildRetrievalQuery(
+        userQuestion: string,
+        context: { recentTranscriptTurns?: string[]; modeIntent?: string } = {}
+    ): string {
+        const parts = [
+            userQuestion,
+            context.modeIntent ? `intent:${context.modeIntent}` : '',
+            ...(context.recentTranscriptTurns ?? []).slice(-3),
+        ]
+            .map((part) => (part || '').trim())
+            .filter(Boolean);
+        return [...new Set(parts)].join('\n');
+    }
+
+    private mergeHybridCandidates(
+        vectorCandidates: ScoredChunk[],
+        lexicalCandidates: ScoredChunk[],
+        retrievalQuery: string,
+    ): ScoredChunk[] {
+        const merged = new Map<number, ScoredChunk>();
+        for (const chunk of vectorCandidates) {
+            merged.set(chunk.id, {
+                ...chunk,
+                vectorScore: chunk.similarity,
+                lexicalScore: keywordCoverage(retrievalQuery, chunk.text),
+            });
+        }
+        for (const chunk of lexicalCandidates) {
+            const existing = merged.get(chunk.id);
+            if (existing) {
+                existing.lexicalScore = Math.max(existing.lexicalScore ?? 0, chunk.lexicalScore ?? chunk.similarity);
+                existing.vectorScore = existing.vectorScore ?? 0;
+                merged.set(chunk.id, existing);
+            } else {
+                merged.set(chunk.id, {
+                    ...chunk,
+                    similarity: 0,
+                    vectorScore: 0,
+                    lexicalScore: chunk.lexicalScore ?? chunk.similarity,
+                });
+            }
+        }
+        return [...merged.values()].map((chunk) => ({
+            ...chunk,
+            similarity: (HYBRID_LEXICAL_WEIGHT * (chunk.lexicalScore ?? 0))
+                + (HYBRID_VECTOR_WEIGHT * (chunk.vectorScore ?? chunk.similarity ?? 0)),
+        }));
     }
 
     /**
@@ -259,14 +350,34 @@ export class RAGRetriever {
         now: number,
         recencyWeight: number
     ): number {
-        // Recency: decay over 7 days (half-life)
-        const ageMs = now - chunk.startMs;
+        const absoluteStartMs = chunk.absoluteStartMs
+            ?? (typeof chunk.meetingStartTimeMs === 'number' ? chunk.meetingStartTimeMs + chunk.startMs : null)
+            ?? chunk.meetingCreatedAtMs
+            ?? null;
+        // Recency: decay over 7 days (half-life). Use meeting wall-clock time
+        // plus chunk offset; chunk offset alone is not an absolute timestamp.
+        const ageMs = typeof absoluteStartMs === 'number' ? Math.max(0, now - absoluteStartMs) : 0;
         const ageHours = ageMs / (1000 * 60 * 60);
-        const recencyScore = Math.exp(-ageHours / 168);  // 168 hours = 7 days
+        const recencyScore = typeof absoluteStartMs === 'number'
+            ? Math.exp(-ageHours / 168)
+            : 0.5;
 
         // Combined score
         const relevanceWeight = 1 - recencyWeight;
         return (relevanceWeight * chunk.similarity) + (recencyWeight * recencyScore);
+    }
+
+    private buildCitations(
+        chunks: ScoredChunk[],
+        sourceType: 'current_meeting' | 'historical_meeting',
+    ): RetrievedContext['citations'] {
+        return chunks.map((chunk) => ({
+            sourceType,
+            sourceId: chunk.meetingId,
+            chunkId: chunk.id,
+            score: Number((chunk.finalScore ?? chunk.similarity ?? 0).toFixed(4)),
+            timestamp: chunk.absoluteStartMs ?? chunk.startMs ?? null,
+        }));
     }
 
     /**

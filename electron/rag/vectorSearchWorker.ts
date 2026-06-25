@@ -54,6 +54,8 @@ interface SearchChunksMessage {
         end_timestamp_ms: number;
         cleaned_text: string;
         token_count: number;
+        meeting_start_time_ms?: number | null;
+        meeting_created_at?: string | number | null;
     }>;
     minSimilarity: number;
     limit: number;
@@ -102,6 +104,25 @@ function cosineSimilarityF32(
     return magnitude === 0 ? 0 : dotProduct / magnitude;
 }
 
+function parseDateLike(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value !== 'string' || !value.trim()) return null;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function computeAbsoluteStart(
+    meetingStartTimeMs: unknown,
+    meetingCreatedAt: unknown,
+    chunkStartMs: unknown,
+): number | null {
+    const base = typeof meetingStartTimeMs === 'number' && Number.isFinite(meetingStartTimeMs)
+        ? meetingStartTimeMs
+        : parseDateLike(meetingCreatedAt);
+    const offset = typeof chunkStartMs === 'number' && Number.isFinite(chunkStartMs) ? chunkStartMs : 0;
+    return typeof base === 'number' ? base + offset : null;
+}
+
 // ============================================
 // Message handler
 // ============================================
@@ -140,6 +161,9 @@ parentPort.on('message', (message: WorkerMessage) => {
                     endMs: number;
                     text: string;
                     tokenCount: number;
+                    meetingStartTimeMs?: number | null;
+                    meetingCreatedAtMs?: number | null;
+                    absoluteStartMs?: number | null;
                     similarity: number;
                 }> = [];
 
@@ -156,6 +180,9 @@ parentPort.on('message', (message: WorkerMessage) => {
                             endMs: meta.end_timestamp_ms,
                             text: meta.cleaned_text,
                             tokenCount: meta.token_count,
+                            meetingStartTimeMs: typeof meta.meeting_start_time_ms === 'number' ? meta.meeting_start_time_ms : null,
+                            meetingCreatedAtMs: parseDateLike(meta.meeting_created_at),
+                            absoluteStartMs: computeAbsoluteStart(meta.meeting_start_time_ms, meta.meeting_created_at, meta.start_timestamp_ms),
                             similarity
                         });
                     }
@@ -219,7 +246,15 @@ parentPort.on('message', (message: WorkerMessage) => {
 
                 const chunkIds = vecRows.map((r: any) => r.chunk_id);
                 const ph = chunkIds.map(() => '?').join(',');
-                let q = `SELECT c.* FROM chunks c JOIN meetings m ON c.meeting_id = m.id WHERE c.id IN (${ph})`;
+                let q = `
+                    SELECT
+                        c.*,
+                        m.start_time AS meeting_start_time_ms,
+                        m.created_at AS meeting_created_at
+                    FROM chunks c
+                    JOIN meetings m ON c.meeting_id = m.id
+                    WHERE c.id IN (${ph})
+                `;
                 const params: any[] = [...chunkIds];
                 if (meetingId) { q += ' AND c.meeting_id = ?'; params.push(meetingId); }
                 // Filter by composite embedding SPACE, not provider name. v1 and v2 Gemini
@@ -240,7 +275,11 @@ parentPort.on('message', (message: WorkerMessage) => {
                     if (similarity >= minSimilarity) {
                         scored.push({ id: c.id, meetingId: c.meeting_id, chunkIndex: c.chunk_index,
                             speaker: c.speaker, startMs: c.start_timestamp_ms, endMs: c.end_timestamp_ms,
-                            text: c.cleaned_text, tokenCount: c.token_count, similarity });
+                            text: c.cleaned_text, tokenCount: c.token_count,
+                            meetingStartTimeMs: typeof c.meeting_start_time_ms === 'number' ? c.meeting_start_time_ms : null,
+                            meetingCreatedAtMs: parseDateLike(c.meeting_created_at),
+                            absoluteStartMs: computeAbsoluteStart(c.meeting_start_time_ms, c.meeting_created_at, c.start_timestamp_ms),
+                            similarity });
                     }
                 }
                 parentPort!.postMessage({ type: 'result', requestId, data: scored.slice(0, limit) });

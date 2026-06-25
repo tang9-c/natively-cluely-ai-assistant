@@ -69,6 +69,46 @@ export interface ModeIntentKeywordSetting {
   keywordsCsv: string
 }
 
+export type AnswerQualityEventType = 'shown' | 'copied' | 'accepted' | 'ignored' | 'regenerated'
+
+export interface AnswerCitation {
+  sourceType: 'current_meeting' | 'historical_meeting' | 'uploaded_material' | 'long_term_memory' | 'enterprise_knowledge' | 'screen_context'
+  sourceId: string
+  chunkId?: string | number | null
+  score?: number | null
+  title?: string | null
+  timestamp?: number | string | null
+}
+
+export interface AnswerContextTrace {
+  answer_id?: string
+  answerId?: string
+  contextUsed?: Record<string, boolean>
+  citations?: AnswerCitation[]
+  degraded_reason?: string | null
+  degradedReason?: string | null
+}
+
+export interface KnowledgeMaterial {
+  id: string
+  file_name?: string
+  fileName?: string
+  title?: string
+  mime_or_ext?: string
+  status: 'queued' | 'indexing' | 'complete' | 'failed' | 'deleted'
+  error_message?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ContextHealth {
+  ragReady: boolean
+  embeddingReady: boolean
+  ragQueue: { pending: number; processing: number; completed: number; failed: number }
+  materialCount: number
+  materialQueue: { pending: number; processing: number; completed: number; failed: number }
+}
+
 export type ResearchProgressStage =
   | 'cache-check'
   | 'searching'
@@ -294,9 +334,13 @@ export interface ElectronAPI {
   // Intelligence Mode IPC
   generateAssist: () => Promise<{ insight: string | null }>
   generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string; persist?: boolean; source?: string; modeEvent?: DynamicActionModeEvent }) => Promise<{
+    answerId?: string;
     answer: string | null;
     question?: string;
     error?: string;
+    contextTrace?: AnswerContextTrace | null;
+    degradedReason?: string;
+    citations?: AnswerCitation[];
     /** Vision pipeline outcome — replaces legacy screenContextStatus/ocrTextLength fields */
     screenContextStatus?: 'not_available' | 'available' | 'failed';
     visionProviderUsed?: string;
@@ -454,6 +498,13 @@ export interface ElectronAPI {
   ragIsMeetingProcessed: (meetingId: string) => Promise<boolean>
   ragGetQueueStatus: () => Promise<{ pending: number; processing: number; completed: number; failed: number }>
   ragRetryEmbeddings: () => Promise<{ success: boolean }>
+  trackAnswerQualityEvent: (input: { answerId: string; eventType: AnswerQualityEventType; surface?: string; metadata?: Record<string, unknown> }) => Promise<{ success: boolean; id?: string; error?: string }>
+  getContextHealth: () => Promise<ContextHealth>
+  knowledgeSelectMaterials: () => Promise<{ success?: boolean; cancelled?: boolean; filePaths?: string[]; error?: string }>
+  knowledgeUploadMaterials: (filePaths: string[]) => Promise<{ success: boolean; materials: KnowledgeMaterial[]; errors?: Array<{ filePath: string; error: string }> }>
+  knowledgeListMaterials: () => Promise<{ success: boolean; materials: KnowledgeMaterial[]; error?: string }>
+  knowledgeDeleteMaterial: (id: string) => Promise<{ success: boolean; error?: string }>
+  knowledgeReindexMaterial: (id: string) => Promise<{ success: boolean; material?: KnowledgeMaterial; error?: string }>
   onRAGStreamChunk: (callback: (data: { meetingId?: string; global?: boolean; chunk: string }) => void) => () => void
   onRAGStreamComplete: (callback: (data: { meetingId?: string; global?: boolean }) => void) => () => void
   onRAGStreamError: (callback: (data: { meetingId?: string; global?: boolean; error: string }) => void) => () => void

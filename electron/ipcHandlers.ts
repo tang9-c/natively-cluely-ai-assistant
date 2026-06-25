@@ -2722,6 +2722,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         let visionModelUsed: string | undefined;
         let visionAttempts: number | undefined;
         let visionFailureReason: string | undefined;
+        const startedAt = Date.now();
+        const answerId = `ans_${startedAt}_${crypto.randomBytes(6).toString('hex')}`;
+        const citations: any[] = [];
+        const degradedReasons: string[] = [];
 
         const validatedImagePaths: string[] | undefined = imagePaths?.length ? [] : undefined;
 
@@ -2819,6 +2823,42 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
         }
 
+        let promptInstruction = typeof options?.promptInstruction === 'string'
+          ? options.promptInstruction
+          : undefined;
+        try {
+          const searchQuery = typeof question === 'string' && question.trim()
+            ? question.trim()
+            : sanitizeModeEvent(options?.modeEvent)?.retrievalQuery;
+          if (searchQuery) {
+            const ragManager = appState.getRAGManager();
+            const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
+            const materialService = new KnowledgeMaterialService(DatabaseManager.getInstance(), ragManager?.getEmbeddingPipeline?.());
+            const materialHits = await materialService.search(searchQuery, { limit: 4 });
+            if (materialHits.length > 0) {
+              citations.push(...materialHits.map((hit: any) => ({
+                sourceType: hit.sourceType,
+                sourceId: hit.sourceId,
+                chunkId: hit.chunkId,
+                score: hit.score,
+                title: hit.title,
+              })));
+              const materialBlock = materialHits
+                .map((hit: any, index: number) => `[${index + 1}] ${hit.title}\n${hit.parentText}`)
+                .join('\n\n');
+              promptInstruction = [
+                promptInstruction,
+                `<uploaded_material_context>\nUse these uploaded materials only when relevant. Citeable source ids are tracked outside the prompt; do not invent unseen sources.\n${materialBlock}\n</uploaded_material_context>`,
+              ].filter(Boolean).join('\n\n');
+            } else {
+              degradedReasons.push('no_relevant_uploaded_material');
+            }
+          }
+        } catch (materialError: any) {
+          degradedReasons.push('uploaded_material_rag_failed');
+          console.warn('[IPC] generate-what-to-say: material RAG failed', { errorClass: materialError?.name || 'Error' });
+        }
+
         const intelligenceManager = appState.getIntelligenceManager();
         // Question and imagePaths are now optional - IntelligenceManager infers from transcript
         const answer = await intelligenceManager.runWhatShouldISay(
@@ -2828,10 +2868,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           {
             skipCooldown: process.env.NODE_ENV === 'test',
             screenContext,
-            promptInstruction:
-              typeof options?.promptInstruction === 'string'
-                ? options.promptInstruction
-                : undefined,
+            promptInstruction: promptInstruction ?? (typeof options?.promptInstruction === 'string'
+              ? options.promptInstruction
+              : undefined),
             persist: options?.persist === false ? false : undefined,
             source:
               typeof options?.source === 'string'
@@ -2840,9 +2879,34 @@ export function initializeIpcHandlers(appState: AppState): void {
             modeEvent: sanitizeModeEvent(options?.modeEvent),
           },
         );
+        if (screenContextStatus === 'failed') degradedReasons.push('screen_context_failed');
+        const llmHelper = appState.processingHelper?.getLLMHelper?.();
+        const contextTrace = DatabaseManager.getInstance().saveAnswerContextTrace({
+          answerId,
+          answerType: 'what_to_say',
+          surface: typeof options?.source === 'string' ? options.source : 'overlay',
+          provider: llmHelper?.getCurrentProvider?.() ?? null,
+          model: llmHelper?.getCurrentModel?.() ?? null,
+          latencyMs: Date.now() - startedAt,
+          contextUsed: {
+            currentTranscript: true,
+            shortTermHistory: true,
+            uploadedDocumentRag: citations.some((citation) => citation.sourceType === 'uploaded_material'),
+            historicalMeetings: false,
+            longTermMemory: false,
+            enterpriseKnowledge: false,
+            screenContext: screenContextStatus === 'available',
+          },
+          citations,
+          degradedReason: degradedReasons.length > 0 ? degradedReasons.join(',') : null,
+        });
         return {
+          answerId,
           answer,
           question: question || 'inferred from context',
+          contextTrace,
+          degradedReason: degradedReasons.length > 0 ? degradedReasons.join(',') : undefined,
+          citations,
           screenContextStatus,
           visionProviderUsed,
           visionModelUsed,
@@ -3444,6 +3508,94 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (!ragManager) return { success: false };
     await ragManager.retryPendingEmbeddings();
     return { success: true };
+  });
+
+  safeHandle('track-answer-quality-event', async (_, input: {
+    answerId: string;
+    eventType: 'shown' | 'copied' | 'accepted' | 'ignored' | 'regenerated';
+    surface?: string;
+    metadata?: Record<string, unknown>;
+  }) => {
+    if (!input?.answerId || !input?.eventType) {
+      return { success: false, error: 'invalid_quality_event' };
+    }
+    return DatabaseManager.getInstance().trackAnswerQualityEvent(input);
+  });
+
+  safeHandle('get-context-health', async () => {
+    const ragManager = appState.getRAGManager();
+    const db = DatabaseManager.getInstance();
+    const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
+    const materialService = new KnowledgeMaterialService(db, ragManager?.getEmbeddingPipeline?.());
+    const ragQueue = ragManager?.getQueueStatus?.() ?? { pending: 0, processing: 0, completed: 0, failed: 0 };
+    const materialHealth = materialService.getHealth();
+    return {
+      ragReady: Boolean(ragManager?.isReady?.()),
+      embeddingReady: Boolean(ragManager?.getEmbeddingPipeline?.().isReady?.()),
+      ragQueue,
+      materialCount: materialHealth.materialCount,
+      materialQueue: materialHealth.queue,
+    };
+  });
+
+  safeHandle('knowledge:select-materials', async () => {
+    try {
+      const result: any = await dialog.showOpenDialog({
+        properties: ['openFile', 'multiSelections'],
+        filters: [{ name: '资料文件', extensions: ['pdf', 'docx', 'txt', 'md', 'markdown'] }],
+      });
+      if (result.canceled || result.filePaths.length === 0) return { cancelled: true };
+      return { success: true, filePaths: result.filePaths };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('knowledge:upload-materials', async (_, filePaths: string[]) => {
+    try {
+      if (!Array.isArray(filePaths) || filePaths.length === 0) {
+        return { success: false, materials: [], errors: [{ filePath: '', error: 'no_files_selected' }] };
+      }
+      const ragManager = appState.getRAGManager();
+      const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
+      const service = new KnowledgeMaterialService(DatabaseManager.getInstance(), ragManager?.getEmbeddingPipeline?.());
+      const result = await service.uploadFiles(filePaths);
+      return { success: result.materials.length > 0, ...result };
+    } catch (error: any) {
+      return { success: false, materials: [], errors: [{ filePath: '', error: error.message || 'unknown_error' }] };
+    }
+  });
+
+  safeHandle('knowledge:list-materials', async () => {
+    try {
+      const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
+      const service = new KnowledgeMaterialService(DatabaseManager.getInstance(), appState.getRAGManager()?.getEmbeddingPipeline?.());
+      return { success: true, materials: service.listMaterials() };
+    } catch (error: any) {
+      return { success: false, materials: [], error: error.message };
+    }
+  });
+
+  safeHandle('knowledge:delete-material', async (_, id: string) => {
+    try {
+      const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
+      const service = new KnowledgeMaterialService(DatabaseManager.getInstance(), appState.getRAGManager()?.getEmbeddingPipeline?.());
+      service.deleteMaterial(id);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('knowledge:reindex-material', async (_, id: string) => {
+    try {
+      const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
+      const service = new KnowledgeMaterialService(DatabaseManager.getInstance(), appState.getRAGManager()?.getEmbeddingPipeline?.());
+      const material = await service.reindexMaterial(id);
+      return { success: true, material };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   });
 
   // ==========================================

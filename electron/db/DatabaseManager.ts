@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { app } from 'electron';
 import fs from 'fs';
+import * as crypto from 'crypto';
 import * as sqliteVec from 'sqlite-vec';
 import { buildLegacySpaceCaseSql } from '../rag/embeddingSpace';
 import {
@@ -57,6 +58,67 @@ export interface Meeting {
     calendarEventId?: string;
     source?: 'manual' | 'calendar';
     isProcessed?: boolean;
+}
+
+export type AnswerQualityEventType = 'shown' | 'copied' | 'accepted' | 'ignored' | 'regenerated';
+
+export interface AnswerCitationRecord {
+    sourceType: 'current_meeting' | 'historical_meeting' | 'uploaded_material' | 'long_term_memory' | 'enterprise_knowledge' | 'screen_context';
+    sourceId: string;
+    chunkId?: string | number | null;
+    score?: number | null;
+    title?: string | null;
+    timestamp?: number | string | null;
+}
+
+export interface AnswerContextTraceInput {
+    answerId: string;
+    meetingId?: string | null;
+    interactionId?: number | null;
+    answerType?: string;
+    surface?: string;
+    provider?: string | null;
+    model?: string | null;
+    latencyMs?: number | null;
+    contextUsed: Record<string, boolean>;
+    citations?: AnswerCitationRecord[];
+    degradedReason?: string | null;
+    status?: string;
+}
+
+export interface KnowledgeMaterialInput {
+    id: string;
+    fileName: string;
+    title?: string | null;
+    mimeOrExt: string;
+    fileHash: string;
+    status?: 'queued' | 'indexing' | 'complete' | 'failed' | 'deleted';
+    errorCode?: string | null;
+    errorMessage?: string | null;
+}
+
+export interface KnowledgeMaterialChunkInput {
+    materialId: string;
+    chunkIndex: number;
+    parentChunkIndex?: number | null;
+    cleanedText: string;
+    parentText?: string | null;
+    tokenCount: number;
+    embedding?: number[] | null;
+    metadata?: Record<string, unknown>;
+}
+
+function cryptoRandomId(): string {
+    return crypto.randomBytes(8).toString('hex');
+}
+
+function safeJson<T>(value: string | null | undefined, fallback: T): T {
+    if (!value) return fallback;
+    try {
+        return JSON.parse(value) as T;
+    } catch {
+        return fallback;
+    }
 }
 
 export class DatabaseManager {
@@ -1050,7 +1112,344 @@ export class DatabaseManager {
             this.db.pragma('user_version = 24');
         }
 
+        // Version 24 -> 25: Answer context visibility and local quality events.
+        if (version < 25) {
+            console.log('[DatabaseManager] Applying migration v24 -> v25: Add answer context trace tables');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS answer_context_traces (
+                    id TEXT PRIMARY KEY,
+                    answer_id TEXT NOT NULL UNIQUE,
+                    meeting_id TEXT,
+                    interaction_id INTEGER,
+                    answer_type TEXT NOT NULL DEFAULT 'what_to_say',
+                    surface TEXT NOT NULL DEFAULT 'overlay',
+                    provider TEXT,
+                    model TEXT,
+                    latency_ms INTEGER,
+                    context_used_json TEXT NOT NULL DEFAULT '{}',
+                    citations_json TEXT NOT NULL DEFAULT '[]',
+                    degraded_reason TEXT,
+                    status TEXT NOT NULL DEFAULT 'generated',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE SET NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_answer_context_traces_answer_id
+                    ON answer_context_traces(answer_id);
+                CREATE INDEX IF NOT EXISTS idx_answer_context_traces_meeting_id
+                    ON answer_context_traces(meeting_id);
+
+                CREATE TABLE IF NOT EXISTS answer_quality_events (
+                    id TEXT PRIMARY KEY,
+                    answer_id TEXT NOT NULL,
+                    meeting_id TEXT,
+                    event_type TEXT NOT NULL CHECK(event_type IN ('shown', 'copied', 'accepted', 'ignored', 'regenerated')),
+                    surface TEXT NOT NULL DEFAULT 'overlay',
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(answer_id) REFERENCES answer_context_traces(answer_id) ON DELETE CASCADE,
+                    FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE SET NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_answer_quality_events_answer_id
+                    ON answer_quality_events(answer_id);
+                CREATE INDEX IF NOT EXISTS idx_answer_quality_events_type
+                    ON answer_quality_events(event_type);
+                CREATE INDEX IF NOT EXISTS idx_answer_quality_events_meeting_id
+                    ON answer_quality_events(meeting_id);
+            `);
+            this.db.pragma('user_version = 25');
+        }
+
+        // Version 25 -> 26: Unified local material library for uploaded-document RAG.
+        if (version < 26) {
+            console.log('[DatabaseManager] Applying migration v25 -> v26: Add knowledge material tables');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS knowledge_materials (
+                    id TEXT PRIMARY KEY,
+                    file_name TEXT NOT NULL,
+                    title TEXT,
+                    mime_or_ext TEXT NOT NULL,
+                    file_hash TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued', 'indexing', 'complete', 'failed', 'deleted')),
+                    error_code TEXT,
+                    error_message TEXT,
+                    source_type TEXT NOT NULL DEFAULT 'upload',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_knowledge_materials_status
+                    ON knowledge_materials(status);
+                CREATE INDEX IF NOT EXISTS idx_knowledge_materials_file_hash
+                    ON knowledge_materials(file_hash);
+
+                CREATE TABLE IF NOT EXISTS knowledge_material_chunks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    material_id TEXT NOT NULL,
+                    chunk_index INTEGER NOT NULL,
+                    parent_chunk_index INTEGER,
+                    cleaned_text TEXT NOT NULL,
+                    parent_text TEXT,
+                    token_count INTEGER NOT NULL,
+                    embedding BLOB,
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(material_id, chunk_index),
+                    FOREIGN KEY(material_id) REFERENCES knowledge_materials(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_knowledge_material_chunks_material
+                    ON knowledge_material_chunks(material_id, chunk_index);
+
+                CREATE TABLE IF NOT EXISTS material_embedding_queue (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    material_chunk_id INTEGER NOT NULL UNIQUE,
+                    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'completed', 'failed')),
+                    retry_count INTEGER NOT NULL DEFAULT 0,
+                    error_message TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    processed_at TEXT,
+                    FOREIGN KEY(material_chunk_id) REFERENCES knowledge_material_chunks(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_material_embedding_queue_status
+                    ON material_embedding_queue(status);
+            `);
+            this.db.pragma('user_version = 26');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
+    }
+
+    private vectorToBlob(vector: number[]): Buffer {
+        const buffer = Buffer.alloc(vector.length * 4);
+        vector.forEach((value, index) => buffer.writeFloatLE(value, index * 4));
+        return buffer;
+    }
+
+    public saveAnswerContextTrace(input: AnswerContextTraceInput): any | null {
+        if (!this.db) return null;
+        const id = `act_${Date.now()}_${cryptoRandomId()}`;
+        const row = {
+            id,
+            answer_id: input.answerId,
+            meeting_id: input.meetingId ?? null,
+            interaction_id: input.interactionId ?? null,
+            answer_type: input.answerType ?? 'what_to_say',
+            surface: input.surface ?? 'overlay',
+            provider: input.provider ?? null,
+            model: input.model ?? null,
+            latency_ms: Number.isFinite(input.latencyMs) ? input.latencyMs : null,
+            context_used_json: JSON.stringify(input.contextUsed ?? {}),
+            citations_json: JSON.stringify(input.citations ?? []),
+            degraded_reason: input.degradedReason ?? null,
+            status: input.status ?? 'generated',
+        };
+        this.db.prepare(`
+            INSERT INTO answer_context_traces
+                (id, answer_id, meeting_id, interaction_id, answer_type, surface, provider, model, latency_ms, context_used_json, citations_json, degraded_reason, status)
+            VALUES
+                (@id, @answer_id, @meeting_id, @interaction_id, @answer_type, @surface, @provider, @model, @latency_ms, @context_used_json, @citations_json, @degraded_reason, @status)
+            ON CONFLICT(answer_id) DO UPDATE SET
+                meeting_id = excluded.meeting_id,
+                interaction_id = excluded.interaction_id,
+                answer_type = excluded.answer_type,
+                surface = excluded.surface,
+                provider = excluded.provider,
+                model = excluded.model,
+                latency_ms = excluded.latency_ms,
+                context_used_json = excluded.context_used_json,
+                citations_json = excluded.citations_json,
+                degraded_reason = excluded.degraded_reason,
+                status = excluded.status
+        `).run(row);
+        return this.getAnswerContextTrace(input.answerId);
+    }
+
+    public getAnswerContextTrace(answerId: string): any | null {
+        if (!this.db) return null;
+        const row = this.db.prepare('SELECT * FROM answer_context_traces WHERE answer_id = ?').get(answerId) as any;
+        if (!row) return null;
+        return {
+            ...row,
+            contextUsed: safeJson(row.context_used_json, {}),
+            citations: safeJson(row.citations_json, []),
+        };
+    }
+
+    public trackAnswerQualityEvent(input: {
+        answerId: string;
+        eventType: AnswerQualityEventType;
+        surface?: string;
+        metadata?: Record<string, unknown>;
+    }): { success: boolean; id?: string; error?: string } {
+        if (!this.db) return { success: false, error: 'database_unavailable' };
+        const trace = this.getAnswerContextTrace(input.answerId);
+        if (!trace) return { success: false, error: 'answer_id_not_found' };
+        const id = `aqe_${Date.now()}_${cryptoRandomId()}`;
+        this.db.prepare(`
+            INSERT INTO answer_quality_events
+                (id, answer_id, meeting_id, event_type, surface, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+            id,
+            input.answerId,
+            trace.meeting_id ?? null,
+            input.eventType,
+            input.surface ?? 'overlay',
+            JSON.stringify(input.metadata ?? {}),
+        );
+        return { success: true, id };
+    }
+
+    public upsertKnowledgeMaterial(input: KnowledgeMaterialInput): any | null {
+        if (!this.db) return null;
+        this.db.prepare(`
+            INSERT INTO knowledge_materials
+                (id, file_name, title, mime_or_ext, file_hash, status, error_code, error_message, updated_at)
+            VALUES
+                (@id, @fileName, @title, @mimeOrExt, @fileHash, @status, @errorCode, @errorMessage, datetime('now'))
+            ON CONFLICT(id) DO UPDATE SET
+                file_name = excluded.file_name,
+                title = excluded.title,
+                mime_or_ext = excluded.mime_or_ext,
+                file_hash = excluded.file_hash,
+                status = excluded.status,
+                error_code = excluded.error_code,
+                error_message = excluded.error_message,
+                updated_at = excluded.updated_at
+        `).run({
+            id: input.id,
+            fileName: input.fileName,
+            title: input.title ?? input.fileName,
+            mimeOrExt: input.mimeOrExt,
+            fileHash: input.fileHash,
+            status: input.status ?? 'queued',
+            errorCode: input.errorCode ?? null,
+            errorMessage: input.errorMessage ?? null,
+        });
+        return this.getKnowledgeMaterial(input.id);
+    }
+
+    public updateKnowledgeMaterialStatus(
+        id: string,
+        status: 'queued' | 'indexing' | 'complete' | 'failed' | 'deleted',
+        error?: { code?: string | null; message?: string | null },
+    ): void {
+        if (!this.db) return;
+        this.db.prepare(`
+            UPDATE knowledge_materials
+            SET status = ?, error_code = ?, error_message = ?, updated_at = datetime('now')
+            WHERE id = ?
+        `).run(status, error?.code ?? null, error?.message ?? null, id);
+    }
+
+    public replaceKnowledgeMaterialChunks(materialId: string, chunks: KnowledgeMaterialChunkInput[]): number[] {
+        if (!this.db) return [];
+        const ids: number[] = [];
+        const txn = this.db.transaction(() => {
+            this.db!.prepare('DELETE FROM material_embedding_queue WHERE material_chunk_id IN (SELECT id FROM knowledge_material_chunks WHERE material_id = ?)').run(materialId);
+            this.db!.prepare('DELETE FROM knowledge_material_chunks WHERE material_id = ?').run(materialId);
+            const insertChunk = this.db!.prepare(`
+                INSERT INTO knowledge_material_chunks
+                    (material_id, chunk_index, parent_chunk_index, cleaned_text, parent_text, token_count, embedding, metadata_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `);
+            const insertQueue = this.db!.prepare(`
+                INSERT OR IGNORE INTO material_embedding_queue (material_chunk_id, status)
+                VALUES (?, ?)
+            `);
+            for (const chunk of chunks) {
+                const result = insertChunk.run(
+                    materialId,
+                    chunk.chunkIndex,
+                    chunk.parentChunkIndex ?? null,
+                    chunk.cleanedText,
+                    chunk.parentText ?? null,
+                    chunk.tokenCount,
+                    chunk.embedding ? this.vectorToBlob(chunk.embedding) : null,
+                    JSON.stringify(chunk.metadata ?? {}),
+                );
+                const chunkId = result.lastInsertRowid as number;
+                ids.push(chunkId);
+                insertQueue.run(chunkId, chunk.embedding ? 'completed' : 'pending');
+            }
+        });
+        txn();
+        return ids;
+    }
+
+    public setKnowledgeMaterialChunkEmbedding(chunkId: number, embedding: number[]): void {
+        if (!this.db) return;
+        this.db.prepare('UPDATE knowledge_material_chunks SET embedding = ? WHERE id = ?').run(this.vectorToBlob(embedding), chunkId);
+        this.db.prepare(`
+            UPDATE material_embedding_queue
+            SET status = 'completed', processed_at = datetime('now'), error_message = NULL
+            WHERE material_chunk_id = ?
+        `).run(chunkId);
+    }
+
+    public listKnowledgeMaterials(): any[] {
+        if (!this.db) return [];
+        return this.db.prepare(`
+            SELECT *
+            FROM knowledge_materials
+            WHERE status != 'deleted'
+            ORDER BY updated_at DESC, created_at DESC
+        `).all();
+    }
+
+    public getKnowledgeMaterial(id: string): any | null {
+        if (!this.db) return null;
+        return this.db.prepare('SELECT * FROM knowledge_materials WHERE id = ? AND status != \'deleted\'').get(id) ?? null;
+    }
+
+    public deleteKnowledgeMaterial(id: string): void {
+        if (!this.db) return;
+        const txn = this.db.transaction(() => {
+            this.db!.prepare('DELETE FROM material_embedding_queue WHERE material_chunk_id IN (SELECT id FROM knowledge_material_chunks WHERE material_id = ?)').run(id);
+            this.db!.prepare('DELETE FROM knowledge_material_chunks WHERE material_id = ?').run(id);
+            this.db!.prepare(`
+                UPDATE knowledge_materials
+                SET status = 'deleted', updated_at = datetime('now')
+                WHERE id = ?
+            `).run(id);
+        });
+        txn();
+    }
+
+    public getKnowledgeMaterialChunks(options: { withEmbeddingsOnly?: boolean } = {}): any[] {
+        if (!this.db) return [];
+        const embeddingClause = options.withEmbeddingsOnly ? 'AND c.embedding IS NOT NULL' : '';
+        return this.db.prepare(`
+            SELECT
+                c.*,
+                m.file_name,
+                m.title,
+                m.created_at AS material_created_at,
+                m.updated_at AS material_updated_at
+            FROM knowledge_material_chunks c
+            JOIN knowledge_materials m ON m.id = c.material_id
+            WHERE m.status = 'complete' ${embeddingClause}
+            ORDER BY m.updated_at DESC, c.chunk_index ASC
+        `).all();
+    }
+
+    public getMaterialQueueStatus(): { pending: number; processing: number; completed: number; failed: number } {
+        if (!this.db) return { pending: 0, processing: 0, completed: 0, failed: 0 };
+        const rows = this.db.prepare(`
+            SELECT status, COUNT(*) AS count
+            FROM material_embedding_queue
+            GROUP BY status
+        `).all() as Array<{ status: string; count: number }>;
+        const status = { pending: 0, processing: 0, completed: 0, failed: 0 };
+        for (const row of rows) {
+            if (row.status in status) {
+                (status as any)[row.status] = row.count;
+            }
+        }
+        return status;
     }
 
     // ============================================

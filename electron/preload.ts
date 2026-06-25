@@ -317,9 +317,13 @@ interface ElectronAPI {
     imagePaths?: string[],
     options?: { promptInstruction?: string; persist?: boolean; source?: string; modeEvent?: ModeEventContext },
   ) => Promise<{
+    answerId?: string;
     answer: string | null;
     question?: string;
     error?: string;
+    contextTrace?: any;
+    degradedReason?: string;
+    citations?: any[];
     screenContextStatus?: 'not_available' | 'available' | 'failed';
     ocrTextLength?: number;
     imageCount?: number;
@@ -551,6 +555,18 @@ interface ElectronAPI {
     failed: number;
   }>;
   ragRetryEmbeddings: () => Promise<{ success: boolean }>;
+  trackAnswerQualityEvent: (input: {
+    answerId: string;
+    eventType: 'shown' | 'copied' | 'accepted' | 'ignored' | 'regenerated';
+    surface?: string;
+    metadata?: Record<string, unknown>;
+  }) => Promise<{ success: boolean; id?: string; error?: string }>;
+  getContextHealth: () => Promise<any>;
+  knowledgeSelectMaterials: () => Promise<{ success?: boolean; cancelled?: boolean; filePaths?: string[]; error?: string }>;
+  knowledgeUploadMaterials: (filePaths: string[]) => Promise<{ success: boolean; materials: any[]; errors?: Array<{ filePath: string; error: string }> }>;
+  knowledgeListMaterials: () => Promise<{ success: boolean; materials: any[]; error?: string }>;
+  knowledgeDeleteMaterial: (id: string) => Promise<{ success: boolean; error?: string }>;
+  knowledgeReindexMaterial: (id: string) => Promise<{ success: boolean; material?: any; error?: string }>;
   onRAGStreamChunk: (
     callback: (data: { meetingId?: string; global?: boolean; chunk: string }) => void,
   ) => () => void;
@@ -1714,6 +1730,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('rag:is-meeting-processed', meetingId),
   ragGetQueueStatus: () => ipcRenderer.invoke('rag:get-queue-status'),
   ragRetryEmbeddings: () => ipcRenderer.invoke('rag:retry-embeddings'),
+  trackAnswerQualityEvent: (input: {
+    answerId: string;
+    eventType: 'shown' | 'copied' | 'accepted' | 'ignored' | 'regenerated';
+    surface?: string;
+    metadata?: Record<string, unknown>;
+  }) => ipcRenderer.invoke('track-answer-quality-event', input),
+  getContextHealth: () => ipcRenderer.invoke('get-context-health'),
+  knowledgeSelectMaterials: () => ipcRenderer.invoke('knowledge:select-materials'),
+  knowledgeUploadMaterials: (filePaths: string[]) =>
+    ipcRenderer.invoke('knowledge:upload-materials', filePaths),
+  knowledgeListMaterials: () => ipcRenderer.invoke('knowledge:list-materials'),
+  knowledgeDeleteMaterial: (id: string) => ipcRenderer.invoke('knowledge:delete-material', id),
+  knowledgeReindexMaterial: (id: string) => ipcRenderer.invoke('knowledge:reindex-material', id),
 
   onIncompatibleProviderWarning: (
     callback: (data: { count: number; oldProvider: string; newProvider: string }) => void,

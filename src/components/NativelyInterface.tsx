@@ -53,7 +53,13 @@ import {
 import { NegotiationCoachingCard } from './NegotiationCoachingCard';
 import { SENSEVOICE_EMOTION_LABELS } from '../../shared/senseVoiceEmotion';
 import type { TranscriptEmotion } from '../../shared/senseVoiceEmotion';
-import type { DynamicActionModeEvent, DynamicActionPayload, NativeAudioTranscriptPayload } from '../types/electron';
+import type {
+  AnswerCitation,
+  AnswerContextTrace,
+  DynamicActionModeEvent,
+  DynamicActionPayload,
+  NativeAudioTranscriptPayload,
+} from '../types/electron';
 import { genMessageId } from '../utils/messageId';
 import { getCodexCliModelDisplayName } from '../utils/modelUtils';
 import { getModifierSymbol, isMac } from '../utils/platformUtils';
@@ -511,6 +517,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [latestVisionFailureReason, setLatestVisionFailureReason] = useState<string | undefined>(
     undefined,
   );
+  const [latestAnswerId, setLatestAnswerId] = useState<string | undefined>(undefined);
+  const [latestAnswerTrace, setLatestAnswerTrace] = useState<AnswerContextTrace | null>(null);
+  const [latestAnswerCitations, setLatestAnswerCitations] = useState<AnswerCitation[]>([]);
+  const [latestDegradedReason, setLatestDegradedReason] = useState<string | undefined>(undefined);
   const activeMode = modes.find((mode) => mode.isActive) ?? null;
   const activeModeDisplayLabel = activeMode
     ? getModeDisplayName(activeMode)
@@ -1592,7 +1602,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           return; // Safety check for any other speaker types
         }
 
-        const speakerLabel = transcript.speakerLabel || (transcript.speaker === 'user' ? 'Me' : 'Interviewer');
+        const speakerLabel = transcript.speaker === 'user' ? 'Me' : 'Interviewer';
+        const displaySpeakerLabel = transcript.speakerLabel || speakerLabel;
 
         // Route to rolling transcript bar - accumulate text continuously
         setIsInterviewerSpeaking(!transcript.final);
@@ -1601,7 +1612,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           // Append finalized text to accumulated transcript
           setRollingTranscript((prev) => {
             const separator = prev ? '  ·  ' : '';
-            return prev + separator + `${speakerLabel}: ${transcript.text}`;
+            return prev + separator + `${displaySpeakerLabel}: ${transcript.text}`;
           });
 
           // Clear speaking indicator after pause
@@ -1935,8 +1946,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const handleCopy = useCallback((text: string) => {
     navigator.clipboard.writeText(text);
     analytics.trackCopyAnswer();
+    if (latestAnswerId) {
+      window.electronAPI
+        ?.trackAnswerQualityEvent?.({
+          answerId: latestAnswerId,
+          eventType: 'copied',
+          surface: 'overlay',
+        })
+        .catch(() => {});
+    }
     // Optional: Trigger a small toast or state change for visual feedback
-  }, []);
+  }, [latestAnswerId]);
 
   const handleWhatToSay = async (
     promptInstruction?: string | React.MouseEvent,
@@ -1993,6 +2013,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setLatestVisionProviderUsed(result.visionProviderUsed);
       setLatestVisionModelUsed(result.visionModelUsed);
       setLatestVisionFailureReason(result.visionFailureReason);
+      setLatestAnswerId(result.answerId);
+      setLatestAnswerTrace(result.contextTrace ?? null);
+      setLatestAnswerCitations(result.citations ?? []);
+      setLatestDegradedReason(result.degradedReason);
+      if (result.answerId) {
+        window.electronAPI
+          ?.trackAnswerQualityEvent?.({
+            answerId: result.answerId,
+            eventType: 'shown',
+            surface: generationOptions?.source ?? 'overlay',
+          })
+          .catch(() => {});
+      }
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -3389,6 +3422,18 @@ Provide only the answer, nothing else.`;
     sttNotConfigured,
   );
   const statusPillBaseClass = `flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shadow-sm backdrop-blur-xl ${isLightTheme ? 'bg-white/55 border-black/10' : 'bg-black/20 border-white/10'}`;
+  const latestContextUsed = latestAnswerTrace?.contextUsed ?? {};
+  const contextLabels = [
+    latestContextUsed.currentTranscript ? '当前会议' : null,
+    latestContextUsed.shortTermHistory ? '短期历史' : null,
+    latestContextUsed.uploadedDocumentRag || latestAnswerCitations.some((c) => c.sourceType === 'uploaded_material') ? '上传资料' : null,
+    latestContextUsed.historicalMeetings ? '历史会议' : null,
+    latestContextUsed.screenContext ? '屏幕' : null,
+  ].filter(Boolean);
+  const contextStatusText = contextLabels.length > 0
+    ? `上下文：${contextLabels.join(' / ')}`
+    : '上下文：仅使用当前输入';
+  const materialCitationCount = latestAnswerCitations.filter((c) => c.sourceType === 'uploaded_material').length;
 
   const copyDiagnostics = async () => {
     const version = import.meta.env.VITE_APP_VERSION || 'unknown';
@@ -3853,6 +3898,22 @@ Provide only the answer, nothing else.`;
                   className="flex-1 overflow-y-auto p-4 space-y-3 no-drag"
                   style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH }}
                 >
+                  {(latestAnswerTrace || latestDegradedReason) && (
+                    <div
+                      className={`flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-[11px] ${isLightTheme ? 'bg-white/60 border-black/10 text-slate-700' : 'bg-black/25 border-white/10 text-slate-200'}`}
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5 opacity-70" />
+                      <span>{contextStatusText}</span>
+                      {materialCitationCount > 0 && (
+                        <span className="opacity-75">资料引用 {materialCitationCount}</span>
+                      )}
+                      {latestDegradedReason && (
+                        <span className={isLightTheme ? 'text-amber-700' : 'text-amber-200'}>
+                          降级：{latestDegradedReason}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {/* Every row spans the full inner width of the scroll
                                         container, which itself rides the shell's animated
                                         width. Bubble max-widths are percentages so the text

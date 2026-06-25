@@ -8,15 +8,28 @@ import path from 'path';
 import fs from 'fs';
 import { Chunk } from './SemanticChunker';
 import { DatabaseManager } from '../db/DatabaseManager';
+import { lexicalScore } from './RagLexical';
 
 export interface StoredChunk extends Chunk {
     id: number;
     embedding?: number[];
+    meetingStartTimeMs?: number | null;
+    meetingCreatedAtMs?: number | null;
+    absoluteStartMs?: number | null;
 }
 
 export interface ScoredChunk extends StoredChunk {
     similarity: number;
+    lexicalScore?: number;
+    vectorScore?: number;
     finalScore?: number;
+}
+
+function parseDateLike(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value !== 'string' || !value.trim()) return null;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
 }
 
 /**
@@ -240,6 +253,51 @@ export class VectorStore {
     }
 
     /**
+     * Lexical candidate search used by hybrid retrieval.
+     *
+     * This intentionally avoids raw prompt/transcript logging. It scores only
+     * stored chunk text and returns metadata plus a normalized lexicalScore.
+     */
+    async searchLexical(
+        queryText: string,
+        options: {
+            meetingId?: string;
+            limit?: number;
+        } = {}
+    ): Promise<ScoredChunk[]> {
+        const { meetingId, limit = 16 } = options;
+        let query = `
+            SELECT
+                c.*,
+                m.start_time AS meeting_start_time_ms,
+                m.created_at AS meeting_created_at
+            FROM chunks c
+            JOIN meetings m ON c.meeting_id = m.id
+            WHERE c.cleaned_text IS NOT NULL
+        `;
+        const params: any[] = [];
+        if (meetingId) {
+            query += ' AND c.meeting_id = ?';
+            params.push(meetingId);
+        }
+        const rows = this.db.prepare(query).all(...params) as any[];
+        return rows
+            .map((row) => {
+                const chunk = this.rowToChunk(row);
+                const score = lexicalScore(queryText, chunk.text);
+                return {
+                    ...chunk,
+                    similarity: score,
+                    lexicalScore: score,
+                    vectorScore: 0,
+                };
+            })
+            .filter((chunk) => (chunk.lexicalScore ?? 0) > 0)
+            .sort((a, b) => (b.lexicalScore ?? 0) - (a.lexicalScore ?? 0))
+            .slice(0, limit);
+    }
+
+    /**
      * Search for similar chunks using native sqlite-vec or JS fallback (worker thread)
      */
     async searchSimilar(
@@ -312,7 +370,10 @@ export class VectorStore {
         spaceKey?: string
     ): Promise<ScoredChunk[]> {
         let query = `
-            SELECT c.*
+            SELECT
+                c.*,
+                m.start_time AS meeting_start_time_ms,
+                m.created_at AS meeting_created_at
             FROM chunks c
             JOIN meetings m ON c.meeting_id = m.id
             WHERE c.embedding IS NOT NULL
@@ -363,7 +424,9 @@ export class VectorStore {
             start_timestamp_ms: r.start_timestamp_ms,
             end_timestamp_ms: r.end_timestamp_ms,
             cleaned_text: r.cleaned_text,
-            token_count: r.token_count
+            token_count: r.token_count,
+            meeting_start_time_ms: r.meeting_start_time_ms,
+            meeting_created_at: r.meeting_created_at
         }));
 
         try {
@@ -799,6 +862,11 @@ export class VectorStore {
     // ============================================
 
     private rowToChunk(row: any): StoredChunk {
+        const meetingStartTimeMs = typeof row.meeting_start_time_ms === 'number'
+            ? row.meeting_start_time_ms
+            : null;
+        const meetingCreatedAtMs = parseDateLike(row.meeting_created_at);
+        const baseTimeMs = meetingStartTimeMs ?? meetingCreatedAtMs;
         return {
             id: row.id,
             meetingId: row.meeting_id,
@@ -808,6 +876,9 @@ export class VectorStore {
             endMs: row.end_timestamp_ms,
             text: row.cleaned_text,
             tokenCount: row.token_count,
+            meetingStartTimeMs,
+            meetingCreatedAtMs,
+            absoluteStartMs: typeof baseTimeMs === 'number' ? baseTimeMs + (row.start_timestamp_ms ?? 0) : null,
             embedding: undefined // Explicitly avoiding buffer parsing unless needed
         };
     }
