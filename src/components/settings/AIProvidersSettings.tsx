@@ -741,11 +741,11 @@ export const AIProvidersSettings: React.FC = () => {
                          * 384d model and the user has no signal that RAG quality is degraded.
                          * See EmbeddingProviderResolver.ts:71 (the `; skipping` log). */}
                         {hasStoredKey.doubao && !doubaoEmbeddingModel && (
-                            <div className="mb-3 flex items-start gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-[11px] text-yellow-200">
-                                <AlertCircle size={14} className="mt-0.5 shrink-0 text-yellow-400" />
+                            <div className="mb-3 flex items-start gap-2 rounded-lg border border-border-subtle bg-bg-input px-3 py-2 text-[11px] text-text-primary">
+                                <AlertCircle size={14} className="mt-0.5 shrink-0 text-amber-500" />
                                 <div className="leading-relaxed">
                                     <div className="font-medium">Doubao API key 已配置，但缺少 Embedding Endpoint ID</div>
-                                    <div className="text-yellow-300/80 mt-0.5">
+                                    <div className="text-text-secondary mt-0.5">
                                         RAG 向量搜索将自动降级到本地 384d 模型，质量与速度均受影响。填写下方 Endpoint ID 可恢复 Doubao 云端 embedding。
                                     </div>
                                 </div>
