@@ -261,3 +261,15 @@ resources/models/Xenova/**/onnx/*.onnx
 
 # Playwright test reports
 playwright-report/
+.playwright-mcp/
+
+# Audio fixtures (real conversations - privacy, large size)
+# Only audio files are excluded — README.md is tracked.
+# Obtain real-conversation-2p-60s.wav from Mandarin Chinese Conversational
+# Speech Corpus (Web Meeting), file: 20200327_2P_lenovo_xiaomi8_69301.wav
+# Trim to 60s and resample to 16kHz mono before placing here.
+tests/fixtures/audio/*.wav
+tests/fixtures/audio/*.mp3
+tests/fixtures/audio/*.flac
+tests/fixtures/audio/*.m4a
+tests/fixtures/audio/*.ogg

@@ -7,7 +7,9 @@
  *
  * Usage:
  *   DOUBAO_API_KEY=your-auc-key npm run test:doubao-auc:real -- /path/to/audio.wav
- *   DOUBAO_API_KEY=your-auc-key node scripts/test-doubao-auc-real.mjs --language zh-CN /path/to/audio.wav
+ *   DOUBAO_API_KEY=your-auc-key npm run test:doubao-auc:real -- --language zh-CN
+ *   # If no path is given, defaults to tests/fixtures/audio/real-conversation-2p-60s.wav
+ *   # See tests/fixtures/audio/README.md to set up the default fixture.
  *
  * DO NOT print API keys. Keep this script opt-in only.
  */
@@ -16,6 +18,10 @@ import axios from 'axios';
 import 'dotenv/config';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const SUBMIT_ENDPOINT = 'https://openspeech-direct.zijieapi.com/api/v3/auc/bigmodel/submit';
 const QUERY_ENDPOINT = 'https://openspeech-direct.zijieapi.com/api/v3/auc/bigmodel/query';
@@ -29,6 +35,9 @@ function usage() {
 
 Usage:
   DOUBAO_API_KEY=your-auc-key npm run test:doubao-auc:real -- /path/to/audio.wav
+  DOUBAO_API_KEY=your-auc-key npm run test:doubao-auc:real -- --language zh-CN
+  # If no path is given, defaults to tests/fixtures/audio/real-conversation-2p-60s.wav
+  # (a 60s real Mandarin 2-person conversation; see tests/fixtures/audio/README.md)
 
 Options:
   --language <bcp47>       Optional language hint, e.g. zh-CN
@@ -343,7 +352,28 @@ async function main() {
     throw new Error('Missing DOUBAO_API_KEY. Example: DOUBAO_API_KEY=xxx npm run test:doubao-auc:real -- /path/to/audio.wav');
   }
   if (!opts.audioPath) {
-    throw new Error('Missing audio file path. Run with --help for usage.');
+    // Default to the standard fixture (60s real Mandarin 2-person conversation)
+    // if it exists locally. Falls back to a friendly error otherwise so users
+    // understand how to set it up.
+    const defaultFixture = path.join(
+      __dirname,
+      '..',
+      'tests',
+      'fixtures',
+      'audio',
+      'real-conversation-2p-60s.wav',
+    );
+    if (fs.existsSync(defaultFixture)) {
+      console.log(`[Doubao AUC] No audio path given. Using default fixture:\n  ${defaultFixture}\n`);
+      opts.audioPath = defaultFixture;
+    } else {
+      throw new Error(
+        'Missing audio file path. Either:\n'
+          + '  1. Run with an explicit path: npm run test:doubao-auc:real -- /path/to/audio.wav\n'
+          + `  2. Place a real conversation audio at: ${defaultFixture}\n`
+          + '     See tests/fixtures/audio/README.md for setup instructions.',
+      );
+    }
   }
   if (!fs.existsSync(opts.audioPath)) {
     throw new Error(`Audio file does not exist: ${opts.audioPath}`);
