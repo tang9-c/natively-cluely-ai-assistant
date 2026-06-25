@@ -2,8 +2,8 @@ import * as crypto from 'crypto';
 import * as path from 'path';
 import { DatabaseManager, type KnowledgeMaterialChunkInput } from '../../db/DatabaseManager';
 import { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
-import { keywordCoverage } from '../../rag/RagLexical';
 import { DocumentTextExtractor } from '../profile/DocumentTextExtractor';
+import { MaterialRagRetriever, type MaterialRagSource } from './MaterialRagRetriever';
 
 type MaterialStatus = 'queued' | 'indexing' | 'complete' | 'failed' | 'deleted';
 
@@ -22,10 +22,14 @@ const CHILD_TARGET_CHARS = 900;
 const PARENT_WINDOW = 1;
 
 export class KnowledgeMaterialService {
+    private readonly materialRagRetriever: MaterialRagRetriever;
+
     constructor(
         private readonly db: DatabaseManager,
         private readonly embeddingPipeline?: EmbeddingPipeline | null,
-    ) {}
+    ) {
+        this.materialRagRetriever = new MaterialRagRetriever(embeddingPipeline);
+    }
 
     listMaterials(): any[] {
         return this.db.listKnowledgeMaterials();
@@ -89,36 +93,33 @@ export class KnowledgeMaterialService {
         const rows = this.db.getKnowledgeMaterialChunks({ withEmbeddingsOnly: false });
         if (rows.length === 0) return [];
 
-        let queryEmbedding: number[] | null = null;
-        if (this.embeddingPipeline?.isReady()) {
-            try {
-                queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(query);
-            } catch {
-                queryEmbedding = null;
-            }
-        }
-
-        const scored = rows.map((row: any) => {
-            const lexical = keywordCoverage(query, row.cleaned_text);
-            const vector = queryEmbedding && row.embedding
-                ? cosine(queryEmbedding, blobToVector(row.embedding))
-                : 0;
-            const score = (0.4 * lexical) + (0.6 * vector);
-            return { row, score };
+        const sources: MaterialRagSource[] = rows.map((row: any) => ({
+            id: `${row.material_id}:${row.id}`,
+            title: row.title || row.file_name || 'Uploaded material',
+            text: row.cleaned_text,
+            parentText: row.parent_text || row.cleaned_text,
+            scope: 'global',
+            sourceType: 'uploaded_material',
+            sourcePriority: 1,
+            chunkId: row.id,
+            embedding: row.embedding ? blobToVector(row.embedding) : undefined,
+        }));
+        const result = await this.materialRagRetriever.retrieve({
+            query,
+            sources,
+            filters: { scopes: ['global'] },
+            topK: limit,
+            format: 'none',
         });
 
-        return scored
-            .filter((item) => item.score > 0)
-            .sort((a, b) => b.score - a.score)
-            .slice(0, limit)
-            .map(({ row, score }) => ({
+        return result.chunks.map((chunk) => ({
                 sourceType: 'uploaded_material' as const,
-                sourceId: row.material_id,
-                chunkId: row.id,
-                score: Number(score.toFixed(4)),
-                title: row.title || row.file_name || 'Uploaded material',
-                text: row.cleaned_text,
-                parentText: row.parent_text || row.cleaned_text,
+                sourceId: String(chunk.sourceId).split(':')[0],
+                chunkId: Number(chunk.chunkId ?? chunk.chunkIndex),
+                score: chunk.score,
+                title: chunk.title,
+                text: chunk.text,
+                parentText: chunk.parentText,
             }));
     }
 
@@ -152,6 +153,14 @@ export class KnowledgeMaterialService {
     }
 }
 
+function blobToVector(blob: Buffer): number[] {
+    const vector: number[] = [];
+    for (let offset = 0; offset + 4 <= blob.byteLength; offset += 4) {
+        vector.push(blob.readFloatLE(offset));
+    }
+    return vector;
+}
+
 function buildParentChildChunks(materialId: string, text: string): KnowledgeMaterialChunkInput[] {
     const paragraphs = text
         .split(/\n{2,}/)
@@ -181,26 +190,4 @@ function buildParentChildChunks(materialId: string, text: string): KnowledgeMate
             metadata: { parentWindow: PARENT_WINDOW },
         };
     });
-}
-
-function blobToVector(blob: Buffer): number[] {
-    const vector: number[] = [];
-    for (let offset = 0; offset + 4 <= blob.byteLength; offset += 4) {
-        vector.push(blob.readFloatLE(offset));
-    }
-    return vector;
-}
-
-function cosine(a: number[], b: number[]): number {
-    if (a.length !== b.length || a.length === 0) return 0;
-    let dot = 0;
-    let normA = 0;
-    let normB = 0;
-    for (let i = 0; i < a.length; i++) {
-        dot += a[i] * b[i];
-        normA += a[i] * a[i];
-        normB += b[i] * b[i];
-    }
-    const denom = Math.sqrt(normA) * Math.sqrt(normB);
-    return denom === 0 ? 0 : dot / denom;
 }

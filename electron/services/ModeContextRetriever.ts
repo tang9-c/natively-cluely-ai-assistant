@@ -1,5 +1,6 @@
 import { Mode, ModeReferenceFile, escapeXmlText } from './ModesManager';
 import { ModeHybridRetriever, ModeRetrievedContext as HybridContext } from './modes/ModeHybridRetriever';
+import { MaterialRagRetriever, type MaterialRagSource } from './knowledge/MaterialRagRetriever';
 import { VectorStore } from '../rag/VectorStore';
 import { EmbeddingPipeline } from '../rag/EmbeddingPipeline';
 import { DatabaseManager } from '../db/DatabaseManager';
@@ -241,8 +242,8 @@ export class ModeContextRetriever {
      * Falls back to lexical-only if embedding provider is unavailable.
      */
     async retrieveHybrid(mode: Mode, files: ModeReferenceFile[], options: RetrieveOptions): Promise<HybridContext> {
-        // Lazily create hybrid retriever on first use
-        if (!this._hybridRetriever) {
+        // Lazily create the legacy adapter and the unified Material RAG retriever together.
+        if (!this._hybridRetriever || !this._materialRagRetriever) {
             const db = DatabaseManager.getInstance().getDb();
             const dbPath = DatabaseManager.getInstance().getDbPath();
             if (!db) {
@@ -261,22 +262,55 @@ export class ModeContextRetriever {
             const vectorStore = new VectorStore(db, dbPath, '');
             const embeddingPipeline = new EmbeddingPipeline(db, vectorStore);
             this._hybridRetriever = new ModeHybridRetriever(db, vectorStore, embeddingPipeline);
+            this._materialRagRetriever = new MaterialRagRetriever(embeddingPipeline);
         }
 
         const queryText = `${options.query}\n${options.transcript ?? ''}`.trim();
         const hasTranscript = !!options.transcript && options.transcript.trim().length > 0;
 
-        const result = await this._hybridRetriever.retrieve({
+        const sources: MaterialRagSource[] = files
+            .filter((file) => file.content.trim())
+            .map((file) => ({
+                id: file.id,
+                title: file.fileName || 'reference',
+                text: file.content.trim(),
+                scope: 'mode',
+                modeId: mode.id,
+                scenarioType: mode.templateType,
+                sourceType: 'mode_reference_file',
+                sourcePriority: 1.1,
+            }));
+        const result = await this._materialRagRetriever!.retrieve({
             query: queryText,
-            modeId: mode.id,
-            files,
+            sources,
+            filters: {
+                scopes: ['mode'],
+                modeId: mode.id,
+                scenarioType: mode.templateType,
+            },
             tokenBudget: options.tokenBudget,
             topK: options.topK,
-            hasTranscript
+            hasTranscript,
+            format: 'mode_xml',
         });
 
-        return result;
+        return {
+            chunks: result.chunks.map((chunk) => ({
+                sourceId: chunk.sourceId,
+                fileName: chunk.title,
+                text: chunk.text,
+                chunkIndex: chunk.chunkIndex,
+                score: chunk.score,
+                ftsScore: chunk.ftsScore,
+                vectorScore: chunk.vectorScore,
+                trustLevel: 'untrusted_reference' as const,
+            })),
+            formattedContext: result.formattedContext,
+            usedFallback: result.usedFallback,
+            usedHybrid: result.usedHybrid,
+        };
     }
 
     private _hybridRetriever: ModeHybridRetriever | null = null;
+    private _materialRagRetriever: MaterialRagRetriever | null = null;
 }
