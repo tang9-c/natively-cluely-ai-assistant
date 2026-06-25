@@ -57,6 +57,25 @@ test('settings exposes only implemented Doubao AUC provider for speaker separati
     assert.doesNotMatch(settings, /id: 'doubao', label:/);
 });
 
+test('settings hides advanced STT providers from the provider dropdown', () => {
+    const settings = read('src/components/SettingsOverlay.tsx');
+    const hiddenProviderLabels = [
+        'Google Cloud',
+        'Groq Whisper',
+        'OpenAI Whisper',
+        'Deepgram Nova-3',
+        'ElevenLabs Scribe',
+        'Azure Speech',
+        'IBM Watson',
+        'Soniox',
+        'Local Whisper',
+    ];
+
+    for (const label of hiddenProviderLabels) {
+        assert.doesNotMatch(settings, new RegExp(`label: '${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
+    }
+});
+
 test('legacy Doubao STT provider is normalized to Doubao AUC', () => {
     const credentials = read('electron/services/CredentialsManager.ts');
 

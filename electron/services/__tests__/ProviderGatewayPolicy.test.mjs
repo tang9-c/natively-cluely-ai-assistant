@@ -138,6 +138,16 @@ test('AIProvidersSettings renders cloud provider data scope controls wired to re
   assert.match(src, /onProviderDataScopesChanged\(setProviderDataScopes\)/);
 });
 
+test('AIProvidersSettings hides legacy cloud API key provider cards', () => {
+  const src = read('src/components/settings/AIProvidersSettings.tsx');
+
+  for (const provider of ['Gemini', 'Groq', 'OpenAI', 'Claude']) {
+    assert.doesNotMatch(src, new RegExp(`providerName="${provider}"`));
+  }
+
+  assert.match(src, /providerName="Doubao \(Volcengine\)"/);
+});
+
 test('main and ProcessingHelper hydrate ragManager.initializeEmbeddings with policy', () => {
   const main = read('electron/main.ts');
   const ph = read('electron/ProcessingHelper.ts');

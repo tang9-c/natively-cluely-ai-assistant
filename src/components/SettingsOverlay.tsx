@@ -852,6 +852,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [hasStoredDoubaoKey, setHasStoredDoubaoKey] = useState(false);
     const [isSttDropdownOpen, setIsSttDropdownOpen] = useState(false);
     const sttDropdownRef = React.useRef<HTMLDivElement>(null);
+    const normalizeVisibleSttProvider = (
+        provider?: string
+    ): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper' | 'local-sensevoice' => {
+        if (provider === 'none' || provider === 'natively' || provider === 'doubao-auc' || provider === 'local-sensevoice') {
+            return provider;
+        }
+        return 'doubao-auc';
+    };
 
     // Close STT dropdown when clicking outside
     useEffect(() => {
@@ -873,7 +881,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 // @ts-ignore
                 const creds = await window.electronAPI?.getStoredCredentials?.();
                 if (creds) {
-                    setSttProvider(creds.sttProvider === 'doubao' ? 'doubao-auc' : creds.sttProvider || 'none');
+                    setSttProvider(normalizeVisibleSttProvider(creds.sttProvider));
                     if (creds.groqSttModel) setGroqSttModel(creds.groqSttModel);
                     setGoogleServiceAccountPath(creds.googleServiceAccountPath);
                     setHasStoredSttGroqKey(creds.hasSttGroqKey);
@@ -918,7 +926,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 // Re-fetch credentials silently — purely additive, no state reset
                 window.electronAPI?.getStoredCredentials?.().then((creds: any) => {
                     if (!creds) return;
-                    setSttProvider(creds.sttProvider === 'doubao' ? 'doubao-auc' : creds.sttProvider || 'none');
+                    setSttProvider(normalizeVisibleSttProvider(creds.sttProvider));
                     if (creds.groqSttModel) setGroqSttModel(creds.groqSttModel);
                     setHasNativelyKey(creds.hasNativelyKey || false);
                     setHasStoredSttGroqKey(creds.hasSttGroqKey);
@@ -2185,16 +2193,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         onChange={(val) => handleSttProviderChange(val as any)}
                                                         options={[
                                                             ...(hasNativelyKey ? [{ id: 'natively', label: 'Natively API', badge: 'Saved' as const, recommended: true, desc: 'Managed transcription via Natively backend', color: 'blue', icon: <Mic size={14} /> }] : []),
-                                                            { id: 'google', label: 'Google Cloud', badge: googleServiceAccountPath ? 'Saved' : null, recommended: true, desc: 'gRPC streaming via Service Account', color: 'blue', icon: <Mic size={14} /> },
-                                                            { id: 'groq', label: 'Groq Whisper', badge: hasStoredSttGroqKey ? 'Saved' : null, recommended: true, desc: 'Ultra-fast REST transcription', color: 'orange', icon: <Mic size={14} /> },
-                                                            { id: 'openai', label: 'OpenAI Whisper', badge: hasStoredSttOpenaiKey ? 'Saved' : null, desc: 'OpenAI-compatible Whisper API', color: 'green', icon: <Mic size={14} /> },
-                                                            { id: 'deepgram', label: 'Deepgram Nova-3', badge: hasStoredDeepgramKey ? 'Saved' : null, recommended: true, desc: 'High-accuracy REST transcription', color: 'purple', icon: <Mic size={14} /> },
-                                                            { id: 'elevenlabs', label: 'ElevenLabs Scribe', badge: hasStoredElevenLabsKey ? 'Saved' : null, desc: 'Scribe v2 Realtime API', color: 'teal', icon: <Mic size={14} /> },
-                                                            { id: 'azure', label: 'Azure Speech', badge: hasStoredAzureKey ? 'Saved' : null, desc: 'Microsoft Cognitive Services STT', color: 'cyan', icon: <Mic size={14} /> },
-                                                            { id: 'ibmwatson', label: 'IBM Watson', badge: hasStoredIbmWatsonKey ? 'Saved' : null, desc: 'IBM Watson cloud STT service', color: 'indigo', icon: <Mic size={14} /> },
-                                                            { id: 'soniox', label: 'Soniox', badge: hasStoredSonioxKey ? 'Saved' : null, recommended: true, desc: '60+ languages, multilingual, domain context', color: 'cyan', icon: <Mic size={14} /> },
                                                             { id: 'doubao-auc', label: 'Doubao AUC (Speaker separation)', badge: hasStoredDoubaoKey ? 'Saved' : null, desc: 'Same Doubao API key; AUC BigModel with speaker separation', color: 'orange', icon: <Mic size={14} /> },
-                                                            { id: 'local-whisper', label: 'Local Whisper', badge: null, desc: 'Privacy-first: runs 100% on your device', color: 'green', icon: <Cpu size={14} /> },
                                                             { id: 'local-sensevoice', label: 'Local SenseVoice', badge: null, desc: 'Chinese-first local STT', color: 'green', icon: <Cpu size={14} /> },
                                                         ]}
                                                     />
