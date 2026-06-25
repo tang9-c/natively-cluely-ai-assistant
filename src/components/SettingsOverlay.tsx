@@ -982,6 +982,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         }
     };
 
+    const formatSttConnectionError = (provider: string, error?: string) => {
+        const message = error || 'Connection failed';
+        if (provider === 'doubao' && /api key/i.test(message)) {
+            return `${message}. If you are validating speaker separation, use Doubao AUC (Speaker separation) with the same key; Streaming ASR does not expose speaker separation.`;
+        }
+        return message;
+    };
+
     const speakerSeparationSupported =
         sttProvider === 'doubao-auc' &&
         (recognitionLanguage === 'auto' || recognitionLanguage === '' || recognitionLanguage === 'chinese' || /^zh[-_]/i.test(recognitionLanguage));
@@ -1021,7 +1029,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
             if (!testResult?.success) {
                 setSttTestStatus('error');
-                setSttTestError(testResult?.error || 'Validation failed. Key not saved.');
+                setSttTestError(formatSttConnectionError(provider, testResult?.error || 'Validation failed. Key not saved.'));
                 setSttSaving(false);
                 return; // Stop save
             }
@@ -1202,12 +1210,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             } else {
                 setSttTestStatus('error');
                 setSttTestOnlyVerified(false);
-                setSttTestError(result?.error || 'Connection failed');
+                setSttTestError(formatSttConnectionError(sttProvider, result?.error || 'Connection failed'));
             }
         } catch (e: any) {
             setSttTestStatus('error');
             setSttTestOnlyVerified(false);
-            setSttTestError(e.message || 'Test failed');
+            setSttTestError(formatSttConnectionError(sttProvider, e.message || 'Test failed'));
         }
     };
 
@@ -2192,8 +2200,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             { id: 'azure', label: 'Azure Speech', badge: hasStoredAzureKey ? 'Saved' : null, desc: 'Microsoft Cognitive Services STT', color: 'cyan', icon: <Mic size={14} /> },
                                                             { id: 'ibmwatson', label: 'IBM Watson', badge: hasStoredIbmWatsonKey ? 'Saved' : null, desc: 'IBM Watson cloud STT service', color: 'indigo', icon: <Mic size={14} /> },
                                                             { id: 'soniox', label: 'Soniox', badge: hasStoredSonioxKey ? 'Saved' : null, recommended: true, desc: '60+ languages, multilingual, domain context', color: 'cyan', icon: <Mic size={14} /> },
-                                                            { id: 'doubao', label: 'Doubao (Volcengine)', badge: hasStoredDoubaoKey ? 'Saved' : null, desc: 'Doubao Streaming ASR 2.0', color: 'orange', icon: <Mic size={14} /> },
-                                                            { id: 'doubao-auc', label: 'Doubao AUC (BigModel)', badge: hasStoredDoubaoKey ? 'Saved' : null, desc: 'Doubao AUC BigModel API', color: 'orange', icon: <Mic size={14} /> },
+                                                            { id: 'doubao', label: 'Doubao Streaming ASR', badge: hasStoredDoubaoKey ? 'Saved' : null, desc: 'Same Doubao API key; streaming ASR, no speaker separation', color: 'orange', icon: <Mic size={14} /> },
+                                                            { id: 'doubao-auc', label: 'Doubao AUC (Speaker separation)', badge: hasStoredDoubaoKey ? 'Saved' : null, desc: 'Same Doubao API key; AUC BigModel with speaker separation', color: 'orange', icon: <Mic size={14} /> },
                                                             { id: 'local-whisper', label: 'Local Whisper', badge: null, desc: 'Privacy-first: runs 100% on your device', color: 'green', icon: <Cpu size={14} /> },
                                                             { id: 'local-sensevoice', label: 'Local SenseVoice', badge: null, desc: 'Chinese-first local STT', color: 'green', icon: <Cpu size={14} /> },
                                                         ]}

@@ -34,7 +34,7 @@ test('speaker separation control lives in the Audio speech provider settings', (
     assert.match(settings, /Speaker separation off/);
 
     const providerIndex = settings.indexOf('Speech Provider Section');
-    const speakerIndex = settings.indexOf('Speaker separation');
+    const speakerIndex = settings.indexOf('>Speaker separation</label>');
     const languageIndex = settings.indexOf('Recognition Language Family');
     assert.ok(providerIndex >= 0, 'Speech Provider Section marker should exist');
     assert.ok(speakerIndex > providerIndex, 'Speaker separation belongs in Speech Provider section');
@@ -46,6 +46,16 @@ test('Doubao AUC registry passes speaker separation mode and channel into RestST
 
     assert.match(registry, /getSpeakerSeparationMode/);
     assert.match(registry, /new RestSTT\('doubao-auc', key, undefined, undefined, \{ speaker, speakerSeparationMode/);
+});
+
+test('Doubao provider choices distinguish API capability without implying different API keys', () => {
+    const settings = read('src/components/SettingsOverlay.tsx');
+
+    assert.match(settings, /Doubao Streaming ASR/);
+    assert.match(settings, /Same Doubao API key; streaming ASR, no speaker separation/);
+    assert.match(settings, /Doubao AUC \(Speaker separation\)/);
+    assert.match(settings, /Same Doubao API key; AUC BigModel with speaker separation/);
+    assert.match(settings, /use Doubao AUC \(Speaker separation\) with the same key/);
 });
 
 test('transcript persistence preserves optional speaker diarization metadata', () => {
