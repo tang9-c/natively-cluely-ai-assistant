@@ -21,6 +21,7 @@ import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEng
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
 import { ScreenContext } from './services/screen/types';
 import { SettingsManager } from './services/SettingsManager';
+import { SkillActivationManager } from './services/SkillActivationManager';
 import { isLocalIntentClassifierAvailable } from './services/LocalModelManager';
 import { ModesManager } from './services/ModesManager';
 import { keywordRowsToMap } from './llm/IntentKeywordDefaults';
@@ -787,6 +788,13 @@ export class IntelligenceEngine extends EventEmitter {
             );
 
             const screenContext = options?.screenContext;
+            const resolvedSkill = options?.activeSkill
+                ? options.activeSkill
+                : SkillActivationManager.getInstance().resolveActiveSkill({
+                    requestType: 'what_to_answer',
+                    latestText: question || lastInterviewerTurn || preparedTranscript,
+                }) || undefined;
+
             console.log('[IntelligenceEngine] Temporal RAG', {
                 previousResponses: temporalContext.previousResponses.length,
                 tone: temporalContext.toneSignals[0]?.type || 'neutral',
@@ -796,6 +804,7 @@ export class IntelligenceEngine extends EventEmitter {
                 imageCount: imagePaths?.length || 0,
                 screenOcrAvailable: Boolean(screenContext?.ocrText),
                 screenOcrTextLength: screenContext?.ocrText?.length || 0,
+                activeSkillId: resolvedSkill?.id,
             });
 
             const generationId = ++this.currentGenerationId;
@@ -810,7 +819,7 @@ export class IntelligenceEngine extends EventEmitter {
                 screenContext,
                 options?.promptInstruction,
                 options?.uploadedMaterialContext,
-                options?.activeSkill,
+                resolvedSkill,
                 options?.modeEvent,
                 options?.contextDegradedReasons,
             );
@@ -1269,5 +1278,6 @@ export class IntelligenceEngine extends EventEmitter {
         }
         this.speculativeText = null;
         this.speculativeTextExpiry = Infinity;
+        SkillActivationManager.getInstance().clearMeetingActivations();
     }
 }
