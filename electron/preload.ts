@@ -16,6 +16,20 @@ interface ResearchProgressPayload {
   message: string;
 }
 
+interface SkillActivation {
+  skillId: string;
+  scope: 'global_default' | 'meeting' | 'session' | 'turn' | 'ephemeral';
+  source: 'default' | 'user' | 'voice' | 'auto' | 'post_call';
+  activatedAt: number;
+  expiresAt?: number;
+  reason?: string;
+}
+
+interface SkillSettings {
+  defaultActiveSkillIds: string[];
+  skillsAutoTriggerEnabled: boolean;
+}
+
 interface ElectronAPI {
   updateContentDimensions: (dimensions: { width: number; height: number }) => Promise<void>;
   updateContentDimensionsCentered: (dimensions: { width: number; height: number }) => Promise<void>;
@@ -804,6 +818,20 @@ interface ElectronAPI {
   ) => Promise<{ success: boolean; error?: string }>;
   modesDeleteNoteSection: (id: string) => Promise<{ success: boolean; error?: string }>;
   modesRemoveAllNoteSections: (modeId: string) => Promise<{ success: boolean; error?: string }>;
+
+  skillsRefresh: () => Promise<Array<{ id: string; name: string; description: string; source: 'builtin' | 'userData' }>>;
+  skillsOpenFolder: () => Promise<{ success: boolean; path: string; error?: string }>;
+  skillsGetSettings: () => Promise<SkillSettings>;
+  skillsSetSettings: (settings: SkillSettings) => Promise<{ success: boolean; error?: string }>;
+  skillsListActivations: () => Promise<SkillActivation[]>;
+  skillsActivate: (input: {
+    skillId: string;
+    scope?: SkillActivation['scope'];
+    source?: SkillActivation['source'];
+    ttlMs?: number;
+    reason?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
+  skillsDeactivate: (skillId: string, scope?: SkillActivation['scope']) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const PROCESSING_EVENTS = {
@@ -1002,6 +1030,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Skills — local SKILL.md instructions surfaced in Settings and the overlay.
   skillsRefresh: () => ipcRenderer.invoke('skills:list'),
   skillsOpenFolder: () => ipcRenderer.invoke('skills:open-folder'),
+  skillsGetSettings: () => ipcRenderer.invoke('skills:get-settings'),
+  skillsSetSettings: (settings) => ipcRenderer.invoke('skills:set-settings', settings),
+  skillsListActivations: () => ipcRenderer.invoke('skills:list-activations'),
+  skillsActivate: (input) => ipcRenderer.invoke('skills:activate', input),
+  skillsDeactivate: (skillId, scope) => ipcRenderer.invoke('skills:deactivate', skillId, scope),
 
 
   onSettingsVisibilityChange: (callback: (isVisible: boolean) => void) => {

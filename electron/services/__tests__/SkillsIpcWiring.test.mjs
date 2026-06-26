@@ -60,6 +60,44 @@ test('preload exposes skillsRefresh / skillsOpenFolder on window.electronAPI', (
     'skillsRefresh must live inside the electronAPI contextBridge block');
 });
 
+test('skill activation settings handlers are registered in ipcHandlers.ts', () => {
+  const source = read('electron/ipcHandlers.ts');
+
+  for (const channel of [
+    'skills:get-settings',
+    'skills:set-settings',
+    'skills:list-activations',
+    'skills:activate',
+    'skills:deactivate',
+  ]) {
+    assert.ok(findSafeHandle(source, channel) >= 0, `${channel} handler must be registered`);
+  }
+
+  assert.match(source, /SkillActivationManager/);
+  assert.match(source, /defaultActiveSkillIds/);
+  assert.match(source, /skillsAutoTriggerEnabled/);
+});
+
+test('preload exposes skill activation settings methods', () => {
+  const preload = read('electron/preload.ts');
+
+  assert.match(preload, /skillsGetSettings:\s*\(\)\s*=>\s*ipcRenderer\.invoke\(['"]skills:get-settings['"]\)/);
+  assert.match(preload, /skillsSetSettings:\s*\(settings\)\s*=>\s*ipcRenderer\.invoke\(['"]skills:set-settings['"],\s*settings\)/);
+  assert.match(preload, /skillsListActivations:\s*\(\)\s*=>\s*ipcRenderer\.invoke\(['"]skills:list-activations['"]\)/);
+  assert.match(preload, /skillsActivate:\s*\(input\)\s*=>\s*ipcRenderer\.invoke\(['"]skills:activate['"],\s*input\)/);
+  assert.match(preload, /skillsDeactivate:\s*\(skillId,\s*scope\)\s*=>\s*ipcRenderer\.invoke\(['"]skills:deactivate['"],\s*skillId,\s*scope\)/);
+});
+
+test('electron.d.ts declares skill activation settings methods', () => {
+  const types = read('src/types/electron.d.ts');
+
+  assert.match(types, /export interface SkillActivation\s*\{/);
+  assert.match(types, /export interface SkillSettings\s*\{/);
+  assert.match(types, /skillsGetSettings:\s*\(\)\s*=>\s*Promise<SkillSettings>/);
+  assert.match(types, /skillsSetSettings:\s*\(settings:\s*SkillSettings\)\s*=>\s*Promise<\{\s*success:\s*boolean;\s*error\?:\s*string\s*\}>/);
+  assert.match(types, /skillsListActivations:\s*\(\)\s*=>\s*Promise<SkillActivation\[\]>/);
+});
+
 test('electron.d.ts declares SkillSummary and the two skills methods', () => {
   const types = read('src/types/electron.d.ts');
 

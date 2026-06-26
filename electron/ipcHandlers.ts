@@ -18,6 +18,7 @@ import {
 } from './permissions/macPermissionHealth';
 import { CodexCliService } from './services/CodexCliService';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
+import { SkillActivationManager, type ActivateSkillInput, type SkillActivationScope } from './services/SkillActivationManager';
 import { SkillsManager } from './services/SkillsManager';
 
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
@@ -4578,6 +4579,66 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (e: any) {
       console.warn('[IPC] skills:list error:', e?.message || e);
       return [];
+    }
+  });
+
+  safeHandle('skills:get-settings', () => {
+    try {
+      const settings = SettingsManager.getInstance();
+      const defaultActiveSkillIds = settings.get('defaultActiveSkillIds');
+      return {
+        defaultActiveSkillIds: Array.isArray(defaultActiveSkillIds) ? defaultActiveSkillIds : [],
+        skillsAutoTriggerEnabled: settings.get('skillsAutoTriggerEnabled') !== false,
+      };
+    } catch (e: any) {
+      console.warn('[IPC] skills:get-settings error:', e?.message || e);
+      return { defaultActiveSkillIds: [], skillsAutoTriggerEnabled: true };
+    }
+  });
+
+  safeHandle('skills:set-settings', (_event, input: { defaultActiveSkillIds?: unknown; skillsAutoTriggerEnabled?: unknown }) => {
+    try {
+      const settings = SettingsManager.getInstance();
+      const ids = Array.isArray(input?.defaultActiveSkillIds)
+        ? input.defaultActiveSkillIds
+          .filter((id): id is string => typeof id === 'string')
+          .map((id) => id.trim().toLowerCase())
+          .filter(Boolean)
+        : [];
+
+      settings.set('defaultActiveSkillIds', Array.from(new Set(ids)));
+      settings.set('skillsAutoTriggerEnabled', input?.skillsAutoTriggerEnabled !== false);
+      return { success: true };
+    } catch (e: any) {
+      console.warn('[IPC] skills:set-settings error:', e?.message || e);
+      return { success: false, error: e?.message || 'failed to save skill settings' };
+    }
+  });
+
+  safeHandle('skills:list-activations', () => {
+    try {
+      return SkillActivationManager.getInstance().listActivations();
+    } catch (e: any) {
+      console.warn('[IPC] skills:list-activations error:', e?.message || e);
+      return [];
+    }
+  });
+
+  safeHandle('skills:activate', (_event, input: ActivateSkillInput) => {
+    try {
+      return SkillActivationManager.getInstance().activateSkill(input);
+    } catch (e: any) {
+      console.warn('[IPC] skills:activate error:', e?.message || e);
+      return { success: false, error: e?.message || 'failed to activate skill' };
+    }
+  });
+
+  safeHandle('skills:deactivate', (_event, skillId: string, scope?: SkillActivationScope) => {
+    try {
+      return SkillActivationManager.getInstance().deactivateSkill(skillId, scope);
+    } catch (e: any) {
+      console.warn('[IPC] skills:deactivate error:', e?.message || e);
+      return { success: false, error: e?.message || 'failed to deactivate skill' };
     }
   });
 

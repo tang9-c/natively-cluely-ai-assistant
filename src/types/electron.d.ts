@@ -601,6 +601,17 @@ export interface ElectronAPI {
   // Skills
   skillsRefresh: () => Promise<SkillSummary[]>;
   skillsOpenFolder: () => Promise<{ success: boolean; path: string; error?: string }>;
+  skillsGetSettings: () => Promise<SkillSettings>;
+  skillsSetSettings: (settings: SkillSettings) => Promise<{ success: boolean; error?: string }>;
+  skillsListActivations: () => Promise<SkillActivation[]>;
+  skillsActivate: (input: {
+    skillId: string;
+    scope?: SkillActivation['scope'];
+    source?: SkillActivation['source'];
+    ttlMs?: number;
+    reason?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
+  skillsDeactivate: (skillId: string, scope?: SkillActivation['scope']) => Promise<{ success: boolean; error?: string }>;
 
 }
 
@@ -609,6 +620,20 @@ export interface SkillSummary {
   name: string;
   description: string;
   source: 'builtin' | 'userData';
+}
+
+export interface SkillActivation {
+  skillId: string;
+  scope: 'global_default' | 'meeting' | 'session' | 'turn' | 'ephemeral';
+  source: 'default' | 'user' | 'voice' | 'auto' | 'post_call';
+  activatedAt: number;
+  expiresAt?: number;
+  reason?: string;
+}
+
+export interface SkillSettings {
+  defaultActiveSkillIds: string[];
+  skillsAutoTriggerEnabled: boolean;
 }
 
 declare global {
