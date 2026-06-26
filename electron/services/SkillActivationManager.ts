@@ -170,7 +170,12 @@ export class SkillActivationManager {
   }
 
   private getDefaultActivations(now: number): SkillActivation[] {
-    const ids = SettingsManager.getInstance().get('defaultActiveSkillIds') ?? [];
+    let ids: unknown;
+    try {
+      ids = SettingsManager.getInstance().get('defaultActiveSkillIds') ?? [];
+    } catch {
+      ids = [];
+    }
     if (!Array.isArray(ids)) return [];
 
     return ids
@@ -186,7 +191,11 @@ export class SkillActivationManager {
   }
 
   private getAutoTriggerEnabled(): boolean {
-    return SettingsManager.getInstance().get('skillsAutoTriggerEnabled') !== false;
+    try {
+      return SettingsManager.getInstance().get('skillsAutoTriggerEnabled') !== false;
+    } catch {
+      return true;
+    }
   }
 
   private pruneExpired(now: number): void {
