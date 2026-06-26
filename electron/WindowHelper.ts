@@ -102,7 +102,10 @@ export class WindowHelper {
     const maxAllowedWidth = Math.floor(workArea.width * 0.9);
     const maxAllowedHeight = Math.floor(workArea.height * 0.9);
     const newWidth = Math.min(Math.max(width, 300), maxAllowedWidth); // min 300, max 90%
-    const newHeight = Math.min(Math.max(height, 1), maxAllowedHeight); // min 1, max 90%
+    const minimumHeight = width >= WindowHelper.OVERLAY_DEFAULT_WIDTH
+      ? WindowHelper.OVERLAY_MIN_HEIGHT
+      : 1;
+    const newHeight = Math.min(Math.max(height, minimumHeight), maxAllowedHeight); // min visible expanded overlay, max 90%
     const maxX = workArea.x + workArea.width - newWidth;
     const maxY = workArea.y + workArea.height - newHeight;
     const newX = Math.min(Math.max(currentX, workArea.x), maxX);
@@ -135,7 +138,10 @@ export class WindowHelper {
     const maxAllowedWidth = Math.floor(workArea.width * 0.9);
     const maxAllowedHeight = Math.floor(workArea.height * 0.9);
     const newWidth = Math.min(Math.max(width, 300), maxAllowedWidth);
-    const newHeight = Math.min(Math.max(height, 1), maxAllowedHeight);
+    const minimumHeight = width >= WindowHelper.OVERLAY_DEFAULT_WIDTH
+      ? WindowHelper.OVERLAY_MIN_HEIGHT
+      : 1;
+    const newHeight = Math.min(Math.max(height, minimumHeight), maxAllowedHeight);
 
     // Compute X so the content's horizontal center stays put across the resize.
     const widthDelta = newWidth - currentContentSize[0];
@@ -610,6 +616,7 @@ export class WindowHelper {
   public hideOverlay(): void {
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
       this.overlayWindow.hide();
+      this.isWindowVisible = false;
     }
   }
 

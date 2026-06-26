@@ -53,6 +53,7 @@ const DOUBAO_MODEL = "doubao-seed-2-0-lite-260215"
 const DOUBAO_PRO_MODEL = "doubao-1-5-pro-32k-250115"
 const DOUBAO_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 const MAX_OUTPUT_TOKENS = 65536
+const OPENAI_COMPAT_MAX_COMPLETION_TOKENS = 12288
 const CLAUDE_MAX_OUTPUT_TOKENS = 64000
 const STRUCTURED_DEFAULT_TIMEOUT_MS = 45_000
 
@@ -461,6 +462,23 @@ export class LLMHelper {
     return modelId.startsWith("doubao-") || modelId.startsWith("volc.") || modelId.startsWith("ep-");
   }
 
+  private getOpenAiCompatMaxCompletionTokens(modelId: string): number {
+    if (this.isClaudeModel(modelId)) return this.getClaudeMaxOutput(modelId);
+    return OPENAI_COMPAT_MAX_COMPLETION_TOKENS;
+  }
+
+  private clampOpenAiCompatMaxCompletionTokens(modelId: string, requested?: number): number {
+    const desired = requested ?? MAX_OUTPUT_TOKENS;
+    const limit = this.getOpenAiCompatMaxCompletionTokens(modelId);
+    if (desired > limit) {
+      console.warn(
+        `[LLMHelper] Clamping max_completion_tokens for ${modelId} from ${desired} to ${limit}`
+      );
+      return limit;
+    }
+    return desired;
+  }
+
   private isGeminiModel(modelId: string): boolean {
     return modelId.startsWith("gemini-") || modelId.startsWith("models/");
   }
@@ -556,7 +574,7 @@ export class LLMHelper {
     const response = await this.doubaoClient.chat.completions.create({
       model,
       messages,
-      max_completion_tokens: options.maxOutputTokens ?? MAX_OUTPUT_TOKENS,
+      max_completion_tokens: this.clampOpenAiCompatMaxCompletionTokens(model, options.maxOutputTokens),
     }, options.timeoutMs ? { timeout: options.timeoutMs } : undefined);
 
     return response.choices[0]?.message?.content ?? "";
@@ -597,7 +615,7 @@ export class LLMHelper {
       model,
       messages,
       stream: true,
-      max_completion_tokens: MAX_OUTPUT_TOKENS,
+      max_completion_tokens: this.clampOpenAiCompatMaxCompletionTokens(model),
     });
 
     for await (const chunk of stream) {
@@ -2212,8 +2230,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       this.withRetry(() => this.openaiClient!.chat.completions.create({
         model,
         messages,
-        max_completion_tokens: options.maxOutputTokens
-          ?? (model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : MAX_OUTPUT_TOKENS),
+        max_completion_tokens: this.clampOpenAiCompatMaxCompletionTokens(model, options.maxOutputTokens),
         ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
       }, options.timeoutMs ? { timeout: options.timeoutMs } : undefined)),
       options.timeoutMs ?? 60_000,
@@ -3659,7 +3676,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       model,
       messages,
       stream: true,
-      max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : MAX_OUTPUT_TOKENS,
+      max_completion_tokens: this.clampOpenAiCompatMaxCompletionTokens(model),
       ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
     });
 
@@ -3731,7 +3748,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       model,
       messages,
       stream: true,
-      max_completion_tokens: model.toLowerCase().includes('claude') ? this.getClaudeMaxOutput(model) : MAX_OUTPUT_TOKENS,
+      max_completion_tokens: this.clampOpenAiCompatMaxCompletionTokens(model),
       ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
     });
 

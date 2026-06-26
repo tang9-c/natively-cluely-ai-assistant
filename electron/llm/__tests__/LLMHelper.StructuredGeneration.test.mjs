@@ -78,6 +78,32 @@ describe('LLMHelper structured generation', () => {
     assert.equal(capturedBody.max_completion_tokens, 8192);
   });
 
+  test('generateContentStructured() clamps Doubao max_completion_tokens to provider ceiling', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    let capturedBody = null;
+    helper.doubaoClient = {
+      chat: {
+        completions: {
+          create: async (body) => {
+            capturedBody = body;
+            return { choices: [{ message: { content: '{"ok":true}' } }] };
+          },
+        },
+      },
+    };
+
+    const result = await helper.generateContentStructured('return json', {
+      taskLabel: 'company-research',
+      perProviderTimeoutMs: 1000,
+      maxOutputTokens: 65536,
+      maxRotations: 1,
+    });
+
+    assert.equal(result, '{"ok":true}');
+    assert.equal(capturedBody.max_completion_tokens, 12288);
+  });
+
   // Phase 4.4 (debug session 2026-06-22): regression guard for the
   // structured-generation chain. Groq's `llama-3.3-70b-versatile` returns 403
   // in this environment (model retired / key revoked). It must NOT be part of
