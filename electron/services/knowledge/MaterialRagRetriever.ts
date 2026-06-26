@@ -296,7 +296,7 @@ export class MaterialRagRetriever {
             if (missing.length > 0) {
                 const texts = missing.map(({ candidate }) => candidate.text);
                 const getEmbeddings = (this.embeddingPipeline as any).getEmbeddings;
-                const embeddedMissing = typeof getEmbeddings === 'function'
+                const embeddedMissing: number[][] = typeof getEmbeddings === 'function'
                     ? await getEmbeddings.call(this.embeddingPipeline, texts)
                     : await Promise.all(texts.map((text) => this.embeddingPipeline!.getEmbedding(text)));
                 embeddedMissing.forEach((embedding, index) => {

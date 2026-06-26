@@ -297,7 +297,7 @@ export class RestSTT extends BaseSTT {
         // unbounded buffer growth and Whisper API file-size/timeout errors.
         // Primary flush is driven by Rust speech_ended events.
         this.safetyNetTimer = setInterval(() => {
-            void this.flushAndUpload();
+            void this.flushAndUpload('safety-net');
         }, SAFETY_NET_INTERVAL_MS);
     }
 
@@ -316,7 +316,7 @@ export class RestSTT extends BaseSTT {
         }
 
         // Flush remaining audio
-        void this.flushAndUpload();
+        void this.flushAndUpload('stop');
     }
 
     /**
@@ -337,13 +337,13 @@ export class RestSTT extends BaseSTT {
         if (!this._isActive) return;
 
         console.log(`[RestSTT] Speech ended detected by native VAD — flushing buffer immediately`);
-        void this.flushAndUpload();
+        void this.flushAndUpload('speech-ended');
     }
 
     finalize(): void {
         if (!this._isActive) return;
         console.log(`[RestSTT] Finalize — flushing buffer immediately`);
-        void this.flushAndUpload();
+        void this.flushAndUpload('finalize');
     }
 
     async drainFinals(timeoutMs: number = 5000): Promise<void> {
@@ -372,9 +372,24 @@ export class RestSTT extends BaseSTT {
     /**
      * Concatenate buffered chunks, add WAV header, and upload to REST API
      */
-    private async flushAndUpload(): Promise<void> {
+    private async flushAndUpload(trigger: string = 'manual'): Promise<void> {
         // Skip if no data
-        if (this.chunks.length === 0 || this.totalBufferedBytes < MIN_BUFFER_BYTES) return;
+        if (this.chunks.length === 0 || this.totalBufferedBytes < MIN_BUFFER_BYTES) {
+            if (trigger !== 'safety-net') {
+                const reason = this.chunks.length === 0 ? 'empty-buffer' : 'below-min-buffer';
+                console.log(
+                    `[RestSTT] Flush skipped (${reason})`,
+                    {
+                        provider: this.provider,
+                        trigger,
+                        chunks: this.chunks.length,
+                        bufferedBytes: this.totalBufferedBytes,
+                        minBytes: MIN_BUFFER_BYTES,
+                    },
+                );
+            }
+            return;
+        }
 
         // Bug #2 fix: if currently uploading, queue a flush for when it completes
         if (this.isUploading) {
@@ -386,7 +401,7 @@ export class RestSTT extends BaseSTT {
         if (this.safetyNetTimer) {
             clearInterval(this.safetyNetTimer);
             this.safetyNetTimer = setInterval(() => {
-                void this.flushAndUpload();
+                void this.flushAndUpload('safety-net');
             }, SAFETY_NET_INTERVAL_MS);
         }
 
@@ -401,9 +416,11 @@ export class RestSTT extends BaseSTT {
 
         // Check for silence (skip upload if audio is too quiet)
         if (this.isSilent(rawPcm)) {
-            if (Math.random() < 0.1) {
-                console.log(`[RestSTT] Skipping silent buffer (${rawPcm.length} bytes)`);
-            }
+            console.log(`[RestSTT] Skipping silent buffer`, {
+                provider: this.provider,
+                trigger,
+                bytes: rawPcm.length,
+            });
             return;
         }
 
@@ -436,7 +453,7 @@ export class RestSTT extends BaseSTT {
                 // Bug #2 fix: if a flush was requested while we were uploading, process it now
                 if (this.flushPending) {
                     this.flushPending = false;
-                    void this.flushAndUpload();
+                    void this.flushAndUpload('queued');
                 }
             });
 

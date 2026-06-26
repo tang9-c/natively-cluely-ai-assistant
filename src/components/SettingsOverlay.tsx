@@ -360,6 +360,11 @@ type SttLanguageCompatibility = {
     message: string;
 };
 
+const screenRecordingFallbackReasons = new Set([
+    'screen-recording-permission-denied',
+    'screen-recording-stale-grant',
+]);
+
 const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, initialTab = 'general' }) => {
     const isLight = useResolvedTheme() === 'light';
     const [activeTab, setActiveTab] = useState(initialTab);
@@ -2721,11 +2726,17 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             <div className="mb-4 flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
                                                 <AlertCircle size={14} className="text-amber-400 shrink-0 mt-0.5" />
                                                 <div className="min-w-0 flex-1">
-                                                    <p className="text-xs text-amber-200/90 leading-snug">
-                                                        Selected {deviceFallbackNotice.kind === 'input' ? 'microphone' : 'output device'}
-                                                        {deviceFallbackNotice.requested ? ` "${deviceFallbackNotice.requested}"` : ''} couldn't be opened
-                                                        — using <span className="font-medium">{deviceFallbackNotice.actual ?? 'no device'}</span> instead.
-                                                    </p>
+                                                    {deviceFallbackNotice.kind === 'output' && deviceFallbackNotice.reason && screenRecordingFallbackReasons.has(deviceFallbackNotice.reason) ? (
+                                                        <p className="text-xs text-amber-200/90 leading-snug">
+                                                            Screen Recording permission is blocking system audio capture. Microphone transcription can still run, but meeting audio from the output device will not be captured until permission is restored.
+                                                        </p>
+                                                    ) : (
+                                                        <p className="text-xs text-amber-200/90 leading-snug">
+                                                            Selected {deviceFallbackNotice.kind === 'input' ? 'microphone' : 'output device'}
+                                                            {deviceFallbackNotice.requested ? ` "${deviceFallbackNotice.requested}"` : ''} couldn't be opened
+                                                            — using <span className="font-medium">{deviceFallbackNotice.actual ?? 'no device'}</span> instead.
+                                                        </p>
+                                                    )}
                                                     {deviceFallbackNotice.reason && (
                                                         <p className="text-[11px] text-amber-200/60 mt-1 font-mono break-all">{deviceFallbackNotice.reason}</p>
                                                     )}

@@ -204,6 +204,36 @@ test('RestSTT drainFinals waits for an in-flight file upload to emit final trans
     ]);
 });
 
+test('RestSTT logs when final flush has too little buffered audio to upload', async () => {
+    const { RestSTT } = await loadRestSTT();
+    const stt = new RestSTT('doubao-auc', 'test-api-key');
+    const logs = [];
+    const originalLog = console.log;
+
+    try {
+        console.log = (...args) => {
+            logs.push(args.map(String).join(' '));
+        };
+
+        const rawPcm = Buffer.alloc(1000);
+        for (let offset = 0; offset < rawPcm.length; offset += 2) {
+            rawPcm.writeInt16LE(1000, offset);
+        }
+
+        stt.start();
+        stt.write(rawPcm);
+        stt.finalize();
+    } finally {
+        console.log = originalLog;
+        stt.stop();
+    }
+
+    assert.ok(
+        logs.some(line => line.includes('Flush skipped') && line.includes('below-min-buffer')),
+        'Doubao AUC should explain when no REST upload happened because the final buffer was too small',
+    );
+});
+
 test('RestSTT Doubao AUC auto mode enables speaker separation for supported language', async () => {
     const { RestSTT } = await loadRestSTT();
     const stt = new RestSTT('doubao-auc', 'test-api-key');
