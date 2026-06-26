@@ -150,7 +150,7 @@ export class SkillActivationManager {
       const skill = SkillsManager.getInstance().getSkill(activation.skillId);
       if (!skill) continue;
 
-      const promptBlock = (SkillsManager.getInstance().buildPromptBlock as any)(skill, {
+      const promptBlock = SkillsManager.getInstance().buildPromptBlock(skill, {
         maxTokens: request.maxPromptTokens ?? DEFAULT_SKILL_PROMPT_TOKENS,
       });
 

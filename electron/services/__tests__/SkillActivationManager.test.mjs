@@ -169,4 +169,22 @@ describe('SkillActivationManager', () => {
     assert.equal(manager.detectTrigger('The customer said they want a summary next week.'), null);
     assert.equal(manager.detectTrigger('We discussed humanizing the product roadmap as a metaphor.'), null);
   });
+
+  test('resolved prompt block respects maxPromptTokens and records truncation marker', () => {
+    SettingsManager.getInstance().set('defaultActiveSkillIds', ['humanize-ai-text']);
+    const manager = SkillActivationManager.getInstance();
+
+    const resolved = manager.resolveActiveSkill({
+      requestType: 'what_to_answer',
+      latestText: 'How should I answer?',
+      now: 1_000,
+      maxPromptTokens: 120,
+    });
+
+    assert.ok(resolved);
+    assert.ok(resolved.promptBlock.length < 1_200, `prompt block too large: ${resolved.promptBlock.length}`);
+    assert.match(resolved.promptBlock, /skill_instructions_truncated/);
+    assert.match(resolved.promptBlock, /<active_skill/);
+    assert.match(resolved.promptBlock, /<\/active_skill>/);
+  });
 });
