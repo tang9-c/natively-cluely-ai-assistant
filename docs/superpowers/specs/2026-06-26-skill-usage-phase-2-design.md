@@ -58,7 +58,7 @@ LLMHelper.streamChat/chatWithGemini(..., { activeSkill })
 | `SkillActivationManager` | Own activation priority, expiry, resolution for `what_to_answer` and `chat` |
 | `SkillWatcherService` | Inspect safe transcript windows and skill summaries; output decisions |
 | `ipcHandlers.ts` | Resolve active skill for chat, expose watcher settings and suggestion actions |
-| `LLMHelper.ts` | Accept explicit active skill and include it in chat prompt assembly |
+| `LLMHelper.ts` | Accept explicit active skill and use shared chat prompt assembly |
 | `SkillsSettings.tsx` | Show watcher setting, active skills, suggestions, accept/dismiss actions |
 
 ## Main Chat Skill Consumption
@@ -89,7 +89,7 @@ type ActiveSkillForPrompt = {
 
 Main chat does not parse `/skill-id` or `$skill-id`. If the user types those strings, they remain ordinary chat text in Phase 2.
 
-### Prompt Merge Order
+### Prompt Assembly
 
 Main chat uses this order:
 
@@ -101,6 +101,26 @@ base chat system prompt
 ```
 
 Unlike Phase 1 `WhatToAnswerLLM`, main chat does not make mode and skill mutually exclusive. Mode defines scenario and persona; skill defines the current task/style constraint.
+
+Implementation must not rely on the current `LLMHelper.streamChat()` active-mode injection path to preserve mode for `CHAT_MODE_PROMPT`. Today `CHAT_MODE_PROMPT` is treated as a universal override and skips the generic mode injection path. Phase 2 should add a small shared helper, for example:
+
+```ts
+type ActiveSkillForPrompt = {
+  id: string;
+  name: string;
+  promptBlock: string;
+};
+
+function buildChatSystemPrompt(input: {
+  basePrompt: string;
+  activeModePrompt?: string;
+  activeSkill?: ActiveSkillForPrompt;
+}): string
+```
+
+Both streaming and non-streaming main chat paths must use the same helper so `gemini-chat-stream` and `gemini-chat` produce the same system prompt shape. The helper only assembles trusted prompt blocks. Retrieved mode context stays in user context, not system prompt.
+
+Phase 2 should also extend `SkillActivationManager.resolveActiveSkill()` for `requestType: 'chat'`, but chat resolution must only consume existing default/runtime activations. It must not create hotword-triggered activations from chat text, because ordinary typed chat content like "humanize this sentence" should not unexpectedly mutate activation state.
 
 ### Failure Behavior
 
@@ -164,7 +184,9 @@ Behavior:
 
 ### Decision Source
 
-Phase 2 can start with a deterministic local heuristic for the built-in `humanize-ai-text` skill and keep the interface ready for future cheap-model decisions. If an LLM watcher is used, it must return strict JSON and pass schema validation before any activation or suggestion is created.
+Phase 2 MVP uses a deterministic local decision provider for the built-in `humanize-ai-text` skill. This keeps the watcher testable, cheap, and safe while the UI and activation lifecycle are still being introduced.
+
+The service may define an internal decision-provider interface so a future cheap-model watcher can be added without rewriting the orchestration. That future LLM provider is not part of Phase 2 implementation. If an LLM watcher is added later, it must remain behind `skillsWatcherEnabled`, return strict JSON, and pass schema validation before any activation or suggestion is created.
 
 The watcher should not call full response-generation APIs that stream user-visible answers.
 
@@ -189,6 +211,14 @@ skills:dismiss-watcher-suggestion
 ```
 
 Renderer preload and `src/types/electron.d.ts` must expose matching methods. All new handlers must use `safeHandle()`.
+
+Watcher suggestions must reach the UI without requiring the user to manually refresh Settings. Phase 2 should add a renderer event:
+
+```text
+skill-watcher-suggestion-created
+```
+
+The main process emits this event when `SkillWatcherService` stores a new suggestion. `SkillsSettings.tsx` can still call `skills:list-watcher-suggestions` on mount or refresh, but live delivery should be event-driven, matching the app's existing dynamic-action style.
 
 ### Settings UI
 
@@ -223,8 +253,10 @@ The UI must keep explicit bridge guards. No optional-chain silent calls such as 
 - Watcher rate limit prevents repeated runs.
 - High-confidence watcher decision creates `ephemeral` activation.
 - Medium-confidence watcher decision creates a suggestion, not activation.
+- Medium-confidence watcher suggestion emits `skill-watcher-suggestion-created`.
 - Accepting a watcher suggestion creates activation.
 - Dismissing a watcher suggestion prevents immediate repeat.
+- `requestType: 'chat'` consumes existing activations but does not create hotword activations from chat text.
 - IPC/preload/types tests cover every new watcher channel.
 - `SkillsSettings` static tests cover watcher settings and suggestion bridge guards.
 
