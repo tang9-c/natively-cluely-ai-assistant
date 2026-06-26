@@ -50,6 +50,62 @@ export class WindowHelper {
     this.appState = appState;
   }
 
+  private logOverlayState(label: string): void {
+    if (!this.overlayWindow || this.overlayWindow.isDestroyed()) {
+      console.log('[WindowHelper] Overlay state:', {
+        label,
+        exists: false,
+        currentWindowMode: this.currentWindowMode,
+        isWindowVisible: this.isWindowVisible,
+        platform: process.platform,
+        arch: process.arch,
+      });
+      return;
+    }
+
+    try {
+      console.log('[WindowHelper] Overlay state:', {
+        label,
+        bounds: this.overlayWindow.getBounds(),
+        contentSize: this.overlayWindow.getContentSize(),
+        visible: this.overlayWindow.isVisible(),
+        opacity: this.overlayWindow.getOpacity(),
+        focusable: this.overlayWindow.isFocusable(),
+        alwaysOnTop: this.overlayWindow.isAlwaysOnTop(),
+        currentWindowMode: this.currentWindowMode,
+        isWindowVisible: this.isWindowVisible,
+        platform: process.platform,
+        arch: process.arch,
+      });
+    } catch (err) {
+      console.warn('[WindowHelper] Failed to log overlay state:', err);
+    }
+  }
+
+  private logOverlayDimensionClamp(
+    label: string,
+    requested: { width: number; height: number },
+    applied: { width: number; height: number },
+    minimumHeight: number,
+    maxAllowedHeight: number,
+    currentBounds: Electron.Rectangle,
+    currentContentSize: number[],
+  ): void {
+    if (requested.width === applied.width && requested.height === applied.height) return;
+
+    console.log('[WindowHelper] Overlay dimensions clamped:', {
+      label,
+      requested,
+      applied,
+      minimumHeight,
+      maxAllowedHeight,
+      currentBounds,
+      currentContentSize,
+      platform: process.platform,
+      arch: process.arch,
+    });
+  }
+
   private getDisplayWorkArea(bounds?: Electron.Rectangle): Electron.Rectangle {
     if (bounds) {
       return screen.getDisplayMatching(bounds).workArea;
@@ -106,6 +162,15 @@ export class WindowHelper {
       ? WindowHelper.OVERLAY_MIN_HEIGHT
       : 1;
     const newHeight = Math.min(Math.max(height, minimumHeight), maxAllowedHeight); // min visible expanded overlay, max 90%
+    this.logOverlayDimensionClamp(
+      'setOverlayDimensions',
+      { width, height },
+      { width: newWidth, height: newHeight },
+      minimumHeight,
+      maxAllowedHeight,
+      currentBounds,
+      currentContentSize,
+    );
     const maxX = workArea.x + workArea.width - newWidth;
     const maxY = workArea.y + workArea.height - newHeight;
     const newX = Math.min(Math.max(currentX, workArea.x), maxX);
@@ -142,6 +207,15 @@ export class WindowHelper {
       ? WindowHelper.OVERLAY_MIN_HEIGHT
       : 1;
     const newHeight = Math.min(Math.max(height, minimumHeight), maxAllowedHeight);
+    this.logOverlayDimensionClamp(
+      'setOverlayDimensionsCentered',
+      { width, height },
+      { width: newWidth, height: newHeight },
+      minimumHeight,
+      maxAllowedHeight,
+      currentBounds,
+      currentContentSize,
+    );
 
     // Compute X so the content's horizontal center stays put across the resize.
     const widthDelta = newWidth - currentContentSize[0];
@@ -340,14 +414,20 @@ export class WindowHelper {
           const native = loadNativeModule();
           if (native && typeof native.applyStealthToWindow === 'function') {
             native.applyStealthToWindow(this.overlayWindow.getNativeWindowHandle());
-            console.log('[WindowHelper] Applied stealth NSPanel attributes to overlay');
+            console.log('[WindowHelper] Applied stealth NSPanel attributes to overlay', {
+              platform: process.platform,
+              arch: process.arch,
+            });
+            this.logOverlayState('overlay-ready-to-show-after-stealth');
           } else {
             console.warn(
               '[WindowHelper] applyStealthToWindow unavailable — rebuild native module (npm run build:native) for full stealth',
             );
+            this.logOverlayState('overlay-ready-to-show-stealth-unavailable');
           }
         } catch (e) {
           console.error('[WindowHelper] Failed to apply stealth attributes:', e);
+          this.logOverlayState('overlay-ready-to-show-stealth-error');
         }
       });
     } else if (process.platform === 'win32') {
@@ -723,6 +803,7 @@ export class WindowHelper {
       // Only grab focus for explicit user-initiated shows (not shortcut/ghost shows)
       if (!inactive) this.overlayWindow.focus();
       this.isWindowVisible = true;
+      this.logOverlayState('switchToOverlay-after-show');
     }
 
     // Hide Launcher SECOND

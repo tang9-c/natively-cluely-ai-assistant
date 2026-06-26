@@ -211,6 +211,13 @@ export function loadNativeModule(): NativeModule | null {
             const mod = require(filePath);
             validateNativeModule(mod);
             cached = mod;
+            console.log('[nativeModuleLoader] Loaded native module:', {
+                binary,
+                filePath,
+                platform: process.platform,
+                arch: process.arch,
+                isDev,
+            });
             if (verboseLogging) {
                 console.log(`[nativeModuleLoader] Loaded ${binary} from: ${filePath}`);
             }
