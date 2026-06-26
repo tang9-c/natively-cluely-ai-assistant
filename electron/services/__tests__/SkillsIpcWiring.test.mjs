@@ -121,6 +121,18 @@ test('SkillsSettings renderer guards against a missing bridge instead of silent 
   assert.match(view, /await window\.electronAPI\.skillsOpenFolder\(\)/);
 });
 
+test('SkillsSettings renders skill defaults and auto-trigger controls with explicit bridge guards', () => {
+  const view = read('src/components/settings/SkillsSettings.tsx');
+
+  assert.match(view, /skillsGetSettings/);
+  assert.match(view, /skillsSetSettings/);
+  assert.match(view, /skillsListActivations/);
+  assert.match(view, /skillsAutoTriggerEnabled/);
+  assert.match(view, /defaultActiveSkillIds/);
+  assert.match(view, /typeof window\.electronAPI\?\.skillsGetSettings\s*!==\s*['"]function['"]/);
+  assert.match(view, /typeof window\.electronAPI\?\.skillsSetSettings\s*!==\s*['"]function['"]/);
+});
+
 // ---------------------------------------------------------------------------
 // 2. Generalised wiring invariant — every electronAPI.* method consumed by the
 //    renderer that maps to an ipcRenderer.invoke channel must have a matching
