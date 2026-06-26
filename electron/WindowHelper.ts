@@ -82,6 +82,19 @@ export class WindowHelper {
     }
   }
 
+  private shouldApplyNativeOverlayStealth(): boolean {
+    if (process.platform !== 'darwin') return false;
+    if (process.env.NATIVELY_DISABLE_NATIVE_OVERLAY_STEALTH === '1') return false;
+
+    // The arm64 packaged build has shown a WindowServer state where Electron
+    // reports the overlay visible with valid bounds, but the user cannot see or
+    // recover it. Development runs without the native artifact do not reproduce,
+    // pointing at the extra AppKit/SPI stealth layer rather than the renderer.
+    // Keep the stable Electron panel behavior on Apple Silicon until the native
+    // stealth path has an arm64-specific fix.
+    return process.arch !== 'arm64';
+  }
+
   private logOverlayDimensionClamp(
     label: string,
     requested: { width: number; height: number },
@@ -408,6 +421,16 @@ export class WindowHelper {
       // dock icon out of the way. Existing users see no regression.
       this.overlayWindow.once('ready-to-show', () => {
         if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
+        if (!this.shouldApplyNativeOverlayStealth()) {
+          console.warn('[WindowHelper] Native overlay stealth skipped for this environment', {
+            platform: process.platform,
+            arch: process.arch,
+            disabledByEnv: process.env.NATIVELY_DISABLE_NATIVE_OVERLAY_STEALTH === '1',
+          });
+          this.logOverlayState('overlay-ready-to-show-native-stealth-skipped');
+          return;
+        }
+
         try {
           // eslint-disable-next-line @typescript-eslint/no-var-requires
           const { loadNativeModule } = require('./audio/nativeModuleLoader');

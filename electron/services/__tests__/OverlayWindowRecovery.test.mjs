@@ -48,6 +48,24 @@ test('overlay diagnostics capture state after showing and stealth setup', () => 
   );
 });
 
+test('Apple Silicon overlay skips native AppKit stealth path', () => {
+  assert.match(
+    source,
+    /private shouldApplyNativeOverlayStealth\(\): boolean/,
+    'WindowHelper should gate native overlay stealth behind a dedicated helper',
+  );
+  assert.match(
+    source,
+    /return process\.arch !== 'arm64';/,
+    'native overlay stealth should be disabled on Apple Silicon until the native path is fixed',
+  );
+  assert.match(
+    source,
+    /overlay-ready-to-show-native-stealth-skipped/,
+    'skipping native overlay stealth should be visible in logs',
+  );
+});
+
 test('native module diagnostics identify the loaded architecture-specific binary', () => {
   assert.match(
     nativeLoaderSource,
