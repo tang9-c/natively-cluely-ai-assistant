@@ -46,15 +46,18 @@
      chunkId?: string;
  }
 
- export interface ContextBlock {
-     type: string;
-     trustLevel: TrustLevel;
-     source: string;
-     tokenBudget: number;
-     recency?: number; // ms age
-     evidenceRefs?: EvidenceRef[];
-     content: string;
- }
+export interface ContextBlock {
+    type: string;
+    trustLevel: TrustLevel;
+    source: string;
+    tokenBudget: number;
+    minTokens?: number;
+    priority?: number;
+    canDrop?: boolean;
+    recency?: number; // ms age
+    evidenceRefs?: EvidenceRef[];
+    content: string;
+}
 
  // Ordered list for assembly — trust levels sorted highest to lowest
  export const TRUST_LEVEL_ORDER: TrustLevel[] = [

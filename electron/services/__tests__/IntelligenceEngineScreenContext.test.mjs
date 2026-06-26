@@ -84,8 +84,8 @@ test('runWhatShouldISay forwards dynamic action promptInstruction to WhatToAnswe
   });
 
   engine.whatToAnswerLLM = {
-    async *generateStream(cleanedTranscript, temporalContext, intentResult, receivedImagePaths, receivedScreenContext, promptInstruction) {
-      calls.push({ cleanedTranscript, temporalContext, intentResult, receivedImagePaths, receivedScreenContext, promptInstruction });
+    async *generateStream(cleanedTranscript, temporalContext, intentResult, receivedImagePaths, receivedScreenContext, promptInstruction, uploadedMaterialContext) {
+      calls.push({ cleanedTranscript, temporalContext, intentResult, receivedImagePaths, receivedScreenContext, promptInstruction, uploadedMaterialContext });
       yield 'Acknowledge the objection and ask a discovery question.';
     }
   };
@@ -98,6 +98,37 @@ test('runWhatShouldISay forwards dynamic action promptInstruction to WhatToAnswe
   assert.equal(answer, 'Acknowledge the objection and ask a discovery question.');
   assert.equal(calls.length, 1);
   assert.equal(calls[0].promptInstruction, 'DYNAMIC_ACTION_PROMPT_INSTRUCTION_SENTINEL');
+  assert.equal(calls[0].uploadedMaterialContext, undefined);
+});
+
+test('runWhatShouldISay forwards uploadedMaterialContext separately from promptInstruction', async () => {
+  const { engine, session } = await makeEngine();
+  const calls = [];
+
+  session.addTranscript({
+    speaker: 'interviewer',
+    text: 'What does the uploaded FAQ say about pricing?',
+    timestamp: Date.now(),
+    final: true,
+  });
+
+  engine.whatToAnswerLLM = {
+    async *generateStream(_cleanedTranscript, _temporalContext, _intentResult, _imagePaths, _screenContext, promptInstruction, uploadedMaterialContext) {
+      calls.push({ promptInstruction, uploadedMaterialContext });
+      yield 'Use the uploaded FAQ answer.';
+    }
+  };
+
+  const answer = await engine.runWhatShouldISay(undefined, 0.8, undefined, {
+    skipCooldown: true,
+    promptInstruction: 'DYNAMIC_ACTION_PROMPT_INSTRUCTION_SENTINEL',
+    uploadedMaterialContext: '<uploaded_material_context>FAQ_SENTINEL</uploaded_material_context>',
+  });
+
+  assert.equal(answer, 'Use the uploaded FAQ answer.');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].promptInstruction, 'DYNAMIC_ACTION_PROMPT_INSTRUCTION_SENTINEL');
+  assert.equal(calls[0].uploadedMaterialContext, '<uploaded_material_context>FAQ_SENTINEL</uploaded_material_context>');
 });
 
 test('runWhatShouldISay works without screenContext', async () => {

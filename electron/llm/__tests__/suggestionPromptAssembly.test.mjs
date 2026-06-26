@@ -232,6 +232,7 @@ test('WhatToAnswerLLM uses structured mode event for RAG query and prompt contex
     undefined,
     modeEvent.promptInstruction,
     undefined,
+    undefined,
     modeEvent,
   )) {
     chunks.push(chunk);

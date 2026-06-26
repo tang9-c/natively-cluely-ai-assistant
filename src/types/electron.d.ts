@@ -333,7 +333,7 @@ export interface ElectronAPI {
 
   // Intelligence Mode IPC
   generateAssist: () => Promise<{ insight: string | null }>
-  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string; persist?: boolean; source?: string; modeEvent?: DynamicActionModeEvent }) => Promise<{
+  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string; uploadedMaterialContext?: string; persist?: boolean; source?: string; modeEvent?: DynamicActionModeEvent }) => Promise<{
     answerId?: string;
     answer: string | null;
     question?: string;

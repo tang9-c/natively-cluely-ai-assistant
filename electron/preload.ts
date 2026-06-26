@@ -315,7 +315,7 @@ interface ElectronAPI {
   generateWhatToSay: (
     question?: string,
     imagePaths?: string[],
-    options?: { promptInstruction?: string; persist?: boolean; source?: string; modeEvent?: ModeEventContext },
+    options?: { promptInstruction?: string; uploadedMaterialContext?: string; persist?: boolean; source?: string; modeEvent?: ModeEventContext },
   ) => Promise<{
     answerId?: string;
     answer: string | null;
@@ -1333,7 +1333,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateWhatToSay: (
     question?: string,
     imagePaths?: string[],
-    options?: { promptInstruction?: string; persist?: boolean; source?: string; modeEvent?: ModeEventContext },
+    options?: { promptInstruction?: string; uploadedMaterialContext?: string; persist?: boolean; source?: string; modeEvent?: ModeEventContext },
   ) => ipcRenderer.invoke('generate-what-to-say', question, imagePaths, options),
   generateClarify: () => ipcRenderer.invoke('generate-clarify'),
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) =>

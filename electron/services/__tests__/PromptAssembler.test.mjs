@@ -381,6 +381,58 @@ ANSWER SHAPE: concise
     assert.match(result.userMessage, /UNTRUSTED_REFERENCE_CONTEXT_SENTINEL/);
   });
 
+  test('uploaded material context is included as its own untrusted reference block', async () => {
+    const result = assembler.assemble({
+      ...defaultParams,
+      uploadedMaterialContext: '<uploaded_material_context>UPLOADED_MATERIAL_SENTINEL</uploaded_material_context>',
+    });
+
+    const materialBlock = result.blocks.find(b => b.type === 'uploaded_material_context');
+    const intentBlock = result.blocks.find(b => b.type === 'intent_context');
+    assert.ok(materialBlock, 'uploaded_material_context block should exist');
+    assert.equal(materialBlock.trustLevel, TrustLevels.TrustLevel.UNTRUSTED_REFERENCE);
+    assert.equal(materialBlock.source, 'uploaded_material_rag');
+    assert.equal(intentBlock, undefined, 'uploaded material must not be mixed into intent_context');
+    assert.match(result.userMessage, /UPLOADED_MATERIAL_SENTINEL/);
+  });
+
+  test('global budget truncates uploaded materials and records concrete degradation', async () => {
+    const result = assembler.assemble({
+      ...defaultParams,
+      transcript: 'Interviewer: Please answer from the uploaded FAQ.',
+      uploadedMaterialContext: `<uploaded_material_context>${'Material sentence. '.repeat(1000)}</uploaded_material_context>`,
+      tokenBudget: 700,
+    });
+
+    assert.ok(result.metadata.totalTokensUsed <= 700,
+      `totalTokensUsed (${result.metadata.totalTokensUsed}) should be <= budget`);
+    assert.ok(
+      result.metadata.degradedReasons.includes('uploaded_material_context_truncated'),
+      `expected uploaded material truncation reason, got ${result.metadata.degradedReasons.join(',')}`
+    );
+    assert.ok(
+      result.blocks.some(b => b.type === 'transcript'),
+      'transcript should be preserved before dropping uploaded material context'
+    );
+  });
+
+  test('global budget drops mode context before truncating the current transcript below its floor', async () => {
+    const result = assembler.assemble({
+      ...defaultParams,
+      transcript: 'Current turn detail. '.repeat(500),
+      retrievedModeContext: `<active_mode_retrieved_context>${'Mode reference. '.repeat(1000)}</active_mode_retrieved_context>`,
+      tokenBudget: 500,
+    });
+
+    assert.ok(result.metadata.totalTokensUsed <= 500);
+    assert.ok(
+      result.metadata.degradedReasons.includes('mode_context_dropped') ||
+      result.metadata.degradedReasons.includes('mode_context_truncated'),
+      `expected mode context degradation, got ${result.metadata.degradedReasons.join(',')}`
+    );
+    assert.ok(result.blocks.some(b => b.type === 'transcript'), 'current transcript should remain present');
+  });
+
   // ── Additional: metadata is correctly set ──────────────────────────────────
   test('assemble sets metadata correctly', async () => {
     const result = assembler.assemble({

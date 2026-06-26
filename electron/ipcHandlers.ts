@@ -2713,7 +2713,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       _,
       question?: string,
       imagePaths?: string[],
-      options?: { promptInstruction?: string; persist?: boolean; source?: string; modeEvent?: ModeEventContext },
+      options?: { promptInstruction?: string; uploadedMaterialContext?: string; persist?: boolean; source?: string; modeEvent?: ModeEventContext },
     ) => {
       try {
         let screenContext: any;
@@ -2726,6 +2726,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const answerId = `ans_${startedAt}_${crypto.randomBytes(6).toString('hex')}`;
         const citations: any[] = [];
         const degradedReasons: string[] = [];
+        const contextBudgetDegradedReasons: string[] = [];
 
         const validatedImagePaths: string[] | undefined = imagePaths?.length ? [] : undefined;
 
@@ -2826,6 +2827,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         let promptInstruction = typeof options?.promptInstruction === 'string'
           ? options.promptInstruction
           : undefined;
+        let uploadedMaterialContext = typeof options?.uploadedMaterialContext === 'string'
+          ? options.uploadedMaterialContext
+          : undefined;
         try {
           const searchQuery = typeof question === 'string' && question.trim()
             ? question.trim()
@@ -2846,10 +2850,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               const materialBlock = materialHits
                 .map((hit: any, index: number) => `[${index + 1}] ${hit.title}\n${hit.parentText}`)
                 .join('\n\n');
-              promptInstruction = [
-                promptInstruction,
-                `<uploaded_material_context>\nUse these uploaded materials only when relevant. Citeable source ids are tracked outside the prompt; do not invent unseen sources.\n${materialBlock}\n</uploaded_material_context>`,
-              ].filter(Boolean).join('\n\n');
+              uploadedMaterialContext = `<uploaded_material_context>\nUse these uploaded materials only when relevant. Citeable source ids are tracked outside the prompt; do not invent unseen sources.\n${materialBlock}\n</uploaded_material_context>`;
             } else {
               degradedReasons.push('no_relevant_uploaded_material');
             }
@@ -2871,15 +2872,20 @@ export function initializeIpcHandlers(appState: AppState): void {
             promptInstruction: promptInstruction ?? (typeof options?.promptInstruction === 'string'
               ? options.promptInstruction
               : undefined),
+            uploadedMaterialContext,
             persist: options?.persist === false ? false : undefined,
             source:
               typeof options?.source === 'string'
                 ? options.source
                 : undefined,
             modeEvent: sanitizeModeEvent(options?.modeEvent),
+            contextDegradedReasons: contextBudgetDegradedReasons,
           },
         );
         if (screenContextStatus === 'failed') degradedReasons.push('screen_context_failed');
+        for (const reason of contextBudgetDegradedReasons) {
+          if (!degradedReasons.includes(reason)) degradedReasons.push(reason);
+        }
         const llmHelper = appState.processingHelper?.getLLMHelper?.();
         const contextTrace = DatabaseManager.getInstance().saveAnswerContextTrace({
           answerId,

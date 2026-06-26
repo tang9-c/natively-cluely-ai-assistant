@@ -11,5 +11,8 @@ import { TrustLevel, ContextBlock } from './TrustLevels';
          screenContextAvailable: boolean;
          tokenBudget: number;
          totalTokensUsed: number;
+         droppedBlocks?: string[];
+         truncatedBlocks?: string[];
+         degradedReasons?: string[];
      };
  }

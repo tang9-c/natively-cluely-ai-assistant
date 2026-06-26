@@ -127,11 +127,13 @@ export class WhatToAnswerLLM {
         imagePaths?: string[],
         screenContext?: ScreenContext,
         promptInstruction?: string,
+        uploadedMaterialContext?: string,
         // When set, the skill's promptBlock REPLACES the mode suffix and the
         // mode-context retrieval step is skipped — the skill defines the entire
         // intent and mixing custom-mode reference docs in just dilutes it.
         activeSkill?: { id: string; name: string; promptBlock: string },
-        modeEvent?: ModeEventContext
+        modeEvent?: ModeEventContext,
+        contextDegradedReasons?: string[],
     ): AsyncGenerator<string> {
         const MEASURE = process.env.MEASURE_LATENCY === 'true';
         let tStart = 0, tIntent = 0, tTemporal = 0, tMode = 0, tTrunc = 0, tPrompt = 0, tStream = 0;
@@ -261,16 +263,6 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 }
             }
 
-            const assemblerBudget = 2000
-                + estimateTokens(intentContext || '')
-                + estimateTokens(modeContextBlock)
-                + estimateTokens(screenContext?.ocrText || '')
-                + estimateTokens((temporalContext?.previousResponses || []).join('\n'));
-            const reservedForFit =
-                (this.llmHelper.getCapabilities().outputBudgetTokens || 2000)
-                + assemblerBudget;
-            const workingTranscript = this.llmHelper.fitContextForCurrentModel(cleanedTranscript, reservedForFit);
-
             // ── Step 3: Resolve the system prompt (base + active mode suffix) ─
             // UNIVERSAL_WHAT_TO_ANSWER_PROMPT carries CORE_IDENTITY + EXECUTION_CONTRACT
             // + CONTEXT_INTELLIGENCE_LAYER + SHARED_CODING_RULES. When a mode is
@@ -310,6 +302,30 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 ? `${basePrompt}\n\n## ACTIVE SKILL\n${activeSkill.promptBlock}`
                 : finalPromptOverride;
 
+            const caps = this.llmHelper.getCapabilities();
+            const outputBudget = caps.outputBudgetTokens || 2000;
+            const safetyMargin = Math.max(512, Math.floor((caps.maxContextTokens || 8192) * 0.08));
+            const availableContextBudget = Math.max(
+                1000,
+                (caps.maxContextTokens || 8192)
+                    - estimateTokens(systemPromptOverride)
+                    - outputBudget
+                    - safetyMargin,
+            );
+            const reservedForFit =
+                outputBudget
+                + safetyMargin
+                + estimateTokens(systemPromptOverride)
+                + estimateTokens(intentContext || '')
+                + estimateTokens(modeContextBlock)
+                + estimateTokens(uploadedMaterialContext || '')
+                + estimateTokens(screenContext?.ocrText || '')
+                + estimateTokens((temporalContext?.previousResponses || []).join('\n'));
+            const workingTranscript = this.llmHelper.fitContextForCurrentModel(cleanedTranscript, reservedForFit);
+            if (workingTranscript !== cleanedTranscript) {
+                contextDegradedReasons?.push('transcript_truncated');
+            }
+
             const assembler = new PromptAssembler();
             const packet = assembler.assemble({
                 transcript: workingTranscript,
@@ -318,9 +334,17 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 priorResponses: temporalContext?.hasRecentResponses ? temporalContext.previousResponses : undefined,
                 intentContext,
                 retrievedModeContext: modeContextBlock || undefined,
-                tokenBudget: Math.max(1000, assemblerBudget),
+                uploadedMaterialContext,
+                tokenBudget: availableContextBudget,
                 systemPrompt: systemPromptOverride,
             });
+            if (packet.metadata.degradedReasons?.length) {
+                for (const reason of packet.metadata.degradedReasons) {
+                    if (!contextDegradedReasons?.includes(reason)) {
+                        contextDegradedReasons?.push(reason);
+                    }
+                }
+            }
 
             if (MEASURE) tPrompt = performance.now();
             if (MEASURE) tStream = performance.now();
@@ -334,6 +358,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
             const streamedBuffer: string[] = [];
             const packetScopes: ProviderDataScope[] = [];
             if (modeContextBlock) packetScopes.push('reference_files');
+            if (uploadedMaterialContext) packetScopes.push('reference_files');
             if (temporalContext?.hasRecentResponses && temporalContext.previousResponses.length > 0) packetScopes.push('profile_history');
             for await (const token of this.llmHelper.streamChat(packet.userMessage, imagePaths, undefined, systemPromptOverride, true, true, packetScopes)) {
                 if (MEASURE) {
