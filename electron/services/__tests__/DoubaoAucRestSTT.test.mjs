@@ -234,6 +234,65 @@ test('RestSTT logs when final flush has too little buffered audio to upload', as
     );
 });
 
+test('RestSTT silent-buffer diagnostics include speaker and audio levels', async () => {
+    const { RestSTT } = await loadRestSTT();
+    const stt = new RestSTT('doubao-auc', 'test-api-key', undefined, undefined, {
+        speaker: 'user',
+    });
+    const logs = [];
+    const originalLog = console.log;
+
+    try {
+        console.log = (...args) => {
+            logs.push(args);
+        };
+
+        stt.start();
+        stt.write(Buffer.alloc(8000));
+        stt.finalize();
+    } finally {
+        console.log = originalLog;
+        stt.stop();
+    }
+
+    const silentLog = logs.find((args) => String(args[0]).includes('Skipping silent buffer'));
+    assert.ok(silentLog, 'silent buffer skip should be logged');
+    assert.equal(silentLog[1]?.provider, 'doubao-auc');
+    assert.equal(silentLog[1]?.speaker, 'user');
+    assert.equal(silentLog[1]?.rms, 0);
+    assert.equal(silentLog[1]?.peak, 0);
+    assert.equal(silentLog[1]?.sampleRate, 16000);
+    assert.equal(silentLog[1]?.channels, 1);
+});
+
+test('RestSTT uploads low-volume Doubao AUC microphone audio instead of treating it as silence', async () => {
+    const { RestSTT } = await loadRestSTT();
+    const stt = new RestSTT('doubao-auc', 'test-api-key', undefined, undefined, {
+        speaker: 'user',
+    });
+    const transcripts = [];
+    const rawPcm = Buffer.alloc(8000);
+    for (let offset = 0; offset < rawPcm.length; offset += 2) {
+        rawPcm.writeInt16LE(20, offset);
+    }
+
+    stt.uploadAudio = async () => '低音量也应该上传';
+    stt.on('transcript', event => transcripts.push(event));
+
+    stt.start();
+    stt.write(rawPcm);
+    await stt.drainFinals(1000);
+    stt.stop();
+
+    assert.deepEqual(transcripts, [
+        {
+            text: '低音量也应该上传',
+            isFinal: true,
+            confidence: 1,
+        },
+    ]);
+});
+
 test('RestSTT Doubao AUC auto mode enables speaker separation for supported language', async () => {
     const { RestSTT } = await loadRestSTT();
     const stt = new RestSTT('doubao-auc', 'test-api-key');

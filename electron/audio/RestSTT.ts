@@ -206,6 +206,7 @@ const SAFETY_NET_INTERVAL_MS = 10000;
 
 // Silence threshold - if RMS is below this, skip the upload
 const SILENCE_RMS_THRESHOLD = 50;
+const DOUBAO_AUC_MIC_SILENCE_RMS_THRESHOLD = 15;
 
 export class RestSTT extends BaseSTT {
     private provider: RestSttProvider;
@@ -415,11 +416,19 @@ export class RestSTT extends BaseSTT {
         const rawPcm = Buffer.concat(currentChunks);
 
         // Check for silence (skip upload if audio is too quiet)
-        if (this.isSilent(rawPcm)) {
+        const level = this.measurePcm16Level(rawPcm);
+        const silenceThreshold = this.getSilenceRmsThreshold();
+        if (level.rms < silenceThreshold) {
             console.log(`[RestSTT] Skipping silent buffer`, {
                 provider: this.provider,
+                speaker: this.options.speaker,
                 trigger,
                 bytes: rawPcm.length,
+                rms: level.rms,
+                peak: level.peak,
+                threshold: silenceThreshold,
+                sampleRate: this._sampleRate,
+                channels: this._numChannels,
             });
             return;
         }
@@ -659,19 +668,33 @@ export class RestSTT extends BaseSTT {
      * Check if audio buffer is essentially silence
      */
     protected isSilent(pcmBuffer: Buffer): boolean {
+        return this.measurePcm16Level(pcmBuffer).rms < this.getSilenceRmsThreshold();
+    }
+
+    private getSilenceRmsThreshold(): number {
+        if (this.provider === 'doubao-auc' && this.options.speaker === 'user') {
+            return DOUBAO_AUC_MIC_SILENCE_RMS_THRESHOLD;
+        }
+        return SILENCE_RMS_THRESHOLD;
+    }
+
+    private measurePcm16Level(pcmBuffer: Buffer): { rms: number; peak: number; sampledFrames: number } {
         let sum = 0;
         const step = 20; // Sample every 20th sample for speed
         let count = 0;
+        let peak = 0;
 
         for (let i = 0; i < pcmBuffer.length - 1; i += 2 * step) {
             const sample = pcmBuffer.readInt16LE(i);
+            const abs = Math.abs(sample);
             sum += sample * sample;
+            if (abs > peak) peak = abs;
             count++;
         }
 
-        if (count === 0) return true;
+        if (count === 0) return { rms: 0, peak: 0, sampledFrames: 0 };
         const rms = Math.sqrt(sum / count);
-        return rms < SILENCE_RMS_THRESHOLD;
+        return { rms, peak, sampledFrames: count };
     }
 
     /**
