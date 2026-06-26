@@ -8,7 +8,7 @@ import path from 'path';
 import fs from 'fs';
 import { Chunk } from './SemanticChunker';
 import { DatabaseManager } from '../db/DatabaseManager';
-import { lexicalScore } from './RagLexical';
+import { lexicalScore, tokenizeForLexicalSearch } from './RagLexical';
 
 export interface StoredChunk extends Chunk {
     id: number;
@@ -30,6 +30,15 @@ function parseDateLike(value: unknown): number | null {
     if (typeof value !== 'string' || !value.trim()) return null;
     const parsed = Date.parse(value);
     return Number.isFinite(parsed) ? parsed : null;
+}
+
+function stableNegativeId(value: string): number {
+    let hash = 0;
+    for (let i = 0; i < value.length; i++) {
+        hash = ((hash << 5) - hash) + value.charCodeAt(i);
+        hash |= 0;
+    }
+    return -Math.max(1, Math.abs(hash));
 }
 
 /**
@@ -291,6 +300,96 @@ export class VectorStore {
                     lexicalScore: score,
                     vectorScore: 0,
                 };
+            })
+            .filter((chunk) => (chunk.lexicalScore ?? 0) > 0)
+            .sort((a, b) => (b.lexicalScore ?? 0) - (a.lexicalScore ?? 0))
+            .slice(0, limit);
+    }
+
+    /**
+     * Global meeting-level lexical fallback.
+     *
+     * Some completed meetings can be visible in history before RAG chunks are
+     * available or after an indexing failure. Search meeting title, summary, and
+     * transcript rows directly so "search all meetings Product" can still find a
+     * meeting title such as "Product Price And Case Discussion".
+     */
+    async searchLexicalMeetings(
+        queryText: string,
+        options: {
+            limit?: number;
+        } = {}
+    ): Promise<ScoredChunk[]> {
+        const { limit = 8 } = options;
+        const primaryTerm = tokenizeForLexicalSearch(queryText)[0] ?? queryText.trim();
+        if (!primaryTerm) return [];
+        const rows = this.db.prepare(`
+            SELECT
+                m.id,
+                m.title,
+                m.summary_json,
+                m.start_time AS meeting_start_time_ms,
+                m.created_at AS meeting_created_at,
+                (
+                    SELECT group_concat(t.content, ' ')
+                    FROM transcripts t
+                    WHERE t.meeting_id = m.id
+                      AND lower(t.content) LIKE '%' || lower(?) || '%'
+                    ORDER BY t.timestamp_ms ASC
+                    LIMIT 6
+                ) AS transcript_matches
+            FROM meetings m
+            WHERE lower(COALESCE(m.title, '')) LIKE '%' || lower(?) || '%'
+               OR lower(COALESCE(m.summary_json, '')) LIKE '%' || lower(?) || '%'
+               OR EXISTS (
+                    SELECT 1
+                    FROM transcripts t
+                    WHERE t.meeting_id = m.id
+                      AND lower(t.content) LIKE '%' || lower(?) || '%'
+               )
+            ORDER BY COALESCE(m.start_time, 0) DESC
+            LIMIT 250
+        `).all(primaryTerm, primaryTerm, primaryTerm, primaryTerm) as any[];
+
+        return rows
+            .map((row) => {
+                const title = String(row.title || '').trim();
+                const summary = String(row.summary_json || '').trim();
+                const transcriptMatches = String(row.transcript_matches || '').trim();
+                const haystack = [
+                    title ? `Meeting title: ${title}` : '',
+                    summary,
+                    transcriptMatches,
+                ].filter(Boolean).join('\n');
+                const score = lexicalScore(queryText, haystack);
+                const meetingStartTimeMs = typeof row.meeting_start_time_ms === 'number'
+                    ? row.meeting_start_time_ms
+                    : null;
+                const meetingCreatedAtMs = parseDateLike(row.meeting_created_at);
+                const baseTimeMs = meetingStartTimeMs ?? meetingCreatedAtMs;
+                const text = [
+                    title ? `Meeting title: ${title}` : '',
+                    summary ? `Meeting summary: ${summary}` : '',
+                    transcriptMatches ? `Matching transcript: ${transcriptMatches}` : '',
+                ].filter(Boolean).join('\n');
+
+                return {
+                    id: stableNegativeId(String(row.id)),
+                    meetingId: row.id,
+                    chunkIndex: -1,
+                    speaker: 'Meeting search',
+                    startMs: 0,
+                    endMs: 0,
+                    text,
+                    tokenCount: Math.max(1, Math.ceil(text.length / 4)),
+                    meetingStartTimeMs,
+                    meetingCreatedAtMs,
+                    absoluteStartMs: baseTimeMs,
+                    embedding: undefined as number[] | undefined,
+                    similarity: score,
+                    lexicalScore: score,
+                    vectorScore: 0,
+                } satisfies ScoredChunk;
             })
             .filter((chunk) => (chunk.lexicalScore ?? 0) > 0)
             .sort((a, b) => (b.lexicalScore ?? 0) - (a.lexicalScore ?? 0))

@@ -225,6 +225,8 @@ export class RAGRetriever {
             limit: topK * 2,
         });
         const chunkResults = this.mergeHybridCandidates(vectorChunkResults, lexicalChunkResults, retrievalQuery);
+        const meetingFallbackResults = await this.vectorStore.searchLexicalMeetings(retrievalQuery, { limit: topK });
+        const globalCandidates = this.mergeHybridCandidates(chunkResults, meetingFallbackResults, retrievalQuery);
 
         const summaryResults = await this.vectorStore.searchSummaries(queryEmbedding, 5, spaceKey);
 
@@ -232,7 +234,7 @@ export class RAGRetriever {
         const relevantMeetingIds = new Set(summaryResults.map(s => s.meetingId));
 
         // Boost chunks from meetings with matching summaries
-        const boostedChunks = chunkResults.map(chunk => ({
+        const boostedChunks = globalCandidates.map(chunk => ({
             ...chunk,
             similarity: relevantMeetingIds.has(chunk.meetingId)
                 ? chunk.similarity * 1.2  // 20% boost
