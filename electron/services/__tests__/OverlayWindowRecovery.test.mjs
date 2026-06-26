@@ -9,6 +9,7 @@ const nativeLoaderSource = fs.readFileSync(
   path.join(repoRoot, 'electron/audio/nativeModuleLoader.ts'),
   'utf8',
 );
+const ipcHandlersSource = fs.readFileSync(path.join(repoRoot, 'electron/ipcHandlers.ts'), 'utf8');
 
 test('expanded overlay resize cannot collapse to a 1px invisible window', () => {
   assert.match(
@@ -57,5 +58,22 @@ test('native module diagnostics identify the loaded architecture-specific binary
     nativeLoaderSource,
     /binary,[\s\S]{0,120}filePath,[\s\S]{0,120}platform: process\.platform,[\s\S]{0,120}arch: process\.arch/,
     'native loader diagnostic should include binary path, platform, and CPU architecture',
+  );
+});
+
+test('renderer hide-window cannot physically hide an active meeting overlay', () => {
+  const start = ipcHandlersSource.indexOf("safeHandle('hide-window'");
+  assert.ok(start >= 0, 'hide-window handler must exist');
+  const body = ipcHandlersSource.slice(start, ipcHandlersSource.indexOf("safeHandle('show-overlay'", start));
+
+  assert.match(
+    body,
+    /appState\.getIsMeetingActive\(\)[\s\S]{0,160}windowHelper\.getCurrentWindowMode\(\) === 'overlay'/,
+    'hide-window should guard active overlay meetings before hiding the BrowserWindow',
+  );
+  assert.match(
+    body,
+    /hide-window ignored while meeting overlay is active/,
+    'ignored renderer hide attempts should leave an audit trail in logs',
   );
 });

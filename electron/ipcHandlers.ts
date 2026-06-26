@@ -334,6 +334,17 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('hide-window', async () => {
+    const windowHelper = appState.getWindowHelper();
+    if (
+      appState.getIsMeetingActive() &&
+      windowHelper.getCurrentWindowMode() === 'overlay'
+    ) {
+      console.warn(
+        '[IPC] hide-window ignored while meeting overlay is active; renderer collapse must not hide the overlay window',
+      );
+      return;
+    }
+
     appState.hideMainWindow();
   });
 
