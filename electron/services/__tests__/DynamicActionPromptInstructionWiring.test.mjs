@@ -17,10 +17,18 @@ test('dynamic action accept uses promptInstruction instead of display label/manu
 
   assert.match(mountSource, /handleWhatToSay\(action\.promptInstruction,\s*\{/);
   assert.match(mountSource, /source:\s*'dynamic_action'/);
-  assert.match(mountSource, /persist:\s*false/);
+  assert.match(mountSource, /persist:\s*true/);
   assert.match(mountSource, /modeEvent:\s*options\.modeEvent/);
   assert.doesNotMatch(mountSource, /setInputValue\(action\.label\)/);
   assert.doesNotMatch(mountSource, /handleManualSubmitRef\.current/);
+});
+
+test('dynamic action accepted answers are persisted into meeting usage', () => {
+  const bar = read('src/components/dynamic-actions/DynamicActionBar.tsx');
+
+  assert.match(bar, /type DynamicActionGenerationOptions[\s\S]{0,120}persist:\s*true/);
+  assert.match(bar, /onAcceptAction\(action,\s*\{[\s\S]{0,100}persist:\s*true/);
+  assert.doesNotMatch(bar, /persist:\s*false/);
 });
 
 test('dynamic action accept forwards modeEvent retrieval metadata', () => {

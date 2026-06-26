@@ -11,7 +11,7 @@ const AUTO_TRIGGER_MIN_CONFIDENCE = 0.9;
 
 type DynamicActionGenerationOptions = {
   source: 'dynamic_action';
-  persist: false;
+  persist: true;
   modeEvent: DynamicActionModeEvent;
 };
 
@@ -101,7 +101,7 @@ export const DynamicActionBar: React.FC<Props> = ({
       }
       onAcceptAction(action, {
         source: 'dynamic_action',
-        persist: false,
+        persist: true,
         modeEvent: buildDynamicActionModeEvent(action),
       });
       setActions((prev) => prev.filter((a) => a.id !== action.id));

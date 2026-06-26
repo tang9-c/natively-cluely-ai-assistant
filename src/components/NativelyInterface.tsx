@@ -3863,7 +3863,7 @@ Provide only the answer, nothing else.`;
                 onAcceptAction={(action: DynamicActionPayload, options) => {
                   void handleWhatToSay(action.promptInstruction, {
                     source: 'dynamic_action',
-                    persist: false,
+                    persist: true,
                     modeEvent: options.modeEvent,
                   });
                 }}
