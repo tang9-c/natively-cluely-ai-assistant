@@ -121,6 +121,15 @@ Acceptance:
 
 ## Phase 2: Context Orchestrator
 
+Status: First implementation plan drafted; not implemented yet.
+
+Plan:
+
+- Saved locally at `docs/superpowers/plans/2026-06-25-context-orchestrator.md`.
+- Current plan is a phased migration plan, not a direct all-at-once rewrite.
+- Key correction from review: this feature has broad impact because prompt and context assembly are currently spread across the main answer chain, legacy suggestion path, multiple LLM classes, LLM helper methods, RAG query handlers, and internal structured tasks.
+- First implementation should only migrate the core real-time answer path, then classify remaining LLM paths as migrated, pending, or exempt.
+
 Timeline: 1-2 weeks.
 
 Goal: Stop prompt assembly from becoming scattered across modules. All context entering the LLM should pass through one selection, ranking, and trimming layer.
