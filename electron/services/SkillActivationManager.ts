@@ -121,13 +121,14 @@ export class SkillActivationManager {
   }
 
   public resolveActiveSkill(request: ResolveSkillRequest): ResolvedActiveSkill | null {
-    if (request.requestType !== 'what_to_answer') return null;
+    if (request.requestType !== 'what_to_answer' && request.requestType !== 'chat') return null;
 
     const now = request.now ?? Date.now();
     this.pruneExpired(now);
 
     const hasTurnActivation = this.activations.some((activation) => activation.scope === 'turn');
-    const trigger = !hasTurnActivation && request.latestText && this.getAutoTriggerEnabled()
+    const shouldDetectTrigger = request.requestType === 'what_to_answer';
+    const trigger = shouldDetectTrigger && !hasTurnActivation && request.latestText && this.getAutoTriggerEnabled()
       ? this.detectTrigger(request.latestText)
       : null;
 

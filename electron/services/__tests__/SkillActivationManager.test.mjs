@@ -187,4 +187,61 @@ describe('SkillActivationManager', () => {
     assert.match(resolved.promptBlock, /<active_skill/);
     assert.match(resolved.promptBlock, /<\/active_skill>/);
   });
+
+  test('resolves default active skill for chat requests', () => {
+    SettingsManager.getInstance().set('defaultActiveSkillIds', ['humanize-ai-text']);
+    const manager = SkillActivationManager.getInstance();
+
+    const resolved = manager.resolveActiveSkill({
+      requestType: 'chat',
+      latestText: 'Please rewrite this line.',
+      now: 1_000,
+    });
+
+    assert.ok(resolved, 'expected default skill to resolve for chat');
+    assert.equal(resolved.id, 'humanize-ai-text');
+    assert.equal(resolved.activation.source, 'default');
+    assert.equal(resolved.activation.scope, 'global_default');
+  });
+
+  test('resolves a turn activation for chat and consumes it once', () => {
+    const manager = SkillActivationManager.getInstance();
+    manager.activateSkill({
+      skillId: 'humanize-ai-text',
+      source: 'user',
+      scope: 'turn',
+      now: 1_000,
+    });
+
+    const first = manager.resolveActiveSkill({
+      requestType: 'chat',
+      latestText: 'Make this sound natural.',
+      now: 1_100,
+    });
+    const second = manager.resolveActiveSkill({
+      requestType: 'chat',
+      latestText: 'Make another line natural.',
+      now: 1_200,
+    });
+
+    assert.ok(first, 'expected turn skill to resolve for chat');
+    assert.equal(first.id, 'humanize-ai-text');
+    assert.equal(first.activation.scope, 'turn');
+    assert.equal(second, null);
+  });
+
+  test('does not create hotword activations from chat text', () => {
+    SettingsManager.getInstance().set('defaultActiveSkillIds', []);
+    SettingsManager.getInstance().set('skillsAutoTriggerEnabled', true);
+    const manager = SkillActivationManager.getInstance();
+
+    const resolved = manager.resolveActiveSkill({
+      requestType: 'chat',
+      latestText: 'Can you humanize this answer?',
+      now: 1_000,
+    });
+
+    assert.equal(resolved, null);
+    assert.deepEqual(manager.listActivations(1_100), []);
+  });
 });
