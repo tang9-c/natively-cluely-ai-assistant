@@ -54,6 +54,9 @@ export interface AppSettings {
     localIntentEnhancementEnabled?: boolean;
     defaultActiveSkillIds?: string[];
     skillsAutoTriggerEnabled?: boolean;
+    skillsWatcherEnabled?: boolean;
+    skillsWatcherAutoActivateThreshold?: number;
+    skillsWatcherSuggestThreshold?: number;
     speakerSeparationMode?: 'auto' | 'off';
 }
 
