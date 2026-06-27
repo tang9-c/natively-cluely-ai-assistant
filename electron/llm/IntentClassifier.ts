@@ -52,6 +52,14 @@ export type ConversationIntent =
     | 'render_formula'     // Formula / equation presented
     | 'answer_class_question' // Instructor asks the class
 
+    // ===== FDE mode intents =====
+    | 'fde_discovery'      // Customer workflow, requirements, and stakeholder discovery
+    | 'fde_integration'    // API, data source, auth, SSO, environment, or integration details
+    | 'fde_security'       // Privacy, compliance, permissions, data residency, audit, or PII concerns
+    | 'fde_risk'           // Deployment blocker, dependency, migration risk, or timeline risk
+    | 'fde_success'        // Success criteria, acceptance, pilot outcome, or measurement
+    | 'fde_next_step'      // Concrete next step, owner, rollout plan, or follow-up
+
     // ===== Fallback =====
     | 'general';           // Default fallback
 
@@ -133,6 +141,12 @@ const GENERAL_ANSWER_SHAPES: Record<ConversationIntent, string> = {
     explain_concept: '',
     render_formula: '',
     answer_class_question: '',
+    fde_discovery: '',
+    fde_integration: '',
+    fde_security: '',
+    fde_risk: '',
+    fde_success: '',
+    fde_next_step: '',
 };
 
 const SALES_ANSWER_SHAPES: Partial<Record<ConversationIntent, string>> = {

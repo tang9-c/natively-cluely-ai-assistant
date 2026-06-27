@@ -199,6 +199,27 @@ test('createMode seeds default intent keywords for the selected template', () =>
   assert.ok(rows.some(row => row.intent === 'discovery_probe' && row.keywords_csv.includes('痛点是什么')));
 });
 
+test('FDE modes seed deployment-specific default intent keywords', () => {
+  const fde = ModesManager.getInstance().createMode({
+    name: 'FDE',
+    templateType: 'fde',
+  });
+
+  const rows = db.getIntentKeywords(fde.id);
+  const intents = rows.map(row => row.intent).sort();
+
+  assert.deepEqual(intents, [
+    'fde_discovery',
+    'fde_integration',
+    'fde_next_step',
+    'fde_risk',
+    'fde_security',
+    'fde_success',
+  ]);
+  assert.ok(rows.some(row => row.intent === 'fde_integration' && /API|SSO|数据源/.test(row.keywords_csv)));
+  assert.ok(rows.some(row => row.intent === 'fde_security' && /PII|SOC2|权限/.test(row.keywords_csv)));
+});
+
 test('updateMode persists intent keyword edits without affecting other modes', () => {
   const sales = ModesManager.getInstance().createMode({ name: 'Sales', templateType: 'sales' });
   const team = ModesManager.getInstance().createMode({ name: 'Team', templateType: 'team-meet' });

@@ -39,6 +39,14 @@ export type ConversationIntent =
     | 'render_formula'
     | 'answer_class_question'
 
+    // ===== FDE mode intents =====
+    | 'fde_discovery'
+    | 'fde_integration'
+    | 'fde_security'
+    | 'fde_risk'
+    | 'fde_success'
+    | 'fde_next_step'
+
     // ===== Fallback =====
     | 'general';
 
@@ -74,6 +82,12 @@ const GENERAL_ANSWER_SHAPES: Record<ConversationIntent, string> = {
     explain_concept: '',
     render_formula: '',
     answer_class_question: '',
+    fde_discovery: '',
+    fde_integration: '',
+    fde_security: '',
+    fde_risk: '',
+    fde_success: '',
+    fde_next_step: '',
 };
 
 const SALES_ANSWER_SHAPES: Partial<Record<ConversationIntent, string>> = {
