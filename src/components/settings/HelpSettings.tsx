@@ -79,7 +79,7 @@ const MockAppInterface = () => {
                             style={{ maskImage: 'linear-gradient(to right, transparent, black 10%, black 90%, transparent)' }}
                         >
                             <span className="text-text-secondary inline-flex items-center text-[13px] italic leading-7 opacity-60">
-                                ...and I'd also consider a distributed cache layer for horizontal scaling
+                                ...并考虑为水平扩展引入分布式缓存层
                                 <span className="inline-flex items-center ml-2">
                                     <span className="w-1 h-1 bg-green-500/60 rounded-full animate-pulse" />
                                 </span>
@@ -205,7 +205,7 @@ const MockMeetingInterfaceAnim = () => {
                         <motion.div key="summary" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
                             {/* Overview — plain paragraph + border-b, matches MeetingDetails prose block */}
                             <div className="mb-5 pb-5 border-b border-border-subtle">
-                                <p className="text-sm text-text-secondary leading-relaxed">Discussed microservice architecture for the new payment gateway. Analyzed Redis vs Memcached for caching with a focus on data persistence to prevent race conditions during checkout.</p>
+                                <p className="text-sm text-text-secondary leading-relaxed">讨论了新支付网关的微服务架构。分析了 Redis 与 Memcached 在缓存选型中的差异，重点关注数据持久化以防止结账时的竞态条件。</p>
                             </div>
                             {/* Action Items — h2 heading + dot-bullet list, matches MeetingDetails exactly */}
                             <section className="mb-6">
@@ -290,7 +290,7 @@ const MockMeetingChatAnim = () => {
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle shrink-0">
                 <div className="flex items-center gap-2 text-text-tertiary">
-                    <img src={nativelyIcon} className="w-3.5 h-3.5 force-black-icon opacity-50" alt="logo" />
+                    <img src={nativelyIcon} className="w-3.5 h-3.5 force-black-icon opacity-50" alt="图标" />
                     <span className="text-[13px] font-medium">搜索本次会议</span>
                 </div>
                 <X size={16} className="text-text-tertiary" />
@@ -350,7 +350,7 @@ const MockSearchPillAnim = () => {
                                     <Sparkles size={12} className="text-white" />
                                 </div>
                                 <span className="text-[13px] text-text-primary truncate">
-                                    System
+                                    系统
                                 </span>
                             </div>
 
@@ -359,7 +359,7 @@ const MockSearchPillAnim = () => {
                                     <Search size={12} className="text-text-secondary" />
                                 </div>
                                 <span className="text-[13px] text-text-secondary">
-                                    搜索 "<span className="text-text-primary">"System"</span>
+                                    搜索 "<span className="text-text-primary">"系统"</span>
                                 </span>
                             </div>
                         </div>
@@ -464,7 +464,7 @@ const MockPillControlsAnim = () => {
             {/* Logo → Launcher */}
             <div className="flex items-center gap-3 p-3 bg-bg-elevated border border-border-subtle rounded-xl">
                 <div className="w-8 h-8 rounded-full bg-bg-item-active flex items-center justify-center border border-border-muted shrink-0 shadow-sm">
-                    <img src={nativelyIcon} alt="Logo" className="w-[18px] h-[18px] object-contain force-black-icon opacity-90" />
+                    <img src={nativelyIcon} alt="图标" className="w-[18px] h-[18px] object-contain force-black-icon opacity-90" />
                 </div>
                 <ArrowRight className="w-3.5 h-3.5 text-text-tertiary shrink-0" />
                 <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -479,7 +479,7 @@ const MockPillControlsAnim = () => {
                         </span>
                         <span className="text-[11px] font-medium text-emerald-500">会议进行中</span>
                     </motion.div>
-                    <span className="text-[11px] text-text-secondary leading-snug">— clicking this brings you right back</span>
+                    <span className="text-[11px] text-text-secondary leading-snug">— 点击此处即可快速恢复</span>
                 </div>
             </div>
 
@@ -509,7 +509,7 @@ const MockPillControlsAnim = () => {
                             <EyeOff className="w-3.5 h-3.5 text-text-tertiary" />
                         </motion.div>
                     </div>
-                    <span className="text-[11px] text-text-secondary leading-snug">Toggles entire window — keeps you <strong className="text-text-primary">purely stealth</strong></span>
+                    <span className="text-[11px] text-text-secondary leading-snug">切换整个窗口 — 让你完全<strong className="text-text-primary">隐身</strong></span>
                 </div>
             </div>
 
@@ -525,9 +525,9 @@ const MockPillControlsAnim = () => {
                         transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
                         className="text-[11px] text-red-400 font-medium shrink-0"
                     >
-                        Session ends instantly
+                        会话立即结束
                     </motion.span>
-                    <span className="text-[11px] text-text-tertiary">— returns to launcher</span>
+                    <span className="text-[11px] text-text-tertiary">— 返回启动器</span>
                 </div>
             </div>
 
@@ -548,7 +548,7 @@ const MockFastModeAnim = () => {
                 </motion.div>
                 <div className="text-center">
                     <div className="font-bold text-lg text-text-primary">快速模式已启用</div>
-                    <div className="text-xs text-text-secondary mt-1">Routing via Groq LPU (Response &lt; 0.5s)</div>
+                    <div className="text-xs text-text-secondary mt-1">通过 Groq LPU 路由（响应时间 &lt; 0.5 秒）</div>
                 </div>
             </div>
 
@@ -843,7 +843,7 @@ const SetupGuide = () => {
         <div className="mb-10">
             <div className="mb-7">
                 <h3 className="text-[20px] font-bold text-text-primary tracking-tight leading-tight">快速开始</h3>
-                <p className="text-[13px] text-text-tertiary mt-0.5">Get Natively running in four steps.</p>
+                <p className="text-[13px] text-text-tertiary mt-0.5">四个步骤即可上手 Natively。</p>
             </div>
 
             <div>
