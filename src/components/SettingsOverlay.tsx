@@ -1665,7 +1665,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         </div>
                                                         <div>
                                                             <h3 className="text-sm font-bold text-text-primary">详细调试日志</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">Print detailed audio, STT, and pipeline diagnostics</p>
+                                                            <p className="text-xs text-text-secondary mt-0.5">输出详细的音频、语音转写和管线诊断信息</p>
                                                         </div>
                                                     </div>
                                                     <div
