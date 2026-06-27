@@ -24,6 +24,7 @@ import { SkillsManager } from './services/SkillsManager';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 import type { ModeEventContext } from './llm';
+import type { ChatPromptOptions } from './llm/chatPromptAssembly';
 import type { ResearchProgress } from './services/research/types';
 import { LlmInvalidFormatError } from './services/research/ResearchDossierBuilder';
 import { getOpenAtLoginForPlatform, setOpenAtLoginForPlatform } from './utils/loginItemSettings';
@@ -115,6 +116,44 @@ export function initializeIpcHandlers(appState: AppState): void {
         win.webContents.send(eventName, ...args);
       }
     });
+  };
+
+  const resolveChatPromptOptions = (
+    message: string,
+    skipSystemPrompt?: boolean,
+  ): ChatPromptOptions | undefined => {
+    if (skipSystemPrompt) {
+      return undefined;
+    }
+
+    try {
+      const resolvedSkill = SkillActivationManager.getInstance().resolveActiveSkill({
+        requestType: 'chat',
+        latestText: message,
+      });
+
+      if (resolvedSkill) {
+        console.log('[Skills] Chat active skill resolved', {
+          activeSkillId: resolvedSkill.id,
+          scope: resolvedSkill.activation.scope,
+          source: resolvedSkill.activation.source,
+        });
+      }
+
+      return {
+        activeSkill: resolvedSkill ? {
+          id: resolvedSkill.id,
+          name: resolvedSkill.name,
+          promptBlock: resolvedSkill.promptBlock,
+        } : undefined,
+      };
+    } catch (error) {
+      console.warn(
+        '[Skills] Failed to resolve chat active skill',
+        error instanceof Error ? error.message : String(error),
+      );
+      return undefined;
+    }
   };
 
   // --- NEW Test Helper ---
@@ -405,9 +444,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       options?: { skipSystemPrompt?: boolean },
     ) => {
       try {
+        const chatPromptOptions = resolveChatPromptOptions(message, options?.skipSystemPrompt);
         const result = await appState.processingHelper
           .getLLMHelper()
-          .chatWithGemini(message, imagePaths, context, options?.skipSystemPrompt);
+          .chatWithGemini(message, imagePaths, context, options?.skipSystemPrompt, undefined, chatPromptOptions);
 
         console.log(`[IPC] gemini - chat response received`, { length: result?.length ?? 0 });
 
@@ -554,6 +594,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const systemPromptOverride: string | undefined = options?.skipSystemPrompt
           ? ''
           : CHAT_MODE_PROMPT;
+        const chatPromptOptions = resolveChatPromptOptions(message, options?.skipSystemPrompt);
 
         try {
           // USE streamChat which handles routing
@@ -563,6 +604,9 @@ export function initializeIpcHandlers(appState: AppState): void {
             context,
             systemPromptOverride,
             options?.ignoreKnowledgeMode,
+            false,
+            [],
+            chatPromptOptions,
           );
 
           for await (const token of stream) {
