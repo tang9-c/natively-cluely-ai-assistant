@@ -1962,7 +1962,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         <div>
                                                             <h3 className="text-sm font-bold text-text-primary">版本</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">
-                                                                You are currently using Natively version {packageJson.version}
+                                                                您当前正在使用 Natively 版本 {packageJson.version}
                                                             </p>
                                                         </div>
                                                     </div>
