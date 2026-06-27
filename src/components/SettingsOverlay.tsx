@@ -1911,8 +1911,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <h3 className="text-sm font-bold text-text-primary">AI 响应语言</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">
                                                                 {aiResponseLanguage === 'auto'
-                                                                    ? 'Mirrors user\'s language automatically'
-                                                                    : 'Language for AI suggestions and notes'
+                                                                    ? '自动镜像用户的语言'
+                                                                    : 'AI 建议和笔记使用的语言'
                                                                 }
                                                             </p>
                                                         </div>
