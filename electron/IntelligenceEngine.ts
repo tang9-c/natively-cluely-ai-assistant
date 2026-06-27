@@ -21,6 +21,9 @@ import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEng
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
 import { ScreenContext } from './services/screen/types';
 import { SettingsManager } from './services/SettingsManager';
+import { SkillActivationManager } from './services/SkillActivationManager';
+import { SkillsManager } from './services/SkillsManager';
+import { SkillWatcherService, type SkillWatcherSuggestion } from './services/SkillWatcherService';
 import { isLocalIntentClassifierAvailable } from './services/LocalModelManager';
 import { ModesManager } from './services/ModesManager';
 import { keywordRowsToMap } from './llm/IntentKeywordDefaults';
@@ -76,6 +79,7 @@ export interface IntelligenceModeEvents {
     // newly created candidate action (post-dedupe). Renderer subscribes via
     // window.electronAPI.onIntelligenceDynamicAction and renders cards.
     'dynamic_action_emitted': (action: DynamicAction) => void;
+    'skill_watcher_suggestion_created': (suggestion: SkillWatcherSuggestion) => void;
 }
 
 /**
@@ -406,6 +410,9 @@ export class IntelligenceEngine extends EventEmitter {
             this.detectConfirmAndEmitDynamicActions(segment).catch((err) => {
                 console.warn('[IntelligenceEngine] detectConfirmAndEmitDynamicActions failed', (err as Error)?.message);
             });
+            this.runSkillWatcher(segment).catch((err) => {
+                console.warn('[IntelligenceEngine] runSkillWatcher failed', (err as Error)?.message);
+            });
         }
 
     }
@@ -509,6 +516,59 @@ export class IntelligenceEngine extends EventEmitter {
         // is a *new* candidate — safe to forward to renderer for rendering.
         for (const action of newActions) {
             this.emit('dynamic_action_emitted', action);
+        }
+    }
+
+    private async runSkillWatcher(segment: TranscriptSegment): Promise<void> {
+        if (segment.speaker !== 'interviewer' && segment.speaker !== 'user') {
+            return;
+        }
+        if (!segment.text?.trim()) {
+            return;
+        }
+
+        const watcher = SkillWatcherService.getInstance();
+        const skills = SkillsManager.getInstance().listSkills().map((skill) => ({
+            id: skill.id,
+            name: skill.name,
+            description: skill.description,
+            source: skill.source,
+        }));
+        const transcriptWindow = this.session.getFullTranscript().slice(-12).map((item) => ({
+            speaker: item.speaker,
+            text: item.text,
+            timestamp: item.timestamp,
+        }));
+        const activations = SkillActivationManager.getInstance().listActivations();
+
+        const decision = watcher.evaluate({
+            transcriptWindow,
+            skills,
+            activations,
+        });
+
+        if (decision.action === 'activate') {
+            SkillActivationManager.getInstance().activateSkill({
+                skillId: decision.skillId,
+                source: 'auto',
+                scope: 'ephemeral',
+                ttlMs: 3 * 60 * 1000,
+                reason: decision.reason,
+            });
+            console.log('[Skills] Watcher activated skill', {
+                skillId: decision.skillId,
+                scope: decision.scope,
+                confidence: decision.confidence,
+                action: decision.action,
+            });
+            return;
+        }
+
+        if (decision.action === 'suggest') {
+            const suggestion = watcher.listSuggestions().find((item) => item.id === decision.id);
+            if (suggestion) {
+                this.emit('skill_watcher_suggestion_created', suggestion);
+            }
         }
     }
 
@@ -787,6 +847,13 @@ export class IntelligenceEngine extends EventEmitter {
             );
 
             const screenContext = options?.screenContext;
+            const resolvedSkill = options?.activeSkill
+                ? options.activeSkill
+                : SkillActivationManager.getInstance().resolveActiveSkill({
+                    requestType: 'what_to_answer',
+                    latestText: question || lastInterviewerTurn || preparedTranscript,
+                }) || undefined;
+
             console.log('[IntelligenceEngine] Temporal RAG', {
                 previousResponses: temporalContext.previousResponses.length,
                 tone: temporalContext.toneSignals[0]?.type || 'neutral',
@@ -796,6 +863,7 @@ export class IntelligenceEngine extends EventEmitter {
                 imageCount: imagePaths?.length || 0,
                 screenOcrAvailable: Boolean(screenContext?.ocrText),
                 screenOcrTextLength: screenContext?.ocrText?.length || 0,
+                activeSkillId: resolvedSkill?.id,
             });
 
             const generationId = ++this.currentGenerationId;
@@ -810,7 +878,7 @@ export class IntelligenceEngine extends EventEmitter {
                 screenContext,
                 options?.promptInstruction,
                 options?.uploadedMaterialContext,
-                options?.activeSkill,
+                resolvedSkill,
                 options?.modeEvent,
                 options?.contextDegradedReasons,
             );
@@ -1269,5 +1337,7 @@ export class IntelligenceEngine extends EventEmitter {
         }
         this.speculativeText = null;
         this.speculativeTextExpiry = Infinity;
+        SkillActivationManager.getInstance().clearMeetingActivations();
+        SkillWatcherService.getInstance().clearSessionState();
     }
 }

@@ -18,11 +18,14 @@ import {
 } from './permissions/macPermissionHealth';
 import { CodexCliService } from './services/CodexCliService';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
+import { SkillActivationManager, type ActivateSkillInput, type SkillActivationScope } from './services/SkillActivationManager';
+import { SkillWatcherService } from './services/SkillWatcherService';
 import { SkillsManager } from './services/SkillsManager';
 
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 import type { ModeEventContext } from './llm';
+import type { ChatPromptOptions } from './llm/chatPromptAssembly';
 import type { ResearchProgress } from './services/research/types';
 import { LlmInvalidFormatError } from './services/research/ResearchDossierBuilder';
 import { getOpenAtLoginForPlatform, setOpenAtLoginForPlatform } from './utils/loginItemSettings';
@@ -114,6 +117,44 @@ export function initializeIpcHandlers(appState: AppState): void {
         win.webContents.send(eventName, ...args);
       }
     });
+  };
+
+  const resolveChatPromptOptions = (
+    message: string,
+    skipSystemPrompt?: boolean,
+  ): ChatPromptOptions | undefined => {
+    if (skipSystemPrompt) {
+      return undefined;
+    }
+
+    try {
+      const resolvedSkill = SkillActivationManager.getInstance().resolveActiveSkill({
+        requestType: 'chat',
+        latestText: message,
+      });
+
+      if (resolvedSkill) {
+        console.log('[Skills] Chat active skill resolved', {
+          activeSkillId: resolvedSkill.id,
+          scope: resolvedSkill.activation.scope,
+          source: resolvedSkill.activation.source,
+        });
+      }
+
+      return {
+        activeSkill: resolvedSkill ? {
+          id: resolvedSkill.id,
+          name: resolvedSkill.name,
+          promptBlock: resolvedSkill.promptBlock,
+        } : undefined,
+      };
+    } catch (error) {
+      console.warn(
+        '[Skills] Failed to resolve chat active skill',
+        error instanceof Error ? error.message : String(error),
+      );
+      return undefined;
+    }
   };
 
   // --- NEW Test Helper ---
@@ -415,9 +456,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       options?: { skipSystemPrompt?: boolean },
     ) => {
       try {
+        const chatPromptOptions = resolveChatPromptOptions(message, options?.skipSystemPrompt);
         const result = await appState.processingHelper
           .getLLMHelper()
-          .chatWithGemini(message, imagePaths, context, options?.skipSystemPrompt);
+          .chatWithGemini(message, imagePaths, context, options?.skipSystemPrompt, undefined, chatPromptOptions);
 
         console.log(`[IPC] gemini - chat response received`, { length: result?.length ?? 0 });
 
@@ -564,6 +606,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const systemPromptOverride: string | undefined = options?.skipSystemPrompt
           ? ''
           : CHAT_MODE_PROMPT;
+        const chatPromptOptions = resolveChatPromptOptions(message, options?.skipSystemPrompt);
 
         try {
           // USE streamChat which handles routing
@@ -573,6 +616,9 @@ export function initializeIpcHandlers(appState: AppState): void {
             context,
             systemPromptOverride,
             options?.ignoreKnowledgeMode,
+            false,
+            [],
+            chatPromptOptions,
           );
 
           for await (const token of stream) {
@@ -4589,6 +4635,133 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (e: any) {
       console.warn('[IPC] skills:list error:', e?.message || e);
       return [];
+    }
+  });
+
+  safeHandle('skills:get-settings', () => {
+    try {
+      const settings = SettingsManager.getInstance();
+      const defaultActiveSkillIds = settings.get('defaultActiveSkillIds');
+      return {
+        defaultActiveSkillIds: Array.isArray(defaultActiveSkillIds) ? defaultActiveSkillIds : [],
+        skillsAutoTriggerEnabled: settings.get('skillsAutoTriggerEnabled') !== false,
+      };
+    } catch (e: any) {
+      console.warn('[IPC] skills:get-settings error:', e?.message || e);
+      return { defaultActiveSkillIds: [], skillsAutoTriggerEnabled: true };
+    }
+  });
+
+  safeHandle('skills:set-settings', (_event, input: { defaultActiveSkillIds?: unknown; skillsAutoTriggerEnabled?: unknown }) => {
+    try {
+      const settings = SettingsManager.getInstance();
+      const ids = Array.isArray(input?.defaultActiveSkillIds)
+        ? input.defaultActiveSkillIds
+          .filter((id): id is string => typeof id === 'string')
+          .map((id) => id.trim().toLowerCase())
+          .filter(Boolean)
+        : [];
+
+      settings.set('defaultActiveSkillIds', Array.from(new Set(ids)));
+      settings.set('skillsAutoTriggerEnabled', input?.skillsAutoTriggerEnabled !== false);
+      return { success: true };
+    } catch (e: any) {
+      console.warn('[IPC] skills:set-settings error:', e?.message || e);
+      return { success: false, error: e?.message || 'failed to save skill settings' };
+    }
+  });
+
+  safeHandle('skills:list-activations', () => {
+    try {
+      return SkillActivationManager.getInstance().listActivations();
+    } catch (e: any) {
+      console.warn('[IPC] skills:list-activations error:', e?.message || e);
+      return [];
+    }
+  });
+
+  safeHandle('skills:activate', (_event, input: ActivateSkillInput) => {
+    try {
+      return SkillActivationManager.getInstance().activateSkill(input);
+    } catch (e: any) {
+      console.warn('[IPC] skills:activate error:', e?.message || e);
+      return { success: false, error: e?.message || 'failed to activate skill' };
+    }
+  });
+
+  safeHandle('skills:deactivate', (_event, skillId: string, scope?: SkillActivationScope) => {
+    try {
+      return SkillActivationManager.getInstance().deactivateSkill(skillId, scope);
+    } catch (e: any) {
+      console.warn('[IPC] skills:deactivate error:', e?.message || e);
+      return { success: false, error: e?.message || 'failed to deactivate skill' };
+    }
+  });
+
+  safeHandle('skills:get-watcher-settings', () => {
+    try {
+      return SkillWatcherService.getInstance().getSettings();
+    } catch (e: any) {
+      console.warn('[IPC] skills:get-watcher-settings error:', e?.message || e);
+      return {
+        skillsWatcherEnabled: false,
+        skillsWatcherAutoActivateThreshold: 0.86,
+        skillsWatcherSuggestThreshold: 0.65,
+      };
+    }
+  });
+
+  safeHandle('skills:set-watcher-settings', (_event, input: unknown) => {
+    try {
+      const settings = SkillWatcherService.getInstance().setSettings(
+        input && typeof input === 'object' ? input as any : {},
+      );
+      return { success: true, settings };
+    } catch (e: any) {
+      console.warn('[IPC] skills:set-watcher-settings error:', e?.message || e);
+      return { success: false, error: e?.message || 'failed to save watcher settings' };
+    }
+  });
+
+  safeHandle('skills:list-watcher-suggestions', () => {
+    try {
+      return SkillWatcherService.getInstance().listSuggestions();
+    } catch (e: any) {
+      console.warn('[IPC] skills:list-watcher-suggestions error:', e?.message || e);
+      return [];
+    }
+  });
+
+  safeHandle('skills:accept-watcher-suggestion', (_event, suggestionId: string) => {
+    try {
+      const suggestion = SkillWatcherService.getInstance().acceptSuggestion(suggestionId);
+      if (!suggestion) {
+        return { success: false, error: 'Suggestion not found or expired.' };
+      }
+      SkillActivationManager.getInstance().activateSkill({
+        skillId: suggestion.skillId,
+        source: 'auto',
+        scope: suggestion.scope,
+        ttlMs: 3 * 60 * 1000,
+        reason: suggestion.reason,
+      });
+      return { success: true, suggestion };
+    } catch (e: any) {
+      console.warn('[IPC] skills:accept-watcher-suggestion error:', e?.message || e);
+      return { success: false, error: e?.message || 'failed to accept watcher suggestion' };
+    }
+  });
+
+  safeHandle('skills:dismiss-watcher-suggestion', (_event, suggestionId: string) => {
+    try {
+      const suggestion = SkillWatcherService.getInstance().dismissSuggestion(suggestionId);
+      if (!suggestion) {
+        return { success: false, error: 'Suggestion not found.' };
+      }
+      return { success: true, suggestion };
+    } catch (e: any) {
+      console.warn('[IPC] skills:dismiss-watcher-suggestion error:', e?.message || e);
+      return { success: false, error: e?.message || 'failed to dismiss watcher suggestion' };
     }
   });
 

@@ -60,12 +60,76 @@ test('preload exposes skillsRefresh / skillsOpenFolder on window.electronAPI', (
     'skillsRefresh must live inside the electronAPI contextBridge block');
 });
 
+test('skill activation settings handlers are registered in ipcHandlers.ts', () => {
+  const source = read('electron/ipcHandlers.ts');
+
+  for (const channel of [
+    'skills:get-settings',
+    'skills:set-settings',
+    'skills:list-activations',
+    'skills:activate',
+    'skills:deactivate',
+  ]) {
+    assert.ok(findSafeHandle(source, channel) >= 0, `${channel} handler must be registered`);
+  }
+
+  assert.match(source, /SkillActivationManager/);
+  assert.match(source, /defaultActiveSkillIds/);
+  assert.match(source, /skillsAutoTriggerEnabled/);
+});
+
+test('preload exposes skill activation settings methods', () => {
+  const preload = read('electron/preload.ts');
+
+  assert.match(preload, /skillsGetSettings:\s*\(\)\s*=>\s*ipcRenderer\.invoke\(['"]skills:get-settings['"]\)/);
+  assert.match(preload, /skillsSetSettings:\s*\(settings\)\s*=>\s*ipcRenderer\.invoke\(['"]skills:set-settings['"],\s*settings\)/);
+  assert.match(preload, /skillsListActivations:\s*\(\)\s*=>\s*ipcRenderer\.invoke\(['"]skills:list-activations['"]\)/);
+  assert.match(preload, /skillsActivate:\s*\(input\)\s*=>\s*ipcRenderer\.invoke\(['"]skills:activate['"],\s*input\)/);
+  assert.match(preload, /skillsDeactivate:\s*\(skillId,\s*scope\)\s*=>\s*ipcRenderer\.invoke\(['"]skills:deactivate['"],\s*skillId,\s*scope\)/);
+});
+
+test('electron.d.ts declares skill activation settings methods', () => {
+  const types = read('src/types/electron.d.ts');
+
+  assert.match(types, /export interface SkillActivation\s*\{/);
+  assert.match(types, /export interface SkillSettings\s*\{/);
+  assert.match(types, /skillsGetSettings:\s*\(\)\s*=>\s*Promise<SkillSettings>/);
+  assert.match(types, /skillsSetSettings:\s*\(settings:\s*SkillSettings\)\s*=>\s*Promise<\{\s*success:\s*boolean;\s*error\?:\s*string\s*\}>/);
+  assert.match(types, /skillsListActivations:\s*\(\)\s*=>\s*Promise<SkillActivation\[\]>/);
+});
+
 test('electron.d.ts declares SkillSummary and the two skills methods', () => {
   const types = read('src/types/electron.d.ts');
 
   assert.match(types, /export interface SkillSummary\s*\{[\s\S]{0,200}id:\s*string;[\s\S]{0,200}source:\s*['"]builtin['"]\s*\|\s*['"]userData['"]/);
   assert.match(types, /skillsRefresh:\s*\(\)\s*=>\s*Promise<SkillSummary\[\]>/);
   assert.match(types, /skillsOpenFolder:\s*\(\)\s*=>\s*Promise<\{\s*success:\s*boolean;\s*path:\s*string;\s*error\?:\s*string\s*\}>/);
+});
+
+test('watcher skills IPC handlers are registered and exposed', () => {
+  const ipc = read('electron/ipcHandlers.ts');
+  const preload = read('electron/preload.ts');
+  const types = read('src/types/electron.d.ts');
+
+  for (const channel of [
+    'skills:get-watcher-settings',
+    'skills:set-watcher-settings',
+    'skills:list-watcher-suggestions',
+    'skills:accept-watcher-suggestion',
+    'skills:dismiss-watcher-suggestion',
+  ]) {
+    assert.ok(findSafeHandle(ipc, channel) >= 0, `${channel} handler must use safeHandle`);
+    assert.ok(
+      preload.includes(`ipcRenderer.invoke('${channel}'`) || preload.includes(`ipcRenderer.invoke("${channel}"`),
+      `${channel} must be exposed by preload`,
+    );
+  }
+
+  assert.match(preload, /onSkillWatcherSuggestionCreated/);
+  assert.match(preload, /skill-watcher-suggestion-created/);
+  assert.match(types, /interface SkillWatcherSettings/);
+  assert.match(types, /interface SkillWatcherSuggestion/);
+  assert.match(types, /onSkillWatcherSuggestionCreated/);
 });
 
 test('SkillsSettings renderer guards against a missing bridge instead of silent optional-chain', () => {
@@ -81,6 +145,38 @@ test('SkillsSettings renderer guards against a missing bridge instead of silent 
   // After each guard, the call is unconditional (no optional chain on the method).
   assert.match(view, /await window\.electronAPI\.skillsRefresh\(\)/);
   assert.match(view, /await window\.electronAPI\.skillsOpenFolder\(\)/);
+});
+
+test('SkillsSettings renders skill defaults and auto-trigger controls with explicit bridge guards', () => {
+  const view = read('src/components/settings/SkillsSettings.tsx');
+
+  assert.match(view, /skillsGetSettings/);
+  assert.match(view, /skillsSetSettings/);
+  assert.match(view, /skillsListActivations/);
+  assert.match(view, /skillsAutoTriggerEnabled/);
+  assert.match(view, /defaultActiveSkillIds/);
+  assert.match(view, /typeof window\.electronAPI\?\.skillsGetSettings\s*!==\s*['"]function['"]/);
+  assert.match(view, /typeof window\.electronAPI\?\.skillsSetSettings\s*!==\s*['"]function['"]/);
+});
+
+test('SkillsSettings uses explicit watcher bridge guards and live suggestion event', () => {
+  const view = read('src/components/settings/SkillsSettings.tsx');
+
+  for (const method of [
+    'skillsGetWatcherSettings',
+    'skillsSetWatcherSettings',
+    'skillsListWatcherSuggestions',
+    'skillsAcceptWatcherSuggestion',
+    'skillsDismissWatcherSuggestion',
+    'onSkillWatcherSuggestionCreated',
+  ]) {
+    assert.match(view, new RegExp(`typeof window\\.electronAPI\\?\\.${method}\\s*!==\\s*['"]function['"]`));
+  }
+  assert.match(view, /skillsWatcherEnabled/);
+  assert.match(view, /skillsWatcherAutoActivateThreshold/);
+  assert.match(view, /skillsWatcherSuggestThreshold/);
+  assert.match(view, /acceptWatcherSuggestion/);
+  assert.match(view, /dismissWatcherSuggestion/);
 });
 
 // ---------------------------------------------------------------------------

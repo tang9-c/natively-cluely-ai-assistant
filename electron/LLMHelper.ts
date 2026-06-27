@@ -23,6 +23,7 @@ import {
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
+import { buildChatSystemPrompt, type ChatPromptOptions } from "./llm/chatPromptAssembly"
 import type { TranscriptTurn } from "./llm/transcriptCleaner"
 import { deepVariableReplacer, getByPath, injectImageIntoMessages } from './utils/curlUtils';
 import curl2Json from "@bany/curl-to-json";
@@ -1502,7 +1503,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     return blocks;
   }
 
-  public async chatWithGemini(message: string, imagePaths?: string[], context?: string, skipSystemPrompt: boolean = false, alternateGroqMessage?: string): Promise<string> {
+  public async chatWithGemini(message: string, imagePaths?: string[], context?: string, skipSystemPrompt: boolean = false, alternateGroqMessage?: string, chatPromptOptions?: ChatPromptOptions): Promise<string> {
     try {
       console.log(`[LLMHelper] chatWithGemini called`, { messageLength: message.length, imageCount: imagePaths?.length ?? 0, hasContext: Boolean(context) })
 
@@ -1579,8 +1580,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const userContent = context
         ? `CONTEXT:\n${context}\n\nUSER QUESTION:\n${message}`
         : message;
-      const finalGeminiPrompt = this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT);
-      const finalGroqPrompt = alternateGroqMessage || this.injectLanguageInstruction(systemPromptOverride || GROQ_SYSTEM_PROMPT);
+      const buildProviderSystemPrompt = (fallbackPrompt: string) => buildChatSystemPrompt({
+        basePrompt: systemPromptOverride || fallbackPrompt,
+        activeModePrompt: chatPromptOptions?.activeModePrompt,
+        activeSkill: chatPromptOptions?.activeSkill ?? null,
+      });
+      const finalGeminiPrompt = this.injectLanguageInstruction(buildProviderSystemPrompt(HARD_SYSTEM_PROMPT));
+      const finalGroqPrompt = alternateGroqMessage || this.injectLanguageInstruction(buildProviderSystemPrompt(GROQ_SYSTEM_PROMPT));
 
       const combinedMessages = {
         gemini: buildMessage(finalGeminiPrompt),
@@ -1625,8 +1631,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       }
 
       // System prompts for OpenAI/Claude/Codex CLI (skipped if skipSystemPrompt)
-      const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
-      const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || CLAUDE_SYSTEM_PROMPT);
+      const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(buildProviderSystemPrompt(OPENAI_SYSTEM_PROMPT));
+      const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(buildProviderSystemPrompt(CLAUDE_SYSTEM_PROMPT));
 
       // GROQ FAST TEXT OVERRIDE (Text-Only) — gated on picked model so Gemini/Claude/OpenAI
       // selections aren't silently routed to Groq. See streamChat() for matching gate.
@@ -1669,13 +1675,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       }
 
       if (this.activeCurlProvider) {
-        return await this.chatWithCurl(cloudUserContent, skipSystemPrompt ? undefined : this.injectLanguageInstruction(CUSTOM_SYSTEM_PROMPT), cloudImagePaths?.[0]);
+        return await this.chatWithCurl(cloudUserContent, skipSystemPrompt ? undefined : this.injectLanguageInstruction(buildProviderSystemPrompt(CUSTOM_SYSTEM_PROMPT)), cloudImagePaths?.[0]);
       }
 
       if (this.customProvider) {
         console.log(`[LLMHelper] Using Custom Provider: ${this.customProvider.name}`);
         // For non-streaming call — use rich CUSTOM prompts since custom providers can be cloud models
-        const customSystemPrompt = skipSystemPrompt ? "" : this.injectLanguageInstruction(CUSTOM_SYSTEM_PROMPT);
+        const customSystemPrompt = skipSystemPrompt ? "" : this.injectLanguageInstruction(buildProviderSystemPrompt(CUSTOM_SYSTEM_PROMPT));
         const response = await this.executeCustomProvider(
           this.customProvider.curlCommand,
           cloudCombinedMessages.gemini,
@@ -3088,7 +3094,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     systemPromptOverride?: string, // Optional override (defaults to HARD_SYSTEM_PROMPT)
     ignoreKnowledgeMode: boolean = false,
     skipModeInjection: boolean = false,
-    extraDataScopes: ProviderDataScope[] = []
+    extraDataScopes: ProviderDataScope[] = [],
+    chatPromptOptions?: ChatPromptOptions
   ): AsyncGenerator<string, void, unknown> {
 
     // ============================================================
@@ -3225,7 +3232,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // Determine the system prompt to use
     // logic: if override provided, use it. otherwise use HARD_SYSTEM_PROMPT (which is the universal base)
-    const baseSystemPrompt = systemPromptOverride || HARD_SYSTEM_PROMPT;
+    const buildProviderSystemPrompt = (fallbackPrompt: string) => buildChatSystemPrompt({
+      basePrompt: systemPromptOverride || fallbackPrompt,
+      activeModePrompt: chatPromptOptions?.activeModePrompt,
+      activeSkill: chatPromptOptions?.activeSkill ?? null,
+    });
+    const baseSystemPrompt = buildProviderSystemPrompt(HARD_SYSTEM_PROMPT);
     const finalSystemPrompt = this.injectLanguageInstruction(baseSystemPrompt);
     // Profile context is already merged into `context` above; cloud and local
     // providers now receive the same combined context.
@@ -3262,7 +3274,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       if (this.groqClient && !this._groqLocalDisabled) {
         console.log(`[LLMHelper] ⚡️ Groq Fast Text Mode Active (Streaming). Routing to local Groq...`);
         try {
-          const groqSystem = systemPromptOverride || GROQ_SYSTEM_PROMPT;
+          const groqSystem = buildProviderSystemPrompt(GROQ_SYSTEM_PROMPT);
           const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
           // Only thread currentModelId when it's actually a Groq model; otherwise
           // we'd send 'natively' or a Gemini ID as the Groq model name → 400.
@@ -3326,7 +3338,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // OpenAI
     if (this.isOpenAiModel(this.currentModelId) && this.openaiClient) {
-      const openAiSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
+      const openAiSystem = buildProviderSystemPrompt(OPENAI_SYSTEM_PROMPT);
       const finalOpenAiSystem = this.injectLanguageInstruction(openAiSystem);
       if (isMultimodal && imagePaths) {
         yield* this.streamWithOpenaiMultimodal(userContent, imagePaths, finalOpenAiSystem);
@@ -3338,7 +3350,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // Claude
     if (this.isClaudeModel(this.currentModelId) && this.claudeClient) {
-      const claudeSystem = systemPromptOverride || CLAUDE_SYSTEM_PROMPT;
+      const claudeSystem = buildProviderSystemPrompt(CLAUDE_SYSTEM_PROMPT);
       const finalClaudeSystem = this.injectLanguageInstruction(claudeSystem);
       if (isMultimodal && imagePaths) {
         yield* this.streamWithClaudeMultimodal(userContent, imagePaths, finalClaudeSystem);
@@ -3352,13 +3364,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (this.isGroqModel(this.currentModelId) && this.groqClient) {
       if (isMultimodal && imagePaths) {
         // Route multimodal to Groq Llama 4 Scout (vision-capable)
-        const groqSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
+        const groqSystem = buildProviderSystemPrompt(OPENAI_SYSTEM_PROMPT);
         const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
         yield* this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem);
         return;
       }
       // Text-only Groq
-      const groqSystem = systemPromptOverride ? baseSystemPrompt : GROQ_SYSTEM_PROMPT;
+      const groqSystem = buildProviderSystemPrompt(GROQ_SYSTEM_PROMPT);
       const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
       // CACHE: pass system separately so Groq prefix-cache hits across turns.
       yield* this.streamWithGroq(userContent, this.currentModelId, finalGroqSystem);
@@ -3367,7 +3379,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // Doubao
     if (this.isDoubaoModel(this.currentModelId) && this.doubaoClient) {
-      const doubaoSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
+      const doubaoSystem = buildProviderSystemPrompt(OPENAI_SYSTEM_PROMPT);
       const finalDoubaoSystem = this.injectLanguageInstruction(doubaoSystem);
       yield* this.streamWithDoubao(userContent, finalDoubaoSystem, imagePaths);
       return;
@@ -3392,7 +3404,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
                 const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
                 yield* this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem);
               } else {
-                const groqSystem = systemPromptOverride ? baseSystemPrompt : GROQ_SYSTEM_PROMPT;
+                const groqSystem = buildProviderSystemPrompt(GROQ_SYSTEM_PROMPT);
                 const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
                 // intentional: emergency fallback waterfall — use stable GROQ_MODEL baseline, not currentModelId
                 // CACHE: pass system separately so Groq prefix-cache hits across turns.
@@ -4875,9 +4887,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   /**
    * Universal Chat (Non-streaming)
    */
-  public async chat(message: string, imagePaths?: string[], context?: string, systemPromptOverride?: string, skipModeInjection: boolean = false): Promise<string> {
+  public async chat(message: string, imagePaths?: string[], context?: string, systemPromptOverride?: string, skipModeInjection: boolean = false, chatPromptOptions?: ChatPromptOptions): Promise<string> {
     let fullResponse = "";
-    for await (const chunk of this.streamChat(message, imagePaths, context, systemPromptOverride, false, skipModeInjection)) {
+    for await (const chunk of this.streamChat(message, imagePaths, context, systemPromptOverride, false, skipModeInjection, [], chatPromptOptions)) {
       fullResponse += chunk;
     }
     return fullResponse;

@@ -369,3 +369,54 @@ test('WhatToAnswerLLM refuses attached images for a non-vision model without cal
   assert.match(chunks[0], /vision-capable model/);
   assert.match(chunks[0], /qwen3.5:4b/);
 });
+
+test('WhatToAnswerLLM activeSkill injects skill and suppresses active mode suffix', async () => {
+  const { WhatToAnswerLLM } = require(distWhatToAnswerPath);
+  const calls = [];
+  const llmHelper = {
+    getPromptTier: () => 'full',
+    getCapabilities: () => ({ maxContextTokens: 8192, outputBudgetTokens: 1000 }),
+    fitContextForCurrentModel: text => text,
+    async *streamChat(...args) {
+      calls.push(args);
+      yield 'ok';
+    },
+  };
+  const modesManager = {
+    getActiveModeSystemPromptSuffix: () => 'MODE_SENTINEL_SHOULD_NOT_APPEAR',
+    buildRetrievedActiveModeContextBlockHybrid: async () => '',
+    buildRetrievedActiveModeContextBlock: () => '',
+    buildActiveModeContextBlock: () => '',
+  };
+  const answerer = new WhatToAnswerLLM(llmHelper, modesManager);
+
+  const chunks = [];
+  for await (const chunk of answerer.generateStream(
+    'Interviewer: Can you humanize this?',
+    { previousResponses: [], hasRecentResponses: false, toneSignals: [] },
+    { intent: 'answer_question', confidence: 0.9 },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+      id: 'humanize-ai-text',
+      name: 'Humanize AI Text',
+      promptBlock: '<active_skill id="humanize-ai-text">SKILL_SENTINEL</active_skill>',
+    },
+  )) {
+    chunks.push(chunk);
+  }
+
+  assert.equal(chunks.join(''), 'ok');
+  assert.equal(calls.length, 1);
+
+  const [message, _imagePaths, context, systemPromptOverride, ignoreKnowledgeMode, skipModeInjection] = calls[0];
+  assert.equal(context, undefined);
+  assert.equal(ignoreKnowledgeMode, true);
+  assert.equal(skipModeInjection, true);
+  assert.match(systemPromptOverride, /## ACTIVE SKILL/);
+  assert.match(systemPromptOverride, /SKILL_SENTINEL/);
+  assert.doesNotMatch(systemPromptOverride, /MODE_SENTINEL_SHOULD_NOT_APPEAR/);
+  assert.doesNotMatch(message, /SKILL_SENTINEL/);
+});

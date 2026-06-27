@@ -601,6 +601,23 @@ export interface ElectronAPI {
   // Skills
   skillsRefresh: () => Promise<SkillSummary[]>;
   skillsOpenFolder: () => Promise<{ success: boolean; path: string; error?: string }>;
+  skillsGetSettings: () => Promise<SkillSettings>;
+  skillsSetSettings: (settings: SkillSettings) => Promise<{ success: boolean; error?: string }>;
+  skillsListActivations: () => Promise<SkillActivation[]>;
+  skillsActivate: (input: {
+    skillId: string;
+    scope?: SkillActivation['scope'];
+    source?: SkillActivation['source'];
+    ttlMs?: number;
+    reason?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
+  skillsDeactivate: (skillId: string, scope?: SkillActivation['scope']) => Promise<{ success: boolean; error?: string }>;
+  skillsGetWatcherSettings: () => Promise<SkillWatcherSettings>;
+  skillsSetWatcherSettings: (settings: Partial<SkillWatcherSettings>) => Promise<{ success: boolean; settings?: SkillWatcherSettings; error?: string }>;
+  skillsListWatcherSuggestions: () => Promise<SkillWatcherSuggestion[]>;
+  skillsAcceptWatcherSuggestion: (suggestionId: string) => Promise<{ success: boolean; suggestion?: SkillWatcherSuggestion; error?: string }>;
+  skillsDismissWatcherSuggestion: (suggestionId: string) => Promise<{ success: boolean; suggestion?: SkillWatcherSuggestion; error?: string }>;
+  onSkillWatcherSuggestionCreated: (callback: (data: { suggestion: SkillWatcherSuggestion }) => void) => () => void;
 
 }
 
@@ -609,6 +626,38 @@ export interface SkillSummary {
   name: string;
   description: string;
   source: 'builtin' | 'userData';
+}
+
+export interface SkillActivation {
+  skillId: string;
+  scope: 'global_default' | 'meeting' | 'session' | 'turn' | 'ephemeral';
+  source: 'default' | 'user' | 'voice' | 'auto' | 'post_call';
+  activatedAt: number;
+  expiresAt?: number;
+  reason?: string;
+}
+
+export interface SkillSettings {
+  defaultActiveSkillIds: string[];
+  skillsAutoTriggerEnabled: boolean;
+}
+
+export interface SkillWatcherSettings {
+  skillsWatcherEnabled: boolean;
+  skillsWatcherAutoActivateThreshold: number;
+  skillsWatcherSuggestThreshold: number;
+}
+
+export interface SkillWatcherSuggestion {
+  id: string;
+  skillId: string;
+  action: 'suggest';
+  scope: 'meeting' | 'ephemeral';
+  confidence: number;
+  reason: string;
+  expiresAt?: number;
+  createdAt: number;
+  status: 'pending' | 'accepted' | 'dismissed';
 }
 
 declare global {

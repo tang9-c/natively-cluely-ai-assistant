@@ -52,6 +52,11 @@ export interface AppSettings {
     // Chinese intent recognition uses rules + cloud fallback without pulling
     // the large local mDeBERTa artifact.
     localIntentEnhancementEnabled?: boolean;
+    defaultActiveSkillIds?: string[];
+    skillsAutoTriggerEnabled?: boolean;
+    skillsWatcherEnabled?: boolean;
+    skillsWatcherAutoActivateThreshold?: number;
+    skillsWatcherSuggestThreshold?: number;
     speakerSeparationMode?: 'auto' | 'off';
 }
 
