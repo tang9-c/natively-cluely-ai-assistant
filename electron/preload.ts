@@ -30,6 +30,24 @@ interface SkillSettings {
   skillsAutoTriggerEnabled: boolean;
 }
 
+interface SkillWatcherSettings {
+  skillsWatcherEnabled: boolean;
+  skillsWatcherAutoActivateThreshold: number;
+  skillsWatcherSuggestThreshold: number;
+}
+
+interface SkillWatcherSuggestion {
+  id: string;
+  skillId: string;
+  action: 'suggest';
+  scope: 'meeting' | 'ephemeral';
+  confidence: number;
+  reason: string;
+  expiresAt?: number;
+  createdAt: number;
+  status: 'pending' | 'accepted' | 'dismissed';
+}
+
 interface ElectronAPI {
   updateContentDimensions: (dimensions: { width: number; height: number }) => Promise<void>;
   updateContentDimensionsCentered: (dimensions: { width: number; height: number }) => Promise<void>;
@@ -832,6 +850,12 @@ interface ElectronAPI {
     reason?: string;
   }) => Promise<{ success: boolean; error?: string }>;
   skillsDeactivate: (skillId: string, scope?: SkillActivation['scope']) => Promise<{ success: boolean; error?: string }>;
+  skillsGetWatcherSettings: () => Promise<SkillWatcherSettings>;
+  skillsSetWatcherSettings: (settings: Partial<SkillWatcherSettings>) => Promise<{ success: boolean; settings?: SkillWatcherSettings; error?: string }>;
+  skillsListWatcherSuggestions: () => Promise<SkillWatcherSuggestion[]>;
+  skillsAcceptWatcherSuggestion: (suggestionId: string) => Promise<{ success: boolean; suggestion?: SkillWatcherSuggestion; error?: string }>;
+  skillsDismissWatcherSuggestion: (suggestionId: string) => Promise<{ success: boolean; suggestion?: SkillWatcherSuggestion; error?: string }>;
+  onSkillWatcherSuggestionCreated: (callback: (data: { suggestion: SkillWatcherSuggestion }) => void) => () => void;
 }
 
 export const PROCESSING_EVENTS = {
@@ -1035,6 +1059,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   skillsListActivations: () => ipcRenderer.invoke('skills:list-activations'),
   skillsActivate: (input) => ipcRenderer.invoke('skills:activate', input),
   skillsDeactivate: (skillId, scope) => ipcRenderer.invoke('skills:deactivate', skillId, scope),
+  skillsGetWatcherSettings: () => ipcRenderer.invoke('skills:get-watcher-settings'),
+  skillsSetWatcherSettings: (settings) => ipcRenderer.invoke('skills:set-watcher-settings', settings),
+  skillsListWatcherSuggestions: () => ipcRenderer.invoke('skills:list-watcher-suggestions'),
+  skillsAcceptWatcherSuggestion: (suggestionId) => ipcRenderer.invoke('skills:accept-watcher-suggestion', suggestionId),
+  skillsDismissWatcherSuggestion: (suggestionId) => ipcRenderer.invoke('skills:dismiss-watcher-suggestion', suggestionId),
 
 
   onSettingsVisibilityChange: (callback: (isVisible: boolean) => void) => {
@@ -1445,6 +1474,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('intelligence-dynamic-action', subscription);
     return () => {
       ipcRenderer.removeListener('intelligence-dynamic-action', subscription);
+    };
+  },
+  onSkillWatcherSuggestionCreated: (callback: (data: { suggestion: SkillWatcherSuggestion }) => void) => {
+    const subscription = (_: any, data: { suggestion: SkillWatcherSuggestion }) => callback(data);
+    ipcRenderer.on('skill-watcher-suggestion-created', subscription);
+    return () => {
+      ipcRenderer.removeListener('skill-watcher-suggestion-created', subscription);
     };
   },
   acceptDynamicAction: (actionId: string) => ipcRenderer.invoke('dynamic-action:accept', actionId),

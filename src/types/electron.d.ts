@@ -612,6 +612,12 @@ export interface ElectronAPI {
     reason?: string;
   }) => Promise<{ success: boolean; error?: string }>;
   skillsDeactivate: (skillId: string, scope?: SkillActivation['scope']) => Promise<{ success: boolean; error?: string }>;
+  skillsGetWatcherSettings: () => Promise<SkillWatcherSettings>;
+  skillsSetWatcherSettings: (settings: Partial<SkillWatcherSettings>) => Promise<{ success: boolean; settings?: SkillWatcherSettings; error?: string }>;
+  skillsListWatcherSuggestions: () => Promise<SkillWatcherSuggestion[]>;
+  skillsAcceptWatcherSuggestion: (suggestionId: string) => Promise<{ success: boolean; suggestion?: SkillWatcherSuggestion; error?: string }>;
+  skillsDismissWatcherSuggestion: (suggestionId: string) => Promise<{ success: boolean; suggestion?: SkillWatcherSuggestion; error?: string }>;
+  onSkillWatcherSuggestionCreated: (callback: (data: { suggestion: SkillWatcherSuggestion }) => void) => () => void;
 
 }
 
@@ -634,6 +640,24 @@ export interface SkillActivation {
 export interface SkillSettings {
   defaultActiveSkillIds: string[];
   skillsAutoTriggerEnabled: boolean;
+}
+
+export interface SkillWatcherSettings {
+  skillsWatcherEnabled: boolean;
+  skillsWatcherAutoActivateThreshold: number;
+  skillsWatcherSuggestThreshold: number;
+}
+
+export interface SkillWatcherSuggestion {
+  id: string;
+  skillId: string;
+  action: 'suggest';
+  scope: 'meeting' | 'ephemeral';
+  confidence: number;
+  reason: string;
+  expiresAt?: number;
+  createdAt: number;
+  status: 'pending' | 'accepted' | 'dismissed';
 }
 
 declare global {

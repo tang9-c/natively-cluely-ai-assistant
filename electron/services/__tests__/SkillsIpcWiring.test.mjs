@@ -106,6 +106,32 @@ test('electron.d.ts declares SkillSummary and the two skills methods', () => {
   assert.match(types, /skillsOpenFolder:\s*\(\)\s*=>\s*Promise<\{\s*success:\s*boolean;\s*path:\s*string;\s*error\?:\s*string\s*\}>/);
 });
 
+test('watcher skills IPC handlers are registered and exposed', () => {
+  const ipc = read('electron/ipcHandlers.ts');
+  const preload = read('electron/preload.ts');
+  const types = read('src/types/electron.d.ts');
+
+  for (const channel of [
+    'skills:get-watcher-settings',
+    'skills:set-watcher-settings',
+    'skills:list-watcher-suggestions',
+    'skills:accept-watcher-suggestion',
+    'skills:dismiss-watcher-suggestion',
+  ]) {
+    assert.ok(findSafeHandle(ipc, channel) >= 0, `${channel} handler must use safeHandle`);
+    assert.ok(
+      preload.includes(`ipcRenderer.invoke('${channel}'`) || preload.includes(`ipcRenderer.invoke("${channel}"`),
+      `${channel} must be exposed by preload`,
+    );
+  }
+
+  assert.match(preload, /onSkillWatcherSuggestionCreated/);
+  assert.match(preload, /skill-watcher-suggestion-created/);
+  assert.match(types, /interface SkillWatcherSettings/);
+  assert.match(types, /interface SkillWatcherSuggestion/);
+  assert.match(types, /onSkillWatcherSuggestionCreated/);
+});
+
 test('SkillsSettings renderer guards against a missing bridge instead of silent optional-chain', () => {
   const view = read('src/components/settings/SkillsSettings.tsx');
 

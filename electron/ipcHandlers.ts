@@ -19,6 +19,7 @@ import {
 import { CodexCliService } from './services/CodexCliService';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
 import { SkillActivationManager, type ActivateSkillInput, type SkillActivationScope } from './services/SkillActivationManager';
+import { SkillWatcherService } from './services/SkillWatcherService';
 import { SkillsManager } from './services/SkillsManager';
 
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
@@ -4683,6 +4684,73 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (e: any) {
       console.warn('[IPC] skills:deactivate error:', e?.message || e);
       return { success: false, error: e?.message || 'failed to deactivate skill' };
+    }
+  });
+
+  safeHandle('skills:get-watcher-settings', () => {
+    try {
+      return SkillWatcherService.getInstance().getSettings();
+    } catch (e: any) {
+      console.warn('[IPC] skills:get-watcher-settings error:', e?.message || e);
+      return {
+        skillsWatcherEnabled: false,
+        skillsWatcherAutoActivateThreshold: 0.86,
+        skillsWatcherSuggestThreshold: 0.65,
+      };
+    }
+  });
+
+  safeHandle('skills:set-watcher-settings', (_event, input: unknown) => {
+    try {
+      const settings = SkillWatcherService.getInstance().setSettings(
+        input && typeof input === 'object' ? input as any : {},
+      );
+      return { success: true, settings };
+    } catch (e: any) {
+      console.warn('[IPC] skills:set-watcher-settings error:', e?.message || e);
+      return { success: false, error: e?.message || 'failed to save watcher settings' };
+    }
+  });
+
+  safeHandle('skills:list-watcher-suggestions', () => {
+    try {
+      return SkillWatcherService.getInstance().listSuggestions();
+    } catch (e: any) {
+      console.warn('[IPC] skills:list-watcher-suggestions error:', e?.message || e);
+      return [];
+    }
+  });
+
+  safeHandle('skills:accept-watcher-suggestion', (_event, suggestionId: string) => {
+    try {
+      const suggestion = SkillWatcherService.getInstance().acceptSuggestion(suggestionId);
+      if (!suggestion) {
+        return { success: false, error: 'Suggestion not found or expired.' };
+      }
+      SkillActivationManager.getInstance().activateSkill({
+        skillId: suggestion.skillId,
+        source: 'auto',
+        scope: suggestion.scope,
+        ttlMs: 3 * 60 * 1000,
+        reason: suggestion.reason,
+      });
+      return { success: true, suggestion };
+    } catch (e: any) {
+      console.warn('[IPC] skills:accept-watcher-suggestion error:', e?.message || e);
+      return { success: false, error: e?.message || 'failed to accept watcher suggestion' };
+    }
+  });
+
+  safeHandle('skills:dismiss-watcher-suggestion', (_event, suggestionId: string) => {
+    try {
+      const suggestion = SkillWatcherService.getInstance().dismissSuggestion(suggestionId);
+      if (!suggestion) {
+        return { success: false, error: 'Suggestion not found.' };
+      }
+      return { success: true, suggestion };
+    } catch (e: any) {
+      console.warn('[IPC] skills:dismiss-watcher-suggestion error:', e?.message || e);
+      return { success: false, error: e?.message || 'failed to dismiss watcher suggestion' };
     }
   });
 
