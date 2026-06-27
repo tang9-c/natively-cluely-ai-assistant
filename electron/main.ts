@@ -3723,6 +3723,10 @@ export class AppState {
         return [];
       }
     });
+
+    this.intelligenceManager.on('skill_watcher_suggestion_created', (suggestion: any) => {
+      this.broadcast('skill-watcher-suggestion-created', { suggestion });
+    });
   }
 
   public createWindow(): void {
