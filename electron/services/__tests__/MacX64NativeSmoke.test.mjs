@@ -15,7 +15,7 @@ function readJson(rel) {
   return JSON.parse(read(rel));
 }
 
-test('electron-builder mac release targets include Intel x64 and unpack native binaries', () => {
+test('electron-builder mac release targets support both release architectures and keep native binaries unpacked', () => {
   const pkg = readJson('package.json');
   const macTargets = pkg.build.mac.target;
   const arches = new Set(macTargets.flatMap((target) => target.arch));
@@ -24,18 +24,42 @@ test('electron-builder mac release targets include Intel x64 and unpack native b
   assert.ok(arches.has('arm64'), 'mac release must include Apple Silicon arm64');
   assert.ok(pkg.build.files.includes('native-module'), 'native-module must be packaged');
   assert.ok(pkg.build.files.includes('node_modules'), 'native dependencies must be packaged');
+  assert.ok(pkg.build.files.includes('!**/*.map'), 'source maps must be excluded from release packages');
+  assert.ok(pkg.build.files.includes('!dist-electron/electron/test/**'), 'compiled Electron test fixtures must not be packaged');
+  assert.ok(pkg.build.files.includes('!node_modules/electron/**'), 'Electron runtime package must not be bundled in app resources');
+  assert.ok(pkg.build.files.includes('!node_modules/app-builder-bin/**'), 'electron-builder helper binaries must not be bundled in app resources');
   assert.ok(pkg.build.asarUnpack.includes('**/*.node'), '.node files must be unpacked outside app.asar');
   assert.ok(pkg.build.asarUnpack.includes('**/*.dylib'), '.dylib files must be unpacked outside app.asar');
 });
 
-test('native build script produces both macOS native-module artifacts when release build flag is set', () => {
+test('native build script accepts explicit macOS release targets so CI can build one architecture per workflow', () => {
   const src = read('scripts/build-native.js');
+  assert.match(src, /NATIVELY_NATIVE_TARGETS/);
   assert.match(src, /NATIVELY_BUILD_ALL_MAC_ARCHES/);
   assert.match(src, /x86_64-apple-darwin/);
   assert.match(src, /aarch64-apple-darwin/);
   assert.match(src, /index\.darwin-x64\.node/);
   assert.match(src, /index\.darwin-arm64\.node/);
   assert.match(src, /verifyArtifacts\(macTargets\.map/);
+});
+
+test('mac release workflows build one architecture each and upload size audit reports', () => {
+  const intelWorkflow = read('.github/workflows/build-intel-mac.yml');
+  const armWorkflow = read('.github/workflows/build-arm64-mac.yml');
+
+  assert.match(intelWorkflow, /^name:\s*Build Intel Mac$/m);
+  assert.match(intelWorkflow, /NATIVELY_NATIVE_TARGETS:\s*"x86_64-apple-darwin"/);
+  assert.match(intelWorkflow, /npx electron-builder --mac --x64 --publish never/);
+  assert.doesNotMatch(intelWorkflow, /NATIVELY_BUILD_ALL_MAC_ARCHES:\s*"1"/);
+  assert.match(intelWorkflow, /node scripts\/audit-release-size\.js > release\/size-report\.txt/);
+  assert.match(intelWorkflow, /release\/size-report\.txt/);
+
+  assert.match(armWorkflow, /^name:\s*Build ARM64 Mac$/m);
+  assert.match(armWorkflow, /runs-on:\s*macos-latest/);
+  assert.match(armWorkflow, /NATIVELY_NATIVE_TARGETS:\s*"aarch64-apple-darwin"/);
+  assert.match(armWorkflow, /npx electron-builder --mac --arm64 --publish never/);
+  assert.match(armWorkflow, /node scripts\/audit-release-size\.js > release\/size-report\.txt/);
+  assert.match(armWorkflow, /natively-arm64-mac-/);
 });
 
 test('dev Electron startup preflights the native audio artifact before launching', () => {

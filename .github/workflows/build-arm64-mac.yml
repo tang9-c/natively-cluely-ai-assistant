@@ -1,31 +1,15 @@
-# Build an x86_64 (Intel) macOS distributable of Natively on GitHub Actions.
+# Build an arm64 (Apple Silicon) macOS distributable of Natively on GitHub Actions.
 #
 # Trigger: manual (workflow_dispatch) only. Run from the Actions tab in
-# the GitHub UI, or with `gh workflow run build-intel-mac`.
-#
-# Why macos-latest + cross-compile: as of 2026, GitHub's macos-13
-# (Intel x86_64) hosted runner is severely under-provisioned and can sit
-# queued for 30+ minutes. macos-latest (arm64) runners allocate much
-# faster; we use them and cross-compile the Rust native module +
-# better-sqlite3 + keytar + sherpa-onnx-node + sharp to
-# x86_64-apple-darwin via NATIVELY_NATIVE_TARGETS.
-# electron-builder then packages the x64-only artifact (--mac --x64).
-#
-# Tuning notes:
-#   - To switch to native x86_64 (when macos-13 is reliable again),
-#     change runs-on to macos-13 and drop the
-#     NATIVELY_NATIVE_TARGETS env var from the build step.
-#   - CSC_IDENTITY_AUTO_DISCOVERY=false prevents electron-builder from
-#     looking for an Apple cert in the CI keychain (we use ad-hoc signing).
-#   - Bump timeout-minutes to 60-90 if the cold first run exceeds 45.
+# the GitHub UI, or with `gh workflow run build-arm64-mac`.
 
-name: Build Intel Mac
+name: Build ARM64 Mac
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-intel-mac:
+  build-arm64-mac:
     runs-on: macos-latest
     timeout-minutes: 45
 
@@ -44,18 +28,18 @@ jobs:
 
       - name: Build renderer, main, and native module
         env:
-          NATIVELY_NATIVE_TARGETS: "x86_64-apple-darwin"
+          NATIVELY_NATIVE_TARGETS: "aarch64-apple-darwin"
         run: |
           npm run build
           npm run build:electron
           npm run build:native
-          rm -f native-module/index.darwin-arm64.node
+          rm -f native-module/index.darwin-x64.node
 
       - name: Install sharp macOS dependencies
         run: node scripts/ensure-sharp-mac-deps.js
 
-      - name: Package x64 with electron-builder
-        run: npx electron-builder --mac --x64 --publish never
+      - name: Package arm64 with electron-builder
+        run: npx electron-builder --mac --arm64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
@@ -68,7 +52,7 @@ jobs:
       - name: Upload distributable artifacts
         uses: actions/upload-artifact@v5
         with:
-          name: natively-intel-mac-${{ github.run_id }}
+          name: natively-arm64-mac-${{ github.run_id }}
           path: |
             release/*.zip
             release/*.dmg

@@ -24,6 +24,10 @@ test('windows package config ships x64 native dependencies outside asar', () => 
   assert.equal(arches.has('ia32'), false, 'Windows ia32 must stay disabled until native ia32 artifacts are built');
   assert.ok(pkg.build.files.includes('native-module'), 'native-module must be packaged');
   assert.ok(pkg.build.files.includes('node_modules'), 'node_modules must be packaged for native deps');
+  assert.ok(pkg.build.files.includes('!**/*.map'), 'source maps must be excluded from Windows release packages');
+  assert.ok(pkg.build.files.includes('!dist-electron/electron/test/**'), 'compiled Electron test fixtures must not be packaged');
+  assert.ok(pkg.build.files.includes('!node_modules/electron/**'), 'Electron runtime package must not be bundled in app resources');
+  assert.ok(pkg.build.files.includes('!node_modules/electron-winstaller/**'), 'Windows installer build helper must not be bundled in app resources');
   assert.ok(pkg.build.asarUnpack.includes('**/*.node'), '.node files must be unpacked outside app.asar');
   assert.ok(pkg.build.asarUnpack.includes('**/*.dll'), '.dll files must be unpacked outside app.asar on Windows');
 });
@@ -85,4 +89,6 @@ test('windows CI workflow makes toolchain and shell assumptions explicit', () =>
   assert.match(workflow, /shell: bash/);
   assert.match(workflow, /npm run typecheck:electron/);
   assert.match(workflow, /WindowsPackagingSmoke\.test\.mjs/);
+  assert.match(workflow, /node scripts\/audit-release-size\.js > release\/size-report\.txt/);
+  assert.match(workflow, /release\/size-report\.txt/);
 });

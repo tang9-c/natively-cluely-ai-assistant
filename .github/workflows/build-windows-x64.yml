@@ -52,6 +52,10 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
+      - name: Audit release size
+        shell: bash
+        run: node scripts/audit-release-size.js > release/size-report.txt
+
       - name: Upload distributable artifacts
         uses: actions/upload-artifact@v5
         with:
@@ -60,5 +64,6 @@ jobs:
             release/*.exe
             release/*.blockmap
             release/latest.yml
+            release/size-report.txt
           if-no-files-found: error
           retention-days: 14

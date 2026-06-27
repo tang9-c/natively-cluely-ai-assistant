@@ -5,6 +5,10 @@ const path = require('path');
 
 const nativeModulePath = path.join(__dirname, '..', 'native-module');
 const buildAllMacTargets = process.env.NATIVELY_BUILD_ALL_MAC_ARCHES === '1';
+const explicitMacTargets = (process.env.NATIVELY_NATIVE_TARGETS || '')
+  .split(',')
+  .map((target) => target.trim())
+  .filter(Boolean);
 
 function verifyArtifacts(expectedArtifacts) {
   const missing = expectedArtifacts.filter((file) => !fs.existsSync(path.join(nativeModulePath, file)));
@@ -86,20 +90,29 @@ function fixMacOSDylibPaths(nodeFilePath) {
 }
 
 if (os.platform() === 'darwin') {
-  const macTargets = buildAllMacTargets
-    ? ['x86_64-apple-darwin', 'aarch64-apple-darwin']
-    : [os.arch() === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin'];
-
-  console.log(
-    buildAllMacTargets
-      ? 'Building for macOS (darwin) for both x64 and arm64...'
-      : `Building for macOS (darwin) for current architecture only: ${macTargets[0]}`
-  );
-
   const artifactMap = {
     'x86_64-apple-darwin': 'index.darwin-x64.node',
     'aarch64-apple-darwin': 'index.darwin-arm64.node',
   };
+
+  const invalidTargets = explicitMacTargets.filter((target) => !artifactMap[target]);
+  if (invalidTargets.length > 0) {
+    throw new Error(`Invalid NATIVELY_NATIVE_TARGETS value(s): ${invalidTargets.join(', ')}`);
+  }
+
+  const macTargets = explicitMacTargets.length > 0
+    ? explicitMacTargets
+    : buildAllMacTargets
+      ? ['x86_64-apple-darwin', 'aarch64-apple-darwin']
+      : [os.arch() === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin'];
+
+  console.log(
+    explicitMacTargets.length > 0
+      ? `Building for explicit macOS target(s): ${macTargets.join(', ')}`
+      : buildAllMacTargets
+        ? 'Building for macOS (darwin) for both x64 and arm64...'
+        : `Building for macOS (darwin) for current architecture only: ${macTargets[0]}`
+  );
 
   const clangLibPath = getClangLibPath();
   if (clangLibPath) {

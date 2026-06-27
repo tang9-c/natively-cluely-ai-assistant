@@ -19,7 +19,10 @@ const findTs = (dir) => {
   const results = [];
   for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, f.name);
-    if (f.isDirectory()) results.push(...findTs(full));
+    if (f.isDirectory()) {
+      if (f.name === '__tests__' || f.name === 'test') continue;
+      results.push(...findTs(full));
+    }
     else if (f.name.endsWith('.ts') && !f.name.endsWith('.d.ts')) results.push(full);
   }
   return results;
@@ -44,7 +47,7 @@ build({
   format: 'cjs',          // Electron loads package.json main as CommonJS in this repo
                           // (package.json has no "type": "module").
   external: ['electron', 'better-sqlite3', 'keytar', 'sqlite-vec', 'sherpa-onnx-node'],
-  sourcemap: true,
+  sourcemap: process.env.NATIVELY_ELECTRON_SOURCEMAP === '1',
   jsx: 'automatic',
   loader: {
     '.ts': 'ts',

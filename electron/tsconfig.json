@@ -6,7 +6,7 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "noImplicitAny": true,
-    "sourceMap": true,
+    "sourceMap": false,
     "jsx": "react-jsx",
     "baseUrl": ".",
     "rootDir": "..",
