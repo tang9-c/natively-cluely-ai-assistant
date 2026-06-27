@@ -1006,8 +1006,8 @@ export const HelpSettings: React.FC = () => {
                         <MockProviderSelectionAnim />
 
                         <div className="space-y-4 pt-2">
-                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">API Keys & Testing</h4>
-                            <p className="text-xs text-text-secondary">We strongly recommend testing connections before jumping into a live meeting. The system shows successful pings or explicit errors if credits/permissions fail.</p>
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">API 密钥与测试</h4>
+                            <p className="text-xs text-text-secondary">强烈建议在进入正式会议前先测试连接。如果额度或权限异常，系统会显示成功的 ping 或明确的错误信息。</p>
 
                             <MockApiKeyFlowAnim />
                         </div>
@@ -1018,7 +1018,7 @@ export const HelpSettings: React.FC = () => {
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
                                     <span>1. Google Cloud STT</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.cloud.google.com/apis/credentials') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.cloud.google.com/apis/credentials') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
                                     使用 Service Account JSON 而非 API 密钥。你必须创建一个 GCP 项目，激活 Cloud Speech API，并在 IAM 下创建 Service Account。下载 JSON 密钥，然后拖放到音频设置中的框内。
@@ -1028,7 +1028,7 @@ export const HelpSettings: React.FC = () => {
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
                                     <span>2. ElevenLabs</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://elevenlabs.io/app/settings/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://elevenlabs.io/app/settings/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
                                     为"对话式 AI"流式集成创建自定义 API 密钥时，你必须显式启用 <strong>convai.conversations.create</strong> 和 <strong>assistants.list</strong>。
@@ -1040,7 +1040,7 @@ export const HelpSettings: React.FC = () => {
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
                                     <span>3. Groq</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.groq.com/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.groq.com/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
                                     通过 LPU 提供超快速的 Whisper 响应。密钥以 <span className={kbdClass}>gsk_</span> 开头。不需要特殊权限。
@@ -1050,7 +1050,7 @@ export const HelpSettings: React.FC = () => {
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
                                     <span>4. OpenAI</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://platform.openai.com/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://platform.openai.com/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
                                     使用标准 OpenAI 密钥（<span className={kbdClass}>sk-</span>）。注意：此音频密钥与"AI 提供商"下的 AI 生成密钥是独立的。
@@ -1060,7 +1060,7 @@ export const HelpSettings: React.FC = () => {
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
                                     <span>5. Deepgram</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.deepgram.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.deepgram.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
                                     极其精确的流式转录（Nova-2 模型）。密钥在 Deepgram 控制台中按需生成。
@@ -1070,30 +1070,30 @@ export const HelpSettings: React.FC = () => {
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
                                     <span>6. Azure</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://portal.azure.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://portal.azure.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Requires establishing Azure Speech Services. <strong>重要</strong>: You must also specify an Azure Region alongside your key (e.g. <em>eastus</em>, <em>westeurope</em>) or requests will bounce.
+                                    需要先开通 Azure 语音服务。<strong>重要</strong>：你必须在密钥之外指定 Azure 区域（例如 <em>eastus</em>、<em>westeurope</em>），否则请求会被拒。
                                 </p>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
                                     <span>7. IBM Watson</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://cloud.ibm.com/catalog/services/speech-to-text') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://cloud.ibm.com/catalog/services/speech-to-text') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Create a Watson Speech to Text resource in IBM Cloud and generate a set of API credentials.
+                                    在 IBM Cloud 中创建 Watson 语音转文本资源，并生成一组 API 凭据。
                                 </p>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
                                     <span>8. Soniox</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.soniox.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.soniox.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Provides high-end medical/law tier transcriptions using their standard dashboard API Key.
+                                    使用其标准控制台 API 密钥提供高质量的医疗/法律级别转录。
                                 </p>
                             </div>
                         </div>
