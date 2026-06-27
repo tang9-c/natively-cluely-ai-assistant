@@ -2035,7 +2035,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     <div className="flex items-center justify-between mb-3">
                                                         <label className="flex items-center gap-2 text-xs font-medium text-text-secondary uppercase tracking-wide">
                                                             <Eye size={13} className="text-text-secondary" />
-                                                            Interface Opacity
+                                                            覆盖层不透明度
                                                         </label>
                                                         <span className="opacity-percent-label text-xs font-semibold text-text-primary tabular-nums">
                                                             {Math.round(overlayOpacity * 100)}%
@@ -2063,8 +2063,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     </div>
 
                                                     <p className="text-xs text-text-tertiary mt-2">
-                                                        Controls the visibility of the in-meeting overlay.{' '}
-                                                        <span className="text-text-secondary">Hold the slider to preview.</span>
+                                                        控制会议中覆盖层的可见性。{' '}
+                                                        <span className="text-text-secondary">按住滑块可预览效果。</span>
                                                     </p>
                                                 </div>
 
