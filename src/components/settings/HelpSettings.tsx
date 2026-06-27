@@ -1215,7 +1215,7 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="4. Natively 界面操作" icon={<Monitor className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">When initialized, Natively hides itself visually while remaining active as a persistent translucent overlay. This is your command center.</p>
+                        <p className="text-[13px]">启动后，Natively 会以视觉上隐藏但始终活跃的半透明覆盖层形式存在。这是你的指挥中心。</p>
 
                         <div className="relative w-full flex flex-col p-2 sm:p-5 bg-bg-main rounded-[26px] border border-border-subtle shadow-inner">
                             <MockAppInterface />
@@ -1225,7 +1225,7 @@ export const HelpSettings: React.FC = () => {
                         {/* Quick Actions & Hotkeys */}
                         <div className="mt-4 mb-3 flex items-center gap-3">
                             <div className="flex-1 h-px bg-border-subtle" />
-                            <span className="text-[10px] font-semibold text-text-tertiary uppercase tracking-widest">Quick Actions & Hotkeys</span>
+                            <span className="text-[10px] font-semibold text-text-tertiary uppercase tracking-widest">快速操作与快捷键</span>
                             <div className="flex-1 h-px bg-border-subtle" />
                         </div>
 
@@ -1309,16 +1309,16 @@ export const HelpSettings: React.FC = () => {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl shadow-sm hover:border-border-muted transition-colors group">
                                 <h4 className="text-[14px] font-bold text-text-primary flex items-center gap-2 mb-2">
-                                    <FileText className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" /> Summary Execution
+                                    <FileText className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" /> 摘要生成
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    会议一结束，Natively 就会触发本地后台任务 to compress the entire raw audio transcript into clean, formatted markdown representing structural overviews and explicit action items.
+                                    会议一结束，Natively 就会触发本地后台任务，把整段原始音频转录压缩成干净的格式化 markdown，包含结构化的概览和明确的行动项。
                                 </p>
                             </div>
 
                             <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl shadow-sm hover:border-border-muted transition-colors group">
                                 <h4 className="text-[14px] font-bold text-text-primary flex items-center gap-2 mb-2">
-                                    <Volume2 className="w-4 h-4 text-emerald-500 group-hover:scale-110 transition-transform" /> Raw Transcripts
+                                    <Volume2 className="w-4 h-4 text-emerald-500 group-hover:scale-110 transition-transform" /> 原始转录
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
                                     深入精确的对话时间线。说话人分离尝试使用音量阈值区分"我"和"对方"，捕获所有实际说出的话及时间戳。
@@ -1327,26 +1327,26 @@ export const HelpSettings: React.FC = () => {
 
                             <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl shadow-sm hover:border-border-muted transition-colors group">
                                 <h4 className="text-[14px] font-bold text-text-primary flex items-center gap-2 mb-2">
-                                    <Cpu className="w-4 h-4 text-purple-500 group-hover:scale-110 transition-transform" /> Usage & Storage
+                                    <Cpu className="w-4 h-4 text-purple-500 group-hover:scale-110 transition-transform" /> 用量与存储
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    View exactly how many tokens the AI consumed globally across the meeting, tracking visual and textual inputs separately.
+                                    查看会议过程中 AI 全局消耗的 token 数量，区分视觉和文本输入分别统计。
                                 </p>
                             </div>
                         </div>
 
                         <div className="border-t border-border-subtle pt-6">
                             <h4 className="font-bold text-sm text-text-primary flex items-center gap-2 mb-4">
-                                <MessageSquare className="w-4 h-4 text-accent-primary" /> In-Meeting Semantic Search
+                                <MessageSquare className="w-4 h-4 text-accent-primary" /> 会议内语义搜索
                             </h4>
-                            <p className="text-[13px] mb-6">Instead of re-reading the entire transcript to find what happened, use the attached RAG interface pinned to the bottom of the Meeting details window.</p>
+                            <p className="text-[13px] mb-6">不用重新阅读整段转录来查找发生了什么，使用会议详情窗口底部的 RAG 检索界面即可。</p>
 
                             <MockMeetingChatAnim />
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-6">
                                 <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl shadow-sm hover:border-border-muted transition-colors group">
                                     <h4 className="text-[14px] font-bold text-text-primary flex items-center gap-2 mb-2">
-                                        <Search className="w-4 h-4 text-orange-500 group-hover:scale-110 transition-transform" /> Contextual Semantic Search
+                                        <Search className="w-4 h-4 text-orange-500 group-hover:scale-110 transition-transform" /> 上下文语义搜索
                                     </h4>
                                     <p className="text-[12px] text-text-secondary leading-relaxed">
                                         你无需编写冗长的 AI 提示。只需问"他们列出了哪些 API 依赖？"，系统就会注入该特定时间线的局部转录内容，动态提供高度准确的回答。
@@ -1355,10 +1355,10 @@ export const HelpSettings: React.FC = () => {
 
                                 <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl shadow-sm hover:border-border-muted transition-colors group">
                                     <h4 className="text-[14px] font-bold text-text-primary flex items-center gap-2 mb-2">
-                                        <Brain className="w-4 h-4 text-teal-500 group-hover:scale-110 transition-transform" /> Memory Isolation
+                                        <Brain className="w-4 h-4 text-teal-500 group-hover:scale-110 transition-transform" /> 记忆隔离
                                     </h4>
                                     <p className="text-[12px] text-text-secondary leading-relaxed">
-                                        Conversations here are strictly isolated to the selected meeting boundaries. They do not utilize global memory, ensuring hyper-focused extraction without cross-contamination.
+                                        这里的对话严格限定在所选会议范围内，不使用全局记忆，确保提取聚焦且不会跨会议串味。
                                     </p>
                                 </div>
                             </div>
@@ -1375,7 +1375,7 @@ export const HelpSettings: React.FC = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 mb-4">
                             <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl shadow-sm hover:border-border-muted transition-colors group">
                                 <h4 className="text-[14px] font-bold text-text-primary flex items-center gap-2 mb-2">
-                                    <Briefcase className="w-4 h-4 text-sky-500 group-hover:scale-110 transition-transform" /> Instant Meeting Traversal
+                                    <Briefcase className="w-4 h-4 text-sky-500 group-hover:scale-110 transition-transform" /> 即时会议跳转
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
                                     输入任何文本即可在所有历史会议标题、摘要和内部文件中进行即时模糊匹配。按回车键即可直接进入该主题的智能查看器。
@@ -1384,17 +1384,17 @@ export const HelpSettings: React.FC = () => {
 
                             <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl shadow-sm hover:border-border-muted transition-colors group">
                                 <h4 className="text-[14px] font-bold text-text-primary flex items-center gap-2 mb-2">
-                                    <Sparkles className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" /> Conversational Fallback
+                                    <Sparkles className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" /> 对话式兜底
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    If your query doesn't match an existing document, the palette offers a direct jump to spark off a standard LLM chat conversation passing through your exact typed intent.
+                                    如果你的查询没有匹配的文档，调色板会直接跳转开启一次标准 LLM 对话，并把你的输入意图原样传入。
                                 </p>
                             </div>
                         </div>
 
                         <div className="border-t border-border-subtle pt-6">
                             <h4 className="font-bold text-sm text-text-primary border-b border-border-subtle pb-1">全局系统快捷键</h4>
-                            <p className="text-[11px] text-text-secondary mt-1 mb-3">These hotkeys work anywhere on your operating system, regardless of whether Natively is focused or completely hidden. Change them via <strong>Settings &gt; Hotkeys</strong>.</p>
+                            <p className="text-[11px] text-text-secondary mt-1 mb-3">这些快捷键在你的操作系统任意位置都能触发，无论 Natively 是否处于焦点或完全隐藏。在"设置 &gt; 快捷键"中可以修改它们。</p>
 
                             <div className="grid gap-3">
                                 <div className="flex items-center justify-between p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
@@ -1403,8 +1403,8 @@ export const HelpSettings: React.FC = () => {
                                             <Eye className="w-4 h-4 text-text-primary" />
                                         </div>
                                         <div>
-                                            <div className="font-semibold text-sm text-text-primary">Show / Hide Interface</div>
-                                            <div className="text-xs text-text-secondary mt-1">Quickly toggle the window visibility. Used as an immediate panic hide.</div>
+                                            <div className="font-semibold text-sm text-text-primary">显示 / 隐藏界面</div>
+                                            <div className="text-xs text-text-secondary mt-1">快速切换窗口可见性。需要紧急隐藏时立即可用。</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
@@ -1433,8 +1433,8 @@ export const HelpSettings: React.FC = () => {
                                             <MessageSquare className="w-4 h-4 text-text-primary" />
                                         </div>
                                         <div>
-                                            <div className="font-semibold text-sm text-text-primary">Process Captured Context (Execute)</div>
-                                            <div className="text-xs text-text-secondary mt-1">Triggers Natively to analyze the captured screenshots and text from the rolling buffer.</div>
+                                            <div className="font-semibold text-sm text-text-primary">处理已捕获的上下文（执行）</div>
+                                            <div className="text-xs text-text-secondary mt-1">触发 Natively 分析滚动缓冲区的截图和文本。</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
@@ -1448,8 +1448,8 @@ export const HelpSettings: React.FC = () => {
                                             <Zap className="w-4 h-4 text-text-primary" />
                                         </div>
                                         <div>
-                                            <div className="font-semibold text-sm text-text-primary">Capture + Execute Instantly</div>
-                                            <div className="text-xs text-text-secondary mt-1">Captures a screenshot AND processes it in one fluid action.</div>
+                                            <div className="font-semibold text-sm text-text-primary">即时捕获并执行</div>
+                                            <div className="text-xs text-text-secondary mt-1">一键完成截图捕获与处理。</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
@@ -1469,22 +1469,22 @@ export const HelpSettings: React.FC = () => {
                         <div>
                             <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-4">
                                 <h4 className="text-[13px] font-semibold text-amber-500 flex items-center gap-2 mb-1">
-                                    <User size={14} /> Profile Intelligence System
+                                    <User size={14} /> 档案智能系统
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    Instead of telling the AI who you are during every prompt, Profile Intelligence parses your background and universally injects it into all queries so it responds securely customized to your job role.
+                                    档案智能会解析你的背景资料，并自动注入到所有查询中——你不必在每次输入提示时重复介绍自己，AI 会根据你的职位给出定制化的回复。
                                 </p>
                             </div>
 
                             <div className="grid md:grid-cols-2 gap-3">
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <Globe className="w-4 h-4 text-blue-500" /> Core Benefits
+                                        <Globe className="w-4 h-4 text-blue-500" /> 核心优势
                                     </h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li><strong>Zero Context Prep:</strong> Model inherits your coding stack, experience, etc.</li>
-                                        <li><strong>Resume Parsing:</strong> Upload your PDF Resume for local extraction.</li>
-                                        <li><strong>Global Toggle:</strong> Enable <span className="text-amber-500 font-semibold">档案模式</span> via the Star button.</li>
+                                        <li><strong>零上下文准备：</strong> 模型自动继承你的技术栈、经验等信息。</li>
+                                        <li><strong>简历解析：</strong> 上传 PDF 简历即可在本地完成信息提取。</li>
+                                        <li><strong>全局开关：</strong> 通过星标按钮启用 <span className="text-amber-500 font-semibold">档案模式</span>。</li>
                                     </ul>
                                 </div>
 
@@ -1506,17 +1506,17 @@ export const HelpSettings: React.FC = () => {
                         <div className="border-t border-border-subtle pt-5 mt-2">
                             <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl mb-4">
                                 <h4 className="text-[13px] font-semibold text-purple-400 flex items-center gap-2 mb-1">
-                                    <Briefcase size={14} /> Job Description Targeting
+                                    <Briefcase size={14} /> 职位描述对齐
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    Drop a target <strong>职位描述 PDF</strong> alongside your resume. Natively extracts the role title, level, company, and required technologies, then biases every prompt to align your responses with that exact spec — perfect for staying on-message during a final loop.
+                                    把目标<strong>职位描述 PDF</strong> 与你的简历一同上传。Natively 会提取岗位名称、级别、公司和所需技术栈，然后在每次回复时都让回答贴合该岗位的具体要求——在终面环节保持对齐非常有帮助。
                                 </p>
                             </div>
 
                             <div className="grid md:grid-cols-2 gap-3 mb-5">
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <Building2 className="w-4 h-4 text-purple-400" /> Company Intelligence
+                                        <Building2 className="w-4 h-4 text-purple-400" /> 公司情报
                                     </h4>
                                     <p className="text-[11px] text-text-secondary leading-relaxed">
                                         After uploading a JD, hit <strong>立即研究</strong> to compile a live dossier on the company — recent news, product surface area, culture signals — cached and injected into every reply so you sound briefed without prep.
@@ -1524,32 +1524,32 @@ export const HelpSettings: React.FC = () => {
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <DollarSign className="w-4 h-4 text-emerald-500" /> Negotiation Script
+                                        <DollarSign className="w-4 h-4 text-emerald-500" /> 谈判话术
                                     </h4>
                                     <p className="text-[11px] text-text-secondary leading-relaxed">
-                                        Generate a <strong>tailored salary script</strong> calibrated against the active JD's level and your background. Live coaching shows up inline during compensation conversations.
+                                        根据当前 JD 的级别和你的背景生成<strong>量身定制的薪资谈判话术</strong>。在薪酬沟通过程中会有实时辅导内联展示。
                                     </p>
                                 </div>
                             </div>
 
                             <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl mb-4">
                                 <h4 className="text-[13px] font-semibold text-emerald-500 flex items-center gap-2 mb-1">
-                                    <FileText size={14} /> Custom Context Notes
+                                    <FileText size={14} /> 自定义上下文
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    In addition to your Resume and JD, type any free-form context into the <strong>自定义上下文</strong> textarea — sales stats, product details, LeetCode solutions, personal preferences. Injected as a <code className="bg-bg-elevated px-1 rounded text-[10px]">&lt;user_context&gt;</code> block into every AI call, across all modes and providers.
+                                    除了简历和 JD，你还可以在<strong>自定义上下文</strong>文本框中输入任意内容——销售数据、产品细节、LeetCode 解法、个人偏好。系统会以 <code className="bg-bg-elevated px-1 rounded text-[10px]">&lt;user_context&gt;</code> 块的形式注入到每一次 AI 调用中，覆盖所有模式和提供商。
                                 </p>
                             </div>
                             <div className="grid md:grid-cols-2 gap-3">
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <Upload className="w-4 h-4 text-emerald-500" /> How to Use
+                                        <Upload className="w-4 h-4 text-emerald-500" /> 使用方法
                                     </h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Open <strong>Settings → Profile Intelligence</strong></li>
-                                        <li>Scroll to the <strong>自定义上下文</strong> textarea</li>
-                                        <li>Type anything — auto-saved after 800 ms</li>
-                                        <li>Up to 4,000 characters with a live counter</li>
+                                        <li>打开 <strong>设置 → 档案智能</strong></li>
+                                        <li>滚动到 <strong>自定义上下文</strong> 文本框</li>
+                                        <li>直接输入任意内容 — 800 毫秒后自动保存</li>
+                                        <li>最多 4,000 字符，带实时字数统计</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
@@ -1647,10 +1647,10 @@ export const HelpSettings: React.FC = () => {
                         <div>
                             <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl mb-4">
                                 <h4 className="text-[13px] font-semibold text-blue-500 flex items-center gap-2 mb-1">
-                                    <Calendar size={14} /> What is Calendar Intelligence?
+                                    <Calendar size={14} /> 什么是日历智能？
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    By connecting your Google Calendar directly to Natively, the AI automatically gains context on your upcoming meetings, syncs the event data, and reads attendee lists to hyper-personalize your interactions.
+                                    将你的 Google 日历直接接入 Natively 后，AI 会自动获取即将召开的会议上下文、同步事件数据、读取与会者名单，从而实现高度个性化的交互。
                                 </p>
                             </div>
 
@@ -1664,25 +1664,25 @@ export const HelpSettings: React.FC = () => {
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Follow-Up System</h4>
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">跟进系统</h4>
                                     <p className="text-[11px] text-text-secondary">
-                                        When tracking live meetings, Natively uses the connected calendar context to instantly figure out <strong>who you are talking to</strong>. This powers the Follow-Up Email system, letting you auto-draft post-meeting notes to confirmed attendees.
+                                        在跟踪实时会议时，Natively 会利用日历上下文立即判断<strong>你在和谁开会</strong>。这驱动了跟进邮件系统，让你可以在会议结束后自动起草给已确认与会者的跟进笔记。
                                     </p>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <LayoutGrid className="w-4 h-4 text-blue-500" /> Launcher Peek Stack
+                                        <LayoutGrid className="w-4 h-4 text-blue-500" /> 启动器预览层叠
                                     </h4>
                                     <p className="text-[11px] text-text-secondary">
-                                        The Launcher's Calendar card now displays your <strong>next real meeting</strong> with a stacked-card visual hinting at what comes after it — no need to switch tabs to see what's queued.
+                                        启动器的日历卡片现在用层叠卡片显示你的<strong>下一场真实会议</strong>，并通过堆叠的视觉效果暗示紧接其后的会议——无需切换标签页即可查看待办事项。
                                     </p>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <ExternalLink className="w-4 h-4 text-emerald-500" /> One-Click Join
+                                        <ExternalLink className="w-4 h-4 text-emerald-500" /> 一键加入
                                     </h4>
                                     <p className="text-[11px] text-text-secondary">
-                                        Each upcoming event shows a <strong>立即加入</strong> button that opens the meeting link in your <strong>system default browser</strong> (so it lands in the right Chrome/Safari profile), not an in-app webview.
+                                        每场即将开始的会议都显示一个 <strong>立即加入</strong> 按钮，会用你的<strong>系统默认浏览器</strong>打开会议链接（所以会落到正确的 Chrome/Safari 个人资料），而不是应用内的 webview。
                                     </p>
                                 </div>
                             </div>
@@ -1693,15 +1693,15 @@ export const HelpSettings: React.FC = () => {
                         {/* Fast Mode */}
                         <div className="space-y-4">
                             <h4 className="font-bold text-sm text-text-primary flex items-center gap-2">
-                                <Zap className="w-4 h-4 text-orange-500" /> Fast Mode (Hardware LPU)
+                                <Zap className="w-4 h-4 text-orange-500" /> 快速模式（硬件 LPU）
                             </h4>
                             <MockFastModeAnim />
                             <div className="p-4 rounded-xl border bg-orange-500/10 border-orange-500/20">
                                 <h4 className="font-semibold text-sm mb-2 text-orange-500 flex items-center gap-2">
-                                    <Zap className="w-4 h-4" /> How Fast Mode Works
+                                    <Zap className="w-4 h-4" /> 快速模式工作原理
                                 </h4>
                                 <p className="text-xs text-orange-400/80 m-0">
-                                    Fast Mode activates highly efficient models (like Llama 3 8B) layered over Groq hardware LPUs instead of GPUs. This brings latency down from 2-3 seconds to less than 500ms. To enable Fast Mode, navigate to Settings &gt; General Settings popup overlay, and click the Lightning Icon.
+                                    快速模式启用高效模型（如 Llama 3 8B），运行在 Groq 硬件 LPU 而非 GPU 上，把延迟从 2-3 秒压到 500 毫秒以内。要启用快速模式，进入设置 &gt; 通用设置浮层，点击闪电图标即可。
                                 </p>
                             </div>
                         </div>
@@ -1713,19 +1713,19 @@ export const HelpSettings: React.FC = () => {
                         <div className="grid gap-3">
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <EyeOff className="w-4 h-4 text-text-secondary" /> Dynamic UI Opacity
+                                    <EyeOff className="w-4 h-4 text-text-secondary" /> 动态界面透明度
                                 </h4>
                                 <p className="text-xs text-text-secondary">
-                                    Decrease your visual footprint to near-zero. Navigate to the General Settings overlay and dynamically drag the <strong>透明度滑块</strong> down to make the interface completely translucent against your underlying native applications.
+                                    把你的视觉占用降到接近零。进入通用设置面板，把 <strong>透明度滑块</strong> 往下拖，让界面在下层原生应用之上呈现完全透明的效果。
                                 </p>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                    <Monitor className="w-4 h-4 text-text-secondary" /> Mouse Pass-Through Mode
+                                    <Monitor className="w-4 h-4 text-text-secondary" /> 鼠标穿透模式
                                 </h4>
                                 <p className="text-[11px] text-text-secondary mb-2">
-                                    Do you want the AI prompt completely fused into your screen without obstructing your clicks? Activate <strong>Mouse Pass-through</strong> inside the UI toggle menu.
+                                    想让 AI 提示与屏幕完全融为一体、又不阻挡你的点击？在界面切换菜单里启用 <strong>鼠标穿透</strong> 即可。
                                 </p>
                                 <div className="p-2 border border-orange-500/20 bg-orange-500/5 rounded-lg">
                                     <p className="text-[10px] text-orange-400 m-0">
