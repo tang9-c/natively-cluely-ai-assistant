@@ -179,10 +179,21 @@ const LECTURE_ANSWER_SHAPES: Partial<Record<ConversationIntent, string>> = {
     define_term: 'Bold the term; 2-3 sentences connecting it to a previously-defined concept or a real-world analogy. No formal definition.',
 };
 
+const FDE_ANSWER_SHAPES: Partial<Record<ConversationIntent, string>> = {
+    fde_discovery: 'Ask 1-2 concrete workflow or stakeholder questions. Anchor on customer reality, not generic product discovery.',
+    fde_integration: 'Clarify the integration surface: system, auth, data direction, environment, owner, and smallest validation step.',
+    fde_security: 'Respond with a security-conscious checklist: data involved, permissions, compliance review, auditability, and decision owner.',
+    fde_risk: 'Name the blocker or risk, identify dependency and impact, then propose the next unblock step. Do not guess missing owners.',
+    fde_success: 'Turn the discussion into measurable acceptance criteria or pilot success metrics. Keep it concrete and testable.',
+    fde_next_step: 'Convert the conversation into owner, deliverable, and date. If one is missing, ask for it directly.',
+    define_term: 'Define the technical or deployment term in one sentence, then connect it to the customer deployment context.',
+};
+
 const MODE_ANSWER_SHAPES: Record<string, Partial<Record<ConversationIntent, string>>> = {
     'general': {},
     'looking-for-work': {},
     'sales': SALES_ANSWER_SHAPES,
+    'fde': FDE_ANSWER_SHAPES,
     'recruiting': RECRUITING_ANSWER_SHAPES,
     'team-meet': TEAM_MEET_ANSWER_SHAPES,
     'lecture': LECTURE_ANSWER_SHAPES,
@@ -242,6 +253,18 @@ const ZERO_SHOT_LABELS_EN_BY_MODE: Record<string, Record<string, ConversationInt
         'requesting a summary or next step': 'advance_dialog',
         'general conversation or question': 'general',
     },
+    'fde': {
+        'discovering customer workflow, requirements, stakeholders, or deployment context': 'fde_discovery',
+        'discussing API, data source, authentication, environment, or integration details': 'fde_integration',
+        'reviewing privacy, compliance, permissions, audit logs, PII, or security concerns': 'fde_security',
+        'raising deployment risk, blocker, dependency, migration, rollback, or timeline concern': 'fde_risk',
+        'defining pilot success, validation, metrics, acceptance criteria, or sign-off': 'fde_success',
+        'confirming owner, next step, rollout plan, launch plan, or follow-up date': 'fde_next_step',
+        'asking what a term or acronym means': 'define_term',
+        'requesting a summary or next step': 'advance_dialog',
+        'general conversation or question': 'general',
+        'no actionable content, just filler or acknowledgement': 'silence',
+    },
     'recruiting': {
         'evaluating a candidate answer and probing deeper': 'evaluate_answer',
         'requesting a concrete example or instance from a candidate': 'request_example',
@@ -295,6 +318,18 @@ const ZERO_SHOT_LABELS_ZH_BY_MODE: Record<string, Record<string, ConversationInt
         '询问某个术语或缩写的含义': 'define_term',
         '请求总结或下一步': 'advance_dialog',
         '一般性对话或问题': 'general',
+    },
+    'fde': {
+        '正在澄清客户流程、业务需求、干系人或部署上下文': 'fde_discovery',
+        '正在讨论 API、数据源、认证、环境或集成细节': 'fde_integration',
+        '正在讨论隐私、合规、权限、审计日志、PII 或安全问题': 'fde_security',
+        '正在提出部署风险、阻塞、依赖、迁移、回滚或时间线问题': 'fde_risk',
+        '正在定义试点成功、验证指标、验收标准或签署确认': 'fde_success',
+        '正在确认负责人、下一步、上线计划、推进计划或跟进时间': 'fde_next_step',
+        '询问某个术语或缩写的含义': 'define_term',
+        '请求总结或下一步': 'advance_dialog',
+        '一般性对话或问题': 'general',
+        '无可行动内容,只是寒暄或确认': 'silence',
     },
     'recruiting': {
         '评估候选人回答并深入追问': 'evaluate_answer',
@@ -403,6 +438,8 @@ export function detectIntentByPattern(
     switch (mode) {
         case 'sales':
             return detectSalesIntentByPattern(text);
+        case 'fde':
+            return detectFdeIntentByPattern(text);
         case 'team-meet':
             return detectTeamMeetIntentByPattern(text);
         case 'lecture':
@@ -431,10 +468,17 @@ function confidenceForKeywordIntent(intent: ConversationIntent): number {
         case 'coding':
         case 'behavioral':
         case 'clarification':
+        case 'fde_security':
+        case 'fde_risk':
+        case 'fde_next_step':
             return 0.9;
         case 'capture_risk':
         case 'request_example':
             return 0.88;
+        case 'fde_integration':
+        case 'fde_success':
+        case 'fde_discovery':
+            return 0.85;
         case 'discovery_probe':
         case 'status_update':
         case 'answer_class_question':
@@ -631,6 +675,34 @@ function detectLectureIntentByPattern(text: string): IntentResult | null {
     return null;
 }
 
+function detectFdeIntentByPattern(text: string): IntentResult | null {
+    if (/(PII|SOC2|compliance|audit logs?|permissions?|access control|data residency|encryption|security review|privacy)/i.test(text)
+        || /(合规|审计日志|权限|访问控制|数据驻留|加密|安全评审|隐私|敏感数据|脱敏)/.test(text)) {
+        return { intent: 'fde_security', confidence: 0.92, answerShape: getAnswerShapeForMode('fde', 'fde_security') };
+    }
+    if (/(blocker|blocked|dependency|risk|timeline|delay|migration|cutover|rollback|edge case|launch risk)/i.test(text)
+        || /(阻塞|卡住|依赖|风险|延期|迁移|切换|回滚|边界情况|上线风险|不确定)/.test(text)) {
+        return { intent: 'fde_risk', confidence: 0.9, answerShape: getAnswerShapeForMode('fde', 'fde_risk') };
+    }
+    if (/(next step|owner|follow up|action item|rollout plan|launch plan|go live|by friday|by next week)/i.test(text)
+        || /(下一步|负责人|跟进|行动项|上线计划|推进计划|灰度|正式上线|周五前|下周)/.test(text)) {
+        return { intent: 'fde_next_step', confidence: 0.9, answerShape: getAnswerShapeForMode('fde', 'fde_next_step') };
+    }
+    if (/(API|endpoint|webhook|SSO|SAML|OAuth|SCIM|data source|database|warehouse|environment|sandbox|production|staging|integration)/i.test(text)
+        || /(API 接口|接口|端点|回调|单点登录|数据源|数据库|数仓|环境|沙盒|生产环境|测试环境|集成|打通)/.test(text)) {
+        return { intent: 'fde_integration', confidence: 0.88, answerShape: getAnswerShapeForMode('fde', 'fde_integration') };
+    }
+    if (/(success criteria|acceptance criteria|acceptance test|pilot|POC|measurement|metric|KPI|validation|sign off)/i.test(text)
+        || /(验收标准|成功标准|试点|验证|指标|度量|KPI|验收测试|通过标准|效果衡量)/.test(text)) {
+        return { intent: 'fde_success', confidence: 0.88, answerShape: getAnswerShapeForMode('fde', 'fde_success') };
+    }
+    if (/(current workflow|current process|business process|user workflow|stakeholder|requirements|what are you trying to solve|what does success look like)/i.test(text)
+        || /(现有流程|当前流程|业务流程|用户流程|需求是什么|想解决什么|谁会使用|谁负责|干系人|业务场景|客户现场)/.test(text)) {
+        return { intent: 'fde_discovery', confidence: 0.85, answerShape: getAnswerShapeForMode('fde', 'fde_discovery') };
+    }
+    return null;
+}
+
 /**
  * Recruiting mode regex — extends the interview family with the interviewer
  * perspective. Falls back to the interview regex for behavioral / follow-up /
@@ -680,6 +752,8 @@ function getCandidateIntentsForMode(modeTemplateType?: string | null): Conversat
     switch (mode) {
         case 'sales':
             return ['handle_objection', 'seize_signal', 'discovery_probe', 'define_term', 'advance_dialog', 'general', 'silence'];
+        case 'fde':
+            return ['fde_discovery', 'fde_integration', 'fde_security', 'fde_risk', 'fde_success', 'fde_next_step', 'define_term', 'advance_dialog', 'general', 'silence'];
         case 'recruiting':
             return ['evaluate_answer', 'request_example', 'clarification', 'follow_up', 'deep_dive', 'define_term', 'general', 'silence'];
         case 'team-meet':

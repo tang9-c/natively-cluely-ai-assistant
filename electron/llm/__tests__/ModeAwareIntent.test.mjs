@@ -92,6 +92,32 @@ describe('Tier 1 regex coverage: sales mode ≥80%', () => {
   });
 });
 
+describe('Tier 1 regex coverage: FDE mode ≥80%', () => {
+  const samples = [
+    { utterance: 'What does the current customer workflow look like?', expected: 'fde_discovery' },
+    { utterance: '谁会使用这个流程，业务场景是什么?', expected: 'fde_discovery' },
+    { utterance: 'We need to connect the API and SSO before the pilot.', expected: 'fde_integration' },
+    { utterance: '数据源和生产环境怎么打通?', expected: 'fde_integration' },
+    { utterance: 'Security review is blocked on PII and audit logs.', expected: 'fde_security' },
+    { utterance: '权限和敏感数据需要先过合规评审', expected: 'fde_security' },
+    { utterance: 'The migration has a rollback risk and may delay launch.', expected: 'fde_risk' },
+    { utterance: '上线风险是依赖客户数仓迁移完成', expected: 'fde_risk' },
+    { utterance: 'What are the acceptance criteria for the POC?', expected: 'fde_success' },
+    { utterance: '试点成功标准和验收指标是什么?', expected: 'fde_success' },
+    { utterance: 'Next step is to assign an owner and confirm rollout plan.', expected: 'fde_next_step' },
+    { utterance: '下一步谁负责，周五前能不能给上线计划?', expected: 'fde_next_step' },
+  ];
+
+  test('FDE regex hits ≥80% of canonical utterances', () => {
+    const { rate, total, misses } = coverageRate('fde', samples);
+    assert.ok(
+      rate >= 0.8,
+      `FDE mode hit rate ${(rate * 100).toFixed(1)}% < 80% (${misses.length}/${total} misses): ` +
+      JSON.stringify(misses, null, 2),
+    );
+  });
+});
+
 describe('Tier 1 regex coverage: team-meet mode ≥80%', () => {
   const samples = [
     // English — action item
@@ -251,6 +277,15 @@ describe('Tier 1 regex coverage: recruiting mode (extras only — falls through 
 // fine, but the test will notice.
 
 describe('Tier 2 edge cases: regex intentionally misses so SLM can take over', () => {
+  test('FDE custom intent keywords override default pattern matching', () => {
+    const r = detectIntentByPattern('客户说红线问题还没解决', 'fde', {
+      fde_risk: ['红线问题'],
+    });
+
+    assert.equal(r?.intent, 'fde_risk');
+    assert.ok(r.confidence >= 0.85);
+  });
+
   // No "no, but..." in regex vocabulary — pure paraphrase relies on SLM
   test('paraphrased sales objection does not match regex (SLM territory)', () => {
     const r = detectIntentByPattern(

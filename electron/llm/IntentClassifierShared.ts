@@ -119,10 +119,21 @@ const LECTURE_ANSWER_SHAPES: Partial<Record<ConversationIntent, string>> = {
     define_term: 'Bold the term; 2-3 sentences connecting it to a previously-defined concept or a real-world analogy. No formal definition.',
 };
 
+const FDE_ANSWER_SHAPES: Partial<Record<ConversationIntent, string>> = {
+    fde_discovery: 'Ask 1-2 concrete workflow or stakeholder questions. Anchor on customer reality, not generic product discovery.',
+    fde_integration: 'Clarify the integration surface: system, auth, data direction, environment, owner, and smallest validation step.',
+    fde_security: 'Respond with a security-conscious checklist: data involved, permissions, compliance review, auditability, and decision owner.',
+    fde_risk: 'Name the blocker or risk, identify dependency and impact, then propose the next unblock step. Do not guess missing owners.',
+    fde_success: 'Turn the discussion into measurable acceptance criteria or pilot success metrics. Keep it concrete and testable.',
+    fde_next_step: 'Convert the conversation into owner, deliverable, and date. If one is missing, ask for it directly.',
+    define_term: 'Define the technical or deployment term in one sentence, then connect it to the customer deployment context.',
+};
+
 const MODE_ANSWER_SHAPES: Record<string, Partial<Record<ConversationIntent, string>>> = {
     'general': {},
     'looking-for-work': {},
     'sales': SALES_ANSWER_SHAPES,
+    'fde': FDE_ANSWER_SHAPES,
     'recruiting': RECRUITING_ANSWER_SHAPES,
     'team-meet': TEAM_MEET_ANSWER_SHAPES,
     'lecture': LECTURE_ANSWER_SHAPES,
@@ -162,6 +173,18 @@ const ZERO_SHOT_LABELS_EN_BY_MODE: Record<string, Record<string, ConversationInt
         'asking what a term or acronym means': 'define_term',
         'requesting a summary or next step': 'advance_dialog',
         'general conversation or question': 'general',
+    },
+    'fde': {
+        'discovering customer workflow, requirements, stakeholders, or deployment context': 'fde_discovery',
+        'discussing API, data source, authentication, environment, or integration details': 'fde_integration',
+        'reviewing privacy, compliance, permissions, audit logs, PII, or security concerns': 'fde_security',
+        'raising deployment risk, blocker, dependency, migration, rollback, or timeline concern': 'fde_risk',
+        'defining pilot success, validation, metrics, acceptance criteria, or sign-off': 'fde_success',
+        'confirming owner, next step, rollout plan, launch plan, or follow-up date': 'fde_next_step',
+        'asking what a term or acronym means': 'define_term',
+        'requesting a summary or next step': 'advance_dialog',
+        'general conversation or question': 'general',
+        'no actionable content, just filler or acknowledgement': 'silence',
     },
     'recruiting': {
         'evaluating a candidate answer and probing deeper': 'evaluate_answer',
@@ -210,6 +233,18 @@ const ZERO_SHOT_LABELS_ZH_BY_MODE: Record<string, Record<string, ConversationInt
         '询问某个术语或缩写的含义': 'define_term',
         '请求总结或下一步': 'advance_dialog',
         '一般性对话或问题': 'general',
+    },
+    'fde': {
+        '正在澄清客户流程、业务需求、干系人或部署上下文': 'fde_discovery',
+        '正在讨论 API、数据源、认证、环境或集成细节': 'fde_integration',
+        '正在讨论隐私、合规、权限、审计日志、PII 或安全问题': 'fde_security',
+        '正在提出部署风险、阻塞、依赖、迁移、回滚或时间线问题': 'fde_risk',
+        '正在定义试点成功、验证指标、验收标准或签署确认': 'fde_success',
+        '正在确认负责人、下一步、上线计划、推进计划或跟进时间': 'fde_next_step',
+        '询问某个术语或缩写的含义': 'define_term',
+        '请求总结或下一步': 'advance_dialog',
+        '一般性对话或问题': 'general',
+        '无可行动内容,只是寒暄或确认': 'silence',
     },
     'recruiting': {
         '评估候选人回答并深入追问': 'evaluate_answer',
