@@ -318,7 +318,7 @@ export class DynamicActionEngine {
     }
 
     private isStrongAutoSignal(type: string, confidence: number): boolean {
-        return confidence >= 0.9 && ['buying_signal', 'final_offer', 'coding_problem'].includes(type);
+        return confidence >= 0.9 && ['buying_signal', 'final_offer', 'coding_problem', 'fde_next_step', 'fde_security_review'].includes(type);
     }
 
     private synthesizeTrigger(modeTemplateType: string, intentResult?: IntentResult): ActionTrigger | null {
@@ -341,6 +341,16 @@ export class DynamicActionEngine {
                 handle_objection: 'pricing_objection',
                 seize_signal: 'buying_signal',
                 discovery_probe: 'pricing_request',
+            },
+            fde: {
+                fde_discovery: 'fde_discovery_probe',
+                fde_integration: 'fde_integration_check',
+                fde_security: 'fde_security_review',
+                fde_risk: 'fde_risk_blocker',
+                fde_success: 'fde_success_criteria',
+                fde_next_step: 'fde_next_step',
+                define_term: 'fde_discovery_probe',
+                advance_dialog: 'fde_next_step',
             },
             recruiting: {
                 evaluate_answer: 'candidate_experience_probe',
@@ -383,6 +393,12 @@ export class DynamicActionEngine {
             concept_explanation: '解释概念',
             general_assistance_request: '建议回应',
             general_explain: '解释清楚',
+            fde_discovery_probe: '澄清部署上下文',
+            fde_integration_check: '澄清集成方案',
+            fde_security_review: '澄清安全评审',
+            fde_risk_blocker: '解除部署阻塞',
+            fde_success_criteria: '定义验收标准',
+            fde_next_step: '锁定下一步',
         };
         const label = labels[type];
         if (!label) return null;

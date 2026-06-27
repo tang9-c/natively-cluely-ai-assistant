@@ -385,10 +385,86 @@ const TECHNICAL_TRIGGERS: ActionTrigger[] = [
     },
 ];
 
+const FDE_TRIGGERS: ActionTrigger[] = [
+    {
+        type: 'fde_security_review',
+        patterns: [
+            /\b(PII|SOC2|compliance|audit logs?|permissions?|access control|data residency|encryption|security review|privacy)\b/i,
+            zh('合规', '审计日志', '权限', '访问控制', '数据驻留', '加密', '安全评审', '隐私', '敏感数据', '脱敏'),
+        ],
+        priority: 0.92,
+        label: 'Clarify security review',
+        promptInstruction:
+            'You are in FDE mode. The customer raised security, privacy, or compliance concerns. Identify data involved, permission boundary, required reviewer, and the next validation step.',
+        answerStyle: { maxWords: 120, format: 'checklist', tone: 'precise' },
+    },
+    {
+        type: 'fde_risk_blocker',
+        patterns: [
+            /\b(blocker|blocked|dependency|risk|timeline|delay|migration|cutover|rollback|edge case|launch risk)\b/i,
+            zh('阻塞', '卡住', '依赖', '风险', '延期', '迁移', '切换', '回滚', '边界情况', '上线风险', '不确定'),
+        ],
+        priority: 0.9,
+        label: 'Unblock deployment risk',
+        promptInstruction:
+            'You are in FDE mode. A deployment risk or blocker was raised. State the blocker, impact, dependency, owner if present, and the smallest unblock step.',
+        answerStyle: { maxWords: 110, format: 'checklist', tone: 'direct' },
+    },
+    {
+        type: 'fde_next_step',
+        patterns: [
+            /\b(next step|owner|follow up|action item|rollout plan|launch plan|go live|by Friday|by next week)\b/i,
+            zh('下一步', '负责人', '跟进', '行动项', '上线计划', '推进计划', '灰度', '正式上线', '周五前', '下周'),
+        ],
+        priority: 0.9,
+        label: 'Lock next step',
+        promptInstruction:
+            'You are in FDE mode. Convert the discussion into owner, deliverable, date, and validation artifact. Ask directly for any missing field.',
+        answerStyle: { maxWords: 90, format: 'checklist', tone: 'direct' },
+    },
+    {
+        type: 'fde_integration_check',
+        patterns: [
+            /\b(API|endpoint|webhook|SSO|SAML|OAuth|SCIM|data source|database|warehouse|environment|sandbox|production|staging|integration)\b/i,
+            zh('API 接口', '接口', '端点', '回调', '单点登录', '数据源', '数据库', '数仓', '环境', '沙盒', '生产环境', '测试环境', '集成', '打通'),
+        ],
+        priority: 0.88,
+        label: 'Clarify integration',
+        promptInstruction:
+            'You are in FDE mode. Clarify the integration surface: source system, auth method, data direction, environment, owner, and validation step.',
+        answerStyle: { maxWords: 120, format: 'checklist', tone: 'technical' },
+    },
+    {
+        type: 'fde_success_criteria',
+        patterns: [
+            /\b(success criteria|acceptance criteria|acceptance test|pilot|POC|measurement|metric|KPI|validation|sign off)\b/i,
+            zh('验收标准', '成功标准', '试点', '验证', '指标', '度量', 'KPI', '验收测试', '通过标准', '效果衡量'),
+        ],
+        priority: 0.86,
+        label: 'Define success criteria',
+        promptInstruction:
+            'You are in FDE mode. Convert the pilot or deployment discussion into measurable acceptance criteria and a validation artifact.',
+        answerStyle: { maxWords: 100, format: 'bullets', tone: 'structured' },
+    },
+    {
+        type: 'fde_discovery_probe',
+        patterns: [
+            /\b(current workflow|current process|business process|user workflow|stakeholder|requirements|what are you trying to solve|what does success look like)\b/i,
+            zh('现有流程', '当前流程', '业务流程', '用户流程', '需求是什么', '想解决什么', '谁会使用', '谁负责', '干系人', '业务场景', '客户现场'),
+        ],
+        priority: 0.84,
+        label: 'Probe deployment context',
+        promptInstruction:
+            'You are in FDE mode. Ask focused questions about workflow, stakeholders, constraints, and the deployment reality.',
+        answerStyle: { maxWords: 100, format: 'bullets', tone: 'curious' },
+    },
+];
+
 export const MODE_TRIGGERS: Record<string, ActionTrigger[]> = {
     general: GENERAL_TRIGGERS,
     negotiation: NEGOTIATION_TRIGGERS,
     sales: SALES_TRIGGERS,
+    fde: FDE_TRIGGERS,
     recruiting: RECRUITING_TRIGGERS,
     'team-meet': TEAM_TRIGGERS,
     team_meeting: TEAM_TRIGGERS,

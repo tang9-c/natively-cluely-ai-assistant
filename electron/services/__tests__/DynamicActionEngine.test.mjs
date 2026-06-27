@@ -69,7 +69,7 @@ test('Competitor mention (Gong) detected creates competitor_mention action', asy
   assert.equal(competitorAction.status, 'candidate');
 });
 
-test('All seven real mode template keys have matching trigger packs', async () => {
+test('All eight real mode template keys have matching trigger packs', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
 
@@ -83,6 +83,11 @@ test('All seven real mode template keys have matching trigger packs', async () =
       modeTemplateType: 'sales',
       transcript: '这个价格太高了, 能不能便宜点?',
       expectedType: 'pricing_objection',
+    },
+    {
+      modeTemplateType: 'fde',
+      transcript: '权限和 PII 审计日志需要先过安全评审',
+      expectedType: 'fde_security_review',
     },
     {
       modeTemplateType: 'recruiting',
@@ -124,6 +129,47 @@ test('All seven real mode template keys have matching trigger packs', async () =
       `${item.modeTemplateType} should emit ${item.expectedType}; got ${actions.map(a => a.type).join(', ')}`,
     );
   }
+});
+
+test('FDE deployment transcript creates integration action', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = engine.detectActions({
+    transcript: '客户需要打通 API、SSO 和生产环境数据源',
+    speaker: 'Customer',
+    modeTemplateType: 'fde',
+    modeId: 'mode_fde_1',
+    sessionId: 'session_fde_integration',
+  });
+
+  const action = actions.find(a => a.type === 'fde_integration_check');
+  assert.ok(action, `Expected fde_integration_check; got ${actions.map(a => a.type).join(', ')}`);
+  assert.equal(action.label, 'Clarify integration');
+  assert.ok(action.keyEntities?.includes('API'));
+  assert.ok(action.keyEntities?.includes('SSO'));
+  assert.ok(action.keyEntities?.includes('数据源'));
+});
+
+test('FDE intent result can synthesize action when regex does not match', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = engine.assessSignals({
+    transcript: '客户说红线问题还没解决',
+    speaker: 'Customer',
+    modeTemplateType: 'fde',
+    modeId: 'mode_fde_2',
+    sessionId: 'session_fde_synthetic',
+    intentResult: {
+      intent: 'fde_risk',
+      confidence: 0.9,
+      answerShape: 'Name blocker and next unblock step.',
+    },
+    now: 1_000,
+  });
+
+  assert.ok(actions.some(action => action.type === 'fde_risk_blocker'));
 });
 
 test('dynamic action retrievalQuery uses active-mode entity extraction', async () => {
