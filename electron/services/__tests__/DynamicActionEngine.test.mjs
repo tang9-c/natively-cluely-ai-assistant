@@ -697,6 +697,78 @@ test('assessSignals uses classifier intent to synthesize high-confidence sales a
   assert.equal(action.emotion, 'angry');
 });
 
+test('assessSignals synthesizes general summary action from custom keyword intent', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = engine.assessSignals({
+    transcript: '客户刚才说了一段没有总结关键词的长内容',
+    speaker: 'speaker',
+    modeTemplateType: 'general',
+    modeId: 'mode_general',
+    sessionId: 'session_general_summary_custom_keyword',
+    intentResult: {
+      intent: 'summary_probe',
+      confidence: 0.9,
+      answerShape: 'Confirm the summary briefly.',
+    },
+    now: 10_000,
+  });
+
+  assert.ok(
+    actions.some(action => action.type === 'general_summarize'),
+    `Expected general_summarize; got ${actions.map(action => action.type).join(', ')}`,
+  );
+});
+
+test('assessSignals synthesizes general explanation action from custom keyword intent', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = engine.assessSignals({
+    transcript: '客户提到了一个内部黑话',
+    speaker: 'speaker',
+    modeTemplateType: 'general',
+    modeId: 'mode_general',
+    sessionId: 'session_general_explain_custom_keyword',
+    intentResult: {
+      intent: 'clarification',
+      confidence: 0.9,
+      answerShape: 'Give a direct clarification.',
+    },
+    now: 11_000,
+  });
+
+  assert.ok(
+    actions.some(action => action.type === 'general_explain'),
+    `Expected general_explain; got ${actions.map(action => action.type).join(', ')}`,
+  );
+});
+
+test('assessSignals synthesizes general assistance action from custom coding intent', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = engine.assessSignals({
+    transcript: '用户说内部自动化脚本要怎么处理',
+    speaker: 'speaker',
+    modeTemplateType: 'general',
+    modeId: 'mode_general',
+    sessionId: 'session_general_assist_custom_keyword',
+    intentResult: {
+      intent: 'coding',
+      confidence: 0.9,
+      answerShape: 'Provide implementation help.',
+    },
+    now: 12_000,
+  });
+
+  assert.ok(
+    actions.some(action => action.type === 'general_assistance_request'),
+    `Expected general_assistance_request; got ${actions.map(action => action.type).join(', ')}`,
+  );
+});
+
 test('assessSignals keeps sub-threshold signals out of top actions', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();

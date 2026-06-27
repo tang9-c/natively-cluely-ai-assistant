@@ -333,7 +333,14 @@ export class DynamicActionEngine {
     private mapIntentToActionType(modeOrCurrentType: string, intent: string): string | null {
         const byMode: Record<string, Record<string, string>> = {
             general: {
+                clarification: 'general_explain',
+                deep_dive: 'general_explain',
+                example_request: 'general_explain',
                 define_term: 'general_explain',
+                summary_probe: 'general_summarize',
+                follow_up: 'general_assistance_request',
+                behavioral: 'general_assistance_request',
+                coding: 'general_assistance_request',
                 advance_dialog: 'general_assistance_request',
                 general: 'general_assistance_request',
             },
@@ -392,6 +399,7 @@ export class DynamicActionEngine {
             coding_problem: '解技术题',
             concept_explanation: '解释概念',
             general_assistance_request: '建议回应',
+            general_summarize: '总结讨论',
             general_explain: '解释清楚',
             fde_discovery_probe: '澄清部署上下文',
             fde_integration_check: '澄清集成方案',
