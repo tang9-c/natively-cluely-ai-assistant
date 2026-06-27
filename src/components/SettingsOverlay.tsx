@@ -1733,7 +1733,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         </div>
                                                         <div>
                                                             <h3 className="text-sm font-bold text-text-primary">面试官转录文本</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">Show real-time transcription of the interviewer</p>
+                                                            <p className="text-xs text-text-secondary mt-0.5">显示面试官的实时转录文本</p>
                                                         </div>
                                                     </div>
                                                     <div
