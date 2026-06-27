@@ -1598,7 +1598,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         </div>
                                                         <div>
                                                             <h3 className="text-sm font-bold text-text-primary">登录时打开 Natively</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">Natively will open automatically when you log in to your computer</p>
+                                                            <p className="text-xs text-text-secondary mt-0.5">登录电脑时 Natively 会自动打开</p>
                                                         </div>
                                                     </div>
                                                     <div
