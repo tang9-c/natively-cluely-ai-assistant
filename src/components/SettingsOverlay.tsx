@@ -1763,7 +1763,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         </div>
                                                         <div>
                                                             <h3 className="text-sm font-bold text-text-primary">自动滚动</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">Automatically scroll to the latest message as new responses arrive</p>
+                                                            <p className="text-xs text-text-secondary mt-0.5">新回复到达时自动滚动到最新消息</p>
                                                         </div>
                                                     </div>
                                                     <div
