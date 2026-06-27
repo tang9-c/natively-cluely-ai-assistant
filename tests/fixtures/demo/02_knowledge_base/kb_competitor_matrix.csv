@@ -1,0 +1,8 @@
+vendor,transcription_accuracy,live_coaching,per_mode,profile_bridge,pricing_tier,target_market,key_strength,key_weakness
+Otter,98%,no,no,limited,enterprise,SMB+enterprise,Mature product+large user base,No real-time coaching,generic mode
+Cluely,92%,yes,no,no,free+pro,individual,Free tier+simple UI,Stability issues,limited integrations
+FinalRound,90%,yes,no,no,subscription,individual job seekers,Interview-specific AI,Priced per interview,not for sales
+Gong,99%,yes,limited,no,enterprise,B2B sales,Enterprise sales playbook,3x price,complex setup
+Chorus,95%,limited,no,no,enterprise,B2B sales+CS,Zoom integration,UI outdated
+Fireflies,93%,no,limited,no,freemium,small teams,Cheap tier,Weak features
+Natively,96%,yes,yes,full,freemium+SMB+enterprise,individuals+teams+enterprise,Per-mode AI+full profile bridge,Newer player,smaller install base

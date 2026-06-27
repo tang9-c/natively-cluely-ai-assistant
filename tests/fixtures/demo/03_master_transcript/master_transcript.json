@@ -1,0 +1,555 @@
+{
+  "meeting_id": "demo-master-2026-06-27",
+  "title": "Natively 多场景演示主会议",
+  "duration_ms": 390000,
+  "language": "zh-CN",
+  "speakers": [
+    {
+      "id": "S1",
+      "name": "Alex Chen",
+      "name_zh": "陈亚伦",
+      "role": "user",
+      "native_role": "Natively 创始人 / 工程师",
+      "scenarios": ["sales", "technical-interview", "team-meet", "lecture", "fde"]
+    },
+    {
+      "id": "S2",
+      "name": "Jordan Rivera",
+      "role": "interviewer",
+      "speaker_label": "Jordan (Acme Corp Sales VP)",
+      "scenarios": ["sales"]
+    },
+    {
+      "id": "S3",
+      "name": "Priya Shah",
+      "role": "interviewer",
+      "speaker_label": "Priya (Datacraft 工程经理)",
+      "scenarios": ["technical-interview"]
+    },
+    {
+      "id": "S4",
+      "name": "Mei Wong",
+      "role": "interviewer",
+      "speaker_label": "Mei (产品负责人)",
+      "scenarios": ["team-meet"]
+    },
+    {
+      "id": "S5",
+      "name": "Prof. Daniel Liang",
+      "role": "interviewer",
+      "speaker_label": "梁教授 (分布式系统课程)",
+      "scenarios": ["lecture"]
+    },
+    {
+      "id": "S6",
+      "name": "Sam Patel",
+      "role": "interviewer",
+      "speaker_label": "Sam (Beta Corp CTO)",
+      "scenarios": ["fde"]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "seg1_sales",
+      "scenario": "sales",
+      "template_type": "sales",
+      "start_ms": 0,
+      "end_ms": 75000,
+      "title": "Sales - Acme Corp 销售演示",
+      "expected_intents": ["discovery_probe", "handle_objection", "seize_signal", "confirm"],
+      "expected_assists": ["runWhatShouldISay", "runRecap", "detectConfirmAndEmitDynamicActions"],
+      "expected_kb_retrievals": ["kb_competitor_matrix", "kb_objection_playbook"]
+    },
+    {
+      "id": "seg2_tech_interview",
+      "scenario": "interview",
+      "sub_scenario": "technical",
+      "template_type": "technical-interview",
+      "start_ms": 75000,
+      "end_ms": 150000,
+      "title": "Technical Interview - Datacraft",
+      "expected_intents": ["deep_dive", "example_request", "coding"],
+      "expected_assists": ["runWhatShouldISay", "runClarify", "runCodeHint"]
+    },
+    {
+      "id": "seg3_team_meet",
+      "scenario": "team-meet",
+      "template_type": "team-meet",
+      "start_ms": 150000,
+      "end_ms": 225000,
+      "title": "Team Meeting - 内部周会",
+      "expected_intents": ["status_update", "capture_action", "capture_risk", "capture_decision"],
+      "expected_assists": ["runWhatShouldISay", "runRecap"]
+    },
+    {
+      "id": "seg4_lecture",
+      "scenario": "lecture",
+      "template_type": "lecture",
+      "start_ms": 225000,
+      "end_ms": 300000,
+      "title": "Lecture - 分布式系统课程",
+      "expected_intents": ["explain_concept", "render_formula", "answer_class_question", "clarification"],
+      "expected_assists": ["runWhatShouldISay", "runManualAnswer", "runClarify"]
+    },
+    {
+      "id": "seg5_fde",
+      "scenario": "fde",
+      "template_type": "fde",
+      "start_ms": 300000,
+      "end_ms": 390000,
+      "title": "FDE - Beta Corp 客户现场",
+      "expected_intents": ["deep_dive", "capture_risk", "capture_decision", "clarification"],
+      "expected_assists": ["runWhatShouldISay", "runBrainstorm", "runClarify"],
+      "expected_kb_retrievals": ["fde_security_requirements", "fde_delivery_risk"]
+    }
+  ],
+  "segments": [
+    {
+      "speaker_id": "S2",
+      "speaker_label": "Jordan (Acme Corp Sales VP)",
+      "start_ms": 0,
+      "end_ms": 8000,
+      "scenario": "sales",
+      "text": "Alex,谢谢你今天抽时间。我们这边销售团队 500 人,去年刚换了 Otter,但说实话,现在怎么衡量效果我们心里没底。你们跟 Otter 比强在哪儿?",
+      "trigger_keywords": ["现在怎么衡量效果", "跟 Otter 比"],
+      "expected_intent": "discovery_probe",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S1",
+      "speaker_label": "Alex (我)",
+      "start_ms": 8000,
+      "end_ms": 22000,
+      "scenario": "sales",
+      "text": "主要差在三点:第一,你们最担心的销售、招聘、客户成功三类通话,Natively 都有专门的模式,不是一刀切。第二,实时话术辅助是 Otter 没有的,边听边给建议。第三,长会后能直接出客户档案更新和下一步邮件。",
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "speaker_id": "S2",
+      "speaker_label": "Jordan (Acme Corp Sales VP)",
+      "start_ms": 22000,
+      "end_ms": 30000,
+      "scenario": "sales",
+      "text": "听起来不错。但价格太高了吧?500 个席位按你说的方案年付,预算这一关就过不了。",
+      "trigger_keywords": ["价格太高了", "预算"],
+      "expected_intent": "handle_objection",
+      "expected_assist": "runWhatShouldISay",
+      "expected_kb_retrieval": "kb_competitor_matrix"
+    },
+    {
+      "speaker_id": "S1",
+      "speaker_label": "Alex (我)",
+      "start_ms": 30000,
+      "end_ms": 45000,
+      "scenario": "sales",
+      "text": "我理解。我们算过 ROI,一线销售每月 8 场高价值通话,每场多成单 1 单意味着 60 单/年,光这一项就把 500 席位的年费盖了。要不要我把这套算法按你们 500 人调一遍发过去?",
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "speaker_id": "S2",
+      "speaker_label": "Jordan (Acme Corp Sales VP)",
+      "start_ms": 45000,
+      "end_ms": 52000,
+      "scenario": "sales",
+      "text": "算 ROI 那个可以发我。我们 CFO 这周在,下周想推进到法务审核那一步。你看你们能配合出个方案简介吗?",
+      "trigger_keywords": ["下周想推进到法务审核"],
+      "expected_intent": "seize_signal",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S1",
+      "speaker_label": "Alex (我)",
+      "start_ms": 52000,
+      "end_ms": 58000,
+      "scenario": "sales",
+      "text": "没问题。我今天会议结束就发一版报价给你,CFO 看的简化版,周一上午 10 点我们对一下?",
+      "trigger_keywords": ["发一版报价"],
+      "expected_intent": "confirm",
+      "expected_assist": "detectConfirmAndEmitDynamicActions"
+    },
+    {
+      "speaker_id": "S2",
+      "speaker_label": "Jordan (Acme Corp Sales VP)",
+      "start_ms": 58000,
+      "end_ms": 65000,
+      "scenario": "sales",
+      "text": "走起,我让 Procurement 也加进来。",
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "speaker_id": "S1",
+      "speaker_label": "Alex (我)",
+      "start_ms": 65000,
+      "end_ms": 72000,
+      "scenario": "sales",
+      "text": "那我先发邮件草稿,这边会中我顺便把客户档案的更新点列出来,会议后自动存档。",
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "speaker_id": "S2",
+      "speaker_label": "Jordan (Acme Corp Sales VP)",
+      "start_ms": 72000,
+      "end_ms": 75000,
+      "scenario": "sales",
+      "text": "完美,期待收到。",
+      "expected_intent": null,
+      "expected_assist": "runRecap"
+    },
+    {
+      "speaker_id": "S3",
+      "speaker_label": "Priya (Datacraft 工程经理)",
+      "start_ms": 75000,
+      "end_ms": 85000,
+      "scenario": "technical-interview",
+      "text": "我们今天聊 45 分钟,前 20 分钟系统设计,后面 coding。我看了你简历,Datacraft 的订单系统是你从头搭的吗?",
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "speaker_id": "S1",
+      "speaker_label": "Alex (我)",
+      "start_ms": 85000,
+      "end_ms": 90000,
+      "scenario": "technical-interview",
+      "text": "是的,峰值 1 万 QPS,我带着两个人做的。",
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "speaker_id": "S3",
+      "speaker_label": "Priya (Datacraft 工程经理)",
+      "start_ms": 90000,
+      "end_ms": 100000,
+      "scenario": "technical-interview",
+      "text": "能详细讲讲你当时为什么选 PostgreSQL 而不是 Cassandra?数据量到什么量级之后呢?",
+      "trigger_keywords": ["能详细讲讲", "之后呢"],
+      "expected_intent": "deep_dive",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S1",
+      "speaker_label": "Alex (我)",
+      "start_ms": 100000,
+      "end_ms": 120000,
+      "scenario": "technical-interview",
+      "text": "当时日订单 200 万,五年增长预测到日 5000 万。Postgres 单机分区表能扛到 8000 万/天,超过才考虑 Cassandra。举个例子,订单表按 user_id 哈希分 64 个分区,...",
+      "trigger_keywords": ["举个例子"],
+      "expected_intent": "example_request",
+      "expected_assist": "runClarify"
+    },
+    {
+      "speaker_id": "S3",
+      "speaker_label": "Priya (Datacraft 工程经理)",
+      "start_ms": 120000,
+      "end_ms": 130000,
+      "scenario": "technical-interview",
+      "text": "OK,明白了。那我们切到 coding 环节。写一下代码实现一个 LRU 缓存,get 和 put 都是 O(1)。",
+      "trigger_keywords": ["写一下代码", "coding"],
+      "expected_intent": "coding",
+      "expected_assist": "runCodeHint"
+    },
+    {
+      "speaker_id": "S1",
+      "speaker_label": "Alex (我)",
+      "start_ms": 130000,
+      "end_ms": 145000,
+      "scenario": "technical-interview",
+      "text": "用双向链表加哈希表,get 把节点移到头,put 满了就删尾巴。class DLinkedNode: def __init__(self, key=0, value=0): self.key = key; self.value = value; self.prev = None; self.next = None。然后维护 head 和 tail 哨兵节点,容量到了就 pop_tail,把对应 key 从 dict 里删掉。",
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "speaker_id": "S3",
+      "speaker_label": "Priya (Datacraft 工程经理)",
+      "start_ms": 145000,
+      "end_ms": 150000,
+      "scenario": "technical-interview",
+      "text": "嗯,如果再多说一下并发场景呢?多线程读怎么保证一致?",
+      "trigger_keywords": ["再多说一下"],
+      "expected_intent": "deep_dive",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S4",
+      "speaker_label": "Mei (产品负责人)",
+      "start_ms": 150000,
+      "end_ms": 158000,
+      "scenario": "team-meet",
+      "text": "OK 切到周会。先过状态,搜索服务那块现在如何?上次说有性能问题。",
+      "trigger_keywords": ["现在如何"],
+      "expected_intent": "status_update",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S1",
+      "speaker_label": "Alex (我)",
+      "start_ms": 158000,
+      "end_ms": 164000,
+      "scenario": "team-meet",
+      "text": "我来做 P99 优化,周五前出 patch,PR 我来提。",
+      "trigger_keywords": ["我来做", "周五前"],
+      "expected_intent": "capture_action",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S4",
+      "speaker_label": "Mei (产品负责人)",
+      "start_ms": 164000,
+      "end_ms": 172000,
+      "scenario": "team-meet",
+      "text": "收到。下一个,Risky 的支付回调卡在第三方,这事会赶不上 release,谁接手?",
+      "trigger_keywords": ["卡在第三方", "会赶不上"],
+      "expected_intent": "capture_risk",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S1",
+      "speaker_label": "Alex (我)",
+      "start_ms": 172000,
+      "end_ms": 178000,
+      "scenario": "team-meet",
+      "text": "我跟进这个,等下找 Risky,周三前给个时间线。",
+      "trigger_keywords": ["我跟进", "周三前"],
+      "expected_intent": "capture_action",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S4",
+      "speaker_label": "Mei (产品负责人)",
+      "start_ms": 178000,
+      "end_ms": 188000,
+      "scenario": "team-meet",
+      "text": "好。决策项,就用 Postgres 17,不用升级到 18 了?上回大家同意那次投票结果算数吗?",
+      "trigger_keywords": ["就用 Postgres 17", "最终决定", "大家同意"],
+      "expected_intent": "capture_decision",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S1",
+      "speaker_label": "Alex (我)",
+      "start_ms": 188000,
+      "end_ms": 198000,
+      "scenario": "team-meet",
+      "text": "数。但最终决定我得再过一遍 legal 合规,周一前出结论。",
+      "trigger_keywords": ["最终决定", "周一前"],
+      "expected_intent": "capture_decision",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S4",
+      "speaker_label": "Mei (产品负责人)",
+      "start_ms": 198000,
+      "end_ms": 208000,
+      "scenario": "team-meet",
+      "text": "行。Marketing site copy review 分配给 Sarah,周三前完事。",
+      "trigger_keywords": ["分配给", "周三前"],
+      "expected_intent": "capture_action",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S1",
+      "speaker_label": "Alex (我)",
+      "start_ms": 208000,
+      "end_ms": 218000,
+      "scenario": "team-meet",
+      "text": "收到,我同步给她。",
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "speaker_id": "S4",
+      "speaker_label": "Mei (产品负责人)",
+      "start_ms": 218000,
+      "end_ms": 225000,
+      "scenario": "team-meet",
+      "text": "接下来讲一下 launch checklist,Sarah 的部分谁来接?",
+      "expected_intent": null,
+      "expected_assist": "runRecap"
+    },
+    {
+      "speaker_id": "S5",
+      "speaker_label": "梁教授",
+      "start_ms": 225000,
+      "end_ms": 250000,
+      "scenario": "lecture",
+      "text": "今天我们讲一致性哈希。这个叫 consistent hashing,原理是把节点和 key 都映射到同一个环上。定义为 virtual node 的概念,意思是用 vnode 解决数据倾斜问题。",
+      "trigger_keywords": ["这个叫", "原理是", "定义为"],
+      "expected_intent": "explain_concept",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S5",
+      "speaker_label": "梁教授",
+      "start_ms": 250000,
+      "end_ms": 265000,
+      "scenario": "lecture",
+      "text": "接下来,公式推导一下。假设环长 1,有 k 个节点、n 个 key,期望每个节点承载 key 的数量是 n/k,方差大约 1/k,标准差 1/sqrt(k)。",
+      "trigger_keywords": ["公式", "推导", "期望"],
+      "expected_intent": "render_formula",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S5",
+      "speaker_label": "梁教授",
+      "start_ms": 265000,
+      "end_ms": 275000,
+      "scenario": "lecture",
+      "text": "当一个节点加入或离开时,只有 1/k 比例的 key 会被重新映射,这就是相比 mod 哈希的最大优势。",
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "speaker_id": "S5",
+      "speaker_label": "梁教授",
+      "start_ms": 275000,
+      "end_ms": 285000,
+      "scenario": "lecture",
+      "text": "谁知道为什么用 160 位的 vnode 而不是 32 位?有同学能答吗?",
+      "trigger_keywords": ["谁知道", "为什么"],
+      "expected_intent": "answer_class_question",
+      "expected_assist": "runManualAnswer"
+    },
+    {
+      "speaker_id": "S1",
+      "speaker_label": "Alex (学生)",
+      "start_ms": 285000,
+      "end_ms": 298000,
+      "scenario": "lecture",
+      "text": "老师,能解释一下为什么不用 mod 哈希吗?具体说一下环式映射的好处?",
+      "trigger_keywords": ["能解释", "具体说"],
+      "expected_intent": "clarification",
+      "expected_assist": "runClarify"
+    },
+    {
+      "speaker_id": "S5",
+      "speaker_label": "梁教授",
+      "start_ms": 298000,
+      "end_ms": 305000,
+      "scenario": "lecture",
+      "text": "好问题。环式的好处是节点增减时只影响相邻节点,mod 哈希不行,任何一个节点变化都要全部重新映射。",
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "speaker_id": "S6",
+      "speaker_label": "Sam (Beta Corp CTO)",
+      "start_ms": 305000,
+      "end_ms": 315000,
+      "scenario": "fde",
+      "text": "终于联上了。Alex,我们想两周内原型出 Notion 到 SQL 的双向同步,当前流程手动 4 小时/天。",
+      "trigger_keywords": ["原型", "当前流程"],
+      "expected_intent": "deep_dive",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S1",
+      "speaker_label": "Alex (我)",
+      "start_ms": 315000,
+      "end_ms": 325000,
+      "scenario": "fde",
+      "text": "我深入讲一下方案:dbt + Airbyte 增量,不改造 Notion,只读 + 写回。",
+      "trigger_keywords": ["深入讲"],
+      "expected_intent": "deep_dive",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S6",
+      "speaker_label": "Sam (Beta Corp CTO)",
+      "start_ms": 325000,
+      "end_ms": 335000,
+      "scenario": "fde",
+      "text": "安全这边能详细讲吗?我们的客户表里有 PII,审计日志怎么存?",
+      "trigger_keywords": ["能详细讲", "PII"],
+      "expected_intent": "deep_dive",
+      "expected_assist": "runWhatShouldISay",
+      "expected_kb_retrieval": "fde_security_requirements"
+    },
+    {
+      "speaker_id": "S1",
+      "speaker_label": "Alex (我)",
+      "start_ms": 335000,
+      "end_ms": 350000,
+      "scenario": "fde",
+      "text": "字段级加密 + Postgres RLS,审计走 CloudTrail,数据驻留留 us-east-1,合规清单之后呢我会发你 SOC2 报告。",
+      "trigger_keywords": ["之后呢"],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "speaker_id": "S6",
+      "speaker_label": "Sam (Beta Corp CTO)",
+      "start_ms": 350000,
+      "end_ms": 360000,
+      "scenario": "fde",
+      "text": "OK。那风险主要在哪?有依赖第三方 API 吗?",
+      "trigger_keywords": ["风险", "依赖"],
+      "expected_intent": "capture_risk",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S1",
+      "speaker_label": "Alex (我)",
+      "start_ms": 360000,
+      "end_ms": 370000,
+      "scenario": "fde",
+      "text": "依赖 Notion 官方 API,风险是速率限制,短板是他们凌晨维护窗口。",
+      "trigger_keywords": ["依赖", "风险", "短板"],
+      "expected_intent": "capture_risk",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S6",
+      "speaker_label": "Sam (Beta Corp CTO)",
+      "start_ms": 370000,
+      "end_ms": 380000,
+      "scenario": "fde",
+      "text": "那就这样定:周一 kickoff,周三中间检查点,周五演示。",
+      "trigger_keywords": ["就这样定"],
+      "expected_intent": "capture_decision",
+      "expected_assist": "runWhatShouldISay"
+    },
+    {
+      "speaker_id": "S1",
+      "speaker_label": "Alex (我)",
+      "start_ms": 380000,
+      "end_ms": 385000,
+      "scenario": "fde",
+      "text": "收到,我来写项目计划,今天内发出来。",
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "speaker_id": "S6",
+      "speaker_label": "Sam (Beta Corp CTO)",
+      "start_ms": 385000,
+      "end_ms": 390000,
+      "scenario": "fde",
+      "text": "完美。顺便问一下,如果要做到双向同步,大概要多长时间?",
+      "trigger_keywords": ["如果要做到"],
+      "expected_intent": "clarification",
+      "expected_assist": "runClarify"
+    }
+  ],
+  "summary": {
+    "total_duration_ms": 390000,
+    "total_segments": 41,
+    "scenarios_covered": 5,
+    "speakers": 6,
+    "expected_intent_matches": 21,
+    "expected_assist_calls": 22,
+    "expected_kb_retrievals": 3,
+    "assist_functions_triggered": [
+      "runWhatShouldISay",
+      "runRecap",
+      "runClarify",
+      "runCodeHint",
+      "runManualAnswer",
+      "runBrainstorm",
+      "detectConfirmAndEmitDynamicActions"
+    ]
+  }
+}
