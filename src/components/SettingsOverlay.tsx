@@ -1563,7 +1563,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     <h3 className="text-lg font-bold text-text-primary">鼠标穿透</h3>
                                                 </div>
                                                 <p className="text-xs text-text-secondary">
-                                                    Overlay stays visible but lets all mouse clicks pass through to the app beneath.
+                                                    覆盖层保持可见,但允许所有鼠标点击穿透到下方的应用。
                                                 </p>
                                             </div>
                                             <div
