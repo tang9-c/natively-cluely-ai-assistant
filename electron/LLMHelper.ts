@@ -97,7 +97,7 @@ export class LLMHelper {
   private negotiationCoachingHandler: ((payload: unknown) => void) | null = null;
   private customNotes: string = '';
   private personaPrompt: string = '';
-  private aiResponseLanguage: string = 'auto';
+  private aiResponseLanguage: string = 'Chinese';
   private sttLanguage: string = 'english-us';
   private nativelyKey: string | null = null;
 
