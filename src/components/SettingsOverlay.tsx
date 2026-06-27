@@ -1855,8 +1855,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <h3 className="text-sm font-bold text-text-primary">会议界面风格</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">
                                                                 {meetingInterfaceTheme === 'liquid-glass'
-                                                                    ? 'Liquid glass — Apple-inspired transparent overlay'
-                                                                    : 'Default overlay appearance'}
+                                                                    ? '液态玻璃 — 借鉴 Apple 风格的透明覆盖层'
+                                                                    : '默认覆盖层外观'}
                                                             </p>
                                                         </div>
                                                     </div>
