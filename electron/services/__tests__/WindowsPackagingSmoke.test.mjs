@@ -89,6 +89,10 @@ test('windows CI workflow makes toolchain and shell assumptions explicit', () =>
   assert.match(workflow, /shell: bash/);
   assert.match(workflow, /npm run typecheck:electron/);
   assert.match(workflow, /WindowsPackagingSmoke\.test\.mjs/);
+  assert.match(workflow, /rm -rf release/);
+  assert.match(workflow, /Validate Windows x64 artifact set/);
+  assert.match(workflow, /Unexpected macOS artifact in Windows workflow/);
+  assert.match(workflow, /Unexpected non-x64 Windows artifact/);
   assert.match(workflow, /node scripts\/audit-release-size\.js > release\/size-report\.txt/);
   assert.match(workflow, /release\/size-report\.txt/);
 });

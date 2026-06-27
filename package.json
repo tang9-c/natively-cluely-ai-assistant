@@ -96,18 +96,10 @@
       "category": "public.app-category.productivity",
       "target": [
         {
-          "target": "zip",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
+          "target": "zip"
         },
         {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
+          "target": "dmg"
         }
       ],
       "icon": "assets/natively.icns",

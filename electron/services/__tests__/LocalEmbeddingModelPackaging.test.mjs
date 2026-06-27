@@ -64,6 +64,14 @@ test('download-models does not install optional multilingual intent classifier b
   assert.doesNotMatch(src, /Downloading Xenova\/mobilebert-uncased-mnli/);
 });
 
+test('bundled resources do not include legacy mobilebert model cache', () => {
+  const bundledModelsDir = path.join(repoRoot, 'resources/models/Xenova');
+  const bundledModels = fs.readdirSync(bundledModelsDir);
+
+  assert.ok(bundledModels.includes('paraphrase-multilingual-MiniLM-L12-v2'));
+  assert.equal(bundledModels.includes('mobilebert-uncased-mnli'), false);
+});
+
 test('LocalModelsPanel labels optional intent model separately from base models', () => {
   const src = read('src/components/LocalModelsPanel.tsx');
 

@@ -15,13 +15,15 @@ function readJson(rel) {
   return JSON.parse(read(rel));
 }
 
-test('electron-builder mac release targets support both release architectures and keep native binaries unpacked', () => {
+test('electron-builder mac release targets are architecture-neutral so workflows can package one arch', () => {
   const pkg = readJson('package.json');
   const macTargets = pkg.build.mac.target;
-  const arches = new Set(macTargets.flatMap((target) => target.arch));
 
-  assert.ok(arches.has('x64'), 'mac release must include Intel x64');
-  assert.ok(arches.has('arm64'), 'mac release must include Apple Silicon arm64');
+  assert.deepEqual(macTargets.map((target) => target.target), ['zip', 'dmg']);
+  for (const target of macTargets) {
+    assert.equal(target.arch, undefined, 'mac target arch must be controlled by workflow CLI flags');
+  }
+
   assert.ok(pkg.build.files.includes('native-module'), 'native-module must be packaged');
   assert.ok(pkg.build.files.includes('node_modules'), 'native dependencies must be packaged');
   assert.ok(pkg.build.files.includes('!**/*.map'), 'source maps must be excluded from release packages');
@@ -51,6 +53,9 @@ test('mac release workflows build one architecture each and upload size audit re
   assert.match(intelWorkflow, /NATIVELY_NATIVE_TARGETS:\s*"x86_64-apple-darwin"/);
   assert.match(intelWorkflow, /npx electron-builder --mac --x64 --publish never/);
   assert.doesNotMatch(intelWorkflow, /NATIVELY_BUILD_ALL_MAC_ARCHES:\s*"1"/);
+  assert.match(intelWorkflow, /rm -rf release/);
+  assert.match(intelWorkflow, /Validate Intel artifact set/);
+  assert.match(intelWorkflow, /Unexpected arm64 artifact in Intel workflow/);
   assert.match(intelWorkflow, /node scripts\/audit-release-size\.js > release\/size-report\.txt/);
   assert.match(intelWorkflow, /release\/size-report\.txt/);
 
@@ -58,8 +63,18 @@ test('mac release workflows build one architecture each and upload size audit re
   assert.match(armWorkflow, /runs-on:\s*macos-latest/);
   assert.match(armWorkflow, /NATIVELY_NATIVE_TARGETS:\s*"aarch64-apple-darwin"/);
   assert.match(armWorkflow, /npx electron-builder --mac --arm64 --publish never/);
+  assert.match(armWorkflow, /rm -rf release/);
+  assert.match(armWorkflow, /Validate ARM64 artifact set/);
+  assert.match(armWorkflow, /Unexpected non-arm64 artifact in ARM64 workflow/);
   assert.match(armWorkflow, /node scripts\/audit-release-size\.js > release\/size-report\.txt/);
   assert.match(armWorkflow, /natively-arm64-mac-/);
+  assert.match(armWorkflow, /release\/\*arm64\*\.dmg/);
+  assert.match(armWorkflow, /release\/\*arm64\*\.zip/);
+
+  const pkg = readJson('package.json');
+  for (const target of pkg.build.mac.target) {
+    assert.equal(target.arch, undefined, 'workflow arch flags must not be widened by package.json mac target arch arrays');
+  }
 });
 
 test('dev Electron startup preflights the native audio artifact before launching', () => {

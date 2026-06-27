@@ -48,9 +48,31 @@ jobs:
 
       - name: Package x64 with electron-builder
         shell: bash
-        run: npx electron-builder --win --x64 --publish never
+        run: |
+          rm -rf release
+          npx electron-builder --win --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Validate Windows x64 artifact set
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          artifacts=(release/*.exe release/*.blockmap)
+          printf '%s\n' "${artifacts[@]}"
+          if compgen -G "release/*.dmg" > /dev/null || compgen -G "release/*.zip" > /dev/null; then
+            echo "Unexpected macOS artifact in Windows workflow" >&2
+            exit 1
+          fi
+          for artifact in "${artifacts[@]}"; do
+            name="$(basename "$artifact")"
+            if [[ "$name" == *arm64* || "$name" == *ia32* ]]; then
+              echo "Unexpected non-x64 Windows artifact: $artifact" >&2
+              exit 1
+            fi
+          done
+          test -e release/*.exe
 
       - name: Audit release size
         shell: bash
