@@ -91,3 +91,19 @@ test('permissions toaster uses effective screen health instead of only raw scree
   assert.match(toaster, /recommendedFix/);
   assert.doesNotMatch(toaster, /setScrStatus\(p\.screen\s+as PermStatus\)/);
 });
+
+test('startup permissions toaster is skipped when effective permissions are already granted', () => {
+  const app = read('src/App.tsx');
+  const onboardingBlock = app.match(/\/\/ ── Onboarding[\s\S]*?\/\/ Listen for open-settings-tab/);
+
+  assert.ok(onboardingBlock, 'App onboarding startup block should be present');
+  assert.match(onboardingBlock[0], /checkPermissions\?\.\(\)/);
+  assert.match(onboardingBlock[0], /screenHealth\?\.effectiveGranted/);
+  assert.match(onboardingBlock[0], /systemAudioHealth\?\.effectiveGranted/);
+  assert.match(onboardingBlock[0], /localStorage\.setItem\('natively_perms_shown_v1', '1'\)/);
+  assert.doesNotMatch(
+    onboardingBlock[0],
+    /if \(!permsShown\)\s*{\s*\/\/ First ever launch[\s\S]*?setShowPermissionsToaster\(true\);[\s\S]*?}/,
+    'missing localStorage marker must not unconditionally show the permissions toaster',
+  );
+});

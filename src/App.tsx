@@ -145,13 +145,38 @@ const App: React.FC = () => {
   useEffect(() => {
     // Clean up old local storage
     localStorage.removeItem('useLegacyAudioBackend');
+    let onboardingCancelled = false;
 
     // ── Onboarding ──────────────────────────────────
     if (isLauncherWindow || isDefault) {
       const permsShown = localStorage.getItem('natively_perms_shown_v1');
       if (!permsShown) {
-        // First ever launch — show permissions toaster
-        setShowPermissionsToaster(true);
+        const maybeShowPermissionsToaster = async () => {
+          try {
+            const permissions = await window.electronAPI?.checkPermissions?.();
+            const micGranted =
+              permissions?.microphone === 'granted' ||
+              permissions?.microphoneHealth?.effectiveGranted === true;
+            const permissionsAlreadyGranted = permissions?.platform === 'darwin'
+              ? micGranted &&
+                permissions?.screenHealth?.effectiveGranted === true &&
+                permissions?.systemAudioHealth?.effectiveGranted === true
+              : micGranted;
+
+            if (permissionsAlreadyGranted) {
+              localStorage.setItem('natively_perms_shown_v1', '1');
+              return;
+            }
+          } catch (error) {
+            console.warn('[App] Failed to preflight permissions toaster state:', error);
+          }
+
+          if (!onboardingCancelled) {
+            setShowPermissionsToaster(true);
+          }
+        };
+
+        void maybeShowPermissionsToaster();
       }
     }
 
@@ -189,6 +214,7 @@ const App: React.FC = () => {
     }
 
     return () => {
+      onboardingCancelled = true;
       if (removeProgress) removeProgress();
       if (removeComplete) removeComplete();
       if (removeWarning) removeWarning();
