@@ -932,7 +932,7 @@ export const HelpSettings: React.FC = () => {
                                     <Mic size={14} className="text-blue-500" /> 麦克风与扬声器回环选择
                                 </h5>
                                 <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                    Natively can capture both what you say and what you hear globally. At the top of the Audio Settings, use the Dropdowns to explicitly select your hardware Input (e.g. your physical microphone) and Output capture (what the speakers play). By default, Natively utilizes the <strong>系统默认</strong>, so audio routing will automatically follow your OS preferences.
+                                    Natively 可以全局捕获你说的和听到的声音。在音频设置顶部，使用下拉菜单明确选择你的硬件输入（例如你的物理麦克风）和输出捕获（扬声器播放的内容）。默认情况下，Natively 使用<strong>系统默认</strong>，音频路由会自动跟随系统的偏好设置。
                                 </p>
                             </div>
 
@@ -940,7 +940,7 @@ export const HelpSettings: React.FC = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
                                         <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                            <Monitor size={14} className="text-accent-primary" /> ScreenCaptureKit (SCK)
+                                            <Monitor size={14} className="text-accent-primary" /> ScreenCaptureKit（SCK）
                                         </h5>
                                         <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
                                             macOS 13.0+ 推荐的后端。使用 Apple 现代的、高度优化的内部框架，安全地实现零延迟回环扬声器捕获。
@@ -948,7 +948,7 @@ export const HelpSettings: React.FC = () => {
                                     </div>
                                     <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
                                         <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                            <Volume2 size={14} className="text-orange-500" /> CoreAudio ( legacy )
+                                            <Volume2 size={14} className="text-orange-500" /> CoreAudio（旧版）
                                         </h5>
                                         <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
                                             旧硬件的备用引擎。依赖内部设备聚合来捕获输出音频。仅在 SCK 反复丢失扬声器数据包时使用。
@@ -974,7 +974,7 @@ export const HelpSettings: React.FC = () => {
                                         <Monitor className="w-4 h-4 text-accent-primary" /> 屏幕录制
                                     </h4>
                                     <p className="text-xs opacity-90 mb-2">让 Natively 在捕获上下文时临时读取你的屏幕。</p>
-                                    <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; 屏幕录制</p>
+                                    <p className="text-[11px] text-text-tertiary">系统设置 &gt; 隐私与安全性 &gt; 屏幕录制</p>
                                 </div>
 
                                 <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
@@ -982,7 +982,7 @@ export const HelpSettings: React.FC = () => {
                                         <Command className="w-4 h-4 text-purple-500" /> 辅助功能
                                     </h4>
                                     <p className="text-xs opacity-90 mb-2">让 Natively 能够检测下方的全局键盘快捷键，无论当前聚焦哪个窗口。</p>
-                                    <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; 辅助功能</p>
+                                    <p className="text-[11px] text-text-tertiary">系统设置 &gt; 隐私与安全性 &gt; 辅助功能</p>
                                 </div>
                             </div>
                         ) : (
@@ -992,7 +992,7 @@ export const HelpSettings: React.FC = () => {
                                         <Mic className="w-4 h-4 text-blue-500" /> 麦克风
                                     </h4>
                                     <p className="text-xs opacity-90 mb-2">用于捕获你在会议中说的话。Windows 会在你第一次开始会议时提示。</p>
-                                    <p className="text-[11px] text-text-tertiary">Settings &gt; Privacy &gt; 麦克风</p>
+                                    <p className="text-[11px] text-text-tertiary">设置 &gt; 隐私 &gt; 麦克风</p>
                                 </div>
                             </div>
                         )}
