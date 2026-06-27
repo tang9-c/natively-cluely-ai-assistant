@@ -56,8 +56,18 @@ test('Apple Silicon overlay skips native AppKit stealth path', () => {
   );
   assert.match(
     source,
-    /return process\.arch !== 'arm64';/,
+    /return !this\.isAppleSiliconMac\(\);/,
     'native overlay stealth should be disabled on Apple Silicon until the native path is fixed',
+  );
+  assert.match(
+    source,
+    /sysctl\.proc_translated/,
+    'Apple Silicon detection should include Intel builds running under Rosetta',
+  );
+  assert.match(
+    source,
+    /hw\.optional\.arm64/,
+    'Apple Silicon detection should fall back to the hardware capability sysctl',
   );
   assert.match(
     source,

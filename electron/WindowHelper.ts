@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, screen } from 'electron';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { AppState } from './main';
 import { KeybindManager } from './services/KeybindManager';
@@ -86,13 +87,36 @@ export class WindowHelper {
     if (process.platform !== 'darwin') return false;
     if (process.env.NATIVELY_DISABLE_NATIVE_OVERLAY_STEALTH === '1') return false;
 
-    // The arm64 packaged build has shown a WindowServer state where Electron
-    // reports the overlay visible with valid bounds, but the user cannot see or
-    // recover it. Development runs without the native artifact do not reproduce,
-    // pointing at the extra AppKit/SPI stealth layer rather than the renderer.
-    // Keep the stable Electron panel behavior on Apple Silicon until the native
-    // stealth path has an arm64-specific fix.
-    return process.arch !== 'arm64';
+    // Apple Silicon, including Intel builds running under Rosetta, has shown a
+    // WindowServer state where Electron reports the overlay visible with valid
+    // bounds, but the user cannot see or recover it. Keep the stable Electron
+    // panel behavior there until the native stealth path has a silicon-specific fix.
+    return !this.isAppleSiliconMac();
+  }
+
+  private isAppleSiliconMac(): boolean {
+    if (process.platform !== 'darwin') return false;
+    if (process.arch === 'arm64') return true;
+
+    try {
+      const translated = execFileSync('/usr/sbin/sysctl', ['-in', 'sysctl.proc_translated'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      if (translated === '1') return true;
+    } catch {
+      // sysctl.proc_translated is absent on non-Rosetta macOS.
+    }
+
+    try {
+      const supportsArm64 = execFileSync('/usr/sbin/sysctl', ['-n', 'hw.optional.arm64'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      return supportsArm64 === '1';
+    } catch {
+      return false;
+    }
   }
 
   private logOverlayDimensionClamp(
@@ -425,6 +449,7 @@ export class WindowHelper {
           console.warn('[WindowHelper] Native overlay stealth skipped for this environment', {
             platform: process.platform,
             arch: process.arch,
+            appleSiliconMac: this.isAppleSiliconMac(),
             disabledByEnv: process.env.NATIVELY_DISABLE_NATIVE_OVERLAY_STEALTH === '1',
           });
           this.logOverlayState('overlay-ready-to-show-native-stealth-skipped');
