@@ -1,6 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCircle, FolderOpen, RefreshCw, Sparkles } from 'lucide-react';
-import type { SkillActivation, SkillSettings, SkillSummary } from '../../types/electron';
+import type {
+    SkillActivation,
+    SkillSettings,
+    SkillSummary,
+    SkillWatcherSettings,
+    SkillWatcherSuggestion,
+} from '../../types/electron';
 
 export const SkillsSettings: React.FC = () => {
     const [skills, setSkills] = useState<SkillSummary[]>([]);
@@ -12,6 +18,28 @@ export const SkillsSettings: React.FC = () => {
         skillsAutoTriggerEnabled: true,
     });
     const [activations, setActivations] = useState<SkillActivation[]>([]);
+    const [watcherSettings, setWatcherSettings] = useState<SkillWatcherSettings>({
+        skillsWatcherEnabled: false,
+        skillsWatcherAutoActivateThreshold: 0.86,
+        skillsWatcherSuggestThreshold: 0.65,
+    });
+    const [watcherSuggestions, setWatcherSuggestions] = useState<SkillWatcherSuggestion[]>([]);
+
+    const loadWatcherState = useCallback(async () => {
+        if (typeof window.electronAPI?.skillsGetWatcherSettings !== 'function') {
+            throw new Error('Skills watcher settings bridge is unavailable.');
+        }
+        if (typeof window.electronAPI?.skillsListWatcherSuggestions !== 'function') {
+            throw new Error('Skills watcher suggestions bridge is unavailable.');
+        }
+
+        const [settings, suggestions] = await Promise.all([
+            window.electronAPI.skillsGetWatcherSettings(),
+            window.electronAPI.skillsListWatcherSuggestions(),
+        ]);
+        setWatcherSettings(settings);
+        setWatcherSuggestions(Array.isArray(suggestions) ? suggestions : []);
+    }, []);
 
     const loadSkills = useCallback(async () => {
         setLoading(true);
@@ -41,17 +69,30 @@ export const SkillsSettings: React.FC = () => {
 
             const active = await window.electronAPI.skillsListActivations();
             setActivations(Array.isArray(active) ? active : []);
+            await loadWatcherState();
             setStatus(null);
         } catch (error: any) {
             setStatus(error?.message || 'Could not load skills.');
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [loadWatcherState]);
 
     useEffect(() => {
         loadSkills();
     }, [loadSkills]);
+
+    useEffect(() => {
+        if (typeof window.electronAPI?.onSkillWatcherSuggestionCreated !== 'function') {
+            return;
+        }
+        return window.electronAPI.onSkillWatcherSuggestionCreated(({ suggestion }) => {
+            setWatcherSuggestions((current) => [
+                suggestion,
+                ...current.filter((item) => item.id !== suggestion.id),
+            ]);
+        });
+    }, []);
 
     const openFolder = async () => {
         try {
@@ -102,6 +143,62 @@ export const SkillsSettings: React.FC = () => {
             ...skillSettings,
             skillsAutoTriggerEnabled: !skillSettings.skillsAutoTriggerEnabled,
         });
+    };
+
+    const updateWatcherSettings = async (next: SkillWatcherSettings) => {
+        if (typeof window.electronAPI?.skillsSetWatcherSettings !== 'function') {
+            setStatus('Skills watcher settings bridge is unavailable.');
+            return;
+        }
+
+        setWatcherSettings(next);
+        const result = await window.electronAPI.skillsSetWatcherSettings(next);
+        if (!result?.success || !result.settings) {
+            setStatus(result?.error || 'Could not update watcher settings.');
+            await loadWatcherState();
+            return;
+        }
+        setWatcherSettings(result.settings);
+        setStatus(null);
+    };
+
+    const acceptWatcherSuggestion = async (suggestionId: string) => {
+        if (typeof window.electronAPI?.skillsAcceptWatcherSuggestion !== 'function') {
+            setStatus('Skills watcher accept bridge is unavailable.');
+            return;
+        }
+
+        const result = await window.electronAPI.skillsAcceptWatcherSuggestion(suggestionId);
+        if (!result?.success) {
+            setStatus(result?.error || 'Could not accept watcher suggestion.');
+        }
+        await loadSkills();
+    };
+
+    const dismissWatcherSuggestion = async (suggestionId: string) => {
+        if (typeof window.electronAPI?.skillsDismissWatcherSuggestion !== 'function') {
+            setStatus('Skills watcher dismiss bridge is unavailable.');
+            return;
+        }
+
+        const result = await window.electronAPI.skillsDismissWatcherSuggestion(suggestionId);
+        if (!result?.success) {
+            setStatus(result?.error || 'Could not dismiss watcher suggestion.');
+        }
+        await loadWatcherState();
+    };
+
+    const deactivateSkill = async (skillId: string, scope?: SkillActivation['scope']) => {
+        if (typeof window.electronAPI?.skillsDeactivate !== 'function') {
+            setStatus('Skills deactivate bridge is unavailable.');
+            return;
+        }
+
+        const result = await window.electronAPI.skillsDeactivate(skillId, scope);
+        if (!result?.success) {
+            setStatus(result?.error || 'Could not deactivate skill.');
+        }
+        await loadSkills();
     };
 
     return (
@@ -167,16 +264,78 @@ export const SkillsSettings: React.FC = () => {
                 </div>
             </div>
 
+            <div className="bg-bg-card rounded-lg border border-border-subtle p-4">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                        <h4 className="text-sm font-semibold text-text-primary">Transcript watcher</h4>
+                        <p className="text-xs text-text-secondary mt-1">
+                            High confidence activates temporarily. Medium confidence asks first.
+                        </p>
+                        <p className="mt-2 text-[11px] text-text-tertiary">
+                            Auto {Math.round(watcherSettings.skillsWatcherAutoActivateThreshold * 100)}% · Suggest {Math.round(watcherSettings.skillsWatcherSuggestThreshold * 100)}%
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => updateWatcherSettings({
+                            ...watcherSettings,
+                            skillsWatcherEnabled: !watcherSettings.skillsWatcherEnabled,
+                        })}
+                        className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${watcherSettings.skillsWatcherEnabled ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                        role="switch"
+                        aria-checked={watcherSettings.skillsWatcherEnabled}
+                        aria-label="Transcript watcher"
+                    >
+                        <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${watcherSettings.skillsWatcherEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                </div>
+            </div>
+
             {status && (
                 <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
                     {status}
                 </div>
             )}
 
+            {watcherSuggestions.length > 0 && (
+                <div className="space-y-2">
+                    <h4 className="text-sm font-semibold text-text-primary">Watcher suggestions</h4>
+                    {watcherSuggestions.map((suggestion) => (
+                        <div key={suggestion.id} className="bg-bg-card rounded-lg border border-border-subtle p-3">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-sm text-text-primary truncate">{suggestion.skillId}</p>
+                                    <p className="text-xs text-text-secondary">
+                                        Confidence {Math.round(suggestion.confidence * 100)}% · {suggestion.reason}
+                                    </p>
+                                </div>
+                                <div className="flex gap-2 shrink-0">
+                                    <button
+                                        type="button"
+                                        className="px-2.5 py-1.5 rounded-lg border border-accent-primary/40 bg-accent-primary/15 text-[11px] font-medium text-accent-primary"
+                                        onClick={() => acceptWatcherSuggestion(suggestion.id)}
+                                    >
+                                        Accept
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="px-2.5 py-1.5 rounded-lg border border-border-subtle bg-bg-input text-[11px] font-medium text-text-secondary hover:text-text-primary"
+                                        onClick={() => dismissWatcherSuggestion(suggestion.id)}
+                                    >
+                                        Dismiss
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
             <div className="space-y-2">
                 {skills.map((skill) => {
                     const isDefault = skillSettings.defaultActiveSkillIds.includes(skill.id);
-                    const isRuntimeActive = activations.some((activation) => activation.skillId === skill.id);
+                    const runtimeActivation = activations.find((activation) => activation.skillId === skill.id);
+                    const isRuntimeActive = Boolean(runtimeActivation);
 
                     return (
                         <div key={skill.id} className="bg-bg-card rounded-lg border border-border-subtle p-4">
@@ -197,9 +356,13 @@ export const SkillsSettings: React.FC = () => {
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
                                     {isRuntimeActive && (
-                                        <span className="px-2 py-1 rounded-md border border-green-500/20 bg-green-500/10 text-[11px] text-green-400">
-                                            Active
-                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => deactivateSkill(skill.id, runtimeActivation?.scope)}
+                                            className="px-2 py-1 rounded-md border border-green-500/20 bg-green-500/10 text-[11px] text-green-400 hover:bg-green-500/15"
+                                        >
+                                            Active · Cancel
+                                        </button>
                                     )}
                                     <button
                                         type="button"

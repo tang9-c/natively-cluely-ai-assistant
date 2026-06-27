@@ -159,6 +159,26 @@ test('SkillsSettings renders skill defaults and auto-trigger controls with expli
   assert.match(view, /typeof window\.electronAPI\?\.skillsSetSettings\s*!==\s*['"]function['"]/);
 });
 
+test('SkillsSettings uses explicit watcher bridge guards and live suggestion event', () => {
+  const view = read('src/components/settings/SkillsSettings.tsx');
+
+  for (const method of [
+    'skillsGetWatcherSettings',
+    'skillsSetWatcherSettings',
+    'skillsListWatcherSuggestions',
+    'skillsAcceptWatcherSuggestion',
+    'skillsDismissWatcherSuggestion',
+    'onSkillWatcherSuggestionCreated',
+  ]) {
+    assert.match(view, new RegExp(`typeof window\\.electronAPI\\?\\.${method}\\s*!==\\s*['"]function['"]`));
+  }
+  assert.match(view, /skillsWatcherEnabled/);
+  assert.match(view, /skillsWatcherAutoActivateThreshold/);
+  assert.match(view, /skillsWatcherSuggestThreshold/);
+  assert.match(view, /acceptWatcherSuggestion/);
+  assert.match(view, /dismissWatcherSuggestion/);
+});
+
 // ---------------------------------------------------------------------------
 // 2. Generalised wiring invariant — every electronAPI.* method consumed by the
 //    renderer that maps to an ipcRenderer.invoke channel must have a matching
