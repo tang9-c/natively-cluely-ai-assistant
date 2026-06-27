@@ -15,7 +15,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { BaseSTT } from './BaseSTT';
-import { extractDoubaoAucTranscript, extractDoubaoAucTranscription, transcribeDoubaoAucFile, type DoubaoAucTranscriptionResult } from './doubaoAucClient';
+import { extractDoubaoAucTranscript, extractDoubaoAucTranscriptionJson, transcribeDoubaoAucFile, type DoubaoAucTranscriptionResult } from './doubaoAucClient';
 import { SpeakerDiarizationAligner } from './SpeakerDiarizationAligner';
 
 export type RestSttProvider = 'groq' | 'openai' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'doubao' | 'doubao-auc';
@@ -591,7 +591,7 @@ export class RestSTT extends BaseSTT {
                 queryEndpoint,
                 authHeader: this.config.authHeader,
                 requestBody,
-                extractTranscript: (data: any) => JSON.stringify(extractDoubaoAucTranscription(data)),
+                extractTranscript: extractDoubaoAucTranscriptionJson,
                 post: (url, body, options) => axios.post(url, body, options),
                 logger: console,
             });

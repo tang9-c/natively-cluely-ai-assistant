@@ -141,6 +141,15 @@ export function extractDoubaoAucTranscription(data: any): DoubaoAucTranscription
     return { text, utterances };
 }
 
+export function extractDoubaoAucTranscriptionJson(data: any): string {
+    const result = extractDoubaoAucTranscription(data);
+    if (result.text.trim().length === 0 && result.utterances.length === 0) {
+        return '';
+    }
+
+    return JSON.stringify(result);
+}
+
 export async function transcribeDoubaoAucFile(options: DoubaoAucTranscribeOptions): Promise<string> {
     const {
         submitEndpoint,

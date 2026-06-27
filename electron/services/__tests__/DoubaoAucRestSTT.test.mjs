@@ -66,6 +66,58 @@ test('Doubao AUC queries with the submit request id when submit body is empty', 
     assert.equal(calls[1].options.headers['X-Tt-Logid'], 'log-1');
 });
 
+test('Doubao AUC structured extraction keeps polling when submit body has no transcript', async () => {
+    const {
+        transcribeDoubaoAucFile,
+        extractDoubaoAucTranscriptionJson,
+    } = await loadClient();
+    const calls = [];
+    const post = async (url, body, options) => {
+        calls.push({ url, body, options });
+        if (url.endsWith('/submit')) {
+            return {
+                data: {},
+                headers: {
+                    'x-api-status-code': '20000000',
+                    'x-tt-logid': 'log-structured',
+                },
+            };
+        }
+        return {
+            data: {
+                result: {
+                    utterances: [
+                        { text: '结构化结果到了', start_time: 0, end_time: 1200, speaker_id: '1' },
+                    ],
+                },
+            },
+            headers: { 'x-api-status-code': '20000000' },
+        };
+    };
+
+    assert.equal(typeof extractDoubaoAucTranscriptionJson, 'function');
+
+    const jsonText = await transcribeDoubaoAucFile(createOptions({
+        extractTranscript: extractDoubaoAucTranscriptionJson,
+        post,
+    }));
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].url, 'https://example.test/api/v3/auc/bigmodel/query');
+    assert.equal(calls[1].options.headers['X-Tt-Logid'], 'log-structured');
+    assert.deepEqual(JSON.parse(jsonText), {
+        text: '结构化结果到了',
+        utterances: [
+            {
+                text: '结构化结果到了',
+                startMs: 0,
+                endMs: 1200,
+                providerSpeakerId: '1',
+            },
+        ],
+    });
+});
+
 test('Doubao AUC keeps polling through pending status and joins utterances', async () => {
     const { transcribeDoubaoAucFile, extractDoubaoAucTranscript } = await loadClient();
     const calls = [];
