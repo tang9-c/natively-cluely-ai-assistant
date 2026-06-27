@@ -21,6 +21,7 @@ async function loadModules() {
     DynamicActionEngine: engineMod.DynamicActionEngine,
     DynamicActionStore: storeMod.DynamicActionStore,
     DynamicActionDetector: detectorMod.DynamicActionDetector,
+    MODE_TRIGGERS: detectorMod.MODE_TRIGGERS,
     DynamicAction: actionMod.DynamicAction,
     ActionStatus: actionMod.ActionStatus,
   };
@@ -128,6 +129,25 @@ test('All eight real mode template keys have matching trigger packs', async () =
       actions.some(action => action.type === item.expectedType),
       `${item.modeTemplateType} should emit ${item.expectedType}; got ${actions.map(a => a.type).join(', ')}`,
     );
+  }
+});
+
+test('All persisted mode template keys have dynamic action trigger packs', async () => {
+  const { MODE_TRIGGERS } = await loadModules();
+  const modeTemplateTypes = [
+    'general',
+    'looking-for-work',
+    'sales',
+    'fde',
+    'recruiting',
+    'team-meet',
+    'lecture',
+    'technical-interview',
+  ];
+
+  for (const mode of modeTemplateTypes) {
+    assert.ok(Array.isArray(MODE_TRIGGERS[mode]), `${mode} should have a trigger pack`);
+    assert.ok(MODE_TRIGGERS[mode].length > 0, `${mode} trigger pack should not be empty`);
   }
 });
 

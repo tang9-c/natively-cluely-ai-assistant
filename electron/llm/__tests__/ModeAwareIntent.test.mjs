@@ -332,6 +332,19 @@ describe('Tier 2 edge cases: regex intentionally misses so SLM can take over', (
   });
 });
 
+test('FDE mode does not fall back to interview default keywords', () => {
+  const defaultsPath = path.resolve(
+    __dirname, '../../../dist-electron/electron/llm/IntentKeywordDefaults.js',
+  );
+  const { defaultKeywordRowsForTemplate } = cjsRequire(defaultsPath);
+  const rows = defaultKeywordRowsForTemplate('fde');
+
+  assert.ok(rows.length >= 6);
+  assert.ok(rows.every(row => row.intent.startsWith('fde_')));
+  assert.equal(rows.some(row => row.intent === 'behavioral'), false);
+  assert.equal(rows.some(row => row.intent === 'coding'), false);
+});
+
 // ---------------------------------------------------------------------------
 // Mode isolation — regex for one mode should NOT fire for another mode
 // ---------------------------------------------------------------------------
