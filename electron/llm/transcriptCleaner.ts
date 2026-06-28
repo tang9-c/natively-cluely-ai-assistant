@@ -6,6 +6,10 @@ export interface TranscriptTurn {
     role: 'interviewer' | 'user' | 'assistant';
     text: string;
     timestamp: number;
+    speakerId?: string;
+    speakerLabel?: string;
+    providerSpeakerId?: string;
+    diarizationProvider?: 'doubao-auc';
 }
 
 /**
@@ -98,7 +102,11 @@ export function cleanTranscript(turns: TranscriptTurn[]): TranscriptTurn[] {
             cleaned.push({
                 role: turn.role,
                 text: cleanedText,
-                timestamp: turn.timestamp
+                timestamp: turn.timestamp,
+                speakerId: turn.speakerId,
+                speakerLabel: turn.speakerLabel,
+                providerSpeakerId: turn.providerSpeakerId,
+                diarizationProvider: turn.diarizationProvider,
             });
         }
     }
@@ -106,38 +114,95 @@ export function cleanTranscript(turns: TranscriptTurn[]): TranscriptTurn[] {
     return cleaned;
 }
 
+function turnKey(turn: TranscriptTurn): string {
+    return `${turn.timestamp}|${turn.role}|${turn.speakerId ?? ''}|${turn.speakerLabel ?? ''}|${turn.text}`;
+}
+
+function speakerKey(turn: TranscriptTurn): string {
+    return (turn.speakerId || turn.speakerLabel || turn.role).trim();
+}
+
+function findPreviousTurn(turns: TranscriptTurn[], turn: TranscriptTurn): TranscriptTurn | null {
+    const index = turns.indexOf(turn);
+    if (index <= 0) return null;
+    return turns[index - 1];
+}
+
 /**
  * Sparsify transcript to target turn count
- * Prioritizes interviewer speech, keeps recent context
+ * Preserves the latest anchor, speaker diversity, and recent context
  * Target: 8-12 turns, ~300-600 tokens
  */
 export function sparsifyTranscript(
     turns: TranscriptTurn[],
     maxTurns: number = 12
 ): TranscriptTurn[] {
-    if (turns.length <= maxTurns) {
-        return [...turns].sort((a, b) => a.timestamp - b.timestamp);
+    if (maxTurns <= 0 || turns.length === 0) return [];
+
+    const ordered = [...turns].sort((a, b) => a.timestamp - b.timestamp);
+    if (ordered.length <= maxTurns) {
+        return ordered;
     }
 
-    // Separate by role
-    const interviewerTurns = turns.filter(t => t.role === 'interviewer');
-    const otherTurns = turns.filter(t => t.role !== 'interviewer');
+    const selected = new Map<string, TranscriptTurn>();
+    const add = (turn: TranscriptTurn | null | undefined): void => {
+        if (!turn || selected.size >= maxTurns) return;
+        selected.set(turnKey(turn), turn);
+    };
+    const findLatestByRole = (role: TranscriptTurn['role']): TranscriptTurn | undefined => {
+        for (let i = ordered.length - 1; i >= 0; i--) {
+            if (ordered[i].role === role) return ordered[i];
+        }
+        return undefined;
+    };
 
-    // Keep all interviewer turns if under limit
-    const result: TranscriptTurn[] = [];
+    // The newest cleaned turn is the trigger anchor for answer generation.
+    add(ordered[ordered.length - 1]);
 
-    // Prioritize recent interviewer turns (last 6)
-    const recentInterviewer = interviewerTurns.slice(-6);
+    // Keep the latest contribution from each role before considering density.
+    add(findLatestByRole('user'));
+    add(findLatestByRole('interviewer'));
+    add(findLatestByRole('assistant'));
 
-    // Fill remaining with recent other turns
-    const remainingSlots = maxTurns - recentInterviewer.length;
-    const recentOther = otherTurns.slice(-remainingSlots);
+    // In meetings, several humans can all be role=interviewer; keep each voice.
+    const seenSpeakers = new Set<string>();
+    for (let i = ordered.length - 1; i >= 0 && selected.size < maxTurns; i--) {
+        const turn = ordered[i];
+        if (turn.role === 'assistant') continue;
+        const key = speakerKey(turn);
+        if (seenSpeakers.has(key)) continue;
+        seenSpeakers.add(key);
+        add(turn);
+    }
 
-    // Merge and sort by timestamp
-    result.push(...recentInterviewer, ...recentOther);
-    result.sort((a, b) => a.timestamp - b.timestamp);
+    // Preserve immediate lead-in for selected anchors when budget allows.
+    const anchors = Array.from(selected.values()).sort((a, b) => b.timestamp - a.timestamp);
+    for (const anchor of anchors) {
+        if (selected.size >= maxTurns) break;
+        add(findPreviousTurn(ordered, anchor));
+    }
 
-    return result;
+    // Fill remaining slots with the most recent turns.
+    for (let i = ordered.length - 1; i >= 0 && selected.size < maxTurns; i--) {
+        add(ordered[i]);
+    }
+
+    return Array.from(selected.values()).sort((a, b) => a.timestamp - b.timestamp);
+}
+
+function baseRoleLabel(role: TranscriptTurn['role']): string {
+    return role === 'interviewer' ? 'INTERVIEWER' : role === 'user' ? 'ME' : 'ASSISTANT';
+}
+
+function shouldShowSpeakerLabel(turn: TranscriptTurn, label: string): boolean {
+    const normalized = label.trim().toLowerCase();
+    if (!normalized) return false;
+    const genericLabels: Record<TranscriptTurn['role'], Set<string>> = {
+        interviewer: new Set(['interviewer']),
+        user: new Set(['me', 'user', 'candidate']),
+        assistant: new Set(['assistant']),
+    };
+    return !genericLabels[turn.role].has(normalized);
 }
 
 /**
@@ -145,8 +210,11 @@ export function sparsifyTranscript(
  */
 export function formatTranscriptForLLM(turns: TranscriptTurn[]): string {
     return turns.map(turn => {
-        const label = turn.role === 'interviewer' ? 'INTERVIEWER' :
-            turn.role === 'user' ? 'ME' : 'ASSISTANT';
+        const baseLabel = baseRoleLabel(turn.role);
+        const speakerLabel = turn.speakerLabel?.trim();
+        const label = speakerLabel && shouldShowSpeakerLabel(turn, speakerLabel)
+            ? `${baseLabel}: ${speakerLabel}`
+            : baseLabel;
         return `[${label}]: ${turn.text}`;
     }).join('\n');
 }

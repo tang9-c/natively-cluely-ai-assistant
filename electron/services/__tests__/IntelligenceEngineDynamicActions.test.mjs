@@ -251,6 +251,47 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(action.confirmationSource, 'cloud_intent');
   });
 
+  test('cloud intent prompt keeps triggering turn and speaker-diverse meeting context', async () => {
+    const helper = new StubLLMHelper({
+      structuredResponses: ['{"intent":"fde_next_step","confidence":0.96}'],
+    });
+    const { engine } = await makeEngine(helper);
+    const emitted = [];
+    engine.on('dynamic_action_emitted', (action) => emitted.push(action));
+    engine.setDynamicActionContext({ sessionId: 's-speakers', modeId: 'm-fde', modeTemplateType: 'fde' });
+
+    const base = Date.now();
+    const segments = [
+      { speaker: 'interviewer', speakerId: 's-jordan', speakerLabel: 'Jordan', text: 'Jordan opened with pricing context for the rollout.', timestamp: base + 1, final: true },
+      { speaker: 'interviewer', speakerId: 's-priya', speakerLabel: 'Priya', text: 'Priya described the security review requirements.', timestamp: base + 2, final: true },
+      { speaker: 'interviewer', speakerId: 's-mei', speakerLabel: 'Mei', text: 'Mei raised integration ownership and API constraints.', timestamp: base + 3, final: true },
+      { speaker: 'interviewer', speakerId: 's-sam', speakerLabel: 'Sam', text: 'Sam explained support readiness and customer risk.', timestamp: base + 4, final: true },
+      { speaker: 'user', speakerId: 's-me', speakerLabel: 'Me', text: 'I can coordinate the rollout plan with product and engineering.', timestamp: base + 5, final: true },
+      { speaker: 'interviewer', speakerId: 's-jordan', speakerLabel: 'Jordan', text: 'Jordan added another pricing detail for enterprise customers.', timestamp: base + 6, final: true },
+      { speaker: 'interviewer', speakerId: 's-jordan', speakerLabel: 'Jordan', text: 'Jordan repeated budget sensitivity for this account.', timestamp: base + 7, final: true },
+      { speaker: 'interviewer', speakerId: 's-jordan', speakerLabel: 'Jordan', text: 'Jordan mentioned implementation timing after approval.', timestamp: base + 8, final: true },
+      { speaker: 'interviewer', speakerId: 's-jordan', speakerLabel: 'Jordan', text: 'Jordan asked whether discount approval can happen this week.', timestamp: base + 9, final: true },
+      { speaker: 'interviewer', speakerId: 's-jordan', speakerLabel: 'Jordan', text: 'Jordan wants a clear decision owner before Friday.', timestamp: base + 10, final: true },
+      { speaker: 'interviewer', speakerId: 's-jordan', speakerLabel: 'Jordan', text: 'Jordan asked for a risk mitigation plan for launch.', timestamp: base + 11, final: true },
+      { speaker: 'interviewer', speakerId: 's-jordan', speakerLabel: 'Jordan', text: 'Jordan requested a concrete next step for legal and security.', timestamp: base + 12, final: true },
+      { speaker: 'interviewer', speakerId: 's-jordan', speakerLabel: 'Jordan', text: '下一步需要负责人，明天前确认上线计划。', timestamp: base + 13, final: true },
+    ];
+
+    for (const segment of segments) {
+      engine.handleTranscript(segment, true);
+    }
+    await waitForAsyncSignals();
+
+    assert.ok(helper.structuredCalls.length >= 1);
+    const lastPrompt = helper.structuredCalls.at(-1).prompt;
+    assert.match(lastPrompt, /\[INTERVIEWER: Jordan\]: 下一步需要负责人，明天前确认上线计划。/);
+    assert.match(lastPrompt, /\[INTERVIEWER: Priya\]: priya described the security review requirements\./);
+    assert.match(lastPrompt, /\[INTERVIEWER: Mei\]: mei raised integration ownership and api constraints\./);
+    assert.match(lastPrompt, /\[INTERVIEWER: Sam\]: sam explained support readiness and customer risk\./);
+    assert.match(lastPrompt, /\[ME\]: i can coordinate the rollout plan with product and engineering\./);
+    assert.ok(emitted.some(a => a.type === 'fde_next_step'), 'FDE dynamic action should still emit from confirmed cloud intent');
+  });
+
   test('transcript scope disabled skips cloud intent confirmation', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: ['{"intent":"seize_signal","confidence":0.96}'],

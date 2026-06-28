@@ -12,6 +12,7 @@ import {
     AssistantResponse as LLMAssistantResponse, classifyIntent, planNextAssistantAction, PlannerDecision
 } from './llm';
 import type { ModeEventContext } from './llm';
+import type { TranscriptTurn } from './llm';
 import type {
     CloudIntentClassifierInput,
     CloudIntentClassifierResult,
@@ -473,6 +474,44 @@ export class IntelligenceEngine extends EventEmitter {
         this.intentClassificationOptionsForTest = options;
     }
 
+    private contextItemToTranscriptTurn(item: ContextItem): TranscriptTurn {
+        return {
+            role: item.role,
+            text: item.text,
+            timestamp: item.timestamp,
+            speakerId: item.speakerId,
+            speakerLabel: item.speakerLabel,
+        };
+    }
+
+    private buildTranscriptTurns(contextItems: ContextItem[]): TranscriptTurn[] {
+        return contextItems.map(item => this.contextItemToTranscriptTurn(item));
+    }
+
+    private appendSegmentAnchorIfMissing(
+        turns: TranscriptTurn[],
+        segment: TranscriptSegment,
+        role: TranscriptTurn['role'],
+    ): void {
+        const text = (segment.text || '').trim();
+        if (!text) return;
+        const duplicate = turns.some(turn =>
+            turn.role === role &&
+            turn.text === text &&
+            Math.abs(turn.timestamp - segment.timestamp) < 1000
+        );
+        if (duplicate) return;
+        turns.push({
+            role,
+            text,
+            timestamp: segment.timestamp,
+            speakerId: segment.speakerId,
+            speakerLabel: segment.speakerLabel,
+            providerSpeakerId: segment.providerSpeakerId,
+            diarizationProvider: segment.diarizationProvider,
+        });
+    }
+
     private async detectConfirmAndEmitDynamicActions(segment: TranscriptSegment): Promise<void> {
         if (!this.dynamicActionEngine || !this.currentSessionId
             || !this.currentDynamicActionModeId || !this.currentDynamicActionTemplateType) {
@@ -485,11 +524,10 @@ export class IntelligenceEngine extends EventEmitter {
         if (!text) return;
 
         const contextItems = this.session.getContext(180);
-        const preparedTranscript = prepareTranscriptForWhatToAnswer(contextItems.map(item => ({
-            role: item.role,
-            text: item.text,
-            timestamp: item.timestamp,
-        })), 12);
+        const transcriptTurns = this.buildTranscriptTurns(contextItems);
+        const anchorRole = segment.speaker === 'user' ? 'user' : 'interviewer';
+        this.appendSegmentAnchorIfMissing(transcriptTurns, segment, anchorRole);
+        const preparedTranscript = prepareTranscriptForWhatToAnswer(transcriptTurns, 12);
         const intentResult = await classifyIntent(
             text,
             preparedTranscript,
@@ -620,11 +658,7 @@ export class IntelligenceEngine extends EventEmitter {
     private async planSuggestionTrigger(trigger: SuggestionTrigger): Promise<PlannerDecision> {
         const contextItems = this.session.getContext(180);
         const transcriptContext = contextItems.map(item => item.text).join('\n');
-        const preparedTranscript = prepareTranscriptForWhatToAnswer(contextItems.map(item => ({
-            role: item.role,
-            text: item.text,
-            timestamp: item.timestamp,
-        })), 12);
+        const preparedTranscript = prepareTranscriptForWhatToAnswer(this.buildTranscriptTurns(contextItems), 12);
         const lastInterviewerTurn = this.session.getLastInterviewerTurn();
         const intentResult = await classifyIntent(
             lastInterviewerTurn,
@@ -818,16 +852,14 @@ export class IntelligenceEngine extends EventEmitter {
                     contextItems.push({
                         role,
                         text: lastInterim.text,
-                        timestamp: lastInterim.timestamp
+                        timestamp: lastInterim.timestamp,
+                        speakerId: lastInterim.speakerId,
+                        speakerLabel: lastInterim.speakerLabel,
                     });
                 }
             }
 
-            const transcriptTurns = contextItems.map(item => ({
-                role: item.role,
-                text: item.text,
-                timestamp: item.timestamp
-            }));
+            const transcriptTurns = this.buildTranscriptTurns(contextItems);
 
             const preparedTranscript = prepareTranscriptForWhatToAnswer(transcriptTurns, 12);
 
