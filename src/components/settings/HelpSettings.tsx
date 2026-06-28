@@ -1069,27 +1069,7 @@ export const HelpSettings: React.FC = () => {
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>6. Azure</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://portal.azure.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
-                                </h5>
-                                <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    需要先开通 Azure 语音服务。<strong>重要</strong>：你必须在密钥之外指定 Azure 区域（例如 <em>eastus</em>、<em>westeurope</em>），否则请求会被拒。
-                                </p>
-                            </div>
-
-                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
-                                <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>7. IBM Watson</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://cloud.ibm.com/catalog/services/speech-to-text') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
-                                </h5>
-                                <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    在 IBM Cloud 中创建 Watson 语音转文本资源，并生成一组 API 凭据。
-                                </p>
-                            </div>
-
-                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
-                                <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>8. Soniox</span>
+                                    <span>6. Soniox</span>
                                     <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.soniox.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
@@ -1643,51 +1623,6 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="9. 其他" icon={<Settings className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        {/* Calendar */}
-                        <div>
-                            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl mb-4">
-                                <h4 className="text-[13px] font-semibold text-blue-500 flex items-center gap-2 mb-1">
-                                    <Calendar size={14} /> 什么是日历智能？
-                                </h4>
-                                <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    将你的 Google 日历直接接入 Natively 后，AI 会自动获取即将召开的会议上下文、同步事件数据、读取与会者名单，从而实现高度个性化的交互。
-                                </p>
-                            </div>
-
-                            <div className="grid md:grid-cols-2 gap-3">
-                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">如何设置</h4>
-                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Navigate to the <strong>日历</strong> tab in settings.</li>
-                                        <li>Click <strong>连接 Google 日历</strong> and authenticate securely.</li>
-                                        <li>Natively will quietly background-sync your schedule.</li>
-                                    </ul>
-                                </div>
-                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">跟进系统</h4>
-                                    <p className="text-[11px] text-text-secondary">
-                                        在跟踪实时会议时，Natively 会利用日历上下文立即判断<strong>你在和谁开会</strong>。这驱动了跟进邮件系统，让你可以在会议结束后自动起草给已确认与会者的跟进笔记。
-                                    </p>
-                                </div>
-                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <LayoutGrid className="w-4 h-4 text-blue-500" /> 启动器预览层叠
-                                    </h4>
-                                    <p className="text-[11px] text-text-secondary">
-                                        启动器的日历卡片现在用层叠卡片显示你的<strong>下一场真实会议</strong>，并通过堆叠的视觉效果暗示紧接其后的会议——无需切换标签页即可查看待办事项。
-                                    </p>
-                                </div>
-                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <ExternalLink className="w-4 h-4 text-emerald-500" /> 一键加入
-                                    </h4>
-                                    <p className="text-[11px] text-text-secondary">
-                                        每场即将开始的会议都显示一个 <strong>立即加入</strong> 按钮，会用你的<strong>系统默认浏览器</strong>打开会议链接（所以会落到正确的 Chrome/Safari 个人资料），而不是应用内的 webview。
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
                         <div className="border-t border-border-subtle my-5"></div>
 
                         {/* Fast Mode */}
