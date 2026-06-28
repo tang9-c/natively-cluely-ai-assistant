@@ -535,33 +535,6 @@ const MockPillControlsAnim = () => {
     );
 };
 
-const MockFastModeAnim = () => {
-    return (
-        <div className="flex justify-center items-center py-8 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[240px]">
-            <div className="flex flex-col items-center gap-4 z-10">
-                <motion.div
-                    className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center shadow-[0_0_30px_rgba(249,115,22,0.4)]"
-                    animate={{ rotate: 360 }}
-                    transition={{ ease: "linear", duration: 8, repeat: Infinity }}
-                >
-                    <Zap className="w-8 h-8 text-white" />
-                </motion.div>
-                <div className="text-center">
-                    <div className="font-bold text-lg text-text-primary">快速模式已启用</div>
-                    <div className="text-xs text-text-secondary mt-1">通过 Groq LPU 路由（响应时间 &lt; 0.5 秒）</div>
-                </div>
-            </div>
-
-            {/* Background pulses */}
-            <motion.div
-                className="absolute inset-0 border-[6px] border-orange-500/20 rounded-xl"
-                animate={{ scale: [1, 1.05, 1], opacity: [0, 1, 0] }}
-                transition={{ duration: 2, repeat: Infinity }}
-            />
-        </div>
-    );
-};
-
 // Audio Mock Animations
 
 const getBadgeStyle = (color?: string) => {
@@ -1623,23 +1596,7 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="9. 其他" icon={<Settings className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <div className="border-t border-border-subtle my-5"></div>
-
-                        {/* Fast Mode */}
-                        <div className="space-y-4">
-                            <h4 className="font-bold text-sm text-text-primary flex items-center gap-2">
-                                <Zap className="w-4 h-4 text-orange-500" /> 快速模式（硬件 LPU）
-                            </h4>
-                            <MockFastModeAnim />
-                            <div className="p-4 rounded-xl border bg-orange-500/10 border-orange-500/20">
-                                <h4 className="font-semibold text-sm mb-2 text-orange-500 flex items-center gap-2">
-                                    <Zap className="w-4 h-4" /> 快速模式工作原理
-                                </h4>
-                                <p className="text-xs text-orange-400/80 m-0">
-                                    快速模式启用高效模型（如 Llama 3 8B），运行在 Groq 硬件 LPU 而非 GPU 上，把延迟从 2-3 秒压到 500 毫秒以内。要启用快速模式，进入设置 &gt; 通用设置浮层，点击闪电图标即可。
-                                </p>
-                            </div>
-                        </div>
+                        <p className="text-[11px] text-text-tertiary">暂无其他说明。</p>
                     </div>
                 </AccordionSection>
 
