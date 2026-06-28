@@ -155,15 +155,12 @@ export const AIProvidersSettings: React.FC = () => {
     const [isRefreshingOllama, setIsRefreshingOllama] = useState(false);
 
     // --- Local (Codex CLI) ---
-    const [codexCliConfig, setCodexCliConfig] = useState({ enabled: false, path: 'codex', model: 'gpt-5.4', fastModel: 'gpt-5.3-codex-spark', timeoutMs: 60000 });
+    const [codexCliConfig, setCodexCliConfig] = useState({ enabled: false, path: 'codex', model: 'gpt-5.4', timeoutMs: 60000 });
     const [codexCliStatus, setCodexCliStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
     const [codexCliError, setCodexCliError] = useState('');
 
     // --- Default Model ---
     const [defaultModel, setDefaultModel] = useState<string>('gemini-3.1-flash-lite-preview');
-    const [fastResponseMode, setFastResponseMode] = useState(false);
-    const [credentialsLoaded, setCredentialsLoaded] = useState(false);
-    const canUseFastMode = !!(hasStoredKey.groq || hasStoredKey.natively || codexCliConfig.enabled);
 
     // --- Dynamic Model Discovery ---
     const [preferredModels, setPreferredModels] = useState<Record<string, string>>({});
@@ -177,10 +174,6 @@ export const AIProvidersSettings: React.FC = () => {
 
     const reloadStoredCredentials = async () => {
         try {
-            // Load credentials FIRST so canUseFastMode is correct before we set fastResponseMode.
-            // If we set fastResponseMode before hasStoredKey is populated, the enforcement
-            // effect below fires with canUseFastMode=false and immediately resets fast mode
-            // to false — writing that reset back to SettingsManager on every startup.
             // @ts-ignore
             const creds = await window.electronAPI?.getStoredCredentials?.();
             if (creds) {
@@ -211,9 +204,6 @@ export const AIProvidersSettings: React.FC = () => {
             const cliConfig = await window.electronAPI?.getCodexCliConfig?.();
             if (cliConfig) setCodexCliConfig(cliConfig);
 
-            const fastMode = await window.electronAPI?.getGroqFastTextMode();
-            if (fastMode) setFastResponseMode(fastMode.enabled);
-
             // @ts-ignore
             const custom = await window.electronAPI?.getCustomProviders();
             if (custom) {
@@ -227,10 +217,8 @@ export const AIProvidersSettings: React.FC = () => {
                 setDefaultModel(result.model);
             }
 
-            setCredentialsLoaded(true);
         } catch (e) {
             console.error("Failed to load settings:", e);
-            setCredentialsLoaded(true); // Unblock even on error
         }
     };
 
@@ -239,15 +227,6 @@ export const AIProvidersSettings: React.FC = () => {
         reloadStoredCredentials();
         checkOllama();
 
-        // Listen for changes from other windows (2-way sync)
-        if (window.electronAPI?.onGroqFastTextChanged) {
-            // @ts-ignore
-            const unsubscribe = window.electronAPI.onGroqFastTextChanged((enabled: boolean) => {
-                setFastResponseMode(enabled);
-                localStorage.setItem('natively_groq_fast_text', String(enabled));
-            });
-            return () => unsubscribe();
-        }
     }, []);
 
     useEffect(() => {
@@ -259,19 +238,6 @@ export const AIProvidersSettings: React.FC = () => {
         });
         return () => unsubscribe();
     }, []);
-
-    // Effect to enforce fast mode disabled if neither Groq key nor Natively API is configured.
-    // Guard with credentialsLoaded so this never fires during the initial async load phase
-    // (when hasStoredKey is still empty and canUseFastMode is incorrectly false).
-    useEffect(() => {
-        if (!credentialsLoaded) return;
-        if (!canUseFastMode && fastResponseMode) {
-            setFastResponseMode(false);
-            localStorage.setItem('natively_groq_fast_text', 'false');
-            // @ts-ignore
-            window.electronAPI?.setGroqFastTextMode(false);
-        }
-    }, [credentialsLoaded, canUseFastMode, fastResponseMode]);
 
     // Ollama polling disabled by default
     // useEffect(() => {
@@ -673,38 +639,6 @@ export const AIProvidersSettings: React.FC = () => {
                     />
                 </div>
 
-                {/* Fast Response Mode */}
-                <div
-                    className={`bg-bg-item-surface rounded-xl p-5 border border-border-subtle flex items-center justify-between gap-4 ${!canUseFastMode ? 'opacity-50 grayscale' : ''}`}
-                    title={!canUseFastMode ? "Requires Groq, Natively API, or Codex CLI to be configured" : ""}
-                >
-                    <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                            <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">快速响应模式</label>
-                            <span className="bg-orange-500/10 text-orange-500 text-[9px] font-bold px-1.5 py-0.5 rounded border border-orange-500/20">新建</span>
-                        </div>
-                        <p className="text-[10px] text-text-secondary mt-0.5">Super fast responses using the Codex CLI fast model, Groq, or Natively. Turn this off to use the selected normal model.</p>
-                        {!canUseFastMode && (
-                            <p className="text-[10px] text-orange-500 mt-0.5 font-medium">Requires Groq, Natively API, or Codex CLI to be configured.</p>
-                        )}
-                    </div>
-                    <div
-                        onClick={async () => {
-                            if (!canUseFastMode) {
-                                alert("Please configure Groq, Natively API, or Codex CLI first to enable Fast Response Mode.");
-                                return;
-                            }
-                            const newState = !fastResponseMode;
-                            setFastResponseMode(newState);
-                            localStorage.setItem('natively_groq_fast_text', String(newState));
-                            // @ts-ignore
-                            await window.electronAPI?.setGroqFastTextMode(newState);
-                        }}
-                        className={`shrink-0 w-11 h-6 rounded-full relative cursor-pointer transition-colors ${!canUseFastMode ? 'cursor-not-allowed bg-bg-toggle-switch' : fastResponseMode ? 'bg-orange-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
-                    >
-                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${fastResponseMode ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </div>
-                </div>
             </div>
 
             {/* Cloud Providers */}
@@ -845,14 +779,6 @@ export const AIProvidersSettings: React.FC = () => {
                             placeholder="gpt-5.5"
                             onChange={(model) => setCodexCliConfig(prev => ({ ...prev, model }))}
                             onSelect={(model) => saveCodexCliConfig({ ...codexCliConfig, model })}
-                            onSave={() => saveCodexCliConfig()}
-                        />
-                        <CodexCliModelField
-                            label="快速模型"
-                            value={codexCliConfig.fastModel}
-                            placeholder="gpt-5.3-codex-spark"
-                            onChange={(fastModel) => setCodexCliConfig(prev => ({ ...prev, fastModel }))}
-                            onSelect={(fastModel) => saveCodexCliConfig({ ...codexCliConfig, fastModel })}
                             onSave={() => saveCodexCliConfig()}
                         />
                     </div>

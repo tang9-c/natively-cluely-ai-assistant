@@ -2450,32 +2450,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     },
   );
 
-  safeHandle('get-groq-fast-text-mode', () => {
-    try {
-      const llmHelper = appState.processingHelper.getLLMHelper();
-      return { enabled: llmHelper.getGroqFastTextMode() };
-    } catch (error: any) {
-      return { enabled: false };
-    }
-  });
-
-  // Set Groq Fast Text Mode
-  safeHandle('set-groq-fast-text-mode', (_, enabled: boolean) => {
-    try {
-      const llmHelper = appState.processingHelper.getLLMHelper();
-      llmHelper.setGroqFastTextMode(enabled);
-
-      const { SettingsManager } = require('./services/SettingsManager');
-      SettingsManager.getInstance().set('groqFastTextMode', enabled);
-
-      broadcast('groq-fast-text-changed', enabled);
-
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
-
   safeHandle('get-codex-cli-config', () => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
@@ -2492,7 +2466,6 @@ export function initializeIpcHandlers(appState: AppState): void {
       sm.set('codexCliEnabled', normalized.enabled);
       sm.set('codexCliPath', normalized.path);
       sm.set('codexCliModel', normalized.model);
-      sm.set('codexCliFastModel', normalized.fastModel);
       sm.set('codexCliTimeoutMs', normalized.timeoutMs);
       sm.set('codexCliSandboxMode', normalized.sandboxMode);
       appState.processingHelper.getLLMHelper().setCodexCliConfig(normalized);

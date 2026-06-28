@@ -8,11 +8,9 @@ export interface AppSettings {
     // can be moved here from CredentialsManager to allow early boot access.
     verboseLogging?: boolean;
     actionButtonMode?: 'recap' | 'brainstorm';
-    groqFastTextMode?: boolean;
     codexCliEnabled?: boolean;
     codexCliPath?: string;
     codexCliModel?: string;
-    codexCliFastModel?: string;
     codexCliTimeoutMs?: number;
     codexCliSandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
     knowledgeMode?: boolean;

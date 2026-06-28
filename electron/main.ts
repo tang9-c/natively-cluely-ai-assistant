@@ -609,22 +609,13 @@ export class AppState {
     // Initialize ThemeManager
     this.themeManager = ThemeManager.getInstance()
 
-    // Restore toggle states that live in LLMHelper memory.
-    // This MUST happen here — not inside initializeRAGManager() — so that
-    // it runs unconditionally regardless of whether premium modules are available.
-    // Previously, groqFastTextMode restore was inside the KnowledgeOrchestrator
-    // block which silently skips when premium modules are absent.
+    // Restore boot-time LLMHelper settings.
     {
       const llmHelper = this.processingHelper.getLLMHelper();
-      if (settingsManager.get('groqFastTextMode')) {
-        llmHelper.setGroqFastTextMode(true);
-        console.log('[AppState] Fast mode restored from settings');
-      }
       llmHelper.setCodexCliConfig({
         enabled: !!settingsManager.get('codexCliEnabled'),
         path: settingsManager.get('codexCliPath') || 'codex',
         model: settingsManager.get('codexCliModel') || 'gpt-5.4',
-        fastModel: settingsManager.get('codexCliFastModel') || 'gpt-5.3-codex-spark',
         timeoutMs: settingsManager.get('codexCliTimeoutMs') || 60_000,
         sandboxMode: settingsManager.get('codexCliSandboxMode') || 'read-only',
       });
@@ -785,10 +776,6 @@ export class AppState {
 
         // Attach KnowledgeOrchestrator to LLMHelper
         llmHelper.setKnowledgeOrchestrator(this.knowledgeOrchestrator);
-
-        // Restore persisted toggle states so UI reflects what the user left them as.
-        // NOTE: groqFastTextMode is now restored unconditionally in the AppState constructor
-        // so it is not repeated here.
 
         const sm = SettingsManager.getInstance();
         if (sm.get('knowledgeMode')) {

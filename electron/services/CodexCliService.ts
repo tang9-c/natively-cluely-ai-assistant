@@ -11,7 +11,6 @@ export interface CodexCliConfig {
   enabled: boolean;
   path: string;
   model: string;
-  fastModel: string;
   timeoutMs: number;
   sandboxMode: CodexSandboxMode;
 }
@@ -25,13 +24,10 @@ export interface CodexCliRunOptions {
   signal?: AbortSignal;
 }
 
-// Default fast model: gpt-5.3-codex works with both ChatGPT-account and API-key
-// auth. The faster gpt-5.3-codex-spark is API-key-only and 400s on ChatGPT auth.
 export const DEFAULT_CODEX_CLI_CONFIG: CodexCliConfig = {
   enabled: false,
   path: 'codex',
   model: 'gpt-5.4',
-  fastModel: 'gpt-5.3-codex',
   timeoutMs: 60_000,
   sandboxMode: 'read-only',
 };
@@ -65,7 +61,6 @@ export class CodexCliService {
       enabled: !!config.enabled,
       path: (config.path || DEFAULT_CODEX_CLI_CONFIG.path).trim() || DEFAULT_CODEX_CLI_CONFIG.path,
       model: (config.model || DEFAULT_CODEX_CLI_CONFIG.model).trim() || DEFAULT_CODEX_CLI_CONFIG.model,
-      fastModel: (config.fastModel || DEFAULT_CODEX_CLI_CONFIG.fastModel).trim() || DEFAULT_CODEX_CLI_CONFIG.fastModel,
       timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_CODEX_CLI_CONFIG.timeoutMs,
       sandboxMode,
     };

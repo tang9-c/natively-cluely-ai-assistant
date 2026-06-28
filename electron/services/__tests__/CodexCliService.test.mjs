@@ -27,7 +27,6 @@ test('DEFAULT_CODEX_CLI_CONFIG has expected shape', () => {
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.enabled, false);
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.path, 'codex');
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.model, 'gpt-5.4');
-  assert.equal(DEFAULT_CODEX_CLI_CONFIG.fastModel, 'gpt-5.3-codex');
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.timeoutMs, 60_000);
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.sandboxMode, 'read-only');
 });
@@ -38,6 +37,12 @@ test('CODEX_SANDBOX_MODES enumerates the three valid modes', () => {
 
 test('normalizeConfig: empty input returns defaults', () => {
   assert.deepEqual(CodexCliService.normalizeConfig({}), DEFAULT_CODEX_CLI_CONFIG);
+});
+
+test('normalizeConfig ignores legacy fast model input', () => {
+  const legacyKey = ['fast', 'Model'].join('');
+  const normalized = CodexCliService.normalizeConfig({ [legacyKey]: 'legacy-fast-model' });
+  assert.equal(Object.prototype.hasOwnProperty.call(normalized, legacyKey), false);
 });
 
 test('normalizeConfig: invalid timeouts fall back to default', () => {

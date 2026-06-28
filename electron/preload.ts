@@ -445,22 +445,19 @@ interface ElectronAPI {
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>;
 
-  // Groq Fast Text Mode
-  getGroqFastTextMode: () => Promise<{ enabled: boolean }>;
-  setGroqFastTextMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   getCodexCliConfig: () => Promise<{
     enabled: boolean;
     path: string;
     model: string;
-    fastModel: string;
     timeoutMs: number;
+    sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
   }>;
   setCodexCliConfig: (config: {
     enabled: boolean;
     path: string;
     model: string;
-    fastModel: string;
     timeoutMs: number;
+    sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
   }) => Promise<{
     success: boolean;
     error?: string;
@@ -468,16 +465,16 @@ interface ElectronAPI {
       enabled: boolean;
       path: string;
       model: string;
-      fastModel: string;
       timeoutMs: number;
+      sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
     };
   }>;
   testCodexCli: (config?: {
     enabled?: boolean;
     path?: string;
     model?: string;
-    fastModel?: string;
     timeoutMs?: number;
+    sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
   }) => Promise<{
     success: boolean;
     error?: string;
@@ -486,8 +483,8 @@ interface ElectronAPI {
       enabled: boolean;
       path: string;
       model: string;
-      fastModel: string;
       timeoutMs: number;
+      sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
     };
   }>;
 
@@ -536,7 +533,6 @@ interface ElectronAPI {
   onGeminiStreamDone: (callback: () => void) => () => void;
   onGeminiStreamError: (callback: (error: string) => void) => () => void;
 
-  onGroqFastTextChanged: (callback: (enabled: boolean) => void) => () => void;
   onModelChanged: (callback: (modelId: string) => void) => () => void;
 
   // Ollama
@@ -1646,23 +1642,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleSettingsWindow: (coords?: { x: number; y: number }) =>
     ipcRenderer.invoke('toggle-settings-window', coords),
 
-  // Groq Fast Text Mode
-  getGroqFastTextMode: () => ipcRenderer.invoke('get-groq-fast-text-mode'),
-  setGroqFastTextMode: (enabled: boolean) => ipcRenderer.invoke('set-groq-fast-text-mode', enabled),
   getCodexCliConfig: () => ipcRenderer.invoke('get-codex-cli-config'),
   setCodexCliConfig: (config: {
     enabled: boolean;
     path: string;
     model: string;
-    fastModel: string;
     timeoutMs: number;
+    sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
   }) => ipcRenderer.invoke('set-codex-cli-config', config),
   testCodexCli: (config?: {
     enabled?: boolean;
     path?: string;
     model?: string;
-    fastModel?: string;
     timeoutMs?: number;
+    sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
   }) => ipcRenderer.invoke('test-codex-cli', config),
 
   // Demo
@@ -1692,14 +1685,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('overlay-mouse-passthrough-changed', subscription);
     return () => {
       ipcRenderer.removeListener('overlay-mouse-passthrough-changed', subscription);
-    };
-  },
-
-  onGroqFastTextChanged: (callback: (enabled: boolean) => void) => {
-    const subscription = (_: any, enabled: boolean) => callback(enabled);
-    ipcRenderer.on('groq-fast-text-changed', subscription);
-    return () => {
-      ipcRenderer.removeListener('groq-fast-text-changed', subscription);
     };
   },
 

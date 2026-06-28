@@ -437,12 +437,9 @@ export interface ElectronAPI {
   toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>;
   openModesManager: () => Promise<void>;
 
-  // Groq Fast Text Mode
-  getGroqFastTextMode: () => Promise<{ enabled: boolean }>;
-  setGroqFastTextMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
-  getCodexCliConfig: () => Promise<{ enabled: boolean; path: string; model: string; fastModel: string; timeoutMs: number }>;
-  setCodexCliConfig: (config: { enabled: boolean; path: string; model: string; fastModel: string; timeoutMs: number }) => Promise<{ success: boolean; error?: string; config?: { enabled: boolean; path: string; model: string; fastModel: string; timeoutMs: number } }>;
-  testCodexCli: (config?: { enabled?: boolean; path?: string; model?: string; fastModel?: string; timeoutMs?: number }) => Promise<{ success: boolean; error?: string; resolvedPath?: string; config?: { enabled: boolean; path: string; model: string; fastModel: string; timeoutMs: number } }>;
+  getCodexCliConfig: () => Promise<{ enabled: boolean; path: string; model: string; timeoutMs: number; sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access' }>;
+  setCodexCliConfig: (config: { enabled: boolean; path: string; model: string; timeoutMs: number; sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access' }) => Promise<{ success: boolean; error?: string; config?: { enabled: boolean; path: string; model: string; timeoutMs: number; sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access' } }>;
+  testCodexCli: (config?: { enabled?: boolean; path?: string; model?: string; timeoutMs?: number; sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access' }) => Promise<{ success: boolean; error?: string; resolvedPath?: string; config?: { enabled: boolean; path: string; model: string; timeoutMs: number; sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access' } }>;
 
   // Demo
   seedDemo: () => Promise<{ success: boolean }>;
@@ -460,7 +457,6 @@ export interface ElectronAPI {
   // Database
   flushDatabase: () => Promise<{ success: boolean }>;
 
-  onGroqFastTextChanged: (callback: (enabled: boolean) => void) => () => void;
   onModelChanged: (callback: (modelId: string) => void) => () => void;
   onOpenModesManager: (callback: () => void) => () => void;
 
