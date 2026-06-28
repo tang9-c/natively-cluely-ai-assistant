@@ -48,6 +48,11 @@ interface SkillWatcherSuggestion {
   status: 'pending' | 'accepted' | 'dismissed';
 }
 
+type MeetingStartStatus = {
+  phase: 'starting' | 'ready' | 'failed';
+  message?: string;
+};
+
 interface ElectronAPI {
   updateContentDimensions: (dimensions: { width: number; height: number }) => Promise<void>;
   updateContentDimensionsCentered: (dimensions: { width: number; height: number }) => Promise<void>;
@@ -509,6 +514,8 @@ interface ElectronAPI {
   hideOverlay: () => Promise<void>;
   getMeetingActive: () => Promise<boolean>;
   onMeetingStateChanged: (callback: (data: { isActive: boolean }) => void) => () => void;
+  onMeetingStartStatus: (callback: (status: MeetingStartStatus) => void) => () => void;
+  onMeetingAudioError: (callback: (message: string) => void) => () => void;
   onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void;
   onEnsureExpanded: (callback: () => void) => () => void;
   onToggleExpand: (callback: () => void) => () => void;
@@ -1006,6 +1013,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('meeting-state-changed', subscription);
     return () => {
       ipcRenderer.removeListener('meeting-state-changed', subscription);
+    };
+  },
+  onMeetingStartStatus: (callback: (status: MeetingStartStatus) => void) => {
+    const subscription = (_: any, status: MeetingStartStatus) => callback(status);
+    ipcRenderer.on('meeting-start-status', subscription);
+    return () => {
+      ipcRenderer.removeListener('meeting-start-status', subscription);
+    };
+  },
+  onMeetingAudioError: (callback: (message: string) => void) => {
+    const subscription = (_: any, message: string) => callback(message);
+    ipcRenderer.on('meeting-audio-error', subscription);
+    return () => {
+      ipcRenderer.removeListener('meeting-audio-error', subscription);
     };
   },
   onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => {

@@ -390,6 +390,7 @@ export class AppState {
   // before booting a new session so the shared STT instances are not torn down
   // mid-meeting by a stale teardown task.
   private _pendingTeardown: Promise<void> | null = null;
+  private _meetingStartInFlight: Promise<void> | null = null;
   private _isQuitting: boolean = false;
   private _verboseLogging: boolean = false;
   // Tracks whether STT sample-rate has been applied for the current capture
@@ -2996,7 +2997,30 @@ export class AppState {
   }
 
   public async startMeeting(metadata?: any): Promise<void> {
+    if (this.isMeetingActive) {
+      this.windowHelper.setWindowMode('overlay', true);
+      this.broadcastMeetingState();
+      return;
+    }
+
+    if (this._meetingStartInFlight) {
+      return this._meetingStartInFlight;
+    }
+
+    this._meetingStartInFlight = this.startMeetingInternal(metadata);
+    try {
+      await this._meetingStartInFlight;
+    } finally {
+      this._meetingStartInFlight = null;
+    }
+  }
+
+  private async startMeetingInternal(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
+
+    this.windowHelper.resetOverlayPosition();
+    this.windowHelper.setWindowMode('overlay');
+    this.broadcast('meeting-start-status', { phase: 'starting' });
 
     // If a previous endMeeting() is still draining STT in the background, wait
     // for it to finish before we boot a new session — otherwise the BG teardown
@@ -3028,6 +3052,7 @@ export class AppState {
 
     if (!(await ensureMacMicrophoneAccess('meeting start'))) {
       const message = formatPermissionMessage('mic-denied');
+      this.broadcast('meeting-start-status', { phase: 'failed', message });
       this.broadcast('meeting-audio-error', message);
       throw new Error(message);
     }
@@ -3065,12 +3090,6 @@ export class AppState {
     this.logSttRuntimeDiagnostics('meeting-start', 'user');
     this.logSttRuntimeDiagnostics('meeting-start', 'interviewer');
 
-    // Reset overlay position BEFORE the switch so the new meeting starts in
-    // a predictable centered position regardless of where the previous
-    // session left it. (Moved up from below so setWindowMode('overlay') reads
-    // the reset bounds.)
-    this.windowHelper.resetOverlayPosition();
-
     // ─── WINDOW SWAP BEFORE STATE BROADCAST ───────────────────────────────
     // Switch to the overlay BEFORE flipping `isMeetingActive` to true. If we
     // broadcast meeting-state-changed:{isActive:true} while the launcher is
@@ -3082,6 +3101,7 @@ export class AppState {
 
     this.isMeetingActive = true;
     this.broadcastMeetingState()
+    this.broadcast('meeting-start-status', { phase: 'ready' });
     if (metadata) {
       this.intelligenceManager.setMeetingMetadata(metadata);
     }
@@ -3179,7 +3199,9 @@ export class AppState {
       } catch (err) {
         console.error('[Main] Error initializing audio pipeline:', err);
         // Notify UI so user knows microphone/audio failed to start
-        this.broadcast('meeting-audio-error', (err as Error).message || 'Audio pipeline failed to start');
+        const message = (err as Error).message || 'Audio pipeline failed to start';
+        this.broadcast('meeting-audio-error', message);
+        this.broadcast('meeting-start-status', { phase: 'failed', message });
       }
     }, 0); // Defer to next event loop tick — ensures IPC response reaches renderer before audio init
   }

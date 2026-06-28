@@ -40,7 +40,7 @@ interface Meeting {
 }
 
 interface LauncherProps {
-    onStartMeeting: () => void;
+    onStartMeeting: () => Promise<boolean> | boolean;
     onOpenSettings: (tab?: string) => void;
     onOpenProfile?: () => void;
     onOpenModes?: () => void;
@@ -79,6 +79,7 @@ const formatTime = (dateStr: string) => {
 const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onOpenProfile, onOpenModes, onOpenResearch, onPageChange, ollamaPullStatus = 'idle', ollamaPullPercent = 0, ollamaPullMessage = '' }) => {
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [isMeetingActive, setIsMeetingActive] = useState(false);
+    const [isStartingMeeting, setIsStartingMeeting] = useState(false);
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [showNotification, setShowNotification] = useState(false);
@@ -109,6 +110,33 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         } finally {
             // Ensure distinct feedback provided (min 500ms spin)
             setTimeout(() => setIsRefreshing(false), 500);
+        }
+    };
+
+    const handleStartMeetingClick = async () => {
+        if (isMeetingActive) {
+            // inactive=true: overlay appears on top but doesn't activate
+            // the Natively app or steal OS focus — preserves stealth.
+            // setWindowMode (not showWindow) is required because
+            // logo-click set currentWindowMode='launcher', so showWindow()
+            // would re-show the launcher rather than switch to overlay.
+            window.electronAPI?.setWindowMode?.('overlay', true);
+            analytics.trackCommandExecuted('resume_meeting_from_launcher');
+            return;
+        }
+
+        if (isStartingMeeting) {
+            return;
+        }
+
+        setIsStartingMeeting(true);
+        try {
+            const started = await Promise.resolve(onStartMeeting());
+            if (started !== false) {
+                analytics.trackCommandExecuted('start_natively_cta');
+            }
+        } finally {
+            setIsStartingMeeting(false);
         }
     };
 
@@ -677,20 +705,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
 
                                         {/* Unified CTA pill — same jelly shape, morphs between idle and active-meeting state */}
                                         <motion.button
-                                            onClick={() => {
-                                                if (isMeetingActive) {
-                                                    // inactive=true: overlay appears on top but doesn't activate
-                                                    // the Natively app or steal OS focus — preserves stealth.
-                                                    // setWindowMode (not showWindow) is required because
-                                                    // logo-click set currentWindowMode='launcher', so showWindow()
-                                                    // would re-show the launcher rather than switch to overlay.
-                                                    window.electronAPI?.setWindowMode?.('overlay', true);
-                                                    analytics.trackCommandExecuted('resume_meeting_from_launcher');
-                                                } else {
-                                                    onStartMeeting();
-                                                    analytics.trackCommandExecuted('start_natively_cta');
-                                                }
-                                            }}
+                                            onClick={handleStartMeetingClick}
+                                            disabled={isStartingMeeting}
+                                            aria-busy={isStartingMeeting}
+                                            aria-label={isMeetingActive ? '显示会议界面' : '启动会议'}
                                             whileHover={{ scale: 1.01, filter: 'brightness(1.1)' }}
                                             whileTap={{ scale: 0.99 }}
                                             transition={{ duration: 0.18, ease: 'easeOut' }}

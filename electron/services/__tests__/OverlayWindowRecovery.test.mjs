@@ -105,3 +105,32 @@ test('renderer hide-window cannot physically hide an active meeting overlay', ()
     'ignored renderer hide attempts should leave an audit trail in logs',
   );
 });
+
+test('overlay renderer-ready deferral has timeout reload recovery', () => {
+  assert.match(source, /private overlayReadyRecoveryTimer: NodeJS\.Timeout \| null = null/);
+  assert.match(source, /private reloadOverlayRenderer\(reason: string, inactive: boolean\): void/);
+  assert.match(source, /private scheduleOverlayReadyRecovery\(inactive: boolean\): void/);
+  assert.match(source, /loadURL\(`\$\{startUrl\}\?window=overlay`\)/);
+});
+
+test('switchToOverlay defers without marking the overlay visible when renderer is not ready', () => {
+  const start = source.indexOf('public switchToOverlay(inactive?: boolean): void');
+  const end = source.indexOf('public switchToLauncher', start);
+  const body = source.slice(start, end);
+  const deferStart = body.indexOf('!this.overlayRendererReady');
+  const deferEnd = body.indexOf('return;', deferStart);
+  const deferBranch = body.slice(deferStart, deferEnd);
+
+  assert.match(deferBranch, /this\.pendingOverlayShowInactive = !!inactive/);
+  assert.match(deferBranch, /this\.scheduleOverlayReadyRecovery\(\!\!inactive\)/);
+  assert.doesNotMatch(deferBranch, /this\.isWindowVisible = true/);
+  assert.doesNotMatch(deferBranch, /this\.launcherWindow\.hide\(\)/);
+});
+
+test('overlay show path verifies and repairs invisible overlay state', () => {
+  assert.match(source, /private verifyOverlayVisibleAfterShow\(reason: string\): void/);
+  assert.match(source, /this\.overlayWindow\.getOpacity\(\)/);
+  assert.match(source, /WindowHelper\.OVERLAY_MIN_HEIGHT/);
+  assert.match(source, /WindowHelper\.OVERLAY_DEFAULT_WIDTH/);
+  assert.match(source, /this\.logOverlayState\(`switchToOverlay-recovered-\$\{reason\}`\)/);
+});

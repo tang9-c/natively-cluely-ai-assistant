@@ -271,7 +271,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleStartMeeting = async () => {
+  const handleStartMeeting = async (): Promise<boolean> => {
     try {
       localStorage.setItem('natively_last_meeting_start', Date.now().toString());
       const inputDeviceId = localStorage.getItem('preferredInputDeviceId');
@@ -304,11 +304,14 @@ const App: React.FC = () => {
         // Window swap happens inside main's startMeeting() now (before the
         // meeting-state broadcast) to avoid a blue→green CTA flash on the
         // launcher. No follow-up setWindowMode IPC needed here.
+        return true;
       } else {
         console.error("Failed to start meeting:", result.error);
+        return false;
       }
     } catch (err) {
       console.error("Failed to start meeting:", err);
+      return false;
     }
   };
 

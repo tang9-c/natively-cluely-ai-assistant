@@ -1,5 +1,6 @@
 import { animate, AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion';
 import {
+  AlertCircle,
   ArrowRight,
   Check,
   ChevronDown,
@@ -373,6 +374,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   >('connected');
   const [sttInterviewerError, setSttInterviewerError] = useState<string>('');
   const [sttInterviewerProvider, setSttInterviewerProvider] = useState<string>('');
+  const [meetingStartStatus, setMeetingStartStatus] = useState<{
+    phase: 'starting' | 'ready' | 'failed';
+    message?: string;
+  } | null>(null);
   const sttUserStatusRef = useRef<'connected' | 'reconnecting' | 'failed'>('connected');
   const micCaptureFailureRef = useRef(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -912,8 +917,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       .catch(() => {});
 
     const unsub = window.electronAPI.onMeetingStateChanged(({ isActive }) => {
-      if (!isActive) return;
+      if (!isActive) {
+        setMeetingStartStatus(null);
+        return;
+      }
       setSystemAudioWarning(null);
+      setMeetingStartStatus(null);
       setRollingTranscript('');
       setIsInterviewerSpeaking(false);
       micCaptureFailureRef.current = false;
@@ -922,6 +931,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => {
       mounted = false;
       unsub?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    const cleanupStatus = window.electronAPI?.onMeetingStartStatus?.((status) => {
+      setMeetingStartStatus(status.phase === 'ready' ? null : status);
+    });
+    const cleanupAudio = window.electronAPI?.onMeetingAudioError?.((message: string) => {
+      setMeetingStartStatus({ phase: 'failed', message });
+      setIsExpanded(true);
+    });
+
+    return () => {
+      cleanupStatus?.();
+      cleanupAudio?.();
     };
   }, []);
 
@@ -1352,6 +1376,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setManualTranscript('');
       setVoiceInput('');
       setIsProcessing(false);
+      setMeetingStartStatus(null);
       // Optionally reset connection status if needed, but connection persists
 
       // Track new conversation/session if applicable?
@@ -3704,6 +3729,29 @@ Provide only the answer, nothing else.`;
                   <span>{llmPrivacyLabel}</span>
                 </div>
               </div>
+
+              {meetingStartStatus?.phase === 'failed' && (
+                <div className="flex items-center justify-between mx-4 mt-3 mb-1 px-3.5 py-2.5 bg-red-500/10 border border-red-500/20 rounded-[12px] shadow-sm relative no-drag">
+                  <div className="flex flex-col gap-1 pr-3">
+                    <div className="flex items-center gap-2 text-[12.5px] text-red-600 dark:text-red-400/90 font-medium leading-tight">
+                      <div className="shrink-0 p-1 bg-red-500/20 rounded-full">
+                        <AlertCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
+                      </div>
+                      <span>会议启动异常</span>
+                    </div>
+                    <p className="text-[11px] text-red-600/70 dark:text-red-400/60 leading-snug pl-[26px]">
+                      {meetingStartStatus.message || '会议音频启动失败，请检查麦克风权限后重试。'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setMeetingStartStatus(null)}
+                    className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-red-600/50 hover:text-red-700 dark:text-red-500/50 dark:hover:text-red-400 transition-colors"
+                    title="关闭"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
 
               {/* System Audio / Screen Recording Warning Banner */}
               {systemAudioWarning && (

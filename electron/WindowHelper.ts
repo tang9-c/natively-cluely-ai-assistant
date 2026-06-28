@@ -29,6 +29,7 @@ export class WindowHelper {
   private overlayBounds: Electron.Rectangle | null = null;
   private overlayRendererReady = false;
   private pendingOverlayShowInactive: boolean | null = null;
+  private overlayReadyRecoveryTimer: NodeJS.Timeout | null = null;
   // Track current window mode (persists even when overlay is hidden via Cmd+B)
   private currentWindowMode: 'launcher' | 'overlay' = 'launcher';
 
@@ -154,6 +155,73 @@ export class WindowHelper {
       return screen.getDisplayMatching(this.overlayWindow.getBounds()).workArea;
     }
     return screen.getPrimaryDisplay().workArea;
+  }
+
+  private reloadOverlayRenderer(reason: string, inactive: boolean): void {
+    if (!this.overlayWindow || this.overlayWindow.isDestroyed()) {
+      console.error(`[WindowHelper] Cannot reload overlay renderer (${reason}): overlay window is missing`);
+      return;
+    }
+
+    console.warn(`[WindowHelper] Reloading overlay renderer after ${reason}`);
+    this.overlayRendererReady = false;
+    this.pendingOverlayShowInactive = inactive;
+    this.overlayWindow.loadURL(`${startUrl}?window=overlay`).catch((e) => {
+      console.error('[WindowHelper] Failed to reload Overlay URL:', e);
+    });
+  }
+
+  private scheduleOverlayReadyRecovery(inactive: boolean): void {
+    if (this.overlayReadyRecoveryTimer) {
+      clearTimeout(this.overlayReadyRecoveryTimer);
+    }
+
+    this.overlayReadyRecoveryTimer = setTimeout(() => {
+      this.overlayReadyRecoveryTimer = null;
+      if (!this.overlayRendererReady) {
+        this.reloadOverlayRenderer('renderer-ready-timeout', inactive);
+      }
+    }, 1500);
+  }
+
+  private verifyOverlayVisibleAfterShow(reason: string): void {
+    setTimeout(() => {
+      if (!this.overlayWindow || this.overlayWindow.isDestroyed()) {
+        return;
+      }
+
+      const bounds = this.overlayWindow.getBounds();
+      const isTooSmall = bounds.width < 240 || bounds.height < WindowHelper.OVERLAY_MIN_HEIGHT;
+      const isTransparent = this.overlayWindow.getOpacity() < 0.95;
+      const isHidden = !this.overlayWindow.isVisible();
+
+      if (!isHidden && !isTooSmall && !isTransparent) {
+        return;
+      }
+
+      const workArea = this.getDisplayWorkArea(bounds);
+      const repairedBounds = {
+        x: Math.max(
+          workArea.x,
+          Math.min(bounds.x, workArea.x + workArea.width - WindowHelper.OVERLAY_DEFAULT_WIDTH),
+        ),
+        y: Math.max(
+          workArea.y,
+          Math.min(bounds.y, workArea.y + workArea.height - WindowHelper.OVERLAY_MIN_HEIGHT),
+        ),
+        width: Math.max(bounds.width, WindowHelper.OVERLAY_DEFAULT_WIDTH),
+        height: Math.max(bounds.height, WindowHelper.OVERLAY_MIN_HEIGHT),
+      };
+
+      this.overlayWindow.setBounds(repairedBounds);
+      this.overlayWindow.setOpacity(1);
+      if (process.platform === 'win32') {
+        this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+      }
+      this.overlayWindow.showInactive();
+      this.isWindowVisible = true;
+      this.logOverlayState(`switchToOverlay-recovered-${reason}`);
+    }, 250);
   }
 
   public setWindowDimensions(width: number, height: number): void {
@@ -489,6 +557,10 @@ export class WindowHelper {
 
     this.overlayWindow.webContents.on('did-finish-load', () => {
       this.overlayRendererReady = true;
+      if (this.overlayReadyRecoveryTimer) {
+        clearTimeout(this.overlayReadyRecoveryTimer);
+        this.overlayReadyRecoveryTimer = null;
+      }
       console.log('[WindowHelper] Overlay renderer loaded');
       if (this.pendingOverlayShowInactive !== null) {
         const inactive = this.pendingOverlayShowInactive;
@@ -499,11 +571,14 @@ export class WindowHelper {
 
     this.overlayWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
       console.error(`[WindowHelper] Overlay did-fail-load: ${errorCode} ${errorDescription}`);
+      this.overlayRendererReady = false;
+      this.scheduleOverlayReadyRecovery(this.pendingOverlayShowInactive ?? true);
     });
 
     this.overlayWindow.webContents.on('render-process-gone', (_event, details) => {
       console.error('[WindowHelper] Overlay render-process-gone:', details);
       this.overlayRendererReady = false;
+      this.scheduleOverlayReadyRecovery(this.pendingOverlayShowInactive ?? true);
     });
 
     this.overlayWindow.loadURL(`${startUrl}?window=overlay`).catch((e) => {
@@ -785,14 +860,16 @@ export class WindowHelper {
 
   public switchToOverlay(inactive?: boolean): void {
     console.log(`[WindowHelper] Switching to OVERLAY (inactive: ${!!inactive})`);
-    this.currentWindowMode = 'overlay';
-    KeybindManager.getInstance().setMode('overlay'); // Adapted from public PR #123 — verify premium interaction
 
     if (this.overlayWindow && !this.overlayWindow.isDestroyed() && !this.overlayRendererReady) {
       this.pendingOverlayShowInactive = !!inactive;
+      this.scheduleOverlayReadyRecovery(!!inactive);
       console.warn('[WindowHelper] Overlay renderer not ready; deferring show until did-finish-load');
       return;
     }
+
+    this.currentWindowMode = 'overlay';
+    KeybindManager.getInstance().setMode('overlay'); // Adapted from public PR #123 — verify premium interaction
 
     // Tell the overlay renderer to expand to full size (e.g. after being minimised)
     this.overlayWindow?.webContents.send('ensure-expanded');
@@ -852,6 +929,7 @@ export class WindowHelper {
       if (!inactive) this.overlayWindow.focus();
       this.isWindowVisible = true;
       this.logOverlayState('switchToOverlay-after-show');
+      this.verifyOverlayVisibleAfterShow(inactive ? 'inactive' : 'active');
     }
 
     // Hide Launcher SECOND
