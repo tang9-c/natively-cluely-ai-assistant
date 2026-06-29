@@ -21,7 +21,7 @@ const INTENT_LABELS: Record<string, string> = {
   pricing_objection: '价格异议',
   buying_signal: '推进信号',
   price_pushback: '价格异议',
-  pricing_request: '询价请求',
+  pricing_request: '邮件草稿',
   budget_probe: '预算试探',
   competitor_mention: '竞品比较',
   roi_question: 'ROI 询问',

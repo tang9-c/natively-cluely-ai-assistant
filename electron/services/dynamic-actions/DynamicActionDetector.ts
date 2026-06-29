@@ -148,12 +148,12 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         type: 'pricing_request',
         patterns: [
             /\b(send me pricing|pricing page|quote|proposal|commercials|what does it cost)\b/i,
-            zh('发我报价', '报价单', '价格页', '方案报价', '商务条款', '多少钱'),
+            zh('发我报价', '发.{0,6}报价', '给.{0,6}报价', '报.{0,4}价格', '给.{0,4}价格', '报价单', '价格页', '方案报价', '商务条款', '多少钱'),
         ],
         priority: 0.86,
-        label: 'Frame pricing request',
+        label: 'Draft quote email',
         promptInstruction:
-            'You are in Sales mode. The prospect asked for pricing. Qualify scope before giving numbers and propose a concrete follow-up.',
+            'You are in Sales mode. Draft a concise follow-up email draft for sending pricing or a quote. Qualify scope before giving numbers and propose a concrete next step.',
         answerStyle: { maxWords: 90, format: 'short_script', tone: 'consultative' },
     },
 ];

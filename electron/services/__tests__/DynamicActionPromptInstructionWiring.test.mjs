@@ -55,6 +55,7 @@ test('dynamic action card presents detected intent and confidence to the user', 
   assert.match(source, /检测到/);
   assert.match(source, /confidencePct/);
   assert.match(source, /pricing_objection:\s*'价格异议'/);
+  assert.match(source, /pricing_request:\s*'邮件草稿'/);
   assert.match(source, /buying_signal:\s*'推进信号'/);
   assert.match(source, /action\.sourceIntent\s*\?\?\s*action\.type/);
 });

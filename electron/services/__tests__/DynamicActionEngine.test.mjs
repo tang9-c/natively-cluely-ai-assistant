@@ -1079,7 +1079,34 @@ describe('ActionTrigger fixtures — sales mode', () => {
     });
     const a = findAction(actions, 'pricing_request');
     assert.ok(a);
-    assert.equal(a.label, 'Frame pricing request');
+    assert.equal(a.label, 'Draft quote email');
+    assert.equal(a.priority, 0.86);
+  });
+
+  test('pricing_request (zh: 发一版报价) surfaces quote email draft', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '那我们会后发一版报价给你们确认',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_pr_draft',
+    });
+    const a = findAction(actions, 'pricing_request');
+    assert.ok(a);
+    assert.equal(a.label, 'Draft quote email');
+    assert.match(a.promptInstruction, /email draft/i);
+    assert.equal(a.priority, 0.86);
+  });
+
+  test('pricing_request (zh: 报个价格看看) surfaces quote email draft', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '报个价格看看',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_pr_price_probe',
+    });
+    const a = findAction(actions, 'pricing_request');
+    assert.ok(a);
+    assert.equal(a.label, 'Draft quote email');
     assert.equal(a.priority, 0.86);
   });
 });
