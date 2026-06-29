@@ -9,6 +9,23 @@ const dbPath = path.resolve(__dirname, '../../db/DatabaseManager.ts');
 const dbSource = fs.readFileSync(dbPath, 'utf8');
 
 describe('Mode database migrations', () => {
+  test('v26 -> v27 migration backfills shipped default custom contexts only for blank modes', () => {
+    assert.match(
+      dbSource,
+      /if\s*\(\s*version\s*<\s*27\s*\)/,
+      'DatabaseManager must register a v27 migration for default mode custom contexts',
+    );
+    const v27Block = dbSource.match(/if\s*\(\s*version\s*<\s*27\s*\)[\s\S]*?user_version\s*=\s*27/);
+    assert.ok(v27Block, 'v27 migration block must exist');
+    assert.match(v27Block[0], /DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE/);
+    assert.match(v27Block[0], /UPDATE\s+modes\s+SET\s+custom_context\s*=\s*\?/i);
+    assert.match(v27Block[0], /TRIM\s*\(\s*custom_context\s*\)\s*=\s*''/i);
+    assert.match(v27Block[0], /custom_context\s+IS\s+NULL/i);
+    for (const modeType of ['general', 'sales', 'fde', 'recruiting', 'team-meet', 'looking-for-work', 'technical-interview', 'lecture']) {
+      assert.match(v27Block[0], new RegExp(modeType), `v27 migration must cover ${modeType}`);
+    }
+  });
+
   test('v22 -> v23 migration creates per-mode intent keyword defaults', () => {
     assert.match(
       dbSource,

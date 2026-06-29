@@ -1,5 +1,6 @@
 import * as crypto from 'crypto';
 import { DatabaseManager } from '../db/DatabaseManager';
+import { DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE } from './ModeDefaultContexts';
 import { ModeContextRetriever } from './ModeContextRetriever';
 import {
     DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE,
@@ -174,6 +175,8 @@ export function escapeXmlText(value: string): string {
         .replace(/'/g, '&apos;');
 }
 
+export { DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE };
+
 function rowToMode(row: any): Mode {
     return {
         id: row.id,
@@ -320,11 +323,12 @@ export class ModesManager {
     public createMode(params: { name: string; templateType: ModeTemplateType }): Mode {
         const id = `mode_${crypto.randomUUID()}`;
         const db = ModesManager.getDatabase();
+        const defaultCustomContext = DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE[params.templateType] ?? '';
         db.createMode({
             id,
             name: params.name,
             templateType: params.templateType,
-            customContext: '',
+            customContext: defaultCustomContext,
         });
         db.seedDefaultIntentKeywordsForMode?.(id, params.templateType);
         // Seed default note sections for this template type
@@ -343,7 +347,7 @@ export class ModesManager {
             id,
             name: params.name,
             templateType: params.templateType,
-            customContext: '',
+            customContext: defaultCustomContext,
             intentKeywords: this.getIntentKeywords(id),
             isActive: false,
             createdAt: new Date().toISOString(),

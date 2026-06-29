@@ -15,7 +15,7 @@ const promptsMod = await import(pathToFileURL(promptsPath).href);
 const databaseMod = await import(pathToFileURL(databasePath).href);
 const intentDefaultsMod = await import(pathToFileURL(intentDefaultsPath).href);
 
-const { ModesManager, MODE_TEMPLATES, TEMPLATE_NOTE_SECTIONS } = modesMod;
+const { ModesManager, MODE_TEMPLATES, TEMPLATE_NOTE_SECTIONS, DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE } = modesMod;
 const { DatabaseManager } = databaseMod;
 const { DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE, MAX_INTENT_KEYWORDS_CSV_LENGTH } = intentDefaultsMod;
 
@@ -188,6 +188,37 @@ test('every production mode has seeded note sections for meeting summaries', () 
       assert.ok(section.description.trim(), `${modeType} section description should not be empty`);
     }
   }
+});
+
+test('every production mode ships with a professional default custom context', () => {
+  assert.deepEqual(Object.keys(DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE).sort(), [...EXPECTED_MODE_TYPES].sort());
+  for (const modeType of EXPECTED_MODE_TYPES) {
+    const context = DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE[modeType];
+    assert.equal(typeof context, 'string');
+    assert.ok(context.trim().length > 40, `${modeType} default context should be substantive`);
+    assert.doesNotMatch(context, /\b(TODO|TBD|placeholder)\b/i);
+  }
+});
+
+test('createMode seeds the template default custom context', () => {
+  for (const modeType of EXPECTED_MODE_TYPES) {
+    const created = ModesManager.getInstance().createMode({ name: modeType, templateType: modeType });
+    const expected = DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE[modeType];
+    const row = db.modes.find(mode => mode.id === created.id);
+
+    assert.equal(created.customContext, expected);
+    assert.equal(row.custom_context, expected);
+  }
+});
+
+test('updateMode preserves user-edited custom context over the shipped default', () => {
+  const sales = ModesManager.getInstance().createMode({ name: 'Sales', templateType: 'sales' });
+  const editedContext = '用户保存后的销售上下文：优先介绍年度采购流程和本季度试点目标。';
+
+  ModesManager.getInstance().updateMode(sales.id, { customContext: editedContext });
+
+  const row = db.modes.find(mode => mode.id === sales.id);
+  assert.equal(row.custom_context, editedContext);
 });
 
 test('createMode seeds default intent keywords for the selected template', () => {

@@ -10,6 +10,7 @@ import {
     DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE,
     type IntentKeywordConfig,
 } from '../llm/IntentKeywordDefaults';
+import { DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE } from '../services/ModeDefaultContexts';
 import type { ResumeNode, UserProfileRecord } from '../services/profile/types';
 
 // Interfaces for our data objects
@@ -1217,6 +1218,33 @@ export class DatabaseManager {
                     ON material_embedding_queue(status);
             `);
             this.db.pragma('user_version = 26');
+        }
+
+        // Version 26 -> 27: Backfill shipped default custom contexts for blank built-in modes.
+        if (version < 27) {
+            console.log('[DatabaseManager] Applying migration v26 -> v27: Backfill default mode custom contexts');
+            const builtInModeTemplateTypes: Array<keyof typeof DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE> = [
+                'general',
+                'sales',
+                'fde',
+                'recruiting',
+                'team-meet',
+                'looking-for-work',
+                'technical-interview',
+                'lecture',
+            ];
+            const updateBlankCustomContext = this.db.prepare(`
+                UPDATE modes SET custom_context = ?
+                WHERE template_type = ?
+                  AND (custom_context IS NULL OR TRIM(custom_context) = '')
+            `);
+            for (const templateType of builtInModeTemplateTypes) {
+                updateBlankCustomContext.run(
+                    DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE[templateType],
+                    templateType,
+                );
+            }
+            this.db.pragma('user_version = 27');
         }
 
         console.log('[DatabaseManager] Migrations completed.');
