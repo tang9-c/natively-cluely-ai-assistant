@@ -21,6 +21,10 @@ import { SettingsManager, type AppSettings } from './services/SettingsManager';
 import { SkillActivationManager, type ActivateSkillInput, type SkillActivationScope } from './services/SkillActivationManager';
 import { SkillWatcherService } from './services/SkillWatcherService';
 import { SkillsManager } from './services/SkillsManager';
+import {
+  classifyNetworkError,
+  toSafeNetworkDiagnostic,
+} from './utils/networkErrorClassifier';
 
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
@@ -1462,7 +1466,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         const models = await fetchProviderModels(provider, key);
         return { success: true, models };
       } catch (error: any) {
-        console.error(`[IPC] Failed to fetch ${provider} models:`, error);
+        const endpoint = provider === 'doubao' ? DOUBAO_MODELS_ENDPOINT : undefined;
+        const diagnostic = toSafeNetworkDiagnostic(error, { provider, endpoint });
+        console.error(`[IPC] Failed to fetch ${provider} models:`, diagnostic);
+        if (provider === 'doubao') {
+          return { success: false, error: classifyNetworkError(error).userMessage };
+        }
         const msg =
           error?.response?.data?.error?.message || error.message || 'Failed to fetch models';
         return { success: false, error: msg };
@@ -1716,6 +1725,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     return msg.replace(/:\s*[a-zA-Z0-9*]+\*+[a-zA-Z0-9*]+\.?$/g, '').trim();
   };
 
+  const DOUBAO_MODELS_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/models';
+  const DOUBAO_CHAT_COMPLETIONS_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
+  const DOUBAO_AUDIO_TRANSCRIPTIONS_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/audio/transcriptions';
+  const DOUBAO_AUC_SUBMIT_ENDPOINT = 'https://openspeech-direct.zijieapi.com/api/v3/auc/bigmodel/submit';
+
   // Shared test logic for STT providers. Used by both the user-input flow
   // (test-stt-connection: caller supplies the key) and the saved-key flow
   // (test-saved-stt-connection: handler reads the key from CredentialsManager).
@@ -1925,12 +1939,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             'X-Api-Request-Id': requestId,
             'X-Api-Sequence': '-1',
           };
-          console.log('[IPC] Testing Doubao AUC with X-Api-Key prefix:', apiKey.substring(0, 8) + '...');
           console.log('[IPC]   Request ID:', requestId);
 
           try {
             const response = await axios.post(
-              'https://openspeech-direct.zijieapi.com/api/v3/auc/bigmodel/submit',
+              DOUBAO_AUC_SUBMIT_ENDPOINT,
               {
                 user: { uid: 'cluely-test' },
                 audio: {
@@ -1959,12 +1972,10 @@ export function initializeIpcHandlers(appState: AppState): void {
               headers: response.headers,
             });
           } catch (testErr: any) {
-            console.error('[IPC] Doubao AUC test detailed error:', {
-              status: testErr?.response?.status,
-              statusText: testErr?.response?.statusText,
-              data: testErr?.response?.data,
-              headers: testErr?.response?.headers,
-            });
+            console.error('[IPC] Doubao AUC test failed:', toSafeNetworkDiagnostic(testErr, {
+              provider,
+              endpoint: DOUBAO_AUC_SUBMIT_ENDPOINT,
+            }));
             throw testErr;
           }
         } else {
@@ -1989,7 +2000,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             endpoint = 'https://api.groq.com/openai/v1/audio/transcriptions';
             model = 'whisper-large-v3-turbo';
           } else if (provider === 'doubao') {
-            endpoint = 'https://ark.cn-beijing.volces.com/api/v3/audio/transcriptions';
+            endpoint = DOUBAO_AUDIO_TRANSCRIPTIONS_ENDPOINT;
             model = 'volc.seedasr.sauc.duration';
           } else {
             endpoint = openAiEndpoint;
@@ -2012,6 +2023,17 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: true };
       } catch (error: any) {
         const respData = error?.response?.data;
+        const endpoint =
+          provider === 'doubao' ? DOUBAO_AUDIO_TRANSCRIPTIONS_ENDPOINT
+          : provider === 'doubao-auc' ? DOUBAO_AUC_SUBMIT_ENDPOINT
+          : undefined;
+        console.error(`[IPC] STT connection test failed for ${provider}:`, toSafeNetworkDiagnostic(error, {
+          provider,
+          endpoint,
+        }));
+        if (provider === 'doubao' || provider === 'doubao-auc') {
+          return { success: false, error: classifyNetworkError(error).userMessage };
+        }
         const rawMsg =
           respData?.error?.message ||
           respData?.detail?.message ||
@@ -2019,11 +2041,6 @@ export function initializeIpcHandlers(appState: AppState): void {
           error.message ||
           'Connection failed';
         const msg = sanitizeErrorMessage(rawMsg);
-        console.error(`[IPC] STT connection test failed for ${provider}:`, {
-          message: msg,
-          status: error?.response?.status,
-          data: respData,
-        });
         return { success: false, error: msg };
       }
   };
@@ -2064,6 +2081,17 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
         return await runSttConnectionTest(provider, savedKey, region);
       } catch (error: any) {
+        const endpoint =
+          provider === 'doubao' ? DOUBAO_AUDIO_TRANSCRIPTIONS_ENDPOINT
+          : provider === 'doubao-auc' ? DOUBAO_AUC_SUBMIT_ENDPOINT
+          : undefined;
+        console.error(`[IPC] Saved STT connection test failed for ${provider}:`, toSafeNetworkDiagnostic(error, {
+          provider,
+          endpoint,
+        }));
+        if (provider === 'doubao' || provider === 'doubao-auc') {
+          return { success: false, error: classifyNetworkError(error).userMessage };
+        }
         const respData = error?.response?.data;
         const rawMsg =
           respData?.error?.message ||
@@ -2403,7 +2431,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           );
         } else if (provider === 'doubao') {
           response = await axios.post(
-            'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+            DOUBAO_CHAT_COMPLETIONS_ENDPOINT,
             {
               model: 'doubao-seed-2-0-lite-260215',
               messages: [{ role: 'user', content: 'Hello' }],
@@ -2425,18 +2453,12 @@ export function initializeIpcHandlers(appState: AppState): void {
           return { success: false, error: 'Request failed with status ' + response?.status };
         }
       } catch (error: any) {
-        // CRITICAL: do NOT log the raw axios error — it includes the request config
-        // with the Authorization header (full API key) and is dumped verbatim by
-        // Node's util.inspect. Strip to a safe shape before logging.
-        const safeInfo = {
-          provider,
-          status: error?.response?.status,
-          statusText: error?.response?.statusText,
-          code: error?.code,
-          message: error?.message,
-          responseError: error?.response?.data?.error?.message || error?.response?.data?.message,
-        };
+        const endpoint = provider === 'doubao' ? DOUBAO_CHAT_COMPLETIONS_ENDPOINT : undefined;
+        const safeInfo = toSafeNetworkDiagnostic(error, { provider, endpoint });
         console.error('LLM connection test failed:', safeInfo);
+        if (provider === 'doubao') {
+          return { success: false, error: classifyNetworkError(error).userMessage };
+        }
         const rawMsg =
           error?.response?.data?.error?.message ||
           error?.response?.data?.message ||
