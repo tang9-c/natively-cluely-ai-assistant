@@ -59,6 +59,10 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
+          if ! compgen -G "release/*.exe" > /dev/null; then
+            echo "Expected at least one Windows .exe artifact" >&2
+            exit 1
+          fi
           artifacts=(release/*.exe release/*.blockmap)
           printf '%s\n' "${artifacts[@]}"
           if compgen -G "release/*.dmg" > /dev/null || compgen -G "release/*.zip" > /dev/null; then
@@ -72,7 +76,6 @@ jobs:
               exit 1
             fi
           done
-          test -e release/*.exe
 
       - name: Audit release size
         shell: bash
