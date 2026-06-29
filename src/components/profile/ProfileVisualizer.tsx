@@ -1,29 +1,61 @@
 import React from 'react';
 import { BriefcaseBusiness, FileText, Sparkles, UserRound } from 'lucide-react';
 
+import type {
+    NormalizedProfileVisualizerData,
+    ProfileVisualizerData,
+} from './types';
+
 interface ProfileVisualizerProps {
-    profileData: {
-        identity?: { name?: string; email?: string };
-        summary?: string;
-        experiencePreview?: Array<{
-            title?: string;
-            organization?: string;
-            start?: string;
-            end?: string;
-            description?: string;
-        }>;
-        experienceCount?: number;
-        projectCount?: number;
-        nodeCount?: number;
-        skills?: string[];
-        hasActiveJD?: boolean;
-        activeJD?: {
-            title?: string;
-            company?: string;
-            level?: string;
-            technologies?: string[];
-        };
-    } | null;
+    profileData: ProfileVisualizerData | null;
+}
+
+export function getUniqueSkills(skills?: string[]): string[] {
+    const unique: string[] = [];
+    const seen = new Set<string>();
+
+    for (const skill of skills ?? []) {
+        const normalized = skill.trim();
+        if (!normalized || seen.has(normalized)) continue;
+        seen.add(normalized);
+        unique.push(normalized);
+    }
+
+    return unique;
+}
+
+export function getHiddenExperienceCount(profileData?: ProfileVisualizerData | null): number {
+    if (!profileData) return 0;
+    const total = Math.max(0, profileData.experienceCount ?? 0);
+    const shown = Array.isArray(profileData.experiencePreview)
+        ? profileData.experiencePreview.length
+        : 0;
+    return Math.max(0, total - shown);
+}
+
+export function normalizeProfileVisualizerData(
+    profileData?: ProfileVisualizerData | null,
+): NormalizedProfileVisualizerData {
+    const skills = getUniqueSkills(profileData?.skills);
+    const experiences = Array.isArray(profileData?.experiencePreview)
+        ? profileData.experiencePreview
+        : [];
+
+    return {
+        isActive: profileData !== null && profileData !== undefined,
+        displayName: profileData?.identity?.name?.trim() || '身份未命名',
+        email: profileData?.identity?.email?.trim() || undefined,
+        summary: profileData?.summary?.trim() || undefined,
+        experienceCount: Math.max(0, profileData?.experienceCount ?? 0),
+        projectCount: Math.max(0, profileData?.projectCount ?? 0),
+        nodeCount: Math.max(0, profileData?.nodeCount ?? 0),
+        skills,
+        skillCount: skills.length,
+        experiences,
+        hiddenExperienceCount: getHiddenExperienceCount(profileData),
+        hasActiveJD: Boolean(profileData?.hasActiveJD && profileData?.activeJD),
+        activeJD: profileData?.activeJD,
+    };
 }
 
 function compactDateRange(start?: string, end?: string): string {

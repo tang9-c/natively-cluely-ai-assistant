@@ -75,3 +75,47 @@ export interface MasterProfile {
     experience?: string;
     skills?: string;
 }
+
+export interface ProfileVisualizerExperience {
+    title?: string;
+    organization?: string;
+    start?: string;
+    end?: string;
+    description?: string;
+}
+
+export interface ProfileVisualizerData {
+    identity?: {
+        name?: string;
+        email?: string;
+    };
+    summary?: string;
+    experiencePreview?: ProfileVisualizerExperience[];
+    experienceCount?: number;
+    projectCount?: number;
+    nodeCount?: number;
+    skills?: string[];
+    hasActiveJD?: boolean;
+    activeJD?: {
+        title?: string;
+        company?: string;
+        level?: string;
+        technologies?: string[];
+    };
+}
+
+export interface NormalizedProfileVisualizerData {
+    isActive: boolean;
+    displayName: string;
+    email?: string;
+    summary?: string;
+    experienceCount: number;
+    projectCount: number;
+    nodeCount: number;
+    skills: string[];
+    skillCount: number;
+    experiences: ProfileVisualizerExperience[];
+    hiddenExperienceCount: number;
+    hasActiveJD: boolean;
+    activeJD?: ProfileVisualizerData['activeJD'];
+}
