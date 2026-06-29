@@ -21,7 +21,7 @@ const INTENT_LABELS: Record<string, string> = {
   pricing_objection: '价格异议',
   buying_signal: '推进信号',
   price_pushback: '价格异议',
-  pricing_request: '邮件草稿',
+  pricing_request: '报价请求',
   budget_probe: '预算试探',
   competitor_mention: '竞品比较',
   roi_question: 'ROI 询问',
@@ -50,6 +50,10 @@ const INTENT_LABELS: Record<string, string> = {
   system_design_prompt: '系统设计题',
 }
 
+const ACTION_LABELS: Record<string, string> = {
+  'Draft quote email': '邮件草稿',
+}
+
 // Single dynamic action card. Compact, glass-styled, dismissible, and explicit:
 // users can accept with the card, the primary CTA, or Tab on the primary card.
 export const DynamicActionCard: React.FC<Props> = ({
@@ -69,6 +73,7 @@ export const DynamicActionCard: React.FC<Props> = ({
 
   const confidencePct = Math.round((action.confidence ?? 0) * 100)
   const detectedIntent = INTENT_LABELS[action.sourceIntent ?? action.type] ?? action.label
+  const displayLabel = ACTION_LABELS[action.label] ?? action.label
   const isGenerating = busy || status === 'generating'
   const isCountdown = status === 'countdown'
   const statusText = isGenerating
@@ -126,7 +131,7 @@ export const DynamicActionCard: React.FC<Props> = ({
             <span className="text-[10px] tabular-nums text-white/72 shrink-0">{action.evidenceCount}条证据</span>
           )}
         </div>
-        <span className="text-[10.5px] text-white/78 truncate">{action.label}</span>
+        <span className="text-[10.5px] text-white/78 truncate">{displayLabel}</span>
         {evidenceSnippet && (
           <span className="text-[10.5px] text-white/74 truncate">"{evidenceSnippet}"</span>
         )}

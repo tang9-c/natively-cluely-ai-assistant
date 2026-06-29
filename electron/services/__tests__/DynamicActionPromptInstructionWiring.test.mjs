@@ -55,9 +55,17 @@ test('dynamic action card presents detected intent and confidence to the user', 
   assert.match(source, /检测到/);
   assert.match(source, /confidencePct/);
   assert.match(source, /pricing_objection:\s*'价格异议'/);
-  assert.match(source, /pricing_request:\s*'邮件草稿'/);
+  assert.match(source, /pricing_request:\s*'报价请求'/);
   assert.match(source, /buying_signal:\s*'推进信号'/);
   assert.match(source, /action\.sourceIntent\s*\?\?\s*action\.type/);
+});
+
+test('dynamic action card localizes quote email action separately from detected intent', () => {
+  const source = read('src/components/dynamic-actions/DynamicActionCard.tsx');
+
+  assert.match(source, /['"]Draft quote email['"]:\s*'邮件草稿'/);
+  assert.match(source, /displayLabel/);
+  assert.doesNotMatch(source, /pricing_request:\s*'邮件草稿'/);
 });
 
 test('dynamic action card exposes visible generation and cancel controls', () => {
@@ -108,6 +116,16 @@ test('preload and renderer type expose dynamic action generation options', () =>
   assert.match(preload, /ipcRenderer\.invoke\(['"]generate-what-to-say['"], question, imagePaths, options\)/);
   assert.match(types, /export interface DynamicActionModeEvent/);
   assert.match(types, /generateWhatToSay:[\s\S]{0,350}options\?: \{ promptInstruction\?: string; uploadedMaterialContext\?: string; persist\?: boolean; source\?: string; modeEvent\?: DynamicActionModeEvent \}/);
+});
+
+test('dynamic action answerStyle supports email shape across main and renderer types', () => {
+  const action = read('electron/services/dynamic-actions/DynamicAction.ts');
+  const detector = read('electron/services/dynamic-actions/DynamicActionDetector.ts');
+  const rendererTypes = read('src/types/electron.d.ts');
+
+  assert.match(action, /format:\s*'bullets' \| 'short_script' \| 'code' \| 'checklist' \| 'summary' \| 'email'/);
+  assert.match(detector, /format:\s*'bullets' \| 'short_script' \| 'code' \| 'checklist' \| 'summary' \| 'email'/);
+  assert.match(rendererTypes, /format:\s*'bullets' \| 'short_script' \| 'code' \| 'checklist' \| 'summary' \| 'email'/);
 });
 
 test('runWhatShouldISay can emit dynamic action answers without persistence', () => {

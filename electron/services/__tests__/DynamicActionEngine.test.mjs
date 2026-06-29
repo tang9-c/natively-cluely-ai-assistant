@@ -1094,6 +1094,9 @@ describe('ActionTrigger fixtures — sales mode', () => {
     assert.ok(a);
     assert.equal(a.label, 'Draft quote email');
     assert.match(a.promptInstruction, /email draft/i);
+    assert.equal(a.answerStyle?.format, 'email');
+    assert.match(a.promptInstruction, /Do not invent customer names/);
+    assert.match(a.promptInstruction, /\[QUOTE_AMOUNT\]/);
     assert.equal(a.priority, 0.86);
   });
 
@@ -1108,6 +1111,65 @@ describe('ActionTrigger fixtures — sales mode', () => {
     assert.ok(a);
     assert.equal(a.label, 'Draft quote email');
     assert.equal(a.priority, 0.86);
+  });
+
+  test('pricing_request (zh: 给个价格) surfaces quote email draft', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '给个价格',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_pr_give_price',
+    });
+    const a = findAction(actions, 'pricing_request');
+    assert.ok(a);
+    assert.equal(a.label, 'Draft quote email');
+    assert.equal(a.priority, 0.86);
+  });
+
+  test('pricing_request (zh: 给客户发一版报价) surfaces quote email draft', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '给客户发一版报价',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_pr_send_quote',
+    });
+    const a = findAction(actions, 'pricing_request');
+    assert.ok(a);
+    assert.equal(a.label, 'Draft quote email');
+    assert.equal(a.priority, 0.86);
+  });
+
+  test('pricing_request does not fire for Chinese report/quoted-price mentions', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const falsePositiveTranscripts = [
+      '他报告了价格走势，市场普遍看涨',
+      '客户报了价格给我们',
+    ];
+
+    for (const transcript of falsePositiveTranscripts) {
+      const engine = new DynamicActionEngine();
+      const actions = engine.detectActions({
+        transcript,
+        modeTemplateType: 'sales', modeId: 'm_s', sessionId: `s_s_pr_negative_${transcript.length}`,
+      });
+      assert.equal(
+        actions.some(action => action.type === 'pricing_request'),
+        false,
+        `unexpected pricing_request for: ${transcript}`,
+      );
+    }
+  });
+
+  test('pricing_objection remains preferred for Chinese price pushback', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '这个价格太高了',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_pr_objection_guard',
+    });
+
+    assert.ok(findAction(actions, 'pricing_objection'));
+    assert.equal(actions.some(action => action.type === 'pricing_request'), false);
   });
 });
 

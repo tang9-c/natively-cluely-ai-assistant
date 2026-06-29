@@ -44,7 +44,7 @@ export interface DynamicActionPayload {
   confirmedIntent?: string
   answerStyle?: {
     maxWords: number
-    format: 'bullets' | 'short_script' | 'code' | 'checklist' | 'summary'
+    format: 'bullets' | 'short_script' | 'code' | 'checklist' | 'summary' | 'email'
     tone: string
   }
 }

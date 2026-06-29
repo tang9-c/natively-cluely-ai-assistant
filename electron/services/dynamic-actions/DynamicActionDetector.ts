@@ -6,7 +6,7 @@ export interface ActionTrigger {
     promptInstruction: string;
     answerStyle?: {
         maxWords: number;
-        format: 'bullets' | 'short_script' | 'code' | 'checklist' | 'summary';
+        format: 'bullets' | 'short_script' | 'code' | 'checklist' | 'summary' | 'email';
         tone: string;
     };
 }
@@ -148,13 +148,13 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         type: 'pricing_request',
         patterns: [
             /\b(send me pricing|pricing page|quote|proposal|commercials|what does it cost)\b/i,
-            zh('发我报价', '发.{0,6}报价', '给.{0,6}报价', '报.{0,4}价格', '给.{0,4}价格', '报价单', '价格页', '方案报价', '商务条款', '多少钱'),
+            zh('发我报价', '发.{0,6}报价', '给.{0,6}报价', '报(?:个|一下|下)价(?:格)?', '给(?:我)?(?:个|一下|下)价(?:格)?', '报价单', '价格页', '方案报价', '商务条款', '多少钱'),
         ],
         priority: 0.86,
         label: 'Draft quote email',
         promptInstruction:
-            'You are in Sales mode. Draft a concise follow-up email draft for sending pricing or a quote. Qualify scope before giving numbers and propose a concrete next step.',
-        answerStyle: { maxWords: 90, format: 'short_script', tone: 'consultative' },
+            'You are in Sales mode. Generate a follow-up email draft with greeting, 1-2 short paragraphs, and sign-off for sending pricing or a quote. Qualify scope before giving concrete numbers. Do not invent customer names, account numbers, specific pricing, or contract terms. Use placeholders like [CUSTOMER_NAME], [QUOTE_AMOUNT], and [NEXT_STEP] unless exact values are present in trusted context.',
+        answerStyle: { maxWords: 160, format: 'email', tone: 'consultative' },
     },
 ];
 
