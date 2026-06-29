@@ -22,6 +22,16 @@ test('generate-what-to-say uses uploaded material formatter and keeps citations 
   assert.doesNotMatch(handler, /hit\.parentText\}\s*`\)/);
 });
 
+test('generate-what-to-say exposes formatter truncation as a degraded reason', () => {
+  const source = read('electron/ipcHandlers.ts');
+  const handler = sliceSafeHandleBlock(source, 'generate-what-to-say');
+
+  assert.match(handler, /const\s+formattedMaterialContext\s*=\s*formatUploadedMaterialContext\(materialHits\)/);
+  assert.match(handler, /uploadedMaterialContext\s*=\s*formattedMaterialContext\.text/);
+  assert.match(handler, /formattedMaterialContext\.truncated/);
+  assert.match(handler, /degradedReasons\.push\('uploaded_material_context_truncated'\)/);
+});
+
 test('context pill maps uploaded material truncation reasons to user-facing labels', () => {
   const source = read('src/components/NativelyInterface.tsx');
 

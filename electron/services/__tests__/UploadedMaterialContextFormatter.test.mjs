@@ -13,15 +13,17 @@ async function loadFormatter() {
 test('formats uploaded material context within total and per-hit budgets while preserving exact hit text', async () => {
   const { formatUploadedMaterialContext } = await loadFormatter();
   const keyFact = 'SOC2 Type II报告（2025年完成）';
-  const context = formatUploadedMaterialContext([
+  const result = formatUploadedMaterialContext([
     {
       title: 'Security compliance FAQ',
       text: `核心事实：我们可以提供${keyFact}，同时支持GDPR / CCPA / PDPA适配。`,
       parentText: `${'前置背景。'.repeat(300)} SHOULD_NOT_KEEP_DISTANT_PARENT_CONTEXT ${'后置背景。'.repeat(300)}`,
     },
   ]);
+  const { text: context, truncated } = result;
 
   assert.ok(context.length <= 4200, `context should stay within 4200 chars, got ${context.length}`);
+  assert.equal(truncated, true);
   assert.match(context, /<uploaded_material_context>/);
   assert.match(context, /\[1\] Security compliance FAQ/);
   assert.match(context, new RegExp(keyFact));
@@ -30,7 +32,7 @@ test('formats uploaded material context within total and per-hit budgets while p
 
 test('formats multiple uploaded material hits with numbered citeable snippets', async () => {
   const { formatUploadedMaterialContext } = await loadFormatter();
-  const context = formatUploadedMaterialContext([
+  const { text: context, truncated } = formatUploadedMaterialContext([
     {
       title: 'SOC2',
       text: 'SOC2 Type II报告（2025年完成）。',
@@ -43,6 +45,7 @@ test('formats multiple uploaded material hits with numbered citeable snippets', 
     },
   ]);
 
+  assert.equal(truncated, false);
   assert.match(context, /\[1\] SOC2/);
   assert.match(context, /\[2\] Privacy/);
   assert.match(context, /SOC2 Type II报告（2025年完成）/);

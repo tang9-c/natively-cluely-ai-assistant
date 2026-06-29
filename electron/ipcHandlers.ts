@@ -2900,7 +2900,11 @@ export function initializeIpcHandlers(appState: AppState): void {
                 score: hit.score,
                 title: hit.title,
               })));
-              uploadedMaterialContext = formatUploadedMaterialContext(materialHits);
+              const formattedMaterialContext = formatUploadedMaterialContext(materialHits);
+              uploadedMaterialContext = formattedMaterialContext.text;
+              if (formattedMaterialContext.truncated) {
+                degradedReasons.push('uploaded_material_context_truncated');
+              }
             } else {
               degradedReasons.push('no_relevant_uploaded_material');
             }
