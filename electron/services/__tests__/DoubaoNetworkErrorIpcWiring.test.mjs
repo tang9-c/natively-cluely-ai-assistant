@@ -47,5 +47,9 @@ test('Doubao AUC test logging does not include API key prefixes or raw headers',
   assert.doesNotMatch(source, /apiKey\.substring\(0,\s*8\)/);
   assert.doesNotMatch(source, /apiKey\.slice\(0,\s*8\)/);
   assert.doesNotMatch(source, /X-Api-Key prefix/);
+  assert.doesNotMatch(
+    source,
+    /Doubao AUC test response:[\s\S]{0,220}headers:\s*response\.headers/
+  );
   assert.doesNotMatch(source, /Doubao AUC test detailed error:[\s\S]{0,220}headers:\s*testErr\?\.response\?\.headers/);
 });

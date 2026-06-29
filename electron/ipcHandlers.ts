@@ -1969,7 +1969,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             console.log('[IPC] Doubao AUC test response:', {
               status: response.status,
               statusText: response.statusText,
-              headers: response.headers,
+              requestId: response.headers?.['x-tt-logid'],
             });
           } catch (testErr: any) {
             console.error('[IPC] Doubao AUC test failed:', toSafeNetworkDiagnostic(testErr, {
