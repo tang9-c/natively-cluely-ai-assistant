@@ -65,11 +65,12 @@ function compactDateRange(start?: string, end?: string): string {
 }
 
 export const ProfileVisualizer: React.FC<ProfileVisualizerProps> = ({ profileData }) => {
-    const experiences = profileData?.experiencePreview ?? [];
-    const skills = profileData?.skills ?? [];
-    const activeJD = profileData?.activeJD;
+    const normalized = normalizeProfileVisualizerData(profileData);
+    const experiences = normalized.experiences;
+    const skills = normalized.skills;
+    const activeJD = normalized.activeJD;
 
-    if (!profileData) {
+    if (!normalized.isActive) {
         return (
             <section className="rounded-lg border border-dashed border-border-subtle bg-bg-input/30 p-5">
                 <div className="flex items-center gap-3 text-text-secondary">
@@ -93,27 +94,35 @@ export const ProfileVisualizer: React.FC<ProfileVisualizerProps> = ({ profileDat
                         <Sparkles size={15} className="text-accent-primary" />
                         <h4 className="text-sm font-bold text-text-primary">Profile 智能</h4>
                     </div>
-                    <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
-                        {profileData.summary || '已加载可用于实时回答的身份、经验和技能线索。'}
+                    <p className="mt-1 text-[12px] font-semibold text-text-primary">
+                        {normalized.displayName}
+                    </p>
+                    {normalized.email && (
+                        <p className="mt-0.5 text-[10px] text-text-tertiary">
+                            {normalized.email}
+                        </p>
+                    )}
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-text-secondary">
+                        {normalized.summary || '已加载可用于实时回答的身份、经验和技能线索。'}
                     </p>
                 </div>
                 <div className="shrink-0 rounded-full border border-border-subtle bg-bg-input px-2.5 py-1 text-[10px] font-semibold text-text-secondary">
-                    {profileData.nodeCount ?? 0} 节点
+                    {normalized.nodeCount} 节点
                 </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
                 <div className="rounded-md border border-border-subtle bg-bg-input/45 px-3 py-2">
                     <p className="text-[10px] font-semibold text-text-tertiary">经验</p>
-                    <p className="mt-1 text-base font-bold text-text-primary">{profileData.experienceCount ?? 0}</p>
+                    <p className="mt-1 text-base font-bold text-text-primary">{normalized.experienceCount}</p>
                 </div>
                 <div className="rounded-md border border-border-subtle bg-bg-input/45 px-3 py-2">
                     <p className="text-[10px] font-semibold text-text-tertiary">项目</p>
-                    <p className="mt-1 text-base font-bold text-text-primary">{profileData.projectCount ?? 0}</p>
+                    <p className="mt-1 text-base font-bold text-text-primary">{normalized.projectCount}</p>
                 </div>
                 <div className="rounded-md border border-border-subtle bg-bg-input/45 px-3 py-2">
                     <p className="text-[10px] font-semibold text-text-tertiary">技能</p>
-                    <p className="mt-1 text-base font-bold text-text-primary">{skills.length}</p>
+                    <p className="mt-1 text-base font-bold text-text-primary">{normalized.skillCount}</p>
                 </div>
             </div>
 
@@ -142,6 +151,11 @@ export const ProfileVisualizer: React.FC<ProfileVisualizerProps> = ({ profileDat
                             </div>
                         ))}
                     </div>
+                    {normalized.hiddenExperienceCount > 0 && (
+                        <p className="mt-2 text-[10px] font-medium text-text-tertiary">
+                            另有 {normalized.hiddenExperienceCount} 条经验未显示
+                        </p>
+                    )}
                 </div>
             )}
 
@@ -155,7 +169,7 @@ export const ProfileVisualizer: React.FC<ProfileVisualizerProps> = ({ profileDat
                 </div>
             )}
 
-            {profileData.hasActiveJD && activeJD && (
+            {normalized.hasActiveJD && activeJD && (
                 <div className="mt-4 rounded-md border border-border-subtle bg-bg-input/35 px-3 py-2">
                     <div className="flex items-center gap-2 text-[11px] font-bold text-text-primary">
                         <FileText size={13} className="text-text-tertiary" />

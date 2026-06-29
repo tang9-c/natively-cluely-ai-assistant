@@ -39,6 +39,9 @@ test('ProfileVisualizer source is not a null placeholder', () => {
   assert.ok(!/=>\s*null\s*;/.test(source), 'ProfileVisualizer must not be a null placeholder');
   assert.match(source, /Profile 智能/);
   assert.match(source, /经验线索/);
+  assert.match(source, /identity\.name|displayName/);
+  assert.match(source, /另有/);
+  assert.match(source, /条经验未显示/);
 });
 
 test('normalizes null profile into inactive empty state', () => {
