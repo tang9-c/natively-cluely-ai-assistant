@@ -254,6 +254,8 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
         name: parsed.identity?.name ?? 'Unknown',
         email: parsed.identity?.email,
       },
+      summary: parsed.summary,
+      experiencePreview: (parsed.experience ?? []).slice(0, 3),
       experienceCount: parsed.experience?.length ?? 0,
       projectCount: parsed.projects?.length ?? 0,
       nodeCount:

@@ -284,6 +284,10 @@ describe('ProfileOrchestrator', () => {
     const profile = orch3.getProfileData();
     assert.equal(profile.identity.name, 'Bob');
     assert.equal(profile.identity.email, 'bob@example.com');
+    assert.equal(profile.summary, undefined);
+    assert.deepEqual(profile.experiencePreview, [
+      { title: 'Backend Eng', organization: 'BigCo', start: '2021-01' },
+    ]);
     assert.equal(profile.experienceCount, 1);
     assert.deepEqual(profile.skills, ['Python', 'Go']);
   });

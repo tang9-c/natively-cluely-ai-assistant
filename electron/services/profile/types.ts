@@ -66,6 +66,14 @@ export interface ResumeNode {
 
 export interface ProfileData {
   identity: { name: string; email?: string };
+  summary?: string;
+  experiencePreview?: Array<{
+    title?: string;
+    organization?: string;
+    start?: string;
+    end?: string;
+    description?: string;
+  }>;
   experienceCount: number;
   projectCount: number;
   nodeCount: number;
