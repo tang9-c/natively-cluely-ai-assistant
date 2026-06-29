@@ -3513,7 +3513,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true };
     } catch (error: any) {
       if (error.name !== 'AbortError') {
-        event.sender.send('rag:stream-error', { global: true, error: error.message });
+        const msg = error.message || '';
+        if (isRecoverableLiveRagError(msg)) {
+          console.log(`[RAG] Global query failed with '${msg}', falling back to regular chat`);
+          return { fallback: true };
+        }
+        event.sender.send('rag:stream-error', { global: true, error: msg });
       }
       return { success: false, error: error.message };
     } finally {

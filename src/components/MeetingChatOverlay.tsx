@@ -38,6 +38,7 @@ interface MeetingChatOverlayProps {
     onClose: () => void;
     meetingContext: MeetingContext;
     initialQuery?: string;
+    queryNonce?: number;
     onNewQuery: (query: string) => void;
 }
 
@@ -188,6 +189,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
     onClose,
     meetingContext,
     initialQuery = '',
+    queryNonce = 0,
     // onNewQuery
 }) => {
     const [messages, setMessages] = useState<Message[]>([]);
@@ -206,7 +208,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
                 submitQuestion(initialQuery);
             }, 100);
         }
-    }, [isOpen, initialQuery]);
+    }, [isOpen, initialQuery, queryNonce]);
 
     // Listen for new queries from parent
     useEffect(() => {
@@ -214,7 +216,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
             // This is a follow-up query
             submitQuestion(initialQuery);
         }
-    }, [initialQuery]);
+    }, [initialQuery, queryNonce]);
 
     // Reset state when overlay closes
     useEffect(() => {
@@ -387,6 +389,7 @@ ${contextString}`;
                                 ? { ...msg, content: finalContent, isStreaming: false }
                                 : msg
                         ));
+                        setChatState('idle');
                         streamBuffer.reset();
                         oldTokenCleanup?.();
                         oldDoneCleanup?.();

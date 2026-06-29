@@ -89,10 +89,12 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [isCopied, setIsCopied] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [submittedQuery, setSubmittedQuery] = useState('');
+    const [submittedQueryNonce, setSubmittedQueryNonce] = useState(0);
 
     const handleSubmitQuestion = () => {
         if (query.trim()) {
             setSubmittedQuery(query);
+            setSubmittedQueryNonce((prev) => prev + 1);
             if (!isChatOpen) {
                 setIsChatOpen(true);
             }
@@ -638,6 +640,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || '无
                     setIsChatOpen(false);
                     setQuery('');
                     setSubmittedQuery('');
+                    setSubmittedQueryNonce(0);
                 }}
                 meetingContext={{
                     id: meeting.id,  // Required for RAG queries
@@ -648,8 +651,10 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || '无
                     transcript: meeting.transcript
                 }}
                 initialQuery={submittedQuery}
+                queryNonce={submittedQueryNonce}
                 onNewQuery={(newQuery) => {
                     setSubmittedQuery(newQuery);
+                    setSubmittedQueryNonce((prev) => prev + 1);
                 }}
             />
         </div>

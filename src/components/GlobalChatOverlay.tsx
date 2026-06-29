@@ -20,6 +20,7 @@ interface GlobalChatOverlayProps {
     isOpen: boolean;
     onClose: () => void;
     initialQuery?: string;
+    queryNonce?: number;
 }
 
 // ============================================
@@ -115,7 +116,8 @@ type ChatState = 'idle' | 'waiting_for_llm' | 'streaming_response' | 'error';
 const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
     isOpen,
     onClose,
-    initialQuery = ''
+    initialQuery = '',
+    queryNonce = 0
 }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [chatState, setChatState] = useState<ChatState>('idle');
@@ -133,7 +135,7 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                 submitQuestion(initialQuery);
             }, 100);
         }
-    }, [isOpen, initialQuery]);
+    }, [isOpen, initialQuery, queryNonce]);
 
     // Listen for new queries from parent
     useEffect(() => {
@@ -141,7 +143,7 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
             // This is a follow-up query
             submitQuestion(initialQuery);
         }
-    }, [initialQuery]);
+    }, [initialQuery, queryNonce]);
 
     // ESC key handler
     useEffect(() => {

@@ -87,6 +87,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     // Global search state (for AI chat overlay)
     const [isGlobalChatOpen, setIsGlobalChatOpen] = useState(false);
     const [submittedGlobalQuery, setSubmittedGlobalQuery] = useState('');
+    const [submittedGlobalQueryNonce, setSubmittedGlobalQueryNonce] = useState(0);
 
     const [showModesOnboarding, setShowModesOnboarding] = useState(false);
     const [showProfileOnboarding, setShowProfileOnboarding] = useState(false);
@@ -386,6 +387,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                     onAIQuery={(query) => {
                         analytics.trackCommandExecuted('ai_query_search');
                         setSubmittedGlobalQuery(query);
+                        setSubmittedGlobalQueryNonce((prev) => prev + 1);
                         setIsGlobalChatOpen(true);
                     }}
                     onLiteralSearch={(query) => {
@@ -393,6 +395,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                         // Could be enhanced to do fuzzy filtering in the UI
                         analytics.trackCommandExecuted('literal_search');
                         setSubmittedGlobalQuery(query);
+                        setSubmittedGlobalQueryNonce((prev) => prev + 1);
                         setIsGlobalChatOpen(true);
                     }}
                     onOpenMeeting={(meetingId) => {
@@ -966,8 +969,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                 onClose={() => {
                     setIsGlobalChatOpen(false);
                     setSubmittedGlobalQuery('');
+                    setSubmittedGlobalQueryNonce(0);
                 }}
                 initialQuery={submittedGlobalQuery}
+                queryNonce={submittedGlobalQueryNonce}
             />
         </div >
     );
