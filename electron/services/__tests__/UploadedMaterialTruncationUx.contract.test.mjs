@@ -1,0 +1,34 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { sliceSafeHandleBlock } from './ipcTestUtils.mjs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(__dirname, '../../..');
+
+function read(relativePath) {
+  return fs.readFileSync(path.join(root, relativePath), 'utf8');
+}
+
+test('generate-what-to-say uses uploaded material formatter and keeps citations from all hits', () => {
+  const source = read('electron/ipcHandlers.ts');
+  const handler = sliceSafeHandleBlock(source, 'generate-what-to-say');
+
+  assert.match(source, /UploadedMaterialContextFormatter/);
+  assert.match(handler, /formatUploadedMaterialContext\(materialHits\)/);
+  assert.match(handler, /citations\.push\(\.\.\.materialHits\.map/);
+  assert.doesNotMatch(handler, /hit\.parentText\}\s*`\)/);
+});
+
+test('context pill maps uploaded material truncation reasons to user-facing labels', () => {
+  const source = read('src/components/NativelyInterface.tsx');
+
+  assert.match(source, /formatDegradedReasonForDisplay/);
+  assert.match(source, /uploaded_material_context_truncated:\s*'上传资料已节选'/);
+  assert.match(source, /uploaded_material_rag_failed:\s*'上传资料检索失败'/);
+  assert.match(source, /no_relevant_uploaded_material:\s*'未找到相关上传资料'/);
+  assert.match(source, /上下文已部分裁剪/);
+  assert.doesNotMatch(source, /降级：\{latestDegradedReason\}/);
+});

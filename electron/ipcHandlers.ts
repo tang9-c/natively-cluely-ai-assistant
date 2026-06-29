@@ -17,6 +17,7 @@ import {
   resolveMacSystemAudioPermissionHealth,
 } from './permissions/macPermissionHealth';
 import { CodexCliService } from './services/CodexCliService';
+import { formatUploadedMaterialContext } from './services/knowledge/UploadedMaterialContextFormatter';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
 import { SkillActivationManager, type ActivateSkillInput, type SkillActivationScope } from './services/SkillActivationManager';
 import { SkillWatcherService } from './services/SkillWatcherService';
@@ -2899,10 +2900,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 score: hit.score,
                 title: hit.title,
               })));
-              const materialBlock = materialHits
-                .map((hit: any, index: number) => `[${index + 1}] ${hit.title}\n${hit.parentText}`)
-                .join('\n\n');
-              uploadedMaterialContext = `<uploaded_material_context>\nUse these uploaded materials only when relevant. Citeable source ids are tracked outside the prompt; do not invent unseen sources.\n${materialBlock}\n</uploaded_material_context>`;
+              uploadedMaterialContext = formatUploadedMaterialContext(materialHits);
             } else {
               degradedReasons.push('no_relevant_uploaded_material');
             }

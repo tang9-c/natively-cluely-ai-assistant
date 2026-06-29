@@ -279,6 +279,23 @@ const getStatusToneClass = (tone: 'ok' | 'warn' | 'error'): string => {
   return 'overlay-status-ok';
 };
 
+const DEGRADED_REASON_LABELS: Record<string, string> = {
+  uploaded_material_context_truncated: '上传资料已节选',
+  uploaded_material_rag_failed: '上传资料检索失败',
+  no_relevant_uploaded_material: '未找到相关上传资料',
+};
+
+const formatDegradedReasonForDisplay = (reason?: string | null): string | null => {
+  if (!reason) return null;
+  const labels = reason
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => DEGRADED_REASON_LABELS[item] ?? '上下文已部分裁剪');
+  const uniqueLabels = [...new Set(labels)];
+  return uniqueLabels.length > 0 ? uniqueLabels.join('、') : null;
+};
+
 const MessageRow = React.memo(
   function MessageRow({
     msg,
@@ -3459,6 +3476,7 @@ Provide only the answer, nothing else.`;
     ? `上下文：${contextLabels.join(' / ')}`
     : '上下文：仅使用当前输入';
   const materialCitationCount = latestAnswerCitations.filter((c) => c.sourceType === 'uploaded_material').length;
+  const latestDegradedReasonDisplay = formatDegradedReasonForDisplay(latestDegradedReason);
 
   const copyDiagnostics = async () => {
     const version = import.meta.env.VITE_APP_VERSION || 'unknown';
@@ -3955,9 +3973,9 @@ Provide only the answer, nothing else.`;
                       {materialCitationCount > 0 && (
                         <span className="opacity-75">资料引用 {materialCitationCount}</span>
                       )}
-                      {latestDegradedReason && (
+                      {latestDegradedReasonDisplay && (
                         <span className={isLightTheme ? 'text-amber-700' : 'text-amber-200'}>
-                          降级：{latestDegradedReason}
+                          {latestDegradedReasonDisplay}
                         </span>
                       )}
                     </div>
