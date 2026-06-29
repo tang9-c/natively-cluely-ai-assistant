@@ -41,9 +41,14 @@ export function ReferenceMaterialsCard({
 
             <div className="mt-4 space-y-2">
                 {documents.length === 0 ? (
-                    <div className="rounded-md border border-dashed border-border-subtle px-3 py-4 text-[11px] text-text-tertiary">
-                        暂无资料
-                    </div>
+                    <button
+                        type="button"
+                        onClick={() => onUpload(card.docSubtype)}
+                        disabled={uploading}
+                        className="w-full rounded-md border border-dashed border-border-subtle px-3 py-3 text-left text-[11px] text-text-tertiary transition-colors hover:border-accent-primary/40 hover:text-text-secondary disabled:cursor-progress"
+                    >
+                        {uploading ? '正在加入资料...' : '添加场景资料'}
+                    </button>
                 ) : (
                     documents.map((document) => (
                         <div
