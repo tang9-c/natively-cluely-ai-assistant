@@ -41,10 +41,15 @@ const DEFAULT_MESSAGES: Record<NetworkErrorKind, string> = {
 
 const TLS_MARKERS = [
   'unable to verify the first certificate',
+  'depth_zero_self_signed_cert',
   'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
   'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'UNABLE_TO_GET_ISSUER_CERT',
   'SELF_SIGNED_CERT_IN_CHAIN',
+  'CERT_CHAIN_TOO_LONG',
   'CERT_HAS_EXPIRED',
+  'CERT_NOT_YET_VALID',
+  'CERT_REVOKED',
 ];
 
 const TIMEOUT_CODES = new Set(['ECONNABORTED', 'ETIMEDOUT']);
@@ -144,12 +149,11 @@ export function toSafeNetworkDiagnostic(
 
   const host = endpointHost(context.endpoint);
   const code = getCode(error);
-  const message = getMessage(error);
   const status = getStatus(error);
 
   if (host) diagnostic.endpointHost = host;
   if (code) diagnostic.code = code;
-  if (message) diagnostic.message = message;
+  diagnostic.message = DEFAULT_MESSAGES[classified.kind];
   if (typeof status === 'number') diagnostic.status = status;
 
   return diagnostic;

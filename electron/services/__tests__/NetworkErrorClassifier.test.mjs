@@ -48,7 +48,7 @@ test('classifies auth http timeout and network errors', async () => {
 test('safe diagnostic excludes credentials headers bodies and private response details', async () => {
   const { toSafeNetworkDiagnostic } = await loadClassifier();
   const error = {
-    message: 'unable to verify the first certificate',
+    message: 'request failed with private prompt body token=secret Authorization Bearer',
     code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
     config: {
       headers: {
@@ -80,12 +80,21 @@ test('safe diagnostic excludes credentials headers bodies and private response d
   assert.equal(diagnostic.endpointHost, 'ark.cn-beijing.volces.com');
   assert.equal(diagnostic.kind, 'tls_certificate');
   assert.equal(diagnostic.status, 0);
+  assert.ok(diagnostic.message);
+  assert.match(diagnostic.message, /证书链验证失败/);
   assert.doesNotMatch(serialized, /secret-key/);
   assert.doesNotMatch(serialized, /secret-api-key/);
   assert.doesNotMatch(serialized, /Authorization/);
   assert.doesNotMatch(serialized, /X-Api-Key/);
-  assert.doesNotMatch(serialized, /secret prompt/);
+  assert.doesNotMatch(serialized, /private prompt body/);
+  assert.doesNotMatch(serialized, /token=secret/);
+  assert.doesNotMatch(serialized, /Bearer/);
   assert.doesNotMatch(serialized, /set-cookie/);
   assert.doesNotMatch(serialized, /private server payload/);
   assert.doesNotMatch(serialized, /token=private/);
+});
+
+test('classifies DEPTH_ZERO_SELF_SIGNED_CERT as TLS certificate error', async () => {
+  const { classifyNetworkError } = await loadClassifier();
+  assert.equal(classifyNetworkError({ code: 'DEPTH_ZERO_SELF_SIGNED_CERT' }).kind, 'tls_certificate');
 });
