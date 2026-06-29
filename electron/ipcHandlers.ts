@@ -37,6 +37,10 @@ import { getOpenAtLoginForPlatform, setOpenAtLoginForPlatform } from './utils/lo
 import { redactForLog } from './utils/redactForLog';
 import { ParserLLM } from './services/profile/parsers/ParserLLM';
 import { CompanyNameExtractor } from './services/profile/extractors/CompanyNameExtractor';
+import {
+  isRecoverableLiveRagError,
+  shouldUseLiveRagQuery,
+} from './rag/LiveRagQueryGuard';
 
 function sanitizeModeEvent(modeEvent: unknown): ModeEventContext | undefined {
   if (!modeEvent || typeof modeEvent !== 'object') return undefined;
@@ -3429,6 +3433,10 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('rag:query-live', async (event, { query }: { query: string }) => {
     const ragManager = appState.getRAGManager();
 
+    if (!shouldUseLiveRagQuery(query)) {
+      return { fallback: true };
+    }
+
     if (!ragManager || !ragManager.isReady()) {
       return { fallback: true };
     }
@@ -3467,7 +3475,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (error.name !== 'AbortError') {
         const msg = error.message || '';
         // If JIT RAG failed (no embeddings yet, no relevant context), fallback to regular chat
-        if (msg.includes('NO_RELEVANT_CONTEXT') || msg.includes('NO_MEETING_EMBEDDINGS')) {
+        if (isRecoverableLiveRagError(msg)) {
           console.log(`[RAG] JIT query failed with '${msg}', falling back to regular live chat`);
           return { fallback: true };
         }
