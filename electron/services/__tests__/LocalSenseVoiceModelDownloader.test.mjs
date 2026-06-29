@@ -37,6 +37,17 @@ test('SenseVoice downloader includes the user-controlled BOS CDN in default sour
   assert.doesNotMatch(source, /www\.modelscope\.cn\/models\/chriscrs/);
 });
 
+test('SenseVoice downloader uses a Windows-friendly Electron network path and longer timeout', () => {
+  const source = fs.readFileSync(
+    path.resolve(__dirname, '../../../electron/audio/sensevoice/modelDownloader.ts'),
+    'utf8',
+  );
+
+  assert.match(source, /DEFAULT_REQUEST_TIMEOUT_MS\s*=\s*120000/);
+  assert.match(source, /electron\?\.net\?\.fetch/);
+  assert.doesNotMatch(source, /REQUEST_TIMEOUT_MS\s*=\s*15000/);
+});
+
 test('SenseVoice downloader falls back to the next endpoint when the first endpoint fails', async (t) => {
   const modelsDir = makeTempDir();
   const failingServer = http.createServer((_, res) => {
