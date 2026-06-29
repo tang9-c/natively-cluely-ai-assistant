@@ -253,11 +253,20 @@ describe('ProfileOrchestrator', () => {
     orch3.deleteDocumentsByType(DocType.RESUME);
 
     let callIndex = 0;
+    const experience = Array.from({ length: 10 }, (_, index) => ({
+      title: `Backend Eng ${index + 1}`,
+      organization: `BigCo ${index + 1}`,
+      start: `202${index}-01`,
+      end: `202${index}-12`,
+      description: `Owned profile system ${index + 1}`,
+    }));
+
     const responses = [
       JSON.stringify({
         identity: { name: 'Bob', email: 'bob@example.com' },
+        summary: 'Backend specialist with profile intelligence experience.',
         skills: ['Python', 'Go'],
-        experience: [{ title: 'Backend Eng', organization: 'BigCo', start: '2021-01' }],
+        experience,
         projects: [],
         education: [],
       }),
@@ -279,16 +288,36 @@ describe('ProfileOrchestrator', () => {
     const status = orch3.getStatus();
     assert.equal(status.hasResume, true);
     assert.equal(status.resumeSummary.name, 'Bob');
-    assert.equal(status.resumeSummary.role, 'Backend Eng');
+    assert.equal(status.resumeSummary.role, 'Backend Eng 1');
 
     const profile = orch3.getProfileData();
     assert.equal(profile.identity.name, 'Bob');
     assert.equal(profile.identity.email, 'bob@example.com');
-    assert.equal(profile.summary, undefined);
+    assert.equal(profile.summary, 'Backend specialist with profile intelligence experience.');
+    assert.equal(profile.experienceCount, 10);
     assert.deepEqual(profile.experiencePreview, [
-      { title: 'Backend Eng', organization: 'BigCo', start: '2021-01' },
+      {
+        title: 'Backend Eng 1',
+        organization: 'BigCo 1',
+        start: '2020-01',
+        end: '2020-12',
+        description: 'Owned profile system 1',
+      },
+      {
+        title: 'Backend Eng 2',
+        organization: 'BigCo 2',
+        start: '2021-01',
+        end: '2021-12',
+        description: 'Owned profile system 2',
+      },
+      {
+        title: 'Backend Eng 3',
+        organization: 'BigCo 3',
+        start: '2022-01',
+        end: '2022-12',
+        description: 'Owned profile system 3',
+      },
     ]);
-    assert.equal(profile.experienceCount, 1);
     assert.deepEqual(profile.skills, ['Python', 'Go']);
   });
 
