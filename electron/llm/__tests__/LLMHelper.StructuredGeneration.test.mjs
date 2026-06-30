@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cjsRequire = createRequire(import.meta.url);
 const helperPath = path.resolve(__dirname, '../../../dist-electron/electron/LLMHelper.js');
+const doubaoConstantsPath = path.resolve(__dirname, '../../../dist-electron/electron/llm/DoubaoModelConstants.js');
 
 describe('LLMHelper structured generation', () => {
   test('generateContentStructured() falls back when Doubao exceeds per-provider timeout', async () => {
@@ -154,6 +155,7 @@ describe('LLMHelper structured generation', () => {
   // the Pro tier is the documented fix.
   test('generateContentStructured() routes company-research to Doubao Pro model', async () => {
     const { LLMHelper } = cjsRequire(helperPath);
+    const { DOUBAO_PRO_MODEL } = cjsRequire(doubaoConstantsPath);
     const helper = new LLMHelper();
     let capturedBody = null;
     helper.doubaoClient = {
@@ -177,7 +179,7 @@ describe('LLMHelper structured generation', () => {
     assert.ok(capturedBody, 'Doubao client was not called');
     assert.equal(
       capturedBody.model,
-      'doubao-1-5-pro-32k-250115',
+      DOUBAO_PRO_MODEL,
       'company-research must route to the Doubao Pro model, not the Lite tier',
     );
   });

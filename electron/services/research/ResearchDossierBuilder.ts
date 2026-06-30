@@ -5,6 +5,7 @@ import type {
   CompanyDossier, ResearchDimension, ResearchSource,
 } from './types';
 import { DOSSIER_SCHEMA_VERSION } from './types';
+import { DOUBAO_PRO_PROVIDER_LABEL } from '../../llm/DoubaoModelConstants';
 
 /**
  * Emit a one-line structured log for a research-pipeline stage.
@@ -145,7 +146,7 @@ export class ResearchDossierBuilder {
         });
         researchLog('llm-call', {
           attempt: attempt + 1,
-          provider: 'Doubao Pro (doubao-1-5-pro-32k-250115)',
+          provider: DOUBAO_PRO_PROVIDER_LABEL,
           promptChars: prompt.length,
           maxTokens: 4_096,
           durationMs: Date.now() - llmStartedAt,
@@ -169,7 +170,7 @@ export class ResearchDossierBuilder {
       } catch (err) {
         researchLog('llm-call', {
           attempt: attempt + 1,
-          provider: 'Doubao Pro (doubao-1-5-pro-32k-250115)',
+          provider: DOUBAO_PRO_PROVIDER_LABEL,
           promptChars: prompt.length,
           maxTokens: 4_096,
           result: isTimeoutError(err) ? 'timeout' : 'error',

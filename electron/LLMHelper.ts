@@ -22,8 +22,10 @@ import {
 } from "./llm/tinyPrompts"
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
+import { DOUBAO_PRO_MODEL, DOUBAO_PRO_PROVIDER_LABEL } from "./llm/DoubaoModelConstants"
 import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
 import { buildChatSystemPrompt, type ChatPromptOptions } from "./llm/chatPromptAssembly"
+import { QCLOUD_OPENAI_SDK_BASE_URL } from "./llm/QCloudLlmConstants"
 import type { TranscriptTurn } from "./llm/transcriptCleaner"
 import { deepVariableReplacer, getByPath, injectImageIntoMessages } from './utils/curlUtils';
 import curl2Json from "@bany/curl-to-json";
@@ -51,7 +53,6 @@ const DOUBAO_MODEL = "doubao-seed-2-0-lite-260215"
 // Doubao Pro tier — used for structured generation (research dossiers, etc.)
 // where the Lite tier's per-token throughput cannot complete the prompt within
 // the per-provider budget. Streaming chat and vision continue to use Lite.
-const DOUBAO_PRO_MODEL = "doubao-1-5-pro-32k-250115"
 const DOUBAO_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 const MAX_OUTPUT_TOKENS = 65536
 const OPENAI_COMPAT_MAX_COMPLETION_TOKENS = 12288
@@ -77,6 +78,7 @@ export class LLMHelper {
   private client: GoogleGenAI | null = null
   private groqClient: Groq | null = null
   private openaiClient: OpenAI | null = null
+  private qcloudClient: OpenAI | null = null
   private claudeClient: Anthropic | null = null
   private doubaoClient: OpenAI | null = null
   private apiKey: string | null = null
@@ -267,6 +269,7 @@ export class LLMHelper {
 
   public setNativelyKey(key: string | null): void {
     this.nativelyKey = key || null;
+    this.qcloudClient = key ? new OpenAI({ apiKey: key, baseURL: QCLOUD_OPENAI_SDK_BASE_URL }) : null;
     console.log(`[LLMHelper] Natively key ${key ? 'set' : 'cleared'}`);
   }
 
@@ -1910,7 +1913,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // generation within the per-provider budget — see debug session 2026-06-21).
     if (this.doubaoClient) {
       providers.push({
-        name: `Doubao Pro (${DOUBAO_PRO_MODEL})`,
+        name: DOUBAO_PRO_PROVIDER_LABEL,
         execute: () => this.generateWithDoubao(message, undefined, undefined, DOUBAO_PRO_MODEL, {
           maxOutputTokens,
           timeoutMs: perProviderTimeoutMs,
