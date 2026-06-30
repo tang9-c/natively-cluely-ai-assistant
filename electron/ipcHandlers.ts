@@ -28,6 +28,7 @@ import {
 } from './utils/networkErrorClassifier';
 
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
+import { QCLOUD_CHAT_COMPLETIONS_ENDPOINT, QCLOUD_CHAT_MODEL } from './llm/QCloudLlmConstants';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 import type { ModeEventContext } from './llm';
 import type { ChatPromptOptions } from './llm/chatPromptAssembly';
@@ -41,6 +42,43 @@ import {
   isRecoverableLiveRagError,
   shouldUseLiveRagQuery,
 } from './rag/LiveRagQueryGuard';
+
+const QCLOUD_KEY_PATTERN = /^sk-[A-Za-z0-9_-]{32,}$/;
+
+function validateQCloudApiKeyFormat(apiKey: string): string | null {
+  const trimmed = apiKey.trim();
+  if (!trimmed) return null;
+  if (!QCLOUD_KEY_PATTERN.test(trimmed)) {
+    return 'QCLOUD key 格式不正确，应以 sk- 开头，并且只包含字母、数字、下划线或短横线。';
+  }
+  return null;
+}
+
+async function testQCloudApiKeyConnection(apiKey: string): Promise<void> {
+  const response = await fetch(QCLOUD_CHAT_COMPLETIONS_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey.trim()}`,
+    },
+    body: JSON.stringify({
+      model: QCLOUD_CHAT_MODEL,
+      messages: [{ role: 'user', content: 'ping' }],
+      max_tokens: 8,
+      stream: false,
+    }),
+    signal: AbortSignal.timeout(8000),
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    const raw = (errData as any)?.error ?? errData;
+    const detail = typeof raw === 'string'
+      ? raw
+      : raw?.message || raw?.code || JSON.stringify(raw || {});
+    throw new Error(`QCLOUD 连接测试失败 (${response.status}): ${detail || 'unknown'}`);
+  }
+}
 
 function sanitizeModeEvent(modeEvent: unknown): ModeEventContext | undefined {
   if (!modeEvent || typeof modeEvent !== 'object') return undefined;
@@ -1173,18 +1211,26 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
       const prevSttProvider = cm.getSttProvider();
+      const trimmedKey = apiKey.trim();
+      const formatError = validateQCloudApiKeyFormat(apiKey);
+      if (formatError) {
+        return { success: false, error: formatError };
+      }
+      if (trimmedKey) {
+        await testQCloudApiKeyConnection(apiKey);
+      }
       cm.setNativelyApiKey(apiKey, options);
 
       // Update LLMHelper immediately (same pattern as other provider keys)
       const llmHelper = appState.processingHelper.getLLMHelper();
-      llmHelper.setNativelyKey(apiKey || null);
+      llmHelper.setNativelyKey(trimmedKey || null);
 
       // Sync the model into LLMHelper and notify the UI whenever the effective default changed
       const defaultModel = cm.getDefaultModel();
       const providers = [...(cm.getCurlProviders() || []), ...(cm.getCustomProviders() || [])];
       llmHelper.setModel(defaultModel, providers);
       broadcast('model-changed', defaultModel);
-      broadcast('qcloud-key-changed', { hasKey: Boolean(apiKey?.trim()) });
+      broadcast('qcloud-key-changed', { hasKey: Boolean(trimmedKey) });
 
       // setNativelyApiKey may migrate legacy STT values such as 'natively' back to a
       // local provider. Reconfigure only when the effective provider actually changes.

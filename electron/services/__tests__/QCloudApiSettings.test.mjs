@@ -62,6 +62,35 @@ test('QCLOUD settings asks before replacing an existing manual default model', (
   assert.match(source, /setNativelyApiKey\(apiKey\.trim\(\),\s*\{\s*selectAsDefault/);
 });
 
+test('QCLOUD settings validates key format before saving', () => {
+  const source = read('src/components/settings/NativelyApiSettings.tsx');
+
+  assert.match(source, /isValidQCloudKeyFormat/);
+  assert.match(source, /QCLOUD_KEY_PATTERN/);
+  assert.match(source, /QCLOUD key 格式不正确/);
+  assert.ok(
+    source.indexOf('isValidQCloudKeyFormat') < source.indexOf('setNativelyApiKey(apiKey.trim()'),
+    'format validation should happen before the save IPC',
+  );
+});
+
+test('set-natively-api-key validates format and tests connection before persisting', () => {
+  const source = read('electron/ipcHandlers.ts');
+  const start = source.indexOf("  safeHandle('set-natively-api-key'");
+  const end = source.indexOf('  });', start);
+  const handler = source.slice(start, end);
+
+  assert.ok(start >= 0, 'set-natively-api-key handler should exist');
+  assert.match(source, /validateQCloudApiKeyFormat/);
+  assert.match(source, /testQCloudApiKeyConnection/);
+  assert.match(handler, /validateQCloudApiKeyFormat\(apiKey\)/);
+  assert.match(handler, /await testQCloudApiKeyConnection\(apiKey\)/);
+  assert.ok(
+    handler.indexOf('await testQCloudApiKeyConnection(apiKey)') < handler.indexOf('cm.setNativelyApiKey(apiKey, options)'),
+    'connection test must run before persisting the key',
+  );
+});
+
 test('QCLOUD key changes broadcast explicit key state without exposing the key', () => {
   const source = read('electron/ipcHandlers.ts');
   const start = source.indexOf("  safeHandle('set-natively-api-key'");

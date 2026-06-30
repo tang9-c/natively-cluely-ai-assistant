@@ -20,10 +20,15 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
 
 const AUTO_DEFAULT_MODEL_PREFIXES = ['gemini-', 'llama-', 'mixtral-', 'gemma-'];
 const AUTO_DEFAULT_MODEL_IDS = new Set(['', 'gemini', 'llama', 'natively']);
+const QCLOUD_KEY_PATTERN = /^sk-[A-Za-z0-9_-]{32,}$/;
 
 function isAutoDefaultModel(model?: string): boolean {
   const id = model || '';
   return AUTO_DEFAULT_MODEL_IDS.has(id) || AUTO_DEFAULT_MODEL_PREFIXES.some((prefix) => id.startsWith(prefix));
+}
+
+function isValidQCloudKeyFormat(key: string): boolean {
+  return QCLOUD_KEY_PATTERN.test(key.trim());
 }
 
 // ─── Component ───────────────────────────────────────────────
@@ -53,6 +58,10 @@ export const NativelyApiSettings: React.FC = () => {
 
   const handleSave = async () => {
     if (!apiKey.trim() || apiKey.includes('•')) return;
+    if (!isValidQCloudKeyFormat(apiKey)) {
+      setError('QCLOUD key 格式不正确，应以 sk- 开头，并且只包含字母、数字、下划线或短横线。');
+      return;
+    }
     setIsSaving(true);
     setError(null);
     try {
