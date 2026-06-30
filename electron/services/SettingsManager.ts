@@ -56,6 +56,7 @@ export interface AppSettings {
     skillsWatcherAutoActivateThreshold?: number;
     skillsWatcherSuggestThreshold?: number;
     speakerSeparationMode?: 'auto' | 'off';
+    speakerVerificationMode?: 'off' | 'local';
 }
 
 export const VALID_SCREEN_UNDERSTANDING_MODES = ['vision_first', 'vision_only', 'private_vision'] as const;
@@ -136,6 +137,18 @@ export class SettingsManager {
             throw new Error(`[SettingsManager] Invalid speakerSeparationMode: ${mode}`);
         }
         this.settings.speakerSeparationMode = mode;
+        this.saveSettings();
+    }
+
+    public getSpeakerVerificationMode(): 'off' | 'local' {
+        return this.settings.speakerVerificationMode === 'local' ? 'local' : 'off';
+    }
+
+    public setSpeakerVerificationMode(mode: 'off' | 'local'): void {
+        if (!['off', 'local'].includes(mode)) {
+            throw new Error(`[SettingsManager] Invalid speakerVerificationMode: ${mode}`);
+        }
+        this.settings.speakerVerificationMode = mode;
         this.saveSettings();
     }
 

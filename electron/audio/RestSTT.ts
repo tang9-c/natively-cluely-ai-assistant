@@ -17,6 +17,7 @@ import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { BaseSTT } from './BaseSTT';
 import { extractDoubaoAucTranscript, extractDoubaoAucTranscriptionJson, transcribeDoubaoAucFile, type DoubaoAucTranscriptionResult } from './doubaoAucClient';
 import { SpeakerDiarizationAligner } from './SpeakerDiarizationAligner';
+import { buffer16ToFloat32 } from '../services/speaker/speakerAudioUtils';
 
 export type RestSttProvider = 'groq' | 'openai' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'doubao' | 'doubao-auc';
 export type SpeakerSeparationMode = 'auto' | 'off';
@@ -447,7 +448,7 @@ export class RestSTT extends BaseSTT {
         this.isUploading = true;
         const uploadPromise = (async () => {
             const transcript = await this.uploadAudio(wavBuffer);
-            this.emitUploadResult(transcript);
+            await this.emitUploadResult(transcript, pcm16k);
         })()
             .catch(err => {
                 console.error(`[RestSTT] Upload error:`, err);
@@ -473,14 +474,19 @@ export class RestSTT extends BaseSTT {
     /**
      * Upload WAV audio to the REST endpoint
      */
-    private emitUploadResult(transcript: string | DoubaoAucTranscriptionResult): void {
+    private async emitUploadResult(
+        transcript: string | DoubaoAucTranscriptionResult,
+        pcm16k: Buffer,
+    ): Promise<void> {
         if (typeof transcript === 'string') {
             if (transcript && transcript.trim().length > 0) {
                 console.log(`[RestSTT] Transcript received`, { length: transcript.trim().length });
+                const speakerVerification = await this.speakerVerificationAnnotator?.annotate(buffer16ToFloat32(pcm16k));
                 this.emit('transcript', {
                     text: transcript.trim(),
                     isFinal: true,
                     confidence: 1.0,
+                    ...(speakerVerification ? { speakerVerification } : {}),
                 });
             }
             return;
@@ -494,6 +500,8 @@ export class RestSTT extends BaseSTT {
 
         for (const utterance of aligned) {
             if (!utterance.text.trim()) continue;
+            const utteranceSamples = this.slicePcm16kByTime(pcm16k, utterance.startMs, utterance.endMs);
+            const speakerVerification = await this.speakerVerificationAnnotator?.annotate(utteranceSamples);
             this.emit('transcript', {
                 text: utterance.text.trim(),
                 isFinal: true,
@@ -504,8 +512,18 @@ export class RestSTT extends BaseSTT {
                 diarizationProvider: 'doubao-auc',
                 startTimestampMs: utterance.startMs,
                 endTimestampMs: utterance.endMs,
+                ...(speakerVerification ? { speakerVerification } : {}),
             });
         }
+    }
+
+    private slicePcm16kByTime(pcm16k: Buffer, startMs?: number, endMs?: number): Float32Array {
+        if (startMs == null || endMs == null || endMs <= startMs) {
+            return buffer16ToFloat32(pcm16k);
+        }
+        const startByte = Math.max(0, Math.floor((startMs / 1000) * 16000) * 2);
+        const endByte = Math.min(pcm16k.length, Math.ceil((endMs / 1000) * 16000) * 2);
+        return buffer16ToFloat32(pcm16k.subarray(startByte, endByte));
     }
 
     private async uploadAudio(wavBuffer: Buffer): Promise<string | DoubaoAucTranscriptionResult> {

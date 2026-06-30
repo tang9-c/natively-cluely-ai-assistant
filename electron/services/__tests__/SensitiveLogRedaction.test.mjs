@@ -68,6 +68,21 @@ test('STT providers log transcript metadata without transcript text', () => {
   }
 });
 
+test('speaker verification logs do not include raw audio or embedding values', () => {
+  const files = [
+    'electron/services/speaker/SpeakerEnrollmentService.ts',
+    'electron/services/speaker/SpeakerVerificationService.ts',
+    'electron/services/speaker/SpeakerVerificationAnnotator.ts',
+    'electron/services/speaker/SpeakerEmbeddingExtractor.ts',
+  ];
+  for (const file of files) {
+    const source = read(file);
+    assert.doesNotMatch(source, /console\.(log|warn|error)\([^)]*samples/i, `${file} must not log samples`);
+    assert.doesNotMatch(source, /console\.(log|warn|error)\([^)]*embedding/i, `${file} must not log embeddings`);
+    assert.doesNotMatch(source, /console\.(log|warn|error)\([^)]*transcript/i, `${file} must not log transcripts`);
+  }
+});
+
 test('IPC and meeting summary logs avoid answer and LLM response snippets', () => {
   const ipc = read('electron/ipcHandlers.ts');
   const persistence = read('electron/MeetingPersistence.ts');

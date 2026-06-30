@@ -481,6 +481,7 @@ export class IntelligenceEngine extends EventEmitter {
             timestamp: item.timestamp,
             speakerId: item.speakerId,
             speakerLabel: item.speakerLabel,
+            speakerVerification: item.speakerVerification,
         };
     }
 
@@ -509,6 +510,7 @@ export class IntelligenceEngine extends EventEmitter {
             speakerLabel: segment.speakerLabel,
             providerSpeakerId: segment.providerSpeakerId,
             diarizationProvider: segment.diarizationProvider,
+            speakerVerification: segment.speakerVerification,
         });
     }
 
@@ -855,6 +857,7 @@ export class IntelligenceEngine extends EventEmitter {
                         timestamp: lastInterim.timestamp,
                         speakerId: lastInterim.speakerId,
                         speakerLabel: lastInterim.speakerLabel,
+                        speakerVerification: lastInterim.speakerVerification,
                     });
                 }
             }

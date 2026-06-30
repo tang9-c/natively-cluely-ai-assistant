@@ -1094,6 +1094,27 @@ export class AppState {
     if (!stt) return null;
 
     stt.setRecognitionLanguage(sttLanguage);
+    try {
+      const { SettingsManager } = require('./services/SettingsManager');
+      const { SpeakerProfileStore } = require('./services/speaker/SpeakerProfileStore');
+      const { SherpaSpeakerEmbeddingExtractor } = require('./services/speaker/SpeakerEmbeddingExtractor');
+      const { SpeakerVerificationService } = require('./services/speaker/SpeakerVerificationService');
+      const { SpeakerVerificationAnnotator } = require('./services/speaker/SpeakerVerificationAnnotator');
+      const store = new SpeakerProfileStore(DatabaseManager.getInstance());
+      const profile = store.getMeProfile();
+      if (profile && SettingsManager.getInstance().getSpeakerVerificationMode() === 'local') {
+        const extractor = new SherpaSpeakerEmbeddingExtractor();
+        const service = new SpeakerVerificationService({ store, extractor });
+        stt.setSpeakerVerificationAnnotator(new SpeakerVerificationAnnotator({
+          getMode: () => SettingsManager.getInstance().getSpeakerVerificationMode(),
+          service,
+        }));
+      }
+    } catch (error: any) {
+      console.warn('[Main] Local speaker verification unavailable', {
+        message: error?.message ?? String(error),
+      });
+    }
 
     // Wire Transcript Events
     stt.on('transcript', (segment: TranscriptSegment) => {
@@ -1119,7 +1140,8 @@ export class AppState {
         startTimestampMs: segment.startTimestampMs,
         endTimestampMs: segment.endTimestampMs,
         emotion: segment.emotion,
-        emotionSource: segment.emotionSource
+        emotionSource: segment.emotionSource,
+        speakerVerification: segment.speakerVerification
       };
 
       this.intelligenceManager.handleTranscript(transcriptPayload);

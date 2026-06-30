@@ -4,6 +4,7 @@
 
 import { RecapLLM } from './llm';
 import { isVerboseLogging } from './verboseLog';
+import type { SpeakerVerificationMetadata } from './services/speaker/speakerVerificationTypes';
 
 export interface TranscriptSegment {
     marker?: string;
@@ -20,6 +21,7 @@ export interface TranscriptSegment {
     endTimestampMs?: number;
     emotion?: string;
     emotionSource?: string;
+    speakerVerification?: SpeakerVerificationMetadata;
 }
 
 export interface SuggestionTrigger {
@@ -37,6 +39,7 @@ export interface ContextItem {
     speakerLabel?: string;
     emotion?: string;
     emotionSource?: string;
+    speakerVerification?: SpeakerVerificationMetadata;
 }
 
 export interface AssistantResponse {
@@ -248,6 +251,7 @@ export class SessionTracker {
             speakerLabel: segment.speakerLabel,
             emotion: segment.emotion,
             emotionSource: segment.emotionSource,
+            speakerVerification: segment.speakerVerification,
         });
 
         this.evictOldEntries();

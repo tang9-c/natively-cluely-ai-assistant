@@ -12,6 +12,7 @@ import {
 } from '../llm/IntentKeywordDefaults';
 import { DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE } from '../services/ModeDefaultContexts';
 import type { ResumeNode, UserProfileRecord } from '../services/profile/types';
+import type { SpeakerVerificationMetadata } from '../services/speaker/speakerVerificationTypes';
 
 // Interfaces for our data objects
 export interface CompanyResearchCacheRow {
@@ -48,6 +49,7 @@ export interface Meeting {
         timestamp: number;
         startTimestampMs?: number;
         endTimestampMs?: number;
+        speakerVerification?: SpeakerVerificationMetadata;
     }>;
     usage?: Array<{
         type: 'assist' | 'followup' | 'chat' | 'followup_questions';
@@ -311,6 +313,7 @@ export class DatabaseManager {
                     timestamp_ms INTEGER,
                     start_timestamp_ms INTEGER,
                     end_timestamp_ms INTEGER,
+                    speaker_verification_json TEXT,
                     FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
                 );
 
@@ -1245,6 +1248,41 @@ export class DatabaseManager {
                 );
             }
             this.db.pragma('user_version = 27');
+        }
+
+        // Version 27 -> 28: Local speaker verification profile tables.
+        if (version < 28) {
+            console.log('[DatabaseManager] Applying migration v27 -> v28: Local speaker verification profile tables');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS speaker_profiles (
+                    id TEXT PRIMARY KEY,
+                    label TEXT NOT NULL,
+                    embedding BLOB NOT NULL,
+                    embedding_dim INTEGER NOT NULL,
+                    extractor_model TEXT NOT NULL,
+                    extractor_version TEXT NOT NULL,
+                    threshold REAL NOT NULL,
+                    enrolled_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    device_fingerprint TEXT,
+                    sample_count INTEGER NOT NULL DEFAULT 0
+                );
+
+                CREATE TABLE IF NOT EXISTS speaker_profile_stats (
+                    profile_id TEXT PRIMARY KEY,
+                    total_verifications INTEGER NOT NULL DEFAULT 0,
+                    positive_verifications INTEGER NOT NULL DEFAULT 0,
+                    last_verified_at INTEGER
+                );
+            `);
+            this.db.pragma('user_version = 28');
+        }
+
+        // Version 28 -> 29: Preserve local speaker verification metadata on transcripts.
+        if (version < 29) {
+            console.log('[DatabaseManager] Applying migration v28 -> v29: Add speaker verification transcript metadata');
+            try { this.db.exec('ALTER TABLE transcripts ADD COLUMN speaker_verification_json TEXT'); } catch (e) { /* Column already exists */ }
+            this.db.pragma('user_version = 29');
         }
 
         console.log('[DatabaseManager] Migrations completed.');
@@ -2279,9 +2317,10 @@ export class DatabaseManager {
         const insertTranscript = this.db.prepare(`
             INSERT INTO transcripts (
                 meeting_id, speaker, speaker_id, speaker_label, provider_speaker_id,
-                diarization_provider, content, timestamp_ms, start_timestamp_ms, end_timestamp_ms
+                diarization_provider, content, timestamp_ms, start_timestamp_ms, end_timestamp_ms,
+                speaker_verification_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         const insertInteraction = this.db.prepare(`
@@ -2321,7 +2360,8 @@ export class DatabaseManager {
                         segment.text,
                         segment.timestamp,
                         segment.startTimestampMs ?? null,
-                        segment.endTimestampMs ?? null
+                        segment.endTimestampMs ?? null,
+                        segment.speakerVerification ? JSON.stringify(segment.speakerVerification) : null
                     );
                 }
             }
@@ -2487,7 +2527,8 @@ export class DatabaseManager {
             text: row.content,
             timestamp: row.timestamp_ms,
             startTimestampMs: row.start_timestamp_ms ?? undefined,
-            endTimestampMs: row.end_timestamp_ms ?? undefined
+            endTimestampMs: row.end_timestamp_ms ?? undefined,
+            speakerVerification: row.speaker_verification_json ? JSON.parse(row.speaker_verification_json) : undefined
         }));
 
         const usage = usageRows.map(row => {

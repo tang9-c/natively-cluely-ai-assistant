@@ -141,6 +141,30 @@ export interface NativeAudioTranscriptPayload {
   endTimestampMs?: number
   emotion?: TranscriptEmotion
   emotionSource?: 'sensevoice'
+  speakerVerification?: SpeakerVerificationMetadata
+}
+
+export interface SpeakerVerificationMetadata {
+  provider: 'local-speaker-verification'
+  profileId: 'me'
+  isMe: boolean
+  confidence: number
+  threshold: number
+}
+
+export type SpeakerVerificationMode = 'off' | 'local'
+
+export interface SpeakerVerificationStatus {
+  enrolled: boolean
+  enrolledAt?: number
+  model?: string
+  mode: SpeakerVerificationMode
+}
+
+export interface SpeakerEnrollmentSample {
+  samples: Float32Array
+  sampleRate: number
+  deviceFingerprint?: string
 }
 
 export interface ElectronAPI {
@@ -276,6 +300,11 @@ export interface ElectronAPI {
   getSttProvider: () => Promise<string>
   getSpeakerSeparationMode: () => Promise<'auto' | 'off'>
   setSpeakerSeparationMode: (mode: 'auto' | 'off') => Promise<{ success: boolean; error?: string }>
+  getSpeakerVerificationMode: () => Promise<SpeakerVerificationMode>
+  setSpeakerVerificationMode: (mode: SpeakerVerificationMode) => Promise<{ success: boolean; error?: string }>
+  speakerVerificationGetStatus: () => Promise<SpeakerVerificationStatus>
+  speakerVerificationEnroll: (samples: SpeakerEnrollmentSample[]) => Promise<{ success: boolean; status?: SpeakerVerificationStatus; error?: string }>
+  speakerVerificationDeleteProfile: () => Promise<{ success: boolean; error?: string }>
   localSenseVoiceGetModels: () => Promise<{ models: any[]; activeModelId: string }>
   localSenseVoiceDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>
   localSenseVoiceStartDownload: (modelId: string) => Promise<{ success: boolean; error?: string }>
@@ -283,6 +312,12 @@ export interface ElectronAPI {
   onLocalSenseVoiceDownloadComplete: (callback: (data: { modelId: string }) => void) => () => void
   onLocalSenseVoiceDownloadError: (callback: (data: { modelId: string; error: string }) => void) => () => void
   localSenseVoicePreload: (modelId?: string) => Promise<{ success: boolean; reason?: string; error?: string }>
+  localModelsGetList: () => Promise<{ models: any[] }>
+  localModelsStartDownload: (modelId: string) => Promise<{ success: boolean; error?: string }>
+  localModelsDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>
+  onLocalModelsDownloadProgress: (callback: (data: { modelId: string; progress: number }) => void) => () => void
+  onLocalModelsDownloadComplete: (callback: (data: { modelId: string }) => void) => () => void
+  onLocalModelsDownloadError: (callback: (data: { modelId: string; error: string }) => void) => () => void
   localWhisperGetChannelConfig: () => Promise<{ enabled: boolean; micModelId: string; systemModelId: string; globalModelId: string }>
   localWhisperSetChannelConfig: (cfg: { enabled?: boolean; micModelId?: string; systemModelId?: string }) => Promise<{ success: boolean; error?: string }>
   setGroqSttApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>

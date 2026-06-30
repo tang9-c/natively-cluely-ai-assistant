@@ -103,3 +103,13 @@ test('transcript persistence preserves optional speaker diarization metadata', (
     assert.match(db, /row\.speaker_id/);
     assert.match(db, /row\.speaker_label/);
 });
+
+test('local speaker verification does not replace Doubao AUC provider diarization', () => {
+    const base = read('electron/audio/BaseSTT.ts');
+    const rest = read('electron/audio/RestSTT.ts');
+
+    assert.match(base, /speakerVerification/);
+    assert.match(rest, /diarizationProvider: 'doubao-auc'/);
+    assert.match(rest, /speakerVerification/);
+    assert.doesNotMatch(rest, /diarizationProvider: 'local-speaker-verification'/);
+});

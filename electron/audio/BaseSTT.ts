@@ -25,6 +25,8 @@
 
 import { EventEmitter } from 'events';
 import type { TranscriptEmotion } from '../../shared/senseVoiceEmotion';
+import type { SpeakerVerificationAnnotator } from '../services/speaker/SpeakerVerificationAnnotator';
+import type { SpeakerVerificationMetadata } from '../services/speaker/speakerVerificationTypes';
 
 export interface TranscriptSegment {
     text: string;
@@ -38,6 +40,7 @@ export interface TranscriptSegment {
     endTimestampMs?: number;
     emotion?: TranscriptEmotion;
     emotionSource?: 'sensevoice';
+    speakerVerification?: SpeakerVerificationMetadata;
 }
 
 export interface SttWarning {
@@ -51,6 +54,7 @@ export abstract class BaseSTT extends EventEmitter {
     protected _sampleRate = 16000;
     protected _numChannels = 1;
     protected _languageKey = 'en';
+    protected speakerVerificationAnnotator?: SpeakerVerificationAnnotator;
 
     // ── Core lifecycle (must be implemented by subclass) ───────────────────
 
@@ -79,6 +83,10 @@ export abstract class BaseSTT extends EventEmitter {
 
     /** Provider-specific credential file path (e.g. Google JSON key). No-op for API-key providers. */
     setCredentials(_path: string): void { }
+
+    setSpeakerVerificationAnnotator(annotator: SpeakerVerificationAnnotator | undefined): void {
+        this.speakerVerificationAnnotator = annotator;
+    }
 
     // ── Optional capabilities (no-op defaults) ─────────────────────────────
 

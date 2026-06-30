@@ -10,6 +10,7 @@ export interface TranscriptTurn {
     speakerLabel?: string;
     providerSpeakerId?: string;
     diarizationProvider?: 'doubao-auc';
+    speakerVerification?: import('../services/speaker/speakerVerificationTypes').SpeakerVerificationMetadata;
 }
 
 /**
@@ -107,6 +108,7 @@ export function cleanTranscript(turns: TranscriptTurn[]): TranscriptTurn[] {
                 speakerLabel: turn.speakerLabel,
                 providerSpeakerId: turn.providerSpeakerId,
                 diarizationProvider: turn.diarizationProvider,
+                speakerVerification: turn.speakerVerification,
             });
         }
     }
@@ -194,6 +196,10 @@ function baseRoleLabel(role: TranscriptTurn['role']): string {
     return role === 'interviewer' ? 'INTERVIEWER' : role === 'user' ? 'ME' : 'ASSISTANT';
 }
 
+function verificationLabel(turn: TranscriptTurn): string | null {
+    return turn.speakerVerification?.isMe === true ? 'ME' : null;
+}
+
 function shouldShowSpeakerLabel(turn: TranscriptTurn, label: string): boolean {
     const normalized = label.trim().toLowerCase();
     if (!normalized) return false;
@@ -210,8 +216,12 @@ function shouldShowSpeakerLabel(turn: TranscriptTurn, label: string): boolean {
  */
 export function formatTranscriptForLLM(turns: TranscriptTurn[]): string {
     return turns.map(turn => {
+        const verified = verificationLabel(turn);
+        if (verified) {
+            return `[${verified}]: ${turn.text}`;
+        }
         const baseLabel = baseRoleLabel(turn.role);
-        const speakerLabel = turn.speakerLabel?.trim();
+        const speakerLabel = verified ?? turn.speakerLabel?.trim();
         const label = speakerLabel && shouldShowSpeakerLabel(turn, speakerLabel)
             ? `${baseLabel}: ${speakerLabel}`
             : baseLabel;

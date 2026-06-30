@@ -904,6 +904,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       getter: () => SettingsManager.getInstance().getSpeakerSeparationMode(),
       setter: (v) => SettingsManager.getInstance().setSpeakerSeparationMode(v),
     },
+    {
+      suffix: 'speaker-verification-mode',
+      key: 'speakerVerificationMode',
+      validator: (v) => ['off', 'local'].includes(v) || 'invalid_mode',
+      broadcastEvent: 'speaker-verification-mode-changed',
+      getter: () => SettingsManager.getInstance().getSpeakerVerificationMode(),
+      setter: (v) => SettingsManager.getInstance().setSpeakerVerificationMode(v),
+    },
   ];
 
   for (const reg of SETTINGS_REGISTRY) {
@@ -1013,6 +1021,69 @@ export function initializeIpcHandlers(appState: AppState): void {
     SettingsManager.getInstance().setSpeakerSeparationMode(mode);
     broadcast('speaker-separation-mode-changed', mode);
     return { success: true };
+  });
+  safeHandle('get-speaker-verification-mode', async () =>
+    SettingsManager.getInstance().getSpeakerVerificationMode(),
+  );
+  safeHandle('set-speaker-verification-mode', async (_, mode: 'off' | 'local') => {
+    if (!['off', 'local'].includes(mode)) {
+      return { success: false, error: 'invalid_mode' };
+    }
+    SettingsManager.getInstance().setSpeakerVerificationMode(mode);
+    broadcast('speaker-verification-mode-changed', mode);
+    return { success: true };
+  });
+
+  const makeSpeakerServices = () => {
+    const { SpeakerProfileStore } = require('./services/speaker/SpeakerProfileStore');
+    const { SherpaSpeakerEmbeddingExtractor } = require('./services/speaker/SpeakerEmbeddingExtractor');
+    const { SpeakerEnrollmentService } = require('./services/speaker/SpeakerEnrollmentService');
+    const store = new SpeakerProfileStore(DatabaseManager.getInstance());
+    const extractor = new SherpaSpeakerEmbeddingExtractor();
+    return {
+      store,
+      enrollment: new SpeakerEnrollmentService({ store, extractor }),
+    };
+  };
+
+  safeHandle('speaker-verification:get-status', async () => {
+    const { SpeakerProfileStore } = require('./services/speaker/SpeakerProfileStore');
+    const store = new SpeakerProfileStore(DatabaseManager.getInstance());
+    return store.getStatus(SettingsManager.getInstance().getSpeakerVerificationMode());
+  });
+
+  safeHandle('speaker-verification:enroll', async (_, samples: any[]) => {
+    try {
+      if (!Array.isArray(samples) || samples.length < 3) {
+        return { success: false, error: 'speaker_enrollment_requires_three_samples' };
+      }
+      const normalized = samples.map(sample => ({
+        samples: sample.samples instanceof Float32Array
+          ? sample.samples
+          : new Float32Array(sample.samples ?? []),
+        sampleRate: Number(sample.sampleRate) || 16000,
+        deviceFingerprint: typeof sample.deviceFingerprint === 'string' ? sample.deviceFingerprint : undefined,
+      }));
+      const { enrollment } = makeSpeakerServices();
+      const status = await enrollment.enroll(normalized);
+      SettingsManager.getInstance().setSpeakerVerificationMode('local');
+      broadcast('speaker-verification-mode-changed', 'local');
+      return { success: true, status };
+    } catch (error: any) {
+      return { success: false, error: error?.message ?? String(error) };
+    }
+  });
+
+  safeHandle('speaker-verification:delete-profile', async () => {
+    try {
+      const { store } = makeSpeakerServices();
+      store.deleteMeProfile();
+      SettingsManager.getInstance().setSpeakerVerificationMode('off');
+      broadcast('speaker-verification-mode-changed', 'off');
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error?.message ?? String(error) };
+    }
   });
   safeHandle('get-technical-interview-direct-vision', async () =>
     SettingsManager.getInstance().getTechnicalInterviewVisionFirst(),
@@ -1206,6 +1277,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     });
   }
 
+  // ── Usage cache and provider-specific key handlers ────────────────────────
   safeHandle('set-natively-api-key', async (_, apiKey: string, options?: { selectAsDefault?: boolean }) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');

@@ -15,6 +15,7 @@ import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { NativelyApiSettings } from './settings/NativelyApiSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
 import { ResearchTabBody } from './settings/ResearchTabBody';
+import { SpeakerVerificationSettings } from './settings/SpeakerVerificationSettings';
 import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
 import { LocalSenseVoiceModelPanel } from './LocalSenseVoiceModelPanel';
 import { NativelyLogoMark } from './NativelyLogoMark';
@@ -2650,6 +2651,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     </div>
                                                 </div>
                                             </div>
+
+                                            <SpeakerVerificationSettings />
 
                                             {/* Recognition Language Family */}
                                             <CustomSelect

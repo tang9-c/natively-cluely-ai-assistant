@@ -164,6 +164,11 @@ interface ElectronAPI {
   ) => Promise<{ success: boolean; error?: string }>;
   getSpeakerSeparationMode: () => Promise<'auto' | 'off'>;
   setSpeakerSeparationMode: (mode: 'auto' | 'off') => Promise<{ success: boolean; error?: string }>;
+  getSpeakerVerificationMode: () => Promise<'off' | 'local'>;
+  setSpeakerVerificationMode: (mode: 'off' | 'local') => Promise<{ success: boolean; error?: string }>;
+  speakerVerificationGetStatus: () => Promise<{ enrolled: boolean; enrolledAt?: number; model?: string; mode: 'off' | 'local' }>;
+  speakerVerificationEnroll: (samples: Array<{ samples: Float32Array; sampleRate: number; deviceFingerprint?: string }>) => Promise<{ success: boolean; status?: { enrolled: boolean; enrolledAt?: number; model?: string; mode: 'off' | 'local' }; error?: string }>;
+  speakerVerificationDeleteProfile: () => Promise<{ success: boolean; error?: string }>;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
   localWhisperSetModel: (modelId: string) => Promise<{ success: boolean }>;
   localWhisperDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
@@ -1136,6 +1141,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSpeakerSeparationMode: () => ipcRenderer.invoke('get-speaker-separation-mode'),
   setSpeakerSeparationMode: (mode: 'auto' | 'off') =>
     ipcRenderer.invoke('set-speaker-separation-mode', mode),
+  getSpeakerVerificationMode: () => ipcRenderer.invoke('get-speaker-verification-mode'),
+  setSpeakerVerificationMode: (mode: 'off' | 'local') =>
+    ipcRenderer.invoke('set-speaker-verification-mode', mode),
+  speakerVerificationGetStatus: () => ipcRenderer.invoke('speaker-verification:get-status'),
+  speakerVerificationEnroll: (samples: Array<{ samples: Float32Array; sampleRate: number; deviceFingerprint?: string }>) =>
+    ipcRenderer.invoke('speaker-verification:enroll', samples),
+  speakerVerificationDeleteProfile: () => ipcRenderer.invoke('speaker-verification:delete-profile'),
   setGroqSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-groq-stt-api-key', apiKey),
   setOpenAiSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-openai-stt-api-key', apiKey),
   setOpenAiSttBaseUrl: (url: string) => ipcRenderer.invoke('set-openai-stt-base-url', url),

@@ -47,6 +47,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
   private workerReady = false;
   private taskCounter = 0;
   private pendingAudio: Float32Array[] = [];
+  private pendingAudioByTaskId = new Map<string, Float32Array>();
   private inFlightTasks = 0;
   private gapFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly GAP_FLUSH_MS = 400;
@@ -199,7 +200,9 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       customWorkerFactory: !!this.workerFactory,
     });
 
-    worker.on('message', (message) => this.handleWorkerMessage(message));
+    worker.on('message', (message) => {
+      void this.handleWorkerMessage(message);
+    });
     worker.on('error', (error) => {
       debugLog('worker-error', { message: error.message });
       this.emit('error', error);
@@ -232,7 +235,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     });
   }
 
-  private handleWorkerMessage(message: SenseVoiceWorkerOutMessage): void {
+  private async handleWorkerMessage(message: SenseVoiceWorkerOutMessage): Promise<void> {
     if (message.type === 'ready') {
       this.workerReady = true;
       debugLog('worker-ready', { pendingAudio: this.pendingAudio.length });
@@ -252,12 +255,17 @@ export class LocalSenseVoiceSTT extends BaseSTT {
         inFlightTasks: this.inFlightTasks,
       });
       if (text) {
-        this.emit('transcript', {
+        const segment = {
           text,
           isFinal: true,
           confidence: 0.9,
+          speakerVerification: await this.annotateSpeaker(message.taskId),
           ...(parsed.emotion ? { emotion: parsed.emotion, emotionSource: 'sensevoice' as const } : {}),
-        });
+        };
+        if (!segment.speakerVerification) delete segment.speakerVerification;
+        this.emit('transcript', segment);
+      } else {
+        this.pendingAudioByTaskId.delete(message.taskId);
       }
       this.flushPendingAudio();
       return;
@@ -266,8 +274,10 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     if (message.type === 'error') {
       if (message.taskId) {
         this.inFlightTasks = Math.max(0, this.inFlightTasks - 1);
+        this.pendingAudioByTaskId.delete(message.taskId);
       } else {
         this.pendingAudio = [];
+        this.pendingAudioByTaskId.clear();
         this.inFlightTasks = 0;
       }
       debugLog('worker-message-error', {
@@ -310,6 +320,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       if (!samples) continue;
       const taskId = `sensevoice-${++this.taskCounter}`;
       this.inFlightTasks++;
+      this.pendingAudioByTaskId.set(taskId, samples.slice());
       debugLog('dispatch-final', {
         taskId,
         sampleCount: samples.length,
@@ -326,6 +337,13 @@ export class LocalSenseVoiceSTT extends BaseSTT {
         [samples.buffer],
       );
     }
+  }
+
+  private async annotateSpeaker(taskId: string): Promise<import('../../services/speaker/speakerVerificationTypes').SpeakerVerificationMetadata | undefined> {
+    const samples = this.pendingAudioByTaskId.get(taskId);
+    this.pendingAudioByTaskId.delete(taskId);
+    if (!samples) return undefined;
+    return this.speakerVerificationAnnotator?.annotate(samples);
   }
 
   private resetGapFlushTimer(): void {
