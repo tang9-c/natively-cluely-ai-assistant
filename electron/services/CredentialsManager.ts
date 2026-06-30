@@ -65,6 +65,10 @@ export interface StoredCredentials {
     trialClaimed?: boolean;  // set true on first claim, never cleared — hides start card permanently
 }
 
+export interface NativelyApiKeySaveOptions {
+    selectAsDefault?: boolean;
+}
+
 export class CredentialsManager {
     private static instance: CredentialsManager;
     private credentials: StoredCredentials = {};
@@ -413,14 +417,26 @@ export class CredentialsManager {
         console.log(`[CredentialsManager] Default Model set to: ${model}`);
     }
 
-    public setNativelyApiKey(key: string): void {
+    private shouldPromoteQCloudDefault(currentModel: string | undefined, options?: NativelyApiKeySaveOptions): boolean {
+        if (options?.selectAsDefault === true) return true;
+        const current = currentModel || '';
+        if (!current || current === 'natively') return true;
+        return current.startsWith('gemini-')
+            || current.startsWith('llama-')
+            || current.startsWith('mixtral-')
+            || current.startsWith('gemma-')
+            || current === 'gemini'
+            || current === 'llama';
+    }
+
+    public setNativelyApiKey(key: string, options?: NativelyApiKeySaveOptions): void {
         const trimmed = key.trim();
         this.credentials.nativelyApiKey = trimmed || undefined;
 
-        if (trimmed) {
+        if (trimmed && this.shouldPromoteQCloudDefault(this.credentials.defaultModel, options)) {
             this.credentials.defaultModel = 'natively';
             console.log('[CredentialsManager] Auto-set default model to QCLOUD');
-        } else {
+        } else if (!trimmed) {
             // Key cleared — revert natively-auto-set defaults back to safe fallbacks
             if (this.credentials.defaultModel === 'natively') {
                 this.credentials.defaultModel = 'gemini-3.1-flash-lite-preview';

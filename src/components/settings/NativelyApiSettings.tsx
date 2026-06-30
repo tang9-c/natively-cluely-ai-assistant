@@ -18,6 +18,14 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
   );
 }
 
+const AUTO_DEFAULT_MODEL_PREFIXES = ['gemini-', 'llama-', 'mixtral-', 'gemma-'];
+const AUTO_DEFAULT_MODEL_IDS = new Set(['', 'gemini', 'llama', 'natively']);
+
+function isAutoDefaultModel(model?: string): boolean {
+  const id = model || '';
+  return AUTO_DEFAULT_MODEL_IDS.has(id) || AUTO_DEFAULT_MODEL_PREFIXES.some((prefix) => id.startsWith(prefix));
+}
+
 // ─── Component ───────────────────────────────────────────────
 export const NativelyApiSettings: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
@@ -48,7 +56,14 @@ export const NativelyApiSettings: React.FC = () => {
     setIsSaving(true);
     setError(null);
     try {
-      const r = await window.electronAPI.setNativelyApiKey(apiKey.trim());
+      const defaultModel = await window.electronAPI.getDefaultModel?.();
+      let selectAsDefault = true;
+      if (defaultModel?.model && !isAutoDefaultModel(defaultModel.model)) {
+        selectAsDefault = window.confirm(
+          `当前默认聊天模型是 ${defaultModel.model}。保存后是否切换为 QCLOUD API？\n\n选择“取消”将只保存 QCLOUD key，不改变当前默认模型。`,
+        );
+      }
+      const r = await window.electronAPI.setNativelyApiKey(apiKey.trim(), { selectAsDefault });
       if (r.success) {
         setApiKey('•'.repeat(24));
         setIsSaved(true);
@@ -82,7 +97,7 @@ export const NativelyApiSettings: React.FC = () => {
             QCLOUD API
           </h3>
           <p className="text-[12px] text-text-tertiary mt-0.5 leading-snug">
-            配置 QCLOUD key 后，默认聊天模型将切换到 QCLOUD。实时转录和向量模型保持本地优先。
+            配置 QCLOUD key 后，可将默认聊天模型切换到 QCLOUD。实时转录和向量模型保持本地优先。
           </p>
         </div>
         {!isLoading && isSaved && (
@@ -106,7 +121,7 @@ export const NativelyApiSettings: React.FC = () => {
           <div className="min-w-0">
             <p className="text-[13px] font-semibold text-text-primary">QCLOUD key</p>
             <p className="text-[11px] text-text-tertiary leading-snug mt-0.5">
-              保存后仅用于 QCLOUD LLM，实时转录和向量模型不会切换到远程服务。
+              QCLOUD 仅用于 LLM 路由；实时转录和向量模型不会切换到远程服务。
             </p>
           </div>
         </div>
@@ -196,7 +211,7 @@ export const NativelyApiSettings: React.FC = () => {
 
           {/* Hint */}
           <p className="text-[11px] text-text-secondary leading-relaxed text-center">
-            保存 QCLOUD key 后，聊天默认模型会自动切换为 QCLOUD API。
+            LLM 请求可能包含转写文本、截图分析、模式上下文、引用材料等；可通过隐私策略限制 QCLOUD 接收的数据范围。
           </p>
 
           {/* T&C consent */}
@@ -217,7 +232,7 @@ export const NativelyApiSettings: React.FC = () => {
           <div className="space-y-3">
             {[
               { step: '1', text: '粘贴你的 QCLOUD key 并保存。' },
-              { step: '2', text: '保存成功后，聊天默认模型会切换为 QCLOUD API。' },
+              { step: '2', text: '保存成功后，可将聊天默认模型切换为 QCLOUD API；已有手动模型会先询问确认。' },
               { step: '3', text: '实时转录和向量模型不使用 QCLOUD，继续保持本地优先。' },
             ].map(({ step, text }) => (
               <div key={step} className="flex items-start gap-3">

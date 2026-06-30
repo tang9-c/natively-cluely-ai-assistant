@@ -1168,12 +1168,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     });
   }
 
-  safeHandle('set-natively-api-key', async (_, apiKey: string) => {
+  safeHandle('set-natively-api-key', async (_, apiKey: string, options?: { selectAsDefault?: boolean }) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
       const prevSttProvider = cm.getSttProvider();
-      cm.setNativelyApiKey(apiKey);
+      cm.setNativelyApiKey(apiKey, options);
 
       // Update LLMHelper immediately (same pattern as other provider keys)
       const llmHelper = appState.processingHelper.getLLMHelper();
@@ -1184,6 +1184,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const providers = [...(cm.getCurlProviders() || []), ...(cm.getCustomProviders() || [])];
       llmHelper.setModel(defaultModel, providers);
       broadcast('model-changed', defaultModel);
+      broadcast('qcloud-key-changed', { hasKey: Boolean(apiKey?.trim()) });
 
       // setNativelyApiKey may migrate legacy STT values such as 'natively' back to a
       // local provider. Reconfigure only when the effective provider actually changes.

@@ -33,3 +33,20 @@ test('LLMHelper routes QCLOUD chat calls through centralized endpoint and model'
   assert.match(helper, /model:\s*QCLOUD_CHAT_MODEL/);
   assert.doesNotMatch(helper, /https:\/\/api\.natively\.software\/v1\/chat/);
 });
+
+test('LLMHelper advertises QCLOUD model metadata to provider routing', () => {
+  const helper = read('electron/LLMHelper.ts');
+
+  assert.match(helper, /natively:\s*QCLOUD_CHAT_MODEL/);
+});
+
+test('LLMHelper detects persisted QCLOUD keys when memory key is not initialized', () => {
+  const helper = read('electron/LLMHelper.ts');
+  const start = helper.indexOf('  private hasNatively(): boolean');
+  const end = helper.indexOf('  /**', start);
+  const method = helper.slice(start, end);
+
+  assert.ok(start >= 0, 'hasNatively should exist');
+  assert.match(method, /getNativelyApiKey\(\)/);
+  assert.match(method, /this\.nativelyKey/);
+});

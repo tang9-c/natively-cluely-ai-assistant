@@ -288,7 +288,13 @@ export class LLMHelper {
   }
 
   private hasNatively(): boolean {
-    return !!this.nativelyKey;
+    if (this.nativelyKey) return true;
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return !!CredentialsManager.getInstance().getNativelyApiKey();
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -1716,6 +1722,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           hasOllama: ollamaAvailable,
         },
         models: {
+          natively: QCLOUD_CHAT_MODEL,
           groq: textGroq,
           codex: this.codexCliConfig.model,
           geminiFlash: textGeminiFlash,
@@ -1960,7 +1967,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       });
     }
 
-    // Priority 9: QCLOUD API — used when no other provider is available, or as final fallback
+    // Priority 9: QCLOUD API — explicit direct fallback for best-effort JSON/text
+    // responses. ProviderRouter does not advertise QCLOUD as structured-capable until
+    // the remote API has a stable structured-output contract.
     const nativelyKeyForStructured = this.nativelyKey || (() => {
       try { return require('./services/CredentialsManager').CredentialsManager.getInstance().getNativelyApiKey() || null; } catch { return null; }
     })();
