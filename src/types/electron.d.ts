@@ -162,7 +162,7 @@ export interface SpeakerVerificationStatus {
 }
 
 export interface SpeakerEnrollmentSample {
-  samples: Float32Array
+  samples: number[]
   sampleRate: number
   deviceFingerprint?: string
 }

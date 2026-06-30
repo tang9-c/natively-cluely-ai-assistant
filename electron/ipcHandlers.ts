@@ -1058,9 +1058,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'speaker_enrollment_requires_three_samples' };
       }
       const normalized = samples.map(sample => ({
-        samples: sample.samples instanceof Float32Array
-          ? sample.samples
-          : new Float32Array(sample.samples ?? []),
+        samples: Array.isArray(sample.samples)
+          ? new Float32Array(sample.samples)
+          : new Float32Array(Array.from(sample.samples ?? [])),
         sampleRate: Number(sample.sampleRate) || 16000,
         deviceFingerprint: typeof sample.deviceFingerprint === 'string' ? sample.deviceFingerprint : undefined,
       }));

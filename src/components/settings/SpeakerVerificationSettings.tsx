@@ -148,7 +148,7 @@ export function SpeakerVerificationSettings() {
       setSamples(next);
       if (next.length === PROMPTS.length) {
         const payload: SpeakerEnrollmentSample[] = next.map(item => ({
-          samples: item.samples,
+          samples: Array.from(item.samples),
           sampleRate: item.sampleRate,
           deviceFingerprint: item.deviceFingerprint,
         }));

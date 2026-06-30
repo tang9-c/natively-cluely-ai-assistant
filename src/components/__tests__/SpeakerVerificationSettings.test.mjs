@@ -19,6 +19,7 @@ test('SpeakerVerificationSettings exposes register, re-record, and delete states
   assert.match(source, /删除声音注册/);
   assert.match(source, /speakerVerificationDeleteProfile/);
   assert.match(source, /speakerVerificationEnroll/);
+  assert.match(source, /Array\.from\(item\.samples\)/);
   assert.match(source, /localModelsGetList/);
   assert.match(source, /localModelsStartDownload/);
   assert.match(source, /onLocalModelsDownloadProgress/);

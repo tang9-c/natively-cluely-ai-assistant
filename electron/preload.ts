@@ -167,7 +167,7 @@ interface ElectronAPI {
   getSpeakerVerificationMode: () => Promise<'off' | 'local'>;
   setSpeakerVerificationMode: (mode: 'off' | 'local') => Promise<{ success: boolean; error?: string }>;
   speakerVerificationGetStatus: () => Promise<{ enrolled: boolean; enrolledAt?: number; model?: string; mode: 'off' | 'local' }>;
-  speakerVerificationEnroll: (samples: Array<{ samples: Float32Array; sampleRate: number; deviceFingerprint?: string }>) => Promise<{ success: boolean; status?: { enrolled: boolean; enrolledAt?: number; model?: string; mode: 'off' | 'local' }; error?: string }>;
+  speakerVerificationEnroll: (samples: Array<{ samples: number[]; sampleRate: number; deviceFingerprint?: string }>) => Promise<{ success: boolean; status?: { enrolled: boolean; enrolledAt?: number; model?: string; mode: 'off' | 'local' }; error?: string }>;
   speakerVerificationDeleteProfile: () => Promise<{ success: boolean; error?: string }>;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
   localWhisperSetModel: (modelId: string) => Promise<{ success: boolean }>;
@@ -1145,7 +1145,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setSpeakerVerificationMode: (mode: 'off' | 'local') =>
     ipcRenderer.invoke('set-speaker-verification-mode', mode),
   speakerVerificationGetStatus: () => ipcRenderer.invoke('speaker-verification:get-status'),
-  speakerVerificationEnroll: (samples: Array<{ samples: Float32Array; sampleRate: number; deviceFingerprint?: string }>) =>
+  speakerVerificationEnroll: (samples: Array<{ samples: number[]; sampleRate: number; deviceFingerprint?: string }>) =>
     ipcRenderer.invoke('speaker-verification:enroll', samples),
   speakerVerificationDeleteProfile: () => ipcRenderer.invoke('speaker-verification:delete-profile'),
   setGroqSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-groq-stt-api-key', apiKey),
