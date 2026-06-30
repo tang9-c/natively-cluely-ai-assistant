@@ -1,27 +1,41 @@
 import React, { useState, useEffect, useCallback } from "react" // forcing refresh
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { ToastProvider, ToastViewport } from "./components/ui/toast"
-import NativelyInterface from "./components/NativelyInterface"
-import SettingsPopup from "./components/SettingsPopup" // Keeping for legacy/specific window support if needed
-import Launcher from "./components/Launcher"
-import ModelSelectorWindow from "./components/ModelSelectorWindow"
-import SettingsOverlay from "./components/SettingsOverlay"
-import StartupSequence from "./components/StartupSequence"
 import { AnimatePresence, motion } from "framer-motion"
-import UpdateBanner from "./components/UpdateBanner"
-import { PermissionsToaster }   from "./components/onboarding/PermissionsToaster"
 import { AlertCircle } from "lucide-react"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
 import { isMac } from "./utils/platformUtils"
 import { analytics } from "./lib/analytics/analytics.service"
 import { ErrorBoundary } from "./components/ErrorBoundary"
-import ModesSettings from "./components/settings/ModesSettings"
-import { ProfileIntelligenceSettings } from "./components/ProfileIntelligenceSettings"
-import { ResearchPanel } from "./components/research/ResearchPanel"
 import { useResolvedTheme } from "./hooks/useResolvedTheme"
 
 const queryClient = new QueryClient()
+const AppFallback = <div className="h-full min-h-0 w-full bg-transparent" />;
+
+const SettingsPopup = React.lazy(() => import("./components/SettingsPopup"));
+const Launcher = React.lazy(() => import("./components/Launcher"));
+const ModelSelectorWindow = React.lazy(() => import("./components/ModelSelectorWindow"));
+const NativelyInterface = React.lazy(() => import("./components/NativelyInterface"));
+const SettingsOverlay = React.lazy(() => import("./components/SettingsOverlay"));
+const StartupSequence = React.lazy(() => import("./components/StartupSequence"));
+const UpdateBanner = React.lazy(() => import("./components/UpdateBanner"));
+const ModesSettings = React.lazy(() => import("./components/settings/ModesSettings"));
+const ProfileIntelligenceSettings = React.lazy(() =>
+  import("./components/ProfileIntelligenceSettings").then((mod) => ({
+    default: mod.ProfileIntelligenceSettings,
+  })),
+);
+const ResearchPanel = React.lazy(() =>
+  import("./components/research/ResearchPanel").then((mod) => ({
+    default: mod.ResearchPanel,
+  })),
+);
+const PermissionsToaster = React.lazy(() =>
+  import("./components/onboarding/PermissionsToaster").then((mod) => ({
+    default: mod.PermissionsToaster,
+  })),
+);
 
 const App: React.FC = () => {
   const isLightTheme = useResolvedTheme() === 'light';
@@ -349,14 +363,16 @@ const App: React.FC = () => {
   if (isSettingsWindow) {
     return (
       <ErrorBoundary context="SettingsPopup">
-        <div className="h-full min-h-0 w-full">
-          <QueryClientProvider client={queryClient}>
-            <ToastProvider>
-              <SettingsPopup />
-              <ToastViewport />
-            </ToastProvider>
-          </QueryClientProvider>
-        </div>
+        <React.Suspense fallback={AppFallback}>
+          <div className="h-full min-h-0 w-full">
+            <QueryClientProvider client={queryClient}>
+              <ToastProvider>
+                <SettingsPopup />
+                <ToastViewport />
+              </ToastProvider>
+            </QueryClientProvider>
+          </div>
+        </React.Suspense>
       </ErrorBoundary>
     );
   }
@@ -364,14 +380,16 @@ const App: React.FC = () => {
   if (isModelSelectorWindow) {
     return (
       <ErrorBoundary context="ModelSelector">
-        <div className="h-full min-h-0 w-full overflow-hidden">
-          <QueryClientProvider client={queryClient}>
-            <ToastProvider>
-              <ModelSelectorWindow />
-              <ToastViewport />
-            </ToastProvider>
-          </QueryClientProvider>
-        </div>
+        <React.Suspense fallback={AppFallback}>
+          <div className="h-full min-h-0 w-full overflow-hidden">
+            <QueryClientProvider client={queryClient}>
+              <ToastProvider>
+                <ModelSelectorWindow />
+                <ToastViewport />
+              </ToastProvider>
+            </QueryClientProvider>
+          </div>
+        </React.Suspense>
       </ErrorBoundary>
     );
   }
@@ -380,28 +398,30 @@ const App: React.FC = () => {
   if (isOverlayWindow) {
     return (
       <ErrorBoundary context="Overlay">
-        <div className="w-full relative bg-transparent">
-          <QueryClientProvider client={queryClient}>
-            <ToastProvider>
-              <div
-                style={{
-                  ['--overlay-opacity' as '--overlay-opacity']: String(overlayOpacity),
-                  transition: 'background-color 75ms ease, border-color 75ms ease, box-shadow 75ms ease'
-                } as React.CSSProperties}
-              >
-                <NativelyInterface
-                  onEndMeeting={handleEndMeeting}
-                  overlayOpacity={overlayOpacity}
-                  interfaceTheme={meetingInterfaceTheme}
-                  onOpenModes={() => {
-                    window.electronAPI?.openModesManager?.();
-                  }}
-                />
-              </div>
-              <ToastViewport />
-            </ToastProvider>
-          </QueryClientProvider>
-        </div>
+        <React.Suspense fallback={AppFallback}>
+          <div className="w-full relative bg-transparent">
+            <QueryClientProvider client={queryClient}>
+              <ToastProvider>
+                <div
+                  style={{
+                    ['--overlay-opacity' as '--overlay-opacity']: String(overlayOpacity),
+                    transition: 'background-color 75ms ease, border-color 75ms ease, box-shadow 75ms ease'
+                  } as React.CSSProperties}
+                >
+                  <NativelyInterface
+                    onEndMeeting={handleEndMeeting}
+                    overlayOpacity={overlayOpacity}
+                    interfaceTheme={meetingInterfaceTheme}
+                    onOpenModes={() => {
+                      window.electronAPI?.openModesManager?.();
+                    }}
+                  />
+                </div>
+                <ToastViewport />
+              </ToastProvider>
+            </QueryClientProvider>
+          </div>
+        </React.Suspense>
       </ErrorBoundary>
     );
   }
@@ -410,6 +430,7 @@ const App: React.FC = () => {
   // Renders if window=launcher OR no param
   return (
     <ErrorBoundary context="Launcher">
+    <React.Suspense fallback={AppFallback}>
     <div className="h-full min-h-0 w-full relative bg-[#000000]">
       <AnimatePresence>
         {showStartup ? (
@@ -594,6 +615,7 @@ const App: React.FC = () => {
         }}
       />
     </div>
+    </React.Suspense>
     </ErrorBoundary>
   )
 }

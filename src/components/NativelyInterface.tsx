@@ -45,6 +45,7 @@ import remarkMath from 'remark-math';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { analytics, detectProviderType } from '../lib/analytics/analytics.service';
+import { categorizeSttError } from '../lib/sttErrorMapper';
 import type { MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
   getGlassOverlayAppearance,
@@ -3484,7 +3485,6 @@ Provide only the answer, nothing else.`;
       window.electronAPI?.getArch?.().catch(() => 'unknown'),
       window.electronAPI?.getOsVersion?.().catch(() => 'unknown'),
     ]);
-    const { categorizeSttError } = await import('../lib/sttErrorMapper');
     const userCat = sttUserError ? categorizeSttError(sttUserError) : null;
     const interviewerCat = sttInterviewerError ? categorizeSttError(sttInterviewerError) : null;
     const report = [
