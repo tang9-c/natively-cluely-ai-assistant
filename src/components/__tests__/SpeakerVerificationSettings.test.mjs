@@ -65,3 +65,11 @@ test('recording stop path actively stops microphone tracks and closes audio cont
   assert.match(source, /audioContext\.close\(\)/);
   assert.match(source, /stopActiveRecording/);
 });
+
+test('three collected enrollment samples switch to re-record instead of a fourth recording', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+  assert.match(source, /samples\.length >= PROMPTS\.length/);
+  assert.match(source, /hasCompleteSampleSet \? '重新录制' : '开始注册'/);
+  assert.match(source, /enrolled \|\| hasCompleteSampleSet \? <RotateCcw/);
+  assert.match(source, /setRecordingIndex\(shouldRestart \? 0 : samples\.length\)/);
+});

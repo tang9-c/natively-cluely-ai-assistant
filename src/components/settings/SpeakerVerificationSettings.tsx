@@ -131,8 +131,12 @@ export function SpeakerVerificationSettings() {
   const beginRecording = async () => {
     setError(null);
     try {
+      const shouldRestart = enrolled || samples.length >= PROMPTS.length;
+      if (shouldRestart) {
+        setSamples([]);
+      }
       mediaRef.current = await startActiveRecording();
-      setRecordingIndex(samples.length);
+      setRecordingIndex(shouldRestart ? 0 : samples.length);
     } catch (err: any) {
       setError(err?.message ?? '无法启动麦克风录音');
     }
@@ -144,6 +148,7 @@ export function SpeakerVerificationSettings() {
     try {
       const sample = await stopActiveRecording(mediaRef.current);
       mediaRef.current = null;
+      setRecordingIndex(null);
       const next = [...samples, sample];
       setSamples(next);
       if (next.length === PROMPTS.length) {
@@ -193,6 +198,7 @@ export function SpeakerVerificationSettings() {
   };
 
   const enrolled = status?.enrolled === true;
+  const hasCompleteSampleSet = samples.length >= PROMPTS.length;
   const currentPrompt = PROMPTS[samples.length] ?? PROMPTS[0];
 
   return (
@@ -227,8 +233,8 @@ export function SpeakerVerificationSettings() {
               <Square size={14} />
             </button>
           ) : (
-            <button type="button" onClick={beginRecording} disabled={busy} className="rounded-md p-2 bg-accent-primary text-white disabled:opacity-50" title={enrolled ? '重新注册' : '开始注册'}>
-              {enrolled ? <RotateCcw size={14} /> : <Mic size={14} />}
+            <button type="button" onClick={beginRecording} disabled={busy} className="rounded-md p-2 bg-accent-primary text-white disabled:opacity-50" title={enrolled ? '重新注册' : hasCompleteSampleSet ? '重新录制' : '开始注册'}>
+              {enrolled || hasCompleteSampleSet ? <RotateCcw size={14} /> : <Mic size={14} />}
             </button>
           )}
           {enrolled && (
