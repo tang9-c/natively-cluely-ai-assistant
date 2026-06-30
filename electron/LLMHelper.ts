@@ -297,6 +297,14 @@ export class LLMHelper {
     }
   }
 
+  private formatQCloudError(status: number, errorData: any): string {
+    const raw = errorData?.error ?? errorData;
+    const detail = typeof raw === 'string'
+      ? raw
+      : raw?.message || raw?.code || JSON.stringify(raw || {});
+    return `QCLOUD API ${status}: ${detail || 'unknown'}`;
+  }
+
   /**
    * Legacy hook — kept for backward compatibility with callers.
    * ModelVersionManager is now static; no async initialization needed.
@@ -2151,7 +2159,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
-      throw new Error(`QCLOUD API error ${response.status}: ${errData.error || 'unknown'}`);
+      throw new Error(this.formatQCloudError(response.status, errData));
     }
 
     const data = await response.json();
@@ -2902,6 +2910,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // System prompts for OpenAI/Claude (skipped if skipSystemPrompt)
     const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(OPENAI_SYSTEM_PROMPT);
     const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(CLAUDE_SYSTEM_PROMPT);
+    let lastQCloudFailure: string | null = null;
 
     // Static text fallback chain
     const textOpenAI = TEXT_FALLBACK_CHAIN[TextModelFamily.OPENAI][0];
@@ -3024,6 +3033,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           return; // SUCCESS — exit immediately
         } catch (err: any) {
           console.warn(`[LLMHelper] ⚠️ ${provider.name} failed: ${err.message}`);
+          if (provider.name === 'QCLOUD API') {
+            lastQCloudFailure = err?.message || String(err);
+          }
           // Continue to next provider
         }
       }
@@ -3031,6 +3043,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // Truly exhausted after all rotations
     console.error(`[LLMHelper] ❌ All providers exhausted after ${MAX_FULL_ROTATIONS} rotations`);
+    if (lastQCloudFailure) {
+      yield `QCLOUD API failed: ${lastQCloudFailure}`;
+      return;
+    }
     yield "All AI services are currently unavailable. Please check your API keys and try again.";
   }
 
@@ -3293,6 +3309,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       return;
     }
 
+    let lastQCloudFailure: string | null = null;
+
     // 3b. QCLOUD API
     if (this.currentModelId === 'natively') {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -3304,6 +3322,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           return;
         } catch (err: any) {
           console.warn('[LLMHelper] QCLOUD API failed in streamChat, trying Groq fallback:', err.message);
+          lastQCloudFailure = err?.message || String(err);
           // Try Groq before Gemini — Groq key is more commonly available
           if (this.groqClient) {
             try {
@@ -3352,9 +3371,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         return;
       } catch (e: any) {
         console.warn('[LLMHelper] Natively last-resort fallback failed:', e.message);
+        lastQCloudFailure = e?.message || String(e);
       }
     }
 
+    if (lastQCloudFailure) {
+      throw new Error(`QCLOUD API failed: ${lastQCloudFailure}`);
+    }
     throw new Error("No AI provider configured. Please add at least one API key in Settings.");
   }
 
@@ -3446,7 +3469,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}) as Record<string, unknown>);
-      throw new Error(`QCLOUD API ${response.status}: ${(errData as any).error || 'unknown'}`);
+      throw new Error(this.formatQCloudError(response.status, errData));
     }
 
     // Parse the SSE response body incrementally.
