@@ -119,3 +119,12 @@ test('startup no longer mounts the Natively quota banner', () => {
 
   assert.equal(source.includes('Natively' + 'QuotaBanner'), false);
 });
+
+test('meeting interface displays the internal QCLOUD provider id as QCLOUD API', () => {
+  const utils = read('src/utils/modelUtils.ts');
+  const interfaceSource = read('src/components/NativelyInterface.tsx');
+
+  assert.match(utils, /natively['"]?\s*[:=]\s*['"]QCLOUD API['"]/);
+  assert.match(interfaceSource, /getModelDisplayName/);
+  assert.doesNotMatch(interfaceSource, /if \(m === 'natively'\)/);
+});

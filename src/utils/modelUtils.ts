@@ -66,6 +66,22 @@ export const getCodexCliModelDisplayName = (id: string): string | null => {
     return preset?.name || prettifyModelId(modelId);
 };
 
+export const MODEL_DISPLAY_NAMES: Record<string, string> = {
+    natively: 'QCLOUD API',
+    'gemini-3.1-flash-lite-preview': 'Gemini 3.1 Flash',
+    'gemini-3.1-pro-preview': 'Gemini 3.1 Pro',
+    'llama-3.3-70b-versatile': 'Groq Llama 3.3',
+    'gpt-5.4': 'GPT 5.4',
+    'claude-sonnet-4-6': 'Sonnet 4.6',
+};
+
+export const getModelDisplayName = (id: string): string => {
+    const codexCliName = getCodexCliModelDisplayName(id);
+    if (codexCliName) return codexCliName;
+    if (id.startsWith('ollama-')) return id.replace('ollama-', '');
+    return MODEL_DISPLAY_NAMES[id] || id;
+};
+
 export const prettifyModelId = (id: string): string => {
     if (!id) return '';
     return id.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());

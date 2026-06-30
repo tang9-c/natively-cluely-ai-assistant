@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, Check, Cloud, Terminal, Monitor, Server, Plus } from 'lucide-react';
-import { getCodexCliModelDisplayName, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { getModelDisplayName, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 
 interface ModelSelectorProps {
     currentModel: string;
@@ -82,16 +82,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
         setIsOpen(false);
     };
 
-    const getModelDisplayName = (model: string) => {
-        const codexCliName = getCodexCliModelDisplayName(model);
-        if (codexCliName) return codexCliName;
-        if (model.startsWith('ollama-')) return model.replace('ollama-', '');
-        if (model === 'gemini-3.1-flash-lite-preview') return 'Gemini 3.1 Flash';
-        if (model === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
-        if (model === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';
-        if (model === 'gpt-5.4') return 'GPT 5.4';
-        if (model === 'claude-sonnet-4-6') return 'Sonnet 4.6';
-
+    const getDisplayName = (model: string) => {
         // Check dynamic cloud models
         const cloud = cloudModels.find(m => m.id === model);
         if (cloud) return cloud.name;
@@ -100,7 +91,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
         const custom = customProviders.find(p => p.id === model || p.name === model);
         if (custom) return custom.name;
 
-        return model;
+        return getModelDisplayName(model);
     };
 
     return (
@@ -109,7 +100,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                 onClick={() => setIsOpen(!isOpen)}
                 className="flex items-center gap-2 px-3 py-1.5 bg-bg-input hover:bg-bg-elevated border border-border-subtle rounded-lg transition-colors text-xs font-medium text-text-primary max-w-[150px]"
             >
-                <span className="truncate">{getModelDisplayName(currentModel)}</span>
+                <span className="truncate">{getDisplayName(currentModel)}</span>
                 <ChevronDown size={14} className={`shrink-0 text-text-secondary transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 

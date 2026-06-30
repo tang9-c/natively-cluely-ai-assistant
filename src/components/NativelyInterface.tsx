@@ -62,7 +62,7 @@ import type {
   NativeAudioTranscriptPayload,
 } from '../types/electron';
 import { genMessageId } from '../utils/messageId';
-import { getCodexCliModelDisplayName } from '../utils/modelUtils';
+import { getModelDisplayName } from '../utils/modelUtils';
 import { getModifierSymbol, isMac } from '../utils/platformUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
 import GlassEffectLayer from './ui/GlassEffectLayer';
@@ -4233,18 +4233,7 @@ Provide only the answer, nothing else.`;
                       style={appearance.controlStyle}
                     >
                       <span className="truncate min-w-0 flex-1">
-                        {(() => {
-                          const m = currentModel;
-                          const codexCliName = getCodexCliModelDisplayName(m);
-                          if (codexCliName) return codexCliName;
-                          if (m.startsWith('ollama-')) return m.replace('ollama-', '');
-                          if (m === 'gemini-3.1-flash-lite-preview') return 'Gemini 3.1 Flash';
-                          if (m === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
-                          if (m === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';
-                          if (m === 'gpt-5.4') return 'GPT 5.4';
-                          if (m === 'claude-sonnet-4-6') return 'Sonnet 4.6';
-                          return m;
-                        })()}
+                        {getModelDisplayName(currentModel)}
                       </span>
                       <ChevronDown size={14} className="shrink-0 transition-transform" />
                     </button>
