@@ -573,7 +573,7 @@ const MockProviderSelectionAnim = () => {
     }, []);
 
     const options = [
-        { id: 'natively', label: 'Natively API', badge: '', recommended: true, desc: '超低延迟实时转录', color: 'indigo', icon: <img src={nativelyIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="Natively" /> },
+        { id: 'local-sensevoice', label: 'Local SenseVoice', badge: '', recommended: true, desc: '本地优先实时转录', color: 'green', icon: <img src={nativelyIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="Natively" /> },
         { id: 'deepgram', label: 'Deepgram Nova-3', badge: '已保存', recommended: false, desc: '高精度 REST 转录', color: 'purple', icon: <Mic size={14} /> },
         { id: 'google', label: 'Google Cloud', badge: '已保存', recommended: false, desc: '通过 Service Account 的 gRPC 流式传输', color: 'blue', icon: <Mic size={14} /> },
         { id: 'groq', label: 'Groq Whisper', badge: '', recommended: false, desc: '快速 LPU Whisper 转录', color: 'orange', icon: <Mic size={14} /> },
@@ -790,7 +790,7 @@ const SetupGuide = () => {
         },
         {
             title: '设置音频',
-            desc: '打开设置 → 音频，选择 Natively API，或粘贴 Deepgram 或 Google 密钥。',
+            desc: '打开设置 → 音频，优先选择本地 SenseVoice，或按需粘贴 Deepgram 或 Google 密钥。',
         },
         {
             title: '连接 AI 模型',

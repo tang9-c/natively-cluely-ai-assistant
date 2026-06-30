@@ -1,86 +1,11 @@
 import {
   AlertCircle,
-  ArrowUpRight,
-  Brain,
-  CalendarClock,
   CheckCircle,
-  Info,
   Loader2,
-  Mic,
-  RefreshCw,
-  Search,
-  Shield,
   Trash2,
 } from 'lucide-react';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NativelyLogoMark } from '../NativelyLogoMark';
-
-// ─── Types ───────────────────────────────────────────────────
-interface QuotaBucket {
-  used: number;
-  limit: number;
-  remaining: number;
-}
-interface UsageData {
-  plan: string;
-  member_since: string;
-  quota: {
-    transcription: QuotaBucket;
-    ai: QuotaBucket;
-    search: QuotaBucket;
-    resets_at: string;
-  };
-}
-
-const PLAN_STANDARD_URL = 'https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl';
-const PLAN_PRO_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM6Aw0IWdspbsgUeCLA';
-const PLAN_MAX_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM7JElX4Af6LNVFS1Yf';
-const PLAN_ULTRA_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM7rC2kAb69TFKsZnUU';
-
-// ─── Quota bar ───────────────────────────────────────────────
-function QuotaBar({
-  label,
-  icon: Icon,
-  bucket,
-  barColor,
-}: {
-  label: string;
-  icon: React.ElementType;
-  bucket: QuotaBucket;
-  barColor: string;
-}) {
-  const pct = bucket.limit > 0 ? Math.min(100, (bucket.used / bucket.limit) * 100) : 0;
-  const isHigh = pct >= 80;
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon
-            size={12}
-            className={isHigh ? 'text-amber-400' : 'text-text-tertiary'}
-            strokeWidth={1.75}
-          />
-          <span className="text-[12px] text-text-secondary">{label}</span>
-        </div>
-        <span
-          className={`text-[12px] tabular-nums font-medium ${isHigh ? 'text-amber-400' : 'text-text-tertiary'}`}
-        >
-          {bucket.used.toLocaleString()}
-          <span className="font-normal text-text-tertiary/60">
-            {' '}
-            / {bucket.limit.toLocaleString()}
-          </span>
-        </span>
-      </div>
-      <div className="h-[5px] w-full bg-bg-input rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-700 ease-out ${isHigh ? 'bg-amber-400' : barColor}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  );
-}
 
 // ─── Card wrapper ────────────────────────────────────────────
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
@@ -101,9 +26,6 @@ export const NativelyApiSettings: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
-  const [usageData, setUsageData] = useState<UsageData | null>(null);
-  const [usageError, setUsageError] = useState<string | null>(null);
-  const [isLoadingUsage, setIsLoadingUsage] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -121,37 +43,6 @@ export const NativelyApiSettings: React.FC = () => {
     })();
   }, []);
 
-  const fetchUsage = useCallback(async () => {
-    setIsLoadingUsage(true);
-    setUsageError(null);
-    try {
-      const r = await window.electronAPI.getNativelyUsage();
-      if (r.ok && r.quota) {
-        setUsageData(r as UsageData);
-      } else {
-        setUsageError(
-          r.error === 'subscription_inactive'
-            ? '订阅已失效，请续订以恢复访问。'
-            : r.error === 'key_not_found'
-              ? '服务器无法识别此密钥。'
-              : r.error === 'invalid_key_format'
-                ? '密钥格式无效。'
-                : r.error === 'network_error' || r.error?.includes('fetch')
-                  ? '无法连接服务器。'
-                  : `服务器错误：${r.error ?? '未知'}`,
-        );
-      }
-    } catch {
-      setUsageError('加载使用量失败。');
-    } finally {
-      setIsLoadingUsage(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isSaved && !isLoading) fetchUsage();
-  }, [isSaved, isLoading, fetchUsage]);
-
   const handleSave = async () => {
     if (!apiKey.trim() || apiKey.includes('•')) return;
     setIsSaving(true);
@@ -165,10 +56,8 @@ export const NativelyApiSettings: React.FC = () => {
         setTimeout(() => setJustSaved(false), 2500);
         // @ts-ignore
         window.electronAPI?.setDefaultModel?.('natively').catch(console.error);
-        // @ts-ignore
-        window.electronAPI?.setSttProvider?.('natively').catch(console.error);
       } else {
-        setError(r.error || '保存 API 密钥失败');
+        setError(r.error || '保存 QCLOUD key 失败');
       }
     } catch (e: any) {
       setError(e.message || '意外错误');
@@ -181,160 +70,10 @@ export const NativelyApiSettings: React.FC = () => {
     setApiKey('');
     setIsSaved(false);
     setError(null);
-    setUsageData(null);
-    setUsageError(null);
     window.electronAPI.setNativelyApiKey('').catch(() => {});
   };
 
-  const openExternal = (url: string) => {
-    (window.electronAPI as any)?.openExternal?.(url);
-  };
-
   const isDirty = apiKey.length > 0 && !apiKey.includes('•') && !isSaved;
-  const planLabel = usageData?.plan
-    ? usageData.plan.charAt(0).toUpperCase() + usageData.plan.slice(1)
-    : null;
-  const fmtDate = (iso: string) => {
-    try {
-      return new Date(iso).toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
-    } catch {
-      return iso;
-    }
-  };
-
-  const PlansCard = (
-    <Card>
-      <div className="px-5 pt-5 pb-2">
-        <div className="flex flex-col gap-2.5 mb-4">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-widest">
-              Choose a Plan
-            </p>
-            <span className="text-[10px] text-text-tertiary">
-              Pro, Max &amp; Ultra include Natively Pro app
-            </span>
-          </div>
-          <div className="w-full flex items-center justify-center py-2 bg-violet-500/10 border border-violet-500/20 rounded-[10px]">
-            <span className="text-[11.5px] font-medium text-violet-400/90">
-              Use code <span className="font-bold text-violet-400">INSIDER25</span> for 25% off
-            </span>
-          </div>
-        </div>
-
-        {/* Plan rows */}
-        <div className="space-y-2 pb-3">
-          {(
-            [
-              {
-                name: 'Standard',
-                price: '$8',
-                url: PLAN_STANDARD_URL,
-                color: 'text-slate-400',
-                bg: 'bg-slate-500/10',
-                border: 'border-slate-500/20',
-                btnBg: 'bg-slate-700 hover:bg-slate-600',
-                includesPro: false,
-                features: ['500 AI req / mo', '200 min STT', '20 searches'],
-              },
-              {
-                name: 'Pro',
-                price: '$15',
-                url: PLAN_PRO_URL,
-                color: 'text-violet-400',
-                bg: 'bg-violet-500/10',
-                border: 'border-violet-500/20',
-                btnBg: 'bg-violet-600 hover:bg-violet-500',
-                includesPro: true,
-                features: ['1,000 AI req / mo', '500 min STT', '100 searches'],
-              },
-              {
-                name: 'Max',
-                price: '$25',
-                url: PLAN_MAX_URL,
-                color: 'text-blue-400',
-                bg: 'bg-blue-500/10',
-                border: 'border-blue-500/20',
-                btnBg: 'bg-blue-600 hover:bg-blue-500',
-                includesPro: true,
-                features: ['2,000 AI req / mo', '1,000 min STT', '200 searches'],
-              },
-              {
-                name: 'Ultra',
-                price: '$35',
-                url: PLAN_ULTRA_URL,
-                color: 'text-orange-400',
-                bg: 'bg-orange-500/10',
-                border: 'border-orange-500/20',
-                btnBg: 'bg-orange-600 hover:bg-orange-500',
-                includesPro: true,
-                features: ['3,000 AI req / mo', '2,000 min STT', '300 searches'],
-              },
-            ] as const
-          ).map((plan) => (
-            <div
-              key={plan.name}
-              className={`flex items-center gap-3 px-3.5 py-3 rounded-xl border ${plan.bg} ${plan.border}`}
-            >
-              {/* Name + features */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-[13px] font-semibold ${plan.color}`}>{plan.name}</span>
-                  {plan.includesPro && (
-                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 tracking-wide">
-                      + Pro App
-                    </span>
-                  )}
-                </div>
-                <p className="text-[10px] text-text-tertiary leading-relaxed">
-                  {plan.features.join(' · ')}
-                </p>
-              </div>
-              {/* Price + button */}
-              <div className="flex items-center gap-2.5 shrink-0">
-                <span className="text-[13px] font-semibold text-text-primary tabular-nums">
-                  {plan.price}
-                  <span className="text-[10px] font-normal text-text-tertiary">/mo</span>
-                </span>
-                {(() => {
-                  const currentPlan = usageData?.plan?.toLowerCase();
-                  const rowPlan = plan.name.toLowerCase();
-                  // 'starter' is the legacy name for the $8 Standard plan
-                  const isActive =
-                    currentPlan === rowPlan ||
-                    (rowPlan === 'standard' && currentPlan === 'starter');
-                  return isActive ? (
-                    <div className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
-                      Active
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => openExternal(plan.url)}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white ${plan.btnBg} transition-all duration-150 flex items-center gap-1 cursor-pointer active:scale-[0.98]`}
-                    >
-                      Get <ArrowUpRight size={10} strokeWidth={2.5} />
-                    </button>
-                  );
-                })()}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* AI quota note */}
-        <div className="flex items-start gap-2 mb-4 px-3 py-2.5 bg-bg-input rounded-xl border border-border-subtle">
-          <Info size={11} className="text-text-tertiary shrink-0 mt-[1px]" strokeWidth={2} />
-          <p className="text-[11px] text-text-tertiary leading-relaxed">
-            AI requests include chat replies, meeting title &amp; summary generation, and embeddings
-            — not just manual messages.
-          </p>
-        </div>
-      </div>
-    </Card>
-  );
 
   return (
     <div className="space-y-4 animated fadeIn">
@@ -342,24 +81,21 @@ export const NativelyApiSettings: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-[15px] font-semibold text-text-primary tracking-[-0.01em]">
-            Natively API
+            QCLOUD API
           </h3>
           <p className="text-[12px] text-text-tertiary mt-0.5 leading-snug">
-            Managed transcription, AI &amp; search
+            配置 QCLOUD key 后，默认聊天模型将切换到 QCLOUD。实时转录和向量模型保持本地优先。
           </p>
         </div>
         {!isLoading && isSaved && (
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]" />
             <span className="text-[10px] font-semibold text-emerald-500 tracking-wide">
-              {planLabel ?? '已连接'}
+              已连接
             </span>
           </div>
         )}
       </div>
-
-      {/* ── Plans ────────────────────────────────────────── */}
-      {!isSaved && PlansCard}
 
       {/* ── API Key card ─────────────────────────────────── */}
       <Card>
@@ -370,9 +106,9 @@ export const NativelyApiSettings: React.FC = () => {
             <NativelyLogoMark size={18} className="text-blue-400" />
           </div>
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-text-primary">API 密钥</p>
+            <p className="text-[13px] font-semibold text-text-primary">QCLOUD key</p>
             <p className="text-[11px] text-text-tertiary leading-snug mt-0.5">
-              Your Natively API key from your subscription email
+              保存后仅用于 QCLOUD LLM，实时转录和向量模型不会切换到远程服务。
             </p>
           </div>
         </div>
@@ -385,7 +121,7 @@ export const NativelyApiSettings: React.FC = () => {
           {/* Label row */}
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-semibold text-text-tertiary uppercase tracking-widest">
-              Secret key
+              QCLOUD key
             </span>
             {isSaved && (
               <button
@@ -393,7 +129,7 @@ export const NativelyApiSettings: React.FC = () => {
                 className="flex items-center gap-1 text-[11px] text-red-400/80 hover:text-red-400 transition-colors duration-150 cursor-pointer"
               >
                 <Trash2 size={11} strokeWidth={2} />
-                Remove
+                移除
               </button>
             )}
           </div>
@@ -408,7 +144,7 @@ export const NativelyApiSettings: React.FC = () => {
               setError(null);
             }}
             onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-            placeholder="natively_api_..."
+            placeholder="请输入 QCLOUD key"
             spellCheck={false}
             autoComplete="off"
             className={`w-full bg-bg-input border rounded-xl px-3.5 py-2.5 text-[13px] font-mono text-text-primary
@@ -448,172 +184,43 @@ export const NativelyApiSettings: React.FC = () => {
             {isSaving ? (
               <span className="flex items-center justify-center gap-2">
                 <Loader2 size={13} className="animate-spin" />
-                Saving…
+                保存中...
               </span>
             ) : justSaved ? (
               <span className="flex items-center justify-center gap-2">
                 <CheckCircle size={13} />
-                Saved
+                已保存
               </span>
             ) : (
-              'Save key'
+              '保存 key'
             )}
           </button>
 
           {/* Hint */}
           <p className="text-[11px] text-text-secondary leading-relaxed text-center">
-            Don't have a key?{' '}
-            <span
-              onClick={() => openExternal(PLAN_STANDARD_URL)}
-              className="text-blue-400 hover:text-blue-300 cursor-pointer transition-colors duration-150"
-            >
-              Subscribe to get one
-            </span>
+            保存 QCLOUD key 后，聊天默认模型会自动切换为 QCLOUD API。
           </p>
 
           {/* T&C consent */}
           <p className="text-[10.5px] text-text-tertiary leading-relaxed text-center">
-            By saving your key, you agree to our{' '}
-            <span
-              onClick={() => openExternal('https://natively.software/nativelyapi/t&c')}
-              className="text-text-secondary hover:text-text-primary underline decoration-border-subtle underline-offset-[3px] cursor-pointer transition-colors"
-            >
-              Terms &amp; Conditions
-            </span>
-            .
+            STT 和 Embedding 不使用 QCLOUD，仍按当前本地优先配置运行。
           </p>
         </div>
       </Card>
-
-      {/* ── Usage card (connected state) ─────────────────── */}
-      {isSaved && (
-        <Card>
-          {/* Header */}
-          <div className="flex items-center justify-between px-5 pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/20 flex items-center justify-center shrink-0">
-                {isLoadingUsage && !usageData ? (
-                  <Loader2 size={15} className="animate-spin text-violet-400" />
-                ) : (
-                  <CalendarClock size={15} className="text-violet-400" strokeWidth={1.75} />
-                )}
-              </div>
-              <div>
-                <p className="text-[13px] font-semibold text-text-primary">本月使用量</p>
-                {usageData && (
-                  <p className="text-[11px] text-text-tertiary mt-0.5">
-                    Resets {fmtDate(usageData.quota.resets_at)}
-                  </p>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={fetchUsage}
-              disabled={isLoadingUsage}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] text-text-tertiary
-                                hover:text-text-secondary hover:bg-bg-input transition-all duration-150
-                                disabled:opacity-40 cursor-pointer"
-            >
-              <RefreshCw
-                size={11}
-                className={isLoadingUsage ? 'animate-spin' : ''}
-                strokeWidth={2}
-              />
-              Refresh
-            </button>
-          </div>
-
-          {usageError && !usageData && (
-            <div className="mx-5 mb-5 flex items-center gap-2 px-3 py-2.5 bg-red-500/8 border border-red-500/15 rounded-xl text-[12px] text-red-400">
-              <AlertCircle size={13} className="shrink-0" /> {usageError}
-            </div>
-          )}
-
-          {usageData && (
-            <>
-              {/* Stat strip */}
-              <div className="mx-5 mb-4 grid grid-cols-3 bg-bg-input border border-border-subtle rounded-2xl overflow-hidden divide-x divide-border-subtle">
-                {[
-                  {
-                    label: 'STT mins',
-                    value: usageData.quota.transcription.used,
-                    color: 'text-blue-400',
-                    glow: 'rgba(59,130,246,0.5)',
-                  },
-                  {
-                    label: 'AI calls',
-                    value: usageData.quota.ai.used,
-                    color: 'text-violet-400',
-                    glow: 'rgba(139,92,246,0.5)',
-                  },
-                  {
-                    label: 'Searches',
-                    value: usageData.quota.search.used,
-                    color: 'text-emerald-400',
-                    glow: 'rgba(16,185,129,0.5)',
-                  },
-                ].map(({ label, value, color }) => (
-                  <div key={label} className="flex flex-col items-center py-4 px-3 gap-1">
-                    <span
-                      className={`text-[22px] font-semibold tabular-nums tracking-tight leading-none ${color}`}
-                    >
-                      {value.toLocaleString()}
-                    </span>
-                    <span className="text-[10px] text-text-tertiary font-medium tracking-wide">
-                      {label}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Progress bars */}
-              <div className="px-5 pb-5 space-y-3.5">
-                <QuotaBar
-                  label="转录"
-                  icon={Mic}
-                  bucket={usageData.quota.transcription}
-                  barColor="bg-blue-500"
-                />
-                <QuotaBar
-                  label="AI 请求"
-                  icon={Brain}
-                  bucket={usageData.quota.ai}
-                  barColor="bg-violet-500"
-                />
-                <QuotaBar
-                  label="网页搜索"
-                  icon={Search}
-                  bucket={usageData.quota.search}
-                  barColor="bg-emerald-500"
-                />
-              </div>
-            </>
-          )}
-        </Card>
-      )}
-
-      {/* ── Plans ────────────────────────────────────────── */}
-      {isSaved && PlansCard}
 
       {/* ── How it works ─────────────────────────────────── */}
       <Card>
         <div className="px-5 py-4">
           <div className="flex items-center justify-between mb-3.5">
             <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-widest">
-              How it works
+              使用方式
             </p>
-            <button
-              onClick={() => openExternal('https://natively.software/pro')}
-              className="flex items-center gap-1 text-[10px] font-semibold text-blue-400 hover:text-blue-300 uppercase tracking-widest transition-colors cursor-pointer"
-            >
-              Watch Demo <ArrowUpRight size={10} strokeWidth={2} />
-            </button>
           </div>
           <div className="space-y-3">
             {[
-              { step: '1', text: '在上面订阅并在 Dodo Payments 完成结账。' },
-              { step: '2', text: '您的 API 密钥会立即发送到您的邮箱。' },
-              { step: '3', text: '在此粘贴 — Natively 会自动处理其余部分。' },
+              { step: '1', text: '粘贴你的 QCLOUD key 并保存。' },
+              { step: '2', text: '保存成功后，聊天默认模型会切换为 QCLOUD API。' },
+              { step: '3', text: '实时转录和向量模型不使用 QCLOUD，继续保持本地优先。' },
             ].map(({ step, text }) => (
               <div key={step} className="flex items-start gap-3">
                 <div className="w-5 h-5 rounded-full bg-bg-input border border-border-subtle flex items-center justify-center text-[10px] font-bold text-text-tertiary shrink-0 mt-[1px]">
@@ -622,70 +229,6 @@ export const NativelyApiSettings: React.FC = () => {
                 <p className="text-[12px] text-text-secondary leading-relaxed">{text}</p>
               </div>
             ))}
-          </div>
-        </div>
-      </Card>
-
-      {/* ── Refund Policy ────────────────────────────────── */}
-      <Card>
-        <div className="flex items-center gap-3 px-5 pt-5 pb-4">
-          <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center shrink-0">
-            <Shield size={18} className="text-emerald-400" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-text-primary">退款政策</p>
-            <p className="text-[11px] text-text-tertiary leading-snug mt-0.5">
-              24-hour refund window — voucher purchases are final sale
-            </p>
-          </div>
-        </div>
-
-        <div className="h-px bg-border-subtle mx-5" />
-
-        <div className="px-5 pt-4 pb-4">
-          <div className="space-y-3">
-            <div className="rounded-xl bg-bg-input/50 border border-border-subtle px-3.5 py-3">
-              <p className="text-[11.5px] text-text-secondary leading-relaxed">
-                <strong className="text-text-primary font-semibold">A quick heads-up:</strong>{' '}
-                Natively is built and maintained by a single developer and integrates a lot of
-                third-party services — AI providers, transcription engines, search APIs, payments,
-                OS-level audio &amp; screen capture. That gives the app a lot of capability, but the
-                surface area is wider than a typical closed-source product, and once in a while
-                something may not behave exactly as expected. If you run into something like that,
-                please <em>report it</em> rather than disputing the charge — we read every report
-                and fixes typically land in the next update.
-              </p>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="w-1.5 h-1.5 rounded-full bg-text-tertiary/40 shrink-0 mt-[6px]" />
-              <p className="text-[11.5px] text-text-secondary leading-relaxed">
-                Purchases made with a coupon, voucher, referral credit, or limited-time offer are{' '}
-                <strong className="text-text-primary font-semibold">final sale</strong> and not
-                eligible for refund.
-              </p>
-            </div>
-
-            <div className="h-px bg-border-subtle mt-4 mb-3" />
-
-            <p className="text-[11.5px] text-text-secondary leading-relaxed">
-              For everything else — the 24-hour refund window, subscription handling, taxes &amp;
-              fees, and your local consumer rights — please see our full{' '}
-              <span
-                onClick={() => openExternal('https://natively.software/refundpolicy')}
-                className="text-text-primary hover:text-text-secondary underline decoration-border-subtle underline-offset-[3px] cursor-pointer transition-colors"
-              >
-                Refund Policy
-              </span>
-              . To request a refund or ask a question, email{' '}
-              <span
-                onClick={() => openExternal('mailto:natively.contact@gmail.com')}
-                className="text-text-primary hover:text-text-secondary underline decoration-border-subtle underline-offset-[3px] cursor-pointer transition-colors"
-              >
-                natively.contact@gmail.com
-              </span>
-              .
-            </p>
           </div>
         </div>
       </Card>

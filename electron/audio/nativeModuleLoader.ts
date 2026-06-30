@@ -8,7 +8,7 @@ export interface AudioDeviceInfo {
 export interface NativeModule {
   getHardwareId(): string;
   verifyGumroadKey(licenseKey: string): Promise<string>;
-  // Dodo Payments — all three require a binary rebuild (cargo build --release)
+  // Any native dependency update requires a binary rebuild (cargo build --release)
   // They are optional (?) so the module loads even with a stale binary.
   verifyDodoKey?: (licenseKey: string, deviceLabel: string) => Promise<string>;
   validateDodoKey?: (licenseKey: string) => Promise<string>;

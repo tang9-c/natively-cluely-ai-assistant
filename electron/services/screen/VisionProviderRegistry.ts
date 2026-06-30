@@ -77,7 +77,7 @@ function natively(creds: CredentialsManager, _inputs: VisionProviderBuildInputs)
   const apiKey = creds.getNativelyApiKey();
   return {
     id: 'natively',
-    displayName: 'Natively API',
+    displayName: 'QCLOUD API',
     modelId: 'natively',
     isLocal: false,
     isConfigured: !!apiKey,

@@ -62,7 +62,7 @@ export class ElevenLabsStreamingSTT extends BaseSTT {
     /** No-op - channel count is expected to be mono by ElevenLabs Scribe */
     setAudioChannelCount(_count: number): void {}
 
-    /** Recognition language - maps Natively key to ISO-639-1 for ElevenLabs, or 'auto' to omit code */
+    /** Recognition language - maps app language settings to ISO-639-1 for ElevenLabs, or 'auto' to omit code */
     setRecognitionLanguage(key: string): void {
         const newCode = key === 'auto' ? '' : (RECOGNITION_LANGUAGES[key]?.iso639 ?? this.languageCode);
         if (this.languageCode !== newCode) {

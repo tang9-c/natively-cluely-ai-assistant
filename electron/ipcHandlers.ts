@@ -1168,10 +1168,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     });
   }
 
-  // ── Usage cache (60-second TTL, keyed by API key) ──────────────────────────
-  const _usageCache = new Map<string, { data: any; ts: number }>();
-  const USAGE_CACHE_TTL_MS = 60_000;
-
   safeHandle('set-natively-api-key', async (_, apiKey: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -1189,9 +1185,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       llmHelper.setModel(defaultModel, providers);
       broadcast('model-changed', defaultModel);
 
-      // If setNativelyApiKey auto-promoted the STT provider to 'natively', reconfigure
-      // the audio pipeline immediately — without this, the in-memory pipeline still uses
-      // the old STT provider (e.g. Google) until the app restarts.
+      // setNativelyApiKey may migrate legacy STT values such as 'natively' back to a
+      // local provider. Reconfigure only when the effective provider actually changes.
       const newSttProvider = cm.getSttProvider();
       if (newSttProvider !== prevSttProvider) {
         console.log(
@@ -1202,56 +1197,9 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true };
     } catch (error: any) {
-      console.error('Error saving Natively API key:', error);
+      console.error('Error saving QCLOUD key:', error);
       return { success: false, error: error.message };
-    } finally {
-      // Always bust the cache when the key changes so the next usage fetch is fresh
-      _usageCache?.clear();
     }
-  });
-
-  safeHandle('get-natively-usage', async () => {
-    // Hoisted out of try so the catch block's stale-cache lookup can reach it.
-    let key: string | undefined;
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      key = CredentialsManager.getInstance().getNativelyApiKey();
-      if (!key) return { ok: false, error: 'no_key' };
-
-      // Return cached value if it's still fresh
-      const cached = _usageCache.get(key);
-      if (cached && Date.now() - cached.ts < USAGE_CACHE_TTL_MS) {
-        return cached.data;
-      }
-
-      const res = await fetch('https://api.natively.software/v1/usage', {
-        headers: { 'x-natively-key': key },
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as any;
-        return { ok: false, error: body.error || 'request_failed', status: res.status };
-      }
-      const data = (await res.json()) as any;
-      const result = { ok: true, ...data };
-
-      // Cache the successful response
-      _usageCache.set(key, { data: result, ts: Date.now() });
-      return result;
-    } catch (error: any) {
-      // On transient DNS/network failure, serve stale cache rather than showing an error.
-      // Railway uses 1s TTL on DNS records, so a momentary resolver hiccup causes ENOTFOUND
-      // even when the server is up. Stale quota data is far better than a broken UI.
-      const stale = key ? _usageCache.get(key) : undefined;
-      if (stale) return { ...stale.data, stale: true };
-      return { ok: false, error: error.message || 'network_error' };
-    }
-  });
-
-  // Allow other handlers to force-invalidate the usage cache (e.g. after key change)
-  safeHandle('invalidate-natively-usage-cache', () => {
-    _usageCache.clear();
-    return { ok: true };
   });
 
 

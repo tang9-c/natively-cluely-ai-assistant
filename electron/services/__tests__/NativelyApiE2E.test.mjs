@@ -1,6 +1,6 @@
 // electron/services/__tests__/NativelyApiE2E.test.mjs
 //
-// Env-gated real Natively API smoke test. Enabled only when both:
+// Env-gated real QCLOUD API smoke test. Enabled only when both:
 //   RUN_NATIVELY_API_E2E=1
 //   NATIVELY_API_KEY=<key>   (or NATIVELY_TRIAL_TOKEN=<token>)
 //
@@ -26,7 +26,7 @@ function authHeader() {
   return null;
 }
 
-describe('Natively API real-network smoke', { skip: !ENABLED ? 'skip: set RUN_NATIVELY_API_E2E=1 with NATIVELY_API_KEY or NATIVELY_TRIAL_TOKEN to enable' : false }, () => {
+describe('QCLOUD API real-network smoke', { skip: !ENABLED ? 'skip: set RUN_NATIVELY_API_E2E=1 with NATIVELY_API_KEY or NATIVELY_TRIAL_TOKEN to enable' : false }, () => {
   test('credentials are present in env (sanity check, key value not logged)', () => {
     const h = authHeader();
     assert.ok(h, 'NATIVELY_API_KEY or NATIVELY_TRIAL_TOKEN must be set when RUN_NATIVELY_API_E2E=1');

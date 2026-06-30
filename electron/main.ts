@@ -2456,11 +2456,8 @@ export class AppState {
   /**
    * Serialization mutex for reconfigureSttProvider.
    *
-   * Crash/hang fix (2026-06-05): a single "save Natively API key" action can
-   * fire up to TWO reconfigure calls back-to-back — one from the
-   * `set-natively-api-key` handler (which auto-promotes the STT provider to
-   * 'natively' and reconfigures), and one from the renderer's follow-up
-   * `set-stt-provider('natively')` call. Each call tears down and rebuilds the
+   * Crash/hang fix (2026-06-05): STT provider changes can fire reconfigure
+   * calls close together. Each call tears down and rebuilds the
    * native captures (SystemAudioCapture / MicrophoneCapture → CoreAudio /
    * ScreenCaptureKit / WASAPI). Two interleaved teardown+construct sequences
    * against the same native device handles is a native-resource race that

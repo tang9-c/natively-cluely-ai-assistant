@@ -270,7 +270,7 @@ export class LLMHelper {
   public setNativelyKey(key: string | null): void {
     this.nativelyKey = key || null;
     this.qcloudClient = key ? new OpenAI({ apiKey: key, baseURL: QCLOUD_OPENAI_SDK_BASE_URL }) : null;
-    console.log(`[LLMHelper] Natively key ${key ? 'set' : 'cleared'}`);
+    console.log(`[LLMHelper] QCLOUD key ${key ? 'set' : 'cleared'}`);
   }
 
   /**
@@ -1661,7 +1661,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           try {
             return await this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudImagePaths);
           } catch (err: any) {
-            console.warn('[LLMHelper] Natively API failed in chatWithGemini, falling back to Gemini:', err.message);
+            console.warn('[LLMHelper] QCLOUD API failed in chatWithGemini, falling back to Gemini:', err.message);
             // Fall through to smart dynamic fallback below
           }
         }
@@ -1960,13 +1960,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       });
     }
 
-    // Priority 9: Natively API — used when no other provider is available, or as final fallback
+    // Priority 9: QCLOUD API — used when no other provider is available, or as final fallback
     const nativelyKeyForStructured = this.nativelyKey || (() => {
       try { return require('./services/CredentialsManager').CredentialsManager.getInstance().getNativelyApiKey() || null; } catch { return null; }
     })();
     if (nativelyKeyForStructured) {
       providers.push({
-        name: 'Natively API',
+        name: 'QCLOUD API',
         execute: () => this.generateWithNatively(message, undefined, undefined, { maxOutputTokens })
       });
     }
@@ -2072,7 +2072,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
    * Non-streaming OpenAI generation with proper system/user separation
    */
   /**
-   * Routes AI generation through the Natively API backend (Gemini-powered).
+   * Routes AI generation through the QCLOUD API backend.
    */
   private async generateWithNatively(
     userMessage: string,
@@ -2088,7 +2088,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const { CredentialsManager } = require('./services/CredentialsManager');
       nativelyKey = CredentialsManager.getInstance().getNativelyApiKey() || null;
     }
-    if (!nativelyKey) throw new Error('Natively API key not set');
+    if (!nativelyKey) throw new Error('QCLOUD API key not set');
 
     const endpointUrl = 'https://api.natively.software/v1/chat';
     const headers: any = { 'Content-Type': 'application/json', 'x-natively-key': nativelyKey };
@@ -2098,7 +2098,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // Send images as a structured array so the server can build proper Gemini inlineData parts.
     // Embedding base64 in the text content would be truncated at 4000 chars and treated as text.
     //
-    // Compress before sending: retina screenshots are 2-5 MB PNG; the Natively API body limit
+    // Compress before sending: retina screenshots are 2-5 MB PNG; the QCLOUD API body limit
     // is 4 MB. Resize to max 1920px (above the 1470px logical resolution of a MacBook Air, so
     // no detail is lost) and encode as JPEG 85% — typically 200-250 KB per image.
     // 4 screenshots × ~278KB base64 = ~1.1 MB, well within the 4 MB server limit.
@@ -2142,7 +2142,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
-      throw new Error(`Natively API error ${response.status}: ${errData.error || 'unknown'}`);
+      throw new Error(`QCLOUD API error ${response.status}: ${errData.error || 'unknown'}`);
     }
 
     const data = await response.json();
@@ -2904,7 +2904,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (isMultimodal) {
       // MULTIMODAL PROVIDER ORDER: [Natively] -> Codex CLI -> OpenAI -> Gemini Flash -> Claude -> Gemini Pro -> Groq Scout 4
       if (this.hasNatively()) {
-        providers.push({ name: 'Natively API', execute: () => this.streamWithNatively(userContent, openaiSystemPrompt, imagePaths) });
+        providers.push({ name: 'QCLOUD API', execute: () => this.streamWithNatively(userContent, openaiSystemPrompt, imagePaths) });
       }
       if (this.codexCliConfig.enabled) {
         providers.push({ name: `Codex CLI (${this.codexCliConfig.model})`, execute: () => this.streamWithCodexCli(userContent, openaiSystemPrompt, imagePaths) });
@@ -2932,7 +2932,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     } else {
       // TEXT-ONLY PROVIDER ORDER: [Natively] -> Groq -> Codex CLI -> OpenAI -> Claude -> Gemini Flash -> Gemini Pro
       if (this.hasNatively()) {
-        providers.push({ name: 'Natively API', execute: () => this.streamWithNatively(userContent, openaiSystemPrompt) });
+        providers.push({ name: 'QCLOUD API', execute: () => this.streamWithNatively(userContent, openaiSystemPrompt) });
       }
       if (this.groqClient) {
         // CACHE: pass system separately so Groq prefix-cache hits across turns.
@@ -2985,8 +2985,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // Natively is always first when configured, regardless of which model is selected.
     // The sort above may have displaced it — restore it to position 0.
-    if (this.hasNatively() && providers[0]?.name !== 'Natively API') {
-      const idx = providers.findIndex(p => p.name === 'Natively API');
+    if (this.hasNatively() && providers[0]?.name !== 'QCLOUD API') {
+      const idx = providers.findIndex(p => p.name === 'QCLOUD API');
       if (idx > 0) {
         const [entry] = providers.splice(idx, 1);
         providers.unshift(entry);
@@ -3284,7 +3284,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       return;
     }
 
-    // 3b. Natively API
+    // 3b. QCLOUD API
     if (this.currentModelId === 'natively') {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
@@ -3294,7 +3294,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           yield response;
           return;
         } catch (err: any) {
-          console.warn('[LLMHelper] Natively API failed in streamChat, trying Groq fallback:', err.message);
+          console.warn('[LLMHelper] QCLOUD API failed in streamChat, trying Groq fallback:', err.message);
           // Try Groq before Gemini — Groq key is more commonly available
           if (this.groqClient) {
             try {
@@ -3336,7 +3336,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       return;
     }
 
-    // 5. Last-resort: Natively API (if user has a key but no cloud provider configured)
+    // 5. Last-resort: QCLOUD API (if user has a key but no cloud provider configured)
     if (this.hasNatively()) {
       try {
         yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths);
@@ -3350,7 +3350,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   }
 
   /**
-   * Fake-stream for Natively API (non-streaming endpoint).
+   * Fake-stream for QCLOUD API (non-streaming endpoint).
    * Yields the full response in small word-batches so the UI typing effect still plays.
    * Throws on empty response so the fallback chain tries the next provider.
    */
@@ -3365,7 +3365,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const { CredentialsManager } = require('./services/CredentialsManager');
       nativelyKey = CredentialsManager.getInstance().getNativelyApiKey() || null;
     }
-    if (!nativelyKey) throw new Error('Natively API key not set');
+    if (!nativelyKey) throw new Error('QCLOUD API key not set');
 
     const body: Record<string, unknown> = {
       messages: [{ role: 'user', content: userContent }],
@@ -3377,7 +3377,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
 
     // Attach images — compress before sending (same as non-streaming generateWithNatively).
-    // Retina screenshots are 2-5 MB PNG; the Natively API body limit is 4 MB.
+    // Retina screenshots are 2-5 MB PNG; the QCLOUD API body limit is 4 MB.
     // Resize to max 1920px and encode as JPEG 85% — typically 200-250 KB per image.
     // 4 screenshots × ~278KB base64 = ~1.1 MB, well within the 4 MB server limit.
     if (imagePaths?.length) {
@@ -3419,7 +3419,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // and Pro at 10s even when actively yielding tokens. The AbortController pattern
     // below correctly scopes the timeout to the connection phase only.
     const _connectController = new AbortController();
-    const _connectTimer = setTimeout(() => _connectController.abort(new Error('Natively API connect timeout (10s)')), 10_000);
+    const _connectTimer = setTimeout(() => _connectController.abort(new Error('QCLOUD API connect timeout (10s)')), 10_000);
     let response: Response;
     try {
       response = await fetch('https://api.natively.software/v1/chat', {
@@ -3436,7 +3436,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}) as Record<string, unknown>);
-      throw new Error(`Natively API ${response.status}: ${(errData as any).error || 'unknown'}`);
+      throw new Error(`QCLOUD API ${response.status}: ${(errData as any).error || 'unknown'}`);
     }
 
     // Parse the SSE response body incrementally.
@@ -4508,7 +4508,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
    * Robust Meeting Summary Generation
    * Strategy:
    * 0. Custom / cURL Provider (if user selected one — always takes priority)
-   * 1. Natively API (if configured)
+   * 1. QCLOUD API (if configured)
    * 2. Groq (if context text < 100k tokens approx)
    * 3. Gemini Flash (Retry 2x)
    * 4. Gemini Pro (Retry 5x)
@@ -4554,23 +4554,23 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       }
     }
 
-    // ATTEMPT 1: Natively API (if configured — first in chain)
+    // ATTEMPT 1: QCLOUD API (if configured — first in chain)
     // Inner fetch timeout: 8s (AbortSignal.timeout in generateWithNatively).
     // Outer safety net: 10s — covers JSON parsing + any overhead after the fetch resolves.
     if (this.hasNatively()) {
       try {
-        console.log(`[LLMHelper] Attempting Natively API for summary...`);
+        console.log(`[LLMHelper] Attempting QCLOUD API for summary...`);
         const text = await this.withTimeout(
           this.generateWithNatively(`Context:\n${context}`, systemPrompt),
           10000,
           'Natively Summary'
         );
         if (text.trim().length > 0) {
-          console.log(`[LLMHelper] ✅ Natively API summary generated successfully.`);
+          console.log(`[LLMHelper] ✅ QCLOUD API summary generated successfully.`);
           return this.processResponse(text);
         }
       } catch (e: any) {
-        console.warn(`[LLMHelper] ⚠️ Natively API summary failed: ${e.message}. Falling back...`);
+        console.warn(`[LLMHelper] ⚠️ QCLOUD API summary failed: ${e.message}. Falling back...`);
       }
     }
 

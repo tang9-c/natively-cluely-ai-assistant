@@ -119,19 +119,6 @@ interface ElectronAPI {
   setDoubaoLlmApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setDoubaoEmbeddingModel: (model: string) => Promise<{ success: boolean; error?: string }>;
   setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
-  getNativelyUsage: () => Promise<{
-    ok: boolean;
-    plan?: string;
-    quota?: {
-      transcription: { used: number; limit: number; remaining: number };
-      ai: { used: number; limit: number; remaining: number };
-      search: { used: number; limit: number; remaining: number };
-      resets_at: string;
-    };
-    member_since?: string;
-    error?: string;
-    status?: number;
-  }>;
   getStoredCredentials: () => Promise<{
     hasGeminiKey: boolean;
     hasGroqKey: boolean;
@@ -1118,7 +1105,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setDoubaoLlmApiKey: (apiKey: string) => ipcRenderer.invoke('set-doubao-llm-api-key', apiKey),
   setDoubaoEmbeddingModel: (model: string) => ipcRenderer.invoke('set-doubao-embedding-model', model),
   setNativelyApiKey: (apiKey: string) => ipcRenderer.invoke('set-natively-api-key', apiKey),
-  getNativelyUsage: () => ipcRenderer.invoke('get-natively-usage'),
   getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),
 
   // Permissions

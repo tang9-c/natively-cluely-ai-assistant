@@ -6,7 +6,7 @@ import { BaseSTT } from './BaseSTT';
 /**
  * NativelyProSTT
  *
- * Connects to the Natively API WebSocket transcription endpoint.
+ * Legacy remote WebSocket transcription client.
  * Forwards the user's selected accent/language to the server so
  * Deepgram / Google STT use the correct language model.
  *
@@ -129,10 +129,10 @@ export class NativelyProSTT extends BaseSTT {
         }
     }
 
-    /** No-op — Natively API server handles VAD internally */
+    /** No-op — remote server handles VAD internally */
     notifySpeechEnded(): void {}
 
-    /** No-op — Natively API server finalizes via VAD; no client-side flush available */
+    /** No-op — remote server finalizes via VAD; no client-side flush available */
     finalize(): void {}
 
     // ── Lifecycle ─────────────────────────────────────────────

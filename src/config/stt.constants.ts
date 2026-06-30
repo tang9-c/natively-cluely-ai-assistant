@@ -140,8 +140,8 @@ export const STT_PROVIDERS: Record<SttProviderId, SttProviderConfig> = {
     },
     natively: {
         id: 'natively',
-        name: 'Natively Pro (Managed)',
-        description: 'All-in-one managed STT via Natively API',
+        name: 'Legacy Remote STT',
+        description: 'Legacy remote STT provider retained for old configuration compatibility',
         endpoint: '', 
         model: '',
         uploadType: 'websocket',

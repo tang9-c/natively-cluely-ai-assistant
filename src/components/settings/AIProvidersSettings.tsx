@@ -602,7 +602,7 @@ export const AIProvidersSettings: React.FC = () => {
                             const opts: { id: string; name: string }[] = [];
 
                             if (hasStoredKey.natively) {
-                                opts.push({ id: 'natively', name: 'Natively API' });
+                                opts.push({ id: 'natively', name: 'QCLOUD API' });
                             }
 
                             for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {

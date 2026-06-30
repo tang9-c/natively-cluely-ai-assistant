@@ -125,14 +125,11 @@ export class CredentialsManager {
             console.log('[CredentialsManager] Self-healed sttProvider: doubao→doubao-auc (Doubao AUC is the implemented STT path)');
             return 'doubao-auc';
         }
-        // Self-heal: if provider is 'none' but a Natively key exists, the user is in a
-        // broken state (key cleared then re-entered via a path that skipped auto-promote,
-        // or credentials restored from backup). Silently restore to 'natively' so STT works.
-        if (provider === 'none' && this.credentials.nativelyApiKey) {
-            this.credentials.sttProvider = 'natively';
+        if (provider === 'natively') {
+            this.credentials.sttProvider = 'local-sensevoice';
             this.saveCredentials();
-            console.log('[CredentialsManager] Self-healed sttProvider: none→natively (Natively key present)');
-            return 'natively';
+            console.log('[CredentialsManager] Migrated STT provider: natively→local-sensevoice (QCLOUD does not provide default STT)');
+            return 'local-sensevoice';
         }
         return provider;
     }
@@ -229,7 +226,7 @@ export class CredentialsManager {
      * Used by ScreenUnderstandingService to gate vision_only / decide fallback.
      */
     public anyVisionProviderConfigured(): boolean {
-        if (this.credentials.nativelyApiKey) return true;       // Natively API supports vision
+        if (this.credentials.nativelyApiKey) return true;       // QCLOUD API supports vision
         if (this.credentials.openaiApiKey) return true;          // gpt-4o / gpt-5 vision
         if (this.credentials.claudeApiKey) return true;          // Claude vision
         if (this.credentials.geminiApiKey) return true;          // Gemini vision
@@ -435,25 +432,20 @@ export class CredentialsManager {
                 console.log('[CredentialsManager] Auto-set default model to natively');
             }
 
-            // Auto-promote natively STT if still on 'none' or the default Google STT
-            if (!this.credentials.sttProvider || this.credentials.sttProvider === 'none' || this.credentials.sttProvider === 'google') {
-                this.credentials.sttProvider = 'natively';
-                console.log('[CredentialsManager] Auto-set STT provider to natively');
-            }
         } else {
             // Key cleared — revert natively-auto-set defaults back to safe fallbacks
             if (this.credentials.defaultModel === 'natively') {
                 this.credentials.defaultModel = 'gemini-3.1-flash-lite-preview';
-                console.log('[CredentialsManager] Natively key cleared — reset default model to Gemini Flash');
+                console.log('[CredentialsManager] QCLOUD key cleared — reset default model to Gemini Flash');
             }
             if (this.credentials.sttProvider === 'natively') {
-                this.credentials.sttProvider = 'none';
-                console.log('[CredentialsManager] Natively key cleared — reset STT provider to none');
+                this.credentials.sttProvider = 'local-sensevoice';
+                console.log('[CredentialsManager] QCLOUD key cleared — migrated STT provider to local-sensevoice');
             }
         }
 
         this.saveCredentials();
-        console.log('[CredentialsManager] Natively API Key updated');
+        console.log('[CredentialsManager] QCLOUD key updated');
     }
 
     public getPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'doubao'): string | undefined {
