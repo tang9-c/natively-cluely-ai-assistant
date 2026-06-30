@@ -25,7 +25,7 @@ import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { DOUBAO_PRO_MODEL, DOUBAO_PRO_PROVIDER_LABEL } from "./llm/DoubaoModelConstants"
 import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
 import { buildChatSystemPrompt, type ChatPromptOptions } from "./llm/chatPromptAssembly"
-import { QCLOUD_OPENAI_SDK_BASE_URL } from "./llm/QCloudLlmConstants"
+import { QCLOUD_CHAT_ENDPOINT, QCLOUD_CHAT_MODEL, QCLOUD_OPENAI_SDK_BASE_URL } from "./llm/QCloudLlmConstants"
 import type { TranscriptTurn } from "./llm/transcriptCleaner"
 import { deepVariableReplacer, getByPath, injectImageIntoMessages } from './utils/curlUtils';
 import curl2Json from "@bany/curl-to-json";
@@ -2090,10 +2090,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
     if (!nativelyKey) throw new Error('QCLOUD API key not set');
 
-    const endpointUrl = 'https://api.natively.software/v1/chat';
+    const endpointUrl = QCLOUD_CHAT_ENDPOINT;
     const headers: any = { 'Content-Type': 'application/json', 'x-natively-key': nativelyKey };
 
-    const body: any = { messages: [{ role: 'user', content: userMessage }] };
+    const body: any = { model: QCLOUD_CHAT_MODEL, messages: [{ role: 'user', content: userMessage }] };
 
     // Send images as a structured array so the server can build proper Gemini inlineData parts.
     // Embedding base64 in the text content would be truncated at 4000 chars and treated as text.
@@ -3368,6 +3368,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (!nativelyKey) throw new Error('QCLOUD API key not set');
 
     const body: Record<string, unknown> = {
+      model: QCLOUD_CHAT_MODEL,
       messages: [{ role: 'user', content: userContent }],
       stream: true,
     };
@@ -3422,7 +3423,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const _connectTimer = setTimeout(() => _connectController.abort(new Error('QCLOUD API connect timeout (10s)')), 10_000);
     let response: Response;
     try {
-      response = await fetch('https://api.natively.software/v1/chat', {
+      response = await fetch(QCLOUD_CHAT_ENDPOINT, {
         method: 'POST',
         headers: streamHeaders,
         body: JSON.stringify(body),

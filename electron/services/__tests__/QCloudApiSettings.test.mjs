@@ -22,12 +22,12 @@ test('QCLOUD settings page does not show legacy commercial content', () => {
 
   assert.match(source, /QCLOUD API/);
   assert.match(source, /QCLOUD key/);
-  assert.match(source, /setDefaultModel\?\.\('natively'\)/);
+  assert.doesNotMatch(source, /setDefaultModel\?\.\('natively'\)/);
   forbidden.forEach(text => assert.equal(source.includes(text), false, `unexpected legacy text: ${text}`));
   assert.doesNotMatch(source, /setSttProvider\?\.\('natively'\)/);
 });
 
-test('saving QCLOUD key only auto-selects the LLM provider', () => {
+test('saving QCLOUD key atomically selects the LLM provider in the main process', () => {
   const source = read('electron/services/CredentialsManager.ts');
   const start = source.indexOf('    public setNativelyApiKey(key: string): void');
   const end = source.indexOf('    public getPreferredModel', start);
@@ -35,6 +35,7 @@ test('saving QCLOUD key only auto-selects the LLM provider', () => {
 
   assert.ok(start >= 0, 'setNativelyApiKey should exist');
   assert.match(method, /this\.credentials\.defaultModel = 'natively'/);
+  assert.doesNotMatch(method, /const isAutoDefault/);
   assert.doesNotMatch(method, /this\.credentials\.sttProvider = 'natively'/);
   assert.equal(method.includes(['Auto-set STT provider', 'to natively'].join(' ')), false);
 });

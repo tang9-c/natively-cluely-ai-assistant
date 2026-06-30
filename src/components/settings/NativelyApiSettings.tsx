@@ -54,8 +54,6 @@ export const NativelyApiSettings: React.FC = () => {
         setIsSaved(true);
         setJustSaved(true);
         setTimeout(() => setJustSaved(false), 2500);
-        // @ts-ignore
-        window.electronAPI?.setDefaultModel?.('natively').catch(console.error);
       } else {
         setError(r.error || '保存 QCLOUD key 失败');
       }

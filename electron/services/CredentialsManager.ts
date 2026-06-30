@@ -418,20 +418,8 @@ export class CredentialsManager {
         this.credentials.nativelyApiKey = trimmed || undefined;
 
         if (trimmed) {
-            // Auto-promote natively to default model unless user already chose a non-Gemini/Groq model
-            const current = this.credentials.defaultModel || '';
-            const isAutoDefault = !current
-                || current.startsWith('gemini-')
-                || current.startsWith('llama-')
-                || current.startsWith('mixtral-')
-                || current.startsWith('gemma-')
-                || current === 'gemini'
-                || current === 'llama';
-            if (isAutoDefault) {
-                this.credentials.defaultModel = 'natively';
-                console.log('[CredentialsManager] Auto-set default model to natively');
-            }
-
+            this.credentials.defaultModel = 'natively';
+            console.log('[CredentialsManager] Auto-set default model to QCLOUD');
         } else {
             // Key cleared — revert natively-auto-set defaults back to safe fallbacks
             if (this.credentials.defaultModel === 'natively') {
