@@ -29,9 +29,10 @@ test('LLMHelper uses the QCloud SDK base URL derived from centralized constants'
 test('LLMHelper routes QCLOUD chat calls through centralized endpoint and model', () => {
   const helper = read('electron/LLMHelper.ts');
 
-  assert.match(helper, /QCLOUD_CHAT_ENDPOINT/);
+  assert.match(helper, /QCLOUD_CHAT_COMPLETIONS_ENDPOINT/);
   assert.match(helper, /model:\s*QCLOUD_CHAT_MODEL/);
   assert.doesNotMatch(helper, /https:\/\/api\.natively\.software\/v1\/chat/);
+  assert.doesNotMatch(helper, /fetch\(QCLOUD_CHAT_ENDPOINT/);
 });
 
 test('LLMHelper advertises QCLOUD model metadata to provider routing', () => {
