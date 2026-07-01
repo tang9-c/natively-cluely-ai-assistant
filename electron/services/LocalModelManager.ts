@@ -11,6 +11,10 @@ import {
 export const SPEAKER_EMBEDDING_MODEL_ID = 'csukuangfj/speaker-embedding-models' as const;
 export const SPEAKER_EMBEDDING_MODEL_FILENAME = '3dspeaker_speech_campplus_sv_zh-cn_16k-common.onnx' as const;
 export const SPEAKER_EMBEDDING_MODEL_RELATIVE_PATH = SPEAKER_EMBEDDING_MODEL_FILENAME;
+const SPEAKER_EMBEDDING_MODEL_DEFAULT_ENDPOINTS = ['https://huggingface.co', 'https://hf-mirror.com'] as const;
+const SPEAKER_EMBEDDING_MODEL_DEFAULT_FILE_URLS = [
+  'https://feigenbaum.cdn.bcebos.com/onnx/3dspeaker_speech_campplus_sv_zh-cn_16k-common.onnx',
+] as const;
 
 export interface LocalModelInfo {
   id: string;
@@ -186,6 +190,45 @@ function safeUrlForError(rawUrl: string): string {
   }
 }
 
+function normalizeDownloadBaseUrl(value: string): string {
+  return value.trim().replace(/\/$/, '');
+}
+
+function configuredSpeakerEmbeddingFileUrls(): string[] {
+  const configured = process.env.SPEAKER_EMBEDDING_MODEL_FILE_URLS;
+  if (!configured) return [];
+  return configured
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean);
+}
+
+function configuredSpeakerEmbeddingEndpoints(): string[] {
+  const configured = process.env.SPEAKER_EMBEDDING_MODEL_ENDPOINTS;
+  if (configured) {
+    return configured
+      .split(',')
+      .map(normalizeDownloadBaseUrl)
+      .filter(Boolean);
+  }
+  if (process.env.HF_ENDPOINT) {
+    return [normalizeDownloadBaseUrl(process.env.HF_ENDPOINT)];
+  }
+  return [...SPEAKER_EMBEDDING_MODEL_DEFAULT_ENDPOINTS];
+}
+
+function speakerEmbeddingDownloadUrls(): string[] {
+  const configuredFileUrls = configuredSpeakerEmbeddingFileUrls();
+  if (configuredFileUrls.length > 0) return configuredFileUrls;
+
+  return [
+    ...configuredSpeakerEmbeddingEndpoints().map(
+      endpoint => `${endpoint}/${SPEAKER_EMBEDDING_MODEL_ID}/resolve/main/${SPEAKER_EMBEDDING_MODEL_FILENAME}`,
+    ),
+    ...SPEAKER_EMBEDDING_MODEL_DEFAULT_FILE_URLS,
+  ];
+}
+
 async function downloadSingleFileModel(
   def: ModelDefinition,
   filename: string,
@@ -233,6 +276,28 @@ async function downloadSingleFileModel(
   }
 }
 
+async function downloadSingleFileModelWithFallback(
+  def: ModelDefinition,
+  filename: string,
+  sourceUrls: string[],
+): Promise<void> {
+  if (sourceUrls.length === 0) {
+    throw new Error(`No download sources configured for ${def.id}`);
+  }
+
+  const errors: string[] = [];
+  for (const sourceUrl of sourceUrls) {
+    try {
+      await downloadSingleFileModel(def, filename, sourceUrl);
+      return;
+    } catch (error: any) {
+      errors.push(`${safeUrlForError(sourceUrl)}: ${error?.message || String(error)}`);
+    }
+  }
+
+  throw new Error(`Failed to download ${filename}. Tried ${sourceUrls.length} source(s): ${errors.join(' | ')}`);
+}
+
 export async function startLocalModelDownload(modelId: string): Promise<{ success: boolean; error?: string }> {
   const def = MODEL_DEFINITIONS.find((m) => m.id === modelId);
   if (!def) return { success: false, error: `Unknown model: ${modelId}` };
@@ -245,10 +310,10 @@ export async function startLocalModelDownload(modelId: string): Promise<{ succes
 
   try {
     if (modelId === SPEAKER_EMBEDDING_MODEL_ID) {
-      await downloadSingleFileModel(
+      await downloadSingleFileModelWithFallback(
         def,
         SPEAKER_EMBEDDING_MODEL_FILENAME,
-        `https://huggingface.co/${SPEAKER_EMBEDDING_MODEL_ID}/resolve/main/${SPEAKER_EMBEDDING_MODEL_FILENAME}`,
+        speakerEmbeddingDownloadUrls(),
       );
       downloadStates.delete(modelId);
       onProgress?.(modelId, 100);

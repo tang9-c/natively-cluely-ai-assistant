@@ -26,6 +26,23 @@ test('LocalModelManager exposes availability and file resolution helpers for spe
   assert.match(source, /hasModelFiles\(getBundledModelsDir\(\), def\)/);
 });
 
+test('speaker embedding download supports mirror fallback sources', () => {
+  const source = read('electron/services/LocalModelManager.ts');
+  assert.match(source, /SPEAKER_EMBEDDING_MODEL_DEFAULT_ENDPOINTS\s*=\s*\['https:\/\/huggingface\.co', 'https:\/\/hf-mirror\.com'\]/);
+  assert.match(source, /SPEAKER_EMBEDDING_MODEL_DEFAULT_FILE_URLS/);
+  assert.match(source, /https:\/\/feigenbaum\.cdn\.bcebos\.com\/onnx\/3dspeaker_speech_campplus_sv_zh-cn_16k-common\.onnx/);
+  assert.match(source, /SPEAKER_EMBEDDING_MODEL_FILE_URLS/);
+  assert.match(source, /SPEAKER_EMBEDDING_MODEL_ENDPOINTS/);
+  assert.match(source, /speakerEmbeddingDownloadUrls\(\)/);
+  assert.match(source, /downloadSingleFileModelWithFallback/);
+  assert.match(source, /Tried \$\{sourceUrls\.length\} source\(s\)/);
+  assert.match(source, /\.\.\.SPEAKER_EMBEDDING_MODEL_DEFAULT_FILE_URLS/);
+  assert.doesNotMatch(
+    source,
+    /downloadSingleFileModel\(\s*def,\s*SPEAKER_EMBEDDING_MODEL_FILENAME,\s*`https:\/\/huggingface\.co\/\$\{SPEAKER_EMBEDDING_MODEL_ID\}/,
+  );
+});
+
 test('SpeakerEmbeddingExtractor resolves its default ONNX file through LocalModelManager', () => {
   const source = read('electron/services/speaker/SpeakerEmbeddingExtractor.ts');
   assert.match(source, /resolveLocalModelFile/);
