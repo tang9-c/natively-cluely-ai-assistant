@@ -588,6 +588,10 @@ interface ElectronAPI {
     surface?: string;
     metadata?: Record<string, unknown>;
   }) => Promise<{ success: boolean; id?: string; error?: string }>;
+  getAnswerQualityMetrics: (input?: {
+    sinceMs?: number;
+    mode?: string;
+  }) => Promise<{ success: boolean; metrics?: any; error?: string }>;
   getContextHealth: () => Promise<any>;
   knowledgeSelectMaterials: () => Promise<{ success?: boolean; cancelled?: boolean; filePaths?: string[]; error?: string }>;
   knowledgeUploadMaterials: (filePaths: string[]) => Promise<{ success: boolean; materials: any[]; errors?: Array<{ filePath: string; error: string }> }>;
@@ -1809,6 +1813,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     surface?: string;
     metadata?: Record<string, unknown>;
   }) => ipcRenderer.invoke('track-answer-quality-event', input),
+  getAnswerQualityMetrics: (input?: { sinceMs?: number; mode?: string }) =>
+    ipcRenderer.invoke('get-answer-quality-metrics', input),
   getContextHealth: () => ipcRenderer.invoke('get-context-health'),
   knowledgeSelectMaterials: () => ipcRenderer.invoke('knowledge:select-materials'),
   knowledgeUploadMaterials: (filePaths: string[]) =>

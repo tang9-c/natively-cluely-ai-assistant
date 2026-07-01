@@ -3719,6 +3719,18 @@ export function initializeIpcHandlers(appState: AppState): void {
     return DatabaseManager.getInstance().trackAnswerQualityEvent(input);
   });
 
+  safeHandle('get-answer-quality-metrics', async (_, input?: { sinceMs?: number; mode?: string }) => {
+    try {
+      return {
+        success: true,
+        metrics: DatabaseManager.getInstance().getAnswerQualityMetrics(input),
+      };
+    } catch (error: any) {
+      console.error('[IPC get-answer-quality-metrics] Error:', error);
+      return { success: false, error: error?.message || 'metrics_unavailable' };
+    }
+  });
+
   safeHandle('get-context-health', async () => {
     const ragManager = appState.getRAGManager();
     const db = DatabaseManager.getInstance();

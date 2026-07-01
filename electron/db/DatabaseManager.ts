@@ -136,6 +136,21 @@ export interface AnswerContextTraceInput {
     status?: string;
 }
 
+export interface AnswerQualityMetrics {
+    shownCount: number;
+    copiedCount: number;
+    acceptedCount: number;
+    ignoredCount: number;
+    regeneratedCount: number;
+    averageLatencyMs: number | null;
+    p95LatencyMs: number | null;
+    citationHitRate: number;
+    userAcceptanceRate: number;
+    regenerationRate: number;
+    ragHitRate: number;
+    noContextAnswerRate: number;
+}
+
 export interface KnowledgeMaterialInput {
     id: string;
     fileName: string;
@@ -1456,6 +1471,118 @@ export class DatabaseManager {
             JSON.stringify(input.metadata ?? {}),
         );
         return { success: true, id };
+    }
+
+    public getAnswerQualityMetrics(input?: { sinceMs?: number; mode?: string }): AnswerQualityMetrics {
+        const emptyMetrics: AnswerQualityMetrics = {
+            shownCount: 0,
+            copiedCount: 0,
+            acceptedCount: 0,
+            ignoredCount: 0,
+            regeneratedCount: 0,
+            averageLatencyMs: null,
+            p95LatencyMs: null,
+            citationHitRate: 0,
+            userAcceptanceRate: 0,
+            regenerationRate: 0,
+            ragHitRate: 0,
+            noContextAnswerRate: 0,
+        };
+        if (!this.db) return emptyMetrics;
+
+        const filters: string[] = [];
+        const params: any[] = [];
+        if (Number.isFinite(input?.sinceMs)) {
+            filters.push("created_at >= datetime(? / 1000, 'unixepoch')");
+            params.push(input?.sinceMs);
+        }
+        if (input?.mode) {
+            filters.push('answer_type = ?');
+            params.push(input.mode);
+        }
+        const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+        const traces = this.db.prepare(`
+            SELECT *
+            FROM answer_context_traces
+            ${whereClause}
+        `).all(...params) as any[];
+        if (traces.length === 0) return emptyMetrics;
+
+        const traceIds = traces.map((trace) => trace.answer_id).filter(Boolean);
+        const eventRows = traceIds.length > 0
+            ? this.db.prepare(`
+                SELECT answer_id, event_type, surface, metadata_json, created_at
+                FROM answer_quality_events
+                WHERE answer_id IN (${traceIds.map(() => '?').join(',')})
+            `).all(...traceIds) as Array<{ answer_id: string; event_type: AnswerQualityEventType; surface: string; metadata_json: string; created_at: string }>
+            : [];
+        const dedupedEvents = new Map<string, { answer_id: string; event_type: AnswerQualityEventType; surface: string }>();
+        for (const event of eventRows) {
+            dedupedEvents.set(`${event.answer_id}:${event.event_type}:${event.surface}`, event);
+        }
+
+        const eventCounts = {
+            shown: 0,
+            copied: 0,
+            accepted: 0,
+            ignored: 0,
+            regenerated: 0,
+        };
+        for (const event of dedupedEvents.values()) {
+            eventCounts[event.event_type] += 1;
+        }
+
+        const latencies = traces
+            .map((trace) => Number(trace.latency_ms))
+            .filter((latency) => Number.isFinite(latency) && latency >= 0)
+            .sort((a, b) => a - b);
+        const averageLatencyMs = latencies.length > 0
+            ? Math.round(latencies.reduce((sum, latency) => sum + latency, 0) / latencies.length)
+            : null;
+        const p95LatencyMs = latencies.length > 0
+            ? latencies[Math.floor((latencies.length - 1) * 0.95)]
+            : null;
+
+        let citationHits = 0;
+        let ragAttempts = 0;
+        let ragHits = 0;
+        let noContextAnswers = 0;
+        for (const trace of traces) {
+            const contextPayload = safeJson<Record<string, unknown>>(trace.context_used_json, {});
+            const contextUsed = normalizeAnswerContextUsed(contextPayload);
+            const sourceStatus = normalizeAnswerSourceStatus((contextPayload as any).sourceStatus);
+            const citations = safeJson<unknown[]>(trace.citations_json, []);
+            const citationCount = Math.max(sourceStatus.citationCount, citations.length);
+            if (citationCount > 0) citationHits += 1;
+            if (sourceStatus.ragAttempted) ragAttempts += 1;
+            if (sourceStatus.ragAttempted && (sourceStatus.uploadedMaterialHitCount > 0 || contextUsed.uploadedDocumentRag)) {
+                ragHits += 1;
+            }
+            const onlyCurrentTranscript = contextUsed.currentTranscript
+                && !contextUsed.shortTermHistory
+                && !contextUsed.uploadedDocumentRag
+                && !contextUsed.historicalMeetings
+                && !contextUsed.longTermMemory
+                && !contextUsed.enterpriseKnowledge
+                && !contextUsed.screenContext;
+            if (onlyCurrentTranscript && citationCount === 0) noContextAnswers += 1;
+        }
+
+        const denominator = eventCounts.shown || traces.length;
+        return {
+            shownCount: eventCounts.shown,
+            copiedCount: eventCounts.copied,
+            acceptedCount: eventCounts.accepted,
+            ignoredCount: eventCounts.ignored,
+            regeneratedCount: eventCounts.regenerated,
+            averageLatencyMs,
+            p95LatencyMs,
+            citationHitRate: citationHits / denominator,
+            userAcceptanceRate: eventCounts.accepted / denominator,
+            regenerationRate: eventCounts.regenerated / denominator,
+            ragHitRate: ragAttempts > 0 ? ragHits / ragAttempts : 0,
+            noContextAnswerRate: noContextAnswers / denominator,
+        };
     }
 
     public upsertKnowledgeMaterial(input: KnowledgeMaterialInput): any | null {
