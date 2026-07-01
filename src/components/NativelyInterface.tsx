@@ -58,6 +58,7 @@ import type { TranscriptEmotion } from '../../shared/senseVoiceEmotion';
 import type {
   AnswerCitation,
   AnswerContextTrace,
+  AnswerQualityEventType,
   DynamicActionModeEvent,
   DynamicActionPayload,
   NativeAudioTranscriptPayload,
@@ -115,6 +116,15 @@ interface NativelyInterfaceProps {
   interfaceTheme?: MeetingInterfaceTheme;
   onOpenModes?: () => void;
 }
+
+type LatestAnswerLifecycle = {
+  answerId: string;
+  shownAt: number;
+  surface: string;
+  copied: boolean;
+  accepted: boolean;
+  regenerated: boolean;
+};
 
 import {
   DEFAULT_MODE_NAMES,
@@ -281,9 +291,29 @@ const getStatusToneClass = (tone: 'ok' | 'warn' | 'error'): string => {
 };
 
 const DEGRADED_REASON_LABELS: Record<string, string> = {
+  transcript_truncated: '当前转录已节选',
+  assistant_history_truncated: '短期历史已节选',
+  assistant_history_dropped: '短期历史未使用',
+  meeting_history_truncated: '历史会议已节选',
+  meeting_history_dropped: '历史会议未使用',
   uploaded_material_context_truncated: '上传资料已节选',
-  uploaded_material_rag_failed: '上传资料检索失败',
-  no_relevant_uploaded_material: '未找到相关上传资料',
+  uploaded_material_context_dropped: '上传资料未使用',
+  uploaded_material_rag_failed: '上传资料检索失败，本次答案未使用上传资料',
+  no_relevant_uploaded_material: '没有找到相关上传资料，本次答案仅使用会议上下文',
+  screen_context_failed: '屏幕上下文不可用，本次答案未参考屏幕',
+  screen_context_scope_blocked: '屏幕上下文被数据范围设置阻止',
+  screen_context_no_vision_provider: '当前模型不支持屏幕图像，本次答案未参考屏幕',
+  screen_context_truncated: '屏幕上下文已节选',
+  screen_context_dropped: '屏幕上下文未使用',
+  mode_context_truncated: '模式上下文已节选',
+  mode_context_dropped: '模式上下文未使用',
+  rag_unavailable: 'RAG 不可用',
+  embedding_unavailable: 'Embedding 不可用',
+  speaker_separation_unavailable: '说话人分离不可用，发言人归属可能不可靠',
+  stt_user_failed: '你的麦克风转写失败',
+  stt_interviewer_failed: '对方音频转写失败',
+  context_scope_denied: '上下文被数据范围设置阻止',
+  answer_trace_unavailable: '答案可信度追踪不可用',
 };
 
 const formatDegradedReasonForDisplay = (reason?: string | null): string | null => {
@@ -292,7 +322,7 @@ const formatDegradedReasonForDisplay = (reason?: string | null): string | null =
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)
-    .map((item) => DEGRADED_REASON_LABELS[item] ?? '上下文已部分裁剪');
+    .map((item) => DEGRADED_REASON_LABELS[item] ?? `上下文降级：${item}`);
   const uniqueLabels = [...new Set(labels)];
   return uniqueLabels.length > 0 ? uniqueLabels.join('、') : null;
 };
@@ -544,6 +574,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [latestAnswerTrace, setLatestAnswerTrace] = useState<AnswerContextTrace | null>(null);
   const [latestAnswerCitations, setLatestAnswerCitations] = useState<AnswerCitation[]>([]);
   const [latestDegradedReason, setLatestDegradedReason] = useState<string | undefined>(undefined);
+  const latestAnswerLifecycleRef = useRef<LatestAnswerLifecycle | null>(null);
   const activeMode = modes.find((mode) => mode.isActive) ?? null;
   const activeModeDisplayLabel = activeMode
     ? getModeDisplayName(activeMode)
@@ -1986,20 +2017,50 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // PERF: useCallback so the reference is stable between renders. MessageRow
   // (memoized below) receives this as a prop; without a stable identity its
   // memo comparator would never match and the bailout would not fire.
+  const emitAnswerQualityEvent = useCallback((
+    answerId: string,
+    eventType: AnswerQualityEventType,
+    metadata?: Record<string, unknown>,
+    surface = 'overlay',
+  ) => {
+    return window.electronAPI
+      ?.trackAnswerQualityEvent?.({
+        answerId,
+        eventType,
+        surface,
+        metadata,
+      })
+      .catch(() => {});
+  }, []);
+
   const handleCopy = useCallback((text: string) => {
     navigator.clipboard.writeText(text);
     analytics.trackCopyAnswer();
     if (latestAnswerId) {
-      window.electronAPI
-        ?.trackAnswerQualityEvent?.({
-          answerId: latestAnswerId,
-          eventType: 'copied',
-          surface: 'overlay',
-        })
-        .catch(() => {});
+      const lifecycle = latestAnswerLifecycleRef.current;
+      if (lifecycle?.answerId === latestAnswerId) {
+        lifecycle.copied = true;
+      }
+      void emitAnswerQualityEvent(latestAnswerId, 'copied', {
+        answerAgeMs: lifecycle?.answerId === latestAnswerId
+          ? Date.now() - lifecycle.shownAt
+          : undefined,
+        hadCitations: latestAnswerCitations.length > 0,
+      });
     }
     // Optional: Trigger a small toast or state change for visual feedback
-  }, [latestAnswerId]);
+  }, [emitAnswerQualityEvent, latestAnswerCitations.length, latestAnswerId]);
+
+  const handleAcceptLatestAnswer = useCallback(() => {
+    const lifecycle = latestAnswerLifecycleRef.current;
+    if (!lifecycle || lifecycle.accepted) return;
+    lifecycle.accepted = true;
+    void emitAnswerQualityEvent(lifecycle.answerId, 'accepted', {
+      answerAgeMs: Date.now() - lifecycle.shownAt,
+      hadCitations: latestAnswerCitations.length > 0,
+      triggerSource: 'accept_button',
+    }, lifecycle.surface);
+  }, [emitAnswerQualityEvent, latestAnswerCitations.length]);
 
   const handleWhatToSay = async (
     promptInstruction?: string | React.MouseEvent,
@@ -2007,6 +2068,22 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   ) => {
     const dynamicPromptInstruction =
       typeof promptInstruction === 'string' ? promptInstruction : undefined;
+    const previousLifecycle = latestAnswerLifecycleRef.current;
+    if (
+      previousLifecycle &&
+      !previousLifecycle.copied &&
+      !previousLifecycle.accepted &&
+      !previousLifecycle.regenerated
+    ) {
+      const terminalEvent: AnswerQualityEventType =
+        generationOptions?.source === 'dynamic_action' ? 'ignored' : 'regenerated';
+      previousLifecycle.regenerated = terminalEvent === 'regenerated';
+      void emitAnswerQualityEvent(previousLifecycle.answerId, terminalEvent, {
+        answerAgeMs: Date.now() - previousLifecycle.shownAt,
+        triggerSource: generationOptions?.source ?? 'overlay',
+        hadCitations: latestAnswerCitations.length > 0,
+      }, previousLifecycle.surface);
+    }
     setIsExpanded(true);
     setIsProcessing(true);
     analytics.trackCommandExecuted('what_to_say');
@@ -2061,13 +2138,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setLatestAnswerCitations(result.citations ?? []);
       setLatestDegradedReason(result.degradedReason);
       if (result.answerId) {
-        window.electronAPI
-          ?.trackAnswerQualityEvent?.({
-            answerId: result.answerId,
-            eventType: 'shown',
-            surface: generationOptions?.source ?? 'overlay',
-          })
-          .catch(() => {});
+        const surface = generationOptions?.source ?? 'overlay';
+        latestAnswerLifecycleRef.current = {
+          answerId: result.answerId,
+          shownAt: Date.now(),
+          surface,
+          copied: false,
+          accepted: false,
+          regenerated: false,
+        };
+        void emitAnswerQualityEvent(result.answerId, 'shown', {
+          triggerSource: generationOptions?.source ?? 'overlay',
+          hadCitations: (result.citations ?? []).length > 0,
+        }, surface);
       }
     } catch (err) {
       setMessages((prev) => [
@@ -3478,6 +3561,26 @@ Provide only the answer, nothing else.`;
     : '上下文：仅使用当前输入';
   const materialCitationCount = latestAnswerCitations.filter((c) => c.sourceType === 'uploaded_material').length;
   const latestDegradedReasonDisplay = formatDegradedReasonForDisplay(latestDegradedReason);
+  const latestSourceStatus = latestAnswerTrace?.sourceStatus;
+  const confidenceHealthItems = [
+    latestSourceStatus?.ragReady ? 'RAG 可用' : 'RAG 不可用',
+    latestSourceStatus?.embeddingReady ? 'Embedding 可用' : 'Embedding 不可用',
+    latestSourceStatus?.uploadedMaterialHitCount && latestSourceStatus.uploadedMaterialHitCount > 0
+      ? `资料命中 ${latestSourceStatus.uploadedMaterialHitCount}`
+      : '上传资料未使用',
+    latestSourceStatus?.screenContextStatus === 'available'
+      ? '屏幕上下文可用'
+      : latestSourceStatus?.screenContextStatus === 'failed'
+        ? '屏幕上下文不可用'
+        : '未使用屏幕上下文',
+    sttUserStatus === 'connected' ? '你的 STT 正常' : '你的 STT 异常',
+    sttInterviewerStatus === 'connected' ? '对方 STT 正常' : '对方 STT 异常',
+    latestSourceStatus?.speakerSeparationStatus === 'on'
+      ? '说话人分离可用'
+      : latestSourceStatus?.speakerSeparationStatus === 'off'
+        ? '说话人分离关闭'
+        : '说话人分离不可用',
+  ];
 
   const copyDiagnostics = async () => {
     const version = import.meta.env.VITE_APP_VERSION || 'unknown';
@@ -3968,17 +4071,29 @@ Provide only the answer, nothing else.`;
                     <div
                       className={`flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-[11px] ${isLightTheme ? 'bg-white/60 border-black/10 text-slate-700' : 'bg-black/25 border-white/10 text-slate-200'}`}
                     >
-                      <ShieldCheck className="w-3.5 h-3.5 opacity-70" />
-                      <span>{contextStatusText}</span>
-                      {materialCitationCount > 0 && (
-                        <span className="opacity-75">资料引用 {materialCitationCount}</span>
-                      )}
-                      {latestDegradedReasonDisplay && (
-                        <span className={isLightTheme ? 'text-amber-700' : 'text-amber-200'}>
-                          {latestDegradedReasonDisplay}
-                        </span>
-                      )}
-                    </div>
+	                      <ShieldCheck className="w-3.5 h-3.5 opacity-70" />
+	                      <span>{contextStatusText}</span>
+	                      <span className="opacity-75">{confidenceHealthItems.join(' · ')}</span>
+	                      {materialCitationCount > 0 && (
+	                        <span className="opacity-75">资料引用 {materialCitationCount}</span>
+	                      )}
+	                      {latestDegradedReasonDisplay && (
+	                        <span className={isLightTheme ? 'text-amber-700' : 'text-amber-200'}>
+	                          {latestDegradedReasonDisplay}
+	                        </span>
+	                      )}
+	                      {latestAnswerId && (
+	                        <button
+	                          type="button"
+	                          onClick={handleAcceptLatestAnswer}
+	                          className={`rounded border px-2 py-0.5 text-[11px] transition-colors ${isLightTheme ? 'border-black/10 hover:bg-black/5' : 'border-white/10 hover:bg-white/10'}`}
+	                          title="标记这个答案有用"
+	                          aria-label="标记这个答案有用"
+	                        >
+	                          <Check className="h-3 w-3" />
+	                        </button>
+	                      )}
+	                    </div>
                   )}
                   {/* Every row spans the full inner width of the scroll
                                         container, which itself rides the shell's animated
