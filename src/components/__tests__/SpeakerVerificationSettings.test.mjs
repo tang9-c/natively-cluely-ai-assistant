@@ -28,15 +28,28 @@ test('SpeakerVerificationSettings exposes register, re-record, and delete states
   assert.doesNotMatch(source, /speakerVerificationGetModelStatus/);
 });
 
-test('SettingsOverlay renders speaker verification near speaker separation', () => {
+test('SettingsOverlay exposes My Voice as an independent settings tab above Audio', () => {
   const settings = read('src/components/SettingsOverlay.tsx');
-  assert.match(settings, /SpeakerVerificationSettings/);
-  const verificationIndex = settings.indexOf('<SpeakerVerificationSettings');
-  const separationIndex = settings.indexOf('>Speaker separation</label>');
-  const languageIndex = settings.indexOf('Recognition Language Family');
-  assert.ok(verificationIndex > 0, 'SpeakerVerificationSettings should render');
-  assert.ok(verificationIndex < languageIndex, '我的声音设置应放在语言控制之前');
-  assert.ok(Math.abs(verificationIndex - separationIndex) < 4000, '我的声音设置应靠近说话人分离设置');
+  assert.match(settings, /setActiveTab\('speaker-verification'\)/);
+  assert.match(settings, /activeTab === 'speaker-verification'/);
+  assert.match(settings, /> 我的声音/);
+
+  const voiceNavIndex = settings.indexOf("setActiveTab('speaker-verification')");
+  const audioNavIndex = settings.indexOf("setActiveTab('audio')");
+  assert.ok(voiceNavIndex > 0, '我的声音导航入口应存在');
+  assert.ok(voiceNavIndex < audioNavIndex, '我的声音导航入口应放在 Audio 之上');
+
+  const voiceTabIndex = settings.indexOf("{activeTab === 'speaker-verification' && (");
+  const audioTabIndex = settings.indexOf("{activeTab === 'audio' && (");
+  const verificationIndex = settings.indexOf('<SpeakerVerificationSettings', voiceTabIndex);
+  assert.ok(verificationIndex > voiceTabIndex, 'SpeakerVerificationSettings should render in speaker-verification tab');
+  assert.ok(verificationIndex < audioTabIndex, 'SpeakerVerificationSettings should render before the Audio tab block');
+
+  const audioBlockEnd = settings.indexOf("{activeTab === 'help'", audioTabIndex);
+  const audioBlock = settings.slice(audioTabIndex, audioBlockEnd);
+  assert.doesNotMatch(audioBlock, /<SpeakerVerificationSettings/);
+  assert.doesNotMatch(audioBlock, /我的声音/);
+  assert.doesNotMatch(audioBlock, /speaker-verification/);
 });
 
 test('UI copy states the only purpose and deletion behavior', () => {

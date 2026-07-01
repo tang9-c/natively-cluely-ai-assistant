@@ -353,6 +353,37 @@ interface SettingsOverlayProps {
     initialTab?: string;
 }
 
+type SettingsTab =
+    | 'general'
+    | 'natively-api'
+    | 'ai-providers'
+    | 'knowledge'
+    | 'research'
+    | 'skills'
+    | 'speaker-verification'
+    | 'audio'
+    | 'keybinds'
+    | 'help'
+    | 'about';
+
+const SETTINGS_TABS = new Set<SettingsTab>([
+    'general',
+    'natively-api',
+    'ai-providers',
+    'knowledge',
+    'research',
+    'skills',
+    'speaker-verification',
+    'audio',
+    'keybinds',
+    'help',
+    'about',
+]);
+
+const normalizeSettingsTab = (tab: string): SettingsTab => (
+    SETTINGS_TABS.has(tab as SettingsTab) ? tab as SettingsTab : 'general'
+);
+
 type SttLanguageCompatibility = {
     requestedLanguageKey: string;
     effectiveLanguageKey: string;
@@ -368,12 +399,12 @@ const screenRecordingFallbackReasons = new Set([
 
 const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, initialTab = 'general' }) => {
     const isLight = useResolvedTheme() === 'light';
-    const [activeTab, setActiveTab] = useState(initialTab);
+    const [activeTab, setActiveTab] = useState<SettingsTab>(normalizeSettingsTab(initialTab));
 
     // Sync active tab when modal opens
     useEffect(() => {
         if (isOpen && initialTab) {
-            setActiveTab(initialTab);
+            setActiveTab(normalizeSettingsTab(initialTab));
         }
     }, [isOpen, initialTab]);
 
@@ -1510,6 +1541,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         <Sparkles size={16} className={activeTab === 'skills' ? 'text-accent-primary' : 'text-text-secondary'} /> 技能
                                     </button>
                                     <button
+                                        onClick={() => setActiveTab('speaker-verification')}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'speaker-verification' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
+                                    >
+                                        <User size={16} className={activeTab === 'speaker-verification' ? 'text-accent-primary' : 'text-text-secondary'} /> 我的声音
+                                    </button>
+                                    <button
                                         onClick={() => setActiveTab('audio')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'audio' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
@@ -2311,6 +2348,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                 </div>
                             )}
 
+                            {activeTab === 'speaker-verification' && (
+                                <div className="space-y-6 animated fadeIn">
+                                    <div>
+                                        <h3 className="text-lg font-bold text-text-primary mb-1">我的声音</h3>
+                                        <p className="text-xs text-text-secondary mb-5">注册本机声音，让会议中你的发言被识别为 ME。</p>
+                                        <SpeakerVerificationSettings />
+                                    </div>
+                                </div>
+                            )}
+
                             {activeTab === 'audio' && (
                                 <div className="space-y-6 animated fadeIn">
                                     {/* ── Speech Provider Section ── */}
@@ -2651,8 +2698,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     </div>
                                                 </div>
                                             </div>
-
-                                            <SpeakerVerificationSettings />
 
                                             {/* Recognition Language Family */}
                                             <CustomSelect
