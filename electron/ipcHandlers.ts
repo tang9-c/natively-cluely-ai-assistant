@@ -8,6 +8,7 @@ import * as path from 'path';
 import { AudioDevices } from './audio/AudioDevices';
 import { resolveSttLanguageCompatibility } from './audio/sttLanguageCompatibility';
 import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manager
+import type { AnswerSourceStatus } from './db/DatabaseManager';
 import { AppState } from './main';
 import {
   repairMacTccPermissions,
@@ -2851,6 +2852,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         const citations: any[] = [];
         const degradedReasons: string[] = [];
         const contextBudgetDegradedReasons: string[] = [];
+        let materialRagAttempted = false;
+        let uploadedMaterialHitCount = 0;
+        let whatToAnswerTrace: any | null = null;
 
         const validatedImagePaths: string[] | undefined = imagePaths?.length ? [] : undefined;
 
@@ -2954,15 +2958,17 @@ export function initializeIpcHandlers(appState: AppState): void {
         let uploadedMaterialContext = typeof options?.uploadedMaterialContext === 'string'
           ? options.uploadedMaterialContext
           : undefined;
+        const ragManagerForHealth = appState.getRAGManager();
         try {
           const searchQuery = typeof question === 'string' && question.trim()
             ? question.trim()
             : sanitizeModeEvent(options?.modeEvent)?.retrievalQuery;
           if (searchQuery) {
-            const ragManager = appState.getRAGManager();
+            materialRagAttempted = true;
             const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
-            const materialService = new KnowledgeMaterialService(DatabaseManager.getInstance(), ragManager?.getEmbeddingPipeline?.());
+            const materialService = new KnowledgeMaterialService(DatabaseManager.getInstance(), ragManagerForHealth?.getEmbeddingPipeline?.());
             const materialHits = await materialService.search(searchQuery, { limit: 4 });
+            uploadedMaterialHitCount = materialHits.length;
             if (materialHits.length > 0) {
               citations.push(...materialHits.map((hit: any) => ({
                 sourceType: hit.sourceType,
@@ -2983,6 +2989,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         } catch (materialError: any) {
           degradedReasons.push('uploaded_material_rag_failed');
           console.warn('[IPC] generate-what-to-say: material RAG failed', { errorClass: materialError?.name || 'Error' });
+        }
+        const ragReady = Boolean(ragManagerForHealth?.isReady?.());
+        const embeddingReady = Boolean(ragManagerForHealth?.getEmbeddingPipeline?.().isReady?.());
+        if (!ragReady && materialRagAttempted && !degradedReasons.includes('rag_unavailable')) {
+          degradedReasons.push('rag_unavailable');
+        }
+        if (!embeddingReady && materialRagAttempted && !degradedReasons.includes('embedding_unavailable')) {
+          degradedReasons.push('embedding_unavailable');
         }
 
         const intelligenceManager = appState.getIntelligenceManager();
@@ -3005,12 +3019,48 @@ export function initializeIpcHandlers(appState: AppState): void {
                 : undefined,
             modeEvent: sanitizeModeEvent(options?.modeEvent),
             contextDegradedReasons: contextBudgetDegradedReasons,
+            traceSink: (trace) => {
+              whatToAnswerTrace = trace;
+            },
           },
         );
         if (screenContextStatus === 'failed') degradedReasons.push('screen_context_failed');
         for (const reason of contextBudgetDegradedReasons) {
           if (!degradedReasons.includes(reason)) degradedReasons.push(reason);
         }
+        if (!answer) {
+          return {
+            answer: null,
+            question: question || 'inferred from context',
+            screenContextStatus,
+            degradedReason: degradedReasons.length > 0 ? degradedReasons.join(',') : undefined,
+            citations,
+            imageCount: validatedImagePaths?.length || 0,
+            usedImageInput: Boolean(validatedImagePaths?.length),
+          };
+        }
+        const uploadedDocumentRagUsed = citations.some((citation) => citation.sourceType === 'uploaded_material');
+        const mergedContextUsed = {
+          currentTranscript: Boolean(whatToAnswerTrace?.contextUsed?.currentTranscript ?? true),
+          shortTermHistory: Boolean(whatToAnswerTrace?.contextUsed?.shortTermHistory ?? true),
+          uploadedDocumentRag: uploadedDocumentRagUsed,
+          historicalMeetings: Boolean(whatToAnswerTrace?.contextUsed?.historicalMeetings),
+          longTermMemory: Boolean(whatToAnswerTrace?.contextUsed?.longTermMemory),
+          enterpriseKnowledge: Boolean(whatToAnswerTrace?.contextUsed?.enterpriseKnowledge),
+          screenContext: screenContextStatus === 'available',
+        };
+        const mergedSourceStatus: AnswerSourceStatus = {
+          ragAttempted: materialRagAttempted,
+          ragReady,
+          embeddingReady,
+          uploadedMaterialHitCount,
+          citationCount: citations.length,
+          screenContextStatus,
+        };
+        const mergedDegradedReasons = [
+          ...(whatToAnswerTrace?.degradedReasons ?? []),
+          ...degradedReasons,
+        ].filter((reason, index, list) => reason && list.indexOf(reason) === index);
         const llmHelper = appState.processingHelper?.getLLMHelper?.();
         const contextTrace = DatabaseManager.getInstance().saveAnswerContextTrace({
           answerId,
@@ -3019,32 +3069,31 @@ export function initializeIpcHandlers(appState: AppState): void {
           provider: llmHelper?.getCurrentProvider?.() ?? null,
           model: llmHelper?.getCurrentModel?.() ?? null,
           latencyMs: Date.now() - startedAt,
-          contextUsed: {
-            currentTranscript: true,
-            shortTermHistory: true,
-            uploadedDocumentRag: citations.some((citation) => citation.sourceType === 'uploaded_material'),
-            historicalMeetings: false,
-            longTermMemory: false,
-            enterpriseKnowledge: false,
-            screenContext: screenContextStatus === 'available',
-          },
-          sourceStatus: {
-            ragAttempted: false,
-            ragReady: false,
-            embeddingReady: false,
-            uploadedMaterialHitCount: 0,
-            citationCount: citations.length,
-            screenContextStatus,
-          },
+          contextUsed: mergedContextUsed,
+          sourceStatus: mergedSourceStatus,
           citations,
-          degradedReason: degradedReasons.length > 0 ? degradedReasons.join(',') : null,
+          degradedReason: mergedDegradedReasons.length > 0 ? mergedDegradedReasons.join(',') : null,
+          status: whatToAnswerTrace?.status ?? 'generated',
         });
+        if (!contextTrace) {
+          console.warn('[IPC] generate-what-to-say: answer trace persistence failed');
+          return {
+            answer: null,
+            question: question || 'inferred from context',
+            error: 'answer_trace_unavailable',
+            screenContextStatus,
+            degradedReason: 'answer_trace_unavailable',
+            citations: [],
+            imageCount: validatedImagePaths?.length || 0,
+            usedImageInput: Boolean(validatedImagePaths?.length),
+          };
+        }
         return {
           answerId,
           answer,
           question: question || 'inferred from context',
           contextTrace,
-          degradedReason: degradedReasons.length > 0 ? degradedReasons.join(',') : undefined,
+          degradedReason: mergedDegradedReasons.length > 0 ? mergedDegradedReasons.join(',') : undefined,
           citations,
           screenContextStatus,
           visionProviderUsed,
