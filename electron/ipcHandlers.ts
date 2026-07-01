@@ -3028,6 +3028,14 @@ export function initializeIpcHandlers(appState: AppState): void {
             enterpriseKnowledge: false,
             screenContext: screenContextStatus === 'available',
           },
+          sourceStatus: {
+            ragAttempted: false,
+            ragReady: false,
+            embeddingReady: false,
+            uploadedMaterialHitCount: 0,
+            citationCount: citations.length,
+            screenContextStatus,
+          },
           citations,
           degradedReason: degradedReasons.length > 0 ? degradedReasons.join(',') : null,
         });

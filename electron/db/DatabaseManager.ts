@@ -65,6 +65,52 @@ export interface Meeting {
 
 export type AnswerQualityEventType = 'shown' | 'copied' | 'accepted' | 'ignored' | 'regenerated';
 
+export type AnswerDegradedReason =
+    | 'transcript_truncated'
+    | 'assistant_history_truncated'
+    | 'assistant_history_dropped'
+    | 'meeting_history_truncated'
+    | 'meeting_history_dropped'
+    | 'uploaded_material_context_truncated'
+    | 'uploaded_material_context_dropped'
+    | 'uploaded_material_rag_failed'
+    | 'no_relevant_uploaded_material'
+    | 'screen_context_failed'
+    | 'screen_context_scope_blocked'
+    | 'screen_context_no_vision_provider'
+    | 'screen_context_truncated'
+    | 'screen_context_dropped'
+    | 'mode_context_truncated'
+    | 'mode_context_dropped'
+    | 'rag_unavailable'
+    | 'embedding_unavailable'
+    | 'speaker_separation_unavailable'
+    | 'stt_user_failed'
+    | 'stt_interviewer_failed'
+    | 'context_scope_denied';
+
+export interface AnswerContextUsed {
+    currentTranscript: boolean;
+    shortTermHistory: boolean;
+    uploadedDocumentRag: boolean;
+    historicalMeetings: boolean;
+    longTermMemory: boolean;
+    enterpriseKnowledge: boolean;
+    screenContext: boolean;
+}
+
+export interface AnswerSourceStatus {
+    ragAttempted: boolean;
+    ragReady: boolean;
+    embeddingReady: boolean;
+    uploadedMaterialHitCount: number;
+    citationCount: number;
+    screenContextStatus: 'not_available' | 'available' | 'failed';
+    sttUserStatus?: 'connected' | 'reconnecting' | 'failed';
+    sttInterviewerStatus?: 'connected' | 'reconnecting' | 'failed';
+    speakerSeparationStatus?: 'off' | 'on' | 'unavailable';
+}
+
 export interface AnswerCitationRecord {
     sourceType: 'current_meeting' | 'historical_meeting' | 'uploaded_material' | 'long_term_memory' | 'enterprise_knowledge' | 'screen_context';
     sourceId: string;
@@ -83,7 +129,8 @@ export interface AnswerContextTraceInput {
     provider?: string | null;
     model?: string | null;
     latencyMs?: number | null;
-    contextUsed: Record<string, boolean>;
+    contextUsed: AnswerContextUsed;
+    sourceStatus: AnswerSourceStatus;
     citations?: AnswerCitationRecord[];
     degradedReason?: string | null;
     status?: string;
@@ -122,6 +169,42 @@ function safeJson<T>(value: string | null | undefined, fallback: T): T {
     } catch {
         return fallback;
     }
+}
+
+function normalizeAnswerContextUsed(input?: Partial<AnswerContextUsed> | null): AnswerContextUsed {
+    return {
+        currentTranscript: Boolean(input?.currentTranscript),
+        shortTermHistory: Boolean(input?.shortTermHistory),
+        uploadedDocumentRag: Boolean(input?.uploadedDocumentRag),
+        historicalMeetings: Boolean(input?.historicalMeetings),
+        longTermMemory: Boolean(input?.longTermMemory),
+        enterpriseKnowledge: Boolean(input?.enterpriseKnowledge),
+        screenContext: Boolean(input?.screenContext),
+    };
+}
+
+function normalizeStatusValue<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+    return allowed.includes(value as T) ? value as T : fallback;
+}
+
+function normalizeAnswerSourceStatus(input?: Partial<AnswerSourceStatus> | null): AnswerSourceStatus {
+    return {
+        ragAttempted: Boolean(input?.ragAttempted),
+        ragReady: Boolean(input?.ragReady),
+        embeddingReady: Boolean(input?.embeddingReady),
+        uploadedMaterialHitCount: Number.isFinite(input?.uploadedMaterialHitCount) ? Number(input?.uploadedMaterialHitCount) : 0,
+        citationCount: Number.isFinite(input?.citationCount) ? Number(input?.citationCount) : 0,
+        screenContextStatus: normalizeStatusValue(input?.screenContextStatus, ['not_available', 'available', 'failed'] as const, 'not_available'),
+        sttUserStatus: input?.sttUserStatus
+            ? normalizeStatusValue(input.sttUserStatus, ['connected', 'reconnecting', 'failed'] as const, 'failed')
+            : undefined,
+        sttInterviewerStatus: input?.sttInterviewerStatus
+            ? normalizeStatusValue(input.sttInterviewerStatus, ['connected', 'reconnecting', 'failed'] as const, 'failed')
+            : undefined,
+        speakerSeparationStatus: input?.speakerSeparationStatus
+            ? normalizeStatusValue(input.speakerSeparationStatus, ['off', 'on', 'unavailable'] as const, 'unavailable')
+            : undefined,
+    };
 }
 
 export class DatabaseManager {
@@ -1297,6 +1380,10 @@ export class DatabaseManager {
     public saveAnswerContextTrace(input: AnswerContextTraceInput): any | null {
         if (!this.db) return null;
         const id = `act_${Date.now()}_${cryptoRandomId()}`;
+        const contextPayload = {
+            ...normalizeAnswerContextUsed(input.contextUsed),
+            sourceStatus: normalizeAnswerSourceStatus(input.sourceStatus),
+        };
         const row = {
             id,
             answer_id: input.answerId,
@@ -1307,7 +1394,7 @@ export class DatabaseManager {
             provider: input.provider ?? null,
             model: input.model ?? null,
             latency_ms: Number.isFinite(input.latencyMs) ? input.latencyMs : null,
-            context_used_json: JSON.stringify(input.contextUsed ?? {}),
+            context_used_json: JSON.stringify(contextPayload),
             citations_json: JSON.stringify(input.citations ?? []),
             degraded_reason: input.degradedReason ?? null,
             status: input.status ?? 'generated',
@@ -1337,9 +1424,11 @@ export class DatabaseManager {
         if (!this.db) return null;
         const row = this.db.prepare('SELECT * FROM answer_context_traces WHERE answer_id = ?').get(answerId) as any;
         if (!row) return null;
+        const contextPayload = safeJson(row.context_used_json, {});
         return {
             ...row,
-            contextUsed: safeJson(row.context_used_json, {}),
+            contextUsed: normalizeAnswerContextUsed(contextPayload),
+            sourceStatus: normalizeAnswerSourceStatus((contextPayload as any).sourceStatus),
             citations: safeJson(row.citations_json, []),
         };
     }

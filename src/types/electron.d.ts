@@ -76,6 +76,52 @@ export interface ModeIntentKeywordSetting {
 
 export type AnswerQualityEventType = 'shown' | 'copied' | 'accepted' | 'ignored' | 'regenerated'
 
+export type AnswerDegradedReason =
+  | 'transcript_truncated'
+  | 'assistant_history_truncated'
+  | 'assistant_history_dropped'
+  | 'meeting_history_truncated'
+  | 'meeting_history_dropped'
+  | 'uploaded_material_context_truncated'
+  | 'uploaded_material_context_dropped'
+  | 'uploaded_material_rag_failed'
+  | 'no_relevant_uploaded_material'
+  | 'screen_context_failed'
+  | 'screen_context_scope_blocked'
+  | 'screen_context_no_vision_provider'
+  | 'screen_context_truncated'
+  | 'screen_context_dropped'
+  | 'mode_context_truncated'
+  | 'mode_context_dropped'
+  | 'rag_unavailable'
+  | 'embedding_unavailable'
+  | 'speaker_separation_unavailable'
+  | 'stt_user_failed'
+  | 'stt_interviewer_failed'
+  | 'context_scope_denied'
+
+export interface AnswerContextUsed {
+  currentTranscript: boolean
+  shortTermHistory: boolean
+  uploadedDocumentRag: boolean
+  historicalMeetings: boolean
+  longTermMemory: boolean
+  enterpriseKnowledge: boolean
+  screenContext: boolean
+}
+
+export interface AnswerSourceStatus {
+  ragAttempted: boolean
+  ragReady: boolean
+  embeddingReady: boolean
+  uploadedMaterialHitCount: number
+  citationCount: number
+  screenContextStatus: 'not_available' | 'available' | 'failed'
+  sttUserStatus?: 'connected' | 'reconnecting' | 'failed'
+  sttInterviewerStatus?: 'connected' | 'reconnecting' | 'failed'
+  speakerSeparationStatus?: 'off' | 'on' | 'unavailable'
+}
+
 export interface AnswerCitation {
   sourceType: 'current_meeting' | 'historical_meeting' | 'uploaded_material' | 'long_term_memory' | 'enterprise_knowledge' | 'screen_context'
   sourceId: string
@@ -88,10 +134,39 @@ export interface AnswerCitation {
 export interface AnswerContextTrace {
   answer_id?: string
   answerId?: string
-  contextUsed?: Record<string, boolean>
-  citations?: AnswerCitation[]
+  contextUsed: AnswerContextUsed
+  sourceStatus: AnswerSourceStatus
+  citations: AnswerCitation[]
   degraded_reason?: string | null
   degradedReason?: string | null
+  status?: string
+  provider?: string | null
+  model?: string | null
+  latency_ms?: number | null
+  latencyMs?: number | null
+}
+
+export interface AnswerQualityEventMetadata {
+  surface?: 'overlay' | 'launcher' | 'dynamic_action' | string
+  answerAgeMs?: number
+  triggerSource?: string
+  modeTemplate?: string
+  hadCitations?: boolean
+}
+
+export interface AnswerQualityMetrics {
+  shownCount: number
+  copiedCount: number
+  acceptedCount: number
+  ignoredCount: number
+  regeneratedCount: number
+  averageLatencyMs: number | null
+  p95LatencyMs: number | null
+  citationHitRate: number
+  userAcceptanceRate: number
+  regenerationRate: number
+  ragHitRate: number
+  noContextAnswerRate: number
 }
 
 export interface KnowledgeMaterial {
@@ -535,7 +610,8 @@ export interface ElectronAPI {
   ragIsMeetingProcessed: (meetingId: string) => Promise<boolean>
   ragGetQueueStatus: () => Promise<{ pending: number; processing: number; completed: number; failed: number }>
   ragRetryEmbeddings: () => Promise<{ success: boolean }>
-  trackAnswerQualityEvent: (input: { answerId: string; eventType: AnswerQualityEventType; surface?: string; metadata?: Record<string, unknown> }) => Promise<{ success: boolean; id?: string; error?: string }>
+  trackAnswerQualityEvent: (input: { answerId: string; eventType: AnswerQualityEventType; surface?: string; metadata?: AnswerQualityEventMetadata }) => Promise<{ success: boolean; id?: string; error?: string }>
+  getAnswerQualityMetrics: (input?: { sinceMs?: number; mode?: string }) => Promise<{ success: boolean; metrics?: AnswerQualityMetrics; error?: string }>
   getContextHealth: () => Promise<ContextHealth>
   knowledgeSelectMaterials: () => Promise<{ success?: boolean; cancelled?: boolean; filePaths?: string[]; error?: string }>
   knowledgeUploadMaterials: (filePaths: string[]) => Promise<{ success: boolean; materials: KnowledgeMaterial[]; errors?: Array<{ filePath: string; error: string }> }>
