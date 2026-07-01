@@ -389,3 +389,18 @@ describe('modePromptFor unknown mode handling', () => {
     assert.match(source, /throw new Error\(/);
   });
 });
+
+describe('Phase 0 answer confidence eval coverage', () => {
+  test('eval harness keeps deterministic trace expectations for required modes', async () => {
+    const evalHarnessPath = path.resolve(__dirname, '../modes-live-response-eval.ts');
+    const source = await fs.readFile(evalHarnessPath, 'utf8');
+
+    assert.match(source, /phase0TraceExpectations/);
+    assert.match(source, /sales-pricing-objection/);
+    assert.match(source, /technical-incomplete-problem/);
+    assert.match(source, /team-meet-action-items/);
+    assert.match(source, /looking-for-work-no-overclaim/);
+    assert.match(source, /uploadedDocumentRag:\s*true/);
+    assert.match(source, /currentTranscript:\s*true/);
+  });
+});

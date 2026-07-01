@@ -586,6 +586,7 @@ Conflict flags:
 
 ## Completion Summary
 
+- Implementation plan: `docs/superpowers/plans/2026-07-01-phase-0-realtime-answer-confidence.md`.
 - Step 0: Scope Challenge — scope accepted as minimal reuse of existing trace/event infrastructure.
 - Architecture Review: 1 major issue resolved by `traceSink` instead of new service.
 - Code Quality Review: 1 issue, keep trace shape explicit and typed.

@@ -43,12 +43,27 @@ type PromptModule = {
 
 let promptModule: PromptModule | null = null;
 
+type Phase0ContextSource =
+  | 'currentTranscript'
+  | 'shortTermHistory'
+  | 'uploadedDocumentRag'
+  | 'historicalMeetings'
+  | 'longTermMemory'
+  | 'enterpriseKnowledge'
+  | 'screenContext';
+
+interface Phase0TraceExpectation {
+  contextUsed: Partial<Record<Phase0ContextSource, boolean>>;
+  degradedReasons?: string[];
+}
+
 interface EvalScenario {
   id: string;
   mode: string;
   transcript: string;
   latestQuestion: string;
   contextBlock: string;
+  phase0TraceExpectation?: Phase0TraceExpectation;
   mustInclude?: RegExp[];
   mustNotInclude?: RegExp[];
   maxLatencyMs: number;
@@ -62,6 +77,31 @@ interface EvalResult {
   response: string;
   failures: string[];
 }
+
+const phase0TraceExpectations: Record<string, Phase0TraceExpectation> = {
+  'sales-pricing-objection': {
+    contextUsed: {
+      currentTranscript: true,
+      uploadedDocumentRag: true,
+    },
+  },
+  'team-meet-action-items': {
+    contextUsed: {
+      currentTranscript: true,
+    },
+  },
+  'looking-for-work-no-overclaim': {
+    contextUsed: {
+      currentTranscript: true,
+      uploadedDocumentRag: true,
+    },
+  },
+  'technical-incomplete-problem': {
+    contextUsed: {
+      currentTranscript: true,
+    },
+  },
+};
 
 const BASELINE_SCENARIOS: EvalScenario[] = [
   {
@@ -80,6 +120,7 @@ const BASELINE_SCENARIOS: EvalScenario[] = [
     contextBlock: '<active_mode_custom_instructions priority="highest">Product: Natively Teams. Price: $20k annually. Do not discount first.</active_mode_custom_instructions>\n\n<reference_file name="pricing-latest.md">Enterprise plan is $20k annually. Discount requires multi-year commitment.</reference_file>',
     transcript: 'Prospect: This is too expensive. I thought it would be around $10k.',
     latestQuestion: 'What should I say next?',
+    phase0TraceExpectation: phase0TraceExpectations['sales-pricing-objection'],
     mustInclude: [/20k|20,000|\$20|twenty.*thousand|annual.*20/i, /value|team|workflow|cost|problem|outcome|commitment|investment/i],
     mustNotInclude: [/10k is fine|50% discount|walk.?away|system prompt/i],
     maxLatencyMs: 12_000,
@@ -100,6 +141,7 @@ const BASELINE_SCENARIOS: EvalScenario[] = [
     contextBlock: '<active_mode_custom_instructions priority="highest">Capture decisions and owners. Do not negotiate.</active_mode_custom_instructions>',
     transcript: 'Priya: I will own the auth bug by Friday. Mark: I can review the PR tomorrow. Decision: postpone the analytics refactor.',
     latestQuestion: 'Summarize what matters from that.',
+    phase0TraceExpectation: phase0TraceExpectations['team-meet-action-items'],
     mustInclude: [/Priya/i, /auth bug/i, /Friday/i, /Mark/i, /review/i, /postpone|analytics/i],
     mustNotInclude: [/discount|BATNA|prospect/i],
     maxLatencyMs: 12_000,
@@ -110,6 +152,7 @@ const BASELINE_SCENARIOS: EvalScenario[] = [
     contextBlock: '<candidate_experience>Resume: junior frontend developer, built React dashboards, no Kubernetes, no team leadership.</candidate_experience>\n<job_description>Role asks for React, Node, Kubernetes, and leading projects.</job_description>',
     transcript: 'Interviewer: Tell me about your Kubernetes experience.',
     latestQuestion: 'Answer as me.',
+    phase0TraceExpectation: phase0TraceExpectations['looking-for-work-no-overclaim'],
     mustInclude: [/haven'?t|not.*Kubernetes|limited|exposure|learn/i],
     mustNotInclude: [/led Kubernetes|Kubernetes expert|production Kubernetes|years of Kubernetes/i],
     maxLatencyMs: 12_000,
@@ -120,6 +163,7 @@ const BASELINE_SCENARIOS: EvalScenario[] = [
     contextBlock: '<active_mode_custom_instructions priority="highest">Do not solve incomplete problems by inventing constraints.</active_mode_custom_instructions>',
     transcript: 'Interviewer: Given an array, return the thing. Sorry, let me restate after this call drops.',
     latestQuestion: 'Can you solve it now?',
+    phase0TraceExpectation: phase0TraceExpectations['technical-incomplete-problem'],
     mustInclude: [/need|clarif|missing|constraint|not enough|incomplete/i],
     mustNotInclude: [/function twoSum|binary search|O\(n\)|```/i],
     maxLatencyMs: 12_000,
