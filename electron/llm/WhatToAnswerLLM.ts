@@ -8,6 +8,11 @@ import { ScreenContext } from "../services/screen/types";
 import { PromptAssembler } from "../services/context/PromptAssembler";
 import { checkAnswerForCodeBugs } from "./CodeSanityCheck";
 import type { ProviderDataScope } from "./ProviderRouter";
+import type {
+    AnswerContextUsed,
+    AnswerDegradedReason,
+    AnswerSourceStatus,
+} from "../db/DatabaseManager";
 import { buildRetrievalQuery, detectLanguage, escapeXmlText } from "../services/dynamic-actions/ModeEventUtils";
 
 export interface ModeEventContext {
@@ -24,6 +29,15 @@ export interface ModeEventContext {
     promptInstruction?: string;
     answerShape?: string;
 }
+
+export interface WhatToAnswerTraceMetadata {
+    contextUsed: AnswerContextUsed;
+    sourceStatus: AnswerSourceStatus;
+    degradedReasons: AnswerDegradedReason[];
+    status?: 'generated' | 'generated_with_fallback';
+}
+
+export type WhatToAnswerTraceSink = (trace: WhatToAnswerTraceMetadata) => void;
 
 // Dynamically imported to avoid circular dependency at module load time
 type ModesManagerType = {
@@ -93,6 +107,10 @@ function buildStructuredRetrievalQuery(cleanedTranscript: string, intentResult?:
     });
 }
 
+function uniqueReasons(reasons: Array<string | undefined>): AnswerDegradedReason[] {
+    return [...new Set(reasons.filter(Boolean))] as AnswerDegradedReason[];
+}
+
 export class WhatToAnswerLLM {
     private llmHelper: LLMHelper;
     private modesManager?: ReturnType<ModesManagerType['getInstance']>;
@@ -120,6 +138,48 @@ export class WhatToAnswerLLM {
         return full;
     }
 
+    private buildTraceMetadata(input: {
+        workingTranscript?: string;
+        temporalContext?: TemporalContext;
+        uploadedMaterialContext?: string;
+        screenContext?: ScreenContext;
+        imagePaths?: string[];
+        packet?: any;
+        degradedReasons?: string[];
+        status?: 'generated' | 'generated_with_fallback';
+    }): WhatToAnswerTraceMetadata {
+        const screenContextAvailable = Boolean(
+            input.screenContext?.extractedText ||
+            input.screenContext?.visibleSummary ||
+            input.screenContext?.ocrText ||
+            (Array.isArray(input.imagePaths) && input.imagePaths.length > 0)
+        );
+        return {
+            contextUsed: {
+                currentTranscript: Boolean(input.workingTranscript?.trim()),
+                shortTermHistory: Boolean(input.temporalContext?.hasRecentResponses && input.temporalContext.previousResponses?.length),
+                uploadedDocumentRag: Boolean(input.uploadedMaterialContext?.trim()),
+                historicalMeetings: false,
+                longTermMemory: false,
+                enterpriseKnowledge: false,
+                screenContext: screenContextAvailable,
+            },
+            sourceStatus: {
+                ragAttempted: Boolean(input.uploadedMaterialContext),
+                ragReady: false,
+                embeddingReady: false,
+                uploadedMaterialHitCount: input.uploadedMaterialContext?.trim() ? 1 : 0,
+                citationCount: 0,
+                screenContextStatus: screenContextAvailable ? 'available' : 'not_available',
+            },
+            degradedReasons: uniqueReasons([
+                ...(input.degradedReasons ?? []),
+                ...(input.packet?.metadata?.degradedReasons ?? []),
+            ]),
+            status: input.status ?? 'generated',
+        };
+    }
+
     async *generateStream(
         cleanedTranscript: string,
         temporalContext?: TemporalContext,
@@ -134,6 +194,7 @@ export class WhatToAnswerLLM {
         activeSkill?: { id: string; name: string; promptBlock: string },
         modeEvent?: ModeEventContext,
         contextDegradedReasons?: string[],
+        traceSink?: WhatToAnswerTraceSink,
     ): AsyncGenerator<string> {
         const MEASURE = process.env.MEASURE_LATENCY === 'true';
         let tStart = 0, tIntent = 0, tTemporal = 0, tMode = 0, tTrunc = 0, tPrompt = 0, tStream = 0;
@@ -155,6 +216,27 @@ export class WhatToAnswerLLM {
                     const privacyPrefix = this.llmHelper.isLocalOnly()
                         ? 'Local-only mode is enabled, so I cannot send screenshots to a cloud vision model.'
                         : 'The selected model does not support image input.';
+                    traceSink?.({
+                        contextUsed: {
+                            currentTranscript: Boolean(cleanedTranscript?.trim()),
+                            shortTermHistory: false,
+                            uploadedDocumentRag: false,
+                            historicalMeetings: false,
+                            longTermMemory: false,
+                            enterpriseKnowledge: false,
+                            screenContext: false,
+                        },
+                        sourceStatus: {
+                            ragAttempted: false,
+                            ragReady: false,
+                            embeddingReady: false,
+                            uploadedMaterialHitCount: 0,
+                            citationCount: 0,
+                            screenContextStatus: 'failed',
+                        },
+                        degradedReasons: ['screen_context_no_vision_provider'],
+                        status: 'generated_with_fallback',
+                    });
                     yield `${privacyPrefix} Switch to a vision-capable model to answer from the current screen. Current provider: ${provider}; model: ${model}.`;
                     return;
                 }
@@ -348,6 +430,15 @@ ANSWER SHAPE: ${intentResult.answerShape}
 
             if (MEASURE) tPrompt = performance.now();
             if (MEASURE) tStream = performance.now();
+            traceSink?.(this.buildTraceMetadata({
+                workingTranscript,
+                temporalContext,
+                uploadedMaterialContext,
+                screenContext,
+                imagePaths,
+                packet,
+                degradedReasons: contextDegradedReasons,
+            }));
 
             // Stream with per-token latency tracking
             let tokenCount = 0;
