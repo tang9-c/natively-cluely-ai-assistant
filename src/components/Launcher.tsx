@@ -879,21 +879,21 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                                                         try {
                                                                                             const fullMeeting = await window.electronAPI.getMeetingDetails(m.id);
                                                                                             if (fullMeeting) {
-                                                                                                generateMeetingPDF(fullMeeting);
+                                                                                                await generateMeetingPDF(fullMeeting);
                                                                                             } else {
-                                                                                                generateMeetingPDF(m);
+                                                                                                await generateMeetingPDF(m);
                                                                                             }
                                                                                         } catch (e) {
                                                                                             console.error("Failed to fetch details for PDF", e);
-                                                                                            generateMeetingPDF(m);
+                                                                                            await generateMeetingPDF(m);
                                                                                         }
                                                                                     } else {
-                                                                                        generateMeetingPDF(m);
+                                                                                        await generateMeetingPDF(m);
                                                                                     }
                                                                                 }}
                                                                             >
                                                                                 <Download size={13} />
-                                                                                Export
+                                                                                导出
                                                                             </button>
                                                                             <button
                                                                                 className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-lg transition-colors text-left"
@@ -909,7 +909,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                                                 }}
                                                                             >
                                                                                 <Trash2 size={13} />
-                                                                                Delete
+                                                                                删除
                                                                             </button>
                                                                         </div>
                                                                     </motion.div>

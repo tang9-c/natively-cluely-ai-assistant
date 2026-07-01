@@ -1,3 +1,4 @@
+import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
 interface Meeting {
@@ -24,103 +25,282 @@ interface Meeting {
     }>;
 }
 
-export const generateMeetingPDF = (meeting: Meeting) => {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 20;
-    const contentWidth = pageWidth - (margin * 2);
-    let y = 20;
+const PAGE_WIDTH_PX = 794;
+const PAGE_HEIGHT_PX = 1123;
+const PAGE_PADDING_PX = 56;
+const PDF_WIDTH_MM = 210;
+const PDF_HEIGHT_MM = 297;
 
-    // Helper for adding text with auto-page break
-    const addText = (text: string, fontSize: number = 10, isBold: boolean = false, color: string = '#000000') => {
-        doc.setFontSize(fontSize);
-        doc.setFont('helvetica', isBold ? 'bold' : 'normal');
-        doc.setTextColor(color);
+const EXPORT_FONT_STACK = [
+    '-apple-system',
+    'BlinkMacSystemFont',
+    '"Segoe UI"',
+    '"PingFang SC"',
+    '"Hiragino Sans GB"',
+    '"Microsoft YaHei"',
+    '"Noto Sans CJK SC"',
+    '"Noto Sans SC"',
+    'Arial',
+    'sans-serif',
+].join(', ');
 
-        const lines = doc.splitTextToSize(text, contentWidth);
+const splitLongText = (text: string): string[] => {
+    const chunks: string[] = [];
+    const maxLength = 700;
+    let remaining = text;
 
-        // Check if we need a new page
-        if (y + (lines.length * fontSize * 0.5) > doc.internal.pageSize.getHeight() - margin) {
-            doc.addPage();
-            y = 20;
-        }
+    while (remaining.length > maxLength) {
+        const window = remaining.slice(0, maxLength);
+        const breakAt = Math.max(
+            window.lastIndexOf('\n'),
+            window.lastIndexOf('。'),
+            window.lastIndexOf('！'),
+            window.lastIndexOf('？'),
+            window.lastIndexOf('. '),
+            window.lastIndexOf('? '),
+            window.lastIndexOf('! '),
+            window.lastIndexOf(' '),
+        );
+        const splitAt = breakAt > 200 ? breakAt + 1 : maxLength;
+        chunks.push(remaining.slice(0, splitAt).trim());
+        remaining = remaining.slice(splitAt).trim();
+    }
 
-        doc.text(lines, margin, y);
-        y += (lines.length * fontSize * 0.5) + 2; // Add some spacing
-    };
+    if (remaining) {
+        chunks.push(remaining);
+    }
 
-    const addVerticalSpace = (amount: number) => {
-        y += amount;
-    };
+    return chunks;
+};
 
-    // --- Header ---
-    addText(meeting.title, 18, true, '#000000');
-    addVerticalSpace(2);
-    addText(`${meeting.date} • ${meeting.duration}`, 10, false, '#666666');
-    addVerticalSpace(10);
+const addTextBlock = (
+    blocks: HTMLElement[],
+    text: string | undefined,
+    className: string,
+) => {
+    const normalized = (text ?? '').trim();
+    if (!normalized) return;
 
-    // --- Summary ---
+    splitLongText(normalized).forEach(chunk => {
+        const element = document.createElement('div');
+        element.className = className;
+        element.textContent = chunk;
+        blocks.push(element);
+    });
+};
+
+const addSectionTitle = (blocks: HTMLElement[], title: string) => {
+    addTextBlock(blocks, title, 'section-title');
+};
+
+const formatTimestamp = (timestamp: number): string => {
+    if (!Number.isFinite(timestamp)) return '';
+
+    return new Date(timestamp).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+    });
+};
+
+const buildBlocks = (meeting: Meeting): HTMLElement[] => {
+    const blocks: HTMLElement[] = [];
+
+    addTextBlock(blocks, meeting.title, 'title');
+    addTextBlock(blocks, `${meeting.date} - ${meeting.duration}`, 'meta');
+
     if (meeting.summary) {
-        addText('Summary', 14, true, '#000000');
-        addVerticalSpace(2);
-        addText(meeting.summary, 10, false, '#333333');
-        addVerticalSpace(8);
+        addSectionTitle(blocks, 'Summary');
+        addTextBlock(blocks, meeting.summary, 'paragraph');
     }
 
-    if (meeting.detailedSummary) {
-        if (meeting.detailedSummary.actionItems && meeting.detailedSummary.actionItems.length > 0) {
-            addText('Action Items', 12, true, '#000000');
-            meeting.detailedSummary.actionItems.forEach(item => {
-                addText(`• ${item}`, 10, false, '#333333');
-            });
-            addVerticalSpace(5);
-        }
-
-        if (meeting.detailedSummary.keyPoints && meeting.detailedSummary.keyPoints.length > 0) {
-            addText('Key Points', 12, true, '#000000');
-            meeting.detailedSummary.keyPoints.forEach(point => {
-                addText(`• ${point}`, 10, false, '#333333');
-            });
-            addVerticalSpace(8);
-        }
-    }
-
-    // --- Transcript ---
-    if (meeting.transcript && meeting.transcript.length > 0) {
-        addText('Transcript', 14, true, '#000000');
-        addVerticalSpace(2);
-
-        meeting.transcript.forEach(entry => {
-            const timeStr = new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            // Speaker line
-            addText(`${entry.speaker} [${timeStr}]`, 10, true, '#444444');
-            // Text line
-            addText(entry.text, 10, false, '#333333');
-            addVerticalSpace(2);
+    if (meeting.detailedSummary?.actionItems?.length) {
+        addSectionTitle(blocks, 'Action Items');
+        meeting.detailedSummary.actionItems.forEach(item => {
+            addTextBlock(blocks, `- ${item}`, 'list-item');
         });
-        addVerticalSpace(8);
     }
 
-    // --- Usage (Q&A / AI Interactions) ---
-    if (meeting.usage && meeting.usage.length > 0) {
-        addText('AI Usage & Interactions', 14, true, '#000000');
-        addVerticalSpace(2);
+    if (meeting.detailedSummary?.keyPoints?.length) {
+        addSectionTitle(blocks, 'Key Points');
+        meeting.detailedSummary.keyPoints.forEach(point => {
+            addTextBlock(blocks, `- ${point}`, 'list-item');
+        });
+    }
 
+    if (meeting.transcript?.length) {
+        addSectionTitle(blocks, 'Transcript');
+        meeting.transcript.forEach(entry => {
+            const timeStr = formatTimestamp(entry.timestamp);
+            addTextBlock(blocks, `${entry.speaker}${timeStr ? ` [${timeStr}]` : ''}`, 'speaker');
+            addTextBlock(blocks, entry.text, 'paragraph transcript-text');
+        });
+    }
+
+    if (meeting.usage?.length) {
+        addSectionTitle(blocks, 'AI Usage & Interactions');
         meeting.usage.forEach(item => {
             if (item.type === 'chat' && item.question && item.answer) {
-                addText(`Q: ${item.question}`, 10, true, '#222222');
-                addText(`A: ${item.answer}`, 10, false, '#444444');
-                addVerticalSpace(3);
-            }
-            else if (item.type === 'assist' && item.answer) {
-                addText('Assist:', 10, true, '#222222');
-                addText(item.answer, 10, false, '#444444');
-                addVerticalSpace(3);
+                addTextBlock(blocks, `Q: ${item.question}`, 'speaker');
+                addTextBlock(blocks, `A: ${item.answer}`, 'paragraph');
+            } else if (item.type === 'assist' && item.answer) {
+                addTextBlock(blocks, 'Assist:', 'speaker');
+                addTextBlock(blocks, item.answer, 'paragraph');
+            } else if (item.type === 'followup_questions' && item.items?.length) {
+                addTextBlock(blocks, 'Follow-up Questions:', 'speaker');
+                item.items.forEach(question => {
+                    addTextBlock(blocks, `- ${question}`, 'list-item');
+                });
             }
         });
     }
 
-    // Save
-    const safeTitle = meeting.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    doc.save(`${safeTitle}.pdf`);
+    return blocks;
+};
+
+const createPage = () => {
+    const page = document.createElement('div');
+    page.className = 'natively-pdf-page';
+    return page;
+};
+
+const createRenderRoot = () => {
+    const root = document.createElement('div');
+    root.style.position = 'fixed';
+    root.style.left = '-10000px';
+    root.style.top = '0';
+    root.style.width = `${PAGE_WIDTH_PX}px`;
+    root.style.background = '#ffffff';
+    root.style.color = '#111827';
+    root.style.fontFamily = EXPORT_FONT_STACK;
+    root.style.zIndex = '-1';
+
+    const style = document.createElement('style');
+    style.textContent = `
+        .natively-pdf-page {
+            box-sizing: border-box;
+            width: ${PAGE_WIDTH_PX}px;
+            min-height: ${PAGE_HEIGHT_PX}px;
+            padding: ${PAGE_PADDING_PX}px;
+            background: #ffffff;
+            color: #111827;
+            font-family: ${EXPORT_FONT_STACK};
+            line-height: 1.55;
+            overflow: hidden;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+        .natively-pdf-page .title {
+            margin: 0 0 10px;
+            color: #111827;
+            font-size: 26px;
+            font-weight: 700;
+            line-height: 1.25;
+        }
+        .natively-pdf-page .meta {
+            margin: 0 0 26px;
+            color: #6b7280;
+            font-size: 13px;
+            line-height: 1.35;
+        }
+        .natively-pdf-page .section-title {
+            margin: 22px 0 8px;
+            color: #111827;
+            font-size: 18px;
+            font-weight: 700;
+            line-height: 1.35;
+        }
+        .natively-pdf-page .paragraph,
+        .natively-pdf-page .list-item {
+            margin: 0 0 10px;
+            color: #374151;
+            font-size: 13px;
+            line-height: 1.65;
+            white-space: pre-wrap;
+        }
+        .natively-pdf-page .speaker {
+            margin: 12px 0 4px;
+            color: #374151;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.4;
+        }
+        .natively-pdf-page .transcript-text {
+            color: #4b5563;
+        }
+    `;
+
+    root.appendChild(style);
+    document.body.appendChild(root);
+    return root;
+};
+
+const paginateBlocks = (root: HTMLElement, blocks: HTMLElement[]) => {
+    const pages: HTMLElement[] = [];
+    let page = createPage();
+    root.appendChild(page);
+    pages.push(page);
+
+    blocks.forEach(block => {
+        page.appendChild(block);
+
+        if (page.scrollHeight > PAGE_HEIGHT_PX && page.childElementCount > 1) {
+            page.removeChild(block);
+            page = createPage();
+            root.appendChild(page);
+            pages.push(page);
+            page.appendChild(block);
+        }
+    });
+
+    return pages;
+};
+
+const safePdfFilename = (title: string): string => {
+    const normalized = title
+        .trim()
+        .replace(/[\\/:*?"<>|]+/g, '_')
+        .replace(/\s+/g, '_')
+        .slice(0, 80);
+
+    return `${normalized || 'meeting'}.pdf`;
+};
+
+export const generateMeetingPDF = async (meeting: Meeting): Promise<void> => {
+    const root = createRenderRoot();
+
+    try {
+        const pages = paginateBlocks(root, buildBlocks(meeting));
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+        for (let index = 0; index < pages.length; index += 1) {
+            const canvas = await html2canvas(pages[index], {
+                backgroundColor: '#ffffff',
+                logging: false,
+                scale: 2,
+                useCORS: true,
+                windowWidth: PAGE_WIDTH_PX,
+                windowHeight: PAGE_HEIGHT_PX,
+            });
+
+            if (index > 0) {
+                doc.addPage();
+            }
+
+            doc.addImage(
+                canvas.toDataURL('image/png'),
+                'PNG',
+                0,
+                0,
+                PDF_WIDTH_MM,
+                PDF_HEIGHT_MM,
+                undefined,
+                'FAST',
+            );
+        }
+
+        doc.save(safePdfFilename(meeting.title));
+    } finally {
+        root.remove();
+    }
 };
