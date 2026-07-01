@@ -346,6 +346,15 @@ import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
 
+type MeetingAudioSpeaker = 'interviewer' | 'user';
+
+interface MeetingEchoTranscriptDiagnostic {
+  at: number;
+  normalizedText: string;
+  textLength: number;
+  final: boolean;
+}
+
 export class AppState {
   private static instance: AppState | null = null
 
@@ -403,6 +412,11 @@ export class AppState {
   private _micTccRepairBannerShown: boolean = false;
   private _meetingHasMicTranscript: boolean = false;
   private _meetingHasAnyTranscript: boolean = false;
+  private _meetingEchoTranscriptDiagnostics: Partial<Record<MeetingAudioSpeaker, MeetingEchoTranscriptDiagnostic>> = {};
+  private _meetingAudioPeakDiagnostics: Record<MeetingAudioSpeaker, { peak: number; at: number }> = {
+    interviewer: { peak: 0, at: 0 },
+    user: { peak: 0, at: 0 },
+  };
   private _ollamaBootstrapPromise: Promise<void> | null = null;
   private screenshotCaptureInProgress: boolean = false;
 
@@ -1074,6 +1088,113 @@ export class AppState {
     }
   }
 
+  private resetMeetingEchoDiagnostics(): void {
+    this._meetingEchoTranscriptDiagnostics = {};
+    this._meetingAudioPeakDiagnostics = {
+      interviewer: { peak: 0, at: 0 },
+      user: { peak: 0, at: 0 },
+    };
+  }
+
+  private recordMeetingAudioPeak(speaker: MeetingAudioSpeaker, chunk: Buffer, now: number = Date.now()): void {
+    let peak = 0;
+    const stride = Math.max(2, (chunk.length >> 6) & ~1);
+    for (let i = 0; i + 1 < chunk.length; i += stride) {
+      const sample = chunk.readInt16LE(i);
+      const abs = sample < 0 ? -sample : sample;
+      if (abs > peak) peak = abs;
+    }
+    this._meetingAudioPeakDiagnostics[speaker] = {
+      peak: peak / 32768,
+      at: now,
+    };
+  }
+
+  private normalizeTranscriptForEchoDiagnostics(text: string): string {
+    return text
+      .toLowerCase()
+      .replace(/[\s\p{P}\p{S}]+/gu, '');
+  }
+
+  private transcriptSimilarity(a: string, b: string): number {
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+
+    if (a.length < 2 || b.length < 2) {
+      const aChars = new Set([...a]);
+      const bChars = new Set([...b]);
+      let overlap = 0;
+      for (const ch of aChars) {
+        if (bChars.has(ch)) overlap++;
+      }
+      const union = new Set([...aChars, ...bChars]).size;
+      return union === 0 ? 0 : overlap / union;
+    }
+
+    const bigrams = new Map<string, number>();
+    for (let i = 0; i < a.length - 1; i++) {
+      const key = a.slice(i, i + 2);
+      bigrams.set(key, (bigrams.get(key) ?? 0) + 1);
+    }
+
+    let overlap = 0;
+    for (let i = 0; i < b.length - 1; i++) {
+      const key = b.slice(i, i + 2);
+      const count = bigrams.get(key) ?? 0;
+      if (count > 0) {
+        overlap++;
+        if (count === 1) bigrams.delete(key);
+        else bigrams.set(key, count - 1);
+      }
+    }
+
+    return (2 * overlap) / ((a.length - 1) + (b.length - 1));
+  }
+
+  private logMeetingEchoDiagnostics(
+    speaker: MeetingAudioSpeaker,
+    text: string,
+    final: boolean,
+    receivedAt: number,
+  ): void {
+    if (!final) return;
+
+    const counterpart: MeetingAudioSpeaker = speaker === 'user' ? 'interviewer' : 'user';
+    const normalizedText = this.normalizeTranscriptForEchoDiagnostics(text);
+    const current: MeetingEchoTranscriptDiagnostic = {
+      at: receivedAt,
+      normalizedText,
+      textLength: text.trim().length,
+      final,
+    };
+    const previousCounterpart = this._meetingEchoTranscriptDiagnostics[counterpart];
+    const currentPeak = this._meetingAudioPeakDiagnostics[speaker];
+    const counterpartPeak = this._meetingAudioPeakDiagnostics[counterpart];
+    const deltaMs = previousCounterpart ? receivedAt - previousCounterpart.at : null;
+    const absDeltaMs = deltaMs == null ? null : Math.abs(deltaMs);
+    const sameWindow = absDeltaMs != null && absDeltaMs <= 2500;
+    const textSimilarity =
+      previousCounterpart && sameWindow
+        ? this.transcriptSimilarity(normalizedText, previousCounterpart.normalizedText)
+        : null;
+
+    console.log('[Main][EchoDiag] meeting transcript channel comparison', {
+      channel: speaker === 'user' ? 'mic' : 'system',
+      counterpartChannel: counterpart === 'user' ? 'mic' : 'system',
+      sameWindow,
+      deltaMs,
+      textSimilarity,
+      textLength: current.textLength,
+      counterpartTextLength: previousCounterpart?.textLength ?? null,
+      audioPeak: currentPeak.peak,
+      counterpartAudioPeak: counterpartPeak.peak,
+      audioPeakAgeMs: currentPeak.at > 0 ? receivedAt - currentPeak.at : null,
+      counterpartAudioPeakAgeMs: counterpartPeak.at > 0 ? receivedAt - counterpartPeak.at : null,
+    });
+
+    this._meetingEchoTranscriptDiagnostics[speaker] = current;
+  }
+
   private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider | null {
     const { CredentialsManager } = require('./services/CredentialsManager');
     const sttProvider = CredentialsManager.getInstance().getSttProvider();
@@ -1143,6 +1264,8 @@ export class AppState {
         emotionSource: segment.emotionSource,
         speakerVerification: segment.speakerVerification
       };
+
+      this.logMeetingEchoDiagnostics(speaker, segment.text, segment.isFinal, receivedAt);
 
       this.intelligenceManager.handleTranscript(transcriptPayload);
 
@@ -1517,6 +1640,7 @@ export class AppState {
         }
       }
 
+      this.recordMeetingAudioPeak('interviewer', sttChunk, now);
       this.googleSTT?.write(sttChunk);
     });
     capture.on('sample_rate_changed', (rate: number) => {
@@ -1688,6 +1812,7 @@ export class AppState {
         }
       }
 
+      this.recordMeetingAudioPeak('user', chunk, now);
       this.googleSTT_User?.write(chunk);
     });
     capture.on('sample_rate_changed', (rate: number) => {
@@ -3064,6 +3189,7 @@ export class AppState {
     this._micTccRepairBannerShown = false;
     this._meetingHasMicTranscript = false;
     this._meetingHasAnyTranscript = false;
+    this.resetMeetingEchoDiagnostics();
     if (this._systemAudioRecoveryTimer) {
       clearTimeout(this._systemAudioRecoveryTimer);
       this._systemAudioRecoveryTimer = null;
