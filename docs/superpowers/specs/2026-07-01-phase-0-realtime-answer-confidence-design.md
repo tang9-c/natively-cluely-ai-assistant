@@ -1,69 +1,194 @@
 # Phase 0 Realtime Answer Confidence Design
 
 Date: 2026-07-01
-Status: approved design, ready for implementation planning
+Status: revised after adversarial review, ready for implementation planning
 Source plan: `docs/engineering/PHASE_0_REALTIME_ANSWER_CONFIDENCE_PLAN.md`
 
 ## Goal
 
-Make every realtime answer auditable.
+Make every realtime answer auditable, citable, and measurable without replacing the existing streaming architecture.
 
 For each generated answer, the app must know:
 
-- which context sources were actually used
-- which context sources were unavailable or degraded
+- which context sources were actually eligible, attempted, used, omitted, or degraded
+- which exact evidence chunks back each visible citation
+- whether a citation can still be opened against the same source version
 - whether the user saw, copied, accepted, ignored, or regenerated the answer
-- whether a prompt, RAG, memory, or context-selection change improved answer quality
+- whether a prompt, retrieval, memory, or context-selection change improved groundedness
 
-This phase must ship the complete loop before adding more context sources. More context without measurement makes failures harder to explain.
+This phase must close the loop for realtime answers before adding more context sources. More context without orchestration, citations, and evals makes failures harder to explain.
 
-## Confirmed Product Decisions
+## Non-Negotiable Scope
 
-- Scope: implement the full Phase 0 loop in one pass.
-- `accepted`: explicit small accept/useful action on the latest answer.
-- `ignored`: when a shown answer is replaced by a new answer before copy, accept, or regenerate.
-- UI: extend the existing answer context pill/banner, not a new large panel.
-- Storage: reuse existing local SQLite trace and event tables.
-- Telemetry: no remote analytics backend in this phase.
+This phase covers three high-risk paths:
 
-## Architecture
+1. Unified retrieval orchestration for realtime answers.
+2. Citable UI with citation-to-source validation.
+3. Offline groundedness evaluation harness.
 
-Use the existing realtime answer path and add a narrow confidence trace beside it.
+This phase does not rewrite RAG ingestion, replace streaming, add remote analytics, or add new enterprise connectors.
 
-```text
-generate-what-to-say
-  -> material RAG / screen context / answerId
-  -> IntelligenceEngine.runWhatShouldISay
-  -> WhatToAnswerLLM.generateStream(..., traceSink)
-  -> traceSink captures context actually assembled for the model
-  -> saveAnswerContextTrace
-  -> renderer shows context + health + degraded reasons
-  -> trackAnswerQualityEvent
-  -> getAnswerQualityMetrics / eval reads local records
+## Entry Contract
+
+The single realtime answer entry remains the existing IPC channel:
+
+```ts
+ipcRenderer.invoke(
+  'generate-what-to-say',
+  question?: string,
+  imagePaths?: string[],
+  options?: {
+    promptInstruction?: string;
+    persist?: boolean;
+    source?: 'overlay' | 'launcher' | 'dynamic_action';
+    modeEvent?: ModeEventContext;
+  }
+)
 ```
 
-`WhatToAnswerLLM.generateStream` gets an optional `traceSink` callback. The callback fires after prompt assembly and before token streaming. This preserves the existing streaming contract and avoids turning answer generation into a new service.
+Rules:
 
-The IPC handler remains the owner of the final trace row because it already has the generated `answerId`, uploaded material result, screen context result, and latency.
+- Renderer code must not be allowed to pass raw `uploadedMaterialContext` or prebuilt citation context. The main process owns retrieval, citation construction, and scope enforcement.
+- `question`, `imagePaths`, and `modeEvent` are untrusted renderer input and must be validated before retrieval or model calls.
+- `source` is UI metadata only. It must not change provider policy or data scopes.
+- Invalid input returns `answer=null`, `statusCode='invalid-request'`, and no trace or quality event.
+- Permission or data-scope denial returns `answer=null` only when there is not enough allowed context to answer. Otherwise answer generation may continue with omitted sources and explicit degraded reasons.
 
-## Trace Fallback Contract
+The main-process owner is `electron/ipcHandlers.ts` `generate-what-to-say`. It calls retrieval, assembles trace metadata, persists trace, and returns `answerId`, `contextTrace`, `citations`, and `degradedReasons`.
 
-The confidence trace must exist for every non-null answer, including degraded answers that do not reach normal prompt assembly.
+## Unified Retrieval Contract
 
-Required behavior:
+Add a narrow orchestration boundary inside the existing realtime answer path. The implementation can live in `electron/services/context/RealtimeContextOrchestrator.ts` or as a small helper next to `PromptAssembler`, but one function must own source ordering, dedupe, trimming, and fallback.
 
-- Normal path: `traceSink` emits prompt-derived metadata after `PromptAssembler.assemble()` and before streaming.
-- Image early return: if attached images are present but the selected model cannot accept image input, produce a minimal trace with `screenContext=false`, `screenContextStatus='failed'`, and `screen_context_no_vision_provider`.
-- LLM stream error with fallback answer: persist a trace with `status='generated_with_fallback'` and the best available context metadata.
-- Screen understanding failure: persist a trace with `screenContext=false` and `screen_context_failed`.
-- Material RAG failure: persist a trace with `uploadedDocumentRag=false`, `ragAttempted=true`, and `uploaded_material_rag_failed`.
-- Invalid request that returns `answer=null`: do not create a trace and do not emit `shown`.
+```ts
+type RealtimeContextSource =
+  | 'current_transcript'
+  | 'short_term_history'
+  | 'uploaded_material'
+  | 'mode_reference'
+  | 'historical_meetings'
+  | 'profile_history'
+  | 'screen_context';
 
-Trace persistence failure is a confidence feature failure. If `saveAnswerContextTrace` returns null or throws, the IPC response must return `answer=null` with a controlled `answer_trace_unavailable` error. Do not display an untraceable answer as a successful realtime answer. This keeps the core invariant true: every non-null realtime answer has a persisted trace.
+type RealtimeContextCandidate = {
+  source: RealtimeContextSource;
+  sourceId: string;
+  chunkId?: string | number;
+  text: string;
+  score?: number;
+  tokenCount: number;
+  sourceVersion?: string;
+  contentHash?: string;
+  metadata?: Record<string, unknown>;
+};
 
-## Context Contract
+type RealtimeContextPlan = {
+  injected: RealtimeContextCandidate[];
+  omitted: Array<RealtimeContextCandidate & { reason: AnswerDegradedReason }>;
+  sourceStatus: AnswerSourceStatus;
+  degradedReasons: AnswerDegradedReason[];
+  contextFingerprint: string;
+  retrievalTimingMs: Record<RealtimeContextSource, number>;
+};
+```
 
-Every non-null realtime answer persists this exact shape:
+Source priority for Phase 0:
+
+1. Current transcript and direct user question.
+2. Screen context when image input is attached and screenshots scope is allowed.
+3. Uploaded material hits with valid citation anchors.
+4. Active mode reference context.
+5. Short-term assistant history.
+6. Historical meetings and profile history only if this path actually injects them.
+
+Budget rules:
+
+- Reserve model output and system prompt budget first.
+- Keep current transcript unless it alone exceeds the budget; then trim it and emit `transcript_truncated`.
+- Uploaded material and mode reference context are deduped by `(source, sourceId, chunkId, contentHash)` and then by normalized text hash.
+- When two candidates contain the same fact, keep the higher-priority source. Record the omitted duplicate as `duplicate_context_dropped`.
+- If budget is exceeded after required context, drop lower-priority candidates first and emit source-specific degraded reasons such as `uploaded_material_context_truncated`, `mode_context_dropped`, or `assistant_history_truncated`.
+- RAG no-hit, timeout, and scope-denied states are different states. They must not collapse into "no material".
+
+Fallback rules:
+
+- Uploaded material miss: answer may continue; trace has `ragAttempted=true`, `uploadedMaterialHitCount=0`, `uploadedDocumentRag=false`, and `no_relevant_uploaded_material`.
+- Uploaded material timeout/error: answer may continue; trace has `uploaded_material_rag_failed`, not `no_relevant_uploaded_material`.
+- Reference file scope denied: omit reference context, add `context_scope_denied`, and do not mark RAG or citations as used.
+- If all usable context is empty, return `answer=null`, `statusCode='no-context'`.
+
+## Data Scope Contract
+
+Every context source maps to provider scopes before retrieval and before outbound LLM calls:
+
+| Context | Scope |
+|---|---|
+| current transcript | `transcript` |
+| screen context and screenshots | `screenshots` |
+| uploaded material and mode reference files | `reference_files` |
+| short-term assistant history and profile history | `profile_history` |
+| historical meetings | `transcript` plus `profile_history` when tied to a profile |
+| embeddings | `embeddings` |
+
+Rules:
+
+- Retrieval that requires embeddings must call the embedding provider resolver with `providerDataScopes`.
+- Context injection into the final prompt must use `assertProviderDataScopes()` or `routeWithScopeFallback()` through `LLMHelper` before any cloud provider sees scoped data.
+- If cloud scope is denied and local fallback is available, local fallback may receive the scoped context. The trace must record `scopeFallback='local'`.
+- If cloud scope is denied and no local fallback is available, the source is omitted and the trace must record `scopeFallback='omitted'`.
+- Scope denial must be visible to UI as `context_scope_denied` or the more specific source reason. It must not be rendered as "未找到相关资料".
+
+## Citation Contract
+
+Every persisted citation must be a verifiable pointer, not just display metadata.
+
+```ts
+type AnswerCitationRecord = {
+  citationId: string;
+  sourceType:
+    | 'current_meeting'
+    | 'historical_meeting'
+    | 'uploaded_material'
+    | 'long_term_memory'
+    | 'enterprise_knowledge'
+    | 'screen_context';
+  sourceId: string;
+  sourceVersion: string;
+  chunkId: string | number;
+  chunkContentHash: string;
+  sourceFileHash?: string;
+  startOffset?: number;
+  endOffset?: number;
+  score?: number;
+  title?: string;
+};
+```
+
+Rules:
+
+- `citationId` is generated by the main process and is unique within an answer.
+- Uploaded material citations must include `chunkId`, `chunkContentHash`, and `sourceVersion` or `sourceFileHash`.
+- Offset fields are required when the source supports stable text offsets. If offsets are unavailable, clickback opens the chunk with hash validation, not a guessed position.
+- Clickback must re-read the current source/chunk and compare `chunkContentHash` and source version. Mismatch returns `stale-citation`; missing source returns `missing-citation`.
+- Stale or missing citations must never open a best-effort neighboring chunk.
+- The UI can stay compact: show `资料引用 N`, but the count must be clickable when N > 0 and must open a small citation list or source preview. Invalid citations show `引用来源已变更` or `引用来源不可用`.
+- RAG unavailable, no-hit, low-score, or scope-denied states must not render empty citation anchors.
+
+## Streaming and UI Race Contract
+
+`WhatToAnswerLLM.generateStream(..., traceSink)` remains the streaming path. `traceSink` fires after final prompt assembly and before token streaming.
+
+Renderer state updates must be gated by `answerId`:
+
+- Streaming text, trace, citations, degraded reasons, and quality events belong to one `answerId`.
+- If two realtime answers are requested concurrently, stale results from the older answer must not overwrite the latest answer's trace or citations.
+- If a stream is canceled before a persisted trace exists, do not emit `shown`.
+- If text arrives before citations, citation UI stays pending for that `answerId`; it must not show anchors from a previous answer.
+- `shown` is emitted only after a non-null answer with persisted `contextTrace` is displayed.
+
+## Trace Contract
+
+Every non-null realtime answer persists a trace with this context shape:
 
 ```ts
 type AnswerContextUsed = {
@@ -79,21 +204,11 @@ type AnswerContextUsed = {
 
 Rules:
 
-- `currentTranscript`: true when cleaned current transcript enters the prompt.
-- `shortTermHistory`: true when recent turns or prior answer context enters the prompt.
-- `uploadedDocumentRag`: true only when uploaded material RAG hits and citation context is injected.
-- `historicalMeetings`: false in Phase 0 unless this answer path actually injects historical meeting context.
-- `longTermMemory`: false in Phase 0 unless this answer path actually injects long-term memory.
-- `enterpriseKnowledge`: false in Phase 0 unless this answer path actually injects enterprise knowledge.
-- `screenContext`: true when screen understanding or image input reaches the model through a vision-capable path.
+- A source is true only if its text or image content reached the model.
+- `uploadedDocumentRag` is true only when uploaded material citations were injected into the final prompt.
+- Old trace rows hydrate missing keys as `false`.
 
-Do not mark a context source true because it exists in the product. Mark it true only if this answer used it.
-
-Old trace rows that lack newer keys hydrate missing keys as `false`.
-
-## Source Status Contract
-
-`sourceStatus` is required on every new trace row. It gives metrics a denominator, not just a UI label.
+`sourceStatus` is required on every new trace row:
 
 ```ts
 type AnswerSourceStatus = {
@@ -109,21 +224,55 @@ type AnswerSourceStatus = {
 };
 ```
 
+Trace metadata must also include:
+
+```ts
+type AnswerTraceObservability = {
+  traceId: string;
+  answerId: string;
+  retrievalTimingMs: Record<string, number>;
+  contextFingerprint: string;
+  injectedSourceIds: string[];
+  omittedSources: Array<{ source: RealtimeContextSource; reason: AnswerDegradedReason }>;
+  promptFingerprint: string;
+  provider: string | null;
+  model: string | null;
+  status: 'generated' | 'generated_with_fallback';
+};
+```
+
+Do not persist raw prompt bodies, raw transcript text, screenshots, raw uploaded document text, or provider credentials in trace rows.
+
+Trace persistence failure is a confidence feature failure. If `saveAnswerContextTrace` returns null or throws, return `answer=null`, `statusCode='answer-trace-unavailable'`, and do not emit `shown`.
+
+## Failure Semantics
+
+All realtime answer responses must use stable status codes:
+
+```ts
+type RealtimeAnswerStatusCode =
+  | 'ok'
+  | 'invalid-request'
+  | 'no-context'
+  | 'no-result'
+  | 'retrieval-error'
+  | 'permission-denied'
+  | 'scope-rejected'
+  | 'provider-error'
+  | 'answer-trace-unavailable';
+```
+
 Rules:
 
-- `ragAttempted`: true when the answer path attempted material or meeting RAG lookup for this answer.
-- `uploadedMaterialHitCount`: number of material hits returned before formatting/truncation.
-- `citationCount`: number of citations persisted in the trace.
-- `ragReady` and `embeddingReady`: health at generation time, not current health when metrics are later read.
-- Missing status fields on old trace rows hydrate to conservative defaults: booleans false, counts zero, screen status `not_available`.
-
-Without `ragAttempted`, RAG hit rate cannot be trusted. "Did not try RAG" and "tried RAG but got no hit" are different product states.
+- `no-result` means retrieval ran and found no relevant source.
+- `retrieval-error` means retrieval failed, timed out, or its dependency failed.
+- `permission-denied` means OS/app permission blocks a source such as screenshots.
+- `scope-rejected` means provider data-scope policy blocked a source.
+- Renderer copy must not conflate `scope-rejected` with `no-result`.
 
 ## Degradation Reasons
 
 Use stable machine-readable reason codes and map them to clear Chinese UI labels.
-
-Initial codes:
 
 ```ts
 type AnswerDegradedReason =
@@ -133,188 +282,130 @@ type AnswerDegradedReason =
   | 'uploaded_material_context_truncated'
   | 'uploaded_material_rag_failed'
   | 'no_relevant_uploaded_material'
+  | 'uploaded_material_low_confidence'
   | 'screen_context_failed'
   | 'screen_context_scope_blocked'
   | 'screen_context_no_vision_provider'
+  | 'screen_context_truncated'
+  | 'screen_context_dropped'
+  | 'mode_context_truncated'
+  | 'mode_context_dropped'
+  | 'duplicate_context_dropped'
   | 'rag_unavailable'
   | 'embedding_unavailable'
   | 'speaker_separation_unavailable'
   | 'stt_user_failed'
   | 'stt_interviewer_failed'
-  | 'context_scope_denied';
+  | 'context_scope_denied'
+  | 'citation_stale'
+  | 'citation_missing';
 ```
 
 Required user-facing examples:
 
 - `上传资料检索失败，本次答案未使用上传资料`
 - `没有找到相关上传资料，本次答案仅使用会议上下文`
+- `资料引用来源已变更，无法跳回原文`
 - `屏幕上下文不可用，本次答案未参考屏幕`
 - `说话人分离不可用，发言人归属可能不可靠`
-
-RAG unavailable or no-hit states must never be displayed as uploaded material usage.
-
-## UI Design
-
-Extend the existing realtime answer context area.
-
-Show:
-
-- context sources used by this answer
-- degraded reasons
-- RAG status
-- embedding status
-- user STT status
-- interviewer/system STT status
-- speaker separation status
-
-Keep the UI compact. This is an operator surface inside a meeting, not a dashboard. The user should be able to answer two questions at a glance:
-
-1. What did this answer use?
-2. Why did it not use the thing I expected?
-
-Health data is merged from these sources:
-
-- `get-context-health`: RAG readiness, embedding readiness, material count, material indexing queue.
-- renderer local state: user STT status and interviewer/system STT status.
-- speaker separation status: derived from existing speaker/diarization settings and provider capability. If the implementation cannot derive a reliable value, show `unavailable`, not `on`.
-
-Do not create a second health service in Phase 0.
 
 ## Quality Events
 
 Persist these events locally:
 
-- `shown`: answer was displayed.
+- `shown`: answer was displayed with a persisted trace.
 - `copied`: answer was copied.
 - `accepted`: user clicked the explicit accept/useful action.
 - `regenerated`: user asked for another answer for the same flow.
 - `ignored`: previous shown answer was replaced before copy, accept, or regenerate.
 
-Recommended metadata:
-
-```ts
-type AnswerQualityEventMetadata = {
-  surface: 'overlay' | 'launcher';
-  answerAgeMs: number;
-  triggerSource: string;
-  modeTemplate?: string;
-  hadCitations: boolean;
-};
-```
-
-Deduplication:
-
-- UI should avoid sending duplicate events.
-- Metrics must tolerate duplicate events by treating `answerId + eventType + surface` as one logical event.
-
-`copied` and `accepted` remain separate. Copying is not proof the answer was useful.
-
-### Answer Lifecycle State Machine
-
-Quality events must follow one lifecycle per `answerId`.
-
-```text
-shown
-  |
-  |-- copied      (can coexist with accepted)
-  |-- accepted    (explicit user action)
-  |-- regenerated (terminal for the previous answer)
-  `-- ignored     (terminal for the previous answer)
-```
-
 Rules:
 
-- `shown` is emitted once after a response with a persisted trace is displayed.
-- `copied` can be emitted at most once per answer/surface.
-- `accepted` can be emitted at most once per answer/surface.
-- `regenerated` is emitted for the previous shown answer when the user explicitly requests another answer.
-- `ignored` is emitted only when a previous shown answer is replaced by a new answer and the previous answer has no copied, accepted, or regenerated event.
-- `regenerated` and `ignored` are mutually exclusive terminal outcomes for the previous answer.
-- If an answer has no `answerId`, no quality events are emitted.
-
-The renderer should track the latest answer lifecycle locally, and metrics must still dedupe by `answerId + eventType + surface`.
+- Events are keyed by `answerId + eventType + surface` for metrics dedupe.
+- `regenerated` and `ignored` are mutually exclusive terminal outcomes.
+- Unknown `answerId` quality events are rejected safely.
+- Quality event write failure must not block the meeting flow.
 
 ## Metrics
 
-Compute metrics from local SQLite:
+Compute metrics from local SQLite and deterministic eval output:
 
-- answer latency
-- citation hit rate
+- answer latency average and p95 from trace `latencyMs`
+- citation hit rate: shown answers with `citationCount > 0` divided by shown answers with trace
+- citation recall: required evidence chunks cited divided by required chunks in fixture
+- groundedness: answer claims supported by injected evidence divided by checked claims
+- refusal accuracy: unsupported fixture questions refused or caveated
 - user acceptance rate
 - regeneration rate
-- RAG hit rate
-- no-context answer rate
+- RAG hit rate: traces with `ragAttempted=true` and `uploadedMaterialHitCount > 0` divided by traces with `ragAttempted=true`
+- no-context answer rate: shown traces where only `currentTranscript=true` and `citationCount=0`
 
-Metrics should be callable from tests or a local reporting helper. No remote metrics service is part of Phase 0.
+Do not use trace count as the display-quality denominator when `shown` is absent. Unshown traces are useful for debugging but not acceptance or citation display rates.
 
-Metric definitions:
+## Offline Eval Harness
 
-- answer latency: average and p95 of trace `latencyMs`.
-- citation hit rate: answers with `citationCount > 0` divided by shown answers with a trace.
-- user acceptance rate: answers with accepted divided by shown answers.
-- regeneration rate: answers with regenerated divided by shown answers.
-- RAG hit rate: traces with `ragAttempted=true` and `uploadedMaterialHitCount > 0` divided by traces with `ragAttempted=true`.
-- no-context answer rate: traces where only `currentTranscript=true` and `citationCount=0` divided by shown answers with a trace.
+The eval harness must run offline with fixed fixtures and no live LLM dependency for deterministic checks.
 
-Metrics must treat duplicate events as one logical event per `answerId + eventType + surface`.
+Fixture set:
 
-## Testing
+- uploaded material hit with exact expected chunk
+- uploaded material no-hit
+- uploaded material timeout/error
+- low-confidence retrieved chunk that must not be cited
+- wrong citation offset
+- stale citation hash
+- provider scope rejection
+- transcript noise and empty transcript
+- screen context unavailable
+- duplicate fact across transcript and material
 
-### Type and DB Contract
+Required checks:
 
-- `AnswerContextUsed` always contains all seven keys.
-- old trace rows with missing keys hydrate safely.
-- one generated answer creates one trace row.
-- unknown `answerId` quality events are rejected safely.
+- metric formulas have independent unit tests
+- judge prompt or deterministic judge has fixture tests for supported, unsupported, and ambiguous claims
+- changing groundedness, citation recall, or refusal thresholds can make CI fail
+- live answer-quality evals may be tagged separately, but they cannot replace deterministic trace and citation tests
 
-### LLM Trace
+Initial rollback gates:
 
-- `generateStream(..., traceSink)` emits trace metadata before streaming.
-- transcript, screen context, uploaded material, and degraded reasons are represented in trace metadata.
-- stream failure still returns fallback trace where possible.
-- trace persistence failure returns `answer=null` and `answer_trace_unavailable`.
-- raw prompt, raw transcript, screenshots, and raw reference text are not logged or persisted.
+- Any `scope-rejected` case leaking scoped text to a cloud prompt is P0 and blocks release.
+- Any stale citation opening a different chunk is P0 and blocks release.
+- Citation recall below 0.8 on offline fixtures blocks release.
+- Refusal accuracy below 0.9 on unsupported fixtures blocks release.
+- More than one P1 degradation UI mismatch in the offline suite blocks release.
 
-### IPC and UI
+## Testing Plan
 
-- `generate-what-to-say` returns `answerId` and `contextTrace`.
-- RAG failure sets `uploadedDocumentRag=false`.
-- RAG failure displays a clear degraded reason.
-- shown, copied, accepted, regenerated, and ignored persist.
-- duplicate events do not corrupt metrics.
+Prefer behavior tests over source-regex contract tests. Source-regex tests may remain as smoke guards, but they cannot be the only coverage for P0 contracts.
 
-### Mode Eval
+### High ROI Tests
 
-Split evaluation into deterministic trace tests and live answer-quality evals.
+1. `electron/services/__tests__/RealtimeCitationIntegrity.test.mjs`
+   - One new file.
+   - Mock `KnowledgeMaterialService.search` and a temporary DB.
+   - Save citations, mutate chunk text/hash, and assert clickback returns `stale-citation`.
+   - Also assert missing chunk returns `missing-citation`.
 
-Deterministic trace tests must not depend on a live LLM response. They should cover:
+2. `electron/llm/__tests__/WhatToAnswerScopeDenial.test.mjs`
+   - Mock `SettingsManager` and `llmHelper.streamChat`.
+   - Set `reference_files=false` with no local fallback.
+   - Assert final prompt does not contain uploaded material or mode reference text.
+   - Assert trace has `context_scope_denied` and `uploadedDocumentRag=false`.
 
-- `traceSink` normal path
-- image/model unsupported early return
-- material RAG hit, miss, and failure
-- screen context success and failure
-- event lifecycle dedupe and terminal outcomes
-- metrics aggregation with duplicate events
+3. `electron/services/__tests__/AnswerMetricsOfflineHarness.test.mjs`
+   - Temporary SQLite fixture.
+   - Insert traces, duplicate events, unshown traces, valid citations, stale citations, and unsupported questions.
+   - Assert dedupe, denominators, citation recall, groundedness, and refusal accuracy.
 
-Live answer-quality evals add or tag cases for:
+### Additional Required Tests
 
-- sales objection handling, must use pricing/context when present
-- technical interview, must use screen context when available and avoid invention
-- team meeting owners/deadlines, must preserve ambiguity
-- resume Q&A, must answer from resume context and avoid overclaiming
-
-Live evals may assert high-level trace expectations only if the harness actually runs through the trace path. Trace correctness must be proven by deterministic tests.
-
-Run live evals after prompt, RAG, memory, or context-selection changes.
-
-## Failure Handling
-
-- Material RAG failure: answer can continue, trace marks uploaded material unused, UI explains failure.
-- Screen context failure: answer can continue, trace marks screen context unused, UI explains failure.
-- STT failure: answer can continue if enough context exists, health status shows degraded channel.
-- Speaker separation unavailable: answer can continue, UI warns speaker attribution may be unreliable.
-- Trace persistence failure: answer is not displayed as a successful realtime answer; return `answer_trace_unavailable` and log safely without raw user content.
-- Quality event write failure: UI should not block the meeting flow.
+- `generate-what-to-say` invalid renderer payload cannot inject `uploadedMaterialContext`.
+- RAG no-hit, low-confidence, timeout, and thrown error produce different `statusCode` and degraded reasons.
+- Concurrent answer requests cannot let an older response overwrite the latest answer citations.
+- Stream cancel before trace persistence emits no `shown`.
+- `redactForLog()` removes citation `title`, `sourceId`, raw file names, raw chunk text, raw prompt, raw transcript, screenshots, and credentials from new logs.
+- Old trace rows hydrate missing context and source status fields with conservative defaults.
+- Unsupported image path returns a minimal failed screen trace without empty citations.
 
 ## Security and Privacy
 
@@ -326,42 +417,81 @@ Do not persist or log:
 - raw uploaded document text
 - credentials or provider keys
 
-Persist only structured metadata, source booleans, citation metadata, health status, latency, provider/model names, and degraded reason codes.
+Persist only structured metadata, source booleans, citation pointers, hashes, health status, latency, provider/model names, fingerprints, and degraded reason codes.
 
-Citation metadata can still contain sensitive file names or source identifiers. It may be persisted locally and shown in UI, but logs must not print citation `title`, `sourceId`, raw file names, or raw metadata without `redactForLog()`.
+All logs in `generate-what-to-say`, `WhatToAnswerLLM`, retrieval, citation clickback, eval, and metrics paths must use `redactForLog()` when they include objects or errors. Logs must not print citation `title`, `sourceId`, raw file names, raw chunk text, or raw metadata without redaction.
+
+## Observability
+
+Each non-null realtime answer trace must carry:
+
+- `traceId`
+- `answerId`
+- retrieval timing by source
+- final context fingerprint
+- prompt fingerprint
+- injected source ids
+- omitted source reasons
+- provider/model
+- status and degraded reasons
+
+The stored data must be enough to explain source selection and citation validity after the fact without storing raw private content.
+
+## Feature Flag and Rollback
+
+Add a local setting or feature flag:
+
+```ts
+realtimeAnswerConfidenceTraceEnabled: boolean
+realtimeAnswerTraceStrictMode: boolean
+```
+
+Rules:
+
+- Trace and eval code ships behind the enabled flag.
+- Strict mode controls whether trace persistence failure blocks answer display.
+- During rollout, strict mode may be disabled for local dogfood if trace write failures are noisy, but release criteria require strict mode for production builds.
+- Turning the flag off must restore the previous realtime answer behavior without deleting stored traces.
 
 ## Implementation Lanes
 
 ```text
-Lane A: types + DB + metrics
-Lane B: WhatToAnswerLLM traceSink + IPC trace assembly
-Lane C: renderer context health UI + quality event controls
-Lane D: eval/test harness additions
+Lane A: types + DB + citation pointer schema + metrics
+Lane B: unified context orchestrator + scope decisions + traceSink metadata
+Lane C: IPC response semantics + trace persistence + log redaction
+Lane D: renderer citation UI + answerId-gated lifecycle events
+Lane E: offline eval harness + rollback gates
 
 Order:
 1. Build A and B first.
-2. Merge A/B contracts.
+2. Prove scope denial and citation integrity with behavior tests.
 3. Build C and D against stable contracts.
+4. Build E before broadening live evals.
 ```
 
 ## Acceptance Criteria
 
-- Every non-null realtime answer has `answerId` and `contextTrace`.
-- Every trace has all seven `context_used` keys.
-- Every new trace has required `sourceStatus`, including `ragAttempted`.
+- Every non-null realtime answer has `answerId`, `contextTrace`, `traceId`, and stable `statusCode='ok'`.
+- Renderer cannot inject raw uploaded material context.
+- Unified context orchestration defines priority, dedupe, budget trimming, fallback, and omitted-source reasons.
+- Every citation can open the original chunk or actively fail as stale/missing.
 - Uploaded material is marked used only when citation context was actually injected.
+- Scope denial cannot leak scoped context to cloud prompts and cannot be displayed as "no result".
+- RAG no-hit, RAG failure, low confidence, permission denial, and scope rejection have different machine-readable states.
 - RAG, embedding, STT, and speaker separation status are visible near the answer.
-- Degraded paths show clear reasons.
+- Degraded paths show clear Chinese reasons.
 - Quality events persist locally for shown, copied, accepted, ignored, and regenerated.
 - `regenerated` and `ignored` are mutually exclusive for the previous answer.
-- Metrics can answer whether quality improved after prompt, RAG, memory, or context-selection changes.
-- Failures can be attributed to STT, RAG, memory, prompt, model, or context orchestration.
+- Metrics use shown answers as user-facing denominators.
+- Offline evals cover groundedness, citation recall, refusal accuracy, and rollback thresholds.
+- Logs for the new path are redacted and do not include raw user content or citation source text.
 
 ## Out of Scope
 
 - New enterprise PLM/QMS MCP connectors.
 - New remote telemetry backend.
 - Replacing the streaming answer architecture.
-- Rewriting RAG retrieval.
-- Full citation snippet UI.
-- Improving answer quality beyond making quality measurable.
+- Rewriting upload or indexing pipelines.
+- Rewriting RAG retrieval internals beyond adding an orchestration boundary.
+- Full document reader UI. Phase 0 needs citation clickback and stale/missing handling, not a complete source browser.
+- Improving answer quality beyond making quality measurable and preventing ungrounded citations.
