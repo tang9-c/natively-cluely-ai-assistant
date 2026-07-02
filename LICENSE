@@ -1,3 +1,27 @@
+                    ================================================================================
+FORK NOTICE
+================================================================================
+
+This project is a fork of Natively (originally hosted at
+https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant),
+which was originally licensed under the GNU Affero General Public License
+v3.0 (AGPL-3.0) by its original authors.
+
+Modifications, additions, and redistributions of this forked work are also
+licensed under AGPL-3.0 below. Original copyright notices and attributions
+are preserved throughout the source tree. See NOTICE (if present) and the
+file headers for individual attribution.
+
+For the avoidance of doubt:
+  - This work remains free software under AGPL-3.0.
+  - If you run this software as a network service, you must release the
+    corresponding source code to your users under AGPL-3.0.
+  - The original project name, trademarks, and branding belong to their
+    respective owners; this fork is independent and not affiliated with
+    or endorsed by the original authors.
+
+================================================================================
+
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
 

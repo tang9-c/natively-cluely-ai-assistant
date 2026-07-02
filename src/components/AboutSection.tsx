@@ -27,6 +27,22 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
         <p className="text-sm text-text-secondary">
           Designed to be invisible, intelligent, and trusted.
         </p>
+        <p className="text-xs text-text-tertiary mt-2 leading-relaxed">
+          本项目 fork 自{" "}
+          <a
+            href="https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant"
+            onClick={(e) =>
+              handleOpenLink(
+                e,
+                "https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant",
+              )
+            }
+            className="text-accent-primary hover:underline"
+          >
+            github.com/Natively-AI-assistant/natively-cluely-ai-assistant
+          </a>
+          ,并基于 AGPL-3.0 协议继续发布。源代码、修改记录与许可证请参见原仓库。
+        </p>
       </div>
 
       {/* Privacy Section */}
