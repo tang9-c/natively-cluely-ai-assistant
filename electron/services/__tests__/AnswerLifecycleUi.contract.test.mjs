@@ -37,3 +37,13 @@ test('NativelyInterface displays full confidence health states', () => {
   assert.match(source, /sttUserStatus/);
   assert.match(source, /sttInterviewerStatus/);
 });
+
+test('NativelyInterface gates realtime answer state by request id and opens citations through IPC', () => {
+  const source = read('src/components/NativelyInterface.tsx');
+
+  assert.match(source, /latestAnswerRequestIdRef/);
+  assert.match(source, /requestId !== latestAnswerRequestIdRef\.current/);
+  assert.match(source, /openAnswerCitation/);
+  assert.match(source, /引用来源已变更|引用来源不可用/);
+  assert.match(source, /资料引用/);
+});

@@ -574,7 +574,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [latestAnswerTrace, setLatestAnswerTrace] = useState<AnswerContextTrace | null>(null);
   const [latestAnswerCitations, setLatestAnswerCitations] = useState<AnswerCitation[]>([]);
   const [latestDegradedReason, setLatestDegradedReason] = useState<string | undefined>(undefined);
+  const [citationPreviewMessage, setCitationPreviewMessage] = useState<string | null>(null);
   const latestAnswerLifecycleRef = useRef<LatestAnswerLifecycle | null>(null);
+  const latestAnswerRequestIdRef = useRef(0);
   const activeMode = modes.find((mode) => mode.isActive) ?? null;
   const activeModeDisplayLabel = activeMode
     ? getModeDisplayName(activeMode)
@@ -2062,9 +2064,28 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }, lifecycle.surface);
   }, [emitAnswerQualityEvent, latestAnswerCitations.length]);
 
+  const handleOpenLatestCitation = useCallback(async () => {
+    const answerId = latestAnswerId;
+    const citation = latestAnswerCitations.find((item) => item.sourceType === 'uploaded_material' && item.citationId);
+    if (!answerId || !citation?.citationId) return;
+    const result = await window.electronAPI?.openAnswerCitation?.({
+      answerId,
+      citationId: citation.citationId,
+    });
+    if (!result?.success) {
+      setCitationPreviewMessage(
+        result?.status === 'stale-citation'
+          ? '引用来源已变更，无法跳回原文'
+          : '引用来源不可用',
+      );
+      return;
+    }
+    setCitationPreviewMessage(result.previewText || '已找到引用来源');
+  }, [latestAnswerCitations, latestAnswerId]);
+
   const handleWhatToSay = async (
     promptInstruction?: string | React.MouseEvent,
-    generationOptions?: { source?: string; persist?: boolean; modeEvent?: DynamicActionModeEvent },
+    generationOptions?: { source?: 'overlay' | 'launcher' | 'dynamic_action'; persist?: boolean; modeEvent?: DynamicActionModeEvent },
   ) => {
     const dynamicPromptInstruction =
       typeof promptInstruction === 'string' ? promptInstruction : undefined;
@@ -2086,6 +2107,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }
     setIsExpanded(true);
     setIsProcessing(true);
+    const requestId = latestAnswerRequestIdRef.current + 1;
+    latestAnswerRequestIdRef.current = requestId;
+    setCitationPreviewMessage(null);
     analytics.trackCommandExecuted('what_to_say');
 
     // Capture and clear attached image context.
@@ -2128,6 +2152,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             }
           : undefined,
       );
+      if (requestId !== latestAnswerRequestIdRef.current) {
+        return;
+      }
       setScreenContextStatus(result.screenContextStatus || 'not_available');
       setLatestUsedImageInput(Boolean(result.usedImageInput));
       setLatestVisionProviderUsed(result.visionProviderUsed);
@@ -2162,7 +2189,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         },
       ]);
     } finally {
-      setIsProcessing(false);
+      if (requestId === latestAnswerRequestIdRef.current) {
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -4075,11 +4104,24 @@ Provide only the answer, nothing else.`;
 	                      <span>{contextStatusText}</span>
 	                      <span className="opacity-75">{confidenceHealthItems.join(' · ')}</span>
 	                      {materialCitationCount > 0 && (
-	                        <span className="opacity-75">资料引用 {materialCitationCount}</span>
+	                        <button
+	                          type="button"
+	                          onClick={handleOpenLatestCitation}
+	                          className="opacity-75 underline underline-offset-2 hover:opacity-100"
+	                          title="打开资料引用"
+	                          aria-label="打开资料引用"
+	                        >
+	                          资料引用 {materialCitationCount}
+	                        </button>
 	                      )}
 	                      {latestDegradedReasonDisplay && (
 	                        <span className={isLightTheme ? 'text-amber-700' : 'text-amber-200'}>
 	                          {latestDegradedReasonDisplay}
+	                        </span>
+	                      )}
+	                      {citationPreviewMessage && (
+	                        <span className={isLightTheme ? 'text-slate-600' : 'text-slate-300'}>
+	                          {citationPreviewMessage}
 	                        </span>
 	                      )}
 	                      {latestAnswerId && (
