@@ -5,11 +5,13 @@ import { VadProcessor, VadProcessorOptions } from '../whisper/vadProcessor';
 import {
   SENSEVOICE_DEFAULT_MODEL_ID,
   type SenseVoiceModelId,
+  type SenseVoiceTermCorrectionConfig,
   type SenseVoiceWorkerOutMessage,
 } from './types';
 import { resolveSenseVoiceModelFiles } from './modelManager';
 import { resolveSenseVoiceWorkerPath } from './workerPathResolver';
 import { parseSenseVoiceOutput } from './textCleaner';
+import { applySenseVoiceTermCorrection } from './termCorrection';
 import { isVerboseLogging } from '../../verboseLog';
 
 type SenseVoiceWorkerLike = {
@@ -30,6 +32,7 @@ export interface LocalSenseVoiceSTTOptions {
   workerFactory?: () => SenseVoiceWorkerLike;
   modelFiles?: { modelDir: string; modelFile: string; tokensFile: string };
   vadOptions?: VadProcessorOptions;
+  termCorrection?: SenseVoiceTermCorrectionConfig;
   numThreads?: number;
 }
 
@@ -38,6 +41,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
   private readonly workerFactory?: () => SenseVoiceWorkerLike;
   private readonly modelFiles?: { modelDir: string; modelFile: string; tokensFile: string };
   private readonly vadOptions?: VadProcessorOptions;
+  private readonly termCorrection?: SenseVoiceTermCorrectionConfig;
   private readonly numThreads: number;
 
   private inputSampleRate = 16000;
@@ -58,6 +62,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     this.workerFactory = options.workerFactory;
     this.modelFiles = options.modelFiles;
     this.vadOptions = options.vadOptions;
+    this.termCorrection = options.termCorrection;
     this.numThreads = options.numThreads ?? Math.max(1, Math.min(4, require('os').cpus()?.length ?? 2));
   }
 
@@ -246,7 +251,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     if (message.type === 'result') {
       this.inFlightTasks = Math.max(0, this.inFlightTasks - 1);
       const parsed = parseSenseVoiceOutput(message.text);
-      const { text } = parsed;
+      const text = this.applyTermCorrection(parsed.text);
       debugLog('worker-result', {
         taskId: message.taskId,
         textLength: text.length,
@@ -289,6 +294,13 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       this.emit('error', new Error(message.message));
       this.flushPendingAudio();
     }
+  }
+
+  private applyTermCorrection(text: string): string {
+    if (!this.termCorrection?.enabled || this.termCorrection.terms.length === 0) {
+      return text;
+    }
+    return applySenseVoiceTermCorrection(text, this.termCorrection.terms);
   }
 
   private flushVad(): void {

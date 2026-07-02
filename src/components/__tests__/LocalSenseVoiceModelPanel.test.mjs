@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(__dirname, '../../..');
+
+test('LocalSenseVoiceModelPanel exposes term correction controls', () => {
+  const source = fs.readFileSync(path.join(root, 'src/components/LocalSenseVoiceModelPanel.tsx'), 'utf8');
+
+  assert.match(source, /localSenseVoiceGetTerms/);
+  assert.match(source, /localSenseVoiceSetTerms/);
+  assert.match(source, /correctionEnabled/);
+  assert.match(source, /variants/);
+  assert.match(source, /只填写正确词不会提高模型识别概率/);
+  assert.match(source, /下次转写会话生效/);
+  assert.doesNotMatch(source, /localSenseVoiceSuggestTerms/);
+  assert.doesNotMatch(source, /homophoneReplacerEnabled/);
+  assert.doesNotMatch(source, /vadProfile/);
+});

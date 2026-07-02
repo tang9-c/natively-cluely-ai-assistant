@@ -14,6 +14,18 @@ export interface SenseVoiceModelInfo {
   errorMessage?: string;
 }
 
+export interface SenseVoiceTermEntry {
+  id: string;
+  canonical: string;
+  variants: string[];
+  enabled: boolean;
+}
+
+export interface SenseVoiceTermCorrectionConfig {
+  terms: SenseVoiceTermEntry[];
+  enabled: boolean;
+}
+
 export interface SenseVoiceWorkerInitMessage {
   type: 'init';
   modelDir: string;

@@ -111,3 +111,33 @@ test('LocalSenseVoiceSTT emits SenseVoice emotion metadata without polluting tra
     },
   ]);
 });
+
+test('LocalSenseVoiceSTT applies final term correction while preserving SenseVoice metadata', async () => {
+  const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+  const worker = new FakeSenseVoiceWorker({ text: '<|zh|><|HAPPY|><|Speech|>内提夫利很好用。' });
+  const stt = new LocalSenseVoiceSTT({
+    workerFactory: () => worker,
+    termCorrection: {
+      enabled: true,
+      terms: [{ id: '1', canonical: 'Natively', variants: ['内提夫利'], enabled: true }],
+    },
+  });
+  const transcripts = [];
+  stt.on('transcript', event => transcripts.push(event));
+
+  stt.start();
+  stt.write(loudPcm());
+  stt.notifySpeechEnded();
+  await stt.drainFinals(1000);
+  stt.stop();
+
+  assert.deepEqual(transcripts, [
+    {
+      text: 'Natively很好用。',
+      isFinal: true,
+      confidence: 0.9,
+      emotion: 'happy',
+      emotionSource: 'sensevoice',
+    },
+  ]);
+});

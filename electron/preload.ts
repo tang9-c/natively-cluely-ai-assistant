@@ -48,6 +48,13 @@ interface SkillWatcherSuggestion {
   status: 'pending' | 'accepted' | 'dismissed';
 }
 
+interface LocalSenseVoiceTermEntry {
+  id: string;
+  canonical: string;
+  variants: string[];
+  enabled: boolean;
+}
+
 type MeetingStartStatus = {
   phase: 'starting' | 'ready' | 'failed';
   message?: string;
@@ -184,6 +191,14 @@ interface ElectronAPI {
     modelId?: string,
   ) => Promise<{ success: boolean; reason?: string; error?: string }>;
   localSenseVoiceGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
+  localSenseVoiceGetTerms: () => Promise<{
+    terms: LocalSenseVoiceTermEntry[];
+    correctionEnabled: boolean;
+  }>;
+  localSenseVoiceSetTerms: (input: {
+    terms: LocalSenseVoiceTermEntry[];
+    correctionEnabled?: boolean;
+  }) => Promise<{ success: boolean; error?: string }>;
   localSenseVoiceDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   localSenseVoiceStartDownload: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   onLocalSenseVoiceDownloadProgress: (
@@ -1208,6 +1223,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   localWhisperPreload: (modelId?: string) => ipcRenderer.invoke('local-whisper-preload', modelId),
   localSenseVoiceGetModels: () => ipcRenderer.invoke('local-sensevoice-get-models'),
+  localSenseVoiceGetTerms: () => ipcRenderer.invoke('local-sensevoice-get-terms'),
+  localSenseVoiceSetTerms: (input: {
+    terms: LocalSenseVoiceTermEntry[];
+    correctionEnabled?: boolean;
+  }) => ipcRenderer.invoke('local-sensevoice-set-terms', input),
   localSenseVoiceDeleteModel: (modelId: string) =>
     ipcRenderer.invoke('local-sensevoice-delete-model', modelId),
   localSenseVoiceStartDownload: (modelId: string) =>

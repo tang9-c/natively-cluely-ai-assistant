@@ -20,6 +20,7 @@ import { OpenAIStreamingSTT } from './OpenAIStreamingSTT';
 import { NativelyProSTT } from './NativelyProSTT';
 import { CredentialsManager } from '../services/CredentialsManager';
 import { SettingsManager } from '../services/SettingsManager';
+import type { SenseVoiceTermCorrectionConfig } from './sensevoice/types';
 
 type SttProviderId =
   | 'none'
@@ -158,7 +159,15 @@ export const STT_REGISTRY: Record<SttProviderId, RegistryEntry | undefined> = {
     name: 'LocalSenseVoiceSTT',
     factory: (_key, speaker) => {
       const { LocalSenseVoiceSTT } = require('./sensevoice/LocalSenseVoiceSTT');
-      const sv = new LocalSenseVoiceSTT();
+      let termCorrection: SenseVoiceTermCorrectionConfig = { enabled: true, terms: [] };
+      try {
+        termCorrection = SettingsManager.getInstance().getLocalSenseVoiceTermCorrectionConfig();
+      } catch {
+        termCorrection = { enabled: true, terms: [] };
+      }
+      const sv = new LocalSenseVoiceSTT({
+        termCorrection,
+      });
       sv.setChannel(speaker === 'interviewer' ? 'system' : 'mic');
       return sv;
     },

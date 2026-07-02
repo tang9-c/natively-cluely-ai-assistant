@@ -261,6 +261,13 @@ export interface SpeakerEnrollmentSample {
   deviceFingerprint?: string
 }
 
+export interface LocalSenseVoiceTermEntry {
+  id: string
+  canonical: string
+  variants: string[]
+  enabled: boolean
+}
+
 export interface ElectronAPI {
   updateContentDimensions: (dimensions: {
     width: number
@@ -400,6 +407,8 @@ export interface ElectronAPI {
   speakerVerificationEnroll: (samples: SpeakerEnrollmentSample[]) => Promise<{ success: boolean; status?: SpeakerVerificationStatus; error?: string }>
   speakerVerificationDeleteProfile: () => Promise<{ success: boolean; error?: string }>
   localSenseVoiceGetModels: () => Promise<{ models: any[]; activeModelId: string }>
+  localSenseVoiceGetTerms: () => Promise<{ terms: LocalSenseVoiceTermEntry[]; correctionEnabled: boolean }>
+  localSenseVoiceSetTerms: (input: { terms: LocalSenseVoiceTermEntry[]; correctionEnabled?: boolean }) => Promise<{ success: boolean; error?: string }>
   localSenseVoiceDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>
   localSenseVoiceStartDownload: (modelId: string) => Promise<{ success: boolean; error?: string }>
   onLocalSenseVoiceDownloadProgress: (callback: (data: { modelId: string; progress: number }) => void) => () => void
