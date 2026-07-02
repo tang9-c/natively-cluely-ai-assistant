@@ -18,6 +18,9 @@ import {
   resolveMacSystemAudioPermissionHealth,
 } from './permissions/macPermissionHealth';
 import { CodexCliService } from './services/CodexCliService';
+import { buildUploadedMaterialCitation, resolveAnswerCitation } from './services/context/AnswerCitationResolver';
+import { buildRealtimeContextPlan, formatInjectedContext, type RealtimeContextCandidate } from './services/context/RealtimeContextOrchestrator';
+import { sanitizeGenerateWhatToSayOptions } from './services/context/RealtimeAnswerRequest';
 import { formatUploadedMaterialContext } from './services/knowledge/UploadedMaterialContextFormatter';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
 import { SkillActivationManager, type ActivateSkillInput, type SkillActivationScope } from './services/SkillActivationManager';
@@ -2838,9 +2841,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       _,
       question?: string,
       imagePaths?: string[],
-      options?: { promptInstruction?: string; uploadedMaterialContext?: string; persist?: boolean; source?: string; modeEvent?: ModeEventContext },
+      options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: ModeEventContext },
     ) => {
       try {
+        const requestOptions = sanitizeGenerateWhatToSayOptions(options);
         let screenContext: any;
         let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
         let visionProviderUsed: string | undefined;
@@ -2873,6 +2877,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               question: question || 'unknown',
               screenContextStatus,
               error: 'Invalid image path payload',
+              statusCode: 'invalid-request',
             };
           }
 
@@ -2891,6 +2896,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 question: question || 'unknown',
                 screenContextStatus,
                 error: `Invalid image path: ${validation.reason}`,
+                statusCode: 'invalid-request',
               };
             }
             validatedImagePaths!.push(imagePath);
@@ -2952,33 +2958,39 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
         }
 
-        let promptInstruction = typeof options?.promptInstruction === 'string'
-          ? options.promptInstruction
-          : undefined;
-        let uploadedMaterialContext = typeof options?.uploadedMaterialContext === 'string'
-          ? options.uploadedMaterialContext
-          : undefined;
+        let uploadedMaterialContext: string | undefined;
+        const contextCandidates: RealtimeContextCandidate[] = [];
+        const retrievalTimingMs: Record<string, number> = {};
         const ragManagerForHealth = appState.getRAGManager();
         try {
+          const materialStartedAt = Date.now();
           const searchQuery = typeof question === 'string' && question.trim()
             ? question.trim()
-            : sanitizeModeEvent(options?.modeEvent)?.retrievalQuery;
+            : sanitizeModeEvent(requestOptions.modeEvent)?.retrievalQuery;
           if (searchQuery) {
             materialRagAttempted = true;
             const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
             const materialService = new KnowledgeMaterialService(DatabaseManager.getInstance(), ragManagerForHealth?.getEmbeddingPipeline?.());
             const materialHits = await materialService.search(searchQuery, { limit: 4 });
+            retrievalTimingMs.uploaded_material = Date.now() - materialStartedAt;
             uploadedMaterialHitCount = materialHits.length;
             if (materialHits.length > 0) {
-              citations.push(...materialHits.map((hit: any) => ({
-                sourceType: hit.sourceType,
-                sourceId: hit.sourceId,
-                chunkId: hit.chunkId,
-                score: hit.score,
-                title: hit.title,
-              })));
+              citations.push(...materialHits.map((hit: any) => buildUploadedMaterialCitation(hit)));
+              for (const hit of materialHits) {
+                const citation = buildUploadedMaterialCitation(hit);
+                const text = hit.text || hit.parentText || '';
+                contextCandidates.push({
+                  source: 'uploaded_material',
+                  sourceId: hit.sourceId,
+                  chunkId: hit.chunkId,
+                  text,
+                  score: hit.score,
+                  tokenCount: Math.max(1, Math.ceil(String(text).length / 4)),
+                  sourceVersion: hit.materialUpdatedAt || hit.fileHash || 'unknown',
+                  contentHash: citation.chunkContentHash,
+                });
+              }
               const formattedMaterialContext = formatUploadedMaterialContext(materialHits);
-              uploadedMaterialContext = formattedMaterialContext.text;
               if (formattedMaterialContext.truncated) {
                 degradedReasons.push('uploaded_material_context_truncated');
               }
@@ -2998,6 +3010,18 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (!embeddingReady && materialRagAttempted && !degradedReasons.includes('embedding_unavailable')) {
           degradedReasons.push('embedding_unavailable');
         }
+        const realtimeContextPlan = buildRealtimeContextPlan({
+          candidates: contextCandidates,
+          tokenBudget: 1800,
+          ragAttempted: materialRagAttempted,
+          ragReady,
+          embeddingReady,
+          uploadedMaterialHitCount,
+          screenContextStatus,
+          retrievalTimingMs: retrievalTimingMs as any,
+          degradedReasons: degradedReasons as any,
+        });
+        uploadedMaterialContext = formatInjectedContext(realtimeContextPlan) || undefined;
 
         const intelligenceManager = appState.getIntelligenceManager();
         // Question and imagePaths are now optional - IntelligenceManager infers from transcript
@@ -3008,16 +3032,11 @@ export function initializeIpcHandlers(appState: AppState): void {
           {
             skipCooldown: process.env.NODE_ENV === 'test',
             screenContext,
-            promptInstruction: promptInstruction ?? (typeof options?.promptInstruction === 'string'
-              ? options.promptInstruction
-              : undefined),
+            promptInstruction: requestOptions.promptInstruction,
             uploadedMaterialContext,
-            persist: options?.persist === false ? false : undefined,
-            source:
-              typeof options?.source === 'string'
-                ? options.source
-                : undefined,
-            modeEvent: sanitizeModeEvent(options?.modeEvent),
+            persist: requestOptions.persist === false ? false : undefined,
+            source: requestOptions.source,
+            modeEvent: sanitizeModeEvent(requestOptions.modeEvent),
             contextDegradedReasons: contextBudgetDegradedReasons,
             traceSink: (trace) => {
               whatToAnswerTrace = trace;
@@ -3035,6 +3054,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             screenContextStatus,
             degradedReason: degradedReasons.length > 0 ? degradedReasons.join(',') : undefined,
             citations,
+            statusCode: 'no-result',
             imageCount: validatedImagePaths?.length || 0,
             usedImageInput: Boolean(validatedImagePaths?.length),
           };
@@ -3065,7 +3085,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const contextTrace = DatabaseManager.getInstance().saveAnswerContextTrace({
           answerId,
           answerType: 'what_to_say',
-          surface: typeof options?.source === 'string' ? options.source : 'overlay',
+          surface: requestOptions.source ?? 'overlay',
           provider: llmHelper?.getCurrentProvider?.() ?? null,
           model: llmHelper?.getCurrentModel?.() ?? null,
           latencyMs: Date.now() - startedAt,
@@ -3074,6 +3094,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           citations,
           degradedReason: mergedDegradedReasons.length > 0 ? mergedDegradedReasons.join(',') : null,
           status: whatToAnswerTrace?.status ?? 'generated',
+          traceId: answerId,
+          observability: {
+            retrievalTimingMs: realtimeContextPlan.retrievalTimingMs,
+            contextFingerprint: realtimeContextPlan.contextFingerprint,
+            injectedSourceIds: realtimeContextPlan.injected.map((item) => `${item.source}:${item.sourceId}:${item.chunkId ?? ''}`),
+            omittedSources: realtimeContextPlan.omitted.map((item) => ({ source: item.source, reason: item.reason })),
+            promptFingerprint: whatToAnswerTrace?.promptFingerprint ?? null,
+          },
         });
         if (!contextTrace) {
           console.warn('[IPC] generate-what-to-say: answer trace persistence failed');
@@ -3081,6 +3109,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             answer: null,
             question: question || 'inferred from context',
             error: 'answer_trace_unavailable',
+            statusCode: 'answer-trace-unavailable',
             screenContextStatus,
             degradedReason: 'answer_trace_unavailable',
             citations: [],
@@ -3092,6 +3121,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           answerId,
           answer,
           question: question || 'inferred from context',
+          statusCode: 'ok',
           contextTrace,
           degradedReason: mergedDegradedReasons.length > 0 ? mergedDegradedReasons.join(',') : undefined,
           citations,
@@ -3104,11 +3134,12 @@ export function initializeIpcHandlers(appState: AppState): void {
           usedImageInput: Boolean(validatedImagePaths?.length),
         };
       } catch (error: any) {
-        console.error('[IPC] generate-what-to-say error:', error);
+        console.error('[IPC] generate-what-to-say error:', redactForLog([error]));
         return {
           answer: null,
           question: question || 'unknown',
           error: error?.message || 'unknown_error',
+          statusCode: 'provider-error',
         };
       }
     },
@@ -3728,6 +3759,29 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       console.error('[IPC get-answer-quality-metrics] Error:', error);
       return { success: false, error: error?.message || 'metrics_unavailable' };
+    }
+  });
+
+  safeHandle('open-answer-citation', async (_, input: { answerId?: string; citationId?: string }) => {
+    try {
+      if (!input?.answerId || !input?.citationId) {
+        return { success: false, status: 'missing-citation', error: 'invalid_citation_request' };
+      }
+      const trace = DatabaseManager.getInstance().getAnswerContextTrace(input.answerId);
+      const citation = trace?.citations?.find((citation: any) => citation.citationId === input.citationId);
+      if (!citation) {
+        return { success: false, status: 'missing-citation', error: 'citation_not_found' };
+      }
+      const resolution = resolveAnswerCitation(DatabaseManager.getInstance(), citation);
+      return {
+        success: resolution.status === 'ok',
+        status: resolution.status,
+        previewText: resolution.previewText,
+        citation: resolution.citation,
+      };
+    } catch (error: any) {
+      console.error('[IPC open-answer-citation] Error:', redactForLog([error]));
+      return { success: false, status: 'missing-citation', error: 'citation_unavailable' };
     }
   });
 

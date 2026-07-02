@@ -18,7 +18,8 @@ test('generate-what-to-say uses uploaded material formatter and keeps citations 
 
   assert.match(source, /UploadedMaterialContextFormatter/);
   assert.match(handler, /formatUploadedMaterialContext\(materialHits\)/);
-  assert.match(handler, /citations\.push\(\.\.\.materialHits\.map/);
+  assert.match(handler, /buildUploadedMaterialCitation/);
+  assert.doesNotMatch(handler, /sourceType:\s*hit\.sourceType,[\s\S]{0,120}title:\s*hit\.title/);
   assert.doesNotMatch(handler, /hit\.parentText\}\s*`\)/);
 });
 
@@ -27,7 +28,7 @@ test('generate-what-to-say exposes formatter truncation as a degraded reason', (
   const handler = sliceSafeHandleBlock(source, 'generate-what-to-say');
 
   assert.match(handler, /const\s+formattedMaterialContext\s*=\s*formatUploadedMaterialContext\(materialHits\)/);
-  assert.match(handler, /uploadedMaterialContext\s*=\s*formattedMaterialContext\.text/);
+  assert.match(handler, /uploadedMaterialContext\s*=\s*formatInjectedContext\(realtimeContextPlan\)/);
   assert.match(handler, /formattedMaterialContext\.truncated/);
   assert.match(handler, /degradedReasons\.push\('uploaded_material_context_truncated'\)/);
 });

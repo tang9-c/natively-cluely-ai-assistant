@@ -100,12 +100,12 @@ test('generate-what-to-say IPC forwards promptInstruction option to Intelligence
   const handlerSource = sliceSafeHandleBlock(source, 'generate-what-to-say');
   assert.ok(findSafeHandle(source, 'generate-what-to-say') >= 0, 'generate-what-to-say handler should exist');
 
-  assert.match(handlerSource, /options\?: \{ promptInstruction\?: string; uploadedMaterialContext\?: string; persist\?: boolean; source\?: string; modeEvent\?: ModeEventContext \}/);
-  assert.match(handlerSource, /promptInstruction:[\s\S]{0,120}typeof options\?\.promptInstruction === 'string'[\s\S]{0,80}options\.promptInstruction[\s\S]{0,40}: undefined/);
-  assert.match(handlerSource, /uploadedMaterialContext/);
-  assert.match(handlerSource, /persist:[\s\S]{0,120}options\?\.persist === false[\s\S]{0,40}\? false[\s\S]{0,40}: undefined/);
-  assert.match(handlerSource, /source:[\s\S]{0,120}typeof options\?\.source === 'string'[\s\S]{0,80}options\.source[\s\S]{0,40}: undefined/);
-  assert.match(handlerSource, /modeEvent:[\s\S]{0,120}sanitizeModeEvent\(options\?\.modeEvent\)/);
+  assert.match(handlerSource, /sanitizeGenerateWhatToSayOptions\(options\)/);
+  assert.match(handlerSource, /promptInstruction:\s*requestOptions\.promptInstruction/);
+  assert.doesNotMatch(handlerSource, /options\?\.uploadedMaterialContext/);
+  assert.match(handlerSource, /persist:\s*requestOptions\.persist === false \? false : undefined/);
+  assert.match(handlerSource, /source:\s*requestOptions\.source/);
+  assert.match(handlerSource, /modeEvent:\s*sanitizeModeEvent\(requestOptions\.modeEvent\)/);
 });
 
 test('preload and renderer type expose dynamic action generation options', () => {

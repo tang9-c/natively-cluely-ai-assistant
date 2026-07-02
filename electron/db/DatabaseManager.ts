@@ -141,6 +141,8 @@ export interface AnswerContextTraceInput {
     citations?: AnswerCitationRecord[];
     degradedReason?: string | null;
     status?: string;
+    traceId?: string;
+    observability?: Record<string, unknown>;
 }
 
 export interface AnswerQualityMetrics {
@@ -1405,6 +1407,8 @@ export class DatabaseManager {
         const contextPayload = {
             ...normalizeAnswerContextUsed(input.contextUsed),
             sourceStatus: normalizeAnswerSourceStatus(input.sourceStatus),
+            traceId: input.traceId ?? input.answerId,
+            observability: input.observability ?? {},
         };
         const row = {
             id,
@@ -1451,6 +1455,8 @@ export class DatabaseManager {
             ...row,
             contextUsed: normalizeAnswerContextUsed(contextPayload),
             sourceStatus: normalizeAnswerSourceStatus((contextPayload as any).sourceStatus),
+            traceId: (contextPayload as any).traceId ?? row.answer_id,
+            observability: (contextPayload as any).observability ?? {},
             citations: safeJson(row.citations_json, []),
         };
     }

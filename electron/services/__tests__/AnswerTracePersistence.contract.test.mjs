@@ -38,3 +38,24 @@ test('generate-what-to-say returns answer_trace_unavailable if trace persistence
   assert.match(handler, /if \(!contextTrace\)/);
   assert.match(handler, /answer:\s*null/);
 });
+
+test('generate-what-to-say sanitizes options and returns stable status codes', () => {
+  const source = read('electron/ipcHandlers.ts');
+  const handler = sliceSafeHandleBlock(source, 'generate-what-to-say');
+
+  assert.match(handler, /sanitizeGenerateWhatToSayOptions\(options\)/);
+  assert.doesNotMatch(handler, /options\?\.uploadedMaterialContext/);
+  assert.match(handler, /statusCode:\s*'ok'/);
+  assert.match(handler, /statusCode:\s*'invalid-request'/);
+  assert.match(handler, /statusCode:\s*'answer-trace-unavailable'/);
+});
+
+test('open-answer-citation resolves persisted citations by answer id and citation id', () => {
+  const source = read('electron/ipcHandlers.ts');
+  const handler = sliceSafeHandleBlock(source, 'open-answer-citation');
+
+  assert.match(handler, /getAnswerContextTrace\(input\.answerId\)/);
+  assert.match(handler, /citation\.citationId === input\.citationId/);
+  assert.match(handler, /resolveAnswerCitation/);
+  assert.match(handler, /redactForLog/);
+});
