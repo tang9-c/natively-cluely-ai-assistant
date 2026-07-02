@@ -112,10 +112,12 @@ test('preload and renderer type expose dynamic action generation options', () =>
   const preload = read('electron/preload.ts');
   const types = read('src/types/electron.d.ts');
 
-  assert.match(preload, /generateWhatToSay:[\s\S]{0,350}options\?: \{ promptInstruction\?: string; uploadedMaterialContext\?: string; persist\?: boolean; source\?: string; modeEvent\?: ModeEventContext \}/);
+  assert.match(preload, /generateWhatToSay:[\s\S]{0,350}options\?: \{ promptInstruction\?: string; persist\?: boolean; source\?:/);
+  assert.doesNotMatch(preload, /generateWhatToSay:[\s\S]{0,350}uploadedMaterialContext/);
   assert.match(preload, /ipcRenderer\.invoke\(['"]generate-what-to-say['"], question, imagePaths, options\)/);
   assert.match(types, /export interface DynamicActionModeEvent/);
-  assert.match(types, /generateWhatToSay:[\s\S]{0,350}options\?: \{ promptInstruction\?: string; uploadedMaterialContext\?: string; persist\?: boolean; source\?: string; modeEvent\?: DynamicActionModeEvent \}/);
+  assert.match(types, /generateWhatToSay:[\s\S]{0,350}options\?: \{ promptInstruction\?: string; persist\?: boolean; source\?:/);
+  assert.doesNotMatch(types, /generateWhatToSay:[\s\S]{0,350}uploadedMaterialContext/);
 });
 
 test('dynamic action answerStyle supports email shape across main and renderer types', () => {

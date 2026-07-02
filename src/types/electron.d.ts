@@ -123,9 +123,15 @@ export interface AnswerSourceStatus {
 }
 
 export interface AnswerCitation {
+  citationId?: string
   sourceType: 'current_meeting' | 'historical_meeting' | 'uploaded_material' | 'long_term_memory' | 'enterprise_knowledge' | 'screen_context'
   sourceId: string
+  sourceVersion?: string
   chunkId?: string | number | null
+  chunkContentHash?: string
+  sourceFileHash?: string | null
+  startOffset?: number | null
+  endOffset?: number | null
   score?: number | null
   title?: string | null
   timestamp?: number | string | null
@@ -449,11 +455,12 @@ export interface ElectronAPI {
 
   // Intelligence Mode IPC
   generateAssist: () => Promise<{ insight: string | null }>
-  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string; uploadedMaterialContext?: string; persist?: boolean; source?: string; modeEvent?: DynamicActionModeEvent }) => Promise<{
+  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: DynamicActionModeEvent }) => Promise<{
     answerId?: string;
     answer: string | null;
     question?: string;
     error?: string;
+    statusCode?: 'ok' | 'invalid-request' | 'no-context' | 'no-result' | 'retrieval-error' | 'permission-denied' | 'scope-rejected' | 'provider-error' | 'answer-trace-unavailable';
     contextTrace?: AnswerContextTrace | null;
     degradedReason?: string;
     citations?: AnswerCitation[];
@@ -612,6 +619,7 @@ export interface ElectronAPI {
   ragRetryEmbeddings: () => Promise<{ success: boolean }>
   trackAnswerQualityEvent: (input: { answerId: string; eventType: AnswerQualityEventType; surface?: string; metadata?: AnswerQualityEventMetadata }) => Promise<{ success: boolean; id?: string; error?: string }>
   getAnswerQualityMetrics: (input?: { sinceMs?: number; mode?: string }) => Promise<{ success: boolean; metrics?: AnswerQualityMetrics; error?: string }>
+  openAnswerCitation: (input: { answerId: string; citationId: string }) => Promise<{ success: boolean; status: 'ok' | 'stale-citation' | 'missing-citation' | 'unsupported-citation'; previewText?: string | null; citation?: AnswerCitation; error?: string }>
   getContextHealth: () => Promise<ContextHealth>
   knowledgeSelectMaterials: () => Promise<{ success?: boolean; cancelled?: boolean; filePaths?: string[]; error?: string }>
   knowledgeUploadMaterials: (filePaths: string[]) => Promise<{ success: boolean; materials: KnowledgeMaterial[]; errors?: Array<{ filePath: string; error: string }> }>

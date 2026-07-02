@@ -344,12 +344,13 @@ interface ElectronAPI {
   generateWhatToSay: (
     question?: string,
     imagePaths?: string[],
-    options?: { promptInstruction?: string; uploadedMaterialContext?: string; persist?: boolean; source?: string; modeEvent?: ModeEventContext },
+    options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: ModeEventContext },
   ) => Promise<{
     answerId?: string;
     answer: string | null;
     question?: string;
     error?: string;
+    statusCode?: 'ok' | 'invalid-request' | 'no-context' | 'no-result' | 'retrieval-error' | 'permission-denied' | 'scope-rejected' | 'provider-error' | 'answer-trace-unavailable';
     contextTrace?: any;
     degradedReason?: string;
     citations?: any[];
@@ -592,6 +593,13 @@ interface ElectronAPI {
     sinceMs?: number;
     mode?: string;
   }) => Promise<{ success: boolean; metrics?: any; error?: string }>;
+  openAnswerCitation: (input: { answerId: string; citationId: string }) => Promise<{
+    success: boolean;
+    status: 'ok' | 'stale-citation' | 'missing-citation' | 'unsupported-citation';
+    previewText?: string | null;
+    citation?: any;
+    error?: string;
+  }>;
   getContextHealth: () => Promise<any>;
   knowledgeSelectMaterials: () => Promise<{ success?: boolean; cancelled?: boolean; filePaths?: string[]; error?: string }>;
   knowledgeUploadMaterials: (filePaths: string[]) => Promise<{ success: boolean; materials: any[]; errors?: Array<{ filePath: string; error: string }> }>;
@@ -1414,7 +1422,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateWhatToSay: (
     question?: string,
     imagePaths?: string[],
-    options?: { promptInstruction?: string; uploadedMaterialContext?: string; persist?: boolean; source?: string; modeEvent?: ModeEventContext },
+    options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: ModeEventContext },
   ) => ipcRenderer.invoke('generate-what-to-say', question, imagePaths, options),
   generateClarify: () => ipcRenderer.invoke('generate-clarify'),
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) =>
@@ -1815,6 +1823,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }) => ipcRenderer.invoke('track-answer-quality-event', input),
   getAnswerQualityMetrics: (input?: { sinceMs?: number; mode?: string }) =>
     ipcRenderer.invoke('get-answer-quality-metrics', input),
+  openAnswerCitation: (input: { answerId: string; citationId: string }) =>
+    ipcRenderer.invoke('open-answer-citation', input),
   getContextHealth: () => ipcRenderer.invoke('get-context-health'),
   knowledgeSelectMaterials: () => ipcRenderer.invoke('knowledge:select-materials'),
   knowledgeUploadMaterials: (filePaths: string[]) =>
