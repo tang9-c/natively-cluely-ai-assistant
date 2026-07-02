@@ -2075,7 +2075,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (!result?.success) {
       setCitationPreviewMessage(
         result?.status === 'stale-citation'
-          ? '引用来源已变更，无法跳回原文'
+          ? '引用来源已变更，无法预览原片段'
           : '引用来源不可用',
       );
       return;
@@ -4108,10 +4108,10 @@ Provide only the answer, nothing else.`;
 	                          type="button"
 	                          onClick={handleOpenLatestCitation}
 	                          className="opacity-75 underline underline-offset-2 hover:opacity-100"
-	                          title="打开资料引用"
-	                          aria-label="打开资料引用"
+	                          title="查看引用片段"
+	                          aria-label="查看引用片段"
 	                        >
-	                          资料引用 {materialCitationCount}
+	                          查看引用片段 {materialCitationCount}
 	                        </button>
 	                      )}
 	                      {latestDegradedReasonDisplay && (
