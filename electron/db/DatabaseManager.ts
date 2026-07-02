@@ -87,7 +87,8 @@ export type AnswerDegradedReason =
     | 'speaker_separation_unavailable'
     | 'stt_user_failed'
     | 'stt_interviewer_failed'
-    | 'context_scope_denied';
+    | 'context_scope_denied'
+    | 'duplicate_context_dropped';
 
 export interface AnswerContextUsed {
     currentTranscript: boolean;
