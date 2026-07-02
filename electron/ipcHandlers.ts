@@ -2884,6 +2884,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         parsed.protocol === 'https:' &&
         parsed.hostname === 'mail.google.com' &&
         parsed.pathname === '/mail/';
+      const allowedContactMailUrl =
+        parsed.protocol === 'mailto:' &&
+        parsed.pathname === 'tangdu@feigenbaum.ai';
       // x-apple.systempreferences is a macOS-only URI scheme. Allowing it on
       // Windows let renderer regressions hand Windows shell an unknown
       // protocol → Microsoft Store popup (issue #252). Gate the allowlist on
@@ -2891,7 +2894,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const allowedSystemSettingsUrl =
         parsed.protocol === 'x-apple.systempreferences:' && process.platform === 'darwin';
 
-      if (allowedWebUrl || allowedSystemSettingsUrl) {
+      if (allowedWebUrl || allowedContactMailUrl || allowedSystemSettingsUrl) {
         await shell.openExternal(url);
       } else {
         console.warn('[IPC] Blocked open-external request', {
