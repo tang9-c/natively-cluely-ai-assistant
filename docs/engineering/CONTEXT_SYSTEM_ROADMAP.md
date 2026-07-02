@@ -1,27 +1,29 @@
-# Natively Context System Roadmap
+# Natively 上下文系统路线图
 
-## North Star
+## 北极星
 
 会议现场 2 秒内给出能直接说出口的回答建议，并且用户知道它为什么可信。
 
 这不是“接更多模型”，也不是“加更多工具”。核心是把当前会议、短期上下文、本地资料、历史会议、长期记忆、企业知识库和屏幕内容编排成一个稳定、可解释、可评估的上下文系统。
 
-## Product Judgment
+## 产品判断
 
 当前最重要的用户价值是：立刻给出能用的回答建议。
 
-为了做到这一点，优先级不是完整 MCP 工具调用，而是上下文供给链：
+为了做到这一点，优先级不是完整 MCP 工具调用，而是可验证的上下文供给链：
 
-1. 短期记忆和当前会议上下文。
-2. 本地 RAG 与资料上传。
-3. Context Orchestrator，上下文编排层。
-4. 长期记忆。
-5. 只读企业知识库连接器。
-6. 完整 MCP 工具调用。
+1. 实时答案可信度闭环：上下文追踪、降级原因、质量事件、评测。
+2. 本地 RAG 与资料上传，并且能证明资料真的被用对。
+3. `ContextOrchestrator`，上下文编排层，只先迁移主实时回答链路。
+4. PLM/QMS 只读业务系统上下文，通过受控 MCP 连接 BOM、变更、问题和质量记录。
+5. 短期上下文和说话人稳定性。
+6. 长期记忆。
+7. 通用只读企业知识库连接器。
+8. 完整 MCP 工具调用。
 
-完整 MCP tool calling 是长期平台能力，但不是当前地基。只读知识连接器更接近当前价值，但也应该作为本地 RAG 的资料补给系统，而不是实时回答的阻塞路径。
+完整 MCP 工具调用是长期平台能力，但不是当前地基。PLM/QMS 的只读 MCP 连接器应该提前，因为它直接服务会议现场的事实支撑。通用知识连接器更接近资料补给系统，也应该优先同步到本地索引，而不是让实时回答无条件等待远程系统返回。
 
-## Context Layers
+## 上下文层
 
 ```text
 实时回答请求
@@ -30,9 +32,9 @@
 Context Orchestrator
    |
    +-- 当前会议上下文
-   |   - 当前 transcript
-   |   - speaker separation
-   |   - screen context
+   |   - 当前转录文本
+   |   - 说话人分离
+   |   - 屏幕上下文
    |
    +-- 短期记忆
    |   - 最近 N 轮对话
@@ -42,6 +44,12 @@ Context Orchestrator
    |   - 用户上传资料
    |   - 历史会议
    |   - 已缓存企业知识
+   |
+   +-- 受控业务系统上下文
+   |   - PLM BOM / 物料 / 版本
+   |   - PLM ECO / ECN / 变更影响范围
+   |   - QMS CAPA / NCR / 偏差 / 问题状态
+   |   - 审批状态 / 负责人 / 更新时间
    |
    +-- 长期记忆
    |   - 用户偏好
@@ -55,288 +63,381 @@ Context Orchestrator
        - 写入本地索引
 ```
 
-实时路径必须主要依赖本地可用的上下文。远程企业知识库和 MCP 只读调用应当用于预取、同步、缓存、增量刷新，不能让会议现场的回答等待远程工具返回。
+实时路径必须主要依赖本地可用的上下文。PLM/QMS 可以允许受控 live read，但必须带超时、来源、对象 ID、版本和更新时间；远程企业知识库和 MCP 只读调用默认应当用于预取、同步、缓存、增量刷新，不能让会议现场的回答无条件等待远程工具返回。
 
-## Phase 0: Context Visibility And Quality Signals
+## Phase 0：实时答案可信度闭环
 
-Timeline: 1 week.
+时间：1 周。
 
-Goal: Know when the system has useful context and when it is effectively answering bare.
+目标：知道每个实时答案是否有上下文支撑、为什么发生降级，以及用户是否觉得它有用。
 
-Deliverables:
+这一阶段把上下文可见性和第一版质量评估闭环合在一起。必须先做它，再扩展上下文来源。否则团队可能会交付更多上下文能力，却不知道现场答案到底有没有变好。
 
-- Record `context_used` for every generated answer:
-  - current transcript;
-  - short-term history;
-  - uploaded-document RAG;
-  - historical meetings;
-  - long-term memory;
-  - enterprise knowledge;
-  - screen context.
-- Make RAG, embedding, STT, and speaker separation status visible.
-- Show clear reasons when an answer path degrades.
-- Capture answer quality events:
-  - shown;
-  - copied;
-  - accepted;
-  - ignored;
-  - regenerated.
+交付物：
 
-Acceptance:
+- 为每个生成答案记录 `context_used`：
+  - 当前转录文本；
+  - 短期历史；
+  - 上传文档 RAG；
+  - 历史会议；
+  - 长期记忆；
+  - 企业知识；
+  - 屏幕上下文。
+- 展示 RAG、embedding、STT 和说话人分离状态。
+- 当答案路径降级时，展示清楚原因。
+- 捕获答案质量事件：
+  - 已展示；
+  - 已复制；
+  - 已接受；
+  - 已忽略；
+  - 已重新生成。
+- 增加一组小型、按模式划分的评测：
+  - 销售异议处理；
+  - 技术面试；
+  - 团队会议负责人/截止时间；
+  - 简历问答。
+- 跟踪第一批产品质量指标：
+  - 答案延迟；
+  - 引用命中率；
+  - 用户接受率；
+  - 重新生成率；
+  - RAG 命中率；
+  - 无上下文回答率。
+- 每次修改 prompt、RAG、记忆或上下文选择策略后运行评测。
 
-- Every answer can be traced to the context sources it used.
-- When RAG is unavailable, the user is not misled into thinking uploaded materials were used.
-- Quality events are persisted locally or otherwise available for evaluation.
+验收标准：
 
-## Phase 1: Local RAG And Material Upload
+- 每个答案都能追踪到它使用了哪些上下文来源。
+- RAG 不可用时，用户不会被误导为“上传资料已被使用”。
+- 质量事件会持久化到本地，或至少能被评估流程读取。
+- 团队能回答：一次 prompt、RAG、记忆或上下文选择改动是否提升了答案质量。
+- 失败能归因到 STT、RAG、记忆、prompt、模型或上下文编排。
 
-Timeline: 1-2 weeks.
+## Phase 1：本地 RAG 与资料上传
 
-Goal: Users can give Natively important material and reliably get it used during meetings.
+时间：1-2 周。
 
-Deliverables:
+目标：用户能把重要资料交给 Natively，并且在会议中可靠地用上；同时有评测证据证明它改善了实时答案。
 
-- Simplified material upload entry point.
-- Support PDF, DOCX, Markdown, and TXT.
-- Batch upload.
-- Indexing states:
-  - queued;
-  - indexing;
-  - complete;
-  - failed.
-- File-level delete and reindex.
-- Answer source citations.
-- Unified retrieval across:
-  - current meeting;
-  - historical meetings;
-  - uploaded materials.
-- Improve Doubao Embedding Endpoint configuration and fallback messaging.
+交付物：
 
-Acceptance:
+- 简化资料上传入口。
+- 支持 PDF、DOCX、Markdown 和 TXT。
+- 支持批量上传。
+- 索引状态：
+  - 已排队；
+  - 索引中；
+  - 已完成；
+  - 已失败。
+- 文件级删除和重新索引。
+- 答案来源引用。
+- 评测用例证明上传资料被选中、被引用，并且没有被幻觉化。
+- 统一检索：
+  - 当前会议；
+  - 历史会议；
+  - 上传资料。
+- 改善 Doubao Embedding Endpoint 配置和降级提示。
 
-- Upload a product FAQ, ask a related question in a meeting, and receive an answer citing that FAQ.
-- If embedding is not configured, the app shows a clear degraded state.
-- File indexing failures show readable errors.
-- Deleted materials are no longer cited or retrieved.
+验收标准：
 
-## Phase 2: Context Orchestrator
+- 上传一份产品 FAQ，在会议中问相关问题，能得到引用该 FAQ 的回答。
+- embedding 未配置时，应用展示清楚的降级状态。
+- 文件索引失败时，展示可读错误。
+- 已删除资料不会再被引用或检索。
+- 资料支撑型答案必须通过相关评测用例，才算功能完成。
 
-Status: First implementation plan drafted; not implemented yet.
+## Phase 2：Context Orchestrator
 
-Plan:
+状态：第一版实施计划已起草，尚未实施。
 
-- Saved locally at `docs/superpowers/plans/2026-06-25-context-orchestrator.md`.
-- Current plan is a phased migration plan, not a direct all-at-once rewrite.
-- Key correction from review: this feature has broad impact because prompt and context assembly are currently spread across the main answer chain, legacy suggestion path, multiple LLM classes, LLM helper methods, RAG query handlers, and internal structured tasks.
-- First implementation should only migrate the core real-time answer path, then classify remaining LLM paths as migrated, pending, or exempt.
+计划：
 
-Timeline: 1-2 weeks.
+- 本地计划保存在 `docs/superpowers/plans/2026-06-25-context-orchestrator.md`。
+- 当前计划是分阶段迁移计划，不是一次性全量重写。
+- 评审后的关键修正：这个功能影响面很广，因为 prompt 和上下文组装目前分散在主回答链路、旧建议链路、多个 LLM 类、LLM helper 方法、RAG 查询 handler 和内部结构化任务里。
+- 第一版实施只迁移核心实时回答路径，然后把其余 LLM 路径标记为已迁移、待迁移或豁免。
 
-Goal: Stop prompt assembly from becoming scattered across modules. All context entering the LLM should pass through one selection, ranking, and trimming layer.
+时间：1-2 周。
 
-Deliverables:
+目标：阻止 prompt 组装继续散落在多个模块中。所有进入 LLM 的上下文都应经过同一个选择、排序、裁剪层。
 
-- Add `ContextOrchestrator`.
-- Inputs:
-  - user question;
-  - current meeting transcript;
-  - recent N turns;
-  - RAG hits;
-  - speaker metadata;
-  - screen context;
-  - user preference memories.
-- Outputs:
-  - `selectedContext`;
-  - `rejectedContext`;
-  - `reason`;
-  - `tokenBudget`;
-  - `sourceAttribution`.
-- Handle stale, conflicting, and low-confidence context.
-- Default priority order:
-  1. current meeting;
-  2. recent N turns;
-  3. user-uploaded materials;
-  4. historical meetings;
-  5. long-term memory;
-  6. cached enterprise knowledge.
+交付物：
 
-Acceptance:
+- 增加 `ContextOrchestrator`。
+- 输入：
+  - 用户问题；
+  - 当前会议转录文本；
+  - 最近 N 轮；
+  - RAG 命中；
+  - 说话人元数据；
+  - 屏幕上下文；
+  - 用户偏好记忆。
+- 输出：
+  - `selectedContext`；
+  - `rejectedContext`；
+  - `reason`；
+  - `tokenBudget`；
+  - `sourceAttribution`。
+- 处理过期、冲突和低置信度上下文。
+- 默认优先级：
+  1. 当前会议；
+  2. 最近 N 轮；
+  3. 用户上传资料；
+  4. 历史会议；
+  5. 长期记忆；
+  6. 已缓存企业知识。
 
-- The system can explain why each context source was selected or rejected.
-- Token overflows are handled predictably.
-- Prompt assembly no longer happens independently in multiple unrelated modules.
+验收标准：
 
-## Phase 3: Long-Term Memory V1
+- 系统能解释为什么选择或拒绝每个上下文来源。
+- token 溢出时行为可预测。
+- prompt 组装不再在多个无关模块中独立发生。
+- selected/rejected 上下文摘要会写入答案 trace，但不写入原始转录文本、完整 prompt、屏幕文字 dump 或 chunk 正文。
+- 主路径答案评测在迁移前后都会运行，答案质量、延迟、引用命中率和无上下文回答率都不能回归。
 
-Timeline: 1-2 weeks.
+## Phase 3：PLM/QMS 只读业务系统上下文
 
-Goal: Make Natively remember who the user is, how they prefer to answer, and what recurring relationships or historical facts matter.
+时间：1-2 周。
 
-Deliverables:
+目标：会议中讨论 BOM、物料、版本、ECO/ECN、变更影响范围、CAPA、NCR、偏差、问题单、审批状态或质量风险时，Natively 能在不打开 PLM/QMS 的情况下提供可信、可引用、带时间戳的只读上下文。
 
-- Memory types:
-  - user preference;
-  - person/customer relationship;
-  - historical event;
-  - answer style;
-  - taboo or never-use information.
-- Memory fields:
-  - content;
-  - type;
-  - source;
-  - timestamp;
-  - confidence;
-  - user-confirmed flag.
-- Retrieval flows through `ContextOrchestrator`.
-- Settings toggle to disable long-term memory.
-- User can view and delete memories.
+定位：
 
-Acceptance:
+- 这是领域业务系统上下文，不是通用 MCP 平台。
+- MCP 是连接方式，不是用户可见产品名。
+- 对外展示为“PLM/QMS 知识源”或“受控业务系统上下文”。
+- 第一版只读，不写回 PLM/QMS。
 
-- If the user says, "以后回答客户问题直接一点", similar future scenarios reflect that preference.
-- Low-confidence memories do not directly enter prompts.
-- Deleted memories are no longer retrieved or used.
-- Privacy settings are respected.
+交付物：
 
-Risks:
+- 受控 MCP 连接器能力：
+  - PLM BOM 查询；
+  - 物料、版本、替代料查询；
+  - ECO/ECN 查询；
+  - 变更影响范围查询；
+  - QMS 问题单、CAPA、NCR、偏差状态查询；
+  - 审批状态、负责人和更新时间查询。
+- 对每条业务系统上下文记录来源元数据：
+  - 系统名；
+  - 对象类型；
+  - 对象 ID；
+  - 版本；
+  - 状态；
+  - 更新时间；
+  - 查询时间；
+  - 权限范围。
+- 默认使用缓存、预取或本地索引。
+- 必要时允许受控 live read：
+  - 1-2 秒超时；
+  - 失败不阻塞会议回答；
+  - 明确提示“未能获取实时数据”或“使用缓存数据”。
+- 所有 PLM/QMS 上下文都通过 `ContextOrchestrator` 进入主回答链路。
+- 答案引用必须能指回 PLM/QMS 对象，而不是只引用一段无来源文本。
 
-- Long-term memory can become persistent hallucination if low-confidence or stale memories are treated as facts.
-- Memories need source, time, confidence, and deletion controls from the first version.
+验收标准：
 
-## Phase 4: Read-Only Enterprise Knowledge Connectors
+- 用户在会议里问“这个 ECO 影响哪些 BOM？”时，Natively 能在 2 秒目标内给出带来源、对象 ID、版本和更新时间的答案。
+- 如果使用缓存数据，答案必须明确说明数据时间戳。
+- 如果 live read 超时或失败，会议回答继续进行，并展示清楚降级原因。
+- 无权限、对象不存在、版本冲突、状态过期时，系统不会编造答案。
+- 只读边界有测试覆盖，不存在写回 PLM/QMS 的工具调用。
+- 评测覆盖至少一条 BOM 问题、一条变更影响问题和一条 QMS 问题状态问题。
 
-Timeline: 2-3 weeks.
+不在范围内：
 
-Goal: Reduce manual upload burden without making remote calls block real-time answer generation.
+- 写回 PLM/QMS。
+- 创建或审批 ECO、CAPA、NCR、偏差记录。
+- 通用 MCP server 管理界面。
+- 让普通用户直接配置任意 MCP tool。
+- 把 PLM/QMS live read 作为实时回答的无条件阻塞步骤。
 
-Deliverables:
+风险：
 
-- Start with 1-2 sources:
-  - GitHub docs or repository content;
-  - one of Notion, Confluence, or Google Drive.
-- Read-only sync.
-- Sync content into the local index.
-- Incremental refresh.
-- Source citations.
-- Connection status and last sync time.
-- Permission revocation.
+- PLM/QMS 数据带版本和状态，如果缺少更新时间和对象 ID，答案会显得可信但实际不可审计。
+- QMS/PLM 是高风险系统，写操作必须留到安全边界、权限模型和审计日志成熟之后。
+- 如果不经过 `ContextOrchestrator`，BOM、变更和问题单内容会重新变成散落的 prompt 拼接。
 
-Acceptance:
+## Phase 4：短期上下文和说话人稳定性
 
-- Enterprise knowledge is synced into local RAG.
-- Real-time answers do not block on remote APIs.
-- Connector failures do not break the meeting flow.
-- Answer citations point back to original documents.
+时间：1 周。
 
-Product naming:
+目标：在引入长期记忆之前，让实时回答链路可靠理解当前对话以及谁在说话。
 
-- Expose this as "Knowledge Sources" or "资料来源".
-- Do not expose "MCP" to normal users in the first version.
+交付物：
 
-## Phase 5: Quality Evaluation Loop
+- 稳定当前会议的最近轮次选择。
+- 确保说话人分离和本地说话人验证能向答案路径提供安全的元数据。
+- 当使用说话人元数据时，在上下文 trace 中标记说话人置信度。
+- 避免把低置信度说话人身份当成事实使用。
+- 使用说话人元数据时，答案延迟仍保持在 2 秒目标内。
 
-Timeline: first version in 1 week, then continuous.
+验收标准：
 
-Goal: Know whether answer quality is actually improving.
+- 答案路径能使用最近轮次，同时不会拉入过期或无关的会议历史。
+- 只有置信度足够高时才包含说话人元数据。
+- 低置信度说话人状态会显式降级，而不是静默影响答案。
+- 评测至少覆盖一个依赖“谁在说话”或“最近几轮说了什么”才能答对的用例。
 
-Deliverables:
+## Phase 5：长期记忆 V1
 
-- Mode-specific eval suites:
-  - sales objection;
-  - technical interview;
-  - team meeting owner/deadline;
-  - resume Q&A.
-- Metrics:
-  - answer latency;
-  - citation hit rate;
-  - user acceptance rate;
-  - regeneration rate;
-  - RAG hit rate;
-  - no-context answer rate.
-- Run evals after changes to prompts, RAG, memory, or context selection.
+时间：1-2 周。
 
-Acceptance:
+目标：让 Natively 记住用户是谁、用户偏好的回答方式，以及反复出现的人物关系或历史事实。
 
-- The team can answer whether a change improved answer quality.
-- Failures can be attributed to STT, RAG, memory, prompt, model, or context orchestration.
+交付物：
 
-## Phase 6: MCP Read-Only Adapter
+- 记忆类型：
+  - 用户偏好；
+  - 人物/客户关系；
+  - 历史事件；
+  - 回答风格；
+  - 禁忌或永不使用的信息。
+- 记忆字段：
+  - 内容；
+  - 类型；
+  - 来源；
+  - 时间戳；
+  - 置信度；
+  - 用户确认标记。
+- 检索通过 `ContextOrchestrator`。
+- 设置项支持关闭长期记忆。
+- 用户可以查看和删除记忆。
 
-Timeline: after enterprise knowledge connectors prove value.
+验收标准：
 
-Goal: Add MCP compatibility as an extension layer, not as the first user-facing product surface.
+- 如果用户说“以后回答客户问题直接一点”，相似的未来场景会体现该偏好。
+- 低置信度记忆不会直接进入 prompt。
+- 已删除记忆不会再被检索或使用。
+- 隐私设置会被遵守。
 
-Deliverables:
+风险：
 
-- MCP read-only resource adapter.
-- Allowlist.
-- Call logs.
-- Timeout and cache policy.
-- No write operations.
-- No generic MCP server management UI for normal users.
+- 如果低置信度或过期记忆被当成事实，长期记忆会变成持久化幻觉。
+- 第一版记忆必须带来源、时间、置信度和删除控制。
 
-Out of scope:
+## Phase 6：通用只读企业知识连接器
 
-- Full MCP tool execution.
-- Writing CRM records.
-- Creating Jira tasks.
-- Sending Slack messages.
-- Generic automation workflows.
+时间：2-3 周。
 
-## Recommended Execution Order
+目标：减少手动上传负担，同时不让远程调用阻塞实时答案生成。
+
+交付物：
+
+- 先接入 1-2 个文档型来源：
+  - GitHub 文档或仓库内容；
+  - Notion、Confluence 或 Google Drive 之一。
+- 只读同步。
+- 同步内容到本地索引。
+- 增量刷新。
+- 来源引用。
+- 连接状态和最后同步时间。
+- 权限撤销。
+
+验收标准：
+
+- 企业文档知识会同步进本地 RAG。
+- 实时答案不会阻塞在远程 API 上。
+- 连接器失败不会破坏会议流程。
+- 答案引用能指回原始文档。
+
+产品命名：
+
+- 对外展示为“Knowledge Sources”或“资料来源”。
+- 第一版不要向普通用户暴露“MCP”。
+
+## Phase 7：通用 MCP 只读适配器
+
+时间：企业知识连接器证明价值之后。
+
+目标：把 MCP 兼容性作为扩展层加入，而不是作为第一批用户可见产品表面。
+
+交付物：
+
+- MCP 只读资源适配器。
+- allowlist。
+- 调用日志。
+- 超时和缓存策略。
+- 无写操作。
+- 不为普通用户提供通用 MCP server 管理界面。
+
+不在范围内：
+
+- 完整 MCP 工具执行。
+- 写入 CRM 记录。
+- 创建 Jira 任务。
+- 发送 Slack 消息。
+- 通用自动化工作流构建器。
+
+## 推荐执行顺序
 
 ```text
-Week 1:
-  Phase 0: context visibility, quality events, existing RAG/Embedding status fixes.
+第 1 周：
+  Phase 0：实时答案可信度闭环、上下文 trace、质量事件、小型评测集。
 
-Week 2-3:
-  Phase 1: local RAG, material upload, source citations.
+第 2-3 周：
+  Phase 1：本地 RAG、资料上传、来源引用、评测支撑的资料使用。
 
-Week 4:
-  Phase 2: Context Orchestrator.
+第 4 周：
+  Phase 2：主实时回答路径的 Context Orchestrator。
 
-Week 5-6:
-  Phase 3: long-term memory V1.
+第 5-6 周：
+  Phase 3：PLM/QMS 只读业务系统上下文。
 
-Week 7-9:
-  Phase 4: read-only enterprise knowledge connectors.
+第 7 周：
+  Phase 4：短期上下文和说话人稳定性。
 
-Continuous:
-  Phase 5: evals and quality loop.
+第 8-9 周：
+  Phase 5：长期记忆 V1。
 
-Later:
-  Phase 6: MCP read-only adapter, then only much later write-capable tools.
+第 10-12 周：
+  Phase 6：通用只读企业知识连接器。
+
+持续执行：
+  每次修改 prompt、RAG、记忆或上下文选择策略后，持续运行 Phase 0 的可信度闭环。
+
+之后：
+  Phase 7：通用 MCP 只读适配器，再往后才考虑可写工具。
 ```
 
-## P0 Requirements
+## P0 要求
 
-P0 should include only things that decide whether users trust Natively in a live meeting:
+P0 只包含决定用户是否会在现场信任 Natively 的事项：
 
-- Real-time answer quality evaluation loop.
-- Context Orchestrator.
-- Local RAG, material upload, and citations.
-- Short-term context and speaker stability.
-- Visible degradation and setup diagnostics.
-- Long-term memory V1, once the above foundation is stable.
+- 实时答案质量评估闭环。
+- `ContextOrchestrator`。
+- 本地 RAG、资料上传和引用。
+- PLM/QMS 只读业务系统上下文。
+- 短期上下文和说话人稳定性。
+- 可见降级和设置诊断。
 
-## Not P0
+P0 之后再进入：
 
-- Full MCP tool calling.
-- Write actions into CRM, Jira, Slack, or email.
-- Generic MCP server management UI.
-- Large provider marketplace.
-- Complex automation workflow builder.
+- 长期记忆 V1。
+- 通用只读企业知识连接器。
 
-## Strategic Summary
+## 非 P0
 
-Local RAG makes answers grounded.
+- 完整通用 MCP 工具调用。
+- 写入 CRM、Jira、Slack 或 email。
+- 写回 PLM/QMS。
+- 通用 MCP server 管理界面。
+- 大型 provider marketplace。
+- 复杂自动化工作流构建器。
 
-Short-term memory makes answers connected to the current conversation.
+## 战略总结
 
-Long-term memory makes answers personal to the user.
+本地 RAG 让答案有依据。
 
-Enterprise knowledge connectors make the grounding scale without manual uploads.
+PLM/QMS 只读业务系统上下文让会议现场能直接使用 BOM、变更和质量记录这些事实。
 
-MCP is useful later as an extension layer. It should not become the first implementation path for the core user value.
+短期记忆让答案连接当前对话。
 
-The product should first make context accurate, fast, trustworthy, and measurable. Then expand the sources.
+说话人稳定性避免助手替错误的人回答。
+
+长期记忆让答案更贴合用户本人。
+
+通用企业知识连接器让文档型 grounding 在不依赖手动上传的情况下扩展。
+
+受控领域 MCP 应该服务 PLM/QMS 这类高价值只读上下文。通用 MCP 后续可以作为扩展层使用，但不应该成为核心用户价值的第一条实施路径。
+
+产品应该先让上下文准确、快速、可信、可测量，然后再扩展上下文来源。
