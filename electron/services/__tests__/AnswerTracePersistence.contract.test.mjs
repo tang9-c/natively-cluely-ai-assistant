@@ -30,6 +30,13 @@ test('generate-what-to-say passes traceSink and persists sourceStatus', () => {
   assert.match(handler, /citationCount/);
 });
 
+test('generate-what-to-say preserves trace observability from WhatToAnswerLLM', () => {
+  const source = read('electron/ipcHandlers.ts');
+  const handler = sliceSafeHandleBlock(source, 'generate-what-to-say');
+
+  assert.match(handler, /observability:\s*{[\s\S]{0,120}\.\.\.\(whatToAnswerTrace\?\.observability \?\? {}\)/);
+});
+
 test('generate-what-to-say does not discard generated answer when trace persistence fails', () => {
   const source = read('electron/ipcHandlers.ts');
   const handler = sliceSafeHandleBlock(source, 'generate-what-to-say');

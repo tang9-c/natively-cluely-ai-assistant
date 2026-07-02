@@ -96,6 +96,8 @@ export type AnswerDegradedReason =
   | 'rag_unavailable'
   | 'embedding_unavailable'
   | 'speaker_separation_unavailable'
+  | 'speaker_metadata_low_confidence'
+  | 'speaker_metadata_unavailable'
   | 'stt_user_failed'
   | 'stt_interviewer_failed'
   | 'context_scope_denied'
@@ -150,6 +152,7 @@ export interface AnswerContextTrace {
   model?: string | null
   latency_ms?: number | null
   latencyMs?: number | null
+  observability?: Record<string, unknown>
 }
 
 export interface AnswerQualityEventMetadata {

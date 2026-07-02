@@ -154,3 +154,79 @@ test('runWhatShouldISay works without screenContext', async () => {
   assert.equal(answer, 'Answer from transcript only.');
   assert.equal(receivedScreenContext, undefined);
 });
+
+test('runWhatShouldISay strips low-confidence speaker ME assertions and emits speaker trace', async () => {
+  const { engine, session } = await makeEngine();
+  const traces = [];
+  const degradedReasons = [];
+  const calls = [];
+
+  session.addTranscript({
+    speaker: 'interviewer',
+    text: 'I can own the legal review next week.',
+    timestamp: Date.now(),
+    final: true,
+    speakerLabel: 'Candidate',
+    speakerVerification: {
+      provider: 'local-speaker-verification',
+      profileId: 'me',
+      isMe: true,
+      confidence: 0.61,
+      threshold: 0.72,
+    },
+  });
+
+  engine.whatToAnswerLLM = {
+    async *generateStream(
+      cleanedTranscript,
+      _temporalContext,
+      _intentResult,
+      _imagePaths,
+      _screenContext,
+      _promptInstruction,
+      _uploadedMaterialContext,
+      _activeSkill,
+      _modeEvent,
+      contextDegradedReasons,
+      traceSink,
+    ) {
+      calls.push({ cleanedTranscript, contextDegradedReasons });
+      traceSink?.({
+        contextUsed: {
+          currentTranscript: true,
+          shortTermHistory: false,
+          uploadedDocumentRag: false,
+          historicalMeetings: false,
+          longTermMemory: false,
+          enterpriseKnowledge: false,
+          screenContext: false,
+        },
+        sourceStatus: {
+          ragAttempted: false,
+          ragReady: false,
+          embeddingReady: false,
+          uploadedMaterialHitCount: 0,
+          citationCount: 0,
+          screenContextStatus: 'not_available',
+        },
+        degradedReasons: contextDegradedReasons,
+      });
+      yield 'Clarify ownership without assuming who spoke.';
+    }
+  };
+
+  const answer = await engine.runWhatShouldISay(undefined, 0.8, undefined, {
+    skipCooldown: true,
+    contextDegradedReasons: degradedReasons,
+    traceSink: trace => traces.push(trace),
+  });
+
+  assert.equal(answer, 'Clarify ownership without assuming who spoke.');
+  assert.equal(calls.length, 1);
+  assert.doesNotMatch(calls[0].cleanedTranscript, /\[ME\]/);
+  assert.match(calls[0].cleanedTranscript, /\[INTERVIEWER: Candidate\]: i can own the legal review next week\./);
+  assert.ok(degradedReasons.includes('speaker_metadata_low_confidence'));
+  assert.equal(traces.length, 1);
+  assert.equal(traces[0].observability.speakerContext.degraded, true);
+  assert.equal(traces[0].observability.speakerContext.confidenceSummary.lowConfidenceCount, 1);
+});

@@ -29,6 +29,7 @@ import { SkillWatcherService, type SkillWatcherSuggestion } from './services/Ski
 import { isLocalIntentClassifierAvailable } from './services/LocalModelManager';
 import { ModesManager } from './services/ModesManager';
 import { keywordRowsToMap } from './llm/IntentKeywordDefaults';
+import { evaluateSpeakerContextForAnswer } from './services/context/SpeakerContextPolicy';
 
 // Mode types
 export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'recap' | 'clarify' | 'manual' | 'code_hint' | 'brainstorm';
@@ -864,8 +865,22 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             const transcriptTurns = this.buildTranscriptTurns(contextItems);
+            const speakerContext = evaluateSpeakerContextForAnswer(transcriptTurns);
+            const contextDegradedReasons = options?.contextDegradedReasons ?? [];
+            for (const reason of speakerContext.degradedReasons) {
+                if (!contextDegradedReasons.includes(reason)) contextDegradedReasons.push(reason);
+            }
+            const traceSink: WhatToAnswerTraceSink | undefined = options?.traceSink
+                ? (trace) => options.traceSink?.({
+                    ...trace,
+                    observability: {
+                        ...(trace.observability ?? {}),
+                        speakerContext: speakerContext.trace,
+                    },
+                })
+                : undefined;
 
-            const preparedTranscript = prepareTranscriptForWhatToAnswer(transcriptTurns, 12);
+            const preparedTranscript = prepareTranscriptForWhatToAnswer(speakerContext.turns, 12);
 
             const temporalContext = buildTemporalContext(
                 contextItems,
@@ -916,8 +931,8 @@ export class IntelligenceEngine extends EventEmitter {
                 options?.uploadedMaterialContext,
                 resolvedSkill,
                 options?.modeEvent,
-                options?.contextDegradedReasons,
-                options?.traceSink,
+                contextDegradedReasons,
+                traceSink,
                 options?.providerScopePolicy,
             );
             let streamAborted = false;

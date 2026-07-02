@@ -35,6 +35,7 @@ export interface WhatToAnswerTraceMetadata {
     sourceStatus: AnswerSourceStatus;
     degradedReasons: AnswerDegradedReason[];
     status?: 'generated' | 'generated_with_fallback';
+    observability?: Record<string, unknown>;
 }
 
 export type WhatToAnswerTraceSink = (trace: WhatToAnswerTraceMetadata) => void;

@@ -197,7 +197,14 @@ function baseRoleLabel(role: TranscriptTurn['role']): string {
 }
 
 function verificationLabel(turn: TranscriptTurn): string | null {
-    return turn.speakerVerification?.isMe === true ? 'ME' : null;
+    const verification = turn.speakerVerification;
+    return verification?.provider === 'local-speaker-verification' &&
+        verification.isMe === true &&
+        Number.isFinite(verification.confidence) &&
+        Number.isFinite(verification.threshold) &&
+        verification.confidence >= verification.threshold
+        ? 'ME'
+        : null;
 }
 
 function shouldShowSpeakerLabel(turn: TranscriptTurn, label: string): boolean {

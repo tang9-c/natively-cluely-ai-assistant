@@ -3101,6 +3101,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           status: whatToAnswerTrace?.status ?? 'generated',
           traceId: answerId,
           observability: {
+            ...(whatToAnswerTrace?.observability ?? {}),
             retrievalTimingMs: realtimeContextPlan.retrievalTimingMs,
             contextFingerprint: realtimeContextPlan.contextFingerprint,
             injectedSourceIds: realtimeContextPlan.injected.map((item) => `${item.source}:${item.sourceId}:${item.chunkId ?? ''}`),
