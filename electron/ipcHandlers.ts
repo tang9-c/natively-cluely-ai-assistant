@@ -3041,6 +3041,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             traceSink: (trace) => {
               whatToAnswerTrace = trace;
             },
+            providerScopePolicy: SettingsManager.getInstance().get('providerDataScopes') || {},
           },
         );
         if (screenContextStatus === 'failed') degradedReasons.push('screen_context_failed');

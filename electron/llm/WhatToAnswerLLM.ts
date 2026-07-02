@@ -7,7 +7,7 @@ import { IntentResult } from "./IntentClassifier";
 import { ScreenContext } from "../services/screen/types";
 import { PromptAssembler } from "../services/context/PromptAssembler";
 import { checkAnswerForCodeBugs } from "./CodeSanityCheck";
-import type { ProviderDataScope } from "./ProviderRouter";
+import type { ProviderDataScope, ProviderDataScopePolicy } from "./ProviderRouter";
 import type {
     AnswerContextUsed,
     AnswerDegradedReason,
@@ -195,6 +195,7 @@ export class WhatToAnswerLLM {
         modeEvent?: ModeEventContext,
         contextDegradedReasons?: string[],
         traceSink?: WhatToAnswerTraceSink,
+        providerScopePolicy?: ProviderDataScopePolicy,
     ): AsyncGenerator<string> {
         const MEASURE = process.env.MEASURE_LATENCY === 'true';
         let tStart = 0, tIntent = 0, tTemporal = 0, tMode = 0, tTrunc = 0, tPrompt = 0, tStream = 0;
@@ -202,6 +203,12 @@ export class WhatToAnswerLLM {
         let tPrevToken = 0;
 
         try {
+            contextDegradedReasons = contextDegradedReasons ?? [];
+            const explicitReferenceFilesAllowed = providerScopePolicy?.reference_files !== false;
+            if (!explicitReferenceFilesAllowed) {
+                contextDegradedReasons.push('context_scope_denied');
+                uploadedMaterialContext = undefined;
+            }
             if (MEASURE) tStart = performance.now();
 
             // ── Step 1: Transient context (intent + prior-turn guard) ──────────
@@ -300,13 +307,15 @@ ANSWER SHAPE: ${intentResult.answerShape}
                         // modesManager. The SettingsManager scope gate is
                         // only meaningful inside a running electron app
                         // (see constructor comment for why).
-                        if (typeof this.modesManager.buildRetrievedActiveModeContextBlockHybrid === 'function') {
-                            modeContextBlock = await this.modesManager.buildRetrievedActiveModeContextBlockHybrid(
-                                modeRetrievalQuery, cleanedTranscript, 1800,
-                            );
-                        }
-                        if (!modeContextBlock) {
-                            modeContextBlock = this.modesManager.buildRetrievedActiveModeContextBlock(modeRetrievalQuery, cleanedTranscript, 1800);
+                        if (explicitReferenceFilesAllowed) {
+                            if (typeof this.modesManager.buildRetrievedActiveModeContextBlockHybrid === 'function') {
+                                modeContextBlock = await this.modesManager.buildRetrievedActiveModeContextBlockHybrid(
+                                    modeRetrievalQuery, cleanedTranscript, 1800,
+                                );
+                            }
+                            if (!modeContextBlock) {
+                                modeContextBlock = this.modesManager.buildRetrievedActiveModeContextBlock(modeRetrievalQuery, cleanedTranscript, 1800);
+                            }
                         }
                     } else {
                         // Phase 4 — prefer async hybrid retrieval (FTS + vector with
@@ -315,14 +324,16 @@ ANSWER SHAPE: ${intentResult.answerShape}
                         // are unavailable, so we just need a single await here.
                         // Sync lexical method remains as the second-line fallback in
                         // case the hybrid method is missing (older module shape).
-                        let referenceFilesAllowed = true;
-                        try {
-                            const { SettingsManager } = require('../services/SettingsManager');
-                            const policy = SettingsManager.getInstance().get('providerDataScopes');
-                            referenceFilesAllowed = policy?.reference_files !== false;
-                        } catch (_scopeErr: any) {
-                            referenceFilesAllowed = false;
-                            console.warn('[ScopeFallback] reference_files policy unavailable; Ollama unavailable, omitting from context');
+                        let referenceFilesAllowed = explicitReferenceFilesAllowed;
+                        if (providerScopePolicy === undefined) {
+                            try {
+                                const { SettingsManager } = require('../services/SettingsManager');
+                                const policy = SettingsManager.getInstance().get('providerDataScopes');
+                                referenceFilesAllowed = policy?.reference_files !== false;
+                            } catch (_scopeErr: any) {
+                                referenceFilesAllowed = false;
+                                console.warn('[ScopeFallback] reference_files policy unavailable; Ollama unavailable, omitting from context');
+                            }
                         }
                         if (referenceFilesAllowed) {
                             if (typeof this.modesManager.buildRetrievedActiveModeContextBlockHybrid === 'function') {
