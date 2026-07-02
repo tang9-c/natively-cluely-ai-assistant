@@ -23,3 +23,11 @@ test('STT registry wires Local SenseVoice term correction settings into provider
   assert.match(source, /getLocalSenseVoiceTermCorrectionConfig/);
   assert.match(source, /new LocalSenseVoiceSTT\(\{\s*termCorrection/s);
 });
+
+test('STT registry logs a safe warning when Local SenseVoice term settings are unavailable', () => {
+  const source = fs.readFileSync(path.join(root, 'electron/audio/sttRegistry.ts'), 'utf8');
+
+  assert.match(source, /Local SenseVoice term correction settings unavailable/);
+  assert.match(source, /error\?\.message/);
+  assert.doesNotMatch(source, /console\.warn[\s\S]{0,160}termCorrection\.terms/);
+});

@@ -109,6 +109,7 @@ function collectMatches(text: string, rules: CorrectionRule[]): CorrectionMatch[
     const aLength = a.end - a.start;
     const bLength = b.end - b.start;
     if (aLength !== bLength) return bLength - aLength;
+    // Equal-length matches at the same offset are ambiguous; keep settings order deterministic.
     return a.ruleIndex - b.ruleIndex;
   });
 

@@ -162,7 +162,11 @@ export const STT_REGISTRY: Record<SttProviderId, RegistryEntry | undefined> = {
       let termCorrection: SenseVoiceTermCorrectionConfig = { enabled: true, terms: [] };
       try {
         termCorrection = SettingsManager.getInstance().getLocalSenseVoiceTermCorrectionConfig();
-      } catch {
+      } catch (error: any) {
+        const message = error?.message ?? String(error);
+        if (!message.includes("reading 'isReady'")) {
+          console.warn('[STTRegistry] Local SenseVoice term correction settings unavailable', { message });
+        }
         termCorrection = { enabled: true, terms: [] };
       }
       const sv = new LocalSenseVoiceSTT({

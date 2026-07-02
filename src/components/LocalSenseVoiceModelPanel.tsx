@@ -22,7 +22,7 @@ const electronAPI = (window as any).electronAPI;
 function createTerm(): SenseVoiceTermEntry {
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
-        : `term-${Date.now()}`;
+        : `term-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     return { id, canonical: '', variants: [], enabled: true };
 }
 
@@ -192,6 +192,11 @@ export function LocalSenseVoiceModelPanel() {
                                     className="mt-1 h-8 w-full rounded-md border border-border-subtle bg-bg-item-surface px-2 text-xs text-text-primary outline-none focus:border-accent-primary"
                                     placeholder="Natively"
                                 />
+                                {term.variants.length === 0 && (
+                                    <span className="mt-1 block text-[11px] text-amber-500">
+                                        未填写常见误识别，不会生效。
+                                    </span>
+                                )}
                             </label>
                             <label className="text-xs text-text-secondary">
                                 常见误识别（一行一个）

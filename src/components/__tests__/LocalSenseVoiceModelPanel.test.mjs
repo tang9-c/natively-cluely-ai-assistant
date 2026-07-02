@@ -16,6 +16,8 @@ test('LocalSenseVoiceModelPanel exposes term correction controls', () => {
   assert.match(source, /variants/);
   assert.match(source, /只填写正确词不会提高模型识别概率/);
   assert.match(source, /下次转写会话生效/);
+  assert.match(source, /未填写常见误识别，不会生效/);
+  assert.match(source, /Math\.random\(\)\.toString\(36\)/);
   assert.doesNotMatch(source, /localSenseVoiceSuggestTerms/);
   assert.doesNotMatch(source, /homophoneReplacerEnabled/);
   assert.doesNotMatch(source, /vadProfile/);

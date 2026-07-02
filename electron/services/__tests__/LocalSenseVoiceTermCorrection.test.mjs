@@ -66,3 +66,42 @@ test('sanitizeSenseVoiceTerms filters unsafe short variants and duplicates', asy
     [{ id: 'x', canonical: 'Natively', variants: ['内提夫利'], enabled: true }],
   );
 });
+
+test('applySenseVoiceTermCorrection skips disabled terms and defaults missing enabled to true', async () => {
+  const { applySenseVoiceTermCorrection } = await loadTermCorrection();
+
+  assert.equal(
+    applySenseVoiceTermCorrection('内提夫利和耐提夫利都出现了。', [
+      { id: 'disabled', canonical: 'Disabled', variants: ['内提夫利'], enabled: false },
+      { id: 'default', canonical: 'Natively', variants: ['耐提夫利'] },
+    ]),
+    '内提夫利和Natively都出现了。',
+  );
+});
+
+test('sanitizeSenseVoiceTerms caps term and variant counts', async () => {
+  const { sanitizeSenseVoiceTerms } = await loadTermCorrection();
+  const input = Array.from({ length: 205 }, (_, index) => ({
+    id: `term-${index}`,
+    canonical: `Canonical ${index}`,
+    variants: Array.from({ length: 25 }, (_unused, variantIndex) => `variant-${index}-${variantIndex}`),
+    enabled: true,
+  }));
+
+  const terms = sanitizeSenseVoiceTerms(input);
+
+  assert.equal(terms.length, 200);
+  assert.equal(terms[0].variants.length, 20);
+});
+
+test('applySenseVoiceTermCorrection resolves equal-length same-offset ties by settings order', async () => {
+  const { applySenseVoiceTermCorrection } = await loadTermCorrection();
+
+  assert.equal(
+    applySenseVoiceTermCorrection('内提夫利', [
+      { id: 'first', canonical: 'First Canonical', variants: ['内提夫利'], enabled: true },
+      { id: 'second', canonical: 'Second Canonical', variants: ['内提夫利'], enabled: true },
+    ]),
+    'First Canonical',
+  );
+});
