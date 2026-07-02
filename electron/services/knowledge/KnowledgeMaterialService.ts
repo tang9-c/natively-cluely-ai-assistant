@@ -15,6 +15,8 @@ export interface KnowledgeMaterialSearchResult {
     title: string;
     text: string;
     parentText: string;
+    fileHash?: string;
+    materialUpdatedAt?: string;
 }
 
 const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.docx', '.txt', '.md', '.markdown']);
@@ -102,6 +104,8 @@ export class KnowledgeMaterialService {
             sourceType: 'uploaded_material',
             sourcePriority: 1,
             chunkId: row.id,
+            fileHash: row.file_hash,
+            materialUpdatedAt: row.material_updated_at,
             embedding: row.embedding ? blobToVector(row.embedding) : undefined,
         }));
         const result = await this.materialRagRetriever.retrieve({
@@ -120,6 +124,8 @@ export class KnowledgeMaterialService {
                 title: chunk.title,
                 text: chunk.text,
                 parentText: chunk.parentText,
+                fileHash: chunk.fileHash,
+                materialUpdatedAt: chunk.materialUpdatedAt,
             }));
     }
 

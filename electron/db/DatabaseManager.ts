@@ -112,9 +112,15 @@ export interface AnswerSourceStatus {
 }
 
 export interface AnswerCitationRecord {
+    citationId?: string;
     sourceType: 'current_meeting' | 'historical_meeting' | 'uploaded_material' | 'long_term_memory' | 'enterprise_knowledge' | 'screen_context';
     sourceId: string;
+    sourceVersion?: string;
     chunkId?: string | number | null;
+    chunkContentHash?: string;
+    sourceFileHash?: string | null;
+    startOffset?: number | null;
+    endOffset?: number | null;
     score?: number | null;
     title?: string | null;
     timestamp?: number | string | null;
@@ -1709,6 +1715,7 @@ export class DatabaseManager {
                 c.*,
                 m.file_name,
                 m.title,
+                m.file_hash,
                 m.created_at AS material_created_at,
                 m.updated_at AS material_updated_at
             FROM knowledge_material_chunks c
@@ -1716,6 +1723,21 @@ export class DatabaseManager {
             WHERE m.status = 'complete' ${embeddingClause}
             ORDER BY m.updated_at DESC, c.chunk_index ASC
         `).all();
+    }
+
+    public getKnowledgeMaterialChunkById(chunkId: number): any | null {
+        if (!this.db) return null;
+        return this.db.prepare(`
+            SELECT
+                c.*,
+                m.file_name,
+                m.title,
+                m.file_hash,
+                m.updated_at AS material_updated_at
+            FROM knowledge_material_chunks c
+            JOIN knowledge_materials m ON m.id = c.material_id
+            WHERE c.id = ? AND m.status != 'deleted'
+        `).get(chunkId) ?? null;
     }
 
     public getMaterialQueueStatus(): { pending: number; processing: number; completed: number; failed: number } {

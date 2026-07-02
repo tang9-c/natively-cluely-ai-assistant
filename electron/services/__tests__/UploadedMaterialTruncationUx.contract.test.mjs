@@ -37,8 +37,8 @@ test('context pill maps uploaded material truncation reasons to user-facing labe
 
   assert.match(source, /formatDegradedReasonForDisplay/);
   assert.match(source, /uploaded_material_context_truncated:\s*'上传资料已节选'/);
-  assert.match(source, /uploaded_material_rag_failed:\s*'上传资料检索失败'/);
-  assert.match(source, /no_relevant_uploaded_material:\s*'未找到相关上传资料'/);
-  assert.match(source, /上下文已部分裁剪/);
+  assert.match(source, /uploaded_material_rag_failed:\s*'上传资料检索失败，本次答案未使用上传资料'/);
+  assert.match(source, /no_relevant_uploaded_material:\s*'没有找到相关上传资料，本次答案仅使用会议上下文'/);
+  assert.match(source, /上下文降级：\$\{item\}/);
   assert.doesNotMatch(source, /降级：\{latestDegradedReason\}/);
 });

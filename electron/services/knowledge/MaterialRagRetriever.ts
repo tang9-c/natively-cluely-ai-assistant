@@ -17,6 +17,8 @@ export interface MaterialRagSource {
     sourcePriority?: number;
     parentText?: string;
     chunkId?: string | number;
+    fileHash?: string;
+    materialUpdatedAt?: string;
     embedding?: number[];
 }
 
@@ -46,6 +48,8 @@ export interface MaterialRagChunk {
     meetingId?: string;
     speaker?: string;
     timeRange?: { start?: number; end?: number };
+    fileHash?: string;
+    materialUpdatedAt?: string;
     trustLevel: 'untrusted_reference';
 }
 
@@ -390,6 +394,8 @@ export class MaterialRagRetriever {
             meetingId: candidate.source.meetingId,
             speaker: candidate.source.speaker,
             timeRange: candidate.source.timeRange,
+            fileHash: candidate.source.fileHash,
+            materialUpdatedAt: candidate.source.materialUpdatedAt,
             trustLevel: 'untrusted_reference',
         };
     }
