@@ -1,4 +1,4 @@
-# Natively UI 中英对照表
+# CueUp UI 中英对照表
 
 > 本表包含从所有 47 个组件文件中提取的 1,238 条用户可见英文文本及其对应中文翻译。
 > 请审核以下翻译，如有修改意见请告知。
@@ -11,7 +11,7 @@
 
 | 序号 | 英文原文 | 中文翻译 | 类型 |
 |------|---------|---------|------|
-| 1 | About Natively | | |
+| 1 | About CueUp | | |
 | 2 | Designed to be invisible, intelligent, and trusted. | | |
 | 3 | What's New in v2.6 | | |
 | 4 | Phone Link Integration | | |
@@ -19,7 +19,7 @@
 | 6 | Smart Task Sync | | |
 | 7 | Speaker Identification | | |
 | 8 | Expanded Offline Mode | | |
-| 9 | How Natively Works | | |
+| 9 | How CueUp Works | | |
 | 10 | Hybrid Intelligence | | |
 | 11 | Local RAG & Memory | | |
 | 12 | Privacy & Data | | |
@@ -29,15 +29,15 @@
 | 16 | Official Website | | |
 | 17 | Evin John | | |
 | 18 | Creator | | |
-| 19 | Natively | | |
+| 19 | CueUp | | |
 | 20 | Star on GitHub | | |
-| 21 | Love Natively? Support us by starring the repo. | | |
+| 21 | Love CueUp? Support us by starring the repo. | | |
 | 22 | Report an Issue | | |
 | 23 | Found a bug? Let us know so we can fix it. | | |
 | 24 | Get in Touch | | |
 | 25 | Open for professional collaborations and job offers. | | |
 | 26 | Support Development | | |
-| 27 | Natively is independent open-source software. | | |
+| 27 | CueUp is independent open-source software. | | |
 | 28 | Core Technology | | |
 | 29 | wont show if the user open the donate button | | |
 | 30 | Undetectable Mode | | |
@@ -143,9 +143,9 @@
 | 1 | Error: Electron API not initialized. Check preload script. | | |
 | 2 | Profile Intel | | |
 | 3 | Modes | | |
-| 4 | My Natively | | |
+| 4 | My CueUp | | |
 | 5 | Meeting ongoing | | |
-| 6 | Start Natively | | |
+| 6 | Start CueUp | | |
 | 7 | Calendar linked | | |
 | 8 | Calendar Connected | | |
 | 9 | Link your calendar to | | |
@@ -250,7 +250,7 @@
 | 1 | Loading models... | | |
 | 2 | Check Settings. | | |
 | 3 | Retrying Ollama failed | | |
-| 4 | Natively API | | |
+| 4 | CueUp API | | |
 
 ## NativelyInterface.tsx
 
@@ -365,16 +365,16 @@
 | 6 | scale(1) | | |
 | 7 | scale(0.85) | | |
 | 8 | top center | | |
-| 9 | Natively | | |
+| 9 | CueUp | | |
 | 10 | linear-gradient(160deg, #5B8EF0 0%, #3B6FE8 50%, #2D5FD4 100%) | | |
 | 11 | pt-[6px] | | |
-| 12 | Ask anything — Natively knows your resume and this company... | | |
+| 12 | Ask anything — CueUp knows your resume and this company... | | |
 
 ## NativelyQuotaBanner.tsx
 
 | 序号 | 英文原文 | 中文翻译 | 类型 |
 |------|---------|---------|------|
-| 1 | Natively quota almost full | | |
+| 1 | CueUp quota almost full | | |
 | 2 | Resets on your next billing date | | |
 | 3 | AI requests | | |
 | 4 | Transcription | | |
@@ -508,14 +508,14 @@
 | 8 | Recommended | | |
 | 9 | Select Provider | | |
 | 10 | Settings | | |
-| 11 | Natively API | | |
-| 12 | Natively Pro | | |
+| 11 | CueUp API | | |
+| 12 | CueUp Pro | | |
 | 13 | Supported apps here | | |
 | 14 | Mouse Passthrough | | |
 | 15 | General settings | | |
-| 16 | Customize how Natively works for you | | |
-| 17 | Open Natively when you log in | | |
-| 18 | Natively will open automatically when you log in to your computer | | |
+| 16 | Customize how CueUp works for you | | |
+| 17 | Open CueUp when you log in | | |
+| 18 | CueUp will open automatically when you log in to your computer | | |
 | 19 | Do not save meetings | | |
 | 20 | Verbose debug logging | | |
 | 21 | Print detailed audio, STT, and pipeline diagnostics | | |
@@ -523,7 +523,7 @@
 | 23 | Show real-time transcription of the interviewer | | |
 | 24 | Auto Scroll | | |
 | 25 | Theme | | |
-| 26 | Customize how Natively looks on your device | | |
+| 26 | Customize how CueUp looks on your device | | |
 | 27 | Meeting Interface Style | | |
 | 28 | AI Response Language | | |
 | 29 | Auto | | |
@@ -533,7 +533,7 @@
 | 33 | Hold the slider to preview. | | |
 | 34 | Process Disguise | | |
 | 35 | Keyboard shortcuts | | |
-| 36 | Natively works with these easy to remember commands. | | |
+| 36 | CueUp works with these easy to remember commands. | | |
 | 37 | General | | |
 | 38 | Toggle Visibility | | |
 | 39 | Toggle Mouse Passthrough | | |
@@ -567,7 +567,7 @@
 | 67 | Join | | |
 | 68 | No calendars | | |
 | 69 | Get started by connecting a Google account. | | |
-| 70 | Natively | | |
+| 70 | CueUp | | |
 | 71 | Select device | | |
 | 72 | Saved | | |
 | 73 | English | | |
@@ -618,7 +618,7 @@
 | 116 | Move Window Down | | |
 | 117 | Move Window Left | | |
 | 118 | Move Window Right | | |
-| 119 | Managed transcription via Natively backend | | |
+| 119 | Managed transcription via CueUp backend | | |
 | 120 | Google Cloud | | |
 | 121 | gRPC streaming via Service Account | | |
 | 122 | Groq Whisper | | |
@@ -706,7 +706,7 @@
 | 7 | Donate | | |
 | 8 | Undetectable | | |
 | 9 | Detectable | | |
-| 10 | Requires Groq or Natively API key | | |
+| 10 | Requires Groq or CueUp API key | | |
 | 11 | Requires Pro license to be active | | |
 
 ## StartupSequence.tsx
@@ -774,11 +774,11 @@
 |------|---------|---------|------|
 | 1 | Copied | | |
 | 2 | Copy | | |
-| 3 | Run the downloaded installer (.exe) and follow the prompts. Natively will restart when finished. | | |
+| 3 | Run the downloaded installer (.exe) and follow the prompts. CueUp will restart when finished. | | |
 | 4 | Copy to clipboard | | |
 | 5 | Unknown | | |
 | 6 | Latest | | |
-| 7 | xattr -cr /Applications/Natively.app | | |
+| 7 | xattr -cr /Applications/CueUp.app | | |
 | 8 | Please wait while we prepare the update. | | |
 | 9 | Finalizing package... | | |
 | 10 | App is damaged | | |
@@ -829,7 +829,7 @@
 | 16 | All set — continue | | |
 | 17 | Continue | | |
 | 18 | You can grant permissions later in System Preferences. | | |
-| 19 | Windows will prompt you the first time Natively needs the microphone. | | |
+| 19 | Windows will prompt you the first time CueUp needs the microphone. | | |
 | 20 | System handles this | | |
 | 21 | Granted | | |
 | 22 | Denied — re-enable in Settings | | |
@@ -847,7 +847,7 @@
 | 5 | Applies to new chats instantly. | | |
 | 6 | Fast Response Mode | | |
 | 7 | NEW | | |
-| 8 | Requires Groq, Natively API, or Codex CLI to be configured. | | |
+| 8 | Requires Groq, CueUp API, or Codex CLI to be configured. | | |
 | 9 | Cloud Providers | | |
 | 10 | Add API keys to unlock cloud AI models. | | |
 | 11 | Local Provider (Codex CLI) | | |
@@ -895,8 +895,8 @@
 | 52 | Provider Name is required. | | |
 | 53 | Invalid cURL command. | | |
 | 54 | Are you sure you want to delete this provider? | | |
-| 55 | Natively API | | |
-| 56 | Requires Groq, Natively API, or Codex CLI to be configured | | |
+| 55 | CueUp API | | |
+| 56 | Requires Groq, CueUp API, or Codex CLI to be configured | | |
 | 57 | Gemini | | |
 | 58 | AIzaSy... | | |
 | 59 | Groq | | |
@@ -951,7 +951,7 @@
 | 12 | Stripe Payment Intents | | |
 | 13 | System | | |
 | 14 | Screen Recording | | |
-| 15 | Natively | | |
+| 15 | CueUp | | |
 | 16 | Pill Controls | | |
 | 17 | Meeting ongoing | | |
 | 18 | Toggles entire window — keeps you | | |
@@ -965,9 +965,9 @@
 | 26 | No Access | | |
 | 27 | Access | | |
 | 28 | Quick Start | | |
-| 29 | Get Natively running in four steps. | | |
+| 29 | Get CueUp running in four steps. | | |
 | 30 | Want to skip the manual setup? | | |
-| 31 | Natively API | | |
+| 31 | CueUp API | | |
 | 32 | Help Guide | | |
 | 33 | Hardware & Engine Configurations | | |
 | 34 | System Default | | |
@@ -975,7 +975,7 @@
 | 36 | Accent / Region | | |
 | 37 | en-GB | | |
 | 38 | en-IN | | |
-| 39 | Provides Natively the ability to read your screen temporarily when you capture context. | | |
+| 39 | Provides CueUp the ability to read your screen temporarily when you capture context. | | |
 | 40 | System Settings &gt; Privacy & Security &gt; Screen Recording | | |
 | 41 | System Settings &gt; Privacy & Security &gt; Accessibility | | |
 | 42 | Settings &gt; Privacy &gt; Microphone | | |
@@ -1007,7 +1007,7 @@
 | 68 | ollama.com | | |
 | 69 | ollama run llama3:8b | | |
 | 70 | ollama run phi3 | | |
-| 71 | Return to Natively's AI Providers overlay, and you will see your Local models ready for usage. | | |
+| 71 | Return to CueUp's AI Providers overlay, and you will see your Local models ready for usage. | | |
 | 72 | Crucial: The Response Path. | | |
 | 73 | choices[0].message.content | | |
 | 74 | Quick Actions & Hotkeys | | |
@@ -1020,7 +1020,7 @@
 | 81 | Capture Contextual Screenshot | | |
 | 82 | Takes a silent screenshot in the background, feeding the visual data to the LLM context flow. | | |
 | 83 | Process Captured Context (Execute) | | |
-| 84 | Triggers Natively to analyze the captured screenshots and text from the rolling buffer. | | |
+| 84 | Triggers CueUp to analyze the captured screenshots and text from the rolling buffer. | | |
 | 85 | Capture + Execute Instantly | | |
 | 86 | Captures a screenshot AND processes it in one fluid action. | | |
 | 87 | Zero Context Prep: | | |
@@ -1028,7 +1028,7 @@
 | 89 | Global Toggle: | | |
 | 90 | Profile Mode | | |
 | 91 | Get a License at | | |
-| 92 | natively.software | | |
+| 92 | cueup.feigenbaum.ai | | |
 | 93 | Drop your Resume PDF in the UI to activate injection. | | |
 | 94 | JD PDF | | |
 | 95 | Research Now | | |
@@ -1046,7 +1046,7 @@
 | 107 | Opening the Manager | | |
 | 108 | Click the | | |
 | 109 | grid icon | | |
-| 110 | Requires a Natively Pro license | | |
+| 110 | Requires a CueUp Pro license | | |
 | 111 | Activating a Mode | | |
 | 112 | Click | | |
 | 113 | Set active | | |
@@ -1063,12 +1063,12 @@
 | 124 | Real-time Prompt | | |
 | 125 | Define | | |
 | 126 | Note Section Templates | | |
-| 127 | Settings → Natively API | | |
+| 127 | Settings → CueUp API | | |
 | 128 | How to Set it Up | | |
 | 129 | Navigate to the | | |
 | 130 | Calendar | | |
 | 131 | Connect Google Calendar | | |
-| 132 | Natively will quietly background-sync your schedule. | | |
+| 132 | CueUp will quietly background-sync your schedule. | | |
 | 133 | Follow-Up System | | |
 | 134 | who you are talking to | | |
 | 135 | next real meeting | | |
@@ -1119,7 +1119,7 @@
 | 180 | Test API Key | | |
 | 181 | Grant Permissions | | |
 | 182 | Set Up Audio | | |
-| 183 | Open Settings → Audio and select Natively API, or paste a Deepgram or Google key. | | |
+| 183 | Open Settings → Audio and select CueUp API, or paste a Deepgram or Google key. | | |
 | 184 | Connect an AI Model | | |
 | 185 | Personalize (Optional) | | |
 | 186 | You | | |
@@ -1169,7 +1169,7 @@
 | 230 | 1. App Permissions Setup | | |
 | 231 | 2. Audio STT Providers Setup (Microphone) | | |
 | 232 | 3. AI Providers & Prompt Engine | | |
-| 233 | 4. Natively Interface Operations | | |
+| 233 | 4. CueUp Interface Operations | | |
 | 234 | 5. Meeting Intelligence | | |
 | 235 | 6. Global Search & Shortcuts | | |
 | 236 | 7. Pro Intelligence | | |
@@ -1203,7 +1203,7 @@
 | 19 | Max | | |
 | 20 | Ultra | | |
 | 21 | Connected | | |
-| 22 | Try Natively API free | | |
+| 22 | Try CueUp API free | | |
 | 23 | AI | | |
 | 24 | STT | | |
 | 25 | Search | | |
@@ -1220,22 +1220,22 @@
 | 36 | Web searches | | |
 | 37 | Subscribe above and complete checkout on Dodo Payments. | | |
 | 38 | Your API key is emailed instantly to your inbox. | | |
-| 39 | Paste it here — Natively handles the rest automatically. | | |
+| 39 | Paste it here — CueUp handles the rest automatically. | | |
 
 ## NativelyProSettings.tsx
 
 | 序号 | 英文原文 | 中文翻译 | 类型 |
 |------|---------|---------|------|
-| 1 | Natively Pro | | |
+| 1 | CueUp Pro | | |
 | 2 | Pro License Active | | |
-| 3 | Unlock Natively Pro | | |
+| 3 | Unlock CueUp Pro | | |
 | 4 | Supercharge your workflow with advanced intelligence and candidate insights. | | |
 | 5 | Soon | | |
 | 6 | INSIDER25 | | |
 | 7 | Watch it in action | | |
 | 8 | Already purchased? | | |
 | 9 | Enter your license key to activate this device. | | |
-| 10 | Refund Policy — Natively Pro | | |
+| 10 | Refund Policy — CueUp Pro | | |
 | 11 | A quick heads-up: | | |
 | 12 | report it | | |
 | 13 | final sale | | |
@@ -1349,7 +1349,7 @@
 | 14 | Something went wrong. Restart the app. | | |
 | 15 | translateX(-50%) | | |
 | 16 | data:image/svg+xml,%3Csvg xmlns= | | |
-| 17 | Natively Pro | | |
+| 17 | CueUp Pro | | |
 | 18 | Max | | |
 | 19 | Best value | | |
 | 20 | Ultra | | |
@@ -1391,7 +1391,7 @@
 | 6 | Azure | | |
 | 7 | IBM Watson | | |
 | 8 | Soniox | | |
-| 9 | Natively Pro | | |
+| 9 | CueUp Pro | | |
 | 10 | Operational | | |
 | 11 | Reconnecting... | | |
 | 12 | Error | | |
@@ -1444,7 +1444,7 @@
 | 4 | Manage in Settings | | |
 | 5 | No Ollama models found. | | |
 | 6 | Ensure Ollama is running. | | |
-| 7 | Natively API | | |
+| 7 | CueUp API | | |
 | 8 | Managed AI • Fast execution | | |
 | 9 | ollama- | | |
 | 10 | gemini-3.1-flash-lite-preview | | |
@@ -1480,7 +1480,7 @@
 
 | 序号 | 英文原文 | 中文翻译 | 类型 |
 |------|---------|---------|------|
-| 1 | Natively | | |
+| 1 | CueUp | | |
 | 2 | Hide | | |
 | 3 | Show | | |
 
@@ -1495,5 +1495,5 @@
 | 5 | JDAwarenessToaster | | |
 | 6 | RemoteCampaignToaster | | |
 | 7 | NegotiationCoachingCard | | |
-| 8 | NativelyApiPromoToaster | | |
+| 8 | CueUpApiPromoToaster | | |
 | 9 | MaxUltraUpgradeToaster | | |

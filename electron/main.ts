@@ -4143,7 +4143,7 @@ export class AppState {
     trayIcon.setTemplateImage(iconToUse.endsWith('Template.png'));
 
     this.tray = new Tray(trayIcon)
-    this.tray.setToolTip('Natively') // This tooltip might also need update if we change global shortcut, but global shortcut is removed.
+    this.tray.setToolTip('CueUp') // This tooltip might also need update if we change global shortcut, but global shortcut is removed.
     this.updateTrayMenu();
 
     // Double-click to show window
@@ -4161,7 +4161,7 @@ export class AppState {
     console.log('[Main] updateTrayMenu called. Screenshot Accelerator:', screenshotAccel);
 
     // Update tooltip for verification
-    this.tray.setToolTip('Natively');
+    this.tray.setToolTip('CueUp');
 
     const displayScreenshot = formatAcceleratorForPlatform(screenshotAccel);
     // We can also get the toggle visibility shortcut if desired
@@ -4171,7 +4171,7 @@ export class AppState {
 
     const contextMenu = Menu.buildFromTemplate([
       {
-        label: '显示 Natively',
+        label: '显示 CueUp',
         click: () => {
           this.centerAndShowWindow()
         }

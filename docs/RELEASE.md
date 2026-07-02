@@ -2,7 +2,7 @@
 
 ## Update Channels
 
-Natively supports two update channels:
+CueUp supports two update channels:
 
 | Channel | File | Description |
 |---------|------|-------------|
@@ -44,7 +44,7 @@ npm run dist
 
 # 3. Upload to GitHub Release
 # - Tag: v2.0.8-beta.1
-# - Title: Natively v2.0.8-beta.1
+# - Title: CueUp v2.0.8-beta.1
 # - Mark as "Pre-release"
 # - Upload files from release/:
 #   - Natively Setup 2.0.8-beta.1.exe
@@ -64,7 +64,7 @@ npm run dist
 
 # 3. Upload to GitHub Release
 # - Tag: v2.0.8
-# - Title: Natively v2.0.8
+# - Title: CueUp v2.0.8
 # - Upload files from release/:
 #   - Natively Setup 2.0.8.exe
 #   - Natively.2.0.8.exe

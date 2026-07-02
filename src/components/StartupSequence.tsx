@@ -145,7 +145,7 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
                             fontWeight: 500
                         }}
                     >
-                        欢迎使用 Natively
+                        欢迎使用 CueUp
                     </motion.h1>
 
                     <motion.p
@@ -185,14 +185,14 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
                     <p className="text-[12px] opacity-60 mb-6 text-center" style={{ color: '#a7a7ad' }}>
                         By clicking Continue, you agree to our{' '}
                         <span
-                            onClick={() => (window.electronAPI as any)?.openExternal?.('https://natively.software/termsandconditions')}
+                            onClick={() => (window.electronAPI as any)?.openExternal?.('https://cueup.feigenbaum.ai/termsandconditions')}
                             className="font-semibold text-[#2f2f34] underline underline-offset-[3px] decoration-[#2f2f34]/30 hover:decoration-[#2f2f34]/70 cursor-pointer transition-colors"
                         >
                             服务条款
                         </span>
                         {' '}and{' '}
                         <span
-                            onClick={() => (window.electronAPI as any)?.openExternal?.('https://natively.software/privacy')}
+                            onClick={() => (window.electronAPI as any)?.openExternal?.('https://cueup.feigenbaum.ai/privacy')}
                             className="font-semibold text-[#2f2f34] underline underline-offset-[3px] decoration-[#2f2f34]/30 hover:decoration-[#2f2f34]/70 cursor-pointer transition-colors"
                         >
                             隐私政策

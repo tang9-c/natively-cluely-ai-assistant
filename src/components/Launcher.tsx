@@ -656,7 +656,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                     {/* 1.5. Hero Header (Title + Controls + CTA) */}
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-4">
-                                            <h1 className="text-3xl font-celeb-light font-medium text-text-primary tracking-wide drop-shadow-sm">我的 Natively</h1>
+                                            <h1 className="text-3xl font-celeb-light font-medium text-text-primary tracking-wide drop-shadow-sm">我的 CueUp</h1>
 
                                             {/* Refresh Button */}
                                             <button
@@ -768,7 +768,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                             className="flex items-center gap-3"
                                                         >
                                                             <img src={icon} alt="Logo" className="w-[18px] h-[18px] object-contain brightness-0 invert drop-shadow-[0_1px_2px_rgba(0,0,0,0.1)] opacity-90" />
-                                                            <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">启动 Natively</span>
+                                                            <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">启动 CueUp</span>
                                                         </motion.div>
                                                     )}
                                                 </AnimatePresence>
@@ -789,7 +789,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                             <div className="absolute inset-0 bg-gradient-to-br from-violet-900/30 to-indigo-950/50" />
                                             <div className="relative z-10 w-full flex flex-col items-center h-full pt-6 text-center">
                                                 <h3 className="text-[19px] leading-tight mb-4 tracking-[-0.01em]">
-                                                    <span className="block font-semibold text-white">Natively</span>
+                                                    <span className="block font-semibold text-white">CueUp</span>
                                                     <span className="block font-medium text-white/60 text-[0.95em]">AI Meeting Assistant</span>
                                                 </h3>
                                             </div>

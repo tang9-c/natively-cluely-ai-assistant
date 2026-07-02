@@ -2,7 +2,7 @@
 
 _Last updated: April 25th 2026_
 
-We take the security of Natively seriously and we genuinely appreciate reports from researchers, users, and the community. This document describes how to report a vulnerability, what we'll do with it, and the rules of engagement.
+We take the security of CueUp seriously and we genuinely appreciate reports from researchers, users, and the community. This document describes how to report a vulnerability, what we'll do with it, and the rules of engagement.
 
 ---
 
@@ -91,7 +91,7 @@ The following areas of the Service are **in scope** for security reports. High-v
 - **Network communication** — TLS configuration, certificate handling, request integrity.
 - **Local data storage** — SQLite database, `electron-store` settings, BYOK API-key storage.
 - **Dependency vulnerabilities** — Electron, Node, and Rust-crate CVEs that materially affect the shipped app. Please reproduce on the current release before reporting.
-- **The natively.software website** — server misconfigurations, common web vulnerabilities, and information leaks.
+- **The cueup.feigenbaum.ai website** — server misconfigurations, common web vulnerabilities, and information leaks.
 
 If you're not sure whether something is in scope, send the report — we'd rather triage and decline than miss a real issue.
 
@@ -118,7 +118,7 @@ The following are **not** considered in-scope vulnerabilities under this policy:
 The following are **not vulnerabilities** under this policy:
 
 - **AI hallucinations or factual errors** in model outputs.
-- **Prompt-injection attacks** that cause the underlying AI provider to behave in unintended ways. These are limitations of the underlying models, are in scope for the model provider's own safety processes, and are discussed in our [Terms &amp; Conditions §11](https://natively.software/termsandconditions). Reports about a *specific way to bypass a safety filter on OpenAI / Anthropic / Google models* should go to the respective provider.
+- **Prompt-injection attacks** that cause the underlying AI provider to behave in unintended ways. These are limitations of the underlying models, are in scope for the model provider's own safety processes, and are discussed in our [Terms &amp; Conditions §11](https://cueup.feigenbaum.ai/termsandconditions). Reports about a *specific way to bypass a safety filter on OpenAI / Anthropic / Google models* should go to the respective provider.
 - **Jailbreaks** of the AI assistant persona that don't expose data or control the user's machine.
 
 A prompt-injection issue **becomes** in-scope if it leads to **exfiltration of user data**, **unauthorised local file access**, **privilege escalation in the IPC bridge**, or **execution of arbitrary code on the user's machine**. Please call this out clearly in your report.
@@ -153,6 +153,6 @@ If we ever introduce a paid bounty programme, we'll publish the rules here befor
 
 **Email:** natively.contact@gmail.com
 
-For Privacy Policy questions, see [PRIVACY.md](./PRIVACY.md). For commercial / refund / licensing questions, see the [Refund Policy](https://natively.software/refundpolicy) and [Terms &amp; Conditions](https://natively.software/termsandconditions).
+For Privacy Policy questions, see [PRIVACY.md](./PRIVACY.md). For commercial / refund / licensing questions, see the [Refund Policy](https://cueup.feigenbaum.ai/refundpolicy) and [Terms &amp; Conditions](https://cueup.feigenbaum.ai/termsandconditions).
 
-Thanks for helping keep Natively safe.
+Thanks for helping keep CueUp safe.

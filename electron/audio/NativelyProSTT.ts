@@ -58,7 +58,7 @@ export class NativelyProSTT extends BaseSTT {
     // Cleared only after 5 s of stable connection so backoff actually increases on rapid 1006 loops
     private stabilityTimer: NodeJS.Timeout | null = null;
 
-    private readonly BACKEND_URL = 'wss://api.natively.software/v1/transcribe';
+    private readonly BACKEND_URL = 'wss://api.cueup.feigenbaum.ai/v1/transcribe';
 
     // Static: stagger concurrent connections with the same key so both instances
     // don't hit the server (and its upstream Deepgram key rotation) simultaneously.

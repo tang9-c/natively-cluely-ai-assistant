@@ -121,7 +121,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
     try {
       const result = await window.electronAPI?.repairTccPermission?.('screen');
       if (result?.success && result.requiresRestart) {
-        const shouldRestart = window.confirm('权限缓存已清理。立即重启 Natively 以重新触发 macOS 授权吗？');
+        const shouldRestart = window.confirm('权限缓存已清理。立即重启 CueUp 以重新触发 macOS 授权吗？');
         if (shouldRestart) {
           await window.electronAPI?.restartAfterTccRepair?.();
         }
@@ -219,7 +219,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
               {/* Header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px', paddingBottom: '16px', borderBottom: `1px solid ${T.rule}` }}>
                 <span style={{ fontSize: '10.5px', fontWeight: 660, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.t2 }}>
-                  Natively · Permissions
+                  CueUp · Permissions
                 </span>
                 <button onClick={handleDismiss} aria-label="忽略"
                   style={{ background: 'none', border: 'none', cursor: 'pointer', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', opacity: 0.35, padding: 0, transition: 'opacity 150ms, background 150ms' }}
@@ -237,7 +237,7 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                   </h2>
                   <p style={{ fontSize: '13px', lineHeight: 1.64, color: T.t3, margin: 0, maxWidth: '340px' }}>
                     {platform === 'darwin'
-                      ? 'Natively 需要访问您的屏幕和麦克风来捕获会议内容并转录语音。'
+                      ? 'CueUp 需要访问您的屏幕和麦克风来捕获会议内容并转录语音。'
                       : '当您开始会议时，如果 Windows 请求麦克风或屏幕访问权限，请点击"允许"。'}
                   </p>
                 </motion.div>

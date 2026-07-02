@@ -208,8 +208,8 @@ export function SpeakerVerificationSettings() {
           <label className="text-xs font-medium text-text-secondary block">我的声音</label>
           <p className="text-[11px] mt-1 text-text-tertiary">
             {enrolled
-              ? '已注册。Natively 会在会议中把你的发言识别为 ME。'
-              : '注册后，Natively 只会在会议中识别你的发言为 ME。'}
+              ? '已注册。CueUp 会在会议中把你的发言识别为 ME。'
+              : '注册后，CueUp 只会在会议中识别你的发言为 ME。'}
           </p>
           {status?.enrolledAt && (
             <p className="text-[11px] mt-1 text-text-tertiary">
@@ -284,7 +284,7 @@ export function SpeakerVerificationSettings() {
           <div>
             <p className="text-xs font-medium text-red-200">删除声音注册？</p>
             <p className="text-[11px] mt-1 text-red-100/80">
-              删除后，Natively 将不再识别你的发言为 ME。历史会议不会自动改写。
+              删除后，CueUp 将不再识别你的发言为 ME。历史会议不会自动改写。
             </p>
           </div>
           <div className="flex justify-end gap-2">

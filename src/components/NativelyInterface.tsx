@@ -1080,7 +1080,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         return;
       }
 
-      const shouldRestart = window.confirm('权限缓存已清理。立即重启 Natively 以重新触发 macOS 授权吗？');
+      const shouldRestart = window.confirm('权限缓存已清理。立即重启 CueUp 以重新触发 macOS 授权吗？');
       if (shouldRestart) {
         await window.electronAPI?.restartAfterTccRepair?.();
       } else {
@@ -1088,7 +1088,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           prev
             ? {
                 ...prev,
-                message: '权限缓存已清理。请手动重启 Natively 以重新触发 macOS 授权。',
+                message: '权限缓存已清理。请手动重启 CueUp 以重新触发 macOS 授权。',
               }
             : prev,
         );
@@ -3863,7 +3863,7 @@ Provide only the answer, nothing else.`;
                     : '视觉识别失败';
                   const failureTitleMap: Record<string, string> = {
                     no_vision_provider:
-                      '当前未配置支持视觉的服务商。请添加 Natively、OpenAI、Claude、Gemini、Groq 密钥，或配置本地 Ollama 视觉模型。',
+                      '当前未配置支持视觉的服务商。请添加 CueUp、OpenAI、Claude、Gemini、Groq 密钥，或配置本地 Ollama 视觉模型。',
                     all_vision_failed:
                       '本轮所有已配置的视觉服务商都失败了，请检查额度后重试。',
                     privacy_blocked:

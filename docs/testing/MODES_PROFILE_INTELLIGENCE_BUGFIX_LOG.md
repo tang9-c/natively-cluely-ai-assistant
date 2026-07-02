@@ -61,14 +61,14 @@ Each entry below documents a real bug found by the new automated QA suite and th
 - **Mode affected:** none at runtime (test-only). Production code uses the correct endpoint.
 - **Scenario / user affected:** Anyone running `RUN_NATIVELY_API_E2E=1 npm run test:modes` expecting the real API smoke test to validate connectivity.
 - **Before behavior:** `valid auth — health endpoint responds` failed with `Expected 2xx or 404 for /v1/health; got 0 (fetch failed)`. The test hit `https://api.natively.app/v1/health`, which is `NXDOMAIN`. It also sent `Authorization: Bearer <key>`. The earlier live-response eval succeeded because it goes through `LLMHelper` which uses the correct endpoint and header.
-- **Expected behavior:** The test must hit the same base URL `LLMHelper.ts:1709` uses (`https://api.natively.software`) and send the same auth header style (`x-natively-key: <key>`). A 404 from `/v1/health` is an accepted outcome because the route is intentionally absent — the goal is connectivity + auth, not health.
+- **Expected behavior:** The test must hit the same base URL `LLMHelper.ts:1709` uses (`https://api.cueup.feigenbaum.ai`) and send the same auth header style (`x-natively-key: <key>`). A 404 from `/v1/health` is an accepted outcome because the route is intentionally absent — the goal is connectivity + auth, not health.
 - **Actual behavior:** DNS resolution failed because the wrong subdomain was used. The test misled QA into thinking the real API was unreachable when it was actually wired correctly in production.
-- **Root cause:** Drift between the test fixture defaults (`api.natively.app`, `Authorization: Bearer`) and the production base URL/headers (`api.natively.software`, `x-natively-key`) defined in `electron/LLMHelper.ts:1709-1720`.
+- **Root cause:** Drift between the test fixture defaults (`api.natively.app`, `Authorization: Bearer`) and the production base URL/headers (`api.cueup.feigenbaum.ai`, `x-natively-key`) defined in `electron/LLMHelper.ts:1709-1720`.
 - **Files changed:** `electron/services/__tests__/NativelyApiE2E.test.mjs` — corrected `API_BASE` default and `authHeader()` to use `x-natively-key` for `NATIVELY_API_KEY`.
 - **Fix applied:**
   ```diff
   - const API_BASE = process.env.NATIVELY_API_BASE ?? 'https://api.natively.app';
-  + const API_BASE = process.env.NATIVELY_API_BASE ?? 'https://api.natively.software';
+  + const API_BASE = process.env.NATIVELY_API_BASE ?? 'https://api.cueup.feigenbaum.ai';
   ...
   -   if (KEY) return { Authorization: `Bearer ${KEY}` };
   +   if (KEY) return { 'x-natively-key': KEY };
@@ -97,7 +97,7 @@ Apply these on the next QA pass if the underlying scenarios still produce false 
 
 - **Mode affected:** technical-interview (and any custom mode that surfaces a two-sum-style problem through the Natively API).
 - **Scenario / user affected:** anyone asking the live LLM to solve a two-sum / pair-sum hash-map problem under `technical-interview` mode.
-- **Before behavior:** Across consecutive live runs against `https://api.natively.software` with the same key, the model occasionally produces a Python snippet whose key line reads `complement = target, num` (a 2-tuple) instead of `complement = target - num` (the correct subtraction). The dry-run narration also reflects the bug: "calculate `9, 7 = 2`". When this happens, the returned code is non-functional — it would throw `TypeError: unhashable type: 'tuple'` only on the `seen[complement]` lookup on the *second* iteration, but the explanation reads convincing.
+- **Before behavior:** Across consecutive live runs against `https://api.cueup.feigenbaum.ai` with the same key, the model occasionally produces a Python snippet whose key line reads `complement = target, num` (a 2-tuple) instead of `complement = target - num` (the correct subtraction). The dry-run narration also reflects the bug: "calculate `9, 7 = 2`". When this happens, the returned code is non-functional — it would throw `TypeError: unhashable type: 'tuple'` only on the `seen[complement]` lookup on the *second* iteration, but the explanation reads convincing.
 - **Expected behavior:** The implementation should compute `target - num` (or equivalent) and look that value up in the hash map.
 - **Actual behavior:** Bug appears ~1 in ~2 runs in our sample. Other generations of the same scenario produce correct code with `target - num` or `target - nums[i]`.
 - **Root cause:** LLM nondeterminism in the underlying provider routed by the Natively API. The harness now catches it via both a required-pattern check (`target - num | target - nums?[]| complement = target - | target - current`) and a forbidden-pattern check (`complement = target, num`). The forbidden-pattern check correctly fired on this run.

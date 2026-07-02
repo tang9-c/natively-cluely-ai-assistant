@@ -52,7 +52,7 @@ const MockAppInterface = () => {
                         <div className="w-8 h-8 rounded-full bg-bg-item-active flex items-center justify-center border border-border-muted overflow-hidden">
                             <img
                                 src={nativelyIcon}
-                                alt="Natively"
+                                alt="CueUp"
                                 className="w-[20px] h-[20px] object-contain"
                                 style={{ filter: isLight ? 'brightness(0)' : 'brightness(0) invert(1)', opacity: 0.9 }}
                             />
@@ -423,8 +423,8 @@ const MockPermissionsAnim = () => {
                 </div>
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
-                        <img src={nativelyIcon} alt="Natively" className="w-6 h-6 object-contain rounded drop-shadow-sm opacity-90" />
-                        <span className="text-text-primary text-sm font-medium">Natively</span>
+                        <img src={nativelyIcon} alt="CueUp" className="w-6 h-6 object-contain rounded drop-shadow-sm opacity-90" />
+                        <span className="text-text-primary text-sm font-medium">CueUp</span>
                     </div>
 
                     <motion.div
@@ -442,8 +442,8 @@ const MockPermissionsAnim = () => {
             </div>
             <div className="text-xs text-text-secondary text-center max-w-[280px]">
                 {isMac
-                    ? 'Natively 需要辅助功能和屏幕录制权限来分析屏幕内容。'
-                    : 'Natively 会在你第一次开始会议时请求麦克风权限。'}
+                    ? 'CueUp 需要辅助功能和屏幕录制权限来分析屏幕内容。'
+                    : 'CueUp 会在你第一次开始会议时请求麦克风权限。'}
             </div>
         </div>
     );
@@ -573,7 +573,7 @@ const MockProviderSelectionAnim = () => {
     }, []);
 
     const options = [
-        { id: 'local-sensevoice', label: 'Local SenseVoice', badge: '', recommended: true, desc: '本地优先实时转录', color: 'green', icon: <img src={nativelyIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="Natively" /> },
+        { id: 'local-sensevoice', label: 'Local SenseVoice', badge: '', recommended: true, desc: '本地优先实时转录', color: 'green', icon: <img src={nativelyIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="CueUp" /> },
         { id: 'deepgram', label: 'Deepgram Nova-3', badge: '已保存', recommended: false, desc: '高精度 REST 转录', color: 'purple', icon: <Mic size={14} /> },
         { id: 'google', label: 'Google Cloud', badge: '已保存', recommended: false, desc: '通过 Service Account 的 gRPC 流式传输', color: 'blue', icon: <Mic size={14} /> },
         { id: 'groq', label: 'Groq Whisper', badge: '', recommended: false, desc: '快速 LPU Whisper 转录', color: 'orange', icon: <Mic size={14} /> },
@@ -785,7 +785,7 @@ const SetupGuide = () => {
         {
             title: '授予权限',
             desc: isMac
-                ? '在 macOS 隐私与安全性设置中为 Natively 启用屏幕录制和辅助功能。'
+                ? '在 macOS 隐私与安全性设置中为 CueUp 启用屏幕录制和辅助功能。'
                 : '第一次开始会议时批准麦克风提示（设置 → 隐私 → 麦克风）。',
         },
         {
@@ -816,7 +816,7 @@ const SetupGuide = () => {
         <div className="mb-10">
             <div className="mb-7">
                 <h3 className="text-[20px] font-bold text-text-primary tracking-tight leading-tight">快速开始</h3>
-                <p className="text-[13px] text-text-tertiary mt-0.5">四个步骤即可上手 Natively。</p>
+                <p className="text-[13px] text-text-tertiary mt-0.5">四个步骤即可上手 CueUp。</p>
             </div>
 
             <div>
@@ -876,7 +876,7 @@ export const HelpSettings: React.FC = () => {
                     帮助与设置指南
                 </h2>
                 <p className={`text-sm text-text-secondary mt-3 max-w-2xl`}>
-                    了解如何深度配置 Natively。从提供正确的 API 权限到无缝执行对话式面试，以下内容全部涵盖。
+                    了解如何深度配置 CueUp。从提供正确的 API 权限到无缝执行对话式面试，以下内容全部涵盖。
                 </p>
             </div>
 
@@ -893,8 +893,8 @@ export const HelpSettings: React.FC = () => {
                     <div className="space-y-4">
                         <p>
                             {isMac
-                                ? 'Natively 完全在本地运行，但需要操作系统权限来访问屏幕内容和全局快捷键。你的系统设置应如下所示：'
-                                : 'Natively 完全在本地运行。Windows 会在你第一次开始会议时提示麦克风权限——不需要其他操作系统权限。'}
+                                ? 'CueUp 完全在本地运行，但需要操作系统权限来访问屏幕内容和全局快捷键。你的系统设置应如下所示：'
+                                : 'CueUp 完全在本地运行。Windows 会在你第一次开始会议时提示麦克风权限——不需要其他操作系统权限。'}
                         </p>
                         {isMac && <MockPermissionsAnim />}
                         <div className="space-y-3 mt-4">
@@ -905,7 +905,7 @@ export const HelpSettings: React.FC = () => {
                                     <Mic size={14} className="text-blue-500" /> 麦克风与扬声器回环选择
                                 </h5>
                                 <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                    Natively 可以全局捕获你说的和听到的声音。在音频设置顶部，使用下拉菜单明确选择你的硬件输入（例如你的物理麦克风）和输出捕获（扬声器播放的内容）。默认情况下，Natively 使用<strong>系统默认</strong>，音频路由会自动跟随系统的偏好设置。
+                                    CueUp 可以全局捕获你说的和听到的声音。在音频设置顶部，使用下拉菜单明确选择你的硬件输入（例如你的物理麦克风）和输出捕获（扬声器播放的内容）。默认情况下，CueUp 使用<strong>系统默认</strong>，音频路由会自动跟随系统的偏好设置。
                                 </p>
                             </div>
 
@@ -946,7 +946,7 @@ export const HelpSettings: React.FC = () => {
                                     <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
                                         <Monitor className="w-4 h-4 text-accent-primary" /> 屏幕录制
                                     </h4>
-                                    <p className="text-xs opacity-90 mb-2">让 Natively 在捕获上下文时临时读取你的屏幕。</p>
+                                    <p className="text-xs opacity-90 mb-2">让 CueUp 在捕获上下文时临时读取你的屏幕。</p>
                                     <p className="text-[11px] text-text-tertiary">系统设置 &gt; 隐私与安全性 &gt; 屏幕录制</p>
                                 </div>
 
@@ -954,7 +954,7 @@ export const HelpSettings: React.FC = () => {
                                     <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
                                         <Command className="w-4 h-4 text-purple-500" /> 辅助功能
                                     </h4>
-                                    <p className="text-xs opacity-90 mb-2">让 Natively 能够检测下方的全局键盘快捷键，无论当前聚焦哪个窗口。</p>
+                                    <p className="text-xs opacity-90 mb-2">让 CueUp 能够检测下方的全局键盘快捷键，无论当前聚焦哪个窗口。</p>
                                     <p className="text-[11px] text-text-tertiary">系统设置 &gt; 隐私与安全性 &gt; 辅助功能</p>
                                 </div>
                             </div>
@@ -974,7 +974,7 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="2. 音频语音转文字提供商设置（麦克风）" icon={<Mic className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p>Natively supports over 8 different Audio engines to transcribe what you hear and say. From the Audio tab in settings, use the overarching dropdown to switch the active engine.</p>
+                        <p>CueUp supports over 8 different Audio engines to transcribe what you hear and say. From the Audio tab in settings, use the overarching dropdown to switch the active engine.</p>
 
                         <MockProviderSelectionAnim />
 
@@ -1056,7 +1056,7 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="3. AI 提供商与提示词引擎" icon={<Key className="w-4 h-4" />}>
                     <div className="space-y-4">
-                        <p className="text-sm">Natively 使用大语言模型（LLM）来理解你的屏幕和音频上下文。你可以配置云端提供商、本地模型或完全自定义的端点。</p>
+                        <p className="text-sm">CueUp 使用大语言模型（LLM）来理解你的屏幕和音频上下文。你可以配置云端提供商、本地模型或完全自定义的端点。</p>
 
                         <div className="space-y-3 pt-2">
                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">1. 标准云端提供商</h4>
@@ -1109,7 +1109,7 @@ export const HelpSettings: React.FC = () => {
                                     <Zap className="w-4 h-4 text-accent-primary" />
                                 </div>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mt-0.5">
-                                    <strong className="text-text-primary font-bold">自动模型注册表同步：</strong> Natively 使用 14 天为周期的后台同步任务（<span className="font-mono bg-bg-elevated border border-border-muted px-1.5 py-0.5 rounded text-[10px] text-text-primary shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">v2/api/models</span>）静默轮询上游 API。如果 Anthropic 或 OpenAI 发布新的旗舰模型（例如 GPT-5），应用会自动将其加入 UI 下拉菜单。
+                                    <strong className="text-text-primary font-bold">自动模型注册表同步：</strong> CueUp 使用 14 天为周期的后台同步任务（<span className="font-mono bg-bg-elevated border border-border-muted px-1.5 py-0.5 rounded text-[10px] text-text-primary shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">v2/api/models</span>）静默轮询上游 API。如果 Anthropic 或 OpenAI 发布新的旗舰模型（例如 GPT-5），应用会自动将其加入 UI 下拉菜单。
                                 </p>
                             </div>
 
@@ -1125,7 +1125,7 @@ export const HelpSettings: React.FC = () => {
                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">2. 本地模型（Ollama）</h4>
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-3">
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    你可以使用 Ollama 让 Natively 完全离线运行，100% 保护数据隐私。Natively 会自动扫描 <span className={kbdClass}>http://localhost:11434</span> 上的活跃模型。
+                                    你可以使用 Ollama 让 CueUp 完全离线运行，100% 保护数据隐私。CueUp 会自动扫描 <span className={kbdClass}>http://localhost:11434</span> 上的活跃模型。
                                 </p>
                                 <ol className="list-decimal pl-4 text-xs space-y-2 opacity-90 text-text-secondary">
                                     <li>通过 <button onClick={() => { (window as any).electronAPI?.openExternal('https://ollama.com/download') }} className="text-accent-primary hover:underline inline-flex items-center gap-1 font-medium">ollama.com <ExternalLink size={10} /></button> 下载 Ollama</li>
@@ -1136,7 +1136,7 @@ export const HelpSettings: React.FC = () => {
                                     <li>另外，如果想要在没有 GPU 的情况下更快速地生成，可以使用微软的较小模型：
                                         <div className="mt-1 bg-bg-input p-2 rounded border border-border-subtle font-mono text-[11px]">ollama run phi3</div>
                                     </li>
-                                    <li>返回 Natively 的 AI 提供商面板，你将看到本地模型已就绪可用。</li>
+                                    <li>返回 CueUp 的 AI 提供商面板，你将看到本地模型已就绪可用。</li>
                                 </ol>
                             </div>
                         </div>
@@ -1157,7 +1157,7 @@ export const HelpSettings: React.FC = () => {
                                 <div className="flex items-start gap-2 mt-2">
                                     <div className="w-5 h-5 rounded bg-orange-500/20 text-orange-500 flex items-center justify-center shrink-0 mt-0.5"><Zap size={10} /></div>
                                     <div className="text-xs text-text-secondary leading-relaxed">
-                                        <strong>关键：响应路径。</strong> 你必须告诉 Natively 如何解析返回的 JSON。深层嵌套的输出必须定义准确的路径数组。对于兼容 OpenAI/OpenRouter 的端点，必须填写：<span className={kbdClass}>choices[0].message.content</span>。
+                                        <strong>关键：响应路径。</strong> 你必须告诉 CueUp 如何解析返回的 JSON。深层嵌套的输出必须定义准确的路径数组。对于兼容 OpenAI/OpenRouter 的端点，必须填写：<span className={kbdClass}>choices[0].message.content</span>。
                                     </div>
                                 </div>
                             </div>
@@ -1166,9 +1166,9 @@ export const HelpSettings: React.FC = () => {
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="4. Natively 界面操作" icon={<Monitor className="w-4 h-4" />}>
+                <AccordionSection title="4. CueUp 界面操作" icon={<Monitor className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">启动后，Natively 会以视觉上隐藏但始终活跃的半透明覆盖层形式存在。这是你的指挥中心。</p>
+                        <p className="text-[13px]">启动后，CueUp 会以视觉上隐藏但始终活跃的半透明覆盖层形式存在。这是你的指挥中心。</p>
 
                         <div className="relative w-full flex flex-col p-2 sm:p-5 bg-bg-main rounded-[26px] border border-border-subtle shadow-inner">
                             <MockAppInterface />
@@ -1265,7 +1265,7 @@ export const HelpSettings: React.FC = () => {
                                     <FileText className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" /> 摘要生成
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    会议一结束，Natively 就会触发本地后台任务，把整段原始音频转录压缩成干净的格式化 markdown，包含结构化的概览和明确的行动项。
+                                    会议一结束，CueUp 就会触发本地后台任务，把整段原始音频转录压缩成干净的格式化 markdown，包含结构化的概览和明确的行动项。
                                 </p>
                             </div>
 
@@ -1321,7 +1321,7 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="6. 全局搜索与快捷键" icon={<Search className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">按 <span className={kbdClass}>{isMac ? 'Cmd+K' : 'Ctrl+K'}</span> 在电脑任意位置唤出 Natively 全局面板。这相当于你的 Spotlight 覆盖层，用于直接与系统核心交互。</p>
+                        <p className="text-[13px]">按 <span className={kbdClass}>{isMac ? 'Cmd+K' : 'Ctrl+K'}</span> 在电脑任意位置唤出 CueUp 全局面板。这相当于你的 Spotlight 覆盖层，用于直接与系统核心交互。</p>
 
                         <MockSearchPillAnim />
 
@@ -1347,7 +1347,7 @@ export const HelpSettings: React.FC = () => {
 
                         <div className="border-t border-border-subtle pt-6">
                             <h4 className="font-bold text-sm text-text-primary border-b border-border-subtle pb-1">全局系统快捷键</h4>
-                            <p className="text-[11px] text-text-secondary mt-1 mb-3">这些快捷键在你的操作系统任意位置都能触发，无论 Natively 是否处于焦点或完全隐藏。在"设置 &gt; 快捷键"中可以修改它们。</p>
+                            <p className="text-[11px] text-text-secondary mt-1 mb-3">这些快捷键在你的操作系统任意位置都能触发，无论 CueUp 是否处于焦点或完全隐藏。在"设置 &gt; 快捷键"中可以修改它们。</p>
 
                             <div className="grid gap-3">
                                 <div className="flex items-center justify-between p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
@@ -1387,7 +1387,7 @@ export const HelpSettings: React.FC = () => {
                                         </div>
                                         <div>
                                             <div className="font-semibold text-sm text-text-primary">处理已捕获的上下文（执行）</div>
-                                            <div className="text-xs text-text-secondary mt-1">触发 Natively 分析滚动缓冲区的截图和文本。</div>
+                                            <div className="text-xs text-text-secondary mt-1">触发 CueUp 分析滚动缓冲区的截图和文本。</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
@@ -1446,7 +1446,7 @@ export const HelpSettings: React.FC = () => {
                                         <CreditCard className="w-4 h-4 text-accent-primary" /> 功能说明
                                     </h4>
                                     <p className="text-[11px] text-text-secondary mb-2">
-                                        Profile Intelligence 是 Natively 的核心功能，所有用户均可免费使用。
+                                        Profile Intelligence 是 CueUp 的核心功能，所有用户均可免费使用。
                                     </p>
                                     <ol className="text-[11px] text-text-secondary space-y-1 list-decimal pl-4 mb-0">
                                         <li>上传你的简历 PDF，AI 将基于你的真实经历回答问题。</li>
@@ -1462,7 +1462,7 @@ export const HelpSettings: React.FC = () => {
                                     <Briefcase size={14} /> 职位描述对齐
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    把目标<strong>职位描述 PDF</strong> 与你的简历一同上传。Natively 会提取岗位名称、级别、公司和所需技术栈，然后在每次回复时都让回答贴合该岗位的具体要求——在终面环节保持对齐非常有帮助。
+                                    把目标<strong>职位描述 PDF</strong> 与你的简历一同上传。CueUp 会提取岗位名称、级别、公司和所需技术栈，然后在每次回复时都让回答贴合该岗位的具体要求——在终面环节保持对齐非常有帮助。
                                 </p>
                             </div>
 
@@ -1523,7 +1523,7 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="8. 模式管理器" icon={<LayoutGrid className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">模式让你为会话分配专门的 AI 角色。每个模式都有定制的系统提示词、个人上下文区域、参考文件和智能笔记模板分区——因此 Natively 会根据你是在销售电话、编码面试还是团队站会中表现出不同的行为。</p>
+                        <p className="text-[13px]">模式让你为会话分配专门的 AI 角色。每个模式都有定制的系统提示词、个人上下文区域、参考文件和智能笔记模板分区——因此 CueUp 会根据你是在销售电话、编码面试还是团队站会中表现出不同的行为。</p>
 
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                             {([
@@ -1550,7 +1550,7 @@ export const HelpSettings: React.FC = () => {
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                         <li>点击 <strong>网格图标</strong> 在启动器标题栏中</li>
                                         <li>Or click the 网格图标 in the main interface toolbar</li>
-                                        <li>需要 Natively 专业版许可证</li>
+                                        <li>需要 CueUp 专业版许可证</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
@@ -1588,7 +1588,7 @@ export const HelpSettings: React.FC = () => {
                                 <Star size={14} /> 专家模式
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                Natively 提供 8 种专家模式：General、Sales、FDE、Recruiting、Team Meet、Looking for work、Technical Interview 和 Lecture。每个模式都有针对性的系统提示和笔记结构，帮助你在不同场景下获得最佳辅助。
+                                CueUp 提供 8 种专家模式：General、Sales、FDE、Recruiting、Team Meet、Looking for work、Technical Interview 和 Lecture。每个模式都有针对性的系统提示和笔记结构，帮助你在不同场景下获得最佳辅助。
                             </p>
                         </div>
                     </div>
@@ -1621,7 +1621,7 @@ export const HelpSettings: React.FC = () => {
                                 </p>
                                 <div className="p-2 border border-orange-500/20 bg-orange-500/5 rounded-lg">
                                     <p className="text-[10px] text-orange-400 m-0">
-                                        <strong>⚠️ Warning:</strong> 这将使 Natively 覆盖层完全不可点击。你必须记住全局热键（例如 <strong>{isMac ? 'Cmd' : 'Ctrl'}+Shift+Arrows</strong> 来移动， <strong>{isMac ? 'Cmd' : 'Ctrl'}+B</strong> 来隐藏， <strong>{isMac ? 'Cmd' : 'Ctrl'}+1-7</strong> 来执行操作）以在此激活后控制应用。
+                                        <strong>⚠️ Warning:</strong> 这将使 CueUp 覆盖层完全不可点击。你必须记住全局热键（例如 <strong>{isMac ? 'Cmd' : 'Ctrl'}+Shift+Arrows</strong> 来移动， <strong>{isMac ? 'Cmd' : 'Ctrl'}+B</strong> 来隐藏， <strong>{isMac ? 'Cmd' : 'Ctrl'}+1-7</strong> 来执行操作）以在此激活后控制应用。
                                     </p>
                                 </div>
                             </div>

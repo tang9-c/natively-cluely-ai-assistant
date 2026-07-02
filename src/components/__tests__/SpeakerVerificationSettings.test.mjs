@@ -56,7 +56,7 @@ test('UI copy states the only purpose and deletion behavior', () => {
   const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
   assert.match(source, /只会在会议中识别你的发言为 ME/);
   assert.match(source, /仅保存在本机/);
-  assert.match(source, /删除后，Natively 将不再识别你的发言为 ME/);
+  assert.match(source, /删除后，CueUp 将不再识别你的发言为 ME/);
   assert.match(source, /不会默认改写历史会议/);
   assert.doesNotMatch(source, /authentication/i);
   assert.doesNotMatch(source, /login/i);

@@ -183,7 +183,7 @@ export const AIProvidersSettings: React.FC = () => {
                     openai: creds.hasOpenaiKey,
                     claude: creds.hasClaudeKey,
                     doubao: creds.hasDoubaoKey || false,
-                    natively: creds.hasNativelyKey || false
+                    natively: creds.hasCueUpKey || false
                 });
                 setApiKey(prev => mergeMaskedValue(prev, creds.geminiKey));
                 setGroqApiKey(prev => mergeMaskedValue(prev, creds.groqKey));
@@ -1089,7 +1089,7 @@ export const AIProvidersSettings: React.FC = () => {
             <div className="space-y-5">
                 <div>
                     <h3 className="text-sm font-bold text-text-primary mb-1">屏幕理解</h3>
-                    <p className="text-xs text-text-secondary mb-2">Pick how Natively reads what is on your screen. All paths use the vision-capable AI provider directly; OCR is no longer used.</p>
+                    <p className="text-xs text-text-secondary mb-2">Pick how CueUp reads what is on your screen. All paths use the vision-capable AI provider directly; OCR is no longer used.</p>
                 </div>
                 <div className="bg-bg-item-surface rounded-xl p-4 border border-border-subtle flex flex-col gap-2">
                     {([
@@ -1194,7 +1194,7 @@ export const AIProvidersSettings: React.FC = () => {
                     })}
                     <div className="flex items-start gap-2 mt-1 pt-3 border-t border-border-subtle">
                         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-tertiary shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                        <p className="text-[11px] text-text-tertiary leading-relaxed">When a data type is disabled, Natively falls back to the best available local model to keep that data on-device.</p>
+                        <p className="text-[11px] text-text-tertiary leading-relaxed">When a data type is disabled, CueUp falls back to the best available local model to keep that data on-device.</p>
                     </div>
                 </div>
             </div>

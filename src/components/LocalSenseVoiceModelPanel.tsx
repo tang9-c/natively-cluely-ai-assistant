@@ -190,7 +190,7 @@ export function LocalSenseVoiceModelPanel() {
                                     value={term.canonical}
                                     onChange={(event) => updateTerm(term.id, { canonical: event.target.value })}
                                     className="mt-1 h-8 w-full rounded-md border border-border-subtle bg-bg-item-surface px-2 text-xs text-text-primary outline-none focus:border-accent-primary"
-                                    placeholder="Natively"
+                                    placeholder="CueUp"
                                 />
                                 {term.variants.length === 0 && (
                                     <span className="mt-1 block text-[11px] text-amber-500">
@@ -206,7 +206,7 @@ export function LocalSenseVoiceModelPanel() {
                                         variants: event.target.value.split('\n').map((value) => value.trim()).filter(Boolean),
                                     })}
                                     className="mt-1 min-h-16 w-full resize-y rounded-md border border-border-subtle bg-bg-item-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-accent-primary"
-                                    placeholder={'内提夫利\n耐提夫利'}
+                                    placeholder={'丘普\n秋普'}
                                 />
                             </label>
                             <div className="flex items-center justify-end gap-2">

@@ -1,6 +1,6 @@
-# Contributing to Natively
+# Contributing to CueUp
 
-First off, thank you for considering contributing to Natively! It's people like you that make Natively such a great tool.
+First off, thank you for considering contributing to CueUp! It's people like you that make CueUp such a great tool.
 
 Following these guidelines helps to communicate that you respect the time of the developers managing and developing this open source project. In return, they should reciprocate that respect in addressing your issue, assessing changes, and helping you finalize your pull requests.
 
@@ -20,7 +20,7 @@ Following these guidelines helps to communicate that you respect the time of the
 
 ## Code of Conduct
 
-This project and everyone participating in it is governed by the [Natively Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to evinjohnn@gmail.com.
+This project and everyone participating in it is governed by the [CueUp Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to evinjohnn@gmail.com.
 
 ## How Can I Contribute?
 
@@ -45,7 +45,7 @@ Enhancement suggestions are tracked as GitHub issues. When you are creating an e
 - Provide a step-by-step description of the suggested enhancement in as many details as possible.
 - Provide specific examples to demonstrate the steps.
 - Describe the current behavior and explain which behavior you expected to see instead and why.
-- Explain why this enhancement would be useful to most Natively users.
+- Explain why this enhancement would be useful to most CueUp users.
 
 ### Pull Requests
 
@@ -78,7 +78,7 @@ Ensure the test suite passes.
 
 ### Architecture Overview
 
-Natively uses a modern stack consisting of:
+CueUp uses a modern stack consisting of:
 
 - **Frontend**: React, Vite, TypeScript, TailwindCSS
 - **Backend/Desktop**: Electron
@@ -111,4 +111,4 @@ When contributing, ensure you understand which context (Main Process, Renderer P
   - ⬆️ `:arrow_up:` when upgrading dependencies
   - ⬇️ `:arrow_down:` when downgrading dependencies
 
-Thank you for contributing to Natively!
+Thank you for contributing to CueUp!

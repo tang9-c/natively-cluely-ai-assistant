@@ -197,7 +197,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                                 <CopyBlock command={`xattr -cr ~/Downloads/Natively-${displayVersion.replace('v', '')}-${instructionsArch || 'arm64'}.dmg`} />
                                             </div>
                                             <div className="space-y-1 mt-1 pl-0.5">
-                                                <p className="text-[12px] font-medium text-white/80">2. 打开文件并安装 Natively。</p>
+                                                <p className="text-[12px] font-medium text-white/80">2. 打开文件并安装 CueUp。</p>
                                             </div>
                                             <div className="space-y-1 mt-3 w-full">
                                                 <p className="text-[12px] font-medium text-white/80">3. 清除已安装应用的隔离属性：</p>
@@ -206,7 +206,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                         </>
                                     ) : (
                                         <div className="space-y-1 w-full">
-                                            <p className="text-[12px] font-medium text-white/80">运行下载的安装程序 (.exe) 并按照提示操作。完成后 Natively 将重新启动。</p>
+                                            <p className="text-[12px] font-medium text-white/80">运行下载的安装程序 (.exe) 并按照提示操作。完成后 CueUp 将重新启动。</p>
                                         </div>
                                     )}
                                 </div>

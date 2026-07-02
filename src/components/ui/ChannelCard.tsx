@@ -30,7 +30,7 @@ const providerLabel = (provider?: string): string => {
         azure: '微软 Azure',
         ibmwatson: 'IBM Watson',
         soniox: 'Soniox',
-        natively: 'Natively 专业版',
+        natively: 'CueUp 专业版',
     };
     return labels[provider.toLowerCase()] || provider;
 };

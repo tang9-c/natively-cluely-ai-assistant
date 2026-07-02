@@ -61,7 +61,7 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                             <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden overlay-icon-surface" style={appearance.iconStyle}>
                                 <img
                                     src={icon}
-                                    alt="Natively"
+                                    alt="CueUp"
                                     className="w-[24px] h-[24px] object-contain opacity-95 scale-105 force-black-icon"
                                     draggable="false"
                                 />
@@ -1518,7 +1518,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                     onClick={() => window.electronAPI.quitApp()}
                                     className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-3"
                                 >
-                                    <LogOut size={16} /> 退出 Natively
+                                    <LogOut size={16} /> 退出 CueUp
                                 </button>
                                 <button onClick={onClose} className="group mt-2 w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50 transition-colors flex items-center gap-3">
                                     <X size={18} className="group-hover:text-red-500 transition-colors" /> 关闭
@@ -1556,7 +1556,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
 
                                         <div>
                                             <h3 className="text-lg font-bold text-text-primary mb-1">通用设置</h3>
-                                            <p className="text-xs text-text-secondary mb-2">自定义 Natively 的工作方式</p>
+                                            <p className="text-xs text-text-secondary mb-2">自定义 CueUp 的工作方式</p>
 
                                             <div className={`rounded-xl border ${isLight ? 'bg-bg-card border-border-subtle divide-y divide-border-subtle' : 'bg-transparent border-transparent divide-y divide-border-subtle/20'}`}>
                                             <div className="space-y-0">
@@ -1573,8 +1573,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             <Power size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">登录时打开 Natively</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">登录电脑时 Natively 会自动打开</p>
+                                                            <h3 className="text-sm font-bold text-text-primary">登录时打开 CueUp</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">登录电脑时 CueUp 会自动打开</p>
                                                         </div>
                                                     </div>
                                                     <div
@@ -1770,7 +1770,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         </div>
                                                         <div>
                                                             <h3 className="text-sm font-bold text-text-primary">主题</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">自定义 Natively 在您设备上的外观</p>
+                                                            <p className="text-xs text-text-secondary mt-0.5">自定义 CueUp 在您设备上的外观</p>
                                                         </div>
                                                     </div>
 
@@ -1938,7 +1938,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         <div>
                                                             <h3 className="text-sm font-bold text-text-primary">版本</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">
-                                                                您当前正在使用 Natively 版本 {packageJson.version}
+                                                                您当前正在使用 CueUp 版本 {packageJson.version}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -2069,7 +2069,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                     <div className="flex items-start justify-between">
                                         <div>
                                             <h3 className="text-lg font-bold text-text-primary mb-1">键盘快捷键</h3>
-                                            <p className="text-xs text-text-secondary">Natively works with these easy to remember commands.</p>
+                                            <p className="text-xs text-text-secondary">CueUp works with these easy to remember commands.</p>
                                         </div>
                                         <button
                                             onClick={resetShortcuts}

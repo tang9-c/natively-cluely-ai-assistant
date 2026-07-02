@@ -22,10 +22,13 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
       {/* Header */}
       <div>
         <h3 className="text-lg font-bold text-text-primary mb-1">
-          关于 Natively
+          关于 CueUp
         </h3>
         <p className="text-sm text-text-secondary">
           Designed to be invisible, intelligent, and trusted.
+        </p>
+        <p className="text-xs text-text-tertiary mt-1 italic">
+          关键时刻,给你一句能用的回答
         </p>
         <p className="text-xs text-text-tertiary mt-2 leading-relaxed">
           本项目 fork 自{" "}
@@ -67,7 +70,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
             <div>
               <h5 className="text-sm font-medium text-text-primary">未录制</h5>
               <p className="text-xs text-text-secondary mt-1 leading-relaxed">
-                Natively
+                CueUp
                 仅在启用时监听。它不会录制视频，不会在没有指令的情况下任意截图，也不会进行后台监控。
               </p>
             </div>

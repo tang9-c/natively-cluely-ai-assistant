@@ -11,7 +11,7 @@
 > - Mode = 模式
 > - License = 许可证
 > - Premium/Pro = 专业版
-> - Natively = 品牌名，保持英文
+> - CueUp = 品牌名，保持英文
 
 ---
 
@@ -22,7 +22,7 @@
 | 1 | Before we start | 开始之前 |
 | 2 | Configuration Guide | 配置指南 |
 | 3 | Help Guide | 帮助指南 |
-| 4 | Welcome to Natively | 欢迎使用 Natively |
+| 4 | Welcome to CueUp | 欢迎使用 CueUp |
 
 ## 核心功能 - 会议与转录 (43 项)
 
@@ -113,7 +113,7 @@
 | 35 | Google Gemini | Google Gemini |
 | 36 | Model Manager | 模型管理器 |
 | 37 | My Custom LLM | 我的自定义 LLM |
-| 38 | Natively AI | Natively AI |
+| 38 | CueUp AI | CueUp AI |
 | 39 | No models available | 无可用模型 |
 | 40 | Normal Model | 普通模型 |
 | 41 | Ollama connected | Ollama 已连接 |
@@ -137,7 +137,7 @@
 | 59 | Update Failed | 更新失败 |
 | 60 | Whisper Model | Whisper 模型 |
 | 61 | Write your email... | 撰写邮件... |
-| 62 | Your Natively API key from your subscription email | 订阅邮件中的 Natively API 密钥 |
+| 62 | Your CueUp API key from your subscription email | 订阅邮件中的 CueUp API 密钥 |
 | 63 | gpt-5.3-codex-spark | gpt-5.3-codex-spark |
 | 64 | gpt-5.5 | gpt-5.5 |
 | 65 | https://api.openai.com (default) | https://api.openai.com（默认） |
@@ -148,8 +148,8 @@
 |------|---------|---------|
 | 1 | 11. Stealth & Window Control | 11. 隐身与窗口控制 |
 | 2 | Advanced Settings | 高级设置 |
-| 3 | Customize how Natively looks on your device | 自定义 Natively 在您设备上的外观 |
-| 4 | Customize how Natively works for you | 自定义 Natively 的工作方式 |
+| 3 | Customize how CueUp looks on your device | 自定义 CueUp 在您设备上的外观 |
+| 4 | Customize how CueUp works for you | 自定义 CueUp 的工作方式 |
 | 5 | General settings | 通用设置 |
 | 6 | Language | 语言 |
 | 7 | Local Engine Configuration | 本地引擎配置 |
@@ -175,7 +175,7 @@
 | 7 | Custom Providers | 自定义提供商 |
 | 8 | Hybrid Intelligence | 混合智能 |
 | 9 | Manage Pro | 管理专业版 |
-| 10 | Natively Pro | Natively 专业版 |
+| 10 | CueUp Pro | CueUp 专业版 |
 | 11 | No Pro App | 无专业版应用 |
 | 12 | Pro | 专业版 |
 | 13 | Pro Feature | 专业版功能 |
@@ -194,7 +194,7 @@
 | 26 | Promise | 承诺 |
 | 27 | Provider Changed | 提供商已更改 |
 | 28 | Provider Name | 提供商名称 |
-| 29 | Requires a Natively Pro license | 需要 Natively 专业版许可证 |
+| 29 | Requires a CueUp Pro license | 需要 CueUp 专业版许可证 |
 | 30 | SF Pro Text | SF Pro Text |
 | 31 | Save Provider | 保存提供商 |
 | 32 | Select Provider | 选择提供商 |
@@ -202,7 +202,7 @@
 | 34 | Specific Provider Setup | 特定提供商设置 |
 | 35 | Speech Provider | 语音提供商 |
 | 36 | Support Project | 支持项目 |
-| 37 | Unlock Natively Pro | 解锁 Natively 专业版 |
+| 37 | Unlock CueUp Pro | 解锁 CueUp 专业版 |
 | 38 | Unlock Pro | 解锁专业版 |
 
 ## 智能功能 - 模式管理 (21 项)
@@ -247,13 +247,13 @@
 | 10 | Get API Key | 获取 API 密钥 |
 | 11 | Get a License at | 在以下地址获取许可证 |
 | 12 | Groq API Key | Groq API 密钥 |
-| 13 | Natively quota almost full | Natively 配额即将用完 |
+| 13 | CueUp quota almost full | CueUp 配额即将用完 |
 | 14 | Please try the Free Trial first | 请先试用免费版 |
 | 15 | Remove API Key | 移除 API 密钥 |
-| 16 | Requires Groq or Natively API key | 需要 Groq 或 Natively API 密钥 |
+| 16 | Requires Groq or CueUp API key | 需要 Groq 或 CueUp API 密钥 |
 | 17 | Resets on your next billing date | 在下一个账单日重置 |
 | 18 | Stripe Payment Intents | Stripe 支付意向 |
-| 19 | Try Natively API free | 免费试用 Natively API |
+| 19 | Try CueUp API free | 免费试用 CueUp API |
 | 20 | Upgrade | 升级 |
 | 21 | Usage this month | 本月使用量 |
 | 22 | Use my own API keys | 使用我自己的 API 密钥 |
@@ -321,7 +321,7 @@
 | 序号 | 英文原文 | 中文翻译 |
 |------|---------|---------|
 | 1 | About | 关于 |
-| 2 | About Natively | 关于 Natively |
+| 2 | About CueUp | 关于 CueUp |
 | 3 | Community | 社区 |
 | 4 | Contact Me | 联系我 |
 | 5 | Copy Report | 复制报告 |
@@ -344,7 +344,7 @@
 |------|---------|---------|
 | 1 | 1. App Permissions Setup | 1. 应用权限设置 |
 | 2 | 10. Phone Mirror | 10. 手机镜像 |
-| 3 | 4. Natively Interface Operations | 4. Natively 界面操作 |
+| 3 | 4. CueUp Interface Operations | 4. CueUp 界面操作 |
 | 4 | 9. Miscellaneous | 9. 其他 |
 | 5 | Accent / Region | 口音/地区 |
 | 6 | Access | 访问 |
@@ -412,7 +412,7 @@
 | 68 | Hide | 隐藏 |
 | 69 | Hiring Strategy | 招聘策略 |
 | 70 | Hit | 点击 |
-| 71 | How Natively Works | Natively 工作原理 |
+| 71 | How CueUp Works | CueUp 工作原理 |
 | 72 | How it works | 工作原理 |
 | 73 | How to Set it Up | 如何设置 |
 | 74 | How to Use | 如何使用 |
@@ -445,10 +445,10 @@
 | 101 | Minimize | 最小化 |
 | 102 | More Stealth | 更多隐身 |
 | 103 | Mouse Passthrough | 鼠标穿透 |
-| 104 | My Natively | 我的 Natively |
+| 104 | My CueUp | 我的 CueUp |
 | 105 | NEW | 新建 |
-| 106 | Natively | Natively |
-| 107 | Natively API | Natively API |
+| 106 | CueUp | CueUp |
+| 107 | CueUp API | CueUp API |
 | 108 | Navigate to the | 导航到 |
 | 109 | Negotiation Script | 谈判脚本 |
 | 110 | No Access | 无访问权限 |
@@ -463,7 +463,7 @@
 | 119 | Opacity Slider | 透明度滑块 |
 | 120 | Open | 打开 |
 | 121 | Open Folder | 打开文件夹 |
-| 122 | Open Natively when you log in | 登录时打开 Natively |
+| 122 | Open CueUp when you log in | 登录时打开 CueUp |
 | 123 | Opening the Manager | 打开管理器 |
 | 124 | Output Device | 输出设备 |
 | 125 | Persona Engine | 角色引擎 |
@@ -476,7 +476,7 @@
 | 132 | Purchase Lifetime | 购买终身版 |
 | 133 | Purchase Yearly | 购买年费版 |
 | 134 | Quick Start | 快速开始 |
-| 135 | Quit Natively | 退出 Natively |
+| 135 | Quit CueUp | 退出 CueUp |
 | 136 | Rebind | 重新绑定 |
 | 137 | Recap | 回顾 |
 | 138 | Recent News | 最近新闻 |
@@ -512,9 +512,9 @@
 | 168 | Speech to Text | 语音转文字 |
 | 169 | Standard | 标准 |
 | 170 | Start | 开始 |
-| 171 | Start Natively | 启动 Natively |
+| 171 | Start CueUp | 启动 CueUp |
 | 172 | Stop | 停止 |
-| 173 | Stream Natively to Your Phone | 将 Natively 串流到手机 |
+| 173 | Stream CueUp to Your Phone | 将 CueUp 串流到手机 |
 | 174 | Subject | 主题 |
 | 175 | Subject line | 主题行 |
 | 176 | Subscribe to get one | 订阅获取 |

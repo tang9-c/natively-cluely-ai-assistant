@@ -83,7 +83,7 @@ The new tests added by this QA plan:
 
 **Top 5 longest deterministic tests:** see `electron/llm/__tests__/ConversationSummarizer.test.mjs` (`run: timeout is enforced ...` 503ms — intentional), `stream: AbortSignal aborts ...` (153ms), `run: AbortSignal aborts ...` (151ms), `runWhatShouldISay passes screenContext` (136ms), `validateExecutable: bare unfound name ...` (109ms).
 
-**Real bug found and fixed:** FINDING-011 — `electron/services/__tests__/NativelyApiE2E.test.mjs` used the wrong base URL (`api.natively.app`, NXDOMAIN) and wrong auth header style (`Authorization: Bearer`). Production uses `https://api.natively.software` and `x-natively-key`. After fix the smoke test resolves and returns 404 for `/v1/health` (route is intentionally absent), which the test accepts. Fix documented in BUGFIX_LOG.
+**Real bug found and fixed:** FINDING-011 — `electron/services/__tests__/NativelyApiE2E.test.mjs` used the wrong base URL (`api.natively.app`, NXDOMAIN) and wrong auth header style (`Authorization: Bearer`). Production uses `https://api.cueup.feigenbaum.ai` and `x-natively-key`. After fix the smoke test resolves and returns 404 for `/v1/health` (route is intentionally absent), which the test accepts. Fix documented in BUGFIX_LOG.
 
 **Live LLM eval (`modes-live-response-eval.ts`) — observations across two consecutive runs with the same key:**
 

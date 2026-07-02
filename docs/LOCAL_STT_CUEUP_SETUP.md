@@ -1,6 +1,6 @@
-# Installing This Local-STT Natively Build
+# Installing This Local-STT CueUp Build
 
-This guide is for running the Natively source tree that includes the new `Local STT` provider. Your already-installed Natively app will not have this feature until you build and run this modified project or package a new installer from it.
+This guide is for running the CueUp source tree that includes the new `Local STT` provider. Your already-installed CueUp app will not have this feature until you build and run this modified project or package a new installer from it.
 
 ## 1. Prerequisites
 
@@ -55,7 +55,7 @@ npm run test:local-stt
 
 `npm run test:local-stt` uses a mock WhisperLive WebSocket server. It does not require WhisperLive to be installed.
 
-## 4. Run Natively in Development Mode
+## 4. Run CueUp in Development Mode
 
 For day-to-day testing, run:
 
@@ -65,10 +65,10 @@ npm run app:dev
 
 This starts Vite and then launches Electron. Use this mode first to confirm Local STT works before packaging an installer.
 
-## 5. Configure Local STT in Natively
+## 5. Configure Local STT in CueUp
 
 1. Start WhisperLive separately. See [WHISPERLIVE_LOCAL_STT_SETUP.md](./WHISPERLIVE_LOCAL_STT_SETUP.md).
-2. Open Natively.
+2. Open CueUp.
 3. Go to Settings -> Audio -> Speech Provider.
 4. Select `Local STT`.
 5. Use:
@@ -80,7 +80,7 @@ This starts Vite and then launches Electron. Use this mode first to confirm Loca
 6. Click `Save`.
 7. Click `Test Connection`.
 
-When `Test Connection` says connected, start a meeting or audio capture flow. Natively opens separate local STT streams for system audio and microphone, so WhisperLive must allow at least two clients.
+When `Test Connection` says connected, start a meeting or audio capture flow. CueUp opens separate local STT streams for system audio and microphone, so WhisperLive must allow at least two clients.
 
 ## 6. Package a Local Installer
 
@@ -103,7 +103,7 @@ npm run app:build
 
 - Local STT failures are intentionally quiet in the overlay.
 - Settings -> Audio -> `Test Connection` is the place to diagnose local endpoint problems.
-- Natively does not start, install, or supervise WhisperLive. WhisperLive must be running before you use Local STT.
+- CueUp does not start, install, or supervise WhisperLive. WhisperLive must be running before you use Local STT.
 - `Float32` works with the default WhisperLive server.
 - `PCM16` only works if WhisperLive is started with `--raw_pcm_input`.
 
