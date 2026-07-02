@@ -46,7 +46,7 @@ test('dynamic action accept forwards modeEvent retrieval metadata', () => {
   assert.match(bar, /promptInstruction:\s*action\.promptInstruction/);
   assert.match(bar, /answerShape:\s*action\.answerStyle\?\.format/);
   assert.match(bar, /modeEvent:\s*buildDynamicActionModeEvent\(action\)/);
-  assert.match(interfaceSource, /generationOptions\?: \{ source\?: string; persist\?: boolean; modeEvent\?: DynamicActionModeEvent \}/);
+  assert.match(interfaceSource, /generationOptions\?: \{ source\?: 'overlay' \| 'launcher' \| 'dynamic_action'; persist\?: boolean; modeEvent\?: DynamicActionModeEvent \}/);
 });
 
 test('dynamic action card presents detected intent and confidence to the user', () => {
