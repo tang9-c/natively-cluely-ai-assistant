@@ -83,3 +83,21 @@ test('orchestrator records source status for RAG miss separately from RAG failur
   assert.equal(miss.sourceStatus.uploadedMaterialHitCount, 0);
   assert.ok(miss.degradedReasons.includes('no_relevant_uploaded_material'));
 });
+
+test('orchestrator injects explicit business system context ahead of uploaded material', async () => {
+  const { buildRealtimeContextPlan, formatInjectedContext } = await loadOrchestrator();
+  const plan = buildRealtimeContextPlan({
+    tokenBudget: 500,
+    ragReady: true,
+    embeddingReady: true,
+    screenContextStatus: 'not_available',
+    candidates: [
+      { source: 'uploaded_material', sourceId: 'mat', text: 'Old project note', tokenCount: 10 },
+      { source: 'business_system', sourceId: 'plm-default', text: '根据 PLM 知识源：B55 项目负责人是张三。', tokenCount: 20 },
+    ],
+  });
+
+  assert.equal(plan.injected[0].source, 'business_system');
+  assert.match(formatInjectedContext(plan), /<business_system_context>/);
+  assert.match(formatInjectedContext(plan), /PLM 知识源/);
+});

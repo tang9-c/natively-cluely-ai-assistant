@@ -75,6 +75,13 @@ export type AnswerDegradedReason =
     | 'uploaded_material_context_dropped'
     | 'uploaded_material_rag_failed'
     | 'no_relevant_uploaded_material'
+    | 'business_system_context_dropped'
+    | 'business_system_unavailable'
+    | 'business_system_auth_failed'
+    | 'business_system_timeout'
+    | 'business_system_no_result'
+    | 'business_system_ambiguous'
+    | 'business_system_missing_query_anchor'
     | 'screen_context_failed'
     | 'screen_context_scope_blocked'
     | 'screen_context_no_vision_provider'
@@ -99,6 +106,7 @@ export interface AnswerContextUsed {
     historicalMeetings: boolean;
     longTermMemory: boolean;
     enterpriseKnowledge: boolean;
+    businessSystemContext: boolean;
     screenContext: boolean;
 }
 
@@ -109,6 +117,8 @@ export interface AnswerSourceStatus {
     uploadedMaterialHitCount: number;
     citationCount: number;
     screenContextStatus: 'not_available' | 'available' | 'failed';
+    businessSystemStatus?: 'not_requested' | 'available' | 'not_configured' | 'missing_query_anchor' | 'auth_failed' | 'timeout' | 'no_result' | 'ambiguous' | 'unavailable' | 'error';
+    businessSystemSourceName?: string;
     sttUserStatus?: 'connected' | 'reconnecting' | 'failed';
     sttInterviewerStatus?: 'connected' | 'reconnecting' | 'failed';
     speakerSeparationStatus?: 'off' | 'on' | 'unavailable';
@@ -205,6 +215,7 @@ function normalizeAnswerContextUsed(input?: Partial<AnswerContextUsed> | null): 
         historicalMeetings: Boolean(input?.historicalMeetings),
         longTermMemory: Boolean(input?.longTermMemory),
         enterpriseKnowledge: Boolean(input?.enterpriseKnowledge),
+        businessSystemContext: Boolean(input?.businessSystemContext),
         screenContext: Boolean(input?.screenContext),
     };
 }
@@ -221,6 +232,10 @@ function normalizeAnswerSourceStatus(input?: Partial<AnswerSourceStatus> | null)
         uploadedMaterialHitCount: Number.isFinite(input?.uploadedMaterialHitCount) ? Number(input?.uploadedMaterialHitCount) : 0,
         citationCount: Number.isFinite(input?.citationCount) ? Number(input?.citationCount) : 0,
         screenContextStatus: normalizeStatusValue(input?.screenContextStatus, ['not_available', 'available', 'failed'] as const, 'not_available'),
+        businessSystemStatus: input?.businessSystemStatus
+            ? normalizeStatusValue(input.businessSystemStatus, ['not_requested', 'available', 'not_configured', 'missing_query_anchor', 'auth_failed', 'timeout', 'no_result', 'ambiguous', 'unavailable', 'error'] as const, 'not_requested')
+            : undefined,
+        businessSystemSourceName: typeof input?.businessSystemSourceName === 'string' ? input.businessSystemSourceName : undefined,
         sttUserStatus: input?.sttUserStatus
             ? normalizeStatusValue(input.sttUserStatus, ['connected', 'reconnecting', 'failed'] as const, 'failed')
             : undefined,

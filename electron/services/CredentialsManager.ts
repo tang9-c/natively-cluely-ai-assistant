@@ -5,6 +5,11 @@
 import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
+import type {
+    BusinessSystemCredentialInput,
+    BusinessSystemKnowledgeSource,
+    BusinessSystemKnowledgeSourcePublic,
+} from './business-system/BusinessSystemTypes';
 
 export interface CustomProvider {
     id: string;
@@ -27,6 +32,8 @@ export interface StoredCredentials {
     googleServiceAccountPath?: string;
     customProviders?: CustomProvider[];
     curlProviders?: CurlProvider[];
+    businessSystemKnowledgeSources?: BusinessSystemKnowledgeSource[];
+    businessSystemCredentials?: Record<string, BusinessSystemCredentialInput>;
     defaultModel?: string;
     nativelyApiKey?: string;
     // STT Provider settings
@@ -490,6 +497,81 @@ export class CredentialsManager {
         return this.credentials.curlProviders || [];
     }
 
+    public getBusinessSystemKnowledgeSources(): BusinessSystemKnowledgeSource[] {
+        return [...(this.credentials.businessSystemKnowledgeSources || [])];
+    }
+
+    public getBusinessSystemKnowledgeSourcesPublic(): BusinessSystemKnowledgeSourcePublic[] {
+        const credentialsBySource = this.credentials.businessSystemCredentials || {};
+        return this.getBusinessSystemKnowledgeSources().map((source) => {
+            const credential = credentialsBySource[source.id] || {};
+            return {
+                ...source,
+                credentialState: {
+                    hasApiKey: Boolean(credential.apiKey),
+                    hasUsername: Boolean(credential.username),
+                    hasPassword: Boolean(credential.password),
+                },
+            };
+        });
+    }
+
+    public getBusinessSystemCredentials(sourceId: string): BusinessSystemCredentialInput | undefined {
+        const credentials = this.credentials.businessSystemCredentials || {};
+        const credential = credentials[sourceId];
+        return credential ? { ...credential } : undefined;
+    }
+
+    public saveBusinessSystemKnowledgeSource(
+        source: BusinessSystemKnowledgeSource,
+        credential?: BusinessSystemCredentialInput,
+    ): void {
+        const now = new Date().toISOString();
+        const sources = this.credentials.businessSystemKnowledgeSources || [];
+        const normalized: BusinessSystemKnowledgeSource = {
+            ...source,
+            name: source.name.trim(),
+            url: source.url.trim(),
+            createdAt: source.createdAt || now,
+            updatedAt: now,
+        };
+        const nextSources = sources.filter((item) => item.id !== normalized.id);
+        const withDefaultApplied = normalized.isDefault
+            ? nextSources.map((item) => ({ ...item, isDefault: false }))
+            : nextSources;
+        this.credentials.businessSystemKnowledgeSources = [...withDefaultApplied, normalized];
+
+        if (credential) {
+            const current = this.credentials.businessSystemCredentials || {};
+            this.credentials.businessSystemCredentials = {
+                ...current,
+                [normalized.id]: {
+                    apiKey: credential.apiKey?.trim() || undefined,
+                    username: credential.username?.trim() || undefined,
+                    password: credential.password || undefined,
+                },
+            };
+        }
+
+        this.saveCredentials();
+        console.log('[CredentialsManager] Business system knowledge source saved', {
+            id: normalized.id,
+            kind: normalized.kind,
+            authType: normalized.authType,
+            enabled: normalized.enabled,
+        });
+    }
+
+    public deleteBusinessSystemKnowledgeSource(sourceId: string): void {
+        this.credentials.businessSystemKnowledgeSources = (this.credentials.businessSystemKnowledgeSources || [])
+            .filter((source) => source.id !== sourceId);
+        if (this.credentials.businessSystemCredentials) {
+            delete this.credentials.businessSystemCredentials[sourceId];
+        }
+        this.saveCredentials();
+        console.log('[CredentialsManager] Business system knowledge source deleted', { id: sourceId });
+    }
+
     public saveCurlProvider(provider: CurlProvider): void {
         if (!this.credentials.curlProviders) {
             this.credentials.curlProviders = [];
@@ -560,6 +642,13 @@ export class CredentialsManager {
      * Called on app quit and credential clear.
      */
     public scrubMemory(): void {
+        const businessCredentials = this.credentials.businessSystemCredentials || {};
+        for (const credential of Object.values(businessCredentials)) {
+            if (typeof credential.apiKey === 'string') credential.apiKey = '';
+            if (typeof credential.username === 'string') credential.username = '';
+            if (typeof credential.password === 'string') credential.password = '';
+        }
+
         // Overwrite each string field with empty before discarding
         for (const key of Object.keys(this.credentials) as (keyof StoredCredentials)[]) {
             const val = this.credentials[key];

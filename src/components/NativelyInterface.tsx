@@ -58,6 +58,7 @@ import type { TranscriptEmotion } from '../../shared/senseVoiceEmotion';
 import type {
   AnswerCitation,
   AnswerContextTrace,
+  AnswerContextUsed,
   AnswerQualityEventType,
   DynamicActionModeEvent,
   DynamicActionPayload,
@@ -3616,12 +3617,13 @@ Provide only the answer, nothing else.`;
     sttNotConfigured,
   );
   const statusPillBaseClass = `flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shadow-sm backdrop-blur-xl ${isLightTheme ? 'bg-white/55 border-black/10' : 'bg-black/20 border-white/10'}`;
-  const latestContextUsed = latestAnswerTrace?.contextUsed ?? {};
+  const latestContextUsed: Partial<AnswerContextUsed> = latestAnswerTrace?.contextUsed ?? {};
   const contextLabels = [
     latestContextUsed.currentTranscript ? '当前会议' : null,
     latestContextUsed.shortTermHistory ? '短期历史' : null,
     latestContextUsed.uploadedDocumentRag || latestAnswerCitations.some((c) => c.sourceType === 'uploaded_material') ? '上传资料' : null,
     latestContextUsed.historicalMeetings ? '历史会议' : null,
+    latestContextUsed.businessSystemContext ? '业务系统' : null,
     latestContextUsed.screenContext ? '屏幕' : null,
   ].filter(Boolean);
   const contextStatusText = contextLabels.length > 0

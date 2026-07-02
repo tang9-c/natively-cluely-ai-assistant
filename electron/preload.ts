@@ -350,7 +350,7 @@ interface ElectronAPI {
     answer: string | null;
     question?: string;
     error?: string;
-    statusCode?: 'ok' | 'invalid-request' | 'no-context' | 'no-result' | 'retrieval-error' | 'permission-denied' | 'scope-rejected' | 'provider-error' | 'answer-trace-unavailable' | 'partial-trace-unavailable';
+    statusCode?: 'ok' | 'invalid-request' | 'no-context' | 'no-result' | 'retrieval-error' | 'permission-denied' | 'scope-rejected' | 'provider-error' | 'answer-trace-unavailable' | 'partial-trace-unavailable' | 'business-system-unavailable';
     contextTrace?: any;
     degradedReason?: string;
     citations?: any[];
@@ -493,6 +493,10 @@ interface ElectronAPI {
   saveCustomProvider: (provider: any) => Promise<{ success: boolean; id?: string; error?: string }>;
   getCustomProviders: () => Promise<any[]>;
   deleteCustomProvider: (id: string) => Promise<{ success: boolean; error?: string }>;
+  getBusinessSystemKnowledgeSources: () => Promise<any[]>;
+  saveBusinessSystemKnowledgeSource: (input: any) => Promise<{ success: boolean; id?: string; error?: string }>;
+  deleteBusinessSystemKnowledgeSource: (id: string) => Promise<{ success: boolean; error?: string }>;
+  testBusinessSystemKnowledgeSource: (input: any) => Promise<{ success: boolean; status?: string; sourceName?: string; error?: string }>;
 
   // Audio Test
   startAudioTest: (deviceId?: string) => Promise<{ success: boolean }>;
@@ -1696,6 +1700,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveCustomProvider: (provider: any) => ipcRenderer.invoke('save-custom-provider', provider),
   getCustomProviders: () => ipcRenderer.invoke('get-custom-providers'),
   deleteCustomProvider: (id: string) => ipcRenderer.invoke('delete-custom-provider', id),
+  getBusinessSystemKnowledgeSources: () => ipcRenderer.invoke('business-system:list-sources'),
+  saveBusinessSystemKnowledgeSource: (input: any) => ipcRenderer.invoke('business-system:save-source', input),
+  deleteBusinessSystemKnowledgeSource: (id: string) => ipcRenderer.invoke('business-system:delete-source', id),
+  testBusinessSystemKnowledgeSource: (input: any) => ipcRenderer.invoke('business-system:test-source', input),
 
   // Audio Test
   startAudioTest: (deviceId?: string) => ipcRenderer.invoke('start-audio-test', deviceId),

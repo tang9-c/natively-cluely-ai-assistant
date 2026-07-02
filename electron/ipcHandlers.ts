@@ -131,6 +131,23 @@ function sanitizeModeEvent(modeEvent: unknown): ModeEventContext | undefined {
   return Object.keys(cleaned).length > 0 ? cleaned : undefined;
 }
 
+function buildBusinessSystemRecentContextSummary(value: unknown): string | undefined {
+  const text = typeof value === 'string'
+    ? value
+    : typeof (value as any)?.text === 'string'
+      ? (value as any).text
+      : '';
+  const compacted = text.replace(/\s+/g, ' ').trim();
+  if (!compacted) return undefined;
+  const sentences: string[] = compacted.match(/[^。！？.!?]+[。！？.!?]?/g) || [compacted];
+  const summary = sentences
+    .map((sentence: string) => sentence.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join('');
+  return summary || undefined;
+}
+
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (
     channel: string,
@@ -1388,6 +1405,59 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       console.error('Error deleting custom provider:', error);
       return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('business-system:list-sources', async () => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    return CredentialsManager.getInstance().getBusinessSystemKnowledgeSourcesPublic();
+  });
+
+  safeHandle('business-system:save-source', async (_, input: any) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const { randomUUID } = require('crypto');
+      const now = new Date().toISOString();
+      const id = typeof input?.id === 'string' && input.id.trim() ? input.id.trim() : randomUUID();
+      const source = {
+        id,
+        name: String(input?.name || '').trim(),
+        kind: ['plm', 'qms', 'business_system'].includes(input?.kind) ? input.kind : 'business_system',
+        url: String(input?.url || '').trim(),
+        authType: input?.authType === 'username_password' ? 'username_password' : 'api_key',
+        enabled: input?.enabled !== false,
+        isDefault: Boolean(input?.isDefault),
+        createdAt: typeof input?.createdAt === 'string' ? input.createdAt : now,
+        updatedAt: now,
+      };
+      if (!source.name || !source.url) return { success: false, error: 'Name and URL are required' };
+      CredentialsManager.getInstance().saveBusinessSystemKnowledgeSource(source, input?.credentials);
+      return { success: true, id };
+    } catch (error: any) {
+      console.error('[IPC] business-system:save-source failed:', redactForLog([error]));
+      return { success: false, error: error?.message || 'save_failed' };
+    }
+  });
+
+  safeHandle('business-system:delete-source', async (_, id: string) => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    CredentialsManager.getInstance().deleteBusinessSystemKnowledgeSource(String(id || ''));
+    return { success: true };
+  });
+
+  safeHandle('business-system:test-source', async (_, input: any) => {
+    try {
+      const { BusinessMcpClient } = require('./services/business-system/BusinessMcpClient');
+      const source = input?.source;
+      if (!source?.url || !source?.name) return { success: false, status: 'error', error: 'Invalid source' };
+      const result = await new BusinessMcpClient().query(source, input?.credentials, {
+        query: '测试业务系统知识源连接',
+        sourceHint: source.kind,
+      }, 2000);
+      return { success: result.status === 'ok', status: result.status, sourceName: result.sourceName, error: result.errorCode };
+    } catch (error: any) {
+      console.error('[IPC] business-system:test-source failed:', redactForLog([error]));
+      return { success: false, status: 'error', error: error?.message || 'test_failed' };
     }
   });
 
@@ -2861,6 +2931,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         let materialRagAttempted = false;
         let uploadedMaterialHitCount = 0;
         let whatToAnswerTrace: any | null = null;
+        let businessSystemResult: any = { kind: 'skipped' };
 
         const validatedImagePaths: string[] | undefined = imagePaths?.length ? [] : undefined;
 
@@ -2963,6 +3034,77 @@ export function initializeIpcHandlers(appState: AppState): void {
         const contextCandidates: RealtimeContextCandidate[] = [];
         const retrievalTimingMs: Record<string, number> = {};
         const ragManagerForHealth = appState.getRAGManager();
+
+        const { BusinessSystemContextService } = require('./services/business-system/BusinessSystemContextService');
+        const { CredentialsManager: BusinessSystemCredentialsManager } = require('./services/CredentialsManager');
+        const businessSystemStartedAt = Date.now();
+        const businessSystemRecentContext = buildBusinessSystemRecentContextSummary(
+          sanitizeModeEvent(requestOptions.modeEvent)?.latestTurn,
+        );
+        businessSystemResult = await new BusinessSystemContextService({
+          credentialsManager: BusinessSystemCredentialsManager.getInstance(),
+        }).resolve({
+          question,
+          recentContext: businessSystemRecentContext,
+        });
+        retrievalTimingMs.business_system = Date.now() - businessSystemStartedAt;
+
+        if (businessSystemResult.kind === 'fixed_reply') {
+          const contextTrace = DatabaseManager.getInstance().saveAnswerContextTrace({
+            answerId,
+            answerType: 'what_to_say',
+            surface: requestOptions.source ?? 'overlay',
+            provider: null,
+            model: null,
+            latencyMs: Date.now() - startedAt,
+            contextUsed: {
+              currentTranscript: Boolean(question?.trim()),
+              shortTermHistory: false,
+              uploadedDocumentRag: false,
+              historicalMeetings: false,
+              longTermMemory: false,
+              enterpriseKnowledge: false,
+              businessSystemContext: false,
+              screenContext: false,
+            },
+            sourceStatus: {
+              ragAttempted: false,
+              ragReady: Boolean(ragManagerForHealth?.isReady?.()),
+              embeddingReady: Boolean(ragManagerForHealth?.getEmbeddingPipeline?.().isReady?.()),
+              uploadedMaterialHitCount: 0,
+              citationCount: 0,
+              screenContextStatus,
+              businessSystemStatus: businessSystemResult.status,
+              businessSystemSourceName: businessSystemResult.sourceName,
+            },
+            citations: [],
+            degradedReason: `business_system_${businessSystemResult.status}`,
+            status: 'generated_with_fallback',
+            traceId: answerId,
+            observability: {
+              retrievalTimingMs: { business_system: retrievalTimingMs.business_system },
+              businessSystemStatus: businessSystemResult.status,
+              businessSystemSourceName: businessSystemResult.sourceName,
+            },
+          });
+          return {
+            answerId,
+            answer: businessSystemResult.answer,
+            question: question || 'inferred from context',
+            statusCode: 'business-system-unavailable',
+            contextTrace,
+            degradedReason: `business_system_${businessSystemResult.status}`,
+            citations: [],
+            screenContextStatus,
+            imageCount: validatedImagePaths?.length || 0,
+            usedImageInput: Boolean(validatedImagePaths?.length),
+          };
+        }
+
+        if (businessSystemResult.kind === 'context') {
+          contextCandidates.push(businessSystemResult.candidate);
+        }
+
         try {
           const materialStartedAt = Date.now();
           const searchQuery = typeof question === 'string' && question.trim()
@@ -3072,6 +3214,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           historicalMeetings: Boolean(whatToAnswerTrace?.contextUsed?.historicalMeetings),
           longTermMemory: Boolean(whatToAnswerTrace?.contextUsed?.longTermMemory),
           enterpriseKnowledge: Boolean(whatToAnswerTrace?.contextUsed?.enterpriseKnowledge),
+          businessSystemContext: businessSystemResult?.kind === 'context',
           screenContext: screenContextStatus === 'available',
         };
         const mergedSourceStatus: AnswerSourceStatus = {
@@ -3081,6 +3224,16 @@ export function initializeIpcHandlers(appState: AppState): void {
           uploadedMaterialHitCount,
           citationCount: citations.length,
           screenContextStatus,
+          businessSystemStatus: businessSystemResult?.kind === 'context'
+            ? 'available'
+            : businessSystemResult?.kind === 'fixed_reply'
+              ? businessSystemResult.status
+              : 'not_requested',
+          businessSystemSourceName: businessSystemResult?.kind === 'context'
+            ? businessSystemResult.sourceName
+            : businessSystemResult?.kind === 'fixed_reply'
+              ? businessSystemResult.sourceName
+              : undefined,
         };
         const mergedDegradedReasons = [
           ...(whatToAnswerTrace?.degradedReasons ?? []),
@@ -3106,6 +3259,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             contextFingerprint: realtimeContextPlan.contextFingerprint,
             injectedSourceIds: realtimeContextPlan.injected.map((item) => `${item.source}:${item.sourceId}:${item.chunkId ?? ''}`),
             omittedSources: realtimeContextPlan.omitted.map((item) => ({ source: item.source, reason: item.reason })),
+            businessSystemStatus: mergedSourceStatus.businessSystemStatus,
+            businessSystemSourceName: mergedSourceStatus.businessSystemSourceName,
             promptFingerprint: whatToAnswerTrace?.promptFingerprint ?? null,
           },
         });

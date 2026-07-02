@@ -4,6 +4,7 @@ import type { AnswerDegradedReason, AnswerSourceStatus } from '../../db/Database
 export type RealtimeContextSource =
     | 'current_transcript'
     | 'short_term_history'
+    | 'business_system'
     | 'uploaded_material'
     | 'mode_reference'
     | 'historical_meetings'
@@ -50,16 +51,18 @@ export interface RealtimeContextPlanInput {
 const SOURCE_PRIORITY: Record<RealtimeContextSource, number> = {
     current_transcript: 0,
     screen_context: 1,
-    uploaded_material: 2,
-    mode_reference: 3,
-    short_term_history: 4,
-    historical_meetings: 5,
-    profile_history: 6,
+    business_system: 2,
+    uploaded_material: 3,
+    mode_reference: 4,
+    short_term_history: 5,
+    historical_meetings: 6,
+    profile_history: 7,
 };
 
 const BUDGET_OMIT_REASON: Record<RealtimeContextSource, AnswerDegradedReason> = {
     current_transcript: 'transcript_truncated',
     screen_context: 'screen_context_truncated',
+    business_system: 'business_system_context_dropped',
     uploaded_material: 'uploaded_material_context_truncated',
     mode_reference: 'mode_context_truncated',
     short_term_history: 'assistant_history_truncated',
@@ -70,6 +73,7 @@ const BUDGET_OMIT_REASON: Record<RealtimeContextSource, AnswerDegradedReason> = 
 const XML_TAG_BY_SOURCE: Record<RealtimeContextSource, string> = {
     current_transcript: 'current_transcript_context',
     screen_context: 'screen_context',
+    business_system: 'business_system_context',
     uploaded_material: 'uploaded_material_context',
     mode_reference: 'mode_reference_context',
     short_term_history: 'short_term_history_context',

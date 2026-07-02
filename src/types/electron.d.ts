@@ -86,6 +86,13 @@ export type AnswerDegradedReason =
   | 'uploaded_material_context_dropped'
   | 'uploaded_material_rag_failed'
   | 'no_relevant_uploaded_material'
+  | 'business_system_context_dropped'
+  | 'business_system_unavailable'
+  | 'business_system_auth_failed'
+  | 'business_system_timeout'
+  | 'business_system_no_result'
+  | 'business_system_ambiguous'
+  | 'business_system_missing_query_anchor'
   | 'screen_context_failed'
   | 'screen_context_scope_blocked'
   | 'screen_context_no_vision_provider'
@@ -109,6 +116,7 @@ export interface AnswerContextUsed {
   historicalMeetings: boolean
   longTermMemory: boolean
   enterpriseKnowledge: boolean
+  businessSystemContext: boolean
   screenContext: boolean
 }
 
@@ -119,6 +127,8 @@ export interface AnswerSourceStatus {
   uploadedMaterialHitCount: number
   citationCount: number
   screenContextStatus: 'not_available' | 'available' | 'failed'
+  businessSystemStatus?: 'not_requested' | 'available' | 'not_configured' | 'missing_query_anchor' | 'auth_failed' | 'timeout' | 'no_result' | 'ambiguous' | 'unavailable' | 'error'
+  businessSystemSourceName?: string
   sttUserStatus?: 'connected' | 'reconnecting' | 'failed'
   sttInterviewerStatus?: 'connected' | 'reconnecting' | 'failed'
   speakerSeparationStatus?: 'off' | 'on' | 'unavailable'
@@ -463,7 +473,7 @@ export interface ElectronAPI {
     answer: string | null;
     question?: string;
     error?: string;
-    statusCode?: 'ok' | 'invalid-request' | 'no-context' | 'no-result' | 'retrieval-error' | 'permission-denied' | 'scope-rejected' | 'provider-error' | 'answer-trace-unavailable' | 'partial-trace-unavailable';
+    statusCode?: 'ok' | 'invalid-request' | 'no-context' | 'no-result' | 'retrieval-error' | 'permission-denied' | 'scope-rejected' | 'provider-error' | 'answer-trace-unavailable' | 'partial-trace-unavailable' | 'business-system-unavailable';
     contextTrace?: AnswerContextTrace | null;
     degradedReason?: string;
     citations?: AnswerCitation[];
@@ -574,6 +584,19 @@ export interface ElectronAPI {
   saveCustomProvider: (provider: any) => Promise<{ success: boolean; id?: string; error?: string }>;
   getCustomProviders: () => Promise<any[]>;
   deleteCustomProvider: (id: string) => Promise<{ success: boolean; error?: string }>;
+  getBusinessSystemKnowledgeSources: () => Promise<Array<{
+    id: string
+    name: string
+    kind: 'plm' | 'qms' | 'business_system'
+    url: string
+    authType: 'api_key' | 'username_password'
+    enabled: boolean
+    isDefault?: boolean
+    credentialState: { hasApiKey: boolean; hasUsername: boolean; hasPassword: boolean }
+  }>>
+  saveBusinessSystemKnowledgeSource: (input: any) => Promise<{ success: boolean; id?: string; error?: string }>
+  deleteBusinessSystemKnowledgeSource: (id: string) => Promise<{ success: boolean; error?: string }>
+  testBusinessSystemKnowledgeSource: (input: any) => Promise<{ success: boolean; status?: string; sourceName?: string; error?: string }>
 
   // Audio Test
   startAudioTest: (deviceId?: string) => Promise<{ success: boolean }>;

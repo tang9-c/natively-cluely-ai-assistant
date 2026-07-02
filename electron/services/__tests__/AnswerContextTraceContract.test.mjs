@@ -41,6 +41,16 @@ test('renderer and main trace contracts include required context and source stat
   }
 });
 
+test('answer context trace supports business system source status', () => {
+  const dbSource = read('electron/db/DatabaseManager.ts');
+  const rendererTypes = read('src/types/electron.d.ts');
+
+  assert.match(dbSource, /businessSystemContext/);
+  assert.match(dbSource, /businessSystemStatus/);
+  assert.match(rendererTypes, /businessSystemContext/);
+  assert.match(rendererTypes, /businessSystemStatus/);
+});
+
 test('database hydrates missing trace context and source status with conservative defaults', () => {
   const dbSource = read('electron/db/DatabaseManager.ts');
 

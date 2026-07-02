@@ -4,6 +4,7 @@ import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, STANDARD_
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 import { LocalModelsPanel } from '../LocalModelsPanel';
+import { BusinessSystemKnowledgeSourcesSettings } from './BusinessSystemKnowledgeSourcesSettings';
 
 interface CustomProvider {
     id: string;
@@ -891,6 +892,8 @@ export const AIProvidersSettings: React.FC = () => {
                 </div>
             </div>
             )}
+
+            <BusinessSystemKnowledgeSourcesSettings />
 
             {/* Custom Providers */}
             <div className="space-y-5">

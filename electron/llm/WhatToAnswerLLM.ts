@@ -163,6 +163,7 @@ export class WhatToAnswerLLM {
                 historicalMeetings: false,
                 longTermMemory: false,
                 enterpriseKnowledge: false,
+                businessSystemContext: false,
                 screenContext: screenContextAvailable,
             },
             sourceStatus: {
@@ -232,6 +233,7 @@ export class WhatToAnswerLLM {
                             historicalMeetings: false,
                             longTermMemory: false,
                             enterpriseKnowledge: false,
+                            businessSystemContext: false,
                             screenContext: false,
                         },
                         sourceStatus: {
