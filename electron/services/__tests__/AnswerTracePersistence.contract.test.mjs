@@ -30,13 +30,15 @@ test('generate-what-to-say passes traceSink and persists sourceStatus', () => {
   assert.match(handler, /citationCount/);
 });
 
-test('generate-what-to-say returns answer_trace_unavailable if trace persistence fails', () => {
+test('generate-what-to-say does not discard generated answer when trace persistence fails', () => {
   const source = read('electron/ipcHandlers.ts');
   const handler = sliceSafeHandleBlock(source, 'generate-what-to-say');
 
-  assert.match(handler, /answer_trace_unavailable/);
   assert.match(handler, /if \(!contextTrace\)/);
-  assert.match(handler, /answer:\s*null/);
+  assert.match(handler, /statusCode:\s*'partial-trace-unavailable'/);
+  assert.match(handler, /answer,/);
+  assert.match(handler, /contextTrace:\s*null/);
+  assert.doesNotMatch(handler, /if \(!contextTrace\)[\s\S]{0,400}answer:\s*null/);
 });
 
 test('generate-what-to-say sanitizes options and returns stable status codes', () => {
@@ -47,7 +49,7 @@ test('generate-what-to-say sanitizes options and returns stable status codes', (
   assert.doesNotMatch(handler, /options\?\.uploadedMaterialContext/);
   assert.match(handler, /statusCode:\s*'ok'/);
   assert.match(handler, /statusCode:\s*'invalid-request'/);
-  assert.match(handler, /statusCode:\s*'answer-trace-unavailable'/);
+  assert.match(handler, /statusCode:\s*'partial-trace-unavailable'/);
 });
 
 test('open-answer-citation resolves persisted citations by answer id and citation id', () => {

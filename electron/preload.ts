@@ -350,7 +350,7 @@ interface ElectronAPI {
     answer: string | null;
     question?: string;
     error?: string;
-    statusCode?: 'ok' | 'invalid-request' | 'no-context' | 'no-result' | 'retrieval-error' | 'permission-denied' | 'scope-rejected' | 'provider-error' | 'answer-trace-unavailable';
+    statusCode?: 'ok' | 'invalid-request' | 'no-context' | 'no-result' | 'retrieval-error' | 'permission-denied' | 'scope-rejected' | 'provider-error' | 'answer-trace-unavailable' | 'partial-trace-unavailable';
     contextTrace?: any;
     degradedReason?: string;
     citations?: any[];

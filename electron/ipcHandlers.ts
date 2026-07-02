@@ -3110,14 +3110,19 @@ export function initializeIpcHandlers(appState: AppState): void {
         });
         if (!contextTrace) {
           console.warn('[IPC] generate-what-to-say: answer trace persistence failed');
+          const traceUnavailableReasons = mergedDegradedReasons.includes('answer_trace_unavailable')
+            ? mergedDegradedReasons
+            : [...mergedDegradedReasons, 'answer_trace_unavailable'];
           return {
-            answer: null,
+            answerId,
+            answer,
             question: question || 'inferred from context',
             error: 'answer_trace_unavailable',
-            statusCode: 'answer-trace-unavailable',
+            statusCode: 'partial-trace-unavailable',
+            contextTrace: null,
             screenContextStatus,
-            degradedReason: 'answer_trace_unavailable',
-            citations: [],
+            degradedReason: traceUnavailableReasons.join(','),
+            citations,
             imageCount: validatedImagePaths?.length || 0,
             usedImageInput: Boolean(validatedImagePaths?.length),
           };
