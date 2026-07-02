@@ -1581,7 +1581,23 @@ export class DatabaseManager {
             if (onlyCurrentTranscript && citationCount === 0) noContextAnswers += 1;
         }
 
-        const denominator = eventCounts.shown || traces.length;
+        const denominator = eventCounts.shown;
+        if (denominator === 0) {
+            return {
+                shownCount: 0,
+                copiedCount: eventCounts.copied,
+                acceptedCount: eventCounts.accepted,
+                ignoredCount: eventCounts.ignored,
+                regeneratedCount: eventCounts.regenerated,
+                averageLatencyMs,
+                p95LatencyMs,
+                citationHitRate: 0,
+                userAcceptanceRate: 0,
+                regenerationRate: 0,
+                ragHitRate: ragAttempts > 0 ? ragHits / ragAttempts : 0,
+                noContextAnswerRate: 0,
+            };
+        }
         return {
             shownCount: eventCounts.shown,
             copiedCount: eventCounts.copied,
