@@ -1,16 +1,14 @@
 // src/components/settings/ResearchTabBody.tsx
 //
-// Settings tab for the Research feature. Surfaces the Tavily API key
-// management + cache controls so users can re-configure or reset state
-// without leaving the Settings overlay.
+// Settings tab for knowledge sources used by meeting answers.
 
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertCircle,
   Check,
-  FlaskConical,
   Info,
+  LibraryBig,
   Loader2,
   Save,
   Search,
@@ -18,6 +16,8 @@ import {
   X,
 } from 'lucide-react';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
+import { BusinessSystemKnowledgeSourcesSettings } from './BusinessSystemKnowledgeSourcesSettings';
+import { KnowledgeMaterialsSettings } from './KnowledgeMaterialsSettings';
 
 export const ResearchTabBody: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
@@ -107,11 +107,11 @@ export const ResearchTabBody: React.FC = () => {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-lg font-bold text-text-primary mb-1 flex items-center gap-2">
-            <FlaskConical size={18} className="text-accent-primary" />
-            调研
+            <LibraryBig size={18} className="text-accent-primary" />
+            知识源
           </h3>
           <p className="text-xs text-text-secondary">
-            配置实时网络搜索，让公司在调研时获取最新公开信息。
+            配置公开网络调研、资料库和受控业务系统知识源。
           </p>
         </div>
         {hasStoredKey && (
@@ -122,168 +122,162 @@ export const ResearchTabBody: React.FC = () => {
         )}
       </div>
 
-      {/* API Key card */}
-      <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-4">
+      {/* Network research card */}
+      <div data-testid="network-research-card" className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-5">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-bg-input border border-border-subtle flex items-center justify-center shrink-0">
             <Search size={15} className="text-accent-primary" />
           </div>
           <div>
-            <h4 className="text-sm font-semibold text-text-primary">Tavily API Key</h4>
+            <h4 className="text-sm font-semibold text-text-primary">网络调研</h4>
             <p className="text-[11px] text-text-tertiary">
-              为公司调研提供实时网络搜索能力
+              使用 Tavily 为公司调研提供实时公开网络搜索能力
             </p>
           </div>
         </div>
 
-        <div>
-          <label className="block text-[11px] font-medium text-text-secondary uppercase tracking-wide mb-1.5">
-            API 密钥
-          </label>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => {
-              setApiKey(e.target.value);
-              setError('');
-              setTestResult(null);
-            }}
-            placeholder={hasStoredKey ? '••••••••••••' : '输入 Tavily API 密钥 (tvly-...)'}
-            className="w-full bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary/50 transition-all"
-          />
-        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-[11px] font-medium text-text-secondary uppercase tracking-wide mb-1.5">
+              Tavily API Key
+            </label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => {
+                setApiKey(e.target.value);
+                setError('');
+                setTestResult(null);
+              }}
+              placeholder={hasStoredKey ? '••••••••••••' : '输入 Tavily API 密钥 (tvly-...)'}
+              className="w-full bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary/50 transition-all"
+            />
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={handleSave}
-            disabled={isSaving || !apiKey.trim()}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
-              isSaving || !apiKey.trim()
-                ? `${isLight ? 'bg-black/5' : 'bg-white/5'} text-text-tertiary cursor-not-allowed`
-                : 'bg-accent-primary text-white hover:bg-accent-primary/90 active:scale-[0.96]'
-            }`}
-          >
-            {isSaving ? (
-              <>
-                <Loader2 size={13} className="animate-spin" />
-                保存中…
-              </>
-            ) : (
-              <>
-                <Save size={13} />
-                保存
-              </>
-            )}
-          </button>
-
-          <button
-            onClick={handleTest}
-            disabled={isTesting || !apiKey.trim()}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium border border-border-subtle transition-all duration-200 ${
-              isTesting || !apiKey.trim()
-                ? 'opacity-50 cursor-not-allowed'
-                : `${surfaceHover} text-text-secondary hover:text-text-primary`
-            }`}
-          >
-            {isTesting ? (
-              <>
-                <Loader2 size={13} className="animate-spin" />
-                测试中…
-              </>
-            ) : (
-              <>
-                <Search size={13} />
-                测试连接
-              </>
-            )}
-          </button>
-
-          {hasStoredKey && (
+          <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={handleRemove}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/10 transition-all duration-200"
-            >
-              <Trash2 size={13} />
-              移除
-            </button>
-          )}
-        </div>
-
-        <AnimatePresence mode="wait">
-          {testResult && (
-            <motion.div
-              key="test-result"
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              className={`flex items-start gap-2 rounded-xl px-3.5 py-2.5 text-xs border ${
-                testResult.valid
-                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                  : 'bg-red-500/10 border-red-500/20 text-red-400'
+              onClick={handleSave}
+              disabled={isSaving || !apiKey.trim()}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
+                isSaving || !apiKey.trim()
+                  ? `${isLight ? 'bg-black/5' : 'bg-white/5'} text-text-tertiary cursor-not-allowed`
+                  : 'bg-accent-primary text-white hover:bg-accent-primary/90 active:scale-[0.96]'
               }`}
             >
-              {testResult.valid ? <Check size={14} className="shrink-0 mt-0.5" /> : <X size={14} className="shrink-0 mt-0.5" />}
-              <span>
-                {testResult.valid
-                  ? testResult.quotaLow
-                    ? 'Key 有效，但额度已接近上限'
-                    : 'Key 有效'
-                  : testResult.reason ?? '验证失败'}
-              </span>
-            </motion.div>
-          )}
+              {isSaving ? (
+                <>
+                  <Loader2 size={13} className="animate-spin" />
+                  保存中…
+                </>
+              ) : (
+                <>
+                  <Save size={13} />
+                  保存
+                </>
+              )}
+            </button>
 
-          {error && (
-            <motion.div
-              key="error"
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              className="flex items-start gap-2 rounded-xl px-3.5 py-2.5 text-xs bg-red-500/10 border border-red-500/20 text-red-400"
+            <button
+              onClick={handleTest}
+              disabled={isTesting || !apiKey.trim()}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium border border-border-subtle transition-all duration-200 ${
+                isTesting || !apiKey.trim()
+                  ? 'opacity-50 cursor-not-allowed'
+                  : `${surfaceHover} text-text-secondary hover:text-text-primary`
+              }`}
             >
-              <AlertCircle size={14} className="shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </motion.div>
-          )}
+              {isTesting ? (
+                <>
+                  <Loader2 size={13} className="animate-spin" />
+                  测试中…
+                </>
+              ) : (
+                <>
+                  <Search size={13} />
+                  测试连接
+                </>
+              )}
+            </button>
 
-          {saveStatus && (
-            <motion.p
-              key="save-status"
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              className="text-xs text-text-tertiary"
-            >
-              {saveStatus}
-            </motion.p>
-          )}
-        </AnimatePresence>
+            {hasStoredKey && (
+              <button
+                onClick={handleRemove}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/10 transition-all duration-200"
+              >
+                <Trash2 size={13} />
+                移除
+              </button>
+            )}
+          </div>
 
-        <div className="flex items-start gap-2.5 px-3.5 py-3 bg-bg-input rounded-xl border border-border-subtle">
-          <Info className="w-4 h-4 text-text-muted shrink-0 mt-0.5" />
-          <p className="text-xs text-text-secondary leading-relaxed">
-            在{' '}
-            <span
-              className="text-accent-primary hover:text-accent-primary/80 underline underline-offset-2 cursor-pointer"
-              onClick={() => window.electronAPI?.openExternal?.('https://app.tavily.com/home')}
-            >
-              app.tavily.com
-            </span>{' '}
-            获取免费 API 密钥。密钥以 <code className="text-accent-primary bg-accent-primary/10 px-1 py-0.5 rounded text-[10px]">tvly-</code> 开头。免费额度每月 1000 次。
-          </p>
+          <AnimatePresence mode="wait">
+            {testResult && (
+              <motion.div
+                key="test-result"
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className={`flex items-start gap-2 rounded-xl px-3.5 py-2.5 text-xs border ${
+                  testResult.valid
+                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                    : 'bg-red-500/10 border-red-500/20 text-red-400'
+                }`}
+              >
+                {testResult.valid ? <Check size={14} className="shrink-0 mt-0.5" /> : <X size={14} className="shrink-0 mt-0.5" />}
+                <span>
+                  {testResult.valid
+                    ? testResult.quotaLow
+                      ? 'Key 有效，但额度已接近上限'
+                      : 'Key 有效'
+                    : testResult.reason ?? '验证失败'}
+                </span>
+              </motion.div>
+            )}
+
+            {error && (
+              <motion.div
+                key="error"
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="flex items-start gap-2 rounded-xl px-3.5 py-2.5 text-xs bg-red-500/10 border border-red-500/20 text-red-400"
+              >
+                <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </motion.div>
+            )}
+
+            {saveStatus && (
+              <motion.p
+                key="save-status"
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="text-xs text-text-tertiary"
+              >
+                {saveStatus}
+              </motion.p>
+            )}
+          </AnimatePresence>
+
+          <div className="flex items-start gap-2.5 px-3.5 py-3 bg-bg-input rounded-xl border border-border-subtle">
+            <Info className="w-4 h-4 text-text-muted shrink-0 mt-0.5" />
+            <p className="text-xs text-text-secondary leading-relaxed">
+              在{' '}
+              <span
+                className="text-accent-primary hover:text-accent-primary/80 underline underline-offset-2 cursor-pointer"
+                onClick={() => window.electronAPI?.openExternal?.('https://app.tavily.com/home')}
+              >
+                app.tavily.com
+              </span>{' '}
+              获取免费 API 密钥。密钥以 <code className="text-accent-primary bg-accent-primary/10 px-1 py-0.5 rounded text-[10px]">tvly-</code> 开头。免费额度每月 1000 次。
+            </p>
+          </div>
         </div>
-      </div>
 
-      {/* Cache card */}
-      <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
-        <div className="flex items-start justify-between gap-4">
+        <div className="border-t border-border-subtle pt-4 flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-8 h-8 rounded-lg bg-bg-input border border-border-subtle flex items-center justify-center shrink-0">
-                <FlaskConical size={15} className="text-accent-primary" />
-              </div>
-              <h4 className="text-sm font-semibold text-text-primary">缓存</h4>
-            </div>
+            <h5 className="text-xs font-semibold text-text-primary mb-1">缓存</h5>
             <p className="text-xs text-text-secondary">
               同一公司 24h 内只生成一次 dossier。
             </p>
@@ -296,6 +290,10 @@ export const ResearchTabBody: React.FC = () => {
           </button>
         </div>
       </div>
+
+      <KnowledgeMaterialsSettings />
+
+      <BusinessSystemKnowledgeSourcesSettings />
     </div>
   );
 };

@@ -5,7 +5,7 @@ import {
     ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, ExternalLink, Trash2,
-    Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff,
+    Sparkles, Pencil, Briefcase, Building2, Search, LibraryBig, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff,
     Star, AlertCircle, Gift, Cpu, Shield
 } from 'lucide-react';
 import { analytics } from '../lib/analytics/analytics.service';
@@ -358,7 +358,6 @@ type SettingsTab =
     | 'natively-api'
     | 'ai-providers'
     | 'knowledge'
-    | 'research'
     | 'skills'
     | 'speaker-verification'
     | 'audio'
@@ -371,7 +370,6 @@ const SETTINGS_TABS = new Set<SettingsTab>([
     'natively-api',
     'ai-providers',
     'knowledge',
-    'research',
     'skills',
     'speaker-verification',
     'audio',
@@ -380,9 +378,10 @@ const SETTINGS_TABS = new Set<SettingsTab>([
     'about',
 ]);
 
-const normalizeSettingsTab = (tab: string): SettingsTab => (
-    SETTINGS_TABS.has(tab as SettingsTab) ? tab as SettingsTab : 'general'
-);
+const normalizeSettingsTab = (tab: string): SettingsTab => {
+    if (tab === 'research') return 'knowledge';
+    return SETTINGS_TABS.has(tab as SettingsTab) ? tab as SettingsTab : 'general';
+};
 
 type SttLanguageCompatibility = {
     requestedLanguageKey: string;
@@ -426,60 +425,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
     const [showVerboseToast, setShowVerboseToast] = useState(false);
     const verboseToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-    const [knowledgeMaterials, setKnowledgeMaterials] = useState<any[]>([]);
-    const [knowledgeStatus, setKnowledgeStatus] = useState<string | null>(null);
-    const [isKnowledgeBusy, setIsKnowledgeBusy] = useState(false);
-
-    const refreshKnowledgeMaterials = useCallback(async () => {
-        const result = await window.electronAPI?.knowledgeListMaterials?.();
-        if (result?.success) {
-            setKnowledgeMaterials(result.materials || []);
-        }
-    }, []);
-
-    const handleUploadKnowledgeMaterials = useCallback(async () => {
-        setIsKnowledgeBusy(true);
-        setKnowledgeStatus(null);
-        try {
-            const selected = await window.electronAPI?.knowledgeSelectMaterials?.();
-            if (!selected || selected.cancelled) return;
-            if (!selected.success || !selected.filePaths?.length) {
-                setKnowledgeStatus(selected.error || '没有选择文件');
-                return;
-            }
-            const result = await window.electronAPI?.knowledgeUploadMaterials?.(selected.filePaths);
-            const failed = result?.errors?.length || 0;
-            setKnowledgeStatus(failed > 0 ? `已上传 ${result?.materials?.length || 0} 个，失败 ${failed} 个` : '资料已加入索引');
-            await refreshKnowledgeMaterials();
-        } catch (error: any) {
-            setKnowledgeStatus(error?.message || '资料上传失败');
-        } finally {
-            setIsKnowledgeBusy(false);
-        }
-    }, [refreshKnowledgeMaterials]);
-
-    const handleDeleteKnowledgeMaterial = useCallback(async (id: string) => {
-        setIsKnowledgeBusy(true);
-        try {
-            const result = await window.electronAPI?.knowledgeDeleteMaterial?.(id);
-            setKnowledgeStatus(result?.success ? '资料已删除' : (result?.error || '删除失败'));
-            await refreshKnowledgeMaterials();
-        } finally {
-            setIsKnowledgeBusy(false);
-        }
-    }, [refreshKnowledgeMaterials]);
-
-    const handleReindexKnowledgeMaterial = useCallback(async (id: string) => {
-        setIsKnowledgeBusy(true);
-        try {
-            const result = await window.electronAPI?.knowledgeReindexMaterial?.(id);
-            setKnowledgeStatus(result?.success ? '已重新索引' : (result?.error || '重新索引失败'));
-            await refreshKnowledgeMaterials();
-        } finally {
-            setIsKnowledgeBusy(false);
-        }
-    }, [refreshKnowledgeMaterials]);
-
     // Close dropdown when clicking outside
     // Sync with global state changes
     useEffect(() => {
@@ -490,9 +435,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             window.electronAPI?.getOverlayMousePassthrough?.().then(setIsMousePassthrough).catch(() => { });
             window.electronAPI?.getVerboseLogging?.().then(setVerboseLogging).catch(() => { });
             window.electronAPI?.getMeetingRetention?.().then(setMeetingRetention).catch(() => { });
-            refreshKnowledgeMaterials().catch(() => { });
         }
-    }, [isOpen, refreshKnowledgeMaterials]);
+    }, [isOpen]);
 
     useEffect(() => {
         if (!showVerboseToast) return;
@@ -1526,13 +1470,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         onClick={() => setActiveTab('knowledge')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'knowledge' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <Upload size={16} /> 资料库
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveTab('research')}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'research' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
-                                    >
-                                        <Search size={16} /> 调研
+                                        <LibraryBig size={16} /> 知识源
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('skills')}
@@ -2118,78 +2056,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                 <AIProvidersSettings />
                             )}
                             {activeTab === 'knowledge' && (
-                                <div className="space-y-5 animated fadeIn select-text pb-4">
-                                    <div className="flex items-start justify-between gap-4">
-                                        <div>
-                                            <h3 className="text-lg font-bold text-text-primary mb-1">资料库</h3>
-                                            <p className="text-xs text-text-secondary">上传 PDF、DOCX、Markdown 或 TXT，让会议回答可以引用本地资料。</p>
-                                        </div>
-                                        <button
-                                            onClick={handleUploadKnowledgeMaterials}
-                                            disabled={isKnowledgeBusy}
-                                            className="flex items-center gap-2 px-4 py-1.5 rounded-lg border border-border-subtle bg-bg-component hover:bg-bg-elevated text-text-primary text-xs font-medium transition-colors disabled:opacity-60"
-                                        >
-                                            <Upload size={14} />
-                                            上传资料
-                                        </button>
-                                    </div>
-
-                                    {knowledgeStatus && (
-                                        <div className="rounded-lg border border-border-subtle bg-bg-subtle/30 px-3 py-2 text-xs text-text-secondary">
-                                            {knowledgeStatus}
-                                        </div>
-                                    )}
-
-                                    <div className="rounded-xl border border-border-subtle bg-bg-card overflow-hidden">
-                                        {knowledgeMaterials.length === 0 ? (
-                                            <div className="px-4 py-8 text-center text-sm text-text-secondary">
-                                                暂无资料
-                                            </div>
-                                        ) : (
-                                            <div className="divide-y divide-border-subtle">
-                                                {knowledgeMaterials.map((material) => {
-                                                    const title = material.title || material.file_name || material.fileName || material.id;
-                                                    const status = material.status || 'queued';
-                                                    return (
-                                                        <div key={material.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                                                            <div className="min-w-0">
-                                                                <div className="truncate text-sm font-medium text-text-primary">{title}</div>
-                                                                <div className="mt-1 flex items-center gap-2 text-[11px] text-text-tertiary">
-                                                                    <span>{status}</span>
-                                                                    {material.error_message && <span className="text-red-400">{material.error_message}</span>}
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex items-center gap-1.5 shrink-0">
-                                                                <button
-                                                                    onClick={() => handleReindexKnowledgeMaterial(material.id)}
-                                                                    disabled={isKnowledgeBusy}
-                                                                    className="p-1.5 rounded-md border border-border-subtle bg-bg-component hover:bg-bg-elevated text-text-secondary hover:text-text-primary disabled:opacity-60"
-                                                                    title="重新索引"
-                                                                >
-                                                                    <RefreshCw size={13} />
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleDeleteKnowledgeMaterial(material.id)}
-                                                                    disabled={isKnowledgeBusy}
-                                                                    className="p-1.5 rounded-md border border-border-subtle bg-bg-component hover:bg-bg-elevated text-text-secondary hover:text-red-400 disabled:opacity-60"
-                                                                    title="删除"
-                                                                >
-                                                                    <Trash2 size={13} />
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
+                                <ResearchTabBody />
                             )}
                             {activeTab === 'skills' && (
                                 <SkillsSettings />
-                            )}
-                            {activeTab === 'research' && (
-                                <ResearchTabBody />
                             )}
                             {activeTab === 'natively-api' && (
                                 <NativelyApiSettings />
