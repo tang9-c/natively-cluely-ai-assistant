@@ -327,6 +327,34 @@ const formatDegradedReasonForDisplay = (reason?: string | null): string | null =
   return uniqueLabels.length > 0 ? uniqueLabels.join('、') : null;
 };
 
+function formatRealtimeAnswerStatusForDisplay(statusCode?: string, error?: string): string | null {
+  switch (statusCode) {
+    case undefined:
+    case 'ok':
+      return null;
+    case 'partial-trace-unavailable':
+      return '答案已生成，但可信度追踪暂不可用';
+    case 'scope-rejected':
+      return '当前 provider 不允许使用资料上下文，本次答案未使用上传资料';
+    case 'permission-denied':
+      return '权限不足，无法生成实时回答';
+    case 'no-result':
+      return '暂时没有生成可用回答';
+    case 'retrieval-error':
+      return '资料检索失败，本次答案未使用上传资料';
+    case 'answer-trace-unavailable':
+      return '答案可信度追踪不可用';
+    case 'provider-error':
+      return error ? `实时回答失败：${error}` : '实时回答失败，请稍后重试';
+    case 'invalid-request':
+      return '请求格式无效，无法生成实时回答';
+    case 'no-context':
+      return '当前没有足够上下文生成回答';
+    default:
+      return error ? `实时回答失败：${error}` : '实时回答失败';
+  }
+}
+
 const MessageRow = React.memo(
   function MessageRow({
     msg,
@@ -2164,6 +2192,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setLatestAnswerTrace(result.contextTrace ?? null);
       setLatestAnswerCitations(result.citations ?? []);
       setLatestDegradedReason(result.degradedReason);
+      const statusMessage = formatRealtimeAnswerStatusForDisplay(result.statusCode, result.error);
+      if (result.statusCode !== 'ok' && statusMessage && !result.answer) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: genMessageId(),
+            role: 'system',
+            text: statusMessage,
+          },
+        ]);
+      }
       if (result.answerId) {
         const surface = generationOptions?.source ?? 'overlay';
         latestAnswerLifecycleRef.current = {

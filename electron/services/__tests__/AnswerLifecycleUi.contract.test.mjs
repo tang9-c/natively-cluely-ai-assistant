@@ -48,3 +48,15 @@ test('NativelyInterface gates realtime answer state by request id and previews c
   assert.match(source, /引用来源已变更，无法预览原片段|引用来源不可用/);
   assert.doesNotMatch(source, /打开资料引用/);
 });
+
+test('NativelyInterface renders stable realtime answer failure status instead of silently updating state', () => {
+  const source = read('src/components/NativelyInterface.tsx');
+
+  assert.match(source, /formatRealtimeAnswerStatusForDisplay/);
+  assert.match(source, /scope-rejected/);
+  assert.match(source, /provider-error/);
+  assert.match(source, /no-result/);
+  assert.match(source, /partial-trace-unavailable/);
+  assert.match(source, /result\.statusCode\s*!==\s*'ok'/);
+  assert.match(source, /role:\s*'system'/);
+});
