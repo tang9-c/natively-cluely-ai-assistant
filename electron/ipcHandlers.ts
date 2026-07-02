@@ -2842,9 +2842,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       question?: string,
       imagePaths?: string[],
       options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: ModeEventContext },
-    ) => {
-      try {
+      ) => {
+        try {
         const requestOptions = sanitizeGenerateWhatToSayOptions(options);
+        const providerScopes = SettingsManager.getInstance().get('providerDataScopes') || {};
+        const referenceFilesAllowed = providerScopes.reference_files !== false;
         let screenContext: any;
         let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
         let visionProviderUsed: string | undefined;
@@ -2913,7 +2915,6 @@ export function initializeIpcHandlers(appState: AppState): void {
             const sus = getScreenUnderstandingService();
             const settings = SettingsManager.getInstance();
             const credentials = CredentialsManager.getInstance();
-            const providerScopes = settings.get('providerDataScopes') || {};
             const localVisionAvailable = credentials.anyLocalVisionProviderConfigured?.() ?? false;
             if (providerScopes.screenshots === false) {
               console.warn(
@@ -2967,7 +2968,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           const searchQuery = typeof question === 'string' && question.trim()
             ? question.trim()
             : sanitizeModeEvent(requestOptions.modeEvent)?.retrievalQuery;
-          if (searchQuery) {
+          if (searchQuery && referenceFilesAllowed) {
             materialRagAttempted = true;
             const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
             const materialService = new KnowledgeMaterialService(DatabaseManager.getInstance(), ragManagerForHealth?.getEmbeddingPipeline?.());
@@ -3001,6 +3002,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         } catch (materialError: any) {
           degradedReasons.push('uploaded_material_rag_failed');
           console.warn('[IPC] generate-what-to-say: material RAG failed', { errorClass: materialError?.name || 'Error' });
+        }
+        if (!referenceFilesAllowed) {
+          degradedReasons.push('context_scope_denied');
         }
         const ragReady = Boolean(ragManagerForHealth?.isReady?.());
         const embeddingReady = Boolean(ragManagerForHealth?.getEmbeddingPipeline?.().isReady?.());
@@ -3041,7 +3045,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             traceSink: (trace) => {
               whatToAnswerTrace = trace;
             },
-            providerScopePolicy: SettingsManager.getInstance().get('providerDataScopes') || {},
+            providerScopePolicy: providerScopes,
           },
         );
         if (screenContextStatus === 'failed') degradedReasons.push('screen_context_failed');
