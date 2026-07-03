@@ -26,7 +26,7 @@
 ## File Structure
 
 - Create `electron/services/dynamic-actions/ModeEventClassifier.ts`: owns action-level semantic gate types, high-risk/fast-path policy, deterministic local heuristics, and the dynamic-action-specific cloud confirmation helper.
-- Modify `electron/services/dynamic-actions/DynamicAction.ts`: add `SemanticGateTrace` types and `semanticGate?: SemanticGateTrace`.
+- Modify `electron/services/dynamic-actions/DynamicAction.ts`: type-import `SemanticGateTrace` from `ModeEventClassifier.ts` and add `semanticGate?: SemanticGateTrace`.
 - Modify `src/types/electron.d.ts`: mirror `semanticGate` on `DynamicActionPayload`.
 - Modify `electron/services/dynamic-actions/DynamicActionEngine.ts`: inject/use `ModeEventClassifier`, route `assessSignals()` through the gate, add context/cloud options, keep `detectActions()` legacy.
 - Modify `electron/IntelligenceEngine.ts`: pass compact recent context turns and a cloud semantic classifier callback into `assessSignals()`.
@@ -324,6 +324,7 @@ export interface ModeEventGateInput {
     activeActionTypes?: string[];
     intentResult?: IntentResult;
     providerDataScopes?: ProviderDataScopePolicy;
+    cloudClassifier?: CloudSemanticGateClassifier;
 }
 
 export type CloudSemanticGateClassifier = (input: CloudSemanticGateInput) => Promise<CloudSemanticGateResult[] | null>;
@@ -366,7 +367,10 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
     const base = {
         candidate,
         rejectedCandidates: [] as string[],
-        usedLocalIntentModel: Boolean(input.intentResult && input.intentResult.confidence >= 0.75),
+        // Current IntentResult does not expose whether it came from the optional
+        // local SLM, regex, or cloud broad intent path. Do not claim the local
+        // model was used unless a future explicit source field is added.
+        usedLocalIntentModel: false,
         usedCloudArbitration: false,
     };
 
@@ -428,6 +432,15 @@ function shouldUseCloud(input: ModeEventGateInput): boolean {
     );
 }
 
+function shouldUseCloudBeforeLocal(input: ModeEventGateInput, candidate: ModeEventCandidate): boolean {
+    if (input.providerDataScopes?.transcript === false) return false;
+    if (!(candidate.highRisk || HIGH_RISK_ACTIONS.has(candidate.actionType))) return false;
+    const highRiskCount = input.candidates.filter(item => item.highRisk || HIGH_RISK_ACTIONS.has(item.actionType)).length;
+    return isEnglishOrMixed(input.transcript) ||
+        highRiskCount > 1 ||
+        includesAny(input.transcript, ['but', 'however', '先放一边', '不是', '不要', '先不']);
+}
+
 export class ModeEventClassifier {
     constructor(private readonly options: ModeEventClassifierOptions = {}) {}
 
@@ -450,6 +463,10 @@ export class ModeEventClassifier {
                     usedCloudArbitration: false,
                     semanticProvider: 'rule_fast_path',
                 });
+                continue;
+            }
+
+            if (shouldUseCloudBeforeLocal(input, candidate) && (input.cloudClassifier || this.options.cloudClassifier)) {
                 continue;
             }
 
@@ -484,8 +501,9 @@ export class ModeEventClassifier {
                 for (const candidate of unresolvedHighRisk) {
                     decisions.set(candidate.actionType, this.degraded(candidate, 'provider_scope_denied'));
                 }
-            } else if (shouldUseCloud({ ...input, candidates: unresolvedHighRisk }) && this.options.cloudClassifier) {
-                const cloudResults = await this.options.cloudClassifier({
+            } else if (shouldUseCloud({ ...input, candidates: unresolvedHighRisk }) && (input.cloudClassifier || this.options.cloudClassifier)) {
+                const cloudClassifier = input.cloudClassifier ?? this.options.cloudClassifier;
+                const cloudResults = await cloudClassifier?.({
                     transcript: input.transcript,
                     recentContextTurns: input.recentContextTurns ?? [],
                     modeTemplateType: input.modeTemplateType,
@@ -567,7 +585,7 @@ rtk git commit -m "feat: add dynamic action semantic gate"
 - Test: `electron/services/__tests__/DynamicActionPromptInstructionWiring.test.mjs`
 
 **Interfaces:**
-- Consumes `SemanticGateTrace` shape from Task 1.
+- Consumes `SemanticGateTrace` exported by `ModeEventClassifier.ts` from Task 1.
 - Produces `DynamicAction.semanticGate?: SemanticGateTrace` and renderer mirror `DynamicActionPayload.semanticGate`.
 
 - [ ] **Step 1: Add a contract test**
@@ -598,26 +616,10 @@ Expected: fail because `semanticGate` is not mirrored.
 
 - [ ] **Step 3: Update main-process action type**
 
-In `electron/services/dynamic-actions/DynamicAction.ts`, add before `DynamicAction`:
+In `electron/services/dynamic-actions/DynamicAction.ts`, add a type-only import near the top:
 
 ```ts
-export type SemanticGateDecision = 'pass' | 'reject' | 'defer' | 'fast_path';
-export type SemanticGateProvider = 'local_intent' | 'cloud_llm' | 'rule_fast_path' | 'unavailable';
-
-export interface SemanticGateTrace {
-    decision: SemanticGateDecision;
-    actionType: string;
-    semanticIntent?: string;
-    confidence: number;
-    reasons: string[];
-    regexCandidates: string[];
-    rejectedCandidates: string[];
-    usedLocalIntentModel: boolean;
-    usedCloudArbitration: boolean;
-    semanticProvider: SemanticGateProvider;
-    degradedReason?: string;
-    upgradedByRepeatedEvidence: boolean;
-}
+import type { SemanticGateTrace } from './ModeEventClassifier';
 ```
 
 Then add inside `DynamicAction`:
@@ -678,6 +680,7 @@ rtk git commit -m "feat: expose dynamic action semantic gate trace"
 - Consumes `ModeEventClassifier`, `ModeEventContextTurn`, `CloudSemanticGateClassifier`, `ModeEventGateDecision`.
 - Produces async `assessSignals(params): Promise<DynamicAction[]>`.
 - Keeps `detectActions()` synchronous legacy behavior for low-risk callers.
+- Preserves `synthesizeTrigger()` by sending intent-only synthetic candidates through the semantic gate.
 
 - [ ] **Step 1: Add failing engine tests**
 
@@ -803,6 +806,19 @@ Inside `assessSignals()`, replace direct `triggerCandidates` assessment with:
             confirmationSource: this.confirmationSourceFor(params.intentResult),
             confirmedIntent: params.intentResult?.intent,
         }));
+        const synthTrigger = matchedTriggers.length === 0
+            ? this.synthesizeTrigger(modeTemplateType, params.intentResult)
+            : null;
+
+        if (synthTrigger) {
+            triggerCandidates.push({
+                trigger: synthTrigger,
+                match: params.intentResult?.intent ?? synthTrigger.type,
+                confidence: params.intentResult?.confidence ?? synthTrigger.priority,
+                confirmationSource: this.confirmationSourceFor(params.intentResult),
+                confirmedIntent: params.intentResult?.intent,
+            });
+        }
 
         const gateCandidates: ModeEventCandidate[] = triggerCandidates.map(candidate => ({
             actionType: candidate.trigger.type,
@@ -822,6 +838,7 @@ Inside `assessSignals()`, replace direct `triggerCandidates` assessment with:
             activeActionTypes: this.store.getActiveActions(sessionId).map(action => action.type),
             intentResult: params.intentResult,
             providerDataScopes: params.providerDataScopes,
+            cloudClassifier: params.cloudClassifier,
         });
 ```
 
@@ -883,7 +900,30 @@ Add helper:
 
 Pass `semanticGate` into `buildAction()` and add it to the returned action.
 
-- [ ] **Step 6: Adjust callers and tests to await `assessSignals()`**
+- [ ] **Step 6: Fix sales intent-to-action mapping**
+
+In `mapIntentToActionType()`, change the `sales` table from:
+
+```ts
+            sales: {
+                handle_objection: 'pricing_objection',
+                seize_signal: 'buying_signal',
+                discovery_probe: 'pricing_request',
+            },
+```
+
+to:
+
+```ts
+            sales: {
+                handle_objection: 'pricing_objection',
+                seize_signal: 'buying_signal',
+            },
+```
+
+Do not map `discovery_probe` to `pricing_request`. Case study and technical requirements should come from regex candidates plus semantic gate decisions, not broad discovery intent.
+
+- [ ] **Step 7: Adjust callers and tests to await `assessSignals()`**
 
 Update every test call that uses `engine.assessSignals(...)` to `await engine.assessSignals(...)`.
 
@@ -895,7 +935,7 @@ rtk rg -n "assessSignals\\(" electron/services/__tests__ electron
 
 Expected: all non-definition call sites either `await` or return the promise.
 
-- [ ] **Step 7: Run the engine tests**
+- [ ] **Step 8: Run the engine tests**
 
 ```bash
 rtk npm run build:electron && rtk ELECTRON_RUN_AS_NODE=1 npx electron --experimental-test-module-mocks --test electron/services/__tests__/ModeEventClassifier.test.mjs electron/services/__tests__/DynamicActionEngine.test.mjs
@@ -903,14 +943,97 @@ rtk npm run build:electron && rtk ELECTRON_RUN_AS_NODE=1 npx electron --experime
 
 Expected: pass.
 
-- [ ] **Step 8: Commit Task 3**
+- [ ] **Step 9: Commit Task 3**
 
 ```bash
 rtk git add electron/services/dynamic-actions/DynamicActionEngine.ts electron/services/__tests__/DynamicActionEngine.test.mjs
 rtk git commit -m "feat: gate dynamic actions before signal tracking"
 ```
 
-## Task 4: Pass Compact Context And Cloud Callback From IntelligenceEngine
+## Task 4: Audit Async `assessSignals()` Migration
+
+**Files:**
+- Modify: `electron/services/__tests__/DynamicActionEngine.test.mjs`
+- Modify: any additional test file reported by the audit command.
+
+**Interfaces:**
+- Consumes async `DynamicActionEngine.assessSignals()`.
+- Produces no new runtime interface; this task only prevents stale synchronous call sites from treating a `Promise<DynamicAction[]>` like an array.
+
+- [ ] **Step 1: Find all call sites**
+
+Run:
+
+```bash
+rtk rg -n "assessSignals\\(" electron src
+```
+
+Expected: one definition in `DynamicActionEngine.ts`, one production call in `IntelligenceEngine.ts`, and test call sites.
+
+- [ ] **Step 2: Convert test call sites to await**
+
+For each test call, change patterns like:
+
+```js
+const actions = engine.assessSignals({
+  transcript,
+  modeTemplateType,
+  modeId,
+  sessionId,
+});
+```
+
+to:
+
+```js
+const actions = await engine.assessSignals({
+  transcript,
+  modeTemplateType,
+  modeId,
+  sessionId,
+});
+```
+
+For multi-turn variables, change:
+
+```js
+const first = engine.assessSignals(firstParams);
+const second = engine.assessSignals(secondParams);
+```
+
+to:
+
+```js
+const first = await engine.assessSignals(firstParams);
+const second = await engine.assessSignals(secondParams);
+```
+
+- [ ] **Step 3: Verify there are no synchronous array reads from `assessSignals()`**
+
+Run:
+
+```bash
+rtk rg -n "const .* = engine\\.assessSignals|engine\\.assessSignals\\([\\s\\S]{0,120}\\)\\.some|engine\\.assessSignals\\([\\s\\S]{0,120}\\)\\[" electron/services/__tests__ electron
+```
+
+Expected: no stale synchronous usage. If this command prints matches, convert those call sites to `await`.
+
+- [ ] **Step 4: Run affected tests**
+
+```bash
+rtk npm run build:electron && rtk ELECTRON_RUN_AS_NODE=1 npx electron --experimental-test-module-mocks --test electron/services/__tests__/DynamicActionEngine.test.mjs
+```
+
+Expected: pass.
+
+- [ ] **Step 5: Commit Task 4**
+
+```bash
+rtk git add electron/services/__tests__/DynamicActionEngine.test.mjs
+rtk git commit -m "test: await async dynamic action signal assessment"
+```
+
+## Task 5: Pass Compact Context And Cloud Callback From IntelligenceEngine
 
 **Files:**
 - Modify: `electron/IntelligenceEngine.ts`
@@ -1099,14 +1222,14 @@ rtk npm run build:electron && rtk ELECTRON_RUN_AS_NODE=1 npx electron --experime
 
 Expected: pass.
 
-- [ ] **Step 8: Commit Task 4**
+- [ ] **Step 8: Commit Task 5**
 
 ```bash
 rtk git add electron/IntelligenceEngine.ts electron/services/__tests__/IntelligenceEngineDynamicActions.test.mjs
 rtk git commit -m "feat: add cloud semantic fallback for dynamic actions"
 ```
 
-## Task 5: High-Risk Test Migration And Legacy Guard
+## Task 6: High-Risk Test Migration And Legacy Guard
 
 **Files:**
 - Modify: `electron/services/__tests__/DynamicActionEngine.test.mjs`
@@ -1174,14 +1297,14 @@ rtk npm run build:electron && rtk ELECTRON_RUN_AS_NODE=1 npx electron --experime
 
 Expected: pass.
 
-- [ ] **Step 5: Commit Task 5**
+- [ ] **Step 5: Commit Task 6**
 
 ```bash
 rtk git add electron/services/dynamic-actions/DynamicActionEngine.ts electron/services/__tests__/DynamicActionEngine.test.mjs
 rtk git commit -m "test: migrate high-risk dynamic actions to semantic gate"
 ```
 
-## Task 6: Quality Smoke Command
+## Task 7: Quality Smoke Command
 
 **Files:**
 - Modify: `package.json`
@@ -1213,7 +1336,7 @@ rtk npm run typecheck:electron
 
 Expected: pass.
 
-- [ ] **Step 4: Commit Task 6**
+- [ ] **Step 4: Commit Task 7**
 
 ```bash
 rtk git add package.json
