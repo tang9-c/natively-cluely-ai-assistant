@@ -62,7 +62,7 @@ async function makeEngine(helper = new StubLLMHelper()) {
   return { engine, session, helper };
 }
 
-const waitForAsyncSignals = () => new Promise(resolve => setTimeout(resolve, 30));
+const waitForAsyncSignals = () => new Promise(resolve => setTimeout(resolve, 80));
 
 describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
   test('handleTranscript emits dynamic_action_emitted for matching trigger pack', async () => {
@@ -78,7 +78,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
 
     engine.handleTranscript({
       speaker: 'interviewer',
-      text: 'Honestly, this product is too expensive for my team',
+      text: '这个价格太高了，我们预算不够',
       timestamp: Date.now(),
       final: true,
     }, /* skipRefinementCheck */ true);
@@ -93,6 +93,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(pricing.status, 'candidate');
     assert.ok(Array.isArray(pricing.evidenceRefs) && pricing.evidenceRefs.length === 1);
     assert.equal(pricing.evidenceRefs[0].source, 'transcript');
+    assert.ok(pricing.evidenceRefs[0].text.includes('价格'));
   });
 
   test('repeated high-confidence Chinese dynamic action emits auto card without direct What Should I Say run', async () => {
@@ -251,6 +252,115 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(action.confirmationSource, 'cloud_intent');
   });
 
+  test('dynamic action assessment receives compact recent context and provider scope', async () => {
+    const helper = new StubLLMHelper({
+      structuredResponses: ['{"intent":"general","confidence":0.5}'],
+    });
+    const { engine } = await makeEngine(helper);
+    const calls = [];
+    engine.setDynamicActionContext({ sessionId: 's-gate-context', modeId: 'm-sales', modeTemplateType: 'sales' });
+    engine._setIntentClassificationOptionsForTest({
+      providerDataScopes: { transcript: true },
+    });
+    engine._setDynamicActionEngineForTest({
+      assessSignals: async input => {
+        calls.push(input);
+        return [];
+      },
+      detectActions: () => [],
+      acceptAction: () => null,
+      dismissAction: () => {},
+      getTopActions: () => [],
+    });
+
+    const base = Date.now();
+    const segments = [
+      { speaker: 'interviewer', speakerId: 's-1', speakerLabel: 'Alex', text: 'First context turn.', timestamp: base + 1, final: true },
+      { speaker: 'user', speakerId: 's-me', speakerLabel: 'Me', text: 'Second context turn.', timestamp: base + 2, final: true },
+      { speaker: 'interviewer', speakerId: 's-2', speakerLabel: 'Priya', text: 'Third context turn.', timestamp: base + 3, final: true },
+      { speaker: 'interviewer', speakerId: 's-3', speakerLabel: 'Sam', text: 'Fourth context turn.', timestamp: base + 4, final: true },
+      { speaker: 'interviewer', speakerId: 's-4', speakerLabel: 'Mei', text: 'Fifth context turn.', timestamp: base + 5, final: true },
+      { speaker: 'interviewer', speakerId: 's-5', speakerLabel: 'Jordan', text: 'Sixth context turn.', timestamp: base + 6, final: true },
+      { speaker: 'interviewer', speakerId: 's-6', speakerLabel: 'Taylor', text: 'Seventh context turn asks for pricing page.', timestamp: base + 7, final: true },
+    ];
+
+    for (const segment of segments) {
+      engine.handleTranscript(segment, true);
+    }
+    await waitForAsyncSignals();
+
+    const lastCall = calls.at(-1);
+    assert.ok(lastCall, 'expected dynamic action engine to be called');
+    assert.equal(lastCall.providerDataScopes.transcript, true);
+    assert.equal(lastCall.recentContextTurns.length, 6);
+    assert.equal(lastCall.recentContextTurns[0].speaker, 'Me');
+    assert.equal(lastCall.recentContextTurns.at(-1).text, 'Seventh context turn asks for pricing page.');
+    assert.equal(typeof lastCall.cloudClassifier, 'function');
+  });
+
+  test('dynamic action semantic gate uses structured cloud arbitration for English high-risk actions', async () => {
+    const helper = new StubLLMHelper({
+      structuredResponses: [
+        '{"actions":[{"actionType":"case_study_request","decision":"pass","confidence":0.93,"semanticIntent":"case_or_proof_request","reasons":["cloud_confirmed_case"],"rejectedCandidates":[]},{"actionType":"pricing_request","decision":"reject","confidence":0.88,"semanticIntent":"neutral_pricing_reference","reasons":["pricing_page_is_context"],"rejectedCandidates":["pricing_request"]}]}',
+      ],
+    });
+    const { engine } = await makeEngine(helper);
+    engine.setDynamicActionContext({ sessionId: 's-gate-cloud', modeId: 'm-sales', modeTemplateType: 'sales' });
+    const gateResults = [];
+    engine._setDynamicActionEngineForTest({
+      assessSignals: async input => {
+        const result = await input.cloudClassifier({
+          transcript: input.transcript,
+          recentContextTurns: input.recentContextTurns,
+          modeTemplateType: input.modeTemplateType,
+          speaker: input.speaker,
+          intentResult: input.intentResult,
+          candidates: [
+            {
+              actionType: 'case_study_request',
+              label: 'Share relevant case study',
+              match: 'similar customer case',
+              confidence: 0.87,
+              highRisk: true,
+              fastPathEligible: false,
+            },
+            {
+              actionType: 'pricing_request',
+              label: 'Draft quote email',
+              match: 'pricing page',
+              confidence: 0.86,
+              highRisk: true,
+              fastPathEligible: false,
+            },
+          ],
+        });
+        gateResults.push(result);
+        return [];
+      },
+      detectActions: () => [],
+      acceptAction: () => null,
+      dismissAction: () => {},
+      getTopActions: () => [],
+    });
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: 'We need a similar customer case, not the pricing page.',
+      timestamp: Date.now(),
+      final: true,
+    }, true);
+    await waitForAsyncSignals();
+
+    const gateCall = helper.structuredCalls.find(call => call.options?.taskLabel === 'dynamic-action-semantic-gate');
+    assert.ok(gateCall, 'expected dynamic action semantic gate structured call');
+    assert.match(gateCall.prompt, /case_study_request/);
+    assert.match(gateCall.prompt, /pricing_request/);
+    assert.deepEqual(gateResults[0]?.map(item => [item.actionType, item.decision]), [
+      ['case_study_request', 'pass'],
+      ['pricing_request', 'reject'],
+    ]);
+  });
+
   test('cloud intent prompt keeps triggering turn and speaker-diverse meeting context', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: ['{"intent":"fde_next_step","confidence":0.96}'],
@@ -292,7 +402,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.ok(emitted.some(a => a.type === 'fde_next_step'), 'FDE dynamic action should still emit from confirmed cloud intent');
   });
 
-  test('transcript scope disabled skips cloud intent confirmation', async () => {
+  test('transcript scope disabled skips cloud intent confirmation and high-risk emission', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: ['{"intent":"seize_signal","confidence":0.96}'],
     });
@@ -314,7 +424,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     await waitForAsyncSignals();
 
     assert.equal(helper.structuredCalls.length, 0);
-    assert.ok(emitted.some(a => a.type === 'buying_signal'), 'rules should still emit when cloud is blocked');
+    assert.equal(emitted.length, 0, 'high-risk dynamic actions should not emit when transcript scope is denied');
   });
 
   test('cloud classifier failure never breaks final transcript handling', async () => {
@@ -371,12 +481,12 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     const emitted = [];
     engine.on('dynamic_action_emitted', (a) => emitted.push(a));
     engine.setDynamicActionContext({ sessionId: 's1', modeId: 'm', modeTemplateType: 'sales' });
-    engine.handleTranscript({ speaker: 'interviewer', text: 'this is too expensive', timestamp: Date.now(), final: true }, true);
+    engine.handleTranscript({ speaker: 'interviewer', text: '这个价格太高了', timestamp: Date.now(), final: true }, true);
     await waitForAsyncSignals();
     const beforeClear = emitted.length;
     assert.ok(beforeClear >= 1);
     engine.clearDynamicActionContext();
-    engine.handleTranscript({ speaker: 'interviewer', text: 'this is also too expensive', timestamp: Date.now(), final: true }, true);
+    engine.handleTranscript({ speaker: 'interviewer', text: '这个报价太高了', timestamp: Date.now(), final: true }, true);
     await waitForAsyncSignals();
     assert.equal(emitted.length, beforeClear, 'no new emissions after context cleared');
   });
@@ -387,7 +497,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     engine.on('dynamic_action_emitted', (a) => emitted.push(a));
 
     engine.setDynamicActionContext({ sessionId: 's-A', modeId: 'm1', modeTemplateType: 'sales' });
-    engine.handleTranscript({ speaker: 'interviewer', text: 'too expensive', timestamp: Date.now(), final: true }, true);
+    engine.handleTranscript({ speaker: 'interviewer', text: '这个价格太高了', timestamp: Date.now(), final: true }, true);
     await waitForAsyncSignals();
     const aCount = emitted.length;
     assert.ok(aCount >= 1, 'first session should emit');
@@ -395,7 +505,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     // Same trigger phrase in a fresh session must emit again — proving the
     // store was flushed (otherwise dedup would suppress it).
     engine.setDynamicActionContext({ sessionId: 's-B', modeId: 'm1', modeTemplateType: 'sales' });
-    engine.handleTranscript({ speaker: 'interviewer', text: 'too expensive', timestamp: Date.now(), final: true }, true);
+    engine.handleTranscript({ speaker: 'interviewer', text: '这个价格太高了', timestamp: Date.now(), final: true }, true);
     await waitForAsyncSignals();
     assert.ok(emitted.length > aCount, 'second session must produce a fresh action even with identical phrase');
     const last = emitted[emitted.length - 1];
@@ -426,7 +536,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     const emitted = [];
     engine.on('dynamic_action_emitted', (a) => emitted.push(a));
     engine.setDynamicActionContext({ sessionId: 's', modeId: 'm', modeTemplateType: 'sales' });
-    engine.handleTranscript({ speaker: 'interviewer', text: 'too expensive', timestamp: Date.now(), final: true }, true);
+    engine.handleTranscript({ speaker: 'interviewer', text: '这个价格太高了', timestamp: Date.now(), final: true }, true);
     await waitForAsyncSignals();
     assert.ok(emitted.length >= 1);
     const action = emitted[0];
