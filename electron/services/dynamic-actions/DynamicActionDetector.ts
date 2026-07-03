@@ -96,7 +96,7 @@ const SALES_TRIGGERS: ActionTrigger[] = [
     {
         type: 'pricing_objection',
         patterns: [
-            /\b(expensive|too much|budget|price|cost|afford)\b/i,
+            /\b(expensive|too pricey|price (?:is|seems|looks|feels) (?:a bit |really |too )?(?:high|expensive)|pricing (?:is|seems|looks|feels) (?:a bit |really |too )?(?:high|expensive)|cost (?:is|seems|looks|feels) (?:a bit |really |too )?(?:high|expensive)|too much|out of (?:our|my|the) budget|not in (?:our|my|the) budget|can't afford|cannot afford|do better on price|lower the price|reduce the price|discount)\b/i,
             zh('太贵', '价格高', '价格太高', '报价太高', '预算不够', '成本', '费用', '负担不起'),
         ],
         priority: 0.9,
@@ -155,6 +155,30 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         promptInstruction:
             'You are in Sales mode. Generate a follow-up email draft with greeting, 1-2 short paragraphs, and sign-off for sending pricing or a quote. Qualify scope before giving concrete numbers. Do not invent customer names, account numbers, specific pricing, or contract terms. Use placeholders like [CUSTOMER_NAME], [QUOTE_AMOUNT], and [NEXT_STEP] unless exact values are present in trusted context.',
         answerStyle: { maxWords: 160, format: 'email', tone: 'consultative' },
+    },
+    {
+        type: 'case_study_request',
+        patterns: [
+            /\b(case study|customer story|customer example|reference customer|proof point|success story|similar customer|implementation example)\b/i,
+            zh('客户案例', '成功案例', '案例', '标杆客户', '参考客户', '类似客户', '落地案例', '实施案例', '证明材料'),
+        ],
+        priority: 0.87,
+        label: 'Share relevant case study',
+        promptInstruction:
+            'You are in Sales mode. The prospect is asking for proof or a customer case. Recommend the most relevant grounded case study, tie it to their situation, and ask what proof would be most useful next. Do not invent customer names, metrics, or outcomes.',
+        answerStyle: { maxWords: 120, format: 'bullets', tone: 'credible' },
+    },
+    {
+        type: 'technical_requirements',
+        patterns: [
+            /\b(technical requirements?|technical needs?|integration requirements?|API requirements?|security requirements?|deployment requirements?|implementation details?|technical solution|architecture requirements?|SSO requirements?)\b/i,
+            zh('技术需求', '技术要求', '集成需求', '接口需求', 'API 需求', '部署要求', '安全要求', '技术方案', '实现细节', '对接方式', '架构要求', 'SSO 对接'),
+        ],
+        priority: 0.88,
+        label: 'Clarify technical requirements',
+        promptInstruction:
+            'You are in Sales mode. The prospect is raising technical or integration requirements. Clarify systems, APIs, auth, deployment environment, security constraints, owners, and the smallest validation step.',
+        answerStyle: { maxWords: 140, format: 'checklist', tone: 'technical' },
     },
 ];
 

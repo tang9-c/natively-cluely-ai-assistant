@@ -1160,6 +1160,59 @@ describe('ActionTrigger fixtures — sales mode', () => {
     }
   });
 
+  test('sales price mentions do not suppress case-study and technical-need signals', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '价格先放一边，我们更想看 Acme 这种客户案例，以及 API 集成和部署要求。',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_case_tech_needs',
+    });
+
+    assert.equal(
+      actions.some(action => action.type === 'pricing_objection' || action.type === 'pricing_request'),
+      false,
+      `price-only mention should not create pricing actions; got ${actions.map(a => a.type).join(', ')}`,
+    );
+    assert.ok(
+      actions.some(action => action.type === 'case_study_request'),
+      `expected case_study_request; got ${actions.map(a => a.type).join(', ')}`,
+    );
+    assert.ok(
+      actions.some(action => action.type === 'technical_requirements'),
+      `expected technical_requirements; got ${actions.map(a => a.type).join(', ')}`,
+    );
+  });
+
+  test('sales bare English price mentions do not create pricing objections', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: 'The price list is useful, but first we need a technical solution and a customer case study.',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_bare_price',
+    });
+
+    assert.equal(
+      actions.some(action => action.type === 'pricing_objection'),
+      false,
+      `bare price mention should not create pricing_objection; got ${actions.map(a => a.type).join(', ')}`,
+    );
+    assert.ok(actions.some(action => action.type === 'case_study_request'));
+    assert.ok(actions.some(action => action.type === 'technical_requirements'));
+  });
+
+  test('sales technical requirement phrasing is detected without pricing language', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = engine.detectActions({
+      transcript: '客户想确认技术方案、接口需求、SSO 对接方式和生产环境部署要求。',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_technical_needs',
+    });
+
+    const action = findAction(actions, 'technical_requirements');
+    assert.ok(action, `expected technical_requirements; got ${actions.map(a => a.type).join(', ')}`);
+    assert.equal(action.label, 'Clarify technical requirements');
+  });
+
   test('pricing_objection remains preferred for Chinese price pushback', async () => {
     const { DynamicActionEngine } = await loadModules();
     const engine = new DynamicActionEngine();
