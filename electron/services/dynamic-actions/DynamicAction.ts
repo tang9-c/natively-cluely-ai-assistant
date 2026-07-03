@@ -1,3 +1,5 @@
+import type { SemanticGateTrace } from './ModeEventClassifier';
+
 export type ActionStatus = 'candidate' | 'shown' | 'accepted' | 'dismissed' | 'completed' | 'expired';
 export type AutoSurfacePolicy = 'auto' | 'card' | 'silent';
 export type SignalStatus = 'candidate' | 'confirmed' | 'cooling_down' | 'expired';
@@ -46,6 +48,7 @@ export interface DynamicAction {
     evidenceCount?: number;
     confirmationSource?: SignalConfirmationSource;
     confirmedIntent?: string;
+    semanticGate?: SemanticGateTrace;
     answerStyle?: {
         maxWords: number;
         format: 'bullets' | 'short_script' | 'code' | 'checklist' | 'summary' | 'email';

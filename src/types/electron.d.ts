@@ -13,6 +13,21 @@ export interface DynamicActionEvidenceRef {
   chunkId?: string
 }
 
+export interface DynamicActionSemanticGate {
+  decision: 'pass' | 'reject' | 'defer' | 'fast_path'
+  actionType: string
+  semanticIntent?: string
+  confidence: number
+  reasons: string[]
+  regexCandidates: string[]
+  rejectedCandidates: string[]
+  usedLocalIntentModel: boolean
+  usedCloudArbitration: boolean
+  semanticProvider: 'local_intent' | 'cloud_llm' | 'rule_fast_path' | 'unavailable'
+  degradedReason?: string
+  upgradedByRepeatedEvidence: boolean
+}
+
 export interface DynamicActionPayload {
   id: string
   sessionId: string
@@ -42,6 +57,7 @@ export interface DynamicActionPayload {
   evidenceCount?: number
   confirmationSource?: 'trigger' | 'cloud_intent' | 'local_intent' | 'heuristic'
   confirmedIntent?: string
+  semanticGate?: DynamicActionSemanticGate
   answerStyle?: {
     maxWords: number
     format: 'bullets' | 'short_script' | 'code' | 'checklist' | 'summary' | 'email'

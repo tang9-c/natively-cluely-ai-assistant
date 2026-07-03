@@ -130,6 +130,19 @@ test('dynamic action answerStyle supports email shape across main and renderer t
   assert.match(rendererTypes, /format:\s*'bullets' \| 'short_script' \| 'code' \| 'checklist' \| 'summary' \| 'email'/);
 });
 
+test('dynamic action payload mirrors semanticGate trace metadata', () => {
+  const action = read('electron/services/dynamic-actions/DynamicAction.ts');
+  const types = read('src/types/electron.d.ts');
+
+  assert.match(action, /semanticGate\?:/);
+  assert.match(action, /SemanticGateTrace/);
+  assert.match(types, /semanticGate\?:/);
+  assert.match(types, /semanticProvider/);
+  assert.match(types, /degradedReason/);
+  assert.match(types, /usedCloudArbitration/);
+  assert.match(types, /upgradedByRepeatedEvidence/);
+});
+
 test('runWhatShouldISay can emit dynamic action answers without persistence', () => {
   const source = read('electron/IntelligenceEngine.ts');
 
