@@ -172,7 +172,7 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         type: 'technical_requirements',
         patterns: [
             /\b(technical requirements?|technical needs?|integration requirements?|API requirements?|security requirements?|deployment requirements?|implementation details?|technical solution|architecture requirements?|SSO requirements?)\b/i,
-            zh('技术需求', '技术要求', '集成需求', '接口需求', 'API 需求', '部署要求', '安全要求', '技术方案', '实现细节', '对接方式', '架构要求', 'SSO 对接'),
+            zh('技术需求', '技术要求', '集成需求', '集成要求', '接口需求', 'API 需求', '部署要求', '安全要求', '技术方案', '实现细节', '对接方式', '架构要求', 'SSO 对接'),
         ],
         priority: 0.88,
         label: 'Clarify technical requirements',

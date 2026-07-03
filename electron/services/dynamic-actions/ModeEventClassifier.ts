@@ -121,6 +121,27 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
         usedLocalIntentModel: false,
         usedCloudArbitration: false,
     };
+    const intent = input.intentResult?.intent;
+    const intentConfidence = input.intentResult?.confidence ?? 0;
+
+    if (intentConfidence >= 0.85) {
+        const intentMatchesCandidate =
+            (candidate.actionType === 'pricing_objection' && intent === 'handle_objection') ||
+            (candidate.actionType === 'buying_signal' && intent === 'seize_signal') ||
+            (candidate.actionType === 'technical_requirements' && intent === 'fde_integration') ||
+            (candidate.actionType === 'case_study_request' && intent === 'example_request');
+        if (intentMatchesCandidate) {
+            return {
+                ...base,
+                decision: 'pass',
+                confidence: Math.max(candidate.confidence, intentConfidence),
+                semanticIntent: intent,
+                reasons: ['intent_result_confirms_candidate'],
+                usedLocalIntentModel: true,
+                semanticProvider: 'local_intent',
+            };
+        }
+    }
 
     if (candidate.actionType === 'pricing_objection') {
         if (includesAny(text, ['price list', 'pricing page', '成本数据', '价格先放一边'])) {
@@ -133,7 +154,7 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
                 semanticProvider: 'local_intent',
             };
         }
-        if (includesAny(text, ['too expensive', 'too pricey', 'too high', 'out of budget', '价格太高', '太贵', '超出预算'])) {
+        if (includesAny(text, ['too expensive', 'too pricey', 'too high', 'out of budget', '价格太高', '报价太高', '太贵', '超出预算'])) {
             return {
                 ...base,
                 decision: 'pass',
@@ -143,6 +164,17 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
                 semanticProvider: 'local_intent',
             };
         }
+    }
+
+    if (candidate.actionType === 'buying_signal' && includesAny(text, ['send contract', 'legal review', 'finalize', '发合同', '法务审核', '准备签', '准备推进', '安排时间', '敲定'])) {
+        return {
+            ...base,
+            decision: 'pass',
+            confidence: Math.max(candidate.confidence, 0.9),
+            semanticIntent: 'explicit_next_step_or_contract',
+            reasons: ['explicit_next_step_or_contract'],
+            semanticProvider: 'local_intent',
+        };
     }
 
     if (candidate.actionType === 'case_study_request' && includesAny(text, ['case study', 'customer proof', '客户案例', '案例证明', '证明 ROI', '证明roi'])) {

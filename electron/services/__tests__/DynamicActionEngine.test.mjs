@@ -175,7 +175,7 @@ test('FDE intent result can synthesize action when regex does not match', async 
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
 
-  const actions = engine.assessSignals({
+  const actions = await engine.assessSignals({
     transcript: '客户说红线问题还没解决',
     speaker: 'Customer',
     modeTemplateType: 'fde',
@@ -658,7 +658,7 @@ test('assessSignals covers seven real modes with Chinese-first confirmed actions
   ];
 
   for (const [modeTemplateType, transcript, expectedType] of cases) {
-    const actions = engine.assessSignals({
+    const actions = await engine.assessSignals({
       transcript,
       speaker: 'interviewer',
       modeTemplateType,
@@ -678,7 +678,7 @@ test('assessSignals uses classifier intent to synthesize high-confidence sales a
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
 
-  const actions = engine.assessSignals({
+  const actions = await engine.assessSignals({
     transcript: '这个方案我们内部还要和老板确认一下投入产出',
     speaker: 'interviewer',
     modeTemplateType: 'sales',
@@ -701,7 +701,7 @@ test('assessSignals synthesizes general summary action from custom keyword inten
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
 
-  const actions = engine.assessSignals({
+  const actions = await engine.assessSignals({
     transcript: '客户刚才说了一段没有总结关键词的长内容',
     speaker: 'speaker',
     modeTemplateType: 'general',
@@ -725,7 +725,7 @@ test('assessSignals synthesizes general explanation action from custom keyword i
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
 
-  const actions = engine.assessSignals({
+  const actions = await engine.assessSignals({
     transcript: '客户提到了一个内部黑话',
     speaker: 'speaker',
     modeTemplateType: 'general',
@@ -749,7 +749,7 @@ test('assessSignals synthesizes general assistance action from custom coding int
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
 
-  const actions = engine.assessSignals({
+  const actions = await engine.assessSignals({
     transcript: '用户说内部自动化脚本要怎么处理',
     speaker: 'speaker',
     modeTemplateType: 'general',
@@ -774,7 +774,7 @@ test('assessSignals keeps sub-threshold signals out of top actions', async () =>
   const engine = new DynamicActionEngine();
   const sessionId = 'session_subthreshold';
 
-  const actions = engine.assessSignals({
+  const actions = await engine.assessSignals({
     transcript: '这个价格可能有一点点高',
     speaker: 'interviewer',
     modeTemplateType: 'sales',
@@ -788,12 +788,88 @@ test('assessSignals keeps sub-threshold signals out of top actions', async () =>
   assert.equal(engine.getTopActions(sessionId).length, 0);
 });
 
+test('assessSignals rejects sidelined pricing while passing case and technical needs', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = await engine.assessSignals({
+    transcript: '价格先放一边，我们想看客户案例和 API 集成要求',
+    speaker: 'prospect',
+    modeTemplateType: 'sales',
+    modeId: 'mode_sales',
+    sessionId: 'session_semantic_gate_mixed_cn',
+    intentResult: { intent: 'discovery_probe', confidence: 0.9, answerShape: '澄清需求' },
+    now: 20_000,
+  });
+
+  assert.equal(actions.some(action => action.type === 'pricing_objection'), false);
+  assert.ok(actions.some(action => action.type === 'case_study_request'));
+  assert.ok(actions.some(action => action.type === 'technical_requirements'));
+  assert.ok(actions.every(action => action.semanticGate?.decision === 'pass'));
+});
+
+test('assessSignals defers high-risk candidate when transcript scope is denied', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = await engine.assessSignals({
+    transcript: 'This is too expensive.',
+    speaker: 'prospect',
+    modeTemplateType: 'sales',
+    modeId: 'mode_sales',
+    sessionId: 'session_semantic_gate_scope_denied',
+    providerDataScopes: { transcript: false },
+    now: 20_000,
+  });
+
+  assert.equal(actions.length, 0);
+  assert.equal(engine.getTopActions('session_semantic_gate_scope_denied').length, 0);
+});
+
+test('assessSignals uses injected cloud classifier for English high-risk candidates', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const calls = [];
+  const engine = new DynamicActionEngine();
+
+  const actions = await engine.assessSignals({
+    transcript: 'We need a similar customer case proving ROI, not the pricing page.',
+    speaker: 'prospect',
+    modeTemplateType: 'sales',
+    modeId: 'mode_sales',
+    sessionId: 'session_semantic_gate_cloud',
+    cloudClassifier: async input => {
+      calls.push(input);
+      return input.candidates.map(candidate => ({
+        actionType: candidate.actionType,
+        decision: candidate.actionType === 'case_study_request' ? 'pass' : 'reject',
+        confidence: candidate.actionType === 'case_study_request' ? 0.94 : 0.82,
+        semanticIntent: candidate.actionType === 'case_study_request'
+          ? 'case_or_proof_request'
+          : 'neutral_or_rejected_candidate',
+        reasons: candidate.actionType === 'case_study_request'
+          ? ['cloud_confirmed_case_request']
+          : ['cloud_rejected_candidate'],
+        rejectedCandidates: candidate.actionType === 'case_study_request' ? [] : [candidate.actionType],
+      }));
+    },
+    now: 20_000,
+  });
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].candidates.some(candidate => candidate.actionType === 'case_study_request'));
+  assert.ok(actions.some(action => action.type === 'case_study_request'));
+  assert.equal(actions.some(action => action.type === 'pricing_request'), false);
+  const caseAction = actions.find(action => action.type === 'case_study_request');
+  assert.equal(caseAction?.semanticGate?.usedCloudArbitration, true);
+  assert.equal(caseAction?.semanticGate?.semanticProvider, 'cloud_llm');
+});
+
 test('assessSignals requires repeated evidence before auto-surfacing ordinary objections', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
   const sessionId = 'session_auto_after_repeat';
 
-  const first = engine.assessSignals({
+  const first = await engine.assessSignals({
     transcript: '这个价格太高了',
     speaker: 'interviewer',
     modeTemplateType: 'sales',
@@ -802,7 +878,7 @@ test('assessSignals requires repeated evidence before auto-surfacing ordinary ob
     intentResult: { intent: 'handle_objection', confidence: 0.9, answerShape: '处理异议' },
     now: 10_000,
   });
-  const second = engine.assessSignals({
+  const second = await engine.assessSignals({
     transcript: '我们老板肯定会觉得报价太高',
     speaker: 'interviewer',
     modeTemplateType: 'sales',
@@ -824,7 +900,7 @@ test('findRecentActionForIntent maps classifier intent to active dynamic action'
   const engine = new DynamicActionEngine();
   const sessionId = 'session_find_intent';
 
-  engine.assessSignals({
+  await engine.assessSignals({
     transcript: '这个价格太高了',
     speaker: 'interviewer',
     modeTemplateType: 'sales',
@@ -1590,7 +1666,7 @@ describe('DynamicActionEngine emotion propagation', () => {
   test('assessSignals: emotion carries into action when set', async () => {
     const { DynamicActionEngine } = await loadModules();
     const engine = new DynamicActionEngine();
-    const actions = engine.assessSignals({
+    const actions = await engine.assessSignals({
       transcript: 'The price is too expensive.',
       modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_emo_assess',
       emotion: 'sad',
@@ -1658,15 +1734,15 @@ describe('DynamicActionEngine regression — 3 consecutive identical triggers', 
     const sessionId = 's_regression_3x_assess';
     const intentResult = { intent: 'handle_objection', confidence: 0.92, answerShape: 'x' };
 
-    const turn1 = engine.assessSignals({
+    const turn1 = await engine.assessSignals({
       transcript: '太贵了',
       modeTemplateType: 'sales', modeId: 'm_s', sessionId, intentResult, now: 1_000,
     });
-    const turn2 = engine.assessSignals({
+    const turn2 = await engine.assessSignals({
       transcript: '太贵了',
       modeTemplateType: 'sales', modeId: 'm_s', sessionId, intentResult, now: 2_000,
     });
-    const turn3 = engine.assessSignals({
+    const turn3 = await engine.assessSignals({
       transcript: '太贵了',
       modeTemplateType: 'sales', modeId: 'm_s', sessionId, intentResult, now: 3_000,
     });

@@ -543,7 +543,7 @@ export class IntelligenceEngine extends EventEmitter {
             },
         );
 
-        const newActions = this.dynamicActionEngine.assessSignals({
+        const newActions = await this.dynamicActionEngine.assessSignals({
             transcript: text,
             speaker: segment.speaker,
             modeTemplateType: this.currentDynamicActionTemplateType,

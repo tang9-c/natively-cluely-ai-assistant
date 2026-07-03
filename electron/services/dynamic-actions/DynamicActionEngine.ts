@@ -3,24 +3,57 @@ import { DynamicAction, EvidenceRef } from './DynamicAction';
 import { DynamicActionStore } from './DynamicActionStore';
 import { ActionTrigger, DynamicActionDetector, MODE_TRIGGERS } from './DynamicActionDetector';
 import { buildRetrievalQuery, detectLanguage, extractKeyEntities } from './ModeEventUtils';
+import {
+    CloudSemanticGateClassifier,
+    ModeEventCandidate,
+    ModeEventClassifier,
+    ModeEventClassifierOptions,
+    ModeEventContextTurn,
+    SemanticGateTrace,
+} from './ModeEventClassifier';
 import { SignalStateTracker, SignalConfirmationSource } from './SignalStateTracker';
 import type { IntentResult } from '../../llm/IntentClassifier';
+import type { ProviderDataScopePolicy } from '../../llm/ProviderRouter';
+
+const HIGH_RISK_ACTION_TYPES = new Set([
+    'pricing_objection',
+    'pricing_request',
+    'case_study_request',
+    'technical_requirements',
+    'buying_signal',
+]);
+
+const FAST_PATH_ACTION_TYPES = new Set([
+    'send_contract',
+    'schedule_meeting',
+    'coding_problem',
+    'action_item',
+]);
 
 export class DynamicActionEngine {
     private store: DynamicActionStore;
     private detector: DynamicActionDetector;
     private signalTracker: SignalStateTracker;
+    private semanticGate: ModeEventClassifier;
 
     constructor(
         store: DynamicActionStore = new DynamicActionStore(),
         detector: DynamicActionDetector = new DynamicActionDetector(MODE_TRIGGERS),
-        signalTracker: SignalStateTracker = new SignalStateTracker()
+        signalTracker: SignalStateTracker = new SignalStateTracker(),
+        semanticGateOptions: ModeEventClassifierOptions = {}
     ) {
         this.store = store;
         this.detector = detector;
         this.signalTracker = signalTracker;
+        this.semanticGate = new ModeEventClassifier(semanticGateOptions);
     }
 
+    /**
+     * Legacy synchronous regex detector used by older tests and low-risk trigger
+     * pack smoke checks. Production dynamic action emission must use
+     * assessSignals(), which applies action-level semantic gating before storing
+     * or emitting high-risk actions.
+     */
     detectActions(params: {
         transcript: string;
         speaker?: string;
@@ -70,7 +103,7 @@ export class DynamicActionEngine {
         return candidateActions;
     }
 
-    assessSignals(params: {
+    async assessSignals(params: {
         transcript: string;
         speaker?: string;
         modeTemplateType: string;
@@ -80,8 +113,11 @@ export class DynamicActionEngine {
         emotionSource?: string;
         language?: string;
         intentResult?: IntentResult;
+        recentContextTurns?: ModeEventContextTurn[];
+        providerDataScopes?: ProviderDataScopePolicy;
+        cloudClassifier?: CloudSemanticGateClassifier;
         now?: number;
-    }): DynamicAction[] {
+    }): Promise<DynamicAction[]> {
         const { transcript, speaker, modeTemplateType, modeId, sessionId } = params;
         const now = params.now ?? Date.now();
         const language = params.language || detectLanguage(transcript);
@@ -109,14 +145,38 @@ export class DynamicActionEngine {
             });
         }
 
+        const gateCandidates: ModeEventCandidate[] = triggerCandidates.map(candidate => ({
+            actionType: candidate.trigger.type,
+            label: candidate.trigger.label,
+            match: candidate.match,
+            confidence: candidate.confidence,
+            highRisk: HIGH_RISK_ACTION_TYPES.has(candidate.trigger.type),
+            fastPathEligible: FAST_PATH_ACTION_TYPES.has(candidate.trigger.type),
+        }));
+        const gateDecisions = await this.semanticGate.assess({
+            transcript,
+            recentContextTurns: params.recentContextTurns,
+            modeTemplateType,
+            speaker,
+            candidates: gateCandidates,
+            activeActionTypes: this.store.getActiveActions(sessionId).map(action => action.type),
+            intentResult: params.intentResult,
+            providerDataScopes: params.providerDataScopes,
+            cloudClassifier: params.cloudClassifier,
+        });
+        const allRegexCandidates = gateCandidates.map(candidate => `${candidate.actionType}:${candidate.match}`);
+
         for (const candidate of triggerCandidates) {
+            const gateDecision = gateDecisions.find(decision => decision.candidate.actionType === candidate.trigger.type);
+            if (!gateDecision || !['pass', 'fast_path'].includes(gateDecision.decision)) continue;
+
             const evidenceRef: EvidenceRef = {
                 source: 'transcript',
                 text: transcript,
                 timestamp: now,
                 speaker,
             };
-            const adjustedConfidence = this.applyEmotionBoost(candidate.trigger.type, candidate.confidence, params.emotion);
+            const adjustedConfidence = this.applyEmotionBoost(candidate.trigger.type, gateDecision.confidence, params.emotion);
             const signal = this.signalTracker.assess({
                 sessionId,
                 modeTemplateType,
@@ -150,6 +210,7 @@ export class DynamicActionEngine {
                 confirmedIntent: candidate.confirmedIntent,
                 signalStatus: signal.state.status,
                 evidenceRefs: signal.state.evidenceRefs,
+                semanticGate: this.buildSemanticGateTrace(gateDecision, allRegexCandidates, signal.state.evidenceRefs.length > 1),
             });
 
             const deduplicatedAction = this.store.deduplicate(action);
@@ -239,6 +300,7 @@ export class DynamicActionEngine {
         autoSurfaceEligible: boolean;
         confirmationSource?: SignalConfirmationSource;
         confirmedIntent?: string;
+        semanticGate?: SemanticGateTrace;
         signalStatus?: DynamicAction['signalStatus'];
         evidenceRefs?: EvidenceRef[];
     }): DynamicAction {
@@ -288,7 +350,29 @@ export class DynamicActionEngine {
             evidenceCount: evidenceRefs.length,
             confirmationSource: params.confirmationSource,
             confirmedIntent: params.confirmedIntent,
+            semanticGate: params.semanticGate,
             answerStyle: params.trigger.answerStyle,
+        };
+    }
+
+    private buildSemanticGateTrace(
+        gateDecision: Awaited<ReturnType<ModeEventClassifier['assess']>>[number],
+        regexCandidates: string[],
+        upgradedByRepeatedEvidence: boolean
+    ): SemanticGateTrace {
+        return {
+            decision: gateDecision.decision,
+            actionType: gateDecision.candidate.actionType,
+            semanticIntent: gateDecision.semanticIntent,
+            confidence: gateDecision.confidence,
+            reasons: gateDecision.reasons,
+            regexCandidates,
+            rejectedCandidates: gateDecision.rejectedCandidates,
+            usedLocalIntentModel: gateDecision.usedLocalIntentModel,
+            usedCloudArbitration: gateDecision.usedCloudArbitration,
+            semanticProvider: gateDecision.semanticProvider,
+            degradedReason: gateDecision.degradedReason,
+            upgradedByRepeatedEvidence,
         };
     }
 
@@ -347,7 +431,6 @@ export class DynamicActionEngine {
             sales: {
                 handle_objection: 'pricing_objection',
                 seize_signal: 'buying_signal',
-                discovery_probe: 'pricing_request',
             },
             fde: {
                 fde_discovery: 'fde_discovery_probe',
