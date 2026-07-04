@@ -447,6 +447,66 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.ok(emitted.some(a => a.type === 'pricing_objection'), 'rule fallback should still emit after cloud failure');
   });
 
+  test('final Chinese quote request emits pricing_request dynamic action', async () => {
+    const { engine } = await makeEngine();
+    const emitted = [];
+    engine.on('dynamic_action_emitted', (action) => emitted.push(action));
+    engine.setDynamicActionContext({ sessionId: 's-pricing-request', modeId: 'm-sales', modeTemplateType: 'sales' });
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: '给客户发一版报价',
+      timestamp: Date.now(),
+      final: true,
+    }, true);
+    await waitForAsyncSignals();
+
+    const action = emitted.find(item => item.type === 'pricing_request');
+    assert.ok(action, `expected pricing_request; got ${emitted.map(item => item.type).join(', ')}`);
+    assert.equal(action.answerStyle?.format, 'email');
+    assert.equal(action.semanticGate?.decision, 'pass');
+  });
+
+  test('final Chinese case request emits case_study_request dynamic action', async () => {
+    const { engine } = await makeEngine();
+    const emitted = [];
+    engine.on('dynamic_action_emitted', (action) => emitted.push(action));
+    engine.setDynamicActionContext({ sessionId: 's-case-request', modeId: 'm-sales', modeTemplateType: 'sales' });
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: '客户要证明材料和类似客户案例',
+      timestamp: Date.now(),
+      final: true,
+    }, true);
+    await waitForAsyncSignals();
+
+    const action = emitted.find(item => item.type === 'case_study_request');
+    assert.ok(action, `expected case_study_request; got ${emitted.map(item => item.type).join(', ')}`);
+    assert.equal(action.semanticGate?.decision, 'pass');
+  });
+
+  test('final English price objection emits when dynamic action cloud gate fails', async () => {
+    const helper = new StubLLMHelper({ throwStructured: true });
+    const { engine } = await makeEngine(helper);
+    const emitted = [];
+    engine.on('dynamic_action_emitted', (action) => emitted.push(action));
+    engine.setDynamicActionContext({ sessionId: 's-english-cloud-fail', modeId: 'm-sales', modeTemplateType: 'sales' });
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: 'This is too expensive for our budget.',
+      timestamp: Date.now(),
+      final: true,
+    }, true);
+    await waitForAsyncSignals();
+
+    const action = emitted.find(item => item.type === 'pricing_objection');
+    assert.ok(action, `expected pricing_objection; got ${emitted.map(item => item.type).join(', ')}`);
+    assert.equal(action.semanticGate?.decision, 'pass');
+    assert.equal(action.semanticGate?.semanticProvider, 'local_intent');
+  });
+
   test('non-final transcript does not emit dynamic actions', async () => {
     const { engine } = await makeEngine();
     const emitted = [];
