@@ -37,7 +37,7 @@ test('development Electron plist patch declares system audio capture usage', () 
   const patcher = read('scripts/patch-electron-plist.js');
 
   assert.match(patcher, /NSAudioCaptureUsageDescription/);
-  assert.match(patcher, /Natively needs system audio access to transcribe meeting audio\./);
+  assert.match(patcher, /CueUp needs system audio access to transcribe meeting audio\./);
 });
 
 test('TCC repair resets AudioCapture together with ScreenCapture for system audio', () => {
