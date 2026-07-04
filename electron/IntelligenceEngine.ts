@@ -25,6 +25,7 @@ import type {
     CloudSemanticGateInput,
     CloudSemanticGateResult,
     ModeEventContextTurn,
+    SemanticGateTrace,
 } from './services/dynamic-actions/ModeEventClassifier';
 import { ScreenContext } from './services/screen/types';
 import { SettingsManager } from './services/SettingsManager';
@@ -35,6 +36,7 @@ import { isLocalIntentClassifierAvailable } from './services/LocalModelManager';
 import { ModesManager } from './services/ModesManager';
 import { keywordRowsToMap } from './llm/IntentKeywordDefaults';
 import { evaluateSpeakerContextForAnswer } from './services/context/SpeakerContextPolicy';
+import { getContextQualityDiagnosticsCollector } from './services/eval/ContextQualityDiagnostics';
 
 // Mode types
 export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'recap' | 'clarify' | 'manual' | 'code_hint' | 'brainstorm';
@@ -87,6 +89,7 @@ export interface IntelligenceModeEvents {
     // newly created candidate action (post-dedupe). Renderer subscribes via
     // window.electronAPI.onIntelligenceDynamicAction and renders cards.
     'dynamic_action_emitted': (action: DynamicAction) => void;
+    'dynamic_action_gate_trace': (trace: SemanticGateTrace) => void;
     'skill_watcher_suggestion_created': (suggestion: SkillWatcherSuggestion) => void;
 }
 
@@ -637,6 +640,10 @@ export class IntelligenceEngine extends EventEmitter {
             recentContextTurns: this.buildDynamicActionContextTurns(transcriptTurns),
             providerDataScopes: intentOptions.providerDataScopes,
             cloudClassifier: (input) => this.classifyDynamicActionWithCloud(input),
+            semanticGateTraceSink: (trace: SemanticGateTrace) => {
+                getContextQualityDiagnosticsCollector().recordDynamicActionTrace(trace);
+                this.emit('dynamic_action_gate_trace', trace);
+            },
         });
 
         // The store dedupes within the per-session store, so each emitted action

@@ -1659,6 +1659,68 @@ describe('DynamicActionEngine priority propagation', () => {
   });
 });
 
+describe('DynamicActionEngine semantic gate trace sink', () => {
+  test('emits reject trace without storing an action when cloud is unavailable', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const traces = [];
+    const engine = new DynamicActionEngine();
+
+    const actions = await engine.assessSignals({
+      transcript: 'Pricing page 先放一边，我们想看 case study 和 technical solution.',
+      modeTemplateType: 'sales',
+      modeId: 'm_sales_trace',
+      sessionId: 's_reject_trace',
+      cloudClassifier: async () => null,
+      semanticGateTraceSink: (trace) => traces.push(trace),
+    });
+
+    assert.equal(actions.some(action => action.type === 'pricing_request'), false);
+    const pricingTrace = traces.find(trace => trace.actionType === 'pricing_request');
+    assert.ok(pricingTrace, `expected pricing_request trace; got ${traces.map(trace => trace.actionType).join(', ')}`);
+    assert.equal(pricingTrace.decision, 'reject');
+    assert.ok(pricingTrace.reasons.includes('neutral_pricing_reference'));
+    assert.ok(pricingTrace.reasons.includes('cloud_unavailable_local_fallback'));
+  });
+
+  test('emits defer trace without storing an action when provider scope denies transcript', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const traces = [];
+    const engine = new DynamicActionEngine();
+
+    const actions = await engine.assessSignals({
+      transcript: '这个技术方案怎么对接 SSO 和生产环境',
+      modeTemplateType: 'sales',
+      modeId: 'm_sales_trace',
+      sessionId: 's_defer_trace',
+      providerDataScopes: { transcript: false },
+      semanticGateTraceSink: (trace) => traces.push(trace),
+    });
+
+    assert.equal(actions.length, 0);
+    const technicalTrace = traces.find(trace => trace.actionType === 'technical_requirements');
+    assert.ok(technicalTrace, 'expected technical_requirements trace');
+    assert.equal(technicalTrace.decision, 'defer');
+    assert.equal(technicalTrace.degradedReason, 'provider_scope_denied');
+  });
+
+  test('keeps generating passed actions when the trace sink throws', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+
+    const actions = await engine.assessSignals({
+      transcript: '客户要一个类似案例证明 ROI',
+      modeTemplateType: 'sales',
+      modeId: 'm_sales_trace',
+      sessionId: 's_sink_failure',
+      semanticGateTraceSink: () => {
+        throw new Error('diagnostics unavailable');
+      },
+    });
+
+    assert.equal(actions.some(action => action.type === 'case_study_request'), true);
+  });
+});
+
 // ============================================================================
 // Deduplication: same trigger within 120s window suppressed.
 // ============================================================================

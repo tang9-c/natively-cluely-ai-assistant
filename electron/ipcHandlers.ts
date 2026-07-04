@@ -26,6 +26,7 @@ import { SettingsManager, type AppSettings } from './services/SettingsManager';
 import { SkillActivationManager, type ActivateSkillInput, type SkillActivationScope } from './services/SkillActivationManager';
 import { SkillWatcherService } from './services/SkillWatcherService';
 import { SkillsManager } from './services/SkillsManager';
+import { getContextQualityDiagnosticsCollector } from './services/eval/ContextQualityDiagnostics';
 import {
   classifyNetworkError,
   toSafeNetworkDiagnostic,
@@ -3192,6 +3193,12 @@ export function initializeIpcHandlers(appState: AppState): void {
           retrievalTimingMs: retrievalTimingMs as any,
           degradedReasons: degradedReasons as any,
         });
+        getContextQualityDiagnosticsCollector().recordContextPlan({
+          injectedSources: realtimeContextPlan.injected.map((item) => item.source),
+          omittedSources: realtimeContextPlan.omitted.map((item) => ({ source: item.source, reason: item.reason })),
+          degradedReasons: realtimeContextPlan.degradedReasons,
+          retrievalTimingMs: realtimeContextPlan.retrievalTimingMs,
+        });
         uploadedMaterialContext = formatInjectedContext(realtimeContextPlan) || undefined;
 
         const intelligenceManager = appState.getIntelligenceManager();
@@ -3943,9 +3950,11 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('get-answer-quality-metrics', async (_, input?: { sinceMs?: number; mode?: string }) => {
     try {
+      const metrics = DatabaseManager.getInstance().getAnswerQualityMetrics(input);
+      getContextQualityDiagnosticsCollector().setAnswerQualityMetrics(metrics);
       return {
         success: true,
-        metrics: DatabaseManager.getInstance().getAnswerQualityMetrics(input),
+        metrics,
       };
     } catch (error: any) {
       console.error('[IPC get-answer-quality-metrics] Error:', error);

@@ -86,7 +86,7 @@ Realtime Context Orchestrator
 
 ### P0-1：动态动作意图识别语义门控
 
-状态：第一版已落地，当前第一优先进入验收收口。
+状态：第一版已落地，当前第一优先进入验收收口。首批锚点提交：`2e6a37d`、`8fb47c3`、`215694c`、`9a5e913`、`4c212db`；本轮 P1-P3 修复在本提交中落地。
 
 目标：动态动作不能只因为单词或短语命中就执行。系统必须先结合当前 turn、最近几轮上下文、当前 mode、说话人和已有 `intentResult` 理解整体意思，再决定是否生成、展示或自动执行动作。
 
@@ -94,12 +94,14 @@ Realtime Context Orchestrator
 
 - `DynamicActionEngine.assessSignals()` 已改为异步语义门控路径，regex trigger 只生成候选动作，高风险动作必须通过 `ModeEventClassifier` 的 `pass` 或白名单 `fast_path` 才会进入 `SignalStateTracker` 和 action 构建。
 - 新增动作级 `ModeEventClassifier`，输出 `pass` / `reject` / `defer` / `fast_path`，并记录候选、语义意图、置信度、原因、云端仲裁、本地判断和降级原因。
+- `DynamicActionEngine.assessSignals()` 会为所有 gate decision 输出内部诊断 trace；`reject` / `defer` 仍不生成 action、不进入 store，但可以解释为什么候选被拦截。
 - `IntelligenceEngine` 会传入最近 6 轮上下文、当前 mode、说话人、`intentResult`、provider data scope，并提供 `classifyDynamicActionWithCloud()` 云端结构化仲裁。
 - 云端语义门控只允许从 regex 候选 action type 中选择，返回严格 JSON；调用设置短超时，失败时回到本地明确高置信判断或降级。
 - 已移除 sales `discovery_probe -> pricing_request` 的默认映射，降低价格动作误报。
 - 已补充报价请求、案例/证明请求、技术需求/集成需求的中英文召回与本地语义确认，包括“发我报价”“多少钱”“我们想看案例”“类似客户”等常见表达。
 - `detectActions()` 已标注为 legacy 同步 regex detector；生产动态动作发射应使用 `assessSignals()`。
-- 新增 `npm run test:quality:smoke`，固定覆盖语义门控、动态动作引擎、final transcript 动态动作召回、mode intent 和答案 trace contract。
+- 新增 `npm run test:quality:smoke`，固定覆盖语义门控、动态动作引擎、final transcript 动态动作召回、mode intent 和答案 trace contract；连续本地验证可先运行 `rtk npm run build:electron`，再运行 `rtk npm run test:quality:smoke:no-build` 与 `rtk npm run test:quality:diagnostics:no-build`，避免重复构建。
+- `ContextQualityDiagnosticsCollector` 已接入动态动作 gate trace、实时回答 context plan 摘要和 answer quality metrics 查询结果；只记录 action type、decision、reason、来源类型和 timing，不记录 transcript、prompt、截图或 evidence text。采集器为有界最近样本；`context-quality-smoke-report.mjs` 无 JSON 输入时只读取脚本当前进程的空/本地快照，并会显式标记为 `process_local_snapshot`。
 - 回归测试已覆盖：
   - final transcript 触发动态动作；
   - 动态动作语义门控召回；
@@ -110,10 +112,10 @@ Realtime Context Orchestrator
 仍需补齐：
 
 - 本地意图识别模型未下载、未开启、加载失败或超时时的用户可见诊断；当前第一版不能假设本地模型一定存在。
-- 云端仲裁被 provider data scope 禁止、provider 不可用、JSON 非法或超时时的 UI/trace 可见解释。
+- 云端仲裁被 provider data scope 禁止、provider 不可用、JSON 非法或超时时已有内部 trace/diagnostics；仍需决定是否以及如何在产品 UI 中展示。
 - 更多真实会议 fixture，尤其是中文、英文、混合语言、多轮转折、多人说话和旧话题污染当前判断的场景。
 - 高风险 `defer` 的产品策略：等待重复证据、低优先级卡片或完全静默，需要用真实使用数据继续定。
-- 动态动作质量指标：误报率、漏报率、defer 升级率、云端仲裁命中率、云端不可用率和平均仲裁延迟。
+- 动态动作质量指标的产品化展示：误报率、漏报率、defer 升级率和平均仲裁延迟仍未形成 dashboard；内部诊断已覆盖 pass/reject/defer、云端不可用、本地 fallback 和降级原因分布。
 
 实施要求：
 
@@ -465,7 +467,7 @@ Realtime Context Orchestrator
 当前冲刺：
   1. P0-1：动态动作意图识别语义门控第一版验收收口，补真实会议 fixture、降级诊断和质量指标。
   2. Phase 0/2/3/4 已落地能力的验收收口。
-  3. 扩展上下文质量回归评测命令和指标输出；现有基础命令为 npm run test:quality:smoke。
+  3. 扩展上下文质量回归评测命令和指标输出；现有基础命令为 npm run test:quality:smoke，连续本地验证可使用 no-build 变体。
   4. 清点所有实时回答相关 LLM 路径，标记已迁移、待迁移或豁免。
 
 下一冲刺：

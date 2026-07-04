@@ -116,6 +116,7 @@ export class DynamicActionEngine {
         recentContextTurns?: ModeEventContextTurn[];
         providerDataScopes?: ProviderDataScopePolicy;
         cloudClassifier?: CloudSemanticGateClassifier;
+        semanticGateTraceSink?: (trace: SemanticGateTrace) => void;
         now?: number;
     }): Promise<DynamicAction[]> {
         const { transcript, speaker, modeTemplateType, modeId, sessionId } = params;
@@ -165,6 +166,15 @@ export class DynamicActionEngine {
             cloudClassifier: params.cloudClassifier,
         });
         const allRegexCandidates = gateCandidates.map(candidate => `${candidate.actionType}:${candidate.match}`);
+        for (const gateDecision of gateDecisions) {
+            try {
+                params.semanticGateTraceSink?.(
+                    this.buildSemanticGateTrace(gateDecision, allRegexCandidates, false)
+                );
+            } catch {
+                // Diagnostics must never change dynamic action behavior.
+            }
+        }
 
         for (const candidate of triggerCandidates) {
             const gateDecision = gateDecisions.find(decision => decision.candidate.actionType === candidate.trigger.type);

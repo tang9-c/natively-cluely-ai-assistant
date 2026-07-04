@@ -62,6 +62,7 @@ export class IntelligenceManager extends EventEmitter {
             'negotiation_coaching',
             // Phase 3: Cluely-style dynamic action card emissions.
             'dynamic_action_emitted',
+            'dynamic_action_gate_trace',
             'skill_watcher_suggestion_created',
         ];
 

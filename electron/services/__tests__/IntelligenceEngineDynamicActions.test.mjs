@@ -427,6 +427,36 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(emitted.length, 0, 'high-risk dynamic actions should not emit when transcript scope is denied');
   });
 
+  test('final transcript emits semantic gate trace for deferred high-risk action', async () => {
+    const helper = new StubLLMHelper({
+      structuredResponses: ['{"intent":"seize_signal","confidence":0.96}'],
+    });
+    const { engine } = await makeEngine(helper);
+    const emitted = [];
+    const gateTraces = [];
+    engine.on('dynamic_action_emitted', (action) => emitted.push(action));
+    engine.on('dynamic_action_gate_trace', (trace) => gateTraces.push(trace));
+    engine._setIntentClassificationOptionsForTest({
+      providerDataScopes: { transcript: false },
+      cloudIntentClassifier: async () => ({ intent: 'seize_signal', confidence: 0.96 }),
+    });
+    engine.setDynamicActionContext({ sessionId: 's-gate-trace', modeId: 'm-sales', modeTemplateType: 'sales' });
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: '我们想进入下一步, 让法务看一下合同',
+      timestamp: Date.now(),
+      final: true,
+    }, true);
+    await waitForAsyncSignals();
+
+    assert.equal(emitted.length, 0);
+    const buyingTrace = gateTraces.find(trace => trace.actionType === 'buying_signal');
+    assert.ok(buyingTrace, `expected buying_signal gate trace; got ${gateTraces.map(trace => trace.actionType).join(', ')}`);
+    assert.equal(buyingTrace.decision, 'defer');
+    assert.equal(buyingTrace.degradedReason, 'provider_scope_denied');
+  });
+
   test('cloud classifier failure never breaks final transcript handling', async () => {
     const helper = new StubLLMHelper({ throwStructured: true });
     const { engine } = await makeEngine(helper);

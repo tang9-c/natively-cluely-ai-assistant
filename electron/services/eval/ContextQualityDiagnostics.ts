@@ -1,4 +1,4 @@
-import type { AnswerQualityMetrics } from '../../db/DatabaseManager';
+import type { AnswerDegradedReason, AnswerQualityMetrics } from '../../db/DatabaseManager';
 import type { SemanticGateTrace } from '../dynamic-actions/ModeEventClassifier';
 import type { RealtimeContextSource } from '../context/RealtimeContextOrchestrator';
 
@@ -11,8 +11,8 @@ export interface ContextQualityDynamicActionInput {
 
 export interface ContextQualityPlanInput {
     injectedSources?: RealtimeContextSource[];
-    omittedSources?: Array<{ source: RealtimeContextSource; reason?: string }>;
-    degradedReasons?: string[];
+    omittedSources?: Array<{ source: RealtimeContextSource; reason?: AnswerDegradedReason }>;
+    degradedReasons?: AnswerDegradedReason[];
     retrievalTimingMs?: Partial<Record<RealtimeContextSource, number>>;
 }
 
@@ -38,7 +38,9 @@ export interface ContextQualityDiagnosticsSummary {
         degradedReasons: Counter;
         cloudArbitrationRate: number;
         cloudUnavailableRate: number;
+        localFallbackRate: number;
         localFallbackPassRate: number;
+        localFallbackRejectRate: number;
     };
     answerQuality: AnswerQualityMetrics;
     context: {
@@ -46,6 +48,7 @@ export interface ContextQualityDiagnosticsSummary {
         omittedSources: Counter;
         degradedReasons: Counter;
         tokenBudgetDropCount: number;
+        nonTokenBudgetOmitCount: number;
         retrievalTimingMs: Record<string, TimingSummary>;
     };
 }
@@ -73,6 +76,22 @@ const TOKEN_BUDGET_REASONS = new Set([
     'mode_context_truncated',
     'assistant_history_truncated',
     'meeting_history_truncated',
+]);
+
+const ACTION_DEGRADED_REASON_WHITELIST = new Set([
+    'cloud_semantic_gate_unavailable',
+    'provider_scope_denied',
+    'local_intent_unavailable',
+    'semantic_gate_unavailable',
+]);
+
+const CLOUD_UNAVAILABLE_REASONS = new Set([
+    'cloud_semantic_gate_unavailable',
+    'cloud_unavailable_local_fallback',
+]);
+
+const NON_TOKEN_BUDGET_OMIT_REASONS = new Set([
+    'duplicate_context_dropped',
 ]);
 
 function increment(counter: Counter, key: unknown): void {
@@ -107,7 +126,9 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
     const actionDegradedReasons: Counter = {};
     let cloudArbitrations = 0;
     let cloudUnavailable = 0;
+    let localFallbacks = 0;
     let localFallbackPasses = 0;
+    let localFallbackRejects = 0;
 
     for (const action of actions) {
         increment(actionTypes, action.type ?? action.semanticGate?.actionType);
@@ -118,19 +139,25 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
             countedDegradedReasons.add(action.semanticGate.degradedReason);
             increment(actionDegradedReasons, action.semanticGate.degradedReason);
         }
+        let actionHasCloudUnavailable = false;
         for (const reason of action.semanticGate?.reasons ?? []) {
-            if (reason.includes('unavailable') || reason.includes('denied')) {
+            if (ACTION_DEGRADED_REASON_WHITELIST.has(reason)) {
                 if (!countedDegradedReasons.has(reason)) {
                     countedDegradedReasons.add(reason);
                     increment(actionDegradedReasons, reason);
                 }
             }
-            if (reason === 'cloud_unavailable_local_fallback' && action.semanticGate?.decision === 'pass') {
-                localFallbackPasses += 1;
+            if (CLOUD_UNAVAILABLE_REASONS.has(reason)) {
+                actionHasCloudUnavailable = true;
+            }
+            if (reason === 'cloud_unavailable_local_fallback') {
+                localFallbacks += 1;
+                if (action.semanticGate?.decision === 'pass') localFallbackPasses += 1;
+                if (action.semanticGate?.decision === 'reject') localFallbackRejects += 1;
             }
         }
         if (action.semanticGate?.usedCloudArbitration) cloudArbitrations += 1;
-        if (action.semanticGate?.semanticProvider === 'unavailable' || action.semanticGate?.degradedReason === 'cloud_semantic_gate_unavailable') {
+        if (CLOUD_UNAVAILABLE_REASONS.has(action.semanticGate?.degradedReason ?? '') || actionHasCloudUnavailable) {
             cloudUnavailable += 1;
         }
     }
@@ -140,6 +167,7 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
     const contextDegradedReasons: Counter = {};
     const timingValues = new Map<string, number[]>();
     let tokenBudgetDropCount = 0;
+    let nonTokenBudgetOmitCount = 0;
 
     for (const plan of input.contextPlans ?? []) {
         for (const source of plan.injectedSources ?? []) {
@@ -149,13 +177,16 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
             increment(omittedSources, omitted.source);
             increment(contextDegradedReasons, omitted.reason);
             if (omitted.reason && TOKEN_BUDGET_REASONS.has(omitted.reason)) tokenBudgetDropCount += 1;
+            if (omitted.reason && NON_TOKEN_BUDGET_OMIT_REASONS.has(omitted.reason)) nonTokenBudgetOmitCount += 1;
         }
         for (const reason of plan.degradedReasons ?? []) {
             increment(contextDegradedReasons, reason);
             if (TOKEN_BUDGET_REASONS.has(reason)) tokenBudgetDropCount += 1;
         }
         for (const [source, value] of Object.entries(plan.retrievalTimingMs ?? {})) {
+            if (typeof source !== 'string' || source.length === 0) continue;
             if (!Number.isFinite(value)) continue;
+            if (Number(value) < 0) continue;
             const existing = timingValues.get(source) ?? [];
             existing.push(Number(value));
             timingValues.set(source, existing);
@@ -176,7 +207,9 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
             degradedReasons: actionDegradedReasons,
             cloudArbitrationRate: rate(cloudArbitrations, actions.length),
             cloudUnavailableRate: rate(cloudUnavailable, actions.length),
+            localFallbackRate: rate(localFallbacks, actions.length),
             localFallbackPassRate: rate(localFallbackPasses, actions.length),
+            localFallbackRejectRate: rate(localFallbackRejects, actions.length),
         },
         answerQuality: input.answerQualityMetrics ?? EMPTY_ANSWER_QUALITY,
         context: {
@@ -184,7 +217,98 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
             omittedSources,
             degradedReasons: contextDegradedReasons,
             tokenBudgetDropCount,
+            nonTokenBudgetOmitCount,
             retrievalTimingMs,
         },
     };
+}
+
+export class ContextQualityDiagnosticsCollector {
+    private readonly dynamicActions: ContextQualityDynamicActionInput[] = [];
+    private readonly contextPlans: ContextQualityPlanInput[] = [];
+    private readonly maxEntries: number;
+    private answerQualityMetrics?: AnswerQualityMetrics;
+
+    constructor(options?: { maxEntries?: number }) {
+        const requestedMaxEntries = options?.maxEntries ?? 1000;
+        this.maxEntries = Number.isFinite(requestedMaxEntries) && requestedMaxEntries > 0
+            ? Math.floor(requestedMaxEntries)
+            : 1000;
+    }
+
+    recordDynamicActionTrace(trace: SemanticGateTrace): void {
+        this.dynamicActions.push({
+            type: trace.actionType,
+            semanticGate: {
+                decision: trace.decision,
+                actionType: trace.actionType,
+                semanticIntent: trace.semanticIntent,
+                confidence: trace.confidence,
+                reasons: [...trace.reasons],
+                regexCandidates: [] as string[],
+                rejectedCandidates: [...trace.rejectedCandidates],
+                usedLocalIntentModel: trace.usedLocalIntentModel,
+                usedCloudArbitration: trace.usedCloudArbitration,
+                semanticProvider: trace.semanticProvider,
+                degradedReason: trace.degradedReason,
+                upgradedByRepeatedEvidence: trace.upgradedByRepeatedEvidence,
+            },
+        });
+        this.trimToMaxEntries(this.dynamicActions);
+    }
+
+    recordContextPlan(plan: ContextQualityPlanInput): void {
+        this.contextPlans.push({
+            injectedSources: [...(plan.injectedSources ?? [])],
+            omittedSources: (plan.omittedSources ?? []).map((item) => ({
+                source: item.source,
+                reason: item.reason,
+            })),
+            degradedReasons: [...(plan.degradedReasons ?? [])],
+            retrievalTimingMs: { ...(plan.retrievalTimingMs ?? {}) },
+        });
+        this.trimToMaxEntries(this.contextPlans);
+    }
+
+    setAnswerQualityMetrics(metrics: AnswerQualityMetrics): void {
+        this.answerQualityMetrics = { ...metrics };
+    }
+
+    snapshot(): ContextQualityDiagnosticsInput {
+        return {
+            dynamicActions: this.dynamicActions.map((action) => ({
+                type: action.type,
+                semanticGate: action.semanticGate ? {
+                    ...action.semanticGate,
+                    reasons: [...(action.semanticGate.reasons ?? [])],
+                    regexCandidates: [] as string[],
+                    rejectedCandidates: [...(action.semanticGate.rejectedCandidates ?? [])],
+                } : undefined,
+            })),
+            answerQualityMetrics: this.answerQualityMetrics ? { ...this.answerQualityMetrics } : undefined,
+            contextPlans: this.contextPlans.map((plan) => ({
+                injectedSources: [...(plan.injectedSources ?? [])],
+                omittedSources: (plan.omittedSources ?? []).map((item) => ({ ...item })),
+                degradedReasons: [...(plan.degradedReasons ?? [])],
+                retrievalTimingMs: { ...(plan.retrievalTimingMs ?? {}) },
+            })),
+        };
+    }
+
+    clear(): void {
+        this.dynamicActions.length = 0;
+        this.contextPlans.length = 0;
+        this.answerQualityMetrics = undefined;
+    }
+
+    private trimToMaxEntries<T>(items: T[]): void {
+        if (items.length <= this.maxEntries) return;
+        items.splice(0, items.length - this.maxEntries);
+    }
+}
+
+const defaultContextQualityDiagnosticsCollector = new ContextQualityDiagnosticsCollector();
+
+export function getContextQualityDiagnosticsCollector(): ContextQualityDiagnosticsCollector {
+    return defaultContextQualityDiagnosticsCollector;
 }
