@@ -336,7 +336,7 @@ export class ModeEventClassifier {
                     speaker: input.speaker,
                     candidates: unresolvedHighRisk,
                     intentResult: input.intentResult,
-                }).catch(() => null);
+                }).catch((): null => null);
                 const validTypes = new Set(unresolvedHighRisk.map(candidate => candidate.actionType));
                 for (const result of cloudResults ?? []) {
                     if (!validTypes.has(result.actionType)) continue;
