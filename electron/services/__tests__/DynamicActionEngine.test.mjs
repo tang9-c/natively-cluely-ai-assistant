@@ -890,6 +890,27 @@ test('assessSignals falls back to local English price objection when cloud retur
   assert.ok(action.semanticGate?.reasons.includes('cloud_unavailable_local_fallback'));
 });
 
+test('assessSignals keeps neutral pricing references rejected when cloud returns null', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = await engine.assessSignals({
+    transcript: 'The pricing page is just reference material; we need a case study and a technical solution.',
+    speaker: 'interviewer',
+    modeTemplateType: 'sales',
+    modeId: 'mode_sales',
+    sessionId: 'session_neutral_pricing_cloud_null',
+    cloudClassifier: async () => null,
+    now: 20_000,
+  });
+
+  assert.equal(actions.some(item => item.type === 'pricing_request'), false);
+  assert.equal(actions.some(item => item.type === 'pricing_objection'), false);
+  assert.ok(actions.some(item => item.type === 'case_study_request'));
+  assert.ok(actions.some(item => item.type === 'technical_requirements'));
+  assert.ok(actions.every(item => item.semanticGate?.decision === 'pass'));
+});
+
 test('assessSignals uses injected cloud classifier for English high-risk candidates', async () => {
   const { DynamicActionEngine } = await loadModules();
   const calls = [];

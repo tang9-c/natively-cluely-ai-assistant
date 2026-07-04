@@ -164,4 +164,61 @@ describe('ModeEventClassifier', () => {
     assert.equal(decisions[0].semanticProvider, 'local_intent');
     assert.equal(decisions[0].semanticIntent, 'pricing_objection');
   });
+
+  test('preserves clear local rejection when cloud arbitration returns no usable result', async () => {
+    const { ModeEventClassifier } = await loadClassifier();
+    const classifier = new ModeEventClassifier({
+      cloudClassifier: async () => null,
+    });
+
+    const decisions = await classifier.assess({
+      transcript: 'The pricing page is only a reference; we need customer proof and SSO integration details.',
+      recentContextTurns: [
+        { role: 'interviewer', speaker: 'buyer-a', text: 'Earlier we said the quote was too high.', timestamp: 1 },
+        { role: 'interviewer', speaker: 'buyer-b', text: 'Now let us focus on integration proof.', timestamp: 2 },
+      ],
+      modeTemplateType: 'sales',
+      speaker: 'buyer-b',
+      candidates: [
+        candidate('pricing_objection', 'pricing page'),
+        candidate('pricing_request', 'pricing page'),
+        candidate('case_study_request', 'customer proof'),
+        candidate('technical_requirements', 'SSO integration'),
+      ],
+      activeActionTypes: [],
+      providerDataScopes: { transcript: true },
+    });
+
+    assert.equal(decisions.find(d => d.candidate.actionType === 'pricing_objection')?.decision, 'reject');
+    assert.equal(decisions.find(d => d.candidate.actionType === 'pricing_request')?.decision, 'reject');
+    assert.equal(decisions.find(d => d.candidate.actionType === 'case_study_request')?.decision, 'pass');
+    assert.equal(decisions.find(d => d.candidate.actionType === 'technical_requirements')?.decision, 'pass');
+    assert.ok(decisions.every(d => d.reasons.includes('cloud_unavailable_local_fallback')));
+  });
+
+  test('degrades every high-risk candidate when transcript scope is denied', async () => {
+    const { ModeEventClassifier } = await loadClassifier();
+    const classifier = new ModeEventClassifier({
+      cloudClassifier: async () => {
+        throw new Error('cloud should not receive transcript when scope is denied');
+      },
+    });
+
+    const decisions = await classifier.assess({
+      transcript: '这个技术方案怎么对接 SSO 和生产环境，顺便发我报价',
+      recentContextTurns: [],
+      modeTemplateType: 'sales',
+      speaker: 'buyer',
+      candidates: [
+        candidate('technical_requirements', 'SSO'),
+        candidate('pricing_request', '报价'),
+      ],
+      activeActionTypes: [],
+      providerDataScopes: { transcript: false },
+    });
+
+    assert.deepEqual(decisions.map(d => d.decision), ['defer', 'defer']);
+    assert.deepEqual(decisions.map(d => d.degradedReason), ['provider_scope_denied', 'provider_scope_denied']);
+    assert.ok(decisions.every(d => d.semanticProvider === 'unavailable'));
+  });
 });

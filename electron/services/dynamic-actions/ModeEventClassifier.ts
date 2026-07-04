@@ -230,7 +230,7 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
         };
     }
 
-    if (candidate.actionType === 'technical_requirements' && includesAny(text, ['API', 'SSO', 'production', 'integration', '技术方案', '生产环境', '部署要求', '集成要求'])) {
+    if (candidate.actionType === 'technical_requirements' && includesAny(text, ['API', 'SSO', 'production', 'integration', 'technical solution', 'integration requirements', '技术方案', '生产环境', '部署要求', '集成要求'])) {
         return {
             ...base,
             decision: 'pass',
@@ -357,7 +357,7 @@ export class ModeEventClassifier {
                 for (const candidate of unresolvedHighRisk) {
                     if (decisions.has(candidate.actionType)) continue;
                     const fallbackDecision = localDecisionFor(input, candidate);
-                    if (fallbackDecision && fallbackDecision.decision === 'pass') {
+                    if (fallbackDecision && (fallbackDecision.decision === 'pass' || fallbackDecision.decision === 'reject')) {
                         decisions.set(candidate.actionType, {
                             ...fallbackDecision,
                             reasons: [...fallbackDecision.reasons, 'cloud_unavailable_local_fallback'],
