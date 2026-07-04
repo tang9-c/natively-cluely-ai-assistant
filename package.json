@@ -111,9 +111,9 @@
       "identity": null,
       "hardenedRuntime": false,
       "extendInfo": {
-        "NSScreenCaptureUsageDescription": "Natively needs Screen Recording permission to capture system audio for meeting transcription.",
-        "NSMicrophoneUsageDescription": "Natively needs microphone access to transcribe your voice during meetings.",
-        "NSAudioCaptureUsageDescription": "Natively needs system audio access to transcribe meeting audio."
+        "NSScreenCaptureUsageDescription": "CueUp needs Screen Recording permission to capture system audio for meeting transcription.",
+        "NSMicrophoneUsageDescription": "CueUp needs microphone access to transcribe your voice during meetings.",
+        "NSAudioCaptureUsageDescription": "CueUp needs system audio access to transcribe meeting audio."
       }
     },
     "win": {
