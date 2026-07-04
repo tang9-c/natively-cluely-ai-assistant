@@ -15,7 +15,7 @@
 - 品牌外显已从 Natively 迁移到 CueUp，路线图和用户文案应继续使用 CueUp；内部遗留 provider id、类名和存储 key 可按兼容性逐步处理。
 - Phase 0 的可信度闭环已有核心基础：实时答案 trace、来源状态、降级原因、引用预览、失败状态、质量事件、离线指标 harness 和开发诊断输出相关测试已经存在。
 - Phase 2 的实时上下文编排已有第一版：`RealtimeContextOrchestrator` 能按来源优先级去重、按 token budget 选择/丢弃上下文，并输出 `sourceStatus`、`degradedReasons`、`contextFingerprint` 和检索耗时。
-- Phase 3 的受控业务系统上下文已有第一版：业务系统知识源设置、凭据、触发检测、受控查询、上下文候选注入和测试已落地。
+- Phase 3 的受控业务系统上下文已有第一版：业务系统知识源设置、凭据、触发检测、受控查询、上下文候选注入、固定答复防编造和测试已落地。
 - Phase 4 的说话人稳定性已有第一版：`SpeakerContextPolicy` 会过滤低置信度本地说话人验证元数据，并把降级原因写入答案 trace。
 - 动态动作意图识别语义门控第一版已落地并完成一轮审计收口：regex 现在主要作为候选召回，高风险动作会经过 `ModeEventClassifier` 的动作级语义门控；`IntelligenceEngine` 会把最近 6 轮上下文、当前 mode、说话人、`intentResult` 和 provider scope 传入动态动作评估，并在需要时调用云端结构化仲裁；`reject` / `defer` 也会产出内部 gate trace。
 - 动态动作和上下文质量回归已有固定命令：`npm run test:quality:smoke` 覆盖语义门控、动态动作引擎、final transcript 触发路径、mode intent 和 answer trace contract；`npm run test:quality:diagnostics` 覆盖上下文质量诊断和离线指标 harness；两个命令都有 no-build 变体。
@@ -284,6 +284,7 @@ Realtime Context Orchestrator
 - `BusinessSystemTriggerDetector` 判断是否需要查询业务系统。
 - `BusinessSystemContextService` 按 source hint 选择启用的知识源，调用受控 client，并把成功结果转为 `business_system` 上下文候选。
 - 对无配置、缺少查询锚点、无结果、多结果、认证失败、超时、不可用等状态返回固定答复，避免编造。
+- 业务系统查询状态、固定答复和降级提示已收口：无配置、缺少查询线索、无结果、多结果、认证失败、超时、不可用和错误都会返回固定答复并写入 sourceStatus/degradedReason，不进入 LLM 编造路径。
 - 业务系统上下文已通过 orchestrator 进入主链路测试。
 - 业务系统 prompt redaction 和只读边界有测试基础。
 
@@ -295,8 +296,8 @@ Realtime Context Orchestrator
 
 下一步：
 
-- 完善业务系统查询状态、固定答复和降级提示，确保无配置、无结果、多结果、认证失败、超时和不可用都不会进入编造路径。
 - 增加缓存/预取策略；live read 只作为受控补充，并设置 1-2 秒超时。
+- 产品化业务系统固定答复和降级状态的 UI/诊断展示。
 - 评测覆盖至少：
   - BOM 问题；
   - ECO/ECN 变更影响问题；
@@ -474,7 +475,7 @@ Realtime Context Orchestrator
 
 下一冲刺：
   5. 本地 RAG/资料上传端到端验收。
-  6. 业务系统上下文查询状态、降级提示和超时/缓存策略。
+  6. 业务系统上下文缓存/预取策略、真实 connector 诊断和固定答复 UI 展示。
   7. SenseVoice 错词表来源自动化和 homophone replacer 调研验证。
 
 随后：
