@@ -381,6 +381,7 @@ export class DynamicActionEngine {
             usedLocalIntentModel: gateDecision.usedLocalIntentModel,
             usedCloudArbitration: gateDecision.usedCloudArbitration,
             semanticProvider: gateDecision.semanticProvider,
+            arbitrationStatus: gateDecision.arbitrationStatus,
             degradedReason: gateDecision.degradedReason,
             upgradedByRepeatedEvidence,
         };

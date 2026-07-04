@@ -48,7 +48,7 @@ describe('ModeEventClassifier', () => {
   });
 
   test('uses cloud confirmation when local intent is unavailable for English high-risk candidates', async () => {
-    const { ModeEventClassifier } = await loadClassifier();
+    const { CloudSemanticGateError, ModeEventClassifier } = await loadClassifier();
     const cloudCalls = [];
     const classifier = new ModeEventClassifier({
       cloudClassifier: async input => {
@@ -102,6 +102,7 @@ describe('ModeEventClassifier', () => {
     assert.equal(decisions[0].decision, 'defer');
     assert.equal(decisions[0].semanticProvider, 'unavailable');
     assert.equal(decisions[0].degradedReason, 'provider_scope_denied');
+    assert.equal(decisions[0].arbitrationStatus, 'local_only_by_privacy');
   });
 
   test('passes explicit Chinese quote requests through local semantic gate', async () => {
@@ -163,6 +164,8 @@ describe('ModeEventClassifier', () => {
     assert.equal(decisions[0].decision, 'pass');
     assert.equal(decisions[0].semanticProvider, 'local_intent');
     assert.equal(decisions[0].semanticIntent, 'pricing_objection');
+    assert.equal(decisions[0].arbitrationStatus, 'local_fallback_cloud_unavailable');
+    assert.ok(decisions[0].reasons.includes('cloud_provider_unavailable'));
   });
 
   test('preserves clear local rejection when cloud arbitration returns no usable result', async () => {
@@ -220,5 +223,123 @@ describe('ModeEventClassifier', () => {
     assert.deepEqual(decisions.map(d => d.decision), ['defer', 'defer']);
     assert.deepEqual(decisions.map(d => d.degradedReason), ['provider_scope_denied', 'provider_scope_denied']);
     assert.ok(decisions.every(d => d.semanticProvider === 'unavailable'));
+    assert.ok(decisions.every(d => d.arbitrationStatus === 'local_only_by_privacy'));
+  });
+
+  test('labels cloud success and local-only-not-needed arbitration states', async () => {
+    const { ModeEventClassifier } = await loadClassifier();
+    const classifier = new ModeEventClassifier({
+      cloudClassifier: async () => [
+        {
+          actionType: 'case_study_request',
+          decision: 'pass',
+          confidence: 0.92,
+          semanticIntent: 'case_or_proof_request',
+          reasons: ['cloud_confirmed_case_request'],
+        },
+      ],
+    });
+
+    const localOnly = await classifier.assess({
+      transcript: '我会下周五跟进',
+      recentContextTurns: [],
+      modeTemplateType: 'sales',
+      speaker: 'seller',
+      candidates: [{
+        actionType: 'action_item',
+        label: 'action_item',
+        match: '下周五跟进',
+        confidence: 0.8,
+        highRisk: false,
+        fastPathEligible: true,
+      }],
+      activeActionTypes: [],
+    });
+    assert.equal(localOnly[0].arbitrationStatus, 'local_only_not_needed');
+
+    const cloudUsed = await classifier.assess({
+      transcript: 'not the pricing page, we need proof from a similar customer',
+      recentContextTurns: [],
+      modeTemplateType: 'sales',
+      speaker: 'buyer',
+      candidates: [
+        candidate('pricing_request', 'pricing page'),
+        candidate('case_study_request', 'similar customer'),
+      ],
+      activeActionTypes: [],
+      providerDataScopes: { transcript: true },
+    });
+
+    const caseDecision = cloudUsed.find(d => d.candidate.actionType === 'case_study_request');
+    assert.equal(caseDecision?.decision, 'pass');
+    assert.equal(caseDecision?.semanticProvider, 'cloud_llm');
+    assert.equal(caseDecision?.arbitrationStatus, 'cloud_used');
+  });
+
+  test('maps cloud timeout and invalid JSON to degraded reasons while falling back locally', async () => {
+    const { CloudSemanticGateError, ModeEventClassifier } = await loadClassifier();
+    const timeoutClassifier = new ModeEventClassifier({
+      cloudClassifier: async () => {
+        throw new CloudSemanticGateError('cloud_timeout');
+      },
+    });
+
+    const timeoutDecisions = await timeoutClassifier.assess({
+      transcript: 'This is too expensive for our budget.',
+      recentContextTurns: [],
+      modeTemplateType: 'sales',
+      speaker: 'buyer',
+      candidates: [candidate('pricing_objection', 'too expensive', 0.9)],
+      activeActionTypes: [],
+      providerDataScopes: { transcript: true },
+    });
+
+    assert.equal(timeoutDecisions[0].decision, 'pass');
+    assert.equal(timeoutDecisions[0].arbitrationStatus, 'local_fallback_cloud_unavailable');
+    assert.ok(timeoutDecisions[0].reasons.includes('cloud_timeout'));
+    assert.ok(timeoutDecisions[0].reasons.includes('cloud_unavailable_local_fallback'));
+
+    const invalidJsonClassifier = new ModeEventClassifier({
+      cloudClassifier: async () => [
+        { actionType: 'pricing_objection', decision: 'approve', confidence: 0.9 },
+      ],
+    });
+
+    const invalidJsonDecisions = await invalidJsonClassifier.assess({
+      transcript: 'The pricing page is only a reference; we need customer proof.',
+      recentContextTurns: [],
+      modeTemplateType: 'sales',
+      speaker: 'buyer',
+      candidates: [
+        candidate('pricing_objection', 'pricing page'),
+        candidate('case_study_request', 'customer proof'),
+      ],
+      activeActionTypes: [],
+      providerDataScopes: { transcript: true },
+    });
+
+    assert.ok(invalidJsonDecisions.every(d => d.arbitrationStatus === 'local_fallback_cloud_unavailable'));
+    assert.ok(invalidJsonDecisions.every(d => d.reasons.includes('cloud_invalid_json')));
+
+    const noLocalFallbackClassifier = new ModeEventClassifier({
+      cloudClassifier: async () => {
+        throw new CloudSemanticGateError('cloud_invalid_json');
+      },
+    });
+
+    const noLocalFallbackDecisions = await noLocalFallbackClassifier.assess({
+      transcript: 'We need SOC2 controls for procurement.',
+      recentContextTurns: [],
+      modeTemplateType: 'sales',
+      speaker: 'buyer',
+      candidates: [candidate('technical_requirements', 'SOC2 controls', 0.88)],
+      activeActionTypes: [],
+      providerDataScopes: { transcript: true },
+    });
+
+    assert.equal(noLocalFallbackDecisions[0].decision, 'defer');
+    assert.equal(noLocalFallbackDecisions[0].degradedReason, 'cloud_invalid_json');
+    assert.equal(noLocalFallbackDecisions[0].arbitrationStatus, 'cloud_unavailable');
+    assert.equal(noLocalFallbackDecisions[0].reasons.includes('cloud_unavailable_local_fallback'), false);
   });
 });

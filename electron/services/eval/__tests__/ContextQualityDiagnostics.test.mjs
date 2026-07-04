@@ -31,6 +31,7 @@ test('context quality diagnostics summarize gate, answer, and context metrics wi
           usedLocalIntentModel: false,
           usedCloudArbitration: false,
           semanticProvider: 'local_intent',
+          arbitrationStatus: 'local_only_not_needed',
           upgradedByRepeatedEvidence: false,
         },
       },
@@ -46,6 +47,7 @@ test('context quality diagnostics summarize gate, answer, and context metrics wi
           usedLocalIntentModel: false,
           usedCloudArbitration: true,
           semanticProvider: 'cloud_llm',
+          arbitrationStatus: 'cloud_used',
           upgradedByRepeatedEvidence: false,
         },
       },
@@ -62,6 +64,7 @@ test('context quality diagnostics summarize gate, answer, and context metrics wi
           usedCloudArbitration: false,
           semanticProvider: 'unavailable',
           degradedReason: 'cloud_semantic_gate_unavailable',
+          arbitrationStatus: 'local_fallback_cloud_unavailable',
           upgradedByRepeatedEvidence: false,
         },
       },
@@ -101,6 +104,12 @@ test('context quality diagnostics summarize gate, answer, and context metrics wi
   assert.equal(summary.dynamicActions.decisions.pass, 1);
   assert.equal(summary.dynamicActions.decisions.reject, 1);
   assert.equal(summary.dynamicActions.decisions.defer, 1);
+  assert.equal(summary.dynamicActions.arbitrationStatuses.local_only_not_needed, 1);
+  assert.equal(summary.dynamicActions.arbitrationStatuses.cloud_used, 1);
+  assert.equal(summary.dynamicActions.arbitrationStatuses.local_fallback_cloud_unavailable, 1);
+  assert.equal(summary.dynamicActions.cloudUsedRate, 1 / 3);
+  assert.equal(summary.dynamicActions.localOnlyNotNeededRate, 1 / 3);
+  assert.equal(summary.dynamicActions.cloudFallbackRate, 1 / 3);
   assert.equal(summary.dynamicActions.cloudArbitrationRate, 1 / 3);
   assert.equal(summary.dynamicActions.cloudUnavailableRate, 1 / 3);
   assert.equal(summary.dynamicActions.localFallbackRate, 0);
@@ -143,6 +152,11 @@ test('context quality diagnostics count fallback and omitted context reasons pre
         usedCloudArbitration: false,
         semanticProvider: index === 2 ? 'unavailable' : 'local_intent',
         degradedReason: index === 2 ? 'provider_scope_denied' : undefined,
+        arbitrationStatus: fallback
+          ? 'local_fallback_cloud_unavailable'
+          : index === 2
+            ? 'local_only_by_privacy'
+            : 'local_only_not_needed',
         upgradedByRepeatedEvidence: false,
       },
     });
@@ -173,6 +187,9 @@ test('context quality diagnostics count fallback and omitted context reasons pre
   assert.equal(summary.dynamicActions.localFallbackPassRate, 1 / 20);
   assert.equal(summary.dynamicActions.localFallbackRejectRate, 1 / 20);
   assert.equal(summary.dynamicActions.cloudUnavailableRate, 2 / 20);
+  assert.equal(summary.dynamicActions.arbitrationStatuses.local_fallback_cloud_unavailable, 2);
+  assert.equal(summary.dynamicActions.arbitrationStatuses.local_only_by_privacy, 1);
+  assert.equal(summary.dynamicActions.privacyLocalRate, 1 / 20);
   assert.equal(summary.dynamicActions.degradedReasons.provider_scope_denied, 1);
   assert.equal(summary.dynamicActions.degradedReasons.plan_denied_for_future_reason, undefined);
   assert.equal(summary.context.tokenBudgetDropCount, 2);
@@ -200,6 +217,7 @@ test('context quality diagnostics collector stores only summary-safe fields', as
     usedLocalIntentModel: true,
     usedCloudArbitration: false,
     semanticProvider: 'local_intent',
+    arbitrationStatus: 'local_fallback_cloud_unavailable',
     upgradedByRepeatedEvidence: false,
   });
   collector.recordContextPlan({
@@ -214,6 +232,47 @@ test('context quality diagnostics collector stores only summary-safe fields', as
   const summary = summarizeContextQualityDiagnostics(snapshot);
   assert.equal(summary.dynamicActions.localFallbackRejectRate, 1);
   assert.equal(summary.context.nonTokenBudgetOmitCount, 1);
+});
+
+test('context quality diagnostics exposes safe dynamic action arbitration labels', async () => {
+  const {
+    getDynamicActionArbitrationStatusLabel,
+    getDynamicActionArbitrationStatusMessage,
+  } = await loadDiagnostics();
+
+  assert.equal(getDynamicActionArbitrationStatusLabel('local_only_not_needed'), '本地');
+  assert.equal(getDynamicActionArbitrationStatusLabel('cloud_used'), '云端');
+  assert.equal(getDynamicActionArbitrationStatusLabel('local_only_by_privacy'), '隐私本地');
+  assert.equal(getDynamicActionArbitrationStatusLabel('local_fallback_cloud_unavailable'), '本地兜底');
+  assert.equal(getDynamicActionArbitrationStatusLabel('cloud_unavailable'), '云端不可用');
+  assert.equal(getDynamicActionArbitrationStatusMessage('local_only_by_privacy'), '已按隐私设置仅使用本地判断');
+  assert.equal(getDynamicActionArbitrationStatusMessage('local_fallback_cloud_unavailable'), '云端判定不可用，已使用本地兜底');
+  assert.equal(getDynamicActionArbitrationStatusMessage('cloud_unavailable'), '云端判定不可用，已暂缓高风险动作');
+
+  const raw = 'secret transcript prompt provider stack body';
+  const serialized = JSON.stringify([
+    getDynamicActionArbitrationStatusLabel('local_fallback_cloud_unavailable'),
+    getDynamicActionArbitrationStatusMessage('local_fallback_cloud_unavailable'),
+  ]);
+  assert.doesNotMatch(serialized, new RegExp(raw));
+});
+
+test('dynamic action cloud adapter preserves typed failure reasons for production diagnostics', () => {
+  const source = fs.readFileSync(path.resolve(root, 'electron/IntelligenceEngine.ts'), 'utf8');
+  const methodSource = source.slice(
+    source.indexOf('private async classifyDynamicActionWithCloud'),
+    source.indexOf('constructor(llmHelper', source.indexOf('private async classifyDynamicActionWithCloud')),
+  );
+
+  assert.match(methodSource, /throw new CloudSemanticGateError\(cloudFailureReasonFromError\(error\)\)/);
+  assert.match(methodSource, /throw new CloudSemanticGateError\('cloud_invalid_json'\)/);
+  assert.doesNotMatch(methodSource, /catch\s*\([^)]*\)\s*\{[\s\S]{0,220}return null;/);
+});
+
+test('ordinary meeting UI does not expose dynamic action arbitration diagnostics', () => {
+  const source = fs.readFileSync(path.resolve(root, 'src/components/NativelyInterface.tsx'), 'utf8');
+  assert.doesNotMatch(source, /provider_scope_denied|cloud_timeout|cloud_invalid_json|cloud_provider_unavailable/);
+  assert.doesNotMatch(source, /云端判定不可用|已按隐私设置仅使用本地判断/);
 });
 
 test('context quality diagnostics collector keeps a bounded recent sample', async () => {

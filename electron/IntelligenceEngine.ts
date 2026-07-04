@@ -23,11 +23,13 @@ import type {
 } from './llm/IntentClassifier';
 import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEngine';
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
-import type {
-    CloudSemanticGateInput,
-    CloudSemanticGateResult,
-    ModeEventContextTurn,
-    SemanticGateTrace,
+import {
+    CloudSemanticGateError,
+    cloudFailureReasonFromError,
+    type CloudSemanticGateInput,
+    type CloudSemanticGateResult,
+    type ModeEventContextTurn,
+    type SemanticGateTrace,
 } from './services/dynamic-actions/ModeEventClassifier';
 import { ScreenContext } from './services/screen/types';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
@@ -322,48 +324,54 @@ export class IntelligenceEngine extends EventEmitter {
             '返回格式: {"actions":[{"actionType":"...","decision":"pass|reject|defer","confidence":0.0,"semanticIntent":"...","reasons":["..."],"rejectedCandidates":["..."]}]}',
         ].join('\n');
 
+        let raw: string;
         try {
-            const raw = await this.llmHelper.generateContentStructured(prompt, {
+            raw = await this.llmHelper.generateContentStructured(prompt, {
                 taskLabel: 'dynamic-action-semantic-gate',
                 maxOutputTokens: 256,
                 perProviderTimeoutMs: 2500,
                 maxRotations: 1,
             });
-            const jsonText = raw.match(/\{[\s\S]*\}/)?.[0];
-            if (!jsonText) return null;
-            const parsed = JSON.parse(jsonText) as {
+        } catch (error) {
+            throw new CloudSemanticGateError(cloudFailureReasonFromError(error));
+        }
+
+        const jsonText = raw.match(/\{[\s\S]*\}/)?.[0];
+        if (!jsonText) throw new CloudSemanticGateError('cloud_invalid_json');
+
+        let parsed: { actions?: Array<Partial<CloudSemanticGateResult>> };
+        try {
+            parsed = JSON.parse(jsonText) as {
                 actions?: Array<Partial<CloudSemanticGateResult>>;
             };
-            if (!Array.isArray(parsed.actions)) return null;
-
-            const results: CloudSemanticGateResult[] = [];
-            for (const item of parsed.actions) {
-                const actionType = item.actionType;
-                const decision = item.decision;
-                const confidence = Number(item.confidence);
-                if (!actionType || !candidateTypes.has(actionType)) continue;
-                if (decision !== 'pass' && decision !== 'reject' && decision !== 'defer') continue;
-                if (!Number.isFinite(confidence)) continue;
-                results.push({
-                    actionType,
-                    decision,
-                    confidence: Math.max(0, Math.min(1, confidence)),
-                    semanticIntent: typeof item.semanticIntent === 'string' ? item.semanticIntent : undefined,
-                    reasons: Array.isArray(item.reasons)
-                        ? item.reasons.filter(reason => typeof reason === 'string').slice(0, 5)
-                        : undefined,
-                    rejectedCandidates: Array.isArray(item.rejectedCandidates)
-                        ? item.rejectedCandidates.filter(candidate => typeof candidate === 'string').slice(0, 10)
-                        : undefined,
-                });
-            }
-            return results.length > 0 ? results : null;
-        } catch (error) {
-            console.warn('[IntelligenceEngine] Dynamic action semantic gate failed', {
-                error: error instanceof Error ? error.message : String(error),
-            });
-            return null;
+        } catch {
+            throw new CloudSemanticGateError('cloud_invalid_json');
         }
+        if (!Array.isArray(parsed.actions)) throw new CloudSemanticGateError('cloud_invalid_json');
+
+        const results: CloudSemanticGateResult[] = [];
+        for (const item of parsed.actions) {
+            const actionType = item.actionType;
+            const decision = item.decision;
+            const confidence = Number(item.confidence);
+            if (!actionType || !candidateTypes.has(actionType)) continue;
+            if (decision !== 'pass' && decision !== 'reject' && decision !== 'defer') continue;
+            if (!Number.isFinite(confidence)) continue;
+            results.push({
+                actionType,
+                decision,
+                confidence: Math.max(0, Math.min(1, confidence)),
+                semanticIntent: typeof item.semanticIntent === 'string' ? item.semanticIntent : undefined,
+                reasons: Array.isArray(item.reasons)
+                    ? item.reasons.filter(reason => typeof reason === 'string').slice(0, 5)
+                    : undefined,
+                rejectedCandidates: Array.isArray(item.rejectedCandidates)
+                    ? item.rejectedCandidates.filter(candidate => typeof candidate === 'string').slice(0, 10)
+                    : undefined,
+            });
+        }
+        if (parsed.actions.length > 0 && results.length === 0) throw new CloudSemanticGateError('cloud_invalid_json');
+        return results.length > 0 ? results : null;
     }
 
     constructor(llmHelper: LLMHelper, session: SessionTracker) {

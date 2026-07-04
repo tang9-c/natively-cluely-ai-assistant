@@ -949,6 +949,181 @@ test('assessSignals uses injected cloud classifier for English high-risk candida
   assert.equal(caseAction?.semanticGate?.semanticProvider, 'cloud_llm');
 });
 
+describe('DynamicActionEngine real meeting semantic gate fixtures', () => {
+  const fixtures = [
+    {
+      name: '中文转折：价格先放一边，我们想看案例',
+      modeTemplateType: 'sales',
+      turns: [],
+      currentTranscript: '价格先放一边，我们想看案例',
+      speaker: 'buyer-a',
+      providerDataScopes: { transcript: true },
+      cloudClassifierResult: null,
+      expectedActions: ['case_study_request'],
+      expectedRejectedActions: ['pricing_request', 'pricing_objection'],
+      expectedTraceReasons: ['case_or_proof_request'],
+    },
+    {
+      name: '英文转折：not the pricing page, we need proof from a similar customer',
+      modeTemplateType: 'sales',
+      turns: [],
+      currentTranscript: 'not the pricing page, we need proof from a similar customer',
+      speaker: 'buyer-a',
+      providerDataScopes: { transcript: true },
+      cloudClassifierResult: [
+        { actionType: 'pricing_request', decision: 'reject', confidence: 0.86, semanticIntent: 'neutral_pricing_reference', reasons: ['cloud_rejected_pricing_reference'], rejectedCandidates: ['pricing_request'] },
+        { actionType: 'case_study_request', decision: 'pass', confidence: 0.94, semanticIntent: 'case_or_proof_request', reasons: ['cloud_confirmed_case_request'] },
+      ],
+      expectedActions: ['case_study_request'],
+      expectedRejectedActions: ['pricing_request'],
+      expectedTraceReasons: ['cloud_confirmed_case_request', 'cloud_rejected_pricing_reference'],
+    },
+    {
+      name: '中英混合：这个先不谈 pricing，我们要看 integration plan',
+      modeTemplateType: 'sales',
+      turns: [],
+      currentTranscript: '这个先不谈 pricing page，我们要看 integration requirements',
+      speaker: 'buyer-b',
+      providerDataScopes: { transcript: true },
+      cloudClassifierResult: [
+        { actionType: 'pricing_request', decision: 'reject', confidence: 0.84, semanticIntent: 'topic_deprioritized', reasons: ['cloud_rejected_pricing_reference'], rejectedCandidates: ['pricing_request'] },
+        { actionType: 'technical_requirements', decision: 'pass', confidence: 0.91, semanticIntent: 'integration_requirements', reasons: ['cloud_confirmed_integration_need'] },
+      ],
+      expectedActions: ['technical_requirements'],
+      expectedRejectedActions: ['pricing_request'],
+      expectedTraceReasons: ['cloud_confirmed_integration_need', 'cloud_rejected_pricing_reference'],
+    },
+    {
+      name: '多轮污染：上一轮价格异议，当前切到 SSO/生产环境',
+      modeTemplateType: 'sales',
+      turns: [
+        { role: 'buyer', speaker: 'buyer-a', text: 'Earlier this was too expensive for our budget.', timestamp: 1 },
+      ],
+      currentTranscript: '现在切到 SSO 对接和 production integration requirements',
+      speaker: 'buyer-b',
+      providerDataScopes: { transcript: true },
+      cloudClassifierResult: [
+        { actionType: 'technical_requirements', decision: 'pass', confidence: 0.9, semanticIntent: 'integration_requirements', reasons: ['cloud_confirmed_current_turn_integration'] },
+      ],
+      expectedActions: ['technical_requirements'],
+      expectedRejectedActions: ['pricing_objection'],
+      expectedTraceReasons: ['cloud_confirmed_current_turn_integration'],
+    },
+    {
+      name: '多人说话：内部成员提报价表，客户要案例',
+      modeTemplateType: 'sales',
+      turns: [
+        { role: 'buyer', speaker: 'customer', text: 'The quote was too high earlier.', timestamp: 1 },
+      ],
+      currentTranscript: '我们的报价单在这，客户现在只是问 case study',
+      speaker: 'seller',
+      providerDataScopes: { transcript: true },
+      cloudClassifierResult: [
+        { actionType: 'pricing_request', decision: 'reject', confidence: 0.8, semanticIntent: 'internal_quote_reference', reasons: ['cloud_rejected_internal_quote_reference'], rejectedCandidates: ['pricing_request'] },
+        { actionType: 'case_study_request', decision: 'pass', confidence: 0.9, semanticIntent: 'case_or_proof_request', reasons: ['cloud_confirmed_case_request'] },
+      ],
+      expectedActions: ['case_study_request'],
+      expectedRejectedActions: ['pricing_request'],
+      expectedTraceReasons: ['cloud_rejected_internal_quote_reference', 'cloud_confirmed_case_request'],
+    },
+    {
+      name: '隐私禁止云端：英文高风险不调用 cloud classifier',
+      modeTemplateType: 'sales',
+      turns: [],
+      currentTranscript: 'This is too expensive for our budget.',
+      speaker: 'buyer',
+      providerDataScopes: { transcript: false },
+      cloudFailure: 'scope_denied',
+      expectedActions: [],
+      expectedRejectedActions: ['pricing_objection'],
+      expectedTraceReasons: ['provider_scope_denied'],
+    },
+    {
+      name: '云端失败兜底：null 使用本地价格异议',
+      modeTemplateType: 'sales',
+      turns: [],
+      currentTranscript: 'This is too expensive for our budget.',
+      speaker: 'buyer',
+      providerDataScopes: { transcript: true },
+      cloudClassifierResult: null,
+      expectedActions: ['pricing_objection'],
+      expectedRejectedActions: [],
+      expectedTraceReasons: ['cloud_provider_unavailable', 'cloud_unavailable_local_fallback'],
+    },
+    {
+      name: '云端失败兜底：timeout 使用本地价格异议',
+      modeTemplateType: 'sales',
+      turns: [],
+      currentTranscript: 'This is too expensive for our budget.',
+      speaker: 'buyer',
+      providerDataScopes: { transcript: true },
+      cloudFailure: 'timeout',
+      expectedActions: ['pricing_objection'],
+      expectedRejectedActions: [],
+      expectedTraceReasons: ['cloud_timeout', 'cloud_unavailable_local_fallback'],
+    },
+    {
+      name: '云端失败兜底：非法结构拒绝中性价格引用',
+      modeTemplateType: 'sales',
+      turns: [],
+      currentTranscript: 'The pricing page is only a reference; we need a case study.',
+      speaker: 'buyer',
+      providerDataScopes: { transcript: true },
+      cloudClassifierResult: [{ actionType: 'pricing_request', decision: 'approve', confidence: 0.9 }],
+      expectedActions: ['case_study_request'],
+      expectedRejectedActions: ['pricing_request'],
+      expectedTraceReasons: ['cloud_invalid_json', 'cloud_unavailable_local_fallback'],
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    test(fixture.name, async () => {
+      const { DynamicActionEngine } = await loadModules();
+      const traces = [];
+      let cloudCalls = 0;
+      const engine = new DynamicActionEngine();
+      const cloudClassifier = async () => {
+        cloudCalls += 1;
+        if (fixture.cloudFailure === 'timeout') {
+          const error = new Error('cloud classifier timeout');
+          error.code = 'ETIMEDOUT';
+          throw error;
+        }
+        if (fixture.cloudFailure === 'scope_denied') {
+          throw new Error('cloud classifier must not be called');
+        }
+        return fixture.cloudClassifierResult;
+      };
+
+      const actions = await engine.assessSignals({
+        transcript: fixture.currentTranscript,
+        speaker: fixture.speaker,
+        modeTemplateType: fixture.modeTemplateType,
+        modeId: `mode_${fixture.modeTemplateType}`,
+        sessionId: `session_fixture_${fixture.name}`,
+        recentContextTurns: fixture.turns,
+        providerDataScopes: fixture.providerDataScopes,
+        cloudClassifier,
+        semanticGateTraceSink: trace => traces.push(trace),
+        now: 20_000,
+      });
+
+      for (const expectedAction of fixture.expectedActions) {
+        assert.ok(actions.some(action => action.type === expectedAction), `${fixture.name}: expected stored ${expectedAction}; got ${actions.map(action => action.type).join(', ')}`);
+      }
+      for (const rejectedAction of fixture.expectedRejectedActions) {
+        assert.equal(actions.some(action => action.type === rejectedAction), false, `${fixture.name}: should not store ${rejectedAction}`);
+      }
+      for (const expectedReason of fixture.expectedTraceReasons) {
+        assert.ok(traces.some(trace => trace.reasons.includes(expectedReason) || trace.degradedReason === expectedReason), `${fixture.name}: expected trace reason ${expectedReason}; got ${JSON.stringify(traces)}`);
+      }
+      if (fixture.cloudFailure === 'scope_denied') {
+        assert.equal(cloudCalls, 0, `${fixture.name}: cloud classifier should not be called`);
+      }
+    });
+  }
+});
+
 test('assessSignals requires repeated evidence before auto-surfacing ordinary objections', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();

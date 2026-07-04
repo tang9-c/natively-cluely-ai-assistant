@@ -1,6 +1,6 @@
 import type { AnswerDegradedReason, AnswerQualityMetrics } from '../../db/DatabaseManager';
 import type { CodeHintTrace } from '../../llm/CodeHintLLM';
-import type { SemanticGateTrace } from '../dynamic-actions/ModeEventClassifier';
+import type { SemanticGateArbitrationStatus, SemanticGateTrace } from '../dynamic-actions/ModeEventClassifier';
 import type { RealtimeContextSource } from '../context/RealtimeContextOrchestrator';
 
 type Counter = Record<string, number>;
@@ -47,7 +47,12 @@ export interface ContextQualityDiagnosticsSummary {
         decisions: Counter;
         actionTypes: Counter;
         semanticProviders: Counter;
+        arbitrationStatuses: Counter;
         degradedReasons: Counter;
+        cloudUsedRate: number;
+        privacyLocalRate: number;
+        cloudFallbackRate: number;
+        localOnlyNotNeededRate: number;
         cloudArbitrationRate: number;
         cloudUnavailableRate: number;
         localFallbackRate: number;
@@ -101,6 +106,9 @@ const TOKEN_BUDGET_REASONS = new Set([
 
 const ACTION_DEGRADED_REASON_WHITELIST = new Set([
     'cloud_semantic_gate_unavailable',
+    'cloud_timeout',
+    'cloud_invalid_json',
+    'cloud_provider_unavailable',
     'provider_scope_denied',
     'local_intent_unavailable',
     'semantic_gate_unavailable',
@@ -109,7 +117,26 @@ const ACTION_DEGRADED_REASON_WHITELIST = new Set([
 const CLOUD_UNAVAILABLE_REASONS = new Set([
     'cloud_semantic_gate_unavailable',
     'cloud_unavailable_local_fallback',
+    'cloud_timeout',
+    'cloud_invalid_json',
+    'cloud_provider_unavailable',
 ]);
+
+const ARBITRATION_STATUS_LABELS: Record<SemanticGateArbitrationStatus, string> = {
+    cloud_used: '云端',
+    local_only_by_privacy: '隐私本地',
+    local_fallback_cloud_unavailable: '本地兜底',
+    cloud_unavailable: '云端不可用',
+    local_only_not_needed: '本地',
+};
+
+const ARBITRATION_STATUS_MESSAGES: Record<SemanticGateArbitrationStatus, string> = {
+    cloud_used: '已使用云端判定参与动态动作判断',
+    local_only_by_privacy: '已按隐私设置仅使用本地判断',
+    local_fallback_cloud_unavailable: '云端判定不可用，已使用本地兜底',
+    cloud_unavailable: '云端判定不可用，已暂缓高风险动作',
+    local_only_not_needed: '已使用本地判断',
+};
 
 const NON_TOKEN_BUDGET_OMIT_REASONS = new Set([
     'duplicate_context_dropped',
@@ -122,6 +149,14 @@ function increment(counter: Counter, key: unknown): void {
 
 function rate(count: number, total: number): number {
     return total > 0 ? count / total : 0;
+}
+
+export function getDynamicActionArbitrationStatusLabel(status: SemanticGateArbitrationStatus): string {
+    return ARBITRATION_STATUS_LABELS[status];
+}
+
+export function getDynamicActionArbitrationStatusMessage(status: SemanticGateArbitrationStatus): string {
+    return ARBITRATION_STATUS_MESSAGES[status];
 }
 
 function summarizeTiming(values: number[]): TimingSummary {
@@ -144,8 +179,13 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
     const decisions: Counter = {};
     const actionTypes: Counter = {};
     const semanticProviders: Counter = {};
+    const arbitrationStatuses: Counter = {};
     const actionDegradedReasons: Counter = {};
     let cloudArbitrations = 0;
+    let cloudUsed = 0;
+    let privacyLocal = 0;
+    let cloudFallback = 0;
+    let localOnlyNotNeeded = 0;
     let cloudUnavailable = 0;
     let localFallbacks = 0;
     let localFallbackPasses = 0;
@@ -155,6 +195,11 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
         increment(actionTypes, action.type ?? action.semanticGate?.actionType);
         increment(decisions, action.semanticGate?.decision);
         increment(semanticProviders, action.semanticGate?.semanticProvider);
+        increment(arbitrationStatuses, action.semanticGate?.arbitrationStatus);
+        if (action.semanticGate?.arbitrationStatus === 'cloud_used') cloudUsed += 1;
+        if (action.semanticGate?.arbitrationStatus === 'local_only_by_privacy') privacyLocal += 1;
+        if (action.semanticGate?.arbitrationStatus === 'local_fallback_cloud_unavailable') cloudFallback += 1;
+        if (action.semanticGate?.arbitrationStatus === 'local_only_not_needed') localOnlyNotNeeded += 1;
         const countedDegradedReasons = new Set<string>();
         if (action.semanticGate?.degradedReason) {
             countedDegradedReasons.add(action.semanticGate.degradedReason);
@@ -244,7 +289,12 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
             decisions,
             actionTypes,
             semanticProviders,
+            arbitrationStatuses,
             degradedReasons: actionDegradedReasons,
+            cloudUsedRate: rate(cloudUsed, actions.length),
+            privacyLocalRate: rate(privacyLocal, actions.length),
+            cloudFallbackRate: rate(cloudFallback, actions.length),
+            localOnlyNotNeededRate: rate(localOnlyNotNeeded, actions.length),
             cloudArbitrationRate: rate(cloudArbitrations, actions.length),
             cloudUnavailableRate: rate(cloudUnavailable, actions.length),
             localFallbackRate: rate(localFallbacks, actions.length),
@@ -300,6 +350,7 @@ export class ContextQualityDiagnosticsCollector {
                 usedLocalIntentModel: trace.usedLocalIntentModel,
                 usedCloudArbitration: trace.usedCloudArbitration,
                 semanticProvider: trace.semanticProvider,
+                arbitrationStatus: trace.arbitrationStatus,
                 degradedReason: trace.degradedReason,
                 upgradedByRepeatedEvidence: trace.upgradedByRepeatedEvidence,
             },
