@@ -1,4 +1,4 @@
-export const QCLOUD_LLM_BASE_URL = "https://rlbucefe.sealosbja.site";
+export const QCLOUD_LLM_BASE_URL = "https://obzbovrjewzd.sealosbja.site";
 export const QCLOUD_CHAT_MODEL = "lite32k";
 export const QCLOUD_CHAT_ENDPOINT = `${QCLOUD_LLM_BASE_URL}/v1/chat`;
 export const QCLOUD_MODELS_ENDPOINT = `${QCLOUD_LLM_BASE_URL}/v1/models`;
