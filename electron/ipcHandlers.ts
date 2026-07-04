@@ -3061,7 +3061,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         const retrievalTimingMs: Record<string, number> = {};
         const ragManagerForHealth = appState.getRAGManager();
 
-        const { BusinessSystemContextService } = require('./services/business-system/BusinessSystemContextService');
+        const {
+          BusinessSystemContextService,
+          businessSystemDegradedReasonForStatus,
+        } = require('./services/business-system/BusinessSystemContextService');
         const { CredentialsManager: BusinessSystemCredentialsManager } = require('./services/CredentialsManager');
         const businessSystemStartedAt = Date.now();
         const businessSystemRecentContext = buildBusinessSystemRecentContextSummary(
@@ -3076,6 +3079,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         retrievalTimingMs.business_system = Date.now() - businessSystemStartedAt;
 
         if (businessSystemResult.kind === 'fixed_reply') {
+          const businessSystemDegradedReason = businessSystemDegradedReasonForStatus(businessSystemResult.status);
           const contextTrace = DatabaseManager.getInstance().saveAnswerContextTrace({
             answerId,
             answerType: 'what_to_say',
@@ -3104,7 +3108,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               businessSystemSourceName: businessSystemResult.sourceName,
             },
             citations: [],
-            degradedReason: `business_system_${businessSystemResult.status}`,
+            degradedReason: businessSystemDegradedReason,
             status: 'generated_with_fallback',
             traceId: answerId,
             observability: {
@@ -3119,7 +3123,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             question: question || 'inferred from context',
             statusCode: 'business-system-unavailable',
             contextTrace,
-            degradedReason: `business_system_${businessSystemResult.status}`,
+            degradedReason: businessSystemDegradedReason,
             citations: [],
             screenContextStatus,
             imageCount: validatedImagePaths?.length || 0,

@@ -36,3 +36,12 @@ test('generate-what-to-say short-circuits fixed business system failures without
     'fixed business system failures must return before LLM generation'
   );
 });
+
+test('generate-what-to-say uses canonical business system degraded reason helper for fixed replies', () => {
+  const source = read('electron/ipcHandlers.ts');
+  const handler = sliceSafeHandleBlock(source, 'generate-what-to-say');
+
+  assert.match(handler, /businessSystemDegradedReasonForStatus/);
+  assert.match(handler, /const businessSystemDegradedReason\s*=/);
+  assert.doesNotMatch(handler, /degradedReason:\s*`business_system_\$\{businessSystemResult\.status\}`/);
+});
