@@ -49,26 +49,19 @@ export function businessSystemDegradedReasonForStatus(status: BusinessSystemFixe
         case 'ambiguous':
             return 'business_system_ambiguous';
         case 'not_configured':
+            return 'business_system_not_configured';
         case 'unavailable':
-        case 'error':
             return 'business_system_unavailable';
+        case 'error':
+            return 'business_system_error';
     }
 }
 
 export function toBusinessSystemFixedReply(input: {
     status: BusinessSystemFixedReplyStatus;
     sourceName?: string;
-    answer?: string;
 }): { kind: 'fixed_reply'; status: BusinessSystemFixedReplyStatus; answer: string; sourceName?: string } {
     const sourceName = input.sourceName || '业务系统知识源';
-    if (input.answer?.trim()) {
-        return {
-            kind: 'fixed_reply',
-            status: input.status,
-            answer: input.answer.trim(),
-            sourceName: input.sourceName,
-        };
-    }
     if (input.status === 'not_configured') {
         return {
             kind: 'fixed_reply',
@@ -134,7 +127,6 @@ export class BusinessSystemContextService {
             if (trigger.failureReason === 'missing_query_anchor') {
                 return toBusinessSystemFixedReply({
                     status: 'missing_query_anchor',
-                    answer: trigger.userMessage || '我可以查业务系统知识源，但现在还缺少要查询的业务线索。',
                 });
             }
             return { kind: 'skipped' };

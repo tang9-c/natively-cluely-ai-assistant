@@ -183,7 +183,7 @@ export const AIProvidersSettings: React.FC = () => {
                     openai: creds.hasOpenaiKey,
                     claude: creds.hasClaudeKey,
                     doubao: creds.hasDoubaoKey || false,
-                    natively: creds.hasCueUpKey || false
+                    natively: creds.hasNativelyKey || false
                 });
                 setApiKey(prev => mergeMaskedValue(prev, creds.geminiKey));
                 setGroqApiKey(prev => mergeMaskedValue(prev, creds.groqKey));

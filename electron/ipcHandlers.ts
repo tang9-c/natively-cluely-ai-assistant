@@ -23,6 +23,7 @@ import { buildRealtimeContextPlan, formatInjectedContext, type RealtimeContextCa
 import { sanitizeGenerateWhatToSayOptions } from './services/context/RealtimeAnswerRequest';
 import { formatUploadedMaterialContext } from './services/knowledge/UploadedMaterialContextFormatter';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
+import { buildBusinessSystemFixedReplyTraceInput } from './services/business-system/BusinessSystemFixedReplyTrace';
 import { SkillActivationManager, type ActivateSkillInput, type SkillActivationScope } from './services/SkillActivationManager';
 import { SkillWatcherService } from './services/SkillWatcherService';
 import { SkillsManager } from './services/SkillsManager';
@@ -3080,43 +3081,21 @@ export function initializeIpcHandlers(appState: AppState): void {
 
         if (businessSystemResult.kind === 'fixed_reply') {
           const businessSystemDegradedReason = businessSystemDegradedReasonForStatus(businessSystemResult.status);
-          const contextTrace = DatabaseManager.getInstance().saveAnswerContextTrace({
-            answerId,
-            answerType: 'what_to_say',
-            surface: requestOptions.source ?? 'overlay',
-            provider: null,
-            model: null,
-            latencyMs: Date.now() - startedAt,
-            contextUsed: {
-              currentTranscript: Boolean(question?.trim()),
-              shortTermHistory: false,
-              uploadedDocumentRag: false,
-              historicalMeetings: false,
-              longTermMemory: false,
-              enterpriseKnowledge: false,
-              businessSystemContext: false,
-              screenContext: false,
-            },
-            sourceStatus: {
-              ragAttempted: false,
+          const contextTrace = DatabaseManager.getInstance().saveAnswerContextTrace(
+            buildBusinessSystemFixedReplyTraceInput({
+              answerId,
+              surface: requestOptions.source,
+              latencyMs: Date.now() - startedAt,
+              question,
               ragReady: Boolean(ragManagerForHealth?.isReady?.()),
               embeddingReady: Boolean(ragManagerForHealth?.getEmbeddingPipeline?.().isReady?.()),
-              uploadedMaterialHitCount: 0,
-              citationCount: 0,
               screenContextStatus,
               businessSystemStatus: businessSystemResult.status,
               businessSystemSourceName: businessSystemResult.sourceName,
-            },
-            citations: [],
-            degradedReason: businessSystemDegradedReason,
-            status: 'generated_with_fallback',
-            traceId: answerId,
-            observability: {
-              retrievalTimingMs: { business_system: retrievalTimingMs.business_system },
-              businessSystemStatus: businessSystemResult.status,
-              businessSystemSourceName: businessSystemResult.sourceName,
-            },
-          });
+              degradedReason: businessSystemDegradedReason,
+              businessSystemTimingMs: retrievalTimingMs.business_system,
+            }),
+          );
           return {
             answerId,
             answer: businessSystemResult.answer,

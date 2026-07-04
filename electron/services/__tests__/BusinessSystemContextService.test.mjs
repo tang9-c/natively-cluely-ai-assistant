@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -130,6 +131,26 @@ test('does not leak credentials in service output', async () => {
   assert.doesNotMatch(serialized, /alice/);
 });
 
+test('query result sourceName is optional at the service boundary', () => {
+  const source = fs.readFileSync(path.join(root, 'electron/services/business-system/BusinessSystemTypes.ts'), 'utf8');
+
+  assert.match(source, /sourceName\?:\s*string/);
+});
+
+test('fixed replies ignore caller-provided answer text and always use status templates', async () => {
+  const { toBusinessSystemFixedReply } = await loadService();
+
+  const fixed = toBusinessSystemFixedReply({
+    status: 'missing_query_anchor',
+    answer: 'caller supplied raw answer should not be returned',
+  });
+
+  assert.equal(fixed.kind, 'fixed_reply');
+  assert.equal(fixed.status, 'missing_query_anchor');
+  assert.match(fixed.answer, /缺少要查询的物料、项目、图纸、需求或问题线索/);
+  assert.doesNotMatch(fixed.answer, /caller supplied raw answer/);
+});
+
 test('maps every non-ok business system status to fixed reply copy and legal degraded reason', async () => {
   const {
     toBusinessSystemFixedReply,
@@ -137,14 +158,14 @@ test('maps every non-ok business system status to fixed reply copy and legal deg
   } = await loadService();
 
   const cases = [
-    ['not_configured', /没有配置可用的业务系统知识源/, 'business_system_unavailable'],
+    ['not_configured', /没有配置可用的业务系统知识源/, 'business_system_not_configured'],
     ['missing_query_anchor', /缺少要查询/, 'business_system_missing_query_anchor'],
     ['no_result', /没有从PLM 知识源中确认到相关信息/, 'business_system_no_result'],
     ['ambiguous', /返回了多个可能结果/, 'business_system_ambiguous'],
     ['auth_failed', /认证失败/, 'business_system_auth_failed'],
     ['timeout', /查询超时/, 'business_system_timeout'],
     ['unavailable', /当前不可用/, 'business_system_unavailable'],
-    ['error', /查询PLM 知识源时失败/, 'business_system_unavailable'],
+    ['error', /查询PLM 知识源时失败/, 'business_system_error'],
   ];
 
   for (const [status, answerPattern, reason] of cases) {

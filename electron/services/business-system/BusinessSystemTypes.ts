@@ -46,7 +46,7 @@ export type BusinessSystemFixedReplyStatus =
 
 export interface BusinessSystemQueryResult {
     status: BusinessSystemQueryStatus;
-    sourceName: string;
+    sourceName?: string;
     summary?: string;
     items?: unknown[];
     errorCode?: string;
