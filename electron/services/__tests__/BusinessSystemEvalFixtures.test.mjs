@@ -115,3 +115,51 @@ test('fixture: auth failure uses fixed reply', async () => {
   assert.equal(auth.kind, 'fixed_reply');
   assert.match(auth.answer, /认证失败或不可用/);
 });
+
+test('fixture: fixed business system statuses never become context candidates', async () => {
+  const { BusinessSystemContextService } = await loadModules();
+  const cases = [
+    ['no_result', /没有从PLM 知识源中确认到相关信息/],
+    ['ambiguous', /多个可能结果/],
+    ['auth_failed', /认证失败/],
+    ['timeout', /查询超时/],
+    ['unavailable', /当前不可用/],
+    ['error', /查询PLM 知识源时失败/],
+  ];
+
+  for (const [status, answerPattern] of cases) {
+    const service = new BusinessSystemContextService({
+      credentialsManager: credentialsManagerStub(),
+      mcpClient: {
+        query: async () => ({ status, sourceName: 'PLM 知识源' }),
+      },
+    });
+
+    const resolved = await service.resolve({ question: '根据 PLM 查一下物料 a12345' });
+    assert.equal(resolved.kind, 'fixed_reply');
+    assert.equal(resolved.status, status);
+    assert.match(resolved.answer, answerPattern);
+    assert.equal('candidate' in resolved, false);
+  }
+});
+
+test('fixture: no configured business system source returns fixed reply without context candidate', async () => {
+  const { BusinessSystemContextService } = await loadModules();
+  const service = new BusinessSystemContextService({
+    credentialsManager: {
+      getBusinessSystemKnowledgeSources: () => [],
+      getBusinessSystemCredentials: () => undefined,
+    },
+    mcpClient: {
+      query: async () => {
+        throw new Error('should not call MCP without a source');
+      },
+    },
+  });
+
+  const resolved = await service.resolve({ question: '根据 PLM 查一下物料 a12345' });
+  assert.equal(resolved.kind, 'fixed_reply');
+  assert.equal(resolved.status, 'not_configured');
+  assert.match(resolved.answer, /没有配置可用的业务系统知识源/);
+  assert.equal('candidate' in resolved, false);
+});
