@@ -103,4 +103,65 @@ describe('ModeEventClassifier', () => {
     assert.equal(decisions[0].semanticProvider, 'unavailable');
     assert.equal(decisions[0].degradedReason, 'provider_scope_denied');
   });
+
+  test('passes explicit Chinese quote requests through local semantic gate', async () => {
+    const { ModeEventClassifier } = await loadClassifier();
+    const classifier = new ModeEventClassifier();
+
+    for (const transcript of ['发我报价', '给客户发一版报价', '多少钱']) {
+      const decisions = await classifier.assess({
+        transcript,
+        recentContextTurns: [],
+        modeTemplateType: 'sales',
+        speaker: 'interviewer',
+        candidates: [candidate('pricing_request', transcript, 0.86)],
+        activeActionTypes: [],
+      });
+
+      assert.equal(decisions[0].decision, 'pass', transcript);
+      assert.equal(decisions[0].semanticProvider, 'local_intent', transcript);
+      assert.equal(decisions[0].semanticIntent, 'pricing_request', transcript);
+    }
+  });
+
+  test('passes explicit Chinese case requests through local semantic gate', async () => {
+    const { ModeEventClassifier } = await loadClassifier();
+    const classifier = new ModeEventClassifier();
+
+    for (const transcript of ['我们想看案例', '有类似客户吗', '给一个成功案例', '客户要证明材料']) {
+      const decisions = await classifier.assess({
+        transcript,
+        recentContextTurns: [],
+        modeTemplateType: 'sales',
+        speaker: 'interviewer',
+        candidates: [candidate('case_study_request', transcript, 0.87)],
+        activeActionTypes: [],
+      });
+
+      assert.equal(decisions[0].decision, 'pass', transcript);
+      assert.equal(decisions[0].semanticProvider, 'local_intent', transcript);
+      assert.equal(decisions[0].semanticIntent, 'case_or_proof_request', transcript);
+    }
+  });
+
+  test('falls back to clear local English price objection when cloud arbitration is unavailable', async () => {
+    const { ModeEventClassifier } = await loadClassifier();
+    const classifier = new ModeEventClassifier({
+      cloudClassifier: async () => null,
+    });
+
+    const decisions = await classifier.assess({
+      transcript: 'This is too expensive for our budget.',
+      recentContextTurns: [],
+      modeTemplateType: 'sales',
+      speaker: 'interviewer',
+      candidates: [candidate('pricing_objection', 'too expensive', 0.9)],
+      activeActionTypes: [],
+      providerDataScopes: { transcript: true },
+    });
+
+    assert.equal(decisions[0].decision, 'pass');
+    assert.equal(decisions[0].semanticProvider, 'local_intent');
+    assert.equal(decisions[0].semanticIntent, 'pricing_objection');
+  });
 });

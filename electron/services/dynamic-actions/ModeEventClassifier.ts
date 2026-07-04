@@ -166,6 +166,29 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
         }
     }
 
+    if (candidate.actionType === 'pricing_request') {
+        if (includesAny(text, ['price list', 'pricing page', '成本数据', '价格页'])) {
+            return {
+                ...base,
+                decision: 'reject',
+                confidence: 0.82,
+                semanticIntent: 'neutral_pricing_reference',
+                reasons: ['neutral_pricing_reference'],
+                semanticProvider: 'local_intent',
+            };
+        }
+        if (includesAny(text, ['send me pricing', 'quote', 'proposal', 'what does it cost', '发我报价', '报价单', '发一版报价', '给客户发一版报价', '报个价格', '给个价格', '多少钱'])) {
+            return {
+                ...base,
+                decision: 'pass',
+                confidence: Math.max(candidate.confidence, 0.88),
+                semanticIntent: 'pricing_request',
+                reasons: ['explicit_quote_or_pricing_request'],
+                semanticProvider: 'local_intent',
+            };
+        }
+    }
+
     if (candidate.actionType === 'buying_signal' && includesAny(text, ['send contract', 'legal review', 'finalize', '发合同', '法务审核', '准备签', '准备推进', '安排时间', '敲定'])) {
         return {
             ...base,
@@ -177,7 +200,26 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
         };
     }
 
-    if (candidate.actionType === 'case_study_request' && includesAny(text, ['case study', 'customer proof', '客户案例', '案例证明', '证明 ROI', '证明roi'])) {
+    if (candidate.actionType === 'case_study_request' && includesAny(text, [
+        'case study',
+        'customer proof',
+        'customer story',
+        'customer example',
+        'similar customer',
+        'proof point',
+        'success story',
+        '客户案例',
+        '成功案例',
+        '案例证明',
+        '证明 ROI',
+        '证明roi',
+        '想看案例',
+        '类似客户',
+        '证明材料',
+        '标杆客户',
+        '落地案例',
+        '实施案例',
+    ])) {
         return {
             ...base,
             decision: 'pass',
@@ -313,9 +355,16 @@ export class ModeEventClassifier {
                     });
                 }
                 for (const candidate of unresolvedHighRisk) {
-                    if (!decisions.has(candidate.actionType)) {
-                        decisions.set(candidate.actionType, this.degraded(candidate, 'cloud_semantic_gate_unavailable'));
+                    if (decisions.has(candidate.actionType)) continue;
+                    const fallbackDecision = localDecisionFor(input, candidate);
+                    if (fallbackDecision && fallbackDecision.decision === 'pass') {
+                        decisions.set(candidate.actionType, {
+                            ...fallbackDecision,
+                            reasons: [...fallbackDecision.reasons, 'cloud_unavailable_local_fallback'],
+                        });
+                        continue;
                     }
+                    decisions.set(candidate.actionType, this.degraded(candidate, 'cloud_semantic_gate_unavailable'));
                 }
             } else {
                 for (const candidate of unresolvedHighRisk) {
