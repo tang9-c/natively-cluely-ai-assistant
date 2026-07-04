@@ -1,6 +1,6 @@
 # CueUp 上下文系统路线图
 
-更新时间：2026-07-03
+更新时间：2026-07-04
 
 ## 北极星
 
@@ -10,14 +10,16 @@
 
 ## 当前现状
 
-本路线图已经从“设计阶段”进入“第一版地基已落地，继续补齐验收和产品化”的阶段。根据代码图谱和 `594c3c8` 之后的提交，当前状态如下：
+本路线图已经从“设计阶段”进入“第一版地基已落地，继续补齐验收和产品化”的阶段。根据代码图谱和最近 7 次提交（`c899566` 到 `159d371`），当前状态如下：
 
 - 品牌外显已从 Natively 迁移到 CueUp，路线图和用户文案应继续使用 CueUp；内部遗留 provider id、类名和存储 key 可按兼容性逐步处理。
 - Phase 0 的可信度闭环已有核心基础：实时答案 trace、来源状态、降级原因、引用预览、失败状态和质量事件相关测试已经存在。
 - Phase 2 的实时上下文编排已有第一版：`RealtimeContextOrchestrator` 能按来源优先级去重、按 token budget 选择/丢弃上下文，并输出 `sourceStatus`、`degradedReasons`、`contextFingerprint` 和检索耗时。
 - Phase 3 的受控业务系统上下文已有第一版：业务系统知识源设置、凭据、触发检测、受控查询、上下文候选注入和测试已落地。
 - Phase 4 的说话人稳定性已有第一版：`SpeakerContextPolicy` 会过滤低置信度本地说话人验证元数据，并把降级原因写入答案 trace。
-- 动态动作意图识别仍是规则触发和意图结果辅助确认的混合方案，还不是严格的“先整体语义理解，再决定是否执行动作”。价格、案例、技术需求这类高误报/高漏报信号必须优先升级为语义门控。
+- 动态动作意图识别语义门控第一版已落地：regex 现在主要作为候选召回，高风险动作会经过 `ModeEventClassifier` 的动作级语义门控；`IntelligenceEngine` 会把最近 6 轮上下文、当前 mode、说话人、`intentResult` 和 provider scope 传入动态动作评估，并在需要时调用云端结构化仲裁。
+- 动态动作质量回归已有固定 smoke 命令：`npm run test:quality:smoke` 覆盖语义门控、动态动作引擎、final transcript 触发路径、mode intent 和 answer trace contract。
+- P0-1 仍未完全产品化：当前第一版已有核心门控和回归测试，但本地意图模型下载/不可用诊断、云端仲裁 UI 可见性、更多真实会议 fixture 和指标面板仍需补齐。
 - 本地 SenseVoice 已支持 final transcript 后处理专有名词纠错。它不属于上下文编排本身，但会直接影响上下文质量，尤其是人名、公司名、产品名和业务对象 ID 的可检索性。
 
 ## 产品判断
@@ -26,7 +28,7 @@
 
 接下来优先级不是继续扩张到完整 MCP 工具调用，而是把已落地的上下文地基做扎实：
 
-1. 动态动作意图识别语义门控：先理解上下文整体意思，再决定是否执行动作。
+1. 动态动作意图识别语义门控：第一版已进入代码，接下来要把真实会议 fixture、降级诊断和产品可见解释收口。
 2. 补齐实时答案可信度闭环的验收指标和回归评测。
 3. 把 `RealtimeContextOrchestrator` 从“主链路第一版”推进到“所有实时回答关键路径一致使用”。
 4. 继续产品化本地 RAG、资料上传和统一知识源设置。
@@ -84,22 +86,41 @@ Realtime Context Orchestrator
 
 ### P0-1：动态动作意图识别语义门控
 
-状态：当前第一优先，尚未完成。
+状态：第一版已落地，当前第一优先进入验收收口。
 
 目标：动态动作不能只因为单词或短语命中就执行。系统必须先结合当前 turn、最近几轮上下文、当前 mode、说话人和已有 `intentResult` 理解整体意思，再决定是否生成、展示或自动执行动作。
 
-当前问题：
+已完成：
 
-- `DynamicActionEngine.assessSignals()` 已接收 `intentResult`，但仍会先使用当前 transcript 的 regex trigger 生成候选动作。
-- `classifyIntent()` 在部分路径有 cloud/local semantic fallback，但动态动作还没有把语义结果作为最终门控。
-- 价格、案例、技术需求、下一步、技术问题等信号容易因为关键词过宽或缺少专门动作类型而误报/漏报。
+- `DynamicActionEngine.assessSignals()` 已改为异步语义门控路径，regex trigger 只生成候选动作，高风险动作必须通过 `ModeEventClassifier` 的 `pass` 或白名单 `fast_path` 才会进入 `SignalStateTracker` 和 action 构建。
+- 新增动作级 `ModeEventClassifier`，输出 `pass` / `reject` / `defer` / `fast_path`，并记录候选、语义意图、置信度、原因、云端仲裁、本地判断和降级原因。
+- `IntelligenceEngine` 会传入最近 6 轮上下文、当前 mode、说话人、`intentResult`、provider data scope，并提供 `classifyDynamicActionWithCloud()` 云端结构化仲裁。
+- 云端语义门控只允许从 regex 候选 action type 中选择，返回严格 JSON；调用设置短超时，失败时回到本地明确高置信判断或降级。
+- 已移除 sales `discovery_probe -> pricing_request` 的默认映射，降低价格动作误报。
+- 已补充报价请求、案例/证明请求、技术需求/集成需求的中英文召回与本地语义确认，包括“发我报价”“多少钱”“我们想看案例”“类似客户”等常见表达。
+- `detectActions()` 已标注为 legacy 同步 regex detector；生产动态动作发射应使用 `assessSignals()`。
+- 新增 `npm run test:quality:smoke`，固定覆盖语义门控、动态动作引擎、final transcript 动态动作召回、mode intent 和答案 trace contract。
+- 回归测试已覆盖：
+  - final transcript 触发动态动作；
+  - 动态动作语义门控召回；
+  - 云端不可用时保留明确本地高置信召回；
+  - 中性价格提及拦截；
+  - `price list` / `pricing page` / `成本数据` 等不触发价格异议。
+
+仍需补齐：
+
+- 本地意图识别模型未下载、未开启、加载失败或超时时的用户可见诊断；当前第一版不能假设本地模型一定存在。
+- 云端仲裁被 provider data scope 禁止、provider 不可用、JSON 非法或超时时的 UI/trace 可见解释。
+- 更多真实会议 fixture，尤其是中文、英文、混合语言、多轮转折、多人说话和旧话题污染当前判断的场景。
+- 高风险 `defer` 的产品策略：等待重复证据、低优先级卡片或完全静默，需要用真实使用数据继续定。
+- 动态动作质量指标：误报率、漏报率、defer 升级率、云端仲裁命中率、云端不可用率和平均仲裁延迟。
 
 实施要求：
 
 - regex 只作为候选信号，不直接等同于动作。
 - 增加 `ModeEventClassifier` 或等价语义门控层，输入至少包含：
   - 当前 final transcript；
-  - 最近 N 轮上下文；
+  - 最近 4-6 轮上下文，第一版代码默认传最近 6 轮；
   - 当前 mode/template；
   - `intentResult`；
   - 说话人/channel；
@@ -115,7 +136,7 @@ Realtime Context Orchestrator
   - 安排时间；
   - 屏幕上有技术题；
   - 明确 action item。
-- 对于语义不确定的候选，只生成低优先级卡片或等待重复证据，不自动执行。
+- 对于语义不确定的候选，只生成低优先级卡片、等待重复证据或拒绝，不自动执行；第一版更偏保守。
 - trace 中记录：
   - regex 候选；
   - semantic intent；
@@ -125,12 +146,17 @@ Realtime Context Orchestrator
 
 验收标准：
 
-- “价格先放一边，我们想看客户案例和 API 集成要求”不能触发价格动作，应触发案例和技术需求动作。
-- “price list / pricing page / 成本数据”这类中性提及不能触发价格异议。
-- “这个技术方案怎么对接 SSO 和生产环境”能触发技术需求，而不依赖价格词或报价词。
-- “客户要一个类似案例证明 ROI”能触发案例/证明请求。
-- 每个动态动作都能解释：为什么触发、为什么没有被拦截、是否经过语义门控。
-- 相关测试必须覆盖中文、英文、混合语言、单句和多轮上下文。
+- 已覆盖的验收必须持续通过：
+  - “price list / pricing page / 成本数据”这类中性提及不能触发价格异议。
+  - 明确价格异议、报价请求、案例/证明请求和技术需求表达能被召回。
+  - final transcript 路径能生成经过语义门控的动态动作。
+  - 云端不可用时，明确高置信本地语义不能被无差别降级吞掉。
+- 仍需补齐的验收：
+  - “价格先放一边，我们想看客户案例和 API 集成要求”不能触发价格动作，应触发案例和技术需求动作。
+  - “这个技术方案怎么对接 SSO 和生产环境”能触发技术需求，而不依赖价格词或报价词。
+  - “客户要一个类似案例证明 ROI”能触发案例/证明请求。
+  - 每个动态动作都能解释：为什么触发、为什么没有被拦截、是否经过语义门控。
+  - 相关测试必须扩展到更多中文、英文、混合语言、单句和多轮上下文 fixture。
 
 ### Phase 0：实时答案可信度闭环
 
@@ -437,9 +463,9 @@ Realtime Context Orchestrator
 
 ```text
 当前冲刺：
-  1. P0-1：动态动作意图识别语义门控，从 regex-first 升级为 semantic-gated。
+  1. P0-1：动态动作意图识别语义门控第一版验收收口，补真实会议 fixture、降级诊断和质量指标。
   2. Phase 0/2/3/4 已落地能力的验收收口。
-  3. 建立上下文质量回归评测命令和指标输出。
+  3. 扩展上下文质量回归评测命令和指标输出；现有基础命令为 npm run test:quality:smoke。
   4. 清点所有实时回答相关 LLM 路径，标记已迁移、待迁移或豁免。
 
 下一冲刺：
