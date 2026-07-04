@@ -13,6 +13,8 @@ import {
 } from './llm';
 import type { ModeEventContext } from './llm';
 import type { WhatToAnswerTraceSink } from './llm/WhatToAnswerLLM';
+import type { CodeHintTrace } from './llm/CodeHintLLM';
+import type { ProviderDataScope } from './llm/ProviderRouter';
 import type { TranscriptTurn } from './llm';
 import type {
     CloudIntentClassifierInput,
@@ -28,7 +30,7 @@ import type {
     SemanticGateTrace,
 } from './services/dynamic-actions/ModeEventClassifier';
 import { ScreenContext } from './services/screen/types';
-import { SettingsManager } from './services/SettingsManager';
+import { SettingsManager, type AppSettings } from './services/SettingsManager';
 import { SkillActivationManager } from './services/SkillActivationManager';
 import { SkillsManager } from './services/SkillsManager';
 import { SkillWatcherService, type SkillWatcherSuggestion } from './services/SkillWatcherService';
@@ -90,6 +92,7 @@ export interface IntelligenceModeEvents {
     // window.electronAPI.onIntelligenceDynamicAction and renders cards.
     'dynamic_action_emitted': (action: DynamicAction) => void;
     'dynamic_action_gate_trace': (trace: SemanticGateTrace) => void;
+    'code_hint_trace': (trace: CodeHintTrace) => void;
     'skill_watcher_suggestion_created': (suggestion: SkillWatcherSuggestion) => void;
 }
 
@@ -105,6 +108,10 @@ export type ClarifyFailureReason = 'no_llm' | 'aborted' | 'empty' | 'error';
 export type ClarifyResult =
     | { ok: true; clarification: string }
     | { ok: false; reason: ClarifyFailureReason; detail?: string };
+
+export interface RunCodeHintOptions {
+    requestedDataScopes?: ProviderDataScope[];
+}
 
 const WHAT_TO_ANSWER_FALLBACK = "Could you repeat that? I want to make sure I address your question properly.";
 const WHAT_TO_ANSWER_LABEL_EN = 'What to Answer';
@@ -1295,7 +1302,7 @@ export class IntelligenceEngine extends EventEmitter {
      *   2. session.detectedCodingQuestion (detected from interviewer transcript)
      *   3. transcriptContext (last N seconds of conversation — fallback for inference)
      */
-    async runCodeHint(imagePaths?: string[], problemStatement?: string): Promise<string | null> {
+    async runCodeHint(imagePaths?: string[], problemStatement?: string, options?: RunCodeHintOptions): Promise<string | null> {
         if (this.assistCancellationToken) {
             this.assistCancellationToken.abort();
             this.assistCancellationToken = null;
@@ -1325,11 +1332,34 @@ export class IntelligenceEngine extends EventEmitter {
 
             const generationId = ++this.currentGenerationId;
             let fullHint = "";
+            let providerScopePolicy: AppSettings['providerDataScopes'] | undefined;
+            try {
+                providerScopePolicy = SettingsManager.getInstance().get('providerDataScopes');
+            } catch {
+                providerScopePolicy = undefined;
+            }
+            const traceSink = (trace: CodeHintTrace) => {
+                try {
+                    getContextQualityDiagnosticsCollector().recordCodeHintTrace(trace);
+                } catch {
+                    // Diagnostics collector must not affect CodeHint behavior.
+                }
+                try {
+                    this.emit('code_hint_trace', trace);
+                } catch {
+                    // Diagnostics event listeners must not affect CodeHint behavior.
+                }
+            };
             const stream = this.codeHintLLM.generateStream(
                 imagePaths,
                 questionContext ?? undefined,
                 questionSource,
-                transcriptContext ?? undefined
+                transcriptContext ?? undefined,
+                {
+                    providerScopePolicy,
+                    requestedDataScopes: options?.requestedDataScopes,
+                    traceSink,
+                }
             );
 
             let streamAborted = false;

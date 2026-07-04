@@ -3414,6 +3414,18 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('generate-code-hint', async (_, imagePaths?: string[], problemStatement?: string) => {
     try {
+      const providerDataScopes = SettingsManager.getInstance().get('providerDataScopes') || {};
+      const screenshotsScopeDenied = providerDataScopes.screenshots === false;
+
+      if (screenshotsScopeDenied) {
+        console.warn('[IPC] generate-code-hint: screenshots scope denied; skipping screenshot queue and image optimization');
+        const intelligenceManager = appState.getIntelligenceManager();
+        const hint = await intelligenceManager.runCodeHint(undefined, undefined, {
+          requestedDataScopes: ['screenshots'],
+        });
+        return { hint };
+      }
+
       // If no explicit images were passed from the frontend, fall back to the
       // screenshot queue so the AI can always "see" the user's screen.
       const screenshotQueue = appState.getScreenshotQueue();

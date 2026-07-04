@@ -1,4 +1,5 @@
 import type { AnswerDegradedReason, AnswerQualityMetrics } from '../../db/DatabaseManager';
+import type { CodeHintTrace } from '../../llm/CodeHintLLM';
 import type { SemanticGateTrace } from '../dynamic-actions/ModeEventClassifier';
 import type { RealtimeContextSource } from '../context/RealtimeContextOrchestrator';
 
@@ -16,10 +17,21 @@ export interface ContextQualityPlanInput {
     retrievalTimingMs?: Partial<Record<RealtimeContextSource, number>>;
 }
 
+export interface ContextQualityCodeHintInput {
+    status: CodeHintTrace['status'];
+    dataScopesRequested: string[];
+    dataScopesDenied: string[];
+    degradedReasons: AnswerDegradedReason[];
+    usedVision: boolean;
+    usedTranscript: boolean;
+    provider?: string;
+}
+
 export interface ContextQualityDiagnosticsInput {
     dynamicActions?: ContextQualityDynamicActionInput[];
     answerQualityMetrics?: AnswerQualityMetrics;
     contextPlans?: ContextQualityPlanInput[];
+    codeHints?: ContextQualityCodeHintInput[];
 }
 
 export interface TimingSummary {
@@ -50,6 +62,15 @@ export interface ContextQualityDiagnosticsSummary {
         tokenBudgetDropCount: number;
         nonTokenBudgetOmitCount: number;
         retrievalTimingMs: Record<string, TimingSummary>;
+    };
+    codeHints: {
+        total: number;
+        statuses: Counter;
+        degradedReasons: Counter;
+        providers: Counter;
+        scopeDeniedRate: number;
+        visionUsageRate: number;
+        transcriptUsageRate: number;
     };
 }
 
@@ -198,6 +219,25 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
         retrievalTimingMs[source] = summarizeTiming(values);
     }
 
+    const codeHints = input.codeHints ?? [];
+    const codeHintStatuses: Counter = {};
+    const codeHintDegradedReasons: Counter = {};
+    const codeHintProviders: Counter = {};
+    let codeHintScopeDenied = 0;
+    let codeHintVisionUsed = 0;
+    let codeHintTranscriptUsed = 0;
+
+    for (const trace of codeHints) {
+        increment(codeHintStatuses, trace.status);
+        increment(codeHintProviders, trace.provider);
+        for (const reason of trace.degradedReasons ?? []) {
+            increment(codeHintDegradedReasons, reason);
+        }
+        if ((trace.dataScopesDenied ?? []).length > 0) codeHintScopeDenied += 1;
+        if (trace.usedVision) codeHintVisionUsed += 1;
+        if (trace.usedTranscript) codeHintTranscriptUsed += 1;
+    }
+
     return {
         dynamicActions: {
             total: actions.length,
@@ -220,12 +260,22 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
             nonTokenBudgetOmitCount,
             retrievalTimingMs,
         },
+        codeHints: {
+            total: codeHints.length,
+            statuses: codeHintStatuses,
+            degradedReasons: codeHintDegradedReasons,
+            providers: codeHintProviders,
+            scopeDeniedRate: rate(codeHintScopeDenied, codeHints.length),
+            visionUsageRate: rate(codeHintVisionUsed, codeHints.length),
+            transcriptUsageRate: rate(codeHintTranscriptUsed, codeHints.length),
+        },
     };
 }
 
 export class ContextQualityDiagnosticsCollector {
     private readonly dynamicActions: ContextQualityDynamicActionInput[] = [];
     private readonly contextPlans: ContextQualityPlanInput[] = [];
+    private readonly codeHints: ContextQualityCodeHintInput[] = [];
     private readonly maxEntries: number;
     private answerQualityMetrics?: AnswerQualityMetrics;
 
@@ -270,6 +320,19 @@ export class ContextQualityDiagnosticsCollector {
         this.trimToMaxEntries(this.contextPlans);
     }
 
+    recordCodeHintTrace(trace: CodeHintTrace): void {
+        this.codeHints.push({
+            status: trace.status,
+            dataScopesRequested: [...trace.dataScopesRequested],
+            dataScopesDenied: [...trace.dataScopesDenied],
+            degradedReasons: [...trace.degradedReasons],
+            usedVision: trace.usedVision,
+            usedTranscript: trace.usedTranscript,
+            provider: trace.provider,
+        });
+        this.trimToMaxEntries(this.codeHints);
+    }
+
     setAnswerQualityMetrics(metrics: AnswerQualityMetrics): void {
         this.answerQualityMetrics = { ...metrics };
     }
@@ -292,12 +355,22 @@ export class ContextQualityDiagnosticsCollector {
                 degradedReasons: [...(plan.degradedReasons ?? [])],
                 retrievalTimingMs: { ...(plan.retrievalTimingMs ?? {}) },
             })),
+            codeHints: this.codeHints.map((trace) => ({
+                status: trace.status,
+                dataScopesRequested: [...trace.dataScopesRequested],
+                dataScopesDenied: [...trace.dataScopesDenied],
+                degradedReasons: [...trace.degradedReasons],
+                usedVision: trace.usedVision,
+                usedTranscript: trace.usedTranscript,
+                provider: trace.provider,
+            })),
         };
     }
 
     clear(): void {
         this.dynamicActions.length = 0;
         this.contextPlans.length = 0;
+        this.codeHints.length = 0;
         this.answerQualityMetrics = undefined;
     }
 

@@ -10,15 +10,16 @@
 
 ## 当前现状
 
-本路线图已经从“设计阶段”进入“第一版地基已落地，继续补齐验收和产品化”的阶段。根据代码图谱和最近 7 次提交（`c899566` 到 `159d371`），当前状态如下：
+本路线图已经从“设计阶段”进入“第一版地基已落地，继续补齐验收和产品化”的阶段。根据代码图谱和最近 7 次提交（`159d371` 到 `efa906a`），当前状态如下：
 
 - 品牌外显已从 Natively 迁移到 CueUp，路线图和用户文案应继续使用 CueUp；内部遗留 provider id、类名和存储 key 可按兼容性逐步处理。
-- Phase 0 的可信度闭环已有核心基础：实时答案 trace、来源状态、降级原因、引用预览、失败状态和质量事件相关测试已经存在。
+- Phase 0 的可信度闭环已有核心基础：实时答案 trace、来源状态、降级原因、引用预览、失败状态、质量事件、离线指标 harness 和开发诊断输出相关测试已经存在。
 - Phase 2 的实时上下文编排已有第一版：`RealtimeContextOrchestrator` 能按来源优先级去重、按 token budget 选择/丢弃上下文，并输出 `sourceStatus`、`degradedReasons`、`contextFingerprint` 和检索耗时。
 - Phase 3 的受控业务系统上下文已有第一版：业务系统知识源设置、凭据、触发检测、受控查询、上下文候选注入和测试已落地。
 - Phase 4 的说话人稳定性已有第一版：`SpeakerContextPolicy` 会过滤低置信度本地说话人验证元数据，并把降级原因写入答案 trace。
-- 动态动作意图识别语义门控第一版已落地：regex 现在主要作为候选召回，高风险动作会经过 `ModeEventClassifier` 的动作级语义门控；`IntelligenceEngine` 会把最近 6 轮上下文、当前 mode、说话人、`intentResult` 和 provider scope 传入动态动作评估，并在需要时调用云端结构化仲裁。
-- 动态动作质量回归已有固定 smoke 命令：`npm run test:quality:smoke` 覆盖语义门控、动态动作引擎、final transcript 触发路径、mode intent 和 answer trace contract。
+- 动态动作意图识别语义门控第一版已落地并完成一轮审计收口：regex 现在主要作为候选召回，高风险动作会经过 `ModeEventClassifier` 的动作级语义门控；`IntelligenceEngine` 会把最近 6 轮上下文、当前 mode、说话人、`intentResult` 和 provider scope 传入动态动作评估，并在需要时调用云端结构化仲裁；`reject` / `defer` 也会产出内部 gate trace。
+- 动态动作和上下文质量回归已有固定命令：`npm run test:quality:smoke` 覆盖语义门控、动态动作引擎、final transcript 触发路径、mode intent 和 answer trace contract；`npm run test:quality:diagnostics` 覆盖上下文质量诊断和离线指标 harness；两个命令都有 no-build 变体。
+- 实时回答 LLM 路径已完成首轮盘点：主实时回答、`WhatToAnswerLLM`、底层 `LLMHelper.streamChat`、动态动作云端 semantic gate、screen understanding、CodeHint 独立工具流和 suggestion trigger 已标记为 migrated；`CodeHintLLM` 已完成独立 trace/scope 收口，后续只评估是否需要进入持久化 answer trace 或产品 UI 诊断。
 - P0-1 仍未完全产品化：当前第一版已有核心门控和回归测试，但本地意图模型下载/不可用诊断、云端仲裁 UI 可见性、更多真实会议 fixture 和指标面板仍需补齐。
 - 本地 SenseVoice 已支持 final transcript 后处理专有名词纠错。它不属于上下文编排本身，但会直接影响上下文质量，尤其是人名、公司名、产品名和业务对象 ID 的可检索性。
 
@@ -28,7 +29,7 @@
 
 接下来优先级不是继续扩张到完整 MCP 工具调用，而是把已落地的上下文地基做扎实：
 
-1. 动态动作意图识别语义门控：第一版已进入代码，接下来要把真实会议 fixture、降级诊断和产品可见解释收口。
+1. 动态动作意图识别语义门控：第一版和审计修复已进入代码，接下来要把真实会议 fixture、产品可见解释和高风险 `defer` 策略收口。
 2. 补齐实时答案可信度闭环的验收指标和回归评测。
 3. 把 `RealtimeContextOrchestrator` 从“主链路第一版”推进到“所有实时回答关键路径一致使用”。
 4. 继续产品化本地 RAG、资料上传和统一知识源设置。
@@ -86,7 +87,7 @@ Realtime Context Orchestrator
 
 ### P0-1：动态动作意图识别语义门控
 
-状态：第一版已落地，当前第一优先进入验收收口。首批锚点提交：`2e6a37d`、`8fb47c3`、`215694c`、`9a5e913`、`4c212db`；本轮 P1-P3 修复在本提交中落地。
+状态：第一版已落地，当前第一优先进入验收收口。锚点提交：`159d371`、`2e6a37d`、`8fb47c3`、`215694c`、`9a5e913`、`4c212db`、`efa906a`。
 
 目标：动态动作不能只因为单词或短语命中就执行。系统必须先结合当前 turn、最近几轮上下文、当前 mode、说话人和已有 `intentResult` 理解整体意思，再决定是否生成、展示或自动执行动作。
 
@@ -101,7 +102,8 @@ Realtime Context Orchestrator
 - 已补充报价请求、案例/证明请求、技术需求/集成需求的中英文召回与本地语义确认，包括“发我报价”“多少钱”“我们想看案例”“类似客户”等常见表达。
 - `detectActions()` 已标注为 legacy 同步 regex detector；生产动态动作发射应使用 `assessSignals()`。
 - 新增 `npm run test:quality:smoke`，固定覆盖语义门控、动态动作引擎、final transcript 动态动作召回、mode intent 和答案 trace contract；连续本地验证可先运行 `rtk npm run build:electron`，再运行 `rtk npm run test:quality:smoke:no-build` 与 `rtk npm run test:quality:diagnostics:no-build`，避免重复构建。
-- `ContextQualityDiagnosticsCollector` 已接入动态动作 gate trace、实时回答 context plan 摘要和 answer quality metrics 查询结果；只记录 action type、decision、reason、来源类型和 timing，不记录 transcript、prompt、截图或 evidence text。采集器为有界最近样本；`context-quality-smoke-report.mjs` 无 JSON 输入时只读取脚本当前进程的空/本地快照，并会显式标记为 `process_local_snapshot`。
+- `ContextQualityDiagnosticsCollector` 已接入动态动作 gate trace、CodeHint trace、实时回答 context plan 摘要和 answer quality metrics 查询结果；只记录 action type、decision、reason、来源类型、CodeHint 状态和 timing，不记录 transcript、prompt、截图、截图路径、代码正文或 evidence text。采集器为有界最近样本；`context-quality-smoke-report.mjs` 无 JSON 输入时只读取脚本当前进程的空/本地快照，并会显式标记为 `process_local_snapshot`。
+- 诊断链路已按审计意见隔离主路径：gate trace sink 抛错不会影响动态动作生成；collector 不会无限增长；默认诊断脚本不再把跨进程空快照伪装成真实现场数据。
 - 回归测试已覆盖：
   - final transcript 触发动态动作；
   - 动态动作语义门控召回；
@@ -162,7 +164,7 @@ Realtime Context Orchestrator
 
 ### Phase 0：实时答案可信度闭环
 
-状态：第一版已落地，继续补齐评测和产品指标。
+状态：第一版已落地，开发诊断和离线指标 harness 已接入，继续补齐产品指标。
 
 已完成：
 
@@ -171,12 +173,13 @@ Realtime Context Orchestrator
 - 引用预览 UI，并避免把预览引用误导为完整可跳转来源。
 - RAG scope denial、provider data scope、trace persistence failure 等关键失败路径测试。
 - 答案质量事件、接受/重新生成/忽略生命周期的 UI contract 覆盖。
+- `AnswerMetricsOfflineHarness` 和 `ContextQualityDiagnostics` 已进入质量诊断命令。
 
 仍需补齐：
 
-- 将小型按模式评测纳入日常回归，而不是只停留在分散 contract test。
-- 建立每次 prompt、RAG、记忆或上下文选择改动后的固定评测命令。
-- 汇总指标面板或开发诊断输出：
+- 将更多按模式评测纳入日常回归，而不是只停留在分散 contract test。
+- 建立每次 prompt、RAG、记忆或上下文选择改动后的固定评测命令；基础命令已建立，仍需扩大 fixture 和阈值门禁。
+- 产品化指标面板：
   - 答案延迟；
   - 引用命中率；
   - 用户接受率；
@@ -223,7 +226,7 @@ Realtime Context Orchestrator
 
 ### Phase 2：Realtime Context Orchestrator
 
-状态：第一版已实施，下一步是扩大覆盖面和收紧隐私边界。
+状态：第一版已实施，主实时回答链路和首轮 LLM 路径盘点已完成；CodeHint 独立工具流的 trace/scope 归属已收口，下一步是继续扩大评测并决定是否需要持久化工具流 trace。
 
 已完成：
 
@@ -255,9 +258,8 @@ Realtime Context Orchestrator
 
 下一步：
 
-- 标记所有 LLM 路径为已迁移、待迁移或豁免。
-- 主实时回答链路以外，优先迁移仍会影响“现场回答”的路径。
-- 为上下文选择策略增加固定评测，覆盖：
+- `CodeHintLLM` 已完成独立 trace/scope 收口；下一步只评估是否需要进入 answer trace persistence 和产品 UI 诊断。
+- 为上下文选择策略继续增加固定评测，覆盖：
   - token 溢出；
   - 重复上下文；
   - RAG 不可用；
@@ -465,10 +467,10 @@ Realtime Context Orchestrator
 
 ```text
 当前冲刺：
-  1. P0-1：动态动作意图识别语义门控第一版验收收口，补真实会议 fixture、降级诊断和质量指标。
-  2. Phase 0/2/3/4 已落地能力的验收收口。
-  3. 扩展上下文质量回归评测命令和指标输出；现有基础命令为 npm run test:quality:smoke，连续本地验证可使用 no-build 变体。
-  4. 清点所有实时回答相关 LLM 路径，标记已迁移、待迁移或豁免。
+  1. P0-1：动态动作意图识别语义门控验收收口，补真实会议 fixture、产品可见解释和高风险 defer 策略。
+  2. Phase 0/2/3/4 已落地能力的验收收口，重点扩大 fixture 和指标阈值门禁。
+  3. 继续扩展上下文质量回归评测；基础命令为 npm run test:quality:smoke 和 npm run test:quality:diagnostics，连续本地验证可使用 no-build 变体。
+  4. CodeHintLLM 的 trace/scope 归属已收口；继续评估是否需要把独立工具流 trace 纳入持久化 answer trace 或产品 UI 诊断。
 
 下一冲刺：
   5. 本地 RAG/资料上传端到端验收。

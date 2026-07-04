@@ -247,6 +247,66 @@ test('context quality diagnostics collector keeps a bounded recent sample', asyn
   assert.deepEqual(snapshot.dynamicActions?.map((action) => action.type), ['action_2', 'action_3', 'action_4']);
 });
 
+test('context quality diagnostics summarize code hint traces without raw content', async () => {
+  const {
+    ContextQualityDiagnosticsCollector,
+    summarizeContextQualityDiagnostics,
+  } = await loadDiagnostics();
+  const collector = new ContextQualityDiagnosticsCollector({ maxEntries: 2 });
+
+  collector.recordCodeHintTrace({
+    entrypoint: 'code_hint',
+    status: 'blocked',
+    dataScopesRequested: ['screenshots'],
+    dataScopesDenied: ['screenshots'],
+    usedContextSources: [],
+    sourceStatus: { screenContextStatus: 'blocked', transcriptStatus: 'not_used' },
+    degradedReasons: ['screen_context_scope_blocked'],
+    usedVision: false,
+    usedTranscript: false,
+    provider: 'gemini',
+  });
+  collector.recordCodeHintTrace({
+    entrypoint: 'code_hint',
+    status: 'generated',
+    dataScopesRequested: ['screenshots'],
+    dataScopesDenied: [],
+    usedContextSources: ['screenshots'],
+    sourceStatus: { screenContextStatus: 'available', transcriptStatus: 'not_used' },
+    degradedReasons: [],
+    usedVision: true,
+    usedTranscript: false,
+    provider: 'gemini',
+  });
+  collector.recordCodeHintTrace({
+    entrypoint: 'code_hint',
+    status: 'failed',
+    dataScopesRequested: ['screenshots'],
+    dataScopesDenied: [],
+    usedContextSources: ['screenshots'],
+    sourceStatus: { screenContextStatus: 'failed', transcriptStatus: 'not_used' },
+    degradedReasons: ['screen_context_failed'],
+    usedVision: true,
+    usedTranscript: false,
+    provider: 'gemini',
+  });
+
+  const snapshot = collector.snapshot();
+  const summary = summarizeContextQualityDiagnostics(snapshot);
+
+  assert.equal(snapshot.codeHints?.length, 2);
+  assert.equal(summary.codeHints.total, 2);
+  assert.equal(summary.codeHints.statuses.generated, 1);
+  assert.equal(summary.codeHints.statuses.failed, 1);
+  assert.equal(summary.codeHints.degradedReasons.screen_context_failed, 1);
+  assert.equal(summary.codeHints.scopeDeniedRate, 0);
+  assert.equal(summary.codeHints.visionUsageRate, 1);
+  assert.doesNotMatch(JSON.stringify(snapshot), /secret|screenshot\.png|prompt|code body/);
+
+  collector.clear();
+  assert.equal(collector.snapshot().codeHints?.length, 0);
+});
+
 test('context quality smoke report marks default collector snapshot as process-local', () => {
   const output = execFileSync('node', ['scripts/context-quality-smoke-report.mjs'], {
     cwd: root,

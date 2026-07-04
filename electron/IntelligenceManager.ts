@@ -10,7 +10,7 @@
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
 import { SessionTracker } from './SessionTracker';
-import { IntelligenceEngine, ClarifyResult } from './IntelligenceEngine';
+import { IntelligenceEngine, ClarifyResult, type RunCodeHintOptions } from './IntelligenceEngine';
 import { MeetingPersistence } from './MeetingPersistence';
 import { ScreenContext } from './services/screen/types';
 import type { ModeEventContext } from './llm';
@@ -63,6 +63,7 @@ export class IntelligenceManager extends EventEmitter {
             // Phase 3: Cluely-style dynamic action card emissions.
             'dynamic_action_emitted',
             'dynamic_action_gate_trace',
+            'code_hint_trace',
             'skill_watcher_suggestion_created',
         ];
 
@@ -166,8 +167,8 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.runManualAnswer(question);
     }
 
-    async runCodeHint(imagePaths?: string[], problemStatement?: string): Promise<string | null> {
-        return this.engine.runCodeHint(imagePaths, problemStatement);
+    async runCodeHint(imagePaths?: string[], problemStatement?: string, options?: RunCodeHintOptions): Promise<string | null> {
+        return this.engine.runCodeHint(imagePaths, problemStatement, options);
     }
 
     setCodingQuestion(question: string, source: 'screenshot' | 'transcript'): void {
