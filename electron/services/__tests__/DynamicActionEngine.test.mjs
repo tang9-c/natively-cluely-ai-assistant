@@ -826,6 +826,70 @@ test('assessSignals defers high-risk candidate when transcript scope is denied',
   assert.equal(engine.getTopActions('session_semantic_gate_scope_denied').length, 0);
 });
 
+test('assessSignals emits explicit Chinese pricing request actions', async () => {
+  const { DynamicActionEngine } = await loadModules();
+
+  for (const transcript of ['发我报价', '给客户发一版报价', '多少钱']) {
+    const engine = new DynamicActionEngine();
+    const actions = await engine.assessSignals({
+      transcript,
+      speaker: 'interviewer',
+      modeTemplateType: 'sales',
+      modeId: 'mode_sales',
+      sessionId: `session_pricing_request_${transcript}`,
+      now: 20_000,
+    });
+
+    const action = actions.find(item => item.type === 'pricing_request');
+    assert.ok(action, `expected pricing_request for ${transcript}; got ${actions.map(item => item.type).join(', ')}`);
+    assert.equal(action.answerStyle?.format, 'email');
+    assert.equal(action.semanticGate?.decision, 'pass');
+    assert.equal(action.semanticGate?.semanticProvider, 'local_intent');
+  }
+});
+
+test('assessSignals emits explicit Chinese case request actions', async () => {
+  const { DynamicActionEngine } = await loadModules();
+
+  for (const transcript of ['我们想看案例', '有类似客户吗', '给一个成功案例', '客户要证明材料']) {
+    const engine = new DynamicActionEngine();
+    const actions = await engine.assessSignals({
+      transcript,
+      speaker: 'interviewer',
+      modeTemplateType: 'sales',
+      modeId: 'mode_sales',
+      sessionId: `session_case_request_${transcript}`,
+      now: 20_000,
+    });
+
+    const action = actions.find(item => item.type === 'case_study_request');
+    assert.ok(action, `expected case_study_request for ${transcript}; got ${actions.map(item => item.type).join(', ')}`);
+    assert.equal(action.semanticGate?.decision, 'pass');
+    assert.equal(action.semanticGate?.semanticProvider, 'local_intent');
+  }
+});
+
+test('assessSignals falls back to local English price objection when cloud returns null', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = await engine.assessSignals({
+    transcript: 'This is too expensive for our budget.',
+    speaker: 'interviewer',
+    modeTemplateType: 'sales',
+    modeId: 'mode_sales',
+    sessionId: 'session_english_price_cloud_null',
+    cloudClassifier: async () => null,
+    now: 20_000,
+  });
+
+  const action = actions.find(item => item.type === 'pricing_objection');
+  assert.ok(action, `expected pricing_objection; got ${actions.map(item => item.type).join(', ')}`);
+  assert.equal(action.semanticGate?.decision, 'pass');
+  assert.equal(action.semanticGate?.semanticProvider, 'local_intent');
+  assert.ok(action.semanticGate?.reasons.includes('cloud_unavailable_local_fallback'));
+});
+
 test('assessSignals uses injected cloud classifier for English high-risk candidates', async () => {
   const { DynamicActionEngine } = await loadModules();
   const calls = [];
