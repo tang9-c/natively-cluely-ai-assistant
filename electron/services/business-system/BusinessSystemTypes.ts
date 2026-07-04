@@ -39,6 +39,11 @@ export type BusinessSystemQueryStatus =
     | 'timeout'
     | 'error';
 
+export type BusinessSystemFixedReplyStatus =
+    | Exclude<BusinessSystemQueryStatus, 'ok'>
+    | 'missing_query_anchor'
+    | 'not_configured';
+
 export interface BusinessSystemQueryResult {
     status: BusinessSystemQueryStatus;
     sourceName: string;

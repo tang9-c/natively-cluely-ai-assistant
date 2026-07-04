@@ -129,3 +129,29 @@ test('does not leak credentials in service output', async () => {
   assert.doesNotMatch(serialized, /secret-pass/);
   assert.doesNotMatch(serialized, /alice/);
 });
+
+test('maps every non-ok business system status to fixed reply copy and legal degraded reason', async () => {
+  const {
+    toBusinessSystemFixedReply,
+    businessSystemDegradedReasonForStatus,
+  } = await loadService();
+
+  const cases = [
+    ['not_configured', /没有配置可用的业务系统知识源/, 'business_system_unavailable'],
+    ['missing_query_anchor', /缺少要查询/, 'business_system_missing_query_anchor'],
+    ['no_result', /没有从PLM 知识源中确认到相关信息/, 'business_system_no_result'],
+    ['ambiguous', /返回了多个可能结果/, 'business_system_ambiguous'],
+    ['auth_failed', /认证失败/, 'business_system_auth_failed'],
+    ['timeout', /查询超时/, 'business_system_timeout'],
+    ['unavailable', /当前不可用/, 'business_system_unavailable'],
+    ['error', /查询PLM 知识源时失败/, 'business_system_unavailable'],
+  ];
+
+  for (const [status, answerPattern, reason] of cases) {
+    const fixed = toBusinessSystemFixedReply({ status, sourceName: 'PLM 知识源' });
+    assert.equal(fixed.kind, 'fixed_reply');
+    assert.equal(fixed.status, status);
+    assert.match(fixed.answer, answerPattern);
+    assert.equal(businessSystemDegradedReasonForStatus(status), reason);
+  }
+});
