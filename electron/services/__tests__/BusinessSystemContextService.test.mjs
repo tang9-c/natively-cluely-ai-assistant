@@ -155,3 +155,22 @@ test('maps every non-ok business system status to fixed reply copy and legal deg
     assert.equal(businessSystemDegradedReasonForStatus(status), reason);
   }
 });
+
+test('returns fixed unavailable reply when MCP client throws before returning a status', async () => {
+  const { BusinessSystemContextService } = await loadService();
+  const service = new BusinessSystemContextService({
+    credentialsManager: credentialsManagerStub([source()]),
+    mcpClient: {
+      query: async () => {
+        throw new Error('raw upstream secret failure body');
+      },
+    },
+  });
+
+  const result = await service.resolve({ question: '根据 PLM 查一下物料 a12345' });
+
+  assert.equal(result.kind, 'fixed_reply');
+  assert.equal(result.status, 'unavailable');
+  assert.match(result.answer, /当前不可用|无法确认/);
+  assert.doesNotMatch(JSON.stringify(result), /raw upstream secret failure body/);
+});

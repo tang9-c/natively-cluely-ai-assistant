@@ -146,11 +146,19 @@ export class BusinessSystemContextService {
         }
 
         const credentials = this.credentialsManager.getBusinessSystemCredentials(source.id);
-        const result = await this.mcpClient.query(source, credentials, {
-            query: trigger.query || '',
-            sourceHint: trigger.sourceHint,
-            recentContext: trigger.recentContext,
-        });
+        let result: BusinessSystemQueryResult;
+        try {
+            result = await this.mcpClient.query(source, credentials, {
+                query: trigger.query || '',
+                sourceHint: trigger.sourceHint,
+                recentContext: trigger.recentContext,
+            });
+        } catch {
+            return toBusinessSystemFixedReply({
+                status: 'unavailable',
+                sourceName: source.name,
+            });
+        }
 
         if (result.status !== 'ok' || !result.summary?.trim()) {
             const failureStatus = result.status === 'ok' ? 'error' : result.status;
