@@ -101,3 +101,35 @@ test('orchestrator injects explicit business system context ahead of uploaded ma
   assert.match(formatInjectedContext(plan), /<business_system_context>/);
   assert.match(formatInjectedContext(plan), /PLM 知识源/);
 });
+
+test('orchestrator preserves retrieval timing and budget omission reasons for diagnostics', async () => {
+  const { buildRealtimeContextPlan } = await loadOrchestrator();
+  const plan = buildRealtimeContextPlan({
+    tokenBudget: 35,
+    ragAttempted: true,
+    ragReady: true,
+    embeddingReady: true,
+    uploadedMaterialHitCount: 1,
+    screenContextStatus: 'available',
+    retrievalTimingMs: {
+      business_system: 120,
+      uploaded_material: 35,
+      screen_context: 42,
+    },
+    candidates: [
+      { source: 'current_transcript', sourceId: 'transcript', text: 'Current question', tokenCount: 15 },
+      { source: 'business_system', sourceId: 'plm', text: 'PLM result', tokenCount: 15 },
+      { source: 'uploaded_material', sourceId: 'mat', text: 'Material result', tokenCount: 20 },
+    ],
+  });
+
+  assert.deepEqual(plan.injected.map(item => item.source), ['current_transcript', 'business_system']);
+  assert.equal(plan.omitted.length, 1);
+  assert.equal(plan.omitted[0].source, 'uploaded_material');
+  assert.equal(plan.omitted[0].reason, 'uploaded_material_context_truncated');
+  assert.deepEqual(plan.retrievalTimingMs, {
+    business_system: 120,
+    uploaded_material: 35,
+    screen_context: 42,
+  });
+});
