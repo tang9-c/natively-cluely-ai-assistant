@@ -2799,7 +2799,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { model: cm.getDefaultModel() };
     } catch (error: any) {
       console.error('Error getting default model:', error);
-      return { model: 'gemini-3.1-flash-lite-preview' };
+      return { model: 'doubao-seed-2-0-lite-260215' };
     }
   });
 

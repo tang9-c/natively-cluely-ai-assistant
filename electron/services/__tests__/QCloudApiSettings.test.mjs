@@ -53,6 +53,29 @@ test('saving QCLOUD key protects manually selected models unless selection is ex
   assert.doesNotMatch(method, /if \(trimmed\) \{\s*this\.credentials\.defaultModel = 'natively'/);
 });
 
+test('chat default model falls back to Doubao instead of Gemini', () => {
+  const credentials = read('electron/services/CredentialsManager.ts');
+  const ipc = read('electron/ipcHandlers.ts');
+  const aiSettings = read('src/components/settings/AIProvidersSettings.tsx');
+  const modelUtils = read('src/utils/modelUtils.ts');
+  const llmHelper = read('electron/LLMHelper.ts');
+
+  assert.match(credentials, /const DEFAULT_CHAT_MODEL_ID = 'doubao-seed-2-0-lite-260215'/);
+  assert.match(credentials, /return this\.credentials\.defaultModel \|\| DEFAULT_CHAT_MODEL_ID/);
+  assert.match(credentials, /this\.credentials\.defaultModel = DEFAULT_CHAT_MODEL_ID/);
+  assert.match(ipc, /return \{ model: 'doubao-seed-2-0-lite-260215' \}/);
+  assert.match(modelUtils, /export const DEFAULT_CHAT_MODEL_ID = 'doubao-seed-2-0-lite-260215'/);
+  assert.match(aiSettings, /useState<string>\(DEFAULT_CHAT_MODEL_ID\)/);
+  assert.match(llmHelper, /private currentModelId: string = DOUBAO_MODEL/);
+  assert.doesNotMatch(credentials, /return this\.credentials\.defaultModel \|\| 'gemini-3\.1-flash-lite-preview'/);
+});
+
+test('QCLOUD save prompt treats Doubao default as an automatic default model', () => {
+  const source = read('src/components/settings/NativelyApiSettings.tsx');
+
+  assert.match(source, /AUTO_DEFAULT_MODEL_PREFIXES = \[[^\]]*'doubao-'/);
+});
+
 test('QCLOUD settings asks before replacing an existing manual default model', () => {
   const source = read('src/components/settings/NativelyApiSettings.tsx');
 

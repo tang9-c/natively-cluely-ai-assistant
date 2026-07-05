@@ -42,6 +42,8 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     },
 };
 
+export const DEFAULT_CHAT_MODEL_ID = 'doubao-seed-2-0-lite-260215';
+
 export const CODEX_CLI_MODEL = {
     id: 'codex-cli',
     name: 'Codex CLI',
@@ -73,6 +75,7 @@ export const MODEL_DISPLAY_NAMES: Record<string, string> = {
     'llama-3.3-70b-versatile': 'Groq Llama 3.3',
     'gpt-5.4': 'GPT 5.4',
     'claude-sonnet-4-6': 'Sonnet 4.6',
+    'doubao-seed-2-0-lite-260215': 'Doubao Seed 2.0 Lite',
 };
 
 export const getModelDisplayName = (id: string): string => {

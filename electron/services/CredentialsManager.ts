@@ -11,6 +11,8 @@ import type {
     BusinessSystemKnowledgeSourcePublic,
 } from './business-system/BusinessSystemTypes';
 
+const DEFAULT_CHAT_MODEL_ID = 'doubao-seed-2-0-lite-260215';
+
 export interface CustomProvider {
     id: string;
     name: string;
@@ -229,7 +231,7 @@ export class CredentialsManager {
         return this.credentials.aiResponseLanguage || 'Chinese';
     }
     public getDefaultModel(): string {
-        return this.credentials.defaultModel || 'gemini-3.1-flash-lite-preview';
+        return this.credentials.defaultModel || DEFAULT_CHAT_MODEL_ID;
     }
 
     public getNativelyApiKey(): string | undefined {
@@ -458,8 +460,8 @@ export class CredentialsManager {
         } else if (!trimmed) {
             // Key cleared — revert natively-auto-set defaults back to safe fallbacks
             if (this.credentials.defaultModel === 'natively') {
-                this.credentials.defaultModel = 'gemini-3.1-flash-lite-preview';
-                console.log('[CredentialsManager] QCLOUD key cleared — reset default model to Gemini Flash');
+                this.credentials.defaultModel = DEFAULT_CHAT_MODEL_ID;
+                console.log('[CredentialsManager] QCLOUD key cleared — reset default model to Doubao');
             }
             if (this.credentials.sttProvider === 'qcloud-stt' || this.credentials.sttProvider === 'natively') {
                 this.credentials.sttProvider = 'local-sensevoice';

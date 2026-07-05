@@ -496,7 +496,7 @@ export class LLMHelper {
   }
   // ---------------------------
 
-  private currentModelId: string = GEMINI_FLASH_MODEL;
+  private currentModelId: string = DOUBAO_MODEL;
 
   // Tripped when local Groq returns 401 (invalid key). Prevents re-trying every chat
   // turn for the rest of the session — saves ~200-500ms per turn. Reset on key update

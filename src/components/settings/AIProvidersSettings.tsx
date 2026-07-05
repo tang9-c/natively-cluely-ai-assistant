@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit2, AlertCircle, CheckCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2 } from 'lucide-react';
-import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, DEFAULT_CHAT_MODEL_ID, codexCliSelectorId, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 import { LocalModelsPanel } from '../LocalModelsPanel';
@@ -160,7 +160,7 @@ export const AIProvidersSettings: React.FC = () => {
     const [codexCliError, setCodexCliError] = useState('');
 
     // --- Default Model ---
-    const [defaultModel, setDefaultModel] = useState<string>('gemini-3.1-flash-lite-preview');
+    const [defaultModel, setDefaultModel] = useState<string>(DEFAULT_CHAT_MODEL_ID);
 
     // --- Dynamic Model Discovery ---
     const [preferredModels, setPreferredModels] = useState<Record<string, string>>({});
