@@ -65,6 +65,7 @@ const QUALITY_RULES = [
     reason: 'Speaker or screen context can affect realtime answer grounding.',
     patterns: [
       /^electron\/services\/__tests__\/SpeakerContextPolicy\.test\.mjs$/,
+      /^electron\/services\/screen\//,
       /^electron\/services\/ScreenUnderstandingService\.ts$/,
       /^electron\/ProcessingHelper\.ts$/,
     ],
@@ -162,14 +163,20 @@ function parseArgs(argv) {
   return args;
 }
 
-function runGitDiff(base) {
-  const result = spawnSync('git', ['diff', '--name-only', base, '--'], {
+function runGit(args) {
+  const result = spawnSync('git', args, {
     encoding: 'utf8',
   });
   if (result.status !== 0) {
-    throw new Error(`git diff --name-only ${base} -- failed: ${result.stderr || result.stdout}`);
+    throw new Error(`git ${args.join(' ')} failed: ${result.stderr || result.stdout}`);
   }
   return result.stdout.split(/\r?\n/).filter(Boolean);
+}
+
+export function getChangedFiles(base) {
+  const trackedChanges = runGit(['diff', '--name-only', base, '--']);
+  const untrackedChanges = runGit(['ls-files', '--others', '--exclude-standard']);
+  return Array.from(new Set([...trackedChanges, ...untrackedChanges]));
 }
 
 function runCommand(command, args) {
@@ -192,7 +199,7 @@ function runQualityCommands({ noBuild }) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const changedFiles = runGitDiff(args.base);
+  const changedFiles = getChangedFiles(args.base);
   const result = classifyQualityGate(changedFiles);
   console.log(formatQualityGateReport(result));
 
