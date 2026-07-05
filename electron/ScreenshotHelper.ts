@@ -35,7 +35,7 @@ async function assertScreenRecordingPermission(): Promise<void> {
   // needing the app to be in the TCC whitelist (same policy as the startup check in main.ts).
   if (!app.isPackaged) return;
   const screenRecordingRebindMessage =
-    'macOS Screen Recording is not applied to this build yet. Open System Settings > Privacy & Security > Screen Recording, toggle Natively off and back on, then restart the app.';
+    'macOS Screen Recording is not applied to this build yet. Open System Settings > Privacy & Security > Screen Recording, toggle CueUp off and back on, then restart the app.';
   const screenHealth = await resolveMacScreenPermissionHealth('screenshot helper');
 
   if (screenHealth.effectiveGranted) {
@@ -50,7 +50,7 @@ async function assertScreenRecordingPermission(): Promise<void> {
     case 'restart-app':
       throw new Error(
         'Screen Recording permission has not been granted yet. ' +
-        'Please restart Natively — macOS will prompt for access on next launch.'
+        'Please restart CueUp — macOS will prompt for access on next launch.'
       );
     default:
       throw new Error(
@@ -491,7 +491,7 @@ export class ScreenshotHelper {
         throw new Error(
           process.platform === 'darwin'
             ? 'Screen capture permission denied. Please grant screen recording permission in System Settings > Privacy & Security > Screen Recording.'
-            : 'Screen capture permission denied by the OS. Please try again or restart Natively.'
+            : 'Screen capture permission denied by the OS. Please try again or restart CueUp.'
         );
       }
       if ((error as NodeJS.ErrnoException).name === 'NotFoundError') {

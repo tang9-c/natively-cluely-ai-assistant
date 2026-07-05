@@ -40,6 +40,19 @@ const getLogFile = (): string | null => {
 const originalLog = console.log;
 const originalWarn = console.warn;
 const originalError = console.error;
+const LEGACY_USER_DATA_DIR_NAME = 'Natively';
+
+function hasCueUpUserData(userDataPath: string): boolean {
+  return [
+    'credentials.enc',
+    'settings.json',
+    'natively.db',
+    'models',
+    'whisper-models',
+    'sensevoice-models',
+    'skills',
+  ].some((entry) => fs.existsSync(path.join(userDataPath, entry)));
+}
 
 // Lazy redactor import — pulled at first call so this file can boot even if
 // the redactor module fails to load (we fall back to a no-op transform).
@@ -80,6 +93,26 @@ function logToFile(msg: string) {
     fs.appendFileSync(logFile, new Date().toISOString() + ' ' + msg + '\n');
   } catch (e) {
     // Ignore logging errors
+  }
+}
+
+function migrateLegacyUserDataForCueUpBranding(): void {
+  try {
+    const cueUpUserDataPath = app.getPath('userData');
+    const legacyUserDataPath = path.join(app.getPath('appData'), LEGACY_USER_DATA_DIR_NAME);
+    if (path.resolve(cueUpUserDataPath) === path.resolve(legacyUserDataPath)) return;
+    if (hasCueUpUserData(cueUpUserDataPath)) return;
+    if (!hasCueUpUserData(legacyUserDataPath)) return;
+
+    fs.mkdirSync(cueUpUserDataPath, { recursive: true });
+    fs.cpSync(legacyUserDataPath, cueUpUserDataPath, {
+      recursive: true,
+      force: false,
+      errorOnExist: false,
+    });
+    console.log('[Main] Migrated legacy Natively userData into CueUp userData path');
+  } catch (err) {
+    console.warn('[Main] Failed to migrate legacy userData for CueUp branding:', err);
   }
 }
 
@@ -200,7 +233,7 @@ function formatPermissionMessage(reason: PermissionReason, extra?: { device?: st
   switch (reason) {
     case 'screen-recording-denied':
       return isMac
-        ? 'Screen Recording is not applied to this build yet. Interviewer audio will not be captured. Open System Settings → Privacy & Security → Screen Recording, toggle Natively off and back on, then restart the app.'
+        ? 'Screen Recording is not applied to this build yet. Interviewer audio will not be captured. Open System Settings → Privacy & Security → Screen Recording, toggle CueUp off and back on, then restart the app.'
         : 'System audio capture is unavailable. Interviewer audio will not be captured. Check your audio device routing in Settings and restart the meeting.';
     case 'mac-screen-recording-revoked-rebuild':
       // Defense-in-depth: even though all call sites must be darwin-gated
@@ -208,21 +241,21 @@ function formatPermissionMessage(reason: PermissionReason, extra?: { device?: st
       // calls this from a cross-platform path we degrade gracefully rather
       // than leak macOS UI strings to Windows users.
       if (!isMac) return formatPermissionMessage('system-audio-stuck');
-      return 'System audio is being captured but every sample is silent. This usually means macOS Screen Recording permission needs to be re-granted to this build of Natively. Open System Settings → Privacy & Security → Screen Recording, toggle Natively off and back on, then restart the app. (If you recently rebuilt or updated, the previous grant may not apply.)';
+      return 'System audio is being captured but every sample is silent. This usually means macOS Screen Recording permission needs to be re-granted to this build of CueUp. Open System Settings → Privacy & Security → Screen Recording, toggle CueUp off and back on, then restart the app. (If you recently rebuilt or updated, the previous grant may not apply.)';
     case 'mac-coreaudio-audio-capture-revoked':
       if (!isMac) return formatPermissionMessage('system-audio-stuck');
-      return 'CoreAudio system audio capture is running, but macOS is returning silent samples. This usually means the System Audio Recording permission cache no longer applies to this build of Natively. Repair permissions, restart Natively, then grant system audio recording again.';
+      return 'CoreAudio system audio capture is running, but macOS is returning silent samples. This usually means the System Audio Recording permission cache no longer applies to this build of CueUp. Repair permissions, restart CueUp, then grant system audio recording again.';
     case 'mac-system-audio-zero-fill':
       if (!isMac) return formatPermissionMessage('system-audio-stuck');
-      return 'System audio capture is running but every sample is silent. Check that the interviewer audio is actually playing through the selected output device. If the output route changed, re-select the speakers/headphones. If you recently rebuilt or updated Natively, re-toggle Screen Recording for Natively and restart the app.';
+      return 'System audio capture is running but every sample is silent. Check that the interviewer audio is actually playing through the selected output device. If the output route changed, re-select the speakers/headphones. If you recently rebuilt or updated CueUp, re-toggle Screen Recording for CueUp and restart the app.';
     case 'mic-denied':
       return isMac
-        ? 'Microphone access denied. Please allow microphone access in System Settings → Privacy & Security → Microphone, then restart Natively.'
-        : 'Microphone access denied. Please allow microphone access in Settings → Privacy → Microphone, then restart Natively.';
+        ? 'Microphone access denied. Please allow microphone access in System Settings → Privacy & Security → Microphone, then restart CueUp.'
+        : 'Microphone access denied. Please allow microphone access in Settings → Privacy → Microphone, then restart CueUp.';
     case 'mic-zero-fill':
       return isMac
-        ? 'Microphone is producing silent audio. Check that the device is unmuted and that macOS Microphone permission is granted to Natively in System Settings → Privacy & Security → Microphone.'
-        : 'Microphone is producing silent audio. Check that the device is unmuted and that Natively has microphone access in Settings → Privacy → Microphone.';
+        ? 'Microphone is producing silent audio. Check that the device is unmuted and that macOS Microphone permission is granted to CueUp in System Settings → Privacy & Security → Microphone.'
+        : 'Microphone is producing silent audio. Check that the device is unmuted and that CueUp has microphone access in Settings → Privacy → Microphone.';
     case 'mac-same-device-input-output':
       // Defense-in-depth: see comment on `mac-screen-recording-revoked-rebuild`.
       // The CoreAudio Process Tap same-device limitation is macOS-specific;
@@ -946,7 +979,7 @@ export class AppState {
     // Workaround: Open the folder containing the downloaded update so user can install manually
     if (process.platform === 'darwin') {
       try {
-        // Get the downloaded update file path (e.g., .../Natively-1.0.9-mac.zip)
+        // Get the downloaded update file path (e.g., .../CueUp-1.0.9-mac.zip)
         const updateFile = (autoUpdater as any).downloadedUpdateHelper?.file
         console.log('[AutoUpdater] Downloaded update file:', updateFile)
 
@@ -1831,7 +1864,7 @@ export class AppState {
     const message =
       err instanceof Error && err.message
         ? err.message
-        : 'Native audio module is unavailable. Rebuild or reinstall Natively for this Mac architecture, then restart the app.';
+        : 'Native audio module is unavailable. Rebuild or reinstall CueUp for this Mac architecture, then restart the app.';
     this.broadcast('audio-capture-failed', {
       channel,
       message,
@@ -2230,7 +2263,7 @@ export class AppState {
     const currentDefault = route.defaultOutputName || route.defaultOutputId || 'unknown';
 
     if (route.selectedDiffersFromDefault) {
-      return `${message} Natively is listening to "${selected}", while the system default output is "${currentDefault}". Make sure the meeting/interviewer audio is routed to "${selected}", or switch Natively's speaker setting back to Default.`;
+      return `${message} CueUp is listening to "${selected}", while the system default output is "${currentDefault}". Make sure the meeting/interviewer audio is routed to "${selected}", or switch CueUp's speaker setting back to Default.`;
     }
 
     if (route.usingDefaultRoute && route.defaultOutputName) {
@@ -4329,6 +4362,7 @@ async function initializeApp() {
 
   // 2. Wait for app to be ready
   await app.whenReady()
+  migrateLegacyUserDataForCueUpBranding()
 
   // 3. Initialize Managers
   // Phase 6 — bind TelemetryService to the Electron userData path. The

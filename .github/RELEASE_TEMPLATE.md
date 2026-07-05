@@ -33,17 +33,17 @@ If you see "App is damaged":
 
 - **For .zip downloads:**
   1. Move the app to your Applications folder.
-  2. Open Terminal and run: `xattr -cr /Applications/Natively.app`
+  2. Open Terminal and run: `xattr -cr /Applications/CueUp.app`
 
 - **For .dmg downloads:**
   1. Open Terminal and run:
      ```bash
-     xattr -cr ~/Downloads/Natively-2.0.2-arm64.dmg
+     xattr -cr ~/Downloads/CueUp-2.0.2-arm64.dmg
      # Or for Intel Macs:
-     xattr -cr ~/Downloads/Natively-2.0.2-x64.dmg
+     xattr -cr ~/Downloads/CueUp-2.0.2-x64.dmg
      ```
-  2. Install the natively.dmg
-  3. Open Terminal and run: `xattr -cr /Applications/Natively.app`
+  2. Open the downloaded CueUp `.dmg` and install the app.
+  3. Open Terminal and run: `xattr -cr /Applications/CueUp.app`
 
 ## ⚠️Windows Installation (Unsigned Build)
 

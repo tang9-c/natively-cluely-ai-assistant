@@ -584,12 +584,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   let _chatStreamId = 0;
 
   // Matches narrow identity/meta probes only. Kept tight so coding/normal asks don't trip it.
-  // Prevents the small fast-mode model from over-firing the "I'm Natively" canned reply
+  // Prevents the small fast-mode model from over-firing the "I'm CueUp" canned reply
   // (which used to escape the prompt's hard rule for any ambiguous input).
   const IDENTITY_PROBE_RE =
-    /^\s*(who\s+(are|r)\s+(you|u|this|natively)|what\s+(are|r)\s+(you|u)|are\s+you\s+(chatgpt|gpt[-\s]?\d?|claude|gemini|llama|an?\s+(ai|bot|llm|model|assistant))|what('?s|\s+is)\s+your\s+(name|model)|which\s+(ai|model|llm)\s+are\s+you|who\s+(made|built|created|developed|trained)\s+(you|this|natively)|what\s+model\s+(are\s+you|do\s+you\s+use)|introduce\s+yourself)\s*\??\s*$/i;
+    /^\s*(who\s+(are|r)\s+(you|u|this|natively|cueup)|what\s+(are|r)\s+(you|u)|are\s+you\s+(chatgpt|gpt[-\s]?\d?|claude|gemini|llama|an?\s+(ai|bot|llm|model|assistant))|what('?s|\s+is)\s+your\s+(name|model)|which\s+(ai|model|llm)\s+are\s+you|who\s+(made|built|created|developed|trained)\s+(you|this|natively|cueup)|what\s+model\s+(are\s+you|do\s+you\s+use)|introduce\s+yourself)\s*\??\s*$/i;
   const CREATOR_PROBE_RE =
-    /^\s*(who\s+(made|built|created|developed|trained)\s+(you|this|natively))\s*\??\s*$/i;
+    /^\s*(who\s+(made|built|created|developed|trained)\s+(you|this|natively|cueup))\s*\??\s*$/i;
 
   safeHandle(
     'gemini-chat-stream',
@@ -616,7 +616,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           const identityHit = CREATOR_PROBE_RE.test(message)
             ? 'I was developed by Evin John.'
             : IDENTITY_PROBE_RE.test(message)
-              ? "I'm Natively, an AI assistant."
+              ? "I'm CueUp, an AI assistant."
               : null;
           if (identityHit) {
             intelligenceManager.addTranscript(

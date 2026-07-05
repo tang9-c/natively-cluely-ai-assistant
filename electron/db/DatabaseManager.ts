@@ -2947,7 +2947,7 @@ export class DatabaseManager {
 
         const summaryMarkdown = `# Overview
 
-Natively is a real-time AI meeting assistant designed to help you stay focused, informed, and fast-moving during calls. Get live insights while you speak, instant answers to questions, and structured notes after every meeting.
+CueUp is a real-time AI meeting assistant designed to help you stay focused, informed, and fast-moving during calls. Get live insights while you speak, instant answers to questions, and structured notes after every meeting.
 
 # Getting Started
 
@@ -2957,7 +2957,7 @@ Join a scheduled meeting and start directly from the meeting notification.
 
 ### During a Meeting
 - Use the **five quick action buttons** for real-time assistance
-- Show or hide Natively at any time:
+- Show or hide CueUp at any time:
   - **Mac**: Cmd + B
   - **Windows**: Ctrl + B
 - Move the widget anywhere on your screen by hovering over the top pill and dragging
@@ -2975,7 +2975,7 @@ Join a scheduled meeting and start directly from the meeting notification.
 - **Smart Note Taking**: Automatically captures key points, action items, and structured summaries.
 - **Summary**: A concise high-level brief of the entire meeting.
 - **Transcript**: Full real-time speech-to-text transcript, available during and after the call.
-- **Usage**: Track your interaction history and see how Natively assisted you.
+- **Usage**: Track your interaction history and see how CueUp assisted you.
 
 ## Live Insights
 Click **Live Insights** during a call to view:
@@ -2992,7 +2992,7 @@ Click **Live Insights** during a call to view:
 - **Full Screen Screenshot**: Cmd + H
 - **Selective Screenshot**: Cmd + Shift + H
 
-# Making the Most of Natively
+# Making the Most of CueUp
 
 ### Custom Context
 Upload resumes, project briefs, sales scripts, or other documents to tailor responses to your workflow. (coming soon).
@@ -3003,7 +3003,7 @@ Go to **Settings → Language Preferences** to:
 - Enable real-time translation during calls
 
 ### Undetectability
-Unlock the **Undetectability** add-on to keep Natively invisible during screen sharing.
+Unlock the **Undetectability** add-on to keep CueUp invisible during screen sharing.
 
 # Interface Basics
 
@@ -3049,7 +3049,7 @@ If you don’t already have one, follow the steps below to create it.
 - Select **JSON**
 - Download the file
 
-**Once downloaded, return to Settings → Credentials in Natively and select this file to complete setup.**
+**Once downloaded, return to Settings → Credentials in CueUp and select this file to complete setup.**
 
 # Free Google Cloud Credit (New Users)
 
@@ -3071,17 +3071,17 @@ natively.contact@gmail.com`;
 
         const demoMeeting: Meeting = {
             id: demoId,
-            title: "Natively Demo & Guide",
+            title: "CueUp Demo & Guide",
             date: today.toISOString(),
             duration: "5:00",
-            summary: "Complete guide to using Natively - your real-time AI meeting assistant.",
+            summary: "Complete guide to using CueUp - your real-time AI meeting assistant.",
             detailedSummary: {
                 overview: summaryMarkdown,
                 actionItems: [],
                 keyPoints: []
             },
             transcript: [
-                { speaker: 'interviewer', text: "Welcome to Natively! Let me show you how it works.", timestamp: 0 },
+                { speaker: 'interviewer', text: "Welcome to CueUp! Let me show you how it works.", timestamp: 0 },
                 { speaker: 'user', text: "Thanks! I'm excited to try it out.", timestamp: 5000 },
                 { speaker: 'interviewer', text: "You have 5 quick action buttons. 'What to answer' listens to the conversation and suggests what you should say.", timestamp: 10000 },
                 { speaker: 'user', text: "That sounds helpful for interviews.", timestamp: 18000 },
@@ -3091,13 +3091,13 @@ natively.contact@gmail.com`;
                 { speaker: 'interviewer', text: "'Follow Up Questions' suggests questions you can ask. 'Answer' lets you speak a question and get an instant response.", timestamp: 35000 },
                 { speaker: 'user', text: "Can I take screenshots during calls?", timestamp: 45000 },
                 { speaker: 'interviewer', text: "Yes! Press Cmd+H for full screen or Cmd+Shift+H to select an area. The AI will analyze it and help you.", timestamp: 50000 },
-                { speaker: 'user', text: "How do I hide Natively during screen share?", timestamp: 60000 },
+                { speaker: 'user', text: "How do I hide CueUp during screen share?", timestamp: 60000 },
                 { speaker: 'interviewer', text: "Press Cmd+B to toggle visibility anytime. You can also enable undetectable mode in settings.", timestamp: 65000 },
                 { speaker: 'user', text: "This is amazing. What happens after the call?", timestamp: 75000 },
                 { speaker: 'interviewer', text: "You get detailed meeting notes with action items, key points, full transcript, and a log of all AI interactions.", timestamp: 80000 }
             ],
             usage: [
-                { type: 'assist', timestamp: 15000, question: 'What features does Natively have?', answer: 'Natively offers 5 quick action buttons, screenshot analysis, real-time transcription, and comprehensive meeting notes.' },
+                { type: 'assist', timestamp: 15000, question: 'What features does CueUp have?', answer: 'CueUp offers 5 quick action buttons, screenshot analysis, real-time transcription, and comprehensive meeting notes.' },
                 { type: 'followup', timestamp: 40000, question: 'How do the action buttons work?', answer: 'Each button serves a specific purpose: suggest answers, clarify questions, recap conversations, generate follow-up questions, or get instant voice-to-answer responses.' }
             ],
             isProcessed: true

@@ -2,7 +2,7 @@
   "name": "natively",
   "version": "2.7.0",
   "main": "dist-electron/electron/main.js",
-  "description": "Natively is a meeting notes app that uses AI to generate notes from your meetings.",
+  "description": "CueUp is a meeting notes app that uses AI to generate notes from your meetings.",
   "scripts": {
     "clean": "rimraf dist dist-electron",
     "dev": "vite",
@@ -46,7 +46,7 @@
     "generateUpdatesFilesForAllChannels": true,
     "appId": "com.electron.meeting-notes",
     "afterPack": "./scripts/ad-hoc-sign.js",
-    "productName": "Natively",
+    "productName": "CueUp",
     "files": [
       "dist",
       "dist-electron",
@@ -96,8 +96,8 @@
         "to": "assets/"
       },
       {
-        "from": "assets/natively.icns",
-        "to": "natively.icns"
+        "from": "assets/cueup.icns",
+        "to": "cueup.icns"
       }
     ],
     "mac": {
@@ -110,7 +110,7 @@
           "target": "dmg"
         }
       ],
-      "icon": "assets/natively.icns",
+      "icon": "assets/cueup.icns",
       "identity": null,
       "hardenedRuntime": false,
       "extendInfo": {

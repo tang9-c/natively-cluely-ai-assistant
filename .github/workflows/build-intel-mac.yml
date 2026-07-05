@@ -1,4 +1,4 @@
-# Build an x86_64 (Intel) macOS distributable of Natively on GitHub Actions.
+# Build an x86_64 (Intel) macOS distributable of CueUp on GitHub Actions.
 #
 # Trigger: manual (workflow_dispatch) only. Run from the Actions tab in
 # the GitHub UI, or with `gh workflow run build-intel-mac`.
@@ -85,13 +85,13 @@ jobs:
       - name: Upload distributable artifacts
         uses: actions/upload-artifact@v5
         with:
-          name: natively-intel-mac-${{ github.run_id }}
+          name: cueup-intel-mac-${{ github.run_id }}
           path: |
             release/*.zip
             release/*.dmg
             release/*.blockmap
             release/latest-mac.yml
-            release/OPEN-UNSIGNED-NATIVELY-MAC.sh
+            release/OPEN-UNSIGNED-CUEUP-MAC.sh
             release/INSTALL-UNSIGNED-MACOS.txt
             release/size-report.txt
           if-no-files-found: error

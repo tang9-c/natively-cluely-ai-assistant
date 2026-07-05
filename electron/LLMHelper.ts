@@ -1989,7 +1989,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
 
     if (providers.length === 0) {
-      throw new Error('No reasoning model available. Please configure an API key (OpenAI, Claude, Gemini, Groq, Doubao, Natively) or a custom provider.');
+      throw new Error('No reasoning model available. Please configure an API key (OpenAI, Claude, Gemini, Groq, Doubao, QCLOUD API) or a custom provider.');
     }
 
     // Track the most recent failure reason per provider so the final thrown
@@ -2985,7 +2985,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // Ensure the model the user selected handles the request first
     // before falling back to others.
     // ============================================================
-    const currentFamilyLabel = this.currentModelId === 'natively' ? 'Natively'
+    const currentFamilyLabel = this.currentModelId === 'natively' ? 'QCLOUD API'
       : this.isClaudeModel(this.currentModelId) ? 'Claude'
         : this.isOpenAiModel(this.currentModelId) ? 'OpenAI'
           : this.isGroqModel(this.currentModelId) ? 'Groq'
@@ -3001,7 +3001,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       });
     }
 
-    // Natively is always first when configured, regardless of which model is selected.
+    // QCLOUD API is always first when configured, regardless of which model is selected.
     // The sort above may have displaced it — restore it to position 0.
     if (this.hasNatively() && providers[0]?.name !== 'QCLOUD API') {
       const idx = providers.findIndex(p => p.name === 'QCLOUD API');
@@ -3370,7 +3370,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths);
         return;
       } catch (e: any) {
-        console.warn('[LLMHelper] Natively last-resort fallback failed:', e.message);
+        console.warn('[LLMHelper] QCLOUD API last-resort fallback failed:', e.message);
         lastQCloudFailure = e?.message || String(e);
       }
     }
@@ -4597,7 +4597,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         const text = await this.withTimeout(
           this.generateWithNatively(`Context:\n${context}`, systemPrompt),
           10000,
-          'Natively Summary'
+          'QCLOUD API Summary'
         );
         if (text.trim().length > 0) {
           console.log(`[LLMHelper] ✅ QCLOUD API summary generated successfully.`);

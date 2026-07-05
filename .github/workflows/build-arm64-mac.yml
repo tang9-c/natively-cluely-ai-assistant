@@ -1,4 +1,4 @@
-# Build an arm64 (Apple Silicon) macOS distributable of Natively on GitHub Actions.
+# Build an arm64 (Apple Silicon) macOS distributable of CueUp on GitHub Actions.
 #
 # Trigger: manual (workflow_dispatch) only. Run from the Actions tab in
 # the GitHub UI, or with `gh workflow run build-arm64-mac`.
@@ -69,13 +69,13 @@ jobs:
       - name: Upload distributable artifacts
         uses: actions/upload-artifact@v5
         with:
-          name: natively-arm64-mac-${{ github.run_id }}
+          name: cueup-arm64-mac-${{ github.run_id }}
           path: |
             release/*arm64*.zip
             release/*arm64*.dmg
             release/*arm64*.blockmap
             release/latest-mac.yml
-            release/OPEN-UNSIGNED-NATIVELY-MAC.sh
+            release/OPEN-UNSIGNED-CUEUP-MAC.sh
             release/INSTALL-UNSIGNED-MACOS.txt
             release/size-report.txt
           if-no-files-found: error

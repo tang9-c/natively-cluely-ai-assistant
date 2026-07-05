@@ -450,7 +450,7 @@ const BASELINE_SCENARIOS: EvalScenario[] = [
     transcript: 'Interviewer: Tell me about yourself.',
     latestQuestion: 'Answer.',
     mustInclude: [/I.*(am|work|build|have|focus|background|experience)/i, /engineer|developer|lead|built|build|role|background|experience|product|design|focus/i],
-    mustNotInclude: [/great question|let me start|okay so.*introduction|\bEvin John\b|\bI'?m Evin\b|\bI am Evin\b|\bMy name is Evin\b|\bI'?m Natively\b|\bI am Natively\b/i],
+    mustNotInclude: [/great question|let me start|okay so.*introduction|\bEvin John\b|\bI'?m Evin\b|\bI am Evin\b|\bMy name is Evin\b|\bI'?m CueUp\b|\bI am CueUp\b/i],
     maxLatencyMs: 12_000,
   },
   {

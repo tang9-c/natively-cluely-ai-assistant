@@ -19,6 +19,25 @@ test('electron-builder mac release targets are architecture-neutral so workflows
   const pkg = readJson('package.json');
   const macTargets = pkg.build.mac.target;
 
+  assert.equal(pkg.build.appId, 'com.electron.meeting-notes', 'appId must stay unchanged for this branding pass');
+  assert.equal(pkg.build.productName, 'CueUp');
+  assert.equal(pkg.build.mac.icon, 'assets/cueup.icns');
+  assert.ok(
+    pkg.build.extraResources.some((entry) => entry.from === 'assets/cueup.icns' && entry.to === 'cueup.icns'),
+    'CueUp mac icon must be copied into app resources for runtime windows',
+  );
+  const mainSource = read('electron/main.ts');
+  const legacyUserDataIndex = mainSource.indexOf('migrateLegacyUserDataForCueUpBranding()');
+  const managersIndex = mainSource.indexOf('// 3. Initialize Managers');
+  assert.ok(legacyUserDataIndex >= 0, 'CueUp branding must migrate legacy Natively userData before startup services read it');
+  assert.ok(
+    legacyUserDataIndex < managersIndex,
+    'legacy userData migration must run before managers read app.getPath("userData")',
+  );
+  assert.match(mainSource, /LEGACY_USER_DATA_DIR_NAME\s*=\s*'Natively'/);
+  assert.match(mainSource, /app\.getPath\('userData'\)/);
+  assert.match(mainSource, /fs\.cpSync\(legacyUserDataPath,\s*cueUpUserDataPath/);
+  assert.doesNotMatch(mainSource, /app\.setPath\('userData'/);
   assert.deepEqual(macTargets.map((target) => target.target), ['zip', 'dmg']);
   for (const target of macTargets) {
     assert.equal(target.arch, undefined, 'mac target arch must be controlled by workflow CLI flags');
@@ -67,7 +86,10 @@ test('mac release workflows build one architecture each and upload size audit re
   assert.match(armWorkflow, /Validate ARM64 artifact set/);
   assert.match(armWorkflow, /Unexpected non-arm64 artifact in ARM64 workflow/);
   assert.match(armWorkflow, /node scripts\/audit-release-size\.js > release\/size-report\.txt/);
-  assert.match(armWorkflow, /natively-arm64-mac-/);
+  assert.match(armWorkflow, /cueup-arm64-mac-/);
+  assert.match(intelWorkflow, /cueup-intel-mac-/);
+  assert.match(intelWorkflow, /release\/OPEN-UNSIGNED-CUEUP-MAC\.sh/);
+  assert.match(armWorkflow, /release\/OPEN-UNSIGNED-CUEUP-MAC\.sh/);
   assert.match(armWorkflow, /release\/\*arm64\*\.dmg/);
   assert.match(armWorkflow, /release\/\*arm64\*\.zip/);
 

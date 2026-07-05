@@ -89,7 +89,7 @@ const UpdateBanner: React.FC = () => {
                 const dmgSuffix = isArm ? 'arm64' : 'x64';
                 setInstructionsArch(dmgSuffix);
                 const version = updateInfo?.version ? updateInfo.version.replace('v', '') : '2.0.8';
-                const url = `https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v${version}/Natively-${version}-${dmgSuffix}.dmg`;
+                const url = `https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v${version}/CueUp-${version}-${dmgSuffix}.dmg`;
                 window.electronAPI.openExternal(url);
                 setStatus('instructions');
             } catch (err) {

@@ -85,7 +85,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
     };
 
     const handleCopyCommand = () => {
-        navigator.clipboard.writeText('xattr -cr /Applications/Natively.app');
+        navigator.clipboard.writeText('xattr -cr /Applications/CueUp.app');
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };
@@ -194,14 +194,14 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                         <>
                                             <div className="space-y-1 w-full">
                                                 <p className="text-[12px] font-medium text-white/80">1. 清除下载文件的隔离属性：</p>
-                                                <CopyBlock command={`xattr -cr ~/Downloads/Natively-${displayVersion.replace('v', '')}-${instructionsArch || 'arm64'}.dmg`} />
+                                                <CopyBlock command={`xattr -cr ~/Downloads/CueUp-${displayVersion.replace('v', '')}-${instructionsArch || 'arm64'}.dmg`} />
                                             </div>
                                             <div className="space-y-1 mt-1 pl-0.5">
                                                 <p className="text-[12px] font-medium text-white/80">2. 打开文件并安装 CueUp。</p>
                                             </div>
                                             <div className="space-y-1 mt-3 w-full">
                                                 <p className="text-[12px] font-medium text-white/80">3. 清除已安装应用的隔离属性：</p>
-                                                <CopyBlock command="xattr -cr /Applications/Natively.app" />
+                                                <CopyBlock command="xattr -cr /Applications/CueUp.app" />
                                             </div>
                                         </>
                                     ) : (
@@ -235,7 +235,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                 {/* 2. Premium Troubleshooting Card — macOS-only.
                                     The xattr quarantine bypass is meaningless on
                                     Windows (NSIS installer has no Gatekeeper
-                                    equivalent), and the /Applications/Natively.app
+                                    equivalent), and the /Applications/CueUp.app
                                     path doesn't exist there. */}
                                 {isMac && (
                                 <div
@@ -259,7 +259,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                     {/* Code Block with Copy */}
                                     <div className="flex items-center justify-between bg-black/20 rounded-lg pl-3 pr-1.5 py-1.5 border border-white/[0.03] group hover:border-white/10 transition-colors">
                                         <code className="text-[10px] font-mono text-blue-400 truncate mr-2 select-all">
-                                            xattr -cr /Applications/Natively.app
+                                            xattr -cr /Applications/CueUp.app
                                         </code>
                                         <button
                                             onClick={handleCopyCommand}

@@ -400,8 +400,8 @@ export class WindowHelper {
         const isWin = process.platform === 'win32';
         if (isMac) {
           return app.isPackaged
-            ? path.join(process.resourcesPath, 'natively.icns')
-            : path.resolve(__dirname, '../../assets/natively.icns');
+            ? path.join(process.resourcesPath, 'cueup.icns')
+            : path.resolve(__dirname, '../../assets/cueup.icns');
         } else if (isWin) {
           return app.isPackaged
             ? path.join(process.resourcesPath, 'assets/icons/win/icon.ico')

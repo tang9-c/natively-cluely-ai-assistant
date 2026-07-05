@@ -5,8 +5,8 @@ const path = require('path');
 
 const repoRoot = path.resolve(__dirname, '..');
 const releaseDir = path.join(repoRoot, 'release');
-const appName = 'Natively.app';
-const scriptName = 'OPEN-UNSIGNED-NATIVELY-MAC.sh';
+const appName = 'CueUp.app';
+const scriptName = 'OPEN-UNSIGNED-CUEUP-MAC.sh';
 const docName = 'INSTALL-UNSIGNED-MACOS.txt';
 
 if (!fs.existsSync(releaseDir)) {

@@ -1,4 +1,4 @@
-# Build a 64-bit Windows distributable of Natively on GitHub Actions.
+# Build a 64-bit Windows distributable of CueUp on GitHub Actions.
 #
 # Trigger: manual (workflow_dispatch) only. Run from the Actions tab in
 # the GitHub UI, or with `gh workflow run build-windows-x64`.
@@ -84,7 +84,7 @@ jobs:
       - name: Upload distributable artifacts
         uses: actions/upload-artifact@v5
         with:
-          name: natively-windows-x64-${{ github.run_id }}
+          name: cueup-windows-x64-${{ github.run_id }}
           path: |
             release/*.exe
             release/*.blockmap
