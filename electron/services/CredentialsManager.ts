@@ -37,7 +37,7 @@ export interface StoredCredentials {
     defaultModel?: string;
     nativelyApiKey?: string;
     // STT Provider settings
-    sttProvider?: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper' | 'local-sensevoice';
+    sttProvider?: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'qcloud-stt' | 'natively' | 'local-whisper' | 'local-sensevoice';
     groqSttApiKey?: string;
     groqSttModel?: string;
     openAiSttApiKey?: string;
@@ -128,7 +128,7 @@ export class CredentialsManager {
         return this.credentials.customProviders || [];
     }
 
-    public getSttProvider(): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper' | 'local-sensevoice' {
+    public getSttProvider(): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'qcloud-stt' | 'natively' | 'local-whisper' | 'local-sensevoice' {
         const provider = this.credentials.sttProvider || 'none';
         if (provider === 'doubao') {
             this.credentials.sttProvider = 'doubao-auc';
@@ -137,9 +137,21 @@ export class CredentialsManager {
             return 'doubao-auc';
         }
         if (provider === 'natively') {
+            if (this.getNativelyApiKey()) {
+                this.credentials.sttProvider = 'qcloud-stt';
+                this.saveCredentials();
+                console.log('[CredentialsManager] Migrated STT provider: natively→qcloud-stt (QCLOUD API speech channel)');
+                return 'qcloud-stt';
+            }
             this.credentials.sttProvider = 'local-sensevoice';
             this.saveCredentials();
-            console.log('[CredentialsManager] Migrated STT provider: natively→local-sensevoice (QCLOUD does not provide default STT)');
+            console.log('[CredentialsManager] Migrated STT provider: natively→local-sensevoice (QCLOUD API key missing)');
+            return 'local-sensevoice';
+        }
+        if (provider === 'qcloud-stt' && !this.getNativelyApiKey()) {
+            this.credentials.sttProvider = 'local-sensevoice';
+            this.saveCredentials();
+            console.log('[CredentialsManager] Migrated STT provider: qcloud-stt→local-sensevoice (QCLOUD API key missing)');
             return 'local-sensevoice';
         }
         return provider;
@@ -298,7 +310,7 @@ export class CredentialsManager {
         console.log('[CredentialsManager] Google Service Account path updated');
     }
 
-    public setSttProvider(provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper' | 'local-sensevoice'): void {
+    public setSttProvider(provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'qcloud-stt' | 'natively' | 'local-whisper' | 'local-sensevoice'): void {
         if (provider === 'doubao') {
             provider = 'doubao-auc';
         }
@@ -449,7 +461,7 @@ export class CredentialsManager {
                 this.credentials.defaultModel = 'gemini-3.1-flash-lite-preview';
                 console.log('[CredentialsManager] QCLOUD key cleared — reset default model to Gemini Flash');
             }
-            if (this.credentials.sttProvider === 'natively') {
+            if (this.credentials.sttProvider === 'qcloud-stt' || this.credentials.sttProvider === 'natively') {
                 this.credentials.sttProvider = 'local-sensevoice';
                 console.log('[CredentialsManager] QCLOUD key cleared — migrated STT provider to local-sensevoice');
             }

@@ -1,3 +1,5 @@
+import FormData from 'form-data';
+
 export interface DoubaoAucHttpResponse {
     data: any;
     headers: Record<string, any>;
@@ -24,12 +26,44 @@ export interface DoubaoAucTranscribeOptions {
     logger?: Pick<Console, 'log'>;
 }
 
+export interface NewApiDoubaoAucMultipartOptions {
+    submitEndpoint: string;
+    queryEndpoint: string;
+    authHeader: Record<string, string>;
+    audioBuffer: Buffer;
+    filename: string;
+    contentType: string;
+    formFields: Record<string, string>;
+    extractTranscript: (data: any) => string;
+    post: DoubaoAucPost;
+    pollIntervalMs?: number;
+    maxAttempts?: number;
+    submitTimeoutMs?: number;
+    queryTimeoutMs?: number;
+    logger?: Pick<Console, 'log'>;
+}
+
 export interface DoubaoAucUtterance {
     text: string;
     startMs?: number;
     endMs?: number;
     providerSpeakerId?: string;
+    emotion?: DoubaoAucEmotion;
+    emotionDegree?: DoubaoAucEmotionDegree;
+    emotionScore?: number;
+    emotionDegreeScore?: number;
 }
+
+export type DoubaoAucEmotion =
+    | 'happy'
+    | 'sad'
+    | 'angry'
+    | 'fearful'
+    | 'disgusted'
+    | 'surprised'
+    | 'neutral';
+
+export type DoubaoAucEmotionDegree = 'weak' | 'medium' | 'strong';
 
 export interface DoubaoAucTranscriptionResult {
     text: string;
@@ -78,6 +112,29 @@ function readSpeakerId(item: any): string | undefined {
     return String(value);
 }
 
+function readEmotion(additions: any): DoubaoAucEmotion | undefined {
+    const value = additions?.emotion;
+    return value === 'happy'
+        || value === 'sad'
+        || value === 'angry'
+        || value === 'fearful'
+        || value === 'disgusted'
+        || value === 'surprised'
+        || value === 'neutral'
+        ? value
+        : undefined;
+}
+
+function readEmotionDegree(additions: any): DoubaoAucEmotionDegree | undefined {
+    const value = additions?.emotion_degree ?? additions?.emotionDegree;
+    return value === 'weak' || value === 'medium' || value === 'strong' ? value : undefined;
+}
+
+function readOptionalScore(value: any): number | undefined {
+    const parsed = readNumber(value);
+    return parsed == null || parsed < 0 || parsed > 1 ? undefined : parsed;
+}
+
 export function extractDoubaoAucTranscript(data: any): string {
     if (typeof data === 'string') return data;
 
@@ -119,11 +176,20 @@ export function extractDoubaoAucTranscription(data: any): DoubaoAucTranscription
         .map((item: any): DoubaoAucUtterance | null => {
             const text = item?.text || item?.transcription || '';
             if (!text) return null;
+            const additions = item?.additions;
+            const emotion = readEmotion(additions);
+            const emotionDegree = readEmotionDegree(additions);
+            const emotionScore = readOptionalScore(additions?.emotion_score ?? additions?.emotionScore);
+            const emotionDegreeScore = readOptionalScore(additions?.emotion_degree_score ?? additions?.emotionDegreeScore);
             return {
                 text,
                 startMs: readNumber(item?.start_time ?? item?.startMs),
                 endMs: readNumber(item?.end_time ?? item?.endMs),
                 providerSpeakerId: readSpeakerId(item),
+                ...(emotion ? { emotion } : {}),
+                ...(emotionDegree ? { emotionDegree } : {}),
+                ...(emotionScore != null ? { emotionScore } : {}),
+                ...(emotionDegreeScore != null ? { emotionDegreeScore } : {}),
             };
         })
         .filter((item: DoubaoAucUtterance | null): item is DoubaoAucUtterance => item !== null);
@@ -148,6 +214,59 @@ export function extractDoubaoAucTranscriptionJson(data: any): string {
     }
 
     return JSON.stringify(result);
+}
+
+export async function transcribeNewApiDoubaoAucMultipartFile(
+    options: NewApiDoubaoAucMultipartOptions,
+): Promise<string> {
+    const form = new FormData();
+    form.append('file', options.audioBuffer, {
+        filename: options.filename,
+        contentType: options.contentType,
+    });
+    for (const [key, value] of Object.entries(options.formFields)) {
+        form.append(key, value);
+    }
+
+    const submitResponse = await options.post(options.submitEndpoint, form, {
+        headers: {
+            ...options.authHeader,
+            ...form.getHeaders(),
+        },
+        timeout: options.submitTimeoutMs ?? 30000,
+    });
+
+    const taskId = submitResponse.data?.task_id;
+    if (!taskId) {
+        throw new Error('QCLOUD API AUC submit did not return task_id');
+    }
+
+    const pollIntervalMs = options.pollIntervalMs ?? 2000;
+    const maxAttempts = options.maxAttempts ?? 60;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (attempt > 0 && pollIntervalMs > 0) await wait(pollIntervalMs);
+        const queryResponse = await options.post(options.queryEndpoint, { task_id: taskId }, {
+            headers: {
+                ...options.authHeader,
+                'Content-Type': 'application/json',
+            },
+            timeout: options.queryTimeoutMs ?? 15000,
+        });
+
+        const statusCode = String(queryResponse.data?.status_code || '');
+        options.logger?.log('[RestSTT] QCLOUD API AUC query status:', {
+            attempt: attempt + 1,
+            statusCode,
+        });
+        if (statusCode === AUC_STATUS_OK || statusCode === AUC_STATUS_SILENT) {
+            return options.extractTranscript(queryResponse.data);
+        }
+        if (!AUC_STATUS_PROCESSING.has(statusCode)) {
+            throw new Error(`QCLOUD API AUC task failed with status: ${statusCode || 'unknown'}`);
+        }
+    }
+
+    throw new Error('QCLOUD API AUC transcription timed out');
 }
 
 export async function transcribeDoubaoAucFile(options: DoubaoAucTranscribeOptions): Promise<string> {

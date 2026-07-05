@@ -34,7 +34,11 @@ import {
 } from './utils/networkErrorClassifier';
 
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
-import { QCLOUD_CHAT_COMPLETIONS_ENDPOINT, QCLOUD_CHAT_MODEL } from './llm/QCloudLlmConstants';
+import {
+  QCLOUD_CHAT_COMPLETIONS_ENDPOINT,
+  QCLOUD_CHAT_MODEL,
+  QCLOUD_STT_SUBMIT_ENDPOINT,
+} from './llm/QCloudLlmConstants';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 import type { ModeEventContext } from './llm';
 import type { ChatPromptOptions } from './llm/chatPromptAssembly';
@@ -1659,6 +1663,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         | 'soniox'
         | 'doubao'
         | 'doubao-auc'
+        | 'qcloud-stt'
         | 'natively'
         | 'local-whisper'
         | 'local-sensevoice',
@@ -1883,7 +1888,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // (test-saved-stt-connection: handler reads the key from CredentialsManager).
   type SttTestProvider =
     | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson'
-    | 'soniox' | 'doubao' | 'doubao-auc';
+    | 'soniox' | 'doubao' | 'doubao-auc' | 'qcloud-stt';
 
   const runSttConnectionTest = async (
     provider: SttTestProvider,
@@ -2126,6 +2131,46 @@ export function initializeIpcHandlers(appState: AppState): void {
             }));
             throw testErr;
           }
+        } else if (provider === 'qcloud-stt') {
+          const form = new FormData();
+          form.append('file', testWav, {
+            filename: 'connection-test.wav',
+            contentType: 'audio/wav',
+          });
+          form.append('model', 'bigmodel');
+          form.append('enable_speaker_info', 'true');
+          form.append('enable_emotion_detection', 'true');
+          form.append('show_utterances', 'true');
+          form.append('enable_itn', 'true');
+
+          try {
+            const response = await axios.post(
+              QCLOUD_STT_SUBMIT_ENDPOINT,
+              form,
+              {
+                headers: {
+                  Authorization: `Bearer ${apiKey.trim()}`,
+                  ...form.getHeaders(),
+                },
+                timeout: 15000,
+              },
+            );
+
+            console.log('[IPC] QCLOUD API speech test response:', {
+              status: response.status,
+              statusText: response.statusText,
+              hasTaskId: Boolean(response.data?.task_id),
+            });
+            if (!response.data?.task_id) {
+              throw new Error('QCLOUD API speech test did not return task_id');
+            }
+          } catch (testErr: any) {
+            console.error('[IPC] QCLOUD API speech test failed:', toSafeNetworkDiagnostic(testErr, {
+              provider,
+              endpoint: QCLOUD_STT_SUBMIT_ENDPOINT,
+            }));
+            throw testErr;
+          }
         } else {
           // Groq / OpenAI: multipart FormData
           let openAiEndpoint = 'https://api.openai.com/v1/audio/transcriptions';
@@ -2174,12 +2219,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         const endpoint =
           provider === 'doubao' ? DOUBAO_AUDIO_TRANSCRIPTIONS_ENDPOINT
           : provider === 'doubao-auc' ? DOUBAO_AUC_SUBMIT_ENDPOINT
+          : provider === 'qcloud-stt' ? QCLOUD_STT_SUBMIT_ENDPOINT
           : undefined;
         console.error(`[IPC] STT connection test failed for ${provider}:`, toSafeNetworkDiagnostic(error, {
           provider,
           endpoint,
         }));
-        if (provider === 'doubao' || provider === 'doubao-auc') {
+        if (provider === 'doubao' || provider === 'doubao-auc' || provider === 'qcloud-stt') {
           return { success: false, error: classifyNetworkError(error).userMessage };
         }
         const rawMsg =
@@ -2223,6 +2269,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           : provider === 'soniox' ? cm.getSonioxApiKey()
           : provider === 'doubao' ? cm.getDoubaoApiKey()
           : provider === 'doubao-auc' ? cm.getDoubaoAucApiKey()
+          : provider === 'qcloud-stt' ? cm.getNativelyApiKey()
           : undefined;
         if (!savedKey) {
           return { success: false, error: 'no_saved_key' };
@@ -2232,12 +2279,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         const endpoint =
           provider === 'doubao' ? DOUBAO_AUDIO_TRANSCRIPTIONS_ENDPOINT
           : provider === 'doubao-auc' ? DOUBAO_AUC_SUBMIT_ENDPOINT
+          : provider === 'qcloud-stt' ? QCLOUD_STT_SUBMIT_ENDPOINT
           : undefined;
         console.error(`[IPC] Saved STT connection test failed for ${provider}:`, toSafeNetworkDiagnostic(error, {
           provider,
           endpoint,
         }));
-        if (provider === 'doubao' || provider === 'doubao-auc') {
+        if (provider === 'doubao' || provider === 'doubao-auc' || provider === 'qcloud-stt') {
           return { success: false, error: classifyNetworkError(error).userMessage };
         }
         const respData = error?.response?.data;

@@ -18,6 +18,15 @@ test('Electron exposes centralized QCloud LLM constants', () => {
   assert.match(constants, /export const QCLOUD_CHAT_COMPLETIONS_ENDPOINT = `\$\{QCLOUD_LLM_BASE_URL\}\/v1\/chat\/completions`/);
 });
 
+test('QCLOUD exposes speech submit and query endpoints derived from LLM base URL', () => {
+  const constants = read('electron/llm/QCloudLlmConstants.ts');
+
+  assert.match(constants, /export const QCLOUD_STT_SUBMIT_ENDPOINT/);
+  assert.match(constants, /export const QCLOUD_STT_QUERY_ENDPOINT/);
+  assert.match(constants, /QCLOUD_STT_SUBMIT_ENDPOINT\s*=\s*`\$\{QCLOUD_LLM_BASE_URL\}\/v1\/doubao\/audio\/auc\/submit`/);
+  assert.match(constants, /QCLOUD_STT_QUERY_ENDPOINT\s*=\s*`\$\{QCLOUD_LLM_BASE_URL\}\/v1\/doubao\/audio\/auc\/query`/);
+});
+
 test('LLMHelper uses the QCloud SDK base URL derived from centralized constants', () => {
   const helper = read('electron/LLMHelper.ts');
 

@@ -137,6 +137,7 @@ function normalizeRecognitionLanguageForProvider(provider: string, languageKey: 
   // so normalize again at provider construction time, not only when the user
   // changes the dropdown live.
   if (languageKey !== 'auto') return languageKey;
+  if (provider === 'qcloud-stt') return 'chinese';
   return provider !== 'natively' ? 'english-us' : languageKey;
 }
 

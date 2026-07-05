@@ -35,6 +35,7 @@ type SttProviderId =
   | 'ibmwatson'
   | 'doubao'
   | 'doubao-auc'
+  | 'qcloud-stt'
   | 'local-whisper'
   | 'local-sensevoice';
 
@@ -132,6 +133,18 @@ export const STT_REGISTRY: Record<SttProviderId, RegistryEntry | undefined> = {
     factory: (key, speaker, extra?: Record<string, string | undefined>) => {
       const speakerSeparationMode = extra?.speakerSeparationMode === 'off' ? 'off' : 'auto';
       return new RestSTT('doubao-auc', key, undefined, undefined, { speaker, speakerSeparationMode });
+    },
+  },
+
+  'qcloud-stt': {
+    name: 'QCLOUD API',
+    needsKey: 'getNativelyApiKey',
+    extraConfig: () => ({
+      speakerSeparationMode: SettingsManager.getInstance().getSpeakerSeparationMode(),
+    }),
+    factory: (key, speaker, extra?: Record<string, string | undefined>) => {
+      const speakerSeparationMode = extra?.speakerSeparationMode === 'off' ? 'off' : 'auto';
+      return new RestSTT('qcloud-stt', key, undefined, undefined, { speaker, speakerSeparationMode });
     },
   },
 

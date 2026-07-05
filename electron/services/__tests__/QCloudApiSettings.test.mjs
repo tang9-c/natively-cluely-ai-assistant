@@ -102,7 +102,7 @@ test('QCLOUD key changes broadcast explicit key state without exposing the key',
   assert.doesNotMatch(handler, /broadcast\('qcloud-key-changed',\s*apiKey/);
 });
 
-test('legacy Natively STT is migrated to the local provider', () => {
+test('legacy natively STT migrates to QCLOUD API speech channel when key exists and local provider when missing', () => {
   const source = read('electron/services/CredentialsManager.ts');
   const start = source.indexOf('    public getSttProvider()');
   const end = source.indexOf('    public getDeepgramApiKey()', start);
@@ -110,8 +110,21 @@ test('legacy Natively STT is migrated to the local provider', () => {
 
   assert.ok(start >= 0, 'getSttProvider should exist');
   assert.match(method, /provider === 'natively'/);
+  assert.match(method, /getNativelyApiKey\(\)/);
+  assert.match(method, /sttProvider = 'qcloud-stt'/);
   assert.match(method, /this\.credentials\.sttProvider = 'local-sensevoice'/);
-  assert.equal(method.includes('none' + '→' + 'natively'), false);
+  assert.doesNotMatch(method, /QCLOUD does not provide default STT/);
+});
+
+test('clearing QCLOUD API key moves qcloud-stt away from remote STT', () => {
+  const source = read('electron/services/CredentialsManager.ts');
+  const start = source.indexOf('    public setNativelyApiKey(');
+  const end = source.indexOf('    public getPreferredModel(', start);
+  const method = source.slice(start, end);
+
+  assert.ok(start >= 0, 'setNativelyApiKey should exist');
+  assert.match(method, /this\.credentials\.sttProvider === 'qcloud-stt'/);
+  assert.match(method, /this\.credentials\.sttProvider = 'local-sensevoice'/);
 });
 
 test('startup no longer mounts the Natively quota banner', () => {

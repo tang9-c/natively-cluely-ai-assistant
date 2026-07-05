@@ -48,6 +48,15 @@ test('Doubao AUC registry passes speaker separation mode and channel into RestST
     assert.match(registry, /new RestSTT\('doubao-auc', key, undefined, undefined, \{ speaker, speakerSeparationMode/);
 });
 
+test('QCLOUD API speech channel is registered with the QCLOUD API key and speaker separation settings', () => {
+    const registry = read('electron/audio/sttRegistry.ts');
+
+    assert.match(registry, /'qcloud-stt':\s*\{/);
+    assert.match(registry, /needsKey:\s*'getNativelyApiKey'/);
+    assert.match(registry, /new RestSTT\('qcloud-stt', key, undefined, undefined, \{ speaker, speakerSeparationMode/);
+    assert.doesNotMatch(registry, /name:\s*'QCloudSTT'/);
+});
+
 test('settings exposes only implemented Doubao AUC provider for speaker separation', () => {
     const settings = read('src/components/SettingsOverlay.tsx');
 

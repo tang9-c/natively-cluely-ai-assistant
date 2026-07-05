@@ -181,6 +181,40 @@ test('Doubao AUC extracts structured utterances with provider speaker ids', asyn
     });
 });
 
+test('Doubao AUC structured extraction preserves optional QCLOUD emotion metadata', async () => {
+    const { extractDoubaoAucTranscription } = await loadClient();
+
+    const result = extractDoubaoAucTranscription({
+        result: {
+            utterances: [
+                {
+                    text: '我们需要看客户案例。',
+                    start_time: 0,
+                    end_time: 900,
+                    additions: {
+                        speaker: '1',
+                        emotion: 'neutral',
+                        emotion_degree: 'weak',
+                        emotion_score: '0.9978123903274536',
+                        emotion_degree_score: '0.9997349381446838',
+                    },
+                },
+            ],
+        },
+    });
+
+    assert.deepEqual(result.utterances[0], {
+        text: '我们需要看客户案例。',
+        startMs: 0,
+        endMs: 900,
+        providerSpeakerId: '1',
+        emotion: 'neutral',
+        emotionDegree: 'weak',
+        emotionScore: 0.9978123903274536,
+        emotionDegreeScore: 0.9997349381446838,
+    });
+});
+
 test('Doubao AUC returns empty text for silent status without throwing', async () => {
     const { transcribeDoubaoAucFile, extractDoubaoAucTranscript } = await loadClient();
     const post = async (url) => {

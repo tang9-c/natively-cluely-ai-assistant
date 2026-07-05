@@ -14,12 +14,23 @@
 import axios from 'axios';
 import FormData from 'form-data';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
+import {
+    QCLOUD_LLM_BASE_URL,
+    QCLOUD_STT_QUERY_ENDPOINT,
+    QCLOUD_STT_SUBMIT_ENDPOINT,
+} from '../llm/QCloudLlmConstants';
 import { BaseSTT } from './BaseSTT';
-import { extractDoubaoAucTranscript, extractDoubaoAucTranscriptionJson, transcribeDoubaoAucFile, type DoubaoAucTranscriptionResult } from './doubaoAucClient';
+import {
+    extractDoubaoAucTranscript,
+    extractDoubaoAucTranscriptionJson,
+    transcribeDoubaoAucFile,
+    transcribeNewApiDoubaoAucMultipartFile,
+    type DoubaoAucTranscriptionResult,
+} from './doubaoAucClient';
 import { SpeakerDiarizationAligner } from './SpeakerDiarizationAligner';
 import { buffer16ToFloat32 } from '../services/speaker/speakerAudioUtils';
 
-export type RestSttProvider = 'groq' | 'openai' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'doubao' | 'doubao-auc';
+export type RestSttProvider = 'groq' | 'openai' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'doubao' | 'doubao-auc' | 'qcloud-stt';
 export type SpeakerSeparationMode = 'auto' | 'off';
 
 interface RestSttOptions {
@@ -31,8 +42,9 @@ interface RestSttProviderConfig {
     endpoint: string;
     model: string;
     authHeader: Record<string, string>;
-    uploadType: 'multipart' | 'binary' | 'json';
+    uploadType: 'multipart' | 'binary' | 'json' | 'auc-multipart';
     extraFormFields?: Record<string, string>;
+    buildMultipartFields?: () => Record<string, string>;
     /** Extract transcript text from the API response */
     extractTranscript: (data: any) => string;
     /** For async providers: submit endpoint (if different from query endpoint) */
@@ -190,6 +202,40 @@ const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
                     },
                 };
             },
+            extractTranscript: extractDoubaoAucTranscript,
+        };
+    },
+    'qcloud-stt': (apiKey, _region, languageKey, options) => {
+        const requestedLanguage = languageKey || 'auto';
+        const requestedBcp47 = requestedLanguage !== 'auto'
+            ? RECOGNITION_LANGUAGES[requestedLanguage]?.bcp47
+            : undefined;
+        const speakerSeparationMode = options?.speakerSeparationMode ?? 'auto';
+        const languageSupportsSpeakerSeparation =
+            requestedLanguage === 'auto'
+            || requestedLanguage === 'chinese'
+            || requestedBcp47 === 'zh-CN';
+        const enableSpeakerSeparation =
+            speakerSeparationMode === 'auto' && languageSupportsSpeakerSeparation;
+
+        return {
+            endpoint: `${QCLOUD_LLM_BASE_URL}/v1/doubao/audio/auc`,
+            submitEndpoint: QCLOUD_STT_SUBMIT_ENDPOINT,
+            queryEndpoint: QCLOUD_STT_QUERY_ENDPOINT,
+            model: 'bigmodel',
+            authHeader: {
+                Authorization: `Bearer ${apiKey.trim()}`,
+            },
+            uploadType: 'auc-multipart',
+            supportsDiarization: true,
+            diarizationMode: 'provider-utterances',
+            buildMultipartFields: () => ({
+                model: 'bigmodel',
+                enable_speaker_info: enableSpeakerSeparation ? 'true' : 'false',
+                enable_emotion_detection: 'true',
+                show_utterances: 'true',
+                enable_itn: 'true',
+            }),
             extractTranscript: extractDoubaoAucTranscript,
         };
     },
@@ -533,6 +579,9 @@ export class RestSTT extends BaseSTT {
         if (this.config.uploadType === 'json') {
             return this.uploadJson(wavBuffer);
         }
+        if (this.config.uploadType === 'auc-multipart') {
+            return this.uploadAucMultipart(wavBuffer);
+        }
         return this.uploadMultipart(wavBuffer);
     }
 
@@ -584,6 +633,29 @@ export class RestSTT extends BaseSTT {
         });
 
         return this.config.extractTranscript(response.data);
+    }
+
+    /**
+     * Upload via new-api Doubao AUC multipart submit + task_id JSON query (QCLOUD API).
+     */
+    private async uploadAucMultipart(wavBuffer: Buffer): Promise<string | DoubaoAucTranscriptionResult> {
+        const jsonText = await transcribeNewApiDoubaoAucMultipartFile({
+            submitEndpoint: this.config.submitEndpoint || this.config.endpoint,
+            queryEndpoint: this.config.queryEndpoint || this.config.endpoint,
+            authHeader: this.config.authHeader,
+            audioBuffer: wavBuffer,
+            filename: 'audio.wav',
+            contentType: 'audio/wav',
+            formFields: this.config.buildMultipartFields?.() || {},
+            extractTranscript: extractDoubaoAucTranscriptionJson,
+            post: (url, body, options) => axios.post(url, body, options),
+            logger: console,
+        });
+        try {
+            return JSON.parse(jsonText) as DoubaoAucTranscriptionResult;
+        } catch {
+            return jsonText;
+        }
     }
 
     /**

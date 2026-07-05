@@ -62,3 +62,26 @@ test('auto on non-natively providers is explained as an English fallback instead
   assert.equal(result.effectiveLanguageKey, 'english-us');
   assert.equal(result.reasonCode, 'AUTO_NORMALIZED_TO_ENGLISH');
 });
+
+test('auto on QCLOUD API speech channel remains Chinese-first instead of English fallback', async () => {
+  const { resolveSttLanguageCompatibility } = await loadModule();
+
+  const result = resolveSttLanguageCompatibility({
+    provider: 'qcloud-stt',
+    requestedLanguageKey: 'auto',
+  });
+
+  assert.equal(result.effectiveLanguageKey, 'chinese');
+  assert.equal(result.willHonorSelection, true);
+});
+
+test('QCLOUD API speech channel does not claim unverified explicit English language support', async () => {
+  const { resolveSttLanguageCompatibility } = await loadModule();
+
+  const result = resolveSttLanguageCompatibility({
+    provider: 'qcloud-stt',
+    requestedLanguageKey: 'english-us',
+  });
+
+  assert.notEqual(result.willHonorSelection, true);
+});

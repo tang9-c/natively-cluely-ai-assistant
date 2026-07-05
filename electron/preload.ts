@@ -165,6 +165,7 @@ interface ElectronAPI {
       | 'soniox'
       | 'doubao'
       | 'doubao-auc'
+      | 'qcloud-stt'
       | 'natively'
       | 'local-whisper'
       | 'local-sensevoice',
@@ -259,12 +260,12 @@ interface ElectronAPI {
   setDoubaoApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setIbmWatsonRegion: (region: string) => Promise<{ success: boolean; error?: string }>;
   testSttConnection: (
-    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao',
+    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'qcloud-stt',
     apiKey: string,
     region?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   testSavedSttConnection: (
-    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc',
+    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'qcloud-stt',
     region?: string,
   ) => Promise<{ success: boolean; error?: string }>;
 
@@ -1164,6 +1165,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       | 'soniox'
       | 'doubao'
       | 'doubao-auc'
+      | 'qcloud-stt'
       | 'natively'
       | 'local-whisper'
       | 'local-sensevoice',
@@ -1192,12 +1194,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setDoubaoApiKey: (apiKey: string) => ipcRenderer.invoke('set-doubao-api-key', apiKey),
   setIbmWatsonRegion: (region: string) => ipcRenderer.invoke('set-ibmwatson-region', region),
   testSttConnection: (
-    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc',
+    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'qcloud-stt',
     apiKey: string,
     region?: string,
   ) => ipcRenderer.invoke('test-stt-connection', provider, apiKey, region),
   testSavedSttConnection: (
-    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc',
+    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'qcloud-stt',
     region?: string,
   ) => ipcRenderer.invoke('test-saved-stt-connection', provider, region),
   localWhisperGetModels: () => ipcRenderer.invoke('local-whisper-get-models'),

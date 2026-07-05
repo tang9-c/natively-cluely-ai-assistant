@@ -17,6 +17,7 @@ export type SttProviderId =
   | 'ibmwatson'
   | 'doubao'
   | 'doubao-auc'
+  | 'qcloud-stt'
   | 'local-whisper'
   | 'local-sensevoice';
 
@@ -85,7 +86,7 @@ const SENSEVOICE_SUPPORTED_LANGUAGE_KEYS = new Set([
 
 export function normalizeRecognitionLanguageForProvider(provider: string, languageKey: string): string {
   if (languageKey !== 'auto') return languageKey;
-  if (provider === 'local-sensevoice') return 'chinese';
+  if (provider === 'local-sensevoice' || provider === 'qcloud-stt') return 'chinese';
   return provider !== 'natively' ? 'english-us' : languageKey;
 }
 
@@ -125,6 +126,16 @@ export function resolveSttLanguageCompatibility(
   const provider = (input.provider || 'none') as SttProviderId;
   const requestedLanguageKey = input.requestedLanguageKey || 'english-us';
   const effectiveLanguageKey = normalizeRecognitionLanguageForProvider(provider, requestedLanguageKey);
+
+  if (provider === 'qcloud-stt' && requestedLanguageKey === 'auto') {
+    return {
+      requestedLanguageKey,
+      effectiveLanguageKey,
+      willHonorSelection: true,
+      reasonCode: 'SUPPORTED',
+      message: 'QCLOUD API 语音通道会按中文优先策略执行自动识别。',
+    };
+  }
 
   if (requestedLanguageKey === 'auto' && effectiveLanguageKey !== 'auto') {
     return {

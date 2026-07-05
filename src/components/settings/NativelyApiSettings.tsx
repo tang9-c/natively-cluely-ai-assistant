@@ -106,7 +106,7 @@ export const NativelyApiSettings: React.FC = () => {
             QCLOUD API
           </h3>
           <p className="text-[12px] text-text-tertiary mt-0.5 leading-snug">
-            配置 QCLOUD key 后，可将默认聊天模型切换到 QCLOUD。实时转录和向量模型保持本地优先。
+            配置 QCLOUD key 后，可将默认聊天模型切换到 QCLOUD；语音提供商下拉可选择 QCLOUD API 转录（中文优先，支持说话人分离），向量模型仍保持本地优先。
           </p>
         </div>
         {!isLoading && isSaved && (
@@ -130,7 +130,7 @@ export const NativelyApiSettings: React.FC = () => {
           <div className="min-w-0">
             <p className="text-[13px] font-semibold text-text-primary">QCLOUD key</p>
             <p className="text-[11px] text-text-tertiary leading-snug mt-0.5">
-              QCLOUD 仅用于 LLM 路由；实时转录和向量模型不会切换到远程服务。
+              QCLOUD 用于 LLM 路由和实时转录（可选，需在语音标签下手动启用）；向量模型不会切换到远程服务。
             </p>
           </div>
         </div>
@@ -225,7 +225,7 @@ export const NativelyApiSettings: React.FC = () => {
 
           {/* T&C consent */}
           <p className="text-[10.5px] text-text-tertiary leading-relaxed text-center">
-            STT 和 Embedding 不使用 QCLOUD，仍按当前本地优先配置运行。
+            Embedding 不使用 QCLOUD，保持本地优先。STT 可在“语音”标签下选择 QCLOUD API（同一把 key）。
           </p>
         </div>
       </Card>

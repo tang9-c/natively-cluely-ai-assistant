@@ -857,7 +857,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     } | null>(null);
 
     // STT Provider settings
-    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper' | 'local-sensevoice'>('none');
+    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'qcloud-stt' | 'natively' | 'local-whisper' | 'local-sensevoice'>('none');
     const [groqSttModel, setGroqSttModel] = useState('whisper-large-v3-turbo');
     const [sttGroqKey, setSttGroqKey] = useState('');
     const [sttOpenaiKey, setSttOpenaiKey] = useState('');
@@ -884,16 +884,33 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [hasStoredSonioxKey, setHasStoredSonioxKey] = useState(false);
     const [sttDoubaoKey, setSttDoubaoKey] = useState('');
     const [hasStoredDoubaoKey, setHasStoredDoubaoKey] = useState(false);
+    const [hasStoredNativelyKey, setHasStoredNativelyKey] = useState(false);
     const [isSttDropdownOpen, setIsSttDropdownOpen] = useState(false);
     const sttDropdownRef = React.useRef<HTMLDivElement>(null);
     const normalizeVisibleSttProvider = (
-        provider?: string
-    ): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper' | 'local-sensevoice' => {
+        provider?: string,
+        hasQCloudKey = false,
+    ): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'qcloud-stt' | 'natively' | 'local-whisper' | 'local-sensevoice' => {
         if (provider === 'natively') {
-            return 'local-sensevoice';
+            return hasQCloudKey ? 'qcloud-stt' : 'local-sensevoice';
         }
-        if (provider === 'none' || provider === 'doubao-auc' || provider === 'local-sensevoice') {
-            return provider;
+        if (provider === 'qcloud-stt') return hasQCloudKey ? 'qcloud-stt' : 'local-sensevoice';
+        if (
+            provider === 'none'
+            || provider === 'google'
+            || provider === 'groq'
+            || provider === 'openai'
+            || provider === 'deepgram'
+            || provider === 'elevenlabs'
+            || provider === 'azure'
+            || provider === 'ibmwatson'
+            || provider === 'soniox'
+            || provider === 'doubao'
+            || provider === 'doubao-auc'
+            || provider === 'local-whisper'
+            || provider === 'local-sensevoice'
+        ) {
+            return provider === 'doubao' ? 'doubao-auc' : provider;
         }
         return 'doubao-auc';
     };
@@ -918,7 +935,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 // @ts-ignore
                 const creds = await window.electronAPI?.getStoredCredentials?.();
                 if (creds) {
-                    setSttProvider(normalizeVisibleSttProvider(creds.sttProvider));
+                    const hasQCloudKey = Boolean(creds.hasNativelyKey);
+                    setHasStoredNativelyKey(hasQCloudKey);
+                    setSttProvider(normalizeVisibleSttProvider(creds.sttProvider, hasQCloudKey));
                     if (creds.groqSttModel) setGroqSttModel(creds.groqSttModel);
                     setGoogleServiceAccountPath(creds.googleServiceAccountPath);
                     setHasStoredSttGroqKey(creds.hasSttGroqKey);
@@ -962,7 +981,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 // Re-fetch credentials silently — purely additive, no state reset
                 window.electronAPI?.getStoredCredentials?.().then((creds: any) => {
                     if (!creds) return;
-                    setSttProvider(normalizeVisibleSttProvider(creds.sttProvider));
+                    const hasQCloudKey = Boolean(creds.hasNativelyKey);
+                    setHasStoredNativelyKey(hasQCloudKey);
+                    setSttProvider(normalizeVisibleSttProvider(creds.sttProvider, hasQCloudKey));
                     if (creds.groqSttModel) setGroqSttModel(creds.groqSttModel);
                     setHasStoredSttGroqKey(creds.hasSttGroqKey);
                     setHasStoredSttOpenaiKey(creds.hasSttOpenaiKey);
@@ -998,7 +1019,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         return () => unsubscribe();
     }, [isOpen, refreshSttLanguageCompatibility]); // isOpen is checked inside the callback
 
-    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'natively' | 'local-whisper' | 'local-sensevoice') => {
+    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'qcloud-stt' | 'natively' | 'local-whisper' | 'local-sensevoice') => {
         provider = provider === 'doubao' ? 'doubao-auc' : provider;
         setSttProvider(provider);
         setIsSttDropdownOpen(false);
@@ -1027,7 +1048,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     };
 
     const speakerSeparationSupported =
-        sttProvider === 'doubao-auc' &&
+        (sttProvider === 'doubao-auc' || sttProvider === 'qcloud-stt') &&
         (recognitionLanguage === 'auto' || recognitionLanguage === '' || recognitionLanguage === 'chinese' || /^zh[-_]/i.test(recognitionLanguage));
     const speakerSeparationStatus: 'off' | 'on' | 'unavailable' =
         speakerSeparationMode === 'off'
@@ -1242,7 +1263,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                 setTimeout(() => setSttTestOnlyVerified(false), 5000);
             } else if (result?.error === 'no_saved_key') {
                 setSttTestStatus('error');
-                setSttTestError('尚未保存该 provider 的 API key。请先点击 Save 保存。');
+                setSttTestError(sttProvider === 'qcloud-stt'
+                    ? 'QCLOUD API key 未配置。请先在 QCLOUD API 设置中保存 key。'
+                    : '尚未保存该 provider 的 API key。请先点击 Save 保存。');
             } else {
                 setSttTestStatus('error');
                 setSttTestOnlyVerified(false);
@@ -2243,6 +2266,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         value={sttProvider}
                                                         onChange={(val) => handleSttProviderChange(val as any)}
                                                         options={[
+                                                            ...(hasStoredNativelyKey ? [{
+                                                                id: 'qcloud-stt',
+                                                                label: 'QCLOUD API',
+                                                                badge: 'Saved',
+                                                                desc: 'Same QCLOUD API key · Chinese-first bigmodel with speaker separation',
+                                                                color: 'blue',
+                                                                icon: <NativelyLogoMark size={14} className="text-blue-500" />,
+                                                            }] : []),
                                                             { id: 'doubao-auc', label: 'Doubao AUC (Speaker separation)', badge: hasStoredDoubaoKey ? 'Saved' : null, desc: 'Same Doubao API key; AUC BigModel with speaker separation', color: 'orange', icon: <Mic size={14} /> },
                                                             { id: 'local-sensevoice', label: 'Local SenseVoice', badge: null, desc: 'Chinese-first local STT', color: 'green', icon: <Cpu size={14} /> },
                                                         ]}
@@ -2314,7 +2345,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             )}
 
                                             {/* API Key Input (non-Google providers) */}
-                                            {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'local-sensevoice' && sttProvider !== 'natively' && sttProvider !== 'none' && (
+                                            {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'local-sensevoice' && sttProvider !== 'natively' && sttProvider !== 'qcloud-stt' && sttProvider !== 'none' && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
                                                     <label className="text-xs font-medium text-text-secondary block">
                                                         {sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : sttProvider === 'doubao' || sttProvider === 'doubao-auc' ? 'Doubao' : 'Deepgram'} API Key

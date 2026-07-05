@@ -3,7 +3,7 @@
  * Configuration for STT providers (Google gRPC, REST, WebSocket)
  */
 
-export type SttProviderId = 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'doubao' | 'doubao-auc' | 'natively' | 'local-sensevoice';
+export type SttProviderId = 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'doubao' | 'doubao-auc' | 'qcloud-stt' | 'natively' | 'local-sensevoice';
 
 export interface SttProviderConfig {
     id: SttProviderId;
@@ -14,7 +14,7 @@ export interface SttProviderConfig {
     /** Available models for this provider (for user selection) */
     availableModels?: { id: string; label: string }[];
     /** Upload type: 'multipart' for FormData, 'binary' for raw body, 'websocket' for streaming */
-    uploadType?: 'multipart' | 'binary' | 'websocket';
+    uploadType?: 'multipart' | 'binary' | 'websocket' | 'auc-multipart';
     authHeader: (apiKey: string) => Record<string, string>;
     /** Path to extract transcript text from the JSON response */
     responseContentPath: string;
@@ -137,6 +137,18 @@ export const STT_PROVIDERS: Record<SttProviderId, SttProviderConfig> = {
             'X-Api-Resource-Id': 'volc.seedasr.auc',
         }),
         responseContentPath: 'result[0].text',
+    },
+    'qcloud-stt': {
+        id: 'qcloud-stt',
+        name: 'QCLOUD API',
+        description: 'QCLOUD API real-time transcription using the saved QCLOUD API key',
+        endpoint: '',
+        model: 'bigmodel',
+        uploadType: 'auc-multipart',
+        authHeader: (apiKey: string) => ({
+            Authorization: `Bearer ${apiKey}`,
+        }),
+        responseContentPath: '',
     },
     natively: {
         id: 'natively',
