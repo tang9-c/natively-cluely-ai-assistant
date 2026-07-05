@@ -37,6 +37,9 @@
     "test:quality:smoke:no-build": "ELECTRON_RUN_AS_NODE=1 npx electron --experimental-test-module-mocks --test electron/services/__tests__/ModeEventClassifier.test.mjs electron/services/__tests__/DynamicActionEngine.test.mjs electron/services/__tests__/IntelligenceEngineDynamicActions.test.mjs electron/llm/__tests__/ModeAwareIntent.test.mjs electron/services/__tests__/AnswerTracePersistence.contract.test.mjs electron/services/__tests__/AnswerContextTraceContract.test.mjs electron/services/__tests__/RealtimeContextOrchestrator.test.mjs electron/services/__tests__/BusinessSystemEvalFixtures.test.mjs electron/services/__tests__/BusinessSystemFixedReplyGuard.test.mjs electron/services/__tests__/SpeakerContextPolicy.test.mjs electron/services/__tests__/AnswerQualityMetrics.test.mjs electron/services/eval/__tests__/AnswerMetricsOfflineHarness.test.mjs electron/services/__tests__/CodeHintScopeIpc.test.mjs electron/llm/__tests__/CodeHintLLM.test.mjs electron/services/__tests__/IntelligenceEngineCodeHint.test.mjs",
     "test:quality:diagnostics": "npm run build:electron && npm run test:quality:diagnostics:no-build",
     "test:quality:diagnostics:no-build": "ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/eval/__tests__/ContextQualityDiagnostics.test.mjs electron/services/eval/__tests__/AnswerMetricsOfflineHarness.test.mjs && node scripts/context-quality-smoke-report.mjs",
+    "test:quality:changed": "node scripts/context-quality-gate.mjs --list",
+    "test:quality:gate": "node scripts/context-quality-gate.mjs --run",
+    "test:quality:gate:no-build": "node scripts/context-quality-gate.mjs --run --no-build",
     "bench:screen-understanding": "npm run build:electron && node scripts/bench-screen-understanding.mjs"
   },
   "build": {
