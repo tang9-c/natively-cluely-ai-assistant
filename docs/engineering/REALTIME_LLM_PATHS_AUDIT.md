@@ -40,3 +40,4 @@
 1. 评估是否需要把 `CodeHintLLM` 的独立 trace 纳入持久化 answer trace 或产品 UI 诊断。
 2. 为所有调用 `runWhatShouldISay()` 的入口添加 contract test，确保 `traceSink` 不被绕过。
 3. 每次新增实时 LLM 入口，都必须在本文件登记状态、scopes、trace 和降级策略。
+4. 新增或修改实时 LLM 路径、prompt、provider scope、上下文选择或动态动作规则时，必须先运行 `npm run test:quality:changed`。如果输出 `Context quality gate required.`，提交前必须运行 `npm run test:quality:gate`；连续本地验证可使用 `npm run test:quality:gate:no-build`。

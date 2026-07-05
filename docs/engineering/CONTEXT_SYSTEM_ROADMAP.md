@@ -499,7 +499,7 @@ Realtime Context Orchestrator
   1. 现场可信度验收包：把实时答案 trace、sourceStatus、degradedReason、context plan、动态动作 gate trace 汇总成一个固定验收口径。
   2. P0-1 动态动作语义门控收口：补真实会议 fixture、产品可见解释和高风险 defer 策略，重点看误报/漏报，不再只看关键词召回。
   3. Phase 0/2/3/4 已落地能力的验收收口：扩大 fixture 和指标阈值门禁，确保 RAG、业务系统、屏幕、说话人和 provider scope 失败都能归因。
-  4. 质量命令产品化到开发习惯：每次 prompt、RAG、上下文选择、动态动作规则或 LLM 路径改动，都必须跑 npm run test:quality:smoke 和 npm run test:quality:diagnostics；连续本地验证可使用 no-build 变体。
+  4. 质量命令产品化到开发习惯：`npm run test:quality:changed` 会根据当前 diff 判断是否触发质量门禁；命中 prompt、RAG、上下文选择、动态动作规则、实时 LLM 路径、业务系统上下文、说话人/屏幕上下文或 trace/metrics 相关文件时，必须跑 `npm run test:quality:gate`。连续本地验证可先跑 `npm run build:electron`，再跑 `npm run test:quality:gate:no-build`。
   5. CodeHintLLM 已完成 trace/scope 归属收口；只评估是否把独立工具流 trace 纳入持久化 answer trace 或产品 UI 诊断，不再作为阻塞项。
 
 下一冲刺：
