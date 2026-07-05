@@ -1,6 +1,6 @@
 # Security Policy
 
-_Last updated: April 25th 2026_
+_Last updated: July 5th 2026_
 
 We take the security of CueUp seriously and we genuinely appreciate reports from researchers, users, and the community. This document describes how to report a vulnerability, what we'll do with it, and the rules of engagement.
 
@@ -15,7 +15,7 @@ Security fixes are issued for:
 
 Older versions are not supported. If you find a security issue in an unsupported version, please first reproduce it on the current release before reporting.
 
-You can find the current version in the app's **Settings → About** screen, in `package.json` at the repo root, or on the [GitHub Releases page](https://github.com/evinjohnn/natively-cluely-ai-assistant/releases).
+You can find the current version in the app's **Settings → About** screen, in `package.json` at the repo root, or on the [GitHub Releases page](https://github.com/tang9-c/natively-cluely-ai-assistant/releases).
 
 ---
 
@@ -25,7 +25,7 @@ You can find the current version in the app's **Settings → About** screen, in 
 
 ### Where to send reports
 
-Email **natively.contact@gmail.com** with a clear subject line such as "Security report — [short description]".
+Email **tangdu@feigenbaum.ai** with a clear subject line such as "Security report — [short description]".
 
 If your report is sensitive enough that you'd like an encrypted channel, mention this in your initial email and we'll arrange one before you send the technical details.
 
@@ -118,7 +118,7 @@ The following are **not** considered in-scope vulnerabilities under this policy:
 The following are **not vulnerabilities** under this policy:
 
 - **AI hallucinations or factual errors** in model outputs.
-- **Prompt-injection attacks** that cause the underlying AI provider to behave in unintended ways. These are limitations of the underlying models, are in scope for the model provider's own safety processes, and are discussed in our [Terms &amp; Conditions §11](https://cueup.feigenbaum.ai/termsandconditions). Reports about a *specific way to bypass a safety filter on OpenAI / Anthropic / Google models* should go to the respective provider.
+- **Prompt-injection attacks** that cause the underlying AI provider to behave in unintended ways. These are limitations of the underlying models, are in scope for the model provider's own safety processes, and are discussed in our [Terms & Conditions](./termsandcondition.md). Reports about a *specific way to bypass a safety filter on OpenAI / Anthropic / Google models* should go to the respective provider.
 - **Jailbreaks** of the AI assistant persona that don't expose data or control the user's machine.
 
 A prompt-injection issue **becomes** in-scope if it leads to **exfiltration of user data**, **unauthorised local file access**, **privilege escalation in the IPC bridge**, or **execution of arbitrary code on the user's machine**. Please call this out clearly in your report.
@@ -129,7 +129,7 @@ A prompt-injection issue **becomes** in-scope if it leads to **exfiltration of u
 
 When a confirmed issue is fixed, we publish a **GitHub Security Advisory** at:
 
-<https://github.com/evinjohnn/natively-cluely-ai-assistant/security/advisories>
+<https://github.com/tang9-c/natively-cluely-ai-assistant/security/advisories>
 
 The advisory includes a description of the issue, affected versions, the fix, and (with your consent) credit to the reporter. CVE assignment is requested where applicable through GitHub's CNA.
 
@@ -151,8 +151,8 @@ If we ever introduce a paid bounty programme, we'll publish the rules here befor
 
 ## Contact
 
-**Email:** natively.contact@gmail.com
+**Email:** tangdu@feigenbaum.ai
 
-For Privacy Policy questions, see [PRIVACY.md](./PRIVACY.md). For commercial / refund / licensing questions, see the [Refund Policy](https://cueup.feigenbaum.ai/refundpolicy) and [Terms &amp; Conditions](https://cueup.feigenbaum.ai/termsandconditions).
+For Privacy Policy questions, see [PRIVACY.md](./PRIVACY.md). For commercial / refund / licensing questions, see the [Refund Policy](./refund.md) and [Terms & Conditions](./termsandcondition.md).
 
 Thanks for helping keep CueUp safe.

@@ -38,9 +38,9 @@ If you see "App is damaged":
 - **For .dmg downloads:**
   1. Open Terminal and run:
      ```bash
-     xattr -cr ~/Downloads/CueUp-2.0.2-arm64.dmg
+     xattr -cr ~/Downloads/CueUp-<version>-arm64.dmg
      # Or for Intel Macs:
-     xattr -cr ~/Downloads/CueUp-2.0.2-x64.dmg
+     xattr -cr ~/Downloads/CueUp-<version>-x64.dmg
      ```
   2. Open the downloaded CueUp `.dmg` and install the app.
   3. Open Terminal and run: `xattr -cr /Applications/CueUp.app`

@@ -20,7 +20,7 @@ Following these guidelines helps to communicate that you respect the time of the
 
 ## Code of Conduct
 
-This project and everyone participating in it is governed by the [CueUp Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to evinjohnn@gmail.com.
+This project and everyone participating in it is governed by the [CueUp Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to tangdu@feigenbaum.ai.
 
 ## How Can I Contribute?
 
@@ -66,7 +66,7 @@ Enhancement suggestions are tracked as GitHub issues. When you are creating an e
 
 ### Local Development
 
-1. Fork the repo and create your branch from `main`.
+1. Fork the repo and create your branch from the repository default branch, currently `ci/intel-mac-workflow`.
 2. Clone your fork locally: `git clone https://github.com/YOUR_USERNAME/natively-cluely-ai-assistant.git`
 3. Install dependencies: `npm install`
 4. Set up your `.env` file (refer to the README for template).
@@ -75,6 +75,20 @@ Enhancement suggestions are tracked as GitHub issues. When you are creating an e
 If you've added code that should be tested, add tests.
 If you've changed APIs, update the documentation.
 Ensure the test suite passes.
+
+For prompt, RAG, context selection, dynamic action rules, realtime LLM paths, business-system context, speaker/screen context, trace, or metrics changes, run the context quality gate before submitting:
+
+```bash
+npm run test:quality:changed
+npm run test:quality:gate
+```
+
+For repeated local validation after a fresh Electron build, use:
+
+```bash
+npm run build:electron
+npm run test:quality:gate:no-build
+```
 
 ### Architecture Overview
 

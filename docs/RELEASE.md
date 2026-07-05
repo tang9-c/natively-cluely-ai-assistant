@@ -47,8 +47,9 @@ npm run dist
 # - Title: CueUp v2.0.8-beta.1
 # - Mark as "Pre-release"
 # - Upload files from release/:
-#   - Natively Setup 2.0.8-beta.1.exe
-#   - Natively.2.0.8-beta.1.exe
+#   - CueUp Setup 2.0.8-beta.1.exe
+#   - CueUp.2.0.8-beta.1.exe
+#   - CueUp-2.0.8-beta.1-arm64.dmg / CueUp-2.0.8-beta.1-x64.dmg
 #   - beta-latest.yml  <-- important!
 #   - *.blockmap files
 ```
@@ -66,8 +67,9 @@ npm run dist
 # - Tag: v2.0.8
 # - Title: CueUp v2.0.8
 # - Upload files from release/:
-#   - Natively Setup 2.0.8.exe
-#   - Natively.2.0.8.exe
+#   - CueUp Setup 2.0.8.exe
+#   - CueUp.2.0.8.exe
+#   - CueUp-2.0.8-arm64.dmg / CueUp-2.0.8-x64.dmg
 #   - latest.yml  <-- important!
 #   - *.blockmap files
 ```

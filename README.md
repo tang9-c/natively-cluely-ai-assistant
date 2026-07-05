@@ -5,8 +5,10 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 <div align="center">
   <img src="assets/icon.png" width="150" alt="CueUp AI Assistant Logo">
 
-# CueUp — Free, Open-Source AI Interview Copilot & Meeting Assistant
+# Feigenbaum CueUp — Free, Open-Source AI Interview Copilot & Meeting Assistant
 
+**关键时刻，给你一句能用的回答。**
+<br/>
 **The best free alternative to Cluely, Final Round AI, LockedIn AI, and Interview Coder.**
 <br/>
 **Same UI as Cluely. More features. $0. Open source. No data breaches.**
@@ -40,10 +42,10 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 <br/>
 
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blueviolet?style=flat-square)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases)
-[![Downloads](https://img.shields.io/github/downloads/evinjohnn/natively-cluely-ai-assistant/total?style=flat-square&color=success)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blueviolet?style=flat-square)](https://github.com/tang9-c/natively-cluely-ai-assistant/releases)
+[![Downloads](https://img.shields.io/github/downloads/tang9-c/natively-cluely-ai-assistant/total?style=flat-square&color=success)](https://github.com/tang9-c/natively-cluely-ai-assistant/releases)
 ![Repo Views](https://img.shields.io/badge/Views-341k-orange?style=flat-square)
-[![Stars](https://img.shields.io/github/stars/evinjohnn/natively-cluely-ai-assistant?style=flat-square&color=gold)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant)
+[![Stars](https://img.shields.io/github/stars/tang9-c/natively-cluely-ai-assistant?style=flat-square&color=gold)](https://github.com/tang9-c/natively-cluely-ai-assistant)
 ![Status](https://img.shields.io/badge/Status-active-success?style=flat-square)
 [![X Community](https://img.shields.io/badge/Community-black?style=flat-square&logo=x&logoColor=white)](https://x.com/i/communities/2031398735515693507)
 
@@ -56,10 +58,10 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 </p>
 
 <p align="center">
-  <a href="https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases/latest">
+  <a href="https://github.com/tang9-c/natively-cluely-ai-assistant/releases/latest">
     <img src="https://img.shields.io/badge/Download-macOS-007AFF?style=for-the-badge&logo=apple&logoColor=white" />
   </a>
-  <a href="https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases/latest">
+  <a href="https://github.com/tang9-c/natively-cluely-ai-assistant/releases/latest">
     <img src="https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white" />
   </a>
 </p>
@@ -127,7 +129,7 @@ While other tools act as simple API wrappers, CueUp is a complete, native intell
 
 Every star pushes CueUp higher in GitHub search, helping developers and job seekers find a free, private alternative instead of paying $149/month for tools that store their data on someone else's server.
 
-[![Star CueUp](https://img.shields.io/github/stars/evinjohnn/natively-cluely-ai-assistant?style=for-the-badge&color=gold&label=Star%20on%20GitHub)](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant)
+[![Star CueUp](https://img.shields.io/github/stars/tang9-c/natively-cluely-ai-assistant?style=for-the-badge&color=gold&label=Star%20on%20GitHub)](https://github.com/tang9-c/natively-cluely-ai-assistant)
 
 </div>
 
@@ -259,7 +261,7 @@ CueUp works as a **free, undetectable AI coding interview assistant** for standa
 **How it works:**
 
 1. Screenshot the problem with a single shortcut
-2. CueUp OCRs the question and sends it to your chosen AI (GPT, Claude, Gemini, or local Ollama)
+2. CueUp OCRs the question and sends it to your chosen AI (Doubao, QCLOUD API, GPT, Claude, Gemini, Groq, or local Ollama)
 3. Response appears in the invisible overlay — never on screen share
 
 > ⚠️ **Important:** CueUp is not designed to bypass dedicated proctoring software like **Pearson VUE**, **ProctorU**, or **Respondus Lockdown Browser** — these run at the OS level and are a different category entirely. For standard online coding assessments without dedicated proctoring software, CueUp's stealth mode is not detectable.
@@ -268,11 +270,7 @@ CueUp works as a **free, undetectable AI coding interview assistant** for standa
 
 <div align="center">
 
-[![Portfolio](https://img.shields.io/badge/Portfolio-evinjohn.vercel.app-blueviolet?style=flat-square&logo=vercel&logoColor=white)](https://evinjohn.vercel.app/)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/evinjohn/)
-[![X](https://img.shields.io/badge/X-@evinjohnn-black?style=flat-square&logo=x&logoColor=white)](https://x.com/evinjohnn)
-[![Hire Me](https://img.shields.io/badge/Hire_Me-Contact-success?style=flat-square&logo=gmail&logoColor=white)](mailto:evinjohnn@gmail.com?subject=CueUp%20-%20Hiring%20Inquiry)
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support-FFDD00?style=flat-square&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/evinjohn)
+[![Contact CueUp](https://img.shields.io/badge/Contact-tangdu%40feigenbaum.ai-success?style=flat-square&logo=gmail&logoColor=white)](mailto:tangdu@feigenbaum.ai?subject=CueUp%20Inquiry)
 
 </div>
 
@@ -286,8 +284,8 @@ Are you managing separate accounts for your AI reasoning, live transcription, fa
 
 Under the hood, CueUp API connects you to the absolute best models for the optimal user experience:
 
-- **Backend AI Models**: Claude, OpenAI, Gemini, and Groq.
-- **Premium STT Models**: Google Chirp 2/3, ElevenLabs Scribe v2, and Deepgram Nova-3.
+- **Backend AI Models**: Doubao, QCLOUD API, Claude, OpenAI, Gemini, and Groq.
+- **Speech Models**: Local SenseVoice for local transcription, plus QCLOUD API and Doubao AUC for Chinese-first cloud transcription.
 
 ### 4 Categories → 1 Key
 
@@ -295,7 +293,7 @@ Under the hood, CueUp API connects you to the absolute best models for the optim
 
 - **AI Intelligence (GPT/Claude/Gemini):** per-token billing and usage anxiety
 - **Lightning-Fast Inference (Groq/Llama):** strict rate limits to monitor
-- **Real-Time Transcription (Deepgram/Google STT):** separate key + quota
+- **Real-Time Transcription (Local SenseVoice/QCLOUD API/Doubao AUC):** separate setup and provider limits
 - **Web Search & Research (Tavily/Perplexity):** yet another subscription
 
 **Replaced by CueUp API:**
@@ -483,10 +481,10 @@ You explicitly control:
 > **macOS Users (Both Apple Silicon & Intel Macs supported):**
 >
 > 1.  **"Unidentified Developer"**: If you see this, Right-click the app > Select **Open** > Click **Open**.
-> 2.  **"App is Damaged"**: If your build artifact includes `OPEN-UNSIGNED-NATIVELY-MAC.sh`, run that script first. It removes the quarantine flag and opens the app for you.
+> 2.  **"App is Damaged"**: If your build artifact includes `OPEN-UNSIGNED-CUEUP-MAC.sh`, run that script first. It removes the quarantine flag and opens the app for you.
 >
 >     ```bash
->     ./OPEN-UNSIGNED-NATIVELY-MAC.sh
+>     ./OPEN-UNSIGNED-CUEUP-MAC.sh
 >     ```
 >
 >     If the helper script is not available, run the command in Terminal based on your download:
@@ -500,9 +498,9 @@ You explicitly control:
 >     **For .dmg downloads:**
 >     1. Open Terminal and run:
 >        ```bash
->        xattr -cr ~/Downloads/CueUp-2.0.2-arm64.dmg # Or your specific filename
+>        xattr -cr ~/Downloads/CueUp-2.7.0-arm64.dmg # Or your specific filename
 >        ```
->     2. Install the natively.dmg
+>     2. Install the CueUp `.dmg`
 >     3. Open Terminal and run: `xattr -cr /Applications/CueUp.app`
 
 ### Prerequisites
@@ -516,16 +514,15 @@ You explicitly control:
 **CueUp is 100% free to use with your own keys.**  
 Connect **any** speech provider and **any** LLM. No subscriptions, no markups, no hidden fees. All keys are stored locally.
 
-### Unlimited Free Transcription (Whisper, Google, Deepgram)
+### Speech Providers
 
-- **Soniox** (API Key) - _Ultra-fast, highly accurate streaming STT_
-- **Google Cloud Speech-to-Text** (Service Account)
-- **Groq** (API Key)
-- **OpenAI Whisper** (API Key)
-- **Deepgram** (API Key)
-- **ElevenLabs** (API Key)
-- **Azure Speech Services** (API Key + Region)
-- **IBM Watson** (API Key + Region)
+CueUp's current speech setup is centered on three paths:
+
+- **Local SenseVoice** - recommended default for local, Chinese-first real-time transcription.
+- **QCLOUD API** - uses the saved QCLOUD API key for cloud transcription, Chinese-first behavior, and speaker separation where supported.
+- **Doubao AUC** - advanced async transcription for Chinese-first meetings, with optional speaker information, emotion detection, and utterance output.
+
+Legacy BYOK providers such as Groq, OpenAI Whisper, Deepgram, ElevenLabs, Azure Speech Services, and IBM Watson may still be available in settings, but the maintained setup guide now prioritizes the three paths above.
 
 ### AI Engine Support (Bring Your Own Key)
 
@@ -533,40 +530,28 @@ Connect CueUp to **any** leading model or local inference engine.
 
 | Provider                     | Best For                                                    |
 | :--------------------------- | :---------------------------------------------------------- |
-| **Gemini 3.1 Series**        | Recommended: Massive context window (2M tokens) & low cost. |
+| **Doubao Seed 2.0 Lite**     | Default chat model for new installs and Chinese-first real-time answers. |
+| **QCLOUD API**               | One saved key for LLM routing and optional speech transcription. |
 | **OpenAI (GPT-5.4 & o3)**    | High reasoning capabilities.                                |
 | **Anthropic (Claude 4.6)**   | Coding & complex nuanced tasks.                             |
+| **Gemini**                   | Large-context cloud model option when configured.            |
 | **Groq (Llama 3.3/Scout 4)** | Insane speed (near-instant answers) & screenshot analysis.  |
 | **Ollama / LocalAI**         | 100% Offline & Private (No API keys needed).                |
 | **OpenAI-Compatible**        | Connect to _any_ custom endpoint (vLLM, LM Studio, etc.)    |
 
-> **Note:** You only need ONE speech provider to get started. We recommend **Google STT** ,**Groq** or **Deepgram** for the fastest real-time performance.
+> **Note:** You only need one speech provider to get started. We recommend **Local SenseVoice** first, then **QCLOUD API** or **Doubao AUC** when you need cloud transcription or speaker separation.
 
 ---
 
-#### To Use Google Speech-to-Text (Optional)
+#### Credential Setup
 
 Your credentials:
 
 - Never leave your machine
 - Are not logged, proxied, or stored remotely
-- Are used only locally by the app
+- Are used only by the provider paths you enable
 
-What You Need:
-
-- Google Cloud account
-- Billing enabled
-- Speech-to-Text API enabled
-- Service Account JSON key
-
-Setup Summary:
-
-1. Create or select a Google Cloud project
-2. Enable Speech-to-Text API
-3. Create a Service Account
-4. Assign role: `roles/speech.client`
-5. Generate and download a JSON key
-6. Point CueUp to the JSON file in settings
+Most credentials are saved from the in-app settings panels through the desktop credential manager. Use `.env` only for local development or provider smoke tests.
 
 ---
 
@@ -575,7 +560,7 @@ Setup Summary:
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant.git
+git clone https://github.com/tang9-c/natively-cluely-ai-assistant.git
 cd natively-cluely-ai-assistant
 ```
 
@@ -597,13 +582,16 @@ Create a `.env` file:
 
 ```env
 # Cloud AI
+DOUBAO_API_KEY=your_key
+NATIVE_API_KEY=your_key
 GEMINI_API_KEY=your_key
 GROQ_API_KEY=your_key
 OPENAI_API_KEY=your_key
 CLAUDE_API_KEY=your_key
-GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/service-account.json
 
 # Speech Providers (Optional - only one needed)
+QCLOUD_API_KEY=your_key
+DOUBAO_API_KEY=your_key
 DEEPGRAM_API_KEY=your_key
 ELEVENLABS_API_KEY=your_key
 AZURE_SPEECH_KEY=your_key
@@ -617,7 +605,7 @@ OLLAMA_MODEL=llama3.2
 OLLAMA_URL=http://localhost:11434
 
 # Default Model Configuration
-DEFAULT_MODEL=gemini-3.1-flash-lite-preview
+DEFAULT_MODEL=doubao-seed-2-0-lite-260215
 ```
 
 ### Run (Development)
@@ -640,8 +628,10 @@ This runs: Vite build → TypeScript compile → native module build → electro
 
 - **Custom (BYO Endpoint):** Paste any cURL command to use OpenRouter, DeepSeek, or private endpoints.
 - **Ollama (Local):** Zero-setup detection of local models (Llama 3, Mistral, Gemma).
-- **Dynamic Model Selection:** Preferred models (OpenAI, Anthropic, Google) now automatically appear across the app.
-- **Google Gemini:** First-class support for the Gemini 3.1 series.
+- **Dynamic Model Selection:** Preferred models now automatically appear across the app.
+- **Doubao:** Default chat model is Doubao Seed 2.0 Lite.
+- **QCLOUD API:** Saved QCLOUD API key can be used for LLM routing and optional speech transcription.
+- **Google Gemini:** Supported as a configurable cloud provider.
 - **OpenAI:** GPT-5.4 and o3 series support with optimized system prompts.
 - **Anthropic:** Claude 4.6 series support with corrected max_tokens.
 - **Groq:** Ultra-fast text inference with Llama 3.3, and screenshot analysis using Llama 4 Scout.
@@ -820,7 +810,9 @@ No raw audio, screenshots, or transcripts are stored or transmitted unless expli
 
 ### Supported Models
 
-- **Gemini 3.1 Series**
+- **Doubao Seed 2.0 Lite** (default)
+- **QCLOUD API**
+- **Gemini**
 - **OpenAI** (GPT-5.4, o3 series)
 - **Claude** (4.6 series)
 - **Ollama** (Llama, Mistral, CodeLlama)
@@ -970,11 +962,11 @@ CueUp is a free, open-source alternative to:
 
 ## Star History
 
-<a href="https://star-history.com/#evinjohnn/natively-cluely-ai-assistant&Date">
+<a href="https://star-history.com/#tang9-c/natively-cluely-ai-assistant&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=evinjohnn/natively-cluely-ai-assistant&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=evinjohnn/natively-cluely-ai-assistant&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=evinjohnn/natively-cluely-ai-assistant&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=tang9-c/natively-cluely-ai-assistant&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=tang9-c/natively-cluely-ai-assistant&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=tang9-c/natively-cluely-ai-assistant&type=Date" />
  </picture>
 </a>
 

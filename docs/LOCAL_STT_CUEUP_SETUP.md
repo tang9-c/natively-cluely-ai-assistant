@@ -1,4 +1,8 @@
-# Installing This Local-STT CueUp Build
+# Archived WhisperLive Local STT Setup
+
+> **Current status:** This document describes the older WhisperLive-based `Local STT` development path. The current CueUp speech setup is centered on **Local SenseVoice**, **QCLOUD API**, and **Doubao AUC**. Use the in-app Help & Settings guide or the README speech-provider section for the maintained setup path.
+>
+> The old `npm run test:local-stt` command is no longer present in `package.json`; use the current provider-specific tests such as `electron/services/__tests__/LocalSenseVoiceSTT.test.mjs`, `electron/services/__tests__/QCloudApiSpeechChannel.test.mjs`, or `electron/services/__tests__/DoubaoAucRestSTT.test.mjs` when validating speech changes.
 
 This guide is for running the CueUp source tree that includes the new `Local STT` provider. Your already-installed CueUp app will not have this feature until you build and run this modified project or package a new installer from it.
 
@@ -50,10 +54,10 @@ npm run typecheck:electron
 npx tsc --noEmit
 npm run build
 npm run build:electron
-npm run test:local-stt
+ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/__tests__/LocalSenseVoiceSTT.test.mjs electron/services/__tests__/QCloudApiSpeechChannel.test.mjs electron/services/__tests__/DoubaoAucRestSTT.test.mjs
 ```
 
-`npm run test:local-stt` uses a mock WhisperLive WebSocket server. It does not require WhisperLive to be installed.
+These current speech tests cover the maintained Local SenseVoice, QCLOUD API, and Doubao AUC paths. The archived WhisperLive flow is not covered by a package script anymore.
 
 ## 4. Run CueUp in Development Mode
 
