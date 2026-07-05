@@ -14,8 +14,8 @@ function read(relativePath) {
 test('StartupSequence presents the Chinese CueUp onboarding copy', () => {
   const source = read('src/components/StartupSequence.tsx');
 
-  assert.match(source, /欢迎使用 CueUp/);
-  assert.match(source, /实时转写、屏幕理解和会议辅助/);
+  assert.match(source, /欢迎使用 Feigenbaum CueUp/);
+  assert.match(source, /关键时刻，给你一句能用的回答/);
   assert.match(source, /点击继续即表示你同意 CueUp 的/);
   assert.match(source, /本地优先转写/);
   assert.match(source, /屏幕与上下文理解/);

@@ -120,7 +120,7 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
                             fontWeight: 500
                         }}
                     >
-                        欢迎使用 CueUp
+                        欢迎使用 Feigenbaum CueUp
                     </motion.h1>
 
                     <motion.p
@@ -128,7 +128,7 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
                         className="text-[25px] text-center mb-12 text-[#a7a7ad]"
                         style={{ fontFamily: FONTS.celebLight, fontWeight: 300 }}
                     >
-                        实时转写、屏幕理解和会议辅助
+                        关键时刻，给你一句能用的回答
                     </motion.p>
 
                     {/* High-Fidelity "Continue" Button */}
