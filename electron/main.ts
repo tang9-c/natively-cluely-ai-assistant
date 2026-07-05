@@ -3324,6 +3324,11 @@ export class AppState {
     this.getWindowHelper().getOverlayWindow()?.webContents.send('session-reset');
     this.getWindowHelper().getLauncherWindow()?.webContents.send('session-reset');
 
+    if (process.env.ELECTRON_E2E_SKIP_AUDIO_START === '1') {
+      console.log('[Main] E2E mode: skipping native audio pipeline start.');
+      return;
+    }
+
     // ★ ASYNC AUDIO INIT: Return INSTANTLY so the IPC response goes back
     // to the renderer immediately, allowing the UI to switch to overlay
     // without waiting for SCK/audio initialization (which takes 5-7 seconds).
