@@ -242,7 +242,7 @@ export const NativelyApiSettings: React.FC = () => {
             {[
               { step: '1', text: '粘贴你的 QCLOUD key 并保存。' },
               { step: '2', text: '保存成功后，可将聊天默认模型切换为 QCLOUD API；已有手动模型会先询问确认。' },
-              { step: '3', text: '实时转录和向量模型不使用 QCLOUD，继续保持本地优先。' },
+              { step: '3', text: '如需云端语音转写，可在“语音”标签选择 QCLOUD API；向量模型继续保持本地优先。' },
             ].map(({ step, text }) => (
               <div key={step} className="flex items-start gap-3">
                 <div className="w-5 h-5 rounded-full bg-bg-input border border-border-subtle flex items-center justify-center text-[10px] font-bold text-text-tertiary shrink-0 mt-[1px]">

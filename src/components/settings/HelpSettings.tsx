@@ -142,7 +142,7 @@ const MockAppInterface = () => {
                         <div className="flex items-center justify-between mt-3 px-0.5">
                             <div className="flex items-center gap-1.5">
                                 <button className="flex items-center gap-2 px-3 py-1.5 border border-border-subtle rounded-lg bg-bg-item-surface text-text-primary text-xs font-medium w-[140px] shadow-sm">
-                                    <span className="truncate min-w-0 flex-1 text-left">Gemini 3.1 Flash</span>
+                                    <span className="truncate min-w-0 flex-1 text-left">Doubao Seed 2.0 Lite</span>
                                     <ChevronDown size={14} className="shrink-0 opacity-70" />
                                 </button>
                                 <div className="h-3 w-px bg-border-subtle mx-1" />
@@ -573,13 +573,9 @@ const MockProviderSelectionAnim = () => {
     }, []);
 
     const options = [
-        { id: 'local-sensevoice', label: 'Local SenseVoice', badge: '', recommended: true, desc: '本地优先实时转录', color: 'green', icon: <img src={nativelyIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="CueUp" /> },
-        { id: 'deepgram', label: 'Deepgram Nova-3', badge: '已保存', recommended: false, desc: '高精度 REST 转录', color: 'purple', icon: <Mic size={14} /> },
-        { id: 'google', label: 'Google Cloud', badge: '已保存', recommended: false, desc: '通过 Service Account 的 gRPC 流式传输', color: 'blue', icon: <Mic size={14} /> },
-        { id: 'groq', label: 'Groq Whisper', badge: '', recommended: false, desc: '快速 LPU Whisper 转录', color: 'orange', icon: <Mic size={14} /> },
-        { id: 'azure', label: 'Azure Speech', badge: '', recommended: false, desc: '企业级转录', color: 'teal', icon: <Mic size={14} /> },
-        { id: 'soniox', label: 'Soniox', badge: '', recommended: false, desc: '医疗级转录', color: 'cyan', icon: <Mic size={14} /> },
-        { id: 'ibm', label: 'IBM Watson', badge: '', recommended: false, desc: 'Watson 语音转文字', color: 'indigo', icon: <Mic size={14} /> },
+        { id: 'local-sensevoice', label: 'Local SenseVoice', badge: '', recommended: true, desc: '中文优先，本地实时转录', color: 'green', icon: <img src={nativelyIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="CueUp" /> },
+        { id: 'qcloud-stt', label: 'QCLOUD API', badge: '已保存', recommended: false, desc: '同一把 QCLOUD key，中文优先并支持说话人分离', color: 'blue', icon: <Mic size={14} /> },
+        { id: 'doubao-auc', label: 'Doubao AUC', badge: '已保存', recommended: false, desc: 'AUC BigModel，支持说话人和情绪信息', color: 'orange', icon: <Mic size={14} /> },
     ];
     const selected = options[0];
 
@@ -676,11 +672,11 @@ const MockApiKeyFlowAnim = () => {
     return (
         <div className="flex justify-center flex-col items-center gap-2 py-8 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[240px]">
             <div className="w-[380px] space-y-2 relative z-10">
-                <label className="text-xs font-medium text-text-secondary block">Groq API 密钥</label>
+                <label className="text-xs font-medium text-text-secondary block">QCLOUD / Doubao API 密钥</label>
                 <div className="flex gap-2">
                     <div className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary flex items-center shadow-inner">
                         <span className={stage > 0 ? "opacity-100" : "opacity-40"}>
-                            {stage > 0 ? "gsk_a8B2c..." : "输入 API 密钥"}
+                            {stage > 0 ? "sk-a8B2c..." : "输入 API 密钥"}
                         </span>
                         {stage === 0 && <motion.div animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="w-0.5 h-4 bg-accent-primary ml-0.5" />}
                     </div>
@@ -714,20 +710,6 @@ const MockApiKeyFlowAnim = () => {
             >
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5"><path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.42c.45 0 .67-.54.35-.85L6.35 3.35a.5.5 0 0 0-.85.35Z" /></svg>
             </motion.div>
-        </div>
-    );
-};
-
-const ElevenLabsPermissionsMock = () => {
-    return (
-        <div className="w-full flex justify-center py-4 bg-bg-elevated rounded-xl border border-border-subtle mb-3 mt-2 shadow-sm">
-            <div className="flex items-center justify-between w-full max-w-[360px]">
-                <span className="text-[14.5px] text-text-primary font-medium tracking-tight">语音转文字</span>
-                <div className="flex items-center bg-bg-main p-[3px] rounded-lg border border-border-subtle shadow-inner">
-                    <div className="px-3.5 py-1.5 text-[13px] font-medium text-text-secondary">无访问权限</div>
-                    <div className="px-3.5 py-1.5 text-[13px] font-medium text-black bg-white rounded-md shadow-sm relative z-10 before:absolute before:inset-0 before:rounded-md before:border-[1.5px] before:border-black before:opacity-90 before:-m-[1px]">访问</div>
-                </div>
-            </div>
         </div>
     );
 };
@@ -790,11 +772,11 @@ const SetupGuide = () => {
         },
         {
             title: '设置音频',
-            desc: '打开设置 → 音频，优先选择本地 SenseVoice，或按需粘贴 Deepgram 或 Google 密钥。',
+            desc: '打开设置 → 音频，优先选择 Local SenseVoice；需要云端中文转录或说话人分离时，选择 QCLOUD API 或 Doubao AUC。',
         },
         {
             title: '连接 AI 模型',
-            desc: '打开设置 → AI 提供商，选择内置模型，或添加 Groq 或 OpenRouter 密钥。',
+            desc: '打开设置 → AI 提供商，默认聊天模型是 Doubao；也可以配置 QCLOUD、OpenAI、Claude、Gemini、Groq 或自定义端点。',
         },
         {
             title: '个性化（可选）',
@@ -876,7 +858,7 @@ export const HelpSettings: React.FC = () => {
                     帮助与设置指南
                 </h2>
                 <p className={`text-sm text-text-secondary mt-3 max-w-2xl`}>
-                    了解如何深度配置 CueUp。从提供正确的 API 权限到无缝执行对话式面试，以下内容全部涵盖。
+                    了解如何配置 CueUp 的权限、语音转写、AI 提供商、屏幕理解、会议记录、模式和快捷键。
                 </p>
             </div>
 
@@ -974,7 +956,7 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="2. 音频语音转文字提供商设置（麦克风）" icon={<Mic className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p>CueUp supports over 8 different Audio engines to transcribe what you hear and say. From the Audio tab in settings, use the overarching dropdown to switch the active engine.</p>
+                        <p>CueUp 的语音页现在以三条主路径为核心：本地 SenseVoice、QCLOUD API 和 Doubao AUC。Local SenseVoice 适合默认本地中文实时转录；QCLOUD API 和 Doubao AUC 适合需要云端中文优先识别、说话人分离或高级分句信息的会议。</p>
 
                         <MockProviderSelectionAnim />
 
@@ -990,63 +972,36 @@ export const HelpSettings: React.FC = () => {
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>1. Google Cloud STT</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.cloud.google.com/apis/credentials') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
+                                    <span>1. Local SenseVoice</span>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    使用 Service Account JSON 而非 API 密钥。你必须创建一个 GCP 项目，激活 Cloud Speech API，并在 IAM 下创建 Service Account。下载 JSON 密钥，然后拖放到音频设置中的框内。
+                                    推荐默认方案。模型在本机运行，中文优先，不把原始音频发送到云端。第一次使用前需要在本地模型面板下载 SenseVoice 模型；如果模型未安装，设置页会显示下载入口和状态。
                                 </p>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>2. ElevenLabs</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://elevenlabs.io/app/settings/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
+                                    <span>2. QCLOUD API</span>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    为"对话式 AI"流式集成创建自定义 API 密钥时，你必须显式启用 <strong>convai.conversations.create</strong> 和 <strong>assistants.list</strong>。
-                                    关键的是，你还必须允许 <strong>Speech to Text: Access</strong>，如下方 ElevenLabs 界面所示：
-                                </p>
-                                <ElevenLabsPermissionsMock />
-                            </div>
-
-                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
-                                <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>3. Groq</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.groq.com/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
-                                </h5>
-                                <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    通过 LPU 提供超快速的 Whisper 响应。密钥以 <span className={kbdClass}>gsk_</span> 开头。不需要特殊权限。
+                                    使用同一把 QCLOUD key 同时支持 LLM 路由和语音转写。保存 key 后，语音提供商下拉会出现 <strong>QCLOUD API</strong>；它默认中文优先，支持说话人分离。Embedding 仍保持本地优先，不会因为配置 QCLOUD 自动切到远程向量模型。
                                 </p>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>4. OpenAI</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://platform.openai.com/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
+                                    <span>3. Doubao AUC</span>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://www.volcengine.com/docs/6561/1354869') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    使用标准 OpenAI 密钥（<span className={kbdClass}>sk-</span>）。注意：此音频密钥与"AI 提供商"下的 AI 生成密钥是独立的。
+                                    高级云端语音通道。AUC BigModel 支持异步任务、说话人分离、分句信息和情绪信息；适合更长音频或需要更完整会议结构的场景。保存 Doubao 语音 key 后可在语音页选择 <strong>Doubao AUC</strong>。
                                 </p>
                             </div>
 
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
-                                <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>5. Deepgram</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.deepgram.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
-                                </h5>
+                                <h5 className="font-semibold text-sm text-text-primary">说话人分离</h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    极其精确的流式转录（Nova-2 模型）。密钥在 Deepgram 控制台中按需生成。
-                                </p>
-                            </div>
-
-                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
-                                <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
-                                    <span>6. Soniox</span>
-                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.soniox.com/') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 链接</button>
-                                </h5>
-                                <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    使用其标准控制台 API 密钥提供高质量的医疗/法律级别转录。
+                                    语音页底部有 <strong>Speaker separation</strong> 开关。设置为 Auto 时，CueUp 会在支持的云端通道上启用说话人分离；本地 SenseVoice 不会假装提供该能力，界面会明确显示不可用状态。
                                 </p>
                             </div>
                         </div>
@@ -1056,7 +1011,7 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="3. AI 提供商与提示词引擎" icon={<Key className="w-4 h-4" />}>
                     <div className="space-y-4">
-                        <p className="text-sm">CueUp 使用大语言模型（LLM）来理解你的屏幕和音频上下文。你可以配置云端提供商、本地模型或完全自定义的端点。</p>
+                        <p className="text-sm">CueUp 使用大语言模型（LLM）来理解屏幕、转录、模式、参考资料和个人上下文。默认聊天模型是 Doubao Seed 2.0 Lite；你也可以切换到 QCLOUD API、OpenAI、Claude、Gemini、Groq、本地 Ollama 或自定义端点。</p>
 
                         <div className="space-y-3 pt-2">
                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">1. 标准云端提供商</h4>
@@ -1069,7 +1024,7 @@ export const HelpSettings: React.FC = () => {
                                         </span>
                                         <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.groq.com/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 获取密钥</button>
                                     </h5>
-                                    <p className="text-[11px] opacity-80 mb-2">使用 LPU 硬件实现超快推理。默认模型： <strong>llama-3.3-70b-versatile</strong>.</p>
+                                    <p className="text-[11px] opacity-80 mb-2">使用 LPU 硬件实现快速推理。可在模型下拉中选择已拉取到注册表的 Groq 模型。</p>
                                     <span className={kbdClass}>gsk_...</span>
                                 </div>
                                 <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
@@ -1079,7 +1034,7 @@ export const HelpSettings: React.FC = () => {
                                         </span>
                                         <button onClick={() => { (window as any).electronAPI?.openExternal('https://platform.openai.com/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 获取密钥</button>
                                     </h5>
-                                    <p className="text-[11px] opacity-80 mb-2">业界标准管线。默认模型： <strong>gpt-5.4-mini</strong> & <strong>gpt-5.4</strong>.</p>
+                                    <p className="text-[11px] opacity-80 mb-2">标准 OpenAI 管线。保存 key 后可选择 OpenAI 系列聊天与视觉模型。</p>
                                     <span className={kbdClass}>sk-proj-...</span>
                                 </div>
                                 <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
@@ -1089,7 +1044,7 @@ export const HelpSettings: React.FC = () => {
                                         </span>
                                         <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.anthropic.com/settings/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 获取密钥</button>
                                     </h5>
-                                    <p className="text-[11px] opacity-80 mb-2">顶级的代码基础模型。默认： <strong>claude-4.6-sonnet</strong>.</p>
+                                    <p className="text-[11px] opacity-80 mb-2">适合长上下文和代码推理。保存 key 后可选择 Claude 系列模型。</p>
                                     <span className={kbdClass}>sk-ant-...</span>
                                 </div>
                                 <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
@@ -1099,9 +1054,30 @@ export const HelpSettings: React.FC = () => {
                                         </span>
                                         <button onClick={() => { (window as any).electronAPI?.openExternal('https://aistudio.google.com/app/apikey') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 获取密钥</button>
                                     </h5>
-                                    <p className="text-[11px] opacity-80 mb-2">超大的上下文窗口。默认模型： <strong>gemini-3.1-pro</strong>.</p>
+                                    <p className="text-[11px] opacity-80 mb-2">适合长上下文和视觉输入。保存 key 后可选择 Gemini 系列模型。</p>
                                     <span className={kbdClass}>AIzaSy...</span>
                                 </div>
+                            </div>
+
+                            <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
+                                <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
+                                    <span className="flex items-center gap-2">
+                                        <img src={nativelyIcon} alt="Doubao" className="w-4 h-4 object-contain force-black-icon opacity-80" /> Doubao
+                                    </span>
+                                    <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.volcengine.com/ark') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 获取密钥</button>
+                                </h5>
+                                <p className="text-[11px] opacity-80 mb-2">当前默认聊天模型是 <strong>Doubao Seed 2.0 Lite</strong>。适合中文优先的实时回答，也可填写 Doubao Embedding Endpoint ID 用于云端向量。</p>
+                                <span className={kbdClass}>doubao-seed-2-0-lite-260215</span>
+                            </div>
+
+                            <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
+                                <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
+                                    <span className="flex items-center gap-2">
+                                        <img src={nativelyIcon} alt="QCLOUD API" className="w-4 h-4 object-contain force-black-icon opacity-80" /> QCLOUD API
+                                    </span>
+                                </h5>
+                                <p className="text-[11px] opacity-80 mb-2">一把 key 可用于 LLM 路由和可选语音转写。保存时如果当前仍是自动默认模型，CueUp 会把聊天默认切到 QCLOUD；如果你已手动选择模型，会先询问确认。</p>
+                                <span className={kbdClass}>sk-...</span>
                             </div>
 
                             <div className="mt-2 bg-bg-item-surface p-4 rounded-xl border border-border-subtle shadow-sm flex gap-3">
@@ -1109,14 +1085,14 @@ export const HelpSettings: React.FC = () => {
                                     <Zap className="w-4 h-4 text-accent-primary" />
                                 </div>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mt-0.5">
-                                    <strong className="text-text-primary font-bold">自动模型注册表同步：</strong> CueUp 使用 14 天为周期的后台同步任务（<span className="font-mono bg-bg-elevated border border-border-muted px-1.5 py-0.5 rounded text-[10px] text-text-primary shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">v2/api/models</span>）静默轮询上游 API。如果 Anthropic 或 OpenAI 发布新的旗舰模型（例如 GPT-5），应用会自动将其加入 UI 下拉菜单。
+                                    <strong className="text-text-primary font-bold">自动模型注册表同步：</strong> CueUp 会周期性同步已配置提供商的模型列表。新模型进入注册表后，会出现在对应提供商的下拉菜单中；如果同步失败，仍保留本地默认模型和已保存的手动选择。
                                 </p>
                             </div>
 
                             <div className="p-4 mt-2 rounded-xl border border-border-subtle bg-bg-item-surface">
                                 <h5 className="font-semibold text-[13px] text-text-primary mb-1">配置当前模型引擎</h5>
                                 <p className="text-[11px] text-text-secondary leading-relaxed">
-                                    在启动器界面（开始按钮上方），你可以热切换你的<strong>当前模型</strong>。这个选择至关重要——它决定了当前的核心推理引擎。如果设置为 <strong>claude-3-5-sonnet</strong>，智能体将完全使用 Anthropic 基础设施进行屏幕分析。切换到 <strong>llama3:8b</strong>，系统会立刻改用你的离线 GPU 管线生成回复。
+                                    在启动器界面（开始按钮上方）可以切换<strong>当前模型</strong>。这个选择决定实时回答、屏幕理解和动态动作语义判断优先使用哪条 LLM 路径。屏幕截图只会发送给具备视觉能力且数据范围允许的提供商；如果云端数据范围被关闭，CueUp 会回退到可用的本地路径或给出明确降级提示。
                                 </p>
                             </div>
                         </div>
@@ -1255,7 +1231,7 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="5. 会议智能" icon={<Calendar className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[13px]">When an active session concludes, it gets saved directly to your local file system as a complete intelligence dossier spanning the transcript, AI token usage, and automated structural summaries.</p>
+                        <p className="text-[13px]">会话结束后，CueUp 会把会议保存到本地数据库，并生成包含转录、AI 用量和结构化摘要的会议详情。</p>
 
                         <MockMeetingInterfaceAnim />
 
@@ -1372,7 +1348,7 @@ export const HelpSettings: React.FC = () => {
                                         </div>
                                         <div>
                                             <div className="font-semibold text-sm text-text-primary">捕获上下文截图</div>
-                                            <div className="text-xs text-text-secondary mt-1">Takes a silent screenshot in the background, feeding the visual data to the LLM context flow.</div>
+                                            <div className="text-xs text-text-secondary mt-1">在后台静默截图，并把视觉内容送入受数据范围保护的 LLM 上下文流程。</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
@@ -1472,7 +1448,7 @@ export const HelpSettings: React.FC = () => {
                                         <Building2 className="w-4 h-4 text-purple-400" /> 公司情报
                                     </h4>
                                     <p className="text-[11px] text-text-secondary leading-relaxed">
-                                        After uploading a JD, hit <strong>立即研究</strong> to compile a live dossier on the company — recent news, product surface area, culture signals — cached and injected into every reply so you sound briefed without prep.
+                                        上传 JD 后点击 <strong>立即研究</strong>，CueUp 会整理公司资料，包括近期动态、产品范围和文化信号；结果会缓存并注入后续回答，让你不用临场补课。
                                     </p>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
@@ -1549,35 +1525,35 @@ export const HelpSettings: React.FC = () => {
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary">打开管理器</h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                         <li>点击 <strong>网格图标</strong> 在启动器标题栏中</li>
-                                        <li>Or click the 网格图标 in the main interface toolbar</li>
-                                        <li>需要 CueUp 专业版许可证</li>
+                                        <li>也可以点击主界面工具栏中的网格图标</li>
+                                        <li>管理器会显示内置模式、模板库和你创建的自定义模式</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary">激活模式</h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                         <li>在左侧边栏选择任意模式</li>
-                                        <li>Click <strong>设为活跃</strong> to apply it</li>
+                                        <li>点击 <strong>设为活跃</strong> 立即应用</li>
                                         <li>工具栏图标实时显示当前模式名称</li>
-                                        <li>Click <strong>停用</strong> to return to General</li>
+                                        <li>点击 <strong>停用</strong> 返回 General</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary">参考文件</h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Upload PDF, DOCX, or TXT files per mode</li>
-                                        <li>File contents are injected as real-time context</li>
-                                        <li>Great for: resumes, product sheets, job descriptions</li>
-                                        <li>Per-file cap: 12 k chars · total cap: 40 k chars</li>
+                                        <li>每个模式可上传 PDF、DOCX、TXT、Markdown 等参考文件</li>
+                                        <li>文件内容会作为实时上下文注入回答</li>
+                                        <li>适合简历、产品资料、职位描述和项目背景</li>
+                                        <li>单文件约 12k 字符，总量约 40k 字符</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
-                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Custom Modes & Templates</h4>
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">自定义模式与模板</h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>Click <strong>+ New Mode</strong> for a blank slate</li>
-                                        <li>Browse the <strong>模板库</strong> for ready-made personas</li>
-                                        <li>Edit the <strong>Real-time Prompt</strong> with the inline Save action</li>
-                                        <li>Define <strong>备注分区模板</strong> per mode for capture format</li>
+                                        <li>点击 <strong>+ 新建模式</strong> 创建空白模式</li>
+                                        <li>浏览 <strong>模板库</strong> 选择预设角色</li>
+                                        <li>编辑 <strong>实时提示词</strong> 后用行内保存按钮保存</li>
+                                        <li>为每个模式定义 <strong>备注分区模板</strong>，控制会议记录格式</li>
                                     </ul>
                                 </div>
                             </div>
