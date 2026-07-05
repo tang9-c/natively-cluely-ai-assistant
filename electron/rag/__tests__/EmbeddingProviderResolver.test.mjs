@@ -7,6 +7,19 @@ import { createRequire } from 'node:module';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
+const originalLocalEmbeddingProbeOverride = process.env.CUEUP_TEST_LOCAL_EMBEDDING_AVAILABLE;
+
+// These tests assert resolver ordering only. Avoid loading Transformers/ONNX in
+// this process, because macOS can abort during native runtime teardown after
+// the assertions have already passed.
+process.env.CUEUP_TEST_LOCAL_EMBEDDING_AVAILABLE = '1';
+test.after(() => {
+  if (originalLocalEmbeddingProbeOverride === undefined) {
+    delete process.env.CUEUP_TEST_LOCAL_EMBEDDING_AVAILABLE;
+  } else {
+    process.env.CUEUP_TEST_LOCAL_EMBEDDING_AVAILABLE = originalLocalEmbeddingProbeOverride;
+  }
+});
 
 // Stub `electron` before any provider imports it. `node:test`'s mock.module()
 // does not accept `format: 'electron'` on Node 20 (Electron's runtime), so we

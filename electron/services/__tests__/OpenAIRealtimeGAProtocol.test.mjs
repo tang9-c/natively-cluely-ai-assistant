@@ -281,6 +281,24 @@ describe('race / late-arrival safety', () => {
 // ──────────────────────────────────────────────────────────────────────────
 
 describe('timer ownership', () => {
+    test('stop() clears every active timer owned by the instance', () => {
+        const stt = new OpenAIStreamingSTT('sk-test-key');
+        stt._isActive = true;
+        stt.reconnectTimer = setTimeout(() => {}, 100_000);
+        stt.keepAliveTimer = setInterval(() => {}, 100_000);
+        stt.connectionTimeoutTimer = setTimeout(() => {}, 100_000);
+        stt.sessionSetupTimer = setTimeout(() => {}, 100_000);
+        stt.restSafetyTimer = setInterval(() => {}, 100_000);
+
+        stt.stop();
+
+        assert.strictEqual(stt.reconnectTimer, null);
+        assert.strictEqual(stt.keepAliveTimer, null);
+        assert.strictEqual(stt.connectionTimeoutTimer, null);
+        assert.strictEqual(stt.sessionSetupTimer, null);
+        assert.strictEqual(stt.restSafetyTimer, null);
+    });
+
     test('_closeWs() clears reconnectTimer (no phantom reconnect after language change)', () => {
         // The critical bug this guards against: _scheduleWsReconnect arms a
         // 30s timer; user changes language; _closeWs(true) must clear that

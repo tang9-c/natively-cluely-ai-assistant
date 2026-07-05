@@ -39,6 +39,10 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   }
 
   async isAvailable(): Promise<boolean> {
+    if (process.env.CUEUP_TEST_LOCAL_EMBEDDING_AVAILABLE === '1') {
+      return true;
+    }
+
     // Local model is ALWAYS available after install — this is the guarantee
     try {
       await this.ensureLoaded();
