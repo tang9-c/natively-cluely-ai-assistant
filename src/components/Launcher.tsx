@@ -92,6 +92,22 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const [showModesOnboarding, setShowModesOnboarding] = useState(false);
     const [showProfileOnboarding, setShowProfileOnboarding] = useState(false);
 
+    const shouldShowProfileOnboarding = () =>
+        localStorage.getItem('natively_seen_profile_onboarding_v1') !== 'true';
+
+    const shouldShowModesOnboarding = () =>
+        localStorage.getItem('natively_seen_modes_onboarding_v5') !== 'true';
+
+    const dismissProfileOnboarding = () => {
+        setShowProfileOnboarding(false);
+        localStorage.setItem('natively_seen_profile_onboarding_v1', 'true');
+    };
+
+    const dismissModesOnboarding = () => {
+        setShowModesOnboarding(false);
+        localStorage.setItem('natively_seen_modes_onboarding_v5', 'true');
+    };
+
     const fetchMeetings = () => {
         if (window.electronAPI && window.electronAPI.getRecentMeetings) {
             window.electronAPI.getRecentMeetings().then(setMeetings).catch(err => console.error("Failed to fetch meetings:", err));
@@ -161,19 +177,19 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         const hasSeenModesOnboarding = localStorage.getItem('natively_seen_modes_onboarding_v5');
         if (!hasSeenModesOnboarding) {
             setTimeout(() => {
-                if (mounted) setShowModesOnboarding(true);
+                if (mounted && shouldShowModesOnboarding()) setShowModesOnboarding(true);
             }, 8000); // Increased delay so it doesn't overlap with other startup notifications
         }
 
         const hasSeenProfileOnboarding = localStorage.getItem('natively_seen_profile_onboarding_v1');
         if (!hasSeenProfileOnboarding && hasSeenModesOnboarding) {
             setTimeout(() => {
-                if (mounted) setShowProfileOnboarding(true);
+                if (mounted && shouldShowProfileOnboarding()) setShowProfileOnboarding(true);
             }, 9000);
         } else if (!hasSeenProfileOnboarding && !hasSeenModesOnboarding) {
              // If both haven't been seen, show profile after modes
              setTimeout(() => {
-                if (mounted) setShowProfileOnboarding(true);
+                if (mounted && shouldShowProfileOnboarding()) setShowProfileOnboarding(true);
             }, 18000);
         }
 
@@ -419,8 +435,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                     <div className="relative group/profile-btn select-none">
                         <button
                             onClick={() => {
-                                setShowProfileOnboarding(false);
-                                localStorage.setItem('natively_seen_profile_onboarding_v1', 'true');
+                                dismissProfileOnboarding();
                                 onOpenProfile?.();
                             }}
                             title="档案智能"
@@ -436,7 +451,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                     animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
                                     exit={{ opacity: 0, y: -2, scale: 0.98, filter: "blur(2px)", transition: { duration: 0.15, ease: "easeOut" } }}
                                     transition={{ type: "spring", stiffness: 350, damping: 25, mass: 1 }}
-                                    className={`absolute top-[38px] right-2 w-[270px] rounded-[20px] p-4 z-[300] origin-top-right backdrop-blur-[40px] saturate-[180%] transform-gpu ${
+                                    className={`absolute top-[38px] right-2 w-[270px] rounded-[20px] p-4 z-[300] origin-top-right backdrop-blur-[40px] saturate-[180%] transform-gpu no-drag pointer-events-auto ${
                                         isLight 
                                         ? 'bg-white/70 shadow-[0_8px_30px_rgb(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.04)]' 
                                         : 'bg-[#18181A]/70 shadow-[0_8px_30px_rgb(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.08)]'
@@ -470,8 +485,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                 <button 
                                                     onClick={(e) => { 
                                                         e.stopPropagation(); 
-                                                        setShowProfileOnboarding(false); 
-                                                        localStorage.setItem('natively_seen_profile_onboarding_v1', 'true'); 
+                                                        dismissProfileOnboarding();
                                                     }}
                                                     className={`text-[12px] font-medium px-3.5 py-[6px] rounded-full transition-all active:scale-95 ${
                                                         isLight
@@ -485,8 +499,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                     onClick={(e) => { 
                                                         e.stopPropagation(); 
                                                         onOpenProfile?.(); 
-                                                        setShowProfileOnboarding(false); 
-                                                        localStorage.setItem('natively_seen_profile_onboarding_v1', 'true'); 
+                                                        dismissProfileOnboarding();
                                                     }}
                                                     className={`text-[12px] font-medium px-4 py-[6px] rounded-full transition-all active:scale-95 shadow-sm ${
                                                         isLight
@@ -506,8 +519,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                     <div className="relative group/modes-btn select-none">
                         <button
                             onClick={() => {
-                                setShowModesOnboarding(false);
-                                localStorage.setItem('natively_seen_modes_onboarding_v5', 'true');
+                                dismissModesOnboarding();
                                 onOpenModes?.();
                             }}
                             title="模式"
@@ -528,7 +540,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                     animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
                                     exit={{ opacity: 0, y: -2, scale: 0.98, filter: "blur(2px)", transition: { duration: 0.15, ease: "easeOut" } }}
                                     transition={{ type: "spring", stiffness: 350, damping: 25, mass: 1 }}
-                                    className={`absolute top-[38px] right-2 w-[270px] rounded-[20px] p-4 z-[300] origin-top-right backdrop-blur-[40px] saturate-[180%] transform-gpu ${
+                                    className={`absolute top-[38px] right-2 w-[270px] rounded-[20px] p-4 z-[300] origin-top-right backdrop-blur-[40px] saturate-[180%] transform-gpu no-drag pointer-events-auto ${
                                         isLight 
                                         ? 'bg-white/70 shadow-[0_8px_30px_rgb(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.04)]' 
                                         : 'bg-[#18181A]/70 shadow-[0_8px_30px_rgb(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.08)]'
@@ -574,8 +586,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                 <button 
                                                     onClick={(e) => { 
                                                         e.stopPropagation(); 
-                                                        setShowModesOnboarding(false); 
-                                                        localStorage.setItem('natively_seen_modes_onboarding_v5', 'true'); 
+                                                        dismissModesOnboarding();
                                                     }}
                                                     className={`text-[12px] font-medium px-3.5 py-[6px] rounded-full transition-all active:scale-95 ${
                                                         isLight
@@ -589,8 +600,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                     onClick={(e) => { 
                                                         e.stopPropagation(); 
                                                         onOpenModes?.(); 
-                                                        setShowModesOnboarding(false); 
-                                                        localStorage.setItem('natively_seen_modes_onboarding_v5', 'true'); 
+                                                        dismissModesOnboarding();
                                                     }}
                                                     className={`text-[12px] font-medium px-4 py-[6px] rounded-full transition-all active:scale-95 shadow-sm ${
                                                         isLight
