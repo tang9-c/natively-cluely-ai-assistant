@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { X, Zap } from 'lucide-react'
 import type { DynamicActionPayload } from '@/types/electron'
+import { explainDynamicAction } from '../../../shared/realtimeAnswerTrustViewModel'
 
 export type DynamicActionCardStatus = 'idle' | 'countdown' | 'generating' | 'cancelled'
 
@@ -84,6 +85,10 @@ export const DynamicActionCard: React.FC<Props> = ({
         ? '已取消'
         : '检测到行动项'
   const buttonLabel = isGenerating ? '正在生成' : isCountdown ? '立即生成' : '生成回答'
+  const actionTrustExplanation = explainDynamicAction({
+    type: action.type,
+    semanticGate: action.semanticGate,
+  })
 
   const accept = async () => {
     if (isGenerating || status === 'cancelled') return
@@ -132,6 +137,9 @@ export const DynamicActionCard: React.FC<Props> = ({
           )}
         </div>
         <span className="text-[10.5px] text-white/78 truncate">{displayLabel}</span>
+        <span className="text-[10px] text-white/62 truncate">
+          {actionTrustExplanation.message}
+        </span>
         {evidenceSnippet && (
           <span className="text-[10.5px] text-white/74 truncate">"{evidenceSnippet}"</span>
         )}

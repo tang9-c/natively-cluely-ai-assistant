@@ -143,6 +143,17 @@ test('dynamic action payload mirrors semanticGate trace metadata', () => {
   assert.match(types, /upgradedByRepeatedEvidence/);
 });
 
+test('dynamic action renderer payload exposes semantic gate metadata without evidence text expansion', () => {
+  const types = read('src/types/electron.d.ts');
+  const card = read('src/components/dynamic-actions/DynamicActionCard.tsx');
+
+  assert.match(types, /semanticGate\?: DynamicActionSemanticGate/);
+  assert.match(card, /semanticGate/);
+  assert.match(card, /explainDynamicAction\(\{\s*type: action\.type,\s*semanticGate: action\.semanticGate/);
+  assert.doesNotMatch(card, /semanticGate[\s\S]{0,200}evidenceRefs\?\.\[0\]\?\.text/);
+  assert.doesNotMatch(card, /语义证据不足，已暂缓高风险动作|相似的低置信候选已被拦截/);
+});
+
 test('runWhatShouldISay can emit dynamic action answers without persistence', () => {
   const source = read('electron/IntelligenceEngine.ts');
 
