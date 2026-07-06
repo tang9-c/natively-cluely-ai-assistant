@@ -47,7 +47,7 @@ test('settings overlay wires a dedicated STT language compatibility warning', ()
 
   assert.match(ui, /getSttLanguageCompatibility/);
   assert.match(ui, /willHonorSelection/);
-  assert.match(ui, /这次中文识别不会按所选语言执行|当前实现不会按中文执行/);
+  assert.match(ui, /这次中文识别不会按所选语言执行|当前语音提供商不会按中文执行/);
   assert.match(preload, /getSttLanguageCompatibility:/);
   assert.match(types, /getSttLanguageCompatibility: \(\) => Promise<\{/);
   assert.match(types, /reasonCode: 'AUTO_NORMALIZED_TO_ENGLISH' \| 'MODEL_ENGLISH_ONLY' \| 'PROVIDER_LANGUAGE_UNSUPPORTED' \| 'SUPPORTED'/);

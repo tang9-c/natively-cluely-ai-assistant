@@ -122,8 +122,8 @@ npm run app:build
 
 ```powershell
 Remove-Item -Recurse -Force node_modules\electron
-npm install electron@33.2.0 --save-dev
+npm install electron@42.6.0 --save-dev
 npm run app:dev
 ```
 
-If this keeps happening, switch to Node 22 LTS, delete `node_modules` and `package-lock.json`, then run `npm install` again.
+If this keeps happening, switch to the project-supported Node version, delete `node_modules`, then run `npm install` again.
