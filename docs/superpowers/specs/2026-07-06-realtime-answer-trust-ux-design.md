@@ -54,35 +54,65 @@ This keeps the implementation focused, avoids new sensitive data paths, and leav
 
 ## Architecture
 
-### UI-Facing Diagnostic View Model
+### Two Separate View Models
 
-Add a narrow read-only explanation layer that consumes existing internal data and produces JSON-safe UI summaries.
+This design must not use aggregate metrics to explain a single answer. It uses two separate UI-facing models:
+
+1. `LatestAnswerTrustExplanation`
+   - Explains the currently displayed realtime answer.
+   - Built from the answer result already returned to the renderer: `latestAnswerTrace`, `sourceStatus`, `citations`, and `degradedReason`.
+   - It may also use safe citation titles and material status, but it must not read or expose material chunk text.
+
+2. `RealtimeDiagnosticsSummary`
+   - Explains recent aggregate quality.
+   - Built from persisted answer traces and answer quality events in SQLite through `DatabaseManager.getAnswerQualityMetrics()` and existing safe trace summaries.
+   - `ContextQualityDiagnosticsCollector` may supplement developer-only live context-plan and dynamic-action samples, but it must not be the product metrics source because it is in-memory, process-local, and may be empty after restart.
 
 Suggested module shape:
 
-- `RealtimeAnswerTrustSummary`
+- `LatestAnswerTrustExplanation`
+- `RealtimeDiagnosticsSummary`
 - `AnswerSourceExplanation`
 - `MaterialStatusExplanation`
 - `EmbeddingDegradationExplanation`
 - `DynamicActionExplanation`
 - `AnswerQualityMetricSummary`
+- `buildLatestAnswerTrustExplanation(input)`
+- `buildRealtimeDiagnosticsSummary(input)`
+- `mapTrustReasonToCopy(reason)`
 
 The exact file location can follow current project conventions, for example under `electron/services/eval/` or a nearby `electron/services/trust/` folder if that reads cleaner during implementation.
 
 This layer must:
 
-- Accept existing `AnswerContextTrace`, `sourceStatus`, `degradedReasons`, material status rows, answer quality metrics, and dynamic action semantic gate metadata.
+- Keep single-answer explanation and aggregate diagnostics separate.
+- Accept existing `AnswerContextTrace`, `sourceStatus`, `degradedReasons`, material status rows, answer quality metrics, and dynamic action semantic gate metadata only through explicit typed inputs.
 - Return product-safe status labels, counts, reason labels, and short explanations.
 - Centralize reason-code-to-copy mapping so renderer components do not each invent their own wording.
 - Never include raw transcript, prompt, screenshot path, screenshot content, material chunk text, or dynamic-action evidence text.
 
+### Data Source Mapping
+
+Each user-facing state must be derived from a concrete field:
+
+| UI state | Primary source | Notes |
+| --- | --- | --- |
+| Latest answer used uploaded material | `latestAnswerTrace.sourceStatus.uploadedMaterialHitCount > 0` or uploaded-material citation count | Do not infer usage from aggregate RAG hit rate. |
+| Latest answer did not use uploaded material | `sourceStatus.ragAttempted === true` and `uploadedMaterialHitCount === 0`, or degraded reason `no_relevant_uploaded_material` | Show a miss, not a failure, when retrieval worked but found no relevant material. |
+| Latest answer citation available | safe `AnswerCitation` title/id and successful citation resolver status | Stale/missing citation must not appear as a valid clickable source. |
+| Embedding provider not configured | existing context health / embedding readiness status | This is a configuration state, shown in settings and answer explanation when relevant. |
+| Embedding write failed during indexing | material row status/error code or embedding queue failure signal | This is material/index-time degradation. |
+| Query-time lexical fallback | `MaterialRagRetriever` / context plan degraded reason such as `embedding_unavailable` or `hybrid_threw` | This explains a specific answer retrieval attempt. |
+| Aggregate latency / rates | `DatabaseManager.getAnswerQualityMetrics()` over persisted answer traces and quality events | Requires sample size in the response. |
+| Dynamic action semantic explanation | `DynamicActionPayload.semanticGate` if exposed and contract-tested | If absent, use conservative copy and mark diagnostics incomplete. |
+
 ### IPC Boundary
 
-Add a read-only IPC endpoint for diagnostics summary, for example:
+Add a read-only IPC endpoint for aggregate diagnostics summary, for example:
 
 - `quality:get-realtime-diagnostics-summary`
 
-The endpoint should return recent aggregate information only:
+The endpoint should return recent aggregate information only, from persisted sources:
 
 - Answer latency summary, including p95 when enough samples exist.
 - Citation hit rate.
@@ -91,12 +121,26 @@ The endpoint should return recent aggregate information only:
 - Accept and regenerate rates.
 - Degraded reason distribution.
 - Recent source status counts.
+- `sampleSize`.
+- `insufficientData` for p95 and rates when the sample is too small to be meaningful.
+- `source: "persisted"` for persisted metrics; developer-only collector supplement must be labeled separately if included.
 
 The endpoint should tolerate missing data and return an empty summary with a clear status instead of throwing into the UI.
+
+Implementation must update all IPC surfaces together:
+
+- Register the handler in `electron/ipcHandlers.ts` with `safeHandle()`.
+- Expose it through `electron/preload.ts`.
+- Add the typed API to `src/types/electron.d.ts`.
+- Add IPC/preload contract tests proving the channel exists and returns only safe summary fields.
+
+No new IPC is required for the latest answer explanation if it can be built from the answer result already available in `NativelyInterface`. If implementation discovers missing fields, add only the minimal safe fields to the existing answer result and update its contract tests.
 
 ### Renderer Integration
 
 Renderer components should consume the UI-facing summaries and explanation strings. They should not directly inspect internal reason codes except in tests that verify the mapping layer is wired.
+
+The settings diagnostics entry should live in the existing settings/context-quality area rather than creating a new top-level navigation item. A practical first placement is near the current context health / knowledge materials settings, because the first user-facing diagnostics are RAG, citation, and answer-trust focused.
 
 ## UX Surfaces
 
@@ -149,6 +193,8 @@ For failed materials:
 
 - Do not present reindex as a working recovery path.
 - Show the failure reason and next step.
+- The action is "重新上传新文件", not "重试此资料", unless a future API stores enough source data to perform a true object-level retry.
+- A newly uploaded replacement may create a new material row; the UI must not imply it mutates the failed row unless implementation adds an explicit replace API.
 
 Reason examples:
 
@@ -158,7 +204,7 @@ Reason examples:
 - `empty_document`: "没有找到可读取文本。请上传包含可选中文本的文档。"
 - `embedding_failed`: "资料文本已索引，但语义检索失败。CueUp 会尝试降级为关键词匹配。"
 
-The primary action for failed material should be "Upload again" or clear guidance to upload a replacement, not "Reindex", unless implementation later stores enough source data to perform a true retry.
+The primary action for failed material should be "重新上传新文件" or clear guidance to upload a replacement, not "重新索引" and not "重试此资料", unless implementation later stores enough source data to perform a true retry.
 
 ### 4. Embedding Degradation Copy
 
@@ -190,10 +236,12 @@ Examples:
 If semantic gate trace is missing:
 
 - Do not invent a semantic explanation.
-- Show a conservative label such as "Triggered by meeting signal."
+- Show a conservative label such as "基于会议信号触发。"
 - Record the missing trace in diagnostics.
 
 Detailed cloud/local arbitration data should remain in diagnostics, not ordinary card text.
+
+This design does not expand the existing evidence snippet shown in dynamic action cards. Before adding semantic-gate copy, implementation must verify the renderer payload contract exposes safe `semanticGate` metadata. If the payload lacks semantic-gate metadata, the first implementation should show only conservative generic copy rather than reaching into evidence text or adding new raw evidence fields.
 
 ## Data And Privacy Rules
 
@@ -207,6 +255,7 @@ The UI-facing diagnostics may expose:
 - Degraded reason labels.
 - Material title and status.
 - Dynamic action type and gate decision summary.
+- Sample size and insufficient-data flags.
 
 The UI-facing diagnostics must not expose:
 
@@ -221,6 +270,8 @@ The UI-facing diagnostics must not expose:
 
 All new logs must continue to use existing redaction utilities when logging is necessary. Prefer no new logs unless needed for non-sensitive error reporting.
 
+Privacy tests must serialize the full IPC response and latest-answer explanation fixture, then assert that known fixture secrets are absent. The forbidden strings must include a fake transcript sentence, prompt body, screenshot path, screenshot body marker, material chunk text, provider key, and dynamic-action evidence text.
+
 ## Error Handling
 
 - Diagnostics unavailable: show "暂无诊断数据" and keep answer generation unaffected.
@@ -228,6 +279,7 @@ All new logs must continue to use existing redaction utilities when logging is n
 - Missing material row for a citation: show a stale or unavailable citation state, not a clickable valid source.
 - Failed material: show reason-specific copy and upload-again guidance.
 - Dynamic action missing gate trace: show conservative explanation and mark diagnostics as incomplete.
+- Low sample size: show "样本不足，暂不展示趋势判断" for p95/rate fields rather than implying stable quality.
 
 ## Testing Strategy
 
@@ -240,6 +292,10 @@ Add or extend tests that verify:
 - Embedding not configured, embedding write failed, and query-time fallback are distinguishable.
 - Failed material reasons map to correct next-step guidance.
 - Diagnostics summary tolerates empty data and trace persistence failure.
+- Aggregate diagnostics use persisted answer quality metrics as the product source and label collector-only data as developer supplement if included.
+- Low sample sizes set `insufficientData` instead of presenting p95 or rates as stable.
+- `LatestAnswerTrustExplanation` is built from a single answer trace/result and does not use aggregate metrics to explain a single answer.
+- Serialized responses do not contain fixture transcript, prompt, screenshot path/body marker, material chunk text, provider key, or dynamic-action evidence text.
 
 ### Renderer / Contract Tests
 
@@ -247,9 +303,22 @@ Add or extend tests that verify:
 
 - Realtime answer area can display used sources and degraded source explanations.
 - Material settings do not show a misleading reindex action for failed materials.
-- Material settings show upload-again guidance for failed material.
+- Material settings show "重新上传新文件" guidance for failed material and do not imply object-level retry.
 - Dynamic action card shows a concise semantic explanation when metadata exists.
+- Dynamic action card falls back to conservative generic copy when semantic-gate metadata is absent.
 - Diagnostics entry renders latency, citation hit rate, RAG hit rate, accept/regenerate rate, no-context answer rate, and degraded reason distribution.
+- IPC/preload/type contracts expose `quality:get-realtime-diagnostics-summary` through `electron/ipcHandlers.ts`, `electron/preload.ts`, and `src/types/electron.d.ts`.
+
+Required fixtures:
+
+- `uploadedMaterialHitCount > 0` shows uploaded material was used.
+- `ragAttempted === true` and `uploadedMaterialHitCount === 0` shows uploaded material was not matched.
+- `embedding_unavailable` shows keyword degradation.
+- `hybrid_threw` shows query-time retrieval fallback.
+- stale or missing citation does not render as a valid clickable source.
+- failed material with `unsupported_file_type`, `binary_text_file`, `parse_failed`, `empty_document`, and `embedding_failed` maps to the expected next-step copy.
+- dynamic action with semantic gate metadata shows semantic explanation.
+- dynamic action without semantic gate metadata shows conservative explanation.
 
 ### Quality Commands
 
@@ -271,6 +340,8 @@ Implementation should keep the existing full commands valid:
 - Embedding degradation is not collapsed into a vague "RAG failed" message.
 - A dynamic action card can explain why it appeared without exposing raw evidence.
 - The diagnostics entry shows recent answer quality metrics without exposing sensitive content.
+- The diagnostics entry clearly marks low sample size and does not present unstable p95/rate values as authoritative.
+- Product metrics come from persisted traces/events; process-local collector data is never presented as the primary product metric source.
 - Tests prove that the new explanation layer is privacy-safe and that the five UX improvements render from controlled fixtures.
 
 ## Implementation Boundaries
@@ -285,3 +356,5 @@ This design should be implemented incrementally:
 6. Add quality command coverage.
 
 Each step should preserve the existing answer generation behavior.
+
+Before implementation starts, keep unrelated working-tree changes out of the implementation commits. At the time this spec was reviewed, `docs/engineering/CONTEXT_SYSTEM_ROADMAP.md` and `docs/engineering/TEST_ALL_BASELINE_REPORT_FOLLOWUP_2026-07-05.md` were separate local changes and should be committed separately or left untouched.
