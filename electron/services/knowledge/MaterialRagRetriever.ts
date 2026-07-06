@@ -308,7 +308,7 @@ export class MaterialRagRetriever {
                 });
             }
         } catch {
-            chunkEmbeddings = candidates.map((candidate) => candidate.source.embedding ?? []);
+            throw new Error('missing_chunk_embedding_failed');
         }
         return candidates
             .map((candidate, index) => ({

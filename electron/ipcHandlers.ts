@@ -3172,7 +3172,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             materialRagAttempted = true;
             const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
             const materialService = new KnowledgeMaterialService(DatabaseManager.getInstance(), ragManagerForHealth?.getEmbeddingPipeline?.());
-            const materialHits = await materialService.search(searchQuery, { limit: 4 });
+            const materialSearch = await materialService.searchWithDiagnostics(searchQuery, { limit: 4 });
+            const materialHits = materialSearch.hits;
+            if (materialSearch.degradedReason && !degradedReasons.includes('embedding_unavailable')) {
+              degradedReasons.push('embedding_unavailable');
+            }
             retrievalTimingMs.uploaded_material = Date.now() - materialStartedAt;
             uploadedMaterialHitCount = materialHits.length;
             if (materialHits.length > 0) {

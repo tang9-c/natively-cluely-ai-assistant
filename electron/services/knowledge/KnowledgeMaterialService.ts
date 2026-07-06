@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import * as fs from 'fs';
 import * as path from 'path';
 import { DatabaseManager, type KnowledgeMaterialChunkInput } from '../../db/DatabaseManager';
 import { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
@@ -19,12 +20,19 @@ export interface KnowledgeMaterialSearchResult {
     materialUpdatedAt?: string;
 }
 
+export interface KnowledgeMaterialSearchResponse {
+    hits: KnowledgeMaterialSearchResult[];
+    degradedReason?: 'embedding_unavailable' | 'hybrid_threw';
+}
+
 const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.docx', '.txt', '.md', '.markdown']);
 const CHILD_TARGET_CHARS = 900;
 const PARENT_WINDOW = 1;
 
 export class KnowledgeMaterialService {
     private readonly materialRagRetriever: MaterialRagRetriever;
+    private static indexQueue: Promise<void> = Promise.resolve();
+    private static cancelledMaterialIds = new Set<string>();
 
     constructor(
         private readonly db: DatabaseManager,
@@ -42,24 +50,60 @@ export class KnowledgeMaterialService {
         const errors: Array<{ filePath: string; error: string }> = [];
         for (const filePath of filePaths) {
             try {
-                materials.push(await this.uploadFile(filePath));
+                materials.push(await this.createMaterialRecord(filePath));
             } catch (error: any) {
                 errors.push({ filePath, error: error?.message || 'unknown_error' });
+            }
+        }
+        for (const material of materials) {
+            const filePath = material.__filePath;
+            delete material.__filePath;
+            if (material.status === 'queued' && filePath) {
+                this.enqueueIndexMaterialFromFile(material.id, filePath);
             }
         }
         return { materials, errors };
     }
 
     async uploadFile(filePath: string): Promise<any> {
+        const material = await this.createMaterialRecord(filePath);
+        const indexableFilePath = material.__filePath;
+        delete material.__filePath;
+        if (material.status === 'queued' && indexableFilePath) {
+            this.enqueueIndexMaterialFromFile(material.id, indexableFilePath);
+        }
+        return material;
+    }
+
+    async createMaterialRecord(filePath: string): Promise<any> {
         const ext = path.extname(filePath).toLowerCase();
-        if (!SUPPORTED_EXTENSIONS.has(ext)) {
-            throw new Error(`Unsupported file type "${ext}". Supported formats: PDF, DOCX, TXT, MD.`);
+        const fileName = path.basename(filePath);
+        const materialId = `mat_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
+        let fileHash = `pending_${crypto.randomBytes(8).toString('hex')}`;
+        try {
+            const stat = fs.statSync(filePath);
+            fileHash = crypto
+                .createHash('sha256')
+                .update(`${fileName}:${stat.size}:${stat.mtimeMs}`)
+                .digest('hex');
+        } catch {
+            // Keep a pending hash so the failed material record can still be listed.
         }
 
-        const fileName = path.basename(filePath);
-        const rawText = await DocumentTextExtractor.extract(filePath);
-        const fileHash = crypto.createHash('sha256').update(rawText).digest('hex');
-        const materialId = `mat_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
+        if (!SUPPORTED_EXTENSIONS.has(ext)) {
+            this.db.upsertKnowledgeMaterial({
+                id: materialId,
+                fileName,
+                title: fileName,
+                mimeOrExt: ext || 'unknown',
+                fileHash,
+                status: 'failed',
+                errorCode: 'unsupported_file_type',
+                errorMessage: '不支持的文件类型。当前支持 PDF、DOCX、Markdown 和 TXT。',
+            });
+            return this.db.getKnowledgeMaterial(materialId);
+        }
+
         this.db.upsertKnowledgeMaterial({
             id: materialId,
             fileName,
@@ -68,9 +112,12 @@ export class KnowledgeMaterialService {
             fileHash,
             status: 'queued',
         });
+        KnowledgeMaterialService.cancelledMaterialIds.delete(materialId);
 
-        await this.indexMaterial(materialId, rawText);
-        return this.db.getKnowledgeMaterial(materialId);
+        return {
+            ...(this.db.getKnowledgeMaterial(materialId) ?? {}),
+            __filePath: filePath,
+        };
     }
 
     async reindexMaterial(materialId: string): Promise<any> {
@@ -87,13 +134,18 @@ export class KnowledgeMaterialService {
     }
 
     deleteMaterial(materialId: string): void {
+        KnowledgeMaterialService.cancelledMaterialIds.add(materialId);
         this.db.deleteKnowledgeMaterial(materialId);
     }
 
     async search(query: string, options: { limit?: number } = {}): Promise<KnowledgeMaterialSearchResult[]> {
+        return (await this.searchWithDiagnostics(query, options)).hits;
+    }
+
+    async searchWithDiagnostics(query: string, options: { limit?: number } = {}): Promise<KnowledgeMaterialSearchResponse> {
         const limit = options.limit ?? 6;
         const rows = this.db.getKnowledgeMaterialChunks({ withEmbeddingsOnly: false });
-        if (rows.length === 0) return [];
+        if (rows.length === 0) return { hits: [] };
 
         const sources: MaterialRagSource[] = rows.map((row: any) => ({
             id: `${row.material_id}:${row.id}`,
@@ -116,7 +168,8 @@ export class KnowledgeMaterialService {
             format: 'none',
         });
 
-        return result.chunks.map((chunk) => ({
+        return {
+            hits: result.chunks.map((chunk) => ({
                 sourceType: 'uploaded_material' as const,
                 sourceId: String(chunk.sourceId).split(':')[0],
                 chunkId: Number(chunk.chunkId ?? chunk.chunkIndex),
@@ -126,7 +179,9 @@ export class KnowledgeMaterialService {
                 parentText: chunk.parentText,
                 fileHash: chunk.fileHash,
                 materialUpdatedAt: chunk.materialUpdatedAt,
-            }));
+            })),
+            degradedReason: result.degradedReason,
+        };
     }
 
     getHealth(): { materialCount: number; queue: { pending: number; processing: number; completed: number; failed: number } } {
@@ -137,26 +192,95 @@ export class KnowledgeMaterialService {
     }
 
     private async indexMaterial(materialId: string, text: string): Promise<void> {
+        if (!this.isMaterialIndexable(materialId)) return;
         this.db.updateKnowledgeMaterialStatus(materialId, 'indexing');
         try {
+            if (!this.isMaterialIndexable(materialId)) return;
             const chunks = buildParentChildChunks(materialId, text);
+            if (chunks.length === 0) {
+                throw createMaterialIndexError('empty_document', '文档没有可索引的文本。');
+            }
+            if (!this.isMaterialIndexable(materialId)) return;
             const chunkIds = this.db.replaceKnowledgeMaterialChunks(materialId, chunks);
             if (this.embeddingPipeline?.isReady() && chunkIds.length > 0) {
-                const embeddings = await this.embeddingPipeline.getEmbeddings(chunks.map((chunk) => chunk.cleanedText));
-                embeddings.forEach((embedding, index) => {
-                    this.db.setKnowledgeMaterialChunkEmbedding(chunkIds[index], embedding);
-                });
+                try {
+                    const embeddings = await this.embeddingPipeline.getEmbeddings(chunks.map((chunk) => chunk.cleanedText));
+                    if (!this.isMaterialIndexable(materialId)) return;
+                    embeddings.forEach((embedding, index) => {
+                        this.db.setKnowledgeMaterialChunkEmbedding(chunkIds[index], embedding);
+                    });
+                } catch (embeddingError: any) {
+                    this.db.markKnowledgeMaterialEmbeddingsFailed?.(materialId, embeddingError?.message || 'embedding_failed');
+                    // Keep the text index usable. MaterialRagRetriever will report
+                    // embedding_unavailable and fall back to lexical retrieval.
+                }
             }
             const status: MaterialStatus = 'complete';
+            if (!this.isMaterialIndexable(materialId)) return;
             this.db.updateKnowledgeMaterialStatus(materialId, status);
         } catch (error: any) {
+            if (!this.isMaterialIndexable(materialId)) return;
+            const classifiedCode = classifyMaterialIndexError(error);
+            error.code = error?.code || (classifiedCode === 'parse_failed' ? 'index_failed' : classifiedCode);
             this.db.updateKnowledgeMaterialStatus(materialId, 'failed', {
-                code: 'index_failed',
-                message: error?.message || 'Could not index material.',
+                code: error.code,
+                message: toUserFacingMaterialError(error),
             });
             throw error;
         }
     }
+
+    private async indexMaterialFromFile(materialId: string, filePath: string): Promise<void> {
+        try {
+            if (!this.isMaterialIndexable(materialId)) return;
+            const rawText = await DocumentTextExtractor.extract(filePath);
+            if (!this.isMaterialIndexable(materialId)) return;
+            await this.indexMaterial(materialId, rawText);
+        } catch (error: any) {
+            if (!this.isMaterialIndexable(materialId)) return;
+            this.db.updateKnowledgeMaterialStatus(materialId, 'failed', {
+                code: classifyMaterialIndexError(error),
+                message: toUserFacingMaterialError(error),
+            });
+        }
+    }
+
+    private enqueueIndexMaterialFromFile(materialId: string, filePath: string): void {
+        KnowledgeMaterialService.indexQueue = KnowledgeMaterialService.indexQueue
+            .catch((): void => undefined)
+            .then(() => this.indexMaterialFromFile(materialId, filePath));
+    }
+
+    private isMaterialIndexable(materialId: string): boolean {
+        if (KnowledgeMaterialService.cancelledMaterialIds.has(materialId)) return false;
+        return Boolean(this.db.getKnowledgeMaterial(materialId));
+    }
+}
+
+function classifyMaterialIndexError(error: any): string {
+    if (error?.code) return error.code;
+    const message = String(error?.message || '').toLowerCase();
+    if (message.includes('unsupported file type')) return 'unsupported_file_type';
+    if (message.includes('empty')) return 'empty_document';
+    if (message.includes('binary')) return 'binary_text_file';
+    if (message.includes('embedding')) return 'embedding_failed';
+    return 'parse_failed';
+}
+
+function toUserFacingMaterialError(error: any): string {
+    const code = classifyMaterialIndexError(error);
+    if (code === 'unsupported_file_type') return '不支持的文件类型。当前支持 PDF、DOCX、Markdown 和 TXT。';
+    if (code === 'empty_document') return '文档没有可索引的文本。';
+    if (code === 'binary_text_file') return 'TXT 文件看起来是二进制内容，无法作为文本资料索引。';
+    if (code === 'embedding_failed') return '资料文本已读取，但向量索引失败。';
+    if (code === 'parse_failed') return '文档解析失败，请确认文件未损坏。';
+    return error?.message || '资料索引失败。';
+}
+
+function createMaterialIndexError(code: string, message: string): Error & { code?: string } {
+    const error = new Error(message) as Error & { code?: string };
+    error.code = code;
+    return error;
 }
 
 function blobToVector(blob: Buffer): number[] {

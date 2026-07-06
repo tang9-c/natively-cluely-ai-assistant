@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { pathToFileURL } from 'url';
 
 const PARSE_TIMEOUT_MS = 15_000;
 
@@ -50,6 +51,7 @@ export class DocumentTextExtractor {
 
   private static async extractPdf(filePath: string): Promise<string> {
     const { PDFParse } = require('pdf-parse');
+    PDFParse.setWorker(pathToFileURL(resolvePdfWorkerPath()).href);
     const buffer = fs.readFileSync(filePath);
     const parser = new PDFParse({ data: buffer });
     const data: any = await withTimeout(parser.getText(), PARSE_TIMEOUT_MS, 'PDF parse');
@@ -91,4 +93,12 @@ export class DocumentTextExtractor {
     }
     return probe.toString('utf8');
   }
+}
+
+function resolvePdfWorkerPath(): string {
+  const bundledWorkerPath = path.resolve(__dirname, '../../pdf.worker.mjs');
+  if (fs.existsSync(bundledWorkerPath)) {
+    return bundledWorkerPath;
+  }
+  return path.resolve(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs');
 }

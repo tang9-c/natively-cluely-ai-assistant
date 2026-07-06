@@ -1,20 +1,97 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw, Trash2, Upload } from 'lucide-react';
+
+const MATERIAL_STATUS_LABELS: Record<string, string> = {
+  queued: '排队中',
+  indexing: '索引中',
+  complete: '已完成',
+  failed: '索引失败',
+  deleted: '已删除',
+};
+
+function isBatchSettled(materials: any[], ids: string[]) {
+  const byId = new Map(materials.map((material) => [material.id, material]));
+  return ids.every((id) => {
+    const status = byId.get(id)?.status;
+    return status === 'complete' || status === 'failed' || status === 'deleted';
+  });
+}
+
+function summarizeUploadResult(result: any) {
+  const materials = result?.materials || [];
+  const transportFailures = result?.errors?.length || 0;
+  const failedMaterials = materials.filter((material: any) => material.status === 'failed').length;
+  const queuedMaterials = materials.filter((material: any) => material.status === 'queued' || material.status === 'indexing').length;
+  const completeMaterials = materials.filter((material: any) => material.status === 'complete').length;
+  const failed = transportFailures + failedMaterials;
+
+  if (failed > 0 && queuedMaterials > 0) {
+    return `已加入 ${queuedMaterials} 个资料索引队列，${failed} 个失败`;
+  }
+  if (failed > 0) {
+    return `资料上传完成，${failed} 个失败`;
+  }
+  if (completeMaterials > 0 && queuedMaterials === 0) {
+    return `已完成 ${completeMaterials} 个资料索引`;
+  }
+  return '资料已加入索引队列';
+}
 
 export function KnowledgeMaterialsSettings() {
   const [materials, setMaterials] = useState<any[]>([]);
   const [status, setStatus] = useState<string | null>(null);
+  const [embeddingReady, setEmbeddingReady] = useState<boolean | null>(null);
+  const [materialEmbeddingFailed, setMaterialEmbeddingFailed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const pollingRef = useRef<number | null>(null);
 
   const refreshMaterials = useCallback(async () => {
     const result = await window.electronAPI?.knowledgeListMaterials?.();
     if (result?.success) {
       setMaterials(result.materials || []);
+      return result.materials || [];
+    }
+    return [];
+  }, []);
+
+  const refreshContextHealth = useCallback(async () => {
+    const result = await window.electronAPI?.getContextHealth?.();
+    if (result) {
+      setEmbeddingReady(Boolean(result.embeddingReady));
+      setMaterialEmbeddingFailed((result.materialQueue?.failed || 0) > 0);
     }
   }, []);
 
   useEffect(() => {
     refreshMaterials().catch(() => {});
+    refreshContextHealth().catch(() => {});
+  }, [refreshContextHealth, refreshMaterials]);
+
+  useEffect(() => () => {
+    if (pollingRef.current) {
+      window.clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  }, []);
+
+  const startUploadPolling = useCallback((materialIds: string[]) => {
+    if (pollingRef.current) {
+      window.clearInterval(pollingRef.current);
+    }
+    if (materialIds.length === 0) return;
+
+    let attempts = 0;
+    pollingRef.current = window.setInterval(async () => {
+      attempts += 1;
+      const latestMaterials = await refreshMaterials();
+      if (isBatchSettled(latestMaterials, materialIds) || attempts >= 30) {
+        if (pollingRef.current) {
+          window.clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+        setBusy(false);
+      }
+    }, 1000);
   }, [refreshMaterials]);
 
   const uploadMaterials = useCallback(async () => {
@@ -28,15 +105,20 @@ export function KnowledgeMaterialsSettings() {
         return;
       }
       const result = await window.electronAPI?.knowledgeUploadMaterials?.(selected.filePaths);
-      const failed = result?.errors?.length || 0;
-      setStatus(failed > 0 ? `已上传 ${result?.materials?.length || 0} 个，失败 ${failed} 个` : '资料已加入索引');
+      const materialIds = (result?.materials || []).map((material: any) => material.id).filter(Boolean);
+      setStatus(summarizeUploadResult(result));
       await refreshMaterials();
+      await refreshContextHealth();
+      startUploadPolling(materialIds);
     } catch (error: any) {
       setStatus(error?.message || '资料上传失败');
-    } finally {
       setBusy(false);
+    } finally {
+      if (!pollingRef.current) {
+        setBusy(false);
+      }
     }
-  }, [refreshMaterials]);
+  }, [refreshContextHealth, refreshMaterials, startUploadPolling]);
 
   const deleteMaterial = useCallback(async (id: string) => {
     setBusy(true);
@@ -72,6 +154,9 @@ export function KnowledgeMaterialsSettings() {
             <p className="text-[11px] text-text-tertiary">
               上传 PDF、DOCX、Markdown 或 TXT，让会议回答可以引用本地资料。
             </p>
+            <p className="mt-1 text-[11px] text-text-tertiary">
+              PPTX 即将支持；当前请先导出为 PDF 或 Markdown 后上传。
+            </p>
           </div>
         </div>
         <button
@@ -90,6 +175,18 @@ export function KnowledgeMaterialsSettings() {
         </div>
       )}
 
+      {embeddingReady === false && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-100">
+          资料仍可上传，但检索将降级为关键词匹配，回答可能不稳定。
+        </div>
+      )}
+
+      {embeddingReady === true && materialEmbeddingFailed && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-100">
+          部分资料的向量索引失败；资料仍可检索，但会降级为关键词匹配。
+        </div>
+      )}
+
       <div className="rounded-xl border border-border-subtle bg-bg-input overflow-hidden">
         {materials.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-text-secondary">
@@ -100,21 +197,23 @@ export function KnowledgeMaterialsSettings() {
             {materials.map((material) => {
               const title = material.title || material.file_name || material.fileName || material.id;
               const materialStatus = material.status || 'queued';
+              const errorMessage = material.error_message || material.errorMessage;
+              const canReindex = materialStatus === 'complete';
               return (
                 <div key={material.id} className="flex items-center justify-between gap-3 px-3.5 py-2.5">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium text-text-primary">{title}</div>
                     <div className="mt-1 flex items-center gap-2 text-[11px] text-text-tertiary">
-                      <span>{materialStatus}</span>
-                      {material.error_message && <span className="text-red-400">{material.error_message}</span>}
+                      <span>{MATERIAL_STATUS_LABELS[materialStatus] || materialStatus}</span>
+                      {errorMessage && <span className="text-red-400">{errorMessage}</span>}
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       onClick={() => reindexMaterial(material.id)}
-                      disabled={busy}
+                      disabled={busy || !canReindex}
                       className="p-1.5 rounded-lg border border-border-subtle bg-bg-component hover:bg-bg-elevated text-text-secondary hover:text-text-primary disabled:opacity-60"
-                      title="重新索引"
+                      title={canReindex ? '重新索引' : '仅已完成资料可重新索引'}
                     >
                       <RefreshCw size={13} />
                     </button>

@@ -1671,8 +1671,19 @@ export class DatabaseManager {
         this.db.prepare(`
             UPDATE knowledge_materials
             SET status = ?, error_code = ?, error_message = ?, updated_at = datetime('now')
-            WHERE id = ?
-        `).run(status, error?.code ?? null, error?.message ?? null, id);
+            WHERE id = ? AND (status != 'deleted' OR ? = 'deleted')
+        `).run(status, error?.code ?? null, error?.message ?? null, id, status);
+    }
+
+    public markKnowledgeMaterialEmbeddingsFailed(materialId: string, message?: string | null): void {
+        if (!this.db) return;
+        this.db.prepare(`
+            UPDATE material_embedding_queue
+            SET status = 'failed', error_message = ?, processed_at = datetime('now')
+            WHERE material_chunk_id IN (
+                SELECT id FROM knowledge_material_chunks WHERE material_id = ?
+            )
+        `).run(message ?? 'embedding_failed', materialId);
     }
 
     public replaceKnowledgeMaterialChunks(materialId: string, chunks: KnowledgeMaterialChunkInput[]): number[] {
@@ -1778,7 +1789,7 @@ export class DatabaseManager {
                 m.updated_at AS material_updated_at
             FROM knowledge_material_chunks c
             JOIN knowledge_materials m ON m.id = c.material_id
-            WHERE c.id = ? AND m.status != 'deleted'
+            WHERE c.id = ? AND m.status = 'complete'
         `).get(chunkId) ?? null;
     }
 

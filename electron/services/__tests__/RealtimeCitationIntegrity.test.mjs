@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -109,4 +110,12 @@ test('uploaded material citation becomes missing when chunk was deleted', async 
 
   assert.equal(resolved.status, 'missing-citation');
   assert.equal(resolved.chunk, null);
+});
+
+test('database resolver only treats complete uploaded materials as valid citation sources', () => {
+  const dbSource = fs.readFileSync(path.join(root, 'electron/db/DatabaseManager.ts'), 'utf8');
+
+  assert.match(dbSource, /getKnowledgeMaterialChunkById\(chunkId: number\)/);
+  assert.match(dbSource, /WHERE c\.id = \? AND m\.status = 'complete'/);
+  assert.doesNotMatch(dbSource, /WHERE c\.id = \? AND m\.status != 'deleted'/);
 });
