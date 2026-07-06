@@ -51,6 +51,7 @@ export class SherpaSpeakerEmbeddingExtractor implements SpeakerEmbeddingExtracto
     if (!this.extractor.isReady(stream)) {
       throw new Error('speaker_embedding_stream_not_ready');
     }
-    return this.extractor.compute(stream);
+    const embedding = this.extractor.compute(stream, false);
+    return new Float32Array(embedding);
   }
 }

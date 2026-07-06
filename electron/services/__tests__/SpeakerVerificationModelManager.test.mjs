@@ -51,3 +51,10 @@ test('SpeakerEmbeddingExtractor resolves its default ONNX file through LocalMode
   assert.doesNotMatch(source, /speakerModelManager/);
   assert.doesNotMatch(source, /speakerModelDownloader/);
 });
+
+test('SpeakerEmbeddingExtractor disables sherpa external buffers for Electron enrollment', () => {
+  const source = read('electron/services/speaker/SpeakerEmbeddingExtractor.ts');
+  assert.match(source, /this\.extractor\.compute\(stream,\s*false\)/);
+  assert.match(source, /return new Float32Array\(embedding\)/);
+  assert.doesNotMatch(source, /return this\.extractor\.compute\(stream\)/);
+});
