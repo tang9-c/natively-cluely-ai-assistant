@@ -174,6 +174,14 @@ export interface AnswerQualityMetrics {
     noContextAnswerRate: number;
 }
 
+export interface RealtimeDiagnosticsAggregate {
+    metrics: AnswerQualityMetrics;
+    degradedReasons: Record<string, number>;
+    sourceStatusCounts: Record<string, number>;
+    traceSampleSize: number;
+    eventSampleSize: number;
+}
+
 export interface KnowledgeMaterialInput {
     id: string;
     fileName: string;
@@ -248,6 +256,83 @@ function normalizeAnswerSourceStatus(input?: Partial<AnswerSourceStatus> | null)
             ? normalizeStatusValue(input.speakerSeparationStatus, ['off', 'on', 'unavailable'] as const, 'unavailable')
             : undefined,
     };
+}
+
+const KNOWN_DEGRADED_REASONS = new Set<string>([
+    'transcript_truncated',
+    'assistant_history_truncated',
+    'assistant_history_dropped',
+    'meeting_history_truncated',
+    'meeting_history_dropped',
+    'uploaded_material_context_truncated',
+    'uploaded_material_context_dropped',
+    'uploaded_material_rag_failed',
+    'no_relevant_uploaded_material',
+    'business_system_context_dropped',
+    'business_system_not_configured',
+    'business_system_unavailable',
+    'business_system_error',
+    'business_system_auth_failed',
+    'business_system_timeout',
+    'business_system_no_result',
+    'business_system_ambiguous',
+    'business_system_missing_query_anchor',
+    'screen_context_failed',
+    'screen_context_scope_blocked',
+    'screen_context_no_vision_provider',
+    'screen_context_truncated',
+    'screen_context_dropped',
+    'mode_context_truncated',
+    'mode_context_dropped',
+    'rag_unavailable',
+    'embedding_unavailable',
+    'speaker_separation_unavailable',
+    'speaker_metadata_low_confidence',
+    'speaker_metadata_unavailable',
+    'stt_user_failed',
+    'stt_interviewer_failed',
+    'context_scope_denied',
+    'duplicate_context_dropped',
+]);
+
+function incrementCount(counts: Record<string, number>, key: string): void {
+    counts[key] = (counts[key] ?? 0) + 1;
+}
+
+function countKnownDegradedReason(counts: Record<string, number>, reason?: string | null): void {
+    if (!reason) return;
+    incrementCount(counts, KNOWN_DEGRADED_REASONS.has(reason) ? reason : 'unknown_degraded_reason');
+}
+
+function countAnswerSourceStatus(counts: Record<string, number>, sourceStatus: AnswerSourceStatus, citationCount: number): void {
+    if (!sourceStatus.ragAttempted) {
+        incrementCount(counts, 'rag.not_attempted');
+    } else if (sourceStatus.uploadedMaterialHitCount > 0) {
+        incrementCount(counts, 'rag.hit');
+    } else if (sourceStatus.ragReady) {
+        incrementCount(counts, 'rag.miss');
+    } else {
+        incrementCount(counts, 'rag.failed');
+    }
+
+    if (sourceStatus.embeddingReady) incrementCount(counts, 'embedding.ready');
+    else incrementCount(counts, 'embedding.unavailable');
+
+    const screenStatus = sourceStatus.screenContextStatus;
+    if (screenStatus === 'available') incrementCount(counts, 'screen.available');
+    else if (screenStatus === 'failed') incrementCount(counts, 'screen.failed');
+    else incrementCount(counts, 'screen.not_used');
+
+    const businessStatus = sourceStatus.businessSystemStatus ?? 'not_requested';
+    if (businessStatus === 'available') incrementCount(counts, 'business_system.available');
+    else if (businessStatus === 'no_result') incrementCount(counts, 'business_system.no_result');
+    else if (businessStatus === 'auth_failed') incrementCount(counts, 'business_system.auth_failed');
+    else if (businessStatus === 'timeout') incrementCount(counts, 'business_system.timeout');
+    else if (businessStatus === 'unavailable') incrementCount(counts, 'business_system.unavailable');
+    else if (businessStatus === 'error') incrementCount(counts, 'business_system.error');
+    else incrementCount(counts, 'business_system.not_used');
+
+    incrementCount(counts, citationCount > 0 ? 'citations.present' : 'citations.missing');
 }
 
 export class DatabaseManager {
@@ -1630,6 +1715,60 @@ export class DatabaseManager {
             regenerationRate: eventCounts.regenerated / denominator,
             ragHitRate: ragAttempts > 0 ? ragHits / ragAttempts : 0,
             noContextAnswerRate: noContextAnswers / denominator,
+        };
+    }
+
+    public getRealtimeDiagnosticsAggregate(input?: { sinceMs?: number; mode?: string }): RealtimeDiagnosticsAggregate {
+        const metrics = this.getAnswerQualityMetrics(input);
+        const emptyAggregate: RealtimeDiagnosticsAggregate = {
+            metrics,
+            degradedReasons: {},
+            sourceStatusCounts: {},
+            traceSampleSize: 0,
+            eventSampleSize: metrics.shownCount,
+        };
+        if (!this.db) return emptyAggregate;
+
+        const filters: string[] = [];
+        const params: any[] = [];
+        if (Number.isFinite(input?.sinceMs)) {
+            filters.push("created_at >= datetime(? / 1000, 'unixepoch')");
+            params.push(input?.sinceMs);
+        }
+        if (input?.mode) {
+            filters.push('answer_type = ?');
+            params.push(input.mode);
+        }
+        const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+        const traces = this.db.prepare(`
+            SELECT answer_id, context_used_json, citations_json, degraded_reason
+            FROM answer_context_traces
+            ${whereClause}
+        `).all(...params) as Array<{
+            answer_id: string;
+            context_used_json: string;
+            citations_json: string;
+            degraded_reason: string | null;
+        }>;
+
+        const degradedReasons: Record<string, number> = {};
+        const sourceStatusCounts: Record<string, number> = {};
+
+        for (const trace of traces) {
+            const contextPayload = safeJson<Record<string, unknown>>(trace.context_used_json, {});
+            const sourceStatus = normalizeAnswerSourceStatus((contextPayload as any).sourceStatus);
+            const citations = safeJson<unknown[]>(trace.citations_json, []);
+            const citationCount = Math.max(sourceStatus.citationCount, citations.length);
+            countKnownDegradedReason(degradedReasons, trace.degraded_reason);
+            countAnswerSourceStatus(sourceStatusCounts, sourceStatus, citationCount);
+        }
+
+        return {
+            metrics,
+            degradedReasons,
+            sourceStatusCounts,
+            traceSampleSize: traces.length,
+            eventSampleSize: metrics.shownCount,
         };
     }
 

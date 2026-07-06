@@ -207,6 +207,18 @@ export interface AnswerQualityMetrics {
   noContextAnswerRate: number
 }
 
+export interface RealtimeDiagnosticsSummary {
+  source: 'persisted'
+  sampleSize: number
+  traceSampleSize: number
+  eventSampleSize: number
+  insufficientData: boolean
+  metrics: AnswerQualityMetrics
+  degradedReasons: Record<string, number>
+  sourceStatusCounts: Record<string, number>
+  messages: string[]
+}
+
 export interface KnowledgeMaterial {
   id: string
   file_name?: string
@@ -214,7 +226,10 @@ export interface KnowledgeMaterial {
   title?: string
   mime_or_ext?: string
   status: 'queued' | 'indexing' | 'complete' | 'failed' | 'deleted'
+  error_code?: string | null
+  errorCode?: string | null
   error_message?: string | null
+  errorMessage?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -673,6 +688,7 @@ export interface ElectronAPI {
   ragRetryEmbeddings: () => Promise<{ success: boolean }>
   trackAnswerQualityEvent: (input: { answerId: string; eventType: AnswerQualityEventType; surface?: string; metadata?: AnswerQualityEventMetadata }) => Promise<{ success: boolean; id?: string; error?: string }>
   getAnswerQualityMetrics: (input?: { sinceMs?: number; mode?: string }) => Promise<{ success: boolean; metrics?: AnswerQualityMetrics; error?: string }>
+  getRealtimeDiagnosticsSummary: (input?: { sinceMs?: number; mode?: string }) => Promise<{ success: boolean; summary?: RealtimeDiagnosticsSummary; error?: string }>
   openAnswerCitation: (input: { answerId: string; citationId: string }) => Promise<{ success: boolean; status: 'ok' | 'stale-citation' | 'missing-citation' | 'unsupported-citation'; previewText?: string | null; citation?: AnswerCitation; error?: string }>
   getContextHealth: () => Promise<ContextHealth>
   knowledgeSelectMaterials: () => Promise<{ success?: boolean; cancelled?: boolean; filePaths?: string[]; error?: string }>

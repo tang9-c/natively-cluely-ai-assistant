@@ -52,6 +52,7 @@ import {
   isRecoverableLiveRagError,
   shouldUseLiveRagQuery,
 } from './rag/LiveRagQueryGuard';
+import { buildRealtimeDiagnosticsSummary } from '../shared/realtimeAnswerTrustViewModel';
 
 const QCLOUD_KEY_PATTERN = /^sk-[A-Za-z0-9_-]{32,}$/;
 
@@ -1271,6 +1272,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             openaiKey: CredentialsManager.getInstance().getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
             geminiKey: CredentialsManager.getInstance().getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
             doubaoKey: apiKey || process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY || undefined,
+            doubaoEmbeddingModel: CredentialsManager.getInstance().getDoubaoEmbeddingModel() || process.env.DOUBAO_EMBEDDING_MODEL || undefined,
             ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
             providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
           });
@@ -4007,6 +4009,20 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       console.error('[IPC get-answer-quality-metrics] Error:', error);
       return { success: false, error: error?.message || 'metrics_unavailable' };
+    }
+  });
+
+  safeHandle('quality:get-realtime-diagnostics-summary', async (_, input?: { sinceMs?: number; mode?: string }) => {
+    try {
+      const aggregate = DatabaseManager.getInstance().getRealtimeDiagnosticsAggregate(input);
+      const summary = buildRealtimeDiagnosticsSummary(aggregate);
+      return {
+        success: true,
+        summary,
+      };
+    } catch (error: any) {
+      console.error('[IPC quality:get-realtime-diagnostics-summary] Error:', error);
+      return { success: false, error: error?.message || 'realtime_diagnostics_unavailable' };
     }
   });
 

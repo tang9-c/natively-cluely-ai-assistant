@@ -613,6 +613,10 @@ interface ElectronAPI {
     sinceMs?: number;
     mode?: string;
   }) => Promise<{ success: boolean; metrics?: any; error?: string }>;
+  getRealtimeDiagnosticsSummary: (input?: {
+    sinceMs?: number;
+    mode?: string;
+  }) => Promise<{ success: boolean; summary?: any; error?: string }>;
   openAnswerCitation: (input: { answerId: string; citationId: string }) => Promise<{
     success: boolean;
     status: 'ok' | 'stale-citation' | 'missing-citation' | 'unsupported-citation';
@@ -1853,6 +1857,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }) => ipcRenderer.invoke('track-answer-quality-event', input),
   getAnswerQualityMetrics: (input?: { sinceMs?: number; mode?: string }) =>
     ipcRenderer.invoke('get-answer-quality-metrics', input),
+  getRealtimeDiagnosticsSummary: (input?: { sinceMs?: number; mode?: string }) =>
+    ipcRenderer.invoke('quality:get-realtime-diagnostics-summary', input),
   openAnswerCitation: (input: { answerId: string; citationId: string }) =>
     ipcRenderer.invoke('open-answer-citation', input),
   getContextHealth: () => ipcRenderer.invoke('get-context-health'),
