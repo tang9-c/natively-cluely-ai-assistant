@@ -33,6 +33,11 @@ if (fs.existsSync(electronDir)) {
   entryPoints.push(...findTs(electronDir).map(f => path.relative(rootDir, f)));
 }
 
+const sharedDir = path.resolve(rootDir, 'shared');
+if (fs.existsSync(sharedDir)) {
+  entryPoints.push(...findTs(sharedDir).map(f => path.relative(rootDir, f)));
+}
+
 const start = Date.now();
 
 build({
