@@ -98,6 +98,18 @@ test('RAGManager forwards providerDataScopes from config and runtime keys', () =
   assert.match(src, /providerDataScopes: config\.providerDataScopes/);
 });
 
+test('runtime embedding reinitialization preserves Doubao endpoint configuration', () => {
+  const processing = read('electron/ProcessingHelper.ts');
+  const ipc = read('electron/ipcHandlers.ts');
+  const pipeline = read('electron/rag/EmbeddingPipeline.ts');
+
+  assert.match(processing, /getDoubaoEmbeddingModel\(\)/);
+  assert.match(processing, /doubaoEmbeddingModel: doubaoEmbeddingModel \|\| process\.env\.DOUBAO_EMBEDDING_MODEL \|\| undefined/);
+  assert.match(processing, /ollamaUrl: process\.env\.OLLAMA_URL \|\| 'http:\/\/localhost:11434'/);
+  assert.match(ipc, /doubaoEmbeddingModel: CredentialsManager\.getInstance\(\)\.getDoubaoEmbeddingModel\(\) \|\| process\.env\.DOUBAO_EMBEDDING_MODEL \|\| undefined/);
+  assert.match(pipeline, /hasNew\(prev\.doubaoEmbeddingModel, next\.doubaoEmbeddingModel\)/);
+});
+
 test('SettingsManager exposes providerDataScopes setting', () => {
   const src = read('electron/services/SettingsManager.ts');
 

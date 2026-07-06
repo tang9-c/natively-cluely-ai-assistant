@@ -86,6 +86,7 @@ export class ProcessingHelper {
       console.log("[ProcessingHelper] Loading stored Doubao LLM API Key from CredentialsManager");
       this.llmHelper.setDoubaoApiKey(doubaoKey);
     }
+    const doubaoEmbeddingModel = credManager.getDoubaoEmbeddingModel();
 
     const nativelyKey = credManager.getNativelyApiKey();
     if (nativelyKey) {
@@ -105,7 +106,10 @@ export class ProcessingHelper {
       ragManager.initializeEmbeddings({
           openaiKey: openaiKey || undefined,
           geminiKey: geminiKey || undefined,
-          // ollamaUrl is not fetched in CredentialsManager yet by default, but we pass these keys
+          doubaoKey: doubaoKey || process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY || undefined,
+          doubaoEmbeddingModel: doubaoEmbeddingModel || process.env.DOUBAO_EMBEDDING_MODEL || undefined,
+          // Keep runtime re-initialization aligned with AppState.initializeRAGManager().
+          ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
           providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
       });
 

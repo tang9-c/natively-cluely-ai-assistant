@@ -84,6 +84,7 @@ export class EmbeddingPipeline {
             hasNew(prev.openaiKey, next.openaiKey) ||
             hasNew(prev.geminiKey, next.geminiKey) ||
             hasNew(prev.doubaoKey, next.doubaoKey) ||
+            hasNew(prev.doubaoEmbeddingModel, next.doubaoEmbeddingModel) ||
             hasNew(prev.ollamaUrl, next.ollamaUrl)
         );
     }

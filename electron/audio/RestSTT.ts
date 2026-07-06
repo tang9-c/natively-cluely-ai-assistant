@@ -253,7 +253,7 @@ const SAFETY_NET_INTERVAL_MS = 10000;
 
 // Silence threshold - if RMS is below this, skip the upload
 const SILENCE_RMS_THRESHOLD = 50;
-const DOUBAO_AUC_MIC_SILENCE_RMS_THRESHOLD = 15;
+const AUC_MIC_SILENCE_RMS_THRESHOLD = 15;
 
 export class RestSTT extends BaseSTT {
     private provider: RestSttProvider;
@@ -762,8 +762,8 @@ export class RestSTT extends BaseSTT {
     }
 
     private getSilenceRmsThreshold(): number {
-        if (this.provider === 'doubao-auc' && this.options.speaker === 'user') {
-            return DOUBAO_AUC_MIC_SILENCE_RMS_THRESHOLD;
+        if ((this.provider === 'doubao-auc' || this.provider === 'qcloud-stt') && this.options.speaker === 'user') {
+            return AUC_MIC_SILENCE_RMS_THRESHOLD;
         }
         return SILENCE_RMS_THRESHOLD;
     }

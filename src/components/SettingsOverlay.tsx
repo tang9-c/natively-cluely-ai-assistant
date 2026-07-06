@@ -1061,6 +1061,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             : speakerSeparationSupported
                 ? 'on'
                 : 'unavailable';
+    const speakerSeparationProviderLabel = sttProvider === 'qcloud-stt' ? 'QCLOUD API' : 'Doubao AUC';
 
     const handleSttKeySubmit = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc', key: string) => {
         if (!key.trim()) return;
@@ -2582,7 +2583,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                             {speakerSeparationStatus === 'off'
                                                                 ? 'Speaker separation off'
                                                                 : speakerSeparationStatus === 'on'
-                                                                    ? 'Speaker separation on for Doubao AUC'
+                                                                    ? `Speaker separation on for ${speakerSeparationProviderLabel}`
                                                                     : 'Speaker separation unavailable for this transcription provider'}
                                                         </p>
                                                     </div>

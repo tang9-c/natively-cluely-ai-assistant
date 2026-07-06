@@ -38,6 +38,16 @@ test('NativelyInterface displays full confidence health states', () => {
   assert.match(source, /sttInterviewerStatus/);
 });
 
+test('NativelyInterface does not report RAG or embedding unavailable when source status is unknown', () => {
+  const source = read('src/components/NativelyInterface.tsx');
+
+  assert.match(source, /getContextHealth/);
+  assert.match(source, /latestSourceStatus\?\.ragReady \?\? contextHealth\?\.ragReady/);
+  assert.match(source, /latestSourceStatus\?\.embeddingReady \?\? contextHealth\?\.embeddingReady/);
+  assert.match(source, /return '状态检查中'/);
+  assert.doesNotMatch(source, /latestSourceStatus\?\.embeddingReady \? 'Embedding 可用' : 'Embedding 不可用'/);
+});
+
 test('NativelyInterface gates realtime answer state by request id and previews citations without promising source navigation', () => {
   const source = read('src/components/NativelyInterface.tsx');
 

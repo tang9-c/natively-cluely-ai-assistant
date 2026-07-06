@@ -55,6 +55,34 @@ test('QCLOUD API speech channel stays Chinese-first after explicit auto language
   assert.equal(fields.locale, undefined);
 });
 
+test('QCLOUD API speech channel uploads low-volume microphone audio instead of treating it as silence', async () => {
+  const { RestSTT } = await loadRestSTT();
+  const stt = new RestSTT('qcloud-stt', 'qcloud-test-key', undefined, undefined, {
+    speaker: 'user',
+  });
+  const transcripts = [];
+  const rawPcm = Buffer.alloc(8000);
+  for (let offset = 0; offset < rawPcm.length; offset += 2) {
+    rawPcm.writeInt16LE(20, offset);
+  }
+
+  stt.uploadAudio = async () => '低音量 QCLOUD 麦克风也应该上传';
+  stt.on('transcript', event => transcripts.push(event));
+
+  stt.start();
+  stt.write(rawPcm);
+  await stt.drainFinals(1000);
+  stt.stop();
+
+  assert.deepEqual(transcripts, [
+    {
+      text: '低音量 QCLOUD 麦克风也应该上传',
+      isFinal: true,
+      confidence: 1,
+    },
+  ]);
+});
+
 test('QCLOUD API speech channel is never shown as qcloud-stt in user-facing settings source', () => {
   const settings = fs.readFileSync(path.join(root, 'src/components/SettingsOverlay.tsx'), 'utf8');
   const speechOptionBlock = settings.match(/options=\{\[[\s\S]*?\]\}/)?.[0] || '';
@@ -62,6 +90,13 @@ test('QCLOUD API speech channel is never shown as qcloud-stt in user-facing sett
   assert.match(speechOptionBlock, /label:\s*'QCLOUD API'/);
   assert.doesNotMatch(speechOptionBlock, /label:\s*['"]qcloud-stt['"]/i);
   assert.doesNotMatch(speechOptionBlock, /label:\s*['"]QCloudSTT['"]/);
+});
+
+test('QCLOUD API speaker separation settings label uses the active provider name', () => {
+  const settings = fs.readFileSync(path.join(root, 'src/components/SettingsOverlay.tsx'), 'utf8');
+  assert.match(settings, /speakerSeparationProviderLabel = sttProvider === 'qcloud-stt' \? 'QCLOUD API' : 'Doubao AUC'/);
+  assert.match(settings, /Speaker separation on for \$\{speakerSeparationProviderLabel\}/);
+  assert.doesNotMatch(settings, /Speaker separation on for Doubao AUC'/);
 });
 
 test('QCLOUD API missing saved key warning does not expose internal provider wording', () => {
