@@ -75,6 +75,19 @@ test('auto on QCLOUD API speech channel remains Chinese-first instead of English
   assert.equal(result.willHonorSelection, true);
 });
 
+test('QCLOUD API speech channel honors explicit Chinese selection', async () => {
+  const { resolveSttLanguageCompatibility } = await loadModule();
+
+  const result = resolveSttLanguageCompatibility({
+    provider: 'qcloud-stt',
+    requestedLanguageKey: 'chinese',
+  });
+
+  assert.equal(result.effectiveLanguageKey, 'chinese');
+  assert.equal(result.willHonorSelection, true);
+  assert.equal(result.reasonCode, 'SUPPORTED');
+});
+
 test('QCLOUD API speech channel does not claim unverified explicit English language support', async () => {
   const { resolveSttLanguageCompatibility } = await loadModule();
 

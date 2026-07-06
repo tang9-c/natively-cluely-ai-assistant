@@ -1330,6 +1330,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       llmHelper.setModel(defaultModel, providers);
       broadcast('model-changed', defaultModel);
       broadcast('qcloud-key-changed', { hasKey: Boolean(trimmedKey) });
+      broadcast('credentials-changed');
 
       // setNativelyApiKey may migrate legacy STT values such as 'natively' back to a
       // local provider. Reconfigure only when the effective provider actually changes.

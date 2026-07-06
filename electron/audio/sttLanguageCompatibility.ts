@@ -137,6 +137,16 @@ export function resolveSttLanguageCompatibility(
     };
   }
 
+  if (provider === 'qcloud-stt' && requestedLanguageKey === 'chinese') {
+    return {
+      requestedLanguageKey,
+      effectiveLanguageKey: 'chinese',
+      willHonorSelection: true,
+      reasonCode: 'SUPPORTED',
+      message: 'QCLOUD API 语音通道会按中文优先策略执行识别。',
+    };
+  }
+
   if (requestedLanguageKey === 'auto' && effectiveLanguageKey !== 'auto') {
     return {
       requestedLanguageKey,

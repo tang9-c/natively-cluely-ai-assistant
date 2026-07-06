@@ -122,6 +122,7 @@ test('QCLOUD key changes broadcast explicit key state without exposing the key',
 
   assert.ok(start >= 0, 'set-natively-api-key handler should exist');
   assert.match(handler, /broadcast\('qcloud-key-changed',\s*\{\s*hasKey:/);
+  assert.match(handler, /broadcast\('credentials-changed'\)/);
   assert.doesNotMatch(handler, /broadcast\('qcloud-key-changed',\s*apiKey/);
 });
 

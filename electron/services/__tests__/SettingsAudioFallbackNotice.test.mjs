@@ -15,7 +15,7 @@ test('settings audio fallback banner distinguishes screen recording permission f
     const settings = read('src/components/SettingsOverlay.tsx');
 
     assert.match(settings, /screenRecordingFallbackReasons/);
-    assert.match(settings, /Screen Recording permission is blocking system audio capture/);
+    assert.match(settings, /屏幕录制权限阻止了系统音频采集/);
     assert.match(settings, /screen-recording-permission-denied/);
     assert.match(settings, /screen-recording-stale-grant/);
 
@@ -23,10 +23,12 @@ test('settings audio fallback banner distinguishes screen recording permission f
         settings.indexOf('{deviceFallbackNotice && ('),
         settings.indexOf('localStorage.removeItem', settings.indexOf('{deviceFallbackNotice && (')),
     );
-    const permissionTextIndex = banner.indexOf('Screen Recording permission is blocking system audio capture');
+    const permissionTextIndex = banner.indexOf('屏幕录制权限阻止了系统音频采集');
     const genericOutputTextIndex = banner.indexOf("couldn't be opened");
 
     assert.ok(permissionTextIndex >= 0, 'permission-specific text should be present');
     assert.ok(genericOutputTextIndex >= 0, 'generic device-open fallback should remain for real device failures');
     assert.ok(permissionTextIndex < genericOutputTextIndex, 'permission reason should be handled before generic device failure copy');
+    assert.match(banner, /isKnownScreenRecordingFallback/);
+    assert.match(banner, /deviceFallbackNotice\.reason && !isKnownScreenRecordingFallback/);
 });

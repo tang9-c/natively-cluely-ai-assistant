@@ -855,6 +855,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
         actual: string | null;
         reason?: string;
     } | null>(null);
+    const isKnownScreenRecordingFallback = Boolean(
+        deviceFallbackNotice?.kind === 'output' &&
+        deviceFallbackNotice.reason &&
+        screenRecordingFallbackReasons.has(deviceFallbackNotice.reason),
+    );
 
     // STT Provider settings
     const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'doubao' | 'doubao-auc' | 'qcloud-stt' | 'natively' | 'local-whisper' | 'local-sensevoice'>('none');
@@ -2648,12 +2653,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             </div>
 
                                             {recognitionLanguage === 'chinese' && sttLanguageCompatibility && !sttLanguageCompatibility.willHonorSelection && (
-                                                <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3">
-                                                    <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-400" />
+                                                <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-400/50 bg-amber-500/15 px-3.5 py-3">
+                                                    <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-300" />
                                                     <div className="min-w-0">
-                                                        <p className="text-xs font-semibold text-amber-200">当前实现不会按中文执行</p>
-                                                        <p className="mt-1 text-xs leading-relaxed text-amber-100/90">
-                                                            {sttLanguageCompatibility.message} 会议仍可继续，但这次中文识别不会按所选语言执行。
+                                                        <p className="text-xs font-semibold text-text-primary">当前语音提供商不会按中文执行</p>
+                                                        <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+                                                            {sttLanguageCompatibility.message}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -2671,22 +2676,22 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         {/* Device-fallback banner: shown when main process couldn't
                                             open the selected device and silently used the default. */}
                                         {deviceFallbackNotice && (
-                                            <div className="mb-4 flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                                                <AlertCircle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                                            <div className="mb-4 flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/15 border border-amber-400/50">
+                                                <AlertCircle size={14} className="text-amber-300 shrink-0 mt-0.5" />
                                                 <div className="min-w-0 flex-1">
-                                                    {deviceFallbackNotice.kind === 'output' && deviceFallbackNotice.reason && screenRecordingFallbackReasons.has(deviceFallbackNotice.reason) ? (
-                                                        <p className="text-xs text-amber-200/90 leading-snug">
-                                                            Screen Recording permission is blocking system audio capture. Microphone transcription can still run, but meeting audio from the output device will not be captured until permission is restored.
+                                                    {isKnownScreenRecordingFallback ? (
+                                                        <p className="text-xs text-text-primary leading-snug">
+                                                            屏幕录制权限阻止了系统音频采集。麦克风转写仍可继续，但在恢复权限前，来自输出设备的会议音频不会被捕获。
                                                         </p>
                                                     ) : (
-                                                        <p className="text-xs text-amber-200/90 leading-snug">
+                                                        <p className="text-xs text-text-primary leading-snug">
                                                             Selected {deviceFallbackNotice.kind === 'input' ? 'microphone' : 'output device'}
                                                             {deviceFallbackNotice.requested ? ` "${deviceFallbackNotice.requested}"` : ''} couldn't be opened
                                                             — using <span className="font-medium">{deviceFallbackNotice.actual ?? 'no device'}</span> instead.
                                                         </p>
                                                     )}
-                                                    {deviceFallbackNotice.reason && (
-                                                        <p className="text-[11px] text-amber-200/60 mt-1 font-mono break-all">{deviceFallbackNotice.reason}</p>
+                                                    {deviceFallbackNotice.reason && !isKnownScreenRecordingFallback && (
+                                                        <p className="text-[11px] text-text-tertiary mt-1 font-mono break-all">{deviceFallbackNotice.reason}</p>
                                                     )}
                                                 </div>
                                                 <button
@@ -2701,9 +2706,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         }
                                                         setDeviceFallbackNotice(null);
                                                     }}
-                                                    className="shrink-0 text-[11px] font-medium text-amber-400 hover:text-amber-300 transition-colors px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25"
+                                                    className="shrink-0 text-[11px] font-medium text-text-primary hover:text-accent-primary transition-colors px-2 py-0.5 rounded-md bg-bg-elevated hover:bg-bg-input"
                                                 >
-                                                    Reset
+                                                    重置
                                                 </button>
                                             </div>
                                         )}
