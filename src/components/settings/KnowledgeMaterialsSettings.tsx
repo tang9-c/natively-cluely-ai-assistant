@@ -1,13 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw, Trash2, Upload } from 'lucide-react';
-
-const MATERIAL_STATUS_LABELS: Record<string, string> = {
-  queued: '排队中',
-  indexing: '索引中',
-  complete: '已完成',
-  failed: '索引失败',
-  deleted: '已删除',
-};
+import { explainMaterialStatus } from '../../../shared/realtimeAnswerTrustViewModel';
 
 function isBatchSettled(materials: any[], ids: string[]) {
   const byId = new Map(materials.map((material) => [material.id, material]));
@@ -177,13 +170,13 @@ export function KnowledgeMaterialsSettings() {
 
       {embeddingReady === false && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-100">
-          资料仍可上传，但检索将降级为关键词匹配，回答可能不稳定。
+          未配置语义检索。CueUp 会对上传资料使用关键词匹配。
         </div>
       )}
 
       {embeddingReady === true && materialEmbeddingFailed && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-100">
-          部分资料的向量索引失败；资料仍可检索，但会降级为关键词匹配。
+          部分资料文本可用，但语义索引失败。CueUp 仍可尝试关键词匹配。
         </div>
       )}
 
@@ -197,15 +190,27 @@ export function KnowledgeMaterialsSettings() {
             {materials.map((material) => {
               const title = material.title || material.file_name || material.fileName || material.id;
               const materialStatus = material.status || 'queued';
-              const errorMessage = material.error_message || material.errorMessage;
-              const canReindex = materialStatus === 'complete';
+              const explanation = explainMaterialStatus({
+                id: material.id,
+                title,
+                file_name: material.file_name,
+                fileName: material.fileName,
+                status: materialStatus,
+                errorCode: material.errorCode,
+                error_code: material.error_code,
+                errorMessage: material.errorMessage,
+                error_message: material.error_message,
+              });
+              const canReindex = explanation.canReindex;
               return (
                 <div key={material.id} className="flex items-center justify-between gap-3 px-3.5 py-2.5">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium text-text-primary">{title}</div>
-                    <div className="mt-1 flex items-center gap-2 text-[11px] text-text-tertiary">
-                      <span>{MATERIAL_STATUS_LABELS[materialStatus] || materialStatus}</span>
-                      {errorMessage && <span className="text-red-400">{errorMessage}</span>}
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text-tertiary">
+                      <span>{explanation.label}</span>
+                      <span className={explanation.severity === 'error' ? 'text-red-400' : explanation.severity === 'warning' ? 'text-amber-300' : 'text-text-tertiary'}>
+                        {explanation.message}
+                      </span>
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -213,10 +218,20 @@ export function KnowledgeMaterialsSettings() {
                       onClick={() => reindexMaterial(material.id)}
                       disabled={busy || !canReindex}
                       className="p-1.5 rounded-lg border border-border-subtle bg-bg-component hover:bg-bg-elevated text-text-secondary hover:text-text-primary disabled:opacity-60"
-                      title={canReindex ? '重新索引' : '仅已完成资料可重新索引'}
+                      title={canReindex ? '重新索引：基于已提取文本重建索引' : explanation.primaryActionLabel || explanation.message}
                     >
                       <RefreshCw size={13} />
                     </button>
+                    {!canReindex && explanation.primaryActionLabel === '重新上传新文件' && (
+                      <button
+                        type="button"
+                        onClick={uploadMaterials}
+                        disabled={busy}
+                        className="text-[11px] text-accent-primary hover:underline disabled:opacity-60"
+                      >
+                        重新上传新文件
+                      </button>
+                    )}
                     <button
                       onClick={() => deleteMaterial(material.id)}
                       disabled={busy}
