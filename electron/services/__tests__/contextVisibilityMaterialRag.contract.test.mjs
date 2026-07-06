@@ -52,17 +52,17 @@ test('material upload intentionally excludes PPTX and image OCR from the support
   assert.match(ipc, /extensions:\s*\[[^\]]*'pdf'[^\]]*'docx'[^\]]*'txt'[^\]]*'md'[^\]]*\]/s);
   assert.doesNotMatch(ipc, /knowledgeSelectMaterials[\s\S]{0,500}pptx/i);
   assert.match(settings, /PPTX 即将支持；当前请先导出为 PDF 或 Markdown 后上传。/);
-  assert.match(settings, /queued:\s*'排队中'/);
-  assert.match(settings, /indexing:\s*'索引中'/);
-  assert.match(settings, /complete:\s*'已完成'/);
-  assert.match(settings, /failed:\s*'索引失败'/);
+  assert.match(settings, /explainMaterialStatus/);
+  assert.match(settings, /explanation\.label/);
+  assert.match(settings, /explanation\.message/);
   assert.match(settings, /embeddingReady === false/);
-  assert.match(settings, /资料仍可上传，但检索将降级为关键词匹配，回答可能不稳定。/);
+  assert.match(settings, /未配置语义检索。CueUp 会对上传资料使用关键词匹配。/);
   assert.match(settings, /materialEmbeddingFailed/);
-  assert.match(settings, /部分资料的向量索引失败；资料仍可检索，但会降级为关键词匹配。/);
+  assert.match(settings, /部分资料文本可用，但语义索引失败。CueUp 仍可尝试关键词匹配。/);
   assert.match(settings, /summarizeUploadResult/);
   assert.match(settings, /material\.status === 'failed'/);
-  assert.match(settings, /const canReindex = materialStatus === 'complete'/);
+  assert.match(settings, /const canReindex = explanation\.canReindex/);
+  assert.match(settings, /onClick=\{uploadMaterials\}/);
   assert.match(settings, /disabled=\{busy \|\| !canReindex\}/);
 });
 
