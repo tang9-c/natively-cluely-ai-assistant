@@ -846,6 +846,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [selectedOutput, setSelectedOutput] = useState('');
     const [micLevel, setMicLevel] = useState(0);
     const [useExperimentalSck, setUseExperimentalSck] = useState(false);
+    const toggleExperimentalSck = () => {
+        const newState = !useExperimentalSck;
+        setUseExperimentalSck(newState);
+        window.localStorage.setItem('useExperimentalSckBackend', newState ? 'true' : 'false');
+    };
     // Most-recent device fallback notice. Populated by main process via
     // 'device-selection-applied' IPC when the saved device couldn't be opened
     // and the audio pipeline silently fell back to the system default.
@@ -2809,8 +2814,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                             {isMac && (
                                                 <>
                                                     <div className="h-px bg-border-subtle my-2" />
-                                                    <div className="bg-amber-500/5 rounded-xl border border-amber-500/20 p-4">
-                                                        <div className="flex items-center justify-between">
+                                                    <button
+                                                        type="button"
+                                                        role="switch"
+                                                        aria-checked={useExperimentalSck}
+                                                        onClick={toggleExperimentalSck}
+                                                        className="w-full text-left bg-amber-500/5 hover:bg-amber-500/10 rounded-xl border border-amber-500/20 p-4 transition-colors cursor-pointer"
+                                                    >
+                                                        <div className="flex items-center justify-between gap-4">
                                                             <div className="flex items-start gap-3">
                                                                 <div className="mt-0.5 p-1.5 rounded-lg bg-amber-500/10 text-amber-500">
                                                                     <FlaskConical size={18} />
@@ -2821,22 +2832,20 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                         <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 uppercase tracking-wide">替代方案</span>
                                                                     </div>
                                                                     <p className="text-xs text-text-secondary leading-relaxed max-w-[300px]">
-                                                                        Use the ScreenCaptureKit backend. An optimized alternative to CoreAudio if you experience any capture issues.
+                                                                        使用 ScreenCaptureKit 后端。如果遇到采集问题，可作为 CoreAudio 的优化替代方案。
+                                                                    </p>
+                                                                    <p className="mt-1 text-[11px] text-amber-400">
+                                                                        {useExperimentalSck ? '已开启' : '已关闭'} · 下次开始会议时生效
                                                                     </p>
                                                                 </div>
                                                             </div>
                                                             <div
-                                                                onClick={() => {
-                                                                    const newState = !useExperimentalSck;
-                                                                    setUseExperimentalSck(newState);
-                                                                    window.localStorage.setItem('useExperimentalSckBackend', newState ? 'true' : 'false');
-                                                                }}
                                                                 className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${useExperimentalSck ? 'bg-amber-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                             >
                                                                 <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${useExperimentalSck ? 'translate-x-5' : 'translate-x-0'}`} />
                                                             </div>
                                                         </div>
-                                                    </div>
+                                                    </button>
                                                 </>
                                             )}
                                         </div>

@@ -42,3 +42,11 @@ test('Rust SCK backend documents that device_id is ignored for non-default outpu
   assert.match(src, /ScreenCaptureKit captures ALL system audio, not per-device/);
   assert.match(src, /ScreenCaptureKit fallback ignores device_id/);
 });
+
+test('settings SCK toggle exposes switch state and visible effect timing', () => {
+  const src = read('src/components/SettingsOverlay.tsx');
+  assert.match(src, /role="switch"/);
+  assert.match(src, /aria-checked=\{useExperimentalSck\}/);
+  assert.match(src, /onClick=\{toggleExperimentalSck\}/);
+  assert.match(src, /下次开始会议时生效/);
+});
