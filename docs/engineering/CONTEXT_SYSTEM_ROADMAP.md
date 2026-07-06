@@ -1,6 +1,6 @@
 # CueUp 上下文系统路线图
 
-更新时间：2026-07-04
+更新时间：2026-07-06
 
 ## 北极星
 
@@ -10,17 +10,18 @@
 
 ## 当前现状
 
-本路线图已经从“设计阶段”进入“第一版地基已落地，继续补齐验收和产品化”的阶段。根据代码图谱和最近 7 次提交（`f23974f` 到 `c8a9830`），当前状态如下：
+本路线图已经从“设计阶段”进入“第一版地基已落地，继续补齐验收和产品化”的阶段。根据代码图谱和最近提交（截至 `e53d8add fix: clarify sck backend toggle state`），当前状态如下：
 
 - 品牌外显已从 Natively 迁移到 CueUp，路线图和用户文案应继续使用 CueUp；内部遗留 provider id、类名和存储 key 可按兼容性逐步处理。
-- Phase 0 的可信度闭环已有核心基础：实时答案 trace、来源状态、降级原因、引用预览、失败状态、质量事件、离线指标 harness 和开发诊断输出相关测试已经存在。
+- Phase 0 的可信度闭环已有核心基础：实时答案 trace、来源状态、降级原因、引用预览、失败状态、质量事件、离线指标 harness、开发诊断输出和第一版用户可见 trust explanation 已经存在。
 - Phase 2 的实时上下文编排已有第一版：`RealtimeContextOrchestrator` 能按来源优先级去重、按 token budget 选择/丢弃上下文，并输出 `sourceStatus`、`degradedReasons`、`contextFingerprint` 和检索耗时。
 - Phase 3 的受控业务系统上下文已有第一版：业务系统知识源设置、凭据、触发检测、受控查询、上下文候选注入、固定答复防编造和测试已落地。
 - Phase 4 的说话人稳定性已有第一版：`SpeakerContextPolicy` 会过滤低置信度本地说话人验证元数据，并把降级原因写入答案 trace。
+- Phase 1 的本地资料/RAG 端到端验收第一版已基本收口：PDF、DOCX、Markdown、TXT 抽取进入质量 smoke；资料上传改为先创建 `queued` 记录、后台索引并展示 `queued/indexing/complete/failed`；解析失败保留 failed material；已完成资料可手动重新索引；PPTX 已按“不解析、提示即将支持、拒绝进入索引”的方式覆盖；删除资料不会再被检索或作为有效 citation；embedding 写入失败会保留文本索引并降级为关键词检索。
 - 动态动作意图识别语义门控第一版已落地并完成一轮审计收口：regex 现在主要作为候选召回，高风险动作会经过 `ModeEventClassifier` 的动作级语义门控；`IntelligenceEngine` 会把最近 6 轮上下文、当前 mode、说话人、`intentResult` 和 provider scope 传入动态动作评估，并在需要时调用云端结构化仲裁；`reject` / `defer` 也会产出内部 gate trace。
-- 动态动作和上下文质量回归已有固定命令：`npm run test:quality:smoke` 覆盖语义门控、动态动作引擎、final transcript 触发路径、mode intent 和 answer trace contract；`npm run test:quality:diagnostics` 覆盖上下文质量诊断和离线指标 harness；两个命令都有 no-build 变体。
+- 动态动作和上下文质量回归已有固定命令：`npm run test:quality:smoke` 覆盖语义门控、动态动作引擎、final transcript 触发路径、mode intent、answer trace contract、realtime trust view model、diagnostics IPC 和相关 UI contract；`npm run test:quality:diagnostics` 覆盖上下文质量诊断和离线指标 harness；两个命令都有 no-build 变体。
 - 实时回答 LLM 路径已完成首轮盘点：主实时回答、`WhatToAnswerLLM`、底层 `LLMHelper.streamChat`、动态动作云端 semantic gate、screen understanding、CodeHint 独立工具流和 suggestion trigger 已标记为 migrated；`CodeHintLLM` 已完成独立 trace/scope 收口，后续只评估是否需要进入持久化 answer trace 或产品 UI 诊断。
-- P0-1 仍未完全产品化：当前第一版已有核心门控和回归测试，但本地意图模型下载/不可用诊断、云端仲裁 UI 可见性、更多真实会议 fixture 和指标面板仍需补齐。
+- P0-1 动态动作语义门控验收包已完成第一轮收口：真实会议风格 fixture 已覆盖中文、英文、混合语言、多轮污染、多人说话、provider scope denial、云端不可用和高风险 reject/defer；动态动作卡片已有第一版安全解释行；后续重点从“证明不是关键词弹窗”转为误报/漏报指标、质量面板和更多真实录音回放评测。
 - 本地 SenseVoice 已支持 final transcript 后处理专有名词纠错。它不属于上下文编排本身，但会直接影响上下文质量，尤其是人名、公司名、产品名和业务对象 ID 的可检索性。
 
 ## 产品判断
@@ -34,9 +35,9 @@ CEO 复核后的判断：CueUp 现在的瓶颈不是“能接多少上下文源�
 优先级不是继续扩张到完整 MCP 工具调用，而是把已落地的上下文地基做成一个现场可信度闭环：
 
 1. 现场可信度闭环：每个实时回答和动态动作都能解释“用了什么、没用什么、为什么降级、为什么触发或没触发”。
-2. 动态动作意图识别语义门控：第一版和审计修复已进入代码，接下来要把真实会议 fixture、产品可见解释和高风险 `defer` 策略收口。
-3. 质量回归门禁：把 `test:quality:smoke` 和 `test:quality:diagnostics` 从“能跑”推进到“每次 prompt、RAG、上下文选择、动态动作改动都必须跑”。
-4. 本地 RAG 与资料上传：先把用户手动提供的资料做到可靠引用、可删除、可诊断，再扩企业连接器。
+2. 动态动作意图识别语义门控：第一版、审计修复、真实会议风格 fixture 和动态动作卡片解释已进入代码；接下来要做的是误报/漏报指标、质量面板和真实录音回放评测。
+3. 质量回归门禁：`test:quality:changed`、`test:quality:gate` 和 no-build 快速循环已经建立；接下来要把它们保持为开发习惯，并继续扩大 fixture 和阈值门禁。
+4. 本地 RAG 与资料上传：第一版上传、引用、删除、重新索引、失败诊断和 PPTX 非支持态覆盖已进入质量 smoke；下一步只补更真实的会议回放评测和 failed material 的重新上传/重试产品策略。
 5. 受控业务系统上下文：继续保持只读和防编造，下一步做缓存/预取、真实 connector 诊断和用户可见状态。
 6. 输入质量：SenseVoice 专名纠错、VAD 分段、说话人稳定性直接影响检索和答案质量，不能被当成 STT 边缘工作。
 7. 长期记忆和通用企业连接器放在可信度闭环之后。
@@ -50,7 +51,7 @@ CEO 复核后的判断：CueUp 现在的瓶颈不是“能接多少上下文源�
 多条 LLM 路径已迁移      ->     新入口必须登记 scope/trace  ->   没有“黑盒实时回答路径”
 业务系统有 fixture       ->     只读真实 connector + 缓存    ->   关键业务事实可用，但失败绝不编造
 动态动作能语义门控       ->     真实会议误报/漏报评测       ->   动作像优秀会议助手，而不是关键词弹窗
-资料/RAG 有基础          ->     上传、引用、删除闭环        ->   用户给的材料一定可追踪、可撤回
+资料/RAG 第一版闭环      ->     真实会议回放评测            ->   用户给的材料一定可追踪、可撤回
 ```
 
 这个路线图的北极星不是“上下文系统完整”。那太抽象。真正的 12 个月目标是：用户开会时敢把 CueUp 放在屏幕旁边，因为它快、准、知道自己不知道。
@@ -115,7 +116,7 @@ Realtime Context Orchestrator
 
 ### P0-1：动态动作意图识别语义门控
 
-状态：第一版已落地，当前第一优先进入验收收口。锚点提交：`159d371`、`2e6a37d`、`8fb47c3`、`215694c`、`9a5e913`、`4c212db`、`efa906a`。
+状态：第一版、当前冲刺验收收口和动态动作卡片解释已落地，后续进入指标面板和真实录音回放评测。锚点提交：`159d371`、`2e6a37d`、`8fb47c3`、`215694c`、`9a5e913`、`4c212db`、`efa906a`、`60cb624b`、`d1c1f888`。
 
 目标：动态动作不能只因为单词或短语命中就执行。系统必须先结合当前 turn、最近几轮上下文、当前 mode、说话人和已有 `intentResult` 理解整体意思，再决定是否生成、展示或自动执行动作。
 
@@ -138,13 +139,17 @@ Realtime Context Orchestrator
   - 云端不可用时保留明确本地高置信召回；
   - 中性价格提及拦截；
   - `price list` / `pricing page` / `成本数据` 等不触发价格异议。
+  - “价格先放一边，我们想看客户案例和 API 集成要求”拒绝价格动作，并触发案例/技术需求；
+  - “这个技术方案怎么对接 SSO 和生产环境”触发技术需求；
+  - “客户要一个类似案例证明 ROI”触发案例/证明请求；
+  - 中文、英文、混合语言、多轮旧话题污染、多人说话、provider scope denied、cloud null/timeout/invalid JSON 等 fixture。
 
 仍需补齐：
 
 - 本地意图识别模型未下载、未开启、加载失败或超时时的用户可见诊断；当前第一版不能假设本地模型一定存在。
-- 云端仲裁被 provider data scope 禁止、provider 不可用、JSON 非法或超时时已有内部 trace/diagnostics；仍需决定是否以及如何在产品 UI 中展示。
-- 更多真实会议 fixture，尤其是中文、英文、混合语言、多轮转折、多人说话和旧话题污染当前判断的场景。
-- 高风险 `defer` 的产品策略：等待重复证据、低优先级卡片或完全静默，需要用真实使用数据继续定。
+- 云端仲裁被 provider data scope 禁止、provider 不可用、JSON 非法或超时时已有内部 trace/diagnostics；通过门控并实际出卡的动态动作已有第一版安全解释，reject/defer 仍保持诊断视图而不是用户卡片。
+- 更多真实录音回放 fixture，而不只是文本级真实会议风格 fixture；重点看 ASR 错词、分段、说话人漂移和上下文污染对误报/漏报的影响。
+- 高风险 `defer` 的产品呈现策略：等待重复证据、低优先级卡片或完全静默，需要用真实使用数据继续定；代码层已有 defer/reject trace。
 - 动态动作质量指标的产品化展示：误报率、漏报率、defer 升级率和平均仲裁延迟仍未形成 dashboard；内部诊断已覆盖 pass/reject/defer、云端不可用、本地 fallback 和降级原因分布。
 
 实施要求：
@@ -184,24 +189,23 @@ Realtime Context Orchestrator
   - final transcript 路径能生成经过语义门控的动态动作。
   - 云端不可用时，明确高置信本地语义不能被无差别降级吞掉。
 - 仍需补齐的验收：
-  - “价格先放一边，我们想看客户案例和 API 集成要求”不能触发价格动作，应触发案例和技术需求动作。
-  - “这个技术方案怎么对接 SSO 和生产环境”能触发技术需求，而不依赖价格词或报价词。
-  - “客户要一个类似案例证明 ROI”能触发案例/证明请求。
-  - 每个动态动作都能解释：为什么触发、为什么没有被拦截、是否经过语义门控。
-  - 相关测试必须扩展到更多中文、英文、混合语言、单句和多轮上下文 fixture。
+  - 每个已出卡动态动作都能在产品 UI 解释为什么触发；reject/defer 候选能在诊断视图解释为什么被拦截。
+  - 相关测试继续扩展到真实录音回放、更多中文/英文/混合语言、单句和多轮上下文 fixture。
 
 ### Phase 0：实时答案可信度闭环
 
-状态：第一版已落地，开发诊断和离线指标 harness 已接入，继续补齐产品指标。
+状态：第一版已落地，开发诊断、离线指标 harness、realtime trust view model 和最新答案 trust explanation UI 已接入，继续补齐产品指标。
 
 已完成：
 
 - 答案 trace 元数据和持久化基础。
 - 实时答案来源状态、降级原因和失败状态展示。
 - 引用预览 UI，并避免把预览引用误导为完整可跳转来源。
+- 最新实时答案的 trust explanation 会汇总上传资料命中、引用候选/可打开状态、embedding 降级和来源健康项。
 - RAG scope denial、provider data scope、trace persistence failure 等关键失败路径测试。
 - 答案质量事件、接受/重新生成/忽略生命周期的 UI contract 覆盖。
 - `AnswerMetricsOfflineHarness` 和 `ContextQualityDiagnostics` 已进入质量诊断命令。
+- `RealtimeAnswerTrustViewModel`、`quality:get-realtime-diagnostics-summary`、资料状态解释、最新答案解释和动态动作解释已进入 `test:quality:smoke:no-build`。
 
 仍需补齐：
 
@@ -225,32 +229,55 @@ Realtime Context Orchestrator
 
 ### Phase 1：本地 RAG 与资料上传
 
-状态：已有材料/RAG 基础和统一知识源设置，下一步是打通更明确的产品验收。
+状态：第一版端到端验收已基本收口，继续补真实会议回放评测、failed material 重新上传/重试策略和更强资料支撑型评测。锚点提交：`b6377590`。详细实施方案见 `docs/engineering/PHASE_1_LOCAL_RAG_MATERIAL_UPLOAD_PLAN.md`。
 
 已完成：
 
 - 本地资料、业务系统知识源设置已在设置页中统一呈现。
 - 资料型上下文已作为 `uploaded_material` / `mode_reference` 等候选来源进入实时编排模型。
 - trace 和引用 UI 已能表达 RAG 命中、不可用和降级。
+- 上传入口第一版只验收 PDF、DOCX、Markdown、TXT；PPTX 不进入文件选择器和服务白名单，资料库 UI 常驻提示 `PPTX 即将支持；当前请先导出为 PDF 或 Markdown 后上传。`
+- `DocumentTextExtractor` 已覆盖 PDF、DOCX、Markdown、TXT 正常抽取，以及空文件、损坏/二进制伪 TXT 等错误路径；PDF worker 路径已修复并进入质量 smoke。
+- `KnowledgeMaterialService.uploadFiles()` 已改为先创建 material 记录并立即返回，后台串行索引，状态流转为 `queued -> indexing -> complete/failed`，用户可在设置页看到排队中、索引中、已完成、索引失败。
+- 解析失败、空文档、二进制 TXT、unsupported type 都会留下 `failed` material 记录和可读中文错误，不再只显示 toast。
+- embedding 未配置时资料仍可完成文本索引，检索走 lexical fallback；embedding 写入失败时保留文本索引，标记 embedding queue failed，并在设置页和实时回答 trace 中体现降级。
+- 删除资料会软删除 material、删除 chunks 和 embedding queue；后台索引任务会检查取消状态，防止删除后的资料被异步索引“复活”。
+- citation resolver 只把 `status='complete'` 的 uploaded material 视为有效来源；deleted/failed/indexing/queued 的旧 citation 不返回 `ok`。
+- 已完成资料支持手动重新索引，当前实现从已有 chunk 文本重建索引；如果需要重新解析原文件，产品上应要求用户重新上传。
+- PPTX 覆盖的是产品边界而不是解析能力：UI 明确提示“即将支持”，文件选择器和服务白名单不接受 `.pptx`，服务端直接记录为 `unsupported_file_type` 的 failed material，且不会进入索引队列。
+- 新增资料质量 smoke 覆盖：
+  - 批量上传状态与失败记录；
+  - embedding 失败后的 lexical fallback；
+  - 删除后不可检索/不可引用；
+  - FAQ 唯一事实进入 uploaded material context 和 citation；
+  - 不引入 `30 days refund` 等反事实。
+- `test:quality:smoke:no-build` 已纳入 `DocumentTextExtractor.test.mjs`、`KnowledgeMaterialService.test.mjs`、`RealtimeCitationIntegrity.test.mjs`、`UploadedMaterialAnswerQuality.test.mjs` 和资料/RAG contract 测试。
 
 仍需补齐：
 
-- 上传入口的端到端验收：
-  - PDF、DOCX、PPTX、Markdown、TXT；
-  - 批量上传；
-  - 文件级删除和重新索引；
-  - 索引中、已完成、已失败的可见状态。
-- 评测用例证明上传资料被选中、被引用，并且没有被幻觉化。
-- embedding 未配置或失败时的设置诊断和用户提示。
-- 已删除资料不可再被引用或检索的回归测试。
+- 更真实的会议回放 fixture：上传产品 FAQ 后，在接近主链路的会议实时问答中证明 FAQ 被检索、注入、引用，并写入 answer trace；第一版已有 contract/smoke，仍需覆盖更真实的 transcript 和 answer generation 入口。
+- failed material 的产品策略：当前不持久化原始文件副本，失败资料不能无条件“重新索引成功”；后续需明确是要求重新上传，还是保存安全本地副本后提供真正重试。
+- PPTX 真实解析仍不在 Phase 1 第一版内；当前完成的是非支持态覆盖。后续若要支持 PPTX，需要单独评审可靠解析方案，不使用不稳定的轻量 XML 猜测方案冒充完整 PPTX 支持。
+- embedding 降级的产品表达还可以更细：区分“embedding provider 未配置”“embedding 写入失败”“查询期 hybrid fallback”，并在设置页/诊断输出中给出更可操作的修复建议。
+- 资料支撑型答案评测仍需从 formatter/citation contract 扩展到完整 `generate-what-to-say` 可控 LLM stub 路径，验证 `uploadedMaterialHitCount > 0`、引用标题、唯一事实和反事实拒绝。
+- 跨重启 queued/indexing 恢复不在第一版范围内；如果真实用户大量上传大文件，需要增加恢复/清理策略。
 
 验收标准：
 
-- 上传一份产品 FAQ，在会议中问相关问题，能得到引用该 FAQ 的回答。
-- embedding 未配置时，应用展示清楚的降级状态。
-- 文件索引失败时，展示可读错误。
-- 已删除资料不会再被引用或检索。
-- 资料支撑型答案必须通过相关评测用例，才算功能完成。
+- 第一版已覆盖并必须持续通过：
+  - PDF、DOCX、Markdown、TXT 可以抽取文本并进入资料索引。
+  - 批量上传后能看到文件级 `queued/indexing/complete/failed` 状态。
+  - 文件解析失败时展示可读错误并保留 failed material 记录。
+  - 已完成资料可以重新索引；失败资料不会展示一个必然失败的可用重试承诺。
+  - PPTX 不进入索引，UI 和服务端都明确表达“即将支持/unsupported”。
+  - embedding 未配置或失败时资料上传不失败，检索降级为关键词匹配，并有诊断提示/trace。
+  - 已删除资料不会再被检索，也不能作为有效 citation 打开。
+  - 资料支撑型 smoke 能验证 FAQ 唯一事实被带入 context/citation，且不引入明确反事实。
+- 下一步验收：
+  - 上传一份产品 FAQ，在真实会议回放或更接近主链路的可控实时问答中问相关问题，能得到引用该 FAQ 的回答。
+  - 删除同一 FAQ 后，重复问题不再引用该 FAQ，`uploadedMaterialHitCount === 0`，并覆盖 answer generation 入口。
+  - failed material 的重新上传/重试路径有明确产品行为。
+  - 资料支撑型答案必须通过完整 `generate-what-to-say` 评测用例，才算 Phase 1 产品验收完成。
 
 ### Phase 2：Realtime Context Orchestrator
 
@@ -495,25 +522,26 @@ Realtime Context Orchestrator
 ## 更新后的推荐执行顺序
 
 ```text
-当前冲刺：
-  1. 现场可信度验收包：把实时答案 trace、sourceStatus、degradedReason、context plan、动态动作 gate trace 汇总成一个固定验收口径。
-  2. P0-1 动态动作语义门控收口：补真实会议 fixture、产品可见解释和高风险 defer 策略，重点看误报/漏报，不再只看关键词召回。
-  3. Phase 0/2/3/4 已落地能力的验收收口：扩大 fixture 和指标阈值门禁，确保 RAG、业务系统、屏幕、说话人和 provider scope 失败都能归因。
+已完成的当前冲刺：
+  1. 现场可信度验收包第一版：实时答案 trace、sourceStatus、degradedReason、context plan、动态动作 gate trace 已汇总到固定诊断和质量 smoke 口径。
+  2. P0-1 动态动作语义门控收口：真实会议风格 fixture 已覆盖中英混合、单句/多轮、旧话题污染、多人说话、provider scope denied 和 cloud fallback；后续不再只看关键词召回。
+  3. Phase 0/2/3/4 已落地能力验收收口：RAG、业务系统、屏幕、说话人和 provider scope 失败已进入 trace、diagnostics 或固定答复测试；下一步是扩大阈值门禁和真实样本。
   4. 质量命令产品化到开发习惯：`npm run test:quality:changed` 会根据当前 diff 判断是否触发质量门禁；命中 prompt、RAG、上下文选择、动态动作规则、实时 LLM 路径、业务系统上下文、说话人/屏幕上下文或 trace/metrics 相关文件时，必须跑 `npm run test:quality:gate`。连续本地验证可先跑 `npm run build:electron`，再跑 `npm run test:quality:gate:no-build`。
   5. CodeHintLLM 已完成 trace/scope 归属收口；只评估是否把独立工具流 trace 纳入持久化 answer trace 或产品 UI 诊断，不再作为阻塞项。
 
 下一冲刺：
-  6. 本地 RAG/资料上传端到端验收：上传、引用、删除、重新索引、失败诊断和 PPTX 覆盖。
+  6. 本地 RAG/资料上传第一版保持回归：上传、引用、删除、已完成资料重新索引、失败诊断、embedding 降级和 PPTX 非支持态覆盖已基本完成；下一步只做真实会议回放评测、failed material 重新上传/重试策略和完整 generate-what-to-say 资料支撑评测。
   7. 业务系统上下文缓存/预取策略、真实 connector 诊断和固定答复 UI 展示。
-  8. SenseVoice 错词表来源自动化、homophone replacer 调研验证和 SenseVoice 专属 VAD profile。
+  8. 动态动作误报/漏报指标、质量面板和真实录音回放评测。
+  9. SenseVoice 错词表来源自动化、homophone replacer 调研验证和 SenseVoice 专属 VAD profile。
 
 随后：
-  9. 长期记忆 V1。
-  10. 通用只读企业知识连接器。
+  10. 长期记忆 V1。
+  11. 通用只读企业知识连接器。
 
 之后：
-  11. 通用 MCP 只读适配器。
-  12. 可写工具和自动化工作流继续保持非 P0。
+  12. 通用 MCP 只读适配器。
+  13. 可写工具和自动化工作流继续保持非 P0。
 ```
 
 ## P0 要求
