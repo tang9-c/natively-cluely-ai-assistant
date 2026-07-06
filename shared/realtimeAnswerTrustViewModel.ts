@@ -12,6 +12,17 @@ export interface AnswerSourceStatusLike {
     transcriptStatus?: 'used' | 'not_used' | string;
 }
 
+export interface AnswerContextUsedLike {
+    currentTranscript?: boolean;
+    shortTermHistory?: boolean;
+    uploadedDocumentRag?: boolean;
+    historicalMeetings?: boolean;
+    longTermMemory?: boolean;
+    enterpriseKnowledge?: boolean;
+    businessSystemContext?: boolean;
+    screenContext?: boolean;
+}
+
 export interface AnswerCitationLike {
     citationId?: string;
     sourceId?: string;
@@ -20,7 +31,7 @@ export interface AnswerCitationLike {
 }
 
 export interface AnswerTraceLike {
-    contextUsed?: Record<string, unknown>;
+    contextUsed?: AnswerContextUsedLike;
     sourceStatus?: AnswerSourceStatusLike;
     citations?: AnswerCitationLike[];
     degradedReason?: string | null;

@@ -54,11 +54,15 @@ import {
 import { NegotiationCoachingCard } from './NegotiationCoachingCard';
 import { SENSEVOICE_EMOTION_LABELS } from '../../shared/senseVoiceEmotion';
 import type { TranscriptEmotion } from '../../shared/senseVoiceEmotion';
+import {
+  buildLatestAnswerTrustExplanation,
+  type CitationStatus,
+} from '../../shared/realtimeAnswerTrustViewModel';
 import type {
   AnswerCitation,
   AnswerContextTrace,
-  AnswerContextUsed,
   AnswerQualityEventType,
+  ContextHealth,
   DynamicActionModeEvent,
   DynamicActionPayload,
   NativeAudioTranscriptPayload,
@@ -602,6 +606,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [latestAnswerTrace, setLatestAnswerTrace] = useState<AnswerContextTrace | null>(null);
   const [latestAnswerCitations, setLatestAnswerCitations] = useState<AnswerCitation[]>([]);
   const [latestDegradedReason, setLatestDegradedReason] = useState<string | undefined>(undefined);
+  const [contextHealth, setContextHealth] = useState<ContextHealth | null>(null);
+  const [latestCitationStatus, setLatestCitationStatus] = useState<CitationStatus>('none');
   const [citationPreviewMessage, setCitationPreviewMessage] = useState<string | null>(null);
   const latestAnswerLifecycleRef = useRef<LatestAnswerLifecycle | null>(null);
   const latestAnswerRequestIdRef = useRef(0);
@@ -637,6 +643,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     );
     return () => unsub?.();
   }, []);
+
+  const refreshContextHealth = useCallback(async () => {
+    const health = await window.electronAPI?.getContextHealth?.().catch(() => null);
+    if (health) {
+      setContextHealth(health);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshContextHealth().catch(() => {});
+  }, [refreshContextHealth]);
 
   // Close mode dropdown when clicking outside
   useEffect(() => {
@@ -2097,6 +2114,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       answerId,
       citationId: citation.citationId,
     });
+    setLatestCitationStatus((result?.status as CitationStatus | undefined) ?? 'missing-citation');
     if (!result?.success) {
       setCitationPreviewMessage(
         result?.status === 'stale-citation'
@@ -2105,6 +2123,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       );
       return;
     }
+    setLatestCitationStatus('ok');
     setCitationPreviewMessage(result.previewText || '已找到引用来源');
   }, [latestAnswerCitations, latestAnswerId]);
 
@@ -2187,8 +2206,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setLatestVisionFailureReason(result.visionFailureReason);
       setLatestAnswerId(result.answerId);
       setLatestAnswerTrace(result.contextTrace ?? null);
-      setLatestAnswerCitations(result.citations ?? []);
+      const nextCitations = result.citations ?? [];
+      setLatestAnswerCitations(nextCitations);
+      setLatestCitationStatus(nextCitations.some((citation: AnswerCitation) => citation.sourceType === 'uploaded_material' && citation.citationId) ? 'candidate' : 'none');
+      setCitationPreviewMessage(null);
       setLatestDegradedReason(result.degradedReason);
+      refreshContextHealth().catch(() => {});
       const statusMessage = formatRealtimeAnswerStatusForDisplay(result.statusCode, result.error);
       if (result.statusCode !== 'ok' && statusMessage && !result.answer) {
         setMessages((prev) => [
@@ -3613,27 +3636,32 @@ Provide only the answer, nothing else.`;
     sttNotConfigured,
   );
   const statusPillBaseClass = `flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shadow-sm backdrop-blur-xl ${isLightTheme ? 'bg-white/55 border-black/10' : 'bg-black/20 border-white/10'}`;
-  const latestContextUsed: Partial<AnswerContextUsed> = latestAnswerTrace?.contextUsed ?? {};
-  const contextLabels = [
-    latestContextUsed.currentTranscript ? '当前会议' : null,
-    latestContextUsed.shortTermHistory ? '短期历史' : null,
-    latestContextUsed.uploadedDocumentRag || latestAnswerCitations.some((c) => c.sourceType === 'uploaded_material') ? '上传资料' : null,
-    latestContextUsed.historicalMeetings ? '历史会议' : null,
-    latestContextUsed.businessSystemContext ? '业务系统' : null,
-    latestContextUsed.screenContext ? '屏幕' : null,
-  ].filter(Boolean);
+  const latestAnswerTrustExplanation = buildLatestAnswerTrustExplanation({
+    trace: latestAnswerTrace,
+    citations: latestAnswerCitations,
+    citationStatus: latestCitationStatus,
+    citationPreviewMessage,
+    degradedReason: latestDegradedReason,
+  });
+  const contextLabels = latestAnswerTrustExplanation.sourceLabels;
   const contextStatusText = contextLabels.length > 0
     ? `上下文：${contextLabels.join(' / ')}`
     : '上下文：仅使用当前输入';
   const materialCitationCount = latestAnswerCitations.filter((c) => c.sourceType === 'uploaded_material').length;
-  const latestDegradedReasonDisplay = formatDegradedReasonForDisplay(latestDegradedReason);
+  const latestDegradedReasonDisplay = latestAnswerTrustExplanation.degradedMessages.length === 0
+    ? formatDegradedReasonForDisplay(latestDegradedReason)
+    : null;
   const latestSourceStatus = latestAnswerTrace?.sourceStatus;
-  const confidenceHealthItems = [
-    latestSourceStatus?.ragReady ? 'RAG 可用' : 'RAG 不可用',
-    latestSourceStatus?.embeddingReady ? 'Embedding 可用' : 'Embedding 不可用',
-    latestSourceStatus?.uploadedMaterialHitCount && latestSourceStatus.uploadedMaterialHitCount > 0
-      ? `资料命中 ${latestSourceStatus.uploadedMaterialHitCount}`
-      : '上传资料未使用',
+  const ragReady = latestSourceStatus?.ragReady ?? contextHealth?.ragReady;
+  const embeddingReady = latestSourceStatus?.embeddingReady ?? contextHealth?.embeddingReady;
+  const formatReadyLabel = (ready: boolean | undefined, availableLabel: string, unavailableLabel: string) => {
+    if (ready === true) return availableLabel;
+    if (ready === false) return unavailableLabel;
+    return '状态检查中';
+  };
+  const baseConfidenceHealthItems = [
+    formatReadyLabel(ragReady, 'RAG 可用', 'RAG 不可用'),
+    formatReadyLabel(embeddingReady, 'Embedding 可用', 'Embedding 不可用'),
     latestSourceStatus?.screenContextStatus === 'available'
       ? '屏幕上下文可用'
       : latestSourceStatus?.screenContextStatus === 'failed'
@@ -3647,6 +3675,11 @@ Provide only the answer, nothing else.`;
         ? '说话人分离关闭'
         : '说话人分离不可用',
   ];
+  const confidenceHealthItems = Array.from(new Set([
+    ...latestAnswerTrustExplanation.primaryMessages,
+    ...baseConfidenceHealthItems,
+    ...latestAnswerTrustExplanation.degradedMessages,
+  ].filter(Boolean)));
 
   const copyDiagnostics = async () => {
     const version = import.meta.env.VITE_APP_VERSION || 'unknown';
