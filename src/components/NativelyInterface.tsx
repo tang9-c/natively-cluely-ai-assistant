@@ -36,8 +36,6 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 // import { ModelSelector } from './ui/ModelSelector'; // REMOVED
 import 'katex/dist/katex.min.css';
-import DOMPurify from 'dompurify';
-import { marked } from 'marked';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
@@ -45,6 +43,7 @@ import remarkMath from 'remark-math';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { analytics, detectProviderType } from '../lib/analytics/analytics.service';
+import { renderSafeStreamingMarkdown } from '../lib/streamingMarkdownSanitizer';
 import { categorizeSttError } from '../lib/sttErrorMapper';
 import type { MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
@@ -1542,10 +1541,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       streamingRafRef.current = null;
       const node = streamingNodeRef.current;
       if (!node || !streamingTextRef.current) return;
-      // marked.parse is sync and fast (<1ms for typical LLM chunks).
-      // DOMPurify strips any script/event-handler injection.
-      const rawHtml = marked.parse(streamingTextRef.current, { async: false }) as string;
-      node.innerHTML = DOMPurify.sanitize(rawHtml);
+      node.innerHTML = renderSafeStreamingMarkdown(streamingTextRef.current);
     });
   }, []);
 

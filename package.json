@@ -232,7 +232,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/three": "^0.182.0",
     "axios": "^1.7.7",
-    "better-sqlite3": "12.6.2",
+    "better-sqlite3": "12.11.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "diff": "^7.0.0",
@@ -280,6 +280,7 @@
     "sqlite-vec-windows-x64": "^0.1.7-alpha.2"
   },
   "overrides": {
+    "dompurify": "^3.4.11",
     "onnxruntime-node": "1.22.0"
   }
 }
