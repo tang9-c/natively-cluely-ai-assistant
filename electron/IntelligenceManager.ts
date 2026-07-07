@@ -242,8 +242,20 @@ export class IntelligenceManager extends EventEmitter {
         this.engine.clearDynamicActionContext();
     }
 
-    acceptDynamicAction(actionId: string): import('./services/dynamic-actions/DynamicAction').DynamicAction | null {
-        return this.engine.acceptDynamicAction(actionId);
+    acceptDynamicAction(actionId: string, options?: { triggerSource?: import('./services/dynamic-actions/DynamicAction').DynamicActionAcceptTriggerSource }): import('./services/dynamic-actions/DynamicAction').DynamicAction | null {
+        return this.engine.acceptDynamicAction(actionId, options);
+    }
+
+    markDynamicActionShown(actionId: string): import('./services/dynamic-actions/DynamicAction').DynamicAction | null {
+        return this.engine.markDynamicActionShown(actionId);
+    }
+
+    completeDynamicAction(actionId: string): import('./services/dynamic-actions/DynamicAction').DynamicAction | null {
+        return this.engine.completeDynamicAction(actionId);
+    }
+
+    markDynamicActionGenerationFailed(actionId: string): import('./services/dynamic-actions/DynamicAction').DynamicAction | null {
+        return this.engine.markDynamicActionGenerationFailed(actionId);
     }
 
     dismissDynamicAction(actionId: string): void {

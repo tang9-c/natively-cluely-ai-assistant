@@ -551,9 +551,25 @@ export class IntelligenceEngine extends EventEmitter {
         this.dynamicActionEngine = null;
     }
 
-    acceptDynamicAction(actionId: string): DynamicAction | null {
+    acceptDynamicAction(actionId: string, options?: { triggerSource?: import('./services/dynamic-actions/DynamicAction').DynamicActionAcceptTriggerSource }): DynamicAction | null {
         if (!this.dynamicActionEngine) return null;
-        return this.dynamicActionEngine.acceptAction(actionId);
+        return this.dynamicActionEngine.acceptAction(actionId, options);
+    }
+
+    markDynamicActionShown(actionId: string): DynamicAction | null {
+        if (!this.dynamicActionEngine) return null;
+        return this.dynamicActionEngine.markShown(actionId);
+    }
+
+    completeDynamicAction(actionId: string): DynamicAction | null {
+        if (!this.dynamicActionEngine) return null;
+        this.dynamicActionEngine.completeAction(actionId);
+        return this.dynamicActionEngine.getStore().getAction(actionId) ?? null;
+    }
+
+    markDynamicActionGenerationFailed(actionId: string): DynamicAction | null {
+        if (!this.dynamicActionEngine) return null;
+        return this.dynamicActionEngine.markGenerationFailed(actionId);
     }
 
     dismissDynamicAction(actionId: string): void {

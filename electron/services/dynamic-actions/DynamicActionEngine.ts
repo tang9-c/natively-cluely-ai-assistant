@@ -1,5 +1,5 @@
 import * as crypto from 'crypto';
-import { DynamicAction, EvidenceRef } from './DynamicAction';
+import { DynamicAction, DynamicActionAcceptTriggerSource, EvidenceRef } from './DynamicAction';
 import { buildDynamicActionProductContract } from './DynamicActionProductContract';
 import { DynamicActionStore } from './DynamicActionStore';
 import { ActionTrigger, DynamicActionDetector, MODE_TRIGGERS } from './DynamicActionDetector';
@@ -266,11 +266,12 @@ export class DynamicActionEngine {
             .sort((a, b) => b.confidence - a.confidence)[0] ?? null;
     }
 
-    acceptAction(actionId: string): DynamicAction | null {
+    acceptAction(actionId: string, options?: { triggerSource?: DynamicActionAcceptTriggerSource }): DynamicAction | null {
         const action = this.store.getAction(actionId);
         if (action) {
-            this.store.updateStatus(actionId, 'accepted');
-            return action;
+            const status = options?.triggerSource === 'auto_countdown' ? 'auto_generated' : 'accepted';
+            this.store.updateStatus(actionId, status);
+            return this.store.getAction(actionId) ?? action;
         }
         return null;
     }
@@ -285,6 +286,22 @@ export class DynamicActionEngine {
 
     completeAction(actionId: string): void {
         this.store.updateStatus(actionId, 'completed');
+    }
+
+    markShown(actionId: string): DynamicAction | null {
+        const action = this.store.getAction(actionId);
+        if (!action) return null;
+        if (action.status === 'candidate') {
+            this.store.updateStatus(actionId, 'shown');
+        }
+        return this.store.getAction(actionId) ?? action;
+    }
+
+    markGenerationFailed(actionId: string): DynamicAction | null {
+        const action = this.store.getAction(actionId);
+        if (!action) return null;
+        this.store.updateStatus(actionId, 'generated_failed');
+        return this.store.getAction(actionId) ?? action;
     }
 
     getStore(): DynamicActionStore {

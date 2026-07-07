@@ -234,6 +234,47 @@ test('context quality diagnostics collector stores only summary-safe fields', as
   assert.equal(summary.context.nonTokenBudgetOmitCount, 1);
 });
 
+test('context quality diagnostics aggregates safe dynamic action lifecycle events', async () => {
+  const {
+    ContextQualityDiagnosticsCollector,
+    summarizeContextQualityDiagnostics,
+  } = await loadDiagnostics();
+  const collector = new ContextQualityDiagnosticsCollector();
+
+  collector.recordDynamicActionLifecycleEvent({
+    event: 'shown',
+    actionType: 'pricing_objection',
+    modeTemplateType: 'sales',
+    outputType: 'spoken_response',
+    riskState: 'normal',
+    status: 'shown',
+  });
+  collector.recordDynamicActionLifecycleEvent({
+    event: 'accepted',
+    actionType: 'pricing_objection',
+    modeTemplateType: 'sales',
+    outputType: 'spoken_response',
+    riskState: 'normal',
+    status: 'accepted',
+  });
+  collector.recordDynamicActionLifecycleEvent({
+    event: 'generated_failed',
+    actionType: 'pricing_objection',
+    modeTemplateType: 'sales',
+    outputType: 'spoken_response',
+    riskState: 'normal',
+    status: 'generated_failed',
+  });
+
+  const snapshot = collector.snapshot();
+  assert.doesNotMatch(JSON.stringify(snapshot), /price is too expensive|promptInstruction|provider error/);
+
+  const summary = summarizeContextQualityDiagnostics(snapshot);
+  assert.equal(summary.dynamicActions.lifecycleEvents.shown, 1);
+  assert.equal(summary.dynamicActions.lifecycleEvents.accepted, 1);
+  assert.equal(summary.dynamicActions.lifecycleEvents.generated_failed, 1);
+});
+
 test('context quality diagnostics exposes safe dynamic action arbitration labels', async () => {
   const {
     getDynamicActionArbitrationStatusLabel,

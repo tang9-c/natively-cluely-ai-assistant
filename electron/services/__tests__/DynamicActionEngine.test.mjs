@@ -647,6 +647,27 @@ test('completeAction removes accepted action from active top actions', async () 
   assert.equal(engine.getTopActions(sessionId).some(topAction => topAction.id === action.id), false);
 });
 
+test('acceptAction can mark auto-generated and generation failure statuses', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+  const [action] = engine.detectActions({
+    transcript: 'Please implement a function to solve this algorithm problem.',
+    speaker: 'Interviewer',
+    modeTemplateType: 'technical-interview',
+    modeId: 'mode_technical',
+    sessionId: 'session_auto_status',
+  });
+
+  assert.ok(action);
+  const accepted = engine.acceptAction(action.id, { triggerSource: 'auto_countdown' });
+  assert.ok(accepted);
+  assert.equal(engine.getStore().getAction(action.id).status, 'auto_generated');
+
+  const failed = engine.markGenerationFailed(action.id);
+  assert.ok(failed);
+  assert.equal(engine.getStore().getAction(action.id).status, 'generated_failed');
+});
+
 test('dismissed action can be re-detected after user dismissal', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();

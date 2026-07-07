@@ -26,18 +26,21 @@ export class DynamicActionStore {
         );
     }
 
-    expireStaleActions(sessionId: string, maxAgeMs: number): void {
+    expireStaleActions(sessionId: string, maxAgeMs: number): DynamicAction[] {
         const now = Date.now();
         const cutoff = now - maxAgeMs;
+        const expired: DynamicAction[] = [];
         for (const action of this.actions.values()) {
             if (
                 action.sessionId === sessionId &&
                 action.createdAt < cutoff &&
-                action.status === 'candidate'
+                ['candidate', 'shown', 'accepted', 'auto_generated', 'generated_failed'].includes(action.status)
             ) {
                 action.status = 'expired';
+                expired.push(action);
             }
         }
+        return expired;
     }
 
     deduplicate(newAction: DynamicAction, windowMs: number = 120000): DynamicAction | null {

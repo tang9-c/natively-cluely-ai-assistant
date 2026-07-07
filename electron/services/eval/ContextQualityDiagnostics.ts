@@ -27,8 +27,26 @@ export interface ContextQualityCodeHintInput {
     provider?: string;
 }
 
+export type DynamicActionQualityEvent =
+    | 'shown'
+    | 'accepted'
+    | 'dismissed'
+    | 'auto_generated'
+    | 'expired'
+    | 'generated_failed';
+
+export interface DynamicActionLifecycleEventInput {
+    event: DynamicActionQualityEvent;
+    actionType: string;
+    modeTemplateType: string;
+    outputType: 'spoken_response' | 'checklist' | 'email_draft' | 'action_item' | 'decision_record';
+    riskState: 'auto_countdown' | 'normal';
+    status: string;
+}
+
 export interface ContextQualityDiagnosticsInput {
     dynamicActions?: ContextQualityDynamicActionInput[];
+    dynamicActionLifecycleEvents?: DynamicActionLifecycleEventInput[];
     answerQualityMetrics?: AnswerQualityMetrics;
     contextPlans?: ContextQualityPlanInput[];
     codeHints?: ContextQualityCodeHintInput[];
@@ -49,6 +67,7 @@ export interface ContextQualityDiagnosticsSummary {
         semanticProviders: Counter;
         arbitrationStatuses: Counter;
         degradedReasons: Counter;
+        lifecycleEvents: Counter;
         cloudUsedRate: number;
         privacyLocalRate: number;
         cloudFallbackRate: number;
@@ -190,6 +209,11 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
     let localFallbacks = 0;
     let localFallbackPasses = 0;
     let localFallbackRejects = 0;
+    const lifecycleEvents: Counter = {};
+
+    for (const event of input.dynamicActionLifecycleEvents ?? []) {
+        increment(lifecycleEvents, event.event);
+    }
 
     for (const action of actions) {
         increment(actionTypes, action.type ?? action.semanticGate?.actionType);
@@ -291,6 +315,7 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
             semanticProviders,
             arbitrationStatuses,
             degradedReasons: actionDegradedReasons,
+            lifecycleEvents,
             cloudUsedRate: rate(cloudUsed, actions.length),
             privacyLocalRate: rate(privacyLocal, actions.length),
             cloudFallbackRate: rate(cloudFallback, actions.length),
@@ -324,6 +349,7 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
 
 export class ContextQualityDiagnosticsCollector {
     private readonly dynamicActions: ContextQualityDynamicActionInput[] = [];
+    private readonly dynamicActionLifecycleEvents: DynamicActionLifecycleEventInput[] = [];
     private readonly contextPlans: ContextQualityPlanInput[] = [];
     private readonly codeHints: ContextQualityCodeHintInput[] = [];
     private readonly maxEntries: number;
@@ -356,6 +382,18 @@ export class ContextQualityDiagnosticsCollector {
             },
         });
         this.trimToMaxEntries(this.dynamicActions);
+    }
+
+    recordDynamicActionLifecycleEvent(event: DynamicActionLifecycleEventInput): void {
+        this.dynamicActionLifecycleEvents.push({
+            event: event.event,
+            actionType: event.actionType,
+            modeTemplateType: event.modeTemplateType,
+            outputType: event.outputType,
+            riskState: event.riskState,
+            status: event.status,
+        });
+        this.trimToMaxEntries(this.dynamicActionLifecycleEvents);
     }
 
     recordContextPlan(plan: ContextQualityPlanInput): void {
@@ -399,6 +437,7 @@ export class ContextQualityDiagnosticsCollector {
                     rejectedCandidates: [...(action.semanticGate.rejectedCandidates ?? [])],
                 } : undefined,
             })),
+            dynamicActionLifecycleEvents: this.dynamicActionLifecycleEvents.map((event) => ({ ...event })),
             answerQualityMetrics: this.answerQualityMetrics ? { ...this.answerQualityMetrics } : undefined,
             contextPlans: this.contextPlans.map((plan) => ({
                 injectedSources: [...(plan.injectedSources ?? [])],
@@ -420,6 +459,7 @@ export class ContextQualityDiagnosticsCollector {
 
     clear(): void {
         this.dynamicActions.length = 0;
+        this.dynamicActionLifecycleEvents.length = 0;
         this.contextPlans.length = 0;
         this.codeHints.length = 0;
         this.answerQualityMetrics = undefined;
