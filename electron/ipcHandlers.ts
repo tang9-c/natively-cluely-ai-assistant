@@ -3117,6 +3117,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           BusinessSystemContextService,
           businessSystemDegradedReasonForStatus,
         } = require('./services/business-system/BusinessSystemContextService');
+        const {
+          createWindchillBusinessContextAdapter,
+        } = require('./services/business-system/WindchillBusinessContextAdapter');
         const { CredentialsManager: BusinessSystemCredentialsManager } = require('./services/CredentialsManager');
         const businessSystemStartedAt = Date.now();
         const businessSystemRecentContext = buildBusinessSystemRecentContextSummary(
@@ -3124,6 +3127,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         );
         businessSystemResult = await new BusinessSystemContextService({
           credentialsManager: BusinessSystemCredentialsManager.getInstance(),
+          plmAdapter: createWindchillBusinessContextAdapter(),
         }).resolve({
           question,
           recentContext: businessSystemRecentContext,

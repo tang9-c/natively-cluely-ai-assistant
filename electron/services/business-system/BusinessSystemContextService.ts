@@ -9,6 +9,7 @@ import type {
     BusinessSystemQueryResult,
     BusinessSystemSourceKind,
 } from './BusinessSystemTypes';
+import type { WindchillBusinessContextAdapter } from './WindchillBusinessContextAdapter';
 
 export type BusinessSystemServiceResult =
     | { kind: 'skipped' }
@@ -23,6 +24,7 @@ export interface BusinessSystemResolveInput {
 interface BusinessSystemContextServiceDeps {
     credentialsManager: Pick<CredentialsManager, 'getBusinessSystemKnowledgeSources' | 'getBusinessSystemCredentials'>;
     mcpClient?: Pick<BusinessMcpClient, 'query'>;
+    plmAdapter?: Pick<WindchillBusinessContextAdapter, 'query'>;
 }
 
 function enabledSourcesForHint(sources: BusinessSystemKnowledgeSource[], hint?: BusinessSystemSourceKind): BusinessSystemKnowledgeSource[] {
@@ -115,10 +117,12 @@ function buildContextCandidate(source: BusinessSystemKnowledgeSource, result: Bu
 export class BusinessSystemContextService {
     private credentialsManager: BusinessSystemContextServiceDeps['credentialsManager'];
     private mcpClient: Pick<BusinessMcpClient, 'query'>;
+    private plmAdapter?: Pick<WindchillBusinessContextAdapter, 'query'>;
 
     constructor(deps: BusinessSystemContextServiceDeps) {
         this.credentialsManager = deps.credentialsManager;
         this.mcpClient = deps.mcpClient || new BusinessMcpClient();
+        this.plmAdapter = deps.plmAdapter;
     }
 
     async resolve(input: BusinessSystemResolveInput): Promise<BusinessSystemServiceResult> {
@@ -140,11 +144,26 @@ export class BusinessSystemContextService {
         const credentials = this.credentialsManager.getBusinessSystemCredentials(source.id);
         let result: BusinessSystemQueryResult;
         try {
-            result = await this.mcpClient.query(source, credentials, {
-                query: trigger.query || '',
-                sourceHint: trigger.sourceHint,
-                recentContext: trigger.recentContext,
-            });
+            // PLM 类知识源走专用 adapter(只支持 Windchill);
+            // 其他(QMS、business_system、未识别的 MCP)继续原路调 business_context.query。
+            if (source.kind === 'plm' && this.plmAdapter) {
+                result = await this.plmAdapter.query(
+                    {
+                        query: trigger.query || '',
+                        sourceHint: trigger.sourceHint,
+                        recentContext: trigger.recentContext,
+                        sourceUrl: source.url,
+                    },
+                    credentials,
+                    2000,
+                );
+            } else {
+                result = await this.mcpClient.query(source, credentials, {
+                    query: trigger.query || '',
+                    sourceHint: trigger.sourceHint,
+                    recentContext: trigger.recentContext,
+                });
+            }
         } catch {
             return toBusinessSystemFixedReply({
                 status: 'unavailable',
