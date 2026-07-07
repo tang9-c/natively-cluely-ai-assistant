@@ -69,6 +69,7 @@ interface StructuredGenerationOptions {
 interface ProviderRequestOptions {
   maxOutputTokens?: number;
   timeoutMs?: number;
+  dataScopes?: ProviderDataScope[];
 }
 
 // Simple prompt for image analysis (not interview copilot - kept separate)
@@ -2091,13 +2092,24 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   /**
    * Routes AI generation through the QCLOUD API backend.
    */
+  public async generatePptxKnowledgeWithNatively(
+    userMessage: string,
+    systemPrompt?: string,
+    imagePaths?: string[],
+  ): Promise<string> {
+    const dataScopes: ProviderDataScope[] = imagePaths?.length
+      ? ['reference_files', 'screenshots']
+      : ['reference_files'];
+    return this.generateWithNatively(userMessage, systemPrompt, imagePaths, { dataScopes });
+  }
+
   private async generateWithNatively(
     userMessage: string,
     systemPrompt?: string,
     imagePaths?: string[],
     _options: ProviderRequestOptions = {},
   ): Promise<string> {
-    this.assertOutboundScopes('natively', userMessage, imagePaths);
+    this.assertOutboundScopes('natively', userMessage, imagePaths, _options.dataScopes ?? []);
     // Prefer the in-memory field; fall back to CredentialsManager for the direct-routing path
     // where currentModelId === 'natively' but setNativelyKey() wasn't called yet.
     let nativelyKey = this.nativelyKey;
