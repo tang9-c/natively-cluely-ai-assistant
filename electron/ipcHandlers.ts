@@ -1459,6 +1459,23 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { BusinessMcpClient } = require('./services/business-system/BusinessMcpClient');
       const source = input?.source;
       if (!source?.url || !source?.name) return { success: false, status: 'error', error: 'Invalid source' };
+      if (source.kind === 'plm') {
+        const { McpRpcClient } = require('./services/business-system/McpRpcClient');
+        const client = new McpRpcClient({
+          url: String(source.url || '').trim(),
+          authType: source.authType === 'username_password' ? 'username_password' : 'api_key',
+          credentials: input?.credentials,
+          clientInfo: { name: 'natively-windchill-test', version: '1.0.0' },
+        });
+        await client.initialize(6000);
+        const tools = await client.listTools(6000);
+        return {
+          success: tools.length > 0,
+          status: tools.length > 0 ? 'ok' : 'unavailable',
+          sourceName: source.name,
+          error: tools.length > 0 ? undefined : 'no_tools',
+        };
+      }
       const result = await new BusinessMcpClient().query(source, input?.credentials, {
         query: '测试业务系统知识源连接',
         sourceHint: source.kind,
