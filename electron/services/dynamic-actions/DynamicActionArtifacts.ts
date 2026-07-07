@@ -67,11 +67,7 @@ export function buildDynamicActionArtifacts(input: BuildDynamicActionArtifactsIn
 
 function findUsageForAction(actionId: string, acceptedAt: number, usage: BuildDynamicActionArtifactsInput['usage'][number][]) {
   const direct = usage.find((item) => item.metadata?.source === 'dynamic_action' && item.metadata?.actionId === actionId);
-  if (direct) return direct;
-  return usage
-    .filter((item) => item.metadata?.source === 'dynamic_action' || item.type === 'assist')
-    .filter((item) => typeof item.timestamp !== 'number' || item.timestamp >= acceptedAt)
-    .sort((a, b) => (a.timestamp ?? Number.MAX_SAFE_INTEGER) - (b.timestamp ?? Number.MAX_SAFE_INTEGER))[0];
+  return direct;
 }
 
 function normalizeAnswer(answer: unknown): string {

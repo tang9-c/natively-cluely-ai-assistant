@@ -42,7 +42,29 @@ test('builds artifact from completed dynamic action and nearest usage answer', a
   assert.equal(artifacts[0].generationStatus, 'completed');
   assert.match(artifacts[0].structuredSummary, /Owner: Maya/);
   assert.deepEqual(artifacts[0].missingFields, []);
-  assert.equal(artifacts[0].groundedSources[0].type, 'transcript');
+  assert.deepEqual(artifacts[0].groundedSources, [
+    { type: 'transcript', label: 'accepted action', status: 'used' },
+  ]);
+});
+
+test('does not use ordinary assist usage without dynamic_action metadata', async () => {
+  const { buildDynamicActionArtifacts } = await loadHelper();
+  const artifacts = buildDynamicActionArtifacts({
+    actions: [action()],
+    usage: [{
+      type: 'assist',
+      timestamp: 1200,
+      question: 'dynamic action',
+      answer: 'Owner: Maya\\nDeliverable: launch checklist\\nDue: Friday',
+      metadata: {},
+    }],
+  });
+
+  assert.equal(artifacts[0].actionId, 'action_1');
+  assert.equal(artifacts[0].generationStatus, 'not_generated');
+  assert.equal(artifacts[0].structuredSummary, action().latestTurn);
+  assert.match(artifacts[0].structuredSummary, /Maya will send/);
+  assert.ok(!/Owner: Maya/.test(artifacts[0].structuredSummary));
 });
 
 test('builds conservative not_generated artifact when usage is missing', async () => {
