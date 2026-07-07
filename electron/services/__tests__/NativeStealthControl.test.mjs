@@ -62,3 +62,54 @@ test('shared native stealth helper preserves env and platform gates', () => {
     }
   }
 });
+
+test('shared native stealth helper does not load native module when disabled by env', () => {
+  const mod = require('../../../dist-electron/electron/utils/nativeStealth.js');
+  const previous = process.env.NATIVELY_DISABLE_NATIVE_OVERLAY_STEALTH;
+  const fakeWindow = {
+    isDestroyed: () => false,
+    getNativeWindowHandle: () => Buffer.from('fake-window'),
+  };
+  let loadCount = 0;
+  let applyCount = 0;
+  const loadNativeModule = () => {
+    loadCount += 1;
+    return {
+      applyStealthToWindow: () => {
+        applyCount += 1;
+      },
+    };
+  };
+
+  try {
+    process.env.NATIVELY_DISABLE_NATIVE_OVERLAY_STEALTH = '1';
+    assert.equal(
+      mod.applyNativeStealthIfEnabled(fakeWindow, {
+        label: 'NativeStealthControlTest',
+        platform: 'darwin',
+        loadNativeModule,
+      }).status,
+      'skipped',
+    );
+    assert.equal(loadCount, 0);
+    assert.equal(applyCount, 0);
+
+    delete process.env.NATIVELY_DISABLE_NATIVE_OVERLAY_STEALTH;
+    assert.equal(
+      mod.applyNativeStealthIfEnabled(fakeWindow, {
+        label: 'NativeStealthControlTest',
+        platform: 'darwin',
+        loadNativeModule,
+      }).status,
+      'applied',
+    );
+    assert.equal(loadCount, 1);
+    assert.equal(applyCount, 1);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.NATIVELY_DISABLE_NATIVE_OVERLAY_STEALTH;
+    } else {
+      process.env.NATIVELY_DISABLE_NATIVE_OVERLAY_STEALTH = previous;
+    }
+  }
+});

@@ -6,8 +6,15 @@ export interface NativeStealthGateOptions {
   isAppleSiliconMac?: () => boolean;
 }
 
+type NativeStealthModule = {
+  applyStealthToWindow?: (handle: Buffer) => void;
+};
+
+type NativeStealthModuleLoader = () => NativeStealthModule | null;
+
 export interface NativeStealthApplyOptions extends NativeStealthGateOptions {
   label: string;
+  loadNativeModule?: NativeStealthModuleLoader;
 }
 
 export type NativeStealthStatus = 'applied' | 'skipped' | 'unavailable' | 'error';
@@ -47,8 +54,15 @@ export function applyNativeStealthIfEnabled(
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { loadNativeModule } = require('../audio/nativeModuleLoader');
+    const loadNativeModule =
+      options.loadNativeModule ??
+      (() => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const nativeLoader = require('../audio/nativeModuleLoader') as {
+          loadNativeModule: NativeStealthModuleLoader;
+        };
+        return nativeLoader.loadNativeModule();
+      });
     const native = loadNativeModule();
     if (native && typeof native.applyStealthToWindow === 'function') {
       native.applyStealthToWindow(window.getNativeWindowHandle());
