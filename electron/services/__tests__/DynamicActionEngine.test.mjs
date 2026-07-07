@@ -50,6 +50,44 @@ test('Pricing objection detected in Sales transcript creates pricing_objection a
   assert.ok(pricingAction.evidenceRefs[0].text.includes('price'));
 });
 
+test('detected actions include product contract copy', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const [action] = engine.detectActions({
+    transcript: 'The price is too expensive for our budget.',
+    speaker: 'Prospect',
+    modeTemplateType: 'sales',
+    modeId: 'mode_sales',
+    sessionId: 'session_contract',
+  });
+
+  assert.ok(action.productContract);
+  assert.equal(action.productContract.userAction, '回应价格异议');
+  assert.equal(action.productContract.outputType, 'spoken_response');
+  assert.equal(action.productContract.riskState, 'auto_countdown');
+  assert.ok(action.productContract.whyNow.length > 0);
+  assert.ok(action.productContract.outputPromise.length > 0);
+});
+
+test('auto eligible actions expose auto countdown risk state through product contract', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = engine.detectActions({
+    transcript: 'Please implement a function to solve this algorithm problem.',
+    speaker: 'Interviewer',
+    modeTemplateType: 'technical-interview',
+    modeId: 'mode_technical',
+    sessionId: 'session_auto_contract',
+  });
+  const action = actions.find(item => item.type === 'coding_problem');
+
+  assert.ok(action);
+  assert.equal(action.autoSurfacePolicy, 'auto');
+  assert.equal(action.productContract.riskState, 'auto_countdown');
+});
+
 test('Competitor mention (Gong) detected creates competitor_mention action', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();

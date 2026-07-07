@@ -29,6 +29,26 @@ export interface DynamicActionSemanticGate {
   upgradedByRepeatedEvidence: boolean
 }
 
+export type DynamicActionOutputType =
+  | 'spoken_response'
+  | 'checklist'
+  | 'email_draft'
+  | 'action_item'
+  | 'decision_record'
+
+export type DynamicActionRiskState =
+  | 'auto_countdown'
+  | 'normal'
+
+export interface DynamicActionProductContract {
+  userAction: string
+  whyNow: string
+  evidenceSummary?: string
+  outputType: DynamicActionOutputType
+  outputPromise: string
+  riskState: DynamicActionRiskState
+}
+
 export interface DynamicActionPayload {
   id: string
   sessionId: string
@@ -37,10 +57,11 @@ export interface DynamicActionPayload {
   type: string
   label: string
   description?: string
+  productContract: DynamicActionProductContract
   confidence: number
   priority: number
   evidenceRefs: DynamicActionEvidenceRef[]
-  status: 'candidate' | 'shown' | 'accepted' | 'dismissed' | 'completed' | 'expired'
+  status: 'candidate' | 'shown' | 'accepted' | 'auto_generated' | 'dismissed' | 'expired' | 'generated_failed' | 'completed'
   createdAt: number
   expiresAt?: number
   promptInstruction: string

@@ -1,5 +1,6 @@
 import * as crypto from 'crypto';
 import { DynamicAction, EvidenceRef } from './DynamicAction';
+import { buildDynamicActionProductContract } from './DynamicActionProductContract';
 import { DynamicActionStore } from './DynamicActionStore';
 import { ActionTrigger, DynamicActionDetector, MODE_TRIGGERS } from './DynamicActionDetector';
 import { buildRetrievalQuery, detectLanguage, extractKeyEntities } from './ModeEventUtils';
@@ -330,6 +331,15 @@ export class DynamicActionEngine {
             emotion: params.emotion,
             language: params.language,
         });
+        const productContract = buildDynamicActionProductContract({
+            type: params.trigger.type,
+            label: params.trigger.label,
+            modeTemplateType: params.modeTemplateType,
+            confidence: params.confidence,
+            autoSurfacePolicy,
+            evidenceRefs,
+            answerStyle: params.trigger.answerStyle,
+        });
 
         return {
             id: `action_${crypto.randomUUID()}`,
@@ -339,6 +349,7 @@ export class DynamicActionEngine {
             type: params.trigger.type,
             label: params.trigger.label,
             description: `Triggered by: "${params.match}"`,
+            productContract,
             confidence: params.confidence,
             priority: params.confidence,
             evidenceRefs,

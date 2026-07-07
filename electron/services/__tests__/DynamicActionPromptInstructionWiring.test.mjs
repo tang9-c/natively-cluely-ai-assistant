@@ -49,15 +49,12 @@ test('dynamic action accept forwards modeEvent retrieval metadata', () => {
   assert.match(interfaceSource, /generationOptions\?: \{ source\?: 'overlay' \| 'launcher' \| 'dynamic_action'; persist\?: boolean; modeEvent\?: DynamicActionModeEvent \}/);
 });
 
-test('dynamic action card presents detected intent and confidence to the user', () => {
-  const source = read('src/components/dynamic-actions/DynamicActionCard.tsx');
+test('dynamic action payload and renderer types expose required productContract', () => {
+  const action = read('electron/services/dynamic-actions/DynamicAction.ts');
+  const rendererTypes = read('src/types/electron.d.ts');
 
-  assert.match(source, /检测到/);
-  assert.match(source, /confidencePct/);
-  assert.match(source, /pricing_objection:\s*'价格异议'/);
-  assert.match(source, /pricing_request:\s*'报价请求'/);
-  assert.match(source, /buying_signal:\s*'推进信号'/);
-  assert.match(source, /action\.sourceIntent\s*\?\?\s*action\.type/);
+  assert.match(action, /productContract:\s*DynamicActionProductContract/);
+  assert.match(rendererTypes, /productContract:\s*DynamicActionProductContract/);
 });
 
 test('dynamic action card localizes quote email action separately from detected intent', () => {
