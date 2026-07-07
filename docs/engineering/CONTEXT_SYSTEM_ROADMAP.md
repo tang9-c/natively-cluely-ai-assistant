@@ -1,594 +1,614 @@
-# CueUp 上下文系统路线图
+# CueUp 产品力路线图：把实时会议动作卡片打穿
 
-更新时间：2026-07-06
+更新时间：2026-07-07
+
+## 一句话判断
+
+未来 3 个月，CueUp 不应该继续把主线写成“接更多上下文源”。
+
+主线应该变成：在销售、FDE、团队会议这 3 类高频会议里，CueUp 能在关键瞬间自动浮出一张小卡片，告诉用户现在该做什么、为什么、点一下能生成什么，并且这张卡片大多数时候是对的。
+
+现在的问题不是“好像能用”。是“用户敢不敢在真实会议里依赖它”。
+
+这就是产品力。
 
 ## 北极星
 
-会议现场 2 秒内给出能直接说出口的回答建议，并且用户知道它为什么可信。
+会议中 2 秒内出现一张可信、可操作、可忽略的实时提醒卡片，帮助用户赢下这一轮对话。
 
-这不是“接更多模型”，也不是“加更多工具”。核心是把当前会议、短期上下文、本地资料、历史会议、长期记忆、企业知识库、业务系统事实和屏幕内容编排成一个稳定、可解释、可评估的上下文系统。
+不是给用户更多信息。是帮用户少错过关键瞬间：
 
-## 当前现状
+- 客户说太贵时，不是总结“客户提到价格”，而是给出可说出口的价值回应。
+- 客户问 SSO / 权限 / 生产环境时，不是泛泛解释集成，而是追问系统、环境、认证方式、负责人和验证步骤。
+- 团队说“我来跟进”时，不是会后才发现，而是当场锁定负责人、交付物和时间。
 
-本路线图已经从“设计阶段”进入“第一版地基已落地，继续补齐验收和产品化”的阶段。根据代码图谱和最近提交（截至 `e53d8add fix: clarify sck backend toggle state`），当前状态如下：
+如果卡片做不到“这一下帮我省了脑子”，它就只是 UI 动效。
 
-- 品牌外显已从 Natively 迁移到 CueUp，路线图和用户文案应继续使用 CueUp；内部遗留 provider id、类名和存储 key 可按兼容性逐步处理。
-- Phase 0 的可信度闭环已有核心基础：实时答案 trace、来源状态、降级原因、引用预览、失败状态、质量事件、离线指标 harness、开发诊断输出和第一版用户可见 trust explanation 已经存在。
-- Phase 2 的实时上下文编排已有第一版：`RealtimeContextOrchestrator` 能按来源优先级去重、按 token budget 选择/丢弃上下文，并输出 `sourceStatus`、`degradedReasons`、`contextFingerprint` 和检索耗时。
-- Phase 3 的受控业务系统上下文已有第一版：业务系统知识源设置、凭据、触发检测、受控查询、上下文候选注入、固定答复防编造和测试已落地。
-- Phase 4 的说话人稳定性已有第一版：`SpeakerContextPolicy` 会过滤低置信度本地说话人验证元数据，并把降级原因写入答案 trace。
-- Phase 1 的本地资料/RAG 端到端验收第一版已基本收口：PDF、DOCX、Markdown、TXT 抽取进入质量 smoke；资料上传改为先创建 `queued` 记录、后台索引并展示 `queued/indexing/complete/failed`；解析失败保留 failed material；已完成资料可手动重新索引；PPTX 已按“不解析、提示即将支持、拒绝进入索引”的方式覆盖；删除资料不会再被检索或作为有效 citation；embedding 写入失败会保留文本索引并降级为关键词检索。
-- 动态动作意图识别语义门控第一版已落地并完成一轮审计收口：regex 现在主要作为候选召回，高风险动作会经过 `ModeEventClassifier` 的动作级语义门控；`IntelligenceEngine` 会把最近 6 轮上下文、当前 mode、说话人、`intentResult` 和 provider scope 传入动态动作评估，并在需要时调用云端结构化仲裁；`reject` / `defer` 也会产出内部 gate trace。
-- 动态动作和上下文质量回归已有固定命令：`npm run test:quality:smoke` 覆盖语义门控、动态动作引擎、final transcript 触发路径、mode intent、answer trace contract、realtime trust view model、diagnostics IPC 和相关 UI contract；`npm run test:quality:diagnostics` 覆盖上下文质量诊断和离线指标 harness；两个命令都有 no-build 变体。
-- 实时回答 LLM 路径已完成首轮盘点：主实时回答、`WhatToAnswerLLM`、底层 `LLMHelper.streamChat`、动态动作云端 semantic gate、screen understanding、CodeHint 独立工具流和 suggestion trigger 已标记为 migrated；`CodeHintLLM` 已完成独立 trace/scope 收口，后续只评估是否需要进入持久化 answer trace 或产品 UI 诊断。
-- P0-1 动态动作语义门控验收包已完成第一轮收口：真实会议风格 fixture 已覆盖中文、英文、混合语言、多轮污染、多人说话、provider scope denial、云端不可用和高风险 reject/defer；动态动作卡片已有第一版安全解释行；后续重点从“证明不是关键词弹窗”转为误报/漏报指标、质量面板和更多真实录音回放评测。
-- 本地 SenseVoice 已支持 final transcript 后处理专有名词纠错。它不属于上下文编排本身，但会直接影响上下文质量，尤其是人名、公司名、产品名和业务对象 ID 的可检索性。
+## 当前真相
 
-## 产品判断
+工程地基已经不少：
 
-当前最重要的用户价值仍然是：立刻给出能用的回答建议。
+- `DynamicActionEngine.assessSignals()` 已有 regex 候选、语义门控、云端仲裁、本地 fallback、reject/defer trace。
+- `DynamicActionBar` / `DynamicActionCard` 已能展示、忽略、Tab 接受、5 秒自动生成。
+- `ModesManager` 已有销售、FDE、团队会议等重点模式。
+- `DynamicActionDetector` 已有 sales、fde、team-meet trigger packs。
+- `IntentClassifier` 已有 mode-aware intent 和 answer shape。
+- `RealtimeContextOrchestrator`、RAG、PPTX 知识源、Windchill 知识源、speaker policy、QCLOUD 情绪元数据都已进入上下文系统。
+- `test:quality:smoke`、`test:quality:diagnostics`、`test:quality:gate` 已经存在。
 
-CEO 复核后的判断：CueUp 现在的瓶颈不是“能接多少上下文源”，而是用户在会议现场能不能相信它。一个用户不会因为我们接了 PLM、RAG、屏幕、长期记忆而更信任产品。用户只会因为答案准、来得快、知道来源、失败时不装懂而信任产品。
+但产品还没有打穿。
 
-所以接下来要做减法。
+现在更像“信号链路存在”，不是“用户在真实会议里离不开”。卡片还缺 5 件事：
 
-优先级不是继续扩张到完整 MCP 工具调用，而是把已落地的上下文地基做成一个现场可信度闭环：
+1. 每个重点模式的关键时刻定义不够产品化。
+2. 卡片内容还偏“检测到某类意图”，不是“下一步该怎么做”。
+3. 卡片接受后的回答质量没有按模式形成强验收。
+4. 误报、漏报、延迟、接受率没有变成产品指标。
+5. 真实会议回放不足，尤其是中文、英文、中英混合、多人说话、旧话题污染、ASR 错词、客户/内部成员区分。
 
-1. 现场可信度闭环：每个实时回答和动态动作都能解释“用了什么、没用什么、为什么降级、为什么触发或没触发”。
-2. 动态动作意图识别语义门控：第一版、审计修复、真实会议风格 fixture 和动态动作卡片解释已进入代码；接下来要做的是误报/漏报指标、质量面板和真实录音回放评测。
-3. 质量回归门禁：`test:quality:changed`、`test:quality:gate` 和 no-build 快速循环已经建立；接下来要把它们保持为开发习惯，并继续扩大 fixture 和阈值门禁。
-4. 本地 RAG 与资料上传：第一版上传、引用、删除、重新索引、失败诊断和 PPTX 非支持态覆盖已进入质量 smoke；下一步只补更真实的会议回放评测和 failed material 的重新上传/重试产品策略。
-5. 受控业务系统上下文：继续保持只读和防编造，下一步做缓存/预取、真实 connector 诊断和用户可见状态。
-6. 输入质量：SenseVoice 专名纠错、VAD 分段、说话人稳定性直接影响检索和答案质量，不能被当成 STT 边缘工作。
-7. 长期记忆和通用企业连接器放在可信度闭环之后。
-8. 通用 MCP 只读适配器是扩展层，不是当前产品主线；可写工具仍不进入 P0。
+这就是未来 3 个月的工作。
 
-## 12 个月理想状态
+## 3 个月产品力目标
+
+到 3 个月后，CueUp 应该达到这个状态：
 
 ```text
-当前状态                       当前路线图                     12 个月理想状态
-地基已落地，但体验分散   ->     收口可信度闭环和评测门禁   ->   每个现场回答都像有证据链的副驾驶
-多条 LLM 路径已迁移      ->     新入口必须登记 scope/trace  ->   没有“黑盒实时回答路径”
-业务系统有 fixture       ->     只读真实 connector + 缓存    ->   关键业务事实可用，但失败绝不编造
-动态动作能语义门控       ->     真实会议误报/漏报评测       ->   动作像优秀会议助手，而不是关键词弹窗
-资料/RAG 第一版闭环      ->     真实会议回放评测            ->   用户给的材料一定可追踪、可撤回
+用户进入会议
+  |
+  v
+选择 销售 / FDE / 团队会议
+  |
+  v
+CueUp 监听当前 turn + 最近上下文 + 资料 + 屏幕 + 业务系统
+  |
+  v
+只在高价值瞬间浮出动作卡片
+  |
+  +-- 用户接受：生成可直接说/发/记录的内容
+  +-- 用户忽略：系统学习这类场景不要打扰
+  +-- 系统不确定：不弹卡，只记录诊断
 ```
 
-这个路线图的北极星不是“上下文系统完整”。那太抽象。真正的 12 个月目标是：用户开会时敢把 CueUp 放在屏幕旁边，因为它快、准、知道自己不知道。
+产品验收不是“卡片出现了”。
 
-## 当前冲刺成功定义
+产品验收是：
 
-当前冲刺只算成功，如果能同时回答这 5 个问题：
+- 用户觉得它在正确时间帮了忙。
+- 用户愿意点。
+- 点完的内容能直接用。
+- 不该出现时它安静。
+- 出错时能解释为什么。
 
-1. 这条实时答案用了哪些上下文来源？
-2. 哪些来源没用，为什么没用？
-3. 如果 RAG、业务系统、屏幕、说话人或 provider scope 失败，用户和开发者分别看到什么？
-4. 这个动态动作为什么触发，为什么没有被语义门控拦截？
-5. 改一次 prompt、RAG、上下文选择或动态动作规则后，跑哪个固定命令能证明质量没有倒退？
+## 五步路线图
 
-如果只能回答“代码里应该能看出来”，就还没完成。软件不该靠考古来证明自己没编。
+### Step 1：定义动作卡片的产品契约
 
-## 上下文层
+时间：第 1-2 周
+
+目标：先把“什么叫一张好卡片”钉死。否则后面只会继续堆 trigger。
+
+动作卡片必须从“检测提示”升级为“会议里的下一步动作”。
+
+每张卡片必须包含：
+
+- **用户现在要做的事**：例如“回应价格异议”“锁定集成验证步骤”“确认负责人和截止时间”。
+- **为什么现在弹**：一句人能看懂的解释，不暴露 prompt、原始 provider error 或内部 trace。
+- **证据摘要**：最多一条短 evidence，不塞整段 transcript。
+- **接受后会生成什么**：短回应、检查清单、邮件草稿、行动项、决策记录。
+- **风险状态**：高置信自动倒计时、普通卡片、低置信静默诊断。
+- **退出方式**：忽略、取消自动生成、过期消失。
+
+卡片不能做：
+
+- 不能只写“检测到行动项”。
+- 不能把内部字段名暴露给用户。
+- 不能因为情绪 alone 触发动作。
+- 不能在无证据时装作有证据。
+- 不能把用户已经忽略过的同类卡片反复弹出。
+
+产品 DoD：
+
+- `DynamicActionCard` 的所有文案从 intent label 转为 action promise。
+- 统一卡片状态：candidate、countdown、generating、cancelled、expired、failed。
+- 卡片解释复用 `explainDynamicAction()`，但面向用户重写，不是诊断句子。
+- 加入“接受后产物类型”字段：spoken_response、checklist、email_draft、action_item、decision_record。
+- 质量指标开始记录：shown、accepted、dismissed、auto_generated、expired、generated_failed。
+
+复用现有能力：
+
+- `DynamicActionBar.tsx`
+- `DynamicActionCard.tsx`
+- `DynamicActionEngine.ts`
+- `SignalStateTracker.ts`
+- `ContextQualityDiagnosticsCollector`
+- `AnswerQualityMetrics`
+
+不做：
+
+- 不扩展通用 MCP。
+- 不做复杂卡片设计系统。
+- 不做新模式。
+
+### Step 2：销售模式打穿
+
+时间：第 3-5 周
+
+目标：销售模式先成为第一个“真实可卖”的样板。因为销售场景最容易验证价值，也最容易暴露误报。
+
+销售模式只做 5 个关键瞬间：
+
+1. 价格异议：客户说太贵、预算不够、要折扣。
+2. 报价请求：客户要报价、proposal、商务条款。
+3. 案例/证明请求：客户要类似客户、ROI、成功案例。
+4. 技术/集成需求：客户问 API、SSO、安全、部署环境。
+5. 购买/推进信号：客户说下一步、法务、合同、试点。
+
+每个瞬间都要打穿 4 层：
 
 ```text
-实时回答请求
-   |
-   v
-Realtime Context Orchestrator
-   |
-   +-- 当前会议上下文
-   |   - 当前转录文本
-   |   - 说话人分离
-   |   - 本地说话人验证元数据
-   |   - 屏幕上下文
-   |
-   +-- 短期记忆
-   |   - 最近 N 轮对话
-   |   - 当前问题前后的局部上下文
-   |
-   +-- 本地知识 RAG
-   |   - 用户上传资料
-   |   - 模式参考资料
-   |   - 历史会议
-   |   - 已缓存企业知识
-   |
-   +-- 受控业务系统上下文
-   |   - PLM BOM / 物料 / 版本
-   |   - PLM ECO / ECN / 变更影响范围
-   |   - QMS CAPA / NCR / 偏差 / 问题状态
-   |   - 审批状态 / 负责人 / 更新时间
-   |
-   +-- 长期记忆
-   |   - 用户偏好
-   |   - 人物/客户关系
-   |   - 行为事件
-   |   - 常见回答风格
-   |
-   +-- 企业知识连接器
-       - 只读同步
-       - 后台更新
-       - 写入本地索引
+客户当前话术
+  -> 是否应该弹卡
+  -> 卡片上说什么
+  -> 点卡后生成什么
+  -> 会后记录/跟进如何落地
 ```
 
-实时路径必须主要依赖本地可用的上下文。PLM/QMS 可以允许受控 live read，但必须带超时、来源和查询状态；远程企业知识库和 MCP 只读调用默认应当用于预取、同步、缓存、增量刷新，不能让会议现场的回答无条件等待远程工具返回。
-
-## 已完成地基
-
-### P0-1：动态动作意图识别语义门控
-
-状态：第一版、当前冲刺验收收口和动态动作卡片解释已落地，后续进入指标面板和真实录音回放评测。锚点提交：`159d371`、`2e6a37d`、`8fb47c3`、`215694c`、`9a5e913`、`4c212db`、`efa906a`、`60cb624b`、`d1c1f888`。
-
-目标：动态动作不能只因为单词或短语命中就执行。系统必须先结合当前 turn、最近几轮上下文、当前 mode、说话人和已有 `intentResult` 理解整体意思，再决定是否生成、展示或自动执行动作。
-
-已完成：
-
-- `DynamicActionEngine.assessSignals()` 已改为异步语义门控路径，regex trigger 只生成候选动作，高风险动作必须通过 `ModeEventClassifier` 的 `pass` 或白名单 `fast_path` 才会进入 `SignalStateTracker` 和 action 构建。
-- 新增动作级 `ModeEventClassifier`，输出 `pass` / `reject` / `defer` / `fast_path`，并记录候选、语义意图、置信度、原因、云端仲裁、本地判断和降级原因。
-- `DynamicActionEngine.assessSignals()` 会为所有 gate decision 输出内部诊断 trace；`reject` / `defer` 仍不生成 action、不进入 store，但可以解释为什么候选被拦截。
-- `IntelligenceEngine` 会传入最近 6 轮上下文、当前 mode、说话人、`intentResult`、provider data scope，并提供 `classifyDynamicActionWithCloud()` 云端结构化仲裁。
-- 云端语义门控只允许从 regex 候选 action type 中选择，返回严格 JSON；调用设置短超时，失败时回到本地明确高置信判断或降级。
-- 已移除 sales `discovery_probe -> pricing_request` 的默认映射，降低价格动作误报。
-- 已补充报价请求、案例/证明请求、技术需求/集成需求的中英文召回与本地语义确认，包括“发我报价”“多少钱”“我们想看案例”“类似客户”等常见表达。
-- `detectActions()` 已标注为 legacy 同步 regex detector；生产动态动作发射应使用 `assessSignals()`。
-- 新增 `npm run test:quality:smoke`，固定覆盖语义门控、动态动作引擎、final transcript 动态动作召回、mode intent 和答案 trace contract；连续本地验证可先运行 `rtk npm run build:electron`，再运行 `rtk npm run test:quality:smoke:no-build` 与 `rtk npm run test:quality:diagnostics:no-build`，避免重复构建。
-- `ContextQualityDiagnosticsCollector` 已接入动态动作 gate trace、CodeHint trace、实时回答 context plan 摘要和 answer quality metrics 查询结果；只记录 action type、decision、reason、来源类型、CodeHint 状态和 timing，不记录 transcript、prompt、截图、截图路径、代码正文或 evidence text。采集器为有界最近样本；`context-quality-smoke-report.mjs` 无 JSON 输入时只读取脚本当前进程的空/本地快照，并会显式标记为 `process_local_snapshot`。
-- 诊断链路已按审计意见隔离主路径：gate trace sink 抛错不会影响动态动作生成；collector 不会无限增长；默认诊断脚本不再把跨进程空快照伪装成真实现场数据。
-- 回归测试已覆盖：
-  - final transcript 触发动态动作；
-  - 动态动作语义门控召回；
-  - 云端不可用时保留明确本地高置信召回；
-  - 中性价格提及拦截；
-  - `price list` / `pricing page` / `成本数据` 等不触发价格异议。
-  - “价格先放一边，我们想看客户案例和 API 集成要求”拒绝价格动作，并触发案例/技术需求；
-  - “这个技术方案怎么对接 SSO 和生产环境”触发技术需求；
-  - “客户要一个类似案例证明 ROI”触发案例/证明请求；
-  - 中文、英文、混合语言、多轮旧话题污染、多人说话、provider scope denied、cloud null/timeout/invalid JSON 等 fixture。
-
-仍需补齐：
-
-- 本地意图识别模型未下载、未开启、加载失败或超时时的用户可见诊断；当前第一版不能假设本地模型一定存在。
-- 云端仲裁被 provider data scope 禁止、provider 不可用、JSON 非法或超时时已有内部 trace/diagnostics；通过门控并实际出卡的动态动作已有第一版安全解释，reject/defer 仍保持诊断视图而不是用户卡片。
-- 更多真实录音回放 fixture，而不只是文本级真实会议风格 fixture；重点看 ASR 错词、分段、说话人漂移和上下文污染对误报/漏报的影响。
-- 高风险 `defer` 的产品呈现策略：等待重复证据、低优先级卡片或完全静默，需要用真实使用数据继续定；代码层已有 defer/reject trace。
-- 动态动作质量指标的产品化展示：误报率、漏报率、defer 升级率和平均仲裁延迟仍未形成 dashboard；内部诊断已覆盖 pass/reject/defer、云端不可用、本地 fallback 和降级原因分布。
-
-实施要求：
-
-- regex 只作为候选信号，不直接等同于动作。
-- 增加 `ModeEventClassifier` 或等价语义门控层，输入至少包含：
-  - 当前 final transcript；
-  - 最近 4-6 轮上下文，第一版代码默认传最近 6 轮；
-  - 当前 mode/template；
-  - `intentResult`；
-  - 说话人/channel；
-  - 已有 active dynamic action。
-- 高误报类型必须“双确认”：
-  - 价格异议；
-  - 报价请求；
-  - 案例/证明请求；
-  - 技术需求/集成需求；
-  - 下一步/购买信号。
-- 高价值明确动作可以保留强规则快速通道，但需要白名单：
-  - 发合同；
-  - 安排时间；
-  - 屏幕上有技术题；
-  - 明确 action item。
-- 对于语义不确定的候选，只生成低优先级卡片、等待重复证据或拒绝，不自动执行；第一版更偏保守。
-- trace 中记录：
-  - regex 候选；
-  - semantic intent；
-  - 是否通过门控；
-  - 被拒绝原因；
-  - 是否因重复证据升级。
-
-验收标准：
-
-- 已覆盖的验收必须持续通过：
-  - “price list / pricing page / 成本数据”这类中性提及不能触发价格异议。
-  - 明确价格异议、报价请求、案例/证明请求和技术需求表达能被召回。
-  - final transcript 路径能生成经过语义门控的动态动作。
-  - 云端不可用时，明确高置信本地语义不能被无差别降级吞掉。
-- 仍需补齐的验收：
-  - 每个已出卡动态动作都能在产品 UI 解释为什么触发；reject/defer 候选能在诊断视图解释为什么被拦截。
-  - 相关测试继续扩展到真实录音回放、更多中文/英文/混合语言、单句和多轮上下文 fixture。
-
-### Phase 0：实时答案可信度闭环
-
-状态：第一版已落地，开发诊断、离线指标 harness、realtime trust view model 和最新答案 trust explanation UI 已接入，继续补齐产品指标。
-
-已完成：
-
-- 答案 trace 元数据和持久化基础。
-- 实时答案来源状态、降级原因和失败状态展示。
-- 引用预览 UI，并避免把预览引用误导为完整可跳转来源。
-- 最新实时答案的 trust explanation 会汇总上传资料命中、引用候选/可打开状态、embedding 降级和来源健康项。
-- RAG scope denial、provider data scope、trace persistence failure 等关键失败路径测试。
-- 答案质量事件、接受/重新生成/忽略生命周期的 UI contract 覆盖。
-- `AnswerMetricsOfflineHarness` 和 `ContextQualityDiagnostics` 已进入质量诊断命令。
-- `RealtimeAnswerTrustViewModel`、`quality:get-realtime-diagnostics-summary`、资料状态解释、最新答案解释和动态动作解释已进入 `test:quality:smoke:no-build`。
-
-仍需补齐：
-
-- 将更多按模式评测纳入日常回归，而不是只停留在分散 contract test。
-- 建立每次 prompt、RAG、记忆或上下文选择改动后的固定评测命令；基础命令已建立，仍需扩大 fixture 和阈值门禁。
-- 产品化指标面板：
-  - 答案延迟；
-  - 引用命中率；
-  - 用户接受率；
-  - 重新生成率；
-  - RAG 命中率；
-  - 无上下文回答率；
-  - 降级原因分布。
-
-验收标准：
-
-- 每个实时答案都能追踪使用了哪些上下文来源。
-- RAG 不可用时，用户不会被误导为“上传资料已被使用”。
-- 失败能归因到 STT、RAG、记忆、prompt、模型、provider data scope 或上下文编排。
-- 团队能回答：一次 prompt、RAG、记忆或上下文选择改动是否提升了答案质量。
-
-### Phase 1：本地 RAG 与资料上传
-
-状态：第一版端到端验收已基本收口，继续补真实会议回放评测、failed material 重新上传/重试策略和更强资料支撑型评测。锚点提交：`b6377590`。详细实施方案见 `docs/engineering/PHASE_1_LOCAL_RAG_MATERIAL_UPLOAD_PLAN.md`。
-
-已完成：
-
-- 本地资料、业务系统知识源设置已在设置页中统一呈现。
-- 资料型上下文已作为 `uploaded_material` / `mode_reference` 等候选来源进入实时编排模型。
-- trace 和引用 UI 已能表达 RAG 命中、不可用和降级。
-- 上传入口第一版只验收 PDF、DOCX、Markdown、TXT；PPTX 不进入文件选择器和服务白名单，资料库 UI 常驻提示 `PPTX 即将支持；当前请先导出为 PDF 或 Markdown 后上传。`
-- `DocumentTextExtractor` 已覆盖 PDF、DOCX、Markdown、TXT 正常抽取，以及空文件、损坏/二进制伪 TXT 等错误路径；PDF worker 路径已修复并进入质量 smoke。
-- `KnowledgeMaterialService.uploadFiles()` 已改为先创建 material 记录并立即返回，后台串行索引，状态流转为 `queued -> indexing -> complete/failed`，用户可在设置页看到排队中、索引中、已完成、索引失败。
-- 解析失败、空文档、二进制 TXT、unsupported type 都会留下 `failed` material 记录和可读中文错误，不再只显示 toast。
-- embedding 未配置时资料仍可完成文本索引，检索走 lexical fallback；embedding 写入失败时保留文本索引，标记 embedding queue failed，并在设置页和实时回答 trace 中体现降级。
-- 删除资料会软删除 material、删除 chunks 和 embedding queue；后台索引任务会检查取消状态，防止删除后的资料被异步索引“复活”。
-- citation resolver 只把 `status='complete'` 的 uploaded material 视为有效来源；deleted/failed/indexing/queued 的旧 citation 不返回 `ok`。
-- 已完成资料支持手动重新索引，当前实现从已有 chunk 文本重建索引；如果需要重新解析原文件，产品上应要求用户重新上传。
-- PPTX 覆盖的是产品边界而不是解析能力：UI 明确提示“即将支持”，文件选择器和服务白名单不接受 `.pptx`，服务端直接记录为 `unsupported_file_type` 的 failed material，且不会进入索引队列。
-- 新增资料质量 smoke 覆盖：
-  - 批量上传状态与失败记录；
-  - embedding 失败后的 lexical fallback；
-  - 删除后不可检索/不可引用；
-  - FAQ 唯一事实进入 uploaded material context 和 citation；
-  - 不引入 `30 days refund` 等反事实。
-- `test:quality:smoke:no-build` 已纳入 `DocumentTextExtractor.test.mjs`、`KnowledgeMaterialService.test.mjs`、`RealtimeCitationIntegrity.test.mjs`、`UploadedMaterialAnswerQuality.test.mjs` 和资料/RAG contract 测试。
-
-仍需补齐：
-
-- 更真实的会议回放 fixture：上传产品 FAQ 后，在接近主链路的会议实时问答中证明 FAQ 被检索、注入、引用，并写入 answer trace；第一版已有 contract/smoke，仍需覆盖更真实的 transcript 和 answer generation 入口。
-- failed material 的产品策略：当前不持久化原始文件副本，失败资料不能无条件“重新索引成功”；后续需明确是要求重新上传，还是保存安全本地副本后提供真正重试。
-- PPTX 真实解析仍不在 Phase 1 第一版内；当前完成的是非支持态覆盖。后续若要支持 PPTX，需要单独评审可靠解析方案，不使用不稳定的轻量 XML 猜测方案冒充完整 PPTX 支持。
-- embedding 降级的产品表达还可以更细：区分“embedding provider 未配置”“embedding 写入失败”“查询期 hybrid fallback”，并在设置页/诊断输出中给出更可操作的修复建议。
-- 资料支撑型答案评测仍需从 formatter/citation contract 扩展到完整 `generate-what-to-say` 可控 LLM stub 路径，验证 `uploadedMaterialHitCount > 0`、引用标题、唯一事实和反事实拒绝。
-- 跨重启 queued/indexing 恢复不在第一版范围内；如果真实用户大量上传大文件，需要增加恢复/清理策略。
-
-验收标准：
-
-- 第一版已覆盖并必须持续通过：
-  - PDF、DOCX、Markdown、TXT 可以抽取文本并进入资料索引。
-  - 批量上传后能看到文件级 `queued/indexing/complete/failed` 状态。
-  - 文件解析失败时展示可读错误并保留 failed material 记录。
-  - 已完成资料可以重新索引；失败资料不会展示一个必然失败的可用重试承诺。
-  - PPTX 不进入索引，UI 和服务端都明确表达“即将支持/unsupported”。
-  - embedding 未配置或失败时资料上传不失败，检索降级为关键词匹配，并有诊断提示/trace。
-  - 已删除资料不会再被检索，也不能作为有效 citation 打开。
-  - 资料支撑型 smoke 能验证 FAQ 唯一事实被带入 context/citation，且不引入明确反事实。
-- 下一步验收：
-  - 上传一份产品 FAQ，在真实会议回放或更接近主链路的可控实时问答中问相关问题，能得到引用该 FAQ 的回答。
-  - 删除同一 FAQ 后，重复问题不再引用该 FAQ，`uploadedMaterialHitCount === 0`，并覆盖 answer generation 入口。
-  - failed material 的重新上传/重试路径有明确产品行为。
-  - 资料支撑型答案必须通过完整 `generate-what-to-say` 评测用例，才算 Phase 1 产品验收完成。
-
-### Phase 2：Realtime Context Orchestrator
-
-状态：第一版已实施，主实时回答链路和首轮 LLM 路径盘点已完成；CodeHint 独立工具流的 trace/scope 归属已收口，下一步是继续扩大评测并决定是否需要持久化工具流 trace。锚点提交：`f23974f`。
-
-已完成：
-
-- `RealtimeContextSource` 已覆盖：
-  - `current_transcript`；
-  - `short_term_history`；
-  - `business_system`；
-  - `uploaded_material`；
-  - `mode_reference`；
-  - `historical_meetings`；
-  - `profile_history`；
-  - `screen_context`。
-- 按来源优先级排序、按 score 排序、按内容 hash 去重。
-- 按 token budget 注入或丢弃候选上下文。
-- 输出：
-  - `injected`；
-  - `omitted`；
-  - `sourceStatus`；
-  - `degradedReasons`；
-  - `contextFingerprint`；
-  - `retrievalTimingMs`。
-- 支持把注入上下文格式化为分来源 XML block。
-
-当前限制：
-
-- 编排层已经存在，但并不等于所有 LLM 路径都完全收敛。
-- `formatInjectedContext()` 会包含候选正文，因此 trace 持久化必须继续只保存摘要、hash、来源状态和降级原因，不能保存完整 prompt、原始转录、屏幕 dump 或 chunk 正文。
-- token 估算仍是粗粒度，后续要对齐实际模型 tokenizer 或统一估算策略。
-
-下一步：
-
-- `CodeHintLLM` 已完成独立 trace/scope 收口；下一步只评估是否需要进入 answer trace persistence 和产品 UI 诊断。
-- 为上下文选择策略继续增加固定评测，覆盖：
-  - token 溢出；
-  - 重复上下文；
-  - RAG 不可用；
-  - 屏幕上下文失败；
-  - provider data scope denial；
-  - business system 超时或无结果。
-
-验收标准：
-
-- 系统能解释为什么选择或拒绝每个上下文来源。
-- token 溢出时行为可预测。
-- selected/rejected 上下文摘要会写入答案 trace，但不写入原始敏感正文。
-- 主路径答案评测在迁移前后都会运行，答案质量、延迟、引用命中率和无上下文回答率都不能回归。
-
-### Phase 3：受控业务系统上下文
-
-状态：第一版已实施，定位仍是只读、受控、可审计的上下文来源，不是通用 MCP 平台。固定答复和防编造收口锚点提交：`74e5d4d`、`be8e533`、`6b48fa9`、`4d28a65`、`c880f60`、`c8a9830`。
-
-已完成：
-
-- 业务系统知识源设置和凭据保存。
-- `BusinessSystemTriggerDetector` 判断是否需要查询业务系统。
-- `BusinessSystemContextService` 按 source hint 选择启用的知识源，调用受控 client，并把成功结果转为 `business_system` 上下文候选。
-- 对无配置、缺少查询锚点、无结果、多结果、认证失败、超时、不可用等状态返回固定答复，避免编造。
-- 业务系统查询状态、固定答复和降级提示已收口：无配置、缺少查询线索、无结果、多结果、认证失败、超时、不可用和错误都会返回固定答复并写入 sourceStatus/degradedReason，不进入 LLM 编造路径。
-- 业务系统上下文已通过 orchestrator 进入主链路测试。
-- 业务系统 prompt redaction 和只读边界有测试基础。
-
-当前限制：
-
-- 现阶段更接近受控上下文注入框架和 fixture 验证，不是完整 PLM/QMS 产品。
-- `BusinessSystemContextService` 当前候选 metadata 可先保持轻量，重点是来源、状态、只读边界和失败时不编造；第一版不强制扩展完整业务对象审计字段。
-- live read 的真实 connector、超时策略、缓存策略和错误诊断还需要继续产品化。
-
-下一步：
-
-- 增加缓存/预取策略；live read 只作为受控补充，并设置 1-2 秒超时。
-- 产品化业务系统固定答复和降级状态的 UI/诊断展示。
-- 评测覆盖至少：
-  - BOM 问题；
-  - ECO/ECN 变更影响问题；
-  - QMS 问题状态问题；
-  - 无权限；
-  - 对象不存在；
-  - 版本冲突；
-  - 数据过期。
-
-验收标准：
-
-- 用户在会议里问“这个 ECO 影响哪些 BOM？”时，CueUp 能在 2 秒目标内给出带来源和查询状态的答案。
-- 如果使用缓存数据，答案必须明确说明数据时间戳。
-- 如果 live read 超时或失败，会议回答继续进行，并展示清楚降级原因。
-- 无权限、对象不存在、版本冲突、状态过期时，系统不会编造答案。
-- 不存在写回 PLM/QMS 的工具调用。
-
-### Phase 4：短期上下文和说话人稳定性
-
-状态：说话人策略第一版已实施，短期上下文评测仍需加强。
-
-已完成：
-
-- `SpeakerContextPolicy` 会检查本地说话人验证元数据。
-- 只有高置信度 `me` 验证会保留给答案路径。
-- 低置信度或不可用说话人元数据会被移除，并记录：
-  - `speaker_metadata_low_confidence`；
-  - `speaker_metadata_unavailable`。
-- trace 中记录是否使用本地验证、是否使用 diarization、置信度摘要和来源。
-
-仍需补齐：
-
-- 最近 N 轮对话选择策略的固定评测。
-- 依赖“谁在说话”才能答对的端到端场景。
-- Doubao AUC diarization、本地 speaker verification 和 mic/system channel 的冲突处理策略。
-- 低置信度说话人状态在 UI/诊断中的可见解释。
-
-验收标准：
-
-- 答案路径能使用最近轮次，同时不会拉入过期或无关的会议历史。
-- 只有置信度足够高时才包含说话人元数据。
-- 低置信度说话人状态会显式降级，而不是静默影响答案。
-- 评测至少覆盖一个依赖“谁在说话”或“最近几轮说了什么”才能答对的用例。
-
-### STT 上下文质量：Local SenseVoice 专名纠错
-
-状态：第一版已实施，属于上下文系统的输入质量优化。
-
-已完成：
-
-- Local SenseVoice final transcript 后处理专有名词纠错。
-- 支持中英文 canonical term、常见误识别 variants、启用/禁用、设置持久化和 UI 配置。
-- 纠错发生在 final transcript 后，不假设 SenseVoice 原生支持解码期热词偏置。
-- UI 会提示空 variants 不会生效。
-- registry 会把设置注入 Local SenseVoice provider，并在设置不可用时安全降级。
-
-当前边界：
-
-- 只能修正常见、稳定、可枚举的误识别。
-- 不能让模型在解码时“提前知道”热词，因此不能解决所有上下文词表问题。
-- homophone replacer 和 SenseVoice 专属 VAD profile 仍未接入。
-
-下一步：
-
-- 建立默认错词表来源：
-  - 参会人名；
-  - 公司名；
-  - 产品名；
-  - 当前 mode；
-  - 参考资料标题；
-  - 用户自定义术语。
-- 评估 sherpa-onnx SenseVoice homophone replacer 是否适合接入。
-- 为中文会议模式测试 SenseVoice 专属 VAD 参数 profile，尤其是 hangover、min speech、最大段长。
-
-## 后续阶段
-
-### Phase 5：长期记忆 V1
-
-状态：未开始。
-
-目标：让 CueUp 记住用户是谁、用户偏好的回答方式，以及反复出现的人物关系或历史事实。
-
-交付物：
-
-- 记忆类型：
-  - 用户偏好；
-  - 人物/客户关系；
-  - 历史事件；
-  - 回答风格；
-  - 禁忌或永不使用的信息。
-- 记忆字段：
-  - 内容；
-  - 类型；
-  - 来源；
-  - 时间戳；
-  - 置信度；
-  - 用户确认标记。
-- 检索通过 `RealtimeContextOrchestrator`。
-- 设置项支持关闭长期记忆。
-- 用户可以查看和删除记忆。
-
-验收标准：
-
-- 如果用户说“以后回答客户问题直接一点”，相似的未来场景会体现该偏好。
-- 低置信度记忆不会直接进入 prompt。
-- 已删除记忆不会再被检索或使用。
-- 隐私设置会被遵守。
-
-风险：
-
-- 如果低置信度或过期记忆被当成事实，长期记忆会变成持久化幻觉。
-- 第一版记忆必须带来源、时间、置信度和删除控制。
-
-### Phase 6：通用只读企业知识连接器
-
-状态：未开始；应建立在本地 RAG 和知识源设置稳定之后。
-
-目标：减少手动上传负担，同时不让远程调用阻塞实时答案生成。
-
-交付物：
-
-- 先接入 1-2 个文档型来源：
-  - GitHub 文档或仓库内容；
-  - Notion、Confluence 或 Google Drive 之一。
-- 只读同步。
-- 同步内容到本地索引。
-- 增量刷新。
-- 来源引用。
-- 连接状态和最后同步时间。
-- 权限撤销。
-
-验收标准：
-
-- 企业文档知识会同步进本地 RAG。
-- 实时答案不会阻塞在远程 API 上。
-- 连接器失败不会破坏会议流程。
-- 答案引用能指回原始文档。
-
-产品命名：
-
-- 对外展示为“Knowledge Sources”或“资料来源”。
-- 第一版不要向普通用户暴露“MCP”。
-
-### Phase 7：通用 MCP 只读适配器
-
-状态：长期扩展层。
-
-目标：把 MCP 兼容性作为扩展层加入，而不是作为第一批用户可见产品表面。
-
-交付物：
-
-- MCP 只读资源适配器。
-- allowlist。
-- 调用日志。
-- 超时和缓存策略。
-- 无写操作。
-- 不为普通用户提供通用 MCP server 管理界面。
-
-不在范围内：
-
-- 完整 MCP 工具执行。
-- 写入 CRM 记录。
-- 创建 Jira 任务。
-- 发送 Slack 消息。
-- 通用自动化工作流构建器。
-
-## 更新后的推荐执行顺序
+销售卡片的产品标准：
+
+- 价格异议卡片生成的是“可说出口的回应”，不是价值点列表。
+- 报价请求卡片生成 email draft，但不能编价格、客户名、合同条款。
+- 案例请求必须优先用 RAG / PPTX / 上传资料，不允许编客户案例。
+- 技术需求必须生成澄清 checklist，而不是直接承诺能力。
+- 推进信号必须锁定 next step、owner、date、artifact。
+
+销售模式必须用真实资料打穿：
+
+- 上传 sales deck 或 case study PPTX。
+- 上传 FAQ / pricing policy / security note。
+- 客户问案例时，卡片接受后的回答能引用资料。
+- 客户问 Windchill/PLM 事实时，能走业务系统上下文，但失败时不编。
+
+验收指标：
+
+- 50 条销售会议 fixture，覆盖中文、英文、中英混合。
+- 价格类误报率 < 10%。
+- 明确高价值销售瞬间召回率 > 80%。
+- 用户接受卡片后，80% 生成内容无需大改即可说出口或发出。
+- 每个 sales action 都有 accepted、dismissed、generated_failed 指标。
+
+核心测试：
+
+```bash
+rtk npm run test:quality:gate
+rtk node --test electron/services/__tests__/DynamicActionEngine.test.mjs
+rtk node --test electron/services/__tests__/IntelligenceEngineDynamicActions.test.mjs
+```
+
+新增测试方向：
+
+- `SalesDynamicActionProductFixtures.test.mjs`
+- `SalesDynamicActionAnswerQuality.test.mjs`
+- `SalesActionCardUx.contract.test.mjs`
+
+### Step 3：FDE 模式打穿
+
+时间：第 6-8 周
+
+目标：FDE 模式要成为“客户现场部署助手”，不是技术关键词提醒器。
+
+FDE 的用户价值不是回答技术问题。是让前线工程师把客户现场混乱信息收束成可执行交付计划。
+
+FDE 只做 6 个关键瞬间：
+
+1. 现状流程发现：客户描述当前怎么做。
+2. 集成澄清：API、SSO、OAuth、SAML、SCIM、数据源、环境。
+3. 安全/合规：PII、审计、权限、数据驻留、加密。
+4. 风险/阻塞：依赖、迁移、延期、上线风险、回滚。
+5. 成功标准：POC、pilot、验收标准、KPI、sign-off。
+6. 下一步锁定：owner、deliverable、date、validation artifact。
+
+FDE 卡片接受后不应该生成漂亮废话。
+
+它应该生成：
+
+- 3 个澄清问题。
+- 一个最小验证步骤。
+- 一个 owner/date/artifact checklist。
+- 一个风险记录。
+- 一个验收标准草案。
+
+FDE 模式必须吃进这些上下文：
+
+- 当前会议 transcript。
+- 最近 6 轮上下文。
+- 屏幕上下文，尤其是客户系统、错误信息、API 文档。
+- PPTX 方案材料。
+- Windchill / PLM 查询结果，限只读事实。
+- QCLOUD / SenseVoice 的说话人和情绪线索，只作辅助。
+
+产品 DoD：
+
+- FDE 卡片按“部署推进”组织，不按技术名词组织。
+- 卡片接受后的内容默认短、具体、可问出口。
+- 安全/合规卡片必须保守，不能承诺未经证实的合规能力。
+- 风险卡片必须区分“客户风险”“我们交付风险”“信息缺失”。
+- 下一步卡片缺 owner/date/artifact 时必须追问，不许脑补。
+
+验收指标：
+
+- 40 条 FDE 会议 fixture。
+- 集成/安全/风险/下一步 4 类高价值卡片召回率 > 75%。
+- 明确无关技术闲聊误报率 < 10%。
+- 接受后内容平均 < 120 words 或中文 < 180 字。
+- 每个卡片都有“缺什么信息”的表达。
+
+新增测试方向：
+
+- `FdeDynamicActionProductFixtures.test.mjs`
+- `FdeActionAnswerShape.test.mjs`
+- `FdeScreenAndMaterialContext.test.mjs`
+
+### Step 4：团队会议模式打穿
+
+时间：第 9-10 周
+
+目标：团队会议模式不是“会后总结器”。它要在会中帮团队把口头承诺变成明确行动。
+
+团队会议只做 4 个关键瞬间：
+
+1. 行动项：谁做什么。
+2. 截止时间：什么时候交。
+3. 决策：已经决定了什么，谁同意。
+4. 阻塞：卡在哪里，下一步怎么解。
+
+团队会议卡片产品标准：
+
+- 行动项卡片必须抽取 owner、deliverable、due date。缺任何一项，卡片应提示“还缺负责人/截止时间”。
+- 决策卡片必须记录 decision、rationale、reversibility。不能把讨论中的选项误写成决定。
+- 阻塞卡片必须记录 blocker、impact、dependency、next unblock step。
+- 内部成员说“我们的报价表在这”不能触发销售报价动作。模式隔离必须继续硬。
+
+会中和会后必须闭环：
 
 ```text
-已完成的当前冲刺：
-  1. 现场可信度验收包第一版：实时答案 trace、sourceStatus、degradedReason、context plan、动态动作 gate trace 已汇总到固定诊断和质量 smoke 口径。
-  2. P0-1 动态动作语义门控收口：真实会议风格 fixture 已覆盖中英混合、单句/多轮、旧话题污染、多人说话、provider scope denied 和 cloud fallback；后续不再只看关键词召回。
-  3. Phase 0/2/3/4 已落地能力验收收口：RAG、业务系统、屏幕、说话人和 provider scope 失败已进入 trace、diagnostics 或固定答复测试；下一步是扩大阈值门禁和真实样本。
-  4. 质量命令产品化到开发习惯：`npm run test:quality:changed` 会根据当前 diff 判断是否触发质量门禁；命中 prompt、RAG、上下文选择、动态动作规则、实时 LLM 路径、业务系统上下文、说话人/屏幕上下文或 trace/metrics 相关文件时，必须跑 `npm run test:quality:gate`。连续本地验证可先跑 `npm run build:electron`，再跑 `npm run test:quality:gate:no-build`。
-  5. CodeHintLLM 已完成 trace/scope 归属收口；只评估是否把独立工具流 trace 纳入持久化 answer trace 或产品 UI 诊断，不再作为阻塞项。
-
-下一冲刺：
-  6. 本地 RAG/资料上传第一版保持回归：上传、引用、删除、已完成资料重新索引、失败诊断、embedding 降级和 PPTX 非支持态覆盖已基本完成；下一步只做真实会议回放评测、failed material 重新上传/重试策略和完整 generate-what-to-say 资料支撑评测。
-  7. 业务系统上下文缓存/预取策略、真实 connector 诊断和固定答复 UI 展示。
-  8. 动态动作误报/漏报指标、质量面板和真实录音回放评测。
-  9. SenseVoice 错词表来源自动化、homophone replacer 调研验证和 SenseVoice 专属 VAD profile。
-
-随后：
-  10. 长期记忆 V1。
-  11. 通用只读企业知识连接器。
-
-之后：
-  12. 通用 MCP 只读适配器。
-  13. 可写工具和自动化工作流继续保持非 P0。
+会中卡片捕捉
+  -> 用户接受/修正
+  -> 进入会议 notes 对应 section
+  -> 会后 summary 使用同一结构
+  -> 用户可复制行动项
 ```
 
-## P0 要求
+产品 DoD：
 
-P0 只包含决定用户是否会在现场信任 CueUp 的事项：
+- Team Meeting 的卡片接受后，不只生成回答，也能形成结构化 note draft。
+- Action item / decision / blocker 三类数据进入同一后处理路径。
+- 会后 summary 能引用会中接受的卡片。
+- 用户忽略卡片后，同类候选短时间内降噪。
 
-- 实时答案质量评估闭环。
-- 动态动作意图识别语义门控。
-- `RealtimeContextOrchestrator` 覆盖主实时回答关键路径。
-- 本地 RAG、资料上传和引用。
-- PLM/QMS 只读业务系统上下文。
-- 短期上下文和说话人稳定性。
-- Local SenseVoice 输入质量优化。
-- 可见降级和设置诊断。
+验收指标：
 
-P0 之后再进入：
+- 30 条团队会议 fixture。
+- 明确行动项召回率 > 85%。
+- action item 三字段完整率 > 70%。
+- 决策误报率 < 10%。
+- 会后 summary 中 accepted card 的保留率 > 90%。
 
-- 长期记忆 V1。
-- 通用只读企业知识连接器。
+新增测试方向：
 
-## 非 P0
+- `TeamMeetingDynamicActionProductFixtures.test.mjs`
+- `TeamMeetingActionItemCompleteness.test.mjs`
+- `PostCallDynamicActionCarryover.test.mjs`
 
-- 完整通用 MCP 工具调用。
-- 写入 CRM、Jira、Slack 或 email。
+### Step 5：真实会议评测和产品运营闭环
+
+时间：第 11-12 周
+
+目标：把“基本能用”变成“持续变好”。
+
+没有评测闭环，动作卡片会退化成 trigger 花园。今天加一个词，明天误报一个会。软件很快变成玄学。
+
+需要建立 4 个面板：
+
+1. 模式质量面板：sales / fde / team-meet 的 shown、accepted、dismissed、expired、generated_failed。
+2. 误报/漏报面板：按 action type 看 precision、recall、defer rate、cloud fallback rate。
+3. 延迟面板：从 final transcript 到 card shown、card accepted 到 first token。
+4. 可信度面板：RAG hit、PPTX hit、Windchill hit、screen used、scope denied、local fallback。
+
+评测资产：
+
+- 120 条文本 fixture。
+- 30 段真实录音回放。
+- 15 个销售场景。
+- 10 个 FDE 场景。
+- 5 个团队会议场景。
+- 中英混合、多说话人、旧话题污染、ASR 错词、内部/客户身份错位都必须有。
+
+每周产品 QA：
+
+```text
+周一：跑 quality gate + fixture report
+周二：人工看 10 段真实会议回放
+周三：修 3 个最高频误报/漏报
+周四：验证卡片接受后答案质量
+周五：更新模式 playbook 和路线图
+```
+
+质量门禁：
+
+```bash
+rtk npm run test:quality:changed
+rtk npm run test:quality:gate
+rtk npm run test:quality:diagnostics
+```
+
+新增命令目标：
+
+```bash
+rtk npm run test:dynamic-actions:product
+rtk npm run test:dynamic-actions:replay
+rtk npm run test:dynamic-actions:metrics
+```
+
+3 个月结束时，不能只说“测试通过”。
+
+要能说：
+
+- 销售卡片在哪些场景有用。
+- FDE 卡片在哪些场景有用。
+- 团队会议卡片在哪些场景有用。
+- 哪些卡片被用户忽略最多。
+- 哪些卡片接受后生成失败最多。
+- 哪些上下文源真的提升了卡片质量。
+
+## 五步时间线
+
+```text
+第 1-2 周
+  Step 1: 动作卡片产品契约
+  输出：卡片状态、文案、产物类型、指标事件、UX contract test
+
+第 3-5 周
+  Step 2: 销售模式打穿
+  输出：5 类销售关键瞬间、销售资料 grounding、销售 fixture 和答案质量验收
+
+第 6-8 周
+  Step 3: FDE 模式打穿
+  输出：6 类部署关键瞬间、屏幕/PPTX/Windchill grounding、FDE fixture
+
+第 9-10 周
+  Step 4: 团队会议模式打穿
+  输出：行动项/决策/阻塞闭环、会中卡片到会后 summary carryover
+
+第 11-12 周
+  Step 5: 真实会议评测和运营闭环
+  输出：产品指标面板、录音回放评测、误报/漏报修复节奏
+```
+
+## 重点模式定义
+
+### 销售模式
+
+用户工作：赢下交易，推进下一步。
+
+CueUp 要帮：
+
+- 识别客户的真实购买信号。
+- 处理价格、竞品、ROI、案例和技术风险。
+- 用已有资料回答，不能编。
+- 把下一步变成 owner/date/artifact。
+
+不追求：
+
+- CRM 写回。
+- 自动发邮件。
+- 自动生成正式报价。
+- 编客户案例。
+
+### FDE 模式
+
+用户工作：把客户现场从混乱讨论推进到可交付方案。
+
+CueUp 要帮：
+
+- 从客户话里抽取工作流、系统、数据、权限、风险。
+- 在正确时机追问关键缺口。
+- 把安全、集成、风险、验收变成 checklist。
+- 把会议结束前的下一步锁死。
+
+不追求：
+
+- 替工程师做架构承诺。
+- 自动改客户系统。
+- 写入 PLM/QMS。
+- 泛泛回答所有技术问题。
+
+### 团队会议模式
+
+用户工作：让团队会议产生清楚的决定和行动。
+
+CueUp 要帮：
+
+- 捕捉行动项。
+- 补齐 owner、deliverable、due date。
+- 捕捉真实决策，不把讨论选项当决定。
+- 捕捉阻塞和解法。
+- 会后 summary 延续会中确认过的卡片。
+
+不追求：
+
+- 替团队管理项目工具。
+- 复杂 OKR 系统。
+- 写 Jira / Slack。
+- 自动评价团队成员。
+
+## 动作卡片体验标准
+
+```text
+错误体验：
+  “检测到行动项 90%”
+  用户：所以呢？
+
+正确体验：
+  “锁定负责人和截止时间”
+  “刚才有人承诺会跟进，但还缺截止时间。”
+  [生成一句追问] [忽略]
+```
+
+卡片要像一个好同事，少说，准，知道什么时候闭嘴。
+
+### 卡片分级
+
+| 等级 | 行为 | 适用 |
+|------|------|------|
+| P0 Auto Countdown | 5 秒后自动生成，可取消 | 高置信、低风险、强行动信号 |
+| P1 Suggested Card | 显示卡片，用户点击生成 | 高价值但需要用户确认 |
+| P2 Quiet Diagnostic | 不打扰用户，只记录 trace | 低置信、旧话题污染、scope denied |
+| P3 Suppressed | 完全不出现 | 明确误报、用户刚忽略、无证据 |
+
+### 卡片生成物
+
+| 场景 | 产物 |
+|------|------|
+| 销售价格异议 | 可说出口的短回应 |
+| 销售报价请求 | 带占位符的 email draft |
+| 销售案例请求 | grounded proof points |
+| FDE 集成澄清 | checklist + 下一验证步骤 |
+| FDE 安全评审 | 安全问题清单 |
+| FDE 风险阻塞 | blocker record |
+| 团队行动项 | owner / deliverable / due date |
+| 团队决策 | decision / rationale / reversibility |
+
+## 指标
+
+3 个月内要盯这些数：
+
+| 指标 | 目标 | 为什么 |
+|------|------|--------|
+| Card shown latency | p95 < 2s after final transcript | 会中慢了就没用 |
+| Accept rate | 目标模式 > 25% | 用户是否觉得卡片有价值 |
+| Dismiss rate | 单 action type > 60% 要复盘 | 可能误报或文案不对 |
+| Generated failure rate | < 3% | 点了没结果最伤信任 |
+| Sales high-value recall | > 80% | 销售模式是否真的帮忙 |
+| Sales pricing false positive | < 10% | 价格误报最烦 |
+| FDE high-value recall | > 75% | FDE 是否真的能推进交付 |
+| Team action completeness | > 70% | 行动项是否可执行 |
+| Accepted card carryover | > 90% | 会中动作是否进入会后产物 |
+
+不要只看“卡片出现次数”。那是 vanity metric。
+
+## 现有能力如何服务这条路线
+
+| 能力 | 当前状态 | 未来 3 个月用法 |
+|------|----------|----------------|
+| DynamicActionEngine | 已有语义门控和 trace | 变成三大重点模式的核心产品引擎 |
+| DynamicActionCard | 已能展示/接受/忽略 | 升级为 action promise + evidence + output type |
+| IntentClassifier | 已有 mode-aware intent | 用于模式关键瞬间召回和答案形状 |
+| SignalStateTracker | 已有重复证据和冷却 | 用于降噪和用户忽略后的学习 |
+| RAG / Materials | PDF/DOCX/MD/TXT/PPTX 基础已在 | 销售案例、FDE 方案材料 grounding |
+| Windchill adapter | 专用只读 MCP 已在 | FDE/销售中只读业务事实补充 |
+| Screen understanding | 已在实时路径 | FDE 和技术现场的强上下文 |
+| QCLOUD emotion | 已透传到 UI | 只作风险/语气辅助，不能单独触发动作 |
+| Quality gate | 已有基础命令 | 扩成产品级 fixture 和 replay |
+
+## 不在未来 3 个月范围内
+
+- 通用 MCP marketplace。
+- 写回 CRM、Jira、Slack、email。
 - 写回 PLM/QMS。
-- 通用 MCP server 管理界面。
-- 大型 provider marketplace。
-- 复杂自动化工作流构建器。
+- 大型 custom mode builder。
+- 所有模式平均推进。
+- 长期记忆 V1。
+- 完整 provider marketplace。
+
+这些不是不重要。只是现在会稀释主线。
+
+先把 3 个重点模式打穿。打穿一个，胜过“基本支持八个”。
+
+## 风险和反制
+
+### 风险 1：卡片变成弹窗噪音
+
+反制：
+
+- P0/P1/P2/P3 分级。
+- 用户忽略后进入 cooldown。
+- 高风险动作必须语义门控。
+- 每周看 dismiss rate 最高的 action type。
+
+### 风险 2：模式看起来多，但每个都浅
+
+反制：
+
+- 未来 3 个月只把 sales、fde、team-meet 当主线。
+- general / recruiting / lecture / technical-interview 保持维护，不做主战场。
+- 每个模式只选 4-6 个关键瞬间。
+
+### 风险 3：生成内容不能直接用
+
+反制：
+
+- 每个 action type 有固定 output contract。
+- fixture 不只断言 action 出现，还断言接受后 answer shape。
+- 对 email draft、checklist、action item 分别验收。
+
+### 风险 4：上下文源很多，但没人知道有没有用
+
+反制：
+
+- 每张卡片记录用了哪些上下文源。
+- RAG/PPTX/Windchill/screen 命中进入 metrics。
+- 用户文案只说来源状态，不暴露内部 trace。
+
+### 风险 5：为了智能感牺牲信任
+
+反制：
+
+- 没证据就不说。
+- 不确定就不弹。
+- scope denied 是隐私生效，不是错误。
+- provider 失败时本地降级，但不伪装成云端成功。
+
+## 3 个月后的判断标准
+
+这条路线成功，不是因为功能列表变长。
+
+成功是用户会说：
+
+- “销售电话里它能提醒我怎么接价格异议。”
+- “客户问技术细节时，它能帮我把问题问完整。”
+- “团队会议里它能抓住谁负责什么。”
+- “它不会乱弹。”
+- “它引用资料时我知道它用了什么。”
+
+如果 3 个月后我们只能说“支持更多知识源、更多模式、更多 provider”，那就是走偏了。
+
+## 推荐执行顺序
+
+```text
+1. 动作卡片产品契约
+   先定义好卡片是什么，不是什么。
+
+2. 销售模式打穿
+   用价格、报价、案例、技术需求、推进信号证明价值。
+
+3. FDE 模式打穿
+   用集成、安全、风险、验收、下一步证明复杂会议价值。
+
+4. 团队会议模式打穿
+   用行动项、决策、阻塞和会后 carryover 证明日常价值。
+
+5. 真实会议评测闭环
+   用指标和回放防止产品退化成 trigger 堆。
+```
 
 ## 战略总结
 
-本地 RAG 让答案有依据。
+CueUp 的短期产品力不来自“什么都能接一点”。
 
-实时上下文编排让依据进入 prompt 的过程可解释、可裁剪、可评测。
+来自一个非常窄但很硬的承诺：
 
-PLM/QMS 只读业务系统上下文让会议现场能直接使用 BOM、变更和质量记录这些事实。
+在真实会议的关键时刻，CueUp 会给你一张对的卡片。
 
-短期记忆让答案连接当前对话。
+它不抢话，不乱弹，不编事实。它知道现在是什么模式，知道谁在说话，知道哪些资料可用，知道什么时候该闭嘴。
 
-说话人稳定性避免助手替错误的人回答。
-
-SenseVoice 专名纠错提高输入文本质量，减少专名误识别对检索和回答的污染。
-
-长期记忆让答案更贴合用户本人。
-
-通用企业知识连接器让文档型 grounding 在不依赖手动上传的情况下扩展。
-
-受控领域 MCP 应该服务 PLM/QMS 这类高价值只读上下文。通用 MCP 后续可以作为扩展层使用，但不应该成为核心用户价值的第一条实施路径。
-
-产品应该先让上下文准确、快速、可信、可测量，然后再扩展上下文来源。
+这才是从“AI 会议助手”变成“会议副驾驶”。
