@@ -105,9 +105,14 @@ export function KnowledgeMaterialsSettings() {
         return;
       }
       const hasPptx = selected.filePaths.some((filePath: string) => filePath.toLowerCase().endsWith('.pptx'));
-      if (hasPptx && pptxQCloudAvailable !== true) {
-        setStatus('PPTX 知识源需要先配置并选择 QCLOUD API。');
-        return;
+      if (hasPptx) {
+        const result = await window.electronAPI?.knowledgeCheckQCloudAvailability?.();
+        const available = Boolean(result?.available);
+        setPptxQCloudAvailable(available);
+        if (!available) {
+          setStatus('PPTX 知识源需要先配置并选择 QCLOUD API。');
+          return;
+        }
       }
       const result = await window.electronAPI?.knowledgeUploadMaterials?.(selected.filePaths);
       const materialIds = (result?.materials || []).map((material: any) => material.id).filter(Boolean);
@@ -123,7 +128,7 @@ export function KnowledgeMaterialsSettings() {
         setBusy(false);
       }
     }
-  }, [pptxQCloudAvailable, refreshContextHealth, refreshMaterials, startUploadPolling]);
+  }, [refreshContextHealth, refreshMaterials, startUploadPolling]);
 
   const deleteMaterial = useCallback(async (id: string) => {
     setBusy(true);
