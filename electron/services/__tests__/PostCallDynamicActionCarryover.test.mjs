@@ -6,9 +6,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
 const workflowPath = path.join(root, 'dist-electron/electron/services/post-call/PostCallWorkflow.js');
+const meetingPersistencePath = path.join(root, 'dist-electron/electron/MeetingPersistence.js');
 
 async function loadWorkflow() {
   return import(pathToFileURL(workflowPath).href);
+}
+
+async function loadMeetingPersistence() {
+  return import(pathToFileURL(meetingPersistencePath).href);
 }
 
 test('post-call summary preserves accepted team action artifacts', async () => {
@@ -32,4 +37,79 @@ test('post-call summary preserves accepted team action artifacts', async () => {
 
   assert.ok(result.actionItemsStructured.some((item) => /launch checklist/i.test(item.text)));
   assert.ok(result.coachingInsights.some((insight) => insight.type === 'accepted_dynamic_action'));
+});
+
+test('MeetingPersistence maps flat dynamic action usage into carryover artifacts', async () => {
+  const { buildDynamicActionArtifactActionsFromUsage } = await loadMeetingPersistence();
+  const { buildDynamicActionArtifacts } = await import(pathToFileURL(path.join(root, 'dist-electron/electron/services/dynamic-actions/DynamicActionArtifacts.js')).href);
+  const { buildPostCallEnhancements } = await loadWorkflow();
+
+  const usage = [{
+    timestamp: 1700000000123,
+    question: '请确认负责人和截止时间',
+    answer: 'Owner: Maya\nDeliverable: launch checklist\nDue: Friday',
+    metadata: {
+      source: 'dynamic_action',
+      actionId: 'action_flat_1',
+      actionType: 'action_item',
+      modeTemplateType: 'team-meet',
+      retrievalQuery: 'launch checklist',
+      outputType: 'action_item',
+      groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+    },
+  }];
+
+  const actions = buildDynamicActionArtifactActionsFromUsage(usage);
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].id, 'action_flat_1');
+  assert.equal(actions[0].type, 'action_item');
+  assert.equal(actions[0].modeTemplateType, 'team-meet');
+  assert.equal(actions[0].status, 'completed');
+  assert.equal(actions[0].createdAt, 1700000000123);
+  assert.equal(actions[0].latestTurn, '请确认负责人和截止时间');
+  assert.equal(actions[0].retrievalQuery, 'launch checklist');
+  assert.equal(actions[0].productContract.outputType, 'action_item');
+
+  const artifacts = buildDynamicActionArtifacts({ actions, usage });
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'team-meet',
+    transcript: [{ speaker: 'Maya', text: 'I can send the checklist.', timestamp: 1 }],
+    summaryData: { overview: 'Launch planning.', actionItems: [] },
+    dynamicActionArtifacts: artifacts,
+  });
+
+  assert.ok(result.actionItemsStructured.some((item) => /launch checklist/i.test(item.text)));
+  assert.ok(result.coachingInsights.some((insight) => insight.type === 'accepted_dynamic_action'));
+});
+
+test('MeetingPersistence skips non-dynamic or incomplete usage entries', async () => {
+  const { buildDynamicActionArtifactActionsFromUsage } = await loadMeetingPersistence();
+
+  const actions = buildDynamicActionArtifactActionsFromUsage([
+    {
+      timestamp: 1,
+      question: '普通 usage',
+      answer: 'nothing special',
+      metadata: {
+        source: 'assist',
+        actionId: 'action_skip_1',
+        actionType: 'action_item',
+        modeTemplateType: 'team-meet',
+        outputType: 'action_item',
+      },
+    },
+    {
+      timestamp: 2,
+      question: 'dynamic action missing id',
+      answer: 'still nothing',
+      metadata: {
+        source: 'dynamic_action',
+        actionType: 'action_item',
+        modeTemplateType: 'team-meet',
+        outputType: 'action_item',
+      },
+    },
+  ]);
+
+  assert.deepEqual(actions, []);
 });

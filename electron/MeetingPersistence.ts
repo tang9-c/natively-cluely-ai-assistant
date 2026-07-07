@@ -466,7 +466,7 @@ ${baseRules}
     }
 }
 
-function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<{
+export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<{
     id: string;
     modeTemplateType: string;
     type: string;
@@ -489,31 +489,20 @@ function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<{
     const seen = new Set<string>();
 
     for (const item of usage) {
-        const metadata = item?.metadata?.dynamicAction ?? item?.metadata;
+        const metadata = item?.metadata;
         if (!metadata || typeof metadata !== 'object') continue;
+
+        if (metadata.source !== 'dynamic_action') continue;
 
         const actionId = typeof metadata.actionId === 'string' ? metadata.actionId.trim() : '';
         const modeTemplateType = typeof metadata.modeTemplateType === 'string' ? metadata.modeTemplateType.trim() : '';
         const actionType = typeof metadata.actionType === 'string'
             ? metadata.actionType.trim()
-            : typeof metadata.type === 'string'
-                ? metadata.type.trim()
-                : '';
-        const outputType = metadata.productContract?.outputType ?? metadata.outputType;
-        const status = typeof metadata.status === 'string'
-            ? metadata.status.trim()
-            : typeof metadata.generationStatus === 'string'
-                ? metadata.generationStatus.trim()
-                : '';
-        const createdAt = typeof metadata.createdAt === 'number'
-            ? metadata.createdAt
-            : typeof metadata.acceptedAt === 'number'
-                ? metadata.acceptedAt
-                : typeof item?.timestamp === 'number'
-                    ? item.timestamp
-                    : NaN;
+            : '';
+        const outputType = typeof metadata.outputType === 'string' ? metadata.outputType.trim() : '';
+        const createdAt = typeof item?.timestamp === 'number' ? item.timestamp : 0;
 
-        if (!actionId || !modeTemplateType || !actionType || !outputType || !status || Number.isNaN(createdAt)) continue;
+        if (!actionId || !actionType || !outputType) continue;
         if (seen.has(actionId)) continue;
         seen.add(actionId);
 
@@ -522,10 +511,20 @@ function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<{
             modeTemplateType,
             type: actionType,
             productContract: { outputType },
-            status,
+            status: 'completed',
             createdAt,
-            latestTurn: typeof metadata.latestTurn === 'string' ? metadata.latestTurn : (typeof item?.answer === 'string' ? item.answer : undefined),
-            retrievalQuery: typeof metadata.retrievalQuery === 'string' ? metadata.retrievalQuery : undefined,
+            latestTurn:
+                typeof metadata.latestTurn === 'string'
+                    ? metadata.latestTurn
+                    : typeof item?.question === 'string'
+                        ? item.question
+                        : undefined,
+            retrievalQuery:
+                typeof metadata.retrievalQuery === 'string'
+                    ? metadata.retrievalQuery
+                    : typeof item?.question === 'string'
+                        ? item.question
+                        : undefined,
         });
     }
 

@@ -1,91 +1,37 @@
-# Task 4 Report: QCLOUD Descriptor And LLMHelper Scope Wrapper
+# Task 4 Report
 
-## Scope completed
+## STATUS
+PASS
 
-- 在 `electron/LLMHelper.ts` 中为 QCLOUD 路径新增了窄公开方法 `generatePptxKnowledgeWithNatively(...)`。
-- 该 wrapper 按图片阶段与纯 Markdown 阶段显式传递 data scopes：
-  - 图片阶段：`['reference_files', 'screenshots']`
-  - 纯 Markdown 阶段：`['reference_files']`
-- `generateWithNatively(...)` 继续保持私有，仅增加通过 `_options.dataScopes` 参与 `assertOutboundScopes(...)` 的能力。
-- 新增 `electron/services/knowledge/pptx/PptxVisionDescriptor.ts`，实现：
-  - `describeSlide(imagePath, slideIndex, slideCount)`
-  - `enhanceMarkdown(markdown)`
-- 新增合同测试 `electron/services/knowledge/__tests__/pptxVisionDescriptor.contract.test.mjs`，验证：
-  - Stage 1 会发送图片路径
-  - Stage 2 不会再次发送图片
-  - 增强结果会产出 5 个 hypothetical questions
+## 修改文件
+- `/Users/tang-codeing/code/natively-cluely-ai-assistant/electron/services/post-call/PostCallWorkflow.ts`
+- `/Users/tang-codeing/code/natively-cluely-ai-assistant/electron/MeetingPersistence.ts`
+- `/Users/tang-codeing/code/natively-cluely-ai-assistant/electron/services/__tests__/PostCallDynamicActionCarryover.test.mjs`
+- `/Users/tang-codeing/code/natively-cluely-ai-assistant/electron/services/__tests__/PostCallWorkflow.test.mjs`
 
-## TDD evidence
+## 提交
+- `f23fae5adc18a146c5515dcbcdc046768742274c`
 
-### RED
+## 运行过的命令和结果
+- `rtk npm run build:electron`
+  - 结果：成功。Electron 产物重新生成完成。
+- `rtk env ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/__tests__/PostCallDynamicActionCarryover.test.mjs`
+  - 结果：先失败，符合预期。失败点是 `dynamicActionArtifacts` 还没有接入 post-call structured notes。
+- `rtk env ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/__tests__/PostCallDynamicActionCarryover.test.mjs electron/services/__tests__/PostCallWorkflow.test.mjs`
+  - 结果：成功，19 个测试全部通过。
 
-先新增合同测试并运行：
+## 说明
+- `buildPostCallEnhancements()` 现在支持可选 `dynamicActionArtifacts`，在未传入时保持原有行为不变。
+- `team-meet` 的 accepted `action_item` / `owner_deadline_check` artifacts 会进入 structured notes，并驱动一条 `accepted_dynamic_action` coaching insight。
+- `generated_failed` / `not_generated` artifacts 不会被合成进 post-call notes。
+- `MeetingPersistence` 通过现有 `usage` 数据做薄映射构造 artifacts，没有新增数据库表或字段。
 
-```bash
-rtk npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/knowledge/__tests__/pptxVisionDescriptor.contract.test.mjs
-```
+## Concerns
+- `MeetingPersistence` 当前只会从 `usage.metadata.dynamicAction` 或平铺的 `usage.metadata` 中提取 action 形态；如果后续 Task 3 最终落地的 metadata 结构和这里假设的不一致，需要补一层最小映射。
+- 目前只做了 post-call 侧接线，没有改数据库 schema，也没有改历史数据回填逻辑；旧会议不会自动重算 artifacts。
 
-初次失败原因为测试相对路径错误；修正为符合当前 `dist-electron` 目录布局的路径后，再次运行，失败原因为目标模块尚不存在，符合预期的缺失实现失败。
-
-### GREEN
-
-补充 `LLMHelper` wrapper 与 `PptxVisionDescriptor` 后，重新运行同一 focused verification 命令通过。
-
-## Files changed
-
-- `electron/LLMHelper.ts`
-- `electron/services/knowledge/pptx/PptxVisionDescriptor.ts`
-- `electron/services/knowledge/__tests__/pptxVisionDescriptor.contract.test.mjs`
-
-## Constraint check
-
-- 仅支持 `.pptx`：本次未新增 `.ppt` / `.pptm` 支持。
-- 未实现 ingestion、KnowledgeMaterialService、IPC、UI、DB、renderer 额外变更。
-- 未新增图片预览 IPC。
-- 未在产品 UI 暴露 image/render/screenshot/thumbnail/base64/vision。
-- 未增加图片持久化存储逻辑。
-- 未覆盖或回退现有 `src/components/settings/AIProvidersSettings.tsx` 用户改动。
-- 保持日志/隐私边界：本次未新增原始图片/base64 输出日志。
-
-## Verification
-
-通过命令：
-
-```bash
-rtk npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/knowledge/__tests__/pptxVisionDescriptor.contract.test.mjs
-```
-
-结果：`1 passed, 0 failed`
-
-## Notes
-
-- brief 中合同测试示例里的 dist 相对路径与当前仓库测试目录结构不一致；已按现有仓库布局修正为可工作的路径，其余实现保持与 brief 要求一致。
-
-## Review fix follow-up
-
-- 修复了 `generatePptxKnowledgeWithNatively(...)` 缺少 selected provider gate 的问题：
-  - 现在会先检查 `currentModelId === 'natively'`
-  - 若未选中 QCLOUD API provider，会抛出 `pptx_qcloud_provider_not_selected`
-- 修复了 `PptxVisionDescriptor.enhanceMarkdown(...)` retry 过宽的问题：
-  - 仅当 `parsePptxEnhanceJson(...)` 抛出 `pptx_enhance_invalid_json` 时重试一次
-  - 对 `pptx_enhance_missing_summary`、`pptx_enhance_invalid_questions` 等确定性错误不再重复调用 API
-- 扩展 focused tests：
-  - `pptxVisionDescriptor.contract.test.mjs` 现在覆盖“invalid JSON 后重试一次再成功”
-  - 同时覆盖“deterministic JSON shape error 不重试”
-  - `QCloudApiSettings.test.mjs` 新增静态源码合同，约束 PPTX QCLOUD wrapper 必须先做 provider gate
-
-### Follow-up verification
-
-执行：
-
-```bash
-rtk npm run build:electron
-rtk env ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/knowledge/__tests__/pptxVisionDescriptor.contract.test.mjs
-rtk env ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/__tests__/QCloudApiSettings.test.mjs
-```
-
-结果：
-
-- `build:electron` 通过
-- `pptxVisionDescriptor.contract.test.mjs`: `3 passed, 0 failed`
-- `QCloudApiSettings.test.mjs`: `14 passed, 0 failed`
+## Addendum 2026-07-07
+- 已修复 review finding：`MeetingPersistence.buildDynamicActionArtifactActionsFromUsage()` 现在只接受平铺的 `usage.metadata`，并按 Task 3 字段从 `source/actionId/actionType/modeTemplateType/retrievalQuery/outputType` 构造 action。
+- 现在对 `source !== 'dynamic_action'`、缺少 `actionId/actionType/outputType` 的 usage 会直接跳过；`status` 固定为 `completed`，`createdAt` 优先取 `usage.timestamp`，否则稳定回退到 `0`。
+- 新增测试覆盖平铺 metadata 进入 `buildPostCallEnhancements` carryover，以及普通 usage / 缺 `actionId` 的跳过路径。
+- 已重新运行 `rtk npm run build:electron` 和 `rtk env ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/__tests__/PostCallDynamicActionCarryover.test.mjs electron/services/__tests__/PostCallWorkflow.test.mjs`，均通过。
