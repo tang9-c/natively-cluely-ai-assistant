@@ -512,7 +512,7 @@ interface ElectronAPI {
   getBusinessSystemKnowledgeSources: () => Promise<any[]>;
   saveBusinessSystemKnowledgeSource: (input: any) => Promise<{ success: boolean; id?: string; error?: string }>;
   deleteBusinessSystemKnowledgeSource: (id: string) => Promise<{ success: boolean; error?: string }>;
-  testBusinessSystemKnowledgeSource: (input: any) => Promise<{ success: boolean; status?: string; sourceName?: string; error?: string }>;
+  testBusinessSystemKnowledgeSource: (input: any) => Promise<{ success: boolean; status?: string; sourceName?: string; error?: string; message?: string; detailCode?: string; toolCount?: number }>;
 
   // Audio Test
   startAudioTest: (deviceId?: string) => Promise<{ success: boolean }>;

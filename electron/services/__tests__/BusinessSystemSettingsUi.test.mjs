@@ -103,6 +103,32 @@ test('business system settings uses the same top-level card shell as research se
   assert.doesNotMatch(source, /<div className="space-y-5">\s*<div>\s*<h3/);
 });
 
+test('business system settings mirrors Tavily-style save and test feedback', () => {
+  const source = read('src/components/settings/BusinessSystemKnowledgeSourcesSettings.tsx');
+
+  assert.match(source, /isSaving/);
+  assert.match(source, /isTesting/);
+  assert.match(source, /testResult/);
+  assert.match(source, /saveStatus/);
+  assert.match(source, /保存中…/);
+  assert.match(source, /测试中…/);
+  assert.match(source, /已保存，建议测试连接/);
+  assert.match(source, /连接成功：/);
+  assert.match(source, /认证失败，请检查 API Key 或账号密码。/);
+  assert.match(source, /连接超时，请检查服务地址和网络。/);
+  assert.match(source, /服务可达，但没有返回可用查询能力。/);
+  assert.match(source, /尚未添加业务系统知识源。添加 Windchill 知识源后，可在会议中按需查询只读业务信息。/);
+});
+
+test('business system settings disables save and test until required fields are present', () => {
+  const source = read('src/components/settings/BusinessSystemKnowledgeSourcesSettings.tsx');
+
+  assert.match(source, /const canSubmit = Boolean/);
+  assert.match(source, /credentialIsPresent/);
+  assert.match(source, /disabled=\{isSaving \|\| !canSubmit\}/);
+  assert.match(source, /disabled=\{isTesting \|\| !canSubmit\}/);
+});
+
 test('AI provider settings does not mount business system settings', () => {
   const source = read('src/components/settings/AIProvidersSettings.tsx');
 

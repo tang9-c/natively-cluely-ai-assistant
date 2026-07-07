@@ -1455,10 +1455,48 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('business-system:test-source', async (_, input: any) => {
+    const classifyBusinessSystemTestError = (error: any): { status: string; detailCode: string; message: string } => {
+      const raw = String(error?.message || error?.code || '').toLowerCase();
+      if (raw.includes('timeout') || raw.includes('abort')) {
+        return {
+          status: 'timeout',
+          detailCode: 'timeout',
+          message: '连接超时，请检查服务地址和网络。',
+        };
+      }
+      if (raw.includes('401') || raw.includes('403') || raw.includes('unauthorized') || raw.includes('forbidden') || raw.includes('auth')) {
+        return {
+          status: 'auth_failed',
+          detailCode: 'auth_failed',
+          message: '认证失败，请检查 API Key 或账号密码。',
+        };
+      }
+      if (raw.includes('econnrefused') || raw.includes('enotfound') || raw.includes('fetch failed') || raw.includes('network')) {
+        return {
+          status: 'unavailable',
+          detailCode: 'unavailable',
+          message: '服务不可用，请检查服务地址和网络。',
+        };
+      }
+      return {
+        status: 'error',
+        detailCode: 'error',
+        message: '连接失败，请检查地址、认证方式和服务状态。',
+      };
+    };
+
     try {
       const { BusinessMcpClient } = require('./services/business-system/BusinessMcpClient');
       const source = input?.source;
-      if (!source?.url || !source?.name) return { success: false, status: 'error', error: 'Invalid source' };
+      if (!source?.url || !source?.name) {
+        return {
+          success: false,
+          status: 'error',
+          detailCode: 'invalid_source',
+          error: 'invalid_source',
+          message: '请先填写名称、服务地址和凭据。',
+        };
+      }
       if (source.kind === 'plm') {
         const { McpRpcClient } = require('./services/business-system/McpRpcClient');
         const client = new McpRpcClient({
@@ -1469,21 +1507,37 @@ export function initializeIpcHandlers(appState: AppState): void {
         });
         await client.initialize(6000);
         const tools = await client.listTools(6000);
+        const toolCount = tools.length;
         return {
-          success: tools.length > 0,
-          status: tools.length > 0 ? 'ok' : 'unavailable',
+          success: toolCount > 0,
+          status: toolCount > 0 ? 'ok' : 'unavailable',
           sourceName: source.name,
-          error: tools.length > 0 ? undefined : 'no_tools',
+          detailCode: toolCount > 0 ? undefined : 'no_tools',
+          toolCount,
+          message: toolCount > 0
+            ? `连接成功：${source.name}，可访问 ${toolCount} 个查询能力`
+            : '服务可达，但没有返回可用查询能力。',
+          error: toolCount > 0 ? undefined : 'no_tools',
         };
       }
       const result = await new BusinessMcpClient().query(source, input?.credentials, {
         query: '测试业务系统知识源连接',
         sourceHint: source.kind,
       }, 2000);
-      return { success: result.status === 'ok', status: result.status, sourceName: result.sourceName, error: result.errorCode };
+      return {
+        success: result.status === 'ok',
+        status: result.status,
+        sourceName: result.sourceName,
+        detailCode: result.errorCode || result.status,
+        message: result.status === 'ok'
+          ? `连接成功：${result.sourceName || source.name}`
+          : undefined,
+        error: result.errorCode,
+      };
     } catch (error: any) {
       console.error('[IPC] business-system:test-source failed:', redactForLog([error]));
-      return { success: false, status: 'error', error: error?.message || 'test_failed' };
+      const classified = classifyBusinessSystemTestError(error);
+      return { success: false, ...classified, error: classified.detailCode };
     }
   });
 

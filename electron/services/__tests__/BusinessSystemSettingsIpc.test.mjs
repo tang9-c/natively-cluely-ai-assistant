@@ -39,6 +39,21 @@ test('preload exposes business system settings APIs', () => {
   }
 });
 
+test('business system test-source contract keeps legacy fields and adds user-facing diagnostics', () => {
+  const preload = read('electron/preload.ts');
+  const rendererTypes = read('src/types/electron.d.ts');
+
+  for (const source of [preload, rendererTypes]) {
+    assert.match(source, /success:\s*boolean/);
+    assert.match(source, /status\?:\s*string/);
+    assert.match(source, /sourceName\?:\s*string/);
+    assert.match(source, /error\?:\s*string/);
+    assert.match(source, /message\?:\s*string/);
+    assert.match(source, /detailCode\?:\s*string/);
+    assert.match(source, /toolCount\?:\s*number/);
+  }
+});
+
 test('settings IPC does not return plaintext credentials', () => {
   const source = read('electron/ipcHandlers.ts');
   const start = source.indexOf("safeHandle('business-system:list-sources'");
@@ -64,4 +79,20 @@ test('settings test-source uses Windchill MCP handshake for PLM sources', () => 
   assert.match(plmBranch, /\.initialize\(/);
   assert.match(plmBranch, /\.listTools\(/);
   assert.doesNotMatch(plmBranch, /query:\s*['"]测试业务系统知识源连接['"]/);
+});
+
+test('settings test-source maps connection failures to stable diagnostics', () => {
+  const source = read('electron/ipcHandlers.ts');
+  const start = source.indexOf("safeHandle('business-system:test-source'");
+  const end = source.indexOf("safeHandle('switch-to-custom-provider'", start);
+  const handler = source.slice(start, end);
+
+  assert.match(handler, /classifyBusinessSystemTestError/);
+  assert.match(handler, /detailCode:\s*'invalid_source'/);
+  assert.match(handler, /detailCode:\s*'timeout'/);
+  assert.match(handler, /detailCode:\s*'auth_failed'/);
+  assert.match(handler, /detailCode:\s*'unavailable'/);
+  assert.match(handler, /detailCode:\s*toolCount > 0 \? undefined : 'no_tools'/);
+  assert.match(handler, /toolCount/);
+  assert.match(handler, /message:/);
 });
