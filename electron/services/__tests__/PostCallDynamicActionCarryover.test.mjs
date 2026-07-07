@@ -113,3 +113,72 @@ test('MeetingPersistence skips non-dynamic or incomplete usage entries', async (
 
   assert.deepEqual(actions, []);
 });
+
+test('post-call carryover dedupes accepted team artifacts against extracted transcript items', async () => {
+  const { buildPostCallEnhancements } = await loadWorkflow();
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'team-meet',
+    transcript: [{ speaker: 'Maya', text: 'Maya will send the launch checklist by Friday.', timestamp: 1 }],
+    summaryData: { overview: 'Launch planning.', actionItems: [] },
+    dynamicActionArtifacts: [{
+      actionId: 'action_1',
+      modeTemplateType: 'team-meet',
+      actionType: 'action_item',
+      outputType: 'action_item',
+      structuredSummary: 'Owner: Maya\nDeliverable: launch checklist\nDue: Friday',
+      missingFields: [],
+      groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+      acceptedAt: 1000,
+      generationStatus: 'completed',
+    }],
+  });
+
+  assert.equal(result.actionItemsStructured.length, 1);
+  assert.equal(result.actionItemsStructured[0].owner, 'Maya');
+  assert.equal(result.actionItemsStructured[0].deadline, 'Friday');
+  assert.match(result.actionItemsStructured[0].text, /launch checklist/i);
+});
+
+test('post-call carryover caps merged team artifacts at eight items', async () => {
+  const { buildPostCallEnhancements } = await loadWorkflow();
+  const transcript = Array.from({ length: 7 }, (_, index) => ({
+    speaker: 'Maya',
+    text: `Maya will send checklist ${index + 1} by Friday.`,
+    timestamp: index + 1,
+  }));
+  const dynamicActionArtifacts = [
+    {
+      actionId: 'action_8',
+      modeTemplateType: 'team-meet',
+      actionType: 'action_item',
+      outputType: 'action_item',
+      structuredSummary: 'Owner: Maya\nDeliverable: checklist 8\nDue: Friday',
+      missingFields: [],
+      groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+      acceptedAt: 1008,
+      generationStatus: 'completed',
+    },
+    {
+      actionId: 'action_9',
+      modeTemplateType: 'team-meet',
+      actionType: 'action_item',
+      outputType: 'action_item',
+      structuredSummary: 'Owner: Maya\nDeliverable: checklist 9\nDue: Friday',
+      missingFields: [],
+      groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+      acceptedAt: 1009,
+      generationStatus: 'completed',
+    },
+  ];
+
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'team-meet',
+    transcript,
+    summaryData: { overview: 'Launch planning.', actionItems: [] },
+    dynamicActionArtifacts,
+  });
+
+  assert.equal(result.actionItemsStructured.length, 8);
+  assert.ok(result.actionItemsStructured.some((item) => /checklist 8/i.test(item.text)));
+  assert.equal(result.actionItemsStructured.some((item) => /checklist 9/i.test(item.text)), false);
+});

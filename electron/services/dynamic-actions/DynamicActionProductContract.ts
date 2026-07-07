@@ -36,7 +36,6 @@ const CHECKLIST_TYPES = new Set([
     'fde_success_criteria',
     'fde_next_step',
     'blocker_check',
-    'owner_deadline_check',
 ]);
 
 const EMAIL_TYPES = new Set([
@@ -85,6 +84,9 @@ export function explainDynamicActionForUser(input: Pick<DynamicAction, 'type' | 
     }
     if (input.type === 'fde_agent_feasibility') {
         return { whyNow: 'AI Agent 的自动化边界已经出现，需要先区分人工确认、只读分析和允许写回的步骤。', severity: 'warning' };
+    }
+    if (input.type === 'blocker_check') {
+        return { whyNow: '当前讨论出现阻塞或依赖信号，适合立刻明确影响和解法。', severity: 'warning' };
     }
     if (/fde_|integration|security|risk|blocker/.test(input.type)) {
         return { whyNow: '讨论已经进入验证或风险澄清阶段，需要把下一步说清楚。', severity: 'info' };

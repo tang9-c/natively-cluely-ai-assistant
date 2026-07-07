@@ -251,28 +251,39 @@ function mergeAcceptedActionArtifacts(
   artifacts: ActionArtifact[],
 ): StructuredActionItem[] {
   const merged = [...existing];
-  const seen = new Set(existing.map((item) => item.text.toLowerCase()));
+  const seen = new Set(existing.map((item) => normalizeActionComparisonKey(item.text)));
 
   for (const artifact of artifacts) {
     if (artifact.modeTemplateType !== 'team-meet') continue;
     if (!['action_item', 'owner_deadline_check'].includes(artifact.actionType)) continue;
     if (artifact.generationStatus !== 'completed') continue;
 
-    const text = artifact.structuredSummary.replace(/\s+/g, ' ').trim();
-    if (!text) continue;
+    const parsed = parseArtifactActionSummary(artifact.structuredSummary);
+    if (!parsed.text) continue;
 
-    const key = text.toLowerCase();
-    if (seen.has(key)) continue;
+    const matchedExisting = merged.find((item) => actionItemMatchesArtifact(item, parsed));
+    if (matchedExisting) {
+      if (!matchedExisting.owner && parsed.owner) matchedExisting.owner = parsed.owner;
+      if (!matchedExisting.deadline && parsed.deadline) matchedExisting.deadline = parsed.deadline;
+      if (typeof matchedExisting.sourceTimestamp !== 'number') matchedExisting.sourceTimestamp = artifact.acceptedAt;
+      continue;
+    }
+
+    const key = normalizeActionComparisonKey(parsed.text);
+    if (!key || seen.has(key)) continue;
+    if (merged.length >= 8) continue;
     seen.add(key);
 
     merged.push({
       id: `action_${merged.length + 1}`,
-      text,
+      text: parsed.text,
+      ...(parsed.owner ? { owner: parsed.owner } : {}),
+      ...(parsed.deadline ? { deadline: parsed.deadline } : {}),
       sourceTimestamp: artifact.acceptedAt,
     });
   }
 
-  return merged.slice(0, 8);
+  return merged;
 }
 
 function hasCompletedAcceptedTeamActionArtifact(artifacts?: ActionArtifact[]): boolean {
@@ -282,6 +293,46 @@ function hasCompletedAcceptedTeamActionArtifact(artifacts?: ActionArtifact[]): b
     artifact.generationStatus === 'completed' &&
     Boolean(artifact.structuredSummary.trim()),
   ));
+}
+
+function parseArtifactActionSummary(summary: string): { text: string; owner?: string; deadline?: string } {
+  const trimmed = summary.trim();
+  if (!trimmed) return { text: '' };
+
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const owner = lines.find((line) => /^owner\s*:/i.test(line))?.replace(/^owner\s*:/i, '').trim();
+  const deliverable = lines.find((line) => /^(deliverable|task)\s*:/i.test(line))?.replace(/^(deliverable|task)\s*:/i, '').trim();
+  const deadline = lines.find((line) => /^(due|deadline)\s*:/i.test(line))?.replace(/^(due|deadline)\s*:/i, '').trim();
+
+  return {
+    text: deliverable || trimmed.replace(/\s+/g, ' ').trim(),
+    ...(owner ? { owner } : {}),
+    ...(deadline ? { deadline } : {}),
+  };
+}
+
+function actionItemMatchesArtifact(
+  item: StructuredActionItem,
+  parsedArtifact: { text: string; owner?: string; deadline?: string },
+): boolean {
+  const itemKey = normalizeActionComparisonKey(item.text);
+  const artifactKey = normalizeActionComparisonKey(parsedArtifact.text);
+  if (!itemKey || !artifactKey) return false;
+  return itemKey === artifactKey || itemKey.includes(artifactKey) || artifactKey.includes(itemKey);
+}
+
+function normalizeActionComparisonKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/^(owner|deliverable|task|due|deadline)\s*:\s*/gim, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\b(?:i|we|me|will|can|could|should|need|to|the|a|an|by)\b/gi, ' ')
+    .replace(/\b(?:owner|deliverable|due|deadline)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function extractChineseActionPhrases(text: string): string[] {
