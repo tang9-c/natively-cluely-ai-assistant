@@ -32,6 +32,7 @@ import { SkillActivationManager, type ActivateSkillInput, type SkillActivationSc
 import { SkillWatcherService } from './services/SkillWatcherService';
 import { SkillsManager } from './services/SkillsManager';
 import { getContextQualityDiagnosticsCollector } from './services/eval/ContextQualityDiagnostics';
+import type { DynamicActionOutputType } from './services/dynamic-actions/DynamicAction';
 import {
   classifyNetworkError,
   toSafeNetworkDiagnostic,
@@ -95,12 +96,19 @@ async function testQCloudApiKeyConnection(apiKey: string): Promise<void> {
   }
 }
 
-function sanitizeModeEvent(modeEvent: unknown): ModeEventContext | undefined {
+type SanitizedModeEvent = ModeEventContext & {
+  actionId?: string;
+  productContract?: {
+    outputType?: DynamicActionOutputType;
+  };
+};
+
+function sanitizeModeEvent(modeEvent: unknown): SanitizedModeEvent | undefined {
   if (!modeEvent || typeof modeEvent !== 'object') return undefined;
 
   const raw = modeEvent as Record<string, unknown>;
-  const cleaned: ModeEventContext = {};
-  const assignString = (key: keyof ModeEventContext) => {
+  const cleaned: SanitizedModeEvent = {};
+  const assignString = (key: keyof SanitizedModeEvent) => {
     const value = raw[key];
     if (typeof value !== 'string') return;
     const trimmed = value.trim();
@@ -124,8 +132,27 @@ function sanitizeModeEvent(modeEvent: unknown): ModeEventContext | undefined {
     assignString(key);
   }
 
+  assignString('actionId');
+
   if (typeof raw.confidence === 'number' && Number.isFinite(raw.confidence)) {
     cleaned.confidence = raw.confidence;
+  }
+
+  const productContract = raw.productContract;
+  if (productContract && typeof productContract === 'object') {
+    const outputType = (productContract as Record<string, unknown>).outputType;
+    if (
+      typeof outputType === 'string' &&
+      (
+        outputType === 'spoken_response' ||
+        outputType === 'checklist' ||
+        outputType === 'email_draft' ||
+        outputType === 'action_item' ||
+        outputType === 'decision_record'
+      )
+    ) {
+      cleaned.productContract = { outputType: outputType as DynamicActionOutputType };
+    }
   }
 
   if (Array.isArray(raw.keyEntities)) {

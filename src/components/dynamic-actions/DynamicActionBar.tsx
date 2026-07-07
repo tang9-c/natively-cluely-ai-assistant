@@ -29,6 +29,7 @@ const isSemiAutoAction = (action: DynamicActionPayload): boolean =>
   action.confidence >= AUTO_TRIGGER_MIN_CONFIDENCE;
 
 const buildDynamicActionModeEvent = (action: DynamicActionPayload): DynamicActionModeEvent => ({
+  actionId: action.id,
   modeTemplateType: action.modeTemplateType,
   intent: action.sourceIntent || action.type,
   confidence: action.confidence,
@@ -40,6 +41,9 @@ const buildDynamicActionModeEvent = (action: DynamicActionPayload): DynamicActio
   retrievalQuery: action.retrievalQuery,
   autoSurfacePolicy: action.autoSurfacePolicy,
   promptInstruction: action.promptInstruction,
+  productContract: {
+    outputType: action.productContract.outputType,
+  },
   answerShape: action.answerStyle?.format,
 });
 

@@ -93,6 +93,7 @@ type MeetingStartStatus = {
 }
 
 export interface DynamicActionModeEvent {
+  actionId?: string
   modeTemplateType?: string
   intent?: string
   confidence?: number
@@ -104,6 +105,9 @@ export interface DynamicActionModeEvent {
   retrievalQuery?: string
   autoSurfacePolicy?: string
   promptInstruction?: string
+  productContract?: {
+    outputType: DynamicActionOutputType
+  }
   answerShape?: string
 }
 

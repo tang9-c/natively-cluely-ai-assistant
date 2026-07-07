@@ -23,6 +23,7 @@ import type {
 } from './llm/IntentClassifier';
 import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEngine';
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
+import type { DynamicActionOutputType } from './services/dynamic-actions/DynamicAction';
 import {
     CloudSemanticGateError,
     cloudFailureReasonFromError,
@@ -1111,25 +1112,26 @@ export class IntelligenceEngine extends EventEmitter {
 
             const usageQuestion = IntelligenceEngine.inferUsageQuestionLabel(question, preparedTranscript);
             const dynamicActionModeEvent = options?.modeEvent as (ModeEventContext & {
+                actionId?: string;
                 sourceIntent?: string;
                 productContract?: {
-                    outputType?: string;
+                    outputType?: DynamicActionOutputType;
                 };
             }) | undefined;
+            const isDynamicActionUsage = options?.source === 'dynamic_action' || Boolean(dynamicActionModeEvent?.actionId);
             const usageEntry: any = {
                 type: 'assist',
                 timestamp: Date.now(),
                 question: usageQuestion,
                 answer: fullAnswer,
-                ...(options?.source === 'dynamic_action' || dynamicActionModeEvent ? {
+                ...(isDynamicActionUsage ? {
                     metadata: {
                         source: 'dynamic_action',
-                        // actionType: options.modeEvent?.sourceIntent
                         actionType: dynamicActionModeEvent?.sourceIntent ?? dynamicActionModeEvent?.intent,
+                        actionId: dynamicActionModeEvent?.actionId,
                         modeTemplateType: dynamicActionModeEvent?.modeTemplateType,
                         retrievalQuery: dynamicActionModeEvent?.retrievalQuery,
-                        // outputType: options.modeEvent?.productContract?.outputType
-                        outputType: dynamicActionModeEvent?.productContract?.outputType ?? dynamicActionModeEvent?.answerShape,
+                        outputType: dynamicActionModeEvent?.productContract?.outputType,
                         groundedSources: [],
                     },
                 } : {}),

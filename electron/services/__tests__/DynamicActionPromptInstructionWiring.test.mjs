@@ -34,8 +34,10 @@ test('dynamic action accepted answers are persisted into meeting usage', () => {
 test('dynamic action accept forwards modeEvent retrieval metadata', () => {
   const bar = read('src/components/dynamic-actions/DynamicActionBar.tsx');
   const interfaceSource = read('src/components/NativelyInterface.tsx');
+  const rendererTypes = read('src/types/electron.d.ts');
 
   assert.match(bar, /type DynamicActionModeEvent/);
+  assert.match(bar, /actionId:\s*action\.id/);
   assert.match(bar, /modeTemplateType:\s*action\.modeTemplateType/);
   assert.match(bar, /intent:\s*action\.sourceIntent\s*\|\|\s*action\.type/);
   assert.match(bar, /confidence:\s*action\.confidence/);
@@ -44,8 +46,11 @@ test('dynamic action accept forwards modeEvent retrieval metadata', () => {
   assert.match(bar, /retrievalQuery:\s*action\.retrievalQuery/);
   assert.match(bar, /autoSurfacePolicy:\s*action\.autoSurfacePolicy/);
   assert.match(bar, /promptInstruction:\s*action\.promptInstruction/);
+  assert.match(bar, /productContract:[\s\S]{0,80}outputType:\s*action\.productContract\.outputType/);
   assert.match(bar, /answerShape:\s*action\.answerStyle\?\.format/);
   assert.match(bar, /modeEvent:\s*buildDynamicActionModeEvent\(action\)/);
+  assert.match(rendererTypes, /actionId\?: string/);
+  assert.match(rendererTypes, /productContract\?: \{\s*outputType:\s*DynamicActionOutputType\s*\}/);
   assert.match(interfaceSource, /generationOptions\?: \{ source\?: 'overlay' \| 'launcher' \| 'dynamic_action'; persist\?: boolean; modeEvent\?: DynamicActionModeEvent; throwOnError\?: boolean \}/);
 });
 
@@ -156,6 +161,16 @@ test('generate-what-to-say IPC forwards promptInstruction option to Intelligence
   assert.match(handlerSource, /modeEvent:\s*sanitizeModeEvent\(requestOptions\.modeEvent\)/);
 });
 
+test('sanitizeModeEvent preserves dynamic action identity and product output type', () => {
+  const source = read('electron/ipcHandlers.ts');
+
+  assert.match(source, /function sanitizeModeEvent\(modeEvent: unknown\): SanitizedModeEvent \| undefined/);
+  assert.match(source, /assignString\('actionId'\)/);
+  assert.match(source, /cleaned\.productContract = \{ outputType: outputType as DynamicActionOutputType \}/);
+  assert.match(source, /outputType === 'spoken_response'/);
+  assert.match(source, /outputType === 'decision_record'/);
+});
+
 test('preload and renderer type expose dynamic action generation options', () => {
   const preload = read('electron/preload.ts');
   const types = read('src/types/electron.d.ts');
@@ -216,6 +231,9 @@ test('dynamic action usage entries preserve action metadata for post-call artifa
 
   assert.match(source, /metadata:\s*\{/);
   assert.match(source, /source:\s*['"]dynamic_action['"]/);
-  assert.match(source, /actionType:\s*options\.modeEvent\?\.sourceIntent/);
-  assert.match(source, /outputType:\s*options\.modeEvent\?\.productContract\?\.outputType/);
+  assert.match(source, /actionType:\s*dynamicActionModeEvent\?\.sourceIntent\s*\?\?\s*dynamicActionModeEvent\?\.intent/);
+  assert.match(source, /actionId:\s*dynamicActionModeEvent\?\.actionId/);
+  assert.match(source, /outputType:\s*dynamicActionModeEvent\?\.productContract\?\.outputType/);
+  assert.match(source, /isDynamicActionUsage/);
+  assert.doesNotMatch(source, /outputType:\s*dynamicActionModeEvent\?\.productContract\?\.outputType[\s\S]{0,120}answerShape/);
 });
