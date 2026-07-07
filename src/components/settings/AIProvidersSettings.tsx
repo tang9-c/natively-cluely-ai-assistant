@@ -1089,24 +1089,24 @@ export const AIProvidersSettings: React.FC = () => {
             <div className="space-y-5">
                 <div>
                     <h3 className="text-sm font-bold text-text-primary mb-1">屏幕理解</h3>
-                    <p className="text-xs text-text-secondary mb-2">Pick how CueUp reads what is on your screen. All paths use the vision-capable AI provider directly; OCR is no longer used.</p>
+                    <p className="text-xs text-text-secondary mb-2">选择 CueUp 如何读取屏幕内容。所有路径都会直接使用支持视觉能力的 AI 提供商，不再使用 OCR。</p>
                 </div>
                 <div className="bg-bg-item-surface rounded-xl p-4 border border-border-subtle flex flex-col gap-2">
                     {([
                         {
                             value: 'vision_first' as const,
-                            label: 'Vision first',
-                            description: 'Recommended. Try every configured vision provider in order; first success wins.',
+                            label: '视觉优先',
+                            description: '推荐。按顺序尝试每个已配置的视觉提供商，最先成功的结果生效。',
                         },
                         {
                             value: 'vision_only' as const,
-                            label: 'Vision only',
-                            description: 'Stricter. Require a vision-capable provider; never silently drop the screenshot.',
+                            label: '仅视觉',
+                            description: '更严格。必须使用支持视觉能力的提供商，不会静默丢弃截图。',
                         },
                         {
                             value: 'private_vision' as const,
-                            label: 'Private vision (local only)',
-                            description: 'Use a local vision model (Ollama) only. Never call cloud vision. Clear error if no local provider is configured.',
+                            label: '私有视觉（仅本地）',
+                            description: '只使用本地视觉模型（Ollama），绝不调用云端视觉。未配置本地提供商时会明确报错。',
                         },
                     ]).map(({ value, label, description }) => {
                         const selected = screenUnderstandingMode === value;
@@ -1134,7 +1134,7 @@ export const AIProvidersSettings: React.FC = () => {
                     <div className="flex items-center justify-between pt-2 mt-1 border-t border-border-subtle">
                         <div className="flex flex-col">
                             <span className="text-xs text-text-primary font-semibold">技术面试直接视角</span>
-                            <span className="text-[11px] text-text-secondary leading-snug mt-0.5">Use the highest-resolution image profile so code text stays sharp in interview mode.</span>
+                            <span className="text-[11px] text-text-secondary leading-snug mt-0.5">使用最高分辨率图像配置，让面试模式中的代码文字保持清晰。</span>
                         </div>
                         <div
                             onClick={() => {
@@ -1161,16 +1161,16 @@ export const AIProvidersSettings: React.FC = () => {
             <div className="space-y-5" data-testid="cloud-provider-data-scopes">
                 <div>
                     <h3 className="text-sm font-bold text-text-primary mb-1">云提供商数据范围</h3>
-                    <p className="text-xs text-text-secondary mb-2">Control what data cloud AI providers can access. Disabled types are handled locally for privacy.</p>
+                    <p className="text-xs text-text-secondary mb-2">控制云端 AI 提供商可以访问哪些数据。关闭的数据类型会在本地处理，以保护隐私。</p>
                 </div>
                 <div className="bg-bg-item-surface rounded-xl p-4 border border-border-subtle flex flex-col gap-2">
                     {([
-                        { key: 'transcript', label: 'Transcripts' },
-                        { key: 'screenshots', label: 'Screenshots' },
-                        { key: 'reference_files', label: 'Reference files' },
-                        { key: 'profile_history', label: 'Profile history' },
-                        { key: 'embeddings', label: 'Cloud embeddings' },
-                        { key: 'post_call_summary', label: 'Post-call summaries' },
+                        { key: 'transcript', label: '转写内容' },
+                        { key: 'screenshots', label: '截图' },
+                        { key: 'reference_files', label: '参考文件' },
+                        { key: 'profile_history', label: '画像历史' },
+                        { key: 'embeddings', label: '云端向量' },
+                        { key: 'post_call_summary', label: '会后总结' },
                     ] as const).map(({ key, label }) => {
                         const allowed = providerDataScopes[key] !== false;
                         return (
@@ -1185,7 +1185,7 @@ export const AIProvidersSettings: React.FC = () => {
                                     className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${allowed ? 'bg-emerald-500' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                     role="switch"
                                     aria-checked={allowed}
-                                    aria-label={`Allow ${label} to cloud providers`}
+                                    aria-label={`允许云端提供商访问${label}`}
                                 >
                                     <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${allowed ? 'translate-x-4' : 'translate-x-0'}`} />
                                 </div>
@@ -1194,7 +1194,7 @@ export const AIProvidersSettings: React.FC = () => {
                     })}
                     <div className="flex items-start gap-2 mt-1 pt-3 border-t border-border-subtle">
                         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-tertiary shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                        <p className="text-[11px] text-text-tertiary leading-relaxed">When a data type is disabled, CueUp falls back to the best available local model to keep that data on-device.</p>
+                        <p className="text-[11px] text-text-tertiary leading-relaxed">关闭某类数据后，CueUp 会回退到最佳可用的本地模型，让这类数据留在本机处理。</p>
                     </div>
                 </div>
             </div>
