@@ -7,6 +7,7 @@ import { LLMHelper } from './LLMHelper';
 import { DatabaseManager, Meeting } from './db/DatabaseManager';
 import { GROQ_TITLE_PROMPT, GROQ_SUMMARY_JSON_PROMPT } from './llm';
 import { buildPostCallEnhancements } from './services/post-call/PostCallWorkflow';
+import { buildDynamicActionArtifacts } from './services/dynamic-actions/DynamicActionArtifacts';
 import { telemetryService } from './services/telemetry/TelemetryService';
 import type { ProviderDataScopePolicy } from './llm/ProviderRouter';
 const crypto = require('crypto');
@@ -337,12 +338,18 @@ ${baseRules}
                 console.log("Transcript too short for summary generation.");
             }
 
+            const dynamicActionArtifacts = buildDynamicActionArtifacts({
+                actions: buildDynamicActionArtifactActionsFromUsage(data.usage),
+                usage: data.usage,
+            });
+
             summaryData = {
                 ...summaryData,
                 ...buildPostCallEnhancements({
                     transcript: data.transcript,
                     modeTemplateType: modeSnapshot?.templateType,
                     summaryData,
+                    dynamicActionArtifacts,
                 }),
             };
         } catch (e) {
@@ -457,4 +464,70 @@ ${baseRules}
             }
         }
     }
+}
+
+function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<{
+    id: string;
+    modeTemplateType: string;
+    type: string;
+    productContract: { outputType: any };
+    status: string;
+    createdAt: number;
+    latestTurn?: string;
+    retrievalQuery?: string;
+}> {
+    const actions: Array<{
+        id: string;
+        modeTemplateType: string;
+        type: string;
+        productContract: { outputType: any };
+        status: string;
+        createdAt: number;
+        latestTurn?: string;
+        retrievalQuery?: string;
+    }> = [];
+    const seen = new Set<string>();
+
+    for (const item of usage) {
+        const metadata = item?.metadata?.dynamicAction ?? item?.metadata;
+        if (!metadata || typeof metadata !== 'object') continue;
+
+        const actionId = typeof metadata.actionId === 'string' ? metadata.actionId.trim() : '';
+        const modeTemplateType = typeof metadata.modeTemplateType === 'string' ? metadata.modeTemplateType.trim() : '';
+        const actionType = typeof metadata.actionType === 'string'
+            ? metadata.actionType.trim()
+            : typeof metadata.type === 'string'
+                ? metadata.type.trim()
+                : '';
+        const outputType = metadata.productContract?.outputType ?? metadata.outputType;
+        const status = typeof metadata.status === 'string'
+            ? metadata.status.trim()
+            : typeof metadata.generationStatus === 'string'
+                ? metadata.generationStatus.trim()
+                : '';
+        const createdAt = typeof metadata.createdAt === 'number'
+            ? metadata.createdAt
+            : typeof metadata.acceptedAt === 'number'
+                ? metadata.acceptedAt
+                : typeof item?.timestamp === 'number'
+                    ? item.timestamp
+                    : NaN;
+
+        if (!actionId || !modeTemplateType || !actionType || !outputType || !status || Number.isNaN(createdAt)) continue;
+        if (seen.has(actionId)) continue;
+        seen.add(actionId);
+
+        actions.push({
+            id: actionId,
+            modeTemplateType,
+            type: actionType,
+            productContract: { outputType },
+            status,
+            createdAt,
+            latestTurn: typeof metadata.latestTurn === 'string' ? metadata.latestTurn : (typeof item?.answer === 'string' ? item.answer : undefined),
+            retrievalQuery: typeof metadata.retrievalQuery === 'string' ? metadata.retrievalQuery : undefined,
+        });
+    }
+
+    return actions;
 }

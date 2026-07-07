@@ -98,6 +98,57 @@ test('buildPostCallEnhancements extracts Chinese team-meet actions and coaching 
   assert.ok(!result.coachingInsights.some(insight => insight.type === 'missing_ownership'));
 });
 
+test('buildPostCallEnhancements keeps team-meet behavior unchanged without artifacts', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'team-meet',
+    transcript: [
+      { speaker: 'speaker', text: '这个任务我来负责，周五前完成。', timestamp: 10 },
+    ],
+    summaryData: { overview: '团队确认了负责人。', actionItems: [] },
+  });
+
+  assert.ok(result.actionItemsStructured.some((item) => /我来负责/.test(item.text)));
+  assert.ok(!result.coachingInsights.some((insight) => insight.type === 'accepted_dynamic_action'));
+});
+
+test('buildPostCallEnhancements carries completed team artifacts and ignores failed ones', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'team-meet',
+    transcript: [
+      { speaker: 'speaker', text: '这个任务我来负责，周五前完成。', timestamp: 10 },
+    ],
+    summaryData: { overview: '团队确认了负责人。', actionItems: [] },
+    dynamicActionArtifacts: [
+      {
+        actionId: 'action_1',
+        modeTemplateType: 'team-meet',
+        actionType: 'action_item',
+        outputType: 'action_item',
+        structuredSummary: 'Owner: Maya\nDeliverable: launch checklist\nDue: Friday',
+        missingFields: [],
+        groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+        acceptedAt: 1000,
+        generationStatus: 'completed',
+      },
+      {
+        actionId: 'action_2',
+        modeTemplateType: 'team-meet',
+        actionType: 'action_item',
+        outputType: 'action_item',
+        structuredSummary: 'Owner: Maya\nDeliverable: fallback checklist\nDue: Friday',
+        missingFields: [],
+        groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+        acceptedAt: 1001,
+        generationStatus: 'generated_failed',
+      },
+    ],
+  });
+
+  assert.ok(result.actionItemsStructured.some((item) => /launch checklist/i.test(item.text)));
+  assert.ok(!result.actionItemsStructured.some((item) => /fallback checklist/i.test(item.text)));
+  assert.ok(result.coachingInsights.some((insight) => insight.type === 'accepted_dynamic_action'));
+});
+
 test('buildPostCallEnhancements handles Chinese recruiting logistics and follow-up', () => {
   const result = buildPostCallEnhancements({
     modeTemplateType: 'recruiting',

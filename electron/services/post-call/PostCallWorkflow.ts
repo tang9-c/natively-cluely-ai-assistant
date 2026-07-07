@@ -1,3 +1,5 @@
+import type { ActionArtifact } from '../dynamic-actions/DynamicActionArtifacts';
+
 export type PostCallModeType =
   | 'general'
   | 'looking-for-work'
@@ -68,9 +70,18 @@ export function buildPostCallEnhancements(params: {
   transcript: PostCallTranscriptSegment[];
   modeTemplateType?: PostCallModeType | null;
   summaryData?: { overview?: string; actionItems?: string[]; keyPoints?: string[]; sections?: Array<{ title: string; bullets: string[] }> };
+  dynamicActionArtifacts?: ActionArtifact[];
 }): PostCallEnhancements {
-  const actionItemsStructured = extractStructuredActionItems(params.transcript, params.summaryData?.actionItems ?? []);
-  const coachingInsights = generateCoachingInsights(params.transcript, params.modeTemplateType, params.summaryData);
+  const extractedActionItems = extractStructuredActionItems(params.transcript, params.summaryData?.actionItems ?? []);
+  const actionItemsStructured = params.dynamicActionArtifacts?.length
+    ? mergeAcceptedActionArtifacts(extractedActionItems, params.dynamicActionArtifacts)
+    : extractedActionItems;
+  const coachingInsights = generateCoachingInsights(
+    params.transcript,
+    params.modeTemplateType,
+    params.summaryData,
+    params.dynamicActionArtifacts,
+  );
 
   return {
     schemaVersion: 2,
@@ -162,7 +173,8 @@ export function buildFollowUpDraft(
 export function generateCoachingInsights(
   transcript: PostCallTranscriptSegment[],
   modeTemplateType: PostCallModeType | null | undefined,
-  summaryData?: { sections?: Array<{ title: string; bullets: string[] }> }
+  summaryData?: { sections?: Array<{ title: string; bullets: string[] }> },
+  dynamicActionArtifacts?: ActionArtifact[],
 ): CoachingInsight[] {
   const text = transcript.map(segment => segment.text).join('\n');
   const insights: CoachingInsight[] = [];
@@ -222,6 +234,9 @@ export function generateCoachingInsights(
     if (!TEAM_OWNERSHIP_PATTERN.test(text)) {
       add('missing_ownership', 'Ownership may be unclear', 'Team meetings are more useful when decisions include owners and dates.', 'opportunity');
     }
+    if (hasCompletedAcceptedTeamActionArtifact(dynamicActionArtifacts)) {
+      add('accepted_dynamic_action', 'Accepted meeting action preserved', 'A meeting action accepted during the call was carried into the post-call notes.', 'info');
+    }
   } else if (modeTemplateType === 'lecture') {
     if (LECTURE_STUDY_PATTERN.test(text)) {
       add('study_follow_up', 'Study follow-up detected', 'Add the assignment or study item to follow-up work so it is not missed.', 'info', firstMatch(text, /[^。！？.!?]*(?:homework|assignment|read|chapter|due|exam|quiz|作业|阅读|章节|第[一二三四五六七八九十\d]+章|考试|测验|例题)[^。！？.!?]*/i));
@@ -229,6 +244,44 @@ export function generateCoachingInsights(
   }
 
   return insights.slice(0, 5);
+}
+
+function mergeAcceptedActionArtifacts(
+  existing: StructuredActionItem[],
+  artifacts: ActionArtifact[],
+): StructuredActionItem[] {
+  const merged = [...existing];
+  const seen = new Set(existing.map((item) => item.text.toLowerCase()));
+
+  for (const artifact of artifacts) {
+    if (artifact.modeTemplateType !== 'team-meet') continue;
+    if (!['action_item', 'owner_deadline_check'].includes(artifact.actionType)) continue;
+    if (artifact.generationStatus !== 'completed') continue;
+
+    const text = artifact.structuredSummary.replace(/\s+/g, ' ').trim();
+    if (!text) continue;
+
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    merged.push({
+      id: `action_${merged.length + 1}`,
+      text,
+      sourceTimestamp: artifact.acceptedAt,
+    });
+  }
+
+  return merged.slice(0, 8);
+}
+
+function hasCompletedAcceptedTeamActionArtifact(artifacts?: ActionArtifact[]): boolean {
+  return Boolean(artifacts?.some((artifact) =>
+    artifact.modeTemplateType === 'team-meet' &&
+    ['action_item', 'owner_deadline_check'].includes(artifact.actionType) &&
+    artifact.generationStatus === 'completed' &&
+    Boolean(artifact.structuredSummary.trim()),
+  ));
 }
 
 function extractChineseActionPhrases(text: string): string[] {
