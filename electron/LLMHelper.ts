@@ -2097,6 +2097,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     systemPrompt?: string,
     imagePaths?: string[],
   ): Promise<string> {
+    if (this.currentModelId !== 'natively') {
+      const error = new Error(
+        `pptx_qcloud_provider_not_selected: current PPTX QCLOUD provider requires selected model 'natively', got '${this.currentModelId}'`,
+      ) as Error & { code?: string };
+      error.code = 'pptx_qcloud_provider_not_selected';
+      throw error;
+    }
     const dataScopes: ProviderDataScope[] = imagePaths?.length
       ? ['reference_files', 'screenshots']
       : ['reference_files'];

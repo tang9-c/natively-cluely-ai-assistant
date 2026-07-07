@@ -60,3 +60,32 @@ rtk npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron --test electro
 ## Notes
 
 - brief 中合同测试示例里的 dist 相对路径与当前仓库测试目录结构不一致；已按现有仓库布局修正为可工作的路径，其余实现保持与 brief 要求一致。
+
+## Review fix follow-up
+
+- 修复了 `generatePptxKnowledgeWithNatively(...)` 缺少 selected provider gate 的问题：
+  - 现在会先检查 `currentModelId === 'natively'`
+  - 若未选中 QCLOUD API provider，会抛出 `pptx_qcloud_provider_not_selected`
+- 修复了 `PptxVisionDescriptor.enhanceMarkdown(...)` retry 过宽的问题：
+  - 仅当 `parsePptxEnhanceJson(...)` 抛出 `pptx_enhance_invalid_json` 时重试一次
+  - 对 `pptx_enhance_missing_summary`、`pptx_enhance_invalid_questions` 等确定性错误不再重复调用 API
+- 扩展 focused tests：
+  - `pptxVisionDescriptor.contract.test.mjs` 现在覆盖“invalid JSON 后重试一次再成功”
+  - 同时覆盖“deterministic JSON shape error 不重试”
+  - `QCloudApiSettings.test.mjs` 新增静态源码合同，约束 PPTX QCLOUD wrapper 必须先做 provider gate
+
+### Follow-up verification
+
+执行：
+
+```bash
+rtk npm run build:electron
+rtk env ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/knowledge/__tests__/pptxVisionDescriptor.contract.test.mjs
+rtk env ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/__tests__/QCloudApiSettings.test.mjs
+```
+
+结果：
+
+- `build:electron` 通过
+- `pptxVisionDescriptor.contract.test.mjs`: `3 passed, 0 failed`
+- `QCloudApiSettings.test.mjs`: `14 passed, 0 failed`

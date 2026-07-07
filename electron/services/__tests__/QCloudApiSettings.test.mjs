@@ -165,3 +165,18 @@ test('meeting interface displays the internal QCLOUD provider id as QCLOUD API',
   assert.match(interfaceSource, /getModelDisplayName/);
   assert.doesNotMatch(interfaceSource, /if \(m === 'natively'\)/);
 });
+
+test('PPTX QCLOUD wrapper requires the currently selected provider to be natively', () => {
+  const source = read('electron/LLMHelper.ts');
+  const start = source.indexOf('  public async generatePptxKnowledgeWithNatively(');
+  const end = source.indexOf('  private async generateWithNatively(', start);
+  const method = source.slice(start, end);
+
+  assert.ok(start >= 0, 'generatePptxKnowledgeWithNatively should exist');
+  assert.match(method, /this\.currentModelId !== 'natively'/);
+  assert.match(method, /pptx_qcloud_provider_not_selected/);
+  assert.ok(
+    method.indexOf("this.currentModelId !== 'natively'") < method.indexOf('return this.generateWithNatively('),
+    'provider gate must run before the QCLOUD PPTX wrapper calls generateWithNatively',
+  );
+});

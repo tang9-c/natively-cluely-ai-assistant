@@ -21,7 +21,10 @@ export class PptxVisionDescriptor {
     const prompt = buildPptxEnhancePrompt(markdown);
     try {
       return parsePptxEnhanceJson(await this.llmHelper.generatePptxKnowledgeWithNatively(prompt));
-    } catch {
+    } catch (error) {
+      if ((error as Error)?.message !== 'pptx_enhance_invalid_json') {
+        throw error;
+      }
       return parsePptxEnhanceJson(await this.llmHelper.generatePptxKnowledgeWithNatively(prompt));
     }
   }
