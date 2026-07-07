@@ -59,7 +59,9 @@ export type DynamicActionOutputType =
 
 export type DynamicActionRiskState =
     | 'auto_countdown'
-    | 'normal'
+    | 'normal';
+
+export type DynamicActionDiagnosticRiskState =
     | 'silent_diagnostic';
 
 export interface DynamicActionProductContract {
@@ -84,7 +86,8 @@ export interface DynamicActionProductContract {
 - `riskState`: how the card should surface:
   - `auto_countdown`: high-confidence action allowed to auto-generate after countdown.
   - `normal`: visible card requiring user action.
-  - `silent_diagnostic`: low-confidence diagnostic signal that must not render as a visible card.
+
+`silent_diagnostic` is diagnostics-only in this step. It is not part of visible `DynamicAction.productContract` and must not cause the engine to store or emit a renderer action. Low-confidence or deferred signals continue through the existing semantic-gate diagnostics path.
 
 ## Generation Boundary
 
@@ -106,6 +109,7 @@ This keeps mapping logic out of `DynamicActionEngine` and lets tests exercise th
 
 Initial mapping should be conservative:
 
+- `answerStyle.format === 'email'` always maps to `email_draft`. This wins before type or label fallback.
 - Sales objections, interview answers, technical explanations, and general assistance -> `spoken_response`
 - FDE integration, FDE security, FDE risk, FDE success criteria, and checklist-like actions -> `checklist`
 - Quote or follow-up email actions -> `email_draft`
@@ -162,7 +166,7 @@ Mapping:
 - stale prune -> `expired`
 - answer flow failure -> `failed`
 
-`silent_diagnostic` actions must not enter the visible card list.
+`silent_diagnostic` is not a visible action status. It remains a diagnostics label for rejected or deferred signals and must not enter the visible card list.
 
 ## Renderer Design
 
@@ -239,7 +243,9 @@ Recording points:
 - `dismissed`: `dismissDynamicAction()` updates status.
 - `auto_generated`: renderer countdown accept path calls the existing accept flow with an explicit `triggerSource: 'auto_countdown'` option, and the main process records `auto_generated` once for that action id.
 - `expired`: backend stale expiry records once.
-- `generated_failed`: dynamic action answer flow catches generation failure.
+- `generated_failed`: dynamic action answer flow catches generation failure and marks the same action id failed.
+
+The renderer accept path must become result-aware. `DynamicActionBar.onAcceptAction()` should return a `Promise` that resolves on successful answer generation and rejects or resolves with failure on generation errors. On success the card is removed and the action is marked `completed`. On failure the card remains visible as `failed`, and diagnostics records `generated_failed`.
 
 ## Error Handling
 
@@ -250,7 +256,7 @@ Recording points:
   - `outputPromise`: "生成一段可直接说出口的回应"
   - `riskState`: `normal`
 - If evidence is empty, omit `evidenceSummary`.
-- If an action has `riskState=silent_diagnostic`, renderer ignores it for visible UI while diagnostics may still record the safe event.
+- If a signal is classified as `silent_diagnostic`, it is recorded only through diagnostics and no visible action payload is emitted.
 - If generation fails after accept, card should enter `failed` and diagnostics should record `generated_failed`.
 
 ## Tests
@@ -259,16 +265,17 @@ Recording points:
 
 - `DynamicAction` and renderer types expose `productContract`.
 - `DynamicActionOutputType` contains exactly five values.
-- `DynamicActionRiskState` contains exactly three values.
+- `DynamicActionRiskState` contains exactly two visible values: `auto_countdown` and `normal`.
 - `DynamicActionCard` primary copy uses `productContract.userAction`, `whyNow`, and `outputPromise`.
 - `DynamicActionCard` does not show raw confidence percentages.
-- `silent_diagnostic` actions do not render visible cards.
+- `silent_diagnostic` signals stay in diagnostics and do not create renderer actions.
 
 ### Engine Tests
 
 - `pricing_objection` -> `spoken_response`
 - FDE integration or security action -> `checklist`
-- quote email action -> `email_draft`
+- `answerStyle.format === 'email'` -> `email_draft`
+- quote email action type or label fallback -> `email_draft`
 - team action item -> `action_item`
 - decision point -> `decision_record`
 - empty evidence omits `evidenceSummary`
@@ -279,6 +286,9 @@ Recording points:
 - `shown`, `accepted`, `dismissed`, `auto_generated`, `expired`, and `generated_failed` are recorded in diagnostics aggregation.
 - Dismissing an action still uses `SignalStateTracker.dismiss()` cooldown.
 - Auto countdown cancel records `dismissed`, not `generated_failed`.
+- Accept success removes the card and records `completed`.
+- Accept failure keeps the card visible as `failed` and records `generated_failed`.
+- `shown` is counted once even though main forwards the same action to launcher and overlay.
 
 ### UI Tests
 
