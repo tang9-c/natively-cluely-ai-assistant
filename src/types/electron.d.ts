@@ -602,7 +602,9 @@ export interface ElectronAPI {
 
   // Phase 3 — Cluely-style dynamic action cards.
   onIntelligenceDynamicAction: (callback: (data: { action: DynamicActionPayload }) => void) => () => void
-  acceptDynamicAction: (actionId: string) => Promise<{ success: boolean; action?: DynamicActionPayload; error?: string }>
+  acceptDynamicAction: (actionId: string, options?: { triggerSource?: 'manual' | 'auto_countdown' }) => Promise<{ success: boolean; action?: DynamicActionPayload; error?: string }>
+  completeDynamicAction: (actionId: string) => Promise<{ success: boolean; action?: DynamicActionPayload; error?: string }>
+  failDynamicActionGeneration: (actionId: string) => Promise<{ success: boolean; action?: DynamicActionPayload; error?: string }>
   dismissDynamicAction: (actionId: string) => Promise<{ success: boolean; error?: string }>
   listDynamicActions: () => Promise<{ success: boolean; actions: DynamicActionPayload[]; error?: string }>
 

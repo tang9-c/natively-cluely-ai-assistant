@@ -12,6 +12,7 @@ const AUTO_TRIGGER_MIN_CONFIDENCE = 0.9;
 type DynamicActionGenerationOptions = {
   source: 'dynamic_action';
   persist: true;
+  triggerSource: 'manual' | 'auto_countdown';
   modeEvent: DynamicActionModeEvent;
 };
 
@@ -45,7 +46,7 @@ const buildDynamicActionModeEvent = (action: DynamicActionPayload): DynamicActio
 interface Props {
   // Called when the user accepts (or hits Tab on the primary). Parent should
   // kick off the live answer stream using action.promptInstruction.
-  onAcceptAction: (action: DynamicActionPayload, options: DynamicActionGenerationOptions) => void;
+  onAcceptAction: (action: DynamicActionPayload, options: DynamicActionGenerationOptions) => Promise<void>;
   // Optional: max actions to keep visible. Cluely-style cap at 3.
   maxVisible?: number;
   // Optional: how long actions stay visible without user interaction (ms).
@@ -86,7 +87,7 @@ export const DynamicActionBar: React.FC<Props> = ({
   }, []);
 
   const accept = useCallback(
-    async (action: DynamicActionPayload) => {
+    async (action: DynamicActionPayload, triggerSource: 'manual' | 'auto_countdown' = 'manual') => {
       if (triggeringIdsRef.current.has(action.id)) return;
       triggeringIdsRef.current.add(action.id);
       clearAutoTimer(action.id);
@@ -95,16 +96,23 @@ export const DynamicActionBar: React.FC<Props> = ({
         prev.map((a) => (a.id === action.id ? { ...a, uiStatus: 'generating' } : a)),
       );
       try {
-        await window.electronAPI?.acceptDynamicAction?.(action.id);
+        await window.electronAPI?.acceptDynamicAction?.(action.id, { triggerSource });
+        await onAcceptAction(action, {
+          source: 'dynamic_action',
+          persist: true,
+          triggerSource,
+          modeEvent: buildDynamicActionModeEvent(action),
+        });
+        await window.electronAPI?.completeDynamicAction?.(action.id);
+        setActions((prev) => prev.filter((a) => a.id !== action.id));
       } catch {
-        /* swallow — the parent answer flow is the source of truth */
+        await window.electronAPI?.failDynamicActionGeneration?.(action.id).catch(() => undefined);
+        setActions((prev) =>
+          prev.map((a) => (a.id === action.id ? { ...a, uiStatus: 'failed' } : a)),
+        );
+        triggeringIdsRef.current.delete(action.id);
+        return;
       }
-      onAcceptAction(action, {
-        source: 'dynamic_action',
-        persist: true,
-        modeEvent: buildDynamicActionModeEvent(action),
-      });
-      setActions((prev) => prev.filter((a) => a.id !== action.id));
     },
     [clearAutoTimer, clearDismissRemovalTimer, onAcceptAction],
   );
@@ -116,7 +124,7 @@ export const DynamicActionBar: React.FC<Props> = ({
         autoTimersRef.current.delete(action.id);
         const current = actionsRef.current.find((a) => a.id === action.id);
         if (!current || current.uiStatus === 'cancelled') return;
-        void accept(current);
+        void accept(current, 'auto_countdown');
       }, AUTO_TRIGGER_DELAY_MS);
       autoTimersRef.current.set(action.id, timer);
     },

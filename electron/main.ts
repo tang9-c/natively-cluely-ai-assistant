@@ -3661,8 +3661,20 @@ export class AppState {
     // (launcher + overlay) so whichever surface the user has up shows the card.
     this.intelligenceManager.on('dynamic_action_emitted', (action: any) => {
       const helper = this.getWindowHelper();
-      helper.getLauncherWindow()?.webContents.send('intelligence-dynamic-action', { action });
-      helper.getOverlayWindow()?.webContents.send('intelligence-dynamic-action', { action });
+      const shownAction = this.intelligenceManager.markDynamicActionShown(action.id) ?? action;
+      try {
+        const { getContextQualityDiagnosticsCollector } = require('./services/eval/ContextQualityDiagnostics');
+        getContextQualityDiagnosticsCollector().recordDynamicActionLifecycleEvent({
+          event: 'shown',
+          actionType: shownAction.type,
+          modeTemplateType: shownAction.modeTemplateType,
+          outputType: shownAction.productContract.outputType,
+          riskState: shownAction.productContract.riskState,
+          status: shownAction.status,
+        });
+      } catch { /* diagnostics must not affect window forwarding */ }
+      helper.getLauncherWindow()?.webContents.send('intelligence-dynamic-action', { action: shownAction });
+      helper.getOverlayWindow()?.webContents.send('intelligence-dynamic-action', { action: shownAction });
       // Phase 6 — telemetry: log detection (sanitized: NO transcript text, NO
       // evidence body — only ids, type, mode, confidence). The TelemetryService
       // sanitizer also strips transcript-shaped fields defensively.
@@ -3670,14 +3682,14 @@ export class AppState {
         const { telemetryService } = require('./services/telemetry/TelemetryService');
         telemetryService.track({
           name: 'dynamic_action_detected',
-          sessionId: action?.sessionId,
-          modeId: action?.modeId,
+          sessionId: shownAction?.sessionId,
+          modeId: shownAction?.modeId,
           properties: {
-            actionId: action?.id,
-            actionType: action?.type,
-            modeTemplateType: action?.modeTemplateType,
-            confidence: action?.confidence,
-            priority: action?.priority,
+            actionId: shownAction?.id,
+            actionType: shownAction?.type,
+            modeTemplateType: shownAction?.modeTemplateType,
+            confidence: shownAction?.confidence,
+            priority: shownAction?.priority,
           },
         });
       } catch { /* non-fatal */ }

@@ -46,7 +46,7 @@ test('dynamic action accept forwards modeEvent retrieval metadata', () => {
   assert.match(bar, /promptInstruction:\s*action\.promptInstruction/);
   assert.match(bar, /answerShape:\s*action\.answerStyle\?\.format/);
   assert.match(bar, /modeEvent:\s*buildDynamicActionModeEvent\(action\)/);
-  assert.match(interfaceSource, /generationOptions\?: \{ source\?: 'overlay' \| 'launcher' \| 'dynamic_action'; persist\?: boolean; modeEvent\?: DynamicActionModeEvent \}/);
+  assert.match(interfaceSource, /generationOptions\?: \{ source\?: 'overlay' \| 'launcher' \| 'dynamic_action'; persist\?: boolean; modeEvent\?: DynamicActionModeEvent; throwOnError\?: boolean \}/);
 });
 
 test('dynamic action payload and renderer types expose required productContract', () => {
@@ -90,6 +90,39 @@ test('dynamic action bar owns semi-auto countdown and dedupes generation', () =>
   assert.match(source, /clearTimeout/);
   assert.match(source, /triggeringIdsRef/);
   assert.match(source, /dismissDynamicAction/);
+});
+
+test('dynamic action accept path is result-aware and records completion or failure', () => {
+  const bar = read('src/components/dynamic-actions/DynamicActionBar.tsx');
+  const iface = read('src/components/NativelyInterface.tsx');
+  const preload = read('electron/preload.ts');
+  const types = read('src/types/electron.d.ts');
+  const ipc = read('electron/ipcHandlers.ts');
+
+  assert.match(bar, /onAcceptAction:\s*\(action: DynamicActionPayload, options: DynamicActionGenerationOptions\) => Promise<void>/);
+  assert.match(bar, /triggerSource:\s*'manual' \| 'auto_countdown'/);
+  assert.match(bar, /await onAcceptAction\(action,/);
+  assert.match(bar, /completeDynamicAction/);
+  assert.match(bar, /failDynamicActionGeneration/);
+  assert.match(bar, /uiStatus:\s*'failed'/);
+  assert.match(iface, /return handleWhatToSay\(action\.promptInstruction,/);
+  assert.match(preload, /completeDynamicAction:/);
+  assert.match(preload, /failDynamicActionGeneration:/);
+  assert.match(types, /completeDynamicAction:/);
+  assert.match(types, /failDynamicActionGeneration:/);
+  assert.match(ipc, /dynamic-action:complete/);
+  assert.match(ipc, /dynamic-action:generation-failed/);
+});
+
+test('main records dynamic action shown once before forwarding to multiple windows', () => {
+  const source = read('electron/main.ts');
+  const blockStart = source.indexOf('intelligence-dynamic-action');
+  const block = source.slice(Math.max(0, blockStart - 900), blockStart + 900);
+
+  assert.match(block, /markDynamicActionShown\(action\.id\)/);
+  assert.match(block, /recordDynamicActionLifecycleEvent/);
+  assert.match(block, /helper\.getLauncherWindow\(\)\?\.webContents\.send\('intelligence-dynamic-action'/);
+  assert.match(block, /helper\.getOverlayWindow\(\)\?\.webContents\.send\('intelligence-dynamic-action'/);
 });
 
 test('generate-what-to-say IPC forwards promptInstruction option to IntelligenceManager', () => {

@@ -2138,7 +2138,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   const handleWhatToSay = async (
     promptInstruction?: string | React.MouseEvent,
-    generationOptions?: { source?: 'overlay' | 'launcher' | 'dynamic_action'; persist?: boolean; modeEvent?: DynamicActionModeEvent },
+    generationOptions?: { source?: 'overlay' | 'launcher' | 'dynamic_action'; persist?: boolean; modeEvent?: DynamicActionModeEvent; throwOnError?: boolean },
   ) => {
     const dynamicPromptInstruction =
       typeof promptInstruction === 'string' ? promptInstruction : undefined;
@@ -2231,6 +2231,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             text: statusMessage,
           },
         ]);
+        if (generationOptions?.throwOnError) {
+          throw new Error(statusMessage);
+        }
       }
       if (result.answerId) {
         const surface = generationOptions?.source ?? 'overlay';
@@ -2256,6 +2259,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           text: `Error: ${err}`,
         },
       ]);
+      if (generationOptions?.throwOnError) {
+        throw err;
+      }
     } finally {
       if (requestId === latestAnswerRequestIdRef.current) {
         setIsProcessing(false);
@@ -4160,10 +4166,11 @@ Provide only the answer, nothing else.`;
                                 when no actions are present. */}
               <DynamicActionBar
                 onAcceptAction={(action: DynamicActionPayload, options) => {
-                  void handleWhatToSay(action.promptInstruction, {
+                  return handleWhatToSay(action.promptInstruction, {
                     source: 'dynamic_action',
                     persist: true,
                     modeEvent: options.modeEvent,
+                    throwOnError: true,
                   });
                 }}
               />

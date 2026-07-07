@@ -4,7 +4,7 @@ import { X, Zap } from 'lucide-react'
 import type { DynamicActionPayload } from '@/types/electron'
 import { explainDynamicAction } from '../../../shared/realtimeAnswerTrustViewModel'
 
-export type DynamicActionCardStatus = 'idle' | 'countdown' | 'generating' | 'cancelled'
+export type DynamicActionCardStatus = 'idle' | 'countdown' | 'generating' | 'cancelled' | 'failed'
 
 interface Props {
   action: DynamicActionPayload

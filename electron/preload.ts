@@ -1553,7 +1553,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('skill-watcher-suggestion-created', subscription);
     };
   },
-  acceptDynamicAction: (actionId: string) => ipcRenderer.invoke('dynamic-action:accept', actionId),
+  acceptDynamicAction: (actionId: string, options?: { triggerSource?: 'manual' | 'auto_countdown' }) =>
+    ipcRenderer.invoke('dynamic-action:accept', actionId, options),
+  completeDynamicAction: (actionId: string) =>
+    ipcRenderer.invoke('dynamic-action:complete', actionId),
+  failDynamicActionGeneration: (actionId: string) =>
+    ipcRenderer.invoke('dynamic-action:generation-failed', actionId),
   dismissDynamicAction: (actionId: string) =>
     ipcRenderer.invoke('dynamic-action:dismiss', actionId),
   listDynamicActions: () => ipcRenderer.invoke('dynamic-action:list'),

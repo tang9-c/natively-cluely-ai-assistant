@@ -3772,13 +3772,33 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Phase 3 — Dynamic Actions IPC. Accept/dismiss/list. The action emission
   // direction is push-only (intelligence-dynamic-action channel from main →
   // renderer); these handlers are the renderer → main control plane.
-  safeHandle('dynamic-action:accept', async (_, actionId: string) => {
+  const recordDynamicActionLifecycle = (
+    event: 'shown' | 'accepted' | 'dismissed' | 'auto_generated' | 'expired' | 'generated_failed',
+    action: any,
+  ) => {
+    try {
+      const { getContextQualityDiagnosticsCollector } = require('./services/eval/ContextQualityDiagnostics');
+      getContextQualityDiagnosticsCollector().recordDynamicActionLifecycleEvent({
+        event,
+        actionType: action.type,
+        modeTemplateType: action.modeTemplateType,
+        outputType: action.productContract.outputType,
+        riskState: action.productContract.riskState,
+        status: action.status,
+      });
+    } catch {
+      /* diagnostics must not affect product behavior */
+    }
+  };
+
+  safeHandle('dynamic-action:accept', async (_, actionId: string, options?: { triggerSource?: 'manual' | 'auto_countdown' }) => {
     try {
       if (typeof actionId !== 'string' || !actionId) {
         return { success: false, error: 'invalid_action_id' };
       }
       const intelligenceManager = appState.getIntelligenceManager();
-      const action = intelligenceManager.acceptDynamicAction(actionId);
+      const triggerSource = options?.triggerSource === 'auto_countdown' ? 'auto_countdown' : 'manual';
+      const action = intelligenceManager.acceptDynamicAction(actionId, { triggerSource });
       if (!action) return { success: false, error: 'not_found' };
       // Phase 6 — telemetry on accept (no transcript, no evidence body).
       try {
@@ -3796,9 +3816,39 @@ export function initializeIpcHandlers(appState: AppState): void {
       } catch {
         /* non-fatal */
       }
+      recordDynamicActionLifecycle(triggerSource === 'auto_countdown' ? 'auto_generated' : 'accepted', action);
       // Caller (renderer) is expected to follow up with a normal Ask-AI call
       // using action.promptInstruction. We return the action so the renderer
       // can populate the answer prompt without a second round-trip.
+      return { success: true, action };
+    } catch (error: any) {
+      return { success: false, error: error?.message ?? 'internal_error' };
+    }
+  });
+
+  safeHandle('dynamic-action:complete', async (_, actionId: string) => {
+    try {
+      if (typeof actionId !== 'string' || !actionId) {
+        return { success: false, error: 'invalid_action_id' };
+      }
+      const intelligenceManager = appState.getIntelligenceManager();
+      const action = intelligenceManager.completeDynamicAction(actionId);
+      if (!action) return { success: false, error: 'not_found' };
+      return { success: true, action };
+    } catch (error: any) {
+      return { success: false, error: error?.message ?? 'internal_error' };
+    }
+  });
+
+  safeHandle('dynamic-action:generation-failed', async (_, actionId: string) => {
+    try {
+      if (typeof actionId !== 'string' || !actionId) {
+        return { success: false, error: 'invalid_action_id' };
+      }
+      const intelligenceManager = appState.getIntelligenceManager();
+      const action = intelligenceManager.markDynamicActionGenerationFailed(actionId);
+      if (!action) return { success: false, error: 'not_found' };
+      recordDynamicActionLifecycle('generated_failed', action);
       return { success: true, action };
     } catch (error: any) {
       return { success: false, error: error?.message ?? 'internal_error' };
@@ -3811,7 +3861,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'invalid_action_id' };
       }
       const intelligenceManager = appState.getIntelligenceManager();
+      const action = intelligenceManager.getActiveDynamicActions().find((candidate: any) => candidate.id === actionId);
       intelligenceManager.dismissDynamicAction(actionId);
+      if (action) {
+        recordDynamicActionLifecycle('dismissed', { ...action, status: 'dismissed' });
+      }
       // Phase 6 — telemetry on dismiss.
       try {
         const { telemetryService } = require('./services/telemetry/TelemetryService');
