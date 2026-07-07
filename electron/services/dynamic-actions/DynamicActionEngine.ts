@@ -14,6 +14,7 @@ import {
 import { SignalStateTracker, SignalConfirmationSource } from './SignalStateTracker';
 import type { IntentResult } from '../../llm/IntentClassifier';
 import type { ProviderDataScopePolicy } from '../../llm/ProviderRouter';
+import type { TranscriptEmotionSource } from '../../../shared/senseVoiceEmotion';
 
 const HIGH_RISK_ACTION_TYPES = new Set([
     'pricing_objection',
@@ -61,7 +62,7 @@ export class DynamicActionEngine {
         modeId: string;
         sessionId: string;
         emotion?: string;
-        emotionSource?: string;
+        emotionSource?: TranscriptEmotionSource;
         language?: string;
     }): DynamicAction[] {
         const { transcript, speaker, modeTemplateType, modeId, sessionId } = params;
@@ -110,7 +111,7 @@ export class DynamicActionEngine {
         modeId: string;
         sessionId: string;
         emotion?: string;
-        emotionSource?: string;
+        emotionSource?: TranscriptEmotionSource;
         language?: string;
         intentResult?: IntentResult;
         recentContextTurns?: ModeEventContextTurn[];
@@ -304,7 +305,7 @@ export class DynamicActionEngine {
         language: string;
         keyEntities: string[];
         emotion?: string;
-        emotionSource?: string;
+        emotionSource?: TranscriptEmotionSource;
         confidence: number;
         now: number;
         autoSurfaceEligible: boolean;

@@ -20,10 +20,10 @@ test('native audio transcript IPC carries optional SenseVoice emotion metadata',
   assert.match(main, /emotion:\s*segment\.emotion/);
   assert.match(main, /emotionSource:\s*segment\.emotionSource/);
   assert.match(preload, /emotion\?:\s*TranscriptEmotion/);
-  assert.match(preload, /emotionSource\?:\s*'sensevoice'\s*\|\s*'qcloud'/);
+  assert.match(preload, /emotionSource\?:\s*TranscriptEmotionSource/);
   assert.match(rendererTypes, /emotion\?:\s*TranscriptEmotion/);
-  assert.match(rendererTypes, /emotionSource\?:\s*'sensevoice'\s*\|\s*'qcloud'/);
-  assert.match(baseStt, /emotionSource\?:\s*'sensevoice'\s*\|\s*'qcloud'/);
+  assert.match(rendererTypes, /emotionSource\?:\s*TranscriptEmotionSource/);
+  assert.match(baseStt, /emotionSource\?:\s*TranscriptEmotionSource/);
 });
 
 test('launcher and suggestion overlay render transient non-neutral emotion badges', () => {
@@ -32,9 +32,13 @@ test('launcher and suggestion overlay render transient non-neutral emotion badge
 
   assert.match(launcher, /SENSEVOICE_EMOTION_LABELS/);
   assert.match(launcher, /setDetectedEmotion/);
+  assert.match(launcher, /!transcript\.emotion\s*\|\|\s*!transcript\.emotionSource/);
+  assert.doesNotMatch(launcher, /emotionSource\s*!==\s*'sensevoice'/);
   assert.match(launcher, /情绪/);
   assert.match(overlay, /SENSEVOICE_EMOTION_LABELS/);
   assert.match(overlay, /displayedEmotion/);
+  assert.match(overlay, /transcript\.emotion\s*&&\s*transcript\.emotionSource/);
+  assert.doesNotMatch(overlay, /emotionSource\s*===\s*'sensevoice'/);
   assert.match(overlay, /情绪/);
 });
 
@@ -58,6 +62,7 @@ test('SenseVoice emotion types and labels come from one shared dictionary', () =
 
   assert.match(shared, /export const SENSEVOICE_EMOTIONS/);
   assert.match(shared, /export type TranscriptEmotion/);
+  assert.match(shared, /export type TranscriptEmotionSource/);
   assert.match(shared, /export const SENSEVOICE_EMOTION_LABELS/);
   assert.match(shared, /export const SENSEVOICE_EMOTION_TAGS/);
 

@@ -534,7 +534,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const codeExpandedRef = useRef(false);
   const animationControlsRef = useRef<ReturnType<typeof animate> | null>(null);
   const showSenseVoiceEmotion = useCallback((transcript: NativeAudioTranscriptPayload) => {
-    if (!transcript.emotion || transcript.emotionSource !== 'sensevoice') return;
+    if (!transcript.emotion || !transcript.emotionSource) return;
     const label = SENSEVOICE_EMOTION_LABELS[transcript.emotion];
     if (!label) return;
 

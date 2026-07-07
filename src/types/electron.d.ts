@@ -1,5 +1,5 @@
-import type { TranscriptEmotion } from '../../shared/senseVoiceEmotion'
-export type { TranscriptEmotion } from '../../shared/senseVoiceEmotion'
+import type { TranscriptEmotion, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
+export type { TranscriptEmotion, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
 
 // Phase 3 — DynamicActionPayload mirrors electron/services/dynamic-actions/DynamicAction.ts.
 // Kept as a structural interface (not a class import) to preserve the strict main↔renderer
@@ -48,7 +48,7 @@ export interface DynamicActionPayload {
   latestTurn?: string
   language?: string
   emotion?: string
-  emotionSource?: string
+  emotionSource?: TranscriptEmotionSource
   keyEntities?: string[]
   retrievalQuery?: string
   autoSurfacePolicy?: 'auto' | 'card' | 'silent'
@@ -77,7 +77,7 @@ export interface DynamicActionModeEvent {
   confidence?: number
   latestTurn?: string
   emotion?: string
-  emotionSource?: string
+  emotionSource?: TranscriptEmotionSource
   language?: string
   keyEntities?: string[]
   retrievalQuery?: string
@@ -269,7 +269,7 @@ export interface NativeAudioTranscriptPayload {
   startTimestampMs?: number
   endTimestampMs?: number
   emotion?: TranscriptEmotion
-  emotionSource?: 'sensevoice' | 'qcloud'
+  emotionSource?: TranscriptEmotionSource
   speakerVerification?: SpeakerVerificationMetadata
 }
 

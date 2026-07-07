@@ -5,6 +5,7 @@
 import { RecapLLM } from './llm';
 import { isVerboseLogging } from './verboseLog';
 import type { SpeakerVerificationMetadata } from './services/speaker/speakerVerificationTypes';
+import type { TranscriptEmotionSource } from '../shared/senseVoiceEmotion';
 
 export interface TranscriptSegment {
     marker?: string;
@@ -20,7 +21,7 @@ export interface TranscriptSegment {
     startTimestampMs?: number;
     endTimestampMs?: number;
     emotion?: string;
-    emotionSource?: string;
+    emotionSource?: TranscriptEmotionSource;
     speakerVerification?: SpeakerVerificationMetadata;
 }
 
@@ -38,7 +39,7 @@ export interface ContextItem {
     speakerId?: string;
     speakerLabel?: string;
     emotion?: string;
-    emotionSource?: string;
+    emotionSource?: TranscriptEmotionSource;
     speakerVerification?: SpeakerVerificationMetadata;
 }
 

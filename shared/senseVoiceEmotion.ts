@@ -9,6 +9,7 @@ export const SENSEVOICE_EMOTIONS = [
 
 export type TranscriptEmotion = (typeof SENSEVOICE_EMOTIONS)[number];
 export type SenseVoiceEmotion = TranscriptEmotion;
+export type TranscriptEmotionSource = 'sensevoice' | 'qcloud';
 
 export const SENSEVOICE_EMOTION_LABELS: Record<TranscriptEmotion, string> = {
   happy: '开心',

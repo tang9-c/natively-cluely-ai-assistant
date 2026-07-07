@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ModeEventContext } from './llm';
-import type { TranscriptEmotion } from '../shared/senseVoiceEmotion';
+import type { TranscriptEmotion, TranscriptEmotionSource } from '../shared/senseVoiceEmotion';
 
 // Types for the exposed Electron API
 type ResearchProgressStage =
@@ -282,7 +282,7 @@ interface ElectronAPI {
       text: string;
       final: boolean;
       emotion?: TranscriptEmotion;
-      emotionSource?: 'sensevoice' | 'qcloud';
+      emotionSource?: TranscriptEmotionSource;
     }) => void,
   ) => () => void;
   onNativeAudioSuggestion: (
@@ -1311,7 +1311,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       text: string;
       final: boolean;
       emotion?: TranscriptEmotion;
-      emotionSource?: 'sensevoice' | 'qcloud';
+      emotionSource?: TranscriptEmotionSource;
     }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);

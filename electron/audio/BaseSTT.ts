@@ -24,7 +24,7 @@
  */
 
 import { EventEmitter } from 'events';
-import type { TranscriptEmotion } from '../../shared/senseVoiceEmotion';
+import type { TranscriptEmotion, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion';
 import type { SpeakerVerificationAnnotator } from '../services/speaker/SpeakerVerificationAnnotator';
 import type { SpeakerVerificationMetadata } from '../services/speaker/speakerVerificationTypes';
 
@@ -39,7 +39,7 @@ export interface TranscriptSegment {
     startTimestampMs?: number;
     endTimestampMs?: number;
     emotion?: TranscriptEmotion;
-    emotionSource?: 'sensevoice' | 'qcloud';
+    emotionSource?: TranscriptEmotionSource;
     speakerVerification?: SpeakerVerificationMetadata;
 }
 

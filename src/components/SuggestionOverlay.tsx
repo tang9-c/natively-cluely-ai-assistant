@@ -67,7 +67,7 @@ export const SuggestionOverlay: React.FC<SuggestionOverlayProps> = ({ className 
         cleanups.push(
             window.electronAPI.onNativeAudioTranscript((transcript) => {
                 setCurrentTranscript(transcript);
-                if (transcript.emotion && transcript.emotionSource === 'sensevoice') {
+                if (transcript.emotion && transcript.emotionSource) {
                     showDisplayedEmotion(transcript.emotion);
                 } else {
                     clearDisplayedEmotion();

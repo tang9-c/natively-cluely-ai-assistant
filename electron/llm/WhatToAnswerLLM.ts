@@ -14,6 +14,7 @@ import type {
     AnswerSourceStatus,
 } from "../db/DatabaseManager";
 import { buildRetrievalQuery, detectLanguage, escapeXmlText } from "../services/dynamic-actions/ModeEventUtils";
+import type { TranscriptEmotionSource } from "../../shared/senseVoiceEmotion";
 
 export interface ModeEventContext {
     modeTemplateType?: string;
@@ -21,7 +22,7 @@ export interface ModeEventContext {
     confidence?: number;
     latestTurn?: string;
     emotion?: string;
-    emotionSource?: string;
+    emotionSource?: TranscriptEmotionSource;
     language?: string;
     keyEntities?: string[];
     retrievalQuery?: string;

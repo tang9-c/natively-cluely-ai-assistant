@@ -1,4 +1,5 @@
 import type { SemanticGateTrace } from './ModeEventClassifier';
+import type { TranscriptEmotionSource } from '../../../shared/senseVoiceEmotion';
 
 export type ActionStatus = 'candidate' | 'shown' | 'accepted' | 'dismissed' | 'completed' | 'expired';
 export type AutoSurfacePolicy = 'auto' | 'card' | 'silent';
@@ -38,7 +39,7 @@ export interface DynamicAction {
     latestTurn?: string;
     language?: string;
     emotion?: string;
-    emotionSource?: string;
+    emotionSource?: TranscriptEmotionSource;
     keyEntities?: string[];
     retrievalQuery?: string;
     autoSurfacePolicy?: AutoSurfacePolicy;
