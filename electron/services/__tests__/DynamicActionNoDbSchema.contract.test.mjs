@@ -11,7 +11,7 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
 
-function readTree(relativePath, extensions = new Set(['.ts', '.tsx', '.js', '.jsx'])) {
+function readTree(relativePath, extensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'])) {
   const base = path.join(root, relativePath);
   const entries = fs.readdirSync(base, { withFileTypes: true });
   return entries.flatMap(entry => {
@@ -32,6 +32,7 @@ test('dynamic action artifacts remain transient and do not add durable artifact 
   const rendererFiles = readTree('src').join('\n');
 
   assert.doesNotMatch(db, /CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(?:dynamic_action_artifacts|action_artifacts)/i);
+  assert.doesNotMatch(db, /CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(?:meetings|ai_interactions)\s*\([\s\S]*?\b(?:dynamic_action\w*|action_artifact\w*|artifact\w*)\b[\s\S]*?\);/i);
   assert.doesNotMatch(db, /ALTER TABLE\s+(?:dynamic_action_artifacts|action_artifacts|meetings|ai_interactions)[\s\S]{0,200}(artifact|dynamic_action)/i);
   assert.doesNotMatch(db, /ALTER TABLE\s+(meetings|ai_interactions)[\s\S]{0,160}(artifact|dynamic_action)/i);
   assert.doesNotMatch(rendererFiles, /localStorage\.(setItem|getItem)[\s\S]{0,160}(artifact|dynamic_action)/i);
