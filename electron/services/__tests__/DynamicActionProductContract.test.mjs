@@ -1,0 +1,70 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(__dirname, '../../..');
+const helperPath = path.join(root, 'dist-electron/electron/services/dynamic-actions/DynamicActionProductContract.js');
+
+async function loadHelper() {
+  return import(pathToFileURL(helperPath).href);
+}
+
+function baseInput(overrides = {}) {
+  return {
+    type: 'pricing_objection',
+    label: 'Handle pricing objection',
+    modeTemplateType: 'sales',
+    confidence: 0.84,
+    autoSurfacePolicy: 'card',
+    evidenceRefs: [{ source: 'transcript', text: 'The price is too expensive for our current budget.' }],
+    answerStyle: { maxWords: 90, format: 'short_script', tone: 'calm' },
+    ...overrides,
+  };
+}
+
+test('maps dynamic action output types conservatively', async () => {
+  const { buildDynamicActionProductContract } = await loadHelper();
+
+  assert.equal(buildDynamicActionProductContract(baseInput()).outputType, 'spoken_response');
+  assert.equal(buildDynamicActionProductContract(baseInput({ type: 'fde_integration_check', modeTemplateType: 'fde' })).outputType, 'checklist');
+  assert.equal(buildDynamicActionProductContract(baseInput({ answerStyle: { maxWords: 120, format: 'email', tone: 'clear' } })).outputType, 'email_draft');
+  assert.equal(buildDynamicActionProductContract(baseInput({ type: 'pricing_request', label: 'Draft quote email' })).outputType, 'email_draft');
+  assert.equal(buildDynamicActionProductContract(baseInput({ type: 'action_item', modeTemplateType: 'team-meet' })).outputType, 'action_item');
+  assert.equal(buildDynamicActionProductContract(baseInput({ type: 'decision_point', modeTemplateType: 'team-meet' })).outputType, 'decision_record');
+  assert.equal(buildDynamicActionProductContract(baseInput({ type: 'unknown_action', label: 'Unknown action' })).outputType, 'spoken_response');
+});
+
+test('email answer style wins before type fallback', async () => {
+  const { buildDynamicActionProductContract } = await loadHelper();
+
+  const contract = buildDynamicActionProductContract(baseInput({
+    type: 'decision_point',
+    modeTemplateType: 'team-meet',
+    answerStyle: { maxWords: 120, format: 'email', tone: 'polite' },
+  }));
+
+  assert.equal(contract.outputType, 'email_draft');
+  assert.equal(contract.outputPromise, '生成一封可发送的邮件草稿');
+});
+
+test('risk state only exposes visible states', async () => {
+  const { buildDynamicActionProductContract, VISIBLE_DYNAMIC_ACTION_RISK_STATES } = await loadHelper();
+
+  assert.deepEqual(VISIBLE_DYNAMIC_ACTION_RISK_STATES, ['auto_countdown', 'normal']);
+  assert.equal(buildDynamicActionProductContract(baseInput({ confidence: 0.95, autoSurfacePolicy: 'auto' })).riskState, 'auto_countdown');
+  assert.equal(buildDynamicActionProductContract(baseInput({ confidence: 0.95, autoSurfacePolicy: 'silent' })).riskState, 'normal');
+});
+
+test('evidence summary is omitted when empty and truncated when long', async () => {
+  const { buildDynamicActionProductContract } = await loadHelper();
+
+  assert.equal(buildDynamicActionProductContract(baseInput({ evidenceRefs: [] })).evidenceSummary, undefined);
+  assert.equal(buildDynamicActionProductContract(baseInput({ evidenceRefs: [{ source: 'transcript', text: '   ' }] })).evidenceSummary, undefined);
+
+  const longText = '客户说价格太高, 还担心集成需要两周以上, 希望先确认安全评审、负责人、截止时间和验收标准。'.repeat(3);
+  const contract = buildDynamicActionProductContract(baseInput({ evidenceRefs: [{ source: 'transcript', text: longText }] }));
+  assert.ok(contract.evidenceSummary.length <= 91);
+  assert.ok(contract.evidenceSummary.endsWith('…'));
+});

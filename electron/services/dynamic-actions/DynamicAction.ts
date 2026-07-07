@@ -1,10 +1,41 @@
 import type { SemanticGateTrace } from './ModeEventClassifier';
 import type { TranscriptEmotionSource } from '../../../shared/senseVoiceEmotion';
 
-export type ActionStatus = 'candidate' | 'shown' | 'accepted' | 'dismissed' | 'completed' | 'expired';
+export type ActionStatus =
+    | 'candidate'
+    | 'shown'
+    | 'accepted'
+    | 'auto_generated'
+    | 'dismissed'
+    | 'expired'
+    | 'generated_failed'
+    | 'completed';
 export type AutoSurfacePolicy = 'auto' | 'card' | 'silent';
+export type DynamicActionAcceptTriggerSource = 'manual' | 'auto_countdown';
 export type SignalStatus = 'candidate' | 'confirmed' | 'cooling_down' | 'expired';
 export type SignalConfirmationSource = 'trigger' | 'cloud_intent' | 'local_intent' | 'heuristic';
+
+export type DynamicActionOutputType =
+    | 'spoken_response'
+    | 'checklist'
+    | 'email_draft'
+    | 'action_item'
+    | 'decision_record';
+
+export type DynamicActionRiskState =
+    | 'auto_countdown'
+    | 'normal';
+
+export type DynamicActionDiagnosticRiskState = 'silent_diagnostic';
+
+export interface DynamicActionProductContract {
+    userAction: string;
+    whyNow: string;
+    evidenceSummary?: string;
+    outputType: DynamicActionOutputType;
+    outputPromise: string;
+    riskState: DynamicActionRiskState;
+}
 
 export interface EvidenceRef {
     source: 'transcript' | 'screen' | 'reference' | 'meeting_history';
@@ -23,6 +54,7 @@ export interface DynamicAction {
     type: string;  // e.g., 'pricing_objection', 'competitor_mention', 'coding_question'
     label: string;  // e.g., "Handle pricing objection"
     description?: string;
+    productContract: DynamicActionProductContract;
     confidence: number;
     priority: number;
     evidenceRefs: EvidenceRef[];
