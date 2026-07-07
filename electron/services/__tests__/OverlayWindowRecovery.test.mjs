@@ -51,12 +51,12 @@ test('overlay diagnostics capture state after showing and stealth setup', () => 
 test('Apple Silicon overlay skips native AppKit stealth path', () => {
   assert.match(
     source,
-    /private shouldApplyNativeOverlayStealth\(\): boolean/,
-    'WindowHelper should gate native overlay stealth behind a dedicated helper',
+    /applyNativeStealthIfEnabled\(this\.overlayWindow,\s*\{[\s\S]{0,180}skipOnAppleSilicon:\s*true/,
+    'WindowHelper should gate native overlay stealth through the shared helper',
   );
   assert.match(
     source,
-    /return !this\.isAppleSiliconMac\(\);/,
+    /isAppleSiliconMac:\s*\(\)\s*=>\s*this\.isAppleSiliconMac\(\)/,
     'native overlay stealth should be disabled on Apple Silicon until the native path is fixed',
   );
   assert.match(

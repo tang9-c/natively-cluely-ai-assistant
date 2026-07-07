@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { AppState } from './main';
 import { KeybindManager } from './services/KeybindManager';
+import { applyNativeStealthIfEnabled } from './utils/nativeStealth';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -82,17 +83,6 @@ export class WindowHelper {
     } catch (err) {
       console.warn('[WindowHelper] Failed to log overlay state:', err);
     }
-  }
-
-  private shouldApplyNativeOverlayStealth(): boolean {
-    if (process.platform !== 'darwin') return false;
-    if (process.env.NATIVELY_DISABLE_NATIVE_OVERLAY_STEALTH === '1') return false;
-
-    // Apple Silicon, including Intel builds running under Rosetta, has shown a
-    // WindowServer state where Electron reports the overlay visible with valid
-    // bounds, but the user cannot see or recover it. Keep the stable Electron
-    // panel behavior there until the native stealth path has a silicon-specific fix.
-    return !this.isAppleSiliconMac();
   }
 
   private isAppleSiliconMac(): boolean {
@@ -513,36 +503,28 @@ export class WindowHelper {
       // dock icon out of the way. Existing users see no regression.
       this.overlayWindow.once('ready-to-show', () => {
         if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
-        if (!this.shouldApplyNativeOverlayStealth()) {
-          console.warn('[WindowHelper] Native overlay stealth skipped for this environment', {
-            platform: process.platform,
-            arch: process.arch,
-            appleSiliconMac: this.isAppleSiliconMac(),
-            disabledByEnv: process.env.NATIVELY_DISABLE_NATIVE_OVERLAY_STEALTH === '1',
-          });
+        // Apple Silicon, including Intel builds running under Rosetta, has shown a
+        // WindowServer state where Electron reports the overlay visible with valid
+        // bounds, but the user cannot see or recover it. Keep the stable Electron
+        // panel behavior there until the native stealth path has a silicon-specific fix.
+        const result = applyNativeStealthIfEnabled(this.overlayWindow, {
+          label: 'WindowHelper',
+          skipOnAppleSilicon: true,
+          isAppleSiliconMac: () => this.isAppleSiliconMac(),
+        });
+        if (result.status === 'skipped') {
           this.logOverlayState('overlay-ready-to-show-native-stealth-skipped');
           return;
         }
-
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const { loadNativeModule } = require('./audio/nativeModuleLoader');
-          const native = loadNativeModule();
-          if (native && typeof native.applyStealthToWindow === 'function') {
-            native.applyStealthToWindow(this.overlayWindow.getNativeWindowHandle());
-            console.log('[WindowHelper] Applied stealth NSPanel attributes to overlay', {
-              platform: process.platform,
-              arch: process.arch,
-            });
-            this.logOverlayState('overlay-ready-to-show-after-stealth');
-          } else {
-            console.warn(
-              '[WindowHelper] applyStealthToWindow unavailable — rebuild native module (npm run build:native) for full stealth',
-            );
-            this.logOverlayState('overlay-ready-to-show-stealth-unavailable');
-          }
-        } catch (e) {
-          console.error('[WindowHelper] Failed to apply stealth attributes:', e);
+        if (result.status === 'applied') {
+          this.logOverlayState('overlay-ready-to-show-after-stealth');
+          return;
+        }
+        if (result.status === 'unavailable') {
+          this.logOverlayState('overlay-ready-to-show-stealth-unavailable');
+          return;
+        }
+        if (result.status === 'error') {
           this.logOverlayState('overlay-ready-to-show-stealth-error');
         }
       });

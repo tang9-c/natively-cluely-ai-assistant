@@ -1,6 +1,7 @@
 import { BrowserWindow, screen, app } from "electron"
 import { WindowHelper } from "./WindowHelper"
 import path from "node:path"
+import { applyNativeStealthIfEnabled } from "./utils/nativeStealth"
 
 const isDev = process.env.NODE_ENV === "development"
 
@@ -152,10 +153,10 @@ export class SettingsWindowHelper {
             },
             // ROUND 3 FIX: type: 'panel' is what makes this an NSPanel rather
             // than a regular NSWindow. WITHOUT it, the becomesKeyOnlyIfNeeded
-            // and _setPreventsActivation: SPI calls in applyStealthToWindow
+            // and native AppKit stealth SPI calls
             // are no-ops (those are NSPanel-only properties — respondsToSelector
             // returns false on a plain NSWindow). The previous fix only added
-            // applyStealthToWindow without the underlying panel type, which is
+            // native stealth without the underlying panel type, which is
             // why focus theft persisted. NSPanel + type:'panel' = the same
             // Spotlight/Alfred mechanism the overlay uses.
             ...(isMac ? { type: 'panel' as const } : {}),
@@ -193,18 +194,7 @@ export class SettingsWindowHelper {
             // the user's foreground app (Zoom/browser/IDE) mid-meeting.
             // Without this, settings was a regular focusable window and
             // every interaction stole focus. Failure is non-fatal; logged.
-            if (process.platform === 'darwin' && this.settingsWindow && !this.settingsWindow.isDestroyed()) {
-                try {
-                    // eslint-disable-next-line @typescript-eslint/no-var-requires
-                    const { loadNativeModule } = require('./audio/nativeModuleLoader');
-                    const native = loadNativeModule();
-                    if (native && typeof native.applyStealthToWindow === 'function') {
-                        native.applyStealthToWindow(this.settingsWindow.getNativeWindowHandle());
-                    }
-                } catch (e) {
-                    console.error('[SettingsWindowHelper] applyStealthToWindow failed:', e);
-                }
-            }
+            applyNativeStealthIfEnabled(this.settingsWindow, { label: 'SettingsWindowHelper' });
             if (showWhenReady) {
                 this.showWindow(this.settingsWindow?.getBounds().x || 0, this.settingsWindow?.getBounds().y || 0)
             }

@@ -1,5 +1,6 @@
 import { BrowserWindow, screen, app, ipcMain, IpcMainEvent } from "electron"
 import path from "node:path"
+import { applyNativeStealthIfEnabled } from "./utils/nativeStealth"
 
 const isDev = process.env.NODE_ENV === "development"
 
@@ -456,18 +457,7 @@ export class CropperWindowHelper {
             // appears with default activation behavior. Failure is logged
             // but non-fatal — partial stealth (panel type + content
             // protection) still applies via the BrowserWindow constructor.
-            if (process.platform === 'darwin') {
-                try {
-                    // eslint-disable-next-line @typescript-eslint/no-var-requires
-                    const { loadNativeModule } = require('./audio/nativeModuleLoader');
-                    const native = loadNativeModule();
-                    if (native && typeof native.applyStealthToWindow === 'function') {
-                        native.applyStealthToWindow(this.cropperWindow.getNativeWindowHandle());
-                    }
-                } catch (e) {
-                    console.error('[CropperWindowHelper] applyStealthToWindow failed:', e);
-                }
-            }
+            applyNativeStealthIfEnabled(this.cropperWindow, { label: 'CropperWindowHelper' });
             if (showImmediately) {
                 this.applyOpacityShield();
             }

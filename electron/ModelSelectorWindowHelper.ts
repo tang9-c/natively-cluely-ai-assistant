@@ -1,5 +1,6 @@
 import { BrowserWindow, screen, app } from "electron"
 import path from "node:path"
+import { applyNativeStealthIfEnabled } from "./utils/nativeStealth"
 
 const isDev = process.env.NODE_ENV === "development"
 
@@ -132,9 +133,9 @@ export class ModelSelectorWindowHelper {
             },
             // ROUND 3 FIX: type:'panel' makes this an NSPanel rather than a
             // regular NSWindow. Required for becomesKeyOnlyIfNeeded and
-            // _setPreventsActivation: SPI calls in applyStealthToWindow to
+            // native AppKit stealth SPI calls to
             // actually take effect (those are NSPanel-only properties).
-            // Without this, the previous applyStealthToWindow call was a
+            // Without this, the previous native stealth call was a
             // no-op and clicking the model selector still stole focus from
             // the user's foreground app.
             //
@@ -180,18 +181,7 @@ export class ModelSelectorWindowHelper {
             // click and therefore never receives blur. If that proves
             // problematic, the close-on-blur handler should switch to a
             // click-outside listener registered on the parent overlay.
-            if (process.platform === 'darwin' && this.window && !this.window.isDestroyed()) {
-                try {
-                    // eslint-disable-next-line @typescript-eslint/no-var-requires
-                    const { loadNativeModule } = require('./audio/nativeModuleLoader');
-                    const native = loadNativeModule();
-                    if (native && typeof native.applyStealthToWindow === 'function') {
-                        native.applyStealthToWindow(this.window.getNativeWindowHandle());
-                    }
-                } catch (e) {
-                    console.error('[ModelSelectorWindowHelper] applyStealthToWindow failed:', e);
-                }
-            }
+            applyNativeStealthIfEnabled(this.window, { label: 'ModelSelectorWindowHelper' });
             if (showWhenReady) {
                 this.showWindow(this.window?.getBounds().x || 0, this.window?.getBounds().y || 0)
             }
