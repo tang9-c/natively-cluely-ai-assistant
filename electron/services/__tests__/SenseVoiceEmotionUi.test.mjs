@@ -15,13 +15,15 @@ test('native audio transcript IPC carries optional SenseVoice emotion metadata',
   const main = read('electron/main.ts');
   const preload = read('electron/preload.ts');
   const rendererTypes = read('src/types/electron.d.ts');
+  const baseStt = read('electron/audio/BaseSTT.ts');
 
   assert.match(main, /emotion:\s*segment\.emotion/);
   assert.match(main, /emotionSource:\s*segment\.emotionSource/);
   assert.match(preload, /emotion\?:\s*TranscriptEmotion/);
-  assert.match(preload, /emotionSource\?:\s*'sensevoice'/);
+  assert.match(preload, /emotionSource\?:\s*'sensevoice'\s*\|\s*'qcloud'/);
   assert.match(rendererTypes, /emotion\?:\s*TranscriptEmotion/);
-  assert.match(rendererTypes, /emotionSource\?:\s*'sensevoice'/);
+  assert.match(rendererTypes, /emotionSource\?:\s*'sensevoice'\s*\|\s*'qcloud'/);
+  assert.match(baseStt, /emotionSource\?:\s*'sensevoice'\s*\|\s*'qcloud'/);
 });
 
 test('launcher and suggestion overlay render transient non-neutral emotion badges', () => {

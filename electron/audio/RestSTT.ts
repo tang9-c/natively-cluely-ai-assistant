@@ -548,6 +548,9 @@ export class RestSTT extends BaseSTT {
             if (!utterance.text.trim()) continue;
             const utteranceSamples = this.slicePcm16kByTime(pcm16k, utterance.startMs, utterance.endMs);
             const speakerVerification = await this.speakerVerificationAnnotator?.annotate(utteranceSamples);
+            const emotionMetadata = utterance.emotion && utterance.emotion !== 'neutral'
+                ? { emotion: utterance.emotion, emotionSource: 'qcloud' as const }
+                : {};
             this.emit('transcript', {
                 text: utterance.text.trim(),
                 isFinal: true,
@@ -558,6 +561,7 @@ export class RestSTT extends BaseSTT {
                 diarizationProvider: 'doubao-auc',
                 startTimestampMs: utterance.startMs,
                 endTimestampMs: utterance.endMs,
+                ...emotionMetadata,
                 ...(speakerVerification ? { speakerVerification } : {}),
             });
         }

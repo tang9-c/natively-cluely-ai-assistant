@@ -282,7 +282,7 @@ interface ElectronAPI {
       text: string;
       final: boolean;
       emotion?: TranscriptEmotion;
-      emotionSource?: 'sensevoice';
+      emotionSource?: 'sensevoice' | 'qcloud';
     }) => void,
   ) => () => void;
   onNativeAudioSuggestion: (
@@ -1311,7 +1311,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       text: string;
       final: boolean;
       emotion?: TranscriptEmotion;
-      emotionSource?: 'sensevoice';
+      emotionSource?: 'sensevoice' | 'qcloud';
     }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);

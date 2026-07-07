@@ -83,6 +83,73 @@ test('QCLOUD API speech channel uploads low-volume microphone audio instead of t
   ]);
 });
 
+test('QCLOUD API forwards non-neutral AUC utterance emotion metadata', async () => {
+  const { RestSTT } = await loadRestSTT();
+  const stt = new RestSTT('qcloud-stt', 'qcloud-test-key');
+  const transcripts = [];
+  const rawPcm = Buffer.alloc(8000);
+  for (let offset = 0; offset < rawPcm.length; offset += 2) {
+    rawPcm.writeInt16LE(1000, offset);
+  }
+
+  stt.uploadAudio = async () => ({
+    text: '这个风险很大。',
+    utterances: [
+      {
+        text: '这个风险很大。',
+        startMs: 0,
+        endMs: 1200,
+        providerSpeakerId: '1',
+        emotion: 'angry',
+      },
+    ],
+  });
+  stt.on('transcript', event => transcripts.push(event));
+
+  stt.start();
+  stt.write(rawPcm);
+  await stt.drainFinals(1000);
+  stt.stop();
+
+  assert.equal(transcripts.length, 1);
+  assert.equal(transcripts[0].emotion, 'angry');
+  assert.equal(transcripts[0].emotionSource, 'qcloud');
+  assert.equal(transcripts[0].diarizationProvider, 'doubao-auc');
+});
+
+test('QCLOUD API does not forward neutral AUC utterance emotion metadata', async () => {
+  const { RestSTT } = await loadRestSTT();
+  const stt = new RestSTT('qcloud-stt', 'qcloud-test-key');
+  const transcripts = [];
+  const rawPcm = Buffer.alloc(8000);
+  for (let offset = 0; offset < rawPcm.length; offset += 2) {
+    rawPcm.writeInt16LE(1000, offset);
+  }
+
+  stt.uploadAudio = async () => ({
+    text: '好的。',
+    utterances: [
+      {
+        text: '好的。',
+        startMs: 0,
+        endMs: 500,
+        providerSpeakerId: '1',
+        emotion: 'neutral',
+      },
+    ],
+  });
+  stt.on('transcript', event => transcripts.push(event));
+
+  stt.start();
+  stt.write(rawPcm);
+  await stt.drainFinals(1000);
+  stt.stop();
+
+  assert.equal(transcripts.length, 1);
+  assert.equal(transcripts[0].emotion, undefined);
+  assert.equal(transcripts[0].emotionSource, undefined);
+});
+
 test('QCLOUD API speech channel is never shown as qcloud-stt in user-facing settings source', () => {
   const settings = fs.readFileSync(path.join(root, 'src/components/SettingsOverlay.tsx'), 'utf8');
   const speechOptionBlock = settings.match(/options=\{\[[\s\S]*?\]\}/)?.[0] || '';

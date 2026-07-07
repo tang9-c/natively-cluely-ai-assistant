@@ -269,7 +269,7 @@ export interface NativeAudioTranscriptPayload {
   startTimestampMs?: number
   endTimestampMs?: number
   emotion?: TranscriptEmotion
-  emotionSource?: 'sensevoice'
+  emotionSource?: 'sensevoice' | 'qcloud'
   speakerVerification?: SpeakerVerificationMetadata
 }
 
