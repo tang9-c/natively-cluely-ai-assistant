@@ -41,17 +41,23 @@ test('renderer contract exposes context trace and material library APIs', () => 
   assert.match(types, /degradedReason\??:/);
 });
 
-test('material upload intentionally excludes PPTX and image OCR from the supported formats', () => {
+test('material upload exposes PPTX content extraction behind QCLOUD availability gate', () => {
   const ipc = read('electron/ipcHandlers.ts');
   const materialService = read('electron/services/knowledge/KnowledgeMaterialService.ts');
   const settings = read('src/components/settings/KnowledgeMaterialsSettings.tsx');
+  const preload = read('electron/preload.ts');
+  const types = read('src/types/electron.d.ts');
 
-  assert.match(materialService, /支持 PDF、DOCX、Markdown 和 TXT|Supported formats: PDF, DOCX, TXT, MD/);
   assert.match(materialService, /SUPPORTED_EXTENSIONS/);
-  assert.doesNotMatch(materialService, /'\.pptx'|"\.pptx"/i);
-  assert.match(ipc, /extensions:\s*\[[^\]]*'pdf'[^\]]*'docx'[^\]]*'txt'[^\]]*'md'[^\]]*\]/s);
-  assert.doesNotMatch(ipc, /knowledgeSelectMaterials[\s\S]{0,500}pptx/i);
-  assert.match(settings, /PPTX 即将支持；当前请先导出为 PDF 或 Markdown 后上传。/);
+  assert.match(materialService, /'\.pptx'|"\.pptx"/i);
+  assert.match(ipc, /knowledge:check-qcloud-availability/);
+  assert.match(preload, /knowledgeCheckQCloudAvailability/);
+  assert.match(types, /knowledgeCheckQCloudAvailability/);
+  assert.doesNotMatch(ipc, /knowledge:get-slide-image/);
+  assert.match(ipc, /extensions:\s*\[[^\]]*'pdf'[^\]]*'docx'[^\]]*'txt'[^\]]*'md'[^\]]*'markdown'[^\]]*'pptx'[^\]]*\]/s);
+  assert.doesNotMatch(ipc, /extensions:\s*\[[^\]]*'ppt'(?:,|\s*\])/i);
+  assert.doesNotMatch(ipc, /extensions:\s*\[[^\]]*'pptm'(?:,|\s*\])/i);
+  assert.match(settings, /PPTX 需要先配置并选择 QCLOUD API；旧版 \.ppt 不支持。/);
   assert.match(settings, /explainMaterialStatus/);
   assert.match(settings, /explanation\.label/);
   assert.match(settings, /explanation\.message/);

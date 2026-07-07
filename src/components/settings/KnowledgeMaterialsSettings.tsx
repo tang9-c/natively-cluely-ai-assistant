@@ -35,6 +35,7 @@ export function KnowledgeMaterialsSettings() {
   const [status, setStatus] = useState<string | null>(null);
   const [embeddingReady, setEmbeddingReady] = useState<boolean | null>(null);
   const [materialEmbeddingFailed, setMaterialEmbeddingFailed] = useState(false);
+  const [pptxQCloudAvailable, setPptxQCloudAvailable] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const pollingRef = useRef<number | null>(null);
 
@@ -55,10 +56,16 @@ export function KnowledgeMaterialsSettings() {
     }
   }, []);
 
+  const refreshPptxAvailability = useCallback(async () => {
+    const result = await window.electronAPI?.knowledgeCheckQCloudAvailability?.();
+    setPptxQCloudAvailable(Boolean(result?.available));
+  }, []);
+
   useEffect(() => {
     refreshMaterials().catch(() => {});
     refreshContextHealth().catch(() => {});
-  }, [refreshContextHealth, refreshMaterials]);
+    refreshPptxAvailability().catch(() => setPptxQCloudAvailable(false));
+  }, [refreshContextHealth, refreshMaterials, refreshPptxAvailability]);
 
   useEffect(() => () => {
     if (pollingRef.current) {
@@ -97,6 +104,11 @@ export function KnowledgeMaterialsSettings() {
         setStatus(selected.error || '没有选择文件');
         return;
       }
+      const hasPptx = selected.filePaths.some((filePath: string) => filePath.toLowerCase().endsWith('.pptx'));
+      if (hasPptx && pptxQCloudAvailable !== true) {
+        setStatus('PPTX 知识源需要先配置并选择 QCLOUD API。');
+        return;
+      }
       const result = await window.electronAPI?.knowledgeUploadMaterials?.(selected.filePaths);
       const materialIds = (result?.materials || []).map((material: any) => material.id).filter(Boolean);
       setStatus(summarizeUploadResult(result));
@@ -111,7 +123,7 @@ export function KnowledgeMaterialsSettings() {
         setBusy(false);
       }
     }
-  }, [refreshContextHealth, refreshMaterials, startUploadPolling]);
+  }, [pptxQCloudAvailable, refreshContextHealth, refreshMaterials, startUploadPolling]);
 
   const deleteMaterial = useCallback(async (id: string) => {
     setBusy(true);
@@ -145,10 +157,10 @@ export function KnowledgeMaterialsSettings() {
           <div>
             <h4 className="text-sm font-semibold text-text-primary">资料库</h4>
             <p className="text-[11px] text-text-tertiary">
-              上传 PDF、DOCX、Markdown 或 TXT，让会议回答可以引用本地资料。
+              上传 PDF、DOCX、Markdown、TXT 或 PPTX，让会议回答可以引用本地资料。
             </p>
             <p className="mt-1 text-[11px] text-text-tertiary">
-              PPTX 即将支持；当前请先导出为 PDF 或 Markdown 后上传。
+              PPTX 需要先配置并选择 QCLOUD API；旧版 .ppt 不支持。
             </p>
           </div>
         </div>

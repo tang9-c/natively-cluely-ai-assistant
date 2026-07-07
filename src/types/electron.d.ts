@@ -692,6 +692,7 @@ export interface ElectronAPI {
   openAnswerCitation: (input: { answerId: string; citationId: string }) => Promise<{ success: boolean; status: 'ok' | 'stale-citation' | 'missing-citation' | 'unsupported-citation'; previewText?: string | null; citation?: AnswerCitation; error?: string }>
   getContextHealth: () => Promise<ContextHealth>
   knowledgeSelectMaterials: () => Promise<{ success?: boolean; cancelled?: boolean; filePaths?: string[]; error?: string }>
+  knowledgeCheckQCloudAvailability: () => Promise<{ success: boolean; hasNativelyApiKey: boolean; activeProvider: string; available: boolean; error?: string }>
   knowledgeUploadMaterials: (filePaths: string[]) => Promise<{ success: boolean; materials: KnowledgeMaterial[]; errors?: Array<{ filePath: string; error: string }> }>
   knowledgeListMaterials: () => Promise<{ success: boolean; materials: KnowledgeMaterial[]; error?: string }>
   knowledgeDeleteMaterial: (id: string) => Promise<{ success: boolean; error?: string }>

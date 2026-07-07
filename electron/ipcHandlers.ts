@@ -4069,12 +4069,35 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile', 'multiSelections'],
-        filters: [{ name: '资料文件', extensions: ['pdf', 'docx', 'txt', 'md', 'markdown'] }],
+        filters: [{ name: '资料文件', extensions: ['pdf', 'docx', 'txt', 'md', 'markdown', 'pptx'] }],
       });
       if (result.canceled || result.filePaths.length === 0) return { cancelled: true };
       return { success: true, filePaths: result.filePaths };
     } catch (error: any) {
       return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('knowledge:check-qcloud-availability', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const activeProvider = cm.getDefaultModel?.() || '';
+      const hasNativelyApiKey = Boolean(cm.getNativelyApiKey?.());
+      return {
+        success: true,
+        hasNativelyApiKey,
+        activeProvider,
+        available: hasNativelyApiKey && activeProvider === 'natively',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        hasNativelyApiKey: false,
+        activeProvider: '',
+        available: false,
+        error: error.message,
+      };
     }
   });
 

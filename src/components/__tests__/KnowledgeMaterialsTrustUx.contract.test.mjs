@@ -25,3 +25,11 @@ test('knowledge material settings uses trust view model and honest failed-materi
   assert.match(types, /error_code\?: string \| null/);
   assert.match(types, /errorCode\?: string \| null/);
 });
+
+test('knowledge material settings presents PPTX as content extraction without image concepts', () => {
+  const source = read('src/components/settings/KnowledgeMaterialsSettings.tsx');
+
+  assert.match(source, /PPTX 需要先配置并选择 QCLOUD API/);
+  assert.match(source, /旧版 \.ppt 不支持/);
+  assert.doesNotMatch(source, /缩略图|截图|渲染|base64|vision|slide assets/i);
+});

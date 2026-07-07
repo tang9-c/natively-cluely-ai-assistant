@@ -626,6 +626,13 @@ interface ElectronAPI {
   }>;
   getContextHealth: () => Promise<any>;
   knowledgeSelectMaterials: () => Promise<{ success?: boolean; cancelled?: boolean; filePaths?: string[]; error?: string }>;
+  knowledgeCheckQCloudAvailability: () => Promise<{
+    success: boolean;
+    hasNativelyApiKey: boolean;
+    activeProvider: string;
+    available: boolean;
+    error?: string;
+  }>;
   knowledgeUploadMaterials: (filePaths: string[]) => Promise<{ success: boolean; materials: any[]; errors?: Array<{ filePath: string; error: string }> }>;
   knowledgeListMaterials: () => Promise<{ success: boolean; materials: any[]; error?: string }>;
   knowledgeDeleteMaterial: (id: string) => Promise<{ success: boolean; error?: string }>;
@@ -1863,6 +1870,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('open-answer-citation', input),
   getContextHealth: () => ipcRenderer.invoke('get-context-health'),
   knowledgeSelectMaterials: () => ipcRenderer.invoke('knowledge:select-materials'),
+  knowledgeCheckQCloudAvailability: () => ipcRenderer.invoke('knowledge:check-qcloud-availability'),
   knowledgeUploadMaterials: (filePaths: string[]) =>
     ipcRenderer.invoke('knowledge:upload-materials', filePaths),
   knowledgeListMaterials: () => ipcRenderer.invoke('knowledge:list-materials'),
