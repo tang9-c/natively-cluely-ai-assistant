@@ -44,6 +44,7 @@ export type ConversationIntent =
     | 'fde_integration'
     | 'fde_security'
     | 'fde_risk'
+    | 'fde_agent_feasibility'
     | 'fde_success'
     | 'fde_next_step'
 
@@ -86,6 +87,7 @@ const GENERAL_ANSWER_SHAPES: Record<ConversationIntent, string> = {
     fde_integration: '',
     fde_security: '',
     fde_risk: '',
+    fde_agent_feasibility: '',
     fde_success: '',
     fde_next_step: '',
 };
@@ -124,6 +126,7 @@ const FDE_ANSWER_SHAPES: Partial<Record<ConversationIntent, string>> = {
     fde_integration: 'Clarify the integration surface: system, auth, data direction, environment, owner, and smallest validation step.',
     fde_security: 'Respond with a security-conscious checklist: data involved, permissions, compliance review, auditability, and decision owner.',
     fde_risk: 'Name the blocker or risk, identify dependency and impact, then propose the next unblock step. Do not guess missing owners.',
+    fde_agent_feasibility: 'Explain the AI Agent boundary as a checklist: what AI can suggest, what needs human confirmation, and what must stay read-only or never auto-write.',
     fde_success: 'Turn the discussion into measurable acceptance criteria or pilot success metrics. Keep it concrete and testable.',
     fde_next_step: 'Convert the conversation into owner, deliverable, and date. If one is missing, ask for it directly.',
     define_term: 'Define the technical or deployment term in one sentence, then connect it to the customer deployment context.',
@@ -179,6 +182,7 @@ const ZERO_SHOT_LABELS_EN_BY_MODE: Record<string, Record<string, ConversationInt
         'discussing API, data source, authentication, environment, or integration details': 'fde_integration',
         'reviewing privacy, compliance, permissions, audit logs, PII, or security concerns': 'fde_security',
         'raising deployment risk, blocker, dependency, migration, rollback, or timeline concern': 'fde_risk',
+        'reviewing AI Agent automation boundaries, human confirmation, or read-only/write-back split': 'fde_agent_feasibility',
         'defining pilot success, validation, metrics, acceptance criteria, or sign-off': 'fde_success',
         'confirming owner, next step, rollout plan, launch plan, or follow-up date': 'fde_next_step',
         'asking what a term or acronym means': 'define_term',
@@ -239,6 +243,7 @@ const ZERO_SHOT_LABELS_ZH_BY_MODE: Record<string, Record<string, ConversationInt
         '正在讨论 API、数据源、认证、环境或集成细节': 'fde_integration',
         '正在讨论隐私、合规、权限、审计日志、PII 或安全问题': 'fde_security',
         '正在提出部署风险、阻塞、依赖、迁移、回滚或时间线问题': 'fde_risk',
+        '正在确认 AI Agent 自动化边界、人工确认或只读/写回分界': 'fde_agent_feasibility',
         '正在定义试点成功、验证指标、验收标准或签署确认': 'fde_success',
         '正在确认负责人、下一步、上线计划、推进计划或跟进时间': 'fde_next_step',
         '询问某个术语或缩写的含义': 'define_term',

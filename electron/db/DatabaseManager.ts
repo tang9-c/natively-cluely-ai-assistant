@@ -10,7 +10,7 @@ import {
     DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE,
     type IntentKeywordConfig,
 } from '../llm/IntentKeywordDefaults';
-import { DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE } from '../services/ModeDefaultContexts';
+import { DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE, getDefaultModeCustomContext } from '../services/ModeDefaultContexts';
 import type { ResumeNode, UserProfileRecord } from '../services/profile/types';
 import type { SpeakerVerificationMetadata } from '../services/speaker/speakerVerificationTypes';
 
@@ -1486,7 +1486,7 @@ export class DatabaseManager {
             `);
             for (const templateType of builtInModeTemplateTypes) {
                 updateBlankCustomContext.run(
-                    DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE[templateType],
+                    getDefaultModeCustomContext(templateType),
                     templateType,
                 );
             }
