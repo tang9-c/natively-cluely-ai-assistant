@@ -16,8 +16,11 @@ export interface PptxRenderedDeck {
 
 interface PptxSlideRendererDeps {
   createTempDir?: () => Promise<string>;
-  runRenderChild?: (scriptPath: string, filePath: string, outputDir: string) => Promise<void>;
+  runRenderChild?: (scriptPath: string, filePath: string, outputDir: string, timeoutMs: number) => Promise<void>;
+  renderTimeoutMs?: number;
 }
+
+const DEFAULT_RENDER_TIMEOUT_MS = 2 * 60 * 1000;
 
 export function createRenderedDeckForTest(
   tempDir: string,
@@ -38,13 +41,16 @@ export class PptxSlideRenderer {
     scriptPath: string,
     filePath: string,
     outputDir: string,
+    timeoutMs: number,
   ) => Promise<void>;
+  private readonly renderTimeoutMs: number;
 
   constructor(deps: PptxSlideRendererDeps = {}) {
     this.createTempDir =
       deps.createTempDir ??
       (() => fs.promises.mkdtemp(path.join(os.tmpdir(), 'natively-pptx-')));
     this.runRenderChildImpl = deps.runRenderChild ?? runRenderChild;
+    this.renderTimeoutMs = deps.renderTimeoutMs ?? DEFAULT_RENDER_TIMEOUT_MS;
   }
 
   async renderToTempImages(filePath: string): Promise<PptxRenderedDeck> {
@@ -52,7 +58,10 @@ export class PptxSlideRenderer {
     const scriptPath = path.join(__dirname, 'pptx-render-child.mjs');
 
     try {
-      await this.runRenderChildImpl(scriptPath, filePath, tempDir);
+      await withRenderTimeout(
+        this.runRenderChildImpl(scriptPath, filePath, tempDir, this.renderTimeoutMs),
+        this.renderTimeoutMs,
+      );
       const files = (await fs.promises.readdir(tempDir))
         .filter((name) => /^slide-\d+\.jpg$/.test(name))
         .sort();
@@ -79,7 +88,31 @@ export class PptxSlideRenderer {
   }
 }
 
-function runRenderChild(scriptPath: string, filePath: string, outputDir: string): Promise<void> {
+function withRenderTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('pptx_render_timeout'));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
+}
+
+export function runRenderChild(
+  scriptPath: string,
+  filePath: string,
+  outputDir: string,
+  timeoutMs: number = DEFAULT_RENDER_TIMEOUT_MS,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [scriptPath, filePath, outputDir], {
       env: {
@@ -91,30 +124,49 @@ function runRenderChild(scriptPath: string, filePath: string, outputDir: string)
     });
 
     let stderr = '';
+    let settled = false;
+
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    };
+
+    const timeout = setTimeout(() => {
+      if (!child.killed) {
+        child.kill('SIGKILL');
+      }
+      finish(new Error('pptx_render_timeout'));
+    }, timeoutMs);
 
     child.stderr.on('data', (chunk) => {
       stderr += chunk.toString();
     });
-    child.on('error', reject);
+    child.on('error', (error) => finish(error));
     child.on('exit', (code) => {
       if (code === 0) {
-        resolve();
+        finish();
         return;
       }
 
       const message = stderr || `pptx_render_child_exit_${code}`;
 
       if (message.includes('pptx_too_many_slides')) {
-        reject(new Error('pptx_too_many_slides'));
+        finish(new Error('pptx_too_many_slides'));
         return;
       }
 
       if (message.includes('invalid zip')) {
-        reject(new Error('pptx_invalid_file'));
+        finish(new Error('pptx_invalid_file'));
         return;
       }
 
-      reject(new Error('pptx_render_failed'));
+      finish(new Error('pptx_render_failed'));
     });
   });
 }

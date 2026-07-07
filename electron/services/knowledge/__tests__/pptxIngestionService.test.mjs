@@ -33,6 +33,35 @@ test('PptxSlideRenderer renderToTempImages cleans up temporary output directory 
   assert.equal(fs.existsSync(tempDir), false);
 });
 
+test('PptxSlideRenderer renderToTempImages cleans up temporary output directory when child render hangs', async () => {
+  const { PptxSlideRenderer } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-render-timeout-cleanup-test-'));
+  const renderer = new PptxSlideRenderer({
+    createTempDir: async () => tempDir,
+    renderTimeoutMs: 20,
+    runRenderChild: async () => new Promise(() => {}),
+  });
+
+  await assert.rejects(() => renderer.renderToTempImages('/tmp/fake-input.pptx'), /pptx_render_timeout/);
+  assert.equal(fs.existsSync(tempDir), false);
+});
+
+test('PptxSlideRenderer runRenderChild rejects when child process hangs', async () => {
+  const { runRenderChild } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-render-timeout-test-'));
+  const scriptPath = path.join(tempDir, 'hang-child.mjs');
+  fs.writeFileSync(scriptPath, 'setInterval(() => {}, 1000);');
+
+  try {
+    await assert.rejects(
+      () => runRenderChild(scriptPath, '/tmp/fake-input.pptx', tempDir, 20),
+      /pptx_render_timeout/,
+    );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('PptxIngestionService writes one chunk per slide and cleans temp files', async () => {
   const { PptxIngestionService } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxIngestionService.js');
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-ingest-test-'));
