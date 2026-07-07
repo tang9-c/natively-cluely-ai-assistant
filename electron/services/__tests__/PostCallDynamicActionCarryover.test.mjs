@@ -188,6 +188,38 @@ test('MeetingPersistence upgrades accepted placeholder usage to generated_failed
   assert.equal(artifacts[0].structuredSummary, '确认负责人和截止时间');
 });
 
+test('post-call carryover preserves accepted fallback artifacts when generation did not complete', async () => {
+  const { buildPostCallEnhancements } = await loadWorkflow();
+
+  for (const generationStatus of ['generated_failed', 'not_generated']) {
+    const result = buildPostCallEnhancements({
+      modeTemplateType: 'team-meet',
+      transcript: [{ speaker: 'Maya', text: 'We need to follow up on launch readiness.', timestamp: 1 }],
+      summaryData: { overview: 'Launch planning.', actionItems: [] },
+      dynamicActionArtifacts: [{
+        actionId: `action_${generationStatus}`,
+        modeTemplateType: 'team-meet',
+        actionType: 'action_item',
+        outputType: 'action_item',
+        structuredSummary: 'Owner: Maya\nDeliverable: launch readiness checklist\nDue: Friday',
+        missingFields: [],
+        groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+        acceptedAt: 1000,
+        generationStatus,
+      }],
+    });
+
+    assert.ok(
+      result.actionItemsStructured.some((item) => /launch readiness checklist/i.test(item.text)),
+      `${generationStatus} fallback artifact should remain in post-call action items`,
+    );
+    assert.ok(
+      result.coachingInsights.some((insight) => insight.type === 'accepted_dynamic_action'),
+      `${generationStatus} fallback artifact should be reflected in post-call coaching insights`,
+    );
+  }
+});
+
 test('post-call carryover dedupes accepted team artifacts against extracted transcript items', async () => {
   const { buildPostCallEnhancements } = await loadWorkflow();
   const result = buildPostCallEnhancements({

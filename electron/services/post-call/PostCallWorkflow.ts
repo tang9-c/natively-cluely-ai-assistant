@@ -256,7 +256,7 @@ function mergeAcceptedActionArtifacts(
   for (const artifact of artifacts) {
     if (artifact.modeTemplateType !== 'team-meet') continue;
     if (!['action_item', 'owner_deadline_check'].includes(artifact.actionType)) continue;
-    if (artifact.generationStatus !== 'completed') continue;
+    if (!isAcceptedTeamActionCarryoverStatus(artifact.generationStatus)) continue;
 
     const parsed = parseArtifactActionSummary(artifact.structuredSummary);
     if (!parsed.text) continue;
@@ -290,9 +290,13 @@ function hasCompletedAcceptedTeamActionArtifact(artifacts?: ActionArtifact[]): b
   return Boolean(artifacts?.some((artifact) =>
     artifact.modeTemplateType === 'team-meet' &&
     ['action_item', 'owner_deadline_check'].includes(artifact.actionType) &&
-    artifact.generationStatus === 'completed' &&
+    isAcceptedTeamActionCarryoverStatus(artifact.generationStatus) &&
     Boolean(artifact.structuredSummary.trim()),
   ));
+}
+
+function isAcceptedTeamActionCarryoverStatus(status: ActionArtifact['generationStatus']): boolean {
+  return status === 'completed' || status === 'generated_failed' || status === 'not_generated';
 }
 
 function parseArtifactActionSummary(summary: string): { text: string; owner?: string; deadline?: string } {
