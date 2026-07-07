@@ -240,6 +240,7 @@ test('FDE modes seed deployment-specific default intent keywords', () => {
   const intents = rows.map(row => row.intent).sort();
 
   assert.deepEqual(intents, [
+    'fde_agent_feasibility',
     'fde_discovery',
     'fde_integration',
     'fde_next_step',
@@ -247,6 +248,7 @@ test('FDE modes seed deployment-specific default intent keywords', () => {
     'fde_security',
     'fde_success',
   ]);
+  assert.ok(rows.some(row => row.intent === 'fde_agent_feasibility' && /AI Agent|人工确认|只读/.test(row.keywords_csv)));
   assert.ok(rows.some(row => row.intent === 'fde_integration' && /API|SSO|数据源/.test(row.keywords_csv)));
   assert.ok(rows.some(row => row.intent === 'fde_security' && /PII|SOC2|权限/.test(row.keywords_csv)));
 });
