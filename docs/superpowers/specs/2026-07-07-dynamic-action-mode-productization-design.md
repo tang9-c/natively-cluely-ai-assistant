@@ -106,6 +106,82 @@ The artifact is not a persisted database record. It is an internal semantic shap
 - Validate mode-specific answer quality in tests.
 - Preserve accepted Team Meeting actions in post-call notes without inventing missing fields.
 
+### Artifact Construction Boundary
+
+The first implementation must add a small helper boundary rather than spreading artifact logic across IPC, renderer, and post-call code:
+
+```ts
+interface BuildDynamicActionArtifactsInput {
+  actions: Array<{
+    id: string;
+    modeTemplateType: string;
+    type: string;
+    productContract: {
+      outputType: ActionArtifact['outputType'];
+    };
+    status: 'accepted' | 'auto_generated' | 'completed' | 'generated_failed' | string;
+    createdAt: number;
+    latestTurn?: string;
+    retrievalQuery?: string;
+  }>;
+  usage: Array<{
+    question?: string;
+    answer?: string | string[] | null;
+    type?: string;
+    timestamp?: number;
+    metadata?: unknown;
+  }>;
+  qualityEvents?: Array<{
+    answerId?: string;
+    eventType?: string;
+    metadata?: unknown;
+  }>;
+}
+
+function buildDynamicActionArtifacts(input: BuildDynamicActionArtifactsInput): ActionArtifact[];
+```
+
+Rules:
+
+- Use existing dynamic action state as the source of truth for `actionId`, `modeTemplateType`, `actionType`, `outputType`, `acceptedAt`, and `generationStatus`.
+- Use existing `usage` records as the source of truth for generated answer text. Do not add database fields.
+- If the usage record cannot be matched to an accepted action, still produce a conservative artifact from the action itself with `generationStatus: 'not_generated'`.
+- Match usage to actions by the dynamic-action source metadata when available; otherwise use the nearest dynamic-action usage item in the same session after `acceptedAt`.
+- Derive `missingFields` with deterministic text helpers per mode. Do not ask the LLM to infer whether fields are missing.
+- Derive `groundedSources` from existing citations, context trace, degraded reason, and mode event metadata when present. If not present, use `transcript` with status `used` only when the artifact is based on the accepted action text.
+
+### Post-Call Integration Boundary
+
+`PostCallWorkflow.buildPostCallEnhancements()` should accept artifacts as an optional input:
+
+```ts
+buildPostCallEnhancements({
+  transcript,
+  modeTemplateType,
+  summaryData,
+  dynamicActionArtifacts,
+});
+```
+
+Rules:
+
+- Existing callers without `dynamicActionArtifacts` must behave exactly as they do today.
+- Team Meeting summaries must preserve accepted action, decision, deadline, and blocker artifacts in the matching post-call sections.
+- Sales and FDE summaries may use artifacts as follow-up and coaching context, but they must not invent facts that are absent from `structuredSummary` or trusted grounding.
+- If an artifact is `generated_failed` or `not_generated`, post-call may mention the accepted action only as a pending/missing item. It must not fabricate the generated content.
+- This boundary keeps the "no new database schema" decision honest: the bridge is existing dynamic actions + existing usage + optional quality events + post-call input.
+
+### No-Database Contract
+
+This work must include contract tests that fail if implementation adds schema for dynamic action artifacts:
+
+- No new migration version solely for action artifacts.
+- No `dynamic_action_artifacts` table.
+- No new dynamic-action artifact columns on `meetings` or `ai_interactions`.
+- No renderer localStorage persistence for artifacts.
+
+If later product work needs durable editable artifacts, that must be a separate spec because it changes data retention and user-visible editing behavior.
+
 ## Sales Mode
 
 ### Product Goal
@@ -245,6 +321,47 @@ Team Meeting mode should turn meeting-time verbal commitments into clear actions
 
 The tests should cover explicit action items, missing-field prompts, decisions versus discussion, blockers, and cross-mode isolation.
 
+## Fixture Schema And Scoring
+
+All mode product tests should use one shared fixture shape so recall and false-positive numbers mean the same thing across Sales, FDE, and Team Meeting.
+
+```ts
+interface DynamicActionProductFixture {
+  id: string;
+  modeTemplateType: 'sales' | 'fde' | 'team-meet';
+  language: 'zh' | 'en' | 'mixed';
+  transcriptTurns: Array<{
+    speaker: 'user' | 'customer' | 'teammate' | 'internal' | string;
+    text: string;
+    final?: boolean;
+  }>;
+  expected: {
+    shouldEmit: boolean;
+    actionType?: string;
+    outputType?: ActionArtifact['outputType'];
+    requiredCardCopy?: string[];
+    forbiddenCardCopy?: string[];
+    requiredAnswerPatterns?: string[];
+    forbiddenAnswerPatterns?: string[];
+    requiredMissingFields?: string[];
+    requiredGrounding?: Array<'material' | 'pptx' | 'screen' | 'business_context' | 'transcript'>;
+  };
+  negativeReason?: 'wrong_mode' | 'internal_chatter' | 'low_value' | 'missing_evidence' | 'unrelated_small_talk';
+}
+```
+
+Scoring:
+
+- Recall denominator: fixtures with `expected.shouldEmit === true`.
+- Recall numerator: expected action type emitted, survives semantic gate, and product contract output type matches.
+- False positive denominator: fixtures with `expected.shouldEmit === false`.
+- False positive numerator: any visible card emitted for the forbidden scenario.
+- Answer quality pass: all `requiredAnswerPatterns` match and no `forbiddenAnswerPatterns` match.
+- Grounding pass: required grounding sources are present, or the answer explicitly reports no citeable source when grounding is unavailable.
+- Missing-field pass: all `requiredMissingFields` appear in the artifact and generated output.
+
+Deterministic unit tests should own threshold math. Real LLM, real STT, real PPTX, and real business-system calls are allowed only in gated smoke tests with explicit environment prerequisites.
+
 ## Error Handling and Degradation
 
 - Material, PPTX, RAG, Windchill, PLM, QMS, or business context not found: say no citeable source or read-only fact was found.
@@ -277,6 +394,9 @@ rtk node --test electron/services/__tests__/FdeManufacturingScenarioProfile.test
 rtk node --test electron/services/__tests__/TeamMeetingDynamicActionProductFixtures.test.mjs
 rtk node --test electron/services/__tests__/TeamMeetingActionItemCompleteness.test.mjs
 rtk node --test electron/services/__tests__/PostCallDynamicActionCarryover.test.mjs
+rtk node --test electron/services/__tests__/DynamicActionArtifactBuilder.test.mjs
+rtk node --test electron/services/__tests__/DynamicActionProductFixtureScoring.test.mjs
+rtk node --test electron/services/__tests__/DynamicActionNoDbSchema.contract.test.mjs
 ```
 
 Full verification should still run the project build and type checks before landing implementation:
@@ -295,6 +415,7 @@ rtk npm run build
 4. FDE screen, material, and business-context grounding tests.
 5. Team Meeting action artifact semantics.
 6. Post-call carryover tests for accepted Team actions.
-7. Final quality gate and full build verification.
+7. Shared fixture scoring and no-database contract tests.
+8. Final quality gate and full build verification.
 
 Each phase should be shippable on its own and should not rely on unfinished later phases.
