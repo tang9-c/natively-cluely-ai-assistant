@@ -19,7 +19,7 @@
 不是给用户更多信息。是帮用户少错过关键瞬间：
 
 - 客户说太贵时，不是总结“客户提到价格”，而是给出可说出口的价值回应。
-- 客户问 SSO / 权限 / 生产环境时，不是泛泛解释集成，而是追问系统、环境、认证方式、负责人和验证步骤。
+- 客户问 PLM / QMS / 企业 AI Agent 部署时，不是泛泛解释集成，而是追问业务流程、系统边界、数据对象、权限、验证步骤和上线责任人。
 - 团队说“我来跟进”时，不是会后才发现，而是当场锁定负责人、交付物和时间。
 
 如果卡片做不到“这一下帮我省了脑子”，它就只是 UI 动效。
@@ -194,59 +194,88 @@ rtk node --test electron/services/__tests__/IntelligenceEngineDynamicActions.tes
 
 时间：第 6-8 周
 
-目标：FDE 模式要成为“客户现场部署助手”，不是技术关键词提醒器。
+目标：FDE 模式要从“通用客户现场部署助手”收敛成“制造业 PLM / QMS / 企业 AI Agent 部署助手”。
 
-FDE 的用户价值不是回答技术问题。是让前线工程师把客户现场混乱信息收束成可执行交付计划。
+FDE 的用户价值不是回答所有技术问题。是让负责制造业研发与质量业务系统部署的前线工程师，把客户现场的流程、数据、权限、质量闭环和 AI Agent 落地风险收束成可执行交付计划。
+
+这类 FDE 的默认画像要写进模式上下文：
+
+- 熟悉制造业研发流程：物料、BOM、图纸、ECR / ECO / ECN、变更评审、发布、版本、权限。
+- 熟悉质量流程：NCR、CAPA、8D、客诉、审计、检验、追溯、偏差、闭环验证。
+- 熟悉企业 AI Agent 部署：知识源接入、权限边界、工具调用、审批流、人机协同、评测和上线治理。
+- 不替客户做流程承诺，不替系统写入数据，不把未知的业务规则说成事实。
 
 FDE 只做 6 个关键瞬间：
 
-1. 现状流程发现：客户描述当前怎么做。
-2. 集成澄清：API、SSO、OAuth、SAML、SCIM、数据源、环境。
-3. 安全/合规：PII、审计、权限、数据驻留、加密。
-4. 风险/阻塞：依赖、迁移、延期、上线风险、回滚。
-5. 成功标准：POC、pilot、验收标准、KPI、sign-off。
-6. 下一步锁定：owner、deliverable、date、validation artifact。
+1. 业务流程发现：客户描述研发、变更、质量或审批现在怎么跑。
+2. 系统对象澄清：客户提到物料、BOM、图纸、变更单、CAPA、NCR、审计或项目对象。
+3. 集成与权限澄清：PLM、QMS、ERP、MES、文档系统、SSO、角色、数据方向、读写边界。
+4. AI Agent 可行性判断：哪些动作适合 AI 建议，哪些必须人审，哪些只能只读查询。
+5. 风险/合规/验证：权限越界、质量记录真实性、审计追踪、数据驻留、上线回滚、模型误判。
+6. 下一步锁定：owner、deliverable、date、validation artifact、测试数据和验收标准。
 
 FDE 卡片接受后不应该生成漂亮废话。
 
 它应该生成：
 
-- 3 个澄清问题。
-- 一个最小验证步骤。
+- 3 个面向制造业流程的澄清问题。
+- 一个最小验证步骤，例如“用一个真实 ECO 和一个 CAPA 样本跑通只读查询与审批建议”。
 - 一个 owner/date/artifact checklist。
-- 一个风险记录。
-- 一个验收标准草案。
+- 一个风险记录，区分业务流程风险、系统权限风险、AI Agent 误判风险。
+- 一个验收标准草案，包含准确率、权限边界、人工确认点和审计可追溯性。
+
+FDE 模式要支持“场景档案”和“自定义上下文”：
+
+```text
+场景档案
+  -> 当前客户行业、工厂/研发/质量组织、已知系统、关键流程、上线阶段
+  -> PLM / QMS / AI Agent 部署目标
+  -> 本次会议要推进的验证对象和验收标准
+
+自定义上下文
+  -> 客户术语映射
+  -> 业务对象命名规则
+  -> 不可承诺事项
+  -> 内部交付边界
+  -> 已知风险和待验证假设
+```
 
 FDE 模式必须吃进这些上下文：
 
 - 当前会议 transcript。
 - 最近 6 轮上下文。
-- 屏幕上下文，尤其是客户系统、错误信息、API 文档。
-- PPTX 方案材料。
+- 屏幕上下文，尤其是 PLM / QMS 页面、错误信息、对象详情、流程图、API 文档。
+- PPTX 方案材料，尤其是部署方案、流程蓝图、AI Agent 架构和验收计划。
 - Windchill / PLM 查询结果，限只读事实。
+- QMS 或业务系统查询结果，限只读事实。
+- 场景档案和用户自定义上下文。
 - QCLOUD / SenseVoice 的说话人和情绪线索，只作辅助。
 
 产品 DoD：
 
-- FDE 卡片按“部署推进”组织，不按技术名词组织。
+- FDE 卡片按“制造业业务流程推进”组织，不按技术名词组织。
 - 卡片接受后的内容默认短、具体、可问出口。
-- 安全/合规卡片必须保守，不能承诺未经证实的合规能力。
-- 风险卡片必须区分“客户风险”“我们交付风险”“信息缺失”。
+- 安全/合规卡片必须保守，不能承诺未经证实的质量、审计或权限能力。
+- 风险卡片必须区分“客户流程风险”“系统权限风险”“我们交付风险”“AI Agent 误判风险”“信息缺失”。
 - 下一步卡片缺 owner/date/artifact 时必须追问，不许脑补。
+- AI Agent 卡片必须默认包含人工确认点，不能暗示系统会自动写入 PLM / QMS。
+- 不是增加新功能,是把现有的功能利用好.
 
 验收指标：
 
 - 40 条 FDE 会议 fixture。
-- 集成/安全/风险/下一步 4 类高价值卡片召回率 > 75%。
+- PLM 流程、QMS 流程、AI Agent 可行性、权限/合规、风险/下一步 5 类高价值卡片召回率 > 75%。
 - 明确无关技术闲聊误报率 < 10%。
 - 接受后内容平均 < 120 words 或中文 < 180 字。
 - 每个卡片都有“缺什么信息”的表达。
+- 每个 AI Agent 部署建议都必须包含“人工确认点”和“不可自动化边界”。
 
 新增测试方向：
 
 - `FdeDynamicActionProductFixtures.test.mjs`
 - `FdeActionAnswerShape.test.mjs`
 - `FdeScreenAndMaterialContext.test.mjs`
+- `FdeManufacturingScenarioProfile.test.mjs`
 
 ### Step 4：团队会议模式打穿
 
@@ -373,7 +402,7 @@ rtk npm run test:dynamic-actions:metrics
 
 第 6-8 周
   Step 3: FDE 模式打穿
-  输出：6 类部署关键瞬间、屏幕/PPTX/Windchill grounding、FDE fixture
+  输出：PLM / QMS / 企业 AI Agent 部署关键瞬间、场景档案、屏幕/PPTX/Windchill grounding、FDE fixture
 
 第 9-10 周
   Step 4: 团队会议模式打穿
@@ -406,14 +435,17 @@ CueUp 要帮：
 
 ### FDE 模式
 
-用户工作：把客户现场从混乱讨论推进到可交付方案。
+用户工作：把制造业客户的研发、质量和企业 AI Agent 部署讨论，从混乱现场推进到可验证、可上线、可审计的交付方案。
+
+这个模式不再服务所有“客户现场工程师”。默认服务的是负责 PLM / QMS 系统部署和企业 AI Agent 部署的 FDE。他们理解制造业研发与质量流程，也理解前沿 AI 技术怎么安全落地到企业系统。
 
 CueUp 要帮：
 
-- 从客户话里抽取工作流、系统、数据、权限、风险。
+- 从客户话里抽取研发流程、质量流程、业务对象、系统边界、数据权限和交付风险。
 - 在正确时机追问关键缺口。
-- 把安全、集成、风险、验收变成 checklist。
+- 把 PLM / QMS 集成、AI Agent 可行性、权限、风险、验收变成 checklist。
 - 把会议结束前的下一步锁死。
+- 通过场景档案和自定义上下文记住客户术语、系统清单、流程阶段、不可承诺事项和待验证假设。
 
 不追求：
 
@@ -421,6 +453,7 @@ CueUp 要帮：
 - 自动改客户系统。
 - 写入 PLM/QMS。
 - 泛泛回答所有技术问题。
+- 泛泛服务所有行业的 FDE 场景。
 
 ### 团队会议模式
 
@@ -472,9 +505,10 @@ CueUp 要帮：
 | 销售价格异议 | 可说出口的短回应 |
 | 销售报价请求 | 带占位符的 email draft |
 | 销售案例请求 | grounded proof points |
-| FDE 集成澄清 | checklist + 下一验证步骤 |
-| FDE 安全评审 | 安全问题清单 |
-| FDE 风险阻塞 | blocker record |
+| FDE PLM/QMS 流程澄清 | 业务对象 + 流程缺口 + 下一验证步骤 |
+| FDE 企业 AI Agent 可行性 | 可自动化边界 + 人工确认点 + 最小验证 |
+| FDE 权限/合规评审 | 权限、审计、数据边界问题清单 |
+| FDE 风险阻塞 | 业务流程/系统权限/AI 误判 blocker record |
 | 团队行动项 | owner / deliverable / due date |
 | 团队决策 | decision / rationale / reversibility |
 
@@ -490,7 +524,7 @@ CueUp 要帮：
 | Generated failure rate | < 3% | 点了没结果最伤信任 |
 | Sales high-value recall | > 80% | 销售模式是否真的帮忙 |
 | Sales pricing false positive | < 10% | 价格误报最烦 |
-| FDE high-value recall | > 75% | FDE 是否真的能推进交付 |
+| FDE high-value recall | > 75% | FDE 是否真的能推进 PLM/QMS/AI Agent 部署 |
 | Team action completeness | > 70% | 行动项是否可执行 |
 | Accepted card carryover | > 90% | 会中动作是否进入会后产物 |
 
@@ -504,9 +538,9 @@ CueUp 要帮：
 | DynamicActionCard | 已能展示/接受/忽略 | 升级为 action promise + evidence + output type |
 | IntentClassifier | 已有 mode-aware intent | 用于模式关键瞬间召回和答案形状 |
 | SignalStateTracker | 已有重复证据和冷却 | 用于降噪和用户忽略后的学习 |
-| RAG / Materials | PDF/DOCX/MD/TXT/PPTX 基础已在 | 销售案例、FDE 方案材料 grounding |
-| Windchill adapter | 专用只读 MCP 已在 | FDE/销售中只读业务事实补充 |
-| Screen understanding | 已在实时路径 | FDE 和技术现场的强上下文 |
+| RAG / Materials | PDF/DOCX/MD/TXT/PPTX 基础已在 | 销售案例、FDE 部署方案、流程蓝图和验收材料 grounding |
+| Windchill adapter | 专用只读 MCP 已在 | FDE 中 PLM 物料、BOM、变更、文档等只读事实补充 |
+| Screen understanding | 已在实时路径 | FDE 看 PLM/QMS 页面、错误信息、流程图和 API 文档 |
 | QCLOUD emotion | 已透传到 UI | 只作风险/语气辅助，不能单独触发动作 |
 | Quality gate | 已有基础命令 | 扩成产品级 fixture 和 replay |
 
@@ -541,6 +575,7 @@ CueUp 要帮：
 
 - 未来 3 个月只把 sales、fde、team-meet 当主线。
 - general / recruiting / lecture / technical-interview 保持维护，不做主战场。
+- FDE 不再做泛行业现场工程师，主战场收敛到制造业 PLM / QMS / 企业 AI Agent 部署。
 - 每个模式只选 4-6 个关键瞬间。
 
 ### 风险 3：生成内容不能直接用
@@ -592,7 +627,7 @@ CueUp 要帮：
    用价格、报价、案例、技术需求、推进信号证明价值。
 
 3. FDE 模式打穿
-   用集成、安全、风险、验收、下一步证明复杂会议价值。
+   用 PLM/QMS 流程、业务对象、AI Agent 可行性、权限合规、风险和验收证明复杂会议价值。
 
 4. 团队会议模式打穿
    用行动项、决策、阻塞和会后 carryover 证明日常价值。
