@@ -25,7 +25,22 @@ export interface KnowledgeMaterialSearchResponse {
     degradedReason?: 'embedding_unavailable' | 'hybrid_threw';
 }
 
-const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.docx', '.txt', '.md', '.markdown']);
+interface PptxQCloudAvailability {
+    hasNativelyApiKey: boolean;
+    activeProvider: string;
+    available: boolean;
+}
+
+interface KnowledgeMaterialServiceOptions {
+    getQCloudAvailability?: () => Promise<PptxQCloudAvailability>;
+    createPptxIngestionService?: (
+        indexPreparedChunks: (materialId: string, chunks: KnowledgeMaterialChunkInput[]) => Promise<void>,
+    ) => {
+        ingest(materialId: string, filePath: string): Promise<void>;
+    };
+}
+
+const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.docx', '.txt', '.md', '.markdown', '.pptx']);
 const CHILD_TARGET_CHARS = 900;
 const PARENT_WINDOW = 1;
 
@@ -37,6 +52,7 @@ export class KnowledgeMaterialService {
     constructor(
         private readonly db: DatabaseManager,
         private readonly embeddingPipeline?: EmbeddingPipeline | null,
+        private readonly options: KnowledgeMaterialServiceOptions = {},
     ) {
         this.materialRagRetriever = new MaterialRagRetriever(embeddingPipeline);
     }
@@ -50,6 +66,7 @@ export class KnowledgeMaterialService {
         const errors: Array<{ filePath: string; error: string }> = [];
         for (const filePath of filePaths) {
             try {
+                await this.assertUploadAllowed(filePath);
                 materials.push(await this.createMaterialRecord(filePath));
             } catch (error: any) {
                 errors.push({ filePath, error: error?.message || 'unknown_error' });
@@ -66,6 +83,7 @@ export class KnowledgeMaterialService {
     }
 
     async uploadFile(filePath: string): Promise<any> {
+        await this.assertUploadAllowed(filePath);
         const material = await this.createMaterialRecord(filePath);
         const indexableFilePath = material.__filePath;
         delete material.__filePath;
@@ -192,11 +210,13 @@ export class KnowledgeMaterialService {
     }
 
     private async indexMaterial(materialId: string, text: string): Promise<void> {
+        await this.indexPreparedChunks(materialId, buildParentChildChunks(materialId, text));
+    }
+
+    private async indexPreparedChunks(materialId: string, chunks: KnowledgeMaterialChunkInput[]): Promise<void> {
         if (!this.isMaterialIndexable(materialId)) return;
         this.db.updateKnowledgeMaterialStatus(materialId, 'indexing');
         try {
-            if (!this.isMaterialIndexable(materialId)) return;
-            const chunks = buildParentChildChunks(materialId, text);
             if (chunks.length === 0) {
                 throw createMaterialIndexError('empty_document', '文档没有可索引的文本。');
             }
@@ -233,6 +253,14 @@ export class KnowledgeMaterialService {
     private async indexMaterialFromFile(materialId: string, filePath: string): Promise<void> {
         try {
             if (!this.isMaterialIndexable(materialId)) return;
+            const ext = path.extname(filePath).toLowerCase();
+            if (ext === '.pptx') {
+                const service = this.options.createPptxIngestionService
+                    ? this.options.createPptxIngestionService((id, chunks) => this.indexPreparedChunks(id, chunks))
+                    : this.createDefaultPptxIngestionService();
+                await service.ingest(materialId, filePath);
+                return;
+            }
             const rawText = await DocumentTextExtractor.extract(filePath);
             if (!this.isMaterialIndexable(materialId)) return;
             await this.indexMaterial(materialId, rawText);
@@ -243,6 +271,48 @@ export class KnowledgeMaterialService {
                 message: toUserFacingMaterialError(error),
             });
         }
+    }
+
+    private async assertUploadAllowed(filePath: string): Promise<void> {
+        const ext = path.extname(filePath).toLowerCase();
+        if (ext === '.ppt') {
+            throw new Error('暂不支持旧版 .ppt，请另存为 .pptx 后上传。');
+        }
+        if (ext === '.pptm') {
+            throw new Error('暂不支持含宏 PPT，请另存为 .pptx 后上传。');
+        }
+        if (ext !== '.pptx') return;
+        const availability = await this.checkPptxQCloudAvailability();
+        if (!availability.hasNativelyApiKey || availability.activeProvider !== 'natively' || !availability.available) {
+            throw new Error('PPTX 知识源需要先配置并选择 QCLOUD API。');
+        }
+    }
+
+    private async checkPptxQCloudAvailability(): Promise<PptxQCloudAvailability> {
+        if (this.options.getQCloudAvailability) return this.options.getQCloudAvailability();
+        const { CredentialsManager } = require('../CredentialsManager');
+        const cm = CredentialsManager.getInstance();
+        const activeProvider = cm.getDefaultModel?.() || '';
+        const hasNativelyApiKey = Boolean(cm.getNativelyApiKey?.());
+        return {
+            hasNativelyApiKey,
+            activeProvider,
+            available: hasNativelyApiKey && activeProvider === 'natively',
+        };
+    }
+
+    private createDefaultPptxIngestionService(): { ingest(materialId: string, filePath: string): Promise<void> } {
+        const { LLMHelper } = require('../../LLMHelper');
+        const { PptxIngestionService } = require('./pptx/PptxIngestionService');
+        const { PptxSlideRenderer } = require('./pptx/PptxSlideRenderer');
+        const { PptxVisionDescriptor } = require('./pptx/PptxVisionDescriptor');
+        const llmHelper = new LLMHelper();
+        llmHelper.setModel('natively');
+        return new PptxIngestionService(
+            new PptxSlideRenderer(),
+            new PptxVisionDescriptor(llmHelper),
+            (id: string, chunks: KnowledgeMaterialChunkInput[]) => this.indexPreparedChunks(id, chunks),
+        );
     }
 
     private enqueueIndexMaterialFromFile(materialId: string, filePath: string): void {
@@ -260,6 +330,11 @@ export class KnowledgeMaterialService {
 function classifyMaterialIndexError(error: any): string {
     if (error?.code) return error.code;
     const message = String(error?.message || '').toLowerCase();
+    if (message.includes('pptx_too_many_slides')) return 'pptx_too_many_slides';
+    if (message.includes('pptx_invalid_file')) return 'pptx_invalid_file';
+    if (message.includes('pptx_render_failed')) return 'pptx_render_failed';
+    if (message.includes('pptx_markdown_empty')) return 'pptx_markdown_empty';
+    if (message.includes('pptx_enhance_')) return 'pptx_enhance_invalid_json';
     if (message.includes('unsupported file type')) return 'unsupported_file_type';
     if (message.includes('empty')) return 'empty_document';
     if (message.includes('binary')) return 'binary_text_file';
@@ -269,10 +344,16 @@ function classifyMaterialIndexError(error: any): string {
 
 function toUserFacingMaterialError(error: any): string {
     const code = classifyMaterialIndexError(error);
-    if (code === 'unsupported_file_type') return '不支持的文件类型。当前支持 PDF、DOCX、Markdown 和 TXT。';
+    if (code === 'unsupported_file_type') return '不支持的文件类型。当前支持 PDF、DOCX、PPTX、Markdown 和 TXT。';
     if (code === 'empty_document') return '文档没有可索引的文本。';
     if (code === 'binary_text_file') return 'TXT 文件看起来是二进制内容，无法作为文本资料索引。';
     if (code === 'embedding_failed') return '资料文本已读取，但向量索引失败。';
+    if (code === 'pptx_too_many_slides') return 'PPTX 页数超过 200，请拆分后上传。';
+    if (code === 'pptx_invalid_file') return 'PPTX 文件已损坏或不是有效的 PowerPoint 文件。';
+    if (code === 'pptx_render_failed') return 'PPTX 内容提取失败，请另存为标准 .pptx 后重试。';
+    if (code === 'pptx_markdown_empty' || code === 'pptx_enhance_invalid_json' || code === 'pptx_enhance_invalid_questions') {
+        return 'PPTX 内容提取失败，请稍后重试。';
+    }
     if (code === 'parse_failed') return '文档解析失败，请确认文件未损坏。';
     return error?.message || '资料索引失败。';
 }

@@ -32,3 +32,37 @@ test('PptxSlideRenderer renderToTempImages cleans up temporary output directory 
   await assert.rejects(() => renderer.renderToTempImages('/tmp/fake-input.pptx'), /pptx_render_failed/);
   assert.equal(fs.existsSync(tempDir), false);
 });
+
+test('PptxIngestionService writes one chunk per slide and cleans temp files', async () => {
+  const { PptxIngestionService } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxIngestionService.js');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-ingest-test-'));
+  const image1 = path.join(tempDir, 'slide-001.jpg');
+  const image2 = path.join(tempDir, 'slide-002.jpg');
+  fs.writeFileSync(image1, 'one');
+  fs.writeFileSync(image2, 'two');
+  const chunks = [];
+  const renderer = {
+    renderToTempImages: async () => ({
+      tempDir,
+      slides: [{ slideIndex: 1, imagePath: image1 }, { slideIndex: 2, imagePath: image2 }],
+      cleanup: async () => fs.rmSync(tempDir, { recursive: true, force: true }),
+    }),
+  };
+  const descriptor = {
+    describeSlide: async (_imagePath, slideIndex) => `# 标题\nSlide ${slideIndex}`,
+    enhanceMarkdown: async () => ({
+      summary: '摘要',
+      hypotheticalQuestions: ['问1', '问2', '问3', '问4', '问5'],
+    }),
+  };
+  const service = new PptxIngestionService(renderer, descriptor, async (_materialId, nextChunks) => {
+    chunks.push(...nextChunks);
+  });
+  await service.ingest('mat_1', '/tmp/deck.pptx');
+  assert.equal(chunks.length, 2);
+  assert.match(chunks[0].cleanedText, /## 本页摘要/);
+  assert.match(chunks[0].cleanedText, /问5/);
+  assert.equal(chunks[0].metadata.source_format, 'pptx');
+  assert.equal(chunks[0].metadata.slide_index, 1);
+  assert.equal(fs.existsSync(tempDir), false);
+});

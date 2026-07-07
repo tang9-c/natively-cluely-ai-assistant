@@ -174,17 +174,106 @@ test('parse failure leaves a failed material record with a readable error', asyn
 test('unsupported files are recorded as failed without entering the index queue', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'material-service-'));
   try {
-    const pptxPath = path.join(tmpDir, 'deck.pptx');
-    fs.writeFileSync(pptxPath, 'not supported', 'utf8');
+    const rtfPath = path.join(tmpDir, 'notes.rtf');
+    fs.writeFileSync(rtfPath, 'not supported', 'utf8');
     const db = createDbStub();
     const service = new KnowledgeMaterialService(db, null);
 
-    const result = await service.uploadFiles([pptxPath]);
+    const result = await service.uploadFiles([rtfPath]);
     assert.equal(result.errors.length, 0);
     assert.equal(result.materials.length, 1);
     assert.equal(result.materials[0].status, 'failed');
     assert.equal(result.materials[0].error_code, 'unsupported_file_type');
     assert.equal(db.getKnowledgeMaterialChunks().length, 0);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('pptx upload is rejected before material creation when QCLOUD is unavailable', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'material-service-'));
+  try {
+    const pptxPath = path.join(tmpDir, 'deck.pptx');
+    fs.writeFileSync(pptxPath, 'fake', 'utf8');
+    const db = createDbStub();
+    const service = new KnowledgeMaterialService(db, null, {
+      getQCloudAvailability: async () => ({ hasNativelyApiKey: false, activeProvider: 'openai', available: false }),
+    });
+    const result = await service.uploadFiles([pptxPath]);
+    assert.equal(result.materials.length, 0);
+    assert.equal(result.errors.length, 1);
+    assert.match(result.errors[0].error, /PPTX 知识源需要先配置并选择 QCLOUD API/);
+    assert.equal(db.listKnowledgeMaterials().length, 0);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('legacy ppt formats are rejected before material creation', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'material-service-'));
+  try {
+    const pptPath = path.join(tmpDir, 'legacy.ppt');
+    const pptmPath = path.join(tmpDir, 'macro.pptm');
+    fs.writeFileSync(pptPath, 'fake', 'utf8');
+    fs.writeFileSync(pptmPath, 'fake', 'utf8');
+    const db = createDbStub();
+    const service = new KnowledgeMaterialService(db, null, {
+      getQCloudAvailability: async () => ({ hasNativelyApiKey: true, activeProvider: 'natively', available: true }),
+    });
+    const result = await service.uploadFiles([pptPath, pptmPath]);
+    assert.equal(result.materials.length, 0);
+    assert.equal(result.errors.length, 2);
+    assert.match(result.errors[0].error, /另存为 .pptx/);
+    assert.match(result.errors[1].error, /另存为 .pptx/);
+    assert.equal(db.listKnowledgeMaterials().length, 0);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('pptx upload indexes prepared slide chunks without text splitting', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'material-service-'));
+  try {
+    const pptxPath = path.join(tmpDir, 'deck.pptx');
+    fs.writeFileSync(pptxPath, 'fake', 'utf8');
+    const db = createDbStub();
+    const service = new KnowledgeMaterialService(db, null, {
+      getQCloudAvailability: async () => ({ hasNativelyApiKey: true, activeProvider: 'natively', available: true }),
+      createPptxIngestionService: (indexPreparedChunks) => ({
+        ingest: async (materialId) => {
+          await indexPreparedChunks(materialId, [
+            {
+              materialId,
+              chunkIndex: 0,
+              parentChunkIndex: 0,
+              cleanedText: 'Slide 1 prepared chunk',
+              parentText: 'Slide 1 prepared chunk',
+              tokenCount: 6,
+              metadata: { source_format: 'pptx', slide_index: 1 },
+            },
+            {
+              materialId,
+              chunkIndex: 1,
+              parentChunkIndex: 1,
+              cleanedText: 'Slide 2 prepared chunk',
+              parentText: 'Slide 2 prepared chunk',
+              tokenCount: 6,
+              metadata: { source_format: 'pptx', slide_index: 2 },
+            },
+          ]);
+        },
+      }),
+    });
+    const result = await service.uploadFiles([pptxPath]);
+    assert.equal(result.errors.length, 0);
+    assert.equal(result.materials.length, 1);
+    const materialId = result.materials[0].id;
+
+    await waitFor(() => assert.equal(db.getKnowledgeMaterial(materialId).status, 'complete'));
+    const chunks = [...db.chunks.values()].filter((chunk) => chunk.material_id === materialId);
+    assert.equal(chunks.length, 2);
+    assert.equal(chunks[0].cleaned_text, 'Slide 1 prepared chunk');
+    assert.equal(chunks[1].cleaned_text, 'Slide 2 prepared chunk');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
