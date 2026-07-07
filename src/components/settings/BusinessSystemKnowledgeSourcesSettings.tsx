@@ -16,13 +16,19 @@ interface BusinessSource {
 }
 
 const emptySource: BusinessSource = {
-  name: 'PLM 知识源',
+  name: 'Windchill 知识源',
   kind: 'plm',
   url: '',
   authType: 'api_key',
   enabled: true,
   isDefault: true,
 };
+
+function labelForSourceKind(kind: SourceKind): string {
+  if (kind === 'plm') return 'Windchill 知识源';
+  if (kind === 'qms') return 'QMS 知识源';
+  return '业务系统知识源';
+}
 
 export function BusinessSystemKnowledgeSourcesSettings() {
   const [sources, setSources] = useState<BusinessSource[]>([]);
@@ -83,7 +89,7 @@ export function BusinessSystemKnowledgeSourcesSettings() {
         <div>
           <h4 className="text-sm font-semibold text-text-primary">业务系统知识源</h4>
           <p className="text-[11px] text-text-tertiary">
-            连接 PLM 知识源、QMS 知识源或其它受控业务系统。
+            连接 Windchill 知识源、QMS 知识源或其它受控业务系统。
           </p>
         </div>
       </div>
@@ -97,7 +103,7 @@ export function BusinessSystemKnowledgeSourcesSettings() {
           <label className="space-y-1">
             <span className="text-[11px] font-medium text-text-secondary uppercase tracking-wide">类型</span>
             <select className="w-full bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary/50 transition-all" value={draft.kind} onChange={(event) => setDraft({ ...draft, kind: event.target.value as SourceKind })}>
-              <option value="plm">PLM 知识源</option>
+              <option value="plm">Windchill 知识源</option>
               <option value="qms">QMS 知识源</option>
               <option value="business_system">业务系统知识源</option>
             </select>
@@ -149,7 +155,7 @@ export function BusinessSystemKnowledgeSourcesSettings() {
           <div key={source.id} className="flex items-center justify-between bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5">
             <div>
               <p className="text-sm text-text-primary">{source.name}</p>
-              <p className="text-xs text-text-tertiary">{source.kind} · {source.enabled ? '已启用' : '已停用'} · {source.credentialState?.hasApiKey || source.credentialState?.hasPassword ? '已配置凭据' : '未配置凭据'}</p>
+              <p className="text-xs text-text-tertiary">{labelForSourceKind(source.kind)} · {source.enabled ? '已启用' : '已停用'} · {source.credentialState?.hasApiKey || source.credentialState?.hasPassword ? '已配置凭据' : '未配置凭据'}</p>
             </div>
             <button onClick={() => source.id && remove(source.id)} className="p-1.5 rounded-lg text-text-secondary hover:text-red-400" title="删除">
               <Trash2 size={14} />

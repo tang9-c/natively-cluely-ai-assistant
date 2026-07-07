@@ -112,6 +112,7 @@ export type AnswerDegradedReason =
   | 'business_system_no_result'
   | 'business_system_ambiguous'
   | 'business_system_missing_query_anchor'
+  | 'business_system_unsupported_operation'
   | 'screen_context_failed'
   | 'screen_context_scope_blocked'
   | 'screen_context_no_vision_provider'
@@ -146,7 +147,7 @@ export interface AnswerSourceStatus {
   uploadedMaterialHitCount: number
   citationCount: number
   screenContextStatus: 'not_available' | 'available' | 'failed'
-  businessSystemStatus?: 'not_requested' | 'available' | 'not_configured' | 'missing_query_anchor' | 'auth_failed' | 'timeout' | 'no_result' | 'ambiguous' | 'unavailable' | 'error'
+  businessSystemStatus?: 'not_requested' | 'available' | 'not_configured' | 'missing_query_anchor' | 'auth_failed' | 'timeout' | 'no_result' | 'ambiguous' | 'unsupported_operation' | 'unavailable' | 'error'
   businessSystemSourceName?: string
   sttUserStatus?: 'connected' | 'reconnecting' | 'failed'
   sttInterviewerStatus?: 'connected' | 'reconnecting' | 'failed'

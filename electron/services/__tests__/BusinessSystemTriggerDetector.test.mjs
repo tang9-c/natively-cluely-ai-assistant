@@ -29,6 +29,26 @@ test('detects explicit QMS trigger', async () => {
   assert.equal(result.sourceHint, 'qms');
 });
 
+test('detects Windchill wording as PLM source hint', async () => {
+  const { detectBusinessSystemTrigger } = await loadDetector();
+
+  const result = detectBusinessSystemTrigger('查一下 Windchill 里的 PRT-001 BOM');
+
+  assert.equal(result.shouldQuery, true);
+  assert.equal(result.sourceHint, 'plm');
+  assert.equal(result.query, '查一下 Windchill 里的 PRT-001 BOM');
+});
+
+test('detects mixed Windchill ECN wording as PLM source hint', async () => {
+  const { detectBusinessSystemTrigger } = await loadDetector();
+
+  const result = detectBusinessSystemTrigger('用 Windchill 确认一下 ECN-123 的 affected objects');
+
+  assert.equal(result.shouldQuery, true);
+  assert.equal(result.sourceHint, 'plm');
+  assert.match(result.query, /ECN-123/);
+});
+
 test('detects explicit business-object lookup without naming PLM or QMS', async () => {
   const { detectBusinessSystemTrigger } = await loadDetector();
 

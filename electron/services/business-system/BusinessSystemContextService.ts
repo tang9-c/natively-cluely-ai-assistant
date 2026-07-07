@@ -4,12 +4,15 @@ import type { RealtimeContextCandidate } from '../context/RealtimeContextOrchest
 import { BusinessMcpClient } from './BusinessMcpClient';
 import { detectBusinessSystemTrigger } from './BusinessSystemTriggerDetector';
 import type {
+    BusinessSystemEvidence,
     BusinessSystemFixedReplyStatus,
     BusinessSystemKnowledgeSource,
     BusinessSystemQueryResult,
     BusinessSystemSourceKind,
 } from './BusinessSystemTypes';
 import type { WindchillBusinessContextAdapter } from './WindchillBusinessContextAdapter';
+
+const WINDCHILL_QUERY_TIMEOUT_MS = 6000;
 
 export type BusinessSystemServiceResult =
     | { kind: 'skipped' }
@@ -42,6 +45,8 @@ export function businessSystemDegradedReasonForStatus(status: BusinessSystemFixe
     switch (status) {
         case 'missing_query_anchor':
             return 'business_system_missing_query_anchor';
+        case 'unsupported_operation':
+            return 'business_system_unsupported_operation';
         case 'auth_failed':
             return 'business_system_auth_failed';
         case 'timeout':
@@ -94,13 +99,47 @@ export function toBusinessSystemFixedReply(input: {
     if (input.status === 'unavailable') {
         return { kind: 'fixed_reply', status: input.status, sourceName, answer: `${sourceName}当前不可用，无法确认该信息。` };
     }
+    if (input.status === 'unsupported_operation') {
+        return {
+            kind: 'fixed_reply',
+            status: input.status,
+            sourceName,
+            answer: '当前只支持查询 Windchill 数据，暂不支持创建、修改、审批或提交操作。',
+        };
+    }
     return { kind: 'fixed_reply', status: 'error', sourceName, answer: `查询${sourceName}时失败，无法确认该信息。` };
+}
+
+function formatEvidenceContext(sourceName: string, evidence: BusinessSystemEvidence): string {
+    const label = evidence.source === 'windchill' ? 'Windchill' : sourceName;
+    const lines = [
+        `${label} 结构化查询结果：`,
+    ];
+    if (evidence.sourceTool) lines.push(`工具：${evidence.sourceTool}`);
+    lines.push(`记录数：${evidence.recordCount}`);
+    evidence.records.slice(0, 5).forEach((record, index) => {
+        lines.push(`记录 ${index + 1}${record.title ? `：${record.title}` : '：'}`);
+        for (const field of record.fields.slice(0, 16)) {
+            lines.push(`- ${field.name}: ${field.value}`);
+        }
+    });
+    if (typeof evidence.omittedFieldCount === 'number' && evidence.omittedFieldCount > 0) {
+        lines.push(`已省略字段数：${evidence.omittedFieldCount}`);
+    }
+    lines.push('请用中文自然汇报，不要输出 JSON，不要编造缺失字段。');
+    return lines.join('\n');
+}
+
+function hasBusinessSystemContent(result: BusinessSystemQueryResult): boolean {
+    return Boolean(result.summary?.trim() || result.evidence?.records?.length);
 }
 
 function buildContextCandidate(source: BusinessSystemKnowledgeSource, result: BusinessSystemQueryResult): RealtimeContextCandidate {
     const sourceName = result.sourceName || source.name;
     const summary = String(result.summary || '').trim();
-    const text = `根据 ${sourceName}：${summary}`;
+    const text = result.evidence
+        ? formatEvidenceContext(sourceName, result.evidence)
+        : `根据 ${sourceName}：${summary}`;
     return {
         source: 'business_system',
         sourceId: source.id,
@@ -110,6 +149,9 @@ function buildContextCandidate(source: BusinessSystemKnowledgeSource, result: Bu
             sourceName,
             status: result.status,
             kind: source.kind,
+            evidenceSource: result.evidence?.source,
+            sourceTool: result.evidence?.sourceTool,
+            recordCount: result.evidence?.recordCount,
         },
     };
 }
@@ -155,7 +197,7 @@ export class BusinessSystemContextService {
                         sourceUrl: source.url,
                     },
                     credentials,
-                    2000,
+                    WINDCHILL_QUERY_TIMEOUT_MS,
                 );
             } else {
                 result = await this.mcpClient.query(source, credentials, {
@@ -171,7 +213,7 @@ export class BusinessSystemContextService {
             });
         }
 
-        if (result.status !== 'ok' || !result.summary?.trim()) {
+        if (result.status !== 'ok' || !hasBusinessSystemContent(result)) {
             const failureStatus = result.status === 'ok' ? 'error' : result.status;
             return toBusinessSystemFixedReply({
                 status: failureStatus,

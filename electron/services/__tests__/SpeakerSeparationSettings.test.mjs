@@ -29,7 +29,8 @@ test('speaker separation control lives in the Audio speech provider settings', (
 
     assert.match(settings, /Speaker separation/);
     assert.match(settings, /speakerSeparationMode/);
-    assert.match(settings, /Speaker separation on for Doubao AUC/);
+    assert.match(settings, /speakerSeparationProviderLabel/);
+    assert.match(settings, /Speaker separation on for \$\{speakerSeparationProviderLabel\}/);
     assert.match(settings, /Speaker separation unavailable for this transcription provider/);
     assert.match(settings, /Speaker separation off/);
 

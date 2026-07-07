@@ -15,7 +15,8 @@ test('business system settings component uses product language and not MCP manag
   const source = read('src/components/settings/BusinessSystemKnowledgeSourcesSettings.tsx');
 
   assert.match(source, /业务系统知识源/);
-  assert.match(source, /PLM 知识源/);
+  assert.match(source, /Windchill 知识源/);
+  assert.doesNotMatch(source, /PLM 知识源/);
   assert.match(source, /QMS 知识源/);
   assert.match(source, /账号密码/);
   assert.match(source, /API Key/);

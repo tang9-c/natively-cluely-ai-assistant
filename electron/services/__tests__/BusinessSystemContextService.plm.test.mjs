@@ -122,3 +122,71 @@ test('BusinessSystemContextService: source.kind !== "plm" still routes through m
   assert.equal(result.kind, 'context');
   assert.match(result.candidate.text, /NCR-2024-001/);
 });
+
+test('BusinessSystemContextService: unsupported Windchill write returns fixed reply', async () => {
+  const { BusinessSystemContextService } = await loadService();
+  const service = new BusinessSystemContextService({
+    credentialsManager: {
+      getBusinessSystemKnowledgeSources: () => [{
+        id: 'plm-1',
+        name: 'Windchill 知识源',
+        kind: 'plm',
+        url: 'https://example.invalid/mcp',
+        authType: 'api_key',
+        enabled: true,
+        isDefault: true,
+      }],
+      getBusinessSystemCredentials: () => ({ apiKey: 'k' }),
+    },
+    plmAdapter: {
+      async query() {
+        return { status: 'unsupported_operation', sourceName: 'Windchill 知识源' };
+      },
+    },
+  });
+
+  const result = await service.resolve({ question: '用 Windchill approve ECN-123' });
+
+  assert.equal(result.kind, 'fixed_reply');
+  assert.equal(result.status, 'unsupported_operation');
+  assert.match(result.answer, /暂不支持创建、修改、审批或提交操作/);
+});
+
+test('BusinessSystemContextService: Windchill adapter gets a multi-call query budget', async () => {
+  const { BusinessSystemContextService } = await loadService();
+  let observedTimeoutMs = 0;
+  const service = new BusinessSystemContextService({
+    credentialsManager: {
+      getBusinessSystemKnowledgeSources: () => [{
+        id: 'plm-1',
+        name: 'Windchill 知识源',
+        kind: 'plm',
+        url: 'https://example.invalid/mcp',
+        authType: 'api_key',
+        enabled: true,
+        isDefault: true,
+      }],
+      getBusinessSystemCredentials: () => ({ apiKey: 'k' }),
+    },
+    plmAdapter: {
+      async query(_input, _credentials, timeoutMs) {
+        observedTimeoutMs = timeoutMs;
+        return {
+          status: 'ok',
+          sourceName: 'Windchill 知识源',
+          evidence: {
+            source: 'windchill',
+            sourceTool: 'part_search',
+            recordCount: 1,
+            records: [{ fields: [{ name: 'Number', value: '0000000001' }] }],
+          },
+        };
+      },
+    },
+  });
+
+  const result = await service.resolve({ question: '查一下 Windchill 里 0000000001 这个料的信息' });
+
+  assert.equal(result.kind, 'context');
+  assert.equal(observedTimeoutMs, 6000);
+});

@@ -51,8 +51,8 @@ test('extractPartNumberFromQuery: returns the token matching letter+digits / wil
 });
 
 // RED #3: Windchill OData 响应 → BusinessSystemQueryResult。这是纯函数包装层,
-// 输入是 part_search 返回的 OData JSON,输出符合项目规定的 status/sourceName/summary/items。
-test('wrapWindchillPartResults: single hit → status "ok" with one item', async () => {
+// 输入是 part_search 返回的 OData JSON,输出符合项目规定的 status/sourceName/evidence。
+test('wrapWindchillPartResults: single hit → status "ok" with structured evidence', async () => {
   const { wrapWindchillPartResults } = await loadAdapter();
 
   const odata = {
@@ -67,10 +67,16 @@ test('wrapWindchillPartResults: single hit → status "ok" with one item', async
   const result = wrapWindchillPartResults(odata, 'Windchill PLM');
   assert.equal(result.status, 'ok');
   assert.equal(result.sourceName, 'Windchill PLM');
-  assert.match(result.summary, /PRT-001/);
-  assert.equal(result.items.length, 1);
-  assert.equal(result.items[0].id, 'OR:wt.part.WTPart:238446');
-  assert.equal(result.items[0].number, 'PRT-001');
+  assert.equal(result.summary, undefined);
+  assert.equal(result.evidence.sourceTool, 'part_search');
+  assert.equal(result.evidence.records.length, 1);
+  assert.equal(result.evidence.records[0].title, 'PRT-001 / Plate-A');
+  assert.deepEqual(result.evidence.records[0].fields.slice(0, 4).map((field) => [field.name, field.value]), [
+    ['Number', 'PRT-001'],
+    ['Name', 'Plate-A'],
+    ['State', 'Released'],
+    ['ID', 'OR:wt.part.WTPart:238446'],
+  ]);
 });
 
 test('wrapWindchillPartResults: empty value → status "no_result"', async () => {
@@ -93,7 +99,8 @@ test('wrapWindchillPartResults: multiple hits → status "ambiguous"', async () 
   const result = wrapWindchillPartResults(odata, 'Windchill PLM');
   assert.equal(result.status, 'ambiguous');
   assert.match(result.summary, /3/);
-  assert.equal(result.items.length, 3);
+  assert.equal(result.evidence.recordCount, 3);
+  assert.equal(result.evidence.records.length, 3);
 });
 
 // RED #4: 错误 → BusinessSystemQueryResult.status 映射。这是纯函数,
@@ -148,7 +155,8 @@ test('query: happy path → initialize + tools/call(part_search) + wrap to ok', 
 
   const stub = makeStubFetch([
     { body: { jsonrpc: '2.0', id: 1, result: { capabilities: {} } } },
-    { body: { jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: JSON.stringify({
+    { body: { jsonrpc: '2.0', id: 2, result: { tools: [{ name: 'part_search' }] } } },
+    { body: { jsonrpc: '2.0', id: 3, result: { content: [{ type: 'text', text: JSON.stringify({
       value: [{ ID: 'OR:1', Name: 'Plate', Number: 'PRT-001', State: { Display: 'Released' } }],
     }) }] } } },
   ]);
@@ -160,12 +168,14 @@ test('query: happy path → initialize + tools/call(part_search) + wrap to ok', 
     2000,
   );
 
-  assert.equal(stub.calls.length, 2);
+  assert.equal(stub.calls.length, 3);
   assert.match(stub.calls[0].init.body, /"method":"initialize"/);
-  assert.match(stub.calls[1].init.body, /"name":"part_search"/);
-  assert.match(stub.calls[1].init.body, /"number":"PRT-001"/);
+  assert.match(stub.calls[1].init.body, /"method":"tools\/list"/);
+  assert.match(stub.calls[2].init.body, /"name":"part_search"/);
+  assert.match(stub.calls[2].init.body, /"number":"PRT-001"/);
   assert.equal(result.status, 'ok');
-  assert.equal(result.items[0].number, 'PRT-001');
+  assert.equal(result.evidence.sourceTool, 'part_search');
+  assert.equal(result.evidence.records[0].title, 'PRT-001 / Plate');
 });
 
 test('query: missing sourceUrl → status "not_configured"', async () => {
@@ -199,7 +209,7 @@ test('query: fetch returns non-ok → mapped via mapWindchillErrorToStatus', asy
   ]);
   const adapter = createWindchillBusinessContextAdapter({ fetchImpl: stub.fetch });
   const result = await adapter.query(
-    { query: 'x', sourceHint: 'plm', sourceUrl: 'https://example/mcp' },
+    { query: '查 PRT-401', sourceHint: 'plm', sourceUrl: 'https://example-401/mcp' },
     { apiKey: 'bad' },
     2000,
   );
@@ -215,10 +225,125 @@ test('query: fetch throws ECONNREFUSED → status "unavailable"', async () => {
   };
   const adapter = createWindchillBusinessContextAdapter({ fetchImpl: fetcher });
   const result = await adapter.query(
-    { query: 'x', sourceHint: 'plm', sourceUrl: 'https://example/mcp' },
+    { query: '查 PRT-500', sourceHint: 'plm', sourceUrl: 'https://example-500/mcp' },
     { apiKey: 'k' },
     2000,
   );
   assert.equal(result.status, 'unavailable');
   assert.match(result.errorCode, /windchill/);
+});
+
+test('query: unsupported write intent returns unsupported_operation without tools/call', async () => {
+  const { createWindchillBusinessContextAdapter } = await loadAdapter();
+  const stub = makeStubFetch([
+    { body: { jsonrpc: '2.0', id: 1, result: { capabilities: {} } } },
+  ]);
+  const adapter = createWindchillBusinessContextAdapter({ fetchImpl: stub.fetch });
+
+  const result = await adapter.query(
+    { query: '请 approve ECN-123', sourceHint: 'plm', sourceUrl: 'https://example-write/mcp' },
+    { apiKey: 'secret' },
+    2000,
+  );
+
+  assert.equal(result.status, 'unsupported_operation');
+  assert.equal(stub.calls.length, 0, 'write intent should not call MCP at all');
+});
+
+test('query: vague Windchill query returns missing_query_anchor without broad part_search', async () => {
+  const { createWindchillBusinessContextAdapter } = await loadAdapter();
+  const stub = makeStubFetch([
+    { body: { jsonrpc: '2.0', id: 1, result: { capabilities: {} } } },
+  ]);
+  const adapter = createWindchillBusinessContextAdapter({ fetchImpl: stub.fetch });
+
+  const result = await adapter.query(
+    { query: '查一下 Windchill 这个', sourceHint: 'plm', sourceUrl: 'https://example-missing/mcp' },
+    { apiKey: 'secret' },
+    2000,
+  );
+
+  assert.equal(result.status, 'missing_query_anchor');
+  assert.equal(stub.calls.length, 0, 'missing anchor should not call broad search');
+});
+
+test('query: BOM lookup runs search then structure with resolved id', async () => {
+  const { createWindchillBusinessContextAdapter } = await loadAdapter();
+  const stub = makeStubFetch([
+    { body: { jsonrpc: '2.0', id: 1, result: { serverInfo: { name: 'windchill' } } } },
+    { body: { jsonrpc: '2.0', id: 2, result: { tools: [{ name: 'part_search' }, { name: 'part_get_structure' }] } } },
+    { body: { jsonrpc: '2.0', id: 3, result: { content: [{ type: 'text', text: JSON.stringify({ value: [{ ID: 'OR:1', Number: 'PRT-001' }] }) }] } } },
+    { body: { jsonrpc: '2.0', id: 4, result: { content: [{ type: 'text', text: JSON.stringify({ Components: [{ Number: 'CH-1' }] }) }] } } },
+  ]);
+  const adapter = createWindchillBusinessContextAdapter({ fetchImpl: stub.fetch, sourceName: 'Windchill PLM' });
+
+  const result = await adapter.query(
+    { query: '查 PRT-001 的 BOM', sourceHint: 'plm', sourceUrl: 'https://example-bom/mcp' },
+    { apiKey: 'secret' },
+    5000,
+  );
+
+  assert.equal(result.status, 'ok');
+  assert.equal(result.summary, undefined);
+  assert.equal(result.evidence.sourceTool, 'part_get_structure');
+  assert.equal(result.evidence.recordCount, 1);
+  assert.match(stub.calls[2].init.body, /"name":"part_search"/);
+  assert.match(stub.calls[3].init.body, /"name":"part_get_structure"/);
+  assert.match(stub.calls[3].init.body, /"id":"OR:1"/);
+});
+
+test('formatWindchillResult: part search single hit returns structured evidence without a natural-language summary', async () => {
+  const { formatWindchillResult } = await import(`${pathToFileURL(path.resolve(root, 'dist-electron/electron/services/business-system/windchill/WindchillResultFormatter.js')).href}?t=${Date.now()}`);
+  const result = formatWindchillResult('part_search', {
+    partSearch: { value: [{
+      ID: 'OR:1',
+      Number: 'PRT-001',
+      Name: 'Plate',
+      State: { Display: 'Released' },
+      CreatedOn: '2026-07-02T15:31:55+08:00',
+      '@odata.context': 'http://example/$metadata#Parts',
+    }] },
+  }, 'Windchill PLM');
+
+  assert.equal(result.status, 'ok');
+  assert.equal(result.summary, undefined);
+  assert.equal(result.evidence.source, 'windchill');
+  assert.equal(result.evidence.sourceTool, 'part_search');
+  assert.equal(result.evidence.recordCount, 1);
+  assert.equal(result.evidence.records[0].title, 'PRT-001 / Plate');
+  assert.deepEqual(
+    result.evidence.records[0].fields.map((field) => [field.name, field.value]),
+    [
+      ['Number', 'PRT-001'],
+      ['Name', 'Plate'],
+      ['State', 'Released'],
+      ['ID', 'OR:1'],
+      ['CreatedOn', '2026-07-02T15:31:55+08:00'],
+    ],
+  );
+  assert.equal(result.items, undefined);
+});
+
+test('formatWindchillResult: multiple search hits returns ambiguous', async () => {
+  const { formatWindchillResult } = await import(`${pathToFileURL(path.resolve(root, 'dist-electron/electron/services/business-system/windchill/WindchillResultFormatter.js')).href}?t=${Date.now()}`);
+  const result = formatWindchillResult('part_search', {
+    partSearch: { value: [{ ID: 'OR:1', Number: 'PRT-001' }, { ID: 'OR:2', Number: 'PRT-002' }] },
+  }, 'Windchill PLM');
+
+  assert.equal(result.status, 'ambiguous');
+  assert.match(result.summary, /2/);
+});
+
+test('formatWindchillResult: part structure summarizes child count', async () => {
+  const { formatWindchillResult } = await import(`${pathToFileURL(path.resolve(root, 'dist-electron/electron/services/business-system/windchill/WindchillResultFormatter.js')).href}?t=${Date.now()}`);
+  const result = formatWindchillResult('part_structure', {
+    partSearch: { value: [{ ID: 'OR:1', Number: 'PRT-001', Name: 'Plate' }] },
+    partStructure: { Components: [{ Number: 'CH-1', Name: 'Bolt' }, { Number: 'CH-2', Name: 'Nut' }] },
+  }, 'Windchill PLM');
+
+  assert.equal(result.status, 'ok');
+  assert.equal(result.summary, undefined);
+  assert.equal(result.evidence.sourceTool, 'part_get_structure');
+  assert.equal(result.evidence.recordCount, 2);
+  assert.equal(result.evidence.records[0].title, 'CH-1 / Bolt');
 });

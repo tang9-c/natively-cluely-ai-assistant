@@ -83,6 +83,41 @@ test('maps ok MCP result to a business_system context candidate', async () => {
   assert.match(result.candidate.text, /根据 PLM 知识源/);
 });
 
+test('maps evidence-only MCP result to an LLM-ready business_system context candidate', async () => {
+  const { BusinessSystemContextService } = await loadService();
+  const service = new BusinessSystemContextService({
+    credentialsManager: credentialsManagerStub([source({ name: 'Windchill 知识源' })]),
+    mcpClient: {
+      query: async () => ({
+        status: 'ok',
+        sourceName: 'Windchill 知识源',
+        evidence: {
+          source: 'windchill',
+          sourceTool: 'part_search',
+          recordCount: 1,
+          records: [{
+            title: '0000000001 / 测试部件1',
+            fields: [
+              { name: 'Number', value: '0000000001' },
+              { name: 'Name', value: '测试部件1' },
+              { name: 'State', value: 'In Work' },
+            ],
+          }],
+        },
+      }),
+    },
+  });
+
+  const result = await service.resolve({ question: '查一下 Windchill 里 0000000001 这个料的信息' });
+
+  assert.equal(result.kind, 'context');
+  assert.match(result.candidate.text, /Windchill 结构化查询结果/);
+  assert.match(result.candidate.text, /工具：part_search/);
+  assert.match(result.candidate.text, /Number: 0000000001/);
+  assert.match(result.candidate.text, /请用中文自然汇报/);
+  assert.doesNotMatch(result.candidate.text, /[{}]/);
+});
+
 test('maps ambiguous MCP result to a fixed reply', async () => {
   const { BusinessSystemContextService } = await loadService();
   const service = new BusinessSystemContextService({
@@ -165,6 +200,7 @@ test('maps every non-ok business system status to fixed reply copy and legal deg
     ['auth_failed', /认证失败/, 'business_system_auth_failed'],
     ['timeout', /查询超时/, 'business_system_timeout'],
     ['unavailable', /当前不可用/, 'business_system_unavailable'],
+    ['unsupported_operation', /当前只支持查询 Windchill 数据，暂不支持创建、修改、审批或提交操作/, 'business_system_unsupported_operation'],
     ['error', /查询PLM 知识源时失败/, 'business_system_error'],
   ];
 

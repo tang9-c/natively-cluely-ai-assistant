@@ -32,23 +32,42 @@ export interface BusinessSystemKnowledgeSourcePublic extends BusinessSystemKnowl
 
 export type BusinessSystemQueryStatus =
     | 'ok'
+    | 'missing_query_anchor'
     | 'no_result'
     | 'ambiguous'
     | 'auth_failed'
     | 'unavailable'
     | 'not_configured'
+    | 'unsupported_operation'
     | 'timeout'
     | 'error';
 
 export type BusinessSystemFixedReplyStatus =
-    | Exclude<BusinessSystemQueryStatus, 'ok'>
-    | 'missing_query_anchor'
-    | 'not_configured';
+    | Exclude<BusinessSystemQueryStatus, 'ok'>;
+
+export interface BusinessSystemEvidenceField {
+    name: string;
+    value: string;
+}
+
+export interface BusinessSystemEvidenceRecord {
+    title?: string;
+    fields: BusinessSystemEvidenceField[];
+}
+
+export interface BusinessSystemEvidence {
+    source: string;
+    sourceTool?: string;
+    recordCount: number;
+    records: BusinessSystemEvidenceRecord[];
+    omittedFieldCount?: number;
+}
 
 export interface BusinessSystemQueryResult {
     status: BusinessSystemQueryStatus;
     sourceName?: string;
     summary?: string;
+    evidence?: BusinessSystemEvidence;
     items?: unknown[];
     errorCode?: string;
 }
