@@ -210,3 +210,12 @@ test('runWhatShouldISay can emit dynamic action answers without persistence', ()
   assert.match(source, /if \(shouldPersist\)[\s\S]{0,160}this\.session\.addAssistantMessage/);
   assert.match(source, /if \(shouldPersist\)[\s\S]{0,220}this\.session\.pushUsage/);
 });
+
+test('dynamic action usage entries preserve action metadata for post-call artifacts', () => {
+  const source = read('electron/IntelligenceEngine.ts');
+
+  assert.match(source, /metadata:\s*\{/);
+  assert.match(source, /source:\s*['"]dynamic_action['"]/);
+  assert.match(source, /actionType:\s*options\.modeEvent\?\.sourceIntent/);
+  assert.match(source, /outputType:\s*options\.modeEvent\?\.productContract\?\.outputType/);
+});

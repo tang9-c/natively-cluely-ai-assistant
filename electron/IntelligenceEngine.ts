@@ -1110,17 +1110,36 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             const usageQuestion = IntelligenceEngine.inferUsageQuestionLabel(question, preparedTranscript);
+            const dynamicActionModeEvent = options?.modeEvent as (ModeEventContext & {
+                sourceIntent?: string;
+                productContract?: {
+                    outputType?: string;
+                };
+            }) | undefined;
+            const usageEntry: any = {
+                type: 'assist',
+                timestamp: Date.now(),
+                question: usageQuestion,
+                answer: fullAnswer,
+                ...(options?.source === 'dynamic_action' || dynamicActionModeEvent ? {
+                    metadata: {
+                        source: 'dynamic_action',
+                        // actionType: options.modeEvent?.sourceIntent
+                        actionType: dynamicActionModeEvent?.sourceIntent ?? dynamicActionModeEvent?.intent,
+                        modeTemplateType: dynamicActionModeEvent?.modeTemplateType,
+                        retrievalQuery: dynamicActionModeEvent?.retrievalQuery,
+                        // outputType: options.modeEvent?.productContract?.outputType
+                        outputType: dynamicActionModeEvent?.productContract?.outputType ?? dynamicActionModeEvent?.answerShape,
+                        groundedSources: [],
+                    },
+                } : {}),
+            };
 
             this.emit('suggested_answer_token', fullAnswer, usageQuestion, confidence);
 
             if (shouldPersist) {
                 this.session.addAssistantMessage(fullAnswer);
-                this.session.pushUsage({
-                    type: 'assist',
-                    timestamp: Date.now(),
-                    question: usageQuestion,
-                    answer: fullAnswer
-                });
+                this.session.pushUsage(usageEntry);
             }
 
             this.emit('suggested_answer', fullAnswer, usageQuestion, confidence);
