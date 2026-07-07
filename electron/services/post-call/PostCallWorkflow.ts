@@ -303,9 +303,9 @@ function parseArtifactActionSummary(summary: string): { text: string; owner?: st
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  const owner = lines.find((line) => /^owner\s*:/i.test(line))?.replace(/^owner\s*:/i, '').trim();
-  const deliverable = lines.find((line) => /^(deliverable|task)\s*:/i.test(line))?.replace(/^(deliverable|task)\s*:/i, '').trim();
-  const deadline = lines.find((line) => /^(due|deadline)\s*:/i.test(line))?.replace(/^(due|deadline)\s*:/i, '').trim();
+  const owner = lines.find((line) => /^(owner|负责人)\s*[:：]/i.test(line))?.replace(/^(owner|负责人)\s*[:：]/i, '').trim();
+  const deliverable = lines.find((line) => /^(deliverable|task|交付物)\s*[:：]/i.test(line))?.replace(/^(deliverable|task|交付物)\s*[:：]/i, '').trim();
+  const deadline = lines.find((line) => /^(due|deadline|截止时间)\s*[:：]/i.test(line))?.replace(/^(due|deadline|截止时间)\s*[:：]/i, '').trim();
 
   return {
     text: deliverable || trimmed.replace(/\s+/g, ' ').trim(),
@@ -321,18 +321,25 @@ function actionItemMatchesArtifact(
   const itemKey = normalizeActionComparisonKey(item.text);
   const artifactKey = normalizeActionComparisonKey(parsedArtifact.text);
   if (!itemKey || !artifactKey) return false;
-  return itemKey === artifactKey || itemKey.includes(artifactKey) || artifactKey.includes(itemKey);
+  return containsWholeActionPhrase(itemKey, artifactKey) || containsWholeActionPhrase(artifactKey, itemKey);
 }
 
 function normalizeActionComparisonKey(value: string): string {
   return value
     .toLowerCase()
-    .replace(/^(owner|deliverable|task|due|deadline)\s*:\s*/gim, '')
+    .replace(/^(owner|deliverable|task|due|deadline|负责人|交付物|截止时间)\s*[:：]\s*/gim, '')
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .replace(/\b(?:i|we|me|will|can|could|should|need|to|the|a|an|by)\b/gi, ' ')
     .replace(/\b(?:owner|deliverable|due|deadline)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function containsWholeActionPhrase(value: string, candidate: string): boolean {
+  if (value === candidate) return true;
+  const paddedValue = ` ${value} `;
+  const paddedCandidate = ` ${candidate} `;
+  return paddedValue.includes(paddedCandidate);
 }
 
 function extractChineseActionPhrases(text: string): string[] {

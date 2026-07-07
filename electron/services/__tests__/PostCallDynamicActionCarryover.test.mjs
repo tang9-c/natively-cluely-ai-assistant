@@ -139,6 +139,54 @@ test('post-call carryover dedupes accepted team artifacts against extracted tran
   assert.match(result.actionItemsStructured[0].text, /launch checklist/i);
 });
 
+test('post-call carryover does not dedupe numeric suffix collisions from accepted artifacts', async () => {
+  const { buildPostCallEnhancements } = await loadWorkflow();
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'team-meet',
+    transcript: [{ speaker: 'Maya', text: 'Maya will send checklist 1 by Friday.', timestamp: 1 }],
+    summaryData: { overview: 'Launch planning.', actionItems: [] },
+    dynamicActionArtifacts: [{
+      actionId: 'action_10',
+      modeTemplateType: 'team-meet',
+      actionType: 'action_item',
+      outputType: 'action_item',
+      structuredSummary: 'Owner: Maya\nDeliverable: checklist 10\nDue: Monday',
+      missingFields: [],
+      groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+      acceptedAt: 1010,
+      generationStatus: 'completed',
+    }],
+  });
+
+  assert.equal(result.actionItemsStructured.length, 2);
+  assert.ok(result.actionItemsStructured.some((item) => /checklist 1/i.test(item.text)));
+  assert.ok(result.actionItemsStructured.some((item) => /checklist 10/i.test(item.text)));
+});
+
+test('post-call carryover parses chinese accepted artifact fields', async () => {
+  const { buildPostCallEnhancements } = await loadWorkflow();
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'team-meet',
+    transcript: [{ speaker: 'Maya', text: '我们需要跟进发布计划。', timestamp: 1 }],
+    summaryData: { overview: 'Launch planning.', actionItems: [] },
+    dynamicActionArtifacts: [{
+      actionId: 'action_cn_1',
+      modeTemplateType: 'team-meet',
+      actionType: 'action_item',
+      outputType: 'action_item',
+      structuredSummary: '负责人：Maya\n交付物：发布清单\n截止时间：周五',
+      missingFields: [],
+      groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+      acceptedAt: 1020,
+      generationStatus: 'completed',
+    }],
+  });
+
+  assert.ok(result.actionItemsStructured.some((item) =>
+    item.text === '发布清单' && item.owner === 'Maya' && item.deadline === '周五'
+  ));
+});
+
 test('post-call carryover caps merged team artifacts at eight items', async () => {
   const { buildPostCallEnhancements } = await loadWorkflow();
   const transcript = Array.from({ length: 7 }, (_, index) => ({
