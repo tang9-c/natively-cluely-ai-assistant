@@ -91,13 +91,15 @@ test('material upload creates records before background indexing can finish', ()
 
 test('material RAG diagnostics propagate embedding fallback into realtime answer trace', () => {
   const ipc = read('electron/ipcHandlers.ts');
+  const contribution = read('electron/services/knowledge/UploadedMaterialContextContributionService.ts');
   const materialService = read('electron/services/knowledge/KnowledgeMaterialService.ts');
   const retriever = read('electron/services/knowledge/MaterialRagRetriever.ts');
   const db = read('electron/db/DatabaseManager.ts');
 
   assert.match(materialService, /searchWithDiagnostics/);
-  assert.match(ipc, /const materialSearch = await materialService\.searchWithDiagnostics/);
-  assert.match(ipc, /materialSearch\.degradedReason[\s\S]{0,160}embedding_unavailable/);
+  assert.match(ipc, /buildUploadedMaterialContextContribution/);
+  assert.match(contribution, /const materialSearch = await input\.materialService\.searchWithDiagnostics/);
+  assert.match(contribution, /materialSearch\.degradedReason[\s\S]{0,160}embedding_unavailable/);
   assert.match(retriever, /throw new Error\('missing_chunk_embedding_failed'\)/);
   assert.match(db, /markKnowledgeMaterialEmbeddingsFailed/);
 });
