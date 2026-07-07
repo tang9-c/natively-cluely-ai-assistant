@@ -36,6 +36,7 @@ export type BusinessSystemQueryStatus =
     | 'ambiguous'
     | 'auth_failed'
     | 'unavailable'
+    | 'not_configured'
     | 'timeout'
     | 'error';
 

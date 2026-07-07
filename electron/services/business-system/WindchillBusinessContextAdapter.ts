@@ -70,7 +70,7 @@ export function createWindchillBusinessContextAdapter(
                 if (search.error) {
                     return { status: mapWindchillErrorToStatus(search.error), sourceName, errorCode: 'rpc_error' };
                 }
-                const textPayload = search.result?.content?.find?.((c) => c?.type === 'text')?.text;
+                const textPayload = search.result?.content?.find?.((c: { type?: string; text?: string }) => c?.type === 'text')?.text;
                 if (!textPayload) {
                     return { status: 'error', sourceName, errorCode: 'invalid_tool_result' };
                 }
