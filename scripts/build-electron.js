@@ -76,6 +76,20 @@ build({
     console.warn('[build-electron] pdf.worker.mjs not found; PDF parsing may fail in production');
   }
 
+  const pptxRenderChildSource = path.resolve(
+    rootDir,
+    'electron/services/knowledge/pptx/pptx-render-child.mjs',
+  );
+  const pptxRenderChildDest = path.resolve(
+    outDir,
+    'electron/services/knowledge/pptx/pptx-render-child.mjs',
+  );
+  if (fs.existsSync(pptxRenderChildSource)) {
+    fs.mkdirSync(path.dirname(pptxRenderChildDest), { recursive: true });
+    fs.copyFileSync(pptxRenderChildSource, pptxRenderChildDest);
+    console.log('[build-electron] Copied pptx-render-child.mjs');
+  }
+
   console.log(`[build-electron] Done in ${Date.now() - start}ms`);
 }).catch((err) => {
   console.error('[build-electron] Build failed:', err.message);
