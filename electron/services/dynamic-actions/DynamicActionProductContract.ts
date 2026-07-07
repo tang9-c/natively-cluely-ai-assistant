@@ -32,6 +32,7 @@ const CHECKLIST_TYPES = new Set([
     'fde_integration_check',
     'fde_security_review',
     'fde_risk_blocker',
+    'fde_agent_feasibility',
     'fde_success_criteria',
     'fde_next_step',
     'blocker_check',
@@ -82,6 +83,9 @@ export function explainDynamicActionForUser(input: Pick<DynamicAction, 'type' | 
     if (/pricing|objection|pushback|budget/.test(input.type)) {
         return { whyNow: '对方正在表达价格或预算顾虑，适合马上给出回应。', severity: 'warning' };
     }
+    if (input.type === 'fde_agent_feasibility') {
+        return { whyNow: 'AI Agent 的自动化边界已经出现，需要先区分人工确认、只读分析和允许写回的步骤。', severity: 'warning' };
+    }
     if (/fde_|integration|security|risk|blocker/.test(input.type)) {
         return { whyNow: '讨论已经进入验证或风险澄清阶段，需要把下一步说清楚。', severity: 'info' };
     }
@@ -111,6 +115,7 @@ function buildUserAction(input: ContractInput, outputType: DynamicActionOutputTy
     if (/pricing|objection|pushback|budget/.test(input.type)) return '回应价格异议';
     if (input.type === 'fde_integration_check') return '锁定集成验证步骤';
     if (input.type === 'fde_security_review') return '确认安全评审要求';
+    if (input.type === 'fde_agent_feasibility') return '判断 AI Agent 可行性边界';
     if (input.type === 'buying_signal') return '锁定下一步';
     if (/fde_|blocker|risk/.test(input.type)) return '澄清部署风险和下一步';
     if (outputType === 'action_item') return '确认负责人和截止时间';

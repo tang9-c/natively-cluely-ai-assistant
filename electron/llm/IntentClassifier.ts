@@ -57,6 +57,7 @@ export type ConversationIntent =
     | 'fde_integration'    // API, data source, auth, SSO, environment, or integration details
     | 'fde_security'       // Privacy, compliance, permissions, data residency, audit, or PII concerns
     | 'fde_risk'           // Deployment blocker, dependency, migration risk, or timeline risk
+    | 'fde_agent_feasibility' // AI Agent automation boundary, human confirmation, or read-only/write-back split
     | 'fde_success'        // Success criteria, acceptance, pilot outcome, or measurement
     | 'fde_next_step'      // Concrete next step, owner, rollout plan, or follow-up
 
@@ -145,6 +146,7 @@ const GENERAL_ANSWER_SHAPES: Record<ConversationIntent, string> = {
     fde_integration: '',
     fde_security: '',
     fde_risk: '',
+    fde_agent_feasibility: '',
     fde_success: '',
     fde_next_step: '',
 };
@@ -184,6 +186,7 @@ const FDE_ANSWER_SHAPES: Partial<Record<ConversationIntent, string>> = {
     fde_integration: 'Clarify the integration surface: system, auth, data direction, environment, owner, and smallest validation step.',
     fde_security: 'Respond with a security-conscious checklist: data involved, permissions, compliance review, auditability, and decision owner.',
     fde_risk: 'Name the blocker or risk, identify dependency and impact, then propose the next unblock step. Do not guess missing owners.',
+    fde_agent_feasibility: 'Explain the AI Agent boundary as a checklist: what AI can suggest, what needs human confirmation, and what must stay read-only or never auto-write.',
     fde_success: 'Turn the discussion into measurable acceptance criteria or pilot success metrics. Keep it concrete and testable.',
     fde_next_step: 'Convert the conversation into owner, deliverable, and date. If one is missing, ask for it directly.',
     define_term: 'Define the technical or deployment term in one sentence, then connect it to the customer deployment context.',
@@ -255,9 +258,11 @@ const ZERO_SHOT_LABELS_EN_BY_MODE: Record<string, Record<string, ConversationInt
     },
     'fde': {
         'discovering customer workflow, requirements, stakeholders, or deployment context': 'fde_discovery',
+        'reviewing manufacturing PLM/BOM/ECO workflows or release/version rules': 'fde_discovery',
         'discussing API, data source, authentication, environment, or integration details': 'fde_integration',
         'reviewing privacy, compliance, permissions, audit logs, PII, or security concerns': 'fde_security',
         'raising deployment risk, blocker, dependency, migration, rollback, or timeline concern': 'fde_risk',
+        'reviewing AI Agent automation boundaries, human confirmation, or read-only/write-back split': 'fde_agent_feasibility',
         'defining pilot success, validation, metrics, acceptance criteria, or sign-off': 'fde_success',
         'confirming owner, next step, rollout plan, launch plan, or follow-up date': 'fde_next_step',
         'asking what a term or acronym means': 'define_term',
@@ -321,9 +326,11 @@ const ZERO_SHOT_LABELS_ZH_BY_MODE: Record<string, Record<string, ConversationInt
     },
     'fde': {
         '正在澄清客户流程、业务需求、干系人或部署上下文': 'fde_discovery',
+        '正在澄清制造业 PLM、BOM、ECO 流程或发布/版本规则': 'fde_discovery',
         '正在讨论 API、数据源、认证、环境或集成细节': 'fde_integration',
         '正在讨论隐私、合规、权限、审计日志、PII 或安全问题': 'fde_security',
         '正在提出部署风险、阻塞、依赖、迁移、回滚或时间线问题': 'fde_risk',
+        '正在确认 AI Agent 自动化边界、人工确认或只读/写回分界': 'fde_agent_feasibility',
         '正在定义试点成功、验证指标、验收标准或签署确认': 'fde_success',
         '正在确认负责人、下一步、上线计划、推进计划或跟进时间': 'fde_next_step',
         '询问某个术语或缩写的含义': 'define_term',
@@ -680,9 +687,13 @@ function detectFdeIntentByPattern(text: string): IntentResult | null {
         || /(合规|审计日志|权限|访问控制|数据驻留|加密|安全评审|隐私|敏感数据|脱敏)/.test(text)) {
         return { intent: 'fde_security', confidence: 0.92, answerShape: getAnswerShapeForMode('fde', 'fde_security') };
     }
-    if (/(blocker|blocked|dependency|risk|timeline|delay|migration|cutover|rollback|edge case|launch risk)/i.test(text)
-        || /(阻塞|卡住|依赖|风险|延期|迁移|切换|回滚|边界情况|上线风险|不确定)/.test(text)) {
+    if (/(blocker|blocked|dependency|risk|timeline|delay|migration|cutover|rollback|edge case|launch risk|NCR|CAPA|8D|non-conformance|traceability|quality|audit)/i.test(text)
+        || /(阻塞|卡住|依赖|风险|延期|迁移|切换|回滚|边界情况|上线风险|不确定|NCR|CAPA|8D|质量|追溯|审计|偏差)/.test(text)) {
         return { intent: 'fde_risk', confidence: 0.9, answerShape: getAnswerShapeForMode('fde', 'fde_risk') };
+    }
+    if (/(agent|AI agent|automation|human in the loop|approval flow|tool call|read[- ]?only|write back|auto[- ]?write|write to PLM|write to QMS)/i.test(text)
+        || /(智能体|AI Agent|自动化|人审|人工确认|审批流|工具调用|只读|写回|自动写入|写入 PLM|写入 QMS)/.test(text)) {
+        return { intent: 'fde_agent_feasibility', confidence: 0.87, answerShape: getAnswerShapeForMode('fde', 'fde_agent_feasibility') };
     }
     if (/(next step|owner|follow up|action item|rollout plan|launch plan|go live|by friday|by next week)/i.test(text)
         || /(下一步|负责人|跟进|行动项|上线计划|推进计划|灰度|正式上线|周五前|下周)/.test(text)) {
@@ -696,8 +707,8 @@ function detectFdeIntentByPattern(text: string): IntentResult | null {
         || /(验收标准|成功标准|试点|验证|指标|度量|KPI|验收测试|通过标准|效果衡量)/.test(text)) {
         return { intent: 'fde_success', confidence: 0.88, answerShape: getAnswerShapeForMode('fde', 'fde_success') };
     }
-    if (/(current workflow|current process|business process|user workflow|stakeholder|requirements|what are you trying to solve|what does success look like)/i.test(text)
-        || /(现有流程|当前流程|业务流程|用户流程|需求是什么|想解决什么|谁会使用|谁负责|干系人|业务场景|客户现场)/.test(text)) {
+    if (/(current workflow|current process|business process|user workflow|stakeholder|requirements|what are you trying to solve|what does success look like|PLM|BOM|ECO|ECN|revision|version|release|part number|drawing|material master|routing|manufacturing)/i.test(text)
+        || /(现有流程|当前流程|业务流程|用户流程|需求是什么|想解决什么|谁会使用|谁负责|干系人|业务场景|客户现场|PLM|BOM|ECO|ECN|版本|变更单|发布|图纸|物料|工艺)/.test(text)) {
         return { intent: 'fde_discovery', confidence: 0.85, answerShape: getAnswerShapeForMode('fde', 'fde_discovery') };
     }
     return null;
@@ -753,7 +764,7 @@ function getCandidateIntentsForMode(modeTemplateType?: string | null): Conversat
         case 'sales':
             return ['handle_objection', 'seize_signal', 'discovery_probe', 'define_term', 'advance_dialog', 'general', 'silence'];
         case 'fde':
-            return ['fde_discovery', 'fde_integration', 'fde_security', 'fde_risk', 'fde_success', 'fde_next_step', 'define_term', 'advance_dialog', 'general', 'silence'];
+            return ['fde_discovery', 'fde_integration', 'fde_security', 'fde_risk', 'fde_agent_feasibility', 'fde_success', 'fde_next_step', 'define_term', 'advance_dialog', 'general', 'silence'];
         case 'recruiting':
             return ['evaluate_answer', 'request_example', 'clarification', 'follow_up', 'deep_dive', 'define_term', 'general', 'silence'];
         case 'team-meet':

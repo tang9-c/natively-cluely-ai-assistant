@@ -147,6 +147,13 @@ const TEMPLATE_SYSTEM_PROMPTS: Record<ModeTemplateType, string> = {
     lecture: MODE_LECTURE_PROMPT,
 };
 
+const FDE_MANUFACTURING_CUSTOM_CONTEXT = [
+    '你熟悉制造业研发流程：物料、BOM、图纸、ECR / ECO / ECN、变更评审、发布、版本、权限。',
+    '你熟悉质量流程：NCR、CAPA、8D、客诉、审计、检验、追溯、偏差、闭环验证。',
+    '你熟悉企业 AI Agent 部署：知识源接入、权限边界、工具调用、审批流、人机协同、评测和上线治理。',
+    '不替客户做流程承诺，不替系统写入数据，不把未知的业务规则说成事实。',
+].join('\n');
+
 // Startup invariant: every MODE_*_PROMPT must begin with one of the two shared
 // prefixes so getActiveModeSystemPromptSuffix() can strip duplicated tokens.
 // If a future template diverges, we silently regress to shipping ~1.6K duplicate
@@ -176,6 +183,12 @@ export function escapeXmlText(value: string): string {
 }
 
 export { DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE };
+
+function resolveDefaultCustomContext(templateType: ModeTemplateType): string {
+    const base = DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE[templateType] ?? '';
+    if (templateType !== 'fde') return base;
+    return [base, FDE_MANUFACTURING_CUSTOM_CONTEXT].filter(Boolean).join('\n');
+}
 
 function rowToMode(row: any): Mode {
     return {
@@ -323,7 +336,7 @@ export class ModesManager {
     public createMode(params: { name: string; templateType: ModeTemplateType }): Mode {
         const id = `mode_${crypto.randomUUID()}`;
         const db = ModesManager.getDatabase();
-        const defaultCustomContext = DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE[params.templateType] ?? '';
+        const defaultCustomContext = resolveDefaultCustomContext(params.templateType);
         db.createMode({
             id,
             name: params.name,

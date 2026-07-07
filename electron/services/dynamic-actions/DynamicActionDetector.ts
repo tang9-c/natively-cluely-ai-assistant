@@ -425,14 +425,26 @@ const FDE_TRIGGERS: ActionTrigger[] = [
     {
         type: 'fde_risk_blocker',
         patterns: [
-            /\b(blocker|blocked|dependency|risk|timeline|delay|migration|cutover|rollback|edge case|launch risk)\b/i,
-            zh('阻塞', '卡住', '依赖', '风险', '延期', '迁移', '切换', '回滚', '边界情况', '上线风险', '不确定'),
+            /\b(blocker|blocked|dependency|risk|timeline|delay|migration|cutover|rollback|edge case|launch risk|NCR|CAPA|8D|non-conformance|traceability|quality|audit)\b/i,
+            zh('阻塞', '卡住', '依赖', '风险', '延期', '迁移', '切换', '回滚', '边界情况', '上线风险', '不确定', 'NCR', 'CAPA', '8D', '质量', '追溯', '审计', '偏差'),
         ],
         priority: 0.9,
         label: 'Unblock deployment risk',
         promptInstruction:
             'You are in FDE mode. A deployment risk or blocker was raised. State the blocker, impact, dependency, owner if present, and the smallest unblock step.',
         answerStyle: { maxWords: 110, format: 'checklist', tone: 'direct' },
+    },
+    {
+        type: 'fde_agent_feasibility',
+        patterns: [
+            /\b(agent|AI agent|automation|human in the loop|approval flow|tool call|read[- ]?only|write back|auto[- ]?write|write to PLM|write to QMS)\b/i,
+            zh('智能体', 'AI Agent', '自动化', '人审', '人工确认', '审批流', '工具调用', '只读', '写回', '自动写入', '写入 PLM', '写入 QMS'),
+        ],
+        priority: 0.87,
+        label: 'Assess AI Agent feasibility',
+        promptInstruction:
+            'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Identify what can be suggested by AI, what requires human confirmation, and what must remain read-only. Do not imply automatic writes to PLM or QMS.',
+        answerStyle: { maxWords: 120, format: 'checklist', tone: 'conservative' },
     },
     {
         type: 'fde_next_step',
@@ -473,8 +485,8 @@ const FDE_TRIGGERS: ActionTrigger[] = [
     {
         type: 'fde_discovery_probe',
         patterns: [
-            /\b(current workflow|current process|business process|user workflow|stakeholder|requirements|what are you trying to solve|what does success look like)\b/i,
-            zh('现有流程', '当前流程', '业务流程', '用户流程', '需求是什么', '想解决什么', '谁会使用', '谁负责', '干系人', '业务场景', '客户现场'),
+            /\b(current workflow|current process|business process|user workflow|stakeholder|requirements|what are you trying to solve|what does success look like|PLM|BOM|ECO|ECN|revision|version|release|part number|drawing|material master|routing|manufacturing)\b/i,
+            zh('现有流程', '当前流程', '业务流程', '用户流程', '需求是什么', '想解决什么', '谁会使用', '谁负责', '干系人', '业务场景', '客户现场', 'PLM', 'BOM', 'ECO', 'ECN', '版本', '变更单', '发布', '图纸', '物料', '工艺'),
         ],
         priority: 0.84,
         label: 'Probe deployment context',
