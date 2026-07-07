@@ -193,3 +193,11 @@ rtk env ELECTRON_RUN_AS_NODE=1 npx electron --test electron/test/__tests__/evalH
 - `/Users/tang-codeing/code/natively-cluely-ai-assistant/electron/test/modes-live-response-eval.ts`
 - `/Users/tang-codeing/code/natively-cluely-ai-assistant/electron/test/__tests__/evalHarnessPatterns.test.mjs`
 - `/Users/tang-codeing/code/natively-cluely-ai-assistant/.superpowers/sdd/task-1-report.md`
+
+## Dynamic Action Productization Task 1 Review Fix
+
+- 已补充 `matchesRequiredPatterns(text, patterns)` 的直接覆盖测试（`true` / `false` 两类断言）
+- 已在 `DynamicActionProductFixtureScoring` 测试中断言 `evaluatePatternExpectations()` 返回：
+  - `missingRequired`
+  - `matchedForbidden`
+- 仍在 `electron/services/__tests__/DynamicActionProductFixtureScoring.test.mjs` 中验证：`rtk npm run build:electron` 后 `npx electron --test electron/services/__tests__/DynamicActionProductFixtureScoring.test.mjs` 通过。

@@ -29,14 +29,22 @@ test('scores recall and false positives with one shared formula', async () => {
 });
 
 test('checks required and forbidden answer patterns', async () => {
-  const { evaluatePatternExpectations } = await loadHelper();
-  assert.equal(evaluatePatternExpectations('Use [QUOTE_AMOUNT] after scope is confirmed.', {
+  const { evaluatePatternExpectations, matchesRequiredPatterns } = await loadHelper();
+  const shouldPass = evaluatePatternExpectations('Use [QUOTE_AMOUNT] after scope is confirmed.', {
     required: ['\\\\[QUOTE_AMOUNT\\\\]', 'scope'],
     forbidden: ['ACME Corp', '\\\\$\\\\d+'],
-  }).passed, true);
+  });
+  assert.equal(shouldPass.passed, true);
+  assert.deepEqual(shouldPass.missingRequired, []);
+  assert.deepEqual(shouldPass.matchedForbidden, []);
+  assert.equal(matchesRequiredPatterns('Use [QUOTE_AMOUNT] after scope is confirmed.', ['\\\\[QUOTE_AMOUNT\\\\]', 'scope']), true);
+  assert.equal(matchesRequiredPatterns('Use [QUOTE_AMOUNT] after scope is confirmed.', ['\\\\[QUOTE_AMOUNT\\\\]', 'customer']), false);
 
-  assert.equal(evaluatePatternExpectations('The quote is $1000 for ACME Corp.', {
+  const shouldFail = evaluatePatternExpectations('The quote is $1000 for ACME Corp.', {
     required: ['quote'],
     forbidden: ['ACME Corp', '\\\\$\\\\d+'],
-  }).passed, false);
+  });
+  assert.equal(shouldFail.passed, false);
+  assert.deepEqual(shouldFail.missingRequired, []);
+  assert.deepEqual(shouldFail.matchedForbidden, ['ACME Corp', '\\\\$\\\\d+']);
 });
