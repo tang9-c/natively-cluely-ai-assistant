@@ -39,6 +39,7 @@ export interface BuildDynamicActionArtifactsInput {
 const ARTIFACT_MODES = new Set(['sales', 'fde', 'team-meet']);
 
 export function buildDynamicActionArtifacts(input: BuildDynamicActionArtifactsInput): ActionArtifact[] {
+  // Dynamic action artifacts are transient post-call inputs, not a persisted database record.
   return input.actions
     .filter((action) => ARTIFACT_MODES.has(action.modeTemplateType))
     .filter((action) => ['accepted', 'auto_generated', 'completed', 'generated_failed'].includes(action.status))
