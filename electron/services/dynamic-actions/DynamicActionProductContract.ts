@@ -83,7 +83,7 @@ export function explainDynamicActionForUser(input: Pick<DynamicAction, 'type' | 
         return { whyNow: '对方正在表达价格或预算顾虑，适合马上给出回应。', severity: 'warning' };
     }
     if (input.type === 'fde_agent_feasibility') {
-        return { whyNow: 'AI Agent 的自动化边界已经出现，需要先区分人工确认、只读分析和允许写回的步骤。', severity: 'warning' };
+        return { whyNow: 'AI Agent 的自动化边界已经出现，需要先明确人工确认、只读分析，以及不可自动写回的边界。', severity: 'warning' };
     }
     if (input.type === 'blocker_check') {
         return { whyNow: '当前讨论出现阻塞或依赖信号，适合立刻明确影响和解法。', severity: 'warning' };

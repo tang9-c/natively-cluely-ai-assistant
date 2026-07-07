@@ -114,6 +114,80 @@ test('MeetingPersistence skips non-dynamic or incomplete usage entries', async (
   assert.deepEqual(actions, []);
 });
 
+test('MeetingPersistence preserves accepted placeholder usage as not_generated artifact fallback', async () => {
+  const { buildDynamicActionArtifactActionsFromUsage } = await loadMeetingPersistence();
+  const { buildDynamicActionArtifacts } = await import(pathToFileURL(path.join(root, 'dist-electron/electron/services/dynamic-actions/DynamicActionArtifacts.js')).href);
+
+  const usage = [{
+    timestamp: 1700000000123,
+    question: '确认负责人和截止时间',
+    answer: null,
+    metadata: {
+      source: 'dynamic_action',
+      actionId: 'action_placeholder_1',
+      actionType: 'action_item',
+      modeTemplateType: 'team-meet',
+      retrievalQuery: 'launch checklist',
+      outputType: 'action_item',
+      generationStatus: 'accepted',
+    },
+  }];
+
+  const actions = buildDynamicActionArtifactActionsFromUsage(usage);
+  const artifacts = buildDynamicActionArtifacts({ actions, usage });
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].status, 'accepted');
+  assert.equal(artifacts.length, 1);
+  assert.equal(artifacts[0].generationStatus, 'not_generated');
+  assert.equal(artifacts[0].structuredSummary, '确认负责人和截止时间');
+});
+
+test('MeetingPersistence upgrades accepted placeholder usage to generated_failed artifact when failure metadata arrives later', async () => {
+  const { buildDynamicActionArtifactActionsFromUsage } = await loadMeetingPersistence();
+  const { buildDynamicActionArtifacts } = await import(pathToFileURL(path.join(root, 'dist-electron/electron/services/dynamic-actions/DynamicActionArtifacts.js')).href);
+
+  const usage = [
+    {
+      timestamp: 1700000000123,
+      question: '确认负责人和截止时间',
+      answer: null,
+      metadata: {
+        source: 'dynamic_action',
+        actionId: 'action_failed_1',
+        actionType: 'action_item',
+        modeTemplateType: 'team-meet',
+        retrievalQuery: 'launch checklist',
+        outputType: 'action_item',
+        generationStatus: 'accepted',
+      },
+    },
+    {
+      timestamp: 1700000001123,
+      question: 'action_item',
+      answer: null,
+      metadata: {
+        source: 'dynamic_action',
+        actionId: 'action_failed_1',
+        actionType: 'action_item',
+        modeTemplateType: 'team-meet',
+        retrievalQuery: 'launch checklist',
+        outputType: 'action_item',
+        generationStatus: 'generated_failed',
+      },
+    },
+  ];
+
+  const actions = buildDynamicActionArtifactActionsFromUsage(usage);
+  const artifacts = buildDynamicActionArtifacts({ actions, usage });
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].status, 'generated_failed');
+  assert.equal(artifacts.length, 1);
+  assert.equal(artifacts[0].generationStatus, 'generated_failed');
+  assert.equal(artifacts[0].structuredSummary, '确认负责人和截止时间');
+});
+
 test('post-call carryover dedupes accepted team artifacts against extracted transcript items', async () => {
   const { buildPostCallEnhancements } = await loadWorkflow();
   const result = buildPostCallEnhancements({

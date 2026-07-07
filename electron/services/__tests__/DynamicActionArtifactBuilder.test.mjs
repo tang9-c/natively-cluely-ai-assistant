@@ -74,6 +74,38 @@ test('builds conservative not_generated artifact when usage is missing', async (
   assert.match(artifacts[0].structuredSummary, /Maya will send/);
 });
 
+test('prefers failure usage metadata over accepted placeholder usage for the same action', async () => {
+  const { buildDynamicActionArtifacts } = await loadHelper();
+  const artifacts = buildDynamicActionArtifacts({
+    actions: [action({ status: 'generated_failed' })],
+    usage: [
+      {
+        question: '确认负责人和截止时间',
+        answer: null,
+        timestamp: 100,
+        metadata: {
+          source: 'dynamic_action',
+          actionId: 'action_1',
+          generationStatus: 'accepted',
+        },
+      },
+      {
+        question: 'fde_agent_feasibility',
+        answer: null,
+        timestamp: 120,
+        metadata: {
+          source: 'dynamic_action',
+          actionId: 'action_1',
+          generationStatus: 'generated_failed',
+        },
+      },
+    ],
+  });
+
+  assert.equal(artifacts[0].generationStatus, 'generated_failed');
+  assert.equal(artifacts[0].structuredSummary, action({ status: 'generated_failed' }).latestTurn);
+});
+
 test('derives missing fields deterministically for team actions', async () => {
   const { buildDynamicActionArtifacts } = await loadHelper();
   const artifacts = buildDynamicActionArtifacts({

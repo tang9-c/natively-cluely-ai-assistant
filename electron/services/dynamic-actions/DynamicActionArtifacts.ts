@@ -67,13 +67,41 @@ export function buildDynamicActionArtifacts(input: BuildDynamicActionArtifactsIn
 }
 
 function findUsageForAction(actionId: string, acceptedAt: number, usage: BuildDynamicActionArtifactsInput['usage'][number][]) {
-  const direct = usage.find((item) => item.metadata?.source === 'dynamic_action' && item.metadata?.actionId === actionId);
-  return direct;
+  const direct = usage
+    .filter((item) => item.metadata?.source === 'dynamic_action' && item.metadata?.actionId === actionId)
+    .sort((left, right) => {
+      const priorityDelta = usageGenerationStatusPriority(usageGenerationStatus(right)) - usageGenerationStatusPriority(usageGenerationStatus(left));
+      if (priorityDelta !== 0) return priorityDelta;
+      return (right.timestamp ?? acceptedAt) - (left.timestamp ?? acceptedAt);
+    });
+  return direct[0];
 }
 
 function normalizeAnswer(answer: unknown): string {
   if (Array.isArray(answer)) return answer.join('\n').trim();
   return typeof answer === 'string' ? answer.trim() : '';
+}
+
+function usageGenerationStatus(item: BuildDynamicActionArtifactsInput['usage'][number]): 'accepted' | 'auto_generated' | 'generated_failed' | 'completed' {
+  const status = typeof item?.metadata?.generationStatus === 'string' ? item.metadata.generationStatus.trim() : '';
+  if (status === 'accepted' || status === 'auto_generated' || status === 'generated_failed' || status === 'completed') {
+    return status;
+  }
+  return normalizeAnswer(item?.answer) ? 'completed' : 'accepted';
+}
+
+function usageGenerationStatusPriority(status: ReturnType<typeof usageGenerationStatus>): number {
+  switch (status) {
+    case 'completed':
+      return 4;
+    case 'generated_failed':
+      return 3;
+    case 'auto_generated':
+      return 2;
+    case 'accepted':
+    default:
+      return 1;
+  }
 }
 
 function deriveMissingFields(mode: string, actionType: string, text: string): string[] {

@@ -554,7 +554,11 @@ export class IntelligenceEngine extends EventEmitter {
 
     acceptDynamicAction(actionId: string, options?: { triggerSource?: import('./services/dynamic-actions/DynamicAction').DynamicActionAcceptTriggerSource }): DynamicAction | null {
         if (!this.dynamicActionEngine) return null;
-        return this.dynamicActionEngine.acceptAction(actionId, options);
+        const action = this.dynamicActionEngine.acceptAction(actionId, options);
+        if (action) {
+            this.recordDynamicActionUsage(action, options?.triggerSource === 'auto_countdown' ? 'auto_generated' : 'accepted');
+        }
+        return action;
     }
 
     markDynamicActionShown(actionId: string): DynamicAction | null {
@@ -570,7 +574,11 @@ export class IntelligenceEngine extends EventEmitter {
 
     markDynamicActionGenerationFailed(actionId: string): DynamicAction | null {
         if (!this.dynamicActionEngine) return null;
-        return this.dynamicActionEngine.markGenerationFailed(actionId);
+        const action = this.dynamicActionEngine.markGenerationFailed(actionId);
+        if (action) {
+            this.recordDynamicActionUsage(action, 'generated_failed');
+        }
+        return action;
     }
 
     dismissDynamicAction(actionId: string): void {
@@ -581,6 +589,28 @@ export class IntelligenceEngine extends EventEmitter {
     getActiveDynamicActions(): DynamicAction[] {
         if (!this.dynamicActionEngine || !this.currentSessionId) return [];
         return this.dynamicActionEngine.getTopActions(this.currentSessionId);
+    }
+
+    private recordDynamicActionUsage(
+        action: Pick<DynamicAction, 'id' | 'type' | 'label' | 'modeTemplateType' | 'retrievalQuery' | 'productContract'>,
+        generationStatus: 'accepted' | 'auto_generated' | 'generated_failed'
+    ): void {
+        this.session.pushUsage({
+            type: 'assist',
+            timestamp: Date.now(),
+            question: action.productContract?.userAction || action.label || action.type,
+            answer: null,
+            metadata: {
+                source: 'dynamic_action',
+                actionType: action.type,
+                actionId: action.id,
+                modeTemplateType: action.modeTemplateType,
+                retrievalQuery: action.retrievalQuery,
+                outputType: action.productContract?.outputType,
+                generationStatus,
+                groundedSources: [],
+            },
+        });
     }
 
     // For tests — injection seam.
@@ -906,6 +936,14 @@ export class IntelligenceEngine extends EventEmitter {
         const isSpeculative = options?.speculative === true;
         const skipCooldown = options?.skipCooldown === true;
         const shouldPersist = options?.persist !== false;
+        const dynamicActionModeEvent = options?.modeEvent as (ModeEventContext & {
+            actionId?: string;
+            sourceIntent?: string;
+            productContract?: {
+                outputType?: DynamicActionOutputType;
+            };
+        }) | undefined;
+        const isDynamicActionUsage = options?.source === 'dynamic_action' || Boolean(dynamicActionModeEvent?.actionId);
 
         // Cooldown bypass: explicit images (user intent), speculative pre-fetch, or test harness.
         const hasImages = imagePaths && imagePaths.length > 0;
@@ -1087,6 +1125,9 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (!fullAnswer || fullAnswer.trim().length < 5) {
+                if (isDynamicActionUsage) {
+                    throw new Error('dynamic_action_generation_failed');
+                }
                 fullAnswer = WHAT_TO_ANSWER_FALLBACK;
             }
 
@@ -1094,6 +1135,9 @@ export class IntelligenceEngine extends EventEmitter {
 
 
             if (IntelligenceEngine.isNonAnswerSentinel(fullAnswer)) {
+                if (isDynamicActionUsage) {
+                    throw new Error('dynamic_action_generation_failed');
+                }
                 if (isSpeculative) {
                     this.speculativeText = null;
                     this.speculativeTextExpiry = Infinity;
@@ -1111,14 +1155,6 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             const usageQuestion = IntelligenceEngine.inferUsageQuestionLabel(question, preparedTranscript);
-            const dynamicActionModeEvent = options?.modeEvent as (ModeEventContext & {
-                actionId?: string;
-                sourceIntent?: string;
-                productContract?: {
-                    outputType?: DynamicActionOutputType;
-                };
-            }) | undefined;
-            const isDynamicActionUsage = options?.source === 'dynamic_action' || Boolean(dynamicActionModeEvent?.actionId);
             const usageEntry: any = {
                 type: 'assist',
                 timestamp: Date.now(),
@@ -1132,6 +1168,7 @@ export class IntelligenceEngine extends EventEmitter {
                         modeTemplateType: dynamicActionModeEvent?.modeTemplateType,
                         retrievalQuery: dynamicActionModeEvent?.retrievalQuery,
                         outputType: dynamicActionModeEvent?.productContract?.outputType,
+                        generationStatus: 'completed',
                         groundedSources: [],
                     },
                 } : {}),
@@ -1153,6 +1190,9 @@ export class IntelligenceEngine extends EventEmitter {
             if (isSpeculative) { this.speculativeText = null; this.speculativeTextExpiry = Infinity; }
             this.emit('error', error as Error, 'what_to_say');
             this.setMode('idle');
+            if (isDynamicActionUsage) {
+                throw error;
+            }
             return WHAT_TO_ANSWER_FALLBACK;
         }
     }

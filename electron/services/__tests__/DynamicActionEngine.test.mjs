@@ -255,6 +255,9 @@ test('assessSignals synthesizes confirmed FDE AI Agent feasibility action from i
   assert.equal(action.confirmedIntent, 'fde_agent_feasibility');
   assert.equal(action.productContract?.outputType, 'checklist');
   assert.equal(action.productContract?.userAction, '判断 AI Agent 可行性边界');
+  assert.match(action.promptInstruction, /human confirmation/i);
+  assert.match(action.promptInstruction, /read-only/i);
+  assert.match(action.promptInstruction, /Do not imply automatic writes to PLM or QMS/i);
 });
 
 test('dynamic action retrievalQuery uses active-mode entity extraction', async () => {

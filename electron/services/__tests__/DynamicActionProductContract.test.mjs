@@ -68,3 +68,19 @@ test('evidence summary is omitted when empty and truncated when long', async () 
   assert.ok(contract.evidenceSummary.length <= 91);
   assert.ok(contract.evidenceSummary.endsWith('…'));
 });
+
+test('fde ai agent contract copy keeps human confirmation and no-auto-write boundary visible', async () => {
+  const { buildDynamicActionProductContract } = await loadHelper();
+
+  const contract = buildDynamicActionProductContract(baseInput({
+    type: 'fde_agent_feasibility',
+    label: 'Assess AI Agent feasibility',
+    modeTemplateType: 'fde',
+    answerStyle: { maxWords: 120, format: 'checklist', tone: 'conservative' },
+  }));
+
+  assert.match(contract.whyNow, /人工确认/);
+  assert.match(contract.whyNow, /只读/);
+  assert.match(contract.whyNow, /不可自动写回|不可自动写入|不自动写回/);
+  assert.doesNotMatch(contract.whyNow, /允许写回|write back allowed/i);
+});

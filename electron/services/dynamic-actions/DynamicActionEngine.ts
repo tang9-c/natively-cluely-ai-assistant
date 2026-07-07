@@ -473,15 +473,15 @@ export class DynamicActionEngine {
                 seize_signal: 'buying_signal',
             },
             fde: {
-            fde_discovery: 'fde_discovery_probe',
-            fde_integration: 'fde_integration_check',
-            fde_security: 'fde_security_review',
-            fde_risk: 'fde_risk_blocker',
-            fde_agent_feasibility: 'fde_agent_feasibility',
-            fde_success: 'fde_success_criteria',
-            fde_next_step: 'fde_next_step',
-            define_term: 'fde_discovery_probe',
-            advance_dialog: 'fde_next_step',
+                fde_discovery: 'fde_discovery_probe',
+                fde_integration: 'fde_integration_check',
+                fde_security: 'fde_security_review',
+                fde_risk: 'fde_risk_blocker',
+                fde_agent_feasibility: 'fde_agent_feasibility',
+                fde_success: 'fde_success_criteria',
+                fde_next_step: 'fde_next_step',
+                define_term: 'fde_discovery_probe',
+                advance_dialog: 'fde_next_step',
             },
             recruiting: {
                 evaluate_answer: 'candidate_experience_probe',
@@ -540,7 +540,9 @@ export class DynamicActionEngine {
             patterns: [],
             priority: 0.8,
             label,
-            promptInstruction: `You are in ${modeTemplateType} mode. Respond in Chinese first and help the user handle the detected ${type} intent.`,
+            promptInstruction: type === 'fde_agent_feasibility'
+                ? 'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Identify what can be suggested by AI, what requires human confirmation, and what must remain read-only. Do not imply automatic writes to PLM or QMS.'
+                : `You are in ${modeTemplateType} mode. Respond in Chinese first and help the user handle the detected ${type} intent.`,
             answerStyle: { maxWords: 120, format: 'bullets', tone: 'clear' },
         };
     }

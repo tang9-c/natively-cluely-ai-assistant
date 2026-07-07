@@ -476,7 +476,7 @@ export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<
     latestTurn?: string;
     retrievalQuery?: string;
 }> {
-    const actions: Array<{
+    const actionsById = new Map<string, {
         id: string;
         modeTemplateType: string;
         type: string;
@@ -485,8 +485,7 @@ export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<
         createdAt: number;
         latestTurn?: string;
         retrievalQuery?: string;
-    }> = [];
-    const seen = new Set<string>();
+    }>();
 
     for (const item of usage) {
         const metadata = item?.metadata;
@@ -501,32 +500,74 @@ export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<
             : '';
         const outputType = typeof metadata.outputType === 'string' ? metadata.outputType.trim() : '';
         const createdAt = typeof item?.timestamp === 'number' ? item.timestamp : 0;
+        const generationStatus = normalizeDynamicActionGenerationStatus(item);
 
         if (!actionId || !actionType || !outputType) continue;
-        if (seen.has(actionId)) continue;
-        seen.add(actionId);
 
-        actions.push({
-            id: actionId,
-            modeTemplateType,
-            type: actionType,
-            productContract: { outputType },
-            status: 'completed',
-            createdAt,
-            latestTurn:
-                typeof metadata.latestTurn === 'string'
-                    ? metadata.latestTurn
-                    : typeof item?.question === 'string'
-                        ? item.question
-                        : undefined,
-            retrievalQuery:
-                typeof metadata.retrievalQuery === 'string'
-                    ? metadata.retrievalQuery
-                    : typeof item?.question === 'string'
-                        ? item.question
-                        : undefined,
-        });
+        const latestTurn =
+            typeof metadata.latestTurn === 'string'
+                ? metadata.latestTurn
+                : typeof item?.question === 'string'
+                    ? item.question
+                    : undefined;
+        const retrievalQuery =
+            typeof metadata.retrievalQuery === 'string'
+                ? metadata.retrievalQuery
+                : typeof item?.question === 'string'
+                    ? item.question
+                    : undefined;
+        const existing = actionsById.get(actionId);
+        if (!existing) {
+            actionsById.set(actionId, {
+                id: actionId,
+                modeTemplateType,
+                type: actionType,
+                productContract: { outputType },
+                status: generationStatus,
+                createdAt,
+                latestTurn,
+                retrievalQuery,
+            });
+            continue;
+        }
+
+        if (dynamicActionStatusPriority(generationStatus) > dynamicActionStatusPriority(existing.status)) {
+            existing.status = generationStatus;
+        }
+        if (!existing.modeTemplateType && modeTemplateType) existing.modeTemplateType = modeTemplateType;
+        if (!existing.type && actionType) existing.type = actionType;
+        if (!existing.productContract?.outputType && outputType) existing.productContract = { outputType };
+        if ((!existing.createdAt || createdAt < existing.createdAt) && createdAt > 0) existing.createdAt = createdAt;
+        if (!existing.latestTurn && latestTurn) existing.latestTurn = latestTurn;
+        if (!existing.retrievalQuery && retrievalQuery) existing.retrievalQuery = retrievalQuery;
     }
 
-    return actions;
+    return Array.from(actionsById.values());
+}
+
+function normalizeDynamicActionGenerationStatus(item: any): 'accepted' | 'auto_generated' | 'generated_failed' | 'completed' {
+    const status = typeof item?.metadata?.generationStatus === 'string'
+        ? item.metadata.generationStatus.trim()
+        : '';
+    if (status === 'accepted' || status === 'auto_generated' || status === 'generated_failed' || status === 'completed') {
+        return status;
+    }
+    const answer = item?.answer;
+    if (typeof answer === 'string' && answer.trim()) return 'completed';
+    if (Array.isArray(answer) && answer.some((part) => typeof part === 'string' && part.trim())) return 'completed';
+    return 'accepted';
+}
+
+function dynamicActionStatusPriority(status: string): number {
+    switch (status) {
+        case 'completed':
+            return 4;
+        case 'generated_failed':
+            return 3;
+        case 'auto_generated':
+            return 2;
+        case 'accepted':
+        default:
+            return 1;
+    }
 }

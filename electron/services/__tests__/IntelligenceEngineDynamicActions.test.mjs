@@ -185,6 +185,38 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(autoRuns.length, 0);
   });
 
+  test('accepted dynamic action records placeholder usage and failure metadata for post-call fallback', async () => {
+    const { engine, session } = await makeEngine();
+    const emitted = [];
+    engine.on('dynamic_action_emitted', (action) => emitted.push(action));
+    engine.setDynamicActionContext({
+      sessionId: 'sess-dynamic-action-usage',
+      modeId: 'mode-team',
+      modeTemplateType: 'team-meet',
+    });
+
+    engine.handleTranscript({
+      speaker: 'user',
+      text: '我来发发布清单，周五前完成。',
+      timestamp: Date.now(),
+      final: true,
+    }, true);
+    await waitForAsyncSignals();
+
+    const action = emitted.find((item) => item.type === 'action_item');
+    assert.ok(action);
+    const accepted = engine.acceptDynamicAction(action.id);
+    assert.ok(accepted);
+    const failed = engine.markDynamicActionGenerationFailed(action.id);
+    assert.ok(failed);
+
+    const usage = session.getFullUsage().filter((item) => item?.metadata?.actionId === action.id);
+    assert.equal(usage.length, 2);
+    assert.equal(usage[0].metadata.generationStatus, 'accepted');
+    assert.equal(usage[0].question, action.productContract.userAction);
+    assert.equal(usage[1].metadata.generationStatus, 'generated_failed');
+  });
+
   test('active dynamic action suppresses duplicate suggestion-trigger answer for same sales intent', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: [
