@@ -57,18 +57,20 @@ test('dynamic action payload and renderer types expose required productContract'
   assert.match(rendererTypes, /productContract:\s*DynamicActionProductContract/);
 });
 
-test('dynamic action card localizes quote email action separately from detected intent', () => {
+test('dynamic action card derives email CTA from product output type', () => {
   const source = read('src/components/dynamic-actions/DynamicActionCard.tsx');
 
-  assert.match(source, /['"]Draft quote email['"]:\s*'邮件草稿'/);
-  assert.match(source, /displayLabel/);
+  assert.match(source, /email_draft:\s*'生成邮件'/);
+  assert.match(source, /ctaLabelForOutputType/);
+  assert.match(source, /productContract\.outputType/);
+  assert.doesNotMatch(source, /ACTION_LABELS/);
   assert.doesNotMatch(source, /pricing_request:\s*'邮件草稿'/);
 });
 
 test('dynamic action card exposes visible generation and cancel controls', () => {
   const source = read('src/components/dynamic-actions/DynamicActionCard.tsx');
 
-  assert.match(source, /生成回答|立即生成/);
+  assert.match(source, /生成回应/);
   assert.match(source, /取消|忽略/);
   assert.match(source, /Tab 生成/);
   assert.match(source, /秒后自动生成/);
@@ -76,6 +78,22 @@ test('dynamic action card exposes visible generation and cancel controls', () =>
   assert.doesNotMatch(source, /opacity-0\s+group-hover:opacity-100/);
   assert.doesNotMatch(source, /text-white\/(?:30|40)/);
   assert.doesNotMatch(source, /bg-white\/8/);
+});
+
+test('dynamic action card exposes all product lifecycle display states and output CTAs', () => {
+  const source = read('src/components/dynamic-actions/DynamicActionCard.tsx');
+
+  assert.match(source, /candidate:\s*'建议动作'/);
+  assert.match(source, /countdown:\s*'秒后自动生成'/);
+  assert.match(source, /generating:\s*'正在生成'/);
+  assert.match(source, /cancelled:\s*'已取消'/);
+  assert.match(source, /expired:\s*'已过期'/);
+  assert.match(source, /failed:\s*'生成失败'/);
+  assert.match(source, /spoken_response:\s*'生成回应'/);
+  assert.match(source, /checklist:\s*'生成清单'/);
+  assert.match(source, /email_draft:\s*'生成邮件'/);
+  assert.match(source, /action_item:\s*'记录行动项'/);
+  assert.match(source, /decision_record:\s*'记录决策'/);
 });
 
 test('dynamic action bar owns semi-auto countdown and dedupes generation', () => {
@@ -178,8 +196,8 @@ test('dynamic action renderer payload exposes semantic gate metadata without evi
   const card = read('src/components/dynamic-actions/DynamicActionCard.tsx');
 
   assert.match(types, /semanticGate\?: DynamicActionSemanticGate/);
-  assert.match(card, /semanticGate/);
-  assert.match(card, /explainDynamicAction\(\{\s*type: action\.type,\s*semanticGate: action\.semanticGate/);
+  assert.doesNotMatch(card, /semanticGate/);
+  assert.doesNotMatch(card, /explainDynamicAction\(/);
   assert.doesNotMatch(card, /semanticGate[\s\S]{0,200}evidenceRefs\?\.\[0\]\?\.text/);
   assert.doesNotMatch(card, /语义证据不足，已暂缓高风险动作|相似的低置信候选已被拦截/);
 });

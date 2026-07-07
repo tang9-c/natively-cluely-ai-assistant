@@ -140,7 +140,10 @@ export const DynamicActionBar: React.FC<Props> = ({
             uiStatus: 'countdown',
             autoTriggerAt: Date.now() + AUTO_TRIGGER_DELAY_MS,
           }
-        : action;
+        : {
+            ...action,
+            uiStatus: 'candidate',
+          };
       setActions((prev) => {
         // Dedupe by id (engine has already deduped at backend, but renderer
         // may receive late-arriving duplicates after a window restore).
