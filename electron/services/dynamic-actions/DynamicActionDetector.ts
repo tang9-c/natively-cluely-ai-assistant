@@ -103,7 +103,7 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         label: 'Handle pricing objection',
         promptInstruction:
             "You are in Sales mode. The prospect has raised a pricing concern. Provide a concise, confident response that addresses value over cost. Include a bridge to next steps.",
-        answerStyle: { maxWords: 80, format: 'bullets', tone: 'confident' },
+        answerStyle: { maxWords: 80, format: 'short_script', tone: 'confident' },
     },
     {
         type: 'competitor_mention',
@@ -165,7 +165,7 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         priority: 0.87,
         label: 'Share relevant case study',
         promptInstruction:
-            'You are in Sales mode. The prospect is asking for proof or a customer case. Recommend the most relevant grounded case study, tie it to their situation, and ask what proof would be most useful next. Do not invent customer names, metrics, or outcomes.',
+            'You are in Sales mode. The prospect is asking for proof or a customer case. Recommend the most relevant grounded case study, tie it to their situation, and ask what proof would be most useful next. Do not invent customer names, metrics, or outcomes without trusted context.',
         answerStyle: { maxWords: 120, format: 'bullets', tone: 'credible' },
     },
     {

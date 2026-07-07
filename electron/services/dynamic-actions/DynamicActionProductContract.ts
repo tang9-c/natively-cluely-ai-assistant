@@ -111,6 +111,7 @@ function buildUserAction(input: ContractInput, outputType: DynamicActionOutputTy
     if (/pricing|objection|pushback|budget/.test(input.type)) return '回应价格异议';
     if (input.type === 'fde_integration_check') return '锁定集成验证步骤';
     if (input.type === 'fde_security_review') return '确认安全评审要求';
+    if (input.type === 'buying_signal') return '锁定下一步';
     if (/fde_|blocker|risk/.test(input.type)) return '澄清部署风险和下一步';
     if (outputType === 'action_item') return '确认负责人和截止时间';
     if (outputType === 'decision_record') return '记录当前决策';
