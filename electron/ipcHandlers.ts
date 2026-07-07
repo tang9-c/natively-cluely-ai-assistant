@@ -18,10 +18,14 @@ import {
   resolveMacSystemAudioPermissionHealth,
 } from './permissions/macPermissionHealth';
 import { CodexCliService } from './services/CodexCliService';
-import { buildUploadedMaterialCitation, resolveAnswerCitation } from './services/context/AnswerCitationResolver';
+import { resolveAnswerCitation } from './services/context/AnswerCitationResolver';
 import { buildRealtimeContextPlan, formatInjectedContext, type RealtimeContextCandidate } from './services/context/RealtimeContextOrchestrator';
 import { sanitizeGenerateWhatToSayOptions } from './services/context/RealtimeAnswerRequest';
-import { formatUploadedMaterialContext } from './services/knowledge/UploadedMaterialContextFormatter';
+import {
+  buildUploadedMaterialContextContribution,
+  shouldRequireUploadedMaterialContext,
+  type UploadedMaterialContextContribution,
+} from './services/knowledge/UploadedMaterialContextContributionService';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
 import { buildBusinessSystemFixedReplyTraceInput } from './services/business-system/BusinessSystemFixedReplyTrace';
 import { SkillActivationManager, type ActivateSkillInput, type SkillActivationScope } from './services/SkillActivationManager';
@@ -232,43 +236,89 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   };
 
+  const CHAT_MATERIAL_CONTEXT_TIMEOUT_MS = 180;
+
+  const buildDroppedUploadedMaterialContribution = (
+    existingContext: string | undefined,
+    ragReady: boolean,
+    embeddingReady: boolean,
+  ): UploadedMaterialContextContribution => ({
+    context: existingContext,
+    contextCandidates: [],
+    degradedReasons: ['uploaded_material_context_dropped'],
+    sourceStatus: {
+      ragAttempted: true,
+      ragReady,
+      embeddingReady,
+      uploadedMaterialHitCount: 0,
+      citationCount: 0,
+      screenContextStatus: 'not_available',
+    },
+    citations: [],
+    retrievalTimingMs: {},
+    usedMaterialContext: false,
+    uploadedMaterialHitCount: 0,
+    truncated: false,
+  });
+
+  const publishChatContextStatus = (
+    sender: Electron.WebContents,
+    contribution: UploadedMaterialContextContribution,
+  ): void => {
+    sender.send('chat-context-status', {
+      degradedReason: contribution.degradedReasons[0],
+      sourceStatus: contribution.sourceStatus,
+      uploadedMaterialHitCount: contribution.uploadedMaterialHitCount,
+      citationCount: contribution.citations.length,
+    });
+  };
+
   const resolveUploadedMaterialChatContext = async (
+    sender: Electron.WebContents,
     message: string,
     existingContext?: string,
-  ): Promise<{ context?: string }> => {
-    const query = typeof message === 'string' ? message.trim() : '';
-    if (!query || existingContext?.includes('<uploaded_material_context')) {
-      return { context: existingContext };
-    }
+    options: { allowTimeout?: boolean } = {},
+  ): Promise<UploadedMaterialContextContribution> => {
+    const ragManagerForHealth = appState.getRAGManager();
+    const ragReady = Boolean(ragManagerForHealth?.isReady?.());
+    const embeddingReady = Boolean(ragManagerForHealth?.getEmbeddingPipeline?.().isReady?.());
+    const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
+    const materialService = new KnowledgeMaterialService(
+      DatabaseManager.getInstance(),
+      ragManagerForHealth?.getEmbeddingPipeline?.(),
+    );
+    const contributionPromise = buildUploadedMaterialContextContribution({
+      query: message,
+      existingContext,
+      scopePolicy: SettingsManager.getInstance().get('providerDataScopes') || {},
+      materialService,
+      ragReady,
+      embeddingReady,
+      tokenBudget: 1800,
+      surface: 'overlay-chat',
+    });
 
-    const providerScopes = SettingsManager.getInstance().get('providerDataScopes') || {};
-    if (providerScopes.reference_files === false) {
-      return { context: existingContext };
-    }
-
-    try {
-      const ragManagerForHealth = appState.getRAGManager();
-      const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
-      const materialService = new KnowledgeMaterialService(
-        DatabaseManager.getInstance(),
-        ragManagerForHealth?.getEmbeddingPipeline?.(),
-      );
-      const materialSearch = await materialService.searchWithDiagnostics(query, { limit: 4 });
-      if (materialSearch.hits.length === 0) {
-        return { context: existingContext };
+    let contribution: UploadedMaterialContextContribution;
+    if (options.allowTimeout && !shouldRequireUploadedMaterialContext(message)) {
+      contribution = await Promise.race([
+        contributionPromise,
+        new Promise<UploadedMaterialContextContribution>((resolve) => {
+          setTimeout(
+            () => resolve(buildDroppedUploadedMaterialContribution(existingContext, ragReady, embeddingReady)),
+            CHAT_MATERIAL_CONTEXT_TIMEOUT_MS,
+          );
+        }),
+      ]);
+      if (contribution.degradedReasons.includes('uploaded_material_context_dropped')) {
+        contributionPromise.catch((error: any) => {
+          console.warn('[IPC] late chat material RAG failed', { errorClass: error?.name || 'Error' });
+        });
       }
-
-      const formattedMaterialContext = formatUploadedMaterialContext(materialSearch.hits);
-      const materialContext = formattedMaterialContext.text;
-      return {
-        context: existingContext
-          ? `${existingContext}\n\n${materialContext}`
-          : materialContext,
-      };
-    } catch (error: any) {
-      console.warn('[IPC] chat material RAG failed', { errorClass: error?.name || 'Error' });
-      return { context: existingContext };
+    } else {
+      contribution = await contributionPromise;
     }
+    publishChatContextStatus(sender, contribution);
+    return contribution;
   };
 
   // --- NEW Test Helper ---
@@ -571,7 +621,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     ) => {
       try {
         const chatPromptOptions = resolveChatPromptOptions(message, options?.skipSystemPrompt);
-        const chatContext = await resolveUploadedMaterialChatContext(message, context);
+        const chatContext = await resolveUploadedMaterialChatContext(event.sender, message, context);
         const result = await appState.processingHelper
           .getLLMHelper()
           .chatWithGemini(message, imagePaths, chatContext.context, options?.skipSystemPrompt, undefined, chatPromptOptions);
@@ -713,7 +763,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             `[IPC] Auto-injected 100s context for gemini-chat-stream (${context.length} chars)`,
           );
         }
-        const chatContext = await resolveUploadedMaterialChatContext(message, context);
+        const chatContext = await resolveUploadedMaterialChatContext(event.sender, message, context, { allowTimeout: true });
         context = chatContext.context;
 
         // Use CHAT_MODE_PROMPT for general chat — bypasses the interview-copilot
@@ -3107,7 +3157,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         try {
         const requestOptions = sanitizeGenerateWhatToSayOptions(options);
         const providerScopes = SettingsManager.getInstance().get('providerDataScopes') || {};
-        const referenceFilesAllowed = providerScopes.reference_files !== false;
         let screenContext: any;
         let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
         let visionProviderUsed: string | undefined;
@@ -3282,55 +3331,33 @@ export function initializeIpcHandlers(appState: AppState): void {
           contextCandidates.push(businessSystemResult.candidate);
         }
 
-        try {
-          const materialStartedAt = Date.now();
-          const searchQuery = typeof question === 'string' && question.trim()
-            ? question.trim()
-            : sanitizeModeEvent(requestOptions.modeEvent)?.retrievalQuery;
-          if (searchQuery && referenceFilesAllowed) {
-            materialRagAttempted = true;
-            const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
-            const materialService = new KnowledgeMaterialService(DatabaseManager.getInstance(), ragManagerForHealth?.getEmbeddingPipeline?.());
-            const materialSearch = await materialService.searchWithDiagnostics(searchQuery, { limit: 4 });
-            const materialHits = materialSearch.hits;
-            if (materialSearch.degradedReason && !degradedReasons.includes('embedding_unavailable')) {
-              degradedReasons.push('embedding_unavailable');
-            }
-            retrievalTimingMs.uploaded_material = Date.now() - materialStartedAt;
-            uploadedMaterialHitCount = materialHits.length;
-            if (materialHits.length > 0) {
-              citations.push(...materialHits.map((hit: any) => buildUploadedMaterialCitation(hit)));
-              for (const hit of materialHits) {
-                const citation = buildUploadedMaterialCitation(hit);
-                const text = hit.text || hit.parentText || '';
-                contextCandidates.push({
-                  source: 'uploaded_material',
-                  sourceId: hit.sourceId,
-                  chunkId: hit.chunkId,
-                  text,
-                  score: hit.score,
-                  tokenCount: Math.max(1, Math.ceil(String(text).length / 4)),
-                  sourceVersion: hit.materialUpdatedAt || hit.fileHash || 'unknown',
-                  contentHash: citation.chunkContentHash,
-                });
-              }
-              const formattedMaterialContext = formatUploadedMaterialContext(materialHits);
-              if (formattedMaterialContext.truncated) {
-                degradedReasons.push('uploaded_material_context_truncated');
-              }
-            } else {
-              degradedReasons.push('no_relevant_uploaded_material');
-            }
-          }
-        } catch (materialError: any) {
-          degradedReasons.push('uploaded_material_rag_failed');
-          console.warn('[IPC] generate-what-to-say: material RAG failed', { errorClass: materialError?.name || 'Error' });
-        }
-        if (!referenceFilesAllowed) {
-          degradedReasons.push('context_scope_denied');
-        }
         const ragReady = Boolean(ragManagerForHealth?.isReady?.());
         const embeddingReady = Boolean(ragManagerForHealth?.getEmbeddingPipeline?.().isReady?.());
+        const searchQuery = typeof question === 'string' && question.trim()
+          ? question.trim()
+          : sanitizeModeEvent(requestOptions.modeEvent)?.retrievalQuery;
+        if (searchQuery) {
+          const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
+          const materialService = new KnowledgeMaterialService(DatabaseManager.getInstance(), ragManagerForHealth?.getEmbeddingPipeline?.());
+          const materialContribution = await buildUploadedMaterialContextContribution({
+            query: searchQuery,
+            scopePolicy: providerScopes,
+            materialService,
+            ragReady,
+            embeddingReady,
+            tokenBudget: 1800,
+            surface: requestOptions.source,
+          });
+          materialRagAttempted = materialContribution.sourceStatus.ragAttempted;
+          uploadedMaterialHitCount = materialContribution.uploadedMaterialHitCount;
+          uploadedMaterialContext = materialContribution.context;
+          contextCandidates.push(...materialContribution.contextCandidates);
+          citations.push(...materialContribution.citations);
+          Object.assign(retrievalTimingMs, materialContribution.retrievalTimingMs);
+          for (const reason of materialContribution.degradedReasons) {
+            if (!degradedReasons.includes(reason)) degradedReasons.push(reason);
+          }
+        }
         if (!ragReady && materialRagAttempted && !degradedReasons.includes('rag_unavailable')) {
           degradedReasons.push('rag_unavailable');
         }
@@ -3354,7 +3381,11 @@ export function initializeIpcHandlers(appState: AppState): void {
           degradedReasons: realtimeContextPlan.degradedReasons,
           retrievalTimingMs: realtimeContextPlan.retrievalTimingMs,
         });
-        uploadedMaterialContext = formatInjectedContext(realtimeContextPlan) || undefined;
+        const realtimeInjectedContext = formatInjectedContext({
+          ...realtimeContextPlan,
+          injected: realtimeContextPlan.injected.filter((item) => item.source !== 'uploaded_material'),
+        }) || undefined;
+        uploadedMaterialContext = [uploadedMaterialContext, realtimeInjectedContext].filter(Boolean).join('\n\n') || undefined;
 
         const intelligenceManager = appState.getIntelligenceManager();
         // Question and imagePaths are now optional - IntelligenceManager infers from transcript

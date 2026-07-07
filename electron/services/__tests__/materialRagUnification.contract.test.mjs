@@ -29,6 +29,8 @@ test('global materials and mode reference files share a scope-aware Material RAG
   assert.match(knowledge, /MaterialRagRetriever/);
   assert.match(knowledge, /scope:\s*'global'/);
   assert.match(modeContext, /MaterialRagRetriever/);
+  assert.match(modeContext, /computeLexicalScore/);
+  assert.doesNotMatch(modeContext, /function scoreChunk/);
   assert.match(modeContext, /scope:\s*'mode'/);
   assert.match(modeHybrid, /MaterialRagRetriever/);
 });

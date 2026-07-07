@@ -337,6 +337,36 @@ function countAnswerSourceStatus(counts: Record<string, number>, sourceStatus: A
     incrementCount(counts, citationCount > 0 ? 'citations.present' : 'citations.missing');
 }
 
+function escapeSqlLike(value: string): string {
+    return value.replace(/[%_]/g, (match) => `\\${match}`);
+}
+
+function extractKnowledgeMaterialCandidateTerms(query: string): string[] {
+    const text = String(query || '').trim();
+    if (!text) return [];
+    const normalized = text
+        .toLowerCase()
+        .replace(/['’]s\b/g, '')
+        .replace(/['’]/g, '');
+    const terms = new Set<string>();
+
+    for (const word of normalized.match(/[a-z0-9][a-z0-9-]{2,}/g) ?? []) {
+        terms.add(word);
+    }
+
+    for (const sequence of text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu) ?? []) {
+        if (sequence.length <= 8) terms.add(sequence);
+        for (let i = 0; i < sequence.length - 1; i++) {
+            terms.add(sequence.slice(i, i + 2));
+        }
+        for (let i = 0; i < sequence.length - 2; i++) {
+            terms.add(sequence.slice(i, i + 3));
+        }
+    }
+
+    return Array.from(terms).slice(0, 12);
+}
+
 export class DatabaseManager {
     private static instance: DatabaseManager;
     private db: Database.Database | null = null;
@@ -1917,6 +1947,52 @@ export class DatabaseManager {
             WHERE m.status = 'complete' ${embeddingClause}
             ORDER BY m.updated_at DESC, c.chunk_index ASC
         `).all();
+    }
+
+    public getKnowledgeMaterialCandidateChunks(
+        query: string,
+        options: { limit?: number; candidateLimit?: number; withEmbeddingsOnly?: boolean } = {},
+    ): any[] {
+        if (!this.db) return [];
+        const candidateLimit = Math.max(1, Math.min(1000, Number(options.candidateLimit ?? 200)));
+        const embeddingClause = options.withEmbeddingsOnly ? 'AND c.embedding IS NOT NULL' : '';
+        const selectSql = `
+            SELECT
+                c.*,
+                m.file_name,
+                m.title,
+                m.file_hash,
+                m.created_at AS material_created_at,
+                m.updated_at AS material_updated_at
+            FROM knowledge_material_chunks c
+            JOIN knowledge_materials m ON m.id = c.material_id
+            WHERE m.status = 'complete' ${embeddingClause}
+        `;
+        const orderAndLimitSql = `
+            ORDER BY m.updated_at DESC, c.chunk_index ASC
+            LIMIT ?
+        `;
+        const terms = extractKnowledgeMaterialCandidateTerms(query);
+        if (terms.length > 0) {
+            const clauses: string[] = [];
+            const params: string[] = [];
+            for (const term of terms) {
+                clauses.push('(m.title LIKE ? OR m.file_name LIKE ? OR c.cleaned_text LIKE ? OR c.parent_text LIKE ?)');
+                const likeTerm = `%${escapeSqlLike(term)}%`;
+                params.push(likeTerm, likeTerm, likeTerm, likeTerm);
+            }
+            const rows = this.db.prepare(`
+                ${selectSql}
+                AND (${clauses.join(' OR ')})
+                ${orderAndLimitSql}
+            `).all(...params, candidateLimit);
+            if (rows.length > 0) return rows;
+        }
+
+        return this.db.prepare(`
+            ${selectSql}
+            ${orderAndLimitSql}
+        `).all(candidateLimit);
     }
 
     public getKnowledgeMaterialChunkById(chunkId: number): any | null {

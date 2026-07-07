@@ -25,6 +25,11 @@ export interface KnowledgeMaterialSearchResponse {
     degradedReason?: 'embedding_unavailable' | 'hybrid_threw';
 }
 
+interface KnowledgeMaterialSearchOptions {
+    limit?: number;
+    candidateLimit?: number;
+}
+
 interface PptxQCloudAvailability {
     hasNativelyApiKey: boolean;
     activeProvider: string;
@@ -156,13 +161,17 @@ export class KnowledgeMaterialService {
         this.db.deleteKnowledgeMaterial(materialId);
     }
 
-    async search(query: string, options: { limit?: number } = {}): Promise<KnowledgeMaterialSearchResult[]> {
+    async search(query: string, options: KnowledgeMaterialSearchOptions = {}): Promise<KnowledgeMaterialSearchResult[]> {
         return (await this.searchWithDiagnostics(query, options)).hits;
     }
 
-    async searchWithDiagnostics(query: string, options: { limit?: number } = {}): Promise<KnowledgeMaterialSearchResponse> {
+    async searchWithDiagnostics(query: string, options: KnowledgeMaterialSearchOptions = {}): Promise<KnowledgeMaterialSearchResponse> {
         const limit = options.limit ?? 6;
-        const rows = this.db.getKnowledgeMaterialChunks({ withEmbeddingsOnly: false });
+        const candidateLimit = options.candidateLimit ?? 200;
+        const candidateReader = (this.db as any).getKnowledgeMaterialCandidateChunks;
+        const rows = typeof candidateReader === 'function'
+            ? candidateReader.call(this.db, query, { ...options, limit, candidateLimit, withEmbeddingsOnly: false })
+            : this.db.getKnowledgeMaterialChunks({ withEmbeddingsOnly: false }).slice(0, candidateLimit);
         if (rows.length === 0) return { hits: [] };
 
         const sources: MaterialRagSource[] = rows.map((row: any) => ({

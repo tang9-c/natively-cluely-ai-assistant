@@ -168,6 +168,67 @@ test('demo product overview answers the uploaded-material meeting modes query', 
   assert.match(combinedHits, /Sales\(销售\)|Team Meet\(团队会议\)|Technical Interview\(技术面试\)/);
 });
 
+test('material search uses bounded candidate query when available', async () => {
+  const db = createDbStub();
+  let fullScanCalls = 0;
+  let candidateCalls = 0;
+  db.getKnowledgeMaterialChunks = () => {
+    fullScanCalls++;
+    return [];
+  };
+  db.getKnowledgeMaterialCandidateChunks = (query, options) => {
+    candidateCalls++;
+    assert.equal(query, 'SSO audit log');
+    assert.equal(options.limit, 3);
+    assert.equal(options.candidateLimit, 25);
+    return [{
+      id: 1,
+      material_id: 'mat-1',
+      chunk_index: 0,
+      cleaned_text: 'CueUp Enterprise includes SSO and audit log export.',
+      parent_text: 'CueUp Enterprise includes SSO and audit log export.',
+      token_count: 12,
+      embedding: null,
+      file_name: 'faq.md',
+      title: 'FAQ',
+      file_hash: 'hash',
+      material_updated_at: 'now',
+    }];
+  };
+  const service = new KnowledgeMaterialService(db, null);
+
+  const result = await service.searchWithDiagnostics('SSO audit log', { limit: 3, candidateLimit: 25 });
+
+  assert.equal(candidateCalls, 1);
+  assert.equal(fullScanCalls, 0);
+  assert.equal(result.hits.length, 1);
+});
+
+test('material search keeps CJK product pricing query from retrieving unrelated marketing copy', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'material-service-'));
+  try {
+    const pricingPath = path.join(tmpDir, 'pricing.md');
+    const marketingPath = path.join(tmpDir, 'marketing.md');
+    fs.writeFileSync(pricingPath, '产品定价：Pro 计划每月 20 美元，Enterprise 需要联系销售。', 'utf8');
+    fs.writeFileSync(marketingPath, '品牌故事：这是一份中文营销稿，介绍会议、资料、模式、产品体验和团队文化，但没有价格。', 'utf8');
+    const db = createDbStub();
+    const service = new KnowledgeMaterialService(db, null);
+
+    const result = await service.uploadFiles([pricingPath, marketingPath]);
+    assert.equal(result.errors.length, 0);
+    await waitFor(() => {
+      assert.equal(db.listKnowledgeMaterials().filter((material) => material.status === 'complete').length, 2);
+    });
+
+    const searchResult = await service.searchWithDiagnostics('你们产品定价是多少？', { limit: 2 });
+    const combinedHits = searchResult.hits.map((hit) => hit.parentText).join('\n');
+    assert.match(combinedHits, /每月 20 美元/);
+    assert.doesNotMatch(combinedHits, /品牌故事/);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test('parse failure leaves a failed material record with a readable error', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'material-service-'));
   try {

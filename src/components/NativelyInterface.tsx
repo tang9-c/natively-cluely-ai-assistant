@@ -61,6 +61,7 @@ import {
 import type {
   AnswerCitation,
   AnswerContextTrace,
+  AnswerSourceStatus,
   AnswerQualityEventType,
   ContextHealth,
   DynamicActionModeEvent,
@@ -283,7 +284,7 @@ const getSttSummary = (
   }
   if (!interviewerProvider) {
     return {
-      label: '麦克风转写正常',
+      label: '仅麦克风转写',
       tone: 'warn',
       detail,
     };
@@ -613,6 +614,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [latestAnswerTrace, setLatestAnswerTrace] = useState<AnswerContextTrace | null>(null);
   const [latestAnswerCitations, setLatestAnswerCitations] = useState<AnswerCitation[]>([]);
   const [latestDegradedReason, setLatestDegradedReason] = useState<string | undefined>(undefined);
+  const [latestChatSourceStatus, setLatestChatSourceStatus] = useState<AnswerSourceStatus | null>(null);
   const [contextHealth, setContextHealth] = useState<ContextHealth | null>(null);
   const [latestCitationStatus, setLatestCitationStatus] = useState<CitationStatus>('none');
   const [citationPreviewMessage, setCitationPreviewMessage] = useState<string | null>(null);
@@ -2393,6 +2395,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   useEffect(() => {
     const cleanups: (() => void)[] = [];
 
+    const unsubscribeChatContextStatus = window.electronAPI.onChatContextStatus?.((payload) => {
+      setLatestDegradedReason(payload.degradedReason);
+      setLatestChatSourceStatus(payload.sourceStatus ?? null);
+      if ((payload.uploadedMaterialHitCount ?? 0) > 0) {
+        setLatestCitationStatus(payload.citationCount > 0 ? 'candidate' : 'none');
+      }
+      refreshContextHealth().catch(() => {});
+    });
+    if (unsubscribeChatContextStatus) cleanups.push(unsubscribeChatContextStatus);
+
     // Stream Token — rAF-coalesced via queueToken (same path as intelligence streams)
     cleanups.push(
       window.electronAPI.onGeminiStreamToken((token) => {
@@ -2531,7 +2543,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }
 
     return () => cleanups.forEach((fn) => fn());
-  }, [currentModel, queueToken, flushToken]); // Ensure tracking captures correct model
+  }, [currentModel, queueToken, flushToken, refreshContextHealth]); // Ensure tracking captures correct model
 
   const handleAnswerNow = async () => {
     if (isManualRecording) {
@@ -2654,6 +2666,12 @@ Provide only the answer, nothing else.`;
         }
 
         // Call Streaming API: message = question, context = instructions
+        setLatestAnswerTrace(null);
+        setLatestAnswerCitations([]);
+        setLatestCitationStatus('none');
+        setCitationPreviewMessage(null);
+        setLatestDegradedReason(undefined);
+        setLatestChatSourceStatus(null);
         requestStartTimeRef.current = Date.now();
         await window.electronAPI.streamGeminiChat(
           question,
@@ -2774,6 +2792,12 @@ Provide only the answer, nothing else.`;
       }
 
       // Pass imagePath if attached, AND conversation context
+      setLatestAnswerTrace(null);
+      setLatestAnswerCitations([]);
+      setLatestCitationStatus('none');
+      setCitationPreviewMessage(null);
+      setLatestDegradedReason(undefined);
+      setLatestChatSourceStatus(null);
       requestStartTimeRef.current = Date.now();
       await window.electronAPI.streamGeminiChat(
         userText || 'Analyze this screenshot',
@@ -3658,7 +3682,7 @@ Provide only the answer, nothing else.`;
   const latestDegradedReasonDisplay = latestAnswerTrustExplanation.degradedMessages.length === 0
     ? formatDegradedReasonForDisplay(latestDegradedReason)
     : null;
-  const latestSourceStatus = latestAnswerTrace?.sourceStatus;
+  const latestSourceStatus = latestAnswerTrace?.sourceStatus ?? latestChatSourceStatus ?? undefined;
   const ragReady = latestSourceStatus?.ragReady ?? contextHealth?.ragReady;
   const embeddingReady = latestSourceStatus?.embeddingReady ?? contextHealth?.embeddingReady;
   const formatReadyLabel = (ready: boolean | undefined, availableLabel: string, unavailableLabel: string) => {

@@ -1,5 +1,11 @@
 import { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
 import { escapeXmlText } from '../ModesManager';
+import {
+    CJK_RELEVANCE_THRESHOLD_MULTIPLIER,
+    computeLexicalScore,
+    hasCjkText,
+    wordsOf,
+} from './LexicalScoring';
 
 export type MaterialRagScope = 'global' | 'mode' | 'scenario' | 'meeting';
 
@@ -68,21 +74,6 @@ const CHUNK_OVERLAP = 30;
 const MIN_COMBINED_SCORE = 0.15;
 const FTS_WEIGHT = 0.4;
 const FALLBACK_TELEMETRY_THROTTLE_MS = 60_000;
-const CJK_RETRIEVAL_TERMS = [
-    '价格', '产品', '案例', '报价', '报价单', '预算', '成本', '合同', 'roi',
-    '竞品', '上线', '回本', '价值', '客户', '异议', '法务', '审批', '折扣',
-    '费用', '采购', '实施', '部署', '续约', '试点', '试用',
-    '候选人', '岗位', 'jd', '招聘经理', '面试官', '薪资', 'offer', '签证',
-    '入职时间', '搬迁', '远程', '混合办公', '背景', '经验', '匹配',
-    '简历', '项目', '作品集', '自我介绍', 'star', '领导力', '挑战', '结果', '动机',
-    '行动项', '负责人', '截止', '决策', '风险', '阻塞', '依赖', '状态',
-    '进度', '延期', '里程碑',
-    '概念', '定义', '公式', '定理', '例题', '作业', '阅读', '章节',
-    '考试', '测验', '推导', '变量', '证明',
-    '算法', '复杂度', '系统设计', 'api', '数据库', '缓存', '吞吐量',
-    '边界条件', 'debug', '数据结构', '架构', '优化',
-    '降价', '最终报价', '底线', '让步', '承诺', '条款', '价格范围',
-];
 
 function encodePayload(value: unknown): string {
     return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
@@ -90,34 +81,6 @@ function encodePayload(value: unknown): string {
 
 function estimateTokens(text: string): number {
     return Math.ceil(text.length / 4);
-}
-
-function wordsOf(text: string): string[] {
-    const normalized = text
-        .toLowerCase()
-        .replace(/['’]s\b/g, '')
-        .replace(/['’]/g, '');
-    const tokens = new Set<string>();
-
-    for (const word of normalized.match(/[a-z0-9][a-z0-9-]{1,}/g) ?? []) {
-        if (word.length > 2) tokens.add(word);
-    }
-
-    for (const sequence of text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu) ?? []) {
-        if (sequence.length <= 8) tokens.add(sequence);
-        for (let i = 0; i < sequence.length - 1; i++) tokens.add(sequence.slice(i, i + 2));
-        for (let i = 0; i < sequence.length - 2; i++) tokens.add(sequence.slice(i, i + 3));
-    }
-
-    for (const term of CJK_RETRIEVAL_TERMS) {
-        if (normalized.includes(term.toLowerCase())) tokens.add(term.toLowerCase());
-    }
-
-    return Array.from(tokens);
-}
-
-function hasCjkText(text: string): boolean {
-    return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(text);
 }
 
 function cosine(queryEmbedding: number[], chunkEmbedding: number[]): number {
@@ -172,14 +135,15 @@ export class MaterialRagRetriever {
         const adaptiveThreshold = params.hasTranscript
             ? MIN_COMBINED_SCORE
             : MIN_COMBINED_SCORE * Math.min(1, queryWords.size / 5);
-        const relevanceThreshold = hasCjkText(queryText) ? adaptiveThreshold * 0.45 : adaptiveThreshold;
+        const hasCjkQuery = hasCjkText(queryText);
+        const relevanceThreshold = hasCjkQuery ? adaptiveThreshold * CJK_RELEVANCE_THRESHOLD_MULTIPLIER : adaptiveThreshold;
 
         let scored: Candidate[];
         let usedFallback = false;
         let degradedReason: MaterialRagContext['degradedReason'];
         if (this.embeddingPipeline?.isReady()) {
             try {
-                scored = await this.scoreHybrid(candidates, queryWords, queryText, relevanceThreshold);
+                scored = await this.scoreHybrid(candidates, queryWords, queryText, relevanceThreshold, hasCjkQuery);
             } catch (error) {
                 usedFallback = true;
                 degradedReason = 'hybrid_threw';
@@ -190,7 +154,7 @@ export class MaterialRagRetriever {
                     modeId: params.filters?.modeId,
                     errorClass: error instanceof Error ? error.constructor.name : typeof error,
                 });
-                scored = this.scoreLexical(candidates, queryWords, relevanceThreshold);
+                scored = this.scoreLexical(candidates, queryWords, relevanceThreshold, hasCjkQuery);
             }
         } else {
             usedFallback = true;
@@ -201,7 +165,7 @@ export class MaterialRagRetriever {
                 queryTokenCount: queryWords.size,
                 modeId: params.filters?.modeId,
             });
-            scored = this.scoreLexical(candidates, queryWords, relevanceThreshold);
+            scored = this.scoreLexical(candidates, queryWords, relevanceThreshold, hasCjkQuery);
         }
 
         scored.sort((a, b) => this.rankingScore(b) - this.rankingScore(a));
@@ -290,7 +254,7 @@ export class MaterialRagRetriever {
         return candidates;
     }
 
-    private async scoreHybrid(candidates: Candidate[], queryWords: Set<string>, queryText: string, minScore: number): Promise<Candidate[]> {
+    private async scoreHybrid(candidates: Candidate[], queryWords: Set<string>, queryText: string, minScore: number, hasCjkQuery: boolean): Promise<Candidate[]> {
         const queryEmbedding = await this.embeddingPipeline!.getEmbeddingForQuery(queryText);
         let chunkEmbeddings: number[][] = candidates.map((candidate) => candidate.source.embedding ?? []);
         try {
@@ -313,38 +277,20 @@ export class MaterialRagRetriever {
         return candidates
             .map((candidate, index) => ({
                 ...candidate,
-                ftsScore: this.computeFtsScore(candidate.text, queryWords),
+                ftsScore: computeLexicalScore(candidate.text, queryWords, hasCjkQuery),
                 vectorScore: chunkEmbeddings[index] ? cosine(queryEmbedding, chunkEmbeddings[index]) : 0,
             }))
             .filter((candidate) => this.finalScore(candidate) >= minScore);
     }
 
-    private scoreLexical(candidates: Candidate[], queryWords: Set<string>, minScore: number): Candidate[] {
+    private scoreLexical(candidates: Candidate[], queryWords: Set<string>, minScore: number, hasCjkQuery: boolean): Candidate[] {
         return candidates
             .map((candidate) => ({
                 ...candidate,
-                ftsScore: this.computeFtsScore(candidate.text, queryWords),
+                ftsScore: computeLexicalScore(candidate.text, queryWords, hasCjkQuery),
                 vectorScore: 0,
             }))
             .filter((candidate) => candidate.ftsScore >= minScore);
-    }
-
-    private computeFtsScore(chunk: string, queryWords: Set<string>): number {
-        if (queryWords.size === 0) return 0;
-        const chunkWords = wordsOf(chunk);
-        if (chunkWords.length === 0) return 0;
-        const hasCjkQuery = Array.from(queryWords).some((word) => hasCjkText(word));
-        let matches = 0;
-        const seen = new Set<string>();
-        for (const word of chunkWords) {
-            if (queryWords.has(word) && !seen.has(word)) {
-                matches++;
-                seen.add(word);
-            }
-        }
-        const chunkUniqueSize = new Set(chunkWords).size;
-        const normalizedChunkSize = hasCjkQuery ? Math.min(chunkUniqueSize, 80) : chunkUniqueSize;
-        return matches / Math.sqrt(queryWords.size * Math.max(1, normalizedChunkSize));
     }
 
     private finalScore(candidate: Candidate): number {

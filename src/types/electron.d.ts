@@ -185,6 +185,13 @@ export interface AnswerContextTrace {
   observability?: Record<string, unknown>
 }
 
+export interface ChatContextStatusPayload {
+  degradedReason?: string
+  sourceStatus?: AnswerSourceStatus
+  uploadedMaterialHitCount: number
+  citationCount: number
+}
+
 export interface AnswerQualityEventMetadata {
   surface?: 'overlay' | 'launcher' | 'dynamic_action' | string
   answerAgeMs?: number
@@ -604,6 +611,7 @@ export interface ElectronAPI {
   onGeminiStreamToken: (callback: (token: string) => void) => () => void
   onGeminiStreamDone: (callback: () => void) => () => void
   onGeminiStreamError: (callback: (error: string) => void) => () => void;
+  onChatContextStatus: (callback: (payload: ChatContextStatusPayload) => void) => () => void;
 
   // Model Management
   getDefaultModel: () => Promise<{ model: string }>;

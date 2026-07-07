@@ -552,6 +552,12 @@ interface ElectronAPI {
   onGeminiStreamToken: (callback: (token: string) => void) => () => void;
   onGeminiStreamDone: (callback: () => void) => () => void;
   onGeminiStreamError: (callback: (error: string) => void) => () => void;
+  onChatContextStatus: (callback: (payload: {
+    degradedReason?: string;
+    sourceStatus?: any;
+    uploadedMaterialHitCount: number;
+    citationCount: number;
+  }) => void) => () => void;
 
   onModelChanged: (callback: (modelId: string) => void) => () => void;
 
@@ -1694,6 +1700,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('gemini-stream-error', subscription);
     return () => {
       ipcRenderer.removeListener('gemini-stream-error', subscription);
+    };
+  },
+
+  onChatContextStatus: (callback: (payload: {
+    degradedReason?: string;
+    sourceStatus?: any;
+    uploadedMaterialHitCount: number;
+    citationCount: number;
+  }) => void) => {
+    const subscription = (_: any, payload: any) => callback(payload);
+    ipcRenderer.on('chat-context-status', subscription);
+    return () => {
+      ipcRenderer.removeListener('chat-context-status', subscription);
     };
   },
 

@@ -51,6 +51,8 @@ test('renderer does not call STT normal when a provider label is not set', () =>
     summaryFn[0].indexOf('!interviewerProvider') < summaryFn[0].indexOf("label: '语音转写正常'"),
     'missing system provider branch should run before the normal label'
   );
+  assert.match(summaryFn[0], /label:\s*'仅麦克风转写'/);
+  assert.doesNotMatch(summaryFn[0], /label:\s*'麦克风转写正常'/);
 });
 
 test('native audio transcript handler no longer drops user transcripts outside Answer recording mode', () => {
