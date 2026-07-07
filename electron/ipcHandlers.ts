@@ -232,6 +232,45 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   };
 
+  const resolveUploadedMaterialChatContext = async (
+    message: string,
+    existingContext?: string,
+  ): Promise<{ context?: string }> => {
+    const query = typeof message === 'string' ? message.trim() : '';
+    if (!query || existingContext?.includes('<uploaded_material_context')) {
+      return { context: existingContext };
+    }
+
+    const providerScopes = SettingsManager.getInstance().get('providerDataScopes') || {};
+    if (providerScopes.reference_files === false) {
+      return { context: existingContext };
+    }
+
+    try {
+      const ragManagerForHealth = appState.getRAGManager();
+      const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
+      const materialService = new KnowledgeMaterialService(
+        DatabaseManager.getInstance(),
+        ragManagerForHealth?.getEmbeddingPipeline?.(),
+      );
+      const materialSearch = await materialService.searchWithDiagnostics(query, { limit: 4 });
+      if (materialSearch.hits.length === 0) {
+        return { context: existingContext };
+      }
+
+      const formattedMaterialContext = formatUploadedMaterialContext(materialSearch.hits);
+      const materialContext = formattedMaterialContext.text;
+      return {
+        context: existingContext
+          ? `${existingContext}\n\n${materialContext}`
+          : materialContext,
+      };
+    } catch (error: any) {
+      console.warn('[IPC] chat material RAG failed', { errorClass: error?.name || 'Error' });
+      return { context: existingContext };
+    }
+  };
+
   // --- NEW Test Helper ---
   safeHandle('test-release-fetch', async () => {
     try {
@@ -532,9 +571,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     ) => {
       try {
         const chatPromptOptions = resolveChatPromptOptions(message, options?.skipSystemPrompt);
+        const chatContext = await resolveUploadedMaterialChatContext(message, context);
         const result = await appState.processingHelper
           .getLLMHelper()
-          .chatWithGemini(message, imagePaths, context, options?.skipSystemPrompt, undefined, chatPromptOptions);
+          .chatWithGemini(message, imagePaths, chatContext.context, options?.skipSystemPrompt, undefined, chatPromptOptions);
 
         console.log(`[IPC] gemini - chat response received`, { length: result?.length ?? 0 });
 
@@ -673,6 +713,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             `[IPC] Auto-injected 100s context for gemini-chat-stream (${context.length} chars)`,
           );
         }
+        const chatContext = await resolveUploadedMaterialChatContext(message, context);
+        context = chatContext.context;
 
         // Use CHAT_MODE_PROMPT for general chat — bypasses the interview-copilot
         // framing in HARD_SYSTEM_PROMPT/ASSIST_MODE_PROMPT that was causing coding

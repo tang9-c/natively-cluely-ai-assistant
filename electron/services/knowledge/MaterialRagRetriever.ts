@@ -172,7 +172,7 @@ export class MaterialRagRetriever {
         const adaptiveThreshold = params.hasTranscript
             ? MIN_COMBINED_SCORE
             : MIN_COMBINED_SCORE * Math.min(1, queryWords.size / 5);
-        const relevanceThreshold = hasCjkText(queryText) ? adaptiveThreshold * 0.55 : adaptiveThreshold;
+        const relevanceThreshold = hasCjkText(queryText) ? adaptiveThreshold * 0.45 : adaptiveThreshold;
 
         let scored: Candidate[];
         let usedFallback = false;
@@ -333,6 +333,7 @@ export class MaterialRagRetriever {
         if (queryWords.size === 0) return 0;
         const chunkWords = wordsOf(chunk);
         if (chunkWords.length === 0) return 0;
+        const hasCjkQuery = Array.from(queryWords).some((word) => hasCjkText(word));
         let matches = 0;
         const seen = new Set<string>();
         for (const word of chunkWords) {
@@ -341,7 +342,9 @@ export class MaterialRagRetriever {
                 seen.add(word);
             }
         }
-        return matches / Math.sqrt(queryWords.size * Math.max(1, new Set(chunkWords).size));
+        const chunkUniqueSize = new Set(chunkWords).size;
+        const normalizedChunkSize = hasCjkQuery ? Math.min(chunkUniqueSize, 80) : chunkUniqueSize;
+        return matches / Math.sqrt(queryWords.size * Math.max(1, normalizedChunkSize));
     }
 
     private finalScore(candidate: Candidate): number {

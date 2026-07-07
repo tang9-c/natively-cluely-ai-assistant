@@ -33,6 +33,20 @@ test('generate-what-to-say exposes formatter truncation as a degraded reason', (
   assert.match(handler, /degradedReasons\.push\('uploaded_material_context_truncated'\)/);
 });
 
+test('manual overlay chat injects uploaded material context before calling the LLM', () => {
+  const source = read('electron/ipcHandlers.ts');
+  const chatHandler = sliceSafeHandleBlock(source, 'gemini-chat');
+  const streamHandler = sliceSafeHandleBlock(source, 'gemini-chat-stream');
+
+  assert.match(source, /resolveUploadedMaterialChatContext/);
+  assert.match(source, /KnowledgeMaterialService/);
+  assert.match(source, /providerScopes\.reference_files !== false/);
+  assert.match(chatHandler, /resolveUploadedMaterialChatContext\(message,\s*context\)/);
+  assert.match(chatHandler, /chatContext\.context/);
+  assert.match(streamHandler, /resolveUploadedMaterialChatContext\(message,\s*context\)/);
+  assert.match(streamHandler, /chatContext\.context/);
+});
+
 test('context pill maps uploaded material truncation reasons to user-facing labels', () => {
   const source = read('src/components/NativelyInterface.tsx');
 

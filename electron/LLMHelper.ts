@@ -138,7 +138,7 @@ export class LLMHelper {
   private inferContextScopes(context?: string): ProviderDataScope[] {
     const scopes: ProviderDataScope[] = [];
     if (!context?.trim()) return scopes;
-    if (/<reference_file|<active_mode_retrieved_context|mode_retrieval/i.test(context)) scopes.push('reference_files');
+    if (/<reference_file|<uploaded_material_context|<active_mode_retrieved_context|mode_retrieval/i.test(context)) scopes.push('reference_files');
     if (/<meeting_history|USER-PROVIDED PERSONA CONTEXT|<user_context/i.test(context)) scopes.push('profile_history');
     if (/<post_call_summary|meeting summary|silent meeting summarizer|silent meeting note-taker/i.test(context)) scopes.push('post_call_summary');
     return scopes;

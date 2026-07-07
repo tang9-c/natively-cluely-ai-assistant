@@ -148,6 +148,26 @@ test('uploadFiles returns queued records before background indexing completes', 
   }
 });
 
+test('demo product overview answers the uploaded-material meeting modes query', async () => {
+  const db = createDbStub();
+  const service = new KnowledgeMaterialService(db, null);
+  const fixturePath = path.join(process.cwd(), 'tests/fixtures/demo/02_knowledge_base/kb_natively_product_overview.md');
+
+  const result = await service.uploadFiles([fixturePath]);
+  assert.equal(result.errors.length, 0);
+  const materialId = result.materials[0].id;
+
+  await waitFor(() => assert.equal(db.getKnowledgeMaterial(materialId).status, 'complete'));
+
+  const searchResult = await service.searchWithDiagnostics(
+    '根据刚上传的资料，Natively 支持哪些专用会议模式？',
+    { limit: 2 },
+  );
+  const combinedHits = searchResult.hits.map((hit) => `${hit.text}\n${hit.parentText}`).join('\n');
+  assert.equal(searchResult.hits.length > 0, true);
+  assert.match(combinedHits, /Sales\(销售\)|Team Meet\(团队会议\)|Technical Interview\(技术面试\)/);
+});
+
 test('parse failure leaves a failed material record with a readable error', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'material-service-'));
   try {

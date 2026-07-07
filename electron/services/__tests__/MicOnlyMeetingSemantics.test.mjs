@@ -30,6 +30,29 @@ test('renderer treats microphone as the success anchor for overall STT state', (
   );
 });
 
+test('renderer does not call STT normal when a provider label is not set', () => {
+  const ui = read('src/components/NativelyInterface.tsx');
+  const summaryFn = ui.match(
+    /const getSttSummary = \([\s\S]*?\n\};/
+  );
+
+  assert.ok(summaryFn, 'getSttSummary should exist');
+  assert.match(
+    summaryFn[0],
+    /!userProvider/,
+    'missing microphone provider should not be reported as normal'
+  );
+  assert.match(
+    summaryFn[0],
+    /!interviewerProvider/,
+    'missing system provider should downgrade the label instead of saying transcription is normal'
+  );
+  assert.ok(
+    summaryFn[0].indexOf('!interviewerProvider') < summaryFn[0].indexOf("label: '语音转写正常'"),
+    'missing system provider branch should run before the normal label'
+  );
+});
+
 test('native audio transcript handler no longer drops user transcripts outside Answer recording mode', () => {
   const ui = read('src/components/NativelyInterface.tsx');
   const transcriptHandler = ui.match(
@@ -82,6 +105,14 @@ test('rolling transcript chrome stays normal when only system audio is degraded'
     /const anyReconnecting = micStatus === 'reconnecting';/,
     'system-audio reconnecting alone should not displace normal mic-only meetings'
   );
+});
+
+test('overlay exposes a clickable selective screenshot entry for cropper testing', () => {
+  const ui = read('src/components/NativelyInterface.tsx');
+
+  assert.match(ui, /aria-label="进行区域截图"/);
+  assert.match(ui, /generalHandlersRef\.current\.selectiveScreenshot\(\)/);
+  assert.match(ui, /<Image className="w-3\.5 h-3\.5 opacity-70" \/>/);
 });
 
 test('main tracks microphone transcript presence as meeting usability', () => {

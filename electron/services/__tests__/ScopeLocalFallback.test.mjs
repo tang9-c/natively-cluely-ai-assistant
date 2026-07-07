@@ -54,7 +54,7 @@ test('LLMHelper infers auxiliary context scopes before cloud routing', () => {
   const src = read('electron/LLMHelper.ts');
 
   assert.match(src, /inferContextScopes\(context\?: string\): ProviderDataScope\[\]/);
-  assert.match(src, /<reference_file\|<active_mode_retrieved_context\|mode_retrieval/);
+  assert.match(src, /<reference_file\|<uploaded_material_context\|<active_mode_retrieved_context\|mode_retrieval/);
   assert.match(src, /<meeting_history\|USER-PROVIDED PERSONA CONTEXT\|<user_context/);
   assert.match(src, /<post_call_summary\|meeting summary\|silent meeting summarizer\|silent meeting note-taker/);
 });

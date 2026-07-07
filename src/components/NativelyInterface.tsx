@@ -260,7 +260,7 @@ const getSttSummary = (
   notConfigured: boolean,
 ): { label: string; tone: 'ok' | 'warn' | 'error'; detail: string } => {
   const detail = `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`;
-  if (notConfigured) {
+  if (notConfigured || !userProvider) {
     return {
       label: '语音转写未配置',
       tone: 'error',
@@ -277,6 +277,13 @@ const getSttSummary = (
   if (userStatus === 'reconnecting') {
     return {
       label: '语音转写重连中',
+      tone: 'warn',
+      detail,
+    };
+  }
+  if (!interviewerProvider) {
+    return {
+      label: '麦克风转写正常',
       tone: 'warn',
       detail,
     };
@@ -4463,6 +4470,17 @@ Provide only the answer, nothing else.`;
                         {getModelDisplayName(currentModel)}
                       </span>
                       <ChevronDown size={14} className="shrink-0 transition-transform" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => generalHandlersRef.current.selectiveScreenshot()}
+                      className={`h-7 w-7 flex items-center justify-center rounded-lg border transition-colors interaction-base interaction-press ${controlSurfaceClass}`}
+                      style={appearance.controlStyle}
+                      title="进行区域截图"
+                      aria-label="进行区域截图"
+                    >
+                      <Image className="w-3.5 h-3.5 opacity-70" />
                     </button>
 
                     <div className="w-px h-3 mx-1" style={appearance.dividerStyle} />
