@@ -230,6 +230,33 @@ test('FDE intent result can synthesize action when regex does not match', async 
   assert.ok(actions.some(action => action.type === 'fde_risk_blocker'));
 });
 
+test('assessSignals synthesizes confirmed FDE AI Agent feasibility action from intent runtime mapping', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = await engine.assessSignals({
+    transcript: '客户在讨论一个内部边界问题',
+    speaker: 'Customer',
+    modeTemplateType: 'fde',
+    modeId: 'mode_fde_agent_boundary',
+    sessionId: 'session_fde_agent_boundary',
+    intentResult: {
+      intent: 'fde_agent_feasibility',
+      confidence: 0.92,
+      answerShape: 'Explain the AI Agent boundary as a checklist.',
+    },
+    now: 2_000,
+  });
+
+  const action = actions.find(item => item.type === 'fde_agent_feasibility');
+  assert.ok(action, `Expected fde_agent_feasibility; got ${actions.map(item => item.type).join(', ')}`);
+  assert.equal(action.signalStatus, 'confirmed');
+  assert.equal(action.confirmationSource, 'cloud_intent');
+  assert.equal(action.confirmedIntent, 'fde_agent_feasibility');
+  assert.equal(action.productContract?.outputType, 'checklist');
+  assert.equal(action.productContract?.userAction, '判断 AI Agent 可行性边界');
+});
+
 test('dynamic action retrievalQuery uses active-mode entity extraction', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();

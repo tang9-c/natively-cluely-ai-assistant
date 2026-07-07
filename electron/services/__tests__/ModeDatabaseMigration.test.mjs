@@ -1,15 +1,46 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = path.resolve(__dirname, '../../db/DatabaseManager.ts');
 const dbSource = fs.readFileSync(dbPath, 'utf8');
+const distRoot = path.resolve(__dirname, '../../../dist-electron/electron');
+const databaseModule = await import(pathToFileURL(path.join(distRoot, 'db/DatabaseManager.js')).href);
+const modeContextModule = await import(pathToFileURL(path.join(distRoot, 'services/ModeDefaultContexts.js')).href);
+
+const { DatabaseManager } = databaseModule;
+const { getDefaultModeCustomContext } = modeContextModule;
+const LEGACY_FDE_DEFAULT_CUSTOM_CONTEXT = '你是 FDE 现场交付副驾驶。优先澄清客户工作流、系统边界、数据流、权限、安全合规、上线约束和成功标准。回答时先讲技术可行性与验证路径，再给出最小下一步；不要跳过未知项或替客户假设环境。';
+
+function runFromV26(customContext) {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE modes (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      template_type TEXT NOT NULL DEFAULT 'general',
+      custom_context TEXT NOT NULL DEFAULT '',
+      is_active INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  db.pragma('user_version = 26');
+  db.prepare('INSERT INTO modes (id, name, template_type, custom_context, is_active) VALUES (?, ?, ?, ?, 1)')
+    .run('mode_fde_default', 'FDE', 'fde', customContext);
+
+  const manager = Object.create(DatabaseManager.prototype);
+  manager.db = db;
+  manager.runMigrations();
+
+  return db.prepare('SELECT custom_context FROM modes WHERE id = ?').get('mode_fde_default').custom_context;
+}
 
 describe('Mode database migrations', () => {
-  test('v26 -> v27 migration backfills shipped default custom contexts only for blank modes', () => {
+  test('v26 -> v27 migration backfills shipped default custom contexts and upgrades legacy FDE default copy', () => {
     assert.match(
       dbSource,
       /if\s*\(\s*version\s*<\s*27\s*\)/,
@@ -21,9 +52,24 @@ describe('Mode database migrations', () => {
     assert.match(v27Block[0], /UPDATE\s+modes\s+SET\s+custom_context\s*=\s*\?/i);
     assert.match(v27Block[0], /TRIM\s*\(\s*custom_context\s*\)\s*=\s*''/i);
     assert.match(v27Block[0], /custom_context\s+IS\s+NULL/i);
+    assert.match(v27Block[0], /isLegacyDefaultModeCustomContext/);
     for (const modeType of ['general', 'sales', 'fde', 'recruiting', 'team-meet', 'looking-for-work', 'technical-interview', 'lecture']) {
       assert.match(v27Block[0], new RegExp(modeType), `v27 migration must cover ${modeType}`);
     }
+  });
+
+  test('v27 migration upgrades legacy default FDE custom_context to the canonical manufacturing profile', () => {
+    const migrated = runFromV26(LEGACY_FDE_DEFAULT_CUSTOM_CONTEXT);
+    assert.equal(migrated, getDefaultModeCustomContext('fde'));
+    assert.match(migrated, /制造业研发流程/);
+    assert.match(migrated, /QMS/);
+    assert.match(migrated, /AI Agent/);
+  });
+
+  test('v27 migration preserves user-authored FDE custom_context', () => {
+    const custom = '客户当前只关心 MES 对接和工厂网络隔离，先别展开 PLM/QMS 全量讨论。';
+    const migrated = runFromV26(custom);
+    assert.equal(migrated, custom);
   });
 
   test('v22 -> v23 migration creates per-mode intent keyword defaults', () => {

@@ -1,5 +1,7 @@
 import type { ModeTemplateType } from './ModesManager';
 
+const LEGACY_FDE_DEFAULT_CUSTOM_CONTEXT = '你是 FDE 现场交付副驾驶。优先澄清客户工作流、系统边界、数据流、权限、安全合规、上线约束和成功标准。回答时先讲技术可行性与验证路径，再给出最小下一步；不要跳过未知项或替客户假设环境。';
+
 export const DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE: Record<ModeTemplateType, string> = {
     general: '你是通用会议与对话副驾驶。回答时先判断用户真实意图，再给出清晰、可执行、不过度展开的建议。缺少关键信息时先指出不确定性并提出最小澄清问题；不要编造会议中没有出现的事实、数字、承诺或人名。',
     sales: '你是销售会议副驾驶。优先识别客户目标、痛点、预算、决策链、时机和阻碍；回答时先连接业务价值与 ROI，再给出下一步推进建议。处理异议时保持专业、具体、非防御性，不虚构价格、案例、折扣或承诺。',
@@ -18,6 +20,16 @@ export const DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE: Record<ModeTemplateType, s
     lecture: '你是讲座学习副驾驶。优先提炼概念、定义、因果关系、例子、公式/术语含义和课后任务。解释要准确、分层、便于复习；遇到讲座中未说明的内容，要标注为补充背景而不是讲者原意。',
 };
 
+export const LEGACY_DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE: Partial<Record<ModeTemplateType, string[]>> = {
+    fde: [LEGACY_FDE_DEFAULT_CUSTOM_CONTEXT],
+};
+
 export function getDefaultModeCustomContext(templateType: ModeTemplateType): string {
     return DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE[templateType] ?? '';
+}
+
+export function isLegacyDefaultModeCustomContext(templateType: ModeTemplateType, customContext: string | null | undefined): boolean {
+    const normalized = customContext?.trim();
+    if (!normalized) return false;
+    return (LEGACY_DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE[templateType] ?? []).some((legacy) => legacy.trim() === normalized);
 }

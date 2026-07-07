@@ -10,7 +10,11 @@ import {
     DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE,
     type IntentKeywordConfig,
 } from '../llm/IntentKeywordDefaults';
-import { DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE, getDefaultModeCustomContext } from '../services/ModeDefaultContexts';
+import {
+    DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE,
+    getDefaultModeCustomContext,
+    isLegacyDefaultModeCustomContext,
+} from '../services/ModeDefaultContexts';
 import type { ResumeNode, UserProfileRecord } from '../services/profile/types';
 import type { SpeakerVerificationMetadata } from '../services/speaker/speakerVerificationTypes';
 
@@ -1466,7 +1470,8 @@ export class DatabaseManager {
             this.db.pragma('user_version = 26');
         }
 
-        // Version 26 -> 27: Backfill shipped default custom contexts for blank built-in modes.
+        // Version 26 -> 27: Backfill shipped default custom contexts for blank built-in modes
+        // and migrate legacy shipped FDE default copy to the current canonical context.
         if (version < 27) {
             console.log('[DatabaseManager] Applying migration v26 -> v27: Backfill default mode custom contexts');
             const builtInModeTemplateTypes: Array<keyof typeof DEFAULT_MODE_CUSTOM_CONTEXT_BY_TEMPLATE> = [
@@ -1484,11 +1489,26 @@ export class DatabaseManager {
                 WHERE template_type = ?
                   AND (custom_context IS NULL OR TRIM(custom_context) = '')
             `);
+            const selectModeContextsByTemplate = this.db.prepare(`
+                SELECT id, custom_context
+                FROM modes
+                WHERE template_type = ?
+            `);
+            const updateCustomContextById = this.db.prepare(`
+                UPDATE modes SET custom_context = ?
+                WHERE id = ?
+            `);
             for (const templateType of builtInModeTemplateTypes) {
                 updateBlankCustomContext.run(
                     getDefaultModeCustomContext(templateType),
                     templateType,
                 );
+                if (templateType !== 'fde') continue;
+                const modes = selectModeContextsByTemplate.all(templateType) as Array<{ id: string; custom_context: string | null }>;
+                for (const mode of modes) {
+                    if (!isLegacyDefaultModeCustomContext(templateType, mode.custom_context)) continue;
+                    updateCustomContextById.run(getDefaultModeCustomContext(templateType), mode.id);
+                }
             }
             this.db.pragma('user_version = 27');
         }
