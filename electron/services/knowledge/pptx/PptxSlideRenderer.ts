@@ -14,6 +14,11 @@ export interface PptxRenderedDeck {
   cleanup(): Promise<void>;
 }
 
+interface PptxSlideRendererDeps {
+  createTempDir?: () => Promise<string>;
+  runRenderChild?: (scriptPath: string, filePath: string, outputDir: string) => Promise<void>;
+}
+
 export function createRenderedDeckForTest(
   tempDir: string,
   slides: PptxRenderedSlide[],
@@ -28,12 +33,26 @@ export function createRenderedDeckForTest(
 }
 
 export class PptxSlideRenderer {
+  private readonly createTempDir: () => Promise<string>;
+  private readonly runRenderChildImpl: (
+    scriptPath: string,
+    filePath: string,
+    outputDir: string,
+  ) => Promise<void>;
+
+  constructor(deps: PptxSlideRendererDeps = {}) {
+    this.createTempDir =
+      deps.createTempDir ??
+      (() => fs.promises.mkdtemp(path.join(os.tmpdir(), 'natively-pptx-')));
+    this.runRenderChildImpl = deps.runRenderChild ?? runRenderChild;
+  }
+
   async renderToTempImages(filePath: string): Promise<PptxRenderedDeck> {
-    const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'natively-pptx-'));
+    const tempDir = await this.createTempDir();
     const scriptPath = path.join(__dirname, 'pptx-render-child.mjs');
 
     try {
-      await runRenderChild(scriptPath, filePath, tempDir);
+      await this.runRenderChildImpl(scriptPath, filePath, tempDir);
       const files = (await fs.promises.readdir(tempDir))
         .filter((name) => /^slide-\d+\.jpg$/.test(name))
         .sort();

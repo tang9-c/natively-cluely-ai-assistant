@@ -18,3 +18,17 @@ test('PptxSlideRenderer cleanup removes temporary output directory', async () =>
   await deck.cleanup();
   assert.equal(fs.existsSync(tempDir), false);
 });
+
+test('PptxSlideRenderer renderToTempImages cleans up temporary output directory when child render fails', async () => {
+  const { PptxSlideRenderer } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-render-fail-test-'));
+  const renderer = new PptxSlideRenderer({
+    createTempDir: async () => tempDir,
+    runRenderChild: async () => {
+      throw new Error('pptx_render_failed');
+    },
+  });
+
+  await assert.rejects(() => renderer.renderToTempImages('/tmp/fake-input.pptx'), /pptx_render_failed/);
+  assert.equal(fs.existsSync(tempDir), false);
+});
