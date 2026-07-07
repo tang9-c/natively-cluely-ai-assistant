@@ -111,7 +111,7 @@ test('buildPostCallEnhancements keeps team-meet behavior unchanged without artif
   assert.ok(!result.coachingInsights.some((insight) => insight.type === 'accepted_dynamic_action'));
 });
 
-test('buildPostCallEnhancements carries completed team artifacts and ignores failed ones', () => {
+test('buildPostCallEnhancements carries accepted team artifacts even when generation failed', () => {
   const result = buildPostCallEnhancements({
     modeTemplateType: 'team-meet',
     transcript: [
@@ -145,7 +145,7 @@ test('buildPostCallEnhancements carries completed team artifacts and ignores fai
   });
 
   assert.ok(result.actionItemsStructured.some((item) => /launch checklist/i.test(item.text)));
-  assert.ok(!result.actionItemsStructured.some((item) => /fallback checklist/i.test(item.text)));
+  assert.ok(result.actionItemsStructured.some((item) => /fallback checklist/i.test(item.text)));
   assert.ok(result.coachingInsights.some((insight) => insight.type === 'accepted_dynamic_action'));
 });
 
