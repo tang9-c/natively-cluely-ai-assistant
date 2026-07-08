@@ -95,14 +95,20 @@ test('missing files do not fail export and are recorded in metadata', async () =
   assert.ok(metadata.reportWarnings.length >= 3);
 });
 
-test('quality summary does not contain raw sentinel private content', async () => {
+test('exported QA ZIP does not contain raw sentinel private content', async () => {
   const { QaReportService } = await load();
   const dir = tempDir();
   const outputPath = path.join(dir, 'privacy.zip');
   const telemetryPath = path.join(dir, 'telemetry.jsonl');
+  const debugLogPath = path.join(dir, 'natively_debug.log');
   fs.writeFileSync(
     telemetryPath,
     '{"name":"app_start","timestamp":"2026-07-07T00:00:00.000Z","properties":{"transcript":"SECRET_TRANSCRIPT_SENTINEL","prompt":"SECRET_PROMPT_SENTINEL","apiKey":"sk-abcdefghijklmnopqrstuvwxyz123456"}}\n',
+    'utf8',
+  );
+  fs.writeFileSync(
+    debugLogPath,
+    'debug transcript SECRET_DEBUG_TRANSCRIPT_SENTINEL apiKey sk-abcdefghijklmnopqrstuvwxyz123456\n',
     'utf8',
   );
 
@@ -113,7 +119,7 @@ test('quality summary does not contain raw sentinel private content', async () =
     arch: 'arm64',
     verboseLoggingEnabled: () => false,
     telemetryPath,
-    debugLogPaths: [],
+    debugLogPaths: [debugLogPath],
     getAnswerQualityMetrics: () => null,
   });
 
@@ -121,5 +127,9 @@ test('quality summary does not contain raw sentinel private content', async () =
   assert.equal(result.success, true);
   const zip = await JSZip.loadAsync(fs.readFileSync(outputPath));
   const summary = await zip.file('quality-summary.json').async('string');
+  const telemetry = await zip.file('telemetry.jsonl').async('string');
+  const debugLog = await zip.file('natively_debug.log').async('string');
   assert.doesNotMatch(summary, /SECRET_TRANSCRIPT_SENTINEL|SECRET_PROMPT_SENTINEL|sk-abcdefghijklmnopqrstuvwxyz123456/);
+  assert.doesNotMatch(telemetry, /SECRET_TRANSCRIPT_SENTINEL|SECRET_PROMPT_SENTINEL|sk-abcdefghijklmnopqrstuvwxyz123456/);
+  assert.doesNotMatch(debugLog, /SECRET_DEBUG_TRANSCRIPT_SENTINEL|sk-abcdefghijklmnopqrstuvwxyz123456/);
 });

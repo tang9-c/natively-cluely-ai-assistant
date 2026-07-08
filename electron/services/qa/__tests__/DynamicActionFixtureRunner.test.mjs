@@ -42,3 +42,31 @@ test('product runner writes JSON and Markdown reports', async () => {
   assert.equal(typeof report.score.recallRate, 'number');
   assert.equal(typeof report.score.falsePositiveRate, 'number');
 });
+
+test('product runner records invalid fixture files without dropping valid files', async () => {
+  const { runDynamicActionProductFixtures } = await load();
+  const fixtureDir = fs.mkdtempSync(path.join(process.cwd(), 'reports/dynamic-actions-bad-fixture-'));
+  const outputDir = fs.mkdtempSync(path.join(process.cwd(), 'reports/dynamic-actions-bad-output-'));
+  fs.writeFileSync(
+    path.join(fixtureDir, 'sales.json'),
+    JSON.stringify([
+      {
+        id: 'sales-valid',
+        modeTemplateType: 'sales',
+        language: 'en',
+        transcriptTurns: [{ speaker: 'Customer', text: 'This is too expensive for our budget.' }],
+        expected: { shouldEmit: true, actionType: 'pricing_objection', outputType: 'spoken_response' },
+      },
+    ]),
+    'utf8',
+  );
+  fs.writeFileSync(path.join(fixtureDir, 'fde.json'), '{bad json', 'utf8');
+  fs.writeFileSync(path.join(fixtureDir, 'team-meet.json'), '[]', 'utf8');
+
+  const report = await runDynamicActionProductFixtures({ fixtureDir, outputDir });
+
+  assert.equal(report.totalFixtures, 1);
+  assert.equal(report.invalidFixtures.length, 1);
+  assert.match(report.invalidFixtures[0].file, /fde\.json$/);
+  assert.ok(fs.existsSync(path.join(outputDir, 'product-report.json')));
+});

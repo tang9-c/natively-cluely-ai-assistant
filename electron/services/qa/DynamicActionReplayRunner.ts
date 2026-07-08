@@ -14,6 +14,7 @@ export interface ReplayManifestEntry {
 export interface ReplayRunnerInput {
   manifestPath: string;
   outputDir: string;
+  audioRoot?: string;
 }
 
 export interface ReplayReport {
@@ -25,8 +26,12 @@ export interface ReplayReport {
 
 export function runDynamicActionReplay(input: ReplayRunnerInput): ReplayReport {
   const entries = JSON.parse(fs.readFileSync(input.manifestPath, 'utf8')) as ReplayManifestEntry[];
+  const audioRoot = input.audioRoot ?? process.cwd();
   const reportEntries = entries.map((entry) => {
-    if (!fs.existsSync(path.resolve(process.cwd(), entry.audioPath))) {
+    const audioPath = path.isAbsolute(entry.audioPath)
+      ? entry.audioPath
+      : path.resolve(audioRoot, entry.audioPath);
+    if (!fs.existsSync(audioPath)) {
       return entry.expectedMissingAudio
         ? { id: entry.id, status: 'skipped' as const, reason: 'pending_audio_generation' }
         : { id: entry.id, status: 'failed' as const, reason: 'audio_missing' };

@@ -10,6 +10,7 @@ const { runDynamicActionReplay } = await import(moduleUrl);
 const report = runDynamicActionReplay({
   manifestPath: path.join(root, 'tests/fixtures/dynamic-actions/replay/replay-manifest.json'),
   outputDir: path.join(root, 'reports/dynamic-actions'),
+  audioRoot: root,
 });
 
 console.log(JSON.stringify(report, null, 2));

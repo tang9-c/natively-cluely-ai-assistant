@@ -134,13 +134,13 @@ The summary must not include raw transcript, raw prompt, screenshot contents, AP
 
 ### Debug Logs
 
-The debug logs are included as-is, per product decision.
+The debug logs are included after export-time redaction.
 
-This means `natively_debug.log` and `natively_debug.log.1` are not redacted during export. The feature is explicitly a user-initiated support package export and does not upload files automatically.
+This means `natively_debug.log` and `natively_debug.log.1` can help support diagnose local QA behavior, but the export service must still remove or redact raw transcript-like text, prompts, screenshots, API keys, tokens, credentials, and other sensitive log fields before writing them into the ZIP. The feature is explicitly a user-initiated support package export and does not upload files automatically.
 
 ### Telemetry
 
-Include the raw local `telemetry.jsonl` for the last 7 days where possible.
+Include the local `telemetry.jsonl` for the last 7 days where possible after export-time redaction.
 
 Telemetry already has write-time sanitization. The export service should not rely on telemetry for raw user content and should not enrich it with raw meeting data.
 

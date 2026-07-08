@@ -8,6 +8,7 @@ import {
   parseTelemetryJsonlLines,
   type TelemetryLikeRecord,
 } from './DynamicActionMetricsAggregator';
+import { redactForLog, redactValue } from '../../utils/redactForLog';
 
 export interface QaReportServiceDeps {
   now?: () => Date;
@@ -46,7 +47,7 @@ export class QaReportService {
 
     const telemetry = this.readFileIfRecent(this.deps.telemetryPath, sinceMs, 'telemetry.jsonl', missingFiles, reportWarnings);
     if (telemetry !== null) {
-      zip.file('telemetry.jsonl', telemetry);
+      zip.file('telemetry.jsonl', this.sanitizeTelemetryJsonl(telemetry));
       includedFiles.push('telemetry.jsonl');
       const parsed = parseTelemetryJsonlLines(telemetry);
       telemetryRecords = parsed.records;
@@ -57,7 +58,7 @@ export class QaReportService {
       const name = path.basename(debugPath);
       const content = this.readFileIfRecent(debugPath, sinceMs, name, missingFiles, reportWarnings);
       if (content !== null) {
-        zip.file(name, content);
+        zip.file(name, this.sanitizeLogContent(content));
         includedFiles.push(name);
       }
     }
@@ -120,5 +121,32 @@ export class QaReportService {
       warnings.push(`${zipName} missing`);
       return null;
     }
+  }
+
+  private sanitizeTelemetryJsonl(content: string): string {
+    return content
+      .split(/\r?\n/)
+      .map((line) => {
+        if (!line.trim()) return line;
+        try {
+          return JSON.stringify(redactValue(JSON.parse(line)));
+        } catch {
+          return this.sanitizeLogLine(line);
+        }
+      })
+      .join('\n');
+  }
+
+  private sanitizeLogContent(content: string): string {
+    return content
+      .split(/\r?\n/)
+      .map((line) => line ? this.sanitizeLogLine(line) : line)
+      .join('\n');
+  }
+
+  private sanitizeLogLine(line: string): string {
+    return redactForLog([line])
+      .replace(/\b(transcript|prompt|body|referenceContent|evidenceText|screenshot|base64)\b\s*[:=]?\s*[^,\n\r\t}]*/gi, '$1 [REMOVED]')
+      .replace(/\b(apiKey|authorization|bearer|token|secret|password|credential)\b\s*[:=]?\s*[^,\n\r\t}]*/gi, '$1 [REDACTED]');
   }
 }

@@ -16,19 +16,48 @@ export interface ProductRunnerReport {
   totalFixtures: number;
   results: DynamicActionProductFixtureResult[];
   score: ReturnType<typeof scoreDynamicActionProductFixtures>;
+  invalidFixtures: InvalidFixtureRecord[];
 }
 
-export function loadProductFixtures(fixtureDir: string): DynamicActionProductFixture[] {
+export interface InvalidFixtureRecord {
+  file: string;
+  fixtureId?: string;
+  error: string;
+}
+
+export function loadProductFixtures(
+  fixtureDir: string,
+  invalidFixtures: InvalidFixtureRecord[] = [],
+): DynamicActionProductFixture[] {
   const files = ['sales.json', 'fde.json', 'team-meet.json'];
   return files.flatMap((file) => {
-    const parsed = JSON.parse(fs.readFileSync(path.join(fixtureDir, file), 'utf8')) as DynamicActionProductFixture[];
-    for (const fixture of parsed) validateFixture(fixture);
-    return parsed;
+    let parsed: DynamicActionProductFixture[];
+    try {
+      parsed = JSON.parse(fs.readFileSync(path.join(fixtureDir, file), 'utf8')) as DynamicActionProductFixture[];
+    } catch (error) {
+      invalidFixtures.push({ file, error: error instanceof Error ? error.message : String(error) });
+      return [];
+    }
+    const validFixtures: DynamicActionProductFixture[] = [];
+    for (const fixture of parsed) {
+      try {
+        validateFixture(fixture);
+        validFixtures.push(fixture);
+      } catch (error) {
+        invalidFixtures.push({
+          file,
+          fixtureId: fixture?.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return validFixtures;
   });
 }
 
 export async function runDynamicActionProductFixtures(input: ProductRunnerInput): Promise<ProductRunnerReport> {
-  const fixtures = loadProductFixtures(input.fixtureDir);
+  const invalidFixtures: InvalidFixtureRecord[] = [];
+  const fixtures = loadProductFixtures(input.fixtureDir, invalidFixtures);
   const engine = new DynamicActionEngine();
   const results: DynamicActionProductFixtureResult[] = [];
 
@@ -57,7 +86,7 @@ export async function runDynamicActionProductFixtures(input: ProductRunnerInput)
   }
 
   const score = scoreDynamicActionProductFixtures(results);
-  const report = { totalFixtures: fixtures.length, results, score };
+  const report = { totalFixtures: fixtures.length, results, score, invalidFixtures };
   fs.mkdirSync(input.outputDir, { recursive: true });
   fs.writeFileSync(path.join(input.outputDir, 'product-report.json'), JSON.stringify(report, null, 2));
   fs.writeFileSync(path.join(input.outputDir, 'product-report.md'), renderMarkdown(report));
