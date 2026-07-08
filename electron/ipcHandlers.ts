@@ -32,6 +32,8 @@ import { SkillActivationManager, type ActivateSkillInput, type SkillActivationSc
 import { SkillWatcherService } from './services/SkillWatcherService';
 import { SkillsManager } from './services/SkillsManager';
 import { getContextQualityDiagnosticsCollector } from './services/eval/ContextQualityDiagnostics';
+import { QaReportService } from './services/qa/QaReportService';
+import { telemetryService } from './services/telemetry/TelemetryService';
 import type { DynamicActionOutputType } from './services/dynamic-actions/DynamicAction';
 import {
   classifyNetworkError,
@@ -1100,6 +1102,31 @@ export function initializeIpcHandlers(appState: AppState): void {
     SettingsManager.getInstance().set('meetingRetention', retention);
     broadcast('meeting-retention-changed', retention);
     return { success: true };
+  });
+  safeHandle('export-qa-report', async () => {
+    const result = await ((dialog.showSaveDialog as any)({
+      title: 'Export Quality Report',
+      defaultPath: `cueup-qa-report-${new Date().toISOString().slice(0, 10)}.zip`,
+      filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
+    }) as Promise<{ canceled: boolean; filePath?: string }>);
+    if (result.canceled || !result.filePath) {
+      return { success: false, cancelled: true };
+    }
+
+    const service = new QaReportService({
+      appVersion: app.getVersion(),
+      verboseLoggingEnabled: () => appState.getVerboseLogging(),
+      telemetryPath: telemetryService.getLogFilePath(),
+      debugLogPaths: [
+        path.join(app.getPath('documents'), 'natively_debug.log'),
+        path.join(app.getPath('documents'), 'natively_debug.log.1'),
+      ],
+      getAnswerQualityMetrics: ({ sinceMs }) => DatabaseManager.getInstance().getAnswerQualityMetrics({ sinceMs }),
+    });
+    const exportResult = await service.createQaReport({ outputPath: result.filePath });
+    return exportResult.success
+      ? { success: true, filePath: exportResult.filePath }
+      : { success: false, error: exportResult.error ?? 'export_failed' };
   });
   safeHandle('get-provider-data-scopes', async () =>
     SettingsManager.getInstance().get('providerDataScopes') ?? {},

@@ -740,6 +740,12 @@ interface ElectronAPI {
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+  exportQaReport: () => Promise<{
+    success: boolean;
+    filePath?: string;
+    error?: string;
+    cancelled?: boolean;
+  }>;
   getMeetingRetention: () => Promise<'forever' | '7d' | '30d' | 'never'>;
   setMeetingRetention: (
     retention: 'forever' | '7d' | '30d' | 'never',
@@ -2033,6 +2039,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Verbose / Debug Logging
   getVerboseLogging: () => ipcRenderer.invoke('get-verbose-logging'),
   setVerboseLogging: (enabled: boolean) => ipcRenderer.invoke('set-verbose-logging', enabled),
+  exportQaReport: () => ipcRenderer.invoke('export-qa-report'),
   getMeetingRetention: () => ipcRenderer.invoke('get-meeting-retention'),
   setMeetingRetention: (retention: 'forever' | '7d' | '30d' | 'never') =>
     ipcRenderer.invoke('set-meeting-retention', retention),

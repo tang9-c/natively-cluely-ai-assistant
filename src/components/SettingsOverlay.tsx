@@ -6,7 +6,7 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, LibraryBig, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff,
-    Star, AlertCircle, Gift, Cpu, Shield
+    Star, AlertCircle, Gift, Cpu, Shield, Download
 } from 'lucide-react';
 import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
@@ -424,6 +424,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
     const [verboseLogging, setVerboseLogging] = useState(false);
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
     const [showVerboseToast, setShowVerboseToast] = useState(false);
+    const [qaReportToast, setQaReportToast] = useState<'success' | 'error' | null>(null);
+    const [isExportingQaReport, setIsExportingQaReport] = useState(false);
     const verboseToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     // Close dropdown when clicking outside
     // Sync with global state changes
@@ -445,6 +447,22 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             if (verboseToastTimerRef.current) clearTimeout(verboseToastTimerRef.current);
         };
     }, [showVerboseToast]);
+
+    const handleExportQaReport = async () => {
+        if (isExportingQaReport) return;
+        setIsExportingQaReport(true);
+        setQaReportToast(null);
+        try {
+            const result = await window.electronAPI?.exportQaReport?.();
+            if (result?.cancelled) return;
+            setQaReportToast(result?.success ? 'success' : 'error');
+        } catch {
+            setQaReportToast('error');
+        } finally {
+            setIsExportingQaReport(false);
+            window.setTimeout(() => setQaReportToast(null), 4200);
+        }
+    };
 
 
 
@@ -1728,6 +1746,31 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         </motion.div>
                                                     )}
                                                 </AnimatePresence>
+
+                                                {/* QA Report Export */}
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div className="flex items-center gap-4 min-w-0">
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-tertiary flex items-center justify-center shrink-0">
+                                                            <Download size={20} />
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <h3 className="text-sm font-bold text-text-primary">导出质量报告</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">生成最近 7 天的质量统计、遥测和调试日志支持包</p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={handleExportQaReport}
+                                                        disabled={isExportingQaReport}
+                                                        className="shrink-0 text-xs font-medium text-accent-primary hover:text-accent-primary/80 disabled:opacity-60 transition-colors px-3 py-1.5 rounded-md bg-accent-primary/10 hover:bg-accent-primary/15"
+                                                    >
+                                                        {isExportingQaReport ? '导出中' : '导出'}
+                                                    </button>
+                                                </div>
+                                                {qaReportToast && (
+                                                    <div className="mx-4 mb-1 px-3 py-2 rounded-lg border border-border-subtle bg-bg-item-surface text-xs text-text-secondary">
+                                                        {qaReportToast === 'success' ? 'Quality report exported' : 'Export failed. Please try again.'}
+                                                    </div>
+                                                )}
 
                                                 {/* Interviewer Transcript */}
                                                 <div className="flex items-center justify-between px-4 py-3">
