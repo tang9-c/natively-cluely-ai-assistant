@@ -159,8 +159,8 @@ describe('IntentClassifier.classifyIntent public API', () => {
         assert.equal(input.latestTurn, '这个方向让我有点犹豫');
         assert.equal(input.modeTemplateType, 'sales');
         assert.equal(input.language, 'zh');
-        assert.ok(input.candidateIntents.includes('discovery_probe'));
-        return { intent: 'discovery_probe', confidence: 0.81 };
+        assert.ok(input.candidateIntents.includes('sales_proof_request'));
+        return { intent: 'sales_proof_request', confidence: 0.81 };
       },
       localIntentEnhancementEnabled: true,
       localIntentEnhancementAvailable: true,
@@ -170,7 +170,7 @@ describe('IntentClassifier.classifyIntent public API', () => {
       },
     });
 
-    assert.equal(r.intent, 'discovery_probe');
+    assert.equal(r.intent, 'sales_proof_request');
     assert.equal(r.confidence, 0.81);
     assert.equal(localCalls, 0);
   });
@@ -183,19 +183,19 @@ describe('IntentClassifier.classifyIntent public API', () => {
       providerDataScopes: { transcript: false },
       cloudIntentClassifier: async () => {
         cloudCalls += 1;
-        return { intent: 'discovery_probe', confidence: 0.8 };
+        return { intent: 'sales_proof_request', confidence: 0.8 };
       },
       localIntentEnhancementEnabled: true,
       localIntentEnhancementAvailable: true,
       localIntentClassifier: async () => {
         localCalls += 1;
-        return { intent: 'discovery_probe', confidence: 0.72, answerShape: 'local' };
+        return { intent: 'sales_proof_request', confidence: 0.72, answerShape: 'local' };
       },
     });
 
     assert.equal(cloudCalls, 0);
     assert.equal(localCalls, 1);
-    assert.equal(r.intent, 'discovery_probe');
+    assert.equal(r.intent, 'sales_proof_request');
   });
 
   test('does not call local SLM unless local intent enhancement is enabled', async () => {
@@ -205,7 +205,7 @@ describe('IntentClassifier.classifyIntent public API', () => {
       localIntentEnhancementEnabled: false,
       localIntentClassifier: async () => {
         localCalls += 1;
-        return { intent: 'discovery_probe', confidence: 0.72, answerShape: 'local' };
+        return { intent: 'sales_proof_request', confidence: 0.72, answerShape: 'local' };
       },
     });
 
@@ -222,12 +222,12 @@ describe('IntentClassifier.classifyIntent public API', () => {
       localIntentEnhancementAvailable: true,
       localIntentClassifier: async () => {
         localCalls += 1;
-        return { intent: 'discovery_probe', confidence: 0.72, answerShape: 'local' };
+        return { intent: 'sales_proof_request', confidence: 0.72, answerShape: 'local' };
       },
     });
 
     assert.equal(localCalls, 1);
-    assert.equal(r.intent, 'discovery_probe');
+    assert.equal(r.intent, 'sales_proof_request');
   });
 
   test('does not call optional local SLM when enhancement is enabled but artifact is unavailable', async () => {
@@ -238,7 +238,7 @@ describe('IntentClassifier.classifyIntent public API', () => {
       localIntentEnhancementAvailable: false,
       localIntentClassifier: async () => {
         localCalls += 1;
-        return { intent: 'discovery_probe', confidence: 0.72, answerShape: 'local' };
+        return { intent: 'sales_proof_request', confidence: 0.72, answerShape: 'local' };
       },
     });
 
@@ -289,116 +289,116 @@ describe('IntentClassifier.detectIntentByPattern — sales mode', () => {
   test('custom intent keywords override the sales fast-path without regex exposure', () => {
     const { detectIntentByPattern } = loadModule();
     const r = detectIntentByPattern('客户说他们马上采购', 'sales', {
-      seize_signal: ['马上采购'],
-      handle_objection: [],
-      discovery_probe: [],
+      sales_buying_signal: ['马上采购'],
+      sales_pricing_objection: [],
+      sales_proof_request: [],
     });
 
-    assertIntent(r, 'seize_signal', 0.9, 'seize_signal/custom-keyword');
+    assertIntent(r, 'sales_buying_signal', 0.9, 'sales_buying_signal/custom-keyword');
   });
 
   test('empty custom keyword list disables that intent fast-path and falls through', () => {
     const { detectIntentByPattern } = loadModule();
     const r = detectIntentByPattern('这个方案太贵了', 'sales', {
-      handle_objection: [],
-      seize_signal: [],
-      discovery_probe: [],
+      sales_pricing_objection: [],
+      sales_buying_signal: [],
+      sales_proof_request: [],
     });
 
     assert.equal(r, null);
   });
 
-  // ---- seize_signal (priority over objection) — confidence 0.95
-  test('Chinese: 准备签合同 → seize_signal', () => {
+  // ---- sales_buying_signal (priority over objection) — confidence 0.95
+  test('Chinese: 准备签合同 → sales_buying_signal', () => {
     const { detectIntentByPattern } = loadModule();
     const r = detectIntentByPattern('我们准备签合同了', 'sales');
-    assertIntent(r, 'seize_signal', 0.9, 'seize_signal/zh-sign');
+    assertIntent(r, 'sales_buying_signal', 0.9, 'sales_buying_signal/zh-sign');
   });
 
-  test('Chinese: 下一步怎么走 → seize_signal', () => {
+  test('Chinese: 下一步怎么走 → sales_buying_signal', () => {
     const { detectIntentByPattern } = loadModule();
     const r = detectIntentByPattern('那下一步怎么走?', 'sales');
-    assertIntent(r, 'seize_signal', 0.9, 'seize_signal/zh-next-steps');
+    assertIntent(r, 'sales_buying_signal', 0.9, 'sales_buying_signal/zh-next-steps');
   });
 
-  test('Chinese: 发合同给我 → seize_signal', () => {
+  test('Chinese: 发合同给我 → sales_buying_signal', () => {
     const { detectIntentByPattern } = loadModule();
     const r = detectIntentByPattern('请发合同给我', 'sales');
-    assertIntent(r, 'seize_signal', 0.9, 'seize_signal/zh-send-contract');
+    assertIntent(r, 'sales_buying_signal', 0.9, 'sales_buying_signal/zh-send-contract');
   });
 
-  test('English: ready to move forward → seize_signal', () => {
+  test('English: ready to move forward → sales_buying_signal', () => {
     const { detectIntentByPattern } = loadModule();
     const r = detectIntentByPattern('We are ready to move forward.', 'sales');
-    assertIntent(r, 'seize_signal', 0.9, 'seize_signal/en-ready');
+    assertIntent(r, 'sales_buying_signal', 0.9, 'sales_buying_signal/en-ready');
   });
 
-  test('English: send over the proposal → seize_signal', () => {
+  test('English: send over the proposal → sales_quote_request', () => {
     const { detectIntentByPattern } = loadModule();
     const r = detectIntentByPattern('Please send over the proposal today.', 'sales');
-    assertIntent(r, 'seize_signal', 0.9, 'seize_signal/en-send-proposal');
+    assertIntent(r, 'sales_quote_request', 0.85, 'sales_quote_request/en-send-proposal');
   });
 
-  // ---- handle_objection — confidence 0.92
-  test('Chinese: 太贵了 → handle_objection', () => {
+  // ---- sales_pricing_objection — confidence 0.92
+  test('Chinese: 太贵了 → sales_pricing_objection', () => {
     const { detectIntentByPattern } = loadModule();
     const r = detectIntentByPattern('这个方案太贵了', 'sales');
-    assertIntent(r, 'handle_objection', 0.9, 'handle_objection/zh-expensive');
+    assertIntent(r, 'sales_pricing_objection', 0.9, 'sales_pricing_objection/zh-expensive');
   });
 
-  test('Chinese: 预算不够 → handle_objection', () => {
+  test('Chinese: 预算不够 → sales_pricing_objection', () => {
     const { detectIntentByPattern } = loadModule();
     const r = detectIntentByPattern('我们预算不够,可能负担不起', 'sales');
-    assertIntent(r, 'handle_objection', 0.9, 'handle_objection/zh-budget');
+    assertIntent(r, 'sales_pricing_objection', 0.9, 'sales_pricing_objection/zh-budget');
   });
 
-  test('Chinese: 已经在用 Gong 了 → handle_objection', () => {
+  test('Chinese: 裸竞品提及不触发 sales_pricing_objection', () => {
     const { detectIntentByPattern } = loadModule();
     const r = detectIntentByPattern('我们已经在用 Gong 了', 'sales');
-    assertIntent(r, 'handle_objection', 0.9, 'handle_objection/zh-already-using');
+    assert.equal(r, null);
   });
 
-  test('English: too expensive for our budget → handle_objection', () => {
+  test('English: too expensive for our budget → sales_pricing_objection', () => {
     const { detectIntentByPattern } = loadModule();
     const r = detectIntentByPattern('This is too expensive for our budget.', 'sales');
-    assertIntent(r, 'handle_objection', 0.9, 'handle_objection/en-expensive');
+    assertIntent(r, 'sales_pricing_objection', 0.9, 'sales_pricing_objection/en-expensive');
   });
 
-  test('English: competitor mention (Gong) → handle_objection', () => {
+  test('English: bare competitor mention does not trigger pricing objection', () => {
     const { detectIntentByPattern } = loadModule();
     const r = detectIntentByPattern('We are already using Gong for sales calls.', 'sales');
-    assertIntent(r, 'handle_objection', 0.9, 'handle_objection/en-competitor');
+    assert.equal(r, null);
   });
 
-  // ---- discovery_probe (covers workflow / pain point / ROI) — confidence 0.85
-  test('Chinese: 痛点是什么 → discovery_probe', () => {
+  // ---- sales_proof_request / sales_technical_requirements — five sellable moments
+  test('Chinese: 客户案例 → sales_proof_request', () => {
     const { detectIntentByPattern } = loadModule();
-    const r = detectIntentByPattern('我们现在的痛点是什么', 'sales');
-    assertIntent(r, 'discovery_probe', 0.8, 'discovery_probe/zh-pain');
+    const r = detectIntentByPattern('有没有类似客户案例可以证明效果', 'sales');
+    assertIntent(r, 'sales_proof_request', 0.85, 'sales_proof_request/zh-case');
   });
 
-  test('Chinese: 流程是怎样的 → discovery_probe', () => {
+  test('Chinese: ROI 证明 → sales_proof_request', () => {
     const { detectIntentByPattern } = loadModule();
-    const r = detectIntentByPattern('你们当前的流程是怎样的?', 'sales');
-    assertIntent(r, 'discovery_probe', 0.8, 'discovery_probe/zh-workflow');
+    const r = detectIntentByPattern('有没有 ROI 证明材料', 'sales');
+    assertIntent(r, 'sales_proof_request', 0.85, 'sales_proof_request/zh-roi');
   });
 
-  test('Chinese: ROI 多久回本 → discovery_probe (ROI branch)', () => {
+  test('Chinese: SSO 对接 → sales_technical_requirements', () => {
     const { detectIntentByPattern } = loadModule();
-    const r = detectIntentByPattern('这个方案多久回本?', 'sales');
-    assertIntent(r, 'discovery_probe', 0.8, 'discovery_probe/zh-roi');
+    const r = detectIntentByPattern('我们有 SSO 对接和安全要求', 'sales');
+    assertIntent(r, 'sales_technical_requirements', 0.85, 'sales_technical_requirements/zh-sso');
   });
 
-  test('English: what is the biggest challenge → discovery_probe', () => {
+  test('English: similar customer proof → sales_proof_request', () => {
     const { detectIntentByPattern } = loadModule();
-    const r = detectIntentByPattern("What's the biggest challenge you are facing?", 'sales');
-    assertIntent(r, 'discovery_probe', 0.8, 'discovery_probe/en-challenge');
+    const r = detectIntentByPattern('Do you have a similar customer proof point?', 'sales');
+    assertIntent(r, 'sales_proof_request', 0.85, 'sales_proof_request/en-proof');
   });
 
-  test('English: how do you handle this today → discovery_probe', () => {
+  test('English: API requirements → sales_technical_requirements', () => {
     const { detectIntentByPattern } = loadModule();
-    const r = detectIntentByPattern('How do you handle lead routing today?', 'sales');
-    assertIntent(r, 'discovery_probe', 0.8, 'discovery_probe/en-how-handle');
+    const r = detectIntentByPattern('What are the API requirements for production deployment?', 'sales');
+    assertIntent(r, 'sales_technical_requirements', 0.85, 'sales_technical_requirements/en-api');
   });
 
   // ---- Boundary: sales-mode unmatched → null
@@ -412,7 +412,7 @@ describe('IntentClassifier.detectIntentByPattern — sales mode', () => {
   // ---- Mode-scoping: sales regex must NOT fire under general mode
   test('sales pattern does NOT fire when modeTemplateType is general', () => {
     const { detectIntentByPattern } = loadModule();
-    // 太贵 is sales-only; under general mode it should not be sales:handle_objection.
+    // 太贵 is sales-only; under general mode it should not be sales:sales_pricing_objection.
     // It may still resolve via the interview-family regex (no) or return null.
     const r = detectIntentByPattern('太贵了', 'general');
     assert.equal(r, null, '太贵 should not match under general mode');

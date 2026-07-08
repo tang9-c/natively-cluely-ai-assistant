@@ -99,8 +99,8 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
   test('repeated high-confidence Chinese dynamic action emits auto card without direct What Should I Say run', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: [
-        '{"intent":"handle_objection","confidence":0.92}',
-        '{"intent":"handle_objection","confidence":0.94}',
+        '{"intent":"sales_pricing_objection","confidence":0.92}',
+        '{"intent":"sales_pricing_objection","confidence":0.94}',
       ],
     });
     const { engine } = await makeEngine(helper);
@@ -153,9 +153,9 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
   test('same high-confidence dynamic action evidence does not direct-run main answer repeatedly', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: [
-        '{"intent":"handle_objection","confidence":0.92}',
-        '{"intent":"handle_objection","confidence":0.94}',
-        '{"intent":"handle_objection","confidence":0.94}',
+        '{"intent":"sales_pricing_objection","confidence":0.92}',
+        '{"intent":"sales_pricing_objection","confidence":0.94}',
+        '{"intent":"sales_pricing_objection","confidence":0.94}',
       ],
     });
     const { engine } = await makeEngine(helper);
@@ -220,8 +220,8 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
   test('active dynamic action suppresses duplicate suggestion-trigger answer for same sales intent', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: [
-        '{"intent":"handle_objection","confidence":0.92}',
-        '{"intent":"handle_objection","confidence":0.92}',
+        '{"intent":"sales_pricing_objection","confidence":0.92}',
+        '{"intent":"sales_pricing_objection","confidence":0.92}',
       ],
     });
     const { engine } = await makeEngine(helper);
@@ -262,7 +262,10 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
 
   test('final Chinese transcript uses cloud-first intent confirmation for dynamic actions', async () => {
     const helper = new StubLLMHelper({
-      structuredResponses: ['{"intent":"seize_signal","confidence":0.96}'],
+      structuredResponses: [
+        '{"intent":"sales_buying_signal","confidence":0.96}',
+        '{"actions":[{"actionType":"buying_signal","decision":"pass","confidence":0.96,"semanticIntent":"explicit_next_step_or_contract","reasons":["cloud_confirmed_buying_signal"],"rejectedCandidates":[]}]}',
+      ],
     });
     const { engine } = await makeEngine(helper);
     const emitted = [];
@@ -280,7 +283,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.ok(helper.structuredCalls.length >= 1);
     const action = emitted.find(a => a.type === 'buying_signal');
     assert.ok(action, `expected buying_signal; got ${emitted.map(a => a.type).join(', ')}`);
-    assert.equal(action.confirmedIntent, 'seize_signal');
+    assert.equal(action.confirmedIntent, 'sales_buying_signal');
     assert.equal(action.confirmationSource, 'cloud_intent');
   });
 
@@ -436,12 +439,12 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
 
   test('transcript scope disabled skips cloud intent confirmation and high-risk emission', async () => {
     const helper = new StubLLMHelper({
-      structuredResponses: ['{"intent":"seize_signal","confidence":0.96}'],
+      structuredResponses: ['{"intent":"sales_buying_signal","confidence":0.96}'],
     });
     const { engine } = await makeEngine(helper);
     engine._setIntentClassificationOptionsForTest({
       providerDataScopes: { transcript: false },
-      cloudIntentClassifier: async () => ({ intent: 'seize_signal', confidence: 0.96 }),
+      cloudIntentClassifier: async () => ({ intent: 'sales_buying_signal', confidence: 0.96 }),
     });
     const emitted = [];
     engine.on('dynamic_action_emitted', (action) => emitted.push(action));
@@ -461,7 +464,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
 
   test('final transcript emits semantic gate trace for deferred high-risk action', async () => {
     const helper = new StubLLMHelper({
-      structuredResponses: ['{"intent":"seize_signal","confidence":0.96}'],
+      structuredResponses: ['{"intent":"sales_buying_signal","confidence":0.96}'],
     });
     const { engine } = await makeEngine(helper);
     const emitted = [];
@@ -470,7 +473,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     engine.on('dynamic_action_gate_trace', (trace) => gateTraces.push(trace));
     engine._setIntentClassificationOptionsForTest({
       providerDataScopes: { transcript: false },
-      cloudIntentClassifier: async () => ({ intent: 'seize_signal', confidence: 0.96 }),
+      cloudIntentClassifier: async () => ({ intent: 'sales_buying_signal', confidence: 0.96 }),
     });
     engine.setDynamicActionContext({ sessionId: 's-gate-trace', modeId: 'm-sales', modeTemplateType: 'sales' });
 

@@ -225,9 +225,9 @@ test('createMode seeds default intent keywords for the selected template', () =>
   const created = ModesManager.getInstance().createMode({ name: 'Sales', templateType: 'sales' });
   const rows = db.getIntentKeywords(created.id);
 
-  assert.ok(rows.some(row => row.intent === 'seize_signal' && row.keywords_csv.includes('准备签')));
-  assert.ok(rows.some(row => row.intent === 'handle_objection' && row.keywords_csv.includes('太贵')));
-  assert.ok(rows.some(row => row.intent === 'discovery_probe' && row.keywords_csv.includes('痛点是什么')));
+  assert.ok(rows.some(row => row.intent === 'sales_buying_signal' && row.keywords_csv.includes('准备签')));
+  assert.ok(rows.some(row => row.intent === 'sales_pricing_objection' && row.keywords_csv.includes('太贵')));
+  assert.ok(rows.some(row => row.intent === 'sales_proof_request' && row.keywords_csv.includes('客户案例')));
 });
 
 test('FDE modes seed deployment-specific default intent keywords', () => {
@@ -259,16 +259,16 @@ test('updateMode persists intent keyword edits without affecting other modes', (
 
   ModesManager.getInstance().updateMode(sales.id, {
     intentKeywords: [
-      { intent: 'seize_signal', keywordsCsv: '马上采购,准备签' },
-      { intent: 'handle_objection', keywordsCsv: '' },
+      { intent: 'sales_buying_signal', keywordsCsv: '马上采购,准备签' },
+      { intent: 'sales_pricing_objection', keywordsCsv: '' },
     ],
   });
 
   assert.deepEqual(
     db.getIntentKeywords(sales.id).map(row => [row.intent, row.keywords_csv]).sort(),
     [
-      ['handle_objection', ''],
-      ['seize_signal', '马上采购,准备签'],
+      ['sales_buying_signal', '马上采购,准备签'],
+      ['sales_pricing_objection', ''],
     ],
   );
   assert.ok(db.getIntentKeywords(team.id).some(row => row.intent === 'capture_action'));
@@ -282,7 +282,7 @@ test('getModes hydrates fallback intent keywords without writing to the database
 
   const modes = ModesManager.getInstance().getModes();
 
-  assert.ok(modes[0].intentKeywords.some(row => row.intent === 'seize_signal'));
+  assert.ok(modes[0].intentKeywords.some(row => row.intent === 'sales_buying_signal'));
   assert.deepEqual(db.getIntentKeywords('sales-mode'), []);
   assert.deepEqual(db.seedDefaultIntentKeywordsCalls, []);
 });
@@ -293,13 +293,13 @@ test('updateMode filters malformed intent keyword rows before persisting', () =>
   ModesManager.getInstance().updateMode(sales.id, {
     intentKeywords: [
       { intent: 'evil_intent', keywordsCsv: 'pwned' },
-      { intent: 'seize_signal', keywordsCsv: '马上采购,马上采购,, 准备签 ' },
+      { intent: 'sales_buying_signal', keywordsCsv: '马上采购,马上采购,, 准备签 ' },
     ],
   });
 
   assert.deepEqual(
     db.getIntentKeywords(sales.id).map(row => [row.intent, row.keywords_csv]),
-    [['seize_signal', '马上采购,准备签']],
+    [['sales_buying_signal', '马上采购,准备签']],
   );
 });
 
@@ -308,24 +308,24 @@ test('updateMode caps oversized intent keyword CSV before persisting', () => {
   const hugeKeyword = 'x'.repeat(MAX_INTENT_KEYWORDS_CSV_LENGTH + 500);
 
   ModesManager.getInstance().updateMode(sales.id, {
-    intentKeywords: [{ intent: 'seize_signal', keywordsCsv: hugeKeyword }],
+    intentKeywords: [{ intent: 'sales_buying_signal', keywordsCsv: hugeKeyword }],
   });
 
   const [row] = db.getIntentKeywords(sales.id);
-  assert.equal(row.intent, 'seize_signal');
+  assert.equal(row.intent, 'sales_buying_signal');
   assert.equal(row.keywords_csv.length, MAX_INTENT_KEYWORDS_CSV_LENGTH);
 });
 
 test('resetModeIntentKeywords restores template defaults for one mode', () => {
   const sales = ModesManager.getInstance().createMode({ name: 'Sales', templateType: 'sales' });
   ModesManager.getInstance().updateMode(sales.id, {
-    intentKeywords: [{ intent: 'seize_signal', keywordsCsv: '马上采购' }],
+    intentKeywords: [{ intent: 'sales_buying_signal', keywordsCsv: '马上采购' }],
   });
 
   ModesManager.getInstance().resetModeIntentKeywords(sales.id);
 
   const rows = db.getIntentKeywords(sales.id);
-  assert.ok(rows.some(row => row.intent === 'seize_signal' && row.keywords_csv.includes('准备签')));
+  assert.ok(rows.some(row => row.intent === 'sales_buying_signal' && row.keywords_csv.includes('准备签')));
   assert.equal(rows.some(row => row.keywords_csv === '马上采购'), false);
 });
 
@@ -356,7 +356,7 @@ test('active mode prompt suffix strips shared prompt prelude exactly once', () =
 
   assert.ok(suffix.includes('<mode_definition>'));
   assert.ok(suffix.includes('成交'));
-  assert.ok(suffix.includes('反对意见'));
+  assert.ok(suffix.includes('价格异议'));
   assert.ok(!suffix.startsWith(promptsMod.SHARED_MODE_PREFIX));
   assert.ok(!suffix.startsWith(promptsMod.SHARED_MODE_PREFIX_SHORT));
   assert.equal((suffix.match(/<core_identity>/g) ?? []).length, 0);

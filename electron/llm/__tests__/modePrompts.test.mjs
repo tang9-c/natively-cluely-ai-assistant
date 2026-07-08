@@ -20,24 +20,24 @@ const MODE_PROMPTS = {
 
 const MODE_CONTRACT_TERMS = {
   general: ['全能的会议与对话副驾驶', '感知对话内容', '最近的问题'],
-  sales: ['销售方', '潜在客户', '反对意见', '价格', '案例研究'],
+  sales: ['销售方', '潜在客户', '价格异议', '价格', '案例研究'],
   recruiting: ['面试官', '候选人', '招聘经理', 'lean no', '排练过'],
   'team-meet': ['记录', '行动项', '决策', '阻碍', '状态'],
   'looking-for-work': ['候选人', '面试', '简历', '薪资'],
   'technical-interview': ['技术面试', '编程', '系统设计', '复杂度', 'Edge cases'],
   lecture: ['学生', '讲座', '学习伙伴', '概念', '作业', '学科'],
-  fde: ['前线部署工程师', '客户现场', '捕捉模式', '现场发言模式', '风险', '验证步骤'],
+  fde: ['制造业 PLM / QMS / 企业 AI Agent 部署 FDE', '客户现场', '捕捉模式', '现场发言模式', '风险', '验证步骤'],
 };
 
 const UNIQUE_MODE_TERMS = {
   general: ['全能的会议与对话副驾驶'],
-  sales: ['潜在客户', '反对意见'],
+  sales: ['潜在客户', '价格异议'],
   recruiting: ['招聘经理', '候选人'],
   'team-meet': ['行动项', '阻碍'],
   'looking-for-work': ['面试', '简历'],
   'technical-interview': ['编程', '系统设计'],
   lecture: ['讲座', '学习伙伴'],
-  fde: ['前线部署工程师', '现场发言模式'],
+  fde: ['制造业 PLM / QMS / 企业 AI Agent 部署 FDE', '现场发言模式'],
 };
 
 function assertIncludesAll(text, terms, label) {
@@ -82,7 +82,7 @@ test('mode prompts prevent reference-file hallucination for absent file-specific
   }
 
   assertIncludesAll(MODE_PROMPTS.general, ['不要发明公式', '文件中不存在的特定建议'], 'general');
-  assertIncludesAll(MODE_PROMPTS.sales, ['客户证明点', 'ROI指标', '不在提供的材料中'], 'sales');
+  assertIncludesAll(MODE_PROMPTS.sales, ['客户证明点', 'ROI 指标', '不在提供的材料中'], 'sales');
   assertIncludesAll(MODE_PROMPTS['technical-interview'], ['请求的算法', '学习笔记建议', '在提供的材料中不存在'], 'technical-interview');
 });
 

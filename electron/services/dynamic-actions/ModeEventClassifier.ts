@@ -215,7 +215,12 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
     if (intentConfidence >= 0.85) {
         const intentMatchesCandidate =
             (candidate.actionType === 'pricing_objection' && intent === 'handle_objection') ||
+            (candidate.actionType === 'pricing_objection' && intent === 'sales_pricing_objection') ||
             (candidate.actionType === 'buying_signal' && intent === 'seize_signal') ||
+            (candidate.actionType === 'buying_signal' && intent === 'sales_buying_signal') ||
+            (candidate.actionType === 'pricing_request' && intent === 'sales_quote_request') ||
+            (candidate.actionType === 'case_study_request' && intent === 'sales_proof_request') ||
+            (candidate.actionType === 'technical_requirements' && intent === 'sales_technical_requirements') ||
             (candidate.actionType === 'technical_requirements' && intent === 'fde_integration') ||
             (candidate.actionType === 'case_study_request' && intent === 'example_request');
         if (intentMatchesCandidate) {
