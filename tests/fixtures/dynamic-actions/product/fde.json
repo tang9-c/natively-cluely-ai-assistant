@@ -1,0 +1,952 @@
+[
+  {
+    "id": "fde-discovery-zh-001",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "客户现场当前流程是 ECO 先走 PLM，再同步 BOM。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_discovery_probe",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "discovery",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/fde/customer_workflow.md"
+    ]
+  },
+  {
+    "id": "fde-discovery-zh-002",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "我们要梳理现有流程，图纸发布和物料版本谁负责？",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_discovery_probe",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "discovery",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/fde/customer_workflow.md"
+    ]
+  },
+  {
+    "id": "fde-discovery-mixed-003",
+    "modeTemplateType": "fde",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "Current workflow 是 PLM 到 QMS，再到 manufacturing routing。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_discovery_probe",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "discovery",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/fde/customer_workflow.md"
+    ]
+  },
+  {
+    "id": "fde-discovery-en-004",
+    "modeTemplateType": "fde",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "The current process starts with BOM release and ECO approval.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_discovery_probe",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "discovery",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/fde/customer_workflow.md"
+    ]
+  },
+  {
+    "id": "fde-discovery-en-005",
+    "modeTemplateType": "fde",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "What are you trying to solve in the PLM workflow?",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_discovery_probe",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "discovery",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/fde/customer_workflow.md"
+    ]
+  },
+  {
+    "id": "fde-object-zh-001",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "这个变更单关联物料、BOM 和图纸版本。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_discovery_probe",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "object",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/fde/fde_customer_workflow.csv"
+    ]
+  },
+  {
+    "id": "fde-object-zh-002",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "CAPA 和 NCR 对应哪个质量对象？",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_discovery_probe",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "object",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/fde/fde_customer_workflow.csv"
+    ]
+  },
+  {
+    "id": "fde-object-mixed-003",
+    "modeTemplateType": "fde",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "The ECO 里面有 material master 和 drawing revision。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_discovery_probe",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "object",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/fde/fde_customer_workflow.csv"
+    ]
+  },
+  {
+    "id": "fde-object-en-004",
+    "modeTemplateType": "fde",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "The part number and drawing revision must be traced.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_discovery_probe",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "object",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/fde/fde_customer_workflow.csv"
+    ]
+  },
+  {
+    "id": "fde-object-en-005",
+    "modeTemplateType": "fde",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "NCR, CAPA, and audit records are key system objects.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_discovery_probe",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "object",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/fde/fde_customer_workflow.csv"
+    ]
+  },
+  {
+    "id": "fde-integration-zh-001",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "我们需要打通 PLM API、SSO 和测试环境。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_integration_check",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "integration",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/fde/fde_security_requirements.txt"
+    ]
+  },
+  {
+    "id": "fde-integration-zh-002",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "接口方向是只读还是写回，OAuth 怎么配？",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_integration_check",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "integration",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/fde/fde_security_requirements.txt"
+    ]
+  },
+  {
+    "id": "fde-integration-mixed-003",
+    "modeTemplateType": "fde",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "Need SAML SSO and sandbox integration with QMS。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_integration_check",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "integration",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/fde/fde_security_requirements.txt"
+    ]
+  },
+  {
+    "id": "fde-integration-en-004",
+    "modeTemplateType": "fde",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "The endpoint, webhook, and production environment are not clear.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_integration_check",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "integration",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/fde/fde_security_requirements.txt"
+    ]
+  },
+  {
+    "id": "fde-integration-en-005",
+    "modeTemplateType": "fde",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "We need SCIM and API integration details.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_integration_check",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "integration",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/fde/fde_security_requirements.txt"
+    ]
+  },
+  {
+    "id": "fde-agent-zh-001",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "AI Agent 可以建议审批意见，但必须人审。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_agent_feasibility",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "agent",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/fde/solution_brief.md"
+    ]
+  },
+  {
+    "id": "fde-agent-zh-002",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "能不能只读查询 PLM，不自动写入 QMS？",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_agent_feasibility",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "agent",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/fde/solution_brief.md"
+    ]
+  },
+  {
+    "id": "fde-agent-mixed-003",
+    "modeTemplateType": "fde",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "Tool call 可以做 read-only，人机协同 approval flow。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_agent_feasibility",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "agent",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/fde/solution_brief.md"
+    ]
+  },
+  {
+    "id": "fde-agent-en-004",
+    "modeTemplateType": "fde",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "Which actions can an AI agent automate with human in the loop?",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_agent_feasibility",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "agent",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/fde/solution_brief.md"
+    ]
+  },
+  {
+    "id": "fde-agent-en-005",
+    "modeTemplateType": "fde",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "Do not write back to PLM without approval.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_agent_feasibility",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "agent",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/fde/solution_brief.md"
+    ]
+  },
+  {
+    "id": "fde-risk-zh-001",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "上线风险是 CAPA 记录真实性和审计追踪。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_risk_blocker",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "risk",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/fde/delivery_risk.md"
+    ]
+  },
+  {
+    "id": "fde-risk-zh-002",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "如果迁移延期，需要回滚方案和质量验证。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_risk_blocker",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "risk",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/fde/delivery_risk.md"
+    ]
+  },
+  {
+    "id": "fde-risk-mixed-003",
+    "modeTemplateType": "fde",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "Launch risk 是 NCR traceability 和 audit log。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_risk_blocker",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "risk",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/fde/delivery_risk.md"
+    ]
+  },
+  {
+    "id": "fde-risk-en-004",
+    "modeTemplateType": "fde",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "The blocker is quality traceability during cutover.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_risk_blocker",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "risk",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/fde/delivery_risk.md"
+    ]
+  },
+  {
+    "id": "fde-risk-en-005",
+    "modeTemplateType": "fde",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "CAPA and 8D audit risk may delay go live.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_risk_blocker",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "risk",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/fde/delivery_risk.md"
+    ]
+  },
+  {
+    "id": "fde-next-zh-001",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "下一步张工负责，下周给验证 artifact。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_next_step",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "next_step",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/fde/fde_prototype_scope.json"
+    ]
+  },
+  {
+    "id": "fde-next-zh-002",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "周五前锁定 owner、测试数据和验收标准。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_next_step",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "next_step",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/fde/fde_prototype_scope.json"
+    ]
+  },
+  {
+    "id": "fde-next-mixed-003",
+    "modeTemplateType": "fde",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "Next step 是 owner 确认 rollout plan。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_next_step",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "next_step",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/fde/fde_prototype_scope.json"
+    ]
+  },
+  {
+    "id": "fde-next-en-004",
+    "modeTemplateType": "fde",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "The owner will follow up with the launch plan by Friday.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_next_step",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "next_step",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/fde/fde_prototype_scope.json"
+    ]
+  },
+  {
+    "id": "fde-next-en-005",
+    "modeTemplateType": "fde",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "We need action item, owner, and validation artifact by next week.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "fde_next_step",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "fde",
+      "next_step",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/fde/fde_prototype_scope.json"
+    ]
+  },
+  {
+    "id": "fde-negative-001",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "我们先闲聊一下工厂食堂，不讨论系统。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "unrelated_small_talk"
+  },
+  {
+    "id": "fde-negative-002",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "PLM 只是文件名，不是客户流程描述。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "missing_evidence"
+  },
+  {
+    "id": "fde-negative-003",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "API 这个词出现在内部待办里，不是集成需求。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "internal_chatter"
+  },
+  {
+    "id": "fde-negative-004",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "今天没有客户现场问题，只是测试麦克风。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "low_value"
+  },
+  {
+    "id": "fde-negative-005",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "BOM 表格已经上传，但本轮没人提问。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "missing_evidence"
+  },
+  {
+    "id": "fde-negative-006",
+    "modeTemplateType": "fde",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "审批流是上周话题，当前没有新证据。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "missing_evidence"
+  },
+  {
+    "id": "fde-negative-007",
+    "modeTemplateType": "fde",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "The sandbox word is only in our slide title.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "missing_evidence"
+  },
+  {
+    "id": "fde-negative-008",
+    "modeTemplateType": "fde",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "This is internal planning, not a customer deployment blocker.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "internal_chatter"
+  },
+  {
+    "id": "fde-negative-009",
+    "modeTemplateType": "fde",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "QMS is mentioned in the attendee title only.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "missing_evidence"
+  },
+  {
+    "id": "fde-negative-010",
+    "modeTemplateType": "fde",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "No next step yet, they are still joining the call.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "low_value"
+  }
+]

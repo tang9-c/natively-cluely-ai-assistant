@@ -1,0 +1,712 @@
+[
+  {
+    "id": "team-action-item-zh-001",
+    "modeTemplateType": "team-meet",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "我来做发布 checklist，周五前发出来。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "action_item",
+      "outputType": "action_item"
+    },
+    "tags": [
+      "team",
+      "action_item",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/team-meet/agenda.md"
+    ]
+  },
+  {
+    "id": "team-action-item-zh-002",
+    "modeTemplateType": "team-meet",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "这个行动项分配给小李，他周一前跟进。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "action_item",
+      "outputType": "action_item"
+    },
+    "tags": [
+      "team",
+      "action_item",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/team-meet/agenda.md"
+    ]
+  },
+  {
+    "id": "team-action-item-mixed-003",
+    "modeTemplateType": "team-meet",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "I will send 会议 notes by Friday。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "action_item",
+      "outputType": "action_item"
+    },
+    "tags": [
+      "team",
+      "action_item",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/team-meet/agenda.md"
+    ]
+  },
+  {
+    "id": "team-action-item-en-004",
+    "modeTemplateType": "team-meet",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "I will do the migration checklist by Monday.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "action_item",
+      "outputType": "action_item"
+    },
+    "tags": [
+      "team",
+      "action_item",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/team-meet/agenda.md"
+    ]
+  },
+  {
+    "id": "team-action-item-en-005",
+    "modeTemplateType": "team-meet",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "This action item is assigned to Maya with a Friday deadline.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "action_item",
+      "outputType": "action_item"
+    },
+    "tags": [
+      "team",
+      "action_item",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/team-meet/agenda.md"
+    ]
+  },
+  {
+    "id": "team-action-item-zh-006",
+    "modeTemplateType": "team-meet",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "需要跟进客户反馈，我来负责。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "action_item",
+      "outputType": "action_item"
+    },
+    "tags": [
+      "team",
+      "action_item",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/team-meet/agenda.md"
+    ]
+  },
+  {
+    "id": "team-action-item-mixed-007",
+    "modeTemplateType": "team-meet",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "Action item 是 Alex follow up 依赖。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "action_item",
+      "outputType": "action_item"
+    },
+    "tags": [
+      "team",
+      "action_item",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/team-meet/agenda.md"
+    ]
+  },
+  {
+    "id": "team-deadline-zh-001",
+    "modeTemplateType": "team-meet",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "这个谁负责，截止日期是什么时候？",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "owner_deadline_check",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "team",
+      "deadline",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/team-meet/team_meet_launch_checklist.md"
+    ]
+  },
+  {
+    "id": "team-deadline-zh-002",
+    "modeTemplateType": "team-meet",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "负责人是谁，预计什么时候交？",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "owner_deadline_check",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "team",
+      "deadline",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/team-meet/team_meet_launch_checklist.md"
+    ]
+  },
+  {
+    "id": "team-deadline-mixed-003",
+    "modeTemplateType": "team-meet",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "Who owns this，ETA 是下周吗？",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "owner_deadline_check",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "team",
+      "deadline",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/team-meet/team_meet_launch_checklist.md"
+    ]
+  },
+  {
+    "id": "team-deadline-en-004",
+    "modeTemplateType": "team-meet",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "Who owns this and what is the due date?",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "owner_deadline_check",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "team",
+      "deadline",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/team-meet/team_meet_launch_checklist.md"
+    ]
+  },
+  {
+    "id": "team-deadline-en-005",
+    "modeTemplateType": "team-meet",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "By when can we finish the timeline?",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "owner_deadline_check",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "team",
+      "deadline",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/team-meet/team_meet_launch_checklist.md"
+    ]
+  },
+  {
+    "id": "team-decision-zh-001",
+    "modeTemplateType": "team-meet",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "最终决定用 Postgres 做主库。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "decision_point",
+      "outputType": "decision_record"
+    },
+    "tags": [
+      "team",
+      "decision",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/team-meet/decision_log.md"
+    ]
+  },
+  {
+    "id": "team-decision-zh-002",
+    "modeTemplateType": "team-meet",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "我们定这个方案，今天确认。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "decision_point",
+      "outputType": "decision_record"
+    },
+    "tags": [
+      "team",
+      "decision",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/team-meet/decision_log.md"
+    ]
+  },
+  {
+    "id": "team-decision-mixed-003",
+    "modeTemplateType": "team-meet",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "Final decision 是 go with phased rollout。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "decision_point",
+      "outputType": "decision_record"
+    },
+    "tags": [
+      "team",
+      "decision",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/team-meet/decision_log.md"
+    ]
+  },
+  {
+    "id": "team-decision-en-004",
+    "modeTemplateType": "team-meet",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "We decided to go with the staged launch.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "decision_point",
+      "outputType": "decision_record"
+    },
+    "tags": [
+      "team",
+      "decision",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/team-meet/decision_log.md"
+    ]
+  },
+  {
+    "id": "team-decision-en-005",
+    "modeTemplateType": "team-meet",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "The design is approved and confirmed.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "decision_point",
+      "outputType": "decision_record"
+    },
+    "tags": [
+      "team",
+      "decision",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/team-meet/decision_log.md"
+    ]
+  },
+  {
+    "id": "team-blocker-zh-001",
+    "modeTemplateType": "team-meet",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "现在卡在前端依赖，影响进度。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "blocker_check",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "team",
+      "blocker",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/team-meet/team_meet_risk_register.json"
+    ]
+  },
+  {
+    "id": "team-blocker-zh-002",
+    "modeTemplateType": "team-meet",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "有什么阻塞，谁能解这个依赖？",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "blocker_check",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "team",
+      "blocker",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/team-meet/team_meet_risk_register.json"
+    ]
+  },
+  {
+    "id": "team-blocker-mixed-003",
+    "modeTemplateType": "team-meet",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "We are stuck on API dependency，timeline 有风险。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "blocker_check",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "team",
+      "blocker",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/team-meet/team_meet_risk_register.json"
+    ]
+  },
+  {
+    "id": "team-blocker-en-004",
+    "modeTemplateType": "team-meet",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "The rollout is blocked by the permissions dependency.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "blocker_check",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "team",
+      "blocker",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/team-meet/team_meet_risk_register.json"
+    ]
+  },
+  {
+    "id": "team-blocker-en-005",
+    "modeTemplateType": "team-meet",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "teammate",
+        "text": "What is blocking the release timeline?",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "blocker_check",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "team",
+      "blocker",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/team-meet/team_meet_risk_register.json"
+    ]
+  },
+  {
+    "id": "team-negative-001",
+    "modeTemplateType": "team-meet",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "我们的报价表在这，但这只是内部销售资料。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "wrong_mode"
+  },
+  {
+    "id": "team-negative-002",
+    "modeTemplateType": "team-meet",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "今天天气不错，等大家进会议。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "unrelated_small_talk"
+  },
+  {
+    "id": "team-negative-003",
+    "modeTemplateType": "team-meet",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "Postgres 只是候选项，还没有决定。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "missing_evidence"
+  },
+  {
+    "id": "team-negative-004",
+    "modeTemplateType": "team-meet",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "周五是公司活动，不是交付截止时间。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "missing_evidence"
+  },
+  {
+    "id": "team-negative-005",
+    "modeTemplateType": "team-meet",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "依赖这个词出现在包管理器日志里，不是项目阻塞。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "low_value"
+  },
+  {
+    "id": "team-negative-006",
+    "modeTemplateType": "team-meet",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "I will think about it, not committing to an action item.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "missing_evidence"
+  },
+  {
+    "id": "team-negative-007",
+    "modeTemplateType": "team-meet",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "The decision document is old, no decision today.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "missing_evidence"
+  },
+  {
+    "id": "team-negative-008",
+    "modeTemplateType": "team-meet",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "Blocker is a slide title, nobody raised a blocker.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "missing_evidence"
+  }
+]

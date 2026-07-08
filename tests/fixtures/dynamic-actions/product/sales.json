@@ -1,0 +1,1137 @@
+[
+  {
+    "id": "sales-pricing-objection-zh-001",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "这个价格有点高，我们预算不够。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "pricing_objection",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "pricing",
+      "objection",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/pricing_objections.md"
+    ]
+  },
+  {
+    "id": "sales-pricing-objection-zh-002",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "报价太高了，老板肯定会问成本。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "pricing_objection",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "pricing",
+      "objection",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/pricing_objections.md"
+    ]
+  },
+  {
+    "id": "sales-pricing-objection-zh-003",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "费用有点负担不起，能不能再便宜点？",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "pricing_objection",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "pricing",
+      "objection",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/pricing_objections.md"
+    ]
+  },
+  {
+    "id": "sales-pricing-objection-zh-004",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "这个方案价格太高，我们可能撑不住。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "pricing_objection",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "pricing",
+      "objection",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/pricing_objections.md"
+    ]
+  },
+  {
+    "id": "sales-pricing-objection-mixed-005",
+    "modeTemplateType": "sales",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "This is too expensive，我们预算不够。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "pricing_objection",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "pricing",
+      "objection",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/pricing_objections.md"
+    ]
+  },
+  {
+    "id": "sales-pricing-objection-en-006",
+    "modeTemplateType": "sales",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "The price feels too high for our budget.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "pricing_objection",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "pricing",
+      "objection",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/pricing_objections.md"
+    ]
+  },
+  {
+    "id": "sales-pricing-objection-en-007",
+    "modeTemplateType": "sales",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "We cannot afford this unless you reduce the price.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "pricing_objection",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "pricing",
+      "objection",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/pricing_objections.md"
+    ]
+  },
+  {
+    "id": "sales-pricing-objection-en-008",
+    "modeTemplateType": "sales",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "Can you do better on price? It is out of our budget.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "pricing_objection",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "pricing",
+      "objection",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/pricing_objections.md"
+    ]
+  },
+  {
+    "id": "sales-pricing-request-zh-001",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "你们发我报价单吧，我要给采购看。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "pricing_request",
+      "outputType": "email_draft"
+    },
+    "tags": [
+      "pricing",
+      "request",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/sales/sales_pricing_policy.json"
+    ]
+  },
+  {
+    "id": "sales-pricing-request-zh-002",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "能不能给我一个方案报价和商务条款？",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "pricing_request",
+      "outputType": "email_draft"
+    },
+    "tags": [
+      "pricing",
+      "request",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/sales/sales_pricing_policy.json"
+    ]
+  },
+  {
+    "id": "sales-pricing-request-mixed-003",
+    "modeTemplateType": "sales",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "Please send me pricing，最好今天给报价。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "pricing_request",
+      "outputType": "email_draft"
+    },
+    "tags": [
+      "pricing",
+      "request",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/sales/sales_pricing_policy.json"
+    ]
+  },
+  {
+    "id": "sales-pricing-request-en-004",
+    "modeTemplateType": "sales",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "Can you send me the pricing and a proposal?",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "pricing_request",
+      "outputType": "email_draft"
+    },
+    "tags": [
+      "pricing",
+      "request",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/sales/sales_pricing_policy.json"
+    ]
+  },
+  {
+    "id": "sales-pricing-request-en-005",
+    "modeTemplateType": "sales",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "What does it cost and can you send the quote?",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "pricing_request",
+      "outputType": "email_draft"
+    },
+    "tags": [
+      "pricing",
+      "request",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/sales/sales_pricing_policy.json"
+    ]
+  },
+  {
+    "id": "sales-case-proof-zh-001",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "有没有类似客户的成功案例？",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "case_study_request",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "case_study",
+      "proof",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/case_study.md"
+    ]
+  },
+  {
+    "id": "sales-case-proof-zh-002",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "我们需要一个标杆客户案例证明效果。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "case_study_request",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "case_study",
+      "proof",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/case_study.md"
+    ]
+  },
+  {
+    "id": "sales-case-proof-mixed-003",
+    "modeTemplateType": "sales",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "Do you have a case study，最好是类似客户。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "case_study_request",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "case_study",
+      "proof",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/case_study.md"
+    ]
+  },
+  {
+    "id": "sales-case-proof-en-004",
+    "modeTemplateType": "sales",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "Can you share a customer story or proof point?",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "case_study_request",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "case_study",
+      "proof",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/case_study.md"
+    ]
+  },
+  {
+    "id": "sales-case-proof-en-005",
+    "modeTemplateType": "sales",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "We need a similar customer implementation example.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "case_study_request",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "case_study",
+      "proof",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/case_study.md"
+    ]
+  },
+  {
+    "id": "sales-tech-zh-001",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "我们有 SSO 对接和 API 需求。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "technical_requirements",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "technical",
+      "integration",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/sales/sales_security_faq.html"
+    ]
+  },
+  {
+    "id": "sales-tech-zh-002",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "部署要求是什么，生产环境怎么集成？",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "technical_requirements",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "technical",
+      "integration",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/sales/sales_security_faq.html"
+    ]
+  },
+  {
+    "id": "sales-tech-mixed-003",
+    "modeTemplateType": "sales",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "We need API requirements 和安全要求。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "technical_requirements",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "technical",
+      "integration",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/sales/sales_security_faq.html"
+    ]
+  },
+  {
+    "id": "sales-tech-en-004",
+    "modeTemplateType": "sales",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "What are the integration requirements for SSO?",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "technical_requirements",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "technical",
+      "integration",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/sales/sales_security_faq.html"
+    ]
+  },
+  {
+    "id": "sales-tech-en-005",
+    "modeTemplateType": "sales",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "Can you clarify the technical solution and deployment requirements?",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "technical_requirements",
+      "outputType": "checklist"
+    },
+    "tags": [
+      "technical",
+      "integration",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/sales/sales_security_faq.html"
+    ]
+  },
+  {
+    "id": "sales-buying-signal-zh-001",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "下一步我们安排法务审核合同。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "buying_signal",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "buying_signal",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/solution_brief.md"
+    ]
+  },
+  {
+    "id": "sales-buying-signal-zh-002",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "我们准备签合同了，发合同吧。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "buying_signal",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "buying_signal",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/solution_brief.md"
+    ]
+  },
+  {
+    "id": "sales-buying-signal-mixed-003",
+    "modeTemplateType": "sales",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "Next steps 我们想下周 finalize。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "buying_signal",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "buying_signal",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/solution_brief.md"
+    ]
+  },
+  {
+    "id": "sales-buying-signal-en-004",
+    "modeTemplateType": "sales",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "We are ready to move and send this to legal review.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "buying_signal",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "buying_signal",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/solution_brief.md"
+    ]
+  },
+  {
+    "id": "sales-buying-signal-en-005",
+    "modeTemplateType": "sales",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "Let us schedule the next steps and finalize.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "buying_signal",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "buying_signal",
+      "positive"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/demo/04_mode_reference_files/sales/solution_brief.md"
+    ]
+  },
+  {
+    "id": "sales-negative-smalltalk-001",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "今天天气不错，我们先等人到齐。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "unrelated_small_talk"
+  },
+  {
+    "id": "sales-negative-internal-price-002",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "我们的报价表在共享盘里，等会我打开。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "internal_chatter"
+  },
+  {
+    "id": "sales-negative-product-demo-003",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "这个按钮的颜色有点深，能不能换浅一点。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "low_value"
+  },
+  {
+    "id": "sales-negative-support-004",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "客户说麦克风没有声音，需要重启一下。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "wrong_mode"
+  },
+  {
+    "id": "sales-negative-budget-neutral-005",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "预算流程是财务每季度统一审批。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "missing_evidence"
+  },
+  {
+    "id": "sales-negative-case-word-006",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "这个案例我们内部复盘过，不是客户要材料。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "internal_chatter"
+  },
+  {
+    "id": "sales-negative-api-internal-007",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "API 文档我本地已经更新了，别发给客户。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "internal_chatter"
+  },
+  {
+    "id": "sales-negative-legal-chat-008",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "法务今天不参会，只是旁听。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "low_value"
+  },
+  {
+    "id": "sales-negative-next-week-009",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "下周我们内部开个同步会。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "internal_chatter"
+  },
+  {
+    "id": "sales-negative-competitor-010",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "竞品信息先不用展开，今天只看日程。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "low_value"
+  },
+  {
+    "id": "sales-negative-mixed-011",
+    "modeTemplateType": "sales",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "The price list is in our internal folder，不是客户在问报价。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "internal_chatter"
+  },
+  {
+    "id": "sales-negative-en-012",
+    "modeTemplateType": "sales",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "We are not discussing pricing yet, just checking the agenda.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "low_value"
+  },
+  {
+    "id": "sales-negative-en-013",
+    "modeTemplateType": "sales",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "This case study file name is outdated in our drive.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "internal_chatter"
+  },
+  {
+    "id": "sales-negative-en-014",
+    "modeTemplateType": "sales",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "The API owner is on vacation so we will not cover integration today.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "low_value"
+  },
+  {
+    "id": "sales-negative-en-015",
+    "modeTemplateType": "sales",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "Legal review is a later internal topic, no customer ask right now.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "internal_chatter"
+  },
+  {
+    "id": "sales-negative-zh-016",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "我们先记录一下参会人，不讨论商务。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "low_value"
+  },
+  {
+    "id": "sales-negative-zh-017",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "客户还没进来，先不要弹销售动作。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "missing_evidence"
+  },
+  {
+    "id": "sales-negative-zh-018",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "报价这个词只是文件夹名称。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "missing_evidence"
+  },
+  {
+    "id": "sales-negative-zh-019",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "案例材料还没上传，先别引用。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "missing_evidence"
+  },
+  {
+    "id": "sales-negative-zh-020",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "API 是我们内部任务，不是客户需求。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "internal_chatter"
+  },
+  {
+    "id": "sales-negative-zh-021",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "预算表需要会后整理，不是客户异议。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "missing_evidence"
+  },
+  {
+    "id": "sales-negative-zh-022",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "下一步只是主持人切换议程。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "tags": [
+      "negative"
+    ],
+    "sourceRefs": [],
+    "negativeReason": "low_value"
+  }
+]
