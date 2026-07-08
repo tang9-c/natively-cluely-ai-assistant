@@ -71,6 +71,10 @@ No extra privacy confirmation is shown. No Finder window opens after export. The
 
 The ZIP contains data from the last 7 days where possible.
 
+Implementation uses `jszip` as a direct application dependency. Do not rely on
+`jszip` only as a transitive dependency of `mammoth`, and do not hand-write ZIP
+binary output.
+
 Files:
 
 ```text
@@ -169,6 +173,11 @@ Outputs:
 
 - ZIP file at the user-selected path
 
+Dependency:
+
+- `jszip` is listed in `package.json` dependencies and imported directly by
+  `QaReportService`.
+
 ### `DynamicActionMetricsAggregator`
 
 Pure aggregation helper.
@@ -236,25 +245,39 @@ team-meet: 30
 total: 120
 ```
 
-Each fixture has:
+Each fixture must use the existing `DynamicActionProductFixture` contract from
+`electron/services/dynamic-actions/DynamicActionProductFixtures.ts`. Do not add a
+second fixture schema for this Step 5 runner.
 
 ```json
 {
   "id": "sales-pricing-objection-zh-001",
-  "mode": "sales",
+  "modeTemplateType": "sales",
   "language": "zh",
-  "speakerRole": "customer",
-  "input": "这个价格有点高，我们预算可能撑不住。",
-  "recentContext": [],
-  "expectedActions": ["pricing_objection"],
-  "forbiddenActions": ["pricing_request"],
-  "expectedOutputType": "spoken_response",
+  "transcriptTurns": [
+    {
+      "speaker": "customer",
+      "text": "这个价格有点高，我们预算可能撑不住。",
+      "final": true
+    }
+  ],
+  "expected": {
+    "shouldEmit": true,
+    "actionType": "pricing_objection",
+    "outputType": "spoken_response",
+    "requiredCardCopy": ["回应价格异议"],
+    "forbiddenCardCopy": ["检测到行动项"]
+  },
   "tags": ["pricing", "objection", "positive"],
   "sourceRefs": [
     "tests/fixtures/demo/04_mode_reference_files/sales/pricing_objections.md"
   ]
 }
 ```
+
+`tags` and `sourceRefs` are fixture metadata for reporting and traceability. The
+runner must validate and execute the typed fields above, then pass results through
+the existing `scoreDynamicActionProductFixtures()` scoring helper.
 
 Coverage requirements:
 
@@ -377,6 +400,7 @@ Add focused tests for:
 - IPC/preload/type contract exposes `exportQaReport`.
 - Settings source includes the new export row below Detailed Debug Logs.
 - `QaReportService` creates a ZIP with `metadata.json` and `quality-summary.json`.
+- `package.json` lists `jszip` as a direct dependency for the ZIP export path.
 - Missing telemetry/debug log files do not fail export.
 - `quality-summary.json` does not contain sentinel transcript, prompt, API key, or screenshot content.
 - Fixture manifest has exactly 50 sales, 40 FDE, 30 team-meet entries.
@@ -406,3 +430,13 @@ rtk npm run test:dynamic-actions:metrics
 - Metrics command produces the four Step 5 summary categories.
 - Existing quality diagnostics continue to pass.
 
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | Fixture schema aligned with `DynamicActionProductFixture`; ZIP dependency pinned to direct `jszip`; no critical gaps remain. |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+
+**VERDICT:** ENG CLEARED — ready to implement.
