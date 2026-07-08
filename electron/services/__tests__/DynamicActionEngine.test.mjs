@@ -88,7 +88,7 @@ test('auto eligible actions expose auto countdown risk state through product con
   assert.equal(action.productContract.riskState, 'auto_countdown');
 });
 
-test('Competitor mention (Gong) detected creates competitor_mention action', async () => {
+test('Bare competitor mention does not create a standalone sales action', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
 
@@ -101,11 +101,8 @@ test('Competitor mention (Gong) detected creates competitor_mention action', asy
     sessionId: 'session_123',
   });
 
-  assert.ok(actions.length > 0, 'Expected at least one action');
-  const competitorAction = actions.find(a => a.type === 'competitor_mention');
-  assert.ok(competitorAction, 'Expected competitor_mention action');
-  assert.equal(competitorAction.label, 'Handle competitor comparison');
-  assert.equal(competitorAction.status, 'candidate');
+  assert.equal(actions.some(a => a.type === 'competitor_mention'), false);
+  assert.equal(actions.length, 0);
 });
 
 test('All eight real mode template keys have matching trigger packs', async () => {
@@ -257,7 +254,7 @@ test('assessSignals synthesizes confirmed FDE AI Agent feasibility action from i
   assert.equal(action.productContract?.userAction, '判断 AI Agent 可行性边界');
   assert.match(action.promptInstruction, /human confirmation/i);
   assert.match(action.promptInstruction, /read-only/i);
-  assert.match(action.promptInstruction, /Do not imply automatic writes to PLM or QMS/i);
+  assert.match(action.promptInstruction, /Do not imply automatic writes.*PLM.*QMS/i);
 });
 
 test('dynamic action retrievalQuery uses active-mode entity extraction', async () => {
@@ -426,7 +423,7 @@ test('dismissAction marks status as dismissed', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
 
-  const transcript = "We're using Gong already.";
+  const transcript = 'The price is too expensive for our budget.';
   const sessionId = 'session_dismiss';
 
   const detected = engine.detectActions({
@@ -546,7 +543,7 @@ test('expanded trigger packs cover canonical Cluely-style phrases across modes',
     ['negotiation', "What's your budget range for this deal?", 'budget_probe'],
     ['negotiation', 'Can you do better on the price?', 'price_pushback'],
     ['negotiation', 'This is our final offer.', 'final_offer'],
-    ['sales', "What's the ROI and payback for this?", 'roi_question'],
+    ['sales', "What's the ROI and payback for this?", 'case_study_request'],
     ['sales', 'Can you send me pricing after this call?', 'pricing_request'],
     ['recruiting', 'Tell me about your experience and why this role.', 'candidate_experience_probe'],
     ['team_meeting', 'Are there any blockers or risks to the timeline?', 'blocker_check'],
@@ -1456,17 +1453,15 @@ describe('ActionTrigger fixtures — sales mode', () => {
     assert.equal(a.priority, 0.9);
   });
 
-  test('competitor_mention (en: Gong) → priority 0.85', async () => {
+  test('bare competitor mention does not create a standalone sales action', async () => {
     const { DynamicActionEngine } = await loadModules();
     const engine = new DynamicActionEngine();
     const actions = engine.detectActions({
       transcript: "We're already using Gong for our sales calls.",
       modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_cm',
     });
-    const a = findAction(actions, 'competitor_mention');
-    assert.ok(a);
-    assert.equal(a.label, 'Handle competitor comparison');
-    assert.equal(a.priority, 0.85);
+    assert.equal(actions.some(action => action.type === 'competitor_mention'), false);
+    assert.equal(actions.length, 0);
   });
 
   test('buying_signal (zh: 敲定) → priority 0.95', async () => {
@@ -1482,17 +1477,17 @@ describe('ActionTrigger fixtures — sales mode', () => {
     assert.equal(a.priority, 0.95);
   });
 
-  test('roi_question (en: ROI) → priority 0.88', async () => {
+  test('ROI proof request maps to case_study_request', async () => {
     const { DynamicActionEngine } = await loadModules();
     const engine = new DynamicActionEngine();
     const actions = engine.detectActions({
       transcript: 'What is the ROI on this and the payback period?',
       modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_roi',
     });
-    const a = findAction(actions, 'roi_question');
+    const a = findAction(actions, 'case_study_request');
     assert.ok(a);
-    assert.equal(a.label, 'Build ROI case');
-    assert.equal(a.priority, 0.88);
+    assert.equal(a.label, 'Share relevant case study');
+    assert.equal(a.priority, 0.87);
   });
 
   test('pricing_request (zh: 报价) → priority 0.86', async () => {
@@ -1520,7 +1515,8 @@ describe('ActionTrigger fixtures — sales mode', () => {
     assert.equal(a.label, 'Draft quote email');
     assert.match(a.promptInstruction, /email draft/i);
     assert.equal(a.answerStyle?.format, 'email');
-    assert.match(a.promptInstruction, /Do not invent customer names/);
+    assert.match(a.promptInstruction, /Do not invent/);
+    assert.match(a.promptInstruction, /customer names/);
     assert.match(a.promptInstruction, /\[QUOTE_AMOUNT\]/);
     assert.equal(a.priority, 0.86);
   });

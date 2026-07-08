@@ -32,6 +32,19 @@ const FAST_PATH_ACTION_TYPES = new Set([
     'action_item',
 ]);
 
+const SALES_PROMPT_INSTRUCTIONS: Record<string, string> = {
+    pricing_objection:
+        'You are in Sales mode. The prospect raised a pricing or budget objection. Generate 1-3 sentences the seller can say aloud. Start by acknowledging the concern, do not list generic value points, do not invent ROI, discount, price, customer names, or terms, and end with one forward question.',
+    pricing_request:
+        'You are in Sales mode. The prospect asked for a quote, proposal, pricing, or commercial terms. Generate an email draft with greeting, short body, and sign-off. Use [CUSTOMER_NAME], [QUOTE_AMOUNT], [SCOPE], and [NEXT_STEP] unless exact trusted context provides values. Do not invent pricing, customer names, account numbers, contract terms, or commercial terms.',
+    case_study_request:
+        'You are in Sales mode. The prospect asked for a case study, similar customer, ROI, or proof. Use uploaded/reference/trusted context first. If no grounded case or proof is present, say that the provided materials do not include a matching proof point and ask what proof would be useful. Do not invent customer names, metrics, outcomes, or ROI.',
+    technical_requirements:
+        'You are in Sales mode. The prospect raised technical, security, API, SSO, integration, or deployment requirements. Clarify systems, APIs, auth, deployment environment, security constraints, owners, and the smallest validation step. Do not promise capability before validation.',
+    buying_signal:
+        'You are in Sales mode. The prospect showed buying or next-step intent. Lock next step, owner, date, and artifact. If owner/date/artifact is missing, ask for the missing field instead of inventing it.',
+};
+
 const FDE_PROMPT_INSTRUCTIONS: Record<string, string> = {
     fde_discovery_probe:
         'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Ask 3 manufacturing-process clarification questions about the workflow, system object such as BOM/ECO/ECN/CAPA/NCR/8D, stakeholder, permission boundary, and validation artifact.',
@@ -486,6 +499,11 @@ export class DynamicActionEngine {
                 general: 'general_assistance_request',
             },
             sales: {
+                sales_pricing_objection: 'pricing_objection',
+                sales_quote_request: 'pricing_request',
+                sales_proof_request: 'case_study_request',
+                sales_technical_requirements: 'technical_requirements',
+                sales_buying_signal: 'buying_signal',
                 handle_objection: 'pricing_objection',
                 seize_signal: 'buying_signal',
             },
@@ -533,6 +551,9 @@ export class DynamicActionEngine {
     private syntheticTriggerFor(type: string, modeTemplateType: string): ActionTrigger | null {
         const labels: Record<string, string> = {
             pricing_objection: '处理价格异议',
+            pricing_request: '生成报价邮件',
+            case_study_request: '引用案例证明',
+            technical_requirements: '澄清技术需求',
             buying_signal: '推进下一步',
             action_item: '捕捉行动项',
             decision_point: '确认决策',
@@ -558,6 +579,7 @@ export class DynamicActionEngine {
             priority: 0.8,
             label,
             promptInstruction: FDE_PROMPT_INSTRUCTIONS[type]
+                ?? SALES_PROMPT_INSTRUCTIONS[type]
                 ?? `You are in ${modeTemplateType} mode. Respond in Chinese first and help the user handle the detected ${type} intent.`,
             answerStyle: { maxWords: 120, format: 'bullets', tone: 'clear' },
         };

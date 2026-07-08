@@ -117,3 +117,22 @@ test('fde manufacturing contracts explain process, permission, risk, and next-st
   assert.match(nextStep.userAction, /date|日期|时间/);
   assert.match(nextStep.userAction, /artifact|验证产物/);
 });
+
+test('sales dynamic actions have product-specific card contracts', async () => {
+  const { buildDynamicActionProductContract } = await loadHelper();
+
+  const cases = [
+    ['pricing_objection', 'Handle pricing objection', 'spoken_response', '回应价格异议', /价格|预算/],
+    ['pricing_request', 'Draft quote email', 'email_draft', '生成报价邮件', /报价|邮件/],
+    ['case_study_request', 'Share relevant case study', 'spoken_response', '引用案例证明', /案例|证明/],
+    ['technical_requirements', 'Clarify technical requirements', 'checklist', '澄清技术需求', /技术|集成|安全/],
+    ['buying_signal', 'Seize buying signal', 'action_item', '锁定推进下一步', /owner|负责人|日期|产物|artifact/],
+  ];
+
+  for (const [type, label, outputType, userAction, whyNowPattern] of cases) {
+    const contract = buildDynamicActionProductContract(baseInput({ type, label }));
+    assert.equal(contract.outputType, outputType);
+    assert.equal(contract.userAction, userAction);
+    assert.match(contract.whyNow, whyNowPattern);
+  }
+});

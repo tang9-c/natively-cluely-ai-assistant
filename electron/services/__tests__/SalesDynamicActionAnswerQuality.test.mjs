@@ -21,7 +21,12 @@ test('sales pricing objection uses a spoken short script, not bullets', () => {
 test('sales case study request avoids invented proof without trusted context', () => {
   const block = extractBlock('case_study_request');
 
-  assert.match(block, /Do not invent customer names, metrics, or outcomes without trusted context/);
+  assert.match(block, /uploaded|reference|trusted context|grounded/i);
+  assert.match(block, /Do not invent/);
+  assert.match(block, /customer names/);
+  assert.match(block, /metrics/);
+  assert.match(block, /outcomes/);
+  assert.match(block, /ROI/);
 });
 
 test('sales pricing request keeps placeholder rules intact', () => {
@@ -30,5 +35,27 @@ test('sales pricing request keeps placeholder rules intact', () => {
   assert.match(block, /\[CUSTOMER_NAME\]/);
   assert.match(block, /\[QUOTE_AMOUNT\]/);
   assert.match(block, /\[NEXT_STEP\]/);
-  assert.match(block, /Do not invent customer names, account numbers, specific pricing, or contract terms/);
+  assert.match(block, /Do not invent/);
+  assert.match(block, /pricing/);
+  assert.match(block, /customer names/);
+  assert.match(block, /account numbers/);
+  assert.match(block, /contract terms/);
+  assert.match(block, /commercial terms/);
+});
+
+test('sales buying signal requires owner date and artifact', () => {
+  const block = extractBlock('buying_signal');
+
+  assert.match(block, /owner/i);
+  assert.match(block, /date/i);
+  assert.match(block, /artifact/i);
+  assert.match(block, /missing/i);
+});
+
+test('sales technical requirements must clarify rather than promise capability', () => {
+  const block = extractBlock('technical_requirements');
+
+  assert.match(block, /Clarify systems, APIs, auth, deployment environment, security constraints, owners, and the smallest validation step/);
+  assert.match(block, /Do not promise capability before validation/);
+  assert.doesNotMatch(block, /guarantee|承诺能力已具备/);
 });

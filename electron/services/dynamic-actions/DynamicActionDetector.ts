@@ -102,25 +102,13 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         priority: 0.9,
         label: 'Handle pricing objection',
         promptInstruction:
-            "You are in Sales mode. The prospect has raised a pricing concern. Provide a concise, confident response that addresses value over cost. Include a bridge to next steps.",
+            'You are in Sales mode. The prospect raised a pricing or budget objection. Generate 1-3 sentences the seller can say aloud. Start by acknowledging the concern, do not list generic value points, do not invent ROI, discount, price, customer names, or terms, and end with one forward question.',
         answerStyle: { maxWords: 80, format: 'short_script', tone: 'confident' },
-    },
-    {
-        type: 'competitor_mention',
-        patterns: [
-            /\b(Gong|Chorus|ZoomInfo|Salesloft|Outreach|Clari|yeah\.pm)\b/i,
-            zh('竞品', '竞争对手', '别家', '其他供应商', '其他产品'),
-        ],
-        priority: 0.85,
-        label: 'Handle competitor comparison',
-        promptInstruction:
-            "You are in Sales mode. The prospect mentioned a competitor. Position Natively's advantages confidently without disparaging the competitor.",
-        answerStyle: { maxWords: 100, format: 'bullets', tone: 'confident' },
     },
     {
         type: 'buying_signal',
         patterns: [
-            /\b(ready to move|send contract|legal review|next steps|schedule|finalize)\b/i,
+            /\b(ready to move|ready to sign|send contract|legal review|next steps|schedule|finalize|pilot|trial|procurement|sign the deal)\b/i,
             // Debug session 2026-06-23: bare `准备签` (e.g. "我们准备签合同了")
             // wasn't in the alternation; only `准备推进` matched. Common close-to-
             // closing phrasing like 准备签 / 准备签合同 / 准备签一下 slipped past.
@@ -129,20 +117,8 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         priority: 0.95,
         label: 'Seize buying signal',
         promptInstruction:
-            "You are in Sales mode. The prospect is showing strong buying intent. Help finalize the next steps and create urgency.",
-        answerStyle: { maxWords: 60, format: 'short_script', tone: 'enthusiastic' },
-    },
-    {
-        type: 'roi_question',
-        patterns: [
-            /\b(ROI|return on investment|business case|payback|prove the value|value case)\b/i,
-            zh('投资回报', '回报率', '商业价值', '多久回本', '证明价值', '效果怎么衡量'),
-        ],
-        priority: 0.88,
-        label: 'Build ROI case',
-        promptInstruction:
-            'You are in Sales mode. The prospect is asking for ROI. Tie benefits to measurable business outcomes and ask for their success metric.',
-        answerStyle: { maxWords: 100, format: 'bullets', tone: 'consultative' },
+            'You are in Sales mode. The prospect showed buying or next-step intent. Lock next step, owner, date, and artifact. If owner/date/artifact is missing, ask for the missing field instead of inventing it.',
+        answerStyle: { maxWords: 90, format: 'short_script', tone: 'enthusiastic' },
     },
     {
         type: 'pricing_request',
@@ -153,19 +129,19 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         priority: 0.86,
         label: 'Draft quote email',
         promptInstruction:
-            'You are in Sales mode. Generate a follow-up email draft with greeting, 1-2 short paragraphs, and sign-off for sending pricing or a quote. Qualify scope before giving concrete numbers. Do not invent customer names, account numbers, specific pricing, or contract terms. Use placeholders like [CUSTOMER_NAME], [QUOTE_AMOUNT], and [NEXT_STEP] unless exact values are present in trusted context.',
+            'You are in Sales mode. The prospect asked for a quote, proposal, pricing, or commercial terms. Generate an email draft with greeting, short body, and sign-off. Use [CUSTOMER_NAME], [QUOTE_AMOUNT], [SCOPE], and [NEXT_STEP] unless exact trusted context provides values. Do not invent pricing, customer names, account numbers, contract terms, or commercial terms.',
         answerStyle: { maxWords: 160, format: 'email', tone: 'consultative' },
     },
     {
         type: 'case_study_request',
         patterns: [
-            /\b(case study|customer story|customer example|reference customer|proof point|success story|similar customer|implementation example)\b/i,
-            zh('客户案例', '成功案例', '案例', '标杆客户', '参考客户', '类似客户', '落地案例', '实施案例', '证明材料'),
+            /\b(case study|customer story|customer example|reference customer|proof point|success story|similar customer|implementation example|ROI|return on investment)\b/i,
+            zh('客户案例', '成功案例', '案例', '标杆客户', '参考客户', '类似客户', '落地案例', '实施案例', '证明材料', '投资回报', '回报率'),
         ],
         priority: 0.87,
         label: 'Share relevant case study',
         promptInstruction:
-            'You are in Sales mode. The prospect is asking for proof or a customer case. Recommend the most relevant grounded case study, tie it to their situation, and ask what proof would be most useful next. Do not invent customer names, metrics, or outcomes without trusted context.',
+            'You are in Sales mode. The prospect asked for a case study, similar customer, ROI, or proof. Use uploaded/reference/trusted context first. If no grounded case or proof is present, say that the provided materials do not include a matching proof point and ask what proof would be useful. Do not invent customer names, metrics, outcomes, or ROI.',
         answerStyle: { maxWords: 120, format: 'bullets', tone: 'credible' },
     },
     {
@@ -177,7 +153,7 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         priority: 0.88,
         label: 'Clarify technical requirements',
         promptInstruction:
-            'You are in Sales mode. The prospect is raising technical or integration requirements. Clarify systems, APIs, auth, deployment environment, security constraints, owners, and the smallest validation step.',
+            'You are in Sales mode. The prospect raised technical, security, API, SSO, integration, or deployment requirements. Clarify systems, APIs, auth, deployment environment, security constraints, owners, and the smallest validation step. Do not promise capability before validation.',
         answerStyle: { maxWords: 140, format: 'checklist', tone: 'technical' },
     },
 ];

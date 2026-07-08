@@ -28,6 +28,7 @@ type ContractInput = Pick<
 const EVIDENCE_SUMMARY_MAX_CHARS = 90;
 
 const CHECKLIST_TYPES = new Set([
+    'technical_requirements',
     'fde_discovery_probe',
     'fde_integration_check',
     'fde_security_review',
@@ -47,6 +48,7 @@ const EMAIL_TYPES = new Set([
 const ACTION_ITEM_TYPES = new Set([
     'action_item',
     'owner_deadline_check',
+    'buying_signal',
 ]);
 
 const DECISION_TYPES = new Set([
@@ -79,6 +81,18 @@ export function explainDynamicActionForUser(input: Pick<DynamicAction, 'type' | 
     whyNow: string;
     severity: 'info' | 'ok' | 'warning';
 } {
+    if (input.type === 'pricing_request') {
+        return { whyNow: '对方正在索要报价、proposal 或商务条款，适合生成一封不编价格和条款的跟进邮件。', severity: 'info' };
+    }
+    if (input.type === 'case_study_request') {
+        return { whyNow: '对方正在索要案例、ROI 或证明点，必须优先引用已上传资料，不能编造客户案例。', severity: 'info' };
+    }
+    if (input.type === 'technical_requirements') {
+        return { whyNow: '对方正在确认 API、SSO、安全或部署要求，适合先生成澄清清单而不是承诺能力。', severity: 'info' };
+    }
+    if (input.type === 'buying_signal') {
+        return { whyNow: '对方释放了推进信号，需要锁定 owner、date 和 artifact，避免下一步落空。', severity: 'ok' };
+    }
     if (/pricing|objection|pushback|budget/.test(input.type)) {
         return { whyNow: '对方正在表达价格或预算顾虑，适合马上给出回应。', severity: 'warning' };
     }
@@ -126,6 +140,10 @@ function resolveRiskState(input: { autoSurfacePolicy?: AutoSurfacePolicy; confid
 }
 
 function buildUserAction(input: ContractInput, outputType: DynamicActionOutputType): string {
+    if (input.type === 'pricing_request') return '生成报价邮件';
+    if (input.type === 'case_study_request') return '引用案例证明';
+    if (input.type === 'technical_requirements') return '澄清技术需求';
+    if (input.type === 'buying_signal') return '锁定推进下一步';
     if (/pricing|objection|pushback|budget/.test(input.type)) return '回应价格异议';
     if (input.type === 'fde_discovery_probe') return '澄清制造业流程和系统对象';
     if (input.type === 'fde_integration_check') return '锁定集成、权限和读写边界';
