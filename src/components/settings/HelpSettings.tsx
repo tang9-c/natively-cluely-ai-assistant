@@ -1570,9 +1570,50 @@ export const HelpSettings: React.FC = () => {
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="9. 其他" icon={<Settings className="w-4 h-4" />}>
+                <AccordionSection title="9. 技能" icon={<Sparkles className="w-4 h-4" />}>
                     <div className="space-y-6">
-                        <p className="text-[11px] text-text-tertiary">暂无其他说明。</p>
+                        <p className="text-[13px]">
+                            技能是本地 <code className="bg-bg-tertiary px-1.5 py-0.5 rounded text-[12px] font-mono text-text-primary border border-border-subtle">SKILL.md</code> 指令包。CueUp 会随安装包预置常用技能，也允许你在技能文件夹里继续添加自己的技能。
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {([
+                                { name: '客户谈判复盘', desc: '从客户沟通转写里提炼核心需求、顾虑、异议回应和下次跟进重点。' },
+                                { name: '周例会/月度经营会', desc: '逐人整理上周完成、卡点、本周计划、支援请求和会上拍板事项。' },
+                                { name: '招聘面试评估', desc: '整理候选人逐题回答、经验技能、亮点疑问、复试追问点和匹配度评分。' },
+                                { name: '文本去 AI 味', desc: '把 AI 生成文本改得更自然、更具体，更像真人写出来的内容。' },
+                            ] as Array<{ name: string; desc: string }>).map(({ name, desc }) => (
+                                <div key={name} className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                        <CheckCircle2 className="w-4 h-4 text-emerald-500" /> {name}
+                                    </h4>
+                                    <p className="text-[11px] text-text-secondary leading-relaxed">{desc}</p>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-3">
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-blue-500" /> 从转录生成 Markdown
+                                </h4>
+                                <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                    <li>打开会议详情，切到 <strong>转录</strong> 标签。</li>
+                                    <li>点击 <strong>用技能处理</strong>，选择一个技能。</li>
+                                    <li>生成 Markdown 文件后，可以点击 <strong>打开文件</strong> 或 <strong>打开文件夹</strong>。</li>
+                                </ul>
+                            </div>
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Settings className="w-4 h-4 text-violet-500" /> 技能设置
+                                </h4>
+                                <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                    <li><strong>技能自动触发</strong> 会在输入中识别“润色一下”等明确请求。</li>
+                                    <li><strong>转录监听</strong> 会根据会议转写判断是否建议临时激活技能。</li>
+                                    <li><strong>技能文件夹</strong> 里每个子目录都需要包含一个 SKILL.md。</li>
+                                </ul>
+                            </div>
+                        </div>
                     </div>
                 </AccordionSection>
 

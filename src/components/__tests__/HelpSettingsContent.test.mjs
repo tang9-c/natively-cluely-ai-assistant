@@ -35,3 +35,15 @@ test('QCLOUD settings guide states STT is optional and embeddings stay local-fir
   assert.match(source, /向量模型继续保持本地优先/);
   assert.doesNotMatch(source, /实时转录和向量模型不使用 QCLOUD/);
 });
+
+test('HelpSettings documents preset skills and transcript Markdown export', () => {
+  const source = read('src/components/settings/HelpSettings.tsx');
+
+  assert.match(source, /9\. 技能/);
+  assert.match(source, /客户谈判复盘/);
+  assert.match(source, /周例会\/月度经营会/);
+  assert.match(source, /招聘面试评估/);
+  assert.match(source, /文本去 AI 味/);
+  assert.match(source, /会议详情.*转录.*用技能处理/s);
+  assert.match(source, /生成 Markdown 文件后.*打开文件.*打开文件夹/s);
+});

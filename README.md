@@ -735,6 +735,7 @@ CueUp includes a powerful, local-first meeting management system to review, sear
 
 - **Meeting Archives:** Access full transcripts of every past meeting, searchable by keywords or dates.
 - **Smart Export:** One-click export of transcripts and AI summaries to **Markdown, JSON, or Text**—perfect for pasting into Notion, Obsidian, or Slack.
+- **Transcript Skills:** Run bundled SKILL.md workflows on a full transcript to generate follow-up maps, meeting accountability notes, interview scorecards, or cleaned-up writing as Markdown files.
 - **Usage Statistics:** Track your token usage and API costs in real-time. Know exactly how much you are spending on Gemini, OpenAI, or Claude.
 - **Audio Separation:** Distinct controls for **System Audio** (what they say) vs. **Microphone** (what you dictate).
 - **Session Management:** Rename, organize, or delete past sessions to keep your workspace clean.
