@@ -36,6 +36,11 @@ export type ConversationIntent =
     | 'handle_objection'   // Customer pushback ("太贵", "too expensive")
     | 'seize_signal'       // Strong buying intent ("准备签合同", "ready to move")
     | 'discovery_probe'    // Diagnostic question ("what's the challenge?")
+    | 'sales_pricing_objection' // Price/budget objection
+    | 'sales_quote_request' // Quote, proposal, or commercial terms request
+    | 'sales_proof_request' // Case study, proof, similar customer, or ROI request
+    | 'sales_technical_requirements' // API, SSO, security, deployment, or integration requirements
+    | 'sales_buying_signal' // Legal, contract, pilot, next step, or purchase signal
 
     // ===== Recruiting mode (extras) =====
     | 'evaluate_answer'    // Candidate just answered; evaluate + probe
@@ -133,6 +138,11 @@ const GENERAL_ANSWER_SHAPES: Record<ConversationIntent, string> = {
     handle_objection: '',
     seize_signal: '',
     discovery_probe: '',
+    sales_pricing_objection: '',
+    sales_quote_request: '',
+    sales_proof_request: '',
+    sales_technical_requirements: '',
+    sales_buying_signal: '',
     evaluate_answer: '',
     request_example: '',
     capture_action: '',
@@ -152,6 +162,11 @@ const GENERAL_ANSWER_SHAPES: Record<ConversationIntent, string> = {
 };
 
 const SALES_ANSWER_SHAPES: Partial<Record<ConversationIntent, string>> = {
+    sales_pricing_objection: 'Generate a short spoken response that acknowledges price/budget concern, grounds value in provided context, and asks one forward question.',
+    sales_quote_request: 'Generate a follow-up email draft for quote/proposal request. Use placeholders unless exact trusted values are present.',
+    sales_proof_request: 'Use uploaded/reference materials for proof points or state that no grounded proof was provided. Never invent customer cases or ROI.',
+    sales_technical_requirements: 'Generate a clarification checklist for API, SSO, security, deployment environment, owners, and validation step.',
+    sales_buying_signal: 'Lock next step, owner, date, and artifact. Ask directly for missing fields.',
     handle_objection: 'Acknowledge first ("That makes sense" / "I hear you"). Reframe with specifics. End with a forward-moving question. 2-3 sentences. No labels.',
     seize_signal: 'Propose a concrete next step with a specific time. Trade value for commitment. 1-2 sentences. Confident, no hedge.',
     discovery_probe: 'Ask 1-2 deep diagnostic questions, not surface. Example: "What challenge were you hoping to solve when you reached out?"',
@@ -248,9 +263,11 @@ const ZERO_SHOT_LABELS_EN_GENERAL: Record<string, ConversationIntent> = {
  */
 const ZERO_SHOT_LABELS_EN_BY_MODE: Record<string, Record<string, ConversationIntent>> = {
     'sales': {
-        'customer pushing back or raising a concern (price, value, competitor)': 'handle_objection',
-        'customer showing strong buying intent or asking about next steps': 'seize_signal',
-        'asking a deep diagnostic question to uncover the customer problem': 'discovery_probe',
+        'customer raising a price or budget objection': 'sales_pricing_objection',
+        'customer asking for quote, pricing, proposal, or commercial terms': 'sales_quote_request',
+        'customer asking for case study, proof, similar customer, or ROI': 'sales_proof_request',
+        'customer asking about API, SSO, security, deployment, or technical requirements': 'sales_technical_requirements',
+        'customer showing buying intent, legal review, contract, pilot, or next step': 'sales_buying_signal',
         'no actionable content, just filler or acknowledgement': 'silence',
         'asking what a term or acronym means': 'define_term',
         'requesting a summary or next step': 'advance_dialog',
@@ -316,9 +333,11 @@ const ZERO_SHOT_LABELS_ZH_GENERAL: Record<string, ConversationIntent> = {
 
 const ZERO_SHOT_LABELS_ZH_BY_MODE: Record<string, Record<string, ConversationIntent>> = {
     'sales': {
-        '客户提出价格、价值或竞品方面的异议': 'handle_objection',
-        '客户表达明确的购买意向或询问下一步': 'seize_signal',
-        '提出深度诊断问题以挖掘客户痛点': 'discovery_probe',
+        '客户提出价格或预算异议': 'sales_pricing_objection',
+        '客户索要报价、proposal 或商务条款': 'sales_quote_request',
+        '客户索要案例、类似客户、ROI 或证明材料': 'sales_proof_request',
+        '客户询问 API、SSO、安全、部署或技术需求': 'sales_technical_requirements',
+        '客户表达购买推进、法务、合同、试点或下一步信号': 'sales_buying_signal',
         '无可行动内容,只是寒暄或确认': 'silence',
         '询问某个术语或缩写的含义': 'define_term',
         '请求总结或下一步': 'advance_dialog',
@@ -465,8 +484,10 @@ export function detectIntentByPattern(
 function confidenceForKeywordIntent(intent: ConversationIntent): number {
     switch (intent) {
         case 'seize_signal':
+        case 'sales_buying_signal':
             return 0.95;
         case 'handle_objection':
+        case 'sales_pricing_objection':
         case 'capture_action':
             return 0.92;
         case 'capture_decision':
@@ -482,6 +503,11 @@ function confidenceForKeywordIntent(intent: ConversationIntent): number {
         case 'capture_risk':
         case 'request_example':
             return 0.88;
+        case 'sales_proof_request':
+        case 'sales_technical_requirements':
+            return 0.88;
+        case 'sales_quote_request':
+            return 0.86;
         case 'fde_integration':
         case 'fde_success':
         case 'fde_discovery':
@@ -593,30 +619,30 @@ function detectInterviewIntentByPattern(text: string): IntentResult | null {
  */
 function detectSalesIntentByPattern(text: string): IntentResult | null {
     // 1. Buying signal — strongest purchase intent
-    // Debug session 2026-06-23: the previous alternation only accepted
-    // `send (over )?the contract` and `send (over )?a (proposal|quote)`, missing
-    // the common `send over the proposal` phrasing (article `the` instead of `a`).
-    // Unified to `send (over )?(the|a) (contract|proposal|quote)` to accept all
-    // four combinations: send the/a contract/proposal/quote, with or without
-    // the `over` particle.
-    if (/(ready to move|ready to sign|send (over )?(the|a) (contract|proposal|quote)|let'?s move forward|next steps|finalize|sign the deal|legal review|procurement|when can we start|let'?s get started|let'?s (kick ?off|schedule))/i.test(text)
-        || /(准备签|准备推进|准备敲定|准备开始|发合同|发报价|法务审核|采购流程|下一步怎么走|下一步是|敲定|签合同|推进到|往下走|启动)/.test(text)) {
-        return { intent: 'seize_signal', confidence: 0.95, answerShape: getAnswerShapeForMode('sales', 'seize_signal') };
+    if (/(ready to move|ready to sign|send (over )?(the|a) contract|let'?s move forward|next steps|finalize|sign the deal|legal review|procurement|when can we start|let'?s get started|let'?s (kick ?off|schedule)|pilot|trial)/i.test(text)
+        || /(准备签|准备推进|准备敲定|准备开始|发合同|法务审核|采购流程|下一步怎么走|下一步是|敲定|签合同|推进到|往下走|启动|试点|试用)/.test(text)) {
+        return { intent: 'sales_buying_signal', confidence: 0.95, answerShape: getAnswerShapeForMode('sales', 'sales_buying_signal') };
     }
-    // 2. Objection — pushback on price, value, competitor
-    if (/(too expensive|too pricey|too high|can'?t afford|out of (our|my) budget|not in the budget|cheaper (option|alternative)|discount|price is|reduce the price|competitor|alternative (vendor|provider|tool|product)|why (not use|choose) .* instead|switch from|already using|heard of|what about .* instead|do better on (price|cost)|can you (do better|lower|reduce))/i.test(text)
-        || /(太贵|价格高|价格太高|超出预算|预算不够|预算不足|负担不起|能不能便宜|便宜点|打个折|有折扣吗|竞品|竞争对手|别家|其他供应商|用.*也行|听说|为什么不用|换.*行不行|考虑一下|对比一下|已经在用)/.test(text)) {
-        return { intent: 'handle_objection', confidence: 0.92, answerShape: getAnswerShapeForMode('sales', 'handle_objection') };
+    // 2. Pricing objection — price/budget pushback, not internal price-sheet references.
+    if (/(too expensive|too pricey|too high|can'?t afford|out of (our|my|the) budget|not in (our|my|the) budget|cheaper (option|alternative)|discount|price is|reduce the price|lower the price|do better on (price|cost)|can you (do better|lower|reduce))/i.test(text)
+        || /(太贵|价格高|价格太高|报价太高|超出预算|预算不够|预算不足|负担不起|能不能便宜|便宜点|打个折|有折扣吗)/.test(text)) {
+        return { intent: 'sales_pricing_objection', confidence: 0.92, answerShape: getAnswerShapeForMode('sales', 'sales_pricing_objection') };
     }
-    // 3. Discovery probe — diagnostic, surface the underlying problem
-    if (/(what'?s the (biggest |main |primary )?(challenge|problem)|what are you trying to (solve|achieve)|pain point|what'?s frustrating|what would need to be true|how (are|do) you (handle|currently do) .* today|walk me through .* (process|workflow)|what'?s (driving|prompting) .* (look|search|reach) (for|out)|what does .* (process|workflow|setup) look like|biggest challenge|workflow .* look like|current (process|workflow|setup))/i.test(text)
-        || /(有什么挑战|什么问题|痛点是什么|想解决什么|想达到什么|当前的流程|现在怎么.*的|困扰|为什么要|什么驱动|考察什么|在选什么|需要什么|关注什么|看重什么|遇到什么|流程是怎样的)/.test(text)) {
-        return { intent: 'discovery_probe', confidence: 0.85, answerShape: getAnswerShapeForMode('sales', 'discovery_probe') };
+    // 3. Proof request — case study, similar customer, or ROI proof.
+    if (/(case study|customer story|customer example|reference customer|proof point|success story|similar customer|ROI|return on investment|prove the value|prove the ROI)/i.test(text)
+        || /(客户案例|成功案例|类似客户|标杆客户|参考客户|证明材料|落地案例|实施案例|ROI|投资回报|回报率|证明价值)/.test(text)) {
+        return { intent: 'sales_proof_request', confidence: 0.88, answerShape: getAnswerShapeForMode('sales', 'sales_proof_request') };
     }
-    // 4. ROI / value question
-    if (/(ROI|return on investment|how (do you|will you) (save|generate) .* (money|time)|payback period|prove the (value|ROI)|what'?s the (value|business case)|how (quickly|fast) (do|will) (we|i) see (results|returns))/i.test(text)
-        || /(投资回报|回报率|商业价值|多久回本|怎么衡量效果|效果怎么样|能带来什么|能省多少)/.test(text)) {
-        return { intent: 'discovery_probe', confidence: 0.85, answerShape: getAnswerShapeForMode('sales', 'discovery_probe') };
+    // 4. Technical requirements — clarify before promising capability.
+    if (/(technical requirements?|technical needs?|integration requirements?|API requirements?|security requirements?|deployment requirements?|implementation details?|technical solution|architecture requirements?|SSO requirements?|SOC2|data residency|production environment|sandbox)/i.test(text)
+        || /(技术需求|技术要求|集成需求|集成要求|接口需求|API 需求|部署要求|安全要求|技术方案|实现细节|对接方式|架构要求|SSO 对接|生产环境|沙盒|数据驻留)/.test(text)) {
+        return { intent: 'sales_technical_requirements', confidence: 0.88, answerShape: getAnswerShapeForMode('sales', 'sales_technical_requirements') };
+    }
+    // 5. Quote request — external ask for pricing/proposal/commercial terms.
+    if (!/(我们的报价表|内部报价|报价表在这|等客户问再发|internal price|price sheet)/i.test(text)
+        && (/(send me pricing|send pricing|send (over )?(the|a) proposal|send (over )?(the|a) quote|pricing page|quote|proposal|commercials|commercial terms|what does it cost)/i.test(text)
+            || /(发我报价|发.{0,6}报价|给.{0,6}报价|报(?:个|一下|下)价(?:格)?|给(?:我)?(?:个|一下|下)价(?:格)?|报价单|价格页|方案报价|商务条款|多少钱)/.test(text))) {
+        return { intent: 'sales_quote_request', confidence: 0.86, answerShape: getAnswerShapeForMode('sales', 'sales_quote_request') };
     }
     return null;
 }
@@ -766,7 +792,7 @@ function getCandidateIntentsForMode(modeTemplateType?: string | null): Conversat
     const mode = modeTemplateType ?? 'general';
     switch (mode) {
         case 'sales':
-            return ['handle_objection', 'seize_signal', 'discovery_probe', 'define_term', 'advance_dialog', 'general', 'silence'];
+            return ['sales_buying_signal', 'sales_pricing_objection', 'sales_quote_request', 'sales_proof_request', 'sales_technical_requirements', 'define_term', 'advance_dialog', 'general', 'silence'];
         case 'fde':
             return ['fde_discovery', 'fde_integration', 'fde_security', 'fde_risk', 'fde_agent_feasibility', 'fde_success', 'fde_next_step', 'define_term', 'advance_dialog', 'general', 'silence'];
         case 'recruiting':

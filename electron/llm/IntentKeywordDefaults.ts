@@ -39,9 +39,11 @@ export const DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE: Record<string, IntentKeywordCo
         ...INTERVIEW_KEYWORDS,
     ],
     sales: [
-        { intent: 'seize_signal', keywordsCsv: 'ready to move,ready to sign,send over the contract,send over the proposal,send the contract,send the proposal,let.s move forward,next steps,finalize,sign the deal,legal review,procurement,when can we start,let.s get started,let.s kick off,let.s schedule,准备签,准备推进,准备敲定,准备开始,发合同,发报价,法务审核,采购流程,下一步怎么走,下一步是,敲定,签合同,推进到,往下走,启动' },
-        { intent: 'handle_objection', keywordsCsv: 'too expensive,too pricey,too high,can.t afford,out of our budget,out of my budget,not in the budget,cheaper option,cheaper alternative,discount,price is,reduce the price,competitor,alternative vendor,alternative provider,alternative tool,alternative product,switch from,already using,heard of,do better on price,can you do better,can you lower,can you reduce,太贵,价格高,价格太高,超出预算,预算不够,预算不足,负担不起,能不能便宜,便宜点,打个折,有折扣吗,竞品,竞争对手,别家,其他供应商,听说,为什么不用,考虑一下,对比一下,已经在用' },
-        { intent: 'discovery_probe', keywordsCsv: 'what.s the biggest challenge,what.s the main challenge,what.s the primary challenge,what are you trying to solve,what are you trying to achieve,pain point,what.s frustrating,what would need to be true,how do you handle today,walk me through the process,walk me through the workflow,current process,current workflow,ROI,return on investment,payback period,prove the value,prove the ROI,有什么挑战,什么问题,痛点是什么,想解决什么,想达到什么,当前的流程,现在怎么,困扰,为什么要,什么驱动,考察什么,在选什么,需要什么,关注什么,看重什么,遇到什么,流程是怎样的,投资回报,回报率,商业价值,多久回本,怎么衡量效果,效果怎么样,能带来什么,能省多少' },
+        { intent: 'sales_pricing_objection', keywordsCsv: 'too expensive,too pricey,too high,out of budget,not in budget,can.t afford,discount,do better on price,lower the price,reduce the price,太贵,价格高,价格太高,报价太高,超出预算,预算不够,预算不足,能不能便宜,便宜点,打个折,有折扣吗' },
+        { intent: 'sales_quote_request', keywordsCsv: 'quote,pricing,proposal,commercial terms,send pricing,send proposal,send quote,what does it cost,报价,报价单,价格页,方案报价,商务条款,多少钱,发报价,给报价,发方案,发 proposal' },
+        { intent: 'sales_proof_request', keywordsCsv: 'case study,customer story,customer example,reference customer,proof point,success story,similar customer,ROI,return on investment,客户案例,成功案例,类似客户,标杆客户,参考客户,证明材料,ROI,投资回报,回报率,成功证明' },
+        { intent: 'sales_technical_requirements', keywordsCsv: 'API,SSO,SAML,OAuth,SCIM,security,deployment,production,sandbox,integration,architecture,technical requirements,API 接口,SSO,单点登录,安全,部署,生产环境,沙盒,集成,技术需求,技术要求,架构要求,对接方式' },
+        { intent: 'sales_buying_signal', keywordsCsv: 'ready to move,ready to sign,next steps,legal review,procurement,contract,pilot,trial,finalize,when can we start,准备签,准备推进,下一步,法务审核,采购流程,合同,试点,试用,敲定,启动' },
     ],
     'team-meet': [
         { intent: 'capture_action', keywordsCsv: 'i.ll do,i.ll send,i.ll handle,i.ll own,i.ll take,i.ll follow up,i.ll write,i.ll ship,i.ll PR,i.ll merge,i.m gonna,let me by,action item,to-do,assigned to,owner is,i can have by,by monday,by tuesday,by wednesday,by thursday,by friday,by EOD,by EOW,by next week,我来做,我来发,我来负责,我来处理,我跟进,我写,我来 PR,我提,我合,交给我,我包了,分配给,行动项,待办,跟进项,周五前,周一前,下周三前,今天内,尽快,交付' },
@@ -62,7 +64,7 @@ export const INTENT_MATCH_ORDER_BY_TEMPLATE: Record<string, ConversationIntent[]
     'technical-interview': ['clarification', 'follow_up', 'deep_dive', 'behavioral', 'example_request', 'summary_probe', 'coding'],
     fde: ['fde_security', 'fde_risk', 'fde_agent_feasibility', 'fde_next_step', 'fde_integration', 'fde_success', 'fde_discovery'],
     recruiting: ['request_example', 'clarification', 'follow_up', 'deep_dive', 'behavioral', 'example_request', 'summary_probe', 'coding'],
-    sales: ['seize_signal', 'handle_objection', 'discovery_probe'],
+    sales: ['sales_buying_signal', 'sales_pricing_objection', 'sales_quote_request', 'sales_proof_request', 'sales_technical_requirements'],
     'team-meet': ['capture_action', 'capture_decision', 'capture_risk', 'status_update'],
     lecture: ['explain_concept', 'render_formula', 'answer_class_question'],
 };

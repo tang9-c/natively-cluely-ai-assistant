@@ -54,32 +54,32 @@ function coverageRate(mode, samples) {
 describe('Tier 1 regex coverage: sales mode ≥80%', () => {
   const samples = [
     // English — objection
-    { utterance: "This is too expensive for us right now.", expected: 'handle_objection' },
-    { utterance: "Can you do better on the price?", expected: 'handle_objection' },
-    { utterance: "We're already using Gong, why switch?", expected: 'handle_objection' },
-    { utterance: "It's out of our budget this quarter.", expected: 'handle_objection' },
-    { utterance: "Any discount if we sign annual?", expected: 'handle_objection' },
+    { utterance: "This is too expensive for us right now.", expected: 'sales_pricing_objection' },
+    { utterance: "Can you do better on the price?", expected: 'sales_pricing_objection' },
+    { utterance: "It's out of our budget this quarter.", expected: 'sales_pricing_objection' },
+    { utterance: "Any discount if we sign annual?", expected: 'sales_pricing_objection' },
     // Chinese — objection
-    { utterance: '这个价格太高了', expected: 'handle_objection' },
-    { utterance: '能不能便宜点', expected: 'handle_objection' },
-    { utterance: '预算不够', expected: 'handle_objection' },
-    { utterance: '我们已经在用 Gong 了', expected: 'handle_objection' },
-    { utterance: '有折扣吗', expected: 'handle_objection' },
+    { utterance: '这个价格太高了', expected: 'sales_pricing_objection' },
+    { utterance: '能不能便宜点', expected: 'sales_pricing_objection' },
+    { utterance: '预算不够', expected: 'sales_pricing_objection' },
+    { utterance: '有折扣吗', expected: 'sales_pricing_objection' },
+    // English / Chinese — quote request
+    { utterance: 'Can you send me a proposal and commercial terms?', expected: 'sales_quote_request' },
+    { utterance: '会后发一版报价单给我们。', expected: 'sales_quote_request' },
+    // English / Chinese — proof request
+    { utterance: 'Do you have a similar customer case study or ROI proof?', expected: 'sales_proof_request' },
+    { utterance: '有没有类似客户案例或者 ROI proof?', expected: 'sales_proof_request' },
+    // English / Chinese — technical requirements
+    { utterance: 'What are the API, SSO, security, and production deployment requirements?', expected: 'sales_technical_requirements' },
+    { utterance: '技术方案怎么对接 SSO 和生产环境?', expected: 'sales_technical_requirements' },
     // English — buying signal
-    { utterance: "We're ready to move forward.", expected: 'seize_signal' },
-    { utterance: "Can you send over the contract?", expected: 'seize_signal' },
-    { utterance: "What are the next steps?", expected: 'seize_signal' },
-    { utterance: "Let's finalize the deal.", expected: 'seize_signal' },
+    { utterance: "We're ready to move forward.", expected: 'sales_buying_signal' },
+    { utterance: "Can you send over the contract?", expected: 'sales_buying_signal' },
+    { utterance: "What are the next steps?", expected: 'sales_buying_signal' },
+    { utterance: "Let's finalize the deal.", expected: 'sales_buying_signal' },
     // Chinese — buying signal
-    { utterance: '我们准备签合同了', expected: 'seize_signal' },
-    { utterance: '下一步怎么走', expected: 'seize_signal' },
-    // English — discovery probe
-    { utterance: "What's the biggest challenge you're trying to solve?", expected: 'discovery_probe' },
-    { utterance: "What does your current workflow look like?", expected: 'discovery_probe' },
-    { utterance: "What's the ROI on this for a team our size?", expected: 'discovery_probe' },
-    // Chinese — discovery probe
-    { utterance: '你们现在遇到什么挑战', expected: 'discovery_probe' },
-    { utterance: '现在的流程是怎样的', expected: 'discovery_probe' },
+    { utterance: '我们准备签合同了', expected: 'sales_buying_signal' },
+    { utterance: '下一步怎么走', expected: 'sales_buying_signal' },
   ];
 
   test('sales regex hits ≥80% of canonical utterances', () => {
@@ -89,6 +89,29 @@ describe('Tier 1 regex coverage: sales mode ≥80%', () => {
       `sales mode hit rate ${(rate * 100).toFixed(1)}% < 80% (${misses.length}/${total} misses): ` +
       JSON.stringify(misses, null, 2),
     );
+  });
+});
+
+describe('Sales mode five product moments', () => {
+  const cases = [
+    ['这个价格太高了，我们预算不够。', 'sales_pricing_objection'],
+    ['Can you send me a proposal and commercial terms?', 'sales_quote_request'],
+    ['有没有类似客户案例或者 ROI proof?', 'sales_proof_request'],
+    ['What are the API, SSO, security, and production deployment requirements?', 'sales_technical_requirements'],
+    ['下一步我们可以让法务看合同，先安排 pilot。', 'sales_buying_signal'],
+  ];
+
+  for (const [utterance, expected] of cases) {
+    test(`${utterance} -> ${expected}`, () => {
+      const result = detectIntentByPattern(utterance, 'sales');
+      assert.equal(result?.intent, expected);
+    });
+  }
+
+  test('Sales mode does not treat internal price-sheet mention as quote request', () => {
+    const result = detectIntentByPattern('我们的报价表在这，等客户问再发。', 'sales');
+    assert.notEqual(result?.intent, 'sales_quote_request');
+    assert.notEqual(result?.intent, 'sales_pricing_objection');
   });
 });
 

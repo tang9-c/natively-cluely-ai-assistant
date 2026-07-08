@@ -23,6 +23,11 @@ export type ConversationIntent =
     | 'handle_objection'
     | 'seize_signal'
     | 'discovery_probe'
+    | 'sales_pricing_objection'
+    | 'sales_quote_request'
+    | 'sales_proof_request'
+    | 'sales_technical_requirements'
+    | 'sales_buying_signal'
 
     // ===== Recruiting mode (extras) =====
     | 'evaluate_answer'
@@ -74,6 +79,11 @@ const GENERAL_ANSWER_SHAPES: Record<ConversationIntent, string> = {
     handle_objection: '',
     seize_signal: '',
     discovery_probe: '',
+    sales_pricing_objection: '',
+    sales_quote_request: '',
+    sales_proof_request: '',
+    sales_technical_requirements: '',
+    sales_buying_signal: '',
     evaluate_answer: '',
     request_example: '',
     capture_action: '',
@@ -93,6 +103,11 @@ const GENERAL_ANSWER_SHAPES: Record<ConversationIntent, string> = {
 };
 
 const SALES_ANSWER_SHAPES: Partial<Record<ConversationIntent, string>> = {
+    sales_pricing_objection: 'Generate a short spoken response that acknowledges price/budget concern, grounds value in provided context, and asks one forward question.',
+    sales_quote_request: 'Generate a follow-up email draft for quote/proposal request. Use placeholders unless exact trusted values are present.',
+    sales_proof_request: 'Use uploaded/reference materials for proof points or state that no grounded proof was provided. Never invent customer cases or ROI.',
+    sales_technical_requirements: 'Generate a clarification checklist for API, SSO, security, deployment environment, owners, and validation step.',
+    sales_buying_signal: 'Lock next step, owner, date, and artifact. Ask directly for missing fields.',
     handle_objection: 'Acknowledge first ("That makes sense" / "I hear you"). Reframe with specifics. End with a forward-moving question. 2-3 sentences. No labels.',
     seize_signal: 'Propose a concrete next step with a specific time. Trade value for commitment. 1-2 sentences. Confident, no hedge.',
     discovery_probe: 'Ask 1-2 deep diagnostic questions, not surface. Example: "What challenge were you hoping to solve when you reached out?"',
@@ -169,9 +184,11 @@ const ZERO_SHOT_LABELS_EN_GENERAL: Record<string, ConversationIntent> = {
 
 const ZERO_SHOT_LABELS_EN_BY_MODE: Record<string, Record<string, ConversationIntent>> = {
     'sales': {
-        'customer pushing back or raising a concern (price, value, competitor)': 'handle_objection',
-        'customer showing strong buying intent or asking about next steps': 'seize_signal',
-        'asking a deep diagnostic question to uncover the customer problem': 'discovery_probe',
+        'customer raising a price or budget objection': 'sales_pricing_objection',
+        'customer asking for quote, pricing, proposal, or commercial terms': 'sales_quote_request',
+        'customer asking for case study, proof, similar customer, or ROI': 'sales_proof_request',
+        'customer asking about API, SSO, security, deployment, or technical requirements': 'sales_technical_requirements',
+        'customer showing buying intent, legal review, contract, pilot, or next step': 'sales_buying_signal',
         'no actionable content, just filler or acknowledgement': 'silence',
         'asking what a term or acronym means': 'define_term',
         'requesting a summary or next step': 'advance_dialog',
@@ -230,9 +247,11 @@ const ZERO_SHOT_LABELS_ZH_GENERAL: Record<string, ConversationIntent> = {
 
 const ZERO_SHOT_LABELS_ZH_BY_MODE: Record<string, Record<string, ConversationIntent>> = {
     'sales': {
-        '客户提出价格、价值或竞品方面的异议': 'handle_objection',
-        '客户表达明确的购买意向或询问下一步': 'seize_signal',
-        '提出深度诊断问题以挖掘客户痛点': 'discovery_probe',
+        '客户提出价格或预算异议': 'sales_pricing_objection',
+        '客户索要报价、proposal 或商务条款': 'sales_quote_request',
+        '客户索要案例、类似客户、ROI 或证明材料': 'sales_proof_request',
+        '客户询问 API、SSO、安全、部署或技术需求': 'sales_technical_requirements',
+        '客户表达购买推进、法务、合同、试点或下一步信号': 'sales_buying_signal',
         '无可行动内容,只是寒暄或确认': 'silence',
         '询问某个术语或缩写的含义': 'define_term',
         '请求总结或下一步': 'advance_dialog',
