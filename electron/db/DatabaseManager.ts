@@ -3315,7 +3315,7 @@ The credit can be used for Speech-to-Text and is sufficient for extended testing
 # Support
 
 If you need help with setup or usage, contact us anytime at:
-natively.contact@gmail.com`;
+tangdu@feigenbaum.ai`;
 
         const demoMeeting: Meeting = {
             id: demoId,
