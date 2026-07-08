@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight } from 'lucide-react';
+import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, Sparkles, FolderOpen, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import MeetingChatOverlay from './MeetingChatOverlay';
 import EditableTextBlock from './EditableTextBlock';
@@ -9,6 +9,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import type { SkillSummary } from '../types/electron';
 
 const formatTime = (ms: number) => {
     const date = new Date(ms);
@@ -25,6 +26,18 @@ const cleanMarkdown = (content: string) => {
     if (!content) return '';
     // Ensure code blocks are on new lines to fix rendering issues
     return content.replace(/([^\n])```/g, '$1\n\n```');
+};
+
+const formatTranscriptForSkill = (transcript?: Meeting['transcript']) => {
+    return (transcript || [])
+        .filter(entry => !['system', 'ai', 'assistant', 'model'].includes(entry.speaker?.toLowerCase()))
+        .map(t => `[${formatTime(t.timestamp)}] ${t.speaker === 'user' ? '我' : '对方'}: ${t.text}`)
+        .join('\n');
+};
+
+const parentPathOf = (filePath: string) => {
+    const index = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+    return index > 0 ? filePath.slice(0, index) : filePath;
 };
 
 interface Meeting {
@@ -90,6 +103,36 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [submittedQuery, setSubmittedQuery] = useState('');
     const [submittedQueryNonce, setSubmittedQueryNonce] = useState(0);
+    const [skills, setSkills] = useState<SkillSummary[]>([]);
+    const [skillsMenuOpen, setSkillsMenuOpen] = useState(false);
+    const [skillsLoading, setSkillsLoading] = useState(false);
+    const [runningSkillId, setRunningSkillId] = useState<string | null>(null);
+    const [skillExportStatus, setSkillExportStatus] = useState<{ message: string; filePath?: string; error?: boolean } | null>(null);
+    const transcriptMarkdown = formatTranscriptForSkill(meeting.transcript);
+    const canRunTranscriptSkill = activeTab === 'transcript' && transcriptMarkdown.trim().length > 0;
+
+    const loadTranscriptSkills = async () => {
+        if (typeof window.electronAPI?.skillsRefresh !== 'function') {
+            setSkillExportStatus({ message: '技能桥接不可用，请重启应用后重试。', error: true });
+            return;
+        }
+
+        setSkillsLoading(true);
+        try {
+            const list = await window.electronAPI.skillsRefresh();
+            setSkills(Array.isArray(list) ? list : []);
+        } catch (error: any) {
+            setSkillExportStatus({ message: error?.message || '无法刷新技能。', error: true });
+        } finally {
+            setSkillsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (skillsMenuOpen && skills.length === 0) {
+            void loadTranscriptSkills();
+        }
+    }, [skillsMenuOpen]);
 
     const handleSubmitQuestion = () => {
         if (query.trim()) {
@@ -140,6 +183,47 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || '无
             setTimeout(() => setIsCopied(false), 2000);
         } catch (err) {
             console.error('Failed to copy content:', err);
+        }
+    };
+
+    const handleRunTranscriptSkill = async (skill: SkillSummary) => {
+        if (typeof window.electronAPI?.transcriptSkillRun !== 'function') {
+            setSkillExportStatus({ message: '技能导出桥接不可用，请重启应用后重试。', error: true });
+            return;
+        }
+
+        setRunningSkillId(skill.id);
+        setSkillExportStatus({ message: `正在使用“${skill.name}”处理转录...` });
+        try {
+            const result = await window.electronAPI.transcriptSkillRun({
+                skillId: skill.id,
+                meetingId: meeting.id,
+                meetingTitle: meeting.title,
+                transcriptMarkdown,
+            });
+
+            if (!result?.success || !result.filePath) {
+                setSkillExportStatus({ message: result?.error || '生成 Markdown 文件失败。', error: true });
+                return;
+            }
+
+            setSkillExportStatus({ message: '已生成 Markdown 文件。', filePath: result.filePath });
+            setSkillsMenuOpen(false);
+        } catch (error: any) {
+            setSkillExportStatus({ message: error?.message || '生成 Markdown 文件失败。', error: true });
+        } finally {
+            setRunningSkillId(null);
+        }
+    };
+
+    const openExportPath = async (targetPath: string) => {
+        if (typeof window.electronAPI?.openPath !== 'function') {
+            setSkillExportStatus({ message: '打开文件桥接不可用，请重启应用后重试。', error: true });
+            return;
+        }
+        const result = await window.electronAPI.openPath(targetPath);
+        if (!result?.success) {
+            setSkillExportStatus({ message: result?.error || '无法打开路径。', error: true });
         }
     };
 
@@ -264,15 +348,101 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || '无
                             ))}
                         </div>
 
-                        {/* Copy Button - Inline with Tabs (Always visible) */}
-                        <button
-                            onClick={handleCopy}
-                            className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors"
-                        >
-                            {isCopied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                            {isCopied ? '已复制' : activeTab === 'summary' ? '复制完整摘要' : activeTab === 'transcript' ? '复制完整转录' : '复制使用量'}
-                        </button>
+                        <div className="relative flex items-center gap-3">
+                            {canRunTranscriptSkill && (
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setSkillsMenuOpen((open) => !open)}
+                                        className="flex items-center gap-1.5 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors"
+                                    >
+                                        <Sparkles size={14} />
+                                        用技能处理
+                                        <ChevronDown size={13} className={skillsMenuOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
+                                    </button>
+
+                                    {skillsMenuOpen && (
+                                        <div className={`absolute right-0 top-7 z-50 w-64 rounded-lg border shadow-xl overflow-hidden ${isLight ? 'bg-white border-black/[0.08]' : 'bg-[#1C1C1E] border-white/[0.10]'}`}>
+                                            <div className="px-3 py-2 border-b border-border-subtle">
+                                                <p className="text-xs font-semibold text-text-primary">选择技能</p>
+                                                <p className="mt-0.5 text-[11px] leading-snug text-text-tertiary">将完整转录交给所选技能，生成 Markdown 文件。</p>
+                                            </div>
+
+                                            <div className="max-h-64 overflow-y-auto py-1">
+                                                {skillsLoading && (
+                                                    <p className="px-3 py-2 text-xs text-text-tertiary">正在加载技能...</p>
+                                                )}
+                                                {!skillsLoading && skills.length === 0 && (
+                                                    <p className="px-3 py-2 text-xs text-text-tertiary">还没有可用技能</p>
+                                                )}
+                                                {!skillsLoading && skills.map((skill) => (
+                                                    <button
+                                                        key={skill.id}
+                                                        onClick={() => handleRunTranscriptSkill(skill)}
+                                                        disabled={Boolean(runningSkillId)}
+                                                        className="w-full px-3 py-2 text-left hover:bg-bg-item-active/70 disabled:opacity-60 transition-colors"
+                                                    >
+                                                        <span className="flex items-center gap-2 text-xs font-medium text-text-primary">
+                                                            <FileText size={13} />
+                                                            <span className="truncate">{skill.name}</span>
+                                                        </span>
+                                                        {skill.description && (
+                                                            <span className="mt-0.5 block truncate pl-5 text-[11px] text-text-tertiary">{skill.description}</span>
+                                                        )}
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-1 border-t border-border-subtle p-1">
+                                                <button
+                                                    onClick={loadTranscriptSkills}
+                                                    className="rounded-md px-2 py-1.5 text-xs text-text-secondary hover:bg-bg-item-active hover:text-text-primary"
+                                                >
+                                                    刷新技能
+                                                </button>
+                                                <button
+                                                    onClick={() => window.electronAPI?.skillsOpenFolder?.()}
+                                                    className="rounded-md px-2 py-1.5 text-xs text-text-secondary hover:bg-bg-item-active hover:text-text-primary inline-flex items-center justify-center gap-1"
+                                                >
+                                                    <FolderOpen size={12} />
+                                                    技能文件夹
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            <button
+                                onClick={handleCopy}
+                                className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors"
+                            >
+                                {isCopied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                                {isCopied ? '已复制' : activeTab === 'summary' ? '复制完整摘要' : activeTab === 'transcript' ? '复制完整转录' : '复制使用量'}
+                            </button>
+                        </div>
                     </div>
+
+                    {skillExportStatus && (
+                        <div className={`-mt-5 mb-6 flex flex-wrap items-center justify-end gap-2 text-xs ${skillExportStatus.error ? 'text-red-500' : 'text-text-tertiary'}`}>
+                            <span>{skillExportStatus.message}</span>
+                            {skillExportStatus.filePath && (
+                                <>
+                                    <button
+                                        onClick={() => openExportPath(skillExportStatus.filePath!)}
+                                        className="font-medium text-accent-primary hover:underline"
+                                    >
+                                        打开文件
+                                    </button>
+                                    <button
+                                        onClick={() => openExportPath(parentPathOf(skillExportStatus.filePath!))}
+                                        className="font-medium text-accent-primary hover:underline"
+                                    >
+                                        打开文件夹
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    )}
 
                     {/* Tab Content */}
                     <div className="space-y-8">

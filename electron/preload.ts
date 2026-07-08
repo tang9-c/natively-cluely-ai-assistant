@@ -905,6 +905,13 @@ interface ElectronAPI {
   skillsListWatcherSuggestions: () => Promise<SkillWatcherSuggestion[]>;
   skillsAcceptWatcherSuggestion: (suggestionId: string) => Promise<{ success: boolean; suggestion?: SkillWatcherSuggestion; error?: string }>;
   skillsDismissWatcherSuggestion: (suggestionId: string) => Promise<{ success: boolean; suggestion?: SkillWatcherSuggestion; error?: string }>;
+  transcriptSkillRun: (input: {
+    skillId: string;
+    meetingId?: string;
+    meetingTitle?: string;
+    transcriptMarkdown: string;
+  }) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+  openPath: (targetPath: string) => Promise<{ success: boolean; error?: string }>;
   onSkillWatcherSuggestionCreated: (callback: (data: { suggestion: SkillWatcherSuggestion }) => void) => () => void;
 }
 
@@ -1128,6 +1135,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   skillsListWatcherSuggestions: () => ipcRenderer.invoke('skills:list-watcher-suggestions'),
   skillsAcceptWatcherSuggestion: (suggestionId) => ipcRenderer.invoke('skills:accept-watcher-suggestion', suggestionId),
   skillsDismissWatcherSuggestion: (suggestionId) => ipcRenderer.invoke('skills:dismiss-watcher-suggestion', suggestionId),
+  transcriptSkillRun: (input) => ipcRenderer.invoke('transcript-skills:run', input),
+  openPath: (targetPath) => ipcRenderer.invoke('shell:open-path', targetPath),
 
 
   onSettingsVisibilityChange: (callback: (isVisible: boolean) => void) => {

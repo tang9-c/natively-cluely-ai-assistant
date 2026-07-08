@@ -851,8 +851,23 @@ export interface ElectronAPI {
   skillsListWatcherSuggestions: () => Promise<SkillWatcherSuggestion[]>;
   skillsAcceptWatcherSuggestion: (suggestionId: string) => Promise<{ success: boolean; suggestion?: SkillWatcherSuggestion; error?: string }>;
   skillsDismissWatcherSuggestion: (suggestionId: string) => Promise<{ success: boolean; suggestion?: SkillWatcherSuggestion; error?: string }>;
+  transcriptSkillRun: (input: TranscriptSkillRunInput) => Promise<TranscriptSkillRunResult>;
+  openPath: (targetPath: string) => Promise<{ success: boolean; error?: string }>;
   onSkillWatcherSuggestionCreated: (callback: (data: { suggestion: SkillWatcherSuggestion }) => void) => () => void;
 
+}
+
+export interface TranscriptSkillRunInput {
+  skillId: string;
+  meetingId?: string;
+  meetingTitle?: string;
+  transcriptMarkdown: string;
+}
+
+export interface TranscriptSkillRunResult {
+  success: boolean;
+  filePath?: string;
+  error?: string;
 }
 
 export interface SkillSummary {

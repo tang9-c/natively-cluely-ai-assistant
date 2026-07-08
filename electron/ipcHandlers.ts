@@ -31,6 +31,7 @@ import { buildBusinessSystemFixedReplyTraceInput } from './services/business-sys
 import { SkillActivationManager, type ActivateSkillInput, type SkillActivationScope } from './services/SkillActivationManager';
 import { SkillWatcherService } from './services/SkillWatcherService';
 import { SkillsManager } from './services/SkillsManager';
+import { runTranscriptSkillExport, type TranscriptSkillRunInput } from './services/TranscriptSkillExportService';
 import { getContextQualityDiagnosticsCollector } from './services/eval/ContextQualityDiagnostics';
 import { QaReportService } from './services/qa/QaReportService';
 import { telemetryService } from './services/telemetry/TelemetryService';
@@ -5378,6 +5379,38 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (e: any) {
       console.warn('[IPC] skills:list error:', e?.message || e);
       return [];
+    }
+  });
+
+  safeHandle('transcript-skills:run', async (_event, input: TranscriptSkillRunInput) => {
+    try {
+      const llmHelper = appState.processingHelper?.getLLMHelper?.();
+      return await runTranscriptSkillExport(input, llmHelper);
+    } catch (e: any) {
+      console.warn('[IPC] transcript-skills:run error:', e?.message || e);
+      return { success: false, error: e?.message || 'failed to run transcript skill' };
+    }
+  });
+
+  safeHandle('shell:open-path', async (_event, requestedPath: string) => {
+    try {
+      if (typeof requestedPath !== 'string' || !requestedPath.trim()) {
+        return { success: false, error: 'Path is required.' };
+      }
+
+      const downloadsDir = path.resolve(app.getPath('downloads'));
+      const targetPath = path.resolve(requestedPath);
+      const relative = path.relative(downloadsDir, targetPath);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        return { success: false, error: 'Only exported files in Downloads can be opened.' };
+      }
+
+      const error = await shell.openPath(targetPath);
+      if (error) return { success: false, error };
+      return { success: true };
+    } catch (e: any) {
+      console.warn('[IPC] shell:open-path error:', e?.message || e);
+      return { success: false, error: e?.message || 'failed to open path' };
     }
   });
 
