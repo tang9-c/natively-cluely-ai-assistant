@@ -62,6 +62,33 @@ test('PptxSlideRenderer runRenderChild rejects when child process hangs', async 
   }
 });
 
+test('PptxSlideRenderer runRenderChild preserves child stderr for diagnostics', async () => {
+  const { runRenderChild } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-render-stderr-test-'));
+  const scriptPath = path.join(tempDir, 'fail-child.mjs');
+  fs.writeFileSync(scriptPath, "console.error('ERR_MODULE_NOT_FOUND createPptxFontMapping.js'); process.exit(1);");
+
+  try {
+    await assert.rejects(
+      () => runRenderChild(scriptPath, '/tmp/fake-input.pptx', tempDir, 1000),
+      /ERR_MODULE_NOT_FOUND createPptxFontMapping\.js/,
+    );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('KnowledgeMaterialService classifies missing PPTX renderer assets separately from invalid decks', () => {
+  const source = fs.readFileSync(
+    path.resolve(process.cwd(), 'electron/services/knowledge/KnowledgeMaterialService.ts'),
+    'utf8',
+  );
+
+  assert.match(source, /pptx_renderer_asset_missing/);
+  assert.match(source, /createPptxFontMapping\.js/);
+  assert.match(source, /PPTX 渲染组件缺失/);
+});
+
 test('PptxIngestionService writes one chunk per slide and cleans temp files', async () => {
   const { PptxIngestionService } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxIngestionService.js');
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-ingest-test-'));

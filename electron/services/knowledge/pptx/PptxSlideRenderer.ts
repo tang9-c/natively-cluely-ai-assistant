@@ -21,6 +21,7 @@ interface PptxSlideRendererDeps {
 }
 
 const DEFAULT_RENDER_TIMEOUT_MS = 2 * 60 * 1000;
+const MAX_CHILD_ERROR_DETAIL_CHARS = 4000;
 
 export function createRenderedDeckForTest(
   tempDir: string,
@@ -166,7 +167,24 @@ export function runRenderChild(
         return;
       }
 
-      finish(new Error('pptx_render_failed'));
+      if (isMissingRendererAssetError(message)) {
+        finish(createPptxRenderError('pptx_renderer_asset_missing', message));
+        return;
+      }
+
+      finish(createPptxRenderError('pptx_render_failed', message));
     });
   });
+}
+
+function createPptxRenderError(code: string, detail: string): Error & { code?: string } {
+  const normalizedDetail = detail.trim().slice(0, MAX_CHILD_ERROR_DETAIL_CHARS);
+  const error = new Error(normalizedDetail ? `${code}: ${normalizedDetail}` : code) as Error & { code?: string };
+  error.code = code;
+  return error;
+}
+
+function isMissingRendererAssetError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes('err_module_not_found') && normalized.includes('createpptxfontmapping.js');
 }

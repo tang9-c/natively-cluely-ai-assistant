@@ -48,6 +48,7 @@ interface KnowledgeMaterialServiceOptions {
 const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.docx', '.txt', '.md', '.markdown', '.pptx']);
 const CHILD_TARGET_CHARS = 900;
 const PARENT_WINDOW = 1;
+const PPTX_RENDERER_FONT_MAPPING_MODULE = 'createPptxFontMapping.js';
 
 export class KnowledgeMaterialService {
     private readonly materialRagRetriever: MaterialRagRetriever;
@@ -341,6 +342,13 @@ function classifyMaterialIndexError(error: any): string {
     const message = String(error?.message || '').toLowerCase();
     if (message.includes('pptx_too_many_slides')) return 'pptx_too_many_slides';
     if (message.includes('pptx_invalid_file')) return 'pptx_invalid_file';
+    if (
+        message.includes('pptx_renderer_asset_missing') ||
+        (
+            message.includes('err_module_not_found') &&
+            message.includes(PPTX_RENDERER_FONT_MAPPING_MODULE.toLowerCase())
+        )
+    ) return 'pptx_renderer_asset_missing';
     if (message.includes('pptx_render_failed')) return 'pptx_render_failed';
     if (message.includes('pptx_markdown_empty')) return 'pptx_markdown_empty';
     if (message.includes('pptx_enhance_')) return 'pptx_enhance_invalid_json';
@@ -359,6 +367,7 @@ function toUserFacingMaterialError(error: any): string {
     if (code === 'embedding_failed') return '资料文本已读取，但向量索引失败。';
     if (code === 'pptx_too_many_slides') return 'PPTX 页数超过 200，请拆分后上传。';
     if (code === 'pptx_invalid_file') return 'PPTX 文件已损坏或不是有效的 PowerPoint 文件。';
+    if (code === 'pptx_renderer_asset_missing') return 'PPTX 渲染组件缺失，请重新构建或更新应用后重试。';
     if (code === 'pptx_render_failed') return 'PPTX 内容提取失败，请另存为标准 .pptx 后重试。';
     if (code === 'pptx_markdown_empty' || code === 'pptx_enhance_invalid_json' || code === 'pptx_enhance_invalid_questions') {
         return 'PPTX 内容提取失败，请稍后重试。';
