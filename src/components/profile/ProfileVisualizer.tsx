@@ -76,9 +76,9 @@ export const ProfileVisualizer: React.FC<ProfileVisualizerProps> = ({ profileDat
                 <div className="flex items-center gap-3 text-text-secondary">
                     <UserRound size={16} className="text-text-tertiary" />
                     <div>
-                        <h4 className="text-sm font-bold text-text-primary">Profile 智能未激活</h4>
+                        <h4 className="text-sm font-bold text-text-primary">档案线索未激活</h4>
                         <p className="mt-1 text-[11px] leading-relaxed">
-                            上传简历或填写专业身份后，会议中的 Profile 线索会在这里显示。
+                            这里会显示 AI 当前能引用的身份、经验、技能、目标资料。
                         </p>
                     </div>
                 </div>
@@ -92,7 +92,7 @@ export const ProfileVisualizer: React.FC<ProfileVisualizerProps> = ({ profileDat
                 <div className="min-w-0">
                     <div className="flex items-center gap-2">
                         <Sparkles size={15} className="text-accent-primary" />
-                        <h4 className="text-sm font-bold text-text-primary">Profile 智能</h4>
+                        <h4 className="text-sm font-bold text-text-primary">档案线索</h4>
                     </div>
                     <p className="mt-1 text-[12px] font-semibold text-text-primary">
                         {normalized.displayName}

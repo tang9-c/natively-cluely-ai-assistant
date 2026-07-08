@@ -37,7 +37,7 @@ test('ProfileVisualizer source is not a null placeholder', () => {
   const source = read('src/components/profile/ProfileVisualizer.tsx');
 
   assert.ok(!/=>\s*null\s*;/.test(source), 'ProfileVisualizer must not be a null placeholder');
-  assert.match(source, /Profile 智能/);
+  assert.match(source, /档案线索/);
   assert.match(source, /经验线索/);
   assert.match(source, /identity\.name|displayName/);
   assert.match(source, /另有/);

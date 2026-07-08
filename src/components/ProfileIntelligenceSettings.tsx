@@ -449,7 +449,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                             <h2 className="text-[22px] font-bold text-text-primary leading-none" style={{ letterSpacing: '-0.025em' }}>档案智能</h2>
                         </div>
                         <p className="text-[13px] text-text-secondary" style={{ letterSpacing: '-0.005em' }}>
-                            管理你的专业形象、职业履历和当前职位描述
+                            管理 AI 在所有会议中可使用的身份、背景、场景资料和回答偏好
                         </p>
                     </div>
                 </div>
@@ -469,15 +469,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                 <div className="max-w-3xl mx-auto p-5 pb-12">
                     <div className="space-y-6">
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, ...spring }} className="mb-4 pt-2">
-                            <h3 className="text-lg font-bold text-text-primary tracking-tight">专业身份</h3>
+                            <h3 className="text-lg font-bold text-text-primary tracking-tight">启用状态</h3>
                             <p className="text-[13px] text-text-secondary mt-1">
-                                统一管理跨销售、面试、讲座、团队会议和通用场景复用的档案资料。
+                                先确认档案是否可用，再补充基础身份、资料来源和回答偏好。
                             </p>
-                        </motion.div>
-
-                        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18, ...spring }} className="space-y-4">
-                            <MasterProfileSection />
-                            <ScenarioSection />
                         </motion.div>
 
                                     <BezelCard delay={0.2}>
@@ -494,10 +489,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         </div>
                                                         <div>
                                                             <h4 className="text-sm font-bold text-text-primary tracking-tight">
-                                                                {profileData?.identity?.name || '身份节点未激活'}
+                                                                {profileData?.identity?.name || '尚未建立档案'}
                                                             </h4>
                                                             <p className="text-xs text-text-secondary mt-0.5 tracking-wide">
-                                                                {profileData?.identity?.email || '上传简历开始解析'}
+                                                                {profileData?.identity?.email || '上传简历或填写基础身份后，AI 就能在会议中使用这些背景。'}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -521,7 +516,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
 
                                                         {/* High-fidelity Toggle */}
                                                         <div className="flex items-center gap-2 bg-bg-input px-3 py-1.5 rounded-full border border-border-subtle">
-                                                            <span className="text-xs font-medium text-text-secondary">角色引擎</span>
+                                                            <span className="text-xs font-medium text-text-secondary">在会议中使用档案智能</span>
                                                             <div
                                                                 onClick={async () => {
                                                                     if (!profileStatus.hasProfile) return;
@@ -530,7 +525,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                         await window.electronAPI?.profileSetMode?.(newState);
                                                                         setProfileStatus(prev => ({ ...prev, profileMode: newState }));
                                                                     } catch (e) {
-                                                                        console.error('切换角色引擎失败：', e);
+                                                                        console.error('切换档案智能失败：', e);
                                                                     }
                                                                 }}
                                                                 className={`w-9 h-5 rounded-full relative transition-colors ${!profileStatus.hasProfile ? 'opacity-40 cursor-not-allowed bg-bg-toggle-switch' : profileStatus.profileMode ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
@@ -592,6 +587,23 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                         </div>
                                     </BezelCard>
 
+                        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18, ...spring }} className="space-y-4">
+                            <div>
+                                <h3 className="text-lg font-bold text-text-primary tracking-tight">基础身份</h3>
+                                <p className="text-[13px] text-text-secondary mt-1">
+                                    AI 应该知道的长期背景，会在所有模式中作为档案上下文使用。
+                                </p>
+                            </div>
+                            <MasterProfileSection />
+                        </motion.div>
+
+                                    <div className="pt-2">
+                                        <h3 className="text-lg font-bold text-text-primary tracking-tight">资料来源</h3>
+                                        <p className="text-[13px] text-text-secondary mt-1">
+                                            上传简历、目标资料和场景档案，让 AI 有可引用的事实来源。
+                                        </p>
+                                    </div>
+
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <BezelCard delay={0.3}>
                                         <div className="transition-all h-full">
@@ -602,10 +614,10 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     </div>
                                                     <div className="min-w-0">
                                                         <h4 className="text-[15px] font-bold text-text-primary mb-1 tracking-tight">
-                                                            {profileStatus.hasProfile ? '覆盖源文件' : '初始化知识库'}
+                                                            {profileStatus.hasProfile ? '替换简历或档案资料' : '上传简历或档案资料'}
                                                         </h4>
                                                         <p className="text-xs text-text-secondary leading-relaxed pr-2">
-                                                            上传简历文件以初始化智能引擎。
+                                                            用于抽取经历、项目、技能和可复用背景。
                                                         </p>
                                                     </div>
                                                 </div>
@@ -690,7 +702,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             </div>
                                                         ) : (
                                                             <p className="text-xs text-text-secondary leading-relaxed pr-2">
-                                                                Upload a JD to enable persona tuning and company research.
+                                                                上传目标职位、目标客户或当前机会描述，用于调优相关回答；不是必填项。
                                                             </p>
                                                         )}
                                                     </div>
@@ -766,6 +778,15 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                     </BezelCard>
                                     </div>
 
+                                    <ScenarioSection />
+
+                                    <div className="pt-2">
+                                        <h3 className="text-lg font-bold text-text-primary tracking-tight">回答偏好</h3>
+                                        <p className="text-[13px] text-text-secondary mt-1">
+                                            补充 AI 每次回答都应该遵守的背景、口径和表达方式。
+                                        </p>
+                                    </div>
+
                                     <BezelCard delay={0.3}>
                                             <div className="p-5">
                                                 <div className="flex items-center gap-4 mb-4">
@@ -774,7 +795,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     </div>
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex items-center gap-2">
-                                                            <h4 className="text-sm font-bold text-text-primary">自定义上下文</h4>
+                                                            <h4 className="text-sm font-bold text-text-primary">补充背景</h4>
                                                             {customNotesSaved && (
                                                                 <span className="text-[9px] font-bold text-emerald-500 px-1.5 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20 uppercase tracking-wide flex items-center gap-1">
                                                                     <Check size={8} /> 已保存
@@ -782,7 +803,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             )}
                                                         </div>
                                                         <p className="text-[11px] text-text-secondary mt-0.5">
-                                                            添加 AI 需要了解的任何上下文 — 跨会话自动保存。
+                                                            添加 AI 需要长期记住的事实、偏好、边界和当前目标。
                                                         </p>
                                                     </div>
                                                 </div>
@@ -827,7 +848,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     </div>
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex items-center gap-2">
-                                                            <h4 className="text-sm font-bold text-text-primary">AI 角色</h4>
+                                                            <h4 className="text-sm font-bold text-text-primary">回答风格与角色</h4>
                                                             {personaSaved && (
                                                                 <span className="text-[9px] font-bold text-emerald-500 px-1.5 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20 uppercase tracking-wide flex items-center gap-1">
                                                                     <Check size={8} /> 已更新
@@ -872,7 +893,26 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                             </div>
                                         </BezelCard>
 
-                                    {profileData?.hasActiveJD && profileData?.activeJD?.company && (
+                                    <div className="pt-4">
+                                        <h3 className="text-lg font-bold text-text-primary tracking-tight">当前可用线索</h3>
+                                        <p className="text-[13px] text-text-secondary mt-1">
+                                            这里会显示 AI 当前能引用的身份、经验、技能、目标资料。
+                                        </p>
+                                        <div className="mt-4">
+                                            <ProfileVisualizer profileData={profileData} />
+                                        </div>
+                                    </div>
+
+                                    {profileData?.hasActiveJD && (
+                                        <details className="rounded-lg border border-border-subtle bg-bg-surface/40 p-4">
+                                            <summary className="cursor-pointer select-none text-sm font-bold text-text-primary">
+                                                求职增强
+                                                <span className="ml-2 text-[11px] font-normal text-text-secondary">
+                                                    公司情报和薪资谈判只影响求职/招聘相关场景
+                                                </span>
+                                            </summary>
+                                            <div className="mt-4 space-y-4">
+                                    {profileData?.activeJD?.company && (
                                         <BezelCard delay={0.5}>
                                             <div className="p-5">
                                                 <div className="flex items-center justify-between mb-4">
@@ -1157,11 +1197,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                             </div>
                                         </BezelCard>
                                     )}
-                                    <div className="pt-4">
-                                        <ProfileVisualizer profileData={profileData} />
-                                    </div>
 
-                                    {profileData?.hasActiveJD && (
                                         <BezelCard delay={0.6}>
 
                                                 <div className="p-5">
@@ -1356,6 +1392,8 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     )}
                                                 </div>
                                         </BezelCard>
+                                            </div>
+                                        </details>
                                     )}
 
                     </div>

@@ -65,9 +65,9 @@ export function MasterProfileSection() {
                         <User size={19} />
                     </div>
                     <div className="min-w-0">
-                        <h4 className="text-sm font-bold text-text-primary">主档案</h4>
+                        <h4 className="text-sm font-bold text-text-primary">基础身份</h4>
                         <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
-                            记录跨场景稳定复用的身份、背景和偏好，LLM 会把它作为档案上下文的一部分。
+                            记录 AI 应该知道的长期背景，会作为档案上下文在所有模式中复用。
                         </p>
                     </div>
                 </div>
@@ -92,7 +92,7 @@ export function MasterProfileSection() {
                 <input
                     value={profile.displayName || ''}
                     onChange={(event) => updateField('displayName', event.target.value)}
-                    placeholder="姓名、客户名、团队名或讲者名"
+                    placeholder="姓名、团队、客户名或讲者名"
                     className="rounded-lg border border-border-subtle bg-bg-input px-3 py-2 text-xs text-text-primary placeholder-text-tertiary outline-none transition-colors focus:border-accent-primary/50"
                 />
                 <input
@@ -107,14 +107,14 @@ export function MasterProfileSection() {
                 <textarea
                     value={profile.summary || ''}
                     onChange={(event) => updateField('summary', event.target.value)}
-                    placeholder="背景摘要、当前目标、重要约束"
+                    placeholder="背景摘要、当前目标、重要边界"
                     rows={4}
                     className="rounded-lg border border-border-subtle bg-bg-input px-3 py-2 text-xs leading-relaxed text-text-primary placeholder-text-tertiary outline-none transition-colors focus:border-accent-primary/50"
                 />
                 <textarea
                     value={profile.skills || ''}
                     onChange={(event) => updateField('skills', event.target.value)}
-                    placeholder="技能、卖点、主题关键词或团队能力"
+                    placeholder="技能、卖点、主题关键词、团队能力"
                     rows={4}
                     className="rounded-lg border border-border-subtle bg-bg-input px-3 py-2 text-xs leading-relaxed text-text-primary placeholder-text-tertiary outline-none transition-colors focus:border-accent-primary/50"
                 />
