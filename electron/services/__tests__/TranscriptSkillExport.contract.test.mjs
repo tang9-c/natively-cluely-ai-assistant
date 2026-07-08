@@ -40,12 +40,16 @@ test('transcript skill export service enforces one-shot markdown export boundari
   assert.match(source, /SkillsManager\.getInstance\(\)\.getSkill\(input\.skillId\)/);
   assert.match(source, /buildPromptBlock\(skill/);
   assert.match(source, /getDeniedDataScopes\(\['transcript'\]/);
+  assert.match(source, /QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS/);
+  assert.match(source, /getEffectiveInputBudget/);
+  assert.match(source, /maxOutputTokens:\s*QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS/);
   assert.match(source, /当前 AI 提供商不允许使用转录内容/);
   assert.match(source, /转录过长，当前版本暂不支持用技能处理完整内容/);
   assert.match(source, /app\.getPath\(['"]downloads['"]\)/);
   assert.match(source, /cueup-transcript-\$\{safeSkillId\}-/);
   assert.match(source, /\.md/);
   assert.doesNotMatch(source, /activateSkill\(/);
+  assert.doesNotMatch(source, /MAX_TRANSCRIPT_SKILL_INPUT_TOKENS\s*=\s*24_000/);
 });
 
 test('transcript skill export handler delegates to service and openPath is downloads-scoped', () => {

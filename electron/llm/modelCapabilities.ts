@@ -3,6 +3,12 @@
 // Cloud + large local models -> 'full' prompts. Small local models -> 'tiny' prompts.
 
 import type { TranscriptTurn } from './transcriptCleaner';
+import {
+  QCLOUD_CHAT_MODEL,
+  QCLOUD_DEFAULT_OUTPUT_TOKENS,
+  QCLOUD_MODEL_SPECS,
+  getQCloudModelSpec,
+} from './QCloudLlmConstants';
 
 export type ModelTier = 'cloud' | 'local-large' | 'local-small';
 export type PromptTier = 'full' | 'tiny';
@@ -10,6 +16,8 @@ export type PromptTier = 'full' | 'tiny';
 export interface ModelCapabilities {
   tier: ModelTier;
   maxContextTokens: number;
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
   promptBudgetTokens: number;
   outputBudgetTokens: number;
   supportsXmlTags: boolean;
@@ -46,6 +54,14 @@ function isCloudIdentifier(id: string): boolean {
   if (s.startsWith('gpt-') || s.startsWith('o1-') || s.startsWith('o3-') || s.startsWith('o4-') || s.startsWith('chatgpt-')) return true;
   if (s.startsWith('claude-')) return true;
   return false;
+}
+
+function getQCloudCapabilityId(id: string): string | null {
+  const s = id.toLowerCase();
+  if (s === 'natively') return QCLOUD_CHAT_MODEL;
+  if (s.startsWith('natively-')) return s.slice('natively-'.length);
+  if (QCLOUD_MODEL_SPECS[s]) return s;
+  return null;
 }
 
 // Large Groq-hosted models we trust like cloud.
@@ -104,6 +120,21 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
 
   if (isCloudIdentifier(id)) {
     const b = TIER_BUDGETS['cloud'];
+    const qcloudModel = getQCloudCapabilityId(id);
+    if (qcloudModel) {
+      const spec = getQCloudModelSpec(qcloudModel);
+      return {
+        tier: 'cloud',
+        maxContextTokens: spec.maxContextTokens,
+        maxInputTokens: spec.maxInputTokens,
+        maxOutputTokens: spec.maxOutputTokens,
+        promptBudgetTokens: 8_000,
+        outputBudgetTokens: QCLOUD_DEFAULT_OUTPUT_TOKENS,
+        supportsXmlTags: true,
+        supportsImages: true,
+        name: id || 'natively',
+      };
+    }
     const supportsImages = lower.startsWith('gemini-') || lower.startsWith('claude-')
       || lower.startsWith('gpt-4o') || lower.startsWith('gpt-4.1') || lower.startsWith('gpt-5')
       || lower === 'natively' || lower.startsWith('natively-');
@@ -166,6 +197,17 @@ export function selectPromptTier(modelId: string, isOllama: boolean): PromptTier
 export function estimateTokens(text: string): number {
   if (!text) return 0;
   return Math.ceil(text.length / 4);
+}
+
+export function getEffectiveInputBudget(
+  caps: ModelCapabilities,
+  requestedOutputTokens: number = caps.outputBudgetTokens,
+  overheadTokens: number = caps.promptBudgetTokens
+): number {
+  return Math.max(0, Math.min(
+    caps.maxInputTokens ?? Number.MAX_SAFE_INTEGER,
+    caps.maxContextTokens - requestedOutputTokens - overheadTokens
+  ));
 }
 
 // Drop oldest turns until the joined transcript fits the token budget. Most recent turns are preserved.

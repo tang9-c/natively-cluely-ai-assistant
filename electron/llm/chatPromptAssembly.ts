@@ -13,6 +13,7 @@ export interface ChatPromptAssemblyInput {
 export interface ChatPromptOptions {
   activeModePrompt?: string;
   activeSkill?: ActiveSkillForPrompt | null;
+  maxOutputTokens?: number;
 }
 
 export function buildChatSystemPrompt(input: ChatPromptAssemblyInput): string {

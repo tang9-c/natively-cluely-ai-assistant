@@ -25,7 +25,14 @@ import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { DOUBAO_PRO_MODEL, DOUBAO_PRO_PROVIDER_LABEL } from "./llm/DoubaoModelConstants"
 import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
 import { buildChatSystemPrompt, type ChatPromptOptions } from "./llm/chatPromptAssembly"
-import { QCLOUD_CHAT_COMPLETIONS_ENDPOINT, QCLOUD_CHAT_MODEL, QCLOUD_OPENAI_SDK_BASE_URL } from "./llm/QCloudLlmConstants"
+import {
+  QCLOUD_CHAT_COMPLETIONS_ENDPOINT,
+  QCLOUD_CHAT_MODEL,
+  QCLOUD_DEFAULT_OUTPUT_TOKENS,
+  QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS,
+  QCLOUD_OPENAI_SDK_BASE_URL,
+  getQCloudModelSpec,
+} from "./llm/QCloudLlmConstants"
 import type { TranscriptTurn } from "./llm/transcriptCleaner"
 import { deepVariableReplacer, getByPath, injectImageIntoMessages } from './utils/curlUtils';
 import curl2Json from "@bany/curl-to-json";
@@ -165,6 +172,16 @@ export class LLMHelper {
       return;
     }
     console.warn(`[ScopeFallback] ${scope} denied; Ollama unavailable, omitting from context`);
+  }
+
+  private getQCloudMaxOutputTokens(model: string = QCLOUD_CHAT_MODEL): number {
+    return getQCloudModelSpec(model).maxOutputTokens;
+  }
+
+  private clampQCloudMaxOutputTokens(requested?: number): number {
+    const max = this.getQCloudMaxOutputTokens(QCLOUD_CHAT_MODEL);
+    const value = requested ?? QCLOUD_DEFAULT_OUTPUT_TOKENS;
+    return Math.max(1, Math.min(value, max));
   }
 
   constructor(apiKey?: string, useOllama: boolean = false, ollamaModel?: string, ollamaUrl?: string, groqApiKey?: string, openaiApiKey?: string, claudeApiKey?: string, doubaoApiKey?: string) {
@@ -1674,7 +1691,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
         if (nativelyKey) {
           try {
-            return await this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudImagePaths);
+            return await this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudImagePaths, { maxOutputTokens: chatPromptOptions?.maxOutputTokens });
           } catch (err: any) {
             console.warn('[LLMHelper] QCLOUD API failed in chatWithGemini, falling back to Gemini:', err.message);
             // Fall through to smart dynamic fallback below
@@ -1748,7 +1765,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         if (routedProvider.status !== 'available') continue;
         switch (routedProvider.provider) {
           case 'natively':
-            providers.push({ name: routedProvider.name, execute: () => this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined) });
+            providers.push({ name: routedProvider.name, execute: () => this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined, { maxOutputTokens: chatPromptOptions?.maxOutputTokens }) });
             break;
           case 'groq':
             if (cloudIsMultimodal) {
@@ -2096,6 +2113,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     userMessage: string,
     systemPrompt?: string,
     imagePaths?: string[],
+    options: ProviderRequestOptions = {},
   ): Promise<string> {
     if (this.currentModelId !== 'natively') {
       const error = new Error(
@@ -2107,7 +2125,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const dataScopes: ProviderDataScope[] = imagePaths?.length
       ? ['reference_files', 'screenshots']
       : ['reference_files'];
-    return this.generateWithNatively(userMessage, systemPrompt, imagePaths, { dataScopes });
+    return this.generateWithNatively(userMessage, systemPrompt, imagePaths, { ...options, dataScopes });
   }
 
   private async generateWithNatively(
@@ -2129,7 +2147,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const endpointUrl = QCLOUD_CHAT_COMPLETIONS_ENDPOINT;
     const headers: any = { 'Content-Type': 'application/json', Authorization: `Bearer ${nativelyKey}` };
 
-    const body: any = { model: QCLOUD_CHAT_MODEL, messages: [{ role: 'user', content: userMessage }] };
+    const body: any = {
+      model: QCLOUD_CHAT_MODEL,
+      messages: [{ role: 'user', content: userMessage }],
+      max_tokens: this.clampQCloudMaxOutputTokens(_options.maxOutputTokens),
+    };
 
     // Send images as a structured array so the server can build proper Gemini inlineData parts.
     // Embedding base64 in the text content would be truncated at 4000 chars and treated as text.
@@ -3336,7 +3358,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
       if (nativelyKey) {
         try {
-          const response = await this.generateWithNatively(userContent, finalSystemPrompt, imagePaths);
+          const response = await this.generateWithNatively(userContent, finalSystemPrompt, imagePaths, { maxOutputTokens: chatPromptOptions?.maxOutputTokens });
           yield response;
           return;
         } catch (err: any) {
@@ -3386,7 +3408,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // 5. Last-resort: QCLOUD API (if user has a key but no cloud provider configured)
     if (this.hasNatively()) {
       try {
-        yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths);
+        yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, { maxOutputTokens: chatPromptOptions?.maxOutputTokens });
         return;
       } catch (e: any) {
         console.warn('[LLMHelper] QCLOUD API last-resort fallback failed:', e.message);
@@ -3405,7 +3427,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
    * Yields the full response in small word-batches so the UI typing effect still plays.
    * Throws on empty response so the fallback chain tries the next provider.
    */
-  private async * streamWithNatively(userContent: string, systemPrompt?: string, imagePaths?: string[]): AsyncGenerator<string, void, unknown> {
+  private async * streamWithNatively(userContent: string, systemPrompt?: string, imagePaths?: string[], options: ProviderRequestOptions = {}): AsyncGenerator<string, void, unknown> {
     // ── REAL SSE STREAM (replaces the fake word-by-word simulation) ──────────
     // Previous implementation called generateWithNatively() (blocking, waited for
     // the full response), then drip-fed words with setTimeout delays — pure theater.
@@ -3422,6 +3444,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       model: QCLOUD_CHAT_MODEL,
       messages: [{ role: 'user', content: userContent }],
       stream: true,
+      max_tokens: this.clampQCloudMaxOutputTokens(options.maxOutputTokens),
     };
     if (systemPrompt) body.system = systemPrompt;
     if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {
@@ -4614,7 +4637,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       try {
         console.log(`[LLMHelper] Attempting QCLOUD API for summary...`);
         const text = await this.withTimeout(
-          this.generateWithNatively(`Context:\n${context}`, systemPrompt),
+          this.generateWithNatively(`Context:\n${context}`, systemPrompt, undefined, { maxOutputTokens: QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS }),
           10000,
           'QCLOUD API Summary'
         );

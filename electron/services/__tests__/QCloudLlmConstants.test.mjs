@@ -18,6 +18,18 @@ test('Electron exposes centralized QCloud LLM constants', () => {
   assert.match(constants, /export const QCLOUD_CHAT_COMPLETIONS_ENDPOINT = `\$\{QCLOUD_LLM_BASE_URL\}\/v1\/chat\/completions`/);
 });
 
+test('QCLOUD model specs declare explicit token windows for supported models', () => {
+  const constants = read('electron/llm/QCloudLlmConstants.ts');
+
+  assert.match(constants, /export const QCLOUD_DEFAULT_OUTPUT_TOKENS = 8_192/);
+  assert.match(constants, /export const QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS = 16_000/);
+  for (const model of ['pro32k', 'lite32k', 'turbo']) {
+    assert.match(constants, new RegExp(`${model}[\\s\\S]*maxInputTokens:\\s*224_000`));
+    assert.match(constants, new RegExp(`${model}[\\s\\S]*maxOutputTokens:\\s*128_000`));
+    assert.match(constants, new RegExp(`${model}[\\s\\S]*maxContextTokens:\\s*256_000`));
+  }
+});
+
 test('QCLOUD exposes speech submit and query endpoints derived from LLM base URL', () => {
   const constants = read('electron/llm/QCloudLlmConstants.ts');
 
@@ -40,8 +52,21 @@ test('LLMHelper routes QCLOUD chat calls through centralized endpoint and model'
 
   assert.match(helper, /QCLOUD_CHAT_COMPLETIONS_ENDPOINT/);
   assert.match(helper, /model:\s*QCLOUD_CHAT_MODEL/);
+  assert.match(helper, /max_tokens:\s*this\.clampQCloudMaxOutputTokens\(_options\.maxOutputTokens\)/);
+  assert.match(helper, /max_tokens:\s*this\.clampQCloudMaxOutputTokens\(options\.maxOutputTokens\)/);
   assert.doesNotMatch(helper, /https:\/\/api\.natively\.software\/v1\/chat/);
   assert.doesNotMatch(helper, /fetch\(QCLOUD_CHAT_ENDPOINT/);
+});
+
+test('LLMHelper passes explicit QCLOUD output budgets for chat and PPTX call sites', () => {
+  const helper = read('electron/LLMHelper.ts');
+
+  assert.match(helper, /private getQCloudMaxOutputTokens/);
+  assert.match(helper, /private clampQCloudMaxOutputTokens/);
+  assert.match(helper, /generatePptxKnowledgeWithNatively\([\s\S]*options:\s*ProviderRequestOptions\s*=\s*\{\}/);
+  assert.match(helper, /this\.generateWithNatively\(userMessage,\s*systemPrompt,\s*imagePaths,\s*\{\s*\.\.\.options,\s*dataScopes\s*\}\)/);
+  assert.match(helper, /this\.generateWithNatively\(cloudUserContent,\s*openaiSystemPrompt,\s*cloudImagePaths,\s*\{\s*maxOutputTokens:\s*chatPromptOptions\?\.maxOutputTokens\s*\}\)/);
+  assert.match(helper, /this\.streamWithNatively\(userContent,\s*finalSystemPrompt,\s*imagePaths,\s*\{\s*maxOutputTokens:\s*chatPromptOptions\?\.maxOutputTokens\s*\}\)/);
 });
 
 test('LLMHelper advertises QCLOUD model metadata to provider routing', () => {

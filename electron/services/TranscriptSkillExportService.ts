@@ -1,6 +1,8 @@
 import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
+import { QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS } from '../llm/QCloudLlmConstants';
+import { getEffectiveInputBudget, getModelCapabilities } from '../llm/modelCapabilities';
 import { getDeniedDataScopes } from '../llm/ProviderRouter';
 import { SettingsManager } from './SettingsManager';
 import { SkillsManager } from './SkillsManager';
@@ -25,11 +27,12 @@ interface TranscriptSkillLlm {
     context?: string,
     skipSystemPrompt?: boolean,
     alternateGroqMessage?: string,
-    chatPromptOptions?: { activeSkill?: { id: string; name: string; promptBlock: string } | null },
+    chatPromptOptions?: {
+      activeSkill?: { id: string; name: string; promptBlock: string } | null;
+      maxOutputTokens?: number;
+    },
   ): Promise<string>;
 }
-
-const MAX_TRANSCRIPT_SKILL_INPUT_TOKENS = 24_000;
 
 export async function runTranscriptSkillExport(
   input: TranscriptSkillRunInput,
@@ -50,7 +53,11 @@ export async function runTranscriptSkillExport(
     return { success: false, error: '当前 AI 提供商不允许使用转录内容。请在 AI 提供商数据范围设置中允许“转写内容”。' };
   }
 
-  if (estimateTokenCount(transcriptMarkdown) > MAX_TRANSCRIPT_SKILL_INPUT_TOKENS) {
+  const inputBudgetTokens = getEffectiveInputBudget(
+    getModelCapabilities('natively', false),
+    QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS,
+  );
+  if (estimateTokenCount(transcriptMarkdown) > inputBudgetTokens) {
     return { success: false, error: '转录过长，当前版本暂不支持用技能处理完整内容。' };
   }
 
@@ -75,6 +82,7 @@ export async function runTranscriptSkillExport(
         name: skill.name,
         promptBlock,
       },
+      maxOutputTokens: QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS,
     },
   );
 
