@@ -49,7 +49,7 @@ const fixtures = [
     text: '下一步我们可以让法务看合同，先安排 pilot。',
     shouldEmit: true,
     actionType: 'buying_signal',
-    outputType: 'spoken_response',
+    outputType: 'action_item',
   },
   {
     id: 'sales-internal-price-sheet',

@@ -588,7 +588,7 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "buying_signal",
-      "outputType": "spoken_response"
+      "outputType": "action_item"
     },
     "tags": [
       "buying_signal",
@@ -612,7 +612,7 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "buying_signal",
-      "outputType": "spoken_response"
+      "outputType": "action_item"
     },
     "tags": [
       "buying_signal",
@@ -636,7 +636,7 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "buying_signal",
-      "outputType": "spoken_response"
+      "outputType": "action_item"
     },
     "tags": [
       "buying_signal",
@@ -660,7 +660,7 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "buying_signal",
-      "outputType": "spoken_response"
+      "outputType": "action_item"
     },
     "tags": [
       "buying_signal",
@@ -684,7 +684,7 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "buying_signal",
-      "outputType": "spoken_response"
+      "outputType": "action_item"
     },
     "tags": [
       "buying_signal",
