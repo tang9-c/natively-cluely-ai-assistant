@@ -683,6 +683,10 @@ function detectLectureIntentByPattern(text: string): IntentResult | null {
 }
 
 function detectFdeIntentByPattern(text: string): IntentResult | null {
+    if (/(PLM|QMS|ERP|MES|document system|Windchill).*(data direction|read[- ]?write|read[- ]?only|write[- ]?back|role|permission|environment|sandbox|production|integration)/i.test(text)
+        || /(ERP|MES|PLM|QMS|文档系统|Windchill).*(数据方向|读写边界|只读|写回|角色|权限|环境|沙盒|生产环境|测试环境|集成|打通)/i.test(text)) {
+        return { intent: 'fde_integration', confidence: 0.9, answerShape: getAnswerShapeForMode('fde', 'fde_integration') };
+    }
     if (/(PII|SOC2|compliance|audit logs?|permissions?|access control|data residency|encryption|security review|privacy)/i.test(text)
         || /(合规|审计日志|权限|访问控制|数据驻留|加密|安全评审|隐私|敏感数据|脱敏)/.test(text)) {
         return { intent: 'fde_security', confidence: 0.92, answerShape: getAnswerShapeForMode('fde', 'fde_security') };
@@ -699,8 +703,8 @@ function detectFdeIntentByPattern(text: string): IntentResult | null {
         || /(下一步|负责人|跟进|行动项|上线计划|推进计划|灰度|正式上线|周五前|下周)/.test(text)) {
         return { intent: 'fde_next_step', confidence: 0.9, answerShape: getAnswerShapeForMode('fde', 'fde_next_step') };
     }
-    if (/(API|endpoint|webhook|SSO|SAML|OAuth|SCIM|data source|database|warehouse|environment|sandbox|production|staging|integration)/i.test(text)
-        || /(API 接口|接口|端点|回调|单点登录|数据源|数据库|数仓|环境|沙盒|生产环境|测试环境|集成|打通)/.test(text)) {
+    if (/(API|endpoint|webhook|SSO|SAML|OAuth|SCIM|data source|database|warehouse|environment|sandbox|production|staging|integration|PLM|QMS|ERP|MES|document system|data direction|read[- ]?write boundary)/i.test(text)
+        || /(API 接口|接口|端点|回调|单点登录|数据源|数据库|数仓|环境|沙盒|生产环境|测试环境|集成|打通|PLM|QMS|ERP|MES|文档系统|数据方向|读写边界)/.test(text)) {
         return { intent: 'fde_integration', confidence: 0.88, answerShape: getAnswerShapeForMode('fde', 'fde_integration') };
     }
     if (/(success criteria|acceptance criteria|acceptance test|pilot|POC|measurement|metric|KPI|validation|sign off)/i.test(text)

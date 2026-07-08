@@ -419,7 +419,7 @@ const FDE_TRIGGERS: ActionTrigger[] = [
         priority: 0.92,
         label: 'Clarify security review',
         promptInstruction:
-            'You are in FDE mode. The customer raised security, privacy, or compliance concerns. Identify data involved, permission boundary, required reviewer, and the next validation step.',
+            'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. The customer raised security, privacy, compliance, auditability, permission, or quality-record concerns. Identify the PLM/QMS object or data involved, system-permission risk, required reviewer, human confirmation point, and validation artifact.',
         answerStyle: { maxWords: 120, format: 'checklist', tone: 'precise' },
     },
     {
@@ -431,7 +431,7 @@ const FDE_TRIGGERS: ActionTrigger[] = [
         priority: 0.9,
         label: 'Unblock deployment risk',
         promptInstruction:
-            'You are in FDE mode. A deployment risk or blocker was raised. State the blocker, impact, dependency, owner if present, and the smallest unblock step.',
+            'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. A delivery risk or blocker was raised. Split the risk into customer-process risk, system-permission risk, delivery risk, AI Agent error risk, or missing information. State impact, dependency, owner if present, date if present, and the smallest validation artifact to unblock.',
         answerStyle: { maxWords: 110, format: 'checklist', tone: 'direct' },
     },
     {
@@ -443,7 +443,7 @@ const FDE_TRIGGERS: ActionTrigger[] = [
         priority: 0.87,
         label: 'Assess AI Agent feasibility',
         promptInstruction:
-            'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Identify what can be suggested by AI, what requires human confirmation, and what must remain read-only. Do not imply automatic writes to PLM or QMS.',
+            'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Identify what can be suggested by AI, what requires human confirmation, what must remain read-only, and which human-reviewed approval-flow recommendations need owner/date/artifact validation. Do not imply automatic writes, approvals, or updates to PLM or QMS.',
         answerStyle: { maxWords: 120, format: 'checklist', tone: 'conservative' },
     },
     {
@@ -455,7 +455,7 @@ const FDE_TRIGGERS: ActionTrigger[] = [
         priority: 0.9,
         label: 'Lock next step',
         promptInstruction:
-            'You are in FDE mode. Convert the discussion into owner, deliverable, date, and validation artifact. Ask directly for any missing field.',
+            'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Convert the discussion into owner, deliverable, date, validation artifact, test data, and acceptance criteria. Ask directly for any missing owner/date/artifact field instead of inventing it.',
         answerStyle: { maxWords: 90, format: 'checklist', tone: 'direct' },
     },
     {
@@ -467,7 +467,7 @@ const FDE_TRIGGERS: ActionTrigger[] = [
         priority: 0.88,
         label: 'Clarify integration',
         promptInstruction:
-            'You are in FDE mode. Clarify the integration surface: source system, auth method, data direction, environment, owner, and validation step.',
+            'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Clarify source system, target system, auth/SSO method, role/permission model, data direction, read/write boundary, environment, owner, date, and validation artifact.',
         answerStyle: { maxWords: 120, format: 'checklist', tone: 'technical' },
     },
     {
@@ -479,7 +479,7 @@ const FDE_TRIGGERS: ActionTrigger[] = [
         priority: 0.86,
         label: 'Define success criteria',
         promptInstruction:
-            'You are in FDE mode. Convert the pilot or deployment discussion into measurable acceptance criteria and a validation artifact.',
+            'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Convert the validation discussion into acceptance criteria covering accuracy, permission boundary, human confirmation point, audit traceability, test data, owner, date, and validation artifact.',
         answerStyle: { maxWords: 100, format: 'bullets', tone: 'structured' },
     },
     {
@@ -491,7 +491,7 @@ const FDE_TRIGGERS: ActionTrigger[] = [
         priority: 0.84,
         label: 'Probe deployment context',
         promptInstruction:
-            'You are in FDE mode. Ask focused questions about workflow, stakeholders, constraints, and the deployment reality.',
+            'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Ask 3 manufacturing-process clarification questions about the workflow, system object such as BOM/ECO/ECN/CAPA/NCR/8D, stakeholder, permission boundary, and validation artifact.',
         answerStyle: { maxWords: 100, format: 'bullets', tone: 'curious' },
     },
 ];

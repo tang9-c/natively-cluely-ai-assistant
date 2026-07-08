@@ -85,6 +85,18 @@ export function explainDynamicActionForUser(input: Pick<DynamicAction, 'type' | 
     if (input.type === 'fde_agent_feasibility') {
         return { whyNow: 'AI Agent 的自动化边界已经出现，需要先明确人工确认、只读分析，以及不可自动写回的边界。', severity: 'warning' };
     }
+    if (input.type === 'fde_discovery_probe') {
+        return { whyNow: '客户正在描述制造业流程或系统对象，适合马上澄清 PLM/QMS 对象、角色、权限和验证产物。', severity: 'info' };
+    }
+    if (input.type === 'fde_integration_check') {
+        return { whyNow: '讨论已经进入 PLM/QMS/ERP/MES 集成与权限边界，需要确认数据方向、读写边界和验证产物。', severity: 'info' };
+    }
+    if (input.type === 'fde_risk_blocker') {
+        return { whyNow: '会议出现客户流程风险、系统权限风险、交付风险、AI Agent 误判风险或信息缺失，需要先分类再推进。', severity: 'warning' };
+    }
+    if (input.type === 'fde_next_step') {
+        return { whyNow: '下一步必须锁定 owner、date、artifact、测试数据和验收标准，缺字段时要直接追问。', severity: 'ok' };
+    }
     if (input.type === 'blocker_check') {
         return { whyNow: '当前讨论出现阻塞或依赖信号，适合立刻明确影响和解法。', severity: 'warning' };
     }
@@ -115,9 +127,11 @@ function resolveRiskState(input: { autoSurfacePolicy?: AutoSurfacePolicy; confid
 
 function buildUserAction(input: ContractInput, outputType: DynamicActionOutputType): string {
     if (/pricing|objection|pushback|budget/.test(input.type)) return '回应价格异议';
-    if (input.type === 'fde_integration_check') return '锁定集成验证步骤';
-    if (input.type === 'fde_security_review') return '确认安全评审要求';
+    if (input.type === 'fde_discovery_probe') return '澄清制造业流程和系统对象';
+    if (input.type === 'fde_integration_check') return '锁定集成、权限和读写边界';
+    if (input.type === 'fde_security_review') return '确认权限、审计和质量记录边界';
     if (input.type === 'fde_agent_feasibility') return '判断 AI Agent 可行性边界';
+    if (input.type === 'fde_next_step') return '锁定 owner/date/artifact 下一步';
     if (input.type === 'buying_signal') return '锁定下一步';
     if (/fde_|blocker|risk/.test(input.type)) return '澄清部署风险和下一步';
     if (outputType === 'action_item') return '确认负责人和截止时间';

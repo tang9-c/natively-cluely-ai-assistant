@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
+import fs from 'node:fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workflowPath = path.resolve(__dirname, '../../../dist-electron/electron/services/post-call/PostCallWorkflow.js');
@@ -11,6 +12,16 @@ const {
   buildFollowUpDraft,
   generateCoachingInsights,
 } = await import(pathToFileURL(workflowPath).href);
+
+test('fde post-call patterns are specialized for manufacturing PLM QMS delivery', () => {
+  const sourcePath = path.resolve(__dirname, '../../../electron/services/post-call/PostCallWorkflow.ts');
+  const source = fs.readFileSync(sourcePath, 'utf8');
+
+  assert.match(source, /FDE_INTEGRATION_PATTERN[\s\S]*PLM[\s\S]*QMS[\s\S]*ERP[\s\S]*MES/);
+  assert.match(source, /FDE_SECURITY_PATTERN[\s\S]*quality record|FDE_SECURITY_PATTERN[\s\S]*质量记录/);
+  assert.match(source, /FDE_NEXT_STEP_PATTERN[\s\S]*validation artifact|FDE_NEXT_STEP_PATTERN[\s\S]*验收标准/);
+  assert.doesNotMatch(source, /FDE_INTEGRATION_PATTERN[\s\S]*Salesforce|FDE_INTEGRATION_PATTERN[\s\S]*Slack/);
+});
 
 test('extractStructuredActionItems captures owner, deadline, and stable ids', () => {
   const items = extractStructuredActionItems([
@@ -180,7 +191,7 @@ test('fde post-call insights detect integration ownership, security, scope, and 
   const result = buildPostCallEnhancements({
     modeTemplateType: 'fde',
     transcript: [
-      { speaker: 'Customer', text: '我们担心 PII 出现在日志里，而且能不能也在第一阶段接 Salesforce 和 Slack？', timestamp: 1 },
+      { speaker: 'Customer', text: '我们担心质量记录和审计追踪，第一阶段能不能也把 PLM、QMS、ERP 和 MES 的只读集成跑通？', timestamp: 1 },
     ],
     summaryData: { sections: [] },
   });

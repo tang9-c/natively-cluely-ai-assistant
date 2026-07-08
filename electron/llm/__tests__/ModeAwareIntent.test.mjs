@@ -98,10 +98,13 @@ describe('Tier 1 regex coverage: FDE mode ≥80%', () => {
     { utterance: '谁会使用这个流程，业务场景是什么?', expected: 'fde_discovery' },
     { utterance: 'We need to connect the API and SSO before the pilot.', expected: 'fde_integration' },
     { utterance: '数据源和生产环境怎么打通?', expected: 'fde_integration' },
+    { utterance: 'ERP 和 MES 到 QMS 的数据方向、角色权限和读写边界还没确认。', expected: 'fde_integration' },
     { utterance: 'Security review is blocked on PII and audit logs.', expected: 'fde_security' },
     { utterance: '权限和敏感数据需要先过合规评审', expected: 'fde_security' },
     { utterance: 'The migration has a rollback risk and may delay launch.', expected: 'fde_risk' },
     { utterance: '上线风险是依赖客户数仓迁移完成', expected: 'fde_risk' },
+    { utterance: '这个 CAPA 和 NCR 的审计追踪会影响质量闭环。', expected: 'fde_risk' },
+    { utterance: '这个 AI Agent 只能只读分析，不能自动写回 PLM 或 QMS。', expected: 'fde_agent_feasibility' },
     { utterance: 'What are the acceptance criteria for the POC?', expected: 'fde_success' },
     { utterance: '试点成功标准和验收指标是什么?', expected: 'fde_success' },
     { utterance: 'Next step is to assign an owner and confirm rollout plan.', expected: 'fde_next_step' },
@@ -115,6 +118,18 @@ describe('Tier 1 regex coverage: FDE mode ≥80%', () => {
       `FDE mode hit rate ${(rate * 100).toFixed(1)}% < 80% (${misses.length}/${total} misses): ` +
       JSON.stringify(misses, null, 2),
     );
+  });
+});
+
+describe('FDE manufacturing exact intent routing', () => {
+  test('routes ERP/MES data direction and permission boundary to integration clarification', () => {
+    const result = detectIntentByPattern('ERP 和 MES 到 QMS 的数据方向、角色权限和读写边界还没确认。', 'fde');
+    assert.equal(result?.intent, 'fde_integration');
+  });
+
+  test('routes readonly and writeback AI Agent boundary to agent feasibility', () => {
+    const result = detectIntentByPattern('这个 AI Agent 只能只读分析，不能自动写回 PLM 或 QMS。', 'fde');
+    assert.equal(result?.intent, 'fde_agent_feasibility');
   });
 });
 

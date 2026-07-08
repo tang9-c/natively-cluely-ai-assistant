@@ -84,3 +84,36 @@ test('fde ai agent contract copy keeps human confirmation and no-auto-write boun
   assert.match(contract.whyNow, /不可自动写回|不可自动写入|不自动写回/);
   assert.doesNotMatch(contract.whyNow, /允许写回|write back allowed/i);
 });
+
+test('fde manufacturing contracts explain process, permission, risk, and next-step cards specifically', async () => {
+  const { buildDynamicActionProductContract } = await loadHelper();
+
+  const discovery = buildDynamicActionProductContract(baseInput({
+    type: 'fde_discovery_probe',
+    label: 'Probe deployment context',
+    modeTemplateType: 'fde',
+    answerStyle: { maxWords: 100, format: 'bullets', tone: 'curious' },
+  }));
+  const integration = buildDynamicActionProductContract(baseInput({
+    type: 'fde_integration_check',
+    label: 'Clarify integration',
+    modeTemplateType: 'fde',
+  }));
+  const risk = buildDynamicActionProductContract(baseInput({
+    type: 'fde_risk_blocker',
+    label: 'Unblock deployment risk',
+    modeTemplateType: 'fde',
+  }));
+  const nextStep = buildDynamicActionProductContract(baseInput({
+    type: 'fde_next_step',
+    label: 'Lock next step',
+    modeTemplateType: 'fde',
+  }));
+
+  assert.match(discovery.userAction, /制造业流程|系统对象|PLM|QMS/);
+  assert.match(integration.userAction, /集成|权限|读写边界/);
+  assert.match(risk.whyNow, /客户流程风险|系统权限风险|AI Agent 误判风险|信息缺失/);
+  assert.match(nextStep.userAction, /owner|负责人/);
+  assert.match(nextStep.userAction, /date|日期|时间/);
+  assert.match(nextStep.userAction, /artifact|验证产物/);
+});

@@ -21,7 +21,7 @@ const INTERVIEW_KEYWORDS: IntentKeywordConfig[] = [
 
 const FDE_KEYWORDS: IntentKeywordConfig[] = [
     { intent: 'fde_discovery', keywordsCsv: 'current workflow,current process,business process,user workflow,stakeholder,requirements,what are you trying to solve,what does success look like,现有流程,当前流程,业务流程,用户流程,需求是什么,想解决什么,谁会使用,谁负责,干系人,业务场景,客户现场' },
-    { intent: 'fde_integration', keywordsCsv: 'API,endpoint,webhook,SSO,SAML,OAuth,SCIM,data source,database,warehouse,environment,sandbox,production,staging,integration,API 接口,接口,端点,回调,单点登录,数据源,数据库,数仓,环境,沙盒,生产环境,测试环境,集成,打通' },
+    { intent: 'fde_integration', keywordsCsv: 'API,endpoint,webhook,SSO,SAML,OAuth,SCIM,data source,database,warehouse,environment,sandbox,production,staging,integration,PLM,QMS,ERP,MES,document system,data direction,read-write boundary,role,permission,API 接口,接口,端点,回调,单点登录,数据源,数据库,数仓,环境,沙盒,生产环境,测试环境,集成,打通,文档系统,数据方向,读写边界,角色,权限' },
     { intent: 'fde_security', keywordsCsv: 'PII,SOC2,compliance,audit log,permission,permissions,access control,data residency,encryption,security review,privacy,PII,合规,审计日志,权限,访问控制,数据驻留,加密,安全评审,隐私,敏感数据,脱敏' },
     { intent: 'fde_risk', keywordsCsv: 'blocker,blocked,dependency,risk,timeline,delay,migration,cutover,rollback,edge case,launch risk,阻塞,卡住,依赖,风险,延期,迁移,切换,回滚,边界情况,上线风险,不确定' },
     { intent: 'fde_agent_feasibility', keywordsCsv: 'AI Agent,agent,automation,human in the loop,human confirmation,approval flow,tool call,read-only,write-back,auto-write,write to PLM,write to QMS,智能体,自动化,人工确认,人审,审批流,工具调用,只读,写回,自动写入,写入 PLM,写入 QMS' },

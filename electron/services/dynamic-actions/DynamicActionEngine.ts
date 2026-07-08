@@ -32,6 +32,23 @@ const FAST_PATH_ACTION_TYPES = new Set([
     'action_item',
 ]);
 
+const FDE_PROMPT_INSTRUCTIONS: Record<string, string> = {
+    fde_discovery_probe:
+        'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Ask 3 manufacturing-process clarification questions about the workflow, system object such as BOM/ECO/ECN/CAPA/NCR/8D, stakeholder, permission boundary, and validation artifact.',
+    fde_integration_check:
+        'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Clarify source system, target system, auth/SSO method, role/permission model, data direction, read/write boundary, environment, owner, date, and validation artifact.',
+    fde_security_review:
+        'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Identify the PLM/QMS object or data involved, system-permission risk, required reviewer, human confirmation point, and validation artifact.',
+    fde_risk_blocker:
+        'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Split the risk into customer-process risk, system-permission risk, delivery risk, AI Agent error risk, or missing information. State impact, dependency, owner if present, date if present, and the smallest validation artifact to unblock.',
+    fde_agent_feasibility:
+        'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Identify what can be suggested by AI, what requires human confirmation, what must remain read-only, and which human-reviewed approval-flow recommendations need owner/date/artifact validation. Do not imply automatic writes, approvals, or updates to PLM or QMS.',
+    fde_success_criteria:
+        'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Convert the validation discussion into acceptance criteria covering accuracy, permission boundary, human confirmation point, audit traceability, test data, owner, date, and validation artifact.',
+    fde_next_step:
+        'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Convert the discussion into owner, deliverable, date, validation artifact, test data, and acceptance criteria. Ask directly for any missing owner/date/artifact field instead of inventing it.',
+};
+
 export class DynamicActionEngine {
     private store: DynamicActionStore;
     private detector: DynamicActionDetector;
@@ -540,9 +557,8 @@ export class DynamicActionEngine {
             patterns: [],
             priority: 0.8,
             label,
-            promptInstruction: type === 'fde_agent_feasibility'
-                ? 'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Identify what can be suggested by AI, what requires human confirmation, and what must remain read-only. Do not imply automatic writes to PLM or QMS.'
-                : `You are in ${modeTemplateType} mode. Respond in Chinese first and help the user handle the detected ${type} intent.`,
+            promptInstruction: FDE_PROMPT_INSTRUCTIONS[type]
+                ?? `You are in ${modeTemplateType} mode. Respond in Chinese first and help the user handle the detected ${type} intent.`,
             answerStyle: { maxWords: 120, format: 'bullets', tone: 'clear' },
         };
     }
