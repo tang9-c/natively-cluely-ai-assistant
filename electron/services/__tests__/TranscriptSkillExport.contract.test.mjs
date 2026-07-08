@@ -21,6 +21,20 @@ test('meeting transcript tab exposes a one-shot skill export menu without activa
   assert.match(source, /复制完整转录/);
 });
 
+test('transcript skill export success actions use styled icon buttons', () => {
+  const source = read('src/components/MeetingDetails.tsx');
+  const statusStart = source.indexOf('{skillExportStatus && (');
+  const statusEnd = source.indexOf('{/* Tab Content */}', statusStart);
+  const statusBlock = source.slice(statusStart, statusEnd);
+
+  assert.ok(statusStart >= 0 && statusEnd > statusStart, 'skill export status block should exist');
+  assert.match(statusBlock, /FileText\s+size=\{12\}/);
+  assert.match(statusBlock, /FolderOpen\s+size=\{12\}/);
+  assert.match(statusBlock, /inline-flex\s+items-center\s+gap-1\.5/);
+  assert.match(statusBlock, /rounded-md\s+border\s+border-border-subtle/);
+  assert.match(statusBlock, /hover:bg-bg-item-active/);
+});
+
 test('transcript skill export IPC and preload bridge are wired', () => {
   const ipc = read('electron/ipcHandlers.ts');
   const preload = read('electron/preload.ts');

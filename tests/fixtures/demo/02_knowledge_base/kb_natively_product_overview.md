@@ -1,13 +1,13 @@
-# Knowledge Base — Natively 产品手册
+# Knowledge Base — CueUp 产品手册
 
 > **用途**:跨场景演示使用,作为知识库材料,任何场景下都可以检索。
 > **关联场景**:全部 5 个场景均可引用(作为产品知识支撑)
 
 ---
 
-## 1. Natively 是什么
+## 1. CueUp 是什么
 
-**Natively** 是一款**实时 AI 会议辅助**桌面应用,运行在 macOS / Windows / Linux。
+**CueUp** 是一款**实时 AI 会议辅助**桌面应用,运行在 macOS / Windows / Linux。
 
 核心功能:
 1. **实时转录**:边开会边转录音频(支持中英双语)
@@ -65,7 +65,7 @@ Scenario 是**比模式更细粒度**的场景分类,每个 Scenario 对应一�
 
 ### 什么是 Intent
 
-Intent 是 Natively 对**当前对话意图**的实时分类。基于:
+Intent 是 CueUp 对**当前对话意图**的实时分类。基于:
 1. 关键词匹配(中英双语)
 2. 上下文语义
 3. 当前模式
@@ -135,7 +135,7 @@ Intent 是 Natively 对**当前对话意图**的实时分类。基于:
 
 ### Profile 是什么
 
-Profile 是 Natively 维护的**用户身份信息**,包括:
+Profile 是 CueUp 维护的**用户身份信息**,包括:
 - 基本信息(姓名 / 行业 / 经验)
 - 简历
 - 当前求职目标
@@ -179,7 +179,7 @@ UI 显示(实时)
 
 ## 8. 数据范围(Provider Data Scopes)
 
-Natively 允许精细控制**每个 Provider 能看到的数据**:
+CueUp 允许精细控制**每个 Provider 能看到的数据**:
 
 | Scope | 说明 |
 |---|---|

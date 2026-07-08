@@ -160,7 +160,7 @@ test('demo product overview answers the uploaded-material meeting modes query', 
   await waitFor(() => assert.equal(db.getKnowledgeMaterial(materialId).status, 'complete'));
 
   const searchResult = await service.searchWithDiagnostics(
-    '根据刚上传的资料，Natively 支持哪些专用会议模式？',
+    '根据刚上传的资料，CueUp 支持哪些专用会议模式？',
     { limit: 2 },
   );
   const combinedHits = searchResult.hits.map((hit) => `${hit.text}\n${hit.parentText}`).join('\n');

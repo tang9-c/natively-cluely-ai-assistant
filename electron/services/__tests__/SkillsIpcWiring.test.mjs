@@ -140,7 +140,7 @@ test('SkillsSettings renderer guards against a missing bridge instead of silent 
   // The fix replaces both with explicit guards.
   assert.match(view, /typeof window\.electronAPI\?\.skillsRefresh\s*!==\s*['"]function['"]/);
   assert.match(view, /typeof window\.electronAPI\?\.skillsOpenFolder\s*!==\s*['"]function['"]/);
-  assert.match(view, /Skills IPC bridge not detected/);
+  assert.match(view, /未检测到技能 IPC 桥接/);
 
   // After each guard, the call is unconditional (no optional chain on the method).
   assert.match(view, /await window\.electronAPI\.skillsRefresh\(\)/);
@@ -177,6 +177,29 @@ test('SkillsSettings uses explicit watcher bridge guards and live suggestion eve
   assert.match(view, /skillsWatcherSuggestThreshold/);
   assert.match(view, /acceptWatcherSuggestion/);
   assert.match(view, /dismissWatcherSuggestion/);
+});
+
+test('packaged builtin skills are included as electron-builder resources', () => {
+  const pkg = JSON.parse(read('package.json'));
+  const extraResources = pkg.build?.extraResources ?? [];
+  const expectedSkillIds = [
+    'customer-recap',
+    'humanize-text',
+    'interview-evaluation',
+    'meeting-accountability',
+  ];
+
+  assert.ok(
+    extraResources.some(entry => entry?.from === 'resources/skills' && entry?.to === 'skills'),
+    'package.json build.extraResources must copy resources/skills to Resources/skills',
+  );
+
+  for (const skillId of expectedSkillIds) {
+    const skillPath = path.join(root, 'resources/skills', skillId, 'SKILL.md');
+    assert.ok(fs.existsSync(skillPath), `${skillId} SKILL.md must live in packaged skill resources`);
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, new RegExp(`^---\\nname:\\s*${skillId === 'humanize-text' ? 'humanize-ai-text' : skillId}\\n`, 'm'));
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -258,13 +281,35 @@ test('generic LLM key setters notify renderers after save', () => {
 
 
 // ---------------------------------------------------------------------------
-// 3. Runtime behaviour — SkillsManager.listSkills() seeds and returns the
-//    built-in humanize-ai-text skill. Uses the built `dist-electron` bundle
-//    and a stubbed `electron` module so `app.getPath('userData')` and
-//    `app.isReady()` work without a real Electron host.
+// 3. Runtime behaviour — packaged resource skills are seeded and returned as
+//    built-in skills. Uses the built `dist-electron` bundle and a stubbed
+//    `electron` module so `app.getPath('userData')` and `app.isReady()` work
+//    without a real Electron host.
 // ---------------------------------------------------------------------------
-test('SkillsManager.listSkills() returns the builtin humanize-ai-text skill', () => {
+test('SkillsManager no longer carries the legacy hardcoded humanize skill payload', () => {
+  const source = read('electron/services/SkillsManager.ts');
+
+  assert.equal(source.includes('BUILTIN_HUMANIZE_TEXT'), false);
+  assert.equal(source.includes('LEGACY_BUILTIN_HUMANIZE_TEXTS'), false);
+  assert.equal(source.includes('BUILTIN_SKILLS'), false);
+  assert.equal(source.includes('shouldReplaceBuiltinSkillContent'), false);
+});
+
+test('SkillsManager.listSkills() returns packaged humanize-ai-text as builtin', () => {
   const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-skills-test-'));
+  const tmpResources = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-skill-resources-test-'));
+  const packagedSkillDir = path.join(tmpResources, 'skills', 'humanize-text');
+  fs.mkdirSync(packagedSkillDir, { recursive: true });
+  fs.copyFileSync(
+    path.join(root, 'resources/skills/humanize-text/SKILL.md'),
+    path.join(packagedSkillDir, 'SKILL.md'),
+  );
+
+  const originalResourcesPath = process.resourcesPath;
+  Object.defineProperty(process, 'resourcesPath', {
+    value: tmpResources,
+    configurable: true,
+  });
 
   // Stub `electron` module before SkillsManager is loaded. Inject directly
   // into Node's CJS cache so the bundled `require("electron")` resolves to
@@ -272,11 +317,13 @@ test('SkillsManager.listSkills() returns the builtin humanize-ai-text skill', ()
   // esbuild produced in the bundle.
   const stubExports = {
     app: {
+      isPackaged: true,
       isReady: () => true,
       getPath: (name) => {
         if (name === 'userData') return tmpUserData;
         return os.tmpdir();
       },
+      getAppPath: () => root,
     },
     shell: {
       openPath: async () => '', // empty string = success per Electron contract
@@ -304,35 +351,122 @@ test('SkillsManager.listSkills() returns the builtin humanize-ai-text skill', ()
   // Reset the static singleton so each test run starts fresh.
   if (SkillsManager.instance) SkillsManager.instance = undefined;
 
-  const manager = SkillsManager.getInstance();
-  const list = manager.listSkills();
+  try {
+    const manager = SkillsManager.getInstance();
+    const list = manager.listSkills();
 
-  assert.ok(Array.isArray(list), 'listSkills() must return an array');
-  // The directory id (BUILTIN_SKILLS[0].id = 'humanize-text') and the
-  // displayed skill id (slugify(frontmatter.name) = 'humanize-ai-text')
-  // are intentionally different — the disk slot is named for the legacy
-  // built-in but the parsed frontmatter rebrands it.
-  const humanize = list.find(s => s.id === 'humanize-ai-text');
-  assert.ok(humanize, `expected humanize-ai-text skill in: ${list.map(s => s.id).join(', ')}`);
-  assert.equal(humanize.source, 'builtin');
-  assert.equal(humanize.name, 'humanize-ai-text');
-  assert.ok(humanize.description.length > 20, 'description should be non-trivial');
+    assert.ok(Array.isArray(list), 'listSkills() must return an array');
+    const humanize = list.find(s => s.id === 'humanize-ai-text');
+    assert.ok(humanize, `expected humanize-ai-text skill in: ${list.map(s => s.id).join(', ')}`);
+    assert.equal(humanize.source, 'builtin');
+    assert.equal(humanize.name, 'humanize-ai-text');
+    assert.ok(humanize.description.length > 20, 'description should be non-trivial');
 
-  // Verify the seeded file lives under userData/skills/humanize-text/SKILL.md.
-  const skillFile = path.join(tmpUserData, 'skills', 'humanize-text', 'SKILL.md');
-  assert.ok(fs.existsSync(skillFile), 'SKILL.md must be seeded on disk');
-  const bytes = fs.statSync(skillFile).size;
-  assert.ok(bytes > 1000 && bytes < 100 * 1024,
-    `seeded SKILL.md (${bytes} bytes) must be under the 100KB cap so it is not skipped`);
+    const skillFile = path.join(tmpUserData, 'skills', 'humanize-text', 'SKILL.md');
+    assert.ok(fs.existsSync(skillFile), 'SKILL.md must be seeded on disk');
+    const bytes = fs.statSync(skillFile).size;
+    assert.ok(bytes > 1000 && bytes < 100 * 1024,
+      `seeded SKILL.md (${bytes} bytes) must be under the 100KB cap so it is not skipped`);
 
-  // openSkillsFolder() must always return an object with a `path` field — the
-  // renderer relies on `result?.path` to update the displayed folder string
-  // even on shell.openPath failure.
-  return manager.openSkillsFolder().then(result => {
-    assert.equal(typeof result, 'object');
-    assert.equal(typeof result.path, 'string');
-    assert.ok(result.path.length > 0, 'path must always be populated');
+    return manager.openSkillsFolder().then(result => {
+      assert.equal(typeof result, 'object');
+      assert.equal(typeof result.path, 'string');
+      assert.ok(result.path.length > 0, 'path must always be populated');
+    });
+  } finally {
+    Object.defineProperty(process, 'resourcesPath', {
+      value: originalResourcesPath,
+      configurable: true,
+    });
+  }
+});
+
+test('SkillsManager seeds packaged resource skills as builtin skills', () => {
+  const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-skills-test-'));
+  const tmpResources = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-skill-resources-test-'));
+  const packagedSkills = [
+    ['customer-recap', 'customer-recap', '从客户谈判录音转写中整理客户需求清单。'],
+    ['humanize-text', 'humanize-ai-text', '去除文本中的 AI 写作痕迹。'],
+    ['interview-evaluation', 'interview-evaluation', '从招聘面试录音转写中整理候选人的客观评估单。'],
+    ['meeting-accountability', 'meeting-accountability', '从周例会录音转写中整理责任地图。'],
+  ];
+
+  for (const [dirName, frontmatterName, description] of packagedSkills) {
+    const packagedSkillDir = path.join(tmpResources, 'skills', dirName);
+    fs.mkdirSync(packagedSkillDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(packagedSkillDir, 'SKILL.md'),
+      [
+        '---',
+        `name: ${frontmatterName}`,
+        `description: ${description}`,
+        '---',
+        '',
+        `# ${frontmatterName}`,
+        '',
+        '这是预制技能说明。',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+  }
+
+  const originalResourcesPath = process.resourcesPath;
+  Object.defineProperty(process, 'resourcesPath', {
+    value: tmpResources,
+    configurable: true,
   });
+
+  const stubExports = {
+    app: {
+      isPackaged: true,
+      isReady: () => true,
+      getPath: (name) => {
+        if (name === 'userData') return tmpUserData;
+        return os.tmpdir();
+      },
+      getAppPath: () => root,
+    },
+    shell: {
+      openPath: async () => '',
+    },
+  };
+
+  const cjsRequire = createRequire(import.meta.url);
+  const electronId = 'electron';
+  const stubModule = new Module(electronId);
+  stubModule.exports = stubExports;
+  stubModule.loaded = true;
+  require_cache_set(cjsRequire, electronId, stubModule);
+
+  const distPath = path.join(root, 'dist-electron/electron/services/SkillsManager.js');
+  assert.ok(fs.existsSync(distPath), 'dist-electron must be built (npm test runs build:electron first)');
+
+  delete cjsRequire.cache[distPath];
+  const { SkillsManager } = cjsRequire(distPath);
+  if (SkillsManager.instance) SkillsManager.instance = undefined;
+
+  try {
+    const manager = SkillsManager.getInstance();
+    const list = manager.listSkills();
+
+    for (const [_dirName, frontmatterName] of packagedSkills) {
+      const skill = list.find(s => s.id === frontmatterName);
+      assert.ok(skill, `expected ${frontmatterName} skill in: ${list.map(s => s.id).join(', ')}`);
+      assert.equal(skill.source, 'builtin');
+      assert.equal(skill.name, frontmatterName);
+    }
+
+    for (const [dirName] of packagedSkills) {
+      const seededPath = path.join(tmpUserData, 'skills', dirName, 'SKILL.md');
+      assert.ok(fs.existsSync(seededPath), `${dirName} packaged skill must be seeded into userData skills dir`);
+    }
+  } finally {
+    Object.defineProperty(process, 'resourcesPath', {
+      value: originalResourcesPath,
+      configurable: true,
+    });
+  }
 });
 
 // Helper — Node's CJS require.cache is read-write but the typing in ESM is

@@ -102,6 +102,10 @@
       {
         "from": "assets/cueup.icns",
         "to": "cueup.icns"
+      },
+      {
+        "from": "resources/skills",
+        "to": "skills"
       }
     ],
     "mac": {

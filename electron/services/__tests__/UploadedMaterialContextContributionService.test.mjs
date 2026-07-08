@@ -41,10 +41,10 @@ test('uploaded material chat contribution skips retrieval when reference files s
 test('uploaded material chat contribution reports truncation and source status', async () => {
   const { buildUploadedMaterialContextContribution } = await loadService();
   const calls = [];
-  const longText = 'Natively supports Sales and FDE modes. '.repeat(300);
+  const longText = 'CueUp supports Sales and FDE modes. '.repeat(300);
 
   const result = await buildUploadedMaterialContextContribution({
-    query: '根据刚上传的资料，Natively 支持哪些专用会议模式？',
+    query: '根据刚上传的资料，CueUp 支持哪些专用会议模式？',
     materialService: makeMaterialService({
       hits: [{
         sourceType: 'uploaded_material',

@@ -429,14 +429,16 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || '无
                                 <>
                                     <button
                                         onClick={() => openExportPath(skillExportStatus.filePath!)}
-                                        className="font-medium text-accent-primary hover:underline"
+                                        className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-bg-secondary px-2 py-1 font-medium text-text-secondary transition-colors hover:bg-bg-item-active hover:text-text-primary"
                                     >
+                                        <FileText size={12} />
                                         打开文件
                                     </button>
                                     <button
                                         onClick={() => openExportPath(parentPathOf(skillExportStatus.filePath!))}
-                                        className="font-medium text-accent-primary hover:underline"
+                                        className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-bg-secondary px-2 py-1 font-medium text-text-secondary transition-colors hover:bg-bg-item-active hover:text-text-primary"
                                     >
+                                        <FolderOpen size={12} />
                                         打开文件夹
                                     </button>
                                 </>
