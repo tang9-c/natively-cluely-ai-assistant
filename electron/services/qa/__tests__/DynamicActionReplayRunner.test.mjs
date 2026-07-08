@@ -12,17 +12,26 @@ async function load() {
   return import(moduleUrl);
 }
 
-test('replay runner marks missing audio as expected skipped', async () => {
+test('replay manifest has at least 6 generated audio assets and runner skips execution phase', async () => {
   const { runDynamicActionReplay } = await load();
+  const manifestPath = path.join(process.cwd(), 'tests/fixtures/dynamic-actions/replay/replay-manifest.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  assert.ok(manifest.length >= 6);
+  for (const entry of manifest) {
+    assert.equal(entry.expectedMissingAudio, false);
+    assert.ok(fs.existsSync(path.join(process.cwd(), entry.audioPath)), `${entry.audioPath} should exist`);
+  }
+
   const outputDir = path.join(process.cwd(), 'reports/dynamic-actions-replay-test');
   fs.rmSync(outputDir, { recursive: true, force: true });
   const report = runDynamicActionReplay({
-    manifestPath: path.join(process.cwd(), 'tests/fixtures/dynamic-actions/replay/replay-manifest.json'),
+    manifestPath,
     outputDir,
   });
-  assert.ok(report.totalEntries >= 1);
+  assert.ok(report.totalEntries >= 6);
   assert.equal(report.failedEntries, 0);
   assert.equal(report.skippedEntries, report.totalEntries);
+  assert.equal(report.entries[0].reason, 'audio_replay_not_enabled_in_this_phase');
   assert.ok(fs.existsSync(path.join(outputDir, 'replay-report.json')));
 });
 

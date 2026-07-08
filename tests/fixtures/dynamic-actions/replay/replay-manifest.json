@@ -4,26 +4,65 @@
     "modeTemplateType": "sales",
     "sourceFixture": "tests/fixtures/dynamic-actions/product/sales.json#sales-pricing-objection-zh-001",
     "audioPath": "tests/fixtures/dynamic-actions/replay/audio/sales-pricing-objection-zh-001.wav",
-    "expectedMissingAudio": true,
+    "expectedMissingAudio": false,
     "language": "zh",
-    "speakerCount": 2
+    "speakerCount": 3,
+    "syntheticAudio": true,
+    "coverage": ["pricing_objection", "old_topic_pollution", "internal_context"]
   },
   {
-    "id": "fde-replay-risk-validation-en-001",
+    "id": "sales-replay-case-proof-mixed-001",
+    "modeTemplateType": "sales",
+    "sourceFixture": "tests/fixtures/dynamic-actions/product/sales.json#sales-case-proof-mixed-003",
+    "audioPath": "tests/fixtures/dynamic-actions/replay/audio/sales-case-proof-mixed-001.wav",
+    "expectedMissingAudio": false,
+    "language": "mixed",
+    "speakerCount": 3,
+    "syntheticAudio": true,
+    "coverage": ["case_study_request", "mixed_language", "old_topic_pollution"]
+  },
+  {
+    "id": "sales-replay-internal-price-identity-001",
+    "modeTemplateType": "sales",
+    "sourceFixture": "tests/fixtures/dynamic-actions/product/sales.json#sales-negative-mixed-011",
+    "audioPath": "tests/fixtures/dynamic-actions/replay/audio/sales-internal-price-identity-001.wav",
+    "expectedMissingAudio": false,
+    "language": "mixed",
+    "speakerCount": 3,
+    "syntheticAudio": true,
+    "coverage": ["identity_mismatch", "pricing_false_positive_guard", "technical_requirements"]
+  },
+  {
+    "id": "fde-replay-plm-qms-risk-mixed-001",
     "modeTemplateType": "fde",
-    "sourceFixture": "tests/fixtures/dynamic-actions/product/fde.json#fde-risk-en-004",
-    "audioPath": "tests/fixtures/dynamic-actions/replay/audio/fde-risk-validation-en-001.wav",
-    "expectedMissingAudio": true,
-    "language": "en",
-    "speakerCount": 2
+    "sourceFixture": "tests/fixtures/dynamic-actions/product/fde.json#fde-risk-mixed-003",
+    "audioPath": "tests/fixtures/dynamic-actions/replay/audio/fde-plm-qms-risk-mixed-001.wav",
+    "expectedMissingAudio": false,
+    "language": "mixed",
+    "speakerCount": 3,
+    "syntheticAudio": true,
+    "coverage": ["plm_qms", "capa_traceability", "audit_log", "readonly_boundary"]
   },
   {
-    "id": "team-replay-action-item-mixed-001",
+    "id": "fde-replay-asr-eco-capa-001",
+    "modeTemplateType": "fde",
+    "sourceFixture": "tests/fixtures/dynamic-actions/product/fde.json#fde-object-mixed-003",
+    "audioPath": "tests/fixtures/dynamic-actions/replay/audio/fde-asr-eco-capa-001.wav",
+    "expectedMissingAudio": false,
+    "language": "mixed",
+    "speakerCount": 3,
+    "syntheticAudio": true,
+    "coverage": ["asr_confusion", "eco_ecn_8d", "missing_acceptance_criteria"]
+  },
+  {
+    "id": "team-replay-action-item-multi-speaker-001",
     "modeTemplateType": "team-meet",
     "sourceFixture": "tests/fixtures/dynamic-actions/product/team-meet.json#team-action-item-mixed-003",
-    "audioPath": "tests/fixtures/dynamic-actions/replay/audio/team-action-item-mixed-001.wav",
-    "expectedMissingAudio": true,
+    "audioPath": "tests/fixtures/dynamic-actions/replay/audio/team-action-item-multi-speaker-001.wav",
+    "expectedMissingAudio": false,
     "language": "mixed",
-    "speakerCount": 3
+    "speakerCount": 3,
+    "syntheticAudio": true,
+    "coverage": ["multi_speaker", "action_item", "blocker", "owner_date_artifact_gap"]
   }
 ]
