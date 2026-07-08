@@ -1,0 +1,29 @@
+[
+  {
+    "id": "sales-replay-pricing-objection-zh-001",
+    "modeTemplateType": "sales",
+    "sourceFixture": "tests/fixtures/dynamic-actions/product/sales.json#sales-pricing-objection-zh-001",
+    "audioPath": "tests/fixtures/dynamic-actions/replay/audio/sales-pricing-objection-zh-001.wav",
+    "expectedMissingAudio": true,
+    "language": "zh",
+    "speakerCount": 2
+  },
+  {
+    "id": "fde-replay-risk-validation-en-001",
+    "modeTemplateType": "fde",
+    "sourceFixture": "tests/fixtures/dynamic-actions/product/fde.json#fde-risk-en-004",
+    "audioPath": "tests/fixtures/dynamic-actions/replay/audio/fde-risk-validation-en-001.wav",
+    "expectedMissingAudio": true,
+    "language": "en",
+    "speakerCount": 2
+  },
+  {
+    "id": "team-replay-action-item-mixed-001",
+    "modeTemplateType": "team-meet",
+    "sourceFixture": "tests/fixtures/dynamic-actions/product/team-meet.json#team-action-item-mixed-003",
+    "audioPath": "tests/fixtures/dynamic-actions/replay/audio/team-action-item-mixed-001.wav",
+    "expectedMissingAudio": true,
+    "language": "mixed",
+    "speakerCount": 3
+  }
+]
