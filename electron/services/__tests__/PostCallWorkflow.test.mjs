@@ -160,6 +160,67 @@ test('buildPostCallEnhancements carries accepted team artifacts even when genera
   assert.ok(result.coachingInsights.some((insight) => insight.type === 'accepted_dynamic_action'));
 });
 
+test('sales post-call carries accepted quote and proof artifacts into follow-up', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'sales',
+    transcript: [{ speaker: 'Customer', text: '请会后发报价和类似案例。', timestamp: 10 }],
+    dynamicActionArtifacts: [
+      {
+        actionId: 'a_quote',
+        modeTemplateType: 'sales',
+        actionType: 'pricing_request',
+        outputType: 'email_draft',
+        structuredSummary: 'Hi [CUSTOMER_NAME],\n\nFollowing up with the requested quote...',
+        missingFields: [],
+        groundedSources: [{ type: 'transcript', label: 'accepted quote draft', status: 'used' }],
+        acceptedAt: 1000,
+        generationStatus: 'completed',
+      },
+      {
+        actionId: 'a_case',
+        modeTemplateType: 'sales',
+        actionType: 'case_study_request',
+        outputType: 'spoken_response',
+        structuredSummary: 'The provided case study mentions Halcyon Industries.',
+        missingFields: [],
+        groundedSources: [{ type: 'material', label: 'case-study.md', status: 'used' }],
+        acceptedAt: 1001,
+        generationStatus: 'completed',
+      },
+    ],
+  });
+
+  const text = JSON.stringify(result);
+  assert.match(text, /quote|报价|pricing_request/i);
+  assert.match(text, /case|案例|case_study_request/i);
+  assert.match(text, /Halcyon Industries/);
+});
+
+test('sales post-call flags buying signal when owner date or artifact is missing', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'sales',
+    transcript: [{ speaker: 'Customer', text: '下一步我们让法务看看合同。', timestamp: 20 }],
+    dynamicActionArtifacts: [
+      {
+        actionId: 'a_buy',
+        modeTemplateType: 'sales',
+        actionType: 'buying_signal',
+        outputType: 'action_item',
+        structuredSummary: 'Great, I can send the contract summary after the call.',
+        missingFields: ['owner', 'date', 'artifact'],
+        groundedSources: [{ type: 'transcript', label: 'accepted next step', status: 'used' }],
+        acceptedAt: 1002,
+        generationStatus: 'completed',
+      },
+    ],
+  });
+
+  assert.ok(result.coachingInsights.some((insight) =>
+    insight.type === 'sales_next_step_missing_fields'
+    && /owner|date|artifact|负责人|日期|产物/i.test(insight.detail)
+  ));
+});
+
 test('buildPostCallEnhancements handles Chinese recruiting logistics and follow-up', () => {
   const result = buildPostCallEnhancements({
     modeTemplateType: 'recruiting',

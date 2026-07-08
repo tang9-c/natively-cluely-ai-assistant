@@ -50,8 +50,15 @@ const ACTION_PATTERNS = [
 const OWNER_PATTERN = /\b(I|we|you|he|she|they|[A-Z][a-z]+)\s+(?:will|should|need to|needs to|must|can|could)\b/;
 const DEADLINE_PATTERN = /\b(?:by|before|on|after)\s+([^.!?]+)$/i;
 const ZH_DEADLINE_PATTERN = /(今天|明天|后天|本周|下周|周[一二三四五六日天]|星期[一二三四五六日天]|月底|季度末)前?/u;
-const SALES_OBJECTION_PATTERN = /\b(price|pricing|cost|expensive|competitor|budget|too much|not sure)\b|(?:价格|报价|预算|成本|费用|太贵|竞品|竞争对手|不确定)/i;
+const SALES_OBJECTION_PATTERN = /\b(price|pricing|cost|expensive|competitor|budget|too much|not sure)\b|(?:价格太高|报价太高|预算|成本|费用|太贵|竞品|竞争对手|不确定)/i;
 const SALES_NEXT_STEP_PATTERN = /\b(next step|follow up|send|schedule|pilot|trial|contract|proposal)\b|(?:下一步|跟进|发送|发|安排|试点|试用|合同|报价单|方案|案例)/i;
+const SALES_ACTION_LABELS: Record<string, string> = {
+  pricing_objection: 'Sales pricing objection response',
+  pricing_request: 'Sales quote/proposal follow-up',
+  case_study_request: 'Sales proof/case-study follow-up',
+  technical_requirements: 'Sales technical requirements checklist',
+  buying_signal: 'Sales next step',
+};
 const RECRUITING_LOGISTICS_PATTERN = /\b(compensation|salary|timeline|notice period|availability|start date)\b|(?:薪资|签证|入职时间|搬迁|远程|混合办公|offer|JD|岗位)/i;
 const TEAM_OWNERSHIP_PATTERN = /\b(owner|by|deadline|due|next step|action item)\b|(?:负责人|我来负责|我负责|我来做|行动项|截止|周[一二三四五六日天]前|星期[一二三四五六日天]前)/i;
 const TEAM_DECISION_PATTERN = /\b(decided|approved|confirmed|final decision)\b|(?:决定|就选|我们定|最终决定|批准|确认|通过)/i;
@@ -186,11 +193,32 @@ export function generateCoachingInsights(
   if (modeTemplateType === 'sales') {
     const hasObjection = SALES_OBJECTION_PATTERN.test(text);
     const hasNextStep = SALES_NEXT_STEP_PATTERN.test(text);
+    const acceptedSalesArtifacts = (dynamicActionArtifacts ?? []).filter((artifact) =>
+      artifact.modeTemplateType === 'sales' &&
+      isSalesDynamicActionType(artifact.actionType) &&
+      isAcceptedActionCarryoverStatus(artifact.generationStatus)
+    );
+
     if (hasObjection && !sectionHasContent(summaryData, 'Objections')) {
-      add('missed_objection', 'Objection may need a clearer note', 'The conversation included objection language, but the objection section is empty.', 'opportunity', firstMatch(text, /[^。！？.!?]*(?:price|pricing|cost|expensive|competitor|budget|too much|not sure|价格|报价|预算|成本|费用|太贵|竞品|竞争对手|不确定)[^。！？.!?]*/i));
+      add('missed_objection', 'Objection may need a clearer note', 'The conversation included objection language, but the objection section is empty.', 'opportunity', firstMatch(text, /[^。！？.!?]*(?:price|pricing|cost|expensive|competitor|budget|too much|not sure|价格太高|报价太高|预算|成本|费用|太贵|竞品|竞争对手|不确定)[^。！？.!?]*/i));
     }
     if (!hasNextStep) {
       add('missing_next_step', 'Next step was not explicit', 'Consider ending sales calls with a concrete owner and follow-up date.', 'opportunity');
+    }
+    if (acceptedSalesArtifacts.some((artifact) => artifact.actionType === 'pricing_request')) {
+      add('sales_quote_followup', 'Quote request accepted during call', 'A quote or proposal follow-up was generated during the call. Confirm scope, recipient, and approved pricing source before sending.', 'info');
+    }
+    if (acceptedSalesArtifacts.some((artifact) => artifact.actionType === 'case_study_request')) {
+      add('sales_proof_followup', 'Proof request accepted during call', 'A case study or ROI proof response was generated. Verify it is grounded in uploaded or trusted materials before sending.', 'info');
+    }
+    if (acceptedSalesArtifacts.some((artifact) => artifact.actionType === 'technical_requirements')) {
+      add('sales_technical_followup', 'Technical requirements captured', 'Technical requirements were discussed. Confirm API, SSO, security, deployment environment, owner, and validation step.', 'info');
+    }
+    if (acceptedSalesArtifacts.some((artifact) =>
+      artifact.actionType === 'buying_signal' &&
+      hasSalesNextStepMissingFields(artifact)
+    )) {
+      add('sales_next_step_missing_fields', 'Next step is missing owner, date, or artifact', 'Buying signal was accepted, but owner/date/artifact is not fully explicit. Confirm the missing fields before follow-up.', 'opportunity');
     }
   } else if (modeTemplateType === 'recruiting') {
     if (!RECRUITING_LOGISTICS_PATTERN.test(text)) {
@@ -254,9 +282,14 @@ function mergeAcceptedActionArtifacts(
   const seen = new Set(existing.map((item) => normalizeActionComparisonKey(item.text)));
 
   for (const artifact of artifacts) {
-    if (artifact.modeTemplateType !== 'team-meet') continue;
-    if (!['action_item', 'owner_deadline_check'].includes(artifact.actionType)) continue;
-    if (!isAcceptedTeamActionCarryoverStatus(artifact.generationStatus)) continue;
+    if (artifact.modeTemplateType === 'sales') {
+      if (!isSalesDynamicActionType(artifact.actionType)) continue;
+      if (!isAcceptedActionCarryoverStatus(artifact.generationStatus)) continue;
+    } else {
+      if (artifact.modeTemplateType !== 'team-meet') continue;
+      if (!['action_item', 'owner_deadline_check'].includes(artifact.actionType)) continue;
+      if (!isAcceptedActionCarryoverStatus(artifact.generationStatus)) continue;
+    }
 
     const parsed = parseArtifactActionSummary(artifact.structuredSummary);
     if (!parsed.text) continue;
@@ -290,13 +323,26 @@ function hasCompletedAcceptedTeamActionArtifact(artifacts?: ActionArtifact[]): b
   return Boolean(artifacts?.some((artifact) =>
     artifact.modeTemplateType === 'team-meet' &&
     ['action_item', 'owner_deadline_check'].includes(artifact.actionType) &&
-    isAcceptedTeamActionCarryoverStatus(artifact.generationStatus) &&
+    isAcceptedActionCarryoverStatus(artifact.generationStatus) &&
     Boolean(artifact.structuredSummary.trim()),
   ));
 }
 
-function isAcceptedTeamActionCarryoverStatus(status: ActionArtifact['generationStatus']): boolean {
+function isAcceptedActionCarryoverStatus(status: ActionArtifact['generationStatus']): boolean {
   return status === 'completed' || status === 'generated_failed' || status === 'not_generated';
+}
+
+function isSalesDynamicActionType(type: string): boolean {
+  return Object.prototype.hasOwnProperty.call(SALES_ACTION_LABELS, type);
+}
+
+function hasSalesNextStepMissingFields(artifact: ActionArtifact): boolean {
+  if (artifact.missingFields.some((field) => /owner|date|artifact/i.test(field))) return true;
+  const text = artifact.structuredSummary ?? '';
+  const hasOwner = /\b(owner|who)\b|负责人/i.test(text);
+  const hasDate = /\b(date|when|by|before|on)\b|日期|时间|截止|周[一二三四五六日天]/i.test(text);
+  const hasArtifact = /\b(artifact|proposal|quote|contract|deck|case study|checklist)\b|产物|材料|报价|合同|案例|清单/i.test(text);
+  return !hasOwner || !hasDate || !hasArtifact;
 }
 
 function parseArtifactActionSummary(summary: string): { text: string; owner?: string; deadline?: string } {
