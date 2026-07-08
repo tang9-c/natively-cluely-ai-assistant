@@ -120,6 +120,27 @@ test('ModeContextRetriever lexical fallback retrieves Chinese sales case-study s
   assert.match(result.formattedContext, /降低成本 20%/);
 });
 
+test('ModeContextRetriever retrieves sales proof material for case-study question', async () => {
+  const { ModeContextRetriever } = await loadRetriever();
+  const retriever = new ModeContextRetriever();
+  const result = retriever.retrieve(mode, [
+    {
+      id: 'file_case',
+      modeId: mode.id,
+      fileName: 'case-study.md',
+      content: '客户案例：Halcyon Industries 在上线 30 天后将销售交接时间降低 20%。',
+      createdAt: 'now',
+    },
+  ], {
+    query: '客户问有没有类似客户案例和 ROI 证明',
+    tokenBudget: 500,
+  });
+
+  assert.equal(result.usedFallback, false);
+  assert.match(result.formattedContext, /Halcyon Industries/);
+  assert.match(result.formattedContext, /降低 20%/);
+});
+
 test('ModeContextRetriever lexical fallback retrieves Chinese reference snippets across non-sales modes', async () => {
   const { ModeContextRetriever } = await loadRetriever();
   const retriever = new ModeContextRetriever();
