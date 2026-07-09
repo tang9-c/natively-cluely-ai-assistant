@@ -259,9 +259,24 @@ const getSttSummary = (
   userProvider: string,
   interviewerProvider: string,
   notConfigured: boolean,
+  hasUserTranscript: boolean,
+  hasInterviewerTranscript: boolean,
 ): { label: string; tone: 'ok' | 'warn' | 'error'; detail: string } => {
-  const detail = `${formatProviderLabel(userProvider)} mic · ${formatProviderLabel(interviewerProvider)} system`;
-  if (notConfigured || !userProvider) {
+  const micLabel = userProvider ? formatProviderLabel(userProvider) : hasUserTranscript ? 'active' : 'not set';
+  const systemLabel = interviewerProvider
+    ? formatProviderLabel(interviewerProvider)
+    : hasInterviewerTranscript
+      ? 'active'
+      : 'not set';
+  const detail = `${micLabel} mic · ${systemLabel} system`;
+  if (notConfigured && !hasUserTranscript) {
+    return {
+      label: '语音转写未配置',
+      tone: 'error',
+      detail: '请打开音频设置选择服务商',
+    };
+  }
+  if (!userProvider && !hasUserTranscript) {
     return {
       label: '语音转写未配置',
       tone: 'error',
@@ -282,7 +297,7 @@ const getSttSummary = (
       detail,
     };
   }
-  if (!interviewerProvider) {
+  if (!interviewerProvider && !hasInterviewerTranscript) {
     return {
       label: '仅麦克风转写',
       tone: 'warn',
@@ -457,11 +472,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   );
   const [sttUserError, setSttUserError] = useState<string>('');
   const [sttUserProvider, setSttUserProvider] = useState<string>('');
+  const [hasUserTranscript, setHasUserTranscript] = useState(false);
   const [sttInterviewerStatus, setSttInterviewerStatus] = useState<
     'connected' | 'reconnecting' | 'failed'
   >('connected');
   const [sttInterviewerError, setSttInterviewerError] = useState<string>('');
   const [sttInterviewerProvider, setSttInterviewerProvider] = useState<string>('');
+  const [hasInterviewerTranscript, setHasInterviewerTranscript] = useState(false);
   const [meetingStartStatus, setMeetingStartStatus] = useState<{
     phase: 'starting' | 'ready' | 'failed';
     message?: string;
@@ -1482,6 +1499,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setVoiceInput('');
       setIsProcessing(false);
       setMeetingStartStatus(null);
+      setHasUserTranscript(false);
+      setHasInterviewerTranscript(false);
       // Optionally reset connection status if needed, but connection persists
 
       // Track new conversation/session if applicable?
@@ -1731,6 +1750,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
         if (transcript.speaker !== 'interviewer' && transcript.speaker !== 'user') {
           return; // Safety check for any other speaker types
+        }
+
+        setSttNotConfigured(false);
+        if (transcript.speaker === 'user') {
+          setHasUserTranscript(true);
+          setSttUserStatus('connected');
+          setSttUserError('');
+        } else if (transcript.speaker === 'interviewer') {
+          setHasInterviewerTranscript(true);
+          setSttInterviewerStatus('connected');
+          setSttInterviewerError('');
         }
 
         const speakerLabel = transcript.speaker === 'user' ? 'Me' : 'Interviewer';
@@ -3675,6 +3705,8 @@ Provide only the answer, nothing else.`;
     sttUserProvider,
     sttInterviewerProvider,
     sttNotConfigured,
+    hasUserTranscript,
+    hasInterviewerTranscript,
   );
   const statusPillBaseClass = `flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shadow-sm backdrop-blur-xl ${isLightTheme ? 'bg-white/55 border-black/10' : 'bg-black/20 border-white/10'}`;
   const latestAnswerTrustExplanation = buildLatestAnswerTrustExplanation({

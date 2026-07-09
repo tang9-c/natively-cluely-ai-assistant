@@ -2002,7 +2002,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (nativelyKeyForStructured) {
       providers.push({
         name: 'QCLOUD API',
-        execute: () => this.generateWithNatively(message, undefined, undefined, { maxOutputTokens })
+        execute: () => this.generateWithNatively(message, undefined, undefined, { maxOutputTokens, timeoutMs: perProviderTimeoutMs })
       });
     }
 
@@ -2189,22 +2189,36 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it
     }
 
-    // 8s hard cap: a `fetch failed` network error without this can stall the provider
-    // waterfall for 25-30s before the OS-level TCP reset fires.
-    const response = await fetch(endpointUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(8000),
-    });
+    const timeoutMs = _options.timeoutMs ?? 8000;
+    const qcloudAbortController = new AbortController();
+    const qcloudTimeout = setTimeout(
+      () => qcloudAbortController.abort(new Error(`QCLOUD API request timed out after ${timeoutMs}ms`)),
+      timeoutMs,
+    );
 
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      throw new Error(this.formatQCloudError(response.status, errData));
+    try {
+      await this.rateLimiters.qcloud.acquire();
+      if (qcloudAbortController.signal.aborted) {
+        throw qcloudAbortController.signal.reason || new Error(`QCLOUD API request timed out after ${timeoutMs}ms`);
+      }
+
+      const response = await fetch(endpointUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: qcloudAbortController.signal,
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(this.formatQCloudError(response.status, errData));
+      }
+
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content || data.content || '';
+    } finally {
+      clearTimeout(qcloudTimeout);
     }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || data.content || '';
   }
 
   /**
@@ -4631,14 +4645,15 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
 
     // ATTEMPT 1: QCLOUD API (if configured — first in chain)
-    // Inner fetch timeout: 8s (AbortSignal.timeout in generateWithNatively).
-    // Outer safety net: 10s — covers JSON parsing + any overhead after the fetch resolves.
+    // Meeting summaries are background post-call work, not realtime answer UI.
+    // Use a summary-sized budget so they are not aborted by the realtime 8s default.
     if (this.hasNatively()) {
       try {
         console.log(`[LLMHelper] Attempting QCLOUD API for summary...`);
+        const qcloudSummaryTimeoutMs = 60_000;
         const text = await this.withTimeout(
-          this.generateWithNatively(`Context:\n${context}`, systemPrompt, undefined, { maxOutputTokens: QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS }),
-          10000,
+          this.generateWithNatively(`Context:\n${context}`, systemPrompt, undefined, { maxOutputTokens: QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS, timeoutMs: qcloudSummaryTimeoutMs }),
+          qcloudSummaryTimeoutMs + 5000,
           'QCLOUD API Summary'
         );
         if (text.trim().length > 0) {

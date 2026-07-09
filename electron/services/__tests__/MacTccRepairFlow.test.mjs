@@ -55,6 +55,9 @@ test('TCC repair resolves a valid bundle identifier and never falls back to app 
 
   assert.match(permissions, /export function resolveMacBundleIdentifier/);
   assert.match(permissions, /build\?: \{ appId\?: unknown \}/);
+  assert.match(permissions, /readRuntimeInfoPlistBundleIdentifier/);
+  assert.match(permissions, /CFBundleIdentifier/);
+  assert.match(permissions, /process\.resourcesPath/);
   assert.match(permissions, /Ignoring invalid runtime bundle identifier/);
   assert.match(permissions, /Unable to resolve a valid macOS bundle identifier for TCC repair/);
   assert.doesNotMatch(permissions, /app\.getName\(\)/);

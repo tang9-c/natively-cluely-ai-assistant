@@ -6,6 +6,7 @@ import util from 'util';
 
 const execFileAsync = util.promisify(execFileCallback);
 let cachedConfiguredAppId: string | null | undefined;
+let cachedRuntimeInfoPlistBundleId: string | null | undefined;
 
 export type MacPermissionStatus = 'granted' | 'denied' | 'not-determined' | 'restricted';
 export type PermissionRecommendedFix = 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
@@ -226,6 +227,30 @@ function readConfiguredAppId(): string | null {
   return cachedConfiguredAppId;
 }
 
+function readRuntimeInfoPlistBundleIdentifier(): string | null {
+  if (cachedRuntimeInfoPlistBundleId !== undefined) {
+    return cachedRuntimeInfoPlistBundleId;
+  }
+
+  try {
+    const resourcesPath = process.resourcesPath;
+    if (!resourcesPath) {
+      cachedRuntimeInfoPlistBundleId = null;
+      return cachedRuntimeInfoPlistBundleId;
+    }
+
+    const infoPlistPath = path.join(path.dirname(resourcesPath), 'Info.plist');
+    const plist = fs.readFileSync(infoPlistPath, 'utf8');
+    const match = plist.match(/<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/);
+    cachedRuntimeInfoPlistBundleId = match?.[1]?.trim() || null;
+  } catch (error) {
+    cachedRuntimeInfoPlistBundleId = null;
+    console.warn('[Permissions] Failed to read runtime bundle identifier from Info.plist:', error);
+  }
+
+  return cachedRuntimeInfoPlistBundleId;
+}
+
 export function resolveMacBundleIdentifier(): string | null {
   if (process.platform !== 'darwin') {
     return null;
@@ -247,6 +272,15 @@ export function resolveMacBundleIdentifier(): string | null {
 
   if (configuredAppId) {
     console.warn(`[Permissions] Ignoring invalid configured appId: ${configuredAppId}`);
+  }
+
+  const infoPlistBundleId = readRuntimeInfoPlistBundleIdentifier();
+  if (isValidBundleIdentifier(infoPlistBundleId)) {
+    return infoPlistBundleId;
+  }
+
+  if (infoPlistBundleId) {
+    console.warn(`[Permissions] Ignoring invalid Info.plist CFBundleIdentifier: ${infoPlistBundleId}`);
   }
 
   return null;

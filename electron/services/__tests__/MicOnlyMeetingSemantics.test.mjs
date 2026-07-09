@@ -55,6 +55,35 @@ test('renderer does not call STT normal when a provider label is not set', () =>
   assert.doesNotMatch(summaryFn[0], /label:\s*'麦克风转写正常'/);
 });
 
+test('renderer does not report STT as unconfigured after live transcript arrives', () => {
+  const ui = read('src/components/NativelyInterface.tsx');
+  const summaryFn = ui.match(
+    /const getSttSummary = \([\s\S]*?\n\};/
+  );
+  const transcriptHandler = ui.match(
+    /onNativeAudioTranscript\(\(transcript\) => \{[\s\S]*?\n\s*\}\),/
+  );
+
+  assert.ok(summaryFn, 'getSttSummary should exist');
+  assert.ok(transcriptHandler, 'native-audio-transcript handler should exist');
+  assert.match(summaryFn[0], /hasUserTranscript: boolean/);
+  assert.match(
+    summaryFn[0],
+    /if \(notConfigured && !hasUserTranscript\)/,
+    'a working microphone transcript should override stale not-configured state'
+  );
+  assert.match(
+    transcriptHandler[0],
+    /setSttNotConfigured\(false\);/,
+    'incoming transcripts prove STT is configured enough to work'
+  );
+  assert.match(
+    transcriptHandler[0],
+    /if \(transcript\.speaker === 'user'\) \{\s*setHasUserTranscript\(true\);/,
+    'microphone transcripts should feed the summary fallback'
+  );
+});
+
 test('native audio transcript handler no longer drops user transcripts outside Answer recording mode', () => {
   const ui = read('src/components/NativelyInterface.tsx');
   const transcriptHandler = ui.match(
