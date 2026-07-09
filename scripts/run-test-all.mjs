@@ -94,6 +94,11 @@ const stages = [
     args: ['scripts/run-dynamic-actions-replay.mjs'],
   },
   {
+    name: 'fde-real-stt-replay',
+    command: process.execPath,
+    args: ['scripts/run-fde-real-stt-replay.mjs'],
+  },
+  {
     name: 'e2e',
     command: npxCmd,
     args: ['playwright', 'test'],
