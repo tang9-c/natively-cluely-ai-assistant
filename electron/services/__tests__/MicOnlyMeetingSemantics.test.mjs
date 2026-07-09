@@ -131,3 +131,32 @@ test('main tracks microphone transcript presence as meeting usability', () => {
     'final user transcripts should mark the meeting as usable even when system audio is absent'
   );
 });
+
+test('main announces the configured STT provider before waiting for final transcript', () => {
+  const main = read('electron/main.ts');
+
+  assert.match(
+    main,
+    /this\.broadcast\('stt-status',\s*\{\s*state: 'connected',\s*provider: sttProvider,\s*channel: speaker,\s*\} as SttStatusPayload\);\s*\n\s*\/\/ Consecutive failure counter/,
+    'renderer needs an initial provider status so a configured STT route is not shown as unconfigured'
+  );
+  assert.match(
+    main,
+    /let _lastState: 'connected' \| 'reconnecting' \| 'failed' = 'connected';/,
+    'the initial connected broadcast should not be duplicated by the first final transcript'
+  );
+});
+
+test('renderer clears stale not-configured state when STT status carries a provider', () => {
+  const ui = read('src/components/NativelyInterface.tsx');
+  const listener = ui.match(
+    /onSttStatusChanged\(\(data\) => \{[\s\S]*?\n\s*\}\);/
+  );
+
+  assert.ok(listener, 'STT status listener should exist');
+  assert.match(
+    listener[0],
+    /if \(data\.provider && data\.provider !== 'none'\) \{\s*setSttNotConfigured\(false\);\s*\}/,
+    'a real provider status should clear any stale not-configured UI summary'
+  );
+});

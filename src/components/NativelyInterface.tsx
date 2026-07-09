@@ -1506,6 +1506,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // If registered inside the [isExpanded] effect, events are dropped during cleanup.
   useEffect(() => {
     return window.electronAPI.onSttStatusChanged((data) => {
+      if (data.provider && data.provider !== 'none') {
+        setSttNotConfigured(false);
+      }
+
       if (data.channel === 'user') {
         setSttUserStatus(data.state);
         setSttUserProvider(data.provider);

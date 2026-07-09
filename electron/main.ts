@@ -1342,11 +1342,17 @@ export class AppState {
       }
     });
 
+    this.broadcast('stt-status', {
+      state: 'connected',
+      provider: sttProvider,
+      channel: speaker,
+    } as SttStatusPayload);
+
     // Consecutive failure counter — reset on any successful final transcript
     let _consecutiveErrors = 0;
 
     // Track state so we broadcast 'connected' on recovery from failed/reconnecting
-    let _lastState: 'connected' | 'reconnecting' | 'failed' = 'reconnecting';
+    let _lastState: 'connected' | 'reconnecting' | 'failed' = 'connected';
 
     stt.on('error', (err: Error) => {
       // Google streamingRecognize's 10s silence timeout closes the stream
