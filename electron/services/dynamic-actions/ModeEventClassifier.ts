@@ -247,7 +247,7 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
                 semanticProvider: 'local_intent',
             };
         }
-        if (includesAny(text, ['too expensive', 'too pricey', 'too high', 'out of budget', '价格太高', '报价太高', '太贵', '超出预算'])) {
+        if (includesAny(text, ['too expensive', 'too pricey', 'too high', 'out of budget', '价格太高', '报价太高', '太贵', '超出预算', '预算过不了', '预算这一关就过不了', '预算不够', '预算不足'])) {
             return {
                 ...base,
                 decision: 'pass',
@@ -282,7 +282,7 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
         }
     }
 
-    if (candidate.actionType === 'buying_signal' && includesAny(text, ['send contract', 'legal review', 'finalize', '发合同', '法务审核', '准备签', '准备推进', '安排时间', '敲定'])) {
+    if (candidate.actionType === 'buying_signal' && includesAny(text, ['send contract', 'legal review', 'finalize', '发合同', '法务审核', '放假审核', '准备签', '准备推进', '想推进到', '推进到法务', '推进到放假', '安排时间', '敲定'])) {
         return {
             ...base,
             decision: 'pass',

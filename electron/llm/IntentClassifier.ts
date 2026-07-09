@@ -620,12 +620,12 @@ function detectInterviewIntentByPattern(text: string): IntentResult | null {
 function detectSalesIntentByPattern(text: string): IntentResult | null {
     // 1. Buying signal — strongest purchase intent
     if (/(ready to move|ready to sign|send (over )?(the|a) contract|let'?s move forward|next steps|finalize|sign the deal|legal review|procurement|when can we start|let'?s get started|let'?s (kick ?off|schedule)|pilot|trial)/i.test(text)
-        || /(准备签|准备推进|准备敲定|准备开始|发合同|法务审核|采购流程|下一步怎么走|下一步是|敲定|签合同|推进到|往下走|启动|试点|试用)/.test(text)) {
+        || /(准备签|准备推进|准备敲定|准备开始|想推进到|推进到.{0,6}(?:法务|放假).{0,4}审核|发合同|法务审核|放假审核|采购流程|下一步怎么走|下一步是|敲定|签合同|推进到|往下走|启动|试点|试用)/.test(text)) {
         return { intent: 'sales_buying_signal', confidence: 0.95, answerShape: getAnswerShapeForMode('sales', 'sales_buying_signal') };
     }
     // 2. Pricing objection — price/budget pushback, not internal price-sheet references.
     if (/(too expensive|too pricey|too high|can'?t afford|out of (our|my|the) budget|not in (our|my|the) budget|cheaper (option|alternative)|discount|price is|reduce the price|lower the price|do better on (price|cost)|can you (do better|lower|reduce))/i.test(text)
-        || /(太贵|价格高|价格太高|报价太高|超出预算|预算不够|预算不足|负担不起|能不能便宜|便宜点|打个折|有折扣吗)/.test(text)) {
+        || /(太贵|价格高|价格太高|报价太高|超出预算|预算不够|预算不足|预算.{0,8}过不了|年付.{0,12}预算.{0,8}过不了|太高.{0,12}预算|负担不起|能不能便宜|便宜点|打个折|有折扣吗)/.test(text)) {
         return { intent: 'sales_pricing_objection', confidence: 0.92, answerShape: getAnswerShapeForMode('sales', 'sales_pricing_objection') };
     }
     // 3. Proof request — case study, similar customer, or ROI proof.

@@ -1477,6 +1477,36 @@ describe('ActionTrigger fixtures — sales mode', () => {
     assert.equal(a.priority, 0.95);
   });
 
+  test('sales ASR confusion: 放假审核 still maps to buying_signal', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = await engine.assessSignals({
+      transcript: '我们 CFO 这周在,下周想推进到放假审核那一步',
+      speaker: 'interviewer',
+      modeTemplateType: 'sales',
+      modeId: 'm_s',
+      sessionId: 's_s_bs_legal_asr',
+    });
+    const a = findAction(actions, 'buying_signal');
+    assert.ok(a, `expected buying_signal; got ${actions.map(action => action.type).join(', ')}`);
+    assert.equal(a.priority, 0.95);
+  });
+
+  test('sales ASR confusion: Box five hundred + 预算过不了 still maps to pricing_objection', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = await engine.assessSignals({
+      transcript: '听起来不错,但 Box five hundred 个席位年付预算这一关就过不了',
+      speaker: 'interviewer',
+      modeTemplateType: 'sales',
+      modeId: 'm_s',
+      sessionId: 's_s_po_budget_asr',
+    });
+    const a = findAction(actions, 'pricing_objection');
+    assert.ok(a, `expected pricing_objection; got ${actions.map(action => action.type).join(', ')}`);
+    assert.equal(a.priority, 0.9);
+  });
+
   test('ROI proof request maps to case_study_request', async () => {
     const { DynamicActionEngine } = await loadModules();
     const engine = new DynamicActionEngine();

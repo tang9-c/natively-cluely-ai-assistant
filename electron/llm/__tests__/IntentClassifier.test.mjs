@@ -327,6 +327,12 @@ describe('IntentClassifier.detectIntentByPattern — sales mode', () => {
     assertIntent(r, 'sales_buying_signal', 0.9, 'sales_buying_signal/zh-send-contract');
   });
 
+  test('Chinese ASR confusion: 放假审核 → sales_buying_signal', () => {
+    const { detectIntentByPattern } = loadModule();
+    const r = detectIntentByPattern('我们 CFO 这周在,下周想推进到放假审核那一步', 'sales');
+    assertIntent(r, 'sales_buying_signal', 0.9, 'sales_buying_signal/zh-legal-review-asr');
+  });
+
   test('English: ready to move forward → sales_buying_signal', () => {
     const { detectIntentByPattern } = loadModule();
     const r = detectIntentByPattern('We are ready to move forward.', 'sales');
@@ -350,6 +356,12 @@ describe('IntentClassifier.detectIntentByPattern — sales mode', () => {
     const { detectIntentByPattern } = loadModule();
     const r = detectIntentByPattern('我们预算不够,可能负担不起', 'sales');
     assertIntent(r, 'sales_pricing_objection', 0.9, 'sales_pricing_objection/zh-budget');
+  });
+
+  test('Chinese ASR confusion: Box five hundred + 预算过不了 → sales_pricing_objection', () => {
+    const { detectIntentByPattern } = loadModule();
+    const r = detectIntentByPattern('听起来不错,但 Box five hundred 个席位年付预算这一关就过不了', 'sales');
+    assertIntent(r, 'sales_pricing_objection', 0.9, 'sales_pricing_objection/zh-budget-asr');
   });
 
   test('Chinese: 裸竞品提及不触发 sales_pricing_objection', () => {

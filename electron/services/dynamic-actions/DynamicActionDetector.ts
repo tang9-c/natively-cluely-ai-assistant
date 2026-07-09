@@ -97,7 +97,7 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         type: 'pricing_objection',
         patterns: [
             /\b(expensive|too pricey|price (?:is|seems|looks|feels) (?:a bit |really |too )?(?:high|expensive)|pricing (?:is|seems|looks|feels) (?:a bit |really |too )?(?:high|expensive)|cost (?:is|seems|looks|feels) (?:a bit |really |too )?(?:high|expensive)|too much|out of (?:our|my|the) budget|not in (?:our|my|the) budget|can't afford|cannot afford|do better on price|lower the price|reduce the price|discount)\b/i,
-            zh('太贵', '价格高', '价格太高', '报价太高', '预算不够', '成本', '费用', '负担不起'),
+            zh('太贵', '价格高', '价格太高', '报价太高', '预算不够', '预算不足', '预算.{0,8}过不了', '年付.{0,12}预算.{0,8}过不了', '太高.{0,12}预算', '成本', '费用', '负担不起'),
         ],
         priority: 0.9,
         label: 'Handle pricing objection',
@@ -112,7 +112,7 @@ const SALES_TRIGGERS: ActionTrigger[] = [
             // Debug session 2026-06-23: bare `准备签` (e.g. "我们准备签合同了")
             // wasn't in the alternation; only `准备推进` matched. Common close-to-
             // closing phrasing like 准备签 / 准备签合同 / 准备签一下 slipped past.
-            zh('准备签', '准备推进', '发合同', '法务审核', '下一步', '安排时间', '敲定'),
+            zh('准备签', '准备推进', '想推进到', '推进到.{0,6}法务.{0,4}审核', '推进到.{0,6}放假.{0,4}审核', '发合同', '法务审核', '放假审核', '下一步', '安排时间', '敲定'),
         ],
         priority: 0.95,
         label: 'Seize buying signal',
