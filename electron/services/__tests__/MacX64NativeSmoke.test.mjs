@@ -51,6 +51,10 @@ test('electron-builder mac release targets are architecture-neutral so workflows
   assert.ok(pkg.build.files.includes('!node_modules/app-builder-bin/**'), 'electron-builder helper binaries must not be bundled in app resources');
   assert.ok(pkg.build.asarUnpack.includes('**/*.node'), '.node files must be unpacked outside app.asar');
   assert.ok(pkg.build.asarUnpack.includes('**/*.dylib'), '.dylib files must be unpacked outside app.asar');
+  assert.ok(
+    pkg.build.asarUnpack.includes('dist-electron/electron/rag/vectorSearchWorker.js'),
+    'RAG worker thread entrypoint must be unpacked outside app.asar so worker_threads can load it',
+  );
 });
 
 test('native build script accepts explicit macOS release targets so CI can build one architecture per workflow', () => {

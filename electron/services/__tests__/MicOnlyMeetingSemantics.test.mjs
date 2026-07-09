@@ -44,7 +44,7 @@ test('renderer does not call STT normal when a provider label is not set', () =>
   );
   assert.match(
     summaryFn[0],
-    /!interviewerProvider/,
+    /!interviewerProvider && !hasInterviewerTranscript/,
     'missing system provider should downgrade the label instead of saying transcription is normal'
   );
   assert.ok(
@@ -53,6 +53,60 @@ test('renderer does not call STT normal when a provider label is not set', () =>
   );
   assert.match(summaryFn[0], /label:\s*'仅麦克风转写'/);
   assert.doesNotMatch(summaryFn[0], /label:\s*'麦克风转写正常'/);
+});
+
+test('renderer treats selected STT provider as startup state instead of unconfigured', () => {
+  const ui = read('src/components/NativelyInterface.tsx');
+  const summaryFn = ui.match(
+    /const getSttSummary = \([\s\S]*?\n\};/
+  );
+  const providerLoadEffect = ui.match(
+    /getSttProvider\?\.\(\)[\s\S]*?\.catch\(\(\) => \{\}\);/
+  );
+
+  assert.ok(summaryFn, 'getSttSummary should exist');
+  assert.ok(providerLoadEffect, 'renderer should load the selected STT provider');
+  assert.match(summaryFn[0], /configuredProvider: string \| null/);
+  assert.match(
+    summaryFn[0],
+    /const selectedProvider = configuredProvider && configuredProvider !== 'none' \? configuredProvider : '';/,
+    'a configured provider should be tracked independently from channel status packets'
+  );
+  assert.match(
+    summaryFn[0],
+    /label:\s*'语音转写启动中'/,
+    'configured provider with no channel status yet should be shown as startup, not missing config'
+  );
+  assert.match(
+    providerLoadEffect[0],
+    /setSelectedSttProvider\(provider\);/,
+    'getSttProvider should populate the summary fallback before the first STT status event'
+  );
+});
+
+test('renderer keeps system-audio degradation visible in the summary while suppressing disruptive banners', () => {
+  const ui = read('src/components/NativelyInterface.tsx');
+  const summaryFn = ui.match(
+    /const getSttSummary = \([\s\S]*?\n\};/
+  );
+
+  assert.ok(summaryFn, 'getSttSummary should exist');
+  assert.match(summaryFn[0], /systemAudioIssue: string \| null/);
+  assert.match(
+    summaryFn[0],
+    /if \(systemAudioIssue \|\| \(!interviewerProvider && !hasInterviewerTranscript\)\) \{/,
+    'system-audio failures should keep the top-level summary in mic-only state'
+  );
+  assert.match(
+    ui,
+    /onSystemAudioPermissionDenied\?\.\(\(message: string\) => \{\s*setSystemAudioIssue\(message \|\| '系统音频未捕获'\);[\s\S]*?if \(!micCaptureFailureRef\.current && sttUserStatusRef\.current !== 'failed'\) return;/,
+    'permission-denied events should update the summary even when the banner is gated'
+  );
+  assert.match(
+    ui,
+    /if \(payload\.channel === 'mic'\) \{[\s\S]*?return;[\s\S]*?\}\s*setSystemAudioIssue\(payload\.message \|\| '系统音频未捕获'\);[\s\S]*?if \(!micCaptureFailureRef\.current && sttUserStatusRef\.current !== 'failed'\) return;/,
+    'system capture failures should update the summary even when the banner is gated'
+  );
 });
 
 test('renderer does not report STT as unconfigured after live transcript arrives', () => {
@@ -185,7 +239,7 @@ test('renderer clears stale not-configured state when STT status carries a provi
   assert.ok(listener, 'STT status listener should exist');
   assert.match(
     listener[0],
-    /if \(data\.provider && data\.provider !== 'none'\) \{\s*setSttNotConfigured\(false\);\s*\}/,
+    /if \(data\.provider && data\.provider !== 'none'\) \{[\s\S]*?setSttNotConfigured\(false\);[\s\S]*?\}/,
     'a real provider status should clear any stale not-configured UI summary'
   );
 });

@@ -30,6 +30,10 @@ test('windows package config ships x64 native dependencies outside asar', () => 
   assert.ok(pkg.build.files.includes('!node_modules/electron-winstaller/**'), 'Windows installer build helper must not be bundled in app resources');
   assert.ok(pkg.build.asarUnpack.includes('**/*.node'), '.node files must be unpacked outside app.asar');
   assert.ok(pkg.build.asarUnpack.includes('**/*.dll'), '.dll files must be unpacked outside app.asar on Windows');
+  assert.ok(
+    pkg.build.asarUnpack.includes('dist-electron/electron/rag/vectorSearchWorker.js'),
+    'RAG worker thread entrypoint must be unpacked outside app.asar so worker_threads can load it',
+  );
 });
 
 test('windows package dependencies do not include stale aliases that electron-builder cannot stat', () => {

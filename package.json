@@ -82,6 +82,7 @@
       "!node_modules/@types/**"
     ],
     "asarUnpack": [
+      "dist-electron/electron/rag/vectorSearchWorker.js",
       "**/*.node",
       "**/*.dylib",
       "**/*.dll"

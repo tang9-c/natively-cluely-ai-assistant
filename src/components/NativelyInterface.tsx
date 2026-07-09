@@ -247,6 +247,10 @@ interface MessageRowProps {
 }
 const formatProviderLabel = (provider?: string | null): string => {
   if (!provider) return 'not set';
+  if (provider === 'qcloud-stt' || provider === 'natively') return 'QCLOUD API';
+  if (provider === 'doubao-auc' || provider === 'doubao') return 'Doubao AUC';
+  if (provider === 'local-sensevoice') return 'Local SenseVoice';
+  if (provider === 'local-whisper') return 'Local Whisper';
   return provider
     .split(/[-_\s]+/)
     .filter(Boolean)
@@ -258,17 +262,28 @@ const getSttSummary = (
   userStatus: 'connected' | 'reconnecting' | 'failed',
   userProvider: string,
   interviewerProvider: string,
+  configuredProvider: string | null,
   notConfigured: boolean,
   hasUserTranscript: boolean,
   hasInterviewerTranscript: boolean,
+  systemAudioIssue: string | null,
 ): { label: string; tone: 'ok' | 'warn' | 'error'; detail: string } => {
-  const micLabel = userProvider ? formatProviderLabel(userProvider) : hasUserTranscript ? 'active' : 'not set';
+  const selectedProvider = configuredProvider && configuredProvider !== 'none' ? configuredProvider : '';
+  const micLabel = userProvider
+    ? formatProviderLabel(userProvider)
+    : selectedProvider
+      ? formatProviderLabel(selectedProvider)
+      : hasUserTranscript ? 'active' : 'not set';
   const systemLabel = interviewerProvider
     ? formatProviderLabel(interviewerProvider)
     : hasInterviewerTranscript
       ? 'active'
-      : 'not set';
-  const detail = `${micLabel} mic · ${systemLabel} system`;
+      : systemAudioIssue
+        ? '未捕获'
+        : selectedProvider
+          ? '等待中'
+          : 'not set';
+  const detail = `${micLabel} 麦克风 · ${systemLabel} 系统音频`;
   if (notConfigured && !hasUserTranscript) {
     return {
       label: '语音转写未配置',
@@ -276,11 +291,18 @@ const getSttSummary = (
       detail: '请打开音频设置选择服务商',
     };
   }
-  if (!userProvider && !hasUserTranscript) {
+  if (!userProvider && !selectedProvider && !hasUserTranscript) {
     return {
       label: '语音转写未配置',
       tone: 'error',
       detail: '请打开音频设置选择服务商',
+    };
+  }
+  if (!userProvider && selectedProvider && !hasUserTranscript) {
+    return {
+      label: '语音转写启动中',
+      tone: 'warn',
+      detail,
     };
   }
   if (userStatus === 'failed') {
@@ -297,7 +319,7 @@ const getSttSummary = (
       detail,
     };
   }
-  if (!interviewerProvider && !hasInterviewerTranscript) {
+  if (systemAudioIssue || (!interviewerProvider && !hasInterviewerTranscript)) {
     return {
       label: '仅麦克风转写',
       tone: 'warn',
@@ -472,6 +494,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   );
   const [sttUserError, setSttUserError] = useState<string>('');
   const [sttUserProvider, setSttUserProvider] = useState<string>('');
+  const [selectedSttProvider, setSelectedSttProvider] = useState<string | null>(null);
   const [hasUserTranscript, setHasUserTranscript] = useState(false);
   const [sttInterviewerStatus, setSttInterviewerStatus] = useState<
     'connected' | 'reconnecting' | 'failed'
@@ -479,6 +502,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [sttInterviewerError, setSttInterviewerError] = useState<string>('');
   const [sttInterviewerProvider, setSttInterviewerProvider] = useState<string>('');
   const [hasInterviewerTranscript, setHasInterviewerTranscript] = useState(false);
+  const [systemAudioIssue, setSystemAudioIssue] = useState<string | null>(null);
   const [meetingStartStatus, setMeetingStartStatus] = useState<{
     phase: 'starting' | 'ready' | 'failed';
     message?: string;
@@ -1032,6 +1056,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       .then((isActive) => {
         if (!mounted || !isActive) return;
         setSystemAudioWarning(null);
+        setSystemAudioIssue(null);
         setRollingTranscript('');
         setIsInterviewerSpeaking(false);
         micCaptureFailureRef.current = false;
@@ -1044,6 +1069,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         return;
       }
       setSystemAudioWarning(null);
+      setSystemAudioIssue(null);
       setMeetingStartStatus(null);
       setRollingTranscript('');
       setIsInterviewerSpeaking(false);
@@ -1073,6 +1099,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   useEffect(() => {
     const unsub = window.electronAPI?.onSystemAudioPermissionDenied?.((message: string) => {
+      setSystemAudioIssue(message || '系统音频未捕获');
       if (!micCaptureFailureRef.current && sttUserStatusRef.current !== 'failed') return;
       setSystemAudioWarning({ kind: 'screen-recording-permission', message });
       setIsExpanded(true); // Force overlay open so user sees the warning
@@ -1086,6 +1113,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         micCaptureFailureRef.current = true;
         return;
       }
+      setSystemAudioIssue(payload.message || '系统音频未捕获');
       if (!micCaptureFailureRef.current && sttUserStatusRef.current !== 'failed') return;
       // Only surface terminal failures or the stuck signal — transient
       // recovery attempts shouldn't spam the banner since recovery
@@ -1148,14 +1176,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     window.electronAPI
       ?.getSttProvider?.()
       .then((provider: string) => {
-        if (mounted) setSttNotConfigured(provider === 'none');
+        if (mounted) {
+          setSelectedSttProvider(provider);
+          setSttNotConfigured(provider === 'none');
+        }
       })
       .catch(() => {});
 
     // Listen for live config changes (e.g. user saves a key in Settings while meeting is active)
     const unsub = window.electronAPI?.onSttConfigChanged?.(
       (data: { configured: boolean; provider: string }) => {
-        if (mounted) setSttNotConfigured(!data.configured);
+        if (mounted) {
+          setSelectedSttProvider(data.provider);
+          setSttNotConfigured(!data.configured);
+        }
       },
     );
     return () => {
@@ -1526,6 +1560,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   useEffect(() => {
     return window.electronAPI.onSttStatusChanged((data) => {
       if (data.provider && data.provider !== 'none') {
+        setSelectedSttProvider(data.provider);
         setSttNotConfigured(false);
       }
 
@@ -1761,6 +1796,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           setHasInterviewerTranscript(true);
           setSttInterviewerStatus('connected');
           setSttInterviewerError('');
+          setSystemAudioIssue(null);
         }
 
         const speakerLabel = transcript.speaker === 'user' ? 'Me' : 'Interviewer';
@@ -3704,9 +3740,11 @@ Provide only the answer, nothing else.`;
     sttUserStatus,
     sttUserProvider,
     sttInterviewerProvider,
+    selectedSttProvider,
     sttNotConfigured,
     hasUserTranscript,
     hasInterviewerTranscript,
+    systemAudioIssue,
   );
   const statusPillBaseClass = `flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shadow-sm backdrop-blur-xl ${isLightTheme ? 'bg-white/55 border-black/10' : 'bg-black/20 border-white/10'}`;
   const latestAnswerTrustExplanation = buildLatestAnswerTrustExplanation({
