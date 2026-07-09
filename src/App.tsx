@@ -11,7 +11,16 @@ import { ErrorBoundary } from "./components/ErrorBoundary"
 import { useResolvedTheme } from "./hooks/useResolvedTheme"
 
 const queryClient = new QueryClient()
-const AppFallback = <div className="h-full min-h-0 w-full bg-transparent" />;
+const AppFallback = (
+  <div
+    role="status"
+    aria-live="polite"
+    aria-label="正在加载 CueUp"
+    className="flex h-full min-h-0 w-full items-center justify-center bg-bg-primary text-xs text-text-tertiary"
+  >
+    正在加载 CueUp...
+  </div>
+);
 
 const SettingsPopup = React.lazy(() => import("./components/SettingsPopup"));
 const Launcher = React.lazy(() => import("./components/Launcher"));
@@ -448,13 +457,9 @@ const App: React.FC = () => {
           <motion.div
             key="main"
             className="h-full w-full"
-            initial={{ opacity: 0, scale: 0.98, y: 15 }} // "Linear" style entry: slightly down and scaled down
-            animate={{ opacity: 1, scale: 1, y: 0 }}      // Slide up and snap to place
-            transition={{
-              duration: 0.8,
-              ease: [0.19, 1, 0.22, 1], // Expo-out: snappy start, smooth landing
-              delay: 0.1
-            }}
+            initial={false}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.12, ease: "easeOut" }}
           >
             <QueryClientProvider client={queryClient}>
               <ToastProvider>

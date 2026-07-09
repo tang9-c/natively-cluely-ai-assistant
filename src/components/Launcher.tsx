@@ -631,7 +631,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
             </header>
 
             <div className="relative flex-1 flex flex-col overflow-hidden">
-                <AnimatePresence mode="wait">
+                <AnimatePresence initial={false}>
                     {selectedMeeting ? (
                         <motion.div
                             key="details"
@@ -639,7 +639,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            transition={{ duration: 0.15 }}
+                            transition={{ duration: 0.08 }}
                         >
                             <MeetingDetails
                                 meeting={selectedMeeting}
@@ -654,7 +654,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            transition={{ duration: 0.15 }}
+                            transition={{ duration: 0.08 }}
                         >
 
                             {/* Main Area - Fixed Top, Scrollable Bottom */}
