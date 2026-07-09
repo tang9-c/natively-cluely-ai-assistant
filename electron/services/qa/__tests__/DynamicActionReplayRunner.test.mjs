@@ -24,7 +24,7 @@ test('replay manifest has at least 6 generated audio assets and runner skips exe
 
   const outputDir = path.join(process.cwd(), 'reports/dynamic-actions-replay-test');
   fs.rmSync(outputDir, { recursive: true, force: true });
-  const report = runDynamicActionReplay({
+  const report = await runDynamicActionReplay({
     manifestPath,
     outputDir,
   });
@@ -32,6 +32,44 @@ test('replay manifest has at least 6 generated audio assets and runner skips exe
   assert.equal(report.failedEntries, 0);
   assert.equal(report.skippedEntries, report.totalEntries);
   assert.equal(report.entries[0].reason, 'audio_replay_not_enabled_in_this_phase');
+  assert.ok(fs.existsSync(path.join(outputDir, 'replay-report.json')));
+});
+
+test('sales audio replay runs through STT output and dynamic action detection', async () => {
+  const { runDynamicActionReplay, loadFixtureBackedSttTranscripts } = await load();
+  const manifestPath = path.join(process.cwd(), 'tests/fixtures/dynamic-actions/replay/replay-manifest.json');
+  const outputDir = path.join(process.cwd(), 'reports/dynamic-actions-sales-replay-test');
+  fs.rmSync(outputDir, { recursive: true, force: true });
+
+  const sttTranscripts = loadFixtureBackedSttTranscripts({
+    manifestPath,
+    fixtureRoot: path.join(process.cwd(), 'tests/fixtures/dynamic-actions/product'),
+  });
+  const audioInputs = [];
+  const report = await runDynamicActionReplay({
+    manifestPath,
+    outputDir,
+    audioRoot: process.cwd(),
+    modeTemplateTypes: ['sales'],
+    transcribeAudio: async ({ entry, audioPath }) => {
+      audioInputs.push({ id: entry.id, audioPath });
+      return sttTranscripts.get(entry.id);
+    },
+  });
+
+  assert.equal(report.totalEntries, 3);
+  assert.equal(report.skippedEntries, 0);
+  assert.equal(report.failedEntries, 0);
+  assert.equal(audioInputs.length, 3);
+  assert.ok(audioInputs.every((input) => input.audioPath.endsWith('.wav')));
+
+  const byId = new Map(report.entries.map((entry) => [entry.id, entry]));
+  assert.equal(byId.get('sales-replay-pricing-objection-zh-001')?.status, 'passed');
+  assert.equal(byId.get('sales-replay-pricing-objection-zh-001')?.actionType, 'pricing_objection');
+  assert.equal(byId.get('sales-replay-case-proof-mixed-001')?.status, 'passed');
+  assert.equal(byId.get('sales-replay-case-proof-mixed-001')?.actionType, 'case_study_request');
+  assert.equal(byId.get('sales-replay-internal-price-identity-001')?.status, 'passed');
+  assert.equal(byId.get('sales-replay-internal-price-identity-001')?.emitted, false);
   assert.ok(fs.existsSync(path.join(outputDir, 'replay-report.json')));
 });
 
@@ -61,7 +99,7 @@ test('replay runner resolves audio paths from explicit audio root', async () => 
   const originalCwd = process.cwd();
   try {
     process.chdir(path.dirname(dir));
-    const report = runDynamicActionReplay({
+    const report = await runDynamicActionReplay({
       manifestPath,
       outputDir: path.join(dir, 'out'),
       audioRoot,

@@ -5,12 +5,19 @@ const root = process.cwd();
 const moduleUrl = pathToFileURL(
   path.join(root, 'dist-electron/electron/services/qa/DynamicActionReplayRunner.js'),
 ).href;
-const { runDynamicActionReplay } = await import(moduleUrl);
+const { loadFixtureBackedSttTranscripts, runDynamicActionReplay } = await import(moduleUrl);
 
-const report = runDynamicActionReplay({
-  manifestPath: path.join(root, 'tests/fixtures/dynamic-actions/replay/replay-manifest.json'),
+const manifestPath = path.join(root, 'tests/fixtures/dynamic-actions/replay/replay-manifest.json');
+const sttTranscripts = loadFixtureBackedSttTranscripts({
+  manifestPath,
+  fixtureRoot: path.join(root, 'tests/fixtures/dynamic-actions/product'),
+});
+
+const report = await runDynamicActionReplay({
+  manifestPath,
   outputDir: path.join(root, 'reports/dynamic-actions'),
   audioRoot: root,
+  transcribeAudio: async ({ entry }) => sttTranscripts.get(entry.id),
 });
 
 console.log(JSON.stringify(report, null, 2));

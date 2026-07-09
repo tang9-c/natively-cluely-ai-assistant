@@ -89,6 +89,11 @@ const stages = [
     env: { ELECTRON_RUN_AS_NODE: '1' },
   },
   {
+    name: 'dynamic-actions-replay',
+    command: process.execPath,
+    args: ['scripts/run-dynamic-actions-replay.mjs'],
+  },
+  {
     name: 'e2e',
     command: npxCmd,
     args: ['playwright', 'test'],
