@@ -1548,6 +1548,29 @@ export class DatabaseManager {
             this.db.pragma('user_version = 29');
         }
 
+        // Version 29 -> 30: Upgrade legacy shipped FDE default context to the
+        // manufacturing PLM/QMS/enterprise AI Agent profile. This is a one-time
+        // data correction for databases that already passed v27 but still have
+        // the old built-in FDE default text; user-authored contexts are preserved.
+        if (version < 30) {
+            console.log('[DatabaseManager] Applying migration v29 -> v30: Upgrade legacy FDE default context');
+            const selectFdeModeContexts = this.db.prepare(`
+                SELECT id, custom_context
+                FROM modes
+                WHERE template_type = ?
+            `);
+            const updateCustomContextById = this.db.prepare(`
+                UPDATE modes SET custom_context = ?
+                WHERE id = ?
+            `);
+            const modes = selectFdeModeContexts.all('fde') as Array<{ id: string; custom_context: string | null }>;
+            for (const mode of modes) {
+                if (!isLegacyDefaultModeCustomContext('fde', mode.custom_context)) continue;
+                updateCustomContextById.run(getDefaultModeCustomContext('fde'), mode.id);
+            }
+            this.db.pragma('user_version = 30');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 

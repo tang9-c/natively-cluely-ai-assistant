@@ -17,6 +17,14 @@ const { getDefaultModeCustomContext } = modeContextModule;
 const LEGACY_FDE_DEFAULT_CUSTOM_CONTEXT = '你是 FDE 现场交付副驾驶。优先澄清客户工作流、系统边界、数据流、权限、安全合规、上线约束和成功标准。回答时先讲技术可行性与验证路径，再给出最小下一步；不要跳过未知项或替客户假设环境。';
 
 function runFromV26(customContext) {
+  return runFromVersion(26, customContext);
+}
+
+function runFromV29(customContext) {
+  return runFromVersion(29, customContext);
+}
+
+function runFromVersion(version, customContext) {
   const db = new Database(':memory:');
   db.exec(`
     CREATE TABLE modes (
@@ -28,7 +36,7 @@ function runFromV26(customContext) {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  db.pragma('user_version = 26');
+  db.pragma(`user_version = ${version}`);
   db.prepare('INSERT INTO modes (id, name, template_type, custom_context, is_active) VALUES (?, ?, ?, ?, 1)')
     .run('mode_fde_default', 'FDE', 'fde', customContext);
 
@@ -69,6 +77,29 @@ describe('Mode database migrations', () => {
   test('v27 migration preserves user-authored FDE custom_context', () => {
     const custom = '客户当前只关心 MES 对接和工厂网络隔离，先别展开 PLM/QMS 全量讨论。';
     const migrated = runFromV26(custom);
+    assert.equal(migrated, custom);
+  });
+
+  test('v29 -> v30 migration upgrades legacy FDE default context after v27 has already passed', () => {
+    assert.match(
+      dbSource,
+      /if\s*\(\s*version\s*<\s*30\s*\)/,
+      'DatabaseManager must register a v30 one-time correction for legacy FDE default context',
+    );
+    const v30Block = dbSource.match(/if\s*\(\s*version\s*<\s*30\s*\)[\s\S]*?user_version\s*=\s*30/);
+    assert.ok(v30Block, 'v30 migration block must exist');
+    assert.match(v30Block[0], /isLegacyDefaultModeCustomContext/);
+    assert.match(v30Block[0], /getDefaultModeCustomContext\('fde'\)/);
+
+    const migrated = runFromV29(LEGACY_FDE_DEFAULT_CUSTOM_CONTEXT);
+    assert.equal(migrated, getDefaultModeCustomContext('fde'));
+    assert.match(migrated, /制造业 PLM \/ QMS \/ 企业 AI Agent/);
+    assert.doesNotMatch(migrated, /FDE 现场交付副驾驶/);
+  });
+
+  test('v29 -> v30 migration preserves user-authored FDE custom_context', () => {
+    const custom = '客户当前只关心 MES 对接和工厂网络隔离，先别展开 PLM/QMS 全量讨论。';
+    const migrated = runFromV29(custom);
     assert.equal(migrated, custom);
   });
 
