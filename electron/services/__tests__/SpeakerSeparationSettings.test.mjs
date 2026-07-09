@@ -27,15 +27,15 @@ test('speaker separation setting is exposed through IPC, preload, and renderer t
 test('speaker separation control lives in the Audio speech provider settings', () => {
     const settings = read('src/components/SettingsOverlay.tsx');
 
-    assert.match(settings, /Speaker separation/);
+    assert.match(settings, /说话人分离/);
     assert.match(settings, /speakerSeparationMode/);
     assert.match(settings, /speakerSeparationProviderLabel/);
-    assert.match(settings, /Speaker separation on for \$\{speakerSeparationProviderLabel\}/);
-    assert.match(settings, /Speaker separation unavailable for this transcription provider/);
-    assert.match(settings, /Speaker separation off/);
+    assert.match(settings, /\$\{speakerSeparationProviderLabel\} 已开启说话人分离/);
+    assert.match(settings, /当前语音提供商不支持说话人分离/);
+    assert.match(settings, /说话人分离已关闭/);
 
     const providerIndex = settings.indexOf('Speech Provider Section');
-    const speakerIndex = settings.indexOf('>Speaker separation</label>');
+    const speakerIndex = settings.indexOf('>说话人分离</label>');
     const languageIndex = settings.indexOf('Recognition Language Family');
     assert.ok(providerIndex >= 0, 'Speech Provider Section marker should exist');
     assert.ok(speakerIndex > providerIndex, 'Speaker separation belongs in Speech Provider section');
@@ -61,8 +61,8 @@ test('QCLOUD API speech channel is registered with the QCLOUD API key and speake
 test('settings exposes only implemented Doubao AUC provider for speaker separation', () => {
     const settings = read('src/components/SettingsOverlay.tsx');
 
-    assert.match(settings, /Doubao AUC \(Speaker separation\)/);
-    assert.match(settings, /Same Doubao API key; AUC BigModel with speaker separation/);
+    assert.match(settings, /Doubao AUC（说话人分离）/);
+    assert.match(settings, /复用 Doubao API Key；AUC 大模型，支持说话人分离/);
     assert.doesNotMatch(settings, /Doubao Streaming ASR/);
     assert.doesNotMatch(settings, /id: 'doubao', label:/);
 });

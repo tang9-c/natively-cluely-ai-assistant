@@ -580,7 +580,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || '无
                                                             <p className="text-[11px] text-text-tertiary mt-0.5">
                                                                 {item.owner && <span className="font-medium">{item.owner}</span>}
                                                                 {item.owner && item.deadline && <span> · </span>}
-                                                                {item.deadline && <span>by {item.deadline}</span>}
+                                                                {item.deadline && <span>截止：{item.deadline}</span>}
                                                             </p>
                                                         )}
                                                     </div>
@@ -619,7 +619,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || '无
                                 {meeting.detailedSummary?.followUpDraft && meeting.detailedSummary.followUpDraft.trim() && (
                                     <section className="mb-8">
                                         <div className="flex items-center justify-between mb-3">
-                                            <h2 className="text-lg font-semibold text-text-primary">Follow-up Draft</h2>
+                                            <h2 className="text-lg font-semibold text-text-primary">跟进草稿</h2>
                                             <button
                                                 type="button"
                                                 onClick={() => {
@@ -627,7 +627,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || '无
                                                 }}
                                                 className="text-[11px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-text-secondary border border-white/10 transition-colors"
                                             >
-                                                Copy
+                                                复制
                                             </button>
                                         </div>
                                         <pre className="text-[12.5px] text-text-secondary leading-relaxed whitespace-pre-wrap font-sans select-text cursor-text p-3 rounded-[10px] border border-white/10 bg-white/[0.02]">{meeting.detailedSummary.followUpDraft}</pre>

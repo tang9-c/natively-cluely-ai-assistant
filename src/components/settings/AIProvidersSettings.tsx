@@ -588,13 +588,13 @@ export const AIProvidersSettings: React.FC = () => {
             <div className="space-y-5">
                 <div>
                     <h3 className="text-sm font-bold text-text-primary mb-1">聊天默认模型</h3>
-                    <p className="text-xs text-text-secondary mb-2">Primary model for new chats. Other configured models act as fallbacks.</p>
+                    <p className="text-xs text-text-secondary mb-2">新对话优先使用的模型，其它已配置模型会作为兜底。</p>
                 </div>
 
                 <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle flex items-center justify-between">
                     <div>
                         <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">当前模型</label>
-                        <p className="text-[10px] text-text-secondary">Applies to new chats instantly.</p>
+                        <p className="text-[10px] text-text-secondary">保存后立即用于新的对话。</p>
                     </div>
                     <ModelSelect
                         value={defaultModel}
@@ -645,7 +645,7 @@ export const AIProvidersSettings: React.FC = () => {
             <div className="space-y-5">
                 <div>
                     <h3 className="text-sm font-bold text-text-primary mb-1">云提供商</h3>
-                    <p className="text-xs text-text-secondary mb-2">Add API keys to unlock cloud AI models.</p>
+                    <p className="text-xs text-text-secondary mb-2">添加 API Key 后即可使用云端 AI 模型。</p>
                 </div>
 
                 <div className="space-y-4">
@@ -678,7 +678,7 @@ export const AIProvidersSettings: React.FC = () => {
                             <div className="mb-3 flex items-start gap-2 rounded-lg border border-border-subtle bg-bg-input px-3 py-2 text-[11px] text-text-primary">
                                 <AlertCircle size={14} className="mt-0.5 shrink-0 text-amber-500" />
                                 <div className="leading-relaxed">
-                                    <div className="font-medium">Doubao API key 已配置，但缺少 Embedding Endpoint ID</div>
+                                    <div className="font-medium">Doubao API Key 已配置，但缺少 Embedding Endpoint ID</div>
                                     <div className="text-text-secondary mt-0.5">
                                         RAG 向量搜索将自动降级到本地 384d 模型，质量与速度均受影响。填写下方 Endpoint ID 可恢复 Doubao 云端 embedding。
                                     </div>
@@ -688,7 +688,7 @@ export const AIProvidersSettings: React.FC = () => {
                         <div className="mb-2 flex items-center justify-between">
                             <label className="flex items-center text-xs font-medium text-text-primary uppercase tracking-wide">
                                 Doubao Embedding Endpoint ID
-                                {doubaoEmbeddingModel && <span className="ml-2 text-green-500 normal-case">✓ Saved</span>}
+                                {doubaoEmbeddingModel && <span className="ml-2 text-green-500 normal-case">✓ 已保存</span>}
                             </label>
                             <span className="text-[10px] text-text-tertiary">用于 RAG 向量搜索</span>
                         </div>
@@ -715,7 +715,7 @@ export const AIProvidersSettings: React.FC = () => {
                                     : 'bg-bg-input hover:bg-bg-secondary border border-border-subtle text-text-primary disabled:opacity-50'
                                     }`}
                             >
-                                {savedStatus.doubaoEmbedding ? 'Saved!' : 'Save'}
+                                {savedStatus.doubaoEmbedding ? '已保存！' : '保存'}
                             </button>
                         </div>
                         <p className="text-[10px] text-text-secondary mt-2">
@@ -729,15 +729,15 @@ export const AIProvidersSettings: React.FC = () => {
             {/* Local (Codex CLI) Provider */}
             <div className="space-y-5">
                 <div>
-                    <h3 className="text-sm font-bold text-text-primary mb-1">Local Provider (Codex CLI)</h3>
-                    <p className="text-xs text-text-secondary">Route text and screenshot responses through a locally authenticated Codex CLI.</p>
+                    <h3 className="text-sm font-bold text-text-primary mb-1">本地提供商（Codex CLI）</h3>
+                    <p className="text-xs text-text-secondary">通过本机已登录的 Codex CLI 处理文本和截图回答。</p>
                 </div>
 
                 <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle space-y-4">
                     <div className="flex items-center justify-between">
                         <div>
                             <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-0">启用 Codex CLI</label>
-                            <p className="text-[10px] text-text-secondary">Adds Codex CLI as a selectable local backend and fallback.</p>
+                            <p className="text-[10px] text-text-secondary">将 Codex CLI 加入可选本地后端和兜底通道。</p>
                         </div>
                         <button
                             type="button"
@@ -763,7 +763,7 @@ export const AIProvidersSettings: React.FC = () => {
                             />
                         </label>
                         <label className="space-y-1">
-                            <span className="text-[10px] font-medium text-text-secondary uppercase tracking-wide">Timeout (ms)</span>
+                            <span className="text-[10px] font-medium text-text-secondary uppercase tracking-wide">超时（毫秒）</span>
                             <input
                                 type="number"
                                 value={codexCliConfig.timeoutMs}
@@ -805,7 +805,7 @@ export const AIProvidersSettings: React.FC = () => {
                             className="flex items-center gap-2 px-3 py-1.5 bg-bg-input hover:bg-bg-elevated border border-border-subtle rounded-lg text-xs font-medium text-text-primary transition-colors disabled:opacity-60"
                         >
                             {codexCliStatus === 'testing' ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
-                            Test CLI
+                            测试 CLI
                         </button>
                     </div>
                 </div>
@@ -900,21 +900,21 @@ export const AIProvidersSettings: React.FC = () => {
                             <h3 className="text-sm font-bold text-text-primary">自定义提供商</h3>
                             <span className="px-1.5 py-0 rounded-full text-[7px] font-bold bg-yellow-500/10 text-yellow-500 uppercase tracking-widest border border-yellow-500/20 leading-loose mt-0.5">实验性</span>
                         </div>
-                        <p className="text-xs text-text-secondary">Add your own AI endpoints via cURL.</p>
+                        <p className="text-xs text-text-secondary">通过 cURL 添加自己的 AI 接入点。</p>
                     </div>
                     {!isEditingCustom && (
                         <button
                             onClick={handleNewProvider}
                             className="flex items-center gap-2 px-3 py-1.5 bg-bg-input hover:bg-bg-elevated border border-border-subtle rounded-lg text-xs font-medium text-text-primary transition-colors"
                         >
-                            <Plus size={14} /> Add Provider
+                            <Plus size={14} /> 添加提供商
                         </button>
                     )}
                 </div>
 
                 {isEditingCustom ? (
                     <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle animated fadeIn">
-                        <h4 className="text-sm font-bold text-text-primary mb-4">{editingProvider ? 'Edit Provider' : 'New Provider'}</h4>
+                        <h4 className="text-sm font-bold text-text-primary mb-4">{editingProvider ? '编辑提供商' : '新建提供商'}</h4>
 
                         <div className="space-y-4">
                             <div>
@@ -929,7 +929,7 @@ export const AIProvidersSettings: React.FC = () => {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-1">cURL Command</label>
+                                <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-1">cURL 命令</label>
                                 <div className="relative">
                                     <textarea
                                         value={customCurl}
@@ -942,7 +942,7 @@ export const AIProvidersSettings: React.FC = () => {
 
                             <div>
                                 <label className="block text-xs font-medium text-text-primary uppercase tracking-wide mb-1">
-                                    Response JSON Path <span className="text-text-tertiary normal-case font-normal">(Optional)</span>
+                                    响应 JSON 路径 <span className="text-text-tertiary normal-case font-normal">（可选）</span>
                                 </label>
                                 <input
                                     type="text"
@@ -952,14 +952,14 @@ export const AIProvidersSettings: React.FC = () => {
                                     className="w-full bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary transition-colors font-mono"
                                 />
                                 <p className="text-[10px] text-text-secondary mt-1">
-                                    Dot notation path to the answer text in the JSON response. If empty, the full JSON is returned.
+                                    用点号路径提取 JSON 响应中的回答文本；留空则返回完整 JSON。
                                 </p>
                             </div>
 
                             <div className="bg-bg-elevated/30 rounded-lg overflow-hidden border border-border-subtle mt-4">
                                 <div className="px-4 py-3 bg-bg-elevated/50 border-b border-border-subtle flex items-center justify-between">
                                     <h5 className="block text-xs font-medium text-text-primary uppercase tracking-wide">
-                                        Configuration Guide
+                                        配置指南
                                     </h5>
                                 </div>
 
@@ -969,11 +969,11 @@ export const AIProvidersSettings: React.FC = () => {
                                         <div className="grid grid-cols-1 gap-2">
                                             <div className="flex items-center gap-2 text-xs">
                                                 <code className="bg-bg-input px-1.5 py-0.5 rounded text-text-primary font-mono border border-border-subtle">{"{{TEXT}}"}</code>
-                                                <span className="text-text-tertiary">Combined System + Context + Message (Recommended)</span>
+                                                <span className="text-text-tertiary">系统提示 + 上下文 + 用户消息（推荐）</span>
                                             </div>
                                             <div className="flex items-center gap-2 text-xs">
                                                 <code className="bg-bg-input px-1.5 py-0.5 rounded text-text-primary font-mono border border-border-subtle">{"{{IMAGE_BASE64}}"}</code>
-                                                <span className="text-text-tertiary">Screenshot data (if available)</span>
+                                                <span className="text-text-tertiary">截图数据（如有）</span>
                                             </div>
                                         </div>
                                     </div>
@@ -983,7 +983,7 @@ export const AIProvidersSettings: React.FC = () => {
                                         <div className="space-y-3">
                                             {/* Ollama Example */}
                                             <div>
-                                                <div className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1.5">Local (Ollama)</div>
+                                                <div className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1.5">本地（Ollama）</div>
                                                 <div className="bg-bg-input p-2.5 rounded-lg border border-border-subtle overflow-x-auto group relative">
                                                     <code className="font-mono text-[10px] text-text-primary whitespace-pre block">
                                                         curl http://localhost:11434/api/generate -d '{"{"}"model": "llama3", "prompt": "{`{{TEXT}}`}"{"}"}'
@@ -1027,13 +1027,13 @@ export const AIProvidersSettings: React.FC = () => {
                                     onClick={() => setIsEditingCustom(false)}
                                     className="px-4 py-2 rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-bg-input transition-colors"
                                 >
-                                    Cancel
+                                    取消
                                 </button>
                                 <button
                                     onClick={handleSaveCustom}
                                     className="px-4 py-2 rounded-lg text-xs font-medium bg-accent-primary text-white hover:bg-accent-secondary transition-colors flex items-center gap-2"
                                 >
-                                    <Save size={14} /> Save Provider
+                                    <Save size={14} /> 保存提供商
                                 </button>
                             </div>
                         </div>
@@ -1042,7 +1042,7 @@ export const AIProvidersSettings: React.FC = () => {
                     <div className="space-y-3">
                         {customProviders.length === 0 ? (
                             <div className="text-center py-8 bg-bg-item-surface rounded-xl border border-border-subtle border-dashed">
-                                <p className="text-xs text-text-tertiary">No custom providers added yet.</p>
+                                <p className="text-xs text-text-tertiary">尚未添加自定义提供商。</p>
                             </div>
                         ) : (
                             customProviders.map((provider) => (

@@ -153,7 +153,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                         window.electronAPI?.openExternal(keyUrl);
                     }}
                     className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors"
-                    title={`Get ${providerName} API Key`}
+                    title={`获取 ${providerName} API Key`}
                 >
                     <span className="text-[10px] uppercase tracking-wide">获取密钥</span>
                     <ExternalLink size={12} />
@@ -197,7 +197,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                         testStatus === 'error' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
                             'bg-bg-input hover:bg-bg-elevated text-text-primary'
                         }`}
-                    title={testError || "Test Connection"}
+                    title={testError || "测试连接"}
                 >
                     {testStatus === 'testing' ? <><Loader2 size={12} className="animate-spin" /> 测试中...</> :
                         testStatus === 'success' ? <><CheckCircle size={12} /> 已连接</> :

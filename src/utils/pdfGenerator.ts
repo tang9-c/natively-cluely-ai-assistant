@@ -110,26 +110,26 @@ const buildBlocks = (meeting: Meeting): HTMLElement[] => {
     addTextBlock(blocks, `${meeting.date} - ${meeting.duration}`, 'meta');
 
     if (meeting.summary) {
-        addSectionTitle(blocks, 'Summary');
+        addSectionTitle(blocks, '摘要');
         addTextBlock(blocks, meeting.summary, 'paragraph');
     }
 
     if (meeting.detailedSummary?.actionItems?.length) {
-        addSectionTitle(blocks, 'Action Items');
+        addSectionTitle(blocks, '行动项');
         meeting.detailedSummary.actionItems.forEach(item => {
             addTextBlock(blocks, `- ${item}`, 'list-item');
         });
     }
 
     if (meeting.detailedSummary?.keyPoints?.length) {
-        addSectionTitle(blocks, 'Key Points');
+        addSectionTitle(blocks, '要点');
         meeting.detailedSummary.keyPoints.forEach(point => {
             addTextBlock(blocks, `- ${point}`, 'list-item');
         });
     }
 
     if (meeting.transcript?.length) {
-        addSectionTitle(blocks, 'Transcript');
+        addSectionTitle(blocks, '转录');
         meeting.transcript.forEach(entry => {
             const timeStr = formatTimestamp(entry.timestamp);
             addTextBlock(blocks, `${entry.speaker}${timeStr ? ` [${timeStr}]` : ''}`, 'speaker');
@@ -138,16 +138,16 @@ const buildBlocks = (meeting: Meeting): HTMLElement[] => {
     }
 
     if (meeting.usage?.length) {
-        addSectionTitle(blocks, 'AI Usage & Interactions');
+        addSectionTitle(blocks, 'AI 使用记录与互动');
         meeting.usage.forEach(item => {
             if (item.type === 'chat' && item.question && item.answer) {
-                addTextBlock(blocks, `Q: ${item.question}`, 'speaker');
-                addTextBlock(blocks, `A: ${item.answer}`, 'paragraph');
+                addTextBlock(blocks, `问：${item.question}`, 'speaker');
+                addTextBlock(blocks, `答：${item.answer}`, 'paragraph');
             } else if (item.type === 'assist' && item.answer) {
-                addTextBlock(blocks, 'Assist:', 'speaker');
+                addTextBlock(blocks, '辅助：', 'speaker');
                 addTextBlock(blocks, item.answer, 'paragraph');
             } else if (item.type === 'followup_questions' && item.items?.length) {
-                addTextBlock(blocks, 'Follow-up Questions:', 'speaker');
+                addTextBlock(blocks, '跟进问题：', 'speaker');
                 item.items.forEach(question => {
                     addTextBlock(blocks, `- ${question}`, 'list-item');
                 });

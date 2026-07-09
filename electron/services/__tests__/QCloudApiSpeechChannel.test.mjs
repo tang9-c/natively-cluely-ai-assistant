@@ -162,8 +162,8 @@ test('QCLOUD API speech channel is never shown as qcloud-stt in user-facing sett
 test('QCLOUD API speaker separation settings label uses the active provider name', () => {
   const settings = fs.readFileSync(path.join(root, 'src/components/SettingsOverlay.tsx'), 'utf8');
   assert.match(settings, /speakerSeparationProviderLabel = sttProvider === 'qcloud-stt' \? 'QCLOUD API' : 'Doubao AUC'/);
-  assert.match(settings, /Speaker separation on for \$\{speakerSeparationProviderLabel\}/);
-  assert.doesNotMatch(settings, /Speaker separation on for Doubao AUC'/);
+  assert.match(settings, /\$\{speakerSeparationProviderLabel\} 已开启说话人分离/);
+  assert.doesNotMatch(settings, /Doubao AUC 已开启说话人分离'/);
 });
 
 test('QCLOUD API missing saved key warning does not expose internal provider wording', () => {
