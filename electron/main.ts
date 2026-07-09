@@ -2220,7 +2220,9 @@ export class AppState {
   }
 
   private getOutputRouteDiagnostics(): OutputRouteDiagnostics {
-    const requestedOutputId = this._lastRequestedOutputDeviceId || null;
+    const normalizeOutputRouteDiagnosticId = (id: string | null | undefined): string | null =>
+      id === 'sck' ? null : id || null;
+    const requestedOutputId = normalizeOutputRouteDiagnosticId(this._lastRequestedOutputDeviceId);
     let defaultOutputId: string | null = null;
 
     try {

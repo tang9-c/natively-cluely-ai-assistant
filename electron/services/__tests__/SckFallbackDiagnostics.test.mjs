@@ -21,6 +21,12 @@ test('main broadcasts explicit non-terminal warning when SCK ignores selected ou
   assert.match(src, /stuck: false/);
 });
 
+test('main treats the SCK backend sentinel as not being an output device route', () => {
+  const src = read('electron/main.ts');
+  assert.match(src, /normalizeOutputRouteDiagnosticId/);
+  assert.match(src, /id === 'sck'\s*\?\s*null/);
+});
+
 test('SCK route-ignored warning is checked after system capture start paths', () => {
   const src = read('electron/main.ts');
   assert.match(src, /systemAudioCapture\?\.start\(\);\s*this\.maybeBroadcastSckOutputRouteIgnored\(\);/);

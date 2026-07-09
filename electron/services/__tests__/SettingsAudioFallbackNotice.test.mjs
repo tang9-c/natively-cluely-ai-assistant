@@ -31,4 +31,7 @@ test('settings audio fallback banner distinguishes screen recording permission f
     assert.ok(permissionTextIndex < genericOutputTextIndex, 'permission reason should be handled before generic device failure copy');
     assert.match(banner, /isKnownScreenRecordingFallback/);
     assert.match(banner, /deviceFallbackNotice\.reason && !isKnownScreenRecordingFallback/);
+    assert.match(settings, /repairTccPermission\?\.\('screen'\)/);
+    assert.match(settings, /restartAfterTccRepair\?\.\(\)/);
+    assert.match(settings, /修复并重启/);
 });
