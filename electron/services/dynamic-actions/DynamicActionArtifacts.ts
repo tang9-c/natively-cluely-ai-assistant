@@ -122,8 +122,13 @@ function deriveMissingFields(mode: string, actionType: string, text: string): st
     if (!/(due|deadline|by|Friday|Monday|周[一二三四五六日天]|今天|明天|下周)/i.test(text)) missing.push('due_date');
   }
   if (mode === 'fde' && /next|success|risk|agent|integration/.test(actionType)) {
-    if (!/\bowner\b|负责人/i.test(text)) missing.push('owner');
-    if (!/(artifact|验证材料|交付物|测试数据|sample|样本)/i.test(text)) missing.push('artifact');
+    const marksMissing = (pattern: RegExp) =>
+      new RegExp(`(?:缺|缺少|还缺|missing|需要确认|请.*确认).{0,24}${pattern.source}`, 'i').test(text);
+    if (!/\bowner\b|负责人|谁负责/i.test(text) || marksMissing(/\bowner\b|负责人|谁负责/)) missing.push('owner');
+    if (!/\bdate\b|deadline|by|日期|截止|周[一二三四五六日天]/i.test(text) || marksMissing(/\bdate\b|deadline|日期|截止/)) missing.push('date');
+    if (!/(artifact|验证材料|验证产物|交付物|sample|样本)/i.test(text) || marksMissing(/artifact|验证材料|验证产物|交付物|样本/)) missing.push('artifact');
+    if (!/(test data|测试数据|真实 ECO|真实 CAPA|样本数据)/i.test(text) || marksMissing(/test data|测试数据|真实 ECO|真实 CAPA|样本数据/)) missing.push('test_data');
+    if (!/(acceptance criteria|验收标准|准确率|权限边界|审计可追溯)/i.test(text) || marksMissing(/acceptance criteria|验收标准|准确率|权限边界|审计可追溯/)) missing.push('acceptance_criteria');
   }
   if (mode === 'sales' && actionType === 'buying_signal') {
     if (!/\b(owner|who)\b|负责人/i.test(text)) missing.push('owner');

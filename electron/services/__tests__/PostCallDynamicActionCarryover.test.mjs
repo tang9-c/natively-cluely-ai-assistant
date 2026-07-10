@@ -36,7 +36,56 @@ test('post-call summary preserves accepted team action artifacts', async () => {
   });
 
   assert.ok(result.actionItemsStructured.some((item) => /launch checklist/i.test(item.text)));
+  assert.ok(result.acceptedActionItems.some((item) => /launch checklist/i.test(item.text)));
   assert.ok(result.coachingInsights.some((insight) => insight.type === 'accepted_dynamic_action'));
+});
+
+test('post-call carryover preserves accepted team decision artifacts', async () => {
+  const { buildPostCallEnhancements } = await loadWorkflow();
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'team-meet',
+    transcript: [],
+    summaryData: { overview: 'Architecture review.', actionItems: [] },
+    dynamicActionArtifacts: [{
+      actionId: 'decision_1',
+      modeTemplateType: 'team-meet',
+      actionType: 'decision_point',
+      outputType: 'decision_record',
+      structuredSummary: 'Decision: 采用 Postgres\nRationale: 团队已有经验\nReversibility: 试点后可回滚',
+      missingFields: [],
+      groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+      acceptedAt: 1000,
+      generationStatus: 'completed',
+    }],
+  });
+
+  assert.equal(result.acceptedDecisionRecords.length, 1);
+  assert.match(result.acceptedDecisionRecords[0].decision, /Postgres/);
+  assert.ok(result.followUpDraft.includes('Postgres'));
+});
+
+test('post-call carryover preserves accepted team blocker artifacts', async () => {
+  const { buildPostCallEnhancements } = await loadWorkflow();
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'team-meet',
+    transcript: [],
+    summaryData: { overview: 'Launch review.', actionItems: [] },
+    dynamicActionArtifacts: [{
+      actionId: 'blocker_1',
+      modeTemplateType: 'team-meet',
+      actionType: 'blocker_check',
+      outputType: 'checklist',
+      structuredSummary: 'Blocker: 等安全审批\nImpact: 发布延期\nDependency: 安全团队\nNext unblock step: 今天确认审批 owner',
+      missingFields: [],
+      groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+      acceptedAt: 1000,
+      generationStatus: 'completed',
+    }],
+  });
+
+  assert.equal(result.acceptedBlockerRecords.length, 1);
+  assert.match(result.acceptedBlockerRecords[0].blocker, /安全审批/);
+  assert.ok(result.followUpDraft.includes('安全审批'));
 });
 
 test('MeetingPersistence maps flat dynamic action usage into carryover artifacts', async () => {
@@ -335,4 +384,56 @@ test('post-call carryover caps merged team artifacts at eight items', async () =
   assert.equal(result.actionItemsStructured.length, 8);
   assert.ok(result.actionItemsStructured.some((item) => /checklist 8/i.test(item.text)));
   assert.equal(result.actionItemsStructured.some((item) => /checklist 9/i.test(item.text)), false);
+});
+
+test('post-call carryover preserves at least ninety percent of accepted team artifacts across structured sections', async () => {
+  const { buildPostCallEnhancements } = await loadWorkflow();
+  const dynamicActionArtifacts = [
+    ...Array.from({ length: 4 }, (_, index) => ({
+      actionId: `item_${index + 1}`,
+      modeTemplateType: 'team-meet',
+      actionType: 'action_item',
+      outputType: 'action_item',
+      structuredSummary: `Owner: Maya\nDeliverable: checklist ${index + 1}\nDue: Friday`,
+      missingFields: [],
+      groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+      acceptedAt: 1000 + index,
+      generationStatus: 'completed',
+    })),
+    ...Array.from({ length: 3 }, (_, index) => ({
+      actionId: `decision_${index + 1}`,
+      modeTemplateType: 'team-meet',
+      actionType: 'decision_point',
+      outputType: 'decision_record',
+      structuredSummary: `Decision: decision ${index + 1}\nRationale: rationale\nReversibility: reversible`,
+      missingFields: [],
+      groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+      acceptedAt: 2000 + index,
+      generationStatus: 'completed',
+    })),
+    ...Array.from({ length: 3 }, (_, index) => ({
+      actionId: `blocker_${index + 1}`,
+      modeTemplateType: 'team-meet',
+      actionType: 'blocker_check',
+      outputType: 'checklist',
+      structuredSummary: `Blocker: blocker ${index + 1}\nImpact: launch delay\nDependency: security\nNext unblock step: confirm owner`,
+      missingFields: [],
+      groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+      acceptedAt: 3000 + index,
+      generationStatus: 'completed',
+    })),
+  ];
+
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'team-meet',
+    transcript: [],
+    summaryData: { overview: 'Launch planning.', actionItems: [] },
+    dynamicActionArtifacts,
+  });
+
+  const preserved =
+    result.acceptedActionItems.length +
+    result.acceptedDecisionRecords.length +
+    result.acceptedBlockerRecords.length;
+  assert.ok(preserved >= 9);
 });

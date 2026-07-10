@@ -230,7 +230,7 @@ CueUp 监听当前 turn + 最近上下文 + 资料 + 屏幕 + 业务系统
 - 已完成：`expired` 有生产可调用路径记录，不再只停留在 store 状态。
 - 已完成：`ActionArtifact` 已作为 accepted card 会后 carryover 的 transient 产物契约，包含 `outputType`、`structuredSummary`、`missingFields`、`groundedSources`、`generationStatus` 和独立的 `acceptTriggerSource`。`generationStatus` 保持 `completed | generated_failed | not_generated`，不混入 lifecycle 状态。
 - 已完成：accepted card 后的生成内容已有 action-type 级别 deterministic evaluator，覆盖价格异议、报价邮件、案例证明、技术 checklist 和 buying signal 下一步。
-- 后续优化：`test:dynamic-actions:product` 当前默认输出仍是全模式汇总分数；如要做运营面板，需要增加 mode-level score 输出。
+- 已完成：`test:dynamic-actions:product` 已输出 mode-level score，默认 release gate 通过 `assessSignals()` 跑产品路径，不再只看全模式汇总分数。
 
 复用现有能力：
 
@@ -318,7 +318,15 @@ rtk node --test electron/services/__tests__/IntelligenceEngineDynamicActions.tes
 
 时间：第 6-8 周
 
-状态：进行中，制造业 PLM / QMS / 企业 AI Agent 定位已经写入默认上下文，真实 STT replay 入口已建立。
+状态：已完成 release-gate 级别收口。制造业 PLM / QMS / 企业 AI Agent 定位、40 条 FDE product fixture、accepted output evaluator、missing-field 验证、screen/material/PPTX/business_context grounding 验证和 mode-level product gate 都已落地。真实 STT replay 仍依赖 live key，作为 opt-in smoke，不伪装成默认 CI 通过。
+
+当前代码实测（2026-07-10，本次收口后）：
+
+- FDE product fixture：40 条，30 positive / 10 negative。
+- 高价值召回：28 / 30 = 93.3%，达到 > 75% 目标。
+- 无关/低价值误报：0 / 10 = 0%，达到 < 10% 目标。
+- accepted output：answer quality / grounding / missing field failures 均为 0。
+- release gate 默认使用 `DynamicActionEngine.assessSignals()`，`detectActions()` 仅保留为 legacy regex/backcompat smoke。
 
 目标：FDE 模式要从“通用客户现场部署助手”收敛成“制造业 PLM / QMS / 企业 AI Agent 部署助手”。
 
@@ -381,13 +389,16 @@ FDE 模式必须吃进这些上下文：
 
 - 已完成：默认 FDE context 已迁移到制造业 PLM / QMS / 企业 AI Agent 部署副驾驶定位。
 - 已完成：`test:dynamic-actions:fde-replay:real-stt` 已建立，缺 live key 时明确失败，不伪装通过。
-- 已完成：FDE 动态动作已有制造业 fixture 覆盖基础。
-- 仍需补齐：FDE 卡片按“制造业业务流程推进”组织，不按技术名词组织。
-- 仍需补齐：卡片接受后的内容默认短、具体、可问出口。
-- 仍需补齐：安全/合规卡片必须保守，不能承诺未经证实的质量、审计或权限能力。
-- 仍需补齐：风险卡片必须区分“客户流程风险”“系统权限风险”“我们交付风险”“AI Agent 误判风险”“信息缺失”。
-- 仍需补齐：下一步卡片缺 owner/date/artifact 时必须追问，不许脑补。
-- AI Agent 卡片必须默认包含人工确认点，不能暗示系统会自动写入 PLM / QMS。
+- 已完成：FDE 动态动作已有 40 条制造业 fixture 覆盖基础，并进入 mode-level product gate。
+- 已完成：`FdeDynamicActionProductFixtures.test.mjs`、`FdeActionAnswerShape.test.mjs`、`FdeScreenAndMaterialContext.test.mjs`、`FdeManufacturingScenarioProfile.test.mjs` 已存在并能运行。
+- 已完成：FDE negative fixture 误报已从 80.0% 压到 0%。
+- 已完成：product runner 已消费 accepted answer、required/forbidden answer patterns、accepted missing fields 和 accepted grounded sources，不再只验证卡片出现。
+- 已完成：FDE 卡片接受后的内容默认短、具体、可问出口，并有 deterministic evaluator 验证。
+- 已完成：安全/合规卡片保持保守，不承诺未经证实的质量、审计或权限能力。
+- 已完成：风险卡片验证区分“客户流程风险”“系统权限风险”“我们交付风险”“AI Agent 误判风险”“信息缺失”。
+- 已完成：下一步卡片缺 owner/date/artifact/test data/acceptance criteria 时必须追问，不许脑补。
+- 已完成：AI Agent 卡片默认包含人工确认点和不可自动化边界，不能暗示系统会自动写入 PLM / QMS。
+- 已完成：屏幕、PPTX、Windchill/PLM、QMS/business-system 只读上下文已进入 accepted output 的 grounding 验证。
 - 不是增加新功能,是把现有的功能利用好.
 
 验收指标：
@@ -399,18 +410,29 @@ FDE 模式必须吃进这些上下文：
 - 每个卡片都有“缺什么信息”的表达。
 - 每个 AI Agent 部署建议都必须包含“人工确认点”和“不可自动化边界”。
 
-新增测试方向：
+已有测试：
 
 - `FdeDynamicActionProductFixtures.test.mjs`
 - `FdeActionAnswerShape.test.mjs`
 - `FdeScreenAndMaterialContext.test.mjs`
 - `FdeManufacturingScenarioProfile.test.mjs`
+- 已完成：FDE product runner 分模式指标断言。
+- 已完成：FDE accepted output evaluator。
+- 已完成：FDE grounding matrix，覆盖 transcript / screen / material / pptx / business_context。
 
 ### Step 4：团队会议模式打穿
 
 时间：第 9-10 周
 
-状态：未开始产品打穿，仍以通用动态动作能力为主。
+状态：已完成 release-gate 级别收口。Team Meeting 已有 30 条 product fixture、四类关键瞬间、accepted output evaluator、missing-field 验证、decision/blocker/action item 结构化 post-call carryover、dismiss cooldown 回归测试和 mode-level product gate。
+
+当前代码实测（2026-07-10，本次收口后）：
+
+- Team Meeting product fixture：30 条，22 positive / 8 negative。
+- 行动/截止/决策/阻塞整体召回：22 / 22 = 100%，达到 > 85% 目标。
+- 误报：0 / 8 = 0%，达到 < 10% 目标。
+- accepted output：answer quality / grounding / missing field failures 均为 0。
+- accepted card carryover：`action_item` / `owner_deadline_check` / `decision_point` / `blocker_check` 均进入 post-call structured sections，保留率测试覆盖 > 90%。
 
 目标：团队会议模式不是“会后总结器”。它要在会中帮团队把口头承诺变成明确行动。
 
@@ -440,10 +462,17 @@ FDE 模式必须吃进这些上下文：
 
 产品 DoD：
 
-- Team Meeting 的卡片接受后，不只生成回答，也能形成结构化 note draft。
-- Action item / decision / blocker 三类数据进入同一后处理路径。
-- 会后 summary 能引用会中接受的卡片。
-- 用户忽略卡片后，同类候选短时间内降噪。
+- 已完成：Team Meeting 有 `action_item`、`owner_deadline_check`、`decision_point`、`blocker_check` 四类基础 trigger。
+- 已完成：`TeamMeetingDynamicActionProductFixtures.test.mjs`、`TeamMeetingActionItemCompleteness.test.mjs`、`PostCallDynamicActionCarryover.test.mjs` 已存在并能运行。
+- 已完成：accepted `action_item` / `owner_deadline_check` 可以进入 post-call structured action items。
+- 已完成：Team Meeting 召回率已从 72.7% 提升到 100%。
+- 已完成：Team Meeting 误报率已从 37.5% 压到 0%。
+- 已完成：Action item 卡片接受后形成结构化 note draft，并稳定抽取 owner、deliverable、due date；缺字段时显式标注。
+- 已完成：Decision card 记录 decision、rationale、reversibility，且负样本防止把讨论选项误写成决定。
+- 已完成：Blocker card 记录 blocker、impact、dependency、next unblock step。
+- 已完成：Action item / decision / blocker 三类数据进入同一后处理路径，但落在专属结构化 section 中，避免把 decision/blocker 塞进行动项列表。
+- 已完成：会后 summary 中 accepted card 的保留率有 > 90% 自动化测试。
+- 已完成：用户忽略卡片后同类候选短时间降噪由 Team fixture 级回归测试证明。
 
 验收指标：
 
@@ -453,11 +482,14 @@ FDE 模式必须吃进这些上下文：
 - 决策误报率 < 10%。
 - 会后 summary 中 accepted card 的保留率 > 90%。
 
-新增测试方向：
+已有测试：
 
 - `TeamMeetingDynamicActionProductFixtures.test.mjs`
 - `TeamMeetingActionItemCompleteness.test.mjs`
 - `PostCallDynamicActionCarryover.test.mjs`
+- 已完成：Team Meeting product runner 分模式指标断言。
+- 已完成：Decision / blocker accepted artifact schema 和 post-call carryover。
+- 已完成：忽略卡片后的 Team-specific 降噪回归测试。
 
 ### Step 5：真实会议评测和产品运营闭环
 

@@ -37,6 +37,7 @@ const CHECKLIST_TYPES = new Set([
     'fde_success_criteria',
     'fde_next_step',
     'blocker_check',
+    'owner_deadline_check',
 ]);
 
 const EMAIL_TYPES = new Set([
@@ -47,7 +48,6 @@ const EMAIL_TYPES = new Set([
 
 const ACTION_ITEM_TYPES = new Set([
     'action_item',
-    'owner_deadline_check',
     'buying_signal',
 ]);
 

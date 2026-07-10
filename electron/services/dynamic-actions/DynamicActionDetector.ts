@@ -226,8 +226,8 @@ const TEAM_TRIGGERS: ActionTrigger[] = [
     {
         type: 'blocker_check',
         patterns: [
-            /\b(any blockers|blocked by|stuck on|risk to timeline|what's blocking|dependency)\b/i,
-            zh('有什么阻塞', '被卡住', '卡在哪', '风险', '依赖', '影响进度'),
+            /\b(any blockers|blocked by|stuck on|risk to timeline|what'?s blocking|what is blocking|dependency|waiting on|depends on|cannot proceed|blocked until|stalled because|needs approval from)\b/i,
+            zh('有什么阻塞', '被卡住', '卡在哪', '风险', '依赖', '影响进度', '等.*确认', '等.*审批', '没有.*就推进不了', '需要.*支持', '依赖.*完成'),
         ],
         priority: 0.84,
         label: 'Clarify blocker',
@@ -238,8 +238,8 @@ const TEAM_TRIGGERS: ActionTrigger[] = [
     {
         type: 'owner_deadline_check',
         patterns: [
-            /\b(who owns this|owner for this|by when|timeline|ETA|due date)\b/i,
-            zh('谁负责', '负责人是谁', '什么时候', '时间线', '预计什么时候', '截止日期'),
+            /\b(who owns this|owner for this|by when|timeline|ETA|due date|due by|due on|deadline is|target date|ship date|commit by|before EOD|before end of week)\b/i,
+            zh('谁负责', '负责人是谁', '什么时候', '时间线', '预计什么时候', '截止日期', '本周内', '这周内', '下周前', '月底前', '今天下班前', '明天中午前', '截止到', '交付时间'),
         ],
         priority: 0.83,
         label: 'Lock owner and deadline',
@@ -497,6 +497,34 @@ function shouldSuppressSalesTrigger(trigger: ActionTrigger, transcript: string):
     return false;
 }
 
+function shouldSuppressFdeTrigger(trigger: ActionTrigger, transcript: string): boolean {
+    const text = transcript.replace(/\s+/g, ' ').trim();
+    if (!text) return true;
+    if (/(午饭|吃什么|天气|闲聊|random chat)/i.test(text)) return true;
+    if (/(内部复盘|我们内部|内部待办|internal note|internal planning|draft wording|not a customer ask)/i.test(text)) return true;
+    if (/(只是(?:文件名|提到)|文件名|材料名|不是客户流程|不是集成需求|不是要查|没有客户问题|没有新证据|没人提问|not about deployment|only in (?:our )?slide title|attendee title only)/i.test(text)) return true;
+    if (/(上周话题|old topic|still joining the call|还在加入会议|测试麦克风)/i.test(text)) return true;
+    if (
+        trigger.type === 'fde_discovery_probe' &&
+        !/(客户|customer|PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|流程|权限|验收|集成|AI Agent|智能体|物料|图纸|变更|质量)/i.test(text)
+    ) {
+        return true;
+    }
+    return false;
+}
+
+function shouldSuppressTeamTrigger(trigger: ActionTrigger, transcript: string): boolean {
+    const text = transcript.replace(/\s+/g, ' ').trim();
+    if (!text) return true;
+    if (/(报价表|pricing sheet|sales quote|客户报价)/i.test(text)) return true;
+    if (trigger.type === 'decision_point' && /(只是候选项|还没有决定|只是讨论|方案之一|option only|not decided|no decision today|brainstorm)/i.test(text)) return true;
+    if (trigger.type === 'owner_deadline_check' && /(公司活动|不是交付截止时间|not .*deadline|not .*due date)/i.test(text)) return true;
+    if (trigger.type === 'blocker_check' && /(包管理器日志|不是项目阻塞|slide title|nobody raised a blocker)/i.test(text)) return true;
+    if (trigger.type === 'action_item' && /(not committing to an action item|不会承诺行动项|只是想想|公司活动|不是交付截止时间)/i.test(text)) return true;
+    if (/(闲聊|午饭|天气|random chat|等大家进会议)/i.test(text)) return true;
+    return false;
+}
+
 export class DynamicActionDetector {
     private triggers: Record<string, ActionTrigger[]>;
 
@@ -516,6 +544,12 @@ export class DynamicActionDetector {
 
         for (const trigger of modeTriggers) {
             if (modeTemplateType === 'sales' && shouldSuppressSalesTrigger(trigger, transcript)) {
+                continue;
+            }
+            if (modeTemplateType === 'fde' && shouldSuppressFdeTrigger(trigger, transcript)) {
+                continue;
+            }
+            if ((modeTemplateType === 'team-meet' || modeTemplateType === 'team_meeting') && shouldSuppressTeamTrigger(trigger, transcript)) {
                 continue;
             }
             for (const pattern of trigger.patterns) {

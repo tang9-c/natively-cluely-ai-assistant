@@ -2085,6 +2085,40 @@ describe('DynamicActionEngine deduplication', () => {
     });
     assert.ok(second.length > 0, 'after dismiss, same trigger should re-fire');
   });
+
+  test('team-meet dismissed action does not immediately resurface the same candidate', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const now = 10_000;
+    const cooldownMs = 120_000;
+    const first = await engine.assessSignals({
+      transcript: '我来做发布 checklist，周五前发出来。',
+      modeTemplateType: 'team-meet',
+      modeId: 'team-meet',
+      sessionId: 'team-dismissal',
+      now,
+    });
+    assert.equal(first.length, 1);
+    engine.dismissAction(first[0].id, { now });
+
+    const second = await engine.assessSignals({
+      transcript: '我来做发布 checklist，周五前发出来。',
+      modeTemplateType: 'team-meet',
+      modeId: 'team-meet',
+      sessionId: 'team-dismissal',
+      now: now + 60_000,
+    });
+    assert.equal(second.length, 0);
+
+    const afterCooldown = await engine.assessSignals({
+      transcript: '我来做发布 checklist，周五前发出来。',
+      modeTemplateType: 'team-meet',
+      modeId: 'team-meet',
+      sessionId: 'team-dismissal',
+      now: now + cooldownMs + 1,
+    });
+    assert.equal(afterCooldown.length, 1);
+  });
 });
 
 // ============================================================================

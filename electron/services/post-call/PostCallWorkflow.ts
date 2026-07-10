@@ -33,9 +33,29 @@ export interface CoachingInsight {
   evidence?: string;
 }
 
+export interface AcceptedDecisionRecord {
+  actionId: string;
+  decision: string;
+  rationale?: string;
+  reversibility?: string;
+  sourceActionId: string;
+}
+
+export interface AcceptedBlockerRecord {
+  actionId: string;
+  blocker: string;
+  impact?: string;
+  dependency?: string;
+  nextUnblockStep?: string;
+  sourceActionId: string;
+}
+
 export interface PostCallEnhancements {
   schemaVersion: 2;
   actionItemsStructured: StructuredActionItem[];
+  acceptedActionItems: StructuredActionItem[];
+  acceptedDecisionRecords: AcceptedDecisionRecord[];
+  acceptedBlockerRecords: AcceptedBlockerRecord[];
   followUpDraft: string;
   coachingInsights: CoachingInsight[];
 }
@@ -83,6 +103,15 @@ export function buildPostCallEnhancements(params: {
   const actionItemsStructured = params.dynamicActionArtifacts?.length
     ? mergeAcceptedActionArtifacts(extractedActionItems, params.dynamicActionArtifacts)
     : extractedActionItems;
+  const acceptedActionItems = params.dynamicActionArtifacts?.length
+    ? collectAcceptedTeamActionItems(params.dynamicActionArtifacts)
+    : [];
+  const acceptedDecisionRecords = params.dynamicActionArtifacts?.length
+    ? collectAcceptedTeamDecisionRecords(params.dynamicActionArtifacts)
+    : [];
+  const acceptedBlockerRecords = params.dynamicActionArtifacts?.length
+    ? collectAcceptedTeamBlockerRecords(params.dynamicActionArtifacts)
+    : [];
   const coachingInsights = generateCoachingInsights(
     params.transcript,
     params.modeTemplateType,
@@ -93,7 +122,13 @@ export function buildPostCallEnhancements(params: {
   return {
     schemaVersion: 2,
     actionItemsStructured,
-    followUpDraft: buildFollowUpDraft(params.modeTemplateType, actionItemsStructured, params.summaryData),
+    acceptedActionItems,
+    acceptedDecisionRecords,
+    acceptedBlockerRecords,
+    followUpDraft: buildFollowUpDraft(params.modeTemplateType, actionItemsStructured, params.summaryData, {
+      acceptedDecisionRecords,
+      acceptedBlockerRecords,
+    }),
     coachingInsights,
   };
 }
@@ -148,7 +183,11 @@ export function extractStructuredActionItems(
 export function buildFollowUpDraft(
   modeTemplateType: PostCallModeType | null | undefined,
   actionItems: StructuredActionItem[],
-  summaryData?: { overview?: string; keyPoints?: string[]; sections?: Array<{ title: string; bullets: string[] }> }
+  summaryData?: { overview?: string; keyPoints?: string[]; sections?: Array<{ title: string; bullets: string[] }> },
+  acceptedRecords?: {
+    acceptedDecisionRecords?: AcceptedDecisionRecord[];
+    acceptedBlockerRecords?: AcceptedBlockerRecord[];
+  },
 ): string {
   const greeting = modeTemplateType === 'sales' || modeTemplateType === 'recruiting' || modeTemplateType === 'fde'
     ? 'Hi,'
@@ -169,7 +208,21 @@ export function buildFollowUpDraft(
     lines.push('', 'Next steps:', ...nextSteps);
   }
 
-  if (nextSteps.length === 0) {
+  const decisionLines = (acceptedRecords?.acceptedDecisionRecords ?? []).map((record) =>
+    `- ${record.decision}${record.rationale ? `; rationale: ${record.rationale}` : ''}${record.reversibility ? `; reversibility: ${record.reversibility}` : ''}`
+  );
+  if (decisionLines.length > 0) {
+    lines.push('', 'Decisions:', ...decisionLines);
+  }
+
+  const blockerLines = (acceptedRecords?.acceptedBlockerRecords ?? []).map((record) =>
+    `- ${record.blocker}${record.impact ? `; impact: ${record.impact}` : ''}${record.dependency ? `; dependency: ${record.dependency}` : ''}${record.nextUnblockStep ? `; next unblock step: ${record.nextUnblockStep}` : ''}`
+  );
+  if (blockerLines.length > 0) {
+    lines.push('', 'Blockers:', ...blockerLines);
+  }
+
+  if (nextSteps.length === 0 && decisionLines.length === 0 && blockerLines.length === 0) {
     lines.push('', 'I will follow up if anything else is needed.');
   }
 
@@ -322,10 +375,68 @@ function mergeAcceptedActionArtifacts(
   return merged;
 }
 
+function collectAcceptedTeamActionItems(artifacts: ActionArtifact[]): StructuredActionItem[] {
+  return artifacts
+    .filter((artifact) =>
+      artifact.modeTemplateType === 'team-meet' &&
+      ['action_item', 'owner_deadline_check'].includes(artifact.actionType)
+    )
+    .filter((artifact) => isAcceptedActionCarryoverStatus(artifact.generationStatus))
+    .map((artifact, index) => {
+      const parsed = parseArtifactActionSummary(artifact.structuredSummary);
+      return {
+        id: `accepted_action_${index + 1}`,
+        text: parsed.text,
+        ...(parsed.owner ? { owner: parsed.owner } : {}),
+        ...(parsed.deadline ? { deadline: parsed.deadline } : {}),
+        sourceTimestamp: artifact.acceptedAt,
+      };
+    })
+    .filter((item) => Boolean(item.text));
+}
+
+function collectAcceptedTeamDecisionRecords(artifacts: ActionArtifact[]): AcceptedDecisionRecord[] {
+  return artifacts
+    .filter((artifact) => artifact.modeTemplateType === 'team-meet' && artifact.actionType === 'decision_point')
+    .filter((artifact) => isAcceptedActionCarryoverStatus(artifact.generationStatus))
+    .map((artifact) => ({
+      actionId: artifact.actionId,
+      sourceActionId: artifact.actionId,
+      decision: labeledLine(artifact.structuredSummary, /^(decision|决定)\s*[:：]/i) || artifact.structuredSummary.trim(),
+      rationale: labeledLine(artifact.structuredSummary, /^(rationale|原因|依据)\s*[:：]/i),
+      reversibility: labeledLine(artifact.structuredSummary, /^(reversibility|可逆|回滚)\s*[:：]/i),
+    }))
+    .filter((record) => Boolean(record.decision));
+}
+
+function collectAcceptedTeamBlockerRecords(artifacts: ActionArtifact[]): AcceptedBlockerRecord[] {
+  return artifacts
+    .filter((artifact) => artifact.modeTemplateType === 'team-meet' && artifact.actionType === 'blocker_check')
+    .filter((artifact) => isAcceptedActionCarryoverStatus(artifact.generationStatus))
+    .map((artifact) => ({
+      actionId: artifact.actionId,
+      sourceActionId: artifact.actionId,
+      blocker: labeledLine(artifact.structuredSummary, /^(blocker|阻塞)\s*[:：]/i) || artifact.structuredSummary.trim(),
+      impact: labeledLine(artifact.structuredSummary, /^(impact|影响)\s*[:：]/i),
+      dependency: labeledLine(artifact.structuredSummary, /^(dependency|依赖)\s*[:：]/i),
+      nextUnblockStep: labeledLine(artifact.structuredSummary, /^(next unblock step|解阻|下一步)\s*[:：]/i),
+    }))
+    .filter((record) => Boolean(record.blocker));
+}
+
+function labeledLine(summary: string, label: RegExp): string | undefined {
+  return summary
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => label.test(line))
+    ?.replace(label, '')
+    .trim();
+}
+
 function hasCompletedAcceptedTeamActionArtifact(artifacts?: ActionArtifact[]): boolean {
   return Boolean(artifacts?.some((artifact) =>
     artifact.modeTemplateType === 'team-meet' &&
-    ['action_item', 'owner_deadline_check'].includes(artifact.actionType) &&
+    ['action_item', 'owner_deadline_check', 'decision_point', 'blocker_check'].includes(artifact.actionType) &&
     isAcceptedActionCarryoverStatus(artifact.generationStatus) &&
     Boolean(artifact.structuredSummary.trim()),
   ));

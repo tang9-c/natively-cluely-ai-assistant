@@ -395,6 +395,9 @@ test('post-call schema remains JSON-safe and excludes raw transcript fields', ()
   });
 
   assert.deepEqual(Object.keys(result).sort(), [
+    'acceptedActionItems',
+    'acceptedBlockerRecords',
+    'acceptedDecisionRecords',
     'actionItemsStructured',
     'coachingInsights',
     'followUpDraft',

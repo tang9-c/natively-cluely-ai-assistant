@@ -2,8 +2,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const root = path.resolve(import.meta.dirname, '../../..');
+
+async function loadFdeEvaluator() {
+  return import(pathToFileURL(path.join(root, 'dist-electron/electron/services/dynamic-actions/FdeAcceptedOutputEvaluator.js')).href);
+}
+
+async function loadArtifacts() {
+  return import(pathToFileURL(path.join(root, 'dist-electron/electron/services/dynamic-actions/DynamicActionArtifacts.js')).href);
+}
 
 test('fde agent feasibility prompt requires human confirmation and no-write boundary', () => {
   const detector = fs.readFileSync(path.join(root, 'electron/services/dynamic-actions/DynamicActionDetector.ts'), 'utf8');
@@ -83,4 +92,61 @@ test('fde agent feasibility ships default keywords and keyword match order', () 
   const fdeOrderBlock = defaults.match(/fde:\s*\[[^\]]+\]/);
   assert.ok(fdeOrderBlock, 'FDE intent match order must exist');
   assert.match(fdeOrderBlock[0], /'fde_agent_feasibility'/);
+});
+
+test('fde discovery output requires three manufacturing clarification questions', async () => {
+  const { evaluateFdeAcceptedOutput } = await loadFdeEvaluator();
+  const result = evaluateFdeAcceptedOutput({
+    actionType: 'fde_discovery_probe',
+    answerText: '1. ECO 当前谁发起？\n2. BOM 发布权限在哪个角色？\n3. CAPA 是否需要闭环验证？',
+    missingFields: [],
+    groundedSources: [{ type: 'transcript', status: 'used' }],
+  });
+  assert.equal(result.passed, true);
+});
+
+test('fde next step accepts explicit missing owner date artifact test data and acceptance criteria', async () => {
+  const { evaluateFdeAcceptedOutput } = await loadFdeEvaluator();
+  const result = evaluateFdeAcceptedOutput({
+    actionType: 'fde_next_step',
+    answerText: '还缺 owner、date、validation artifact、测试数据和验收标准，请客户确认后再锁计划。',
+    missingFields: ['owner', 'date', 'artifact', 'test_data', 'acceptance_criteria'],
+    groundedSources: [{ type: 'transcript', status: 'used' }],
+  });
+  assert.equal(result.passed, true);
+});
+
+test('fde agent output rejects automatic PLM QMS writeback promises', async () => {
+  const { evaluateFdeAcceptedOutput } = await loadFdeEvaluator();
+  const result = evaluateFdeAcceptedOutput({
+    actionType: 'fde_agent_feasibility',
+    answerText: 'AI Agent 可以自动审批并写入 PLM。',
+    missingFields: [],
+    groundedSources: [{ type: 'transcript', status: 'used' }],
+  });
+  assert.equal(result.passed, false);
+  assert.match(result.failures.join('\n'), /no_writeback_boundary|missing_human_confirmation|missing_automation_boundary/);
+});
+
+test('fde missing-field derivation treats explicit gap language as missing', async () => {
+  const { buildDynamicActionArtifacts } = await loadArtifacts();
+  const [artifact] = buildDynamicActionArtifacts({
+    actions: [{
+      id: 'fde_gap_1',
+      modeTemplateType: 'fde',
+      type: 'fde_next_step',
+      productContract: { outputType: 'checklist' },
+      status: 'accepted',
+      createdAt: 1,
+    }],
+    usage: [{
+      answer: '还缺 owner、date、validation artifact、测试数据和验收标准，请客户确认后再锁计划。',
+      metadata: { source: 'dynamic_action', actionId: 'fde_gap_1', generationStatus: 'completed' },
+    }],
+  });
+
+  assert.deepEqual(
+    artifact.missingFields.sort(),
+    ['acceptance_criteria', 'artifact', 'date', 'owner', 'test_data'].sort(),
+  );
 });

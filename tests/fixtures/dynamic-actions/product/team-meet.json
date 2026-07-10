@@ -13,7 +13,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "action_item",
-      "outputType": "action_item"
+      "outputType": "action_item",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Owner: Maya\nDeliverable: 发布 checklist\nDue: 周五",
+      "acceptedMissingFields": [],
+      "requiredAnswerPatterns": [
+        "Owner|负责人",
+        "Deliverable|交付物",
+        "Due|截止"
+      ]
     },
     "tags": [
       "team",
@@ -38,7 +51,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "action_item",
-      "outputType": "action_item"
+      "outputType": "action_item",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Owner: Maya\nDeliverable: 发布 checklist\nDue: 周五",
+      "acceptedMissingFields": [],
+      "requiredAnswerPatterns": [
+        "Owner|负责人",
+        "Deliverable|交付物",
+        "Due|截止"
+      ]
     },
     "tags": [
       "team",
@@ -63,7 +89,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "action_item",
-      "outputType": "action_item"
+      "outputType": "action_item",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Owner: Maya\nDeliverable: 发布 checklist\nDue: 周五",
+      "acceptedMissingFields": [],
+      "requiredAnswerPatterns": [
+        "Owner|负责人",
+        "Deliverable|交付物",
+        "Due|截止"
+      ]
     },
     "tags": [
       "team",
@@ -88,7 +127,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "action_item",
-      "outputType": "action_item"
+      "outputType": "action_item",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Owner: Maya\nDeliverable: 发布 checklist\nDue: 周五",
+      "acceptedMissingFields": [],
+      "requiredAnswerPatterns": [
+        "Owner|负责人",
+        "Deliverable|交付物",
+        "Due|截止"
+      ]
     },
     "tags": [
       "team",
@@ -113,7 +165,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "action_item",
-      "outputType": "action_item"
+      "outputType": "action_item",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Owner: Maya\nDeliverable: 发布 checklist\nDue: 周五",
+      "acceptedMissingFields": [],
+      "requiredAnswerPatterns": [
+        "Owner|负责人",
+        "Deliverable|交付物",
+        "Due|截止"
+      ]
     },
     "tags": [
       "team",
@@ -138,7 +203,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "action_item",
-      "outputType": "action_item"
+      "outputType": "action_item",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Owner: Maya\nDeliverable: 发布 checklist\nDue: 周五",
+      "acceptedMissingFields": [],
+      "requiredAnswerPatterns": [
+        "Owner|负责人",
+        "Deliverable|交付物",
+        "Due|截止"
+      ]
     },
     "tags": [
       "team",
@@ -163,7 +241,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "action_item",
-      "outputType": "action_item"
+      "outputType": "action_item",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Owner: Maya\nDeliverable: 发布 checklist\nDue: 周五",
+      "acceptedMissingFields": [],
+      "requiredAnswerPatterns": [
+        "Owner|负责人",
+        "Deliverable|交付物",
+        "Due|截止"
+      ]
     },
     "tags": [
       "team",
@@ -188,7 +279,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "owner_deadline_check",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Owner: Maya\nDeliverable: 发布 checklist\nDue: 周五",
+      "acceptedMissingFields": [],
+      "requiredAnswerPatterns": [
+        "Owner|负责人",
+        "Deliverable|交付物",
+        "Due|截止"
+      ]
     },
     "tags": [
       "team",
@@ -213,7 +317,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "owner_deadline_check",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Owner: Maya\nDeliverable: 发布 checklist\nDue: 周五",
+      "acceptedMissingFields": [],
+      "requiredAnswerPatterns": [
+        "Owner|负责人",
+        "Deliverable|交付物",
+        "Due|截止"
+      ]
     },
     "tags": [
       "team",
@@ -238,7 +355,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "owner_deadline_check",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Owner: Maya\nDeliverable: 发布 checklist\nDue: 周五",
+      "acceptedMissingFields": [],
+      "requiredAnswerPatterns": [
+        "Owner|负责人",
+        "Deliverable|交付物",
+        "Due|截止"
+      ]
     },
     "tags": [
       "team",
@@ -263,7 +393,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "owner_deadline_check",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Owner: Maya\nDeliverable: 发布 checklist\nDue: 周五",
+      "acceptedMissingFields": [],
+      "requiredAnswerPatterns": [
+        "Owner|负责人",
+        "Deliverable|交付物",
+        "Due|截止"
+      ]
     },
     "tags": [
       "team",
@@ -288,7 +431,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "owner_deadline_check",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Owner: Maya\nDeliverable: 发布 checklist\nDue: 周五",
+      "acceptedMissingFields": [],
+      "requiredAnswerPatterns": [
+        "Owner|负责人",
+        "Deliverable|交付物",
+        "Due|截止"
+      ]
     },
     "tags": [
       "team",
@@ -313,7 +469,19 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "decision_point",
-      "outputType": "decision_record"
+      "outputType": "decision_record",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Decision: 采用 Postgres\nRationale: 团队已有运维经验\nReversibility: 可在试点后回滚",
+      "requiredAnswerPatterns": [
+        "Decision|决定",
+        "Rationale|原因|依据",
+        "Reversibility|可逆|回滚|不可逆"
+      ]
     },
     "tags": [
       "team",
@@ -338,7 +506,19 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "decision_point",
-      "outputType": "decision_record"
+      "outputType": "decision_record",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Decision: 采用 Postgres\nRationale: 团队已有运维经验\nReversibility: 可在试点后回滚",
+      "requiredAnswerPatterns": [
+        "Decision|决定",
+        "Rationale|原因|依据",
+        "Reversibility|可逆|回滚|不可逆"
+      ]
     },
     "tags": [
       "team",
@@ -363,7 +543,19 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "decision_point",
-      "outputType": "decision_record"
+      "outputType": "decision_record",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Decision: 采用 Postgres\nRationale: 团队已有运维经验\nReversibility: 可在试点后回滚",
+      "requiredAnswerPatterns": [
+        "Decision|决定",
+        "Rationale|原因|依据",
+        "Reversibility|可逆|回滚|不可逆"
+      ]
     },
     "tags": [
       "team",
@@ -388,7 +580,19 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "decision_point",
-      "outputType": "decision_record"
+      "outputType": "decision_record",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Decision: 采用 Postgres\nRationale: 团队已有运维经验\nReversibility: 可在试点后回滚",
+      "requiredAnswerPatterns": [
+        "Decision|决定",
+        "Rationale|原因|依据",
+        "Reversibility|可逆|回滚|不可逆"
+      ]
     },
     "tags": [
       "team",
@@ -413,7 +617,19 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "decision_point",
-      "outputType": "decision_record"
+      "outputType": "decision_record",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Decision: 采用 Postgres\nRationale: 团队已有运维经验\nReversibility: 可在试点后回滚",
+      "requiredAnswerPatterns": [
+        "Decision|决定",
+        "Rationale|原因|依据",
+        "Reversibility|可逆|回滚|不可逆"
+      ]
     },
     "tags": [
       "team",
@@ -438,7 +654,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "blocker_check",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Blocker: 等安全审批\nImpact: 发布延期\nDependency: 安全团队\nNext unblock step: 今天确认审批 owner",
+      "requiredAnswerPatterns": [
+        "Blocker|阻塞",
+        "Impact|影响",
+        "Dependency|依赖",
+        "Next unblock step|解阻|下一步"
+      ]
     },
     "tags": [
       "team",
@@ -463,7 +692,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "blocker_check",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Blocker: 等安全审批\nImpact: 发布延期\nDependency: 安全团队\nNext unblock step: 今天确认审批 owner",
+      "requiredAnswerPatterns": [
+        "Blocker|阻塞",
+        "Impact|影响",
+        "Dependency|依赖",
+        "Next unblock step|解阻|下一步"
+      ]
     },
     "tags": [
       "team",
@@ -488,7 +730,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "blocker_check",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Blocker: 等安全审批\nImpact: 发布延期\nDependency: 安全团队\nNext unblock step: 今天确认审批 owner",
+      "requiredAnswerPatterns": [
+        "Blocker|阻塞",
+        "Impact|影响",
+        "Dependency|依赖",
+        "Next unblock step|解阻|下一步"
+      ]
     },
     "tags": [
       "team",
@@ -513,7 +768,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "blocker_check",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Blocker: 等安全审批\nImpact: 发布延期\nDependency: 安全团队\nNext unblock step: 今天确认审批 owner",
+      "requiredAnswerPatterns": [
+        "Blocker|阻塞",
+        "Impact|影响",
+        "Dependency|依赖",
+        "Next unblock step|解阻|下一步"
+      ]
     },
     "tags": [
       "team",
@@ -538,7 +806,20 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "blocker_check",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "Blocker: 等安全审批\nImpact: 发布延期\nDependency: 安全团队\nNext unblock step: 今天确认审批 owner",
+      "requiredAnswerPatterns": [
+        "Blocker|阻塞",
+        "Impact|影响",
+        "Dependency|依赖",
+        "Next unblock step|解阻|下一步"
+      ]
     },
     "tags": [
       "team",
@@ -561,7 +842,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "Decision|决定|Blocker|阻塞|Owner|负责人|Due|截止"
+      ]
     },
     "tags": [
       "negative"
@@ -581,7 +865,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "Decision|决定|Blocker|阻塞|Owner|负责人|Due|截止"
+      ]
     },
     "tags": [
       "negative"
@@ -601,7 +888,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "Decision|决定|Blocker|阻塞|Owner|负责人|Due|截止"
+      ]
     },
     "tags": [
       "negative"
@@ -621,7 +911,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "Decision|决定|Blocker|阻塞|Owner|负责人|Due|截止"
+      ]
     },
     "tags": [
       "negative"
@@ -641,7 +934,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "Decision|决定|Blocker|阻塞|Owner|负责人|Due|截止"
+      ]
     },
     "tags": [
       "negative"
@@ -661,7 +957,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "Decision|决定|Blocker|阻塞|Owner|负责人|Due|截止"
+      ]
     },
     "tags": [
       "negative"
@@ -681,7 +980,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "Decision|决定|Blocker|阻塞|Owner|负责人|Due|截止"
+      ]
     },
     "tags": [
       "negative"
@@ -701,7 +1003,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "Decision|决定|Blocker|阻塞|Owner|负责人|Due|截止"
+      ]
     },
     "tags": [
       "negative"

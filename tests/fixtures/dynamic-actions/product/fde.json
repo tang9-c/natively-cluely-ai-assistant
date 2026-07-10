@@ -13,7 +13,21 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_discovery_probe",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "1. ECO 当前谁发起？\n2. BOM 发布权限在哪个角色？\n3. CAPA 是否需要闭环验证？",
+      "requiredAnswerPatterns": [
+        "\\?|？",
+        "ECO|BOM|CAPA|NCR|PLM|QMS|权限|流程"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -38,7 +52,21 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_discovery_probe",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "1. ECO 当前谁发起？\n2. BOM 发布权限在哪个角色？\n3. CAPA 是否需要闭环验证？",
+      "requiredAnswerPatterns": [
+        "\\?|？",
+        "ECO|BOM|CAPA|NCR|PLM|QMS|权限|流程"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -63,7 +91,21 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_discovery_probe",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "1. ECO 当前谁发起？\n2. BOM 发布权限在哪个角色？\n3. CAPA 是否需要闭环验证？",
+      "requiredAnswerPatterns": [
+        "\\?|？",
+        "ECO|BOM|CAPA|NCR|PLM|QMS|权限|流程"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -88,7 +130,21 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_discovery_probe",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "1. ECO 当前谁发起？\n2. BOM 发布权限在哪个角色？\n3. CAPA 是否需要闭环验证？",
+      "requiredAnswerPatterns": [
+        "\\?|？",
+        "ECO|BOM|CAPA|NCR|PLM|QMS|权限|流程"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -113,7 +169,21 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_discovery_probe",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "1. ECO 当前谁发起？\n2. BOM 发布权限在哪个角色？\n3. CAPA 是否需要闭环验证？",
+      "requiredAnswerPatterns": [
+        "\\?|？",
+        "ECO|BOM|CAPA|NCR|PLM|QMS|权限|流程"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -138,7 +208,21 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_discovery_probe",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "1. ECO 当前谁发起？\n2. BOM 发布权限在哪个角色？\n3. CAPA 是否需要闭环验证？",
+      "requiredAnswerPatterns": [
+        "\\?|？",
+        "ECO|BOM|CAPA|NCR|PLM|QMS|权限|流程"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -163,7 +247,21 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_discovery_probe",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "1. ECO 当前谁发起？\n2. BOM 发布权限在哪个角色？\n3. CAPA 是否需要闭环验证？",
+      "requiredAnswerPatterns": [
+        "\\?|？",
+        "ECO|BOM|CAPA|NCR|PLM|QMS|权限|流程"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -188,7 +286,21 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_discovery_probe",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "1. ECO 当前谁发起？\n2. BOM 发布权限在哪个角色？\n3. CAPA 是否需要闭环验证？",
+      "requiredAnswerPatterns": [
+        "\\?|？",
+        "ECO|BOM|CAPA|NCR|PLM|QMS|权限|流程"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -213,7 +325,21 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_discovery_probe",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "1. ECO 当前谁发起？\n2. BOM 发布权限在哪个角色？\n3. CAPA 是否需要闭环验证？",
+      "requiredAnswerPatterns": [
+        "\\?|？",
+        "ECO|BOM|CAPA|NCR|PLM|QMS|权限|流程"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -238,7 +364,21 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_discovery_probe",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "1. ECO 当前谁发起？\n2. BOM 发布权限在哪个角色？\n3. CAPA 是否需要闭环验证？",
+      "requiredAnswerPatterns": [
+        "\\?|？",
+        "ECO|BOM|CAPA|NCR|PLM|QMS|权限|流程"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -263,7 +403,27 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_integration_check",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "screen",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "基于屏幕里的 Windchill ECO 页面，只读确认对象编号；还缺 owner/date/artifact。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact"
+      ],
+      "requiredAnswerPatterns": [
+        "owner|负责人",
+        "date|日期|截止",
+        "artifact|验证产物|交付物"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -288,7 +448,27 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_integration_check",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "business_context",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "请确认 PLM/QMS/ERP/MES 的数据方向、读写边界和权限；还缺 owner/date/artifact。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact"
+      ],
+      "requiredAnswerPatterns": [
+        "owner|负责人",
+        "date|日期|截止",
+        "artifact|验证产物|交付物"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -313,7 +493,27 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_integration_check",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "business_context",
+          "status": "not_found"
+        }
+      ],
+      "acceptedAnswer": "业务系统只读查询没有找到该 ECO，当前不能确认 PLM 状态；还缺 owner/date/artifact。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact"
+      ],
+      "requiredAnswerPatterns": [
+        "owner|负责人",
+        "date|日期|截止",
+        "artifact|验证产物|交付物"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -338,7 +538,27 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_integration_check",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "请确认 PLM/QMS/ERP/MES 的数据方向、读写边界和权限；还缺 owner/date/artifact。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact"
+      ],
+      "requiredAnswerPatterns": [
+        "owner|负责人",
+        "date|日期|截止",
+        "artifact|验证产物|交付物"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -363,7 +583,27 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_integration_check",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "请确认 PLM/QMS/ERP/MES 的数据方向、读写边界和权限；还缺 owner/date/artifact。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact"
+      ],
+      "requiredAnswerPatterns": [
+        "owner|负责人",
+        "date|日期|截止",
+        "artifact|验证产物|交付物"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -388,7 +628,26 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_agent_feasibility",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "AI Agent 只能给只读建议，写入 PLM/QMS 前必须有人审和人工确认；还缺 owner/date/artifact。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact"
+      ],
+      "requiredAnswerPatterns": [
+        "人工确认|human confirmation",
+        "只读|read-only|不可自动写入|no writeback"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -413,7 +672,26 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_agent_feasibility",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "AI Agent 只能给只读建议，写入 PLM/QMS 前必须有人审和人工确认；还缺 owner/date/artifact。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact"
+      ],
+      "requiredAnswerPatterns": [
+        "人工确认|human confirmation",
+        "只读|read-only|不可自动写入|no writeback"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -438,7 +716,26 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_agent_feasibility",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "pptx",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "AI Agent 只能给只读建议，写入 PLM/QMS 前必须有人审和人工确认；还缺 owner/date/artifact。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact"
+      ],
+      "requiredAnswerPatterns": [
+        "人工确认|human confirmation",
+        "只读|read-only|不可自动写入|no writeback"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -463,7 +760,26 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_agent_feasibility",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "AI Agent 只能给只读建议，写入 PLM/QMS 前必须有人审和人工确认；还缺 owner/date/artifact。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact"
+      ],
+      "requiredAnswerPatterns": [
+        "人工确认|human confirmation",
+        "只读|read-only|不可自动写入|no writeback"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -488,7 +804,26 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_agent_feasibility",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "AI Agent 只能给只读建议，写入 PLM/QMS 前必须有人审和人工确认；还缺 owner/date/artifact。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact"
+      ],
+      "requiredAnswerPatterns": [
+        "人工确认|human confirmation",
+        "只读|read-only|不可自动写入|no writeback"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -513,7 +848,29 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_risk_blocker",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "客户流程风险：变更评审未闭环。系统权限风险：PLM 角色未确认。我们交付风险：测试数据缺失。AI Agent 误判风险：建议需人审。信息缺失：owner/date/artifact 未确认。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact"
+      ],
+      "requiredAnswerPatterns": [
+        "客户流程风险",
+        "系统权限风险",
+        "我们交付风险",
+        "AI Agent 误判风险",
+        "信息缺失"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -538,7 +895,29 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_risk_blocker",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "客户流程风险：变更评审未闭环。系统权限风险：PLM 角色未确认。我们交付风险：测试数据缺失。AI Agent 误判风险：建议需人审。信息缺失：owner/date/artifact 未确认。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact"
+      ],
+      "requiredAnswerPatterns": [
+        "客户流程风险",
+        "系统权限风险",
+        "我们交付风险",
+        "AI Agent 误判风险",
+        "信息缺失"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -563,7 +942,29 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_risk_blocker",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "客户流程风险：变更评审未闭环。系统权限风险：PLM 角色未确认。我们交付风险：测试数据缺失。AI Agent 误判风险：建议需人审。信息缺失：owner/date/artifact 未确认。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact"
+      ],
+      "requiredAnswerPatterns": [
+        "客户流程风险",
+        "系统权限风险",
+        "我们交付风险",
+        "AI Agent 误判风险",
+        "信息缺失"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -588,7 +989,29 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_risk_blocker",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "客户流程风险：变更评审未闭环。系统权限风险：PLM 角色未确认。我们交付风险：测试数据缺失。AI Agent 误判风险：建议需人审。信息缺失：owner/date/artifact 未确认。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact"
+      ],
+      "requiredAnswerPatterns": [
+        "客户流程风险",
+        "系统权限风险",
+        "我们交付风险",
+        "AI Agent 误判风险",
+        "信息缺失"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -613,7 +1036,29 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_risk_blocker",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "客户流程风险：变更评审未闭环。系统权限风险：PLM 角色未确认。我们交付风险：测试数据缺失。AI Agent 误判风险：建议需人审。信息缺失：owner/date/artifact 未确认。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact"
+      ],
+      "requiredAnswerPatterns": [
+        "客户流程风险",
+        "系统权限风险",
+        "我们交付风险",
+        "AI Agent 误判风险",
+        "信息缺失"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -638,7 +1083,31 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_next_step",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "material",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "还缺 owner、date、validation artifact、测试数据和验收标准，请客户确认后再锁计划。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact",
+        "test_data",
+        "acceptance_criteria"
+      ],
+      "requiredAnswerPatterns": [
+        "owner|负责人",
+        "date|日期|截止",
+        "artifact|验证产物|交付物",
+        "测试数据|test data",
+        "验收标准|acceptance criteria"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -663,7 +1132,31 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_next_step",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "还缺 owner、date、validation artifact、测试数据和验收标准，请客户确认后再锁计划。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact",
+        "test_data",
+        "acceptance_criteria"
+      ],
+      "requiredAnswerPatterns": [
+        "owner|负责人",
+        "date|日期|截止",
+        "artifact|验证产物|交付物",
+        "测试数据|test data",
+        "验收标准|acceptance criteria"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -688,7 +1181,31 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_next_step",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "还缺 owner、date、validation artifact、测试数据和验收标准，请客户确认后再锁计划。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact",
+        "test_data",
+        "acceptance_criteria"
+      ],
+      "requiredAnswerPatterns": [
+        "owner|负责人",
+        "date|日期|截止",
+        "artifact|验证产物|交付物",
+        "测试数据|test data",
+        "验收标准|acceptance criteria"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -713,7 +1230,31 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_next_step",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "还缺 owner、date、validation artifact、测试数据和验收标准，请客户确认后再锁计划。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact",
+        "test_data",
+        "acceptance_criteria"
+      ],
+      "requiredAnswerPatterns": [
+        "owner|负责人",
+        "date|日期|截止",
+        "artifact|验证产物|交付物",
+        "测试数据|test data",
+        "验收标准|acceptance criteria"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -738,7 +1279,31 @@
     "expected": {
       "shouldEmit": true,
       "actionType": "fde_next_step",
-      "outputType": "checklist"
+      "outputType": "checklist",
+      "acceptedGroundedSources": [
+        {
+          "type": "transcript",
+          "status": "used"
+        }
+      ],
+      "acceptedAnswer": "还缺 owner、date、validation artifact、测试数据和验收标准，请客户确认后再锁计划。",
+      "acceptedMissingFields": [
+        "owner",
+        "date",
+        "artifact",
+        "test_data",
+        "acceptance_criteria"
+      ],
+      "requiredAnswerPatterns": [
+        "owner|负责人",
+        "date|日期|截止",
+        "artifact|验证产物|交付物",
+        "测试数据|test data",
+        "验收标准|acceptance criteria"
+      ],
+      "forbiddenAnswerPatterns": [
+        "自动写入|自动审批|auto-write|automatically approve"
+      ]
     },
     "tags": [
       "fde",
@@ -761,7 +1326,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "PLM|QMS|AI Agent|owner|artifact|验证|权限"
+      ]
     },
     "tags": [
       "negative"
@@ -781,7 +1349,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "PLM|QMS|AI Agent|owner|artifact|验证|权限"
+      ]
     },
     "tags": [
       "negative"
@@ -801,7 +1372,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "PLM|QMS|AI Agent|owner|artifact|验证|权限"
+      ]
     },
     "tags": [
       "negative"
@@ -821,7 +1395,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "PLM|QMS|AI Agent|owner|artifact|验证|权限"
+      ]
     },
     "tags": [
       "negative"
@@ -841,7 +1418,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "PLM|QMS|AI Agent|owner|artifact|验证|权限"
+      ]
     },
     "tags": [
       "negative"
@@ -861,7 +1441,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "PLM|QMS|AI Agent|owner|artifact|验证|权限"
+      ]
     },
     "tags": [
       "negative"
@@ -881,7 +1464,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "PLM|QMS|AI Agent|owner|artifact|验证|权限"
+      ]
     },
     "tags": [
       "negative"
@@ -901,7 +1487,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "PLM|QMS|AI Agent|owner|artifact|验证|权限"
+      ]
     },
     "tags": [
       "negative"
@@ -921,7 +1510,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "PLM|QMS|AI Agent|owner|artifact|验证|权限"
+      ]
     },
     "tags": [
       "negative"
@@ -941,7 +1533,10 @@
       }
     ],
     "expected": {
-      "shouldEmit": false
+      "shouldEmit": false,
+      "forbiddenCardCopy": [
+        "PLM|QMS|AI Agent|owner|artifact|验证|权限"
+      ]
     },
     "tags": [
       "negative"

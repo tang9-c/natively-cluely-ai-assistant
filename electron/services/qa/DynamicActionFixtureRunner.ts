@@ -1,6 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import { DynamicActionEngine } from '../dynamic-actions/DynamicActionEngine';
+import type { DynamicAction } from '../dynamic-actions/DynamicAction';
+import { buildDynamicActionArtifacts } from '../dynamic-actions/DynamicActionArtifacts';
+import { evaluateFdeAcceptedOutput } from '../dynamic-actions/FdeAcceptedOutputEvaluator';
+import { evaluateTeamMeetingAcceptedOutput } from '../dynamic-actions/TeamMeetingAcceptedOutputEvaluator';
 import type {
   DynamicActionProductFixture,
   DynamicActionProductFixtureResult,
@@ -8,6 +12,7 @@ import type {
 import {
   evaluatePatternExpectations,
   scoreDynamicActionProductFixtures,
+  scoreDynamicActionProductFixturesByMode,
 } from '../dynamic-actions/DynamicActionProductFixtures';
 
 export interface ProductRunnerInput {
@@ -19,6 +24,7 @@ export interface ProductRunnerReport {
   totalFixtures: number;
   results: DynamicActionProductFixtureResult[];
   score: ReturnType<typeof scoreDynamicActionProductFixtures>;
+  modeScores: ReturnType<typeof scoreDynamicActionProductFixturesByMode>;
   invalidFixtures: InvalidFixtureRecord[];
 }
 
@@ -66,17 +72,32 @@ export async function runDynamicActionProductFixtures(input: ProductRunnerInput)
 
   for (const fixture of fixtures) {
     const transcript = fixture.transcriptTurns.map((turn) => turn.text).join('\n');
-    const actions = engine.detectActions({
-      transcript,
-      modeTemplateType: fixture.modeTemplateType,
-      modeId: fixture.modeTemplateType,
-      sessionId: `fixture-${fixture.id}`,
-      language: fixture.language,
-    });
+    const runnerMode = fixture.assessment?.runnerMode ?? 'assessSignals';
+    const traces: unknown[] = [];
+    const actions = runnerMode === 'regex'
+      ? engine.detectActions({
+          transcript,
+          modeTemplateType: fixture.modeTemplateType,
+          modeId: fixture.modeTemplateType,
+          sessionId: `fixture-${fixture.id}`,
+          language: fixture.language,
+        })
+      : await engine.assessSignals({
+          transcript,
+          modeTemplateType: fixture.modeTemplateType,
+          modeId: fixture.modeTemplateType,
+          sessionId: `fixture-${fixture.id}`,
+          language: fixture.language,
+          speaker: fixture.transcriptTurns.at(-1)?.speaker,
+          recentContextTurns: fixture.assessment?.recentContextTurns,
+          intentResult: fixture.assessment?.intentResult as any,
+          providerDataScopes: fixture.assessment?.providerDataScopes as any,
+          semanticGateTraceSink: (trace) => traces.push(trace),
+        });
     const matchedAction = fixture.expected.actionType
       ? actions.find((action) => action.type === fixture.expected.actionType)
       : undefined;
-    const firstAction = matchedAction ?? actions[0];
+    const firstAction = fixture.expected.actionType ? matchedAction : actions[0];
     const cardText = firstAction
       ? [
           firstAction.productContract?.userAction,
@@ -89,20 +110,38 @@ export async function runDynamicActionProductFixtures(input: ProductRunnerInput)
       required: fixture.expected.requiredCardCopy ?? [],
       forbidden: fixture.expected.forbiddenCardCopy ?? [],
     });
+    const acceptedPath = runAcceptedActionPathForFixture(fixture, firstAction);
+    const acceptedOutputFailures = acceptedPath.acceptedOutputFailures;
+    const groundingFailures = acceptedPath.groundingFailures;
+    const missingFieldFailures = acceptedPath.missingFieldFailures;
     results.push({
       fixtureId: fixture.id,
+      modeTemplateType: fixture.modeTemplateType,
+      runnerMode,
       shouldEmit: fixture.expected.shouldEmit,
       emitted: actions.length > 0,
       actionTypeMatched: !!matchedAction || (!fixture.expected.actionType && actions.length === 0),
       outputTypeMatched: !!firstAction && (
         !fixture.expected.outputType || firstAction.productContract?.outputType === fixture.expected.outputType
       ),
-      answerQualityPassed: cardPatternResult.passed,
+      answerQualityPassed: cardPatternResult.passed && acceptedOutputFailures.length === 0,
+      groundingPassed: groundingFailures.length === 0,
+      missingFieldsPassed: missingFieldFailures.length === 0,
+      cardCopyFailures: [
+        ...cardPatternResult.missingRequired.map((pattern) => `missing_card:${pattern}`),
+        ...cardPatternResult.matchedForbidden.map((pattern) => `forbidden_card:${pattern}`),
+      ],
+      acceptedOutputFailures,
+      groundingFailures,
+      missingFieldFailures,
+      acceptedPathPassed: acceptedPath.acceptedPathPassed,
+      acceptedArtifact: acceptedPath.acceptedArtifact,
     });
   }
 
   const score = scoreDynamicActionProductFixtures(results);
-  const report = { totalFixtures: fixtures.length, results, score, invalidFixtures };
+  const modeScores = scoreDynamicActionProductFixturesByMode(results);
+  const report = { totalFixtures: fixtures.length, results, score, modeScores, invalidFixtures };
   fs.mkdirSync(input.outputDir, { recursive: true });
   fs.writeFileSync(path.join(input.outputDir, 'product-report.json'), JSON.stringify(report, null, 2));
   fs.writeFileSync(path.join(input.outputDir, 'product-report.md'), renderMarkdown(report));
@@ -121,6 +160,111 @@ function validateFixture(fixture: DynamicActionProductFixture): void {
   }
 }
 
+function runAcceptedActionPathForFixture(fixture: DynamicActionProductFixture, action?: DynamicAction) {
+  const expected = fixture.expected;
+  if (!expected.acceptedAnswer || !action) {
+    return {
+      acceptedPathPassed: true,
+      acceptedArtifact: undefined,
+      acceptedOutputFailures: [],
+      groundingFailures: [],
+      missingFieldFailures: [],
+    };
+  }
+
+  const acceptedAt = action.createdAt ?? 1_000;
+  const artifact = buildDynamicActionArtifacts({
+    actions: [{
+      id: action.id,
+      modeTemplateType: action.modeTemplateType,
+      type: action.type,
+      productContract: action.productContract,
+      status: 'accepted',
+      createdAt: acceptedAt,
+      latestTurn: action.latestTurn,
+      retrievalQuery: action.retrievalQuery,
+    }],
+    usage: [{
+      answer: expected.acceptedAnswer,
+      timestamp: acceptedAt,
+      metadata: {
+        source: 'dynamic_action',
+        actionId: action.id,
+        generationStatus: 'completed',
+        groundedSources: expected.acceptedGroundedSources?.map((source) => ({
+          ...source,
+          label: source.label ?? 'accepted action',
+        })),
+      },
+    }],
+  })[0];
+
+  const groundingFailures = compareExpectedGrounding(
+    artifact?.groundedSources ?? [],
+    expected.acceptedGroundedSources ?? [],
+  );
+  const missingFieldFailures = compareExpectedMissingFields(
+    artifact?.missingFields ?? [],
+    expected.acceptedMissingFields ?? [],
+  );
+  const acceptedOutputFailures = evaluateAcceptedOutputForMode(fixture, artifact, expected.acceptedAnswer);
+
+  return {
+    acceptedPathPassed: acceptedOutputFailures.length === 0 && groundingFailures.length === 0 && missingFieldFailures.length === 0,
+    acceptedArtifact: artifact,
+    acceptedOutputFailures,
+    groundingFailures,
+    missingFieldFailures,
+  };
+}
+
+function compareExpectedMissingFields(actual: string[], expected: string[] = []): string[] {
+  return expected.filter((field) => !actual.includes(field));
+}
+
+function compareExpectedGrounding(
+  actual: Array<{ type: string; status: string; label?: string }>,
+  expected: Array<{ type: string; status: string; label?: string }> = [],
+): string[] {
+  return expected
+    .filter((item) => !actual.some((source) =>
+      source.type === item.type &&
+      source.status === item.status &&
+      (!item.label || source.label === item.label)
+    ))
+    .map((item) => `${item.type}:${item.status}${item.label ? `:${item.label}` : ''}`);
+}
+
+function evaluateAcceptedOutputForMode(
+  fixture: DynamicActionProductFixture,
+  artifact: any,
+  answerText: string,
+): string[] {
+  const patternResult = evaluatePatternExpectations(answerText, {
+    required: fixture.expected.requiredAnswerPatterns ?? [],
+    forbidden: fixture.expected.forbiddenAnswerPatterns ?? [],
+  });
+  const modeFailures = fixture.modeTemplateType === 'fde'
+    ? evaluateFdeAcceptedOutput({
+        actionType: artifact?.actionType ?? fixture.expected.actionType ?? '',
+        answerText,
+        missingFields: artifact?.missingFields ?? [],
+        groundedSources: artifact?.groundedSources ?? [],
+      }).failures
+    : fixture.modeTemplateType === 'team-meet'
+      ? evaluateTeamMeetingAcceptedOutput({
+          actionType: artifact?.actionType ?? fixture.expected.actionType ?? '',
+          answerText,
+          missingFields: artifact?.missingFields ?? [],
+        }).failures
+    : [];
+  return [
+    ...patternResult.missingRequired.map((pattern) => `missing_answer:${pattern}`),
+    ...patternResult.matchedForbidden.map((pattern) => `forbidden_answer:${pattern}`),
+    ...modeFailures,
+  ];
+}
+
 function renderMarkdown(report: ProductRunnerReport): string {
   return [
     '# Dynamic Action Product Report',
@@ -128,6 +272,12 @@ function renderMarkdown(report: ProductRunnerReport): string {
     `Total fixtures: ${report.totalFixtures}`,
     `Recall: ${report.score.recallNumerator}/${report.score.recallDenominator} (${formatRate(report.score.recallRate)})`,
     `False positives: ${report.score.falsePositiveNumerator}/${report.score.falsePositiveDenominator} (${formatRate(report.score.falsePositiveRate)})`,
+    '',
+    '## Mode Scores',
+    '',
+    ...Object.entries(report.modeScores).map(([mode, score]) =>
+      `- ${mode}: recall ${score.recallNumerator}/${score.recallDenominator} (${formatRate(score.recallRate)}), false positives ${score.falsePositiveNumerator}/${score.falsePositiveDenominator} (${formatRate(score.falsePositiveRate)})`
+    ),
     '',
   ].join('\n');
 }

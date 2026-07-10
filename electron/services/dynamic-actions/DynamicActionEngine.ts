@@ -314,10 +314,10 @@ export class DynamicActionEngine {
         return null;
     }
 
-    dismissAction(actionId: string): void {
+    dismissAction(actionId: string, options?: { now?: number }): void {
         const action = this.store.getAction(actionId);
         if (action) {
-            this.signalTracker.dismiss(action.sessionId, action.modeTemplateType, action.type);
+            this.signalTracker.dismiss(action.sessionId, action.modeTemplateType, action.type, options?.now);
         }
         this.store.updateStatus(actionId, 'dismissed');
     }

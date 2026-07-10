@@ -1,5 +1,31 @@
 import type { DynamicActionOutputType } from './DynamicAction';
 
+export type DynamicActionFixtureRunnerMode = 'assessSignals' | 'regex';
+
+export interface DynamicActionFixtureAssessmentContext {
+  runnerMode?: DynamicActionFixtureRunnerMode;
+  intentResult?: {
+    intent: string;
+    confidence: number;
+    source?: string;
+  } | null;
+  recentContextTurns?: Array<{
+    speaker?: string;
+    text: string;
+    timestamp?: number;
+  }>;
+  providerDataScopes?: Partial<Record<
+    'transcript' | 'screenshots' | 'reference_files' | 'profile_history' | 'embeddings' | 'post_call_summary',
+    boolean
+  >>;
+}
+
+export interface DynamicActionAcceptedGroundingExpectation {
+  type: 'material' | 'pptx' | 'screen' | 'business_context' | 'transcript';
+  status: 'used' | 'not_found' | 'scope_denied' | 'failed';
+  label?: string;
+}
+
 export interface DynamicActionProductFixture {
   id: string;
   modeTemplateType: 'sales' | 'fde' | 'team-meet' | 'recruiting';
@@ -9,6 +35,7 @@ export interface DynamicActionProductFixture {
     text: string;
     final?: boolean;
   }>;
+  assessment?: DynamicActionFixtureAssessmentContext;
   expected: {
     shouldEmit: boolean;
     actionType?: string;
@@ -19,12 +46,17 @@ export interface DynamicActionProductFixture {
     forbiddenAnswerPatterns?: string[];
     requiredMissingFields?: string[];
     requiredGrounding?: Array<'material' | 'pptx' | 'screen' | 'business_context' | 'transcript'>;
+    acceptedAnswer?: string;
+    acceptedMissingFields?: string[];
+    acceptedGroundedSources?: DynamicActionAcceptedGroundingExpectation[];
   };
   negativeReason?: 'wrong_mode' | 'internal_chatter' | 'low_value' | 'missing_evidence' | 'unrelated_small_talk';
 }
 
 export interface DynamicActionProductFixtureResult {
   fixtureId: string;
+  modeTemplateType: DynamicActionProductFixture['modeTemplateType'];
+  runnerMode: DynamicActionFixtureRunnerMode;
   shouldEmit: boolean;
   emitted: boolean;
   actionTypeMatched: boolean;
@@ -32,6 +64,12 @@ export interface DynamicActionProductFixtureResult {
   answerQualityPassed?: boolean;
   groundingPassed?: boolean;
   missingFieldsPassed?: boolean;
+  cardCopyFailures: string[];
+  acceptedOutputFailures: string[];
+  groundingFailures: string[];
+  missingFieldFailures: string[];
+  acceptedPathPassed?: boolean;
+  acceptedArtifact?: unknown;
 }
 
 export interface DynamicActionProductScore {
@@ -91,4 +129,20 @@ export function scoreDynamicActionProductFixtures(
     groundingFailures: results.filter((result) => result.groundingPassed === false).map((result) => result.fixtureId),
     missingFieldFailures: results.filter((result) => result.missingFieldsPassed === false).map((result) => result.fixtureId),
   };
+}
+
+export function scoreDynamicActionProductFixturesByMode(
+  results: DynamicActionProductFixtureResult[],
+): Record<string, DynamicActionProductScore> {
+  const grouped = new Map<string, DynamicActionProductFixtureResult[]>();
+  for (const result of results) {
+    const mode = result.modeTemplateType ?? 'unknown';
+    grouped.set(mode, [...(grouped.get(mode) ?? []), result]);
+  }
+  return Object.fromEntries(
+    [...grouped.entries()].map(([mode, modeResults]) => [
+      mode,
+      scoreDynamicActionProductFixtures(modeResults),
+    ]),
+  );
 }
