@@ -1,0 +1,135 @@
+[
+  {
+    "id": "recruiting-candidate-concern-zh-001",
+    "modeTemplateType": "recruiting",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "candidate",
+        "text": "我比较担心签证和入职时间的问题，想确认一下公司能不能支持。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "candidate_concern",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "candidate_concern",
+      "zh",
+      "visa",
+      "start_date"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/recruiting/recruiting_hiring_policy.json",
+      "tests/fixtures/modes/recruiting/recruiting_compensation_policy.txt"
+    ]
+  },
+  {
+    "id": "recruiting-experience-probe-en-001",
+    "modeTemplateType": "recruiting",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "interviewer",
+        "text": "Can you give me a specific example of a backend project where you owned the design and rollout?",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "candidate_experience_probe",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "experience_probe",
+      "en",
+      "backend",
+      "ownership"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/recruiting/recruiting_scorecard.csv",
+      "tests/fixtures/modes/recruiting/recruiting_backend_jd.md"
+    ]
+  },
+  {
+    "id": "recruiting-strong-fit-zh-001",
+    "modeTemplateType": "recruiting",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "candidate",
+        "text": "这个岗位和我之前做的平台工程非常匹配，我也很感兴趣。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "strong_fit_signal",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "strong_fit",
+      "zh",
+      "candidate_interest"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/recruiting/recruiting_backend_jd.md"
+    ]
+  },
+  {
+    "id": "recruiting-scorecard-context-en-001",
+    "modeTemplateType": "recruiting",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "interviewer",
+        "text": "Tell me about your experience with incident response and how you measure impact after a production issue.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "candidate_experience_probe",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "experience_probe",
+      "scorecard",
+      "incident_response"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/recruiting/recruiting_scorecard.csv"
+    ]
+  },
+  {
+    "id": "recruiting-negative-identity-mismatch-mixed-001",
+    "modeTemplateType": "recruiting",
+    "language": "mixed",
+    "transcriptTurns": [
+      {
+        "speaker": "internal",
+        "text": "Internal note: please check the pay band in the ATS after the call, but don't treat this as a candidate concern.",
+        "final": true
+      },
+      {
+        "speaker": "candidate",
+        "text": "我刚才只是确认面试流程，没有提出待遇或入职安排的问题。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": false
+    },
+    "negativeReason": "internal_chatter",
+    "tags": [
+      "identity_mismatch",
+      "false_positive_guard",
+      "mixed"
+    ],
+    "sourceRefs": [
+      "tests/fixtures/modes/recruiting/recruiting_ats_export.xml"
+    ]
+  }
+]

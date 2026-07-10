@@ -45,6 +45,7 @@
     "test:dynamic-actions:product": "npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/qa/__tests__/DynamicActionFixtureRunner.test.mjs && node scripts/run-dynamic-actions-product.mjs",
     "test:dynamic-actions:replay": "npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/qa/__tests__/DynamicActionReplayRunner.test.mjs && node scripts/run-dynamic-actions-replay.mjs",
     "test:dynamic-actions:fde-replay:real-stt": "npm run build:electron && node scripts/run-fde-real-stt-replay.mjs",
+    "test:dynamic-actions:recruiting-replay:real-stt": "npm run build:electron && node scripts/run-recruiting-real-stt-replay.mjs",
     "test:dynamic-actions:metrics": "npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/qa/__tests__/DynamicActionMetricsAggregator.test.mjs && node scripts/run-dynamic-actions-metrics.mjs"
   },
   "build": {

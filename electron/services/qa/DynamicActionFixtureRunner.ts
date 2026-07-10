@@ -29,7 +29,7 @@ export function loadProductFixtures(
   fixtureDir: string,
   invalidFixtures: InvalidFixtureRecord[] = [],
 ): DynamicActionProductFixture[] {
-  const files = ['sales.json', 'fde.json', 'team-meet.json'];
+  const files = ['sales.json', 'fde.json', 'team-meet.json', 'recruiting.json'];
   return files.flatMap((file) => {
     let parsed: DynamicActionProductFixture[];
     try {

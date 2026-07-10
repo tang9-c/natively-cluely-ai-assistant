@@ -2,7 +2,7 @@ import type { DynamicActionOutputType } from './DynamicAction';
 
 export interface DynamicActionProductFixture {
   id: string;
-  modeTemplateType: 'sales' | 'fde' | 'team-meet';
+  modeTemplateType: 'sales' | 'fde' | 'team-meet' | 'recruiting';
   language: 'zh' | 'en' | 'mixed';
   transcriptTurns: Array<{
     speaker: 'user' | 'customer' | 'teammate' | 'internal' | string;

@@ -12,7 +12,7 @@ async function load() {
   return import(moduleUrl);
 }
 
-test('product fixtures have exact Step 5 counts and existing schema fields', async () => {
+test('product fixtures include sales, FDE, team-meet, and recruiting schema fields', async () => {
   const { loadProductFixtures } = await load();
   const fixtures = loadProductFixtures(path.join(process.cwd(), 'tests/fixtures/dynamic-actions/product'));
   const counts = fixtures.reduce((acc, fixture) => {
@@ -26,6 +26,7 @@ test('product fixtures have exact Step 5 counts and existing schema fields', asy
   assert.equal(counts.sales, 50);
   assert.equal(counts.fde, 40);
   assert.equal(counts['team-meet'], 30);
+  assert.equal(counts.recruiting, 5);
 });
 
 test('product runner writes JSON and Markdown reports', async () => {
@@ -36,7 +37,7 @@ test('product runner writes JSON and Markdown reports', async () => {
     fixtureDir: path.join(process.cwd(), 'tests/fixtures/dynamic-actions/product'),
     outputDir: outDir,
   });
-  assert.equal(report.totalFixtures, 120);
+  assert.equal(report.totalFixtures, 125);
   assert.ok(fs.existsSync(path.join(outDir, 'product-report.json')));
   assert.ok(fs.existsSync(path.join(outDir, 'product-report.md')));
   assert.equal(typeof report.score.recallRate, 'number');
@@ -62,6 +63,7 @@ test('product runner records invalid fixture files without dropping valid files'
   );
   fs.writeFileSync(path.join(fixtureDir, 'fde.json'), '{bad json', 'utf8');
   fs.writeFileSync(path.join(fixtureDir, 'team-meet.json'), '[]', 'utf8');
+  fs.writeFileSync(path.join(fixtureDir, 'recruiting.json'), '[]', 'utf8');
 
   const report = await runDynamicActionProductFixtures({ fixtureDir, outputDir });
 

@@ -64,5 +64,38 @@
     "speakerCount": 3,
     "syntheticAudio": true,
     "coverage": ["multi_speaker", "action_item", "blocker", "owner_date_artifact_gap"]
+  },
+  {
+    "id": "recruiting-replay-candidate-concern-zh-001",
+    "modeTemplateType": "recruiting",
+    "sourceFixture": "tests/fixtures/dynamic-actions/product/recruiting.json#recruiting-candidate-concern-zh-001",
+    "audioPath": "tests/fixtures/dynamic-actions/replay/audio/recruiting-candidate-concern-zh-001.wav",
+    "expectedMissingAudio": false,
+    "language": "zh",
+    "speakerCount": 2,
+    "syntheticAudio": true,
+    "coverage": ["candidate_concern", "visa", "start_date", "speaker_identity"]
+  },
+  {
+    "id": "recruiting-replay-experience-probe-en-001",
+    "modeTemplateType": "recruiting",
+    "sourceFixture": "tests/fixtures/dynamic-actions/product/recruiting.json#recruiting-experience-probe-en-001",
+    "audioPath": "tests/fixtures/dynamic-actions/replay/audio/recruiting-experience-probe-en-001.wav",
+    "expectedMissingAudio": false,
+    "language": "en",
+    "speakerCount": 2,
+    "syntheticAudio": true,
+    "coverage": ["candidate_experience_probe", "english", "backend_ownership"]
+  },
+  {
+    "id": "recruiting-replay-identity-mismatch-mixed-001",
+    "modeTemplateType": "recruiting",
+    "sourceFixture": "tests/fixtures/dynamic-actions/product/recruiting.json#recruiting-negative-identity-mismatch-mixed-001",
+    "audioPath": "tests/fixtures/dynamic-actions/replay/audio/recruiting-identity-mismatch-mixed-001.wav",
+    "expectedMissingAudio": false,
+    "language": "mixed",
+    "speakerCount": 3,
+    "syntheticAudio": true,
+    "coverage": ["identity_mismatch", "false_positive_guard", "mixed_language"]
   }
 ]

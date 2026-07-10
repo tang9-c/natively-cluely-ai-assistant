@@ -99,6 +99,11 @@ const stages = [
     args: ['scripts/run-fde-real-stt-replay.mjs'],
   },
   {
+    name: 'recruiting-real-stt-replay',
+    command: process.execPath,
+    args: ['scripts/run-recruiting-real-stt-replay.mjs'],
+  },
+  {
     name: 'e2e',
     command: npxCmd,
     args: ['playwright', 'test'],

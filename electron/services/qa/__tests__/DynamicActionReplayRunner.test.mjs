@@ -12,11 +12,12 @@ async function load() {
   return import(moduleUrl);
 }
 
-test('replay manifest has at least 6 generated audio assets and runner skips execution phase', async () => {
+test('replay manifest has sales, FDE, team-meet, and recruiting generated audio assets and runner skips execution phase', async () => {
   const { runDynamicActionReplay } = await load();
   const manifestPath = path.join(process.cwd(), 'tests/fixtures/dynamic-actions/replay/replay-manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  assert.ok(manifest.length >= 6);
+  assert.ok(manifest.length >= 9);
+  assert.equal(manifest.filter((entry) => entry.modeTemplateType === 'recruiting').length, 3);
   for (const entry of manifest) {
     assert.equal(entry.expectedMissingAudio, false);
     assert.ok(fs.existsSync(path.join(process.cwd(), entry.audioPath)), `${entry.audioPath} should exist`);
@@ -33,6 +34,43 @@ test('replay manifest has at least 6 generated audio assets and runner skips exe
   assert.equal(report.skippedEntries, report.totalEntries);
   assert.equal(report.entries[0].reason, 'audio_replay_not_enabled_in_this_phase');
   assert.ok(fs.existsSync(path.join(outputDir, 'replay-report.json')));
+});
+
+test('recruiting audio replay runs through STT output and dynamic action detection', async () => {
+  const { runDynamicActionReplay, loadFixtureBackedSttTranscripts } = await load();
+  const manifestPath = path.join(process.cwd(), 'tests/fixtures/dynamic-actions/replay/replay-manifest.json');
+  const outputDir = path.join(process.cwd(), 'reports/dynamic-actions-recruiting-replay-test');
+  fs.rmSync(outputDir, { recursive: true, force: true });
+
+  const sttTranscripts = loadFixtureBackedSttTranscripts({
+    manifestPath,
+    fixtureRoot: path.join(process.cwd(), 'tests/fixtures/dynamic-actions/product'),
+  });
+  const audioInputs = [];
+  const report = await runDynamicActionReplay({
+    manifestPath,
+    outputDir,
+    audioRoot: process.cwd(),
+    modeTemplateTypes: ['recruiting'],
+    transcribeAudio: async ({ entry, audioPath }) => {
+      audioInputs.push({ id: entry.id, audioPath });
+      return sttTranscripts.get(entry.id);
+    },
+  });
+
+  assert.equal(report.totalEntries, 3);
+  assert.equal(report.skippedEntries, 0);
+  assert.equal(report.failedEntries, 0);
+  assert.equal(audioInputs.length, 3);
+  assert.ok(audioInputs.every((input) => input.audioPath.endsWith('.wav')));
+
+  const byId = new Map(report.entries.map((entry) => [entry.id, entry]));
+  assert.equal(byId.get('recruiting-replay-candidate-concern-zh-001')?.status, 'passed');
+  assert.equal(byId.get('recruiting-replay-candidate-concern-zh-001')?.actionType, 'candidate_concern');
+  assert.equal(byId.get('recruiting-replay-experience-probe-en-001')?.status, 'passed');
+  assert.equal(byId.get('recruiting-replay-experience-probe-en-001')?.actionType, 'candidate_experience_probe');
+  assert.equal(byId.get('recruiting-replay-identity-mismatch-mixed-001')?.status, 'passed');
+  assert.equal(byId.get('recruiting-replay-identity-mismatch-mixed-001')?.emitted, false);
 });
 
 test('sales audio replay runs through STT output and dynamic action detection', async () => {

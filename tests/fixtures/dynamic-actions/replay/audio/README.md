@@ -12,10 +12,13 @@ failure modes that text fixtures cannot cover well:
 - ASR-prone terms such as ECO, ECN, CAPA, NCR, and 8D
 - internal/customer identity mismatch
 - missing owner, date, or artifact details
+- recruiting candidate concerns, experience probes, and interviewer/candidate
+  identity mismatch
 
-The current replay runner only verifies asset presence and reports that audio
-replay execution is not enabled yet. A later STT-backed runner should consume
-these files through the same `replay-manifest.json` entries.
+The default replay runner verifies asset presence and can execute deterministic
+fixture-backed STT replay through the same `replay-manifest.json` entries.
+Separate real-STT replay stages exist for FDE and recruiting to validate the
+same audio assets through the live QCLOUD API speech path.
 
 ## Files
 
@@ -27,3 +30,6 @@ these files through the same `replay-manifest.json` entries.
 | `fde-plm-qms-risk-mixed-001.wav` | fde | PLM/QMS, CAPA traceability, audit log, readonly boundary |
 | `fde-asr-eco-capa-001.wav` | fde | ASR-prone ECO/ECN/8D terms, missing acceptance criteria |
 | `team-action-item-multi-speaker-001.wav` | team-meet | multi-speaker action item, blocker, owner/date/artifact gap |
+| `recruiting-candidate-concern-zh-001.wav` | recruiting | candidate visa/start-date concern, speaker identity |
+| `recruiting-experience-probe-en-001.wav` | recruiting | English experience probe, backend ownership |
+| `recruiting-identity-mismatch-mixed-001.wav` | recruiting | internal/candidate identity mismatch, false-positive guard |
