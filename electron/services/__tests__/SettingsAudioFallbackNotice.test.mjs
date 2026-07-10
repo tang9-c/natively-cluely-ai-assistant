@@ -24,7 +24,7 @@ test('settings audio fallback banner distinguishes screen recording permission f
         settings.indexOf('localStorage.removeItem', settings.indexOf('{deviceFallbackNotice && (')),
     );
     const permissionTextIndex = banner.indexOf('屏幕录制权限阻止了系统音频采集');
-    const genericOutputTextIndex = banner.indexOf("couldn't be opened");
+    const genericOutputTextIndex = banner.indexOf('无法打开所选');
 
     assert.ok(permissionTextIndex >= 0, 'permission-specific text should be present');
     assert.ok(genericOutputTextIndex >= 0, 'generic device-open fallback should remain for real device failures');
