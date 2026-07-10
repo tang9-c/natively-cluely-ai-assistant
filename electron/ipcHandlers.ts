@@ -1128,6 +1128,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         path.join(app.getPath('documents'), 'natively_debug.log'),
         path.join(app.getPath('documents'), 'natively_debug.log.1'),
       ],
+      dynamicActionReportPaths: {
+        productReportPath: path.join(process.cwd(), 'reports/dynamic-actions/product-report.json'),
+        replayReportPath: path.join(process.cwd(), 'reports/dynamic-actions/replay-report.json'),
+        metricsReportPath: path.join(process.cwd(), 'reports/dynamic-actions/metrics-report.json'),
+      },
       getAnswerQualityMetrics: ({ sinceMs }) => DatabaseManager.getInstance().getAnswerQualityMetrics({ sinceMs }),
     });
     const exportResult = await service.createQaReport({ outputPath: result.filePath });

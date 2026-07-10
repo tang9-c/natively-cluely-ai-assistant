@@ -11,6 +11,7 @@ export interface ReplayManifestEntry {
   expectedMissingAudio: boolean;
   language: string;
   speakerCount: number;
+  syntheticAudio?: boolean;
 }
 
 export interface ReplayRunnerInput {
@@ -19,10 +20,21 @@ export interface ReplayRunnerInput {
   audioRoot?: string;
   fixtureRoot?: string;
   modeTemplateTypes?: string[];
+  environmentStatus?: ReplayEnvironmentStatus;
   transcribeAudio?: (input: {
     entry: ReplayManifestEntry;
     audioPath: string;
   }) => string | undefined | Promise<string | undefined>;
+}
+
+export type ReplayEnvironmentStatus = 'ok' | 'blocked_missing_credentials' | 'not_applicable';
+export type ReplayCoverageMode = 'sales' | 'fde' | 'team-meet';
+
+export interface ReplayAssetCoverage {
+  requiredReal: Record<ReplayCoverageMode, number>;
+  availableReal: Record<ReplayCoverageMode, number>;
+  availableSynthetic: Record<ReplayCoverageMode, number>;
+  blockedReal: Record<ReplayCoverageMode, number>;
 }
 
 export interface ReplayReport {
@@ -30,6 +42,8 @@ export interface ReplayReport {
   skippedEntries: number;
   failedEntries: number;
   passedEntries: number;
+  environmentStatus: ReplayEnvironmentStatus;
+  assetCoverage: ReplayAssetCoverage;
   entries: ReplayReportEntry[];
 }
 
@@ -132,11 +146,45 @@ export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<
     skippedEntries: reportEntries.filter((entry) => entry.status === 'skipped').length,
     failedEntries: reportEntries.filter((entry) => entry.status === 'failed').length,
     passedEntries: reportEntries.filter((entry) => entry.status === 'passed').length,
+    environmentStatus: input.environmentStatus ?? (input.transcribeAudio ? 'ok' : 'not_applicable'),
+    assetCoverage: buildAssetCoverage(allEntries, audioRoot),
     entries: reportEntries,
   };
   fs.mkdirSync(input.outputDir, { recursive: true });
   fs.writeFileSync(path.join(input.outputDir, 'replay-report.json'), JSON.stringify(report, null, 2));
   return report;
+}
+
+function buildAssetCoverage(entries: ReplayManifestEntry[], audioRoot: string): ReplayAssetCoverage {
+  const requiredReal: Record<ReplayCoverageMode, number> = { sales: 15, fde: 10, 'team-meet': 5 };
+  const availableReal: Record<ReplayCoverageMode, number> = { sales: 0, fde: 0, 'team-meet': 0 };
+  const availableSynthetic: Record<ReplayCoverageMode, number> = { sales: 0, fde: 0, 'team-meet': 0 };
+  const modes = new Set<ReplayCoverageMode>(['sales', 'fde', 'team-meet']);
+
+  for (const entry of entries) {
+    const mode = entry.modeTemplateType as ReplayCoverageMode;
+    if (!modes.has(mode)) continue;
+    const audioPath = path.isAbsolute(entry.audioPath)
+      ? entry.audioPath
+      : path.resolve(audioRoot, entry.audioPath);
+    if (!fs.existsSync(audioPath)) continue;
+    if (entry.syntheticAudio === true) {
+      availableSynthetic[mode] += 1;
+    } else {
+      availableReal[mode] += 1;
+    }
+  }
+
+  return {
+    requiredReal,
+    availableReal,
+    availableSynthetic,
+    blockedReal: {
+      sales: Math.max(requiredReal.sales - availableReal.sales, 0),
+      fde: Math.max(requiredReal.fde - availableReal.fde, 0),
+      'team-meet': Math.max(requiredReal['team-meet'] - availableReal['team-meet'], 0),
+    },
+  };
 }
 
 function loadSourceFixture(

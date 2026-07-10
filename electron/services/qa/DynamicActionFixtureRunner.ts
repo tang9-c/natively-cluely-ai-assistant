@@ -117,6 +117,7 @@ export async function runDynamicActionProductFixtures(input: ProductRunnerInput)
     results.push({
       fixtureId: fixture.id,
       modeTemplateType: fixture.modeTemplateType,
+      actionType: fixture.expected.actionType,
       runnerMode,
       shouldEmit: fixture.expected.shouldEmit,
       emitted: actions.length > 0,

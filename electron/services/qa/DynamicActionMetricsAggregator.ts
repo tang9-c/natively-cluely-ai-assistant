@@ -1,4 +1,5 @@
 import type { AnswerQualityMetrics } from '../../db/DatabaseManager';
+import type { ReplayAssetCoverage, ReplayEnvironmentStatus, ReplayReport } from './DynamicActionReplayRunner';
 
 type ModeId = 'sales' | 'fde' | 'team-meet';
 
@@ -25,6 +26,7 @@ export interface AggregatorFixtureResult {
 export interface DynamicActionMetricsInput {
   telemetryRecords: TelemetryLikeRecord[];
   fixtureResults: AggregatorFixtureResult[];
+  replayReport?: ReplayReport | null;
   answerQualityMetrics: AnswerQualityMetrics | null;
 }
 
@@ -67,6 +69,8 @@ export interface DynamicActionQaSummary {
     scopeDenied: number;
     localFallback: number;
   };
+  assetCoverage: ReplayAssetCoverage;
+  environmentStatus: ReplayEnvironmentStatus;
   answerQualityMetrics: AnswerQualityMetrics | null;
 }
 
@@ -169,7 +173,18 @@ export function aggregateDynamicActionQaMetrics(input: DynamicActionMetricsInput
       cardAcceptedToFirstToken: timing(acceptToToken),
     },
     trustSources,
+    assetCoverage: input.replayReport?.assetCoverage ?? emptyAssetCoverage(),
+    environmentStatus: input.replayReport?.environmentStatus ?? 'not_applicable',
     answerQualityMetrics: input.answerQualityMetrics,
+  };
+}
+
+function emptyAssetCoverage(): ReplayAssetCoverage {
+  return {
+    requiredReal: { sales: 15, fde: 10, 'team-meet': 5 },
+    availableReal: { sales: 0, fde: 0, 'team-meet': 0 },
+    availableSynthetic: { sales: 0, fde: 0, 'team-meet': 0 },
+    blockedReal: { sales: 15, fde: 10, 'team-meet': 5 },
   };
 }
 

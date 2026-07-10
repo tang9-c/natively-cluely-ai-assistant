@@ -56,6 +56,7 @@ export interface DynamicActionProductFixture {
 export interface DynamicActionProductFixtureResult {
   fixtureId: string;
   modeTemplateType: DynamicActionProductFixture['modeTemplateType'];
+  actionType?: string;
   runnerMode: DynamicActionFixtureRunnerMode;
   shouldEmit: boolean;
   emitted: boolean;

@@ -35,6 +35,15 @@ function collectTestFiles(dir) {
 }
 
 function runStage(stage) {
+  if (stage.blockedOnMissingEnv?.length) {
+    const missing = stage.blockedOnMissingEnv.filter((name) => !process.env[name]);
+    if (missing.length === stage.blockedOnMissingEnv.length) {
+      const reason = `missing ${stage.blockedOnMissingEnv.join(' or ')}`;
+      console.log(`\n[test:all] stage=${stage.name} result=BLOCKED reason=${reason}`);
+      return { name: stage.name, status: 0, blocked: true, reason, durationMs: 0 };
+    }
+  }
+
   if (stage.skipUnless && !stage.skipUnless()) {
     console.log(`\n[test:all] stage=${stage.name} result=SKIP reason=${stage.skipReason}`);
     return { name: stage.name, status: 0, skipped: true, durationMs: 0 };
@@ -94,14 +103,28 @@ const stages = [
     args: ['scripts/run-dynamic-actions-replay.mjs'],
   },
   {
+    name: 'sales-real-stt-replay',
+    command: process.execPath,
+    args: ['scripts/run-sales-real-stt-replay.mjs'],
+    blockedOnMissingEnv: ['QCLOUD_LIVE_API_KEY', 'NATIVELY_API_KEY'],
+  },
+  {
     name: 'fde-real-stt-replay',
     command: process.execPath,
     args: ['scripts/run-fde-real-stt-replay.mjs'],
+    blockedOnMissingEnv: ['QCLOUD_LIVE_API_KEY', 'NATIVELY_API_KEY'],
+  },
+  {
+    name: 'team-meet-real-stt-replay',
+    command: process.execPath,
+    args: ['scripts/run-team-meet-real-stt-replay.mjs'],
+    blockedOnMissingEnv: ['QCLOUD_LIVE_API_KEY', 'NATIVELY_API_KEY'],
   },
   {
     name: 'recruiting-real-stt-replay',
     command: process.execPath,
     args: ['scripts/run-recruiting-real-stt-replay.mjs'],
+    blockedOnMissingEnv: ['QCLOUD_LIVE_API_KEY', 'NATIVELY_API_KEY'],
   },
   {
     name: 'e2e',
@@ -141,7 +164,7 @@ const failed = results.filter((result) => result.status !== 0);
 
 console.log('\n[test:all] summary');
 for (const result of results) {
-  const label = result.skipped ? 'SKIP' : result.status === 0 ? 'PASS' : `FAIL(${result.status})`;
+  const label = result.blocked ? `BLOCKED: ${result.reason}` : result.skipped ? 'SKIP' : result.status === 0 ? 'PASS' : `FAIL(${result.status})`;
   console.log(`[test:all] ${result.name}: ${label} durationMs=${result.durationMs}`);
 }
 

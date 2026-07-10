@@ -6,6 +6,7 @@ import type { AnswerQualityMetrics } from '../../db/DatabaseManager';
 import {
   aggregateDynamicActionQaMetrics,
   parseTelemetryJsonlLines,
+  type AggregatorFixtureResult,
   type TelemetryLikeRecord,
 } from './DynamicActionMetricsAggregator';
 import { redactForLog, redactValue } from '../../utils/redactForLog';
@@ -18,6 +19,11 @@ export interface QaReportServiceDeps {
   verboseLoggingEnabled: () => boolean;
   telemetryPath: string;
   debugLogPaths: string[];
+  dynamicActionReportPaths?: {
+    productReportPath: string;
+    replayReportPath: string;
+    metricsReportPath: string;
+  };
   getAnswerQualityMetrics: (input: { sinceMs: number }) => AnswerQualityMetrics | null;
 }
 
@@ -63,6 +69,8 @@ export class QaReportService {
       }
     }
 
+    const dynamicActionReports = this.readDynamicActionReports(zip, sinceMs, includedFiles, missingFiles, reportWarnings);
+
     let answerQualityMetrics: AnswerQualityMetrics | null = null;
     try {
       answerQualityMetrics = this.deps.getAnswerQualityMetrics({ sinceMs });
@@ -72,7 +80,8 @@ export class QaReportService {
 
     const summary = aggregateDynamicActionQaMetrics({
       telemetryRecords,
-      fixtureResults: [],
+      fixtureResults: toAggregatorFixtureResults(dynamicActionReports.productReport?.results),
+      replayReport: dynamicActionReports.replayReport,
       answerQualityMetrics,
     });
     zip.file('quality-summary.json', JSON.stringify(summary, null, 2));
@@ -99,6 +108,75 @@ export class QaReportService {
       return { success: true, filePath: input.outputPath };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  private readDynamicActionReports(
+    zip: JSZip,
+    sinceMs: number,
+    includedFiles: string[],
+    missingFiles: string[],
+    warnings: string[],
+  ): {
+    productReport: { results?: unknown[] } | null;
+    replayReport: any | null;
+    metricsReport: any | null;
+  } {
+    const paths = this.deps.dynamicActionReportPaths;
+    if (!paths) {
+      warnings.push('dynamic action QA report paths not configured');
+      return { productReport: null, replayReport: null, metricsReport: null };
+    }
+
+    const productReport = this.readJsonReport(
+      paths.productReportPath,
+      zip,
+      sinceMs,
+      includedFiles,
+      'dynamic-actions/product-report.json',
+      missingFiles,
+      warnings,
+    );
+    const replayReport = this.readJsonReport(
+      paths.replayReportPath,
+      zip,
+      sinceMs,
+      includedFiles,
+      'dynamic-actions/replay-report.json',
+      missingFiles,
+      warnings,
+    );
+    const metricsReport = this.readJsonReport(
+      paths.metricsReportPath,
+      zip,
+      sinceMs,
+      includedFiles,
+      'dynamic-actions/metrics-report.json',
+      missingFiles,
+      warnings,
+    );
+    return { productReport, replayReport, metricsReport };
+  }
+
+  private readJsonReport(
+    filePath: string,
+    zip: JSZip,
+    sinceMs: number,
+    includedFiles: string[],
+    zipName: string,
+    missingFiles: string[],
+    warnings: string[],
+  ): any | null {
+    const content = this.readFileIfRecent(filePath, sinceMs, zipName, missingFiles, warnings);
+    if (content === null) return null;
+    try {
+      const parsed = JSON.parse(content);
+      zip.file(zipName, JSON.stringify(redactValue(parsed), null, 2));
+      includedFiles.push(zipName);
+      return parsed;
+    } catch (error) {
+      warnings.push(`${zipName} omitted because JSON parsing failed: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
     }
   }
 
@@ -149,4 +227,17 @@ export class QaReportService {
       .replace(/\b(transcript|prompt|body|referenceContent|evidenceText|screenshot|base64)\b\s*[:=]?\s*[^,\n\r\t}]*/gi, '$1 [REMOVED]')
       .replace(/\b(apiKey|authorization|bearer|token|secret|password|credential)\b\s*[:=]?\s*[^,\n\r\t}]*/gi, '$1 [REDACTED]');
   }
+}
+
+function toAggregatorFixtureResults(results: unknown): AggregatorFixtureResult[] {
+  if (!Array.isArray(results)) return [];
+  return results.filter((result): result is AggregatorFixtureResult => {
+    if (!result || typeof result !== 'object') return false;
+    const candidate = result as Partial<AggregatorFixtureResult>;
+    return typeof candidate.fixtureId === 'string'
+      && typeof candidate.shouldEmit === 'boolean'
+      && typeof candidate.emitted === 'boolean'
+      && typeof candidate.actionTypeMatched === 'boolean'
+      && typeof candidate.outputTypeMatched === 'boolean';
+  });
 }

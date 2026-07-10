@@ -33,6 +33,15 @@ test('replay manifest has sales, FDE, team-meet, and recruiting generated audio 
   assert.equal(report.failedEntries, 0);
   assert.equal(report.skippedEntries, report.totalEntries);
   assert.equal(report.entries[0].reason, 'audio_replay_not_enabled_in_this_phase');
+  assert.equal(report.environmentStatus, 'not_applicable');
+  assert.deepEqual(report.assetCoverage.requiredReal, { sales: 15, fde: 10, 'team-meet': 5 });
+  assert.equal(report.assetCoverage.availableSynthetic.sales, 3);
+  assert.equal(report.assetCoverage.availableSynthetic.fde, 2);
+  assert.equal(report.assetCoverage.availableSynthetic['team-meet'], 1);
+  assert.equal(report.assetCoverage.availableReal.sales, 0);
+  assert.equal(report.assetCoverage.blockedReal.sales, 15);
+  assert.equal(report.assetCoverage.blockedReal.fde, 10);
+  assert.equal(report.assetCoverage.blockedReal['team-meet'], 5);
   assert.ok(fs.existsSync(path.join(outputDir, 'replay-report.json')));
 });
 
@@ -61,6 +70,7 @@ test('recruiting audio replay runs through STT output and dynamic action detecti
   assert.equal(report.totalEntries, 3);
   assert.equal(report.skippedEntries, 0);
   assert.equal(report.failedEntries, 0);
+  assert.equal(report.environmentStatus, 'ok');
   assert.equal(audioInputs.length, 3);
   assert.ok(audioInputs.every((input) => input.audioPath.endsWith('.wav')));
 

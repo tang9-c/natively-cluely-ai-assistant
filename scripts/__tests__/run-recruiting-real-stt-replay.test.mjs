@@ -14,22 +14,26 @@ function read(relativePath) {
 test('Recruiting real STT replay is part of the default full test list and validates only recruiting audio fixtures', () => {
   const pkg = JSON.parse(read('package.json'));
   const script = read('scripts/run-recruiting-real-stt-replay.mjs');
+  const helper = read('scripts/dynamic-action-real-stt-replay-lib.mjs');
   const allRunner = read('scripts/run-test-all.mjs');
 
   assert.equal(
     pkg.scripts['test:dynamic-actions:recruiting-replay:real-stt'],
     'npm run build:electron && node scripts/run-recruiting-real-stt-replay.mjs',
   );
-  assert.match(script, /modeTemplateTypes:\s*\[\s*'recruiting'\s*\]/);
-  assert.match(script, /QCLOUD_LIVE_API_KEY|NATIVELY_API_KEY/);
+  assert.match(script, /modeTemplateType:\s*'recruiting'/);
+  assert.match(script, /dynamic-action-real-stt-replay-lib\.mjs/);
+  assert.match(helper, /QCLOUD_LIVE_API_KEY|NATIVELY_API_KEY/);
   assert.match(script, /DO NOT print API keys/i);
-  assert.doesNotMatch(script, /loadFixtureBackedSttTranscripts/);
-  assert.doesNotMatch(script, /SKIP:/);
+  assert.doesNotMatch(helper, /loadFixtureBackedSttTranscripts/);
+  assert.match(helper, /blocked_missing_credentials/);
+  assert.match(helper, /process\.exit\(0\)/);
+  assert.doesNotMatch(helper, /throw new Error\('Missing QCLOUD_LIVE_API_KEY or NATIVELY_API_KEY/);
 
   assert.match(allRunner, /name: 'recruiting-real-stt-replay'/);
   const stageStart = allRunner.indexOf("name: 'recruiting-real-stt-replay'");
   const stageEnd = allRunner.indexOf("name: 'e2e'", stageStart);
   assert.ok(stageStart >= 0 && stageEnd > stageStart, 'recruiting-real-stt-replay stage should appear before e2e');
   const stageBlock = allRunner.slice(stageStart, stageEnd);
-  assert.doesNotMatch(stageBlock, /skipUnless/);
+  assert.match(stageBlock, /blockedOnMissingEnv/);
 });

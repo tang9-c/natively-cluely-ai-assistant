@@ -95,6 +95,39 @@ test('missing files do not fail export and are recorded in metadata', async () =
   assert.ok(metadata.reportWarnings.length >= 3);
 });
 
+test('includes dynamic action QA reports when available', async () => {
+  const { QaReportService } = await load();
+  const dir = tempDir();
+  const outputPath = path.join(dir, 'qa-with-dynamic-actions.zip');
+  const productReportPath = path.join(dir, 'product-report.json');
+  const replayReportPath = path.join(dir, 'replay-report.json');
+  const metricsReportPath = path.join(dir, 'metrics-report.json');
+  fs.writeFileSync(productReportPath, '{"totalFixtures":2,"results":[]}', 'utf8');
+  fs.writeFileSync(replayReportPath, '{"totalEntries":9,"environmentStatus":"blocked_missing_credentials"}', 'utf8');
+  fs.writeFileSync(metricsReportPath, '{"environmentStatus":"blocked_missing_credentials"}', 'utf8');
+
+  const service = new QaReportService({
+    now: () => new Date('2026-07-07T12:00:00.000Z'),
+    appVersion: '2.7.0-test',
+    platform: 'darwin',
+    arch: 'arm64',
+    verboseLoggingEnabled: () => false,
+    telemetryPath: path.join(dir, 'missing-telemetry.jsonl'),
+    debugLogPaths: [],
+    dynamicActionReportPaths: { productReportPath, replayReportPath, metricsReportPath },
+    getAnswerQualityMetrics: () => null,
+  });
+
+  const result = await service.createQaReport({ outputPath });
+  assert.equal(result.success, true);
+  const zip = await JSZip.loadAsync(fs.readFileSync(outputPath));
+  assert.ok(zip.file('dynamic-actions/product-report.json'));
+  assert.ok(zip.file('dynamic-actions/replay-report.json'));
+  assert.ok(zip.file('dynamic-actions/metrics-report.json'));
+  const metadata = JSON.parse(await zip.file('metadata.json').async('string'));
+  assert.ok(metadata.includedFiles.includes('dynamic-actions/product-report.json'));
+});
+
 test('exported QA ZIP does not contain raw sentinel private content', async () => {
   const { QaReportService } = await load();
   const dir = tempDir();

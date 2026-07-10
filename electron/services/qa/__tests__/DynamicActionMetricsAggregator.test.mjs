@@ -89,6 +89,33 @@ test('aggregates latency and trust source counters from telemetry', async () => 
   assert.equal(summary.trustSources.localFallback, 1);
 });
 
+test('carries replay asset coverage and environment status into the QA summary', async () => {
+  const { aggregateDynamicActionQaMetrics } = await load();
+  const summary = aggregateDynamicActionQaMetrics({
+    telemetryRecords: [],
+    fixtureResults: [],
+    replayReport: {
+      totalEntries: 9,
+      skippedEntries: 9,
+      failedEntries: 0,
+      passedEntries: 0,
+      environmentStatus: 'blocked_missing_credentials',
+      assetCoverage: {
+        requiredReal: { sales: 15, fde: 10, 'team-meet': 5 },
+        availableReal: { sales: 0, fde: 0, 'team-meet': 0 },
+        availableSynthetic: { sales: 3, fde: 2, 'team-meet': 1 },
+        blockedReal: { sales: 15, fde: 10, 'team-meet': 5 },
+      },
+      entries: [],
+    },
+    answerQualityMetrics: null,
+  });
+
+  assert.equal(summary.environmentStatus, 'blocked_missing_credentials');
+  assert.equal(summary.assetCoverage.availableSynthetic.sales, 3);
+  assert.equal(summary.assetCoverage.blockedReal['team-meet'], 5);
+});
+
 test('parses telemetry JSONL with warnings for invalid lines', async () => {
   const { parseTelemetryJsonlLines } = await load();
   const parsed = parseTelemetryJsonlLines('{"name":"app_start","timestamp":"2026-07-07T00:00:00.000Z","properties":{}}\nnot-json\n\n');

@@ -38,6 +38,7 @@ test('product runner writes JSON and Markdown reports', async () => {
     outputDir: outDir,
   });
   assert.equal(report.totalFixtures, 125);
+  assert.equal(report.results.find((entry) => entry.fixtureId === 'sales-pricing-objection-zh-001')?.actionType, 'pricing_objection');
   assert.ok(fs.existsSync(path.join(outDir, 'product-report.json')));
   assert.ok(fs.existsSync(path.join(outDir, 'product-report.md')));
   assert.equal(typeof report.score.recallRate, 'number');
