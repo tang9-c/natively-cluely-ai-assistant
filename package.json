@@ -46,7 +46,11 @@
     "test:dynamic-actions:replay": "npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/qa/__tests__/DynamicActionReplayRunner.test.mjs && node scripts/run-dynamic-actions-replay.mjs",
     "test:dynamic-actions:fde-replay:real-stt": "npm run build:electron && node scripts/run-fde-real-stt-replay.mjs",
     "test:dynamic-actions:recruiting-replay:real-stt": "npm run build:electron && node scripts/run-recruiting-real-stt-replay.mjs",
-    "test:dynamic-actions:metrics": "npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/qa/__tests__/DynamicActionMetricsAggregator.test.mjs && node scripts/run-dynamic-actions-metrics.mjs"
+    "test:dynamic-actions:metrics": "npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/qa/__tests__/DynamicActionMetricsAggregator.test.mjs && node scripts/run-dynamic-actions-metrics.mjs",
+    "test:coverage": "node scripts/coverage/run-c8.mjs",
+    "test:coverage:baseline": "node scripts/coverage/baseline.mjs",
+    "test:coverage:diff": "node scripts/coverage/diff-against-baseline.mjs",
+    "test:coverage:threshold": "node scripts/coverage/check-threshold.mjs"
   },
   "build": {
     "generateUpdatesFilesForAllChannels": true,

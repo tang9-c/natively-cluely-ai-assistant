@@ -1,0 +1,25 @@
+{
+  "include": [
+    "dist-electron/electron/**/*.js"
+  ],
+  "exclude": [
+    "**/__tests__/**",
+    "**/*.test.*",
+    "**/fixtures/**",
+    "**/test/**",
+    "**/*.spec.*",
+    "**/node_modules/**"
+  ],
+  "reporter": [
+    "text",
+    "text-summary",
+    "html",
+    "json-summary",
+    "lcov"
+  ],
+  "reports-dir": "coverage/report",
+  "temp-directory": "coverage/tmp",
+  "exclude-after-remap": true,
+  "clean": true,
+  "skip-full": false
+}
