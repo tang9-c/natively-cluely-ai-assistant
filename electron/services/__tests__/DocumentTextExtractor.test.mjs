@@ -112,4 +112,58 @@ describe('DocumentTextExtractor', () => {
       /binary file/,
     );
   });
+
+  it('decodes UTF-16 BE with BOM (manually byte-swapped)', async () => {
+    // Node's Buffer does not have a built-in 'utf16be' encoding in this
+    // version, so build the BE bytes manually: for each 'B','E','-','H','e','l','l','o'
+    // emit the big-endian UTF-16 code unit bytes (e.g. 'B' = 0x00 0x42).
+    const utf16le = Buffer.from('BE-Hello', 'utf16le');
+    const utf16be = Buffer.allocUnsafe(utf16le.length);
+    for (let i = 0; i < utf16le.length; i += 2) {
+      utf16be[i] = utf16le[i + 1];
+      utf16be[i + 1] = utf16le[i];
+    }
+    const buf = Buffer.concat([Buffer.from([0xfe, 0xff]), utf16be]);
+    const filePath = path.join(tmpDir, 'utf16be.txt');
+    fs.writeFileSync(filePath, buf);
+    const text = await DocumentTextExtractor.extract(filePath);
+    assert.equal(text, 'BE-Hello');
+  });
+
+  it('strips a UTF-8 BOM and decodes the rest as UTF-8', async () => {
+    const filePath = path.join(tmpDir, 'utf8bom.txt');
+    const buf = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('BOM-UTF8', 'utf8')]);
+    fs.writeFileSync(filePath, buf);
+    const text = await DocumentTextExtractor.extract(filePath);
+    assert.equal(text, 'BOM-UTF8');
+  });
+
+  it('trims surrounding whitespace before returning extracted text', async () => {
+    const filePath = path.join(tmpDir, 'padded.txt');
+    fs.writeFileSync(filePath, '\n\n   hello world   \n\n', 'utf8');
+    const text = await DocumentTextExtractor.extract(filePath);
+    assert.equal(text, 'hello world');
+  });
+
+  it('rejects a non-regular path (e.g. directory)', async () => {
+    await assert.rejects(
+      async () => DocumentTextExtractor.extract(tmpDir),
+      /not a regular file/,
+    );
+  });
+
+  it('rejects a non-existent file (lstatSync surfaces ENOENT)', async () => {
+    const missingPath = path.join(tmpDir, 'does-not-exist.txt');
+    await assert.rejects(
+      async () => DocumentTextExtractor.extract(missingPath),
+      /ENOENT/,
+    );
+  });
+
+  it('handles .markdown extension as plain text', async () => {
+    const filePath = path.join(tmpDir, 'notes.markdown');
+    fs.writeFileSync(filePath, '# Markdown note\n\nbody', 'utf8');
+    const text = await DocumentTextExtractor.extract(filePath);
+    assert.match(text, /Markdown note/);
+  });
 });

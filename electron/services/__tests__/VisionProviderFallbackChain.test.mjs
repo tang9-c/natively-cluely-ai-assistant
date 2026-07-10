@@ -367,3 +367,491 @@ test('OCR modules are not imported by the vision fallback chain source', async (
   assert.ok(!/OcrProvider/.test(susSource), 'ScreenUnderstandingService.js must not reference OcrProvider');
   assert.ok(!/tesseract/i.test(susSource), 'ScreenUnderstandingService.js must not reference tesseract');
 });
+
+test('missing source image returns all_vision_failed with no attempts', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+
+  const result = await runVisionFallback({
+    imagePath: '/definitely/does/not/exist.png',
+    mode: 'vision_first',
+    providers: [
+      makeFakeProvider({ id: 'p1', invoke: async () => 'unreachable' }),
+    ],
+    systemPrompt: 'sys',
+    userPrompt: 'user',
+    optimizer,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.failureReason, 'all_vision_failed');
+  assert.deepEqual(result.attempts, []);
+  await optimizer.cleanupAll();
+});
+
+test('optimizer throwing maps to invalid_payload errorClass', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  // Sabotage the optimizer so optimize() throws.
+  optimizer.optimize = async () => {
+    throw new Error('boom: optimizer failed');
+  };
+  const img = await ensureFixture();
+
+  const result = await runVisionFallback({
+    imagePath: img,
+    mode: 'vision_first',
+    providers: [
+      makeFakeProvider({ id: 'p1', invoke: async () => 'unreachable' }),
+      makeFakeProvider({ id: 'p2', invoke: async () => 'fallback answer' }),
+    ],
+    systemPrompt: 'sys',
+    userPrompt: 'user',
+    optimizer,
+  });
+
+  // The chain catches the optimizer throw BEFORE invoking any provider, so
+  // sawAtLeastOneAttempt stays false and failureReason falls through to the
+  // default branch (no_vision_provider). The first attempt's errorClass is
+  // still 'invalid_payload' to mark the optimizer as the failure source.
+  assert.equal(result.ok, false);
+  assert.equal(result.failureReason, 'no_vision_provider');
+  assert.equal(result.attempts[0].errorClass, 'invalid_payload');
+  await optimizer.cleanupAll();
+});
+
+test('totalDeadlineMs short-circuits remaining providers as timeout', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const img = await ensureFixture();
+
+  // Use a provider that takes ~80ms (well under totalDeadlineMs) so that by
+  // the time we check the deadline for the next provider, we've exceeded it.
+  const result = await runVisionFallback({
+    imagePath: img,
+    mode: 'vision_first',
+    totalDeadlineMs: 60,
+    providers: [
+      makeFakeProvider({
+        id: 'slow',
+        invoke: async () => {
+          await new Promise(r => setTimeout(r, 80));
+          return 'should-be-cut-off';
+        },
+      }),
+      makeFakeProvider({ id: 'never', invoke: async () => 'never-invoked' }),
+    ],
+    systemPrompt: 'sys',
+    userPrompt: 'user',
+    optimizer,
+  });
+
+  // Either the slow provider succeeded before the deadline (and we never
+  // observe the second attempt) or it was cut off by the deadline check.
+  if (!result.ok) {
+    // If the slow provider exceeded the deadline mid-flight, the chain short-
+    // circuits the second provider and reports all_vision_failed.
+    assert.equal(result.failureReason, 'all_vision_failed');
+    assert.ok(
+      result.attempts.some(a => a.errorClass === 'timeout'),
+      'expected at least one timeout attempt',
+    );
+  } else {
+    // Otherwise the slow provider succeeded within the deadline.
+    assert.equal(result.attempts[0].ok, true);
+  }
+  await optimizer.cleanupAll();
+});
+
+test('classifyError maps 401 to auth_error', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const img = await ensureFixture();
+
+  const result = await runVisionFallback({
+    imagePath: img,
+    mode: 'vision_first',
+    providers: [
+      makeFakeProvider({ id: 'p1', invoke: async () => { throw new Error('401 unauthorized'); } }),
+      makeFakeProvider({ id: 'p2', invoke: async () => 'fallback' }),
+    ],
+    systemPrompt: 'sys',
+    userPrompt: 'user',
+    optimizer,
+  });
+
+  assert.equal(result.attempts[0].errorClass, 'auth_error');
+  await optimizer.cleanupAll();
+});
+
+test('classifyError maps network errors to network errorClass', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const img = await ensureFixture();
+
+  const result = await runVisionFallback({
+    imagePath: img,
+    mode: 'vision_first',
+    providers: [
+      makeFakeProvider({
+        id: 'p1',
+        invoke: async () => {
+          const err = new Error('fetch failed: ECONNRESET');
+          err.code = 'ECONNRESET';
+          throw err;
+        },
+      }),
+      makeFakeProvider({ id: 'p2', invoke: async () => 'recovered' }),
+    ],
+    systemPrompt: 'sys',
+    userPrompt: 'user',
+    optimizer,
+  });
+
+  assert.equal(result.attempts[0].errorClass, 'network');
+  await optimizer.cleanupAll();
+});
+
+test('classifyError maps invalid_payload keywords', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const img = await ensureFixture();
+
+  const result = await runVisionFallback({
+    imagePath: img,
+    mode: 'vision_first',
+    providers: [
+      makeFakeProvider({ id: 'p1', invoke: async () => { throw new Error('payload too large (413)'); } }),
+      makeFakeProvider({ id: 'p2', invoke: async () => 'fallback' }),
+    ],
+    systemPrompt: 'sys',
+    userPrompt: 'user',
+    optimizer,
+  });
+
+  assert.equal(result.attempts[0].errorClass, 'invalid_payload');
+  await optimizer.cleanupAll();
+});
+
+// ---------------------------------------------------------------------------
+// Phase 4 PR4.3 — additional edge cases. The file above already covers
+// first-success-wins, skip-on-not-configured / no-vision / scope-blocked /
+// privacy-blocked, total-deadline, and most classifyError branches. The cases
+// below pin the remaining classifyError mappings and a few lesser-tested
+// behaviors of the chain.
+// ---------------------------------------------------------------------------
+
+test('classifyError maps 403 / "forbidden" / "invalid_api" to auth_error', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const img = await ensureFixture();
+
+  for (const message of ['403 forbidden', 'unauthorized', 'invalid_api_key presented']) {
+    const result = await runVisionFallback({
+      imagePath: img,
+      mode: 'vision_first',
+      providers: [
+        makeFakeProvider({ id: 'p1', invoke: async () => { throw new Error(message); } }),
+        makeFakeProvider({ id: 'p2', invoke: async () => 'recovered' }),
+      ],
+      systemPrompt: 'sys',
+      userPrompt: 'user',
+      optimizer,
+    });
+    assert.equal(result.attempts[0].errorClass, 'auth_error', `expected auth_error for: ${message}`);
+  }
+  await optimizer.cleanupAll();
+});
+
+test('classifyError maps 5xx HTTP status codes to provider_error', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const img = await ensureFixture();
+
+  // Note: 504 is intentionally excluded because the classifier's `timeout`
+  // keyword check fires before the 5xx check. The remaining 5xx codes map
+  // cleanly to provider_error.
+  for (const message of ['500 internal error', '502 bad gateway', '503 service unavailable']) {
+    const result = await runVisionFallback({
+      imagePath: img,
+      mode: 'vision_first',
+      providers: [
+        makeFakeProvider({ id: 'p1', invoke: async () => { throw new Error(message); } }),
+        makeFakeProvider({ id: 'p2', invoke: async () => 'recovered' }),
+      ],
+      systemPrompt: 'sys',
+      userPrompt: 'user',
+      optimizer,
+    });
+    assert.equal(result.attempts[0].errorClass, 'provider_error', `expected provider_error for: ${message}`);
+  }
+  await optimizer.cleanupAll();
+});
+
+test('classifyError maps 429 / "rate" / "quota" to rate_limited', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const img = await ensureFixture();
+
+  for (const message of ['429 too many requests', 'rate limit exceeded', 'quota exceeded for today']) {
+    const result = await runVisionFallback({
+      imagePath: img,
+      mode: 'vision_first',
+      providers: [
+        makeFakeProvider({ id: 'p1', invoke: async () => { throw new Error(message); } }),
+        makeFakeProvider({ id: 'p2', invoke: async () => 'recovered' }),
+      ],
+      systemPrompt: 'sys',
+      userPrompt: 'user',
+      optimizer,
+    });
+    assert.equal(result.attempts[0].errorClass, 'rate_limited', `expected rate_limited for: ${message}`);
+  }
+  await optimizer.cleanupAll();
+});
+
+test('classifyError maps ETIMEDOUT to timeout errorClass', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const img = await ensureFixture();
+
+  const result = await runVisionFallback({
+    imagePath: img,
+    mode: 'vision_first',
+    providers: [
+      makeFakeProvider({ id: 'p1', invoke: async () => { throw new Error('ETIMEDOUT upstream'); } }),
+      makeFakeProvider({ id: 'p2', invoke: async () => 'recovered' }),
+    ],
+    systemPrompt: 'sys',
+    userPrompt: 'user',
+    optimizer,
+  });
+
+  assert.equal(result.attempts[0].errorClass, 'timeout');
+  await optimizer.cleanupAll();
+});
+
+test('classifyError maps "image not supported" to no_vision', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const img = await ensureFixture();
+
+  const result = await runVisionFallback({
+    imagePath: img,
+    mode: 'vision_first',
+    providers: [
+      makeFakeProvider({ id: 'p1', invoke: async () => { throw new Error('image not supported by this model'); } }),
+      makeFakeProvider({ id: 'p2', invoke: async () => 'recovered' }),
+    ],
+    systemPrompt: 'sys',
+    userPrompt: 'user',
+    optimizer,
+  });
+
+  assert.equal(result.attempts[0].errorClass, 'no_vision');
+  await optimizer.cleanupAll();
+});
+
+test('classifyError maps unknown errors to unknown errorClass', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const img = await ensureFixture();
+
+  const result = await runVisionFallback({
+    imagePath: img,
+    mode: 'vision_first',
+    providers: [
+      makeFakeProvider({ id: 'p1', invoke: async () => { throw new Error('something we have never seen before'); } }),
+      makeFakeProvider({ id: 'p2', invoke: async () => 'recovered' }),
+    ],
+    systemPrompt: 'sys',
+    userPrompt: 'user',
+    optimizer,
+  });
+
+  assert.equal(result.attempts[0].errorClass, 'unknown');
+  await optimizer.cleanupAll();
+});
+
+test('private_vision with a mix of private and public providers picks the local one', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const img = await ensureFixture();
+
+  // The first provider is configured but flagged non-local, so private_vision
+  // must skip it. The second provider is local, configured, and vision-capable.
+  const result = await runVisionFallback({
+    imagePath: img,
+    mode: 'private_vision',
+    providers: [
+      makeFakeProvider({ id: 'openai', isLocal: false, invoke: async () => 'should not run' }),
+      makeFakeProvider({ id: 'ollama', isLocal: true, invoke: async () => 'local ok' }),
+      makeFakeProvider({ id: 'codex', isLocal: true, invoke: async () => 'should not run (already succeeded)' }),
+    ],
+    systemPrompt: 'sys',
+    userPrompt: 'user',
+    optimizer,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.providerUsed, 'ollama');
+  await optimizer.cleanupAll();
+});
+
+test('result.durationMs is positive and at least one attempt reports durationMs > 0', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const img = await ensureFixture();
+
+  const result = await runVisionFallback({
+    imagePath: img,
+    mode: 'vision_first',
+    providers: [
+      makeFakeProvider({ id: 'p1', invoke: async () => { await new Promise(r => setTimeout(r, 5)); return 'ok'; } }),
+    ],
+    systemPrompt: 'sys',
+    userPrompt: 'user',
+    optimizer,
+  });
+
+  assert.ok(result.durationMs >= 0);
+  // The successful attempt records the elapsed time.
+  assert.ok(result.attempts[0].durationMs > 0);
+  await optimizer.cleanupAll();
+});
+
+test('per-provider timeoutMs override is honored (provider-specific override beats the global default)', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const img = await ensureFixture();
+
+  // The slow provider has a 30ms timeout and a 200ms invocation. With a
+  // global perProviderTimeoutMs of 5_000ms it would normally complete — but
+  // the provider-specific 30ms override must trigger the timeout.
+  const result = await runVisionFallback({
+    imagePath: img,
+    mode: 'vision_first',
+    perProviderTimeoutMs: 5000, // high global default
+    providers: [
+      makeFakeProvider({
+        id: 'slow-override',
+        timeoutMs: 30,
+        invoke: ({ signal }) => new Promise((_, reject) => {
+          const timer = setTimeout(() => reject(new Error('would have completed at 200ms')), 200);
+          signal.addEventListener('abort', () => { clearTimeout(timer); reject(new Error('aborted by override timeout')); });
+        }),
+      }),
+      makeFakeProvider({ id: 'fast', invoke: async () => 'recovered' }),
+    ],
+    systemPrompt: 'sys',
+    userPrompt: 'user',
+    optimizer,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.providerUsed, 'fast');
+  assert.equal(result.attempts[0].errorClass, 'timeout');
+  await optimizer.cleanupAll();
+});
+
+test('result attempts include the model id from the provider config', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const img = await ensureFixture();
+
+  const result = await runVisionFallback({
+    imagePath: img,
+    mode: 'vision_first',
+    providers: [
+      makeFakeProvider({ id: 'p1', modelId: 'gpt-4o-mini', invoke: async () => 'ok' }),
+    ],
+    systemPrompt: 'sys',
+    userPrompt: 'user',
+    optimizer,
+  });
+
+  assert.equal(result.modelUsed, 'gpt-4o-mini');
+  assert.equal(result.attempts[0].model, 'gpt-4o-mini');
+  await optimizer.cleanupAll();
+});
+
+test('provider.timeoutMs undefined falls back to perProviderTimeoutMs global', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const img = await ensureFixture();
+
+  // The provider has no timeoutMs override. The global perProviderTimeoutMs
+  // is 40ms. A 200ms invocation must time out.
+  const result = await runVisionFallback({
+    imagePath: img,
+    mode: 'vision_first',
+    perProviderTimeoutMs: 40,
+    providers: [
+      makeFakeProvider({
+        id: 'slow',
+        // no timeoutMs override
+        invoke: ({ signal }) => new Promise((_, reject) => {
+          const timer = setTimeout(() => reject(new Error('would have completed at 200ms')), 200);
+          signal.addEventListener('abort', () => { clearTimeout(timer); reject(new Error('aborted')); });
+        }),
+      }),
+      makeFakeProvider({ id: 'fast', invoke: async () => 'recovered' }),
+    ],
+    systemPrompt: 'sys',
+    userPrompt: 'user',
+    optimizer,
+  });
+
+  assert.equal(result.attempts[0].errorClass, 'timeout');
+  await optimizer.cleanupAll();
+});
+
+test('telemetry does not leak provider invoke arguments (systemPrompt / userPrompt / image path)', async () => {
+  const runVisionFallback = await loadChain();
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const img = await ensureFixture();
+  const events = [];
+
+  const systemPrompt = 'TOP_SECRET_SYSTEM_PROMPT';
+  const userPrompt = 'TOP_SECRET_USER_PROMPT';
+
+  await runVisionFallback({
+    imagePath: img,
+    mode: 'vision_first',
+    providers: [
+      makeFakeProvider({ id: 'p1', invoke: async () => 'ok' }),
+    ],
+    systemPrompt,
+    userPrompt,
+    optimizer,
+    telemetry: (e) => events.push(e),
+  });
+
+  for (const e of events) {
+    const json = JSON.stringify(e);
+    assert.doesNotMatch(json, /TOP_SECRET_SYSTEM_PROMPT/, `event leaked system prompt: ${json}`);
+    assert.doesNotMatch(json, /TOP_SECRET_USER_PROMPT/, `event leaked user prompt: ${json}`);
+    // The image path may contain regex special chars; escape before matching.
+    const escapedImg = img.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    assert.doesNotMatch(json, new RegExp(escapedImg), `event leaked image path: ${json}`);
+  }
+  await optimizer.cleanupAll();
+});

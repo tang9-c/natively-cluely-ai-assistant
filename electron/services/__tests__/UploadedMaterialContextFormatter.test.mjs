@@ -51,3 +51,50 @@ test('formats multiple uploaded material hits with numbered citeable snippets', 
   assert.match(context, /SOC2 Type II报告（2025年完成）/);
   assert.match(context, /GDPR \/ CCPA \/ PDPA/);
 });
+
+test('normalizeText coerces non-string values to empty string', async () => {
+  const { formatUploadedMaterialContext } = await loadFormatter();
+  // Pass an entry with non-string text/parentText — they must not crash and
+  // must not contribute to the rendered output.
+  const { text } = formatUploadedMaterialContext([
+    { title: 'Nulls', text: null, parentText: undefined },
+    { title: 'Number', text: 42, parentText: { weird: 'object' } },
+  ]);
+  // Header is still emitted but body is empty; no NaN/null literal bleeds in.
+  assert.equal(typeof text, 'string');
+  assert.equal(text.includes('null'), false);
+  assert.equal(text.includes('undefined'), false);
+  assert.equal(text.includes('42'), false);
+});
+
+test('honors custom maxTotalChars and maxPerHitChars overrides', async () => {
+  const { formatUploadedMaterialContext } = await loadFormatter();
+  const { text, truncated } = formatUploadedMaterialContext(
+    [
+      {
+        title: 'Long',
+        text: 'A'.repeat(500),
+        parentText: 'B'.repeat(500),
+      },
+    ],
+    { maxTotalChars: 100, maxPerHitChars: 50 },
+  );
+  assert.equal(truncated, true);
+  // Per-hit truncation must keep the marker + a small slice — bounded well
+  // below the original 500 chars.
+  assert.ok(text.length < 200, `expected truncated output, got ${text.length} chars`);
+});
+
+test('truncation marker kicks in for per-hit overflow', async () => {
+  const { formatUploadedMaterialContext } = await loadFormatter();
+  const { text, truncated } = formatUploadedMaterialContext([
+    {
+      title: 'Overflow',
+      text: 'C'.repeat(2000),
+      parentText: 'D'.repeat(2000),
+    },
+  ]);
+  assert.equal(truncated, true);
+  // Default per-hit cap is small enough that the marker should appear.
+  assert.match(text, /\[\.\.\.\]|\.\.\.|…/);
+});

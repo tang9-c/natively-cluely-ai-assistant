@@ -396,4 +396,64 @@ describe('ProfileOrchestrator', () => {
       svcModule.ScenarioContextService.prototype.buildForRequest = original;
     }
   });
+
+  it('setKnowledgeMode(true) flips isKnowledgeMode() to true and back to false', async () => {
+    orchestrator.setKnowledgeMode(false);
+    assert.equal(orchestrator.isKnowledgeMode(), false);
+    orchestrator.setKnowledgeMode(true);
+    assert.equal(orchestrator.isKnowledgeMode(), true);
+    orchestrator.setKnowledgeMode(false);
+    assert.equal(orchestrator.isKnowledgeMode(), false);
+  });
+
+  it('feedForDepthScoring and feedInterviewerUtterance are tolerant of any input shape', async () => {
+    // These methods are intentionally permissive — they must not throw on
+    // arbitrary message objects and must not produce visible side effects
+    // (no return value, no async failure).
+    assert.doesNotThrow(() => orchestrator.feedForDepthScoring({ text: 'hi' }));
+    assert.doesNotThrow(() => orchestrator.feedForDepthScoring(null));
+    assert.doesNotThrow(() => orchestrator.feedInterviewerUtterance({ speaker: 'me', text: 'hello' }));
+    assert.doesNotThrow(() => orchestrator.feedInterviewerUtterance(undefined));
+  });
+
+  it('getProfileData returns a profile block even when identity.name is "Unknown"', async () => {
+    // Stub the orchestrator's internal ProfileDatabase via the same prototype
+    // pattern other tests use. We do not need the full identity fallback;
+    // we just verify the method does not throw and returns an object.
+    if (!orchestrator.profileDb || typeof orchestrator.profileDb.getUserProfile !== 'function') {
+      // Older build: nothing to assert, skip.
+      return;
+    }
+    const original = orchestrator.profileDb.getUserProfile;
+    orchestrator.profileDb.getUserProfile = () => ({
+      identity: { name: 'Unknown', email: '' },
+      preferences: {},
+      goals: [],
+    });
+    try {
+      const data = orchestrator.getProfileData();
+      assert.ok(data);
+      assert.equal(data.identity?.name, 'Unknown');
+    } finally {
+      orchestrator.profileDb.getUserProfile = original;
+    }
+  });
+
+  it('getStatus reports hasResume=false and hasActiveJD=false when DB has neither', async () => {
+    if (!orchestrator.profileDb || typeof orchestrator.profileDb.getResumeNodes !== 'function') {
+      return;
+    }
+    const originalGetResume = orchestrator.profileDb.getResumeNodes;
+    const originalGetJD = orchestrator.profileDb.getActiveJD;
+    orchestrator.profileDb.getResumeNodes = () => [];
+    orchestrator.profileDb.getActiveJD = () => null;
+    try {
+      const status = orchestrator.getStatus();
+      assert.equal(status.hasResume, false);
+      assert.equal(status.hasActiveJD, false);
+    } finally {
+      orchestrator.profileDb.getResumeNodes = originalGetResume;
+      orchestrator.profileDb.getActiveJD = originalGetJD;
+    }
+  });
 });

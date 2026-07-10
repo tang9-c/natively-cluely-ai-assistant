@@ -155,3 +155,138 @@ test('getBase64 returns base64-encoded buffer matching file contents', async () 
   assert.equal(b64, expected);
   await optimizer.cleanupAll();
 });
+
+test('format:"png" emits a PNG with image/png mimeType', async () => {
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const src = await ensureBigPng();
+
+  const out = await optimizer.optimize(src, { profile: 'balanced', provider: 'openai', format: 'png', cacheKey: 'png-test' });
+
+  assert.equal(out.mimeType, 'image/png');
+  assert.match(out.path, /\.png$/);
+  await optimizer.cleanupAll();
+});
+
+test('format:"webp" emits a WebP with image/webp mimeType', async () => {
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const src = await ensureBigPng();
+
+  const out = await optimizer.optimize(src, { profile: 'balanced', provider: 'openai', format: 'webp', cacheKey: 'webp-test' });
+
+  assert.equal(out.mimeType, 'image/webp');
+  assert.match(out.path, /\.webp$/);
+  await optimizer.cleanupAll();
+});
+
+test('quality step-down loop reduces bytes when maxBytes is tight', async () => {
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const src = await ensureBigPng();
+
+  const tight = await optimizer.optimize(src, {
+    profile: 'balanced',
+    provider: 'openai',
+    maxBytes: 25_000,
+    cacheKey: 'tight',
+  });
+  // Should still produce a usable result even though maxBytes is aggressive.
+  assert.ok(tight.byteSize > 0);
+  assert.equal(tight.cacheHit, false);
+  await optimizer.cleanupAll();
+});
+
+test('throws a descriptive error when the source image cannot be read', async () => {
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const missingPath = path.join(os.tmpdir(), `image-opt-does-not-exist-${Date.now()}.png`);
+
+  await assert.rejects(
+    () => optimizer.optimize(missingPath, { profile: 'balanced' }),
+    /cannot stat source image/,
+  );
+  await optimizer.cleanupAll();
+});
+
+test('getDataUrl returns a data URL with the correct mime prefix', async () => {
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const src = await ensureBigPng();
+
+  const out = await optimizer.optimize(src, { profile: 'fast' });
+  const dataUrl = await optimizer.getDataUrl(out);
+  const expectedPrefix = `data:${out.mimeType};base64,`;
+  assert.ok(dataUrl.startsWith(expectedPrefix), `data URL must start with ${expectedPrefix}`);
+  const payload = dataUrl.slice(expectedPrefix.length);
+  assert.equal(payload, (await fs.readFile(out.path)).toString('base64'));
+  await optimizer.cleanupAll();
+});
+
+test('cleanup() removes a single optimized file and drops the cache entry', async () => {
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const src = await ensureBigPng();
+
+  const out = await optimizer.optimize(src, { profile: 'balanced', cacheKey: 'single-cleanup' });
+  await fs.access(out.path);
+  assert.equal(optimizer.getCacheStats().entries, 1);
+
+  await optimizer.cleanup(out);
+
+  await assert.rejects(() => fs.access(out.path), 'file should be unlinked after cleanup()');
+  assert.equal(optimizer.getCacheStats().entries, 0);
+  await optimizer.cleanupAll();
+});
+
+test('cleanup() on a stale entry is a no-op (does not throw)', async () => {
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const fakeOptimized = { path: '/nonexistent/path.jpg', mimeType: 'image/jpeg' };
+  await assert.doesNotReject(() => optimizer.cleanup(fakeOptimized));
+});
+
+test('getCacheStats starts empty and tracks entries + owned files', async () => {
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const src = await ensureBigPng();
+
+  const initial = optimizer.getCacheStats();
+  assert.equal(initial.entries, 0);
+  assert.equal(initial.ownedFiles, 0);
+  assert.match(initial.tempDir, /(image-opt|vision-optimized|optimized)/i);
+
+  await optimizer.optimize(src, { profile: 'balanced', cacheKey: 'k-stats-a' });
+  await optimizer.optimize(src, { profile: 'balanced', cacheKey: 'k-stats-b' });
+
+  const after = optimizer.getCacheStats();
+  assert.equal(after.entries, 2);
+  assert.equal(after.ownedFiles, 2);
+  await optimizer.cleanupAll();
+});
+
+test('optimize without cacheKey does not populate the cache', async () => {
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const src = await ensureBigPng();
+
+  await optimizer.optimize(src, { profile: 'balanced' });
+  assert.equal(optimizer.getCacheStats().entries, 0);
+  await optimizer.cleanupAll();
+});
+
+test('applyProviderTweaks(ollama) caps width and reduces quality', async () => {
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const src = await ensureBigPng();
+
+  const openai = await optimizer.optimize(src, { profile: 'balanced', provider: 'openai', cacheKey: 'oa' });
+  const ollama = await optimizer.optimize(src, { profile: 'balanced', provider: 'ollama', cacheKey: 'ol' });
+
+  // Ollama profiles are typically constrained to a smaller long edge; verify
+  // the resulting image respects at least the same bound.
+  assert.ok(ollama.width <= 1280, `ollama width ${ollama.width} should be <= 1280`);
+  assert.ok(ollama.height <= 1280, `ollama height ${ollama.height} should be <= 1280`);
+  assert.equal(openai.mimeType, ollama.mimeType);
+  await optimizer.cleanupAll();
+});

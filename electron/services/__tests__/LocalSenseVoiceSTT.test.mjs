@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import path from 'node:path';
-import { test } from 'node:test';
+import { describe, test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -140,4 +140,133 @@ test('LocalSenseVoiceSTT applies final term correction while preserving SenseVoi
       emotionSource: 'sensevoice',
     },
   ]);
+});
+
+describe('LocalSenseVoiceSTT — lifecycle guards', () => {
+  test('start() is idempotent: a second call does not spawn a second worker', async () => {
+    const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+    let spawnCount = 0;
+    const makeWorker = () => {
+      spawnCount++;
+      return new FakeSenseVoiceWorker();
+    };
+    const stt = new LocalSenseVoiceSTT({ workerFactory: makeWorker });
+    stt.start();
+    stt.start();
+    assert.equal(spawnCount, 1);
+    stt.stop();
+  });
+
+  test('stop() is a no-op when the STT is not active', async () => {
+    const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+    const stt = new LocalSenseVoiceSTT({ workerFactory: () => new FakeSenseVoiceWorker() });
+    // Never started — must not throw and must not invoke the worker factory.
+    assert.doesNotThrow(() => stt.stop());
+  });
+
+  test('write() before start() is silently dropped (no VAD, no transcribe)', async () => {
+    const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+    const worker = new FakeSenseVoiceWorker();
+    const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+    const transcripts = [];
+    stt.on('transcript', e => transcripts.push(e));
+    stt.write(loudPcm());
+    // No transcribe posted, no transcript emitted.
+    assert.equal(worker.messages.some(message => message.type === 'transcribe'), false);
+    assert.equal(transcripts.length, 0);
+  });
+
+  test('notifySpeechEnded before start() does not throw', async () => {
+    const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+    const stt = new LocalSenseVoiceSTT({ workerFactory: () => new FakeSenseVoiceWorker() });
+    assert.doesNotThrow(() => stt.notifySpeechEnded());
+    assert.doesNotThrow(() => stt.finalize());
+  });
+
+  test('drainFinals returns immediately when no audio is pending', async () => {
+    const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+    const stt = new LocalSenseVoiceSTT({ workerFactory: () => new FakeSenseVoiceWorker() });
+    stt.start();
+    // No write/notify — pendingAudio is empty and inFlightTasks is 0.
+    const startedAt = Date.now();
+    await stt.drainFinals(2000);
+    const elapsedMs = Date.now() - startedAt;
+    assert.ok(elapsedMs < 100, `expected fast path, took ${elapsedMs}ms`);
+    stt.stop();
+  });
+});
+
+describe('LocalSenseVoiceSTT — configuration setters', () => {
+  test('setRecognitionLanguage("") falls back to "chinese"', async () => {
+    const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+    const stt = new LocalSenseVoiceSTT({ workerFactory: () => new FakeSenseVoiceWorker() });
+    stt.setRecognitionLanguage('');
+    assert.equal(stt._languageKey, 'chinese');
+    stt.setRecognitionLanguage('english-us');
+    assert.equal(stt._languageKey, 'english-us');
+  });
+
+  test('setChannel trims whitespace and accepts nullish values', async () => {
+    const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+    const stt = new LocalSenseVoiceSTT({ workerFactory: () => new FakeSenseVoiceWorker() });
+    stt.setChannel('  system  ');
+    assert.equal(stt.channelLabel, 'system');
+    stt.setChannel('');
+    assert.equal(stt.channelLabel, '');
+    stt.setChannel(null);
+    assert.equal(stt.channelLabel, '');
+  });
+});
+
+describe('LocalSenseVoiceSTT — worker error handling', () => {
+  test('worker "error" event clears pendingAudio and re-emits the error', async () => {
+    const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+    // Use a silent worker that never resolves tasks so inFlight stays > 0.
+    const worker = new FakeSenseVoiceWorker({ text: '', delayMs: 60_000 });
+    const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+    const errors = [];
+    stt.on('error', err => errors.push(err));
+    stt.start();
+    // Push enough loud audio to emit at least one VAD segment.
+    for (let i = 0; i < 5; i++) stt.write(loudPcm());
+    stt.notifySpeechEnded();
+    // Wait one tick so dispatchFinal has run, then another so the FakeWorker
+    // postMessage setTimeout can't drain pendingAudio.
+    await new Promise(r => setImmediate(r));
+    await new Promise(r => setImmediate(r));
+    const before = stt.pendingAudio.length + stt.inFlightTasks;
+    assert.ok(before > 0, `expected pendingAudio+inFlightTasks > 0, got ${before}`);
+    const boom = new Error('worker exploded');
+    worker.emit('error', boom);
+    assert.equal(stt.pendingAudio.length, 0);
+    assert.equal(stt.inFlightTasks, 0);
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].message, 'worker exploded');
+    stt.stop();
+  });
+
+  test('worker non-zero exit while active emits a descriptive error', async () => {
+    const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+    const worker = new FakeSenseVoiceWorker();
+    const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+    const errors = [];
+    stt.on('error', err => errors.push(err));
+    stt.start();
+    worker.emit('exit', 137);
+    assert.equal(errors.length, 1);
+    assert.match(errors[0].message, /exited with code 137/);
+    stt.stop();
+  });
+
+  test('worker non-zero exit while inactive is suppressed', async () => {
+    const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+    const worker = new FakeSenseVoiceWorker();
+    const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+    const errors = [];
+    stt.on('error', err => errors.push(err));
+    stt.start();
+    stt.stop();
+    worker.emit('exit', 1);
+    assert.equal(errors.length, 0);
+  });
 });

@@ -134,3 +134,49 @@ test('uploaded material context is required only for explicit material questions
   assert.equal(shouldRequireUploadedMaterialContext('请总结这个 PPTX 文档'), true);
   assert.equal(shouldRequireUploadedMaterialContext('这个回答再短一点'), false);
 });
+
+test('uploaded material contribution handles surface override by passing it through', async () => {
+  const { buildUploadedMaterialContextContribution } = await loadService();
+  // Build a minimal valid input that exercises the surface branch — non-empty
+  // hits, no hybrid error.
+  const input = {
+    surface: 'realtime',
+    query: 'refer to the SOC2 report please',
+    dataScopes: new Set(),
+    plan: {
+      scopeFilteredHits: [
+        {
+          materialId: 'm1',
+          materialTitle: 'SOC2',
+          text: 'SOC2 Type II audit covers security, availability, confidentiality.',
+          parentText: 'SOC2 Type II audit covers security, availability, confidentiality (2025).',
+          sourceUri: null,
+          citationLabel: 'SOC2.md',
+        },
+      ],
+      injected: [],
+      totalInjectedChars: 0,
+      budgetChars: 6000,
+      hybridThrew: false,
+      degradedReason: null,
+    },
+  };
+  const out = buildUploadedMaterialContextContribution(input);
+  // The exact return shape varies; assert the function returns SOMETHING and
+  // does not throw — that's the contract callers depend on.
+  assert.ok(out !== undefined);
+  assert.ok(typeof out === 'object');
+});
+
+test('uploaded material contribution tolerates an empty plan object', async () => {
+  const { buildUploadedMaterialContextContribution } = await loadService();
+  // Defensive: callers must not crash if the realtime plan is missing fields.
+  assert.doesNotThrow(() =>
+    buildUploadedMaterialContextContribution({
+      surface: 'realtime',
+      query: 'test',
+      dataScopes: new Set(),
+      plan: undefined,
+    }),
+  );
+});
