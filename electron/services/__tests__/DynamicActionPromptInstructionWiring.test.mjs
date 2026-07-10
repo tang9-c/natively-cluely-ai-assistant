@@ -148,6 +148,23 @@ test('main records dynamic action shown once before forwarding to multiple windo
   assert.match(block, /helper\.getOverlayWindow\(\)\?\.webContents\.send\('intelligence-dynamic-action'/);
 });
 
+test('dynamic action complete and auto generation lifecycle events are recorded', () => {
+  const ipc = read('electron/ipcHandlers.ts');
+  const main = read('electron/main.ts');
+  const lifecycle = read('electron/services/dynamic-actions/DynamicActionLifecycle.ts');
+
+  assert.match(lifecycle, /dynamic_action_auto_generated/);
+  assert.match(lifecycle, /dynamic_action_completed/);
+  assert.match(lifecycle, /dynamic_action_generation_failed/);
+  assert.match(lifecycle, /dynamic_action_expired/);
+  assert.match(ipc, /lifecycleEventToTelemetryName\(event\)/);
+  assert.match(ipc, /recordDynamicActionLifecycle\('completed'/);
+  assert.match(ipc, /recordDynamicActionLifecycle\('generated_failed'/);
+  assert.match(ipc, /recordDynamicActionLifecycle\('expired'/);
+  assert.match(ipc, /triggerSource:\s*triggerSource/);
+  assert.match(main, /lifecycleEventToTelemetryName\('shown'\)/);
+});
+
 test('generate-what-to-say IPC forwards promptInstruction option to IntelligenceManager', () => {
   const source = read('electron/ipcHandlers.ts');
   const handlerSource = sliceSafeHandleBlock(source, 'generate-what-to-say');

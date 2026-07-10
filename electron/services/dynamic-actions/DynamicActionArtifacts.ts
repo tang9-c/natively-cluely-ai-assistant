@@ -13,6 +13,7 @@ export interface ActionArtifact {
     status: 'used' | 'not_found' | 'scope_denied' | 'failed';
   }>;
   acceptedAt: number;
+  acceptTriggerSource?: 'manual' | 'auto_countdown';
   generationStatus: 'completed' | 'generated_failed' | 'not_generated';
 }
 
@@ -26,6 +27,7 @@ export interface BuildDynamicActionArtifactsInput {
     createdAt: number;
     latestTurn?: string;
     retrievalQuery?: string;
+    triggerSource?: 'manual' | 'auto_countdown';
   }>;
   usage: Array<{
     question?: string;
@@ -47,6 +49,9 @@ export function buildDynamicActionArtifacts(input: BuildDynamicActionArtifactsIn
       const usage = findUsageForAction(action.id, action.createdAt, input.usage);
       const answer = normalizeAnswer(usage?.answer);
       const structuredSummary = answer || action.latestTurn || action.retrievalQuery || action.type;
+      const acceptTriggerSource =
+        normalizeAcceptTriggerSource(usage?.metadata?.triggerSource) ??
+        normalizeAcceptTriggerSource(action.triggerSource);
       return {
         actionId: action.id,
         modeTemplateType: action.modeTemplateType as ActionArtifact['modeTemplateType'],
@@ -56,6 +61,7 @@ export function buildDynamicActionArtifacts(input: BuildDynamicActionArtifactsIn
         missingFields: deriveMissingFields(action.modeTemplateType, action.type, structuredSummary),
         groundedSources: normalizeGroundedSources(usage?.metadata, structuredSummary),
         acceptedAt: action.createdAt,
+        ...(acceptTriggerSource ? { acceptTriggerSource } : {}),
         generationStatus:
           action.status === 'generated_failed'
             ? 'generated_failed'
@@ -64,6 +70,10 @@ export function buildDynamicActionArtifacts(input: BuildDynamicActionArtifactsIn
               : 'not_generated',
       };
     });
+}
+
+function normalizeAcceptTriggerSource(value: unknown): ActionArtifact['acceptTriggerSource'] | undefined {
+  return value === 'manual' || value === 'auto_countdown' ? value : undefined;
 }
 
 function findUsageForAction(actionId: string, acceptedAt: number, usage: BuildDynamicActionArtifactsInput['usage'][number][]) {

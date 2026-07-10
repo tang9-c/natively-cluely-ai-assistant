@@ -477,6 +477,27 @@ describe('buildDynamicActionArtifactActionsFromUsage', () => {
     assert.equal(auto[0].status, 'auto_generated');
     assert.equal(accepted[0].status, 'accepted');
   });
+
+  test('buildDynamicActionArtifactActionsFromUsage preserves dynamic action trigger source', () => {
+    const actions = buildDynamicActionArtifactActionsFromUsage([
+      {
+        timestamp: 200,
+        question: 'q',
+        answer: 'final answer',
+        metadata: {
+          source: 'dynamic_action',
+          actionId: 'a',
+          actionType: 'pricing_objection',
+          outputType: 'spoken_response',
+          modeTemplateType: 'sales',
+          generationStatus: 'completed',
+          triggerSource: 'auto_countdown',
+        },
+      },
+    ]);
+
+    assert.equal(actions[0].triggerSource, 'auto_countdown');
+  });
 });
 
 describe('MeetingPersistence.recoverUnprocessedMeetings', () => {

@@ -674,6 +674,27 @@ test('completeAction removes accepted action from active top actions', async () 
   assert.equal(engine.getTopActions(sessionId).some(topAction => topAction.id === action.id), false);
 });
 
+test('getTopActionsWithExpired returns expired actions for lifecycle recording', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+  const sessionId = 'session_expired_lifecycle';
+
+  const [action] = engine.detectActions({
+    transcript: 'The price is expensive for our budget.',
+    speaker: 'Prospect',
+    modeTemplateType: 'sales',
+    modeId: 'mode_sales',
+    sessionId,
+  });
+
+  assert.ok(action);
+  const result = engine.getTopActionsWithExpired(sessionId, 60_000, action.createdAt + 70_000);
+  assert.equal(result.actions.length, 0);
+  assert.equal(result.expired.length, 1);
+  assert.equal(result.expired[0].id, action.id);
+  assert.equal(engine.getStore().getAction(action.id).status, 'expired');
+});
+
 test('acceptAction can mark auto-generated and generation failure statuses', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();

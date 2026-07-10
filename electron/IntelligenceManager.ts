@@ -266,6 +266,10 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.getActiveDynamicActions();
     }
 
+    getActiveDynamicActionsWithExpired(): { actions: import('./services/dynamic-actions/DynamicAction').DynamicAction[]; expired: import('./services/dynamic-actions/DynamicAction').DynamicAction[] } {
+        return this.engine.getActiveDynamicActionsWithExpired();
+    }
+
     // ============================================
     // Reset (resets all sub-modules)
     // ============================================

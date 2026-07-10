@@ -115,3 +115,26 @@ test('derives missing fields deterministically for team actions', async () => {
   assert.ok(artifacts[0].missingFields.includes('owner'));
   assert.ok(artifacts[0].missingFields.includes('due_date'));
 });
+
+test('keeps auto countdown source separate from generation status', async () => {
+  const { buildDynamicActionArtifacts } = await loadHelper();
+  const artifacts = buildDynamicActionArtifacts({
+    actions: [action({ status: 'auto_generated', triggerSource: 'auto_countdown' })],
+    usage: [{
+      type: 'assist',
+      timestamp: 1200,
+      question: 'dynamic action',
+      answer: 'Owner: Maya\\nDeliverable: launch checklist\\nDue: Friday',
+      metadata: {
+        source: 'dynamic_action',
+        actionId: 'action_1',
+        generationStatus: 'completed',
+        triggerSource: 'auto_countdown',
+        groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+      },
+    }],
+  });
+
+  assert.equal(artifacts[0].generationStatus, 'completed');
+  assert.equal(artifacts[0].acceptTriggerSource, 'auto_countdown');
+});

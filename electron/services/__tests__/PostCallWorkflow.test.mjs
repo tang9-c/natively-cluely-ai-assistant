@@ -221,6 +221,78 @@ test('sales post-call flags buying signal when owner date or artifact is missing
   ));
 });
 
+test('sales post-call carries all five accepted sales action artifacts', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'sales',
+    transcript: [{ speaker: 'Customer', text: '价格高，想要报价、案例、SSO 信息，下一步法务看合同。', timestamp: 10 }],
+    summaryData: { overview: '客户要求价格、报价、案例、技术和下一步。', actionItems: [] },
+    dynamicActionArtifacts: [
+      {
+        actionId: 'a_price',
+        modeTemplateType: 'sales',
+        actionType: 'pricing_objection',
+        outputType: 'spoken_response',
+        structuredSummary: 'Acknowledge budget concern and propose a small validation pilot.',
+        missingFields: [],
+        groundedSources: [{ type: 'transcript', label: 'pricing objection', status: 'used' }],
+        acceptedAt: 1000,
+        generationStatus: 'completed',
+      },
+      {
+        actionId: 'a_quote',
+        modeTemplateType: 'sales',
+        actionType: 'pricing_request',
+        outputType: 'email_draft',
+        structuredSummary: 'Hi [CUSTOMER_NAME], following up with the approved proposal draft.',
+        missingFields: [],
+        groundedSources: [{ type: 'transcript', label: 'quote request', status: 'used' }],
+        acceptedAt: 1001,
+        generationStatus: 'completed',
+      },
+      {
+        actionId: 'a_case',
+        modeTemplateType: 'sales',
+        actionType: 'case_study_request',
+        outputType: 'spoken_response',
+        structuredSummary: 'case-study.md mentions Halcyon Industries pilot validation.',
+        missingFields: [],
+        groundedSources: [{ type: 'material', label: 'case-study.md', status: 'used' }],
+        acceptedAt: 1002,
+        generationStatus: 'completed',
+      },
+      {
+        actionId: 'a_tech',
+        modeTemplateType: 'sales',
+        actionType: 'technical_requirements',
+        outputType: 'checklist',
+        structuredSummary: 'Checklist: API, SSO, security, production environment, validation owner.',
+        missingFields: [],
+        groundedSources: [{ type: 'transcript', label: 'technical requirement', status: 'used' }],
+        acceptedAt: 1003,
+        generationStatus: 'completed',
+      },
+      {
+        actionId: 'a_buy',
+        modeTemplateType: 'sales',
+        actionType: 'buying_signal',
+        outputType: 'action_item',
+        structuredSummary: 'Owner: Maya\nDeliverable: contract review packet\nDue: Friday',
+        missingFields: [],
+        groundedSources: [{ type: 'transcript', label: 'buying signal', status: 'used' }],
+        acceptedAt: 1004,
+        generationStatus: 'completed',
+      },
+    ],
+  });
+
+  const text = JSON.stringify(result);
+  assert.match(text, /pricing|budget|价格|pilot/i);
+  assert.match(text, /quote|proposal|报价/i);
+  assert.match(text, /Halcyon Industries|case-study/i);
+  assert.match(text, /API|SSO|security|production/i);
+  assert.match(text, /contract review packet|Friday/i);
+});
+
 test('buildPostCallEnhancements handles Chinese recruiting logistics and follow-up', () => {
   const result = buildPostCallEnhancements({
     modeTemplateType: 'recruiting',

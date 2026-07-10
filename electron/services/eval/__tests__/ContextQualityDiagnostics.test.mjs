@@ -275,6 +275,36 @@ test('context quality diagnostics aggregates safe dynamic action lifecycle event
   assert.equal(summary.dynamicActions.lifecycleEvents.generated_failed, 1);
 });
 
+test('dynamic action lifecycle diagnostics preserve ids trigger source and generation status', async () => {
+  const {
+    ContextQualityDiagnosticsCollector,
+    summarizeContextQualityDiagnostics,
+  } = await loadDiagnostics();
+  const collector = new ContextQualityDiagnosticsCollector();
+
+  collector.recordDynamicActionLifecycleEvent({
+    event: 'auto_generated',
+    actionId: 'action_auto_1',
+    actionType: 'pricing_objection',
+    modeId: 'sales',
+    modeTemplateType: 'sales',
+    outputType: 'spoken_response',
+    riskState: 'auto_countdown',
+    triggerSource: 'auto_countdown',
+    generationStatus: 'completed',
+    status: 'completed',
+  });
+
+  const snapshot = collector.snapshot();
+  assert.equal(snapshot.dynamicActionLifecycleEvents[0].actionId, 'action_auto_1');
+  assert.equal(snapshot.dynamicActionLifecycleEvents[0].modeId, 'sales');
+  assert.equal(snapshot.dynamicActionLifecycleEvents[0].triggerSource, 'auto_countdown');
+  assert.equal(snapshot.dynamicActionLifecycleEvents[0].generationStatus, 'completed');
+
+  const summary = summarizeContextQualityDiagnostics(snapshot);
+  assert.equal(summary.dynamicActions.lifecycleEvents.auto_generated, 1);
+});
+
 test('context quality diagnostics exposes safe dynamic action arbitration labels', async () => {
   const {
     getDynamicActionArbitrationStatusLabel,

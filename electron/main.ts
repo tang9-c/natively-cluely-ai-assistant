@@ -3674,7 +3674,9 @@ export class AppState {
         const { getContextQualityDiagnosticsCollector } = require('./services/eval/ContextQualityDiagnostics');
         getContextQualityDiagnosticsCollector().recordDynamicActionLifecycleEvent({
           event: 'shown',
+          actionId: shownAction.id,
           actionType: shownAction.type,
+          modeId: shownAction.modeId,
           modeTemplateType: shownAction.modeTemplateType,
           outputType: shownAction.productContract.outputType,
           riskState: shownAction.productContract.riskState,
@@ -3688,6 +3690,20 @@ export class AppState {
       // sanitizer also strips transcript-shaped fields defensively.
       try {
         const { telemetryService } = require('./services/telemetry/TelemetryService');
+        const { lifecycleEventToTelemetryName } = require('./services/dynamic-actions/DynamicActionLifecycle');
+        telemetryService.track({
+          name: lifecycleEventToTelemetryName('shown'),
+          sessionId: shownAction?.sessionId,
+          modeId: shownAction?.modeId,
+          status: shownAction?.status,
+          properties: {
+            actionId: shownAction?.id,
+            actionType: shownAction?.type,
+            modeTemplateType: shownAction?.modeTemplateType,
+            outputType: shownAction?.productContract?.outputType,
+            riskState: shownAction?.productContract?.riskState,
+          },
+        });
         telemetryService.track({
           name: 'dynamic_action_detected',
           sessionId: shownAction?.sessionId,

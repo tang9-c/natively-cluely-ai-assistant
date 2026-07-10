@@ -205,6 +205,9 @@ export function generateCoachingInsights(
     if (!hasNextStep) {
       add('missing_next_step', 'Next step was not explicit', 'Consider ending sales calls with a concrete owner and follow-up date.', 'opportunity');
     }
+    if (acceptedSalesArtifacts.some((artifact) => artifact.actionType === 'pricing_objection')) {
+      add('sales_pricing_objection_response', 'Pricing objection response accepted during call', 'A pricing objection response was generated. Confirm it avoids unapproved discounts, invented ROI, or unsupported commercial claims.', 'info');
+    }
     if (acceptedSalesArtifacts.some((artifact) => artifact.actionType === 'pricing_request')) {
       add('sales_quote_followup', 'Quote request accepted during call', 'A quote or proposal follow-up was generated during the call. Confirm scope, recipient, and approved pricing source before sending.', 'info');
     }

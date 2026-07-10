@@ -556,7 +556,11 @@ export class IntelligenceEngine extends EventEmitter {
         if (!this.dynamicActionEngine) return null;
         const action = this.dynamicActionEngine.acceptAction(actionId, options);
         if (action) {
-            this.recordDynamicActionUsage(action, options?.triggerSource === 'auto_countdown' ? 'auto_generated' : 'accepted');
+            this.recordDynamicActionUsage(
+                action,
+                options?.triggerSource === 'auto_countdown' ? 'auto_generated' : 'accepted',
+                options?.triggerSource === 'auto_countdown' ? 'auto_countdown' : 'manual',
+            );
         }
         return action;
     }
@@ -591,9 +595,15 @@ export class IntelligenceEngine extends EventEmitter {
         return this.dynamicActionEngine.getTopActions(this.currentSessionId);
     }
 
+    getActiveDynamicActionsWithExpired(): { actions: DynamicAction[]; expired: DynamicAction[] } {
+        if (!this.dynamicActionEngine || !this.currentSessionId) return { actions: [], expired: [] };
+        return this.dynamicActionEngine.getTopActionsWithExpired(this.currentSessionId);
+    }
+
     private recordDynamicActionUsage(
         action: Pick<DynamicAction, 'id' | 'type' | 'label' | 'modeTemplateType' | 'retrievalQuery' | 'productContract'>,
-        generationStatus: 'accepted' | 'auto_generated' | 'generated_failed'
+        generationStatus: 'accepted' | 'auto_generated' | 'generated_failed',
+        triggerSource?: 'manual' | 'auto_countdown',
     ): void {
         this.session.pushUsage({
             type: 'assist',
@@ -608,6 +618,7 @@ export class IntelligenceEngine extends EventEmitter {
                 retrievalQuery: action.retrievalQuery,
                 outputType: action.productContract?.outputType,
                 generationStatus,
+                ...(triggerSource ? { triggerSource } : {}),
                 groundedSources: [],
             },
         });

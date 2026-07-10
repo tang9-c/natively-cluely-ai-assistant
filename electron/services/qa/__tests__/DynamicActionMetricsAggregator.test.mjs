@@ -11,23 +11,45 @@ async function load() {
   return import(moduleUrl);
 }
 
-test('aggregates mode quality lifecycle counts by mode', async () => {
+test('aggregates all dynamic action lifecycle counts by stable telemetry event name', async () => {
   const { aggregateDynamicActionQaMetrics } = await load();
   const summary = aggregateDynamicActionQaMetrics({
     telemetryRecords: [
       { name: 'dynamic_action_shown', timestamp: '2026-07-07T00:00:00.000Z', modeId: 'sales', properties: { actionType: 'pricing_objection' } },
       { name: 'dynamic_action_accepted', timestamp: '2026-07-07T00:00:01.000Z', modeId: 'sales', properties: { actionType: 'pricing_objection' } },
-      { name: 'dynamic_action_dismissed', timestamp: '2026-07-07T00:00:02.000Z', modeId: 'fde', properties: { actionType: 'risk_validation' } },
-      { name: 'dynamic_action_completed', timestamp: '2026-07-07T00:00:03.000Z', modeId: 'team-meet', status: 'generated_failed', properties: { actionType: 'action_item' } },
+      { name: 'dynamic_action_auto_generated', timestamp: '2026-07-07T00:00:02.000Z', modeId: 'sales', properties: { actionType: 'pricing_objection', triggerSource: 'auto_countdown' } },
+      { name: 'dynamic_action_dismissed', timestamp: '2026-07-07T00:00:03.000Z', modeId: 'sales', properties: { actionType: 'pricing_objection' } },
+      { name: 'dynamic_action_expired', timestamp: '2026-07-07T00:00:04.000Z', modeId: 'sales', properties: { actionType: 'pricing_objection' } },
+      { name: 'dynamic_action_generation_failed', timestamp: '2026-07-07T00:00:05.000Z', modeId: 'sales', properties: { actionType: 'pricing_objection', generationStatus: 'generated_failed' } },
+      { name: 'dynamic_action_completed', timestamp: '2026-07-07T00:00:06.000Z', modeId: 'sales', properties: { actionType: 'pricing_objection', generationStatus: 'completed' } },
     ],
     fixtureResults: [],
     answerQualityMetrics: null,
   });
 
-  assert.equal(summary.modeQuality.sales.shown, 1);
-  assert.equal(summary.modeQuality.sales.accepted, 1);
-  assert.equal(summary.modeQuality.fde.dismissed, 1);
+  assert.deepEqual(summary.modeQuality.sales, {
+    shown: 1,
+    accepted: 1,
+    auto_generated: 1,
+    dismissed: 1,
+    expired: 1,
+    generated_failed: 1,
+    completed: 1,
+  });
+});
+
+test('keeps legacy status compatibility without changing the new lifecycle names', async () => {
+  const { aggregateDynamicActionQaMetrics } = await load();
+  const summary = aggregateDynamicActionQaMetrics({
+    telemetryRecords: [
+      { name: 'dynamic_action_completed', timestamp: '2026-07-07T00:00:00.000Z', modeId: 'team-meet', status: 'generated_failed', properties: { actionType: 'action_item' } },
+    ],
+    fixtureResults: [],
+    answerQualityMetrics: null,
+  });
+
   assert.equal(summary.modeQuality['team-meet'].generated_failed, 1);
+  assert.equal(summary.modeQuality['team-meet'].completed, 0);
 });
 
 test('aggregates precision and recall from fixture results by action type', async () => {

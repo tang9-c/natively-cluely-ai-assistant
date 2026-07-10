@@ -5,7 +5,10 @@ import type {
   DynamicActionProductFixture,
   DynamicActionProductFixtureResult,
 } from '../dynamic-actions/DynamicActionProductFixtures';
-import { scoreDynamicActionProductFixtures } from '../dynamic-actions/DynamicActionProductFixtures';
+import {
+  evaluatePatternExpectations,
+  scoreDynamicActionProductFixtures,
+} from '../dynamic-actions/DynamicActionProductFixtures';
 
 export interface ProductRunnerInput {
   fixtureDir: string;
@@ -74,6 +77,18 @@ export async function runDynamicActionProductFixtures(input: ProductRunnerInput)
       ? actions.find((action) => action.type === fixture.expected.actionType)
       : undefined;
     const firstAction = matchedAction ?? actions[0];
+    const cardText = firstAction
+      ? [
+          firstAction.productContract?.userAction,
+          firstAction.productContract?.whyNow,
+          firstAction.productContract?.evidenceSummary,
+          firstAction.productContract?.outputPromise,
+        ].filter(Boolean).join('\n')
+      : '';
+    const cardPatternResult = evaluatePatternExpectations(cardText, {
+      required: fixture.expected.requiredCardCopy ?? [],
+      forbidden: fixture.expected.forbiddenCardCopy ?? [],
+    });
     results.push({
       fixtureId: fixture.id,
       shouldEmit: fixture.expected.shouldEmit,
@@ -82,6 +97,7 @@ export async function runDynamicActionProductFixtures(input: ProductRunnerInput)
       outputTypeMatched: !!firstAction && (
         !fixture.expected.outputType || firstAction.productContract?.outputType === fixture.expected.outputType
       ),
+      answerQualityPassed: cardPatternResult.passed,
     });
   }
 

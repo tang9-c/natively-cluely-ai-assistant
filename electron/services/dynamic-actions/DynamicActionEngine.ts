@@ -266,14 +266,22 @@ export class DynamicActionEngine {
     }
 
     getTopActions(sessionId: string, maxAgeMs: number = 60000): DynamicAction[] {
-        // Expire stale actions first
-        this.store.expireStaleActions(sessionId, maxAgeMs);
+        return this.getTopActionsWithExpired(sessionId, maxAgeMs).actions;
+    }
 
-        // Get active actions sorted by priority (descending)
-        const activeActions = this.store.getActiveActions(sessionId);
-        return activeActions
-            .sort((a, b) => b.priority - a.priority)
-            .slice(0, 3);
+    getTopActionsWithExpired(
+        sessionId: string,
+        maxAgeMs: number = 60000,
+        now?: number,
+    ): { actions: DynamicAction[]; expired: DynamicAction[] } {
+        const expired = this.store.expireStaleActions(sessionId, maxAgeMs, now);
+        const activeActions = this.store.getActiveActions(sessionId, now);
+        return {
+            actions: activeActions
+                .sort((a, b) => b.priority - a.priority)
+                .slice(0, 3),
+            expired,
+        };
     }
 
     findRecentActionForIntent(params: {

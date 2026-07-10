@@ -475,6 +475,7 @@ export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<
     createdAt: number;
     latestTurn?: string;
     retrievalQuery?: string;
+    triggerSource?: 'manual' | 'auto_countdown';
 }> {
     const actionsById = new Map<string, {
         id: string;
@@ -485,6 +486,7 @@ export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<
         createdAt: number;
         latestTurn?: string;
         retrievalQuery?: string;
+        triggerSource?: 'manual' | 'auto_countdown';
     }>();
 
     for (const item of usage) {
@@ -501,6 +503,7 @@ export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<
         const outputType = typeof metadata.outputType === 'string' ? metadata.outputType.trim() : '';
         const createdAt = typeof item?.timestamp === 'number' ? item.timestamp : 0;
         const generationStatus = normalizeDynamicActionGenerationStatus(item);
+        const triggerSource = normalizeDynamicActionTriggerSource(metadata.triggerSource);
 
         if (!actionId || !actionType || !outputType) continue;
 
@@ -527,6 +530,7 @@ export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<
                 createdAt,
                 latestTurn,
                 retrievalQuery,
+                ...(triggerSource ? { triggerSource } : {}),
             });
             continue;
         }
@@ -540,9 +544,14 @@ export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<
         if ((!existing.createdAt || createdAt < existing.createdAt) && createdAt > 0) existing.createdAt = createdAt;
         if (!existing.latestTurn && latestTurn) existing.latestTurn = latestTurn;
         if (!existing.retrievalQuery && retrievalQuery) existing.retrievalQuery = retrievalQuery;
+        if (!existing.triggerSource && triggerSource) existing.triggerSource = triggerSource;
     }
 
     return Array.from(actionsById.values());
+}
+
+function normalizeDynamicActionTriggerSource(value: unknown): 'manual' | 'auto_countdown' | undefined {
+    return value === 'manual' || value === 'auto_countdown' ? value : undefined;
 }
 
 function normalizeDynamicActionGenerationStatus(item: any): 'accepted' | 'auto_generated' | 'generated_failed' | 'completed' {

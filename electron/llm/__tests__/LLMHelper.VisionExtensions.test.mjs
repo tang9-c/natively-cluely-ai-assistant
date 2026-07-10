@@ -13,7 +13,7 @@ const cjsRequire = createRequire(import.meta.url);
 const helperPath = path.resolve(__dirname, '../../../dist-electron/electron/LLMHelper.js');
 
 describe('LLMHelper runVisionRequest — extra provider paths (PR3.5)', () => {
-  test('dispatches gemini_pro to generateWithPro when a Gemini client is wired', async () => {
+  test('dispatches gemini_pro through Gemini generateContent when a Gemini client is wired', async () => {
     const { LLMHelper } = cjsRequire(helperPath);
     const helper = new LLMHelper();
     // gemini_pro reads the file before dispatching to generateContent, so we
@@ -23,11 +23,18 @@ describe('LLMHelper runVisionRequest — extra provider paths (PR3.5)', () => {
     const path = await import('node:path');
     const tmpFile = path.join(os.tmpdir(), `llmhelper-vision-pro-${Date.now()}.png`);
     await fs.writeFile(tmpFile, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-    helper.generateWithPro = async (contents) => {
-      assert.ok(Array.isArray(contents));
-      assert.equal(contents.length, 2);
-      assert.ok(contents[1].inlineData);
-      return 'gemini-pro-vision-ok';
+    helper.client = {
+      models: {
+        generateContent: async ({ model, contents }) => {
+          assert.equal(model, 'gemini-3.1-pro-preview');
+          assert.ok(Array.isArray(contents));
+          assert.equal(contents.length, 2);
+          assert.ok(contents[1].inlineData);
+          return {
+            candidates: [{ content: { parts: [{ text: 'gemini-pro-vision-ok' }] } }],
+          };
+        },
+      },
     };
     try {
       const result = await helper.runVisionRequest('gemini_pro', 'describe', 'sys', tmpFile);
@@ -37,7 +44,7 @@ describe('LLMHelper runVisionRequest — extra provider paths (PR3.5)', () => {
     }
   });
 
-  test('dispatches gemini_flash to generateWithFlash when a Gemini client is wired', async () => {
+  test('dispatches gemini_flash through Gemini generateContent when a Gemini client is wired', async () => {
     const { LLMHelper } = cjsRequire(helperPath);
     const helper = new LLMHelper();
     const fs = await import('node:fs/promises');
@@ -45,11 +52,18 @@ describe('LLMHelper runVisionRequest — extra provider paths (PR3.5)', () => {
     const path = await import('node:path');
     const tmpFile = path.join(os.tmpdir(), `llmhelper-vision-flash-${Date.now()}.png`);
     await fs.writeFile(tmpFile, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-    helper.generateWithFlash = async (contents) => {
-      assert.ok(Array.isArray(contents));
-      assert.equal(contents.length, 2);
-      assert.ok(contents[1].inlineData);
-      return 'gemini-flash-vision-ok';
+    helper.client = {
+      models: {
+        generateContent: async ({ model, contents }) => {
+          assert.equal(model, 'gemini-3.1-flash-lite-preview');
+          assert.ok(Array.isArray(contents));
+          assert.equal(contents.length, 2);
+          assert.ok(contents[1].inlineData);
+          return {
+            candidates: [{ content: { parts: [{ text: 'gemini-flash-vision-ok' }] } }],
+          };
+        },
+      },
     };
     try {
       const result = await helper.runVisionRequest('gemini_flash', 'describe', 'sys', tmpFile);

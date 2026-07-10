@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const root = path.resolve(import.meta.dirname, '../../..');
 const detector = fs.readFileSync(path.join(root, 'electron/services/dynamic-actions/DynamicActionDetector.ts'), 'utf8');
@@ -73,4 +74,26 @@ test('sales prompts are narrowed to five sellable moments', () => {
   assert.match(mainBlock, /上传|reference_file|参考文件|trusted context/i);
   assert.match(tinyBlock, /case|proof|案例|证明/i);
   assert.match(tinyBlock, /quote|proposal|报价/i);
+});
+
+test('sales accepted output evaluator rejects ungrounded proof and invented pricing', async () => {
+  const { evaluateDynamicActionAcceptedOutput } = await import(pathToFileURL(
+    path.join(root, 'dist-electron/electron/services/dynamic-actions/DynamicActionAcceptedOutputEvaluator.js')
+  ).href);
+
+  const inventedPrice = evaluateDynamicActionAcceptedOutput({
+    actionType: 'pricing_request',
+    outputType: 'email_draft',
+    answerText: 'Hi Acme, the quote is $50,000 with net 30 terms.',
+    groundedSources: [{ type: 'transcript', label: 'quote request', status: 'used' }],
+  });
+  const inventedCase = evaluateDynamicActionAcceptedOutput({
+    actionType: 'case_study_request',
+    outputType: 'spoken_response',
+    answerText: 'A Fortune 500 customer got guaranteed ROI.',
+    groundedSources: [],
+  });
+
+  assert.equal(inventedPrice.passed, false);
+  assert.equal(inventedCase.passed, false);
 });

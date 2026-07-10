@@ -31,9 +31,11 @@ export interface DynamicActionMetricsInput {
 export interface CountSummary {
   shown: number;
   accepted: number;
+  auto_generated: number;
   dismissed: number;
   expired: number;
   generated_failed: number;
+  completed: number;
 }
 
 export interface RateSummary {
@@ -174,7 +176,15 @@ export function aggregateDynamicActionQaMetrics(input: DynamicActionMetricsInput
 function makeModeQuality(): Record<ModeId, CountSummary> {
   return Object.fromEntries(MODES.map((mode) => [
     mode,
-    { shown: 0, accepted: 0, dismissed: 0, expired: 0, generated_failed: 0 },
+    {
+      shown: 0,
+      accepted: 0,
+      auto_generated: 0,
+      dismissed: 0,
+      expired: 0,
+      generated_failed: 0,
+      completed: 0,
+    },
   ])) as Record<ModeId, CountSummary>;
 }
 
@@ -183,14 +193,27 @@ function normalizeMode(modeId?: string): ModeId | null {
 }
 
 function isLifecycleEvent(name: string, status?: string): boolean {
-  return ['dynamic_action_shown', 'dynamic_action_accepted', 'dynamic_action_dismissed'].includes(name)
+  return [
+    'dynamic_action_shown',
+    'dynamic_action_accepted',
+    'dynamic_action_auto_generated',
+    'dynamic_action_dismissed',
+    'dynamic_action_expired',
+    'dynamic_action_generation_failed',
+    'dynamic_action_completed',
+  ].includes(name)
     || status === 'expired'
     || status === 'generated_failed';
 }
 
 function lifecycleName(name: string, status?: string): keyof CountSummary {
-  if (status === 'expired') return 'expired';
-  if (status === 'generated_failed') return 'generated_failed';
+  if (name === 'dynamic_action_shown') return 'shown';
+  if (name === 'dynamic_action_accepted') return 'accepted';
+  if (name === 'dynamic_action_auto_generated') return 'auto_generated';
+  if (name === 'dynamic_action_dismissed') return 'dismissed';
+  if (name === 'dynamic_action_expired' || status === 'expired') return 'expired';
+  if (name === 'dynamic_action_generation_failed' || status === 'generated_failed') return 'generated_failed';
+  if (name === 'dynamic_action_completed') return 'completed';
   if (name === 'dynamic_action_accepted') return 'accepted';
   if (name === 'dynamic_action_dismissed') return 'dismissed';
   return 'shown';

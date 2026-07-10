@@ -14,8 +14,7 @@ export class DynamicActionStore {
         }
     }
 
-    getActiveActions(sessionId: string): DynamicAction[] {
-        const now = Date.now();
+    getActiveActions(sessionId: string, now: number = Date.now()): DynamicAction[] {
         return Array.from(this.actions.values()).filter(
             (action) =>
                 action.sessionId === sessionId &&
@@ -26,8 +25,7 @@ export class DynamicActionStore {
         );
     }
 
-    expireStaleActions(sessionId: string, maxAgeMs: number): DynamicAction[] {
-        const now = Date.now();
+    expireStaleActions(sessionId: string, maxAgeMs: number, now: number = Date.now()): DynamicAction[] {
         const cutoff = now - maxAgeMs;
         const expired: DynamicAction[] = [];
         for (const action of this.actions.values()) {

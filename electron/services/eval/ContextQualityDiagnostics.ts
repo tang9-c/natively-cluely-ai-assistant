@@ -1,5 +1,6 @@
 import type { AnswerDegradedReason, AnswerQualityMetrics } from '../../db/DatabaseManager';
 import type { CodeHintTrace } from '../../llm/CodeHintLLM';
+import type { DynamicActionLifecycleEvent } from '../dynamic-actions/DynamicActionLifecycle';
 import type { SemanticGateArbitrationStatus, SemanticGateTrace } from '../dynamic-actions/ModeEventClassifier';
 import type { RealtimeContextSource } from '../context/RealtimeContextOrchestrator';
 
@@ -27,22 +28,7 @@ export interface ContextQualityCodeHintInput {
     provider?: string;
 }
 
-export type DynamicActionQualityEvent =
-    | 'shown'
-    | 'accepted'
-    | 'dismissed'
-    | 'auto_generated'
-    | 'expired'
-    | 'generated_failed';
-
-export interface DynamicActionLifecycleEventInput {
-    event: DynamicActionQualityEvent;
-    actionType: string;
-    modeTemplateType: string;
-    outputType: 'spoken_response' | 'checklist' | 'email_draft' | 'action_item' | 'decision_record';
-    riskState: 'auto_countdown' | 'normal';
-    status: string;
-}
+export type DynamicActionLifecycleEventInput = DynamicActionLifecycleEvent;
 
 export interface ContextQualityDiagnosticsInput {
     dynamicActions?: ContextQualityDynamicActionInput[];
@@ -387,10 +373,14 @@ export class ContextQualityDiagnosticsCollector {
     recordDynamicActionLifecycleEvent(event: DynamicActionLifecycleEventInput): void {
         this.dynamicActionLifecycleEvents.push({
             event: event.event,
+            actionId: event.actionId,
             actionType: event.actionType,
+            modeId: event.modeId,
             modeTemplateType: event.modeTemplateType,
             outputType: event.outputType,
             riskState: event.riskState,
+            triggerSource: event.triggerSource,
+            generationStatus: event.generationStatus,
             status: event.status,
         });
         this.trimToMaxEntries(this.dynamicActionLifecycleEvents);

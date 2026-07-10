@@ -53,8 +53,10 @@ describe('Phase 6 — TelemetryService production emission sites', () => {
 
   test('ipcHandlers.ts emits dynamic_action_accepted in accept handler', () => {
     const src = read('electron/ipcHandlers.ts');
-    assert.match(src, /name:\s*['"]dynamic_action_accepted['"]/, 'accept handler should emit accepted event');
-    assert.match(src, /name:\s*['"]dynamic_action_dismissed['"]/, 'dismiss handler should emit dismissed event');
+    const lifecycleSrc = read('electron/services/dynamic-actions/DynamicActionLifecycle.ts');
+    assert.match(src, /lifecycleEventToTelemetryName\(event\)/, 'lifecycle handler should use shared telemetry mapping');
+    assert.match(lifecycleSrc, /return\s+['"]dynamic_action_accepted['"]/, 'accept handler should emit accepted event');
+    assert.match(lifecycleSrc, /return\s+['"]dynamic_action_dismissed['"]/, 'dismiss handler should emit dismissed event');
   });
 
   test('ipcHandlers.ts emits mode_switched in modes:set-active handler', () => {

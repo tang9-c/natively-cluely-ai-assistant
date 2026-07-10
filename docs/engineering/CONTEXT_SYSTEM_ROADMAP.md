@@ -1,10 +1,12 @@
 # CueUp 产品力路线图：把实时会议动作卡片打穿
 
-更新时间：2026-07-07
+更新时间：2026-07-10
 
 ## 一句话判断
 
-未来 3 个月，CueUp 不应该继续把主线写成“接更多上下文源”。
+未来 3 个月，CueUp 不应该继续把主线写成“接更多上下文源”。也不能只写成“动作卡片更聪明”。
+
+最先要守住的是可靠性：同一套功能在 macOS arm64、macOS x64、Windows x64 上都能启动、录音、转写、降级和恢复。尤其是 Local SenseVoice、Local Whisper、native audio、sqlite-vec、better-sqlite3、sherpa-onnx-node 这些 native/ONNX 路径。这里出问题，用户不会觉得“某个 provider 有 bug”。用户只会觉得软件不可靠。
 
 主线应该变成：在销售、FDE、团队会议这 3 类高频会议里，CueUp 能在关键瞬间自动浮出一张小卡片，告诉用户现在该做什么、为什么、点一下能生成什么，并且这张卡片大多数时候是对的。
 
@@ -13,6 +15,24 @@
 这就是产品力。
 
 ## 北极星
+
+第一北极星：安装后的 CueUp 在目标 OS 上稳定完成一次真实会议闭环。
+
+```text
+安装 / 升级
+  -> 启动
+  -> 权限检查
+  -> 本地/云端 STT 可用性检查
+  -> 开始会议
+  -> 产生 final transcript
+  -> 触发回答/动作
+  -> 保存会议
+  -> 可解释降级
+```
+
+任一环节因为 OS、CPU 架构、native ABI、模型文件、权限、音频设备、打包路径不同而静默失败，都是 P0。
+
+第二北极星才是产品力：
 
 会议中 2 秒内出现一张可信、可操作、可忽略的实时提醒卡片，帮助用户赢下这一轮对话。
 
@@ -24,29 +44,121 @@
 
 如果卡片做不到“这一下帮我省了脑子”，它就只是 UI 动效。
 
+## 当前代码库校验基线
+
+本次路线图按当前代码库和最近提交重新校验，基线如下：
+
+- HEAD：`78ece514 test: align audio fallback notice copy`。
+- 近期主线提交已经覆盖动态动作音频回放、FDE 真实 STT 回放入口、招聘动态动作回放、QCLOUD 模型选择 IPC contract、音频降级提示文案、FDE 默认上下文迁移、RAG/STT 状态稳定和设置/session 中文化。
+- `package.json` 已有 `test:quality:smoke`、`test:quality:diagnostics`、`test:quality:gate`、`test:dynamic-actions:product`、`test:dynamic-actions:replay`、`test:dynamic-actions:fde-replay:real-stt`、`test:dynamic-actions:recruiting-replay:real-stt`、`test:dynamic-actions:metrics`。
+- 当前工作区还有未提交的质量工程补强：覆盖率脚本入口、DatabaseManager/LLMHelper/audio/STT/vision/profile/material 等测试扩展，以及 `test-reports/` 本地全量测试报告。
+- `test-reports/SUMMARY.md` 显示：`typecheck:electron` 和 `build:electron` 通过，E2E 10 通过 2 skip，dynamic-actions replay 通过；此前 Settings 音频 fallback 文案同步失败已在 `78ece514` 修复。FDE 真实 STT replay 仍依赖 live key；招聘真实 STT replay 已有 3 条通过样例。
+- 代码图谱显示本地 STT/native 相关路径影响半径很大：`LocalSenseVoiceSTT`、`LocalWhisperSTT`、`sttRegistry`、native module、`sherpa-onnx-node`、`onnxruntime-node`、`better-sqlite3`、`sqlite-vec` 会影响音频、RAG、会议保存、打包和启动。
+
+工程判断：路线图可以继续把“动作卡片打穿”作为主线，但下一步不应该再写成搭地基。现在的短板是产品验收、真实会议回放、指标面板和测试门禁收口。Wild，但这是好事，地基终于开始够厚了。
+
+更严格的工程判断：动作卡片主线必须排在可靠性门禁之后。跨 OS 本地 STT 不能稳定运行时，所有上层智能都是空中楼阁。
+
 ## 当前真相
 
 工程地基已经不少：
 
 - `DynamicActionEngine.assessSignals()` 已有 regex 候选、语义门控、云端仲裁、本地 fallback、reject/defer trace。
-- `DynamicActionBar` / `DynamicActionCard` 已能展示、忽略、Tab 接受、5 秒自动生成。
+- `DynamicActionBar` / `DynamicActionCard` 已能展示、忽略、Tab 接受、5 秒自动生成，并已有用户可见 trust explanation contract。
 - `ModesManager` 已有销售、FDE、团队会议等重点模式。
 - `DynamicActionDetector` 已有 sales、fde、team-meet trigger packs。
 - `IntentClassifier` 已有 mode-aware intent 和 answer shape。
-- `RealtimeContextOrchestrator`、RAG、PPTX 知识源、Windchill 知识源、speaker policy、QCLOUD 情绪元数据都已进入上下文系统。
-- `test:quality:smoke`、`test:quality:diagnostics`、`test:quality:gate` 已经存在。
+- `RealtimeContextOrchestrator`、RAG、PPTX 诊断路径、Windchill 知识源、speaker policy、QCLOUD 情绪元数据都已进入上下文系统。
+- `test:quality:smoke`、`test:quality:diagnostics`、`test:quality:gate` 已经存在，动态动作 product/replay/metrics 命令也已建立。
+- FDE 默认上下文已经迁移到制造业 PLM / QMS / 企业 AI Agent 部署副驾驶定位。
+- Local SenseVoice 已有模型可用性、生命周期、语言回退、情绪元数据和 final term correction 测试；术语纠错仍是后处理，不是解码热词偏置。
+- 资料/RAG 已覆盖 PDF、DOCX、Markdown、TXT 和 PPTX 边界，PPTX 走 QCLOUD API 相关链路与诊断，不再把不支持态伪装成已解析。
+- 业务系统、资料、屏幕、说话人、provider scope、实时答案 trace 已进入诊断和质量 smoke。
+- 全量测试 runner 已经从 shell `&&` 链改成脚本化阶段报告，能看到后续阶段真实状态。
 
 但产品还没有打穿。
 
-现在更像“信号链路存在”，不是“用户在真实会议里离不开”。卡片还缺 5 件事：
+现在更像“信号链路和验收骨架存在”，不是“用户在真实会议里离不开”。卡片还缺 5 件事：
 
 1. 每个重点模式的关键时刻定义不够产品化。
-2. 卡片内容还偏“检测到某类意图”，不是“下一步该怎么做”。
-3. 卡片接受后的回答质量没有按模式形成强验收。
-4. 误报、漏报、延迟、接受率没有变成产品指标。
-5. 真实会议回放不足，尤其是中文、英文、中英混合、多人说话、旧话题污染、ASR 错词、客户/内部成员区分。
+2. 卡片接受后的回答质量还没有按模式形成强验收。
+3. 误报、漏报、延迟、接受率没有变成产品指标面板。
+4. 真实会议回放还不够，尤其是中文、英文、中英混合、多人说话、旧话题污染、ASR 错词、客户/内部成员区分。
+5. 全量测试仍有零星测试/文案滞后，真实 STT replay 依赖 live key，不能算上线级闭环。
 
 这就是未来 3 个月的工作。
+
+## P0：跨 OS 本地 STT 与安装包可靠性
+
+状态：必须提升为所有产品力工作的前置门禁。当前已有不少保护，但还不是发布级可靠性闭环。
+
+### 已经存在
+
+- `nativeModuleLoader.ts` 会按 `process.platform/process.arch` 加载 `index.darwin-arm64.node`、`index.darwin-x64.node`、`index.win32-x64-msvc.node`，并做 `getInputDevices()` 功能 smoke，避免只加载到 asar stub。
+- `ensure-native-artifact.js` 会在开发启动前检查当前 OS/CPU 对应 native audio artifact。
+- `build-native.js` 支持 macOS 显式 target：`x86_64-apple-darwin`、`aarch64-apple-darwin`，Windows 走 `x86_64-pc-windows-msvc`。
+- `postinstall.js` 会 rebuild `better-sqlite3,keytar,sherpa-onnx-node`，并在 macOS 补 `ensure-sherpa-onnx-darwin.js`。
+- `ensure-sqlite-vec.js` 会补 macOS arm64/x64 和 Windows x64 的 sqlite-vec platform package。
+- `.github/workflows/build-arm64-mac.yml`、`build-intel-mac.yml`、`build-windows-x64.yml` 已能分别产出目标平台安装包。
+- `MacX64NativeSmoke.test.mjs` 和 `WindowsPackagingSmoke.test.mjs` 已覆盖一部分打包配置、native artifact、sqlite-vec、postinstall 和 workflow 假设。
+- `LocalSenseVoiceSTT.test.mjs` 已覆盖 fake worker 下的生命周期、drain、情绪 metadata、术语后处理、worker error/exit。
+
+这些是好基础，但还不够。
+
+### 真正缺的
+
+```text
+CI build smoke
+  |
+  +-- macOS arm64 artifact exists
+  +-- macOS x64 artifact exists
+  +-- Windows x64 artifact exists
+  |
+  v
+Packaged runtime smoke
+  |
+  +-- app launches
+  +-- native audio module loads real .node
+  +-- sqlite-vec load path works or degrades explicitly
+  +-- Local SenseVoice worker can require sherpa-onnx-node
+  +-- model missing shows clear "download model" state
+  +-- model present can run one tiny fixture or preflight
+  +-- Local Whisper missing/present states are explicit
+  |
+  v
+Meeting smoke
+  |
+  +-- microphone-only meeting can start
+  +-- system audio permission denial is non-fatal
+  +-- final transcript reaches renderer
+  +-- meeting save succeeds
+```
+
+当前测试多是源码级 contract 和 fake worker。它能防止我们写错配置，但不能证明用户下载的 `.dmg` 或 `.exe` 在目标机器上真的能跑本地 STT。
+
+### P0 可靠性验收标准
+
+1. **三平台构建可重复**：macOS arm64、macOS x64、Windows x64 的 CI 构建都必须执行 typecheck、build、native artifact smoke、packaging smoke、release size audit。
+2. **本地 STT 预检可解释**：Local SenseVoice / Local Whisper 在模型未安装、native addon 缺失、ABI 不匹配、worker init 失败时，设置页和会议页必须显示明确原因，不能只是不出 transcript。
+3. **packaged app smoke 必须存在**：安装包构建后至少运行一个无真实麦克风依赖的 packaged smoke，证明 app 能启动、IPC 可用、native module 可加载、SenseVoice worker import 可达。
+4. **真实会议最小闭环**：每个平台至少保留一个可执行的 microphone-only smoke。无法在 CI 访问真实音频设备时，必须用平台 smoke + 人工验收 checklist 补齐，不许假装自动化覆盖。
+5. **降级不是失败伪装**：Screen Recording 权限缺失、系统音频不可用、本地模型未安装、sqlite-vec 不可用，都必须进入可见 degraded reason。
+6. **版本组合固定**：Electron、better-sqlite3、sherpa-onnx-node、onnxruntime-node、sqlite-vec 的兼容组合必须有测试护栏。升级 Electron 前先证明 native addon rebuild 通过。
+
+### 推荐下一步
+
+- 新增 `test:release:smoke`：只做跨平台发布前门禁，不塞产品 eval。
+- 新增 packaged smoke 脚本，例如 `scripts/release-smoke.mjs`，由 mac/windows workflow 在打包后运行。
+- 给 Local SenseVoice 增加 worker import preflight：不跑完整识别也要证明 `require('sherpa-onnx-node')` 和 `OfflineRecognizer` 构造路径能到达，失败时返回结构化错误。
+- 给 Local Whisper 增加同等预检：模型目录、ONNX runtime、worker path、缺模型提示。
+- 把 `test:all` 的当前红点先清零，再把 reliability smoke 纳入阶段报告。
+
+### 不在 P0 范围
+
+- 不做 Linux 发布可靠性，当前公开发布目标先是 macOS 和 Windows。
+- 不做 Apple notarization 自动化，签名/公证是分发信任问题，和本地 STT runtime smoke 分开推进。
+- 不要求 CI 真录麦克风或系统音频，CI 先证明 packaged runtime 和 native/model 预检，真实音频由 release checklist 或专用机器补齐。
+- 不新增本地意图模型或新 STT 模型。
 
 ## 3 个月产品力目标
 
@@ -85,6 +197,8 @@ CueUp 监听当前 turn + 最近上下文 + 资料 + 屏幕 + 业务系统
 
 时间：第 1-2 周
 
+状态：已完成 release-gate 级别收口。产品契约已经数据化，UI 已接入，七状态 lifecycle 指标、accepted output deterministic validation、artifact carryover 状态边界和 metrics 报告均已有自动化验收。
+
 目标：先把“什么叫一张好卡片”钉死。否则后面只会继续堆 trigger。
 
 动作卡片必须从“检测提示”升级为“会议里的下一步动作”。
@@ -108,11 +222,15 @@ CueUp 监听当前 turn + 最近上下文 + 资料 + 屏幕 + 业务系统
 
 产品 DoD：
 
-- `DynamicActionCard` 的所有文案从 intent label 转为 action promise。
-- 统一卡片状态：candidate、countdown、generating、cancelled、expired、failed。
-- 卡片解释复用 `explainDynamicAction()`，但面向用户重写，不是诊断句子。
-- 加入“接受后产物类型”字段：spoken_response、checklist、email_draft、action_item、decision_record。
-- 质量指标开始记录：shown、accepted、dismissed、auto_generated、expired、generated_failed。
+- 已完成：`DynamicActionCard` 已进入用户可见解释路径，动态动作 trust UX contract 已进入 quality smoke。
+- 已完成：`DynamicActionEngine` 已输出 gate trace，reject/defer 不出卡但可诊断。
+- 已完成：动态动作 product/replay/metrics 命令已建立。
+- 已完成：卡片状态和产物类型已经从文案约定升级为明确数据契约：`DynamicActionProductContract`、`DynamicActionOutputType`、`DynamicActionRiskState`、`DynamicActionPayload.status` 已在 renderer/main 类型边界中定义。
+- 已完成：`shown / accepted / auto_generated / dismissed / expired / generated_failed / completed` 已进入同一套 lifecycle 口径，diagnostics 和 telemetry/metrics 均可记录。
+- 已完成：`expired` 有生产可调用路径记录，不再只停留在 store 状态。
+- 已完成：`ActionArtifact` 已作为 accepted card 会后 carryover 的 transient 产物契约，包含 `outputType`、`structuredSummary`、`missingFields`、`groundedSources`、`generationStatus` 和独立的 `acceptTriggerSource`。`generationStatus` 保持 `completed | generated_failed | not_generated`，不混入 lifecycle 状态。
+- 已完成：accepted card 后的生成内容已有 action-type 级别 deterministic evaluator，覆盖价格异议、报价邮件、案例证明、技术 checklist 和 buying signal 下一步。
+- 后续优化：`test:dynamic-actions:product` 当前默认输出仍是全模式汇总分数；如要做运营面板，需要增加 mode-level score 输出。
 
 复用现有能力：
 
@@ -132,6 +250,8 @@ CueUp 监听当前 turn + 最近上下文 + 资料 + 屏幕 + 业务系统
 ### Step 2：销售模式打穿
 
 时间：第 3-5 周
+
+状态：已完成 release-gate 级别收口。销售五类关键瞬间、50 条 sales fixture matrix、accepted output deterministic validation、资料/PPTX/business_context grounding mock contract 和五类 sales artifact 会后 carryover 均已有自动化验收。真实 LLM/RAG/PPTX/Windchill 仍作为 opt-in smoke，不进入默认 CI。
 
 目标：销售模式先成为第一个“真实可卖”的样板。因为销售场景最容易验证价值，也最容易暴露误报。
 
@@ -163,7 +283,7 @@ CueUp 监听当前 turn + 最近上下文 + 资料 + 屏幕 + 业务系统
 
 销售模式必须用真实资料打穿：
 
-- 上传 sales deck 或 case study PPTX。
+- 上传 sales deck 或 case study，PPTX 目前必须走 QCLOUD API 支持路径并显示清楚诊断。
 - 上传 FAQ / pricing policy / security note。
 - 客户问案例时，卡片接受后的回答能引用资料。
 - 客户问 Windchill/PLM 事实时，能走业务系统上下文，但失败时不编。
@@ -186,13 +306,19 @@ rtk node --test electron/services/__tests__/IntelligenceEngineDynamicActions.tes
 
 新增测试方向：
 
-- `SalesDynamicActionProductFixtures.test.mjs`
-- `SalesDynamicActionAnswerQuality.test.mjs`
-- `SalesActionCardUx.contract.test.mjs`
+- 已完成：`SalesDynamicActionProductFixtures.test.mjs` 已从 6 条代表样例升级为完整读取 `tests/fixtures/dynamic-actions/product/sales.json` 的 50 条 matrix，覆盖中文、英文、中英混合、内部/客户身份错位、旧话题污染和价格误报负样本。
+- 已完成：销售 fixture matrix 门禁验证 sales recall >= 80%、sales false positive < 10%、positive fixture 的 actionType/outputType 全匹配。
+- 已完成：`SalesDynamicActionAnswerQuality.test.mjs` 已验证销售 prompt / detector 约束，并接入 accepted output evaluator，覆盖报价不编价格/客户名/合同条款、案例不编 proof、价格异议不编折扣或 ROI。
+- 已完成：`SalesActionCardUx.contract.test.mjs` 已存在，作为销售卡片 UX contract。
+- 已完成：`SalesDynamicActionGrounding.test.mjs` 覆盖 material / pptx / business_context 的可用、未找到和失败场景；默认测试不依赖真实外部服务。
+- 已完成：`PostCallWorkflow.test.mjs` 覆盖五类 sales accepted artifact carryover：价格异议回应、报价邮件、案例/证明回应、技术 checklist、buying signal action item。
+- 后续优化：真实 provider smoke 可单独验证 LLM/RAG/PPTX/Windchill 端到端，但不作为默认 CI 门禁。
 
 ### Step 3：FDE 模式打穿
 
 时间：第 6-8 周
+
+状态：进行中，制造业 PLM / QMS / 企业 AI Agent 定位已经写入默认上下文，真实 STT replay 入口已建立。
 
 目标：FDE 模式要从“通用客户现场部署助手”收敛成“制造业 PLM / QMS / 企业 AI Agent 部署助手”。
 
@@ -253,11 +379,14 @@ FDE 模式必须吃进这些上下文：
 
 产品 DoD：
 
-- FDE 卡片按“制造业业务流程推进”组织，不按技术名词组织。
-- 卡片接受后的内容默认短、具体、可问出口。
-- 安全/合规卡片必须保守，不能承诺未经证实的质量、审计或权限能力。
-- 风险卡片必须区分“客户流程风险”“系统权限风险”“我们交付风险”“AI Agent 误判风险”“信息缺失”。
-- 下一步卡片缺 owner/date/artifact 时必须追问，不许脑补。
+- 已完成：默认 FDE context 已迁移到制造业 PLM / QMS / 企业 AI Agent 部署副驾驶定位。
+- 已完成：`test:dynamic-actions:fde-replay:real-stt` 已建立，缺 live key 时明确失败，不伪装通过。
+- 已完成：FDE 动态动作已有制造业 fixture 覆盖基础。
+- 仍需补齐：FDE 卡片按“制造业业务流程推进”组织，不按技术名词组织。
+- 仍需补齐：卡片接受后的内容默认短、具体、可问出口。
+- 仍需补齐：安全/合规卡片必须保守，不能承诺未经证实的质量、审计或权限能力。
+- 仍需补齐：风险卡片必须区分“客户流程风险”“系统权限风险”“我们交付风险”“AI Agent 误判风险”“信息缺失”。
+- 仍需补齐：下一步卡片缺 owner/date/artifact 时必须追问，不许脑补。
 - AI Agent 卡片必须默认包含人工确认点，不能暗示系统会自动写入 PLM / QMS。
 - 不是增加新功能,是把现有的功能利用好.
 
@@ -280,6 +409,8 @@ FDE 模式必须吃进这些上下文：
 ### Step 4：团队会议模式打穿
 
 时间：第 9-10 周
+
+状态：未开始产品打穿，仍以通用动态动作能力为主。
 
 目标：团队会议模式不是“会后总结器”。它要在会中帮团队把口头承诺变成明确行动。
 
@@ -332,6 +463,8 @@ FDE 模式必须吃进这些上下文：
 
 时间：第 11-12 周
 
+状态：基础命令已建立，质量工程正在扩展；产品运营面板未完成。
+
 目标：把“基本能用”变成“持续变好”。
 
 没有评测闭环，动作卡片会退化成 trigger 花园。今天加一个词，明天误报一个会。软件很快变成玄学。
@@ -368,15 +501,19 @@ FDE 模式必须吃进这些上下文：
 rtk npm run test:quality:changed
 rtk npm run test:quality:gate
 rtk npm run test:quality:diagnostics
-```
-
-新增命令目标：
-
-```bash
 rtk npm run test:dynamic-actions:product
 rtk npm run test:dynamic-actions:replay
 rtk npm run test:dynamic-actions:metrics
 ```
+
+已经建立但还需产品化使用的命令：
+
+```bash
+rtk npm run test:dynamic-actions:fde-replay:real-stt
+rtk npm run test:dynamic-actions:recruiting-replay:real-stt
+```
+
+注意：真实 STT replay 依赖 `QCLOUD_LIVE_API_KEY` 或 `NATIVELY_API_KEY`，缺环境变量时必须标为环境 skip / blocked，不能当作通过。
 
 3 个月结束时，不能只说“测试通过”。
 
@@ -534,15 +671,17 @@ CueUp 要帮：
 
 | 能力 | 当前状态 | 未来 3 个月用法 |
 |------|----------|----------------|
-| DynamicActionEngine | 已有语义门控和 trace | 变成三大重点模式的核心产品引擎 |
-| DynamicActionCard | 已能展示/接受/忽略 | 升级为 action promise + evidence + output type |
+| DynamicActionEngine | 已有语义门控、trace、product/replay 基础测试 | 变成三大重点模式的核心产品引擎 |
+| DynamicActionCard | 已能展示/接受/忽略，并已有 trust UX contract | 升级为稳定 action promise + evidence + output type 数据契约 |
 | IntentClassifier | 已有 mode-aware intent | 用于模式关键瞬间召回和答案形状 |
 | SignalStateTracker | 已有重复证据和冷却 | 用于降噪和用户忽略后的学习 |
-| RAG / Materials | PDF/DOCX/MD/TXT/PPTX 基础已在 | 销售案例、FDE 部署方案、流程蓝图和验收材料 grounding |
+| RAG / Materials | PDF/DOCX/MD/TXT 已有本地抽取，PPTX 走 QCLOUD API 支持路径和诊断 | 销售案例、FDE 部署方案、流程蓝图和验收材料 grounding |
 | Windchill adapter | 专用只读 MCP 已在 | FDE 中 PLM 物料、BOM、变更、文档等只读事实补充 |
-| Screen understanding | 已在实时路径 | FDE 看 PLM/QMS 页面、错误信息、流程图和 API 文档 |
+| Screen understanding | 已在实时路径，vision-first fallback chain 已有测试扩展 | FDE 看 PLM/QMS 页面、错误信息、流程图和 API 文档 |
 | QCLOUD emotion | 已透传到 UI | 只作风险/语气辅助，不能单独触发动作 |
-| Quality gate | 已有基础命令 | 扩成产品级 fixture 和 replay |
+| Local SenseVoice | 已有本地中文优先、术语后处理、模型缓存/生命周期测试 | 改善中文会议转写稳定性，但不承诺解码期热词偏置 |
+| Scenario/Profile context | 已有场景档案、master profile 和模式资料过滤测试扩展 | 给销售/FDE 卡片提供可引用、可解释的个性化上下文 |
+| Quality gate | 已有基础命令、动态动作 replay 命令和本地测试报告 | 扩成产品级 fixture、replay、coverage 和上线门禁 |
 
 ## 不在未来 3 个月范围内
 
@@ -635,6 +774,27 @@ CueUp 要帮：
 5. 真实会议评测闭环
    用指标和回放防止产品退化成 trigger 堆。
 ```
+
+## 下一冲刺执行队列
+
+按当前代码库状态，下一冲刺不要再扩 provider、知识源或新模式。先收这 7 件事：
+
+1. **建立 release reliability gate**：新增 `test:release:smoke` 或等价命令，覆盖 macOS arm64、macOS x64、Windows x64 的 packaged runtime smoke、native module load、sqlite-vec path、Local SenseVoice worker import preflight、Local Whisper preflight。
+2. **修掉当前测试红点**：`SettingsAudioFallbackNotice.test.mjs` 与 `SettingsOverlay.tsx` 中文文案不同步。上线级路线图不能容忍“已知 1 红”被忽略。
+3. **把本地 STT 降级做成用户可见状态**：模型未安装、native addon 缺失、ABI 不匹配、worker init 失败、权限不足，都要有设置页/会议页可读原因。
+4. **把动态动作验收从出现推进到可用**：销售/FDE 至少各补一组 accepted output fixture，验证点击卡片后生成内容能直接说、能引用资料、不编价格/案例/PLM/QMS 事实。
+5. **把真实 STT replay 纳入可选 CI**：`test:dynamic-actions:fde-replay:real-stt` 和 recruiting replay 已有入口，CI 需要有 live key 时跑，无 live key 时明确标记环境 skip。
+6. **补产品指标面板第一版**：先显示 answer latency、citation hit rate、RAG hit rate、accept/dismiss/generated failure、degraded reason 分布。内部诊断已有，差的是用户/开发者可读出口。
+7. **把 coverage 变成门禁而不是脚本摆设**：未提交工作区已有 `test:coverage*` 脚本入口，下一步要确定 baseline、diff threshold 和哪些目录先进入阈值。先从 `electron/services`、`electron/llm`、`electron/db`、`electron/audio` 这四块开始，不要一口吃全仓库。
+
+当前不建议做：
+
+- 不新增模式。
+- 不新增业务系统写回。
+- 不新增大 dashboard。
+- 不把 SenseVoice 术语纠错说成“模型提前知道热词”。
+- 不把没有 live key 跑过的 replay 写成已验收。
+- 不把只在源码测试中 import 成功的本地 STT 写成“安装包可靠”。
 
 ## 战略总结
 

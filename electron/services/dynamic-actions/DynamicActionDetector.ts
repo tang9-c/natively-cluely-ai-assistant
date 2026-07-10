@@ -487,6 +487,16 @@ export const MODE_TRIGGERS: Record<string, ActionTrigger[]> = {
     technical_interview: TECHNICAL_TRIGGERS,
 };
 
+function shouldSuppressSalesTrigger(trigger: ActionTrigger, transcript: string): boolean {
+    if (trigger.type === 'case_study_request') {
+        return /内部复盘|不是客户要材料|file name is outdated|our drive|材料还没上传|先别引用/i.test(transcript);
+    }
+    if (trigger.type === 'buying_signal') {
+        return /later internal topic|no customer ask|主持人切换议程|切换议程/i.test(transcript);
+    }
+    return false;
+}
+
 export class DynamicActionDetector {
     private triggers: Record<string, ActionTrigger[]>;
 
@@ -505,6 +515,9 @@ export class DynamicActionDetector {
         const modeTriggers = this.triggers[modeTemplateType] || [];
 
         for (const trigger of modeTriggers) {
+            if (modeTemplateType === 'sales' && shouldSuppressSalesTrigger(trigger, transcript)) {
+                continue;
+            }
             for (const pattern of trigger.patterns) {
                 const match = pattern.exec(transcript);
                 if (match) {
