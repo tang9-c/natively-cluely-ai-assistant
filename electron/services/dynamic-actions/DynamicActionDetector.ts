@@ -487,12 +487,22 @@ export const MODE_TRIGGERS: Record<string, ActionTrigger[]> = {
     technical_interview: TECHNICAL_TRIGGERS,
 };
 
-function shouldSuppressSalesTrigger(trigger: ActionTrigger, transcript: string): boolean {
+function shouldSuppressSalesTrigger(trigger: ActionTrigger, transcript: string, speaker?: string): boolean {
+    const text = transcript.replace(/\s+/g, ' ').trim();
+    if (
+        /^(internal|internal teammate|teammate|me|host)$/i.test((speaker ?? '').trim()) &&
+        ['pricing_objection', 'pricing_request', 'case_study_request', 'technical_requirements', 'buying_signal'].includes(trigger.type)
+    ) {
+        return true;
+    }
     if (trigger.type === 'case_study_request') {
-        return /内部复盘|不是客户要材料|file name is outdated|our drive|材料还没上传|先别引用/i.test(transcript);
+        return /内部复盘|不是客户要材料|file name is outdated|our drive|材料还没上传|先别引用/i.test(text);
     }
     if (trigger.type === 'buying_signal') {
-        return /later internal topic|no customer ask|主持人切换议程|切换议程/i.test(transcript);
+        return /later internal topic|no customer ask|主持人切换议程|切换议程/i.test(text);
+    }
+    if (trigger.type === 'technical_requirements') {
+        return /(internal folder|internal file|our drive|内部文件夹|内部资料|内部核对|内部复盘|不是客户在问|不是客户要|no customer ask|not a customer ask|客户身份错配|identity mismatch|文件夹里的方案标题)/i.test(text);
     }
     return false;
 }
@@ -535,15 +545,16 @@ export class DynamicActionDetector {
     detectTriggers(params: {
         transcript: string;
         modeTemplateType: string;
+        speaker?: string;
     }): Array<{ trigger: ActionTrigger; match: string; index: number }> {
-        const { transcript, modeTemplateType } = params;
+        const { transcript, modeTemplateType, speaker } = params;
         const matchedTriggers: Array<{ trigger: ActionTrigger; match: string; index: number }> = [];
 
         // Get triggers for this mode, fallback to empty array
         const modeTriggers = this.triggers[modeTemplateType] || [];
 
         for (const trigger of modeTriggers) {
-            if (modeTemplateType === 'sales' && shouldSuppressSalesTrigger(trigger, transcript)) {
+            if (modeTemplateType === 'sales' && shouldSuppressSalesTrigger(trigger, transcript, speaker)) {
                 continue;
             }
             if (modeTemplateType === 'fde' && shouldSuppressFdeTrigger(trigger, transcript)) {

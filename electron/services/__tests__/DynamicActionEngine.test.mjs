@@ -1672,6 +1672,25 @@ describe('ActionTrigger fixtures — sales mode', () => {
     assert.ok(actions.some(action => action.type === 'technical_requirements'));
   });
 
+  test('sales internal price-list identity mismatch does not trigger technical requirements', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const transcript = [
+      'The price list is in our internal folder，不是客户在问报价。',
+      '这段只是我们内部核对客户身份错配和材料位置。',
+      '后面有人提到 technical solution 和 integration requirements，也只是文件夹里的方案标题，不是客户需求。',
+    ].join(' ');
+
+    const actions = engine.detectActions({
+      transcript,
+      modeTemplateType: 'sales',
+      modeId: 'm_s',
+      sessionId: 's_s_internal_price_identity_guard',
+    });
+
+    assert.deepEqual(actions.map(action => action.type), []);
+  });
+
   test('sales technical requirement phrasing is detected without pricing language', async () => {
     const { DynamicActionEngine } = await loadModules();
     const engine = new DynamicActionEngine();

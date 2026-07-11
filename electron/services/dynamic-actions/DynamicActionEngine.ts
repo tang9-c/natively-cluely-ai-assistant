@@ -103,7 +103,7 @@ export class DynamicActionEngine {
         const keyEntities = extractKeyEntities(transcript, modeTemplateType);
 
         // Detect triggers using regex patterns
-        const matchedTriggers = this.detector.detectTriggers({ transcript, modeTemplateType });
+        const matchedTriggers = this.detector.detectTriggers({ transcript, modeTemplateType, speaker });
 
         for (const { trigger, match, index } of matchedTriggers) {
             const action = this.buildAction({
@@ -156,7 +156,7 @@ export class DynamicActionEngine {
         const language = params.language || detectLanguage(transcript);
         const keyEntities = extractKeyEntities(transcript, modeTemplateType);
         const candidateActions: DynamicAction[] = [];
-        const matchedTriggers = this.detector.detectTriggers({ transcript, modeTemplateType });
+        const matchedTriggers = this.detector.detectTriggers({ transcript, modeTemplateType, speaker });
         const triggerCandidates = matchedTriggers.map(({ trigger, match }) => ({
             trigger,
             match,

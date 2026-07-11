@@ -116,6 +116,7 @@ export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<
 
     const actions = engine.detectActions({
       transcript,
+      speaker: fixture.transcriptTurns[0]?.speaker,
       modeTemplateType: entry.modeTemplateType,
       modeId: entry.modeTemplateType,
       sessionId: `replay-${entry.id}`,

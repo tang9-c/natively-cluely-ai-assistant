@@ -41,3 +41,10 @@ test('test:all skips the live Doubao AUC request unless explicitly enabled', () 
   assert.match(runner, /set DOUBAO_AUC_REAL_TESTS=1/);
   assert.match(runner, /name: 'doubao-auc-real'[\s\S]*skipUnless:/);
 });
+
+test('test:all loads dotenv before checking blocked live STT stages', () => {
+  const runner = read('scripts/run-test-all.mjs');
+
+  assert.match(runner, /import ['"]dotenv\/config['"]/);
+  assert.match(runner, /blockedOnMissingEnv/);
+});

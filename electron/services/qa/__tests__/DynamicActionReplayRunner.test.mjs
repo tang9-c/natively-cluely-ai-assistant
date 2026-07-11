@@ -101,6 +101,9 @@ test('sales audio replay runs through STT output and dynamic action detection', 
     modeTemplateTypes: ['sales'],
     transcribeAudio: async ({ entry, audioPath }) => {
       audioInputs.push({ id: entry.id, audioPath });
+      if (entry.id === 'sales-replay-internal-price-identity-001') {
+        return 'Internal teammate says our price list is too high in the draft but this is internal prep not the customer speaking 客户说，这个先不谈 pricing 我们要看 integration plan。S O 和 A P I 怎么接？ Expected behavior avoid a pricing objection card and focus on technical requirements';
+      }
       return sttTranscripts.get(entry.id);
     },
   });
