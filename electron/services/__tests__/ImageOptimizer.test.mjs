@@ -180,6 +180,38 @@ test('format:"webp" emits a WebP with image/webp mimeType', async () => {
   await optimizer.cleanupAll();
 });
 
+test('highly compressed small PNG falls back to original when re-encoding grows bytes', async () => {
+  const Optimizer = await loadOptimizer();
+  const optimizer = new Optimizer();
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'image-opt-small-png-'));
+  const src = path.join(dir, 'small.png');
+
+  await sharp({
+    create: { width: 32, height: 32, channels: 3, background: { r: 255, g: 255, b: 255 } },
+  })
+    .png({ compressionLevel: 9, palette: true })
+    .toFile(src);
+  const srcStat = await fs.stat(src);
+
+  const out = await optimizer.optimize(src, {
+    profile: 'fast',
+    provider: 'openai',
+    format: 'jpeg',
+    quality: 90,
+    cacheKey: 'small-compressed',
+  });
+
+  assert.equal(out.path, src);
+  assert.equal(out.mimeType, 'image/png');
+  assert.equal(out.byteSize, srcStat.size);
+  assert.equal(out.originalByteSize, srcStat.size);
+  assert.equal(out.ownsFile, false);
+  await optimizer.cleanup(out);
+  await fs.access(src);
+
+  await optimizer.cleanupAll();
+});
+
 test('quality step-down loop reduces bytes when maxBytes is tight', async () => {
   const Optimizer = await loadOptimizer();
   const optimizer = new Optimizer();

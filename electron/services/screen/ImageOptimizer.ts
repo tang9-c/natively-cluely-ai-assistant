@@ -63,6 +63,7 @@ export interface OptimizedImage {
   profile: OptimizationProfile;
   provider: ProviderHint;
   cacheHit: boolean;
+  ownsFile?: boolean;                     // false when optimization returns the caller-owned original
 }
 
 // Profile defaults — tuned for vision LLM quality vs payload size.
@@ -99,6 +100,19 @@ function applyProviderTweaks(
 }
 
 const DEFAULT_MAX_BYTES = 3.5 * 1024 * 1024; // 3.5 MB safety margin under most provider limits
+
+function mimeTypeFromSharpFormat(format?: string): OptimizedImage['mimeType'] {
+  switch (format) {
+    case 'jpeg':
+    case 'jpg':
+      return 'image/jpeg';
+    case 'webp':
+      return 'image/webp';
+    case 'png':
+    default:
+      return 'image/png';
+  }
+}
 
 export class ImageOptimizer {
   private tempDir: string;
@@ -207,6 +221,30 @@ export class ImageOptimizer {
       attempt++;
     }
 
+    if (buffer.byteLength > originalStats.size) {
+      const result: OptimizedImage = {
+        path: sourcePath,
+        mimeType: mimeTypeFromSharpFormat(metadata.format),
+        width: originalWidth,
+        height: originalHeight,
+        byteSize: originalStats.size,
+        originalWidth,
+        originalHeight,
+        originalByteSize: originalStats.size,
+        durationMs: Date.now() - started,
+        profile,
+        provider,
+        cacheHit: false,
+        ownsFile: false,
+      };
+
+      if (cacheKey) {
+        this.cache.set(cacheKey, result);
+      }
+
+      return result;
+    }
+
     // Determine output extension from chosen format.
     const ext = format === 'jpeg' ? 'jpg' : format;
     const outPath = path.join(this.tempDir, `${uuidv4()}.${ext}`);
@@ -225,6 +263,7 @@ export class ImageOptimizer {
       profile,
       provider,
       cacheHit: false,
+      ownsFile: true,
     };
 
     if (cacheKey) {
@@ -264,14 +303,21 @@ export class ImageOptimizer {
    * Delete a specific optimized file when the caller is done with it.
    */
   async cleanup(optimized: OptimizedImage): Promise<void> {
-    try {
-      await fs.unlink(optimized.path);
-    } catch {
-      // best-effort
+    if (optimized.ownsFile !== false) {
+      try {
+        await fs.unlink(optimized.path);
+      } catch {
+        // best-effort
+      }
     }
     for (const [key, p] of this.ownedFiles.entries()) {
       if (p === optimized.path) {
         this.ownedFiles.delete(key);
+        this.cache.delete(key);
+      }
+    }
+    for (const [key, value] of this.cache.entries()) {
+      if (value.path === optimized.path) {
         this.cache.delete(key);
       }
     }
