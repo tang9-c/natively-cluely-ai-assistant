@@ -365,6 +365,63 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     assert.ok(final.detailedSummary.actionItems.includes('Alice owns docs'));
   });
 
+  test('LLM title that returns closing-summary prose is sanitized before save', async () => {
+    const db = DatabaseManager.getInstance();
+    const session = buildMockSession();
+    let calls = 0;
+    const llm = {
+      generateMeetingSummary: async () => {
+        calls += 1;
+        if (calls === 1) {
+          return '好的，那今天的会议就到这里啦。今天我们重点围绕企业质量管理流程中的风险管理展开了讨论，明确了项目场景下风险管理的核心定义、常见风险类型，也梳理了后续需推进的风险分类、对应责任人确认及最小化交付artifact梳理等关键工作要点。感谢各位的参与。';
+        }
+        return JSON.stringify({ overview: 'overview', keyPoints: [], actionItems: [] });
+      },
+    };
+    const mp = new MeetingPersistence(session, llm);
+
+    await mp.processAndSaveMeeting(buildSnapshot({
+      context: '本次会议围绕企业质量管理流程中的风险管理展开，确认风险分类、责任人和交付 artifact。',
+    }), 'm-long-title-prose');
+
+    const final = db.getMeetingDetails('m-long-title-prose');
+    assert.ok(final);
+    assert.ok(final.title.length <= 32, `title should be short, got ${final.title.length}: ${final.title}`);
+    assert.doesNotMatch(final.title, /会议就到这里|感谢各位|关键工作要点/);
+  });
+
+  test('LLM title that returns markdown meeting notes is sanitized before save', async () => {
+    const db = DatabaseManager.getInstance();
+    const session = buildMockSession();
+    let calls = 0;
+    const llm = {
+      generateMeetingSummary: async () => {
+        calls += 1;
+        if (calls === 1) {
+          return `### 非ERP产线数据量号提取落地方案（结合天健数据质量背景）
+#### 一、核心需求拆解
+针对天健方非ERP产线数据，通过现有代码实现路径输入自动化提取量号。
+
+#### 二、关键行动项
+1. 数据适配梳理
+2. 代码优化与验证
+3. 场景重置执行`;
+        }
+        return JSON.stringify({ overview: 'overview', keyPoints: [], actionItems: [] });
+      },
+    };
+    const mp = new MeetingPersistence(session, llm);
+
+    await mp.processAndSaveMeeting(buildSnapshot({
+      context: '讨论非ERP产线数据量号提取落地方案，重点是天健数据质量、路径输入自动提取和场景重置。',
+    }), 'm-long-title-markdown');
+
+    const final = db.getMeetingDetails('m-long-title-markdown');
+    assert.ok(final);
+    assert.ok(final.title.length <= 32, `title should be short, got ${final.title.length}: ${final.title}`);
+    assert.doesNotMatch(final.title, /###|####|关键行动项|核心需求拆解|1\./);
+  });
+
   test('LLM returns markdown-fenced summary — JSON still parsed', async () => {
     const db = DatabaseManager.getInstance();
     const session = buildMockSession();

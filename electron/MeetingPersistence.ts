@@ -12,6 +12,50 @@ import { telemetryService } from './services/telemetry/TelemetryService';
 import type { ProviderDataScopePolicy } from './llm/ProviderRouter';
 const crypto = require('crypto');
 
+const DEFAULT_MEETING_TITLE = '会议纪要';
+const MAX_MEETING_TITLE_CHARS = 32;
+
+function looksLikeSummaryBody(text: string): boolean {
+    return /(^|\n)\s*#{1,6}\s|\n\s*(?:[-*]|\d+\.|[一二三四五六七八九十]+[、.])\s|关键行动项|后续里程碑|核心需求拆解|行动项|会议就到这里|感谢各位|输出《|准确率≥|####/i.test(text);
+}
+
+function compactMeetingTitle(text: string): string {
+    return text
+        .replace(/```[\s\S]*?```/g, ' ')
+        .replace(/^[#>*\-\s]+/gm, '')
+        .replace(/\*\*/g, '')
+        .replace(/["'“”‘’`]/g, '')
+        .replace(/\s+/g, ' ')
+        .replace(/[。；;，,：:、\-\s]+$/g, '')
+        .trim();
+}
+
+function fallbackTitleFromContext(context: string): string {
+    const compact = compactMeetingTitle(context);
+    if (!compact) return DEFAULT_MEETING_TITLE;
+
+    const match = compact.match(/(?:围绕|关于|讨论|推进|确认|梳理)([^。；;，,]{2,24})/);
+    if (match?.[1]) return compactMeetingTitle(match[1]).slice(0, MAX_MEETING_TITLE_CHARS) || DEFAULT_MEETING_TITLE;
+
+    return compact.slice(0, MAX_MEETING_TITLE_CHARS) || DEFAULT_MEETING_TITLE;
+}
+
+function sanitizeGeneratedMeetingTitle(rawTitle: string | null | undefined, context: string): string {
+    const raw = (rawTitle ?? '').trim();
+    if (!raw) return fallbackTitleFromContext(context);
+
+    if (looksLikeSummaryBody(raw)) return fallbackTitleFromContext(context);
+
+    const firstUsefulLine = raw
+        .split(/\r?\n/)
+        .map(compactMeetingTitle)
+        .find((line) => line.length > 0) ?? '';
+    if (!firstUsefulLine) return fallbackTitleFromContext(context);
+
+    const title = firstUsefulLine.slice(0, MAX_MEETING_TITLE_CHARS).trim();
+    return title || fallbackTitleFromContext(context);
+}
+
 export class MeetingPersistence {
     private session: SessionTracker;
     private llmHelper: LLMHelper;
@@ -180,7 +224,7 @@ export class MeetingPersistence {
                 const groqTitlePrompt = GROQ_TITLE_PROMPT;
 
                 const generatedTitle = await this.llmHelper.generateMeetingSummary(titlePrompt, data.context.substring(0, 5000), groqTitlePrompt);
-                if (generatedTitle) title = generatedTitle.replace(/["*]/g, '').trim();
+                title = sanitizeGeneratedMeetingTitle(generatedTitle, data.context);
             }
 
             // Load template note sections for the mode that was active when meeting stopped.
