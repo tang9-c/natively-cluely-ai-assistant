@@ -69,6 +69,36 @@ test('LLMHelper passes explicit QCLOUD output budgets for chat and PPTX call sit
   assert.match(helper, /this\.streamWithNatively\(userContent,\s*finalSystemPrompt,\s*imagePaths,\s*\{\s*maxOutputTokens:\s*chatPromptOptions\?\.maxOutputTokens\s*\}\)/);
 });
 
+test('streamChat uses real QCLOUD SSE stream for the selected QCLOUD model', () => {
+  const helper = read('electron/LLMHelper.ts');
+  const streamChatInner = helper.slice(
+    helper.indexOf('  private async * _streamChatInner('),
+    helper.indexOf('  /**\n   * Stream response from Groq', helper.indexOf('  private async * _streamChatInner(')),
+  );
+  const selectedQCloudBlock = streamChatInner.slice(
+    streamChatInner.indexOf("if (this.currentModelId === 'natively')"),
+    streamChatInner.indexOf('// 4. Gemini Routing & Fallback'),
+  );
+
+  assert.match(selectedQCloudBlock, /yield\*\s*this\.streamWithNatively\(userContent,\s*finalSystemPrompt,\s*imagePaths/);
+  assert.doesNotMatch(selectedQCloudBlock, /await this\.generateWithNatively\(userContent,\s*finalSystemPrompt,\s*imagePaths/);
+  assert.doesNotMatch(selectedQCloudBlock, /yield response/);
+});
+
+test('QCLOUD streaming parser handles standard SSE, custom delta, non-stream JSON, and empty streams', () => {
+  const helper = read('electron/LLMHelper.ts');
+
+  assert.match(helper, /private extractQCloudStreamContent/);
+  assert.match(helper, /choices\?\.\[0\]\?\.delta\?\.content/);
+  assert.match(helper, /choices\?\.\[0\]\?\.message\?\.content/);
+  assert.match(helper, /chunk\?\.delta/);
+  assert.match(helper, /chunk\?\.data\?\.content/);
+  assert.match(helper, /content-type/);
+  assert.match(helper, /QCLOUD API returned an empty non-streaming response/);
+  assert.match(helper, /QCLOUD API streaming response was empty/);
+  assert.match(helper, /payload === '\[DONE\]'/);
+});
+
 test('LLMHelper advertises QCLOUD model metadata to provider routing', () => {
   const helper = read('electron/LLMHelper.ts');
 

@@ -2128,6 +2128,31 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     return this.generateWithNatively(userMessage, systemPrompt, imagePaths, { ...options, dataScopes });
   }
 
+  private extractQCloudStreamContent(chunk: any): string | null {
+    const direct = chunk?.choices?.[0]?.delta?.content
+      ?? chunk?.choices?.[0]?.message?.content
+      ?? chunk?.delta
+      ?? chunk?.content
+      ?? chunk?.data?.choices?.[0]?.delta?.content
+      ?? chunk?.data?.choices?.[0]?.message?.content
+      ?? chunk?.data?.delta
+      ?? chunk?.data?.content;
+
+    if (typeof direct === 'string') return direct;
+    if (Array.isArray(direct)) {
+      const joined = direct
+        .map((item) => typeof item === 'string' ? item : item?.text || item?.content || '')
+        .filter(Boolean)
+        .join('');
+      return joined || null;
+    }
+    if (direct && typeof direct === 'object') {
+      const nested = direct.content ?? direct.text;
+      return typeof nested === 'string' ? nested : null;
+    }
+    return null;
+  }
+
   private async generateWithNatively(
     userMessage: string,
     systemPrompt?: string,
@@ -3372,8 +3397,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
       if (nativelyKey) {
         try {
-          const response = await this.generateWithNatively(userContent, finalSystemPrompt, imagePaths, { maxOutputTokens: chatPromptOptions?.maxOutputTokens });
-          yield response;
+          yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, { maxOutputTokens: chatPromptOptions?.maxOutputTokens });
           return;
         } catch (err: any) {
           console.warn('[LLMHelper] QCLOUD API failed in streamChat, trying Groq fallback:', err.message);
@@ -3528,13 +3552,26 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       throw new Error(this.formatQCloudError(response.status, errData));
     }
 
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/event-stream') && !contentType.includes('stream')) {
+      const data = await response.json().catch((): null => null);
+      const content = this.extractQCloudStreamContent(data);
+      if (content) {
+        yield content;
+        return;
+      }
+      throw new Error('QCLOUD API returned an empty non-streaming response');
+    }
+
     // Parse the SSE response body incrementally.
     // Protocol: each line starting with "data: " carries a JSON payload.
     //   data: {"delta":"token","model":"llama-3.3-70b"}
     //   data: [DONE]
-    const reader = response.body!.getReader();
+    if (!response.body) throw new Error('QCLOUD API streaming response had no body');
+    const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';
+    let yieldedContent = false;
 
     try {
       outer: while (true) {
@@ -3545,19 +3582,38 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         const lines = buf.split('\n');
         buf = lines.pop()!;  // last line may be incomplete — carry it to next chunk
 
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const payload = line.slice(6).trim();
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line.startsWith('data:')) continue;
+          const payload = line.slice(5).trim();
           if (payload === '[DONE]') break outer;
 
           let chunk: any;
           try { chunk = JSON.parse(payload); } catch { continue; }
 
           if (chunk.error) throw new Error(`Server error: ${chunk.error}`);
-          const content = chunk.choices?.[0]?.delta?.content || chunk.delta;
-          if (typeof content === 'string' && content) yield content;
+          const content = this.extractQCloudStreamContent(chunk);
+          if (content) {
+            yieldedContent = true;
+            yield content;
+          }
         }
       }
+
+      if (buf.trim().startsWith('data:')) {
+        const payload = buf.trim().slice(5).trim();
+        if (payload && payload !== '[DONE]') {
+          try {
+            const content = this.extractQCloudStreamContent(JSON.parse(payload));
+            if (content) {
+              yieldedContent = true;
+              yield content;
+            }
+          } catch { /* ignore incomplete trailing payload */ }
+        }
+      }
+
+      if (!yieldedContent) throw new Error('QCLOUD API streaming response was empty');
     } finally {
       try { reader.cancel(); } catch { }  // release the fetch connection cleanly
     }

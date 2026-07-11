@@ -294,6 +294,44 @@ test('generateStream() emits a friendly fallback message when the helper throws'
   assert.match(chunks[0], /Could you repeat that/);
 });
 
+test('generateStream() uses scenario-specific output token budgets', async () => {
+  const { WhatToAnswerLLM } = require(distPath);
+  async function captureBudget(args = []) {
+    let capturedOptions;
+    const helper = createHelper({
+      async *streamChat(_message, _images, _context, _system, _includeHistory, _skipModeInjection, _scopes, options) {
+        capturedOptions = options;
+        yield 'answer';
+      },
+    });
+    const answerer = new WhatToAnswerLLM(helper, createModesManager());
+    for await (const _ of answerer.generateStream(...args)) {
+      // drain
+    }
+    return capturedOptions?.maxOutputTokens;
+  }
+
+  assert.equal(await captureBudget(['how should we answer?']), 1024);
+  assert.equal(await captureBudget(['answer the objection', undefined, undefined, undefined, undefined, 'draft a short sales card']), 768);
+  assert.equal(await captureBudget([
+    'how should we answer the PLM risk?',
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { modeTemplateType: 'fde', intent: 'integration_risk' },
+  ]), 1536);
+  assert.equal(await captureBudget([
+    'what should I say about this error?',
+    undefined,
+    undefined,
+    ['/tmp/screen.png'],
+  ]), 2048);
+});
+
 test('generateStream() trace metadata reports uploadedDocumentRag when uploadedMaterialContext is non-empty', async () => {
   const { WhatToAnswerLLM } = require(distPath);
   const helper = createHelper();
