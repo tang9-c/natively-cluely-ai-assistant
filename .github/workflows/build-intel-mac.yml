@@ -9,6 +9,8 @@
 # faster; we use them and cross-compile the Rust native module +
 # better-sqlite3 + keytar + sherpa-onnx-node + sharp to
 # x86_64-apple-darwin via NATIVELY_NATIVE_TARGETS.
+# Because Rust/napi build scripts may execute x86_64 helper binaries during
+# cross-compilation, the arm64 runner must have Rosetta installed.
 # electron-builder then packages the x64-only artifact (--mac --x64).
 #
 # Tuning notes:
@@ -38,6 +40,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      - name: Install Rosetta for x64 native build scripts
+        run: |
+          if [[ "$(uname -m)" == "arm64" ]]; then
+            softwareupdate --install-rosetta --agree-to-license
+          fi
 
       - name: Install dependencies
         run: npm install

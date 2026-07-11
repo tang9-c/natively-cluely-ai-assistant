@@ -73,6 +73,8 @@ test('mac release workflows build one architecture each and upload size audit re
   const armWorkflow = read('.github/workflows/build-arm64-mac.yml');
 
   assert.match(intelWorkflow, /^name:\s*Build Intel Mac$/m);
+  assert.match(intelWorkflow, /Install Rosetta for x64 native build scripts/);
+  assert.match(intelWorkflow, /softwareupdate --install-rosetta --agree-to-license/);
   assert.match(intelWorkflow, /NATIVELY_NATIVE_TARGETS:\s*"x86_64-apple-darwin"/);
   assert.match(intelWorkflow, /npx electron-builder --mac --x64 --publish never/);
   assert.doesNotMatch(intelWorkflow, /NATIVELY_BUILD_ALL_MAC_ARCHES:\s*"1"/);
