@@ -104,6 +104,17 @@ test('material RAG diagnostics propagate embedding fallback into realtime answer
   assert.match(db, /markKnowledgeMaterialEmbeddingsFailed/);
 });
 
+test('context health waits briefly for async embedding initialization before reporting unavailable', () => {
+  const ipc = read('electron/ipcHandlers.ts');
+
+  assert.match(ipc, /EMBEDDING_READY_STATUS_WAIT_MS/);
+  assert.match(ipc, /waitForEmbeddingReadiness/);
+  assert.match(ipc, /embeddingPipeline\.waitForReady\(EMBEDDING_READY_STATUS_WAIT_MS\)/);
+  assert.match(ipc, /async function getRagReadiness/);
+  assert.match(ipc, /const \{ ragReady, embeddingReady \} = await getRagReadiness\(ragManagerForHealth\)/);
+  assert.match(ipc, /const \{ ragReady, embeddingReady \} = await getRagReadiness\(ragManager\)/);
+});
+
 test('RAG retrieval combines lexical and vector scoring and does not treat chunk offset as wall-clock recency', () => {
   const retriever = read('electron/rag/RAGRetriever.ts');
   const vectorStore = read('electron/rag/VectorStore.ts');

@@ -69,6 +69,27 @@ import {
 import { buildRealtimeDiagnosticsSummary } from '../shared/realtimeAnswerTrustViewModel';
 
 const QCLOUD_KEY_PATTERN = /^sk-[A-Za-z0-9_-]{32,}$/;
+const EMBEDDING_READY_STATUS_WAIT_MS = 2_500;
+
+async function waitForEmbeddingReadiness(ragManager: any): Promise<void> {
+  const embeddingPipeline = ragManager?.getEmbeddingPipeline?.();
+  if (!embeddingPipeline || embeddingPipeline.isReady?.()) return;
+  if (typeof embeddingPipeline.waitForReady !== 'function') return;
+
+  try {
+    await embeddingPipeline.waitForReady(EMBEDDING_READY_STATUS_WAIT_MS);
+  } catch {
+    // Health/status callers still report unavailable after the bounded wait.
+  }
+}
+
+async function getRagReadiness(ragManager: any): Promise<{ ragReady: boolean; embeddingReady: boolean }> {
+  await waitForEmbeddingReadiness(ragManager);
+  return {
+    ragReady: Boolean(ragManager?.isReady?.()),
+    embeddingReady: Boolean(ragManager?.getEmbeddingPipeline?.().isReady?.()),
+  };
+}
 
 function validateQCloudApiKeyFormat(apiKey: string): string | null {
   const trimmed = apiKey.trim();
@@ -316,8 +337,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     options: { allowTimeout?: boolean } = {},
   ): Promise<UploadedMaterialContextContribution> => {
     const ragManagerForHealth = appState.getRAGManager();
-    const ragReady = Boolean(ragManagerForHealth?.isReady?.());
-    const embeddingReady = Boolean(ragManagerForHealth?.getEmbeddingPipeline?.().isReady?.());
+    const { ragReady, embeddingReady } = await getRagReadiness(ragManagerForHealth);
     const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
     const materialService = new KnowledgeMaterialService(
       DatabaseManager.getInstance(),
@@ -3370,8 +3390,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               surface: requestOptions.source,
               latencyMs: Date.now() - startedAt,
               question,
-              ragReady: Boolean(ragManagerForHealth?.isReady?.()),
-              embeddingReady: Boolean(ragManagerForHealth?.getEmbeddingPipeline?.().isReady?.()),
+              ...(await getRagReadiness(ragManagerForHealth)),
               screenContextStatus,
               businessSystemStatus: businessSystemResult.status,
               businessSystemSourceName: businessSystemResult.sourceName,
@@ -3397,8 +3416,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           contextCandidates.push(businessSystemResult.candidate);
         }
 
-        const ragReady = Boolean(ragManagerForHealth?.isReady?.());
-        const embeddingReady = Boolean(ragManagerForHealth?.getEmbeddingPipeline?.().isReady?.());
+        const { ragReady, embeddingReady } = await getRagReadiness(ragManagerForHealth);
         const searchQuery = typeof question === 'string' && question.trim()
           ? question.trim()
           : sanitizeModeEvent(requestOptions.modeEvent)?.retrievalQuery;
@@ -4331,14 +4349,15 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('get-context-health', async () => {
     const ragManager = appState.getRAGManager();
+    const { ragReady, embeddingReady } = await getRagReadiness(ragManager);
     const db = DatabaseManager.getInstance();
     const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
     const materialService = new KnowledgeMaterialService(db, ragManager?.getEmbeddingPipeline?.());
     const ragQueue = ragManager?.getQueueStatus?.() ?? { pending: 0, processing: 0, completed: 0, failed: 0 };
     const materialHealth = materialService.getHealth();
     return {
-      ragReady: Boolean(ragManager?.isReady?.()),
-      embeddingReady: Boolean(ragManager?.getEmbeddingPipeline?.().isReady?.()),
+      ragReady,
+      embeddingReady,
       ragQueue,
       materialCount: materialHealth.materialCount,
       materialQueue: materialHealth.queue,
