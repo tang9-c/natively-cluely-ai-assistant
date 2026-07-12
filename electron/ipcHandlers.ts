@@ -3238,10 +3238,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       _,
       question?: string,
       imagePaths?: string[],
-      options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: ModeEventContext },
+      options?: { requestId?: string; promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: ModeEventContext },
       ) => {
         try {
         const requestOptions = sanitizeGenerateWhatToSayOptions(options);
+        const intelligenceManager = appState.getIntelligenceManager();
+        intelligenceManager.reserveWhatShouldISayRequest(requestOptions.requestId);
         const providerScopes = SettingsManager.getInstance().get('providerDataScopes') || {};
         let screenContext: any;
         let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
@@ -3471,7 +3473,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         }) || undefined;
         uploadedMaterialContext = [uploadedMaterialContext, realtimeInjectedContext].filter(Boolean).join('\n\n') || undefined;
 
-        const intelligenceManager = appState.getIntelligenceManager();
         // Question and imagePaths are now optional - IntelligenceManager infers from transcript
         const answer = await intelligenceManager.runWhatShouldISay(
           question,
@@ -3484,6 +3485,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             uploadedMaterialContext,
             persist: requestOptions.persist === false ? false : undefined,
             source: requestOptions.source,
+            requestId: requestOptions.requestId,
             modeEvent: sanitizeModeEvent(requestOptions.modeEvent),
             contextDegradedReasons: contextBudgetDegradedReasons,
             traceSink: (trace) => {

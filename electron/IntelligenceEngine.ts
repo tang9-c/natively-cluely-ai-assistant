@@ -71,8 +71,8 @@ function detectRefinementIntent(userText: string): { isRefinement: boolean; inte
 // Events emitted by IntelligenceEngine
 export interface IntelligenceModeEvents {
     'assist_update': (insight: string) => void;
-    'suggested_answer': (answer: string, question: string, confidence: number) => void;
-    'suggested_answer_token': (token: string, question: string, confidence: number) => void;
+    'suggested_answer': (answer: string, question: string, confidence: number, requestId?: string) => void;
+    'suggested_answer_token': (token: string, question: string, confidence: number, requestId?: string) => void;
     'refined_answer': (answer: string, intent: string) => void;
     'refined_answer_token': (token: string, intent: string) => void;
     'recap': (summary: string) => void;
@@ -82,7 +82,7 @@ export interface IntelligenceModeEvents {
     'manual_answer_started': () => void;
     'manual_answer_result': (answer: string, question: string) => void;
     'mode_changed': (mode: IntelligenceMode) => void;
-    'error': (error: Error, mode: IntelligenceMode) => void;
+    'error': (error: Error, mode: IntelligenceMode, requestId?: string) => void;
     // ARCHITECTURE: dedicated channel for live negotiation coaching payloads.
     // Previously the coaching JSON was multiplexed into the suggested_answer
     // / suggested_answer_token streams as a sentinel-string, which forced the
@@ -116,6 +116,17 @@ export interface RunCodeHintOptions {
     requestedDataScopes?: ProviderDataScope[];
 }
 
+interface SpeculativeAnswerState {
+    requestId: string;
+    question: string;
+    status: 'streaming' | 'completed';
+    accumulatedAnswer: string;
+    startedAt: number;
+    completedAt?: number;
+    expiresAt: number;
+    visible: boolean;
+}
+
 const WHAT_TO_ANSWER_FALLBACK = "Could you repeat that? I want to make sure I address your question properly.";
 const WHAT_TO_ANSWER_LABEL_EN = 'What to Answer';
 const WHAT_TO_ANSWER_LABEL_ZH = '待回答内容';
@@ -136,6 +147,8 @@ export class IntelligenceEngine extends EventEmitter {
     // Concurrency tracking
     private assistCancellationToken: AbortController | null = null;
     private currentGenerationId: number = 0;
+    private reservedWhatToSayRequestId: string | null = null;
+    private activeWhatToSayAbortController: AbortController | null = null;
 
     // Keep reference to LLMHelper for client access
     private llmHelper: LLMHelper;
@@ -153,6 +166,7 @@ export class IntelligenceEngine extends EventEmitter {
     private speculativeText: string | null = null;
     // epoch ms after which speculativeText is stale; Infinity while stream is still running
     private speculativeTextExpiry: number = Infinity;
+    private speculativeAnswerState: SpeculativeAnswerState | null = null;
     private readonly SPECULATIVE_DEBOUNCE_MS = 350;
     private readonly SPECULATIVE_MIN_WORDS = 7;
     private readonly SPECULATIVE_MIN_CONFIDENCE = 0.75;
@@ -172,6 +186,67 @@ export class IntelligenceEngine extends EventEmitter {
         return normalized === 'nothing actionable right now'
             || normalized === 'nothing to capture right now'
             || normalized === WHAT_TO_ANSWER_FALLBACK.toLowerCase().replace(/[.!?。！？\s]+$/g, '');
+    }
+
+    private static isPotentialNonAnswerSentinelPrefix(answer: string): boolean {
+        const normalized = answer.trim().toLowerCase().replace(/[.!?。！？\s]+$/g, '');
+        if (!normalized) return true;
+        return [
+            'nothing actionable right now',
+            'nothing to capture right now',
+            WHAT_TO_ANSWER_FALLBACK.toLowerCase(),
+        ].some(candidate => candidate.startsWith(normalized));
+    }
+
+    private clearSpeculativeAnswerState(): void {
+        this.speculativeAnswerState = null;
+        this.speculativeText = null;
+        this.speculativeTextExpiry = Infinity;
+    }
+
+    public reserveWhatShouldISayRequest(requestId?: string): void {
+        if (!requestId) return;
+        this.reservedWhatToSayRequestId = requestId;
+        this.activeWhatToSayAbortController?.abort(new Error('what_to_say request superseded'));
+        this.activeWhatToSayAbortController = null;
+        ++this.currentGenerationId;
+        this.clearSpeculativeAnswerState();
+    }
+
+    private tryPublishSpeculativeAnswer(trigger: SuggestionTrigger): boolean {
+        const speculative = this.speculativeAnswerState;
+        if (!speculative || !trigger.lastQuestion) return false;
+
+        const expired = Date.now() > speculative.expiresAt;
+        const similarity = expired
+            ? 0
+            : IntelligenceEngine.jaccardSimilarity(speculative.question, trigger.lastQuestion);
+        if (expired || similarity < this.SPECULATIVE_SIMILARITY_THRESHOLD) {
+            console.log(`[IntelligenceEngine] Speculative result rejected (expired=${expired}, similarity=${similarity.toFixed(2)})`);
+            this.clearSpeculativeAnswerState();
+            ++this.currentGenerationId;
+            return false;
+        }
+
+        console.log(`[IntelligenceEngine] Speculative stream accepted (Jaccard=${similarity.toFixed(2)})`);
+        this.lastTriggerTime = Date.now();
+        speculative.visible = true;
+        const usageQuestion = IntelligenceEngine.inferUsageQuestionLabel(trigger.lastQuestion, trigger.context);
+        if (speculative.accumulatedAnswer) {
+            this.emit('suggested_answer_token', speculative.accumulatedAnswer, usageQuestion, trigger.confidence, speculative.requestId);
+        }
+        if (speculative.status === 'completed') {
+            this.session.addAssistantMessage(speculative.accumulatedAnswer);
+            this.session.pushUsage({
+                type: 'assist',
+                timestamp: Date.now(),
+                question: usageQuestion,
+                answer: speculative.accumulatedAnswer,
+            });
+            this.emit('suggested_answer', speculative.accumulatedAnswer, usageQuestion, trigger.confidence, speculative.requestId);
+            this.clearSpeculativeAnswerState();
+        }
+        return true;
     }
 
     private static inferUsageQuestionLabel(question: string | undefined, transcript: string): string {
@@ -786,6 +861,8 @@ export class IntelligenceEngine extends EventEmitter {
     async handleSuggestionTrigger(trigger: SuggestionTrigger): Promise<void> {
         if (trigger.confidence < 0.5) return;
 
+        if (this.tryPublishSpeculativeAnswer(trigger)) return;
+
         const plannerDecision = await this.planSuggestionTrigger(trigger);
         if (plannerDecision.kind === 'silent') {
             console.log('[IntelligenceEngine] Planner stayed silent', { reason: plannerDecision.reason, confidence: plannerDecision.confidence });
@@ -795,30 +872,6 @@ export class IntelligenceEngine extends EventEmitter {
         if (plannerDecision.kind !== 'answer') {
             await this.runPlannerDecision(plannerDecision, trigger.lastQuestion);
             return;
-        }
-
-        // If a speculative stream answered (or is answering) this question, reuse it.
-        if (this.speculativeText !== null) {
-            const expired = Date.now() > this.speculativeTextExpiry;
-            const stale = expired || !trigger.lastQuestion; // empty question — reject conservatively
-            if (!stale) {
-                const similarity = IntelligenceEngine.jaccardSimilarity(this.speculativeText, trigger.lastQuestion);
-                this.speculativeText = null;
-                this.speculativeTextExpiry = Infinity;
-                if (similarity >= this.SPECULATIVE_SIMILARITY_THRESHOLD) {
-                    console.log(`[IntelligenceEngine] Speculative stream accepted (Jaccard=${similarity.toFixed(2)}) — continuing`);
-                    this.lastTriggerTime = Date.now();
-                    return;
-                }
-                console.log(`[IntelligenceEngine] Speculative stream rejected (Jaccard=${similarity.toFixed(2)}) — restarting`);
-            } else {
-                console.log(`[IntelligenceEngine] Speculative result discarded (expired=${expired}, noQuestion=${!trigger.lastQuestion})`);
-                this.speculativeText = null;
-                this.speculativeTextExpiry = Infinity;
-            }
-            // IMPORTANT: no await between this increment and runWhatShouldISay below —
-            // the increment must be synchronous with the new stream launch to preserve generation-id ordering.
-            ++this.currentGenerationId;
         }
 
         await this.runWhatShouldISay(trigger.lastQuestion, trigger.confidence);
@@ -942,7 +995,7 @@ export class IntelligenceEngine extends EventEmitter {
      * Manual trigger - uses clean transcript pipeline for question inference
      * NEVER returns null - always provides a usable response
      */
-    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; uploadedMaterialContext?: string; persist?: boolean; source?: string; activeSkill?: { id: string; name: string; promptBlock: string }; modeEvent?: ModeEventContext; contextDegradedReasons?: string[]; traceSink?: WhatToAnswerTraceSink; providerScopePolicy?: import('./llm/ProviderRouter').ProviderDataScopePolicy }): Promise<string | null> {
+    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; uploadedMaterialContext?: string; persist?: boolean; source?: string; requestId?: string; activeSkill?: { id: string; name: string; promptBlock: string }; modeEvent?: ModeEventContext; contextDegradedReasons?: string[]; traceSink?: WhatToAnswerTraceSink; providerScopePolicy?: import('./llm/ProviderRouter').ProviderDataScopePolicy }): Promise<string | null> {
         const now = Date.now();
         const isSpeculative = options?.speculative === true;
         const skipCooldown = options?.skipCooldown === true;
@@ -955,12 +1008,24 @@ export class IntelligenceEngine extends EventEmitter {
             };
         }) | undefined;
         const isDynamicActionUsage = options?.source === 'dynamic_action' || Boolean(dynamicActionModeEvent?.actionId);
+        const requestId = options?.requestId || `what_${now}_${this.currentGenerationId + 1}`;
+        if (
+            options?.requestId &&
+            this.reservedWhatToSayRequestId &&
+            options.requestId !== this.reservedWhatToSayRequestId
+        ) {
+            return null;
+        }
 
         // Cooldown bypass: explicit images (user intent), speculative pre-fetch, or test harness.
         const hasImages = imagePaths && imagePaths.length > 0;
         if (!hasImages && !isSpeculative && !skipCooldown && now - this.lastTriggerTime < this.triggerCooldown) {
             return null;
         }
+
+        this.activeWhatToSayAbortController?.abort(new Error('what_to_say request superseded'));
+        const requestAbortController = new AbortController();
+        this.activeWhatToSayAbortController = requestAbortController;
 
         if (this.assistCancellationToken) {
             this.assistCancellationToken.abort();
@@ -978,6 +1043,15 @@ export class IntelligenceEngine extends EventEmitter {
         if (isSpeculative) {
             this.speculativeText = question ?? null;
             this.speculativeTextExpiry = Infinity;
+            this.speculativeAnswerState = {
+                requestId,
+                question: question ?? '',
+                status: 'streaming',
+                accumulatedAnswer: '',
+                startedAt: now,
+                expiresAt: Infinity,
+                visible: false,
+            };
         }
 
         try {
@@ -1091,6 +1165,16 @@ export class IntelligenceEngine extends EventEmitter {
             });
 
             const generationId = ++this.currentGenerationId;
+            if (
+                requestAbortController.signal.aborted ||
+                (
+                    options?.requestId &&
+                    this.reservedWhatToSayRequestId &&
+                    this.reservedWhatToSayRequestId !== options.requestId
+                )
+            ) {
+                return null;
+            }
             let fullAnswer = "";
             // RC-03 fix: hold a reference to the generator so we can call .return()
             // to properly terminate the network request when a new generation starts.
@@ -1107,8 +1191,20 @@ export class IntelligenceEngine extends EventEmitter {
                 contextDegradedReasons,
                 traceSink,
                 options?.providerScopePolicy,
+                {
+                    requestId,
+                    requestSource: isSpeculative
+                        ? 'automatic'
+                        : options?.source === 'dynamic_action'
+                            ? 'dynamic_action'
+                            : options?.source
+                                ? 'manual'
+                                : 'automatic',
+                    abortSignal: requestAbortController.signal,
+                },
             );
             let streamAborted = false;
+            let emittedStreamingContent = false;
 
             for await (const token of stream) {
                 if (this.currentGenerationId !== generationId) {
@@ -1120,18 +1216,34 @@ export class IntelligenceEngine extends EventEmitter {
                     break;
                 }
                 fullAnswer += token;
+                if (isSpeculative) {
+                    if (this.speculativeAnswerState?.requestId === requestId) {
+                        this.speculativeAnswerState.accumulatedAnswer = fullAnswer;
+                        if (this.speculativeAnswerState.visible) {
+                            this.emit('suggested_answer_token', token, question || 'inferred', confidence, requestId);
+                        }
+                    }
+                } else if (!emittedStreamingContent) {
+                    if (!IntelligenceEngine.isPotentialNonAnswerSentinelPrefix(fullAnswer)) {
+                        this.emit('suggested_answer_token', fullAnswer, question || 'inferred', confidence, requestId);
+                        emittedStreamingContent = true;
+                    }
+                } else {
+                    this.emit('suggested_answer_token', token, question || 'inferred', confidence, requestId);
+                }
             }
 
             if (streamAborted) {
                 // Aborted mid-stream — don't update session or emit final event
                 if (isSpeculative) {
-                    this.speculativeText = null;
-                    this.speculativeTextExpiry = Infinity;
+                    this.clearSpeculativeAnswerState();
                     // Stamp lastTriggerTime so the real trigger that caused this abort
                     // doesn't allow a rapid second trigger within the cooldown window.
                     this.lastTriggerTime = Date.now();
                 }
-                this.setMode('idle');
+                if (this.activeWhatToSayAbortController === requestAbortController) {
+                    this.setMode('idle');
+                }
                 return null;
             }
 
@@ -1150,8 +1262,7 @@ export class IntelligenceEngine extends EventEmitter {
                     throw new Error('dynamic_action_generation_failed');
                 }
                 if (isSpeculative) {
-                    this.speculativeText = null;
-                    this.speculativeTextExpiry = Infinity;
+                    this.clearSpeculativeAnswerState();
                     this.lastTriggerTime = Date.now();
                 }
                 this.setMode('idle');
@@ -1161,8 +1272,19 @@ export class IntelligenceEngine extends EventEmitter {
             if (isSpeculative) {
                 this.lastTriggerTime = Date.now();
                 this.speculativeTextExpiry = this.lastTriggerTime + this.triggerCooldown + 500;
-                this.setMode('idle');
-                return fullAnswer;
+                const speculative = this.speculativeAnswerState?.requestId === requestId
+                    ? this.speculativeAnswerState
+                    : null;
+                if (speculative) {
+                    speculative.status = 'completed';
+                    speculative.accumulatedAnswer = fullAnswer;
+                    speculative.completedAt = this.lastTriggerTime;
+                    speculative.expiresAt = this.speculativeTextExpiry;
+                }
+                if (!speculative?.visible) {
+                    this.setMode('idle');
+                    return fullAnswer;
+                }
             }
 
             const usageQuestion = IntelligenceEngine.inferUsageQuestionLabel(question, preparedTranscript);
@@ -1185,26 +1307,41 @@ export class IntelligenceEngine extends EventEmitter {
                 } : {}),
             };
 
-            this.emit('suggested_answer_token', fullAnswer, usageQuestion, confidence);
+            if (!isSpeculative && !emittedStreamingContent) {
+                this.emit('suggested_answer_token', fullAnswer, usageQuestion, confidence, requestId);
+            }
 
             if (shouldPersist) {
                 this.session.addAssistantMessage(fullAnswer);
                 this.session.pushUsage(usageEntry);
             }
 
-            this.emit('suggested_answer', fullAnswer, usageQuestion, confidence);
+            this.emit('suggested_answer', fullAnswer, usageQuestion, confidence, requestId);
+
+            if (isSpeculative) this.clearSpeculativeAnswerState();
 
             this.setMode('idle');
             return fullAnswer;
 
         } catch (error) {
-            if (isSpeculative) { this.speculativeText = null; this.speculativeTextExpiry = Infinity; }
-            this.emit('error', error as Error, 'what_to_say');
+            if (isSpeculative) this.clearSpeculativeAnswerState();
+            if (requestAbortController.signal.aborted) {
+                if (this.activeWhatToSayAbortController === requestAbortController) {
+                    this.setMode('idle');
+                }
+                return null;
+            }
+            this.emit('error', error as Error, 'what_to_say', requestId);
             this.setMode('idle');
-            if (isDynamicActionUsage) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (isDynamicActionUsage || /QCLOUD|stream_interrupted/i.test(message)) {
                 throw error;
             }
             return WHAT_TO_ANSWER_FALLBACK;
+        } finally {
+            if (this.activeWhatToSayAbortController === requestAbortController) {
+                this.activeWhatToSayAbortController = null;
+            }
         }
     }
 
@@ -1608,6 +1745,7 @@ export class IntelligenceEngine extends EventEmitter {
         }
         this.speculativeText = null;
         this.speculativeTextExpiry = Infinity;
+        this.speculativeAnswerState = null;
         SkillActivationManager.getInstance().clearMeetingActivations();
         SkillWatcherService.getInstance().clearSessionState();
     }

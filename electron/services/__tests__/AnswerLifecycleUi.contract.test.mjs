@@ -59,6 +59,22 @@ test('NativelyInterface gates realtime answer state by request id and previews c
   assert.doesNotMatch(source, /打开资料引用/);
 });
 
+test('what-to-say request ids flow through IPC token batches and gate renderer updates', () => {
+  const renderer = read('src/components/NativelyInterface.tsx');
+  const ipc = read('electron/ipcHandlers.ts');
+  const main = read('electron/main.ts');
+  const preload = read('electron/preload.ts');
+
+  assert.match(preload, /requestId\?: string/);
+  assert.match(ipc, /requestId:\s*requestOptions\.requestId/);
+  assert.match(ipc, /reserveWhatShouldISayRequest\(requestOptions\.requestId\)/);
+  assert.match(main, /suggested_answer_token[\s\S]{0,300}requestId/);
+  assert.match(main, /queueBatch\('suggested_answer',\s*\{\s*token,\s*question,\s*confidence,\s*requestId\s*\}\)/);
+  assert.match(renderer, /activeRealtimeRequestIdRef/);
+  assert.match(renderer, /it\.requestId\s*!==\s*activeRealtimeRequestIdRef\.current/);
+  assert.match(renderer, /requestId:\s*realtimeRequestId/);
+});
+
 test('NativelyInterface renders stable realtime answer failure status instead of silently updating state', () => {
   const source = read('src/components/NativelyInterface.tsx');
 

@@ -420,7 +420,7 @@ interface ElectronAPI {
   // Intelligence Mode Events
   onIntelligenceAssistUpdate: (callback: (data: { insight: string }) => void) => () => void;
   onIntelligenceSuggestedAnswer: (
-    callback: (data: { answer: string; question: string; confidence: number }) => void,
+    callback: (data: { answer: string; question: string; confidence: number; requestId?: string }) => void,
   ) => () => void;
   onIntelligenceRefinedAnswer: (
     callback: (data: { answer: string; intent: string }) => void,
@@ -433,7 +433,7 @@ interface ElectronAPI {
     callback: (data: { answer: string; question: string }) => void,
   ) => () => void;
   onIntelligenceModeChanged: (callback: (data: { mode: string }) => void) => () => void;
-  onIntelligenceError: (callback: (data: { error: string; mode: string }) => void) => () => void;
+  onIntelligenceError: (callback: (data: { error: string; mode: string; requestId?: string }) => void) => () => void;
   // Sprint 7: dedicated negotiation-coaching channel. Replaces the
   // sentinel-string multiplex through suggested_answer_token / suggested_answer.
   onIntelligenceNegotiationCoaching: (callback: (data: { payload: any }) => void) => () => void;
@@ -1480,7 +1480,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateWhatToSay: (
     question?: string,
     imagePaths?: string[],
-    options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: ModeEventContext },
+    options?: { requestId?: string; promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: ModeEventContext },
   ) => ipcRenderer.invoke('generate-what-to-say', question, imagePaths, options),
   generateClarify: () => ipcRenderer.invoke('generate-clarify'),
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) =>
@@ -1578,7 +1578,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('dynamic-action:dismiss', actionId),
   listDynamicActions: () => ipcRenderer.invoke('dynamic-action:list'),
   onIntelligenceSuggestedAnswerToken: (
-    callback: (data: { token: string; question: string; confidence: number }) => void,
+    callback: (data: { token: string; question: string; confidence: number; requestId?: string }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('intelligence-suggested-answer-token', subscription);
@@ -1587,7 +1587,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   onIntelligenceSuggestedAnswer: (
-    callback: (data: { answer: string; question: string; confidence: number }) => void,
+    callback: (data: { answer: string; question: string; confidence: number; requestId?: string }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('intelligence-suggested-answer', subscription);
@@ -1676,7 +1676,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('intelligence-mode-changed', subscription);
     };
   },
-  onIntelligenceError: (callback: (data: { error: string; mode: string }) => void) => {
+  onIntelligenceError: (callback: (data: { error: string; mode: string; requestId?: string }) => void) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('intelligence-error', subscription);
     return () => {

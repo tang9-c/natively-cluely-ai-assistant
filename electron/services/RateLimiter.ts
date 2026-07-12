@@ -14,7 +14,12 @@ export class RateLimiter {
     private readonly maxTokens: number;
     private readonly refillRatePerSecond: number;
     private lastRefillTime: number;
-    private waitQueue: Array<{ resolve: () => void; reject: (err: Error) => void }> = [];
+    private waitQueue: Array<{
+        resolve: () => void;
+        reject: (err: Error) => void;
+        signal?: AbortSignal;
+        onAbort?: () => void;
+    }> = [];
     private refillTimer: ReturnType<typeof setInterval> | null = null;
 
     // Hard cap on pending waiters — beyond this depth, new callers get an immediate
@@ -48,7 +53,10 @@ export class RateLimiter {
      * If the bucket is empty, waits up to MAX_QUEUE_DEPTH slots.
      * Throws RateLimitQueueFullError if the queue is full — callers should catch and fail-fast.
      */
-    public async acquire(): Promise<void> {
+    public async acquire(signal?: AbortSignal): Promise<void> {
+        if (signal?.aborted) {
+            throw signal.reason instanceof Error ? signal.reason : new Error('Rate limiter wait aborted');
+        }
         this.refill();
 
         if (this.tokens >= 1) {
@@ -64,7 +72,27 @@ export class RateLimiter {
 
         // Wait for a token to become available
         return new Promise<void>((resolve, reject) => {
-            this.waitQueue.push({ resolve, reject });
+            const waiter: (typeof this.waitQueue)[number] = {
+                signal,
+                resolve: () => {
+                    if (signal && waiter.onAbort) signal.removeEventListener('abort', waiter.onAbort);
+                    resolve();
+                },
+                reject: (error) => {
+                    if (signal && waiter.onAbort) signal.removeEventListener('abort', waiter.onAbort);
+                    reject(error);
+                },
+            };
+            if (signal) {
+                waiter.onAbort = () => {
+                    const index = this.waitQueue.indexOf(waiter);
+                    if (index >= 0) this.waitQueue.splice(index, 1);
+                    waiter.reject(signal.reason instanceof Error ? signal.reason : new Error('Rate limiter wait aborted'));
+                };
+                signal.addEventListener('abort', waiter.onAbort, { once: true });
+                if (signal.aborted) waiter.onAbort();
+            }
+            if (!signal?.aborted) this.waitQueue.push(waiter);
         });
     }
 

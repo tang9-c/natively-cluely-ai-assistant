@@ -31,3 +31,11 @@ test('sanitizeGenerateWhatToSayOptions limits source to known surfaces', async (
   assert.equal(sanitizeGenerateWhatToSayOptions({ source: 'dynamic_action' }).source, 'dynamic_action');
   assert.equal(sanitizeGenerateWhatToSayOptions({ source: 'evil' }).source, undefined);
 });
+
+test('sanitizeGenerateWhatToSayOptions accepts only bounded opaque request ids', async () => {
+  const { sanitizeGenerateWhatToSayOptions } = await loadRequest();
+
+  assert.equal(sanitizeGenerateWhatToSayOptions({ requestId: 'what_1234_abcd-9' }).requestId, 'what_1234_abcd-9');
+  assert.equal(sanitizeGenerateWhatToSayOptions({ requestId: 'bad\nrequest' }).requestId, undefined);
+  assert.equal(sanitizeGenerateWhatToSayOptions({ requestId: 'x'.repeat(129) }).requestId, undefined);
+});

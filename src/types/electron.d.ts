@@ -635,7 +635,7 @@ export interface ElectronAPI {
   // @ipc-channel generate-assist
   generateAssist: () => Promise<{ insight: string | null }>
   // @ipc-channel generate-what-to-say
-  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: DynamicActionModeEvent }) => Promise<{
+  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { requestId?: string; promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: DynamicActionModeEvent }) => Promise<{
     answerId?: string;
     answer: string | null;
     question?: string;
@@ -743,8 +743,8 @@ export interface ElectronAPI {
 
   // Intelligence Mode Events
   onIntelligenceAssistUpdate: (callback: (data: { insight: string }) => void) => () => void
-  onIntelligenceSuggestedAnswerToken: (callback: (data: { token: string; question: string; confidence: number }) => void) => () => void
-  onIntelligenceSuggestedAnswer: (callback: (data: { answer: string; question: string; confidence: number }) => void) => () => void
+  onIntelligenceSuggestedAnswerToken: (callback: (data: { token: string; question: string; confidence: number; requestId?: string }) => void) => () => void
+  onIntelligenceSuggestedAnswer: (callback: (data: { answer: string; question: string; confidence: number; requestId?: string }) => void) => () => void
   // Sprint 7: dedicated negotiation-coaching channel.
   onIntelligenceNegotiationCoaching: (callback: (data: { payload: any }) => void) => () => void
   // Sprint 9: time-batched IPC token channel.
@@ -758,7 +758,7 @@ export interface ElectronAPI {
   onIntelligenceManualStarted: (callback: () => void) => () => void
   onIntelligenceManualResult: (callback: (data: { answer: string; question: string }) => void) => () => void
   onIntelligenceModeChanged: (callback: (data: { mode: string }) => void) => () => void
-  onIntelligenceError: (callback: (data: { error: string, mode: string }) => void) => () => void;
+  onIntelligenceError: (callback: (data: { error: string, mode: string, requestId?: string }) => void) => () => void;
   // Session Management
   onSessionReset: (callback: () => void) => () => void;
 

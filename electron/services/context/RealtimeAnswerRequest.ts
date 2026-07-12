@@ -12,6 +12,7 @@ export type RealtimeAnswerStatusCode =
     | 'answer-trace-unavailable';
 
 export interface SanitizedGenerateWhatToSayOptions {
+    requestId?: string;
     promptInstruction?: string;
     persist?: boolean;
     source?: 'overlay' | 'launcher' | 'dynamic_action';
@@ -19,11 +20,16 @@ export interface SanitizedGenerateWhatToSayOptions {
 }
 
 const VALID_SOURCES = new Set(['overlay', 'launcher', 'dynamic_action']);
+const VALID_REQUEST_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
 export function sanitizeGenerateWhatToSayOptions(input: unknown): SanitizedGenerateWhatToSayOptions {
     if (!input || typeof input !== 'object') return {};
     const raw = input as Record<string, unknown>;
     const sanitized: SanitizedGenerateWhatToSayOptions = {};
+
+    if (typeof raw.requestId === 'string' && VALID_REQUEST_ID.test(raw.requestId)) {
+        sanitized.requestId = raw.requestId;
+    }
 
     if (typeof raw.promptInstruction === 'string' && raw.promptInstruction.trim()) {
         sanitized.promptInstruction = raw.promptInstruction;

@@ -294,7 +294,48 @@ test('generateStream() emits a friendly fallback message when the helper throws'
   assert.match(chunks[0], /Could you repeat that/);
 });
 
-test('generateStream() uses scenario-specific output token budgets', async () => {
+test('generateStream() propagates an explicit QCLOUD failure before the first token', async () => {
+  const { WhatToAnswerLLM } = require(distPath);
+  const helper = createHelper({
+    async *streamChat() {
+      throw new Error('QCLOUD API first token timeout');
+    },
+  });
+  const answerer = new WhatToAnswerLLM(helper, createModesManager());
+
+  await assert.rejects(
+    async () => {
+      for await (const _ of answerer.generateStream('how should we close?')) {
+        // drain
+      }
+    },
+    /QCLOUD API first token timeout/,
+  );
+});
+
+test('generateStream() propagates any error after yielding a partial answer', async () => {
+  const { WhatToAnswerLLM } = require(distPath);
+  const helper = createHelper({
+    async *streamChat() {
+      yield 'partial answer';
+      throw new Error('connection reset');
+    },
+  });
+  const answerer = new WhatToAnswerLLM(helper, createModesManager());
+  const chunks = [];
+
+  await assert.rejects(
+    async () => {
+      for await (const chunk of answerer.generateStream('how should we close?')) {
+        chunks.push(chunk);
+      }
+    },
+    /connection reset/,
+  );
+  assert.deepEqual(chunks, ['partial answer']);
+});
+
+test('generateStream() does not override provider output token budgets', async () => {
   const { WhatToAnswerLLM } = require(distPath);
   async function captureBudget(args = []) {
     let capturedOptions;
@@ -308,11 +349,11 @@ test('generateStream() uses scenario-specific output token budgets', async () =>
     for await (const _ of answerer.generateStream(...args)) {
       // drain
     }
-    return capturedOptions?.maxOutputTokens;
+    return capturedOptions;
   }
 
-  assert.equal(await captureBudget(['how should we answer?']), 1024);
-  assert.equal(await captureBudget(['answer the objection', undefined, undefined, undefined, undefined, 'draft a short sales card']), 768);
+  assert.equal(await captureBudget(['how should we answer?']), undefined);
+  assert.equal(await captureBudget(['answer the objection', undefined, undefined, undefined, undefined, 'draft a short sales card']), undefined);
   assert.equal(await captureBudget([
     'how should we answer the PLM risk?',
     undefined,
@@ -323,13 +364,13 @@ test('generateStream() uses scenario-specific output token budgets', async () =>
     undefined,
     undefined,
     { modeTemplateType: 'fde', intent: 'integration_risk' },
-  ]), 1536);
+  ]), undefined);
   assert.equal(await captureBudget([
     'what should I say about this error?',
     undefined,
     undefined,
     ['/tmp/screen.png'],
-  ]), 2048);
+  ]), undefined);
 });
 
 test('generateStream() trace metadata reports uploadedDocumentRag when uploadedMaterialContext is non-empty', async () => {

@@ -181,6 +181,46 @@ test('handleSuggestionTrigger routes answerable questions to what-to-say executo
   assert.equal(session.getFullUsage()[0].answer, answer);
 });
 
+test('handleSuggestionTrigger publishes a completed matching speculative answer without another LLM call', async () => {
+  const { engine, session } = await makeEngine();
+  const question = 'How should we explain this migration tradeoff?';
+  const answer = 'I would lead with the latency benefit, then explain the rollout risk.';
+  let answerCalls = 0;
+  engine.whatToAnswerLLM = {
+    async *generateStream() {
+      answerCalls++;
+      yield answer;
+    },
+  };
+  session.handleTranscript({
+    speaker: 'interviewer',
+    text: question,
+    timestamp: Date.now(),
+    final: true,
+    confidence: 0.95,
+  });
+  const tokens = [];
+  const finals = [];
+  engine.on('suggested_answer_token', token => tokens.push(token));
+  engine.on('suggested_answer', value => finals.push(value));
+
+  const speculative = await engine.runWhatShouldISay(question, 0.9, undefined, {
+    speculative: true,
+    skipCooldown: true,
+    requestId: 'req-speculative-1',
+  });
+  assert.equal(speculative, answer);
+  assert.deepEqual(tokens, []);
+  assert.deepEqual(finals, []);
+
+  await engine.handleSuggestionTrigger({ context: question, lastQuestion: question, confidence: 0.9 });
+
+  assert.equal(answerCalls, 1);
+  assert.deepEqual(tokens, [answer]);
+  assert.deepEqual(finals, [answer]);
+  assert.equal(session.getFullUsage().at(-1)?.answer, answer);
+});
+
 test('handleSuggestionTrigger routes incomplete technical restatements to clarify executor', async () => {
   const { engine } = await makeEngine();
   let clarifyCalls = 0;

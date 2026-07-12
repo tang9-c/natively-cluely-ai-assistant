@@ -151,7 +151,11 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.runAssistMode();
     }
 
-    async runWhatShouldISay(question?: string, confidence?: number, imagePaths?: string[], options?: { skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; uploadedMaterialContext?: string; persist?: boolean; source?: string; activeSkill?: { id: string; name: string; promptBlock: string }; modeEvent?: ModeEventContext; contextDegradedReasons?: string[]; traceSink?: WhatToAnswerTraceSink; providerScopePolicy?: import('./llm/ProviderRouter').ProviderDataScopePolicy }): Promise<string | null> {
+    reserveWhatShouldISayRequest(requestId?: string): void {
+        this.engine.reserveWhatShouldISayRequest(requestId);
+    }
+
+    async runWhatShouldISay(question?: string, confidence?: number, imagePaths?: string[], options?: { skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; uploadedMaterialContext?: string; persist?: boolean; source?: string; requestId?: string; activeSkill?: { id: string; name: string; promptBlock: string }; modeEvent?: ModeEventContext; contextDegradedReasons?: string[]; traceSink?: WhatToAnswerTraceSink; providerScopePolicy?: import('./llm/ProviderRouter').ProviderDataScopePolicy }): Promise<string | null> {
         return this.engine.runWhatShouldISay(question, confidence, imagePaths, options);
     }
 

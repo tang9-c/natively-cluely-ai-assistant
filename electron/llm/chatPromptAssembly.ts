@@ -14,6 +14,12 @@ export interface ChatPromptOptions {
   activeModePrompt?: string;
   activeSkill?: ActiveSkillForPrompt | null;
   maxOutputTokens?: number;
+  requestId?: string;
+  requestSource?: 'automatic' | 'manual' | 'dynamic_action' | 'other';
+  firstTokenTimeoutMs?: number;
+  idleTimeoutMs?: number;
+  totalTimeoutMs?: number;
+  abortSignal?: AbortSignal;
 }
 
 export function buildChatSystemPrompt(input: ChatPromptAssemblyInput): string {

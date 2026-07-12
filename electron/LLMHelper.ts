@@ -77,6 +77,12 @@ interface ProviderRequestOptions {
   maxOutputTokens?: number;
   timeoutMs?: number;
   dataScopes?: ProviderDataScope[];
+  requestId?: string;
+  requestSource?: 'automatic' | 'manual' | 'dynamic_action' | 'other';
+  firstTokenTimeoutMs?: number;
+  idleTimeoutMs?: number;
+  totalTimeoutMs?: number;
+  abortSignal?: AbortSignal;
 }
 
 // Simple prompt for image analysis (not interview copilot - kept separate)
@@ -3393,38 +3399,18 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     // 3b. QCLOUD API
     if (this.currentModelId === 'natively') {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
-      if (nativelyKey) {
-        try {
-          yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, { maxOutputTokens: chatPromptOptions?.maxOutputTokens });
-          return;
-        } catch (err: any) {
-          console.warn('[LLMHelper] QCLOUD API failed in streamChat, trying Groq fallback:', err.message);
-          lastQCloudFailure = err?.message || String(err);
-          // Try Groq before Gemini — Groq key is more commonly available
-          if (this.groqClient) {
-            try {
-              if (isMultimodal && imagePaths) {
-                const groqSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
-                const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
-                yield* this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem);
-              } else {
-                const groqSystem = buildProviderSystemPrompt(GROQ_SYSTEM_PROMPT);
-                const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
-                // intentional: emergency fallback waterfall — use stable GROQ_MODEL baseline, not currentModelId
-                // CACHE: pass system separately so Groq prefix-cache hits across turns.
-                yield* this.streamWithGroq(userContent, GROQ_MODEL, finalGroqSystem);
-              }
-              return;
-            } catch (groqErr: any) {
-              console.warn('[LLMHelper] Groq fallback also failed, trying Gemini:', groqErr.message);
-            }
-          }
-          // Fall through to Gemini
-        }
-      }
-      // No key or all fallbacks failed — fall through to Gemini
+      if (!this.hasNatively()) throw new Error('QCLOUD API key not set');
+      yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, {
+        maxOutputTokens: chatPromptOptions?.maxOutputTokens,
+        dataScopes: ['transcript', ...this.inferContextScopes(cloudCombinedContext)],
+        requestId: chatPromptOptions?.requestId,
+        requestSource: chatPromptOptions?.requestSource,
+        firstTokenTimeoutMs: chatPromptOptions?.firstTokenTimeoutMs,
+        idleTimeoutMs: chatPromptOptions?.idleTimeoutMs,
+        totalTimeoutMs: chatPromptOptions?.totalTimeoutMs,
+        abortSignal: chatPromptOptions?.abortSignal,
+      });
+      return;
     }
 
     // 4. Gemini Routing & Fallback
@@ -3460,17 +3446,29 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     throw new Error("No AI provider configured. Please add at least one API key in Settings.");
   }
 
-  /**
-   * Fake-stream for QCLOUD API (non-streaming endpoint).
-   * Yields the full response in small word-batches so the UI typing effect still plays.
-   * Throws on empty response so the fallback chain tries the next provider.
-   */
   private async * streamWithNatively(userContent: string, systemPrompt?: string, imagePaths?: string[], options: ProviderRequestOptions = {}): AsyncGenerator<string, void, unknown> {
-    // ── REAL SSE STREAM (replaces the fake word-by-word simulation) ──────────
-    // Previous implementation called generateWithNatively() (blocking, waited for
-    // the full response), then drip-fed words with setTimeout delays — pure theater.
-    // This version opens a streaming fetch and yields tokens as the server generates
-    // them, cutting time-to-first-token from ~3s to ~80ms.
+    this.assertOutboundScopes('natively', userContent, imagePaths, options.dataScopes ?? []);
+    const requestStartedAt = Date.now();
+    let limiterWaitMs = 0;
+    let firstTokenRecorded = false;
+    const trackQCloudTiming = (name: string, status: string, durationMs: number, properties: Record<string, unknown> = {}) => {
+      try {
+        const { telemetryService } = require('./services/telemetry/TelemetryService');
+        telemetryService.track({
+          name,
+          provider: 'natively',
+          durationMs,
+          status,
+          properties: {
+            requestId: options.requestId,
+            source: options.requestSource ?? 'other',
+            limiterWaitMs,
+            ...properties,
+          },
+        });
+      } catch { /* telemetry must never affect generation */ }
+    };
+    trackQCloudTiming('llm_request_started', 'started', 0);
     let nativelyKey = this.nativelyKey;
     if (!nativelyKey) {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -3524,56 +3522,82 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       Authorization: `Bearer ${nativelyKey}`,
     };
 
-    // Connect-only timeout: 10s to establish the TCP+TLS+HTTP handshake.
-    // Once the server sends the first response byte (headers received), we clear
-    // the timer so the SSE stream can run as long as needed.
-    // IMPORTANT: AbortSignal.timeout() applies to the ENTIRE request lifetime, not
-    // just the connection phase — using it here would kill Flash mid-stream at 10s
-    // and Pro at 10s even when actively yielding tokens. The AbortController pattern
-    // below correctly scopes the timeout to the connection phase only.
-    const _connectController = new AbortController();
-    const _connectTimer = setTimeout(() => _connectController.abort(new Error('QCLOUD API connect timeout (10s)')), 10_000);
+    const controller = new AbortController();
+    const externalAbortSignal = options.abortSignal;
+    const firstTokenTimeoutMs = options.firstTokenTimeoutMs ?? 12_000;
+    const idleTimeoutMs = options.idleTimeoutMs ?? 5_000;
+    const totalTimeoutMs = options.totalTimeoutMs ?? 30_000;
+    let connectTimer: ReturnType<typeof setTimeout> | null = null;
+    let firstTokenTimer: ReturnType<typeof setTimeout> | null = null;
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    let totalTimer: ReturnType<typeof setTimeout> | null = null;
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    let yieldedContent = false;
+    let streamCompleted = false;
+
+    const abortWith = (message: string) => {
+      if (!controller.signal.aborted) controller.abort(new Error(message));
+    };
+    const abortFromCaller = () => {
+      if (!controller.signal.aborted) {
+        controller.abort(
+          externalAbortSignal?.reason instanceof Error
+            ? externalAbortSignal.reason
+            : new Error('QCLOUD request cancelled'),
+        );
+      }
+    };
+    if (externalAbortSignal?.aborted) abortFromCaller();
+    else externalAbortSignal?.addEventListener('abort', abortFromCaller, { once: true });
+    const clearTimer = (timer: ReturnType<typeof setTimeout> | null) => {
+      if (timer) clearTimeout(timer);
+    };
+
     let response: Response;
     try {
+      firstTokenTimer = setTimeout(() => abortWith('QCLOUD API first token timeout'), firstTokenTimeoutMs);
+      totalTimer = setTimeout(() => abortWith('QCLOUD API total timeout'), totalTimeoutMs);
+      const limiterStartedAt = Date.now();
+      await this.rateLimiters.qcloud.acquire(controller.signal);
+      limiterWaitMs = Date.now() - limiterStartedAt;
+      connectTimer = setTimeout(() => abortWith('QCLOUD API connect timeout'), 10_000);
       response = await fetch(QCLOUD_CHAT_COMPLETIONS_ENDPOINT, {
         method: 'POST',
         headers: streamHeaders,
         body: JSON.stringify(body),
-        signal: _connectController.signal,
+        signal: controller.signal,
       });
-    } finally {
-      // Connection established (or failed) — stop the connect-phase timer.
-      // The stream body will now be read without any timeout.
-      clearTimeout(_connectTimer);
-    }
+      clearTimer(connectTimer);
+      connectTimer = null;
 
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}) as Record<string, unknown>);
-      throw new Error(this.formatQCloudError(response.status, errData));
-    }
-
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType.includes('text/event-stream') && !contentType.includes('stream')) {
-      const data = await response.json().catch((): null => null);
-      const content = this.extractQCloudStreamContent(data);
-      if (content) {
-        yield content;
-        return;
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}) as Record<string, unknown>);
+        throw new Error(this.formatQCloudError(response.status, errData));
       }
-      throw new Error('QCLOUD API returned an empty non-streaming response');
-    }
 
-    // Parse the SSE response body incrementally.
-    // Protocol: each line starting with "data: " carries a JSON payload.
-    //   data: {"delta":"token","model":"llama-3.3-70b"}
-    //   data: [DONE]
-    if (!response.body) throw new Error('QCLOUD API streaming response had no body');
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-    let yieldedContent = false;
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('text/event-stream') && !contentType.includes('stream')) {
+        const data = await response.json().catch((): null => null);
+        const content = this.extractQCloudStreamContent(data);
+        if (content) {
+          yieldedContent = true;
+          clearTimer(firstTokenTimer);
+          firstTokenTimer = null;
+          firstTokenRecorded = true;
+          const providerFirstTokenMs = Date.now() - requestStartedAt;
+          trackQCloudTiming('llm_first_token_latency', 'streaming', providerFirstTokenMs, { providerFirstTokenMs });
+          yield content;
+          streamCompleted = true;
+          return;
+        }
+        throw new Error('QCLOUD API returned an empty non-streaming response');
+      }
 
-    try {
+      if (!response.body) throw new Error('QCLOUD API streaming response had no body');
+      reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
       outer: while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -3594,7 +3618,18 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           if (chunk.error) throw new Error(`Server error: ${chunk.error}`);
           const content = this.extractQCloudStreamContent(chunk);
           if (content) {
+            if (!yieldedContent) {
+              clearTimer(firstTokenTimer);
+              firstTokenTimer = null;
+            }
             yieldedContent = true;
+            if (!firstTokenRecorded) {
+              firstTokenRecorded = true;
+              const providerFirstTokenMs = Date.now() - requestStartedAt;
+              trackQCloudTiming('llm_first_token_latency', 'streaming', providerFirstTokenMs, { providerFirstTokenMs });
+            }
+            clearTimer(idleTimer);
+            idleTimer = setTimeout(() => abortWith('QCLOUD API idle timeout'), idleTimeoutMs);
             yield content;
           }
         }
@@ -3606,16 +3641,47 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           try {
             const content = this.extractQCloudStreamContent(JSON.parse(payload));
             if (content) {
+              if (!yieldedContent) {
+                clearTimer(firstTokenTimer);
+                firstTokenTimer = null;
+              }
               yieldedContent = true;
+              if (!firstTokenRecorded) {
+                firstTokenRecorded = true;
+                const providerFirstTokenMs = Date.now() - requestStartedAt;
+                trackQCloudTiming('llm_first_token_latency', 'streaming', providerFirstTokenMs, { providerFirstTokenMs });
+              }
+              clearTimer(idleTimer);
+              idleTimer = setTimeout(() => abortWith('QCLOUD API idle timeout'), idleTimeoutMs);
               yield content;
             }
           } catch { /* ignore incomplete trailing payload */ }
         }
       }
 
-      if (!yieldedContent) throw new Error('QCLOUD API streaming response was empty');
+        if (!yieldedContent) throw new Error('QCLOUD API streaming response was empty');
+        streamCompleted = true;
+    } catch (error: any) {
+      const reason = controller.signal.aborted ? controller.signal.reason : error;
+      if (yieldedContent) {
+        trackQCloudTiming('provider_error', 'stream_interrupted', Date.now() - requestStartedAt);
+        throw new Error(`QCLOUD stream_interrupted: ${reason?.message || String(reason)}`);
+      }
+      trackQCloudTiming('provider_error', 'failed', Date.now() - requestStartedAt);
+      throw reason instanceof Error ? reason : new Error(String(reason));
     } finally {
-      try { reader.cancel(); } catch { }  // release the fetch connection cleanly
+      clearTimer(connectTimer);
+      clearTimer(firstTokenTimer);
+      clearTimer(idleTimer);
+      clearTimer(totalTimer);
+      externalAbortSignal?.removeEventListener('abort', abortFromCaller);
+      if (!controller.signal.aborted) controller.abort(new Error('QCLOUD stream cancelled'));
+      try { await reader?.cancel(); } catch { }
+      if (streamCompleted) {
+        trackQCloudTiming('llm_completed', 'completed', Date.now() - requestStartedAt, {
+          completionMs: Date.now() - requestStartedAt,
+        });
+      }
     }
   }
 

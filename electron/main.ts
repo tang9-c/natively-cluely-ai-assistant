@@ -3719,18 +3719,18 @@ export class AppState {
       } catch { /* non-fatal */ }
     })
 
-    this.intelligenceManager.on('suggested_answer', (answer: string, question: string, confidence: number) => {
+    this.intelligenceManager.on('suggested_answer', (answer: string, question: string, confidence: number, requestId?: string) => {
       flushBatchesBeforeFinal();
       const win = mainWindow()
       if (win) {
-        win.webContents.send('intelligence-suggested-answer', { answer, question, confidence })
+        win.webContents.send('intelligence-suggested-answer', { answer, question, confidence, requestId })
       }
 
     })
 
-    this.intelligenceManager.on('suggested_answer_token', (token: string, question: string, confidence: number) => {
+    this.intelligenceManager.on('suggested_answer_token', (token: string, question: string, confidence: number, requestId?: string) => {
       // Sprint 9: batch instead of per-token webContents.send.
-      queueBatch('suggested_answer', { token, question, confidence });
+      queueBatch('suggested_answer', { token, question, confidence, requestId });
     })
 
     // Sprint 7: dedicated negotiation-coaching channel. Engine emits this
@@ -3822,11 +3822,11 @@ export class AppState {
       }
     })
 
-    this.intelligenceManager.on('error', (error: Error, mode: string) => {
+    this.intelligenceManager.on('error', (error: Error, mode: string, requestId?: string) => {
       console.error(`[IntelligenceManager] Error in ${mode}:`, error)
       const win = mainWindow()
       if (win) {
-        win.webContents.send('intelligence-error', { error: error.message, mode })
+        win.webContents.send('intelligence-error', { error: error.message, mode, requestId })
       }
     })
   }

@@ -80,6 +80,18 @@ describe('RateLimiter', () => {
     // Wait a bit for rejection
     await new Promise(resolve => setTimeout(resolve, 50));
   });
+
+  test('acquire() removes and rejects a queued waiter when its signal aborts', async () => {
+    const limiter = new RateLimiter(0, 0.0);
+    const controller = new AbortController();
+    const pending = limiter.acquire(controller.signal);
+
+    controller.abort(new Error('request superseded'));
+
+    await assert.rejects(pending, /request superseded/);
+    assert.equal(limiter.waitQueue.length, 0);
+    limiter.destroy();
+  });
 });
 
 describe('CircuitBreaker', () => {

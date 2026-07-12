@@ -158,11 +158,121 @@ test('runWhatShouldISay still emits and stores real answers', async () => {
   const answer = await engine.runWhatShouldISay('how should I answer?', 0.9, undefined, { skipCooldown: true });
 
   assert.equal(answer, realAnswer);
-  assert.deepEqual(tokens, [realAnswer]);
+  assert.equal(tokens.join(''), realAnswer);
   assert.deepEqual(finals, [realAnswer]);
   assert.equal(session.getFullUsage().length, 1);
   assert.equal(session.getFullUsage()[0].answer, realAnswer);
   assert.equal(session.getFullTranscript().some(segment => segment.text === realAnswer), true);
+});
+
+test('runWhatShouldISay emits provider chunks before completion with a stable request id', async () => {
+  const { engine } = await makeEngineWithAnswer([]);
+  let releaseSecondChunk;
+  const waitForRelease = new Promise(resolve => { releaseSecondChunk = resolve; });
+  engine.whatToAnswerLLM = {
+    async *generateStream() {
+      yield 'Start with the conclusion. ';
+      await waitForRelease;
+      yield 'Then explain the tradeoff.';
+    },
+  };
+  const tokens = [];
+  const finals = [];
+  engine.on('suggested_answer_token', (token, _question, _confidence, requestId) => {
+    tokens.push({ token, requestId });
+  });
+  engine.on('suggested_answer', (answer, _question, _confidence, requestId) => {
+    finals.push({ answer, requestId });
+  });
+
+  const pending = engine.runWhatShouldISay('how should I answer?', 0.9, undefined, {
+    skipCooldown: true,
+    requestId: 'req-stream-1',
+  });
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.deepEqual(tokens, [{ token: 'Start with the conclusion. ', requestId: 'req-stream-1' }]);
+  assert.deepEqual(finals, []);
+
+  releaseSecondChunk();
+  const answer = await pending;
+  assert.equal(answer, 'Start with the conclusion. Then explain the tradeoff.');
+  assert.equal(tokens.map(item => item.token).join(''), answer);
+  assert.deepEqual(finals, [{ answer, requestId: 'req-stream-1' }]);
+});
+
+test('runWhatShouldISay rejects an older request reserved before async preparation completes', async () => {
+  const { engine, session } = await makeEngineWithAnswer(['stale answer']);
+  let tokenCount = 0;
+  engine.on('suggested_answer_token', () => tokenCount++);
+
+  engine.reserveWhatShouldISayRequest('request-new');
+  const answer = await engine.runWhatShouldISay('old question', 0.9, undefined, {
+    skipCooldown: true,
+    requestId: 'request-old',
+  });
+
+  assert.equal(answer, null);
+  assert.equal(tokenCount, 0);
+  assert.deepEqual(session.getFullUsage(), []);
+});
+
+test('runWhatShouldISay propagates QCLOUD failures without persisting a fallback answer', async () => {
+  const { engine, session } = await makeEngineWithAnswer([]);
+  engine.whatToAnswerLLM = {
+    async *generateStream() {
+      throw new Error('QCLOUD stream_interrupted: idle timeout');
+    },
+  };
+  const errors = [];
+  engine.on('error', (error, _mode, requestId) => errors.push({ message: error.message, requestId }));
+
+  await assert.rejects(
+    engine.runWhatShouldISay('question', 0.9, undefined, {
+      skipCooldown: true,
+      requestId: 'request-qcloud-error',
+    }),
+    /stream_interrupted/,
+  );
+
+  assert.deepEqual(session.getFullUsage(), []);
+  assert.deepEqual(errors, [{
+    message: 'QCLOUD stream_interrupted: idle timeout',
+    requestId: 'request-qcloud-error',
+  }]);
+});
+
+test('reserving a newer request aborts an active what-to-say stream without an error event', async () => {
+  const { engine, session } = await makeEngineWithAnswer([]);
+  let streamStarted;
+  const started = new Promise((resolve) => { streamStarted = resolve; });
+  engine.whatToAnswerLLM = {
+    async *generateStream(...args) {
+      const requestOptions = args[12];
+      streamStarted();
+      await new Promise((_, reject) => {
+        requestOptions.abortSignal.addEventListener(
+          'abort',
+          () => reject(requestOptions.abortSignal.reason),
+          { once: true },
+        );
+      });
+    },
+  };
+  const errors = [];
+  engine.on('error', (error) => errors.push(error.message));
+  engine.reserveWhatShouldISayRequest('request-old');
+  const pending = engine.runWhatShouldISay('old question', 0.9, undefined, {
+    skipCooldown: true,
+    requestId: 'request-old',
+  });
+  await started;
+
+  engine.reserveWhatShouldISayRequest('request-new');
+
+  assert.equal(await pending, null);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(session.getFullUsage(), []);
 });
 
 test('runWhatShouldISay labels inferred Chinese usage questions in Chinese', async () => {

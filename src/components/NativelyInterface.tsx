@@ -661,6 +661,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [citationPreviewMessage, setCitationPreviewMessage] = useState<string | null>(null);
   const latestAnswerLifecycleRef = useRef<LatestAnswerLifecycle | null>(null);
   const latestAnswerRequestIdRef = useRef(0);
+  const activeRealtimeRequestIdRef = useRef<string | null>(null);
   const activeMode = modes.find((mode) => mode.isActive) ?? null;
   const activeModeDisplayLabel = activeMode
     ? getModeDisplayName(activeMode)
@@ -1868,12 +1869,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       window.electronAPI.onIntelligenceSuggestedAnswerToken((data) => {
         // Coaching now arrives via onIntelligenceNegotiationCoaching only —
         // sentinel detection on this stream has been removed.
+        if (data.requestId && activeRealtimeRequestIdRef.current && data.requestId !== activeRealtimeRequestIdRef.current) return;
+        if (data.requestId) activeRealtimeRequestIdRef.current = data.requestId;
         queueToken('what_to_answer', data.token);
       }),
     );
 
     cleanups.push(
       window.electronAPI.onIntelligenceSuggestedAnswer((data) => {
+        if (data.requestId && activeRealtimeRequestIdRef.current && data.requestId !== activeRealtimeRequestIdRef.current) return;
+        if (data.requestId) activeRealtimeRequestIdRef.current = data.requestId;
         // PERF: flush any tokens still pending in the rAF buffer onto the
         // streaming row BEFORE we apply the final-answer setMessages, so no
         // tokens are lost on stream completion.
@@ -1901,6 +1906,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             },
           ];
         });
+        activeRealtimeRequestIdRef.current = null;
       }),
     );
 
@@ -1915,7 +1921,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         const { kind, items } = data;
         if (!items || items.length === 0) return;
         if (kind === 'suggested_answer') {
-          for (const it of items) queueToken('what_to_answer', (it as any).token);
+          for (const it of items) {
+            if (it.requestId && activeRealtimeRequestIdRef.current && it.requestId !== activeRealtimeRequestIdRef.current) continue;
+            if (it.requestId) activeRealtimeRequestIdRef.current = it.requestId;
+            queueToken('what_to_answer', (it as any).token);
+          }
         } else if (kind === 'refined_answer') {
           for (const it of items) queueToken((it as any).intent, (it as any).token);
         } else if (kind === 'recap') {
@@ -2058,15 +2068,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceError((data) => {
+        if (data.requestId && activeRealtimeRequestIdRef.current && data.requestId !== activeRealtimeRequestIdRef.current) return;
         setIsProcessing(false);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: genMessageId(),
-            role: 'system',
-            text: `❌ Error (${data.mode}): ${data.error}`,
-          },
-        ]);
+        flushToken();
+        setMessages((prev) => {
+          const message = `Error (${data.mode}): ${data.error}`;
+          const index = data.requestId
+            ? prev.findLastIndex((item) => item.id === data.requestId)
+            : -1;
+          if (index >= 0) {
+            const updated = [...prev];
+            updated[index] = { ...updated[index], text: message, isStreaming: false };
+            return updated;
+          }
+          return [...prev, { id: genMessageId(), role: 'system', text: message }];
+        });
+        if (data.requestId === activeRealtimeRequestIdRef.current) {
+          activeRealtimeRequestIdRef.current = null;
+        }
       }),
     );
     return () => cleanups.forEach((fn) => fn());
@@ -2232,6 +2251,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     setIsProcessing(true);
     const requestId = latestAnswerRequestIdRef.current + 1;
     latestAnswerRequestIdRef.current = requestId;
+    const realtimeRequestId = `what_${Date.now()}_${requestId}`;
+    activeRealtimeRequestIdRef.current = realtimeRequestId;
     setCitationPreviewMessage(null);
     analytics.trackCommandExecuted('what_to_say');
 
@@ -2263,17 +2284,31 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }, 50);
     }
 
+    flushToken();
+    streamingMsgIdRef.current = realtimeRequestId;
+    streamingIntentRef.current = 'what_to_answer';
+    streamingTextRef.current = '';
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: realtimeRequestId,
+        role: 'system',
+        text: '',
+        intent: 'what_to_answer',
+        isStreaming: true,
+      },
+    ]);
+
     try {
       // Pass imagePath if attached
       const result = await window.electronAPI.generateWhatToSay(
         undefined,
         currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
-        dynamicPromptInstruction || generationOptions
-          ? {
-              promptInstruction: dynamicPromptInstruction,
-              ...generationOptions,
-            }
-          : undefined,
+        {
+          requestId: realtimeRequestId,
+          promptInstruction: dynamicPromptInstruction,
+          ...generationOptions,
+        },
       );
       if (requestId !== latestAnswerRequestIdRef.current) {
         return;
@@ -2293,14 +2328,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       refreshContextHealth().catch(() => {});
       const statusMessage = formatRealtimeAnswerStatusForDisplay(result.statusCode, result.error);
       if (result.statusCode !== 'ok' && statusMessage && !result.answer) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: genMessageId(),
-            role: 'system',
-            text: statusMessage,
-          },
-        ]);
+        setMessages((prev) => {
+          const index = prev.findLastIndex((item) => item.id === realtimeRequestId);
+          if (index >= 0) {
+            const updated = [...prev];
+            updated[index] = { ...updated[index], text: statusMessage, isStreaming: false };
+            return updated;
+          }
+          return [...prev, { id: realtimeRequestId, role: 'system', text: statusMessage }];
+        });
         if (generationOptions?.throwOnError) {
           throw new Error(statusMessage);
         }
