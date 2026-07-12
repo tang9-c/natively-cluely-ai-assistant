@@ -90,7 +90,8 @@ function baseInput(overrides = {}) {
 }
 
 test('prepareWhatToSayContext fast path skips heavy services and embedding readiness wait', async () => {
-  const { prepareWhatToSayContext } = await loadHelper();
+  const { prepareWhatToSayContext, WhatToSayContextPreparationService } = await loadHelper();
+  WhatToSayContextPreparationService.getInstance()._resetCachesForTest();
   const { input, calls } = baseInput();
 
   const result = await prepareWhatToSayContext(input);
@@ -111,7 +112,8 @@ test('prepareWhatToSayContext fast path skips heavy services and embedding readi
 });
 
 test('prepareWhatToSayContext required material path searches and preserves citations', async () => {
-  const { prepareWhatToSayContext } = await loadHelper();
+  const { prepareWhatToSayContext, WhatToSayContextPreparationService } = await loadHelper();
+  WhatToSayContextPreparationService.getInstance()._resetCachesForTest();
   const { input, calls } = baseInput({
     question: 'Share the ROI proof',
     modeEvent: {
@@ -155,4 +157,93 @@ test('prepareWhatToSayContext required material path searches and preserves cita
   assert.equal(result.citations.length, 1);
   assert.match(result.uploadedMaterialContext ?? '', /uploaded_material_context/);
   assert.equal(calls.businessResolve, 0);
+});
+
+test('_resetCachesForTest clears cached material contributions between runs', async () => {
+  const { prepareWhatToSayContext, WhatToSayContextPreparationService } = await loadHelper();
+  const service = WhatToSayContextPreparationService.getInstance();
+  service._resetCachesForTest();
+  const { input, calls } = baseInput({
+    question: 'Share the ROI proof',
+    modeEvent: {
+      productContract: {
+        outputType: 'spoken_response',
+        contextNeedDecision: decision({ material: 'required' }),
+      },
+    },
+  });
+
+  await prepareWhatToSayContext(input);
+  await prepareWhatToSayContext(input);
+  assert.equal(calls.materialSearch, 1, 'same instance should cache identical material lookup');
+
+  service._resetCachesForTest();
+  await prepareWhatToSayContext(input);
+  assert.equal(calls.materialSearch, 2, 'resetForTest should clear cached material lookup');
+});
+
+test('material cache is scoped by dynamic action identity', async () => {
+  const { prepareWhatToSayContext, WhatToSayContextPreparationService } = await loadHelper();
+  const service = WhatToSayContextPreparationService.getInstance();
+  service._resetCachesForTest();
+  const { input, calls } = baseInput({
+    question: 'Share the customer material',
+    modeEvent: {
+      actionId: 'case-study-action',
+      productContract: {
+        outputType: 'spoken_response',
+        contextNeedDecision: decision({ material: 'required' }),
+      },
+    },
+  });
+
+  await prepareWhatToSayContext(input);
+  await prepareWhatToSayContext({
+    ...input,
+    modeEvent: {
+      ...input.modeEvent,
+      actionId: 'pricing-action',
+    },
+  });
+
+  assert.equal(calls.materialSearch, 2, 'different dynamic action ids must not share material cache entries');
+});
+
+test('context preparation failures are logged with redaction', async () => {
+  const { prepareWhatToSayContext, WhatToSayContextPreparationService } = await loadHelper();
+  WhatToSayContextPreparationService.getInstance()._resetCachesForTest();
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => {
+    warnings.push(args.map((arg) => String(arg)).join(' '));
+  };
+  try {
+    const { input } = baseInput({
+      modeEvent: {
+        productContract: {
+          outputType: 'spoken_response',
+          contextNeedDecision: decision({ business: 'required' }),
+        },
+      },
+      businessSystemServiceFactory: () => ({
+        async resolve() {
+          const error = new Error('business lookup failed');
+          error.apiKey = 'sk-test-secret-12345678901234567890';
+          error.prompt = 'raw customer transcript should not appear';
+          throw error;
+        },
+      }),
+    });
+
+    const result = await prepareWhatToSayContext(input);
+
+    assert.equal(result.businessSystemResult.kind, 'fixed_reply');
+    const joined = warnings.join('\n');
+    assert.match(joined, /business_context/);
+    assert.match(joined, /business lookup failed/);
+    assert.doesNotMatch(joined, /sk-test-secret/);
+    assert.doesNotMatch(joined, /raw customer transcript/);
+  } finally {
+    console.warn = originalWarn;
+  }
 });

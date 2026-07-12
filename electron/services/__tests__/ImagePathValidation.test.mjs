@@ -124,10 +124,11 @@ test('generate-what-to-say rejects malformed image path payloads before OCR or m
   const handler = sliceSafeHandleBlock(ipcSource, 'generate-what-to-say');
   const helper = read('electron/services/context/WhatToSayContextPreparation.ts');
 
-  assert.match(helper, /imagePaths\.length > 5/);
+  assert.match(helper, /MAX_CONTEXT_IMAGE_PATHS\s*=\s*5/);
+  assert.match(helper, /imagePaths\.length > MAX_CONTEXT_IMAGE_PATHS/);
   assert.match(helper, /typeof imagePath !== 'string'/);
   assert.match(helper, /imagePath\.trim\(\)\.length === 0/);
-  assert.match(handler, /invalid image path payload rejected/);
+  assert.match(helper, /invalid image path payload rejected/);
   assert.match(helper, /Invalid image path payload/);
   assert.match(handler, /contextPreparation\.invalidRequest/);
   assert.match(handler, /validatedImagePaths/);

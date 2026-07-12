@@ -6,9 +6,19 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
 const helperPath = path.join(root, 'dist-electron/electron/services/dynamic-actions/DynamicActionProductContract.js');
+const contextDecisionPath = path.join(root, 'dist-electron/electron/services/context/ContextNeedDecision.js');
+const detectorPath = path.join(root, 'dist-electron/electron/services/dynamic-actions/DynamicActionDetector.js');
 
 async function loadHelper() {
   return import(pathToFileURL(helperPath).href);
+}
+
+async function loadContextDecisionAndDetector() {
+  const [contextDecision, detector] = await Promise.all([
+    import(pathToFileURL(contextDecisionPath).href),
+    import(pathToFileURL(detectorPath).href),
+  ]);
+  return { contextDecision, detector };
 }
 
 function baseInput(overrides = {}) {
@@ -175,4 +185,20 @@ test('dynamic action contracts carry context need decisions for material, busine
   assert.equal(unknown.contextNeedDecision.material, 'unknown');
   assert.equal(unknown.contextNeedDecision.business, 'unknown');
   assert.equal(unknown.contextNeedDecision.screen, 'unknown');
+});
+
+test('context need action type set is derived from trigger registry', async () => {
+  const { contextDecision, detector } = await loadContextDecisionAndDetector();
+
+  const triggerActionTypes = new Set(
+    Object.values(detector.MODE_TRIGGERS)
+      .flat()
+      .map((trigger) => trigger.type),
+  );
+
+  assert.deepEqual(
+    contextDecision.KNOWN_CONTEXT_DECISION_ACTION_TYPES,
+    triggerActionTypes,
+    'context need decisions must stay aligned with registered dynamic action trigger types',
+  );
 });

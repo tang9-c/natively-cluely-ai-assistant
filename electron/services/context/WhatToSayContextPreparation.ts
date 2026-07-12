@@ -3,8 +3,16 @@ import { app } from 'electron';
 import { DatabaseManager, type AnswerCitationRecord, type AnswerDegradedReason } from '../../db/DatabaseManager';
 import type { ModeEventContext } from '../../llm';
 import type { ProviderDataScopePolicy } from '../../llm/ProviderRouter';
+import type { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
 import { validateImagePath as defaultValidateImagePath } from '../../utils/curlUtils';
-import { businessSystemDegradedReasonForStatus, BusinessSystemContextService } from '../business-system/BusinessSystemContextService';
+import { redactForLog } from '../../utils/redactForLog';
+import type { ScreenContext } from '../screen/types';
+import {
+    businessSystemDegradedReasonForStatus,
+    BusinessSystemContextService,
+    toBusinessSystemFixedReply,
+    type BusinessSystemServiceResult,
+} from '../business-system/BusinessSystemContextService';
 import { createWindchillBusinessContextAdapter } from '../business-system/WindchillBusinessContextAdapter';
 import { CredentialsManager } from '../CredentialsManager';
 import { getContextQualityDiagnosticsCollector } from '../eval/ContextQualityDiagnostics';
@@ -21,6 +29,7 @@ import {
     formatInjectedContext,
     type RealtimeContextCandidate,
     type RealtimeContextPlan,
+    type RealtimeContextSource,
 } from './RealtimeContextOrchestrator';
 import {
     sanitizeContextNeedDecision,
@@ -28,8 +37,20 @@ import {
     type ContextNeedDecision,
     type ContextNeedLevel,
 } from './ContextNeedDecision';
+import type { ScreenUnderstandingRequest, ScreenUnderstandingResult } from '../screen/ScreenUnderstandingService';
 
 export type WhatToSaySource = 'overlay' | 'launcher' | 'dynamic_action';
+
+interface RagManagerLike {
+    isReady?: () => boolean;
+    getEmbeddingPipeline?: () => EmbeddingPipeline | null | undefined;
+}
+
+type ScreenUnderstandingServiceLike = {
+    understand(input: ScreenUnderstandingRequest): Promise<ScreenUnderstandingResult>;
+};
+
+type BusinessSystemServiceLike = Pick<BusinessSystemContextService, 'resolve'>;
 
 export interface WhatToSayModeEventContext extends ModeEventContext {
     actionId?: string;
@@ -56,10 +77,10 @@ export interface WhatToSayContextPreparationInput {
     source?: WhatToSaySource;
     modeEvent?: WhatToSayModeEventContext;
     providerScopes?: ProviderDataScopePolicy;
-    ragManager?: any;
+    ragManager?: unknown;
     materialServiceFactory?: () => UploadedMaterialSearchService;
-    businessSystemServiceFactory?: () => Pick<BusinessSystemContextService, 'resolve'>;
-    screenUnderstandingServiceFactory?: () => { understand: (input: any) => Promise<any> };
+    businessSystemServiceFactory?: () => BusinessSystemServiceLike;
+    screenUnderstandingServiceFactory?: () => ScreenUnderstandingServiceLike;
     validateImagePath?: (imagePath: string, userDataDir: string) => { isValid: boolean; reason?: string };
     userDataDir?: string;
     now?: () => number;
@@ -74,7 +95,7 @@ export interface WhatToSayContextPreparationResult {
         statusCode: 'invalid-request';
     };
     validatedImagePaths?: string[];
-    screenContext?: any;
+    screenContext?: ScreenContext;
     screenContextStatus: 'not_available' | 'available' | 'failed';
     visionProviderUsed?: string;
     visionModelUsed?: string;
@@ -86,27 +107,41 @@ export interface WhatToSayContextPreparationResult {
     contextBudgetDegradedReasons: AnswerDegradedReason[];
     materialRagAttempted: boolean;
     uploadedMaterialHitCount: number;
-    businessSystemResult: any;
+    businessSystemResult: BusinessSystemServiceResult;
     ragReady: boolean;
     embeddingReady: boolean;
     realtimeContextPlan: RealtimeContextPlan;
-    retrievalTimingMs: Partial<Record<string, number>>;
+    retrievalTimingMs: Partial<Record<RealtimeContextSource, number>>;
     timings: WhatToSayContextPreparationTimings;
 }
 
 const CONTEXT_TOKEN_BUDGET = 1800;
 const CACHE_TTL_MS = 60_000;
 const MAX_CACHE_ENTRIES = 50;
+const MAX_CONTEXT_IMAGE_PATHS = 5;
 const EMBEDDING_READY_STATUS_WAIT_MS = 2_500;
-
-let cachedBusinessSystemService: Pick<BusinessSystemContextService, 'resolve'> | null = null;
-let cachedMaterialService: UploadedMaterialSearchService | null = null;
-const materialContributionCache = new Map<string, { expiresAt: number; value: UploadedMaterialContextContribution }>();
-const businessResultCache = new Map<string, { expiresAt: number; value: any }>();
-const screenResultCache = new Map<string, { expiresAt: number; value: any }>();
 
 function addUniqueReason(reasons: AnswerDegradedReason[], reason: AnswerDegradedReason): void {
     if (!reasons.includes(reason)) reasons.push(reason);
+}
+
+function warnContextPreparationFailure(
+    stage: 'embedding_readiness' | 'screen_context' | 'business_context',
+    error: unknown,
+    metadata: Record<string, unknown> = {},
+): void {
+    console.warn('[WhatToSayContextPreparation] context preparation degraded', redactForLog([{
+        stage,
+        ...metadata,
+        failure: error,
+    }]));
+}
+
+function warnInvalidImagePathPayload(reason: string, metadata: Record<string, unknown> = {}): void {
+    console.warn('[WhatToSayContextPreparation] invalid image path payload rejected', redactForLog([{
+        reason,
+        ...metadata,
+    }]));
 }
 
 function measure(now: () => number, startedAt: number): number {
@@ -115,6 +150,15 @@ function measure(now: () => number, startedAt: number): number {
 
 function compact(value: unknown): string {
     return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+}
+
+function asRagManagerLike(value: unknown): RagManagerLike | undefined {
+    if (!isRecord(value)) return undefined;
+    return value as RagManagerLike;
 }
 
 function hashKey(value: string): string {
@@ -157,24 +201,89 @@ function cloneContribution(value: UploadedMaterialContextContribution): Uploaded
     };
 }
 
-function getDefaultBusinessSystemService(): Pick<BusinessSystemContextService, 'resolve'> {
-    if (!cachedBusinessSystemService) {
-        cachedBusinessSystemService = new BusinessSystemContextService({
-            credentialsManager: CredentialsManager.getInstance(),
-            plmAdapter: createWindchillBusinessContextAdapter(),
-        });
+export class WhatToSayContextPreparationService {
+    private static instance: WhatToSayContextPreparationService | null = null;
+
+    private cachedBusinessSystemService: BusinessSystemServiceLike | null = null;
+    private cachedMaterialService: UploadedMaterialSearchService | null = null;
+    private materialContributionCache = new Map<string, { expiresAt: number; value: UploadedMaterialContextContribution }>();
+    private businessResultCache = new Map<string, { expiresAt: number; value: BusinessSystemServiceResult }>();
+    private screenResultCache = new Map<string, { expiresAt: number; value: ScreenUnderstandingResult }>();
+
+    private constructor() {}
+
+    static getInstance(): WhatToSayContextPreparationService {
+        if (!WhatToSayContextPreparationService.instance) {
+            WhatToSayContextPreparationService.instance = new WhatToSayContextPreparationService();
+        }
+        return WhatToSayContextPreparationService.instance;
     }
-    return cachedBusinessSystemService;
+
+    _resetCachesForTest(): void {
+        this.cachedBusinessSystemService = null;
+        this.cachedMaterialService = null;
+        this.materialContributionCache.clear();
+        this.businessResultCache.clear();
+        this.screenResultCache.clear();
+    }
+
+    getDefaultBusinessSystemService(): BusinessSystemServiceLike {
+        if (!this.cachedBusinessSystemService) {
+            this.cachedBusinessSystemService = new BusinessSystemContextService({
+                credentialsManager: CredentialsManager.getInstance(),
+                plmAdapter: createWindchillBusinessContextAdapter(),
+            });
+        }
+        return this.cachedBusinessSystemService;
+    }
+
+    getDefaultMaterialService(ragManager: unknown): UploadedMaterialSearchService {
+        if (!this.cachedMaterialService) {
+            const embeddingPipeline = asRagManagerLike(ragManager)?.getEmbeddingPipeline?.();
+            this.cachedMaterialService = new KnowledgeMaterialService(
+                DatabaseManager.getInstance(),
+                embeddingPipeline,
+            );
+        }
+        return this.cachedMaterialService;
+    }
+
+    readMaterialContribution(cacheKey: string, nowMs: number): UploadedMaterialContextContribution | undefined {
+        const cached = readCache(this.materialContributionCache, cacheKey, nowMs);
+        return cached ? cloneContribution(cached) : undefined;
+    }
+
+    writeMaterialContribution(cacheKey: string, contribution: UploadedMaterialContextContribution, nowMs: number): void {
+        writeCache(this.materialContributionCache, cacheKey, cloneContribution(contribution), nowMs);
+    }
+
+    readBusinessResult(cacheKey: string, nowMs: number): BusinessSystemServiceResult | undefined {
+        return readCache(this.businessResultCache, cacheKey, nowMs);
+    }
+
+    writeBusinessResult(cacheKey: string, result: BusinessSystemServiceResult, nowMs: number): void {
+        writeCache(this.businessResultCache, cacheKey, result, nowMs);
+    }
+
+    readScreenResult(cacheKey: string, nowMs: number): ScreenUnderstandingResult | undefined {
+        return readCache(this.screenResultCache, cacheKey, nowMs);
+    }
+
+    writeScreenResult(cacheKey: string, result: ScreenUnderstandingResult, nowMs: number): void {
+        writeCache(this.screenResultCache, cacheKey, result, nowMs);
+    }
+
+    async prepare(input: WhatToSayContextPreparationInput): Promise<WhatToSayContextPreparationResult> {
+        return prepareWhatToSayContextWithService(this, input);
+    }
 }
 
-function getDefaultMaterialService(ragManager: any): UploadedMaterialSearchService {
-    if (!cachedMaterialService) {
-        cachedMaterialService = new KnowledgeMaterialService(
-            DatabaseManager.getInstance(),
-            ragManager?.getEmbeddingPipeline?.(),
-        );
-    }
-    return cachedMaterialService;
+function getDefaultBusinessSystemService(service: WhatToSayContextPreparationService): BusinessSystemServiceLike {
+    return service.getDefaultBusinessSystemService();
+}
+
+function getDefaultMaterialService(service: WhatToSayContextPreparationService, ragManager: unknown): UploadedMaterialSearchService {
+    return service.getDefaultMaterialService(ragManager);
 }
 
 function emptyPlan(
@@ -196,8 +305,8 @@ function emptyPlan(
 function buildBusinessSystemRecentContextSummary(value: unknown): string | undefined {
     const text = typeof value === 'string'
         ? value
-        : typeof (value as any)?.text === 'string'
-            ? (value as any).text
+        : isRecord(value) && typeof value.text === 'string'
+            ? value.text
             : '';
     const compacted = text.replace(/\s+/g, ' ').trim();
     if (!compacted) return undefined;
@@ -210,24 +319,47 @@ function buildBusinessSystemRecentContextSummary(value: unknown): string | undef
     return summary || undefined;
 }
 
+function toScreenContext(result: ScreenUnderstandingResult): ScreenContext {
+    return {
+        ocrText: result.ocrText,
+        imagePath: result.imagePath,
+        timestamp: result.timestamp ?? result.capturedAt,
+        hash: result.hash ?? result.imageHash,
+        extractedText: result.extractedText,
+        visibleSummary: result.visibleSummary,
+        screenType: result.screenType,
+        codeBlocks: result.codeBlocks,
+        tables: result.tables,
+        errors: result.errors,
+        taskDetected: result.taskDetected,
+        confidence: result.confidence,
+        source: result.source,
+        providerUsed: result.providerUsed,
+        modelUsed: result.modelUsed,
+    };
+}
+
 function resolveContextNeedDecision(modeEvent?: WhatToSayModeEventContext): ContextNeedDecision {
     return sanitizeContextNeedDecision(modeEvent?.productContract?.contextNeedDecision)
         || UNKNOWN_CONTEXT_NEED_DECISION;
 }
 
-export function getRagReadinessSnapshot(ragManager: any): { ragReady: boolean; embeddingReady: boolean } {
+export function getRagReadinessSnapshot(ragManager: unknown): { ragReady: boolean; embeddingReady: boolean } {
+    const manager = asRagManagerLike(ragManager);
+    const embeddingPipeline = manager?.getEmbeddingPipeline?.();
     return {
-        ragReady: Boolean(ragManager?.isReady?.()),
-        embeddingReady: Boolean(ragManager?.getEmbeddingPipeline?.().isReady?.()),
+        ragReady: Boolean(manager?.isReady?.()),
+        embeddingReady: Boolean(embeddingPipeline?.isReady?.()),
     };
 }
 
 async function getRagReadinessForDecision(
-    ragManager: any,
+    ragManager: unknown,
     decision: ContextNeedDecision,
 ): Promise<{ ragReady: boolean; embeddingReady: boolean }> {
+    const manager = asRagManagerLike(ragManager);
     if (shouldRunSlowContext(decision.material)) {
-        const embeddingPipeline = ragManager?.getEmbeddingPipeline?.();
+        const embeddingPipeline = manager?.getEmbeddingPipeline?.();
         if (
             embeddingPipeline &&
             !embeddingPipeline.isReady?.() &&
@@ -235,7 +367,11 @@ async function getRagReadinessForDecision(
         ) {
             try {
                 await embeddingPipeline.waitForReady(EMBEDDING_READY_STATUS_WAIT_MS);
-            } catch {
+            } catch (error) {
+                warnContextPreparationFailure('embedding_readiness', error, {
+                    decisionMaterial: decision.material,
+                    waitMs: EMBEDDING_READY_STATUS_WAIT_MS,
+                });
                 // Snapshot below records unavailable if initialization did not finish.
             }
         }
@@ -254,11 +390,20 @@ function shouldUseReadyContext(level: ContextNeedLevel): boolean {
 function getMaterialCacheKey(input: {
     query: string;
     providerScopes?: ProviderDataScopePolicy;
+    source?: WhatToSaySource;
+    modeEvent?: WhatToSayModeEventContext;
+    decision: ContextNeedDecision;
     ragReady: boolean;
     embeddingReady: boolean;
 }): string {
     return hashKey(JSON.stringify({
         query: compact(input.query).toLowerCase(),
+        source: input.source || 'unknown',
+        actionId: compact(input.modeEvent?.actionId) || undefined,
+        decisionBy: input.decision.decidedBy,
+        decisionMaterial: input.decision.material,
+        decisionBusiness: input.decision.business,
+        decisionScreen: input.decision.screen,
         referenceFiles: input.providerScopes?.reference_files !== false,
         ragReady: input.ragReady,
         embeddingReady: input.embeddingReady,
@@ -278,9 +423,13 @@ function validateImagePaths(input: WhatToSayContextPreparationInput): string[] |
     if (!input.imagePaths || input.imagePaths.length === 0) return undefined;
     if (
         !Array.isArray(input.imagePaths) ||
-        input.imagePaths.length > 5 ||
+        input.imagePaths.length > MAX_CONTEXT_IMAGE_PATHS ||
         input.imagePaths.some((imagePath) => typeof imagePath !== 'string' || imagePath.trim().length === 0)
     ) {
+        warnInvalidImagePathPayload('malformed_payload', {
+            imageCount: Array.isArray(input.imagePaths) ? input.imagePaths.length : undefined,
+            maxImageCount: MAX_CONTEXT_IMAGE_PATHS,
+        });
         return { error: 'Invalid image path payload' };
     }
 
@@ -290,6 +439,10 @@ function validateImagePaths(input: WhatToSayContextPreparationInput): string[] |
     for (const imagePath of input.imagePaths) {
         const validation = validator(imagePath, userDataDir);
         if (!validation.isValid) {
+            warnInvalidImagePathPayload('path_validation_failed', {
+                validationReason: validation.reason,
+                maxImageCount: MAX_CONTEXT_IMAGE_PATHS,
+            });
             return { error: `Invalid image path: ${validation.reason}` };
         }
         validated.push(imagePath);
@@ -298,6 +451,7 @@ function validateImagePaths(input: WhatToSayContextPreparationInput): string[] |
 }
 
 async function prepareScreenContext(input: {
+    service: WhatToSayContextPreparationService;
     request: WhatToSayContextPreparationInput;
     decision: ContextNeedDecision;
     validatedImagePaths?: string[];
@@ -319,10 +473,10 @@ async function prepareScreenContext(input: {
     }
 
     const cacheKey = getScreenCacheKey(paths);
-    const cached = readCache(screenResultCache, cacheKey, input.now());
+    const cached = input.service.readScreenResult(cacheKey, input.now());
     if (cached) {
         return {
-            screenContext: cached.status === 'available' ? cached : undefined,
+            screenContext: cached.status === 'available' ? toScreenContext(cached) : undefined,
             screenContextStatus: cached.status === 'available'
                 ? 'available'
                 : cached.status === 'failed'
@@ -365,9 +519,9 @@ async function prepareScreenContext(input: {
             },
         });
         input.timings.screenMs = measure(input.now, startedAt);
-        writeCache(screenResultCache, cacheKey, sur, input.now());
+        input.service.writeScreenResult(cacheKey, sur, input.now());
         return {
-            screenContext: sur.status === 'available' ? sur : undefined,
+            screenContext: sur.status === 'available' ? toScreenContext(sur) : undefined,
             screenContextStatus: sur.status === 'available'
                 ? 'available'
                 : sur.status === 'failed'
@@ -378,26 +532,33 @@ async function prepareScreenContext(input: {
             visionAttempts: Array.isArray(sur.attempts) ? sur.attempts.length : undefined,
             visionFailureReason: sur.failureReason,
         };
-    } catch {
+    } catch (error) {
         input.timings.screenMs = measure(input.now, startedAt);
+        warnContextPreparationFailure('screen_context', error, {
+            source: input.request.source,
+            decisionScreen: input.decision.screen,
+            elapsedMs: input.timings.screenMs,
+            imageCount: paths.length,
+        });
         addUniqueReason(input.degradedReasons, 'screen_context_failed');
         return { screenContextStatus: 'failed' };
     }
 }
 
 async function prepareBusinessContext(input: {
+    service: WhatToSayContextPreparationService;
     request: WhatToSayContextPreparationInput;
     decision: ContextNeedDecision;
     contextCandidates: RealtimeContextCandidate[];
-    retrievalTimingMs: Partial<Record<string, number>>;
+    retrievalTimingMs: Partial<Record<RealtimeContextSource, number>>;
     degradedReasons: AnswerDegradedReason[];
     timings: WhatToSayContextPreparationTimings;
     now: () => number;
-}): Promise<any> {
+}): Promise<BusinessSystemServiceResult> {
     if (input.decision.business === 'not_needed') return { kind: 'skipped' };
     const recentContext = buildBusinessSystemRecentContextSummary(input.request.modeEvent?.latestTurn);
     const cacheKey = getBusinessCacheKey(input.request.question, recentContext);
-    const cached = readCache(businessResultCache, cacheKey, input.now());
+    const cached = input.service.readBusinessResult(cacheKey, input.now());
     if (cached) {
         if (cached.kind === 'context') input.contextCandidates.push(cached.candidate);
         return cached;
@@ -410,7 +571,7 @@ async function prepareBusinessContext(input: {
     const startedAt = input.now();
     try {
         const serviceInitStartedAt = input.now();
-        const service = input.request.businessSystemServiceFactory?.() || getDefaultBusinessSystemService();
+        const service = input.request.businessSystemServiceFactory?.() || getDefaultBusinessSystemService(input.service);
         input.timings.serviceInitMs += measure(input.now, serviceInitStartedAt);
         const result = await service.resolve({
             question: input.request.question,
@@ -419,27 +580,33 @@ async function prepareBusinessContext(input: {
         input.timings.businessMs = measure(input.now, startedAt);
         input.retrievalTimingMs.business_system = input.timings.businessMs;
         if (result.kind === 'context') input.contextCandidates.push(result.candidate);
-        if (result.kind !== 'skipped') writeCache(businessResultCache, cacheKey, result, input.now());
+        if (result.kind !== 'skipped') input.service.writeBusinessResult(cacheKey, result, input.now());
         if (result.kind === 'fixed_reply') {
             addUniqueReason(input.degradedReasons, businessSystemDegradedReasonForStatus(result.status));
         }
         return result;
-    } catch {
+    } catch (error) {
         input.timings.businessMs = measure(input.now, startedAt);
         input.retrievalTimingMs.business_system = input.timings.businessMs;
+        warnContextPreparationFailure('business_context', error, {
+            source: input.request.source,
+            decisionBusiness: input.decision.business,
+            elapsedMs: input.timings.businessMs,
+        });
         addUniqueReason(input.degradedReasons, 'business_system_unavailable');
-        return { kind: 'fixed_reply', status: 'unavailable' };
+        return toBusinessSystemFixedReply({ status: 'unavailable' });
     }
 }
 
 async function prepareMaterialContext(input: {
+    service: WhatToSayContextPreparationService;
     request: WhatToSayContextPreparationInput;
     decision: ContextNeedDecision;
     ragReady: boolean;
     embeddingReady: boolean;
     contextCandidates: RealtimeContextCandidate[];
     citations: AnswerCitationRecord[];
-    retrievalTimingMs: Partial<Record<string, number>>;
+    retrievalTimingMs: Partial<Record<RealtimeContextSource, number>>;
     degradedReasons: AnswerDegradedReason[];
     timings: WhatToSayContextPreparationTimings;
     now: () => number;
@@ -459,12 +626,15 @@ async function prepareMaterialContext(input: {
     const cacheKey = getMaterialCacheKey({
         query: searchQuery,
         providerScopes: input.request.providerScopes,
+        source: input.request.source,
+        modeEvent: input.request.modeEvent,
+        decision: input.decision,
         ragReady: input.ragReady,
         embeddingReady: input.embeddingReady,
     });
-    const cached = readCache(materialContributionCache, cacheKey, input.now());
+    const cached = input.service.readMaterialContribution(cacheKey, input.now());
     if (cached) {
-        const contribution = cloneContribution(cached);
+        const contribution = cached;
         input.contextCandidates.push(...contribution.contextCandidates);
         input.citations.push(...contribution.citations);
         Object.assign(input.retrievalTimingMs, contribution.retrievalTimingMs);
@@ -481,7 +651,7 @@ async function prepareMaterialContext(input: {
 
     const startedAt = input.now();
     const serviceInitStartedAt = input.now();
-    const materialService = input.request.materialServiceFactory?.() || getDefaultMaterialService(input.request.ragManager);
+    const materialService = input.request.materialServiceFactory?.() || getDefaultMaterialService(input.service, input.request.ragManager);
     input.timings.serviceInitMs += measure(input.now, serviceInitStartedAt);
     const contribution = await buildUploadedMaterialContextContribution({
         query: searchQuery,
@@ -498,14 +668,15 @@ async function prepareMaterialContext(input: {
     input.citations.push(...contribution.citations);
     Object.assign(input.retrievalTimingMs, contribution.retrievalTimingMs);
     for (const reason of contribution.degradedReasons) addUniqueReason(input.degradedReasons, reason);
-    writeCache(materialContributionCache, cacheKey, cloneContribution(contribution), input.now());
+    input.service.writeMaterialContribution(cacheKey, contribution, input.now());
     return {
         materialRagAttempted: contribution.sourceStatus.ragAttempted,
         uploadedMaterialHitCount: contribution.uploadedMaterialHitCount,
     };
 }
 
-export async function prepareWhatToSayContext(
+async function prepareWhatToSayContextWithService(
+    service: WhatToSayContextPreparationService,
     input: WhatToSayContextPreparationInput,
 ): Promise<WhatToSayContextPreparationResult> {
     const now = input.now || (() => Date.now());
@@ -527,7 +698,7 @@ export async function prepareWhatToSayContext(
     const contextBudgetDegradedReasons: AnswerDegradedReason[] = [];
     const citations: AnswerCitationRecord[] = [];
     const contextCandidates: RealtimeContextCandidate[] = [];
-    const retrievalTimingMs: Partial<Record<string, number>> = {};
+    const retrievalTimingMs: Partial<Record<RealtimeContextSource, number>> = {};
 
     const validatedImagePathsResult = validateImagePaths(input);
     if (validatedImagePathsResult && !Array.isArray(validatedImagePathsResult)) {
@@ -564,6 +735,7 @@ export async function prepareWhatToSayContext(
     timings.ragReadinessMs = measure(now, ragReadinessStartedAt);
 
     const screenPromise = prepareScreenContext({
+        service,
         request: input,
         decision: contextNeedDecision,
         validatedImagePaths,
@@ -573,6 +745,7 @@ export async function prepareWhatToSayContext(
         now,
     });
     const businessPromise = prepareBusinessContext({
+        service,
         request: input,
         decision: contextNeedDecision,
         contextCandidates,
@@ -582,6 +755,7 @@ export async function prepareWhatToSayContext(
         now,
     });
     const materialPromise = prepareMaterialContext({
+        service,
         request: input,
         decision: contextNeedDecision,
         ragReady,
@@ -611,8 +785,8 @@ export async function prepareWhatToSayContext(
         embeddingReady: materialResult.materialRagAttempted ? embeddingReady : true,
         uploadedMaterialHitCount: materialResult.uploadedMaterialHitCount,
         screenContextStatus: screenResult.screenContextStatus,
-        retrievalTimingMs: retrievalTimingMs as any,
-        degradedReasons: degradedReasons as any,
+        retrievalTimingMs,
+        degradedReasons,
     });
     timings.contextPlanMs = measure(now, contextPlanStartedAt);
     for (const reason of realtimeContextPlan.degradedReasons) addUniqueReason(contextBudgetDegradedReasons, reason);
@@ -650,4 +824,10 @@ export async function prepareWhatToSayContext(
         retrievalTimingMs,
         timings,
     };
+}
+
+export async function prepareWhatToSayContext(
+    input: WhatToSayContextPreparationInput,
+): Promise<WhatToSayContextPreparationResult> {
+    return WhatToSayContextPreparationService.getInstance().prepare(input);
 }

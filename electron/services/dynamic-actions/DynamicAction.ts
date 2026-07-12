@@ -36,7 +36,7 @@ export interface DynamicActionProductContract {
     outputType: DynamicActionOutputType;
     outputPromise: string;
     riskState: DynamicActionRiskState;
-    contextNeedDecision: ContextNeedDecision;
+    contextNeedDecision?: ContextNeedDecision;
 }
 
 export interface EvidenceRef {

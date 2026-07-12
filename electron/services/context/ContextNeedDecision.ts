@@ -1,20 +1,19 @@
 import type { EvidenceRef } from '../dynamic-actions/DynamicAction';
+import { MODE_TRIGGERS } from '../dynamic-actions/DynamicActionDetector';
+export type {
+    ContextNeedDecision,
+    ContextNeedDecisionSource,
+    ContextNeedLevel,
+} from '../../../shared/contextNeedDecision';
+import type {
+    ContextNeedDecision,
+    ContextNeedDecisionSource,
+    ContextNeedLevel,
+} from '../../../shared/contextNeedDecision';
 
-export type ContextNeedLevel = 'required' | 'use_if_ready' | 'not_needed' | 'unknown';
-export type ContextNeedDecisionSource =
-    | 'llm_semantic_gate'
-    | 'dynamic_action_contract'
-    | 'cached_speculative'
-    | 'unknown';
-
-export interface ContextNeedDecision {
-    material: ContextNeedLevel;
-    business: ContextNeedLevel;
-    screen: ContextNeedLevel;
-    confidence: number;
-    reason: string;
-    decidedBy: ContextNeedDecisionSource;
-}
+// `dynamic_action_contract` is the only producer today. The other source labels
+// reserve the IPC/telemetry contract for the planned LLM semantic gate and
+// speculative-answer context decision producers.
 
 export const UNKNOWN_CONTEXT_NEED_DECISION: ContextNeedDecision = {
     material: 'unknown',
@@ -39,29 +38,15 @@ const SOURCES = new Set<ContextNeedDecisionSource>([
     'unknown',
 ]);
 
-const MATERIAL_ACTION_TYPES = new Set([
+export const MATERIAL_ACTION_TYPES = new Set([
     'case_study_request',
 ]);
 
-const NORMAL_ACTION_TYPES = new Set([
-    'pricing_objection',
-    'pricing_request',
-    'technical_requirements',
-    'buying_signal',
-    'action_item',
-    'decision_point',
-    'final_offer',
-    'send_contract',
-    'blocker_check',
-    'owner_deadline_check',
-    'fde_discovery_probe',
-    'fde_integration_check',
-    'fde_security_review',
-    'fde_risk_blocker',
-    'fde_agent_feasibility',
-    'fde_success_criteria',
-    'fde_next_step',
-]);
+export const KNOWN_CONTEXT_DECISION_ACTION_TYPES = new Set(
+    Object.values(MODE_TRIGGERS)
+        .flat()
+        .map((trigger) => trigger.type),
+);
 
 const MATERIAL_SIGNAL_PATTERN = /\b(case study|customer case|roi|proof|reference|deck|pptx|pdf|uploaded|material|document)\b|案例|客户案例|证明|佐证|资料|材料|文档|知识库|PPT|PDF/i;
 const BUSINESS_SIGNAL_PATTERN = /\b(PLM|Windchill|QMS|BOM|ECO|ECN|CAPA|NCR|part|material|change order|workflow)\b|业务系统|物料|图纸|变更|质量记录|审批|工单/i;
@@ -128,7 +113,7 @@ export function buildDynamicActionContextNeedDecision(input: {
     const evidenceHasScreen = (input.evidenceRefs || []).some((ref) => ref.source === 'screen');
     const materialRequired = MATERIAL_ACTION_TYPES.has(type) || MATERIAL_SIGNAL_PATTERN.test(text);
     const businessRequired = BUSINESS_SIGNAL_PATTERN.test(text);
-    const knownAction = NORMAL_ACTION_TYPES.has(type) || MATERIAL_ACTION_TYPES.has(type);
+    const knownAction = KNOWN_CONTEXT_DECISION_ACTION_TYPES.has(type) || MATERIAL_ACTION_TYPES.has(type);
 
     if (!knownAction && !materialRequired && !businessRequired && !evidenceHasScreen) {
         return {

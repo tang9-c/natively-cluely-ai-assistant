@@ -51,6 +51,8 @@ test('dynamic action accept forwards modeEvent retrieval metadata', () => {
   assert.match(bar, /answerShape:\s*action\.answerStyle\?\.format/);
   assert.match(bar, /modeEvent:\s*buildDynamicActionModeEvent\(action\)/);
   assert.match(rendererTypes, /actionId\?: string/);
+  assert.match(rendererTypes, /from '..\/..\/shared\/contextNeedDecision'/);
+  assert.doesNotMatch(rendererTypes, /export interface ContextNeedDecision\s*\{/);
   assert.match(rendererTypes, /productContract\?: \{\s*outputType:\s*DynamicActionOutputType\s*contextNeedDecision\?: ContextNeedDecision\s*\}/);
   assert.match(interfaceSource, /generationOptions\?: \{ source\?: 'overlay' \| 'launcher' \| 'dynamic_action'; persist\?: boolean; modeEvent\?: DynamicActionModeEvent; throwOnError\?: boolean \}/);
 });

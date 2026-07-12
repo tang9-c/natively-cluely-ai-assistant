@@ -1,5 +1,11 @@
 import type { TranscriptEmotion, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
 export type { TranscriptEmotion, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
+import type { ContextNeedDecision } from '../../shared/contextNeedDecision'
+export type {
+  ContextNeedDecision,
+  ContextNeedDecisionSource,
+  ContextNeedLevel,
+} from '../../shared/contextNeedDecision'
 
 // Phase 3 — DynamicActionPayload mirrors electron/services/dynamic-actions/DynamicAction.ts.
 // Kept as a structural interface (not a class import) to preserve the strict main↔renderer
@@ -40,22 +46,6 @@ export type DynamicActionRiskState =
   | 'auto_countdown'
   | 'normal'
 
-export type ContextNeedLevel = 'required' | 'use_if_ready' | 'not_needed' | 'unknown'
-export type ContextNeedDecisionSource =
-  | 'llm_semantic_gate'
-  | 'dynamic_action_contract'
-  | 'cached_speculative'
-  | 'unknown'
-
-export interface ContextNeedDecision {
-  material: ContextNeedLevel
-  business: ContextNeedLevel
-  screen: ContextNeedLevel
-  confidence: number
-  reason: string
-  decidedBy: ContextNeedDecisionSource
-}
-
 export interface DynamicActionProductContract {
   userAction: string
   whyNow: string
@@ -63,7 +53,7 @@ export interface DynamicActionProductContract {
   outputType: DynamicActionOutputType
   outputPromise: string
   riskState: DynamicActionRiskState
-  contextNeedDecision: ContextNeedDecision
+  contextNeedDecision?: ContextNeedDecision
 }
 
 export interface DynamicActionPayload {

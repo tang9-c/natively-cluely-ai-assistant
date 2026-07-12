@@ -3370,14 +3370,10 @@ export function initializeIpcHandlers(appState: AppState): void {
           screenContextStatus,
           businessSystemStatus: businessSystemResult?.kind === 'context'
             ? 'available'
-            : businessSystemResult?.kind === 'fixed_reply'
-              ? businessSystemResult.status
-              : 'not_requested',
+            : 'not_requested',
           businessSystemSourceName: businessSystemResult?.kind === 'context'
             ? businessSystemResult.sourceName
-            : businessSystemResult?.kind === 'fixed_reply'
-              ? businessSystemResult.sourceName
-              : undefined,
+            : undefined,
         };
         const mergedDegradedReasons = [
           ...(whatToAnswerTrace?.degradedReasons ?? []),
