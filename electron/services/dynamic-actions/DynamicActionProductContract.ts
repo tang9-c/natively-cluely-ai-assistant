@@ -6,6 +6,10 @@ import type {
     DynamicActionRiskState,
     EvidenceRef,
 } from './DynamicAction';
+import {
+    buildDynamicActionContextNeedDecision,
+    UNKNOWN_CONTEXT_NEED_DECISION,
+} from '../context/ContextNeedDecision';
 
 export const VISIBLE_DYNAMIC_ACTION_OUTPUT_TYPES: readonly DynamicActionOutputType[] = [
     'spoken_response',
@@ -65,6 +69,7 @@ export function buildDynamicActionProductContract(input: ContractInput): Dynamic
             outputType,
             outputPromise: outputPromiseFor(outputType),
             riskState: resolveRiskState(input),
+            contextNeedDecision: buildDynamicActionContextNeedDecision(input),
         };
     } catch {
         return {
@@ -73,6 +78,7 @@ export function buildDynamicActionProductContract(input: ContractInput): Dynamic
             outputType: 'spoken_response',
             outputPromise: '生成一段可直接说出口的回应',
             riskState: 'normal',
+            contextNeedDecision: UNKNOWN_CONTEXT_NEED_DECISION,
         };
     }
 }

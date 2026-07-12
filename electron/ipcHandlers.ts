@@ -19,8 +19,9 @@ import {
 } from './permissions/macPermissionHealth';
 import { CodexCliService } from './services/CodexCliService';
 import { resolveAnswerCitation } from './services/context/AnswerCitationResolver';
-import { buildRealtimeContextPlan, formatInjectedContext, type RealtimeContextCandidate } from './services/context/RealtimeContextOrchestrator';
 import { sanitizeGenerateWhatToSayOptions } from './services/context/RealtimeAnswerRequest';
+import { sanitizeContextNeedDecision, type ContextNeedDecision } from './services/context/ContextNeedDecision';
+import { prepareWhatToSayContext } from './services/context/WhatToSayContextPreparation';
 import {
   buildUploadedMaterialContextContribution,
   shouldRequireUploadedMaterialContext,
@@ -28,6 +29,7 @@ import {
 } from './services/knowledge/UploadedMaterialContextContributionService';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
 import { buildBusinessSystemFixedReplyTraceInput } from './services/business-system/BusinessSystemFixedReplyTrace';
+import { businessSystemDegradedReasonForStatus } from './services/business-system/BusinessSystemContextService';
 import { SkillActivationManager, type ActivateSkillInput, type SkillActivationScope } from './services/SkillActivationManager';
 import { SkillWatcherService } from './services/SkillWatcherService';
 import { SkillsManager } from './services/SkillsManager';
@@ -130,6 +132,7 @@ type SanitizedModeEvent = ModeEventContext & {
   actionId?: string;
   productContract?: {
     outputType?: DynamicActionOutputType;
+    contextNeedDecision?: ContextNeedDecision;
   };
 };
 
@@ -170,7 +173,9 @@ function sanitizeModeEvent(modeEvent: unknown): SanitizedModeEvent | undefined {
 
   const productContract = raw.productContract;
   if (productContract && typeof productContract === 'object') {
-    const outputType = (productContract as Record<string, unknown>).outputType;
+    const productContractRecord = productContract as Record<string, unknown>;
+    const outputType = productContractRecord.outputType;
+    const contextNeedDecision = sanitizeContextNeedDecision(productContractRecord.contextNeedDecision);
     if (
       typeof outputType === 'string' &&
       (
@@ -182,6 +187,12 @@ function sanitizeModeEvent(modeEvent: unknown): SanitizedModeEvent | undefined {
       )
     ) {
       cleaned.productContract = { outputType: outputType as DynamicActionOutputType };
+    }
+    if (contextNeedDecision) {
+      cleaned.productContract = {
+        ...(cleaned.productContract || {}),
+        contextNeedDecision,
+      };
     }
   }
 
@@ -197,23 +208,6 @@ function sanitizeModeEvent(modeEvent: unknown): SanitizedModeEvent | undefined {
   }
 
   return Object.keys(cleaned).length > 0 ? cleaned : undefined;
-}
-
-function buildBusinessSystemRecentContextSummary(value: unknown): string | undefined {
-  const text = typeof value === 'string'
-    ? value
-    : typeof (value as any)?.text === 'string'
-      ? (value as any).text
-      : '';
-  const compacted = text.replace(/\s+/g, ' ').trim();
-  if (!compacted) return undefined;
-  const sentences: string[] = compacted.match(/[^。！？.!?]+[。！？.!?]?/g) || [compacted];
-  const summary = sentences
-    .map((sentence: string) => sentence.trim())
-    .filter(Boolean)
-    .slice(0, 3)
-    .join('');
-  return summary || undefined;
 }
 
 export function initializeIpcHandlers(appState: AppState): void {
@@ -3245,144 +3239,48 @@ export function initializeIpcHandlers(appState: AppState): void {
         const intelligenceManager = appState.getIntelligenceManager();
         intelligenceManager.reserveWhatShouldISayRequest(requestOptions.requestId);
         const providerScopes = SettingsManager.getInstance().get('providerDataScopes') || {};
-        let screenContext: any;
-        let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
-        let visionProviderUsed: string | undefined;
-        let visionModelUsed: string | undefined;
-        let visionAttempts: number | undefined;
-        let visionFailureReason: string | undefined;
         const startedAt = Date.now();
         const answerId = `ans_${startedAt}_${crypto.randomBytes(6).toString('hex')}`;
-        const citations: any[] = [];
-        const degradedReasons: string[] = [];
-        const contextBudgetDegradedReasons: string[] = [];
-        let materialRagAttempted = false;
-        let uploadedMaterialHitCount = 0;
         let whatToAnswerTrace: any | null = null;
-        let businessSystemResult: any = { kind: 'skipped' };
-
-        const validatedImagePaths: string[] | undefined = imagePaths?.length ? [] : undefined;
-
-        // SECURITY (P0): Validate image paths if provided from renderer
-        if (imagePaths && imagePaths.length > 0) {
-          if (
-            !Array.isArray(imagePaths) ||
-            imagePaths.length > 5 ||
-            imagePaths.some(
-              (imagePath) => typeof imagePath !== 'string' || imagePath.trim().length === 0,
-            )
-          ) {
-            console.warn('[IPC] generate-what-to-say: malformed image path payload rejected');
-            return {
-              answer: null,
-              question: question || 'unknown',
-              screenContextStatus,
-              error: 'Invalid image path payload',
-              statusCode: 'invalid-request',
-            };
-          }
-
-          const { app } = require('electron');
-          const { validateImagePath } = require('./utils/curlUtils');
-          const userDataDir = app.getPath('userData');
-
-          for (const imagePath of imagePaths) {
-            const validation = validateImagePath(imagePath, userDataDir);
-            if (!validation.isValid) {
-              console.warn(
-                `[IPC] generate-what-to-say: invalid image path rejected: ${validation.reason}`,
-              );
-              return {
-                answer: null,
-                question: question || 'unknown',
-                screenContextStatus,
-                error: `Invalid image path: ${validation.reason}`,
-                statusCode: 'invalid-request',
-              };
-            }
-            validatedImagePaths!.push(imagePath);
-          }
-
-          // Vision-first: run the ScreenUnderstandingService so the image is hashed, optimized,
-          // and routed through the vision provider fallback chain. The structured result becomes
-          // the screenContext that PromptAssembler consumes.
-          try {
-            const {
-              getScreenUnderstandingService,
-            } = require('./services/screen/ScreenUnderstandingService');
-            const { CredentialsManager } = require('./services/CredentialsManager');
-            const sus = getScreenUnderstandingService();
-            const settings = SettingsManager.getInstance();
-            const credentials = CredentialsManager.getInstance();
-            const localVisionAvailable = credentials.anyLocalVisionProviderConfigured?.() ?? false;
-            if (providerScopes.screenshots === false) {
-              console.warn(
-                localVisionAvailable
-                  ? '[ScopeFallback] screenshots denied for cloud; routing to Ollama'
-                  : '[ScopeFallback] screenshots denied; Ollama unavailable, omitting from context',
-              );
-            }
-
-            const sur = await sus.understand({
-              modeId: 'what-to-say',
-              transcript: question,
-              userAction: 'what_to_say',
-              qualityMode: 'balanced',
-              imagePaths: validatedImagePaths,
-              screenUnderstandingMode: settings.getScreenUnderstandingMode(),
-              technicalInterviewVisionFirst: settings.getTechnicalInterviewVisionFirst(),
-              providerPolicy: {
-                localOnly: settings.getScreenUnderstandingMode() === 'private_vision',
-                allowScreenshots: providerScopes.screenshots !== false,
-                visionAvailable: credentials.anyVisionProviderConfigured?.() ?? true,
-                localVisionAvailable,
-              },
-            });
-
-            screenContext = sur.status === 'available' ? sur : undefined;
-            screenContextStatus =
-              sur.status === 'available'
-                ? 'available'
-                : sur.status === 'failed'
-                  ? 'failed'
-                  : 'not_available';
-            visionProviderUsed = sur.providerUsed;
-            visionModelUsed = sur.modelUsed;
-            visionAttempts = Array.isArray(sur.attempts) ? sur.attempts.length : undefined;
-            visionFailureReason = sur.failureReason;
-          } catch (sErr: any) {
-            screenContextStatus = 'failed';
-            console.warn('[IPC] generate-what-to-say: ScreenUnderstandingService failed', {
-              errorClass: sErr?.name || 'Error',
-            });
-          }
-        }
-
-        let uploadedMaterialContext: string | undefined;
-        const contextCandidates: RealtimeContextCandidate[] = [];
-        const retrievalTimingMs: Record<string, number> = {};
-        const ragManagerForHealth = appState.getRAGManager();
-
-        const {
-          BusinessSystemContextService,
-          businessSystemDegradedReasonForStatus,
-        } = require('./services/business-system/BusinessSystemContextService');
-        const {
-          createWindchillBusinessContextAdapter,
-        } = require('./services/business-system/WindchillBusinessContextAdapter');
-        const { CredentialsManager: BusinessSystemCredentialsManager } = require('./services/CredentialsManager');
-        const businessSystemStartedAt = Date.now();
-        const businessSystemRecentContext = buildBusinessSystemRecentContextSummary(
-          sanitizeModeEvent(requestOptions.modeEvent)?.latestTurn,
-        );
-        businessSystemResult = await new BusinessSystemContextService({
-          credentialsManager: BusinessSystemCredentialsManager.getInstance(),
-          plmAdapter: createWindchillBusinessContextAdapter(),
-        }).resolve({
+        const sanitizedModeEvent = sanitizeModeEvent(requestOptions.modeEvent);
+        const contextPreparation = await prepareWhatToSayContext({
           question,
-          recentContext: businessSystemRecentContext,
+          imagePaths,
+          source: requestOptions.source,
+          modeEvent: sanitizedModeEvent,
+          providerScopes,
+          ragManager: appState.getRAGManager(),
         });
-        retrievalTimingMs.business_system = Date.now() - businessSystemStartedAt;
+        const {
+          validatedImagePaths,
+          screenContext,
+          screenContextStatus,
+          visionProviderUsed,
+          visionModelUsed,
+          visionAttempts,
+          visionFailureReason,
+          uploadedMaterialContext,
+          citations,
+          degradedReasons,
+          contextBudgetDegradedReasons,
+          materialRagAttempted,
+          uploadedMaterialHitCount,
+          businessSystemResult,
+          ragReady,
+          embeddingReady,
+          realtimeContextPlan,
+        } = contextPreparation;
+
+        if (contextPreparation.invalidRequest) {
+          console.warn('[IPC] generate-what-to-say: invalid image path payload rejected');
+          return {
+            answer: null,
+            question: question || 'unknown',
+            screenContextStatus,
+            error: contextPreparation.invalidRequest.error,
+            statusCode: contextPreparation.invalidRequest.statusCode,
+          };
+        }
 
         if (businessSystemResult.kind === 'fixed_reply') {
           const businessSystemDegradedReason = businessSystemDegradedReasonForStatus(businessSystemResult.status);
@@ -3392,12 +3290,13 @@ export function initializeIpcHandlers(appState: AppState): void {
               surface: requestOptions.source,
               latencyMs: Date.now() - startedAt,
               question,
-              ...(await getRagReadiness(ragManagerForHealth)),
+              ragReady,
+              embeddingReady,
               screenContextStatus,
               businessSystemStatus: businessSystemResult.status,
               businessSystemSourceName: businessSystemResult.sourceName,
               degradedReason: businessSystemDegradedReason,
-              businessSystemTimingMs: retrievalTimingMs.business_system,
+              businessSystemTimingMs: contextPreparation.retrievalTimingMs.business_system,
             }),
           );
           return {
@@ -3414,65 +3313,6 @@ export function initializeIpcHandlers(appState: AppState): void {
           };
         }
 
-        if (businessSystemResult.kind === 'context') {
-          contextCandidates.push(businessSystemResult.candidate);
-        }
-
-        const { ragReady, embeddingReady } = await getRagReadiness(ragManagerForHealth);
-        const searchQuery = typeof question === 'string' && question.trim()
-          ? question.trim()
-          : sanitizeModeEvent(requestOptions.modeEvent)?.retrievalQuery;
-        if (searchQuery) {
-          const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
-          const materialService = new KnowledgeMaterialService(DatabaseManager.getInstance(), ragManagerForHealth?.getEmbeddingPipeline?.());
-          const materialContribution = await buildUploadedMaterialContextContribution({
-            query: searchQuery,
-            scopePolicy: providerScopes,
-            materialService,
-            ragReady,
-            embeddingReady,
-            tokenBudget: 1800,
-            surface: requestOptions.source,
-          });
-          materialRagAttempted = materialContribution.sourceStatus.ragAttempted;
-          uploadedMaterialHitCount = materialContribution.uploadedMaterialHitCount;
-          uploadedMaterialContext = materialContribution.context;
-          contextCandidates.push(...materialContribution.contextCandidates);
-          citations.push(...materialContribution.citations);
-          Object.assign(retrievalTimingMs, materialContribution.retrievalTimingMs);
-          for (const reason of materialContribution.degradedReasons) {
-            if (!degradedReasons.includes(reason)) degradedReasons.push(reason);
-          }
-        }
-        if (!ragReady && materialRagAttempted && !degradedReasons.includes('rag_unavailable')) {
-          degradedReasons.push('rag_unavailable');
-        }
-        if (!embeddingReady && materialRagAttempted && !degradedReasons.includes('embedding_unavailable')) {
-          degradedReasons.push('embedding_unavailable');
-        }
-        const realtimeContextPlan = buildRealtimeContextPlan({
-          candidates: contextCandidates,
-          tokenBudget: 1800,
-          ragAttempted: materialRagAttempted,
-          ragReady,
-          embeddingReady,
-          uploadedMaterialHitCount,
-          screenContextStatus,
-          retrievalTimingMs: retrievalTimingMs as any,
-          degradedReasons: degradedReasons as any,
-        });
-        getContextQualityDiagnosticsCollector().recordContextPlan({
-          injectedSources: realtimeContextPlan.injected.map((item) => item.source),
-          omittedSources: realtimeContextPlan.omitted.map((item) => ({ source: item.source, reason: item.reason })),
-          degradedReasons: realtimeContextPlan.degradedReasons,
-          retrievalTimingMs: realtimeContextPlan.retrievalTimingMs,
-        });
-        const realtimeInjectedContext = formatInjectedContext({
-          ...realtimeContextPlan,
-          injected: realtimeContextPlan.injected.filter((item) => item.source !== 'uploaded_material'),
-        }) || undefined;
-        uploadedMaterialContext = [uploadedMaterialContext, realtimeInjectedContext].filter(Boolean).join('\n\n') || undefined;
-
         // Question and imagePaths are now optional - IntelligenceManager infers from transcript
         const answer = await intelligenceManager.runWhatShouldISay(
           question,
@@ -3486,7 +3326,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             persist: requestOptions.persist === false ? false : undefined,
             source: requestOptions.source,
             requestId: requestOptions.requestId,
-            modeEvent: sanitizeModeEvent(requestOptions.modeEvent),
+            modeEvent: sanitizedModeEvent,
             contextDegradedReasons: contextBudgetDegradedReasons,
             traceSink: (trace) => {
               whatToAnswerTrace = trace;
@@ -3560,6 +3400,18 @@ export function initializeIpcHandlers(appState: AppState): void {
           observability: {
             ...(whatToAnswerTrace?.observability ?? {}),
             retrievalTimingMs: realtimeContextPlan.retrievalTimingMs,
+            whatToSayPreparation: {
+              ...contextPreparation.timings,
+              fastPath: contextPreparation.fastPath,
+              decisionSource: contextPreparation.decisionSource,
+              contextNeedDecision: {
+                material: contextPreparation.contextNeedDecision.material,
+                business: contextPreparation.contextNeedDecision.business,
+                screen: contextPreparation.contextNeedDecision.screen,
+                confidence: contextPreparation.contextNeedDecision.confidence,
+                decidedBy: contextPreparation.contextNeedDecision.decidedBy,
+              },
+            },
             contextFingerprint: realtimeContextPlan.contextFingerprint,
             injectedSourceIds: realtimeContextPlan.injected.map((item) => `${item.source}:${item.sourceId}:${item.chunkId ?? ''}`),
             omittedSources: realtimeContextPlan.omitted.map((item) => ({ source: item.source, reason: item.reason })),

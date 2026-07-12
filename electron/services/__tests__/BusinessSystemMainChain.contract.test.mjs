@@ -14,13 +14,15 @@ function read(relativePath) {
 
 test('generate-what-to-say resolves business system context before realtime context plan', () => {
   const source = read('electron/ipcHandlers.ts');
+  const helper = read('electron/services/context/WhatToSayContextPreparation.ts');
   const handler = sliceSafeHandleBlock(source, 'generate-what-to-say');
 
-  assert.match(handler, /BusinessSystemContextService/);
+  assert.match(handler, /prepareWhatToSayContext/);
+  assert.match(helper, /BusinessSystemContextService/);
   assert.match(handler, /businessSystemResult/);
-  assert.match(handler, /contextCandidates\.push\(businessSystemResult\.candidate\)/);
+  assert.match(helper, /contextCandidates\.push\(result\.candidate\)/);
   assert.ok(
-    handler.indexOf('BusinessSystemContextService') < handler.indexOf('buildRealtimeContextPlan'),
+    helper.indexOf('const businessPromise = prepareBusinessContext') < helper.indexOf('const realtimeContextPlan = buildRealtimeContextPlan'),
     'business system context should be resolved before context plan is built'
   );
 });

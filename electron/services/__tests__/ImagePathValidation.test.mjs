@@ -99,10 +99,11 @@ test('runWhatShouldISay receives validated imagePaths from IPC handler', () => {
   // But the actual validation happens at the IPC handler level
   const whatToSayHandler = findSafeHandle(ipcSource, 'generate-what-to-say');
   const handler = sliceSafeHandleBlock(ipcSource, 'generate-what-to-say');
+  const helper = read('electron/services/context/WhatToSayContextPreparation.ts');
 
   // The handler should validate imagePaths before calling the engine
   assert.ok(
-    /validateImagePath|isValidPath|checkPathSafety/.test(handler),
+    /prepareWhatToSayContext/.test(handler) && /validateImagePath|isValidPath|checkPathSafety/.test(helper),
     'generate-what-to-say IPC handler should validate imagePaths'
   );
 });
@@ -121,12 +122,14 @@ test('image path validation rejects path traversal attempts', () => {
 test('generate-what-to-say rejects malformed image path payloads before OCR or model calls', () => {
   const ipcSource = read('electron/ipcHandlers.ts');
   const handler = sliceSafeHandleBlock(ipcSource, 'generate-what-to-say');
+  const helper = read('electron/services/context/WhatToSayContextPreparation.ts');
 
-  assert.match(handler, /imagePaths\.length > 5/);
-  assert.match(handler, /typeof imagePath !== 'string'/);
-  assert.match(handler, /imagePath\.trim\(\)\.length === 0/);
-  assert.match(handler, /malformed image path payload rejected/);
-  assert.match(handler, /Invalid image path payload/);
+  assert.match(helper, /imagePaths\.length > 5/);
+  assert.match(helper, /typeof imagePath !== 'string'/);
+  assert.match(helper, /imagePath\.trim\(\)\.length === 0/);
+  assert.match(handler, /invalid image path payload rejected/);
+  assert.match(helper, /Invalid image path payload/);
+  assert.match(handler, /contextPreparation\.invalidRequest/);
   assert.match(handler, /validatedImagePaths/);
   assert.match(handler, /runWhatShouldISay\([\s\S]{0,120}validatedImagePaths/);
 });

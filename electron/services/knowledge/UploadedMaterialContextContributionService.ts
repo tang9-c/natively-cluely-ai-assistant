@@ -42,6 +42,7 @@ export interface UploadedMaterialContextContributionInput {
     materialService: UploadedMaterialSearchService;
     ragReady: boolean;
     embeddingReady: boolean;
+    deferContextPlan?: boolean;
     tokenBudget?: number;
     limit?: number;
     candidateLimit?: number;
@@ -146,6 +147,20 @@ export async function buildUploadedMaterialContextContribution(
             sourceVersion: hit.materialUpdatedAt || hit.fileHash || 'unknown',
             contentHash: citations[index].chunkContentHash,
         }));
+        if (input.deferContextPlan) {
+            return {
+                context: input.existingContext,
+                contextCandidates: candidates,
+                degradedReasons,
+                sourceStatus: emptySourceStatus(input.ragReady, input.embeddingReady, true, hits.length, citations.length),
+                citations,
+                retrievalTimingMs,
+                usedMaterialContext: false,
+                uploadedMaterialHitCount: hits.length,
+                truncated: false,
+            };
+        }
+
         const plan = buildRealtimeContextPlan({
             candidates,
             tokenBudget: input.tokenBudget ?? DEFAULT_TOKEN_BUDGET,

@@ -1,5 +1,6 @@
 import type { SemanticGateTrace } from './ModeEventClassifier';
 import type { TranscriptEmotionSource } from '../../../shared/senseVoiceEmotion';
+import type { ContextNeedDecision } from '../context/ContextNeedDecision';
 
 export type ActionStatus =
     | 'candidate'
@@ -35,6 +36,7 @@ export interface DynamicActionProductContract {
     outputType: DynamicActionOutputType;
     outputPromise: string;
     riskState: DynamicActionRiskState;
+    contextNeedDecision: ContextNeedDecision;
 }
 
 export interface EvidenceRef {

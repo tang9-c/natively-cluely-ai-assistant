@@ -14,6 +14,7 @@ function read(relativePath) {
 
 test('generate-what-to-say uses uploaded material formatter and keeps citations from all hits', () => {
   const source = read('electron/ipcHandlers.ts');
+  const contextPrep = read('electron/services/context/WhatToSayContextPreparation.ts');
   const helper = read('electron/services/knowledge/UploadedMaterialContextContributionService.ts');
   const handler = sliceSafeHandleBlock(source, 'generate-what-to-say');
 
@@ -21,24 +22,27 @@ test('generate-what-to-say uses uploaded material formatter and keeps citations 
   assert.match(helper, /UploadedMaterialContextFormatter/);
   assert.match(helper, /formatUploadedMaterialContext\(selectedHits\)/);
   assert.match(helper, /buildUploadedMaterialCitation/);
-  assert.match(handler, /buildUploadedMaterialContextContribution\(/);
-  assert.match(handler, /citations\.push\(\.\.\.materialContribution\.citations\)/);
-  assert.match(handler, /contextCandidates\.push\(\.\.\.materialContribution\.contextCandidates\)/);
-  assert.match(handler, /realtimeContextPlan\.injected\.filter\(\(item\) => item\.source !== 'uploaded_material'\)/);
+  assert.match(handler, /prepareWhatToSayContext/);
+  assert.match(contextPrep, /buildUploadedMaterialContextContribution\(/);
+  assert.match(contextPrep, /input\.citations\.push\(\.\.\.contribution\.citations\)/);
+  assert.match(contextPrep, /input\.contextCandidates\.push\(\.\.\.contribution\.contextCandidates\)/);
+  assert.match(contextPrep, /deferContextPlan:\s*true/);
+  assert.match(contextPrep, /formatInjectedContext\(realtimeContextPlan\)/);
   assert.doesNotMatch(handler, /sourceType:\s*hit\.sourceType,[\s\S]{0,120}title:\s*hit\.title/);
   assert.doesNotMatch(handler, /hit\.parentText\}\s*`\)/);
 });
 
 test('generate-what-to-say exposes formatter truncation as a degraded reason', () => {
   const source = read('electron/ipcHandlers.ts');
+  const contextPrep = read('electron/services/context/WhatToSayContextPreparation.ts');
   const helper = read('electron/services/knowledge/UploadedMaterialContextContributionService.ts');
-  const handler = sliceSafeHandleBlock(source, 'generate-what-to-say');
 
   assert.match(helper, /const\s+formatted\s*=\s*formatUploadedMaterialContext\(selectedHits\)/);
   assert.match(helper, /formatted\.truncated/);
   assert.match(helper, /allReasons\.push\('uploaded_material_context_truncated'\)/);
-  assert.match(handler, /uploadedMaterialContext\s*=\s*materialContribution\.context/);
-  assert.match(handler, /uploadedMaterialContext\s*=\s*\[uploadedMaterialContext,\s*realtimeInjectedContext\]/);
+  assert.match(source, /prepareWhatToSayContext/);
+  assert.match(contextPrep, /formatInjectedContext\(realtimeContextPlan\)/);
+  assert.match(contextPrep, /contextBudgetDegradedReasons/);
 });
 
 test('manual overlay chat injects uploaded material context before calling the LLM', () => {

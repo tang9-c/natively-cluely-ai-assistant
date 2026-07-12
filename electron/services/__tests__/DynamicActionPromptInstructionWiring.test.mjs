@@ -46,11 +46,12 @@ test('dynamic action accept forwards modeEvent retrieval metadata', () => {
   assert.match(bar, /retrievalQuery:\s*action\.retrievalQuery/);
   assert.match(bar, /autoSurfacePolicy:\s*action\.autoSurfacePolicy/);
   assert.match(bar, /promptInstruction:\s*action\.promptInstruction/);
-  assert.match(bar, /productContract:[\s\S]{0,80}outputType:\s*action\.productContract\.outputType/);
+  assert.match(bar, /productContract:[\s\S]{0,160}outputType:\s*action\.productContract\.outputType/);
+  assert.match(bar, /contextNeedDecision:\s*action\.productContract\.contextNeedDecision/);
   assert.match(bar, /answerShape:\s*action\.answerStyle\?\.format/);
   assert.match(bar, /modeEvent:\s*buildDynamicActionModeEvent\(action\)/);
   assert.match(rendererTypes, /actionId\?: string/);
-  assert.match(rendererTypes, /productContract\?: \{\s*outputType:\s*DynamicActionOutputType\s*\}/);
+  assert.match(rendererTypes, /productContract\?: \{\s*outputType:\s*DynamicActionOutputType\s*contextNeedDecision\?: ContextNeedDecision\s*\}/);
   assert.match(interfaceSource, /generationOptions\?: \{ source\?: 'overlay' \| 'launcher' \| 'dynamic_action'; persist\?: boolean; modeEvent\?: DynamicActionModeEvent; throwOnError\?: boolean \}/);
 });
 
@@ -175,15 +176,18 @@ test('generate-what-to-say IPC forwards promptInstruction option to Intelligence
   assert.doesNotMatch(handlerSource, /options\?\.uploadedMaterialContext/);
   assert.match(handlerSource, /persist:\s*requestOptions\.persist === false \? false : undefined/);
   assert.match(handlerSource, /source:\s*requestOptions\.source/);
-  assert.match(handlerSource, /modeEvent:\s*sanitizeModeEvent\(requestOptions\.modeEvent\)/);
+  assert.match(handlerSource, /const sanitizedModeEvent = sanitizeModeEvent\(requestOptions\.modeEvent\)/);
+  assert.match(handlerSource, /modeEvent:\s*sanitizedModeEvent/);
 });
 
-test('sanitizeModeEvent preserves dynamic action identity and product output type', () => {
+test('sanitizeModeEvent preserves dynamic action identity, product output type, and context decision', () => {
   const source = read('electron/ipcHandlers.ts');
 
   assert.match(source, /function sanitizeModeEvent\(modeEvent: unknown\): SanitizedModeEvent \| undefined/);
   assert.match(source, /assignString\('actionId'\)/);
+  assert.match(source, /sanitizeContextNeedDecision\(productContractRecord\.contextNeedDecision\)/);
   assert.match(source, /cleaned\.productContract = \{ outputType: outputType as DynamicActionOutputType \}/);
+  assert.match(source, /contextNeedDecision/);
   assert.match(source, /outputType === 'spoken_response'/);
   assert.match(source, /outputType === 'decision_record'/);
 });

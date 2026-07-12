@@ -136,3 +136,43 @@ test('sales dynamic actions have product-specific card contracts', async () => {
     assert.match(contract.whyNow, whyNowPattern);
   }
 });
+
+test('dynamic action contracts carry context need decisions for material, business, and unknown cases', async () => {
+  const { buildDynamicActionProductContract } = await loadHelper();
+
+  const caseStudy = buildDynamicActionProductContract(baseInput({
+    type: 'case_study_request',
+    label: 'Share relevant case study',
+    evidenceRefs: [{ source: 'transcript', text: 'Do you have ROI proof or a customer case we can compare against?' }],
+  }));
+  assert.equal(caseStudy.contextNeedDecision.material, 'required');
+  assert.equal(caseStudy.contextNeedDecision.business, 'not_needed');
+  assert.equal(caseStudy.contextNeedDecision.decidedBy, 'dynamic_action_contract');
+
+  const objection = buildDynamicActionProductContract(baseInput({
+    type: 'pricing_objection',
+    label: 'Handle pricing objection',
+    evidenceRefs: [{ source: 'transcript', text: 'This is too expensive.' }],
+  }));
+  assert.equal(objection.contextNeedDecision.material, 'not_needed');
+  assert.equal(objection.contextNeedDecision.business, 'not_needed');
+  assert.equal(objection.contextNeedDecision.screen, 'not_needed');
+
+  const windchill = buildDynamicActionProductContract(baseInput({
+    type: 'fde_integration_check',
+    label: 'Clarify Windchill BOM status',
+    modeTemplateType: 'fde',
+    evidenceRefs: [{ source: 'transcript', text: 'Can you check the Windchill BOM for ECN-123 before we commit?' }],
+  }));
+  assert.equal(windchill.contextNeedDecision.business, 'required');
+  assert.equal(windchill.contextNeedDecision.material, 'use_if_ready');
+
+  const unknown = buildDynamicActionProductContract(baseInput({
+    type: 'unknown_action',
+    label: 'Unknown action',
+    evidenceRefs: [{ source: 'transcript', text: 'Please handle this.' }],
+  }));
+  assert.equal(unknown.contextNeedDecision.material, 'unknown');
+  assert.equal(unknown.contextNeedDecision.business, 'unknown');
+  assert.equal(unknown.contextNeedDecision.screen, 'unknown');
+});

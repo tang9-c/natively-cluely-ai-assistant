@@ -14,12 +14,14 @@ function read(relativePath) {
 
 test('generate-what-to-say gates uploaded material citations behind reference_files scope', () => {
   const source = read('electron/ipcHandlers.ts');
+  const contextPrep = read('electron/services/context/WhatToSayContextPreparation.ts');
   const contribution = read('electron/services/knowledge/UploadedMaterialContextContributionService.ts');
   const handler = sliceSafeHandleBlock(source, 'generate-what-to-say');
 
   assert.match(handler, /const\s+providerScopes\s*=\s*SettingsManager\.getInstance\(\)\.get\('providerDataScopes'\)\s*\|\|\s*\{\}/);
-  assert.match(handler, /scopePolicy:\s*providerScopes/);
-  assert.match(handler, /if\s*\(searchQuery\)/);
+  assert.match(handler, /providerScopes,/);
+  assert.match(contextPrep, /scopePolicy:\s*input\.request\.providerScopes/);
+  assert.match(contextPrep, /const searchQuery = modeQuery \|\| questionQuery/);
   assert.doesNotMatch(handler, /citations\.push[\s\S]{0,500}providerScopePolicy:\s*SettingsManager\.getInstance\(\)\.get\('providerDataScopes'\)/);
   assert.match(contribution, /getDeniedDataScopes\(\['reference_files'\], input\.scopePolicy\)/);
   assert.match(contribution, /context_scope_denied/);

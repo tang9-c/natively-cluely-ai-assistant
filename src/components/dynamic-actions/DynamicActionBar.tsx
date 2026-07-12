@@ -43,6 +43,7 @@ const buildDynamicActionModeEvent = (action: DynamicActionPayload): DynamicActio
   promptInstruction: action.promptInstruction,
   productContract: {
     outputType: action.productContract.outputType,
+    contextNeedDecision: action.productContract.contextNeedDecision,
   },
   answerShape: action.answerStyle?.format,
 });

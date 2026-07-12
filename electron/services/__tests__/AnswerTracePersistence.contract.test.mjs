@@ -55,7 +55,8 @@ test('generate-what-to-say sanitizes options and returns stable status codes', (
   assert.match(handler, /sanitizeGenerateWhatToSayOptions\(options\)/);
   assert.doesNotMatch(handler, /options\?\.uploadedMaterialContext/);
   assert.match(handler, /statusCode:\s*'ok'/);
-  assert.match(handler, /statusCode:\s*'invalid-request'/);
+  assert.match(handler, /contextPreparation\.invalidRequest/);
+  assert.match(handler, /statusCode:\s*contextPreparation\.invalidRequest\.statusCode/);
   assert.match(handler, /statusCode:\s*'partial-trace-unavailable'/);
 });
 
