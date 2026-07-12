@@ -288,6 +288,10 @@ export class MeetingPersistence {
 
             // Generate Structured Summary
             if (hasSummarizableTranscript) {
+                const buildEmptyModeSections = () => modeNoteSections.map(s => ({
+                    title: s.title,
+                    bullets: [] as string[],
+                }));
                 const baseRules = `规则：
 - 不要编造上下文中不存在的信息
 - 可以推断讨论中合理隐含的行动项或后续步骤
@@ -375,7 +379,17 @@ ${baseRules}
                             summaryData = parsed;
                         }
                     } catch (e) {
-                        console.error('[MeetingPersistence] Failed to parse summary JSON', { responseLength: jsonStr.length, error: e });
+                        console.warn('[MeetingPersistence] Failed to parse summary JSON', {
+                            responseLength: jsonStr.length,
+                            errorName: e instanceof Error ? e.name : 'UnknownError',
+                            errorMessage: e instanceof Error ? e.message : String(e),
+                        });
+                        if (modeNoteSections.length > 0) {
+                            summaryData = {
+                                ...summaryData,
+                                sections: buildEmptyModeSections(),
+                            };
+                        }
                     }
                 }
             } else {

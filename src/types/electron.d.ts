@@ -635,7 +635,7 @@ export interface ElectronAPI {
   // @ipc-channel generate-assist
   generateAssist: () => Promise<{ insight: string | null }>
   // @ipc-channel generate-what-to-say
-  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { requestId?: string; promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: DynamicActionModeEvent }) => Promise<{
+  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; requestId?: string; modeEvent?: DynamicActionModeEvent }) => Promise<{
     answerId?: string;
     answer: string | null;
     question?: string;

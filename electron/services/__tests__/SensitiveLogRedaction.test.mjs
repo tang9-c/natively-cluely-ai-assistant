@@ -94,7 +94,10 @@ test('IPC and meeting summary logs avoid answer and LLM response snippets', () =
   assert.doesNotMatch(ipc, /console\.log[\s\S]{0,140}getLastAssistantMessage\(\)\?\.substring\(/);
 
   assert.match(persistence, /LLM summary response received', \{ length: jsonStr\.length \}/);
-  assert.match(persistence, /Failed to parse summary JSON', \{ responseLength: jsonStr\.length, error: e \}/);
+  assert.match(persistence, /Failed to parse summary JSON'[\s\S]{0,180}responseLength: jsonStr\.length/);
+  assert.match(persistence, /errorName: e instanceof Error \? e\.name : 'UnknownError'/);
+  assert.match(persistence, /errorMessage: e instanceof Error \? e\.message : String\(e\)/);
+  assert.doesNotMatch(persistence, /Failed to parse summary JSON'[\s\S]{0,180}error: e/);
   assert.doesNotMatch(persistence, /Raw LLM summary response/);
   assert.doesNotMatch(persistence, /Raw response:', jsonStr\.substring/);
 

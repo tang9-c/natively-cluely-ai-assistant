@@ -360,7 +360,7 @@ interface ElectronAPI {
   generateWhatToSay: (
     question?: string,
     imagePaths?: string[],
-    options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: ModeEventContext },
+    options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; requestId?: string; modeEvent?: ModeEventContext },
   ) => Promise<{
     answerId?: string;
     answer: string | null;
@@ -1480,7 +1480,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateWhatToSay: (
     question?: string,
     imagePaths?: string[],
-    options?: { requestId?: string; promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: ModeEventContext },
+    options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; requestId?: string; modeEvent?: ModeEventContext },
   ) => ipcRenderer.invoke('generate-what-to-say', question, imagePaths, options),
   generateClarify: () => ipcRenderer.invoke('generate-clarify'),
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) =>

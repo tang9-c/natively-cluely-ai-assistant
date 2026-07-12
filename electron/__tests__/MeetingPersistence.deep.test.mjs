@@ -367,6 +367,34 @@ describe('MeetingPersistence.deep — processAndSaveMeeting LLM failure paths', 
     assert.equal(final.title, 'Custom Title');
     assert.equal(final.detailedSummary.overview, 'overview text');
   });
+
+  test('malformed LLM summary preserves mode sections with empty bullets', async () => {
+    const db = DatabaseManager.getInstance();
+    const session = buildMockSession();
+    const llm = buildMockLLMHelper({
+      titleResponse: 'Custom Title',
+      summaryResponse: 'this is not valid json at all {',
+    });
+    const mp = new MeetingPersistence(session, llm);
+    const snap = buildSnapshot();
+
+    await mp.processAndSaveMeeting(
+      snap,
+      'm-bad-json-sections',
+      null,
+      { id: 'mode-sales', name: 'Sales', templateType: 'sales' },
+    );
+
+    const final = db.getMeetingDetails('m-bad-json-sections');
+    assert.ok(final);
+    assert.equal(final.title, 'Custom Title');
+    assert.ok(Array.isArray(final.detailedSummary.sections));
+    assert.equal(final.detailedSummary.sections.length, 6);
+    assert.deepEqual(
+      final.detailedSummary.sections.map(section => section.bullets),
+      [[], [], [], [], [], []],
+    );
+  });
 });
 
 describe('MeetingPersistence.deep — recoverUnprocessedMeetings edge cases', () => {
