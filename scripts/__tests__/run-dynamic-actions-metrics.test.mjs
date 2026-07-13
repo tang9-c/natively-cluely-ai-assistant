@@ -30,7 +30,26 @@ test('dynamic action metrics CLI reads product, replay, and telemetry reports in
       availableSynthetic: { sales: 3, fde: 2, 'team-meet': 1 },
       blockedReal: { sales: 15, fde: 10, 'team-meet': 5 },
     },
-    entries: [],
+    entries: [{
+      id: 'continuation-positive',
+      status: 'passed',
+      continuation: {
+        fixtureId: 'c1',
+        shouldEmit: true,
+        initialActionCompleted: true,
+        plannerCalls: 1,
+        plannerCallsWithoutPending: 0,
+        parentActionId: 'p1',
+        childActionId: 'c1',
+        derivedActionEmitted: true,
+        duplicateDerivedActions: 0,
+        unsafeVisibleAnswerCount: 0,
+        finalTurnToDerivedCardMs: 100,
+        visibleAnswerKind: 'generated',
+        postCallCarryover: true,
+        passed: true
+      }
+    }],
   }), 'utf8');
   fs.writeFileSync(
     path.join(reportDir, 'telemetry.jsonl'),
@@ -50,6 +69,7 @@ test('dynamic action metrics CLI reads product, replay, and telemetry reports in
   assert.equal(summary.latency.finalTranscriptToCardShown.averageMs, 42);
   assert.equal(summary.environmentStatus, 'blocked_missing_credentials');
   assert.equal(summary.assetCoverage.availableSynthetic.sales, 3);
+  assert.deepEqual(summary.continuationGateFailures, []);
 });
 
 test('dynamic action metrics CLI fails when required product or replay reports are missing', () => {

@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 
 const enginePath = path.join(process.cwd(), 'dist-electron/electron/IntelligenceEngine.js');
 const sessionPath = path.join(process.cwd(), 'dist-electron/electron/SessionTracker.js');
+const privacyPath = path.join(process.cwd(), 'scripts/assert-dynamic-action-report-privacy.mjs');
 
 class StubLLMHelper {
   getActiveModel() { return { provider: 'gemini', model: 'gemini-3-flash' }; }
@@ -96,4 +97,72 @@ test('capability stream stays invisible until claim verifier resolves', async ()
   const usage = session.getFullUsage().at(-1);
   assert.equal(usage.metadata.evaluationResult, 'safe_fallback');
   assert.equal(usage.metadata.parentActionId, 'parent-1');
+});
+
+test('runtime evaluation does not persist transcript or evidence sentinels after fallback', async () => {
+  const SENTINELS = {
+    transcript: 'PRIVATE_TRANSCRIPT_SENTINEL_7F91',
+    evidence: 'PRIVATE_EVIDENCE_SENTINEL_2A44',
+    providerBody: 'PRIVATE_PROVIDER_BODY_SENTINEL_9C10',
+  };
+  const { assertDynamicActionReportPrivacy } = await import(pathToFileURL(privacyPath).href);
+  const { engine, session } = await runtimeEvaluationHarness([
+    `可以确认支持自动写回。${SENTINELS.transcript}`,
+  ]);
+  engine._setDynamicActionClaimGroundingVerifierForTest({
+    verify: async () => ({
+      verdict: 'unavailable',
+      evidenceIds: [],
+      reasonCode: 'verifier_provider_unavailable',
+      verificationSource: 'continuation_grounding_verifier',
+    }),
+  });
+
+  await engine.runWhatShouldISay('能力匹配', 0.9, undefined, {
+    skipCooldown: true,
+    source: 'dynamic_action',
+    modeEvent: {
+      actionId: 'child-privacy',
+      actionType: 'capability_fit_answer',
+      parentActionId: 'parent-privacy',
+      productContract: { outputType: 'spoken_response' },
+    },
+    dynamicActionValidation: {
+      actionType: 'capability_fit_answer',
+      parentActionId: 'parent-privacy',
+      grounding: {
+        groundedSources: [{ evidenceId: 'ev-privacy', type: 'material', label: 'privacy.pdf', status: 'used' }],
+        injectedEvidence: [{
+          evidenceId: 'ev-privacy',
+          type: 'material',
+          label: 'privacy.pdf',
+          sourceId: 'm1',
+          excerpt: SENTINELS.evidence,
+        }],
+      },
+      providerDataScopes: { transcript: true, reference_files: true },
+      deferUserVisibleEmission: true,
+      language: 'zh',
+    },
+    dynamicActionEvaluationSink: (trace) => {
+      assert.doesNotThrow(() => assertDynamicActionReportPrivacy({
+        reports: [trace],
+        fixtures: [{
+          turns: [{ text: SENTINELS.transcript }],
+          generatedAnswer: SENTINELS.evidence,
+          providerBody: SENTINELS.providerBody,
+        }],
+      }));
+    },
+  });
+
+  const usage = session.getFullUsage().at(-1);
+  assert.doesNotThrow(() => assertDynamicActionReportPrivacy({
+    reports: [{ usage: usage.metadata }],
+    fixtures: [{
+      turns: [{ text: SENTINELS.transcript }],
+      generatedAnswer: SENTINELS.evidence,
+      providerBody: SENTINELS.providerBody,
+    }],
+  }));
 });

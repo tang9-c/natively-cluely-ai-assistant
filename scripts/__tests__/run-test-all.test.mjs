@@ -48,3 +48,18 @@ test('test:all loads dotenv before checking blocked live STT stages', () => {
   assert.match(runner, /import ['"]dotenv\/config['"]/);
   assert.match(runner, /blockedOnMissingEnv/);
 });
+
+test('test:all runs dynamic action product replay metrics and privacy gates before real STT', () => {
+  const runner = read('scripts/run-test-all.mjs');
+  const order = [
+    "name: 'dynamic-actions-product'",
+    "name: 'dynamic-actions-replay'",
+    "name: 'dynamic-actions-metrics'",
+    "name: 'dynamic-actions-privacy'",
+    "name: 'sales-real-stt-replay'",
+  ].map((needle) => runner.indexOf(needle));
+
+  assert.ok(order.every((index) => index >= 0), 'all dynamic action gate stages should be present');
+  assert.deepEqual([...order].sort((a, b) => a - b), order);
+  assert.match(runner, /args: \['scripts\/assert-dynamic-action-report-privacy\.mjs'\]/);
+});

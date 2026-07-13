@@ -54,8 +54,13 @@ try {
     modes: Object.keys(summary.modeQuality),
     actionTypes: Object.keys(summary.falsePositiveMissByAction),
     environmentStatus: summary.environmentStatus,
+    continuationGateFailures: summary.continuationGateFailures,
     warnings: telemetry.warnings,
   }, null, 2));
+  if (summary.continuationGateFailures.length > 0) {
+    console.error(`Dynamic action continuation quality gate failed: ${summary.continuationGateFailures.join(',')}`);
+    process.exit(1);
+  }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);

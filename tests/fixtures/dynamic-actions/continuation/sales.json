@@ -1,0 +1,235 @@
+[
+  {
+    "id": "sales-continuation-capability-fit-zh-001",
+    "language": "zh",
+    "modeTemplateType": "sales",
+    "initialAction": { "type": "discovery_question", "sourceIntent": "sales_capability_fit", "generationStatus": "completed" },
+    "turns": [
+      { "speaker": "interviewer", "text": "对象是电池包冷却液流道。", "final": true },
+      { "speaker": "interviewer", "text": "主要看压降、流速分布和温升。", "final": true }
+    ],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [
+      { "decision": "continue_collecting", "confidence": 0.7, "extractedSlots": { "object": "电池包冷却液流道" }, "reasonCode": "insufficient_customer_detail", "decisionSource": "continuation_planner" },
+      { "decision": "trigger_grounded_answer", "confidence": 0.92, "extractedSlots": { "object": "电池包冷却液流道", "metrics": ["压降", "流速分布", "温升"] }, "reasonCode": "sufficient_customer_detail", "decisionSource": "continuation_planner" }
+    ],
+    "grounding": {
+      "tokenBudget": 80,
+      "candidates": [{ "source": "uploaded_material", "sourceId": "simulation-capability.pdf", "chunkId": "c1", "text": "能力矩阵确认支持压降分析、流速分布和温升边界验证。", "tokenCount": 20 }],
+      "citations": [{ "citationId": "citation-1", "sourceType": "uploaded_material", "sourceId": "simulation-capability.pdf", "chunkId": "c1", "title": "simulation-capability.pdf" }],
+      "materialRagAttempted": true,
+      "uploadedMaterialHitCount": 1,
+      "degradedReasons": [],
+      "businessSystemResult": { "kind": "skipped" }
+    },
+    "claimVerifierResult": { "verdict": "supported", "reasonCode": "claims_supported" },
+    "generatedAnswer": "根据已上传的能力材料，可以确认压降、流速分布和温升边界验证；建议用一个真实样本做 PoC 确认验收阈值。",
+    "expected": { "plannerCalls": 2, "derivedActionEmitted": true, "visibleAnswerKind": "generated", "postCallCarryover": true }
+  },
+  {
+    "id": "sales-continuation-capability-fit-zh-002",
+    "language": "zh",
+    "modeTemplateType": "sales",
+    "initialAction": { "type": "discovery_question", "sourceIntent": "sales_contextual_proof_discovery", "generationStatus": "completed" },
+    "turns": [
+      { "speaker": "interviewer", "text": "我们想看类似汽车零部件客户的变更评审案例。", "final": true }
+    ],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [{ "decision": "trigger_grounded_answer", "confidence": 0.9, "extractedSlots": { "workflow": "变更评审", "systemObjects": ["ECO", "BOM"] }, "reasonCode": "sufficient_customer_detail", "decisionSource": "continuation_planner" }],
+    "grounding": {
+      "tokenBudget": 80,
+      "candidates": [{ "source": "uploaded_material", "sourceId": "case-study.pdf", "chunkId": "c2", "text": "案例材料包含汽车零部件 ECO 评审流程和客户证明。", "tokenCount": 18 }],
+      "citations": [{ "citationId": "citation-2", "sourceType": "uploaded_material", "sourceId": "case-study.pdf", "chunkId": "c2", "title": "case-study.pdf" }],
+      "materialRagAttempted": true,
+      "uploadedMaterialHitCount": 1,
+      "degradedReasons": [],
+      "businessSystemResult": { "kind": "skipped" }
+    },
+    "claimVerifierResult": { "verdict": "supported", "reasonCode": "claims_supported" },
+    "generatedAnswer": "资料里有汽车零部件 ECO 评审案例，可以先按这个案例说明相似流程，再确认贵司 BOM 和审批角色是否一致。",
+    "expected": { "plannerCalls": 1, "derivedActionEmitted": true, "visibleAnswerKind": "generated", "postCallCarryover": true }
+  },
+  {
+    "id": "sales-continuation-capability-fit-en-001",
+    "language": "en",
+    "modeTemplateType": "sales",
+    "initialAction": { "type": "discovery_question", "sourceIntent": "sales_capability_fit", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "The object is a CAD change package and we need SSO plus audit export validation.", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [{ "decision": "trigger_grounded_answer", "confidence": 0.88, "extractedSlots": { "object": "CAD change package", "metrics": ["SSO", "audit export"] }, "reasonCode": "sufficient_customer_detail", "decisionSource": "continuation_planner" }],
+    "grounding": {
+      "tokenBudget": 80,
+      "candidates": [{ "source": "uploaded_material", "sourceId": "security-note.pdf", "chunkId": "sso", "text": "Security note confirms SSO setup and audit export validation checklist.", "tokenCount": 18 }],
+      "citations": [{ "citationId": "citation-3", "sourceType": "uploaded_material", "sourceId": "security-note.pdf", "chunkId": "sso", "title": "security-note.pdf" }],
+      "materialRagAttempted": true,
+      "uploadedMaterialHitCount": 1,
+      "degradedReasons": [],
+      "businessSystemResult": { "kind": "skipped" }
+    },
+    "claimVerifierResult": { "verdict": "supported", "reasonCode": "claims_supported" },
+    "generatedAnswer": "The security note supports SSO setup and audit export validation. I would confirm the exact IdP and export format through a short PoC.",
+    "expected": { "plannerCalls": 1, "derivedActionEmitted": true, "visibleAnswerKind": "generated", "postCallCarryover": true }
+  },
+  {
+    "id": "sales-continuation-capability-fit-en-002",
+    "language": "en",
+    "modeTemplateType": "sales",
+    "initialAction": { "type": "discovery_question", "sourceIntent": "sales_contextual_proof_discovery", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "We need proof for a regulated supplier onboarding workflow, especially quality sign-off.", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [{ "decision": "trigger_grounded_answer", "confidence": 0.86, "extractedSlots": { "workflow": "supplier onboarding", "validationNeed": "quality sign-off" }, "reasonCode": "sufficient_customer_detail", "decisionSource": "continuation_planner" }],
+    "grounding": {
+      "tokenBudget": 80,
+      "candidates": [{ "source": "uploaded_material", "sourceId": "supplier-proof.pdf", "chunkId": "qms", "text": "Proof deck covers regulated supplier onboarding and quality sign-off governance.", "tokenCount": 18 }],
+      "citations": [{ "citationId": "citation-4", "sourceType": "uploaded_material", "sourceId": "supplier-proof.pdf", "chunkId": "qms", "title": "supplier-proof.pdf" }],
+      "materialRagAttempted": true,
+      "uploadedMaterialHitCount": 1,
+      "degradedReasons": [],
+      "businessSystemResult": { "kind": "skipped" }
+    },
+    "claimVerifierResult": { "verdict": "supported", "reasonCode": "claims_supported" },
+    "generatedAnswer": "The uploaded proof deck covers regulated supplier onboarding and quality sign-off governance; I would still validate your approval roles in a pilot.",
+    "expected": { "plannerCalls": 1, "derivedActionEmitted": true, "visibleAnswerKind": "generated", "postCallCarryover": true }
+  },
+  {
+    "id": "sales-continuation-capability-fit-mixed-001",
+    "language": "mixed",
+    "modeTemplateType": "sales",
+    "initialAction": { "type": "discovery_question", "sourceIntent": "sales_capability_fit", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "我们要看 integration plan，especially Windchill part query and SSO rollout.", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [{ "decision": "trigger_grounded_answer", "confidence": 0.89, "extractedSlots": { "workflow": "integration plan", "systemObjects": ["Windchill part query", "SSO rollout"] }, "reasonCode": "sufficient_customer_detail", "decisionSource": "continuation_planner" }],
+    "grounding": {
+      "tokenBudget": 80,
+      "candidates": [{ "source": "business_system", "sourceId": "windchill-readonly", "chunkId": "part-query", "text": "Windchill 只读查询可用于物料基本信息，不包含写回能力。", "tokenCount": 18 }],
+      "citations": [],
+      "materialRagAttempted": false,
+      "uploadedMaterialHitCount": 0,
+      "degradedReasons": [],
+      "businessSystemResult": { "kind": "context", "status": "ok", "sourceName": "Windchill", "candidate": { "source": "business_system", "sourceId": "windchill-readonly", "chunkId": "part-query", "text": "Windchill 只读查询可用于物料基本信息，不包含写回能力。", "tokenCount": 18 } }
+    },
+    "claimVerifierResult": { "verdict": "supported", "reasonCode": "claims_supported" },
+    "generatedAnswer": "可以确认 Windchill 只读物料查询路径；SSO rollout 需要再用客户 IdP 做 PoC，不承诺自动写回。",
+    "expected": { "plannerCalls": 1, "derivedActionEmitted": true, "visibleAnswerKind": "generated", "postCallCarryover": true }
+  },
+  {
+    "id": "sales-continuation-capability-fit-mixed-002",
+    "language": "mixed",
+    "modeTemplateType": "sales",
+    "initialAction": { "type": "discovery_question", "sourceIntent": "sales_capability_fit", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "对象是 supplier CAPA，need audit trail and human approval point.", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [{ "decision": "trigger_grounded_answer", "confidence": 0.91, "extractedSlots": { "object": "supplier CAPA", "metrics": ["audit trail", "human approval point"] }, "reasonCode": "sufficient_customer_detail", "decisionSource": "continuation_planner" }],
+    "grounding": {
+      "tokenBudget": 80,
+      "candidates": [{ "source": "uploaded_material", "sourceId": "qms-agent-plan.pdf", "chunkId": "capa", "text": "方案材料说明 CAPA 建议必须保留人工确认点和审计追踪。", "tokenCount": 18 }],
+      "citations": [{ "citationId": "citation-5", "sourceType": "uploaded_material", "sourceId": "qms-agent-plan.pdf", "chunkId": "capa", "title": "qms-agent-plan.pdf" }],
+      "materialRagAttempted": true,
+      "uploadedMaterialHitCount": 1,
+      "degradedReasons": [],
+      "businessSystemResult": { "kind": "skipped" }
+    },
+    "claimVerifierResult": { "verdict": "supported", "reasonCode": "claims_supported" },
+    "generatedAnswer": "根据方案材料，可以确认 CAPA 建议要保留人工确认点和审计追踪；具体审批角色需要在 PoC 中验证。",
+    "expected": { "plannerCalls": 1, "derivedActionEmitted": true, "visibleAnswerKind": "generated", "postCallCarryover": true }
+  },
+  {
+    "id": "sales-continuation-internal-speaker-negative-001",
+    "language": "zh",
+    "modeTemplateType": "sales",
+    "initialAction": { "type": "discovery_question", "sourceIntent": "sales_capability_fit", "generationStatus": "completed" },
+    "turns": [{ "speaker": "user", "text": "我们内部先别承诺这个能力。", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [],
+    "grounding": { "tokenBudget": 80, "candidates": [], "citations": [], "materialRagAttempted": true, "uploadedMaterialHitCount": 0, "degradedReasons": [], "businessSystemResult": { "kind": "skipped" } },
+    "claimVerifierResult": { "verdict": "unavailable", "reasonCode": "no_injected_evidence" },
+    "generatedAnswer": "当前资料不足，不能确认这项能力。建议补充产品能力材料，或用一个真实对象和验收指标做 PoC；这里不承诺自动写回 PLM 或 QMS。",
+    "expected": { "plannerCalls": 0, "derivedActionEmitted": false, "visibleAnswerKind": "none", "postCallCarryover": false }
+  },
+  {
+    "id": "sales-continuation-unknown-speaker-negative-001",
+    "language": "en",
+    "modeTemplateType": "sales",
+    "initialAction": { "type": "discovery_question", "sourceIntent": "sales_capability_fit", "generationStatus": "completed" },
+    "turns": [{ "speaker": "unknown", "text": "Maybe it needs SSO.", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [],
+    "grounding": { "tokenBudget": 80, "candidates": [], "citations": [], "materialRagAttempted": true, "uploadedMaterialHitCount": 0, "degradedReasons": [], "businessSystemResult": { "kind": "skipped" } },
+    "claimVerifierResult": { "verdict": "unavailable", "reasonCode": "no_injected_evidence" },
+    "generatedAnswer": "The current materials are not enough to confirm this capability. Please verify it against the capability matrix or run a PoC with one real object and acceptance metric; no automatic PLM or QMS writeback is assumed.",
+    "expected": { "plannerCalls": 0, "derivedActionEmitted": false, "visibleAnswerKind": "none", "postCallCarryover": false }
+  },
+  {
+    "id": "sales-continuation-interim-negative-001",
+    "language": "mixed",
+    "modeTemplateType": "sales",
+    "initialAction": { "type": "discovery_question", "sourceIntent": "sales_capability_fit", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "我们要看 SSO", "final": false }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [],
+    "grounding": { "tokenBudget": 80, "candidates": [], "citations": [], "materialRagAttempted": true, "uploadedMaterialHitCount": 0, "degradedReasons": [], "businessSystemResult": { "kind": "skipped" } },
+    "claimVerifierResult": { "verdict": "unavailable", "reasonCode": "no_injected_evidence" },
+    "generatedAnswer": "当前资料不足，不能确认这项能力。建议补充产品能力材料，或用一个真实对象和验收指标做 PoC；这里不承诺自动写回 PLM 或 QMS。",
+    "expected": { "plannerCalls": 0, "derivedActionEmitted": false, "visibleAnswerKind": "none", "postCallCarryover": false }
+  },
+  {
+    "id": "sales-continuation-old-topic-negative-001",
+    "language": "zh",
+    "modeTemplateType": "sales",
+    "initialAction": { "type": "discovery_question", "sourceIntent": "sales_capability_fit", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "刚才那个先放一边，我们现在讨论采购合同付款条款。", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [{ "decision": "ignore", "confidence": 0.93, "extractedSlots": { "workflow": "采购合同付款条款" }, "reasonCode": "unrelated_turn", "decisionSource": "continuation_planner" }],
+    "grounding": { "tokenBudget": 80, "candidates": [], "citations": [], "materialRagAttempted": true, "uploadedMaterialHitCount": 0, "degradedReasons": [], "businessSystemResult": { "kind": "skipped" } },
+    "claimVerifierResult": { "verdict": "unavailable", "reasonCode": "no_injected_evidence" },
+    "generatedAnswer": "当前资料不足，不能确认这项能力。建议补充产品能力材料，或用一个真实对象和验收指标做 PoC；这里不承诺自动写回 PLM 或 QMS。",
+    "expected": { "plannerCalls": 1, "derivedActionEmitted": false, "visibleAnswerKind": "none", "postCallCarryover": false }
+  },
+  {
+    "id": "sales-continuation-scope-denied-negative-001",
+    "language": "en",
+    "modeTemplateType": "sales",
+    "initialAction": { "type": "discovery_question", "sourceIntent": "sales_capability_fit", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "The validation object is the audit export workflow.", "final": true }],
+    "providerDataScopes": { "transcript": false, "reference_files": true },
+    "plannerResults": [],
+    "grounding": { "tokenBudget": 80, "candidates": [], "citations": [], "materialRagAttempted": true, "uploadedMaterialHitCount": 0, "degradedReasons": [], "businessSystemResult": { "kind": "skipped" } },
+    "claimVerifierResult": { "verdict": "unavailable", "reasonCode": "provider_scope_denied" },
+    "generatedAnswer": "The current materials are not enough to confirm this capability. Please verify it against the capability matrix or run a PoC with one real object and acceptance metric; no automatic PLM or QMS writeback is assumed.",
+    "expected": { "plannerCalls": 0, "derivedActionEmitted": false, "visibleAnswerKind": "none", "postCallCarryover": false }
+  },
+  {
+    "id": "sales-continuation-timeout-budget-negative-001",
+    "language": "en",
+    "modeTemplateType": "sales",
+    "initialAction": { "type": "discovery_question", "sourceIntent": "sales_capability_fit", "generationStatus": "completed" },
+    "turns": [
+      { "speaker": "interviewer", "text": "We need validation for audit export.", "final": true },
+      { "speaker": "interviewer", "text": "The object is supplier CAPA.", "final": true },
+      { "speaker": "interviewer", "text": "The metric is audit traceability.", "final": true }
+    ],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [
+      { "failure": "timeout" },
+      { "failure": "timeout" },
+      { "failure": "timeout" }
+    ],
+    "grounding": { "tokenBudget": 80, "candidates": [], "citations": [], "materialRagAttempted": true, "uploadedMaterialHitCount": 0, "degradedReasons": [], "businessSystemResult": { "kind": "skipped" } },
+    "claimVerifierResult": { "verdict": "unavailable", "reasonCode": "verifier_timeout" },
+    "generatedAnswer": "The current materials are not enough to confirm this capability. Please verify it against the capability matrix or run a PoC with one real object and acceptance metric; no automatic PLM or QMS writeback is assumed.",
+    "expected": { "plannerCalls": 3, "derivedActionEmitted": false, "visibleAnswerKind": "none", "postCallCarryover": false }
+  },
+  {
+    "id": "sales-continuation-material-miss-safe-fallback-001",
+    "language": "zh",
+    "modeTemplateType": "sales",
+    "initialAction": { "type": "discovery_question", "sourceIntent": "sales_capability_fit", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "对象是 QMS 审计导出，我们要确认能不能自动写回整改状态。", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [{ "decision": "trigger_grounded_answer", "confidence": 0.9, "extractedSlots": { "object": "QMS 审计导出", "validationNeed": "自动写回整改状态" }, "reasonCode": "sufficient_customer_detail", "decisionSource": "continuation_planner" }],
+    "grounding": { "tokenBudget": 80, "candidates": [], "citations": [], "materialRagAttempted": true, "uploadedMaterialHitCount": 0, "degradedReasons": [], "businessSystemResult": { "kind": "skipped" } },
+    "claimVerifierResult": { "verdict": "unavailable", "reasonCode": "no_injected_evidence" },
+    "generatedAnswer": "我们支持自动写回整改状态。",
+    "expected": { "plannerCalls": 1, "derivedActionEmitted": true, "visibleAnswerKind": "safe_fallback", "postCallCarryover": true }
+  }
+]

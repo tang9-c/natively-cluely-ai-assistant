@@ -468,9 +468,10 @@ function collectAcceptedCapabilityFitRecords(artifacts: ActionArtifact[]): Accep
         source.status === 'used' &&
         ['material', 'pptx', 'business_context'].includes(source.type)
       );
-      const groundingStatus = usedSources.length > 0 && artifact.evaluationResult !== 'safe_fallback'
-        ? 'grounded'
-        : 'needs_confirmation';
+      const groundingStatus: AcceptedCapabilityFitRecord['groundingStatus'] =
+        usedSources.length > 0 && artifact.evaluationResult !== 'safe_fallback'
+          ? 'grounded'
+          : 'needs_confirmation';
       const groundedSourceLabels = usedSources
         .map((source) => source.label.trim())
         .filter(Boolean)

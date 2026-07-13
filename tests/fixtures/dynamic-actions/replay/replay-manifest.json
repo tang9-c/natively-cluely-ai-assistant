@@ -19,7 +19,20 @@
     "language": "mixed",
     "speakerCount": 3,
     "syntheticAudio": true,
+    "continuationFixture": "tests/fixtures/dynamic-actions/continuation/sales.json#sales-continuation-capability-fit-zh-001",
     "coverage": ["case_study_request", "mixed_language", "old_topic_pollution"]
+  },
+  {
+    "id": "sales-replay-capability-fit-mixed-001",
+    "modeTemplateType": "sales",
+    "sourceFixture": "tests/fixtures/dynamic-actions/product/sales.json#sales-case-proof-mixed-003",
+    "audioPath": "tests/fixtures/dynamic-actions/replay/audio/sales-case-proof-mixed-001.wav",
+    "expectedMissingAudio": false,
+    "language": "mixed",
+    "speakerCount": 3,
+    "syntheticAudio": true,
+    "continuationFixture": "tests/fixtures/dynamic-actions/continuation/sales.json#sales-continuation-capability-fit-mixed-001",
+    "coverage": ["capability_fit", "case_study_request", "continuation"]
   },
   {
     "id": "sales-replay-internal-price-identity-001",

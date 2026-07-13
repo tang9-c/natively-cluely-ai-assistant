@@ -99,9 +99,24 @@ const stages = [
     env: { ELECTRON_RUN_AS_NODE: '1' },
   },
   {
+    name: 'dynamic-actions-product',
+    command: process.execPath,
+    args: ['scripts/run-dynamic-actions-product.mjs'],
+  },
+  {
     name: 'dynamic-actions-replay',
     command: process.execPath,
     args: ['scripts/run-dynamic-actions-replay.mjs'],
+  },
+  {
+    name: 'dynamic-actions-metrics',
+    command: process.execPath,
+    args: ['scripts/run-dynamic-actions-metrics.mjs'],
+  },
+  {
+    name: 'dynamic-actions-privacy',
+    command: process.execPath,
+    args: ['scripts/assert-dynamic-action-report-privacy.mjs'],
   },
   {
     name: 'sales-real-stt-replay',

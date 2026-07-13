@@ -71,7 +71,20 @@ export interface DynamicActionQaSummary {
   };
   assetCoverage: ReplayAssetCoverage;
   environmentStatus: ReplayEnvironmentStatus;
+  continuation: ContinuationQaMetrics;
+  continuationGateFailures: string[];
   answerQualityMetrics: AnswerQualityMetrics | null;
+}
+
+export interface ContinuationQaMetrics {
+  plannerCallsWithoutPending: number;
+  maxPlannerCallsPerContinuation: number;
+  duplicateDerivedActions: number;
+  parentChildCorrelationRate: number;
+  unsafeVisibleAnswerCount: number;
+  derivedActionRecall: number;
+  derivedActionFalsePositiveRate: number;
+  finalTurnToDerivedCardP95Ms: number;
 }
 
 const MODES: ModeId[] = ['sales', 'fde', 'team-meet'];
@@ -157,6 +170,7 @@ export function aggregateDynamicActionQaMetrics(input: DynamicActionMetricsInput
     }
   }
 
+  const continuation = aggregateContinuationMetrics(input.replayReport);
   return {
     modeQuality,
     falsePositiveMissByAction: Object.fromEntries([...actionBuckets.entries()].map(([actionType, bucket]) => [
@@ -175,7 +189,47 @@ export function aggregateDynamicActionQaMetrics(input: DynamicActionMetricsInput
     trustSources,
     assetCoverage: input.replayReport?.assetCoverage ?? emptyAssetCoverage(),
     environmentStatus: input.replayReport?.environmentStatus ?? 'not_applicable',
+    continuation,
+    continuationGateFailures: evaluateContinuationQualityGate(continuation),
     answerQualityMetrics: input.answerQualityMetrics,
+  };
+}
+
+export function evaluateContinuationQualityGate(metrics: ContinuationQaMetrics): string[] {
+  const failures: string[] = [];
+  if (metrics.plannerCallsWithoutPending !== 0) failures.push('planner_calls_without_pending');
+  if (metrics.maxPlannerCallsPerContinuation > 3) failures.push('planner_attempt_budget');
+  if (metrics.duplicateDerivedActions !== 0) failures.push('duplicate_derived_actions');
+  if (metrics.parentChildCorrelationRate !== 1) failures.push('parent_child_correlation');
+  if (metrics.unsafeVisibleAnswerCount !== 0) failures.push('unsafe_visible_answer');
+  if (metrics.derivedActionRecall < 0.8) failures.push('derived_action_recall');
+  if (metrics.derivedActionFalsePositiveRate >= 0.1) failures.push('derived_action_false_positive_rate');
+  if (metrics.finalTurnToDerivedCardP95Ms >= 2000) failures.push('final_turn_to_card_latency');
+  return failures;
+}
+
+function aggregateContinuationMetrics(replayReport?: ReplayReport | null): ContinuationQaMetrics {
+  const continuationResults = (replayReport?.entries ?? [])
+    .map((entry) => entry.continuation)
+    .filter(Boolean) as NonNullable<ReplayReport['entries'][number]['continuation']>[];
+  const positives = continuationResults.filter((result) => result.shouldEmit);
+  const negatives = continuationResults.filter((result) => !result.shouldEmit);
+  const emitted = continuationResults.filter((result) => result.derivedActionEmitted);
+  const emittedPositives = positives.filter((result) => result.derivedActionEmitted).length;
+  const emittedNegatives = negatives.filter((result) => result.derivedActionEmitted).length;
+  const correlated = emitted.filter((result) => Boolean(result.parentActionId && result.childActionId)).length;
+  const latencies = continuationResults
+    .map((result) => result.finalTurnToDerivedCardMs)
+    .filter((value): value is number => Number.isFinite(value) && value >= 0);
+  return {
+    plannerCallsWithoutPending: continuationResults.reduce((sum, result) => sum + result.plannerCallsWithoutPending, 0),
+    maxPlannerCallsPerContinuation: Math.max(0, ...continuationResults.map((result) => result.plannerCalls)),
+    duplicateDerivedActions: continuationResults.reduce((sum, result) => sum + result.duplicateDerivedActions, 0),
+    parentChildCorrelationRate: rate(correlated, emitted.length),
+    unsafeVisibleAnswerCount: continuationResults.reduce((sum, result) => sum + result.unsafeVisibleAnswerCount, 0),
+    derivedActionRecall: rate(emittedPositives, positives.length),
+    derivedActionFalsePositiveRate: rate(emittedNegatives, negatives.length),
+    finalTurnToDerivedCardP95Ms: timing(latencies).p95Ms ?? 0,
   };
 }
 

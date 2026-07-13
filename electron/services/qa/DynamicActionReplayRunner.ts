@@ -2,6 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import { DynamicActionEngine } from '../dynamic-actions/DynamicActionEngine';
 import type { DynamicActionProductFixture } from '../dynamic-actions/DynamicActionProductFixtures';
+import {
+  loadDynamicActionContinuationFixtures,
+  runDynamicActionContinuationFixture,
+  type ContinuationFixtureResult,
+  type DynamicActionContinuationFixture,
+} from './DynamicActionContinuationFixtureRunner';
 
 export interface ReplayManifestEntry {
   id: string;
@@ -12,6 +18,7 @@ export interface ReplayManifestEntry {
   language: string;
   speakerCount: number;
   syntheticAudio?: boolean;
+  continuationFixture?: string;
 }
 
 export interface ReplayRunnerInput {
@@ -19,6 +26,7 @@ export interface ReplayRunnerInput {
   outputDir: string;
   audioRoot?: string;
   fixtureRoot?: string;
+  continuationFixtureRoot?: string;
   modeTemplateTypes?: string[];
   environmentStatus?: ReplayEnvironmentStatus;
   transcribeAudio?: (input: {
@@ -55,6 +63,8 @@ export interface ReplayReportEntry {
   actionType?: string;
   expectedActionType?: string;
   transcriptLength?: number;
+  continuation?: ContinuationFixtureResult;
+  failureStage?: 'initial_action' | 'continuation' | 'runtime_evaluation' | 'post_call';
 }
 
 export function loadFixtureBackedSttTranscripts(input: {
@@ -82,7 +92,9 @@ export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<
     : allEntries;
   const audioRoot = input.audioRoot ?? process.cwd();
   const fixtureRoot = input.fixtureRoot ?? path.join(process.cwd(), 'tests/fixtures/dynamic-actions/product');
+  const continuationFixtureRoot = input.continuationFixtureRoot ?? path.join(process.cwd(), 'tests/fixtures/dynamic-actions/continuation');
   const fixtureCache = new Map<string, DynamicActionProductFixture[]>();
+  const continuationFixtureCache = new Map<string, DynamicActionContinuationFixture[]>();
   const engine = new DynamicActionEngine();
   const reportEntries: ReplayReportEntry[] = [];
 
@@ -127,18 +139,35 @@ export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<
       ? actions.find((action) => action.type === expectedActionType)
       : undefined;
     const emitted = actions.length > 0;
-    const passed = fixture.expected.shouldEmit
+    let passed = fixture.expected.shouldEmit
       ? !!matchedAction
       : !emitted;
+    let continuation: ContinuationFixtureResult | undefined;
+    let failureStage: ReplayReportEntry['failureStage'];
+    if (passed && entry.continuationFixture) {
+      const continuationFixture = loadContinuationFixture(entry.continuationFixture, continuationFixtureRoot, continuationFixtureCache);
+      if (!continuationFixture) {
+        passed = false;
+        failureStage = 'continuation';
+      } else {
+        continuation = await runDynamicActionContinuationFixture({ fixture: continuationFixture });
+        if (!continuation.passed) {
+          passed = false;
+          failureStage = continuation.failureStage ?? 'continuation';
+        }
+      }
+    }
 
     reportEntries.push({
       id: entry.id,
       status: passed ? 'passed' : 'failed',
-      reason: passed ? undefined : 'dynamic_action_expectation_mismatch',
+      reason: passed ? undefined : failureStage ? 'continuation_expectation_mismatch' : 'dynamic_action_expectation_mismatch',
       emitted,
       actionType: matchedAction?.type ?? actions[0]?.type,
       expectedActionType,
       transcriptLength: transcript.length,
+      ...(continuation ? { continuation } : {}),
+      ...(failureStage ? { failureStage } : {}),
     });
   }
 
@@ -154,6 +183,21 @@ export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<
   fs.mkdirSync(input.outputDir, { recursive: true });
   fs.writeFileSync(path.join(input.outputDir, 'replay-report.json'), JSON.stringify(report, null, 2));
   return report;
+}
+
+function loadContinuationFixture(
+  continuationFixture: string,
+  fixtureRoot: string,
+  cache: Map<string, DynamicActionContinuationFixture[]>,
+): DynamicActionContinuationFixture | undefined {
+  const [sourcePath, fixtureId] = continuationFixture.split('#');
+  if (!sourcePath || !fixtureId) return undefined;
+  const filePath = path.join(fixtureRoot, path.basename(sourcePath));
+  if (!cache.has(filePath)) {
+    if (!fs.existsSync(filePath)) return undefined;
+    cache.set(filePath, loadDynamicActionContinuationFixtures(filePath));
+  }
+  return cache.get(filePath)?.find((fixture) => fixture.id === fixtureId);
 }
 
 function buildAssetCoverage(entries: ReplayManifestEntry[], audioRoot: string): ReplayAssetCoverage {

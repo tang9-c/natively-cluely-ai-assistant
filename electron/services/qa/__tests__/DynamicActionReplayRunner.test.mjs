@@ -35,7 +35,7 @@ test('replay manifest has sales, FDE, team-meet, and recruiting generated audio 
   assert.equal(report.entries[0].reason, 'audio_replay_not_enabled_in_this_phase');
   assert.equal(report.environmentStatus, 'not_applicable');
   assert.deepEqual(report.assetCoverage.requiredReal, { sales: 15, fde: 10, 'team-meet': 5 });
-  assert.equal(report.assetCoverage.availableSynthetic.sales, 3);
+  assert.equal(report.assetCoverage.availableSynthetic.sales, 4);
   assert.equal(report.assetCoverage.availableSynthetic.fde, 2);
   assert.equal(report.assetCoverage.availableSynthetic['team-meet'], 1);
   assert.equal(report.assetCoverage.availableReal.sales, 0);
@@ -108,10 +108,10 @@ test('sales audio replay runs through STT output and dynamic action detection', 
     },
   });
 
-  assert.equal(report.totalEntries, 3);
+  assert.equal(report.totalEntries, 4);
   assert.equal(report.skippedEntries, 0);
   assert.equal(report.failedEntries, 0);
-  assert.equal(audioInputs.length, 3);
+  assert.equal(audioInputs.length, 4);
   assert.ok(audioInputs.every((input) => input.audioPath.endsWith('.wav')));
 
   const byId = new Map(report.entries.map((entry) => [entry.id, entry]));
@@ -119,6 +119,10 @@ test('sales audio replay runs through STT output and dynamic action detection', 
   assert.equal(byId.get('sales-replay-pricing-objection-zh-001')?.actionType, 'pricing_objection');
   assert.equal(byId.get('sales-replay-case-proof-mixed-001')?.status, 'passed');
   assert.equal(byId.get('sales-replay-case-proof-mixed-001')?.actionType, 'case_study_request');
+  assert.equal(byId.get('sales-replay-case-proof-mixed-001')?.continuation?.derivedActionEmitted, true);
+  assert.equal(byId.get('sales-replay-capability-fit-mixed-001')?.status, 'passed');
+  assert.equal(byId.get('sales-replay-capability-fit-mixed-001')?.actionType, 'case_study_request');
+  assert.equal(byId.get('sales-replay-capability-fit-mixed-001')?.continuation?.visibleAnswerKind, 'generated');
   assert.equal(byId.get('sales-replay-internal-price-identity-001')?.status, 'passed');
   assert.equal(byId.get('sales-replay-internal-price-identity-001')?.emitted, false);
   assert.ok(fs.existsSync(path.join(outputDir, 'replay-report.json')));

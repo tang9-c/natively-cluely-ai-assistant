@@ -116,6 +116,92 @@ test('carries replay asset coverage and environment status into the QA summary',
   assert.equal(summary.assetCoverage.blockedReal['team-meet'], 5);
 });
 
+test('aggregates continuation metrics and passes the quality gate', async () => {
+  const { aggregateDynamicActionQaMetrics, evaluateContinuationQualityGate } = await load();
+  const continuation = {
+    fixtureId: 'c1',
+    shouldEmit: true,
+    initialActionCompleted: true,
+    plannerCalls: 2,
+    plannerCallsWithoutPending: 0,
+    parentActionId: 'p1',
+    childActionId: 'c1',
+    derivedActionEmitted: true,
+    duplicateDerivedActions: 0,
+    unsafeVisibleAnswerCount: 0,
+    finalTurnToDerivedCardMs: 120,
+    visibleAnswerKind: 'generated',
+    postCallCarryover: true,
+    passed: true,
+  };
+  const summary = aggregateDynamicActionQaMetrics({
+    telemetryRecords: [],
+    fixtureResults: [],
+    replayReport: {
+      totalEntries: 2,
+      skippedEntries: 0,
+      failedEntries: 0,
+      passedEntries: 2,
+      environmentStatus: 'ok',
+      assetCoverage: {
+        requiredReal: { sales: 15, fde: 10, 'team-meet': 5 },
+        availableReal: { sales: 0, fde: 0, 'team-meet': 0 },
+        availableSynthetic: { sales: 4, fde: 2, 'team-meet': 1 },
+        blockedReal: { sales: 15, fde: 10, 'team-meet': 5 },
+      },
+      entries: [
+        { id: 'positive', status: 'passed', continuation },
+        {
+          id: 'negative',
+          status: 'passed',
+          continuation: {
+            ...continuation,
+            fixtureId: 'c2',
+            shouldEmit: false,
+            plannerCalls: 0,
+            parentActionId: undefined,
+            childActionId: undefined,
+            derivedActionEmitted: false,
+            finalTurnToDerivedCardMs: undefined,
+            visibleAnswerKind: 'none',
+            postCallCarryover: false,
+          },
+        },
+      ],
+    },
+    answerQualityMetrics: null,
+  });
+
+  assert.equal(summary.continuation.derivedActionRecall, 1);
+  assert.equal(summary.continuation.derivedActionFalsePositiveRate, 0);
+  assert.equal(summary.continuation.parentChildCorrelationRate, 1);
+  assert.deepEqual(summary.continuationGateFailures, []);
+  assert.deepEqual(evaluateContinuationQualityGate(summary.continuation), []);
+});
+
+test('continuation quality gate reports every boundary failure', async () => {
+  const { evaluateContinuationQualityGate } = await load();
+  assert.deepEqual(evaluateContinuationQualityGate({
+    plannerCallsWithoutPending: 1,
+    maxPlannerCallsPerContinuation: 4,
+    duplicateDerivedActions: 1,
+    parentChildCorrelationRate: 0,
+    unsafeVisibleAnswerCount: 1,
+    derivedActionRecall: 0.79,
+    derivedActionFalsePositiveRate: 0.1,
+    finalTurnToDerivedCardP95Ms: 2000,
+  }), [
+    'planner_calls_without_pending',
+    'planner_attempt_budget',
+    'duplicate_derived_actions',
+    'parent_child_correlation',
+    'unsafe_visible_answer',
+    'derived_action_recall',
+    'derived_action_false_positive_rate',
+    'final_turn_to_card_latency',
+  ]);
+});
+
 test('parses telemetry JSONL with warnings for invalid lines', async () => {
   const { parseTelemetryJsonlLines } = await load();
   const parsed = parseTelemetryJsonlLines('{"name":"app_start","timestamp":"2026-07-07T00:00:00.000Z","properties":{}}\nnot-json\n\n');
