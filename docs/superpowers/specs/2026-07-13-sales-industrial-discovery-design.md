@@ -77,7 +77,14 @@ The action card contract:
 - `outputPromise`: `生成 1-3 个可直接问客户的发现问题`
 - `riskState`: existing normal risk handling unless confidence qualifies for existing auto surface policy.
 
-The action should carry the underlying semantic intent through existing mode event, semantic gate, or answer-style fields. Do not add a new UI card per intent.
+The action must carry the underlying semantic intent through one canonical field:
+
+- `DynamicAction.sourceIntent` is the canonical carrier for the original sales discovery intent.
+- `DynamicAction.latestTurn` is the canonical source utterance used by accepted generation and output evaluation.
+- `DynamicAction.semanticGate.semanticIntent` may mirror the same value for diagnostics, but prompt construction and evaluator logic must not depend on it as the only source.
+- `DynamicAction.productContract.contextNeedDecision` carries the ready-only context policy.
+
+Do not store the discovery subtype in `answerStyle`, label text, or renderer-only state. Do not add a new UI card per intent.
 
 ## Intent Classification Strategy
 
@@ -208,7 +215,17 @@ Phase 2 should be designed separately. Its likely contract:
   - capabilities that cannot be claimed from current evidence.
 - Never invent cases, ROI, customer names, benchmark metrics, or unsupported product functions.
 
-Phase 1 should leave enough trace for Phase 2 to use later, such as the accepted `discovery_question` action, semantic intent, source utterance, and customer follow-up turn. Phase 1 does not need to implement this state machine or answer generation.
+Phase 1 should leave only the trace it already owns on the accepted action:
+
+- `DynamicAction.id`
+- `DynamicAction.type = discovery_question`
+- `DynamicAction.sourceIntent`
+- `DynamicAction.latestTurn`
+- `DynamicAction.keyEntities` when available
+- `DynamicAction.semanticGate` for diagnostics
+- `DynamicAction.productContract.contextNeedDecision`
+
+Phase 1 does not associate later customer follow-up turns with the accepted action. That association, the sufficiency check, and the grounded capability-answer trigger belong to the separate Phase 2 design.
 
 ## Test Matrix
 
@@ -253,6 +270,13 @@ Add 8-12 conflict regression fixtures covering:
 - Contract/legal/pilot/next step should still trigger `sales_buying_signal`.
 - Internal material names, pricing docs, meeting titles, or uploaded file titles should not trigger customer-need discovery by themselves.
 
+Add non-sales mode isolation fixtures:
+
+- Reuse at least one industrial discovery utterance per non-sales mode: general, FDE, team-meet, recruiting, lecture, technical-interview, and looking-for-work.
+- In every non-sales mode fixture, `discovery_question` must not be generated.
+- Existing mode-owned intent/action behavior must remain unchanged for those fixtures.
+- If a mode has a closer existing behavior, such as FDE discovery or integration checks, that existing behavior should win instead of sales discovery.
+
 ## Test Files
 
 Add or update:
@@ -261,6 +285,7 @@ Add or update:
 - `electron/services/__tests__/SalesIndustrialDiscoveryActions.test.mjs`
 - `electron/services/__tests__/SalesIndustrialDiscoveryOutput.test.mjs`
 - Existing sales intent tests.
+- Existing non-sales mode intent/action isolation tests.
 - Existing dynamic action product contract tests.
 - Existing mode event classifier tests.
 - Existing accepted-output evaluator tests.
@@ -275,7 +300,9 @@ Do not isolate all coverage in new test files if existing regression suites alre
 - `discovery_question` context need uses ready-only material/business context and does not require screen.
 - Accepted output contains only 1-3 questions.
 - Accepted output does not include capability claims or invented cases/ROI.
-- Phase 1 records enough action/intent context for a later Phase 2 design, but does not answer product capability questions itself.
+- `DynamicAction.sourceIntent` is the canonical semantic intent carrier for accepted generation and evaluator behavior.
+- Phase 1 records only its owned action trace fields for a later Phase 2 design, and does not associate customer follow-up turns or answer product capability questions itself.
+- Non-sales modes do not generate `discovery_question` for industrial software utterances.
 - Pricing, quote, generic proof, technical requirements, and buying signal regressions still pass.
 - No database schema, provider routing, STT, summary, RAG algorithm, or renderer layout changes are required.
 
