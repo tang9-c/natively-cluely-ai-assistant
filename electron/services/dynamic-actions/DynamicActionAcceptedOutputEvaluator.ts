@@ -1,5 +1,6 @@
 import type { DynamicActionOutputType } from './DynamicAction';
 import type { ActionArtifact } from './DynamicActionArtifacts';
+import type { ClaimGroundingVerdict } from './DynamicActionClaimGroundingVerifier';
 
 export interface AcceptedOutputEvaluationInput {
   actionType: string;
@@ -9,6 +10,7 @@ export interface AcceptedOutputEvaluationInput {
   missingFields?: string[];
   sourceUtterance?: string;
   sourceIntent?: string;
+  claimGrounding?: ClaimGroundingVerdict;
 }
 
 export interface AcceptedOutputEvaluationResult {
@@ -61,6 +63,22 @@ export function evaluateDynamicActionAcceptedOutput(
       groundingFailures.push('case_study_requires_material_or_no_match');
     }
     forbidPattern('invented_customer_or_roi', /Fortune\s*500|世界500强|ROI\s*(都|guarantee|至少|很高|\d)|客户都/i);
+  }
+
+  if (input.actionType === 'capability_fit_answer') {
+    const usedGrounding = hasUsedGrounding(['material', 'pptx', 'business_context']);
+    const statesInsufficiency = /资料不足|不能确认|不能承诺|not enough|cannot confirm|cannot promise/i.test(answer);
+    const proposesValidation = /PoC|样本|能力矩阵|补充.*资料|验证|pilot|capability matrix|validation/i.test(answer);
+    const hasPositiveClaim = containsPositiveCapabilityClaim(answer);
+    if (hasPositiveClaim && (!usedGrounding || input.claimGrounding?.verdict !== 'supported')) {
+      groundingFailures.push('capability_claim_not_supported_by_injected_evidence');
+    }
+    if (!usedGrounding && (!statesInsufficiency || !proposesValidation)) {
+      groundingFailures.push('capability_fit_requires_insufficiency_and_validation');
+    }
+    forbidPattern('invented_customer_roi_price_or_terms', /标杆客户|世界500强|Fortune\s*500|ROI|\d+\s*%|[$¥]\s*\d|合同条款/i);
+    forbidPattern('automatic_writeback_claim', /(?:会|可|可以|支持).{0,8}自动(?:写回|更新)|(?:will|can|supports?).{0,12}auto(?:matic)?\s+(?:write|update)/i);
+    enforceCapabilityFitLength(answer, requiredPatternFailures);
   }
 
   if (input.actionType === 'discovery_question') {
@@ -120,6 +138,24 @@ export function evaluateDynamicActionAcceptedOutput(
     groundingFailures,
     missingFieldFailures,
   };
+}
+
+export function containsPositiveCapabilityClaim(answer: string): boolean {
+  return /可以确认|确认支持|支持|能够|具备|can confirm|supports?|is supported|we can/i.test(answer);
+}
+
+export function buildCapabilityFitSafeFallback(language?: string): string {
+  return language === 'en'
+    ? 'The current materials are not enough to confirm this capability. Please verify it against the capability matrix or run a PoC with one real object and acceptance metric; no automatic PLM or QMS writeback is assumed.'
+    : '当前资料不足，不能确认这项能力。建议补充产品能力材料，或用一个真实对象和验收指标做 PoC；这里不承诺自动写回 PLM 或 QMS。';
+}
+
+function enforceCapabilityFitLength(answer: string, failures: string[]): void {
+  const cjkChars = answer.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu)?.length ?? 0;
+  const words = answer.trim().split(/\s+/).filter(Boolean).length;
+  if ((cjkChars > 0 && cjkChars > 180) || (cjkChars === 0 && words > 120)) {
+    failures.push('capability_fit_answer_too_long');
+  }
 }
 
 function countQuestionLikeSentences(answer: string): number {

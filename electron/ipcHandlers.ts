@@ -38,6 +38,7 @@ import { getContextQualityDiagnosticsCollector } from './services/eval/ContextQu
 import { QaReportService } from './services/qa/QaReportService';
 import { telemetryService } from './services/telemetry/TelemetryService';
 import type { DynamicActionOutputType } from './services/dynamic-actions/DynamicAction';
+import { buildDynamicActionRuntimeGrounding } from './services/dynamic-actions/DynamicActionRuntimeGrounding';
 import {
   lifecycleEventToTelemetryName,
   type DynamicActionAcceptTriggerSourceForLifecycle,
@@ -3248,6 +3249,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const startedAt = Date.now();
         const answerId = `ans_${startedAt}_${crypto.randomBytes(6).toString('hex')}`;
         let whatToAnswerTrace: any | null = null;
+        let runtimeEvaluationTrace: any | null = null;
         const sanitizedModeEvent = sanitizeModeEvent(requestOptions.modeEvent);
         const contextPreparation = await prepareWhatToSayContext({
           question,
@@ -3276,6 +3278,16 @@ export function initializeIpcHandlers(appState: AppState): void {
           embeddingReady,
           realtimeContextPlan,
         } = contextPreparation;
+        const isCapabilityFitAnswer = sanitizedModeEvent?.actionType === 'capability_fit_answer';
+        const grounding = buildDynamicActionRuntimeGrounding({
+          actionType: sanitizedModeEvent?.actionType,
+          realtimeContextPlan,
+          citations,
+          materialRagAttempted,
+          uploadedMaterialHitCount,
+          degradedReasons,
+          businessSystemResult,
+        });
 
         if (contextPreparation.invalidRequest) {
           console.warn('[IPC] generate-what-to-say: invalid image path payload rejected');
@@ -3288,7 +3300,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           };
         }
 
-        if (businessSystemResult.kind === 'fixed_reply') {
+        if (businessSystemResult.kind === 'fixed_reply' && !isCapabilityFitAnswer) {
           const businessSystemDegradedReason = businessSystemDegradedReasonForStatus(businessSystemResult.status);
           const contextTrace = DatabaseManager.getInstance().saveAnswerContextTrace(
             buildBusinessSystemFixedReplyTraceInput({
@@ -3338,6 +3350,18 @@ export function initializeIpcHandlers(appState: AppState): void {
               whatToAnswerTrace = trace;
             },
             providerScopePolicy: providerScopes,
+            dynamicActionValidation: isCapabilityFitAnswer ? {
+              actionType: 'capability_fit_answer',
+              sourceIntent: sanitizedModeEvent?.sourceIntent,
+              parentActionId: sanitizedModeEvent?.parentActionId,
+              grounding,
+              providerDataScopes: providerScopes,
+              deferUserVisibleEmission: true,
+              language: sanitizedModeEvent?.language,
+            } : undefined,
+            dynamicActionEvaluationSink: (trace) => {
+              runtimeEvaluationTrace = trace;
+            },
           },
         );
         if (screenContextStatus === 'failed') degradedReasons.push('screen_context_failed');
@@ -3419,6 +3443,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             omittedSources: realtimeContextPlan.omitted.map((item) => ({ source: item.source, reason: item.reason })),
             businessSystemStatus: mergedSourceStatus.businessSystemStatus,
             businessSystemSourceName: mergedSourceStatus.businessSystemSourceName,
+            dynamicActionRuntimeEvaluation: runtimeEvaluationTrace,
             promptFingerprint: whatToAnswerTrace?.promptFingerprint ?? null,
           },
         });

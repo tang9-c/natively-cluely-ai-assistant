@@ -108,3 +108,63 @@ test('buying signal requires owner date and artifact or direct missing-field que
   assert.equal(complete.passed, true);
   assert.equal(question.passed, true);
 });
+
+test('capability fit answer requires injected evidence and supported claim verdict', async () => {
+  const { evaluateDynamicActionAcceptedOutput, buildCapabilityFitSafeFallback } = await load();
+  const supported = evaluateDynamicActionAcceptedOutput({
+    actionType: 'capability_fit_answer',
+    outputType: 'spoken_response',
+    answerText: '根据能力矩阵，可以确认支持压降分析；温升建议用样本做 PoC 验证。',
+    groundedSources: [{ evidenceId: 'ev-1', type: 'material', label: 'capability.pdf', status: 'used' }],
+    claimGrounding: {
+      verdict: 'supported',
+      evidenceIds: ['ev-1'],
+      reasonCode: 'claims_supported',
+      verificationSource: 'continuation_grounding_verifier',
+    },
+  });
+  assert.equal(supported.passed, true);
+
+  const unsupported = evaluateDynamicActionAcceptedOutput({
+    actionType: 'capability_fit_answer',
+    outputType: 'spoken_response',
+    answerText: '根据材料，可以确认支持温升分析。',
+    groundedSources: [{ evidenceId: 'ev-1', type: 'material', label: 'capability.pdf', status: 'used' }],
+    claimGrounding: {
+      verdict: 'unsupported',
+      evidenceIds: [],
+      reasonCode: 'claim_not_supported',
+      verificationSource: 'continuation_grounding_verifier',
+    },
+  });
+  assert.ok(unsupported.groundingFailures.includes('capability_claim_not_supported_by_injected_evidence'));
+
+  const safeFallback = evaluateDynamicActionAcceptedOutput({
+    actionType: 'capability_fit_answer',
+    outputType: 'spoken_response',
+    answerText: buildCapabilityFitSafeFallback('zh'),
+    groundedSources: [],
+    claimGrounding: {
+      verdict: 'not_required',
+      evidenceIds: [],
+      reasonCode: 'no_positive_capability_claim',
+      verificationSource: 'continuation_grounding_verifier',
+    },
+  });
+  assert.equal(safeFallback.passed, true);
+
+  const overClaim = evaluateDynamicActionAcceptedOutput({
+    actionType: 'capability_fit_answer',
+    outputType: 'spoken_response',
+    answerText: '我们支持自动写回 PLM，并且 ROI 至少 30%。',
+    groundedSources: [{ evidenceId: 'ev-1', type: 'material', label: 'capability.pdf', status: 'used' }],
+    claimGrounding: {
+      verdict: 'supported',
+      evidenceIds: ['ev-1'],
+      reasonCode: 'claims_supported',
+      verificationSource: 'continuation_grounding_verifier',
+    },
+  });
+  assert.ok(overClaim.forbiddenPatternFailures.includes('invented_customer_roi_price_or_terms'));
+  assert.ok(overClaim.forbiddenPatternFailures.includes('automatic_writeback_claim'));
+});

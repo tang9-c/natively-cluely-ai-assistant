@@ -27,6 +27,15 @@ import type { DynamicActionOutputType } from './services/dynamic-actions/Dynamic
 import { DynamicActionContinuationService } from './services/dynamic-actions/DynamicActionContinuationService';
 import { DynamicActionContinuationPlanner } from './services/dynamic-actions/DynamicActionContinuationPlanner';
 import {
+    buildCapabilityFitSafeFallback,
+    evaluateDynamicActionAcceptedOutput,
+} from './services/dynamic-actions/DynamicActionAcceptedOutputEvaluator';
+import {
+    DynamicActionClaimGroundingVerifier,
+    type ClaimGroundingVerdict,
+} from './services/dynamic-actions/DynamicActionClaimGroundingVerifier';
+import type { DynamicActionRuntimeGrounding } from './services/dynamic-actions/DynamicActionRuntimeGrounding';
+import {
     CloudSemanticGateError,
     cloudFailureReasonFromError,
     type CloudSemanticGateInput,
@@ -131,6 +140,25 @@ interface SpeculativeAnswerState {
     visible: boolean;
 }
 
+export interface DynamicActionRuntimeValidation {
+    actionType: string;
+    sourceIntent?: string;
+    parentActionId?: string;
+    grounding: DynamicActionRuntimeGrounding;
+    providerDataScopes?: ProviderDataScopePolicy;
+    deferUserVisibleEmission: boolean;
+    language?: string;
+}
+
+export interface DynamicActionRuntimeEvaluationTrace {
+    actionType: string;
+    parentActionId?: string;
+    result: 'passed' | 'safe_fallback';
+    failureCodes: string[];
+    claimGroundingVerdict: ClaimGroundingVerdict['verdict'];
+    claimGroundingReasonCode: ClaimGroundingVerdict['reasonCode'];
+}
+
 const WHAT_TO_ANSWER_FALLBACK = "Could you repeat that? I want to make sure I address your question properly.";
 const WHAT_TO_ANSWER_LABEL_EN = 'What to Answer';
 const WHAT_TO_ANSWER_LABEL_ZH = '待回答内容';
@@ -181,6 +209,7 @@ export class IntelligenceEngine extends EventEmitter {
     // active meeting, so detectAndEmitDynamicActions becomes a no-op safely.
     private dynamicActionEngine: DynamicActionEngine | null = null;
     private dynamicActionContinuationService: DynamicActionContinuationService;
+    private dynamicActionClaimGroundingVerifier: DynamicActionClaimGroundingVerifier;
     private currentSessionId: string | null = null;
     private currentDynamicActionModeId: string | null = null;
     private currentDynamicActionTemplateType: string | null = null;
@@ -465,6 +494,8 @@ export class IntelligenceEngine extends EventEmitter {
             traceSink: (event) =>
                 getContextQualityDiagnosticsCollector().recordDynamicActionContinuationTrace(event),
         });
+        this.dynamicActionClaimGroundingVerifier = new DynamicActionClaimGroundingVerifier((prompt, options) =>
+            this.llmHelper.generateContentStructured(prompt, options));
         this.initializeLLMs();
 
         // Dedicated channel: LLMHelper invokes this when KnowledgeOrchestrator
@@ -825,6 +856,10 @@ export class IntelligenceEngine extends EventEmitter {
         this.dynamicActionContinuationService = service as DynamicActionContinuationService;
     }
 
+    _setDynamicActionClaimGroundingVerifierForTest(service: Pick<DynamicActionClaimGroundingVerifier, 'verify'>): void {
+        this.dynamicActionClaimGroundingVerifier = service as DynamicActionClaimGroundingVerifier;
+    }
+
     _setIntentClassificationOptionsForTest(options: IntentClassificationOptions | null): void {
         this.intentClassificationOptionsForTest = options;
     }
@@ -1116,7 +1151,7 @@ export class IntelligenceEngine extends EventEmitter {
      * Manual trigger - uses clean transcript pipeline for question inference
      * NEVER returns null - always provides a usable response
      */
-    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; uploadedMaterialContext?: string; persist?: boolean; source?: string; requestId?: string; activeSkill?: { id: string; name: string; promptBlock: string }; modeEvent?: ModeEventContext; contextDegradedReasons?: string[]; traceSink?: WhatToAnswerTraceSink; providerScopePolicy?: import('./llm/ProviderRouter').ProviderDataScopePolicy }): Promise<string | null> {
+    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; uploadedMaterialContext?: string; persist?: boolean; source?: string; requestId?: string; activeSkill?: { id: string; name: string; promptBlock: string }; modeEvent?: ModeEventContext; contextDegradedReasons?: string[]; traceSink?: WhatToAnswerTraceSink; providerScopePolicy?: import('./llm/ProviderRouter').ProviderDataScopePolicy; dynamicActionValidation?: DynamicActionRuntimeValidation; dynamicActionEvaluationSink?: (trace: DynamicActionRuntimeEvaluationTrace) => void }): Promise<string | null> {
         const now = Date.now();
         const isSpeculative = options?.speculative === true;
         const skipCooldown = options?.skipCooldown === true;
@@ -1328,6 +1363,7 @@ export class IntelligenceEngine extends EventEmitter {
             );
             let streamAborted = false;
             let emittedStreamingContent = false;
+            const deferUserVisibleEmission = options?.dynamicActionValidation?.deferUserVisibleEmission === true;
 
             for await (const token of stream) {
                 if (this.currentGenerationId !== generationId) {
@@ -1346,6 +1382,8 @@ export class IntelligenceEngine extends EventEmitter {
                             this.emit('suggested_answer_token', token, question || 'inferred', confidence, requestId);
                         }
                     }
+                } else if (deferUserVisibleEmission) {
+                    // Capability-fit answers are shown only after grounding verification.
                 } else if (!emittedStreamingContent) {
                     if (!IntelligenceEngine.isPotentialNonAnswerSentinelPrefix(fullAnswer)) {
                         this.emit('suggested_answer_token', fullAnswer, question || 'inferred', confidence, requestId);
@@ -1379,7 +1417,6 @@ export class IntelligenceEngine extends EventEmitter {
 
             fullAnswer = IntelligenceEngine.normalizeSuggestedAnswer(fullAnswer);
 
-
             if (IntelligenceEngine.isNonAnswerSentinel(fullAnswer)) {
                 if (isDynamicActionUsage) {
                     throw new Error('dynamic_action_generation_failed');
@@ -1392,6 +1429,42 @@ export class IntelligenceEngine extends EventEmitter {
                 return null;
             }
 
+            let visibleAnswer = fullAnswer;
+            let evaluationResult: 'passed' | 'safe_fallback' | undefined;
+            let claimGrounding: ClaimGroundingVerdict | undefined;
+            if (options?.dynamicActionValidation) {
+                claimGrounding = await this.dynamicActionClaimGroundingVerifier.verify({
+                    answerText: fullAnswer,
+                    evidence: options.dynamicActionValidation.grounding.injectedEvidence,
+                    providerDataScopes: options.dynamicActionValidation.providerDataScopes,
+                });
+                const evaluation = evaluateDynamicActionAcceptedOutput({
+                    actionType: options.dynamicActionValidation.actionType,
+                    outputType: dynamicActionModeEvent?.productContract?.outputType ?? 'spoken_response',
+                    answerText: fullAnswer,
+                    groundedSources: options.dynamicActionValidation.grounding.groundedSources,
+                    claimGrounding,
+                    sourceIntent: options.dynamicActionValidation.sourceIntent,
+                });
+                evaluationResult = evaluation.passed ? 'passed' : 'safe_fallback';
+                if (!evaluation.passed) {
+                    visibleAnswer = buildCapabilityFitSafeFallback(options.dynamicActionValidation.language);
+                }
+                options.dynamicActionEvaluationSink?.({
+                    actionType: options.dynamicActionValidation.actionType,
+                    parentActionId: options.dynamicActionValidation.parentActionId,
+                    result: evaluationResult,
+                    failureCodes: [
+                        ...evaluation.requiredPatternFailures,
+                        ...evaluation.forbiddenPatternFailures,
+                        ...evaluation.groundingFailures,
+                        ...evaluation.missingFieldFailures,
+                    ],
+                    claimGroundingVerdict: claimGrounding.verdict,
+                    claimGroundingReasonCode: claimGrounding.reasonCode,
+                });
+            }
+
             if (isSpeculative) {
                 this.lastTriggerTime = Date.now();
                 this.speculativeTextExpiry = this.lastTriggerTime + this.triggerCooldown + 500;
@@ -1400,13 +1473,13 @@ export class IntelligenceEngine extends EventEmitter {
                     : null;
                 if (speculative) {
                     speculative.status = 'completed';
-                    speculative.accumulatedAnswer = fullAnswer;
+                    speculative.accumulatedAnswer = visibleAnswer;
                     speculative.completedAt = this.lastTriggerTime;
                     speculative.expiresAt = this.speculativeTextExpiry;
                 }
                 if (!speculative?.visible) {
                     this.setMode('idle');
-                    return fullAnswer;
+                    return visibleAnswer;
                 }
             }
 
@@ -1415,7 +1488,7 @@ export class IntelligenceEngine extends EventEmitter {
                 type: 'assist',
                 timestamp: Date.now(),
                 question: usageQuestion,
-                answer: fullAnswer,
+                answer: visibleAnswer,
                 ...(isDynamicActionUsage ? {
                     metadata: {
                         source: 'dynamic_action',
@@ -1427,26 +1500,31 @@ export class IntelligenceEngine extends EventEmitter {
                         retrievalQuery: dynamicActionModeEvent?.retrievalQuery,
                         outputType: dynamicActionModeEvent?.productContract?.outputType,
                         generationStatus: 'completed',
-                        groundedSources: [],
+                        groundedSources: options?.dynamicActionValidation?.grounding.groundedSources ?? [],
+                        ...(evaluationResult ? { evaluationResult } : {}),
+                        ...(claimGrounding ? {
+                            claimGroundingVerdict: claimGrounding.verdict,
+                            claimGroundingReasonCode: claimGrounding.reasonCode,
+                        } : {}),
                     },
                 } : {}),
             };
 
             if (!isSpeculative && !emittedStreamingContent) {
-                this.emit('suggested_answer_token', fullAnswer, usageQuestion, confidence, requestId);
+                this.emit('suggested_answer_token', visibleAnswer, usageQuestion, confidence, requestId);
             }
 
             if (shouldPersist) {
-                this.session.addAssistantMessage(fullAnswer);
+                this.session.addAssistantMessage(visibleAnswer);
                 this.session.pushUsage(usageEntry);
             }
 
-            this.emit('suggested_answer', fullAnswer, usageQuestion, confidence, requestId);
+            this.emit('suggested_answer', visibleAnswer, usageQuestion, confidence, requestId);
 
             if (isSpeculative) this.clearSpeculativeAnswerState();
 
             this.setMode('idle');
-            return fullAnswer;
+            return visibleAnswer;
 
         } catch (error) {
             if (isSpeculative) this.clearSpeculativeAnswerState();

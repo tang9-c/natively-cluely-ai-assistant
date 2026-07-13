@@ -8,6 +8,7 @@ export interface ActionArtifact {
   structuredSummary: string;
   missingFields: string[];
   groundedSources: Array<{
+    evidenceId?: string;
     type: 'material' | 'pptx' | 'screen' | 'business_context' | 'transcript';
     label: string;
     status: 'used' | 'not_found' | 'scope_denied' | 'failed';
