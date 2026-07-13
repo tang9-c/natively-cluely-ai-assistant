@@ -42,6 +42,10 @@ export const MATERIAL_ACTION_TYPES = new Set([
     'case_study_request',
 ]);
 
+export const READY_ONLY_CONTEXT_ACTION_TYPES = new Set([
+    'discovery_question',
+]);
+
 export const KNOWN_CONTEXT_DECISION_ACTION_TYPES = new Set(
     Object.values(MODE_TRIGGERS)
         .flat()
@@ -113,13 +117,25 @@ export function buildDynamicActionContextNeedDecision(input: {
     const evidenceHasScreen = (input.evidenceRefs || []).some((ref) => ref.source === 'screen');
     const materialRequired = MATERIAL_ACTION_TYPES.has(type) || MATERIAL_SIGNAL_PATTERN.test(text);
     const businessRequired = BUSINESS_SIGNAL_PATTERN.test(text);
-    const knownAction = KNOWN_CONTEXT_DECISION_ACTION_TYPES.has(type) || MATERIAL_ACTION_TYPES.has(type);
+    const readyOnlyContext = READY_ONLY_CONTEXT_ACTION_TYPES.has(type);
+    const knownAction = KNOWN_CONTEXT_DECISION_ACTION_TYPES.has(type) || MATERIAL_ACTION_TYPES.has(type) || readyOnlyContext;
 
     if (!knownAction && !materialRequired && !businessRequired && !evidenceHasScreen) {
         return {
             ...UNKNOWN_CONTEXT_NEED_DECISION,
             confidence: clampConfidence(input.confidence),
             reason: `Unknown action type: ${type || 'missing'}.`,
+        };
+    }
+
+    if (readyOnlyContext) {
+        return {
+            material: 'use_if_ready',
+            business: 'use_if_ready',
+            screen: 'not_needed',
+            confidence: clampConfidence(input.confidence || 0.8),
+            reason: 'Discovery questions should use ready context only and must not wait for external retrieval.',
+            decidedBy: 'dynamic_action_contract',
         };
     }
 

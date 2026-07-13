@@ -135,6 +135,7 @@ test('sales dynamic actions have product-specific card contracts', async () => {
     ['pricing_objection', 'Handle pricing objection', 'spoken_response', '回应价格异议', /价格|预算/],
     ['pricing_request', 'Draft quote email', 'email_draft', '生成报价邮件', /报价|邮件/],
     ['case_study_request', 'Share relevant case study', 'spoken_response', '引用案例证明', /案例|证明/],
+    ['discovery_question', 'Ask discovery question', 'spoken_response', '提出发现问题', /发现问题|工业软件|功能适配|流程打通/],
     ['technical_requirements', 'Clarify technical requirements', 'checklist', '澄清技术需求', /技术|集成|安全/],
     ['buying_signal', 'Seize buying signal', 'action_item', '锁定推进下一步', /owner|负责人|日期|产物|artifact/],
   ];
@@ -167,6 +168,17 @@ test('dynamic action contracts carry context need decisions for material, busine
   assert.equal(objection.contextNeedDecision.material, 'not_needed');
   assert.equal(objection.contextNeedDecision.business, 'not_needed');
   assert.equal(objection.contextNeedDecision.screen, 'not_needed');
+
+  const discovery = buildDynamicActionProductContract(baseInput({
+    type: 'discovery_question',
+    label: 'Ask discovery question',
+    evidenceRefs: [{ source: 'transcript', text: 'Windchill ECO 和 QMS CAPA 能不能形成闭环？' }],
+  }));
+  assert.equal(discovery.outputPromise, '生成 1-3 个可直接问客户的发现问题');
+  assert.equal(discovery.contextNeedDecision.material, 'use_if_ready');
+  assert.equal(discovery.contextNeedDecision.business, 'use_if_ready');
+  assert.equal(discovery.contextNeedDecision.screen, 'not_needed');
+  assert.match(discovery.contextNeedDecision.reason, /ready context only|不等待|must not wait/i);
 
   const windchill = buildDynamicActionProductContract(baseInput({
     type: 'fde_integration_check',

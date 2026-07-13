@@ -67,7 +67,7 @@ export function buildDynamicActionProductContract(input: ContractInput): Dynamic
             whyNow: explainDynamicActionForUser(input).whyNow,
             evidenceSummary: summarizeEvidence(input.evidenceRefs),
             outputType,
-            outputPromise: outputPromiseFor(outputType),
+            outputPromise: outputPromiseFor(input.type, outputType),
             riskState: resolveRiskState(input),
             contextNeedDecision: buildDynamicActionContextNeedDecision(input),
         };
@@ -169,7 +169,8 @@ function buildUserAction(input: ContractInput, outputType: DynamicActionOutputTy
     return '生成下一步回应';
 }
 
-function outputPromiseFor(outputType: DynamicActionOutputType): string {
+function outputPromiseFor(actionType: string, outputType: DynamicActionOutputType): string {
+    if (actionType === 'discovery_question') return '生成 1-3 个可直接问客户的发现问题';
     switch (outputType) {
         case 'checklist':
             return '生成一份可核对的检查清单';
