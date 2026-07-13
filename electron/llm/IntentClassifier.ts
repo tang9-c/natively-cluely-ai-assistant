@@ -41,6 +41,11 @@ export type ConversationIntent =
     | 'sales_proof_request' // Case study, proof, similar customer, or ROI request
     | 'sales_technical_requirements' // API, SSO, security, deployment, or integration requirements
     | 'sales_buying_signal' // Legal, contract, pilot, next step, or purchase signal
+    | 'sales_pain_discovery' // Customer describes current pain, broken workflow, or operational friction
+    | 'sales_capability_fit' // Customer asks whether capability fits an industrial software scenario
+    | 'sales_process_integration' // Customer discusses PLM/QMS/ERP/MES/ALM/CAD process integration
+    | 'sales_value_discovery' // Customer describes value, efficiency, quality, or metric impact
+    | 'sales_contextual_proof_discovery' // Customer asks for proof anchored to industrial context
 
     // ===== Recruiting mode (extras) =====
     | 'evaluate_answer'    // Candidate just answered; evaluate + probe
@@ -80,7 +85,7 @@ export interface CloudIntentClassifierInput {
     recentTranscript: string;
     modeTemplateType?: string | null;
     candidateIntents: ConversationIntent[];
-    language: 'zh';
+    language: 'zh' | 'en';
     keyEntities: string[];
 }
 
@@ -143,6 +148,11 @@ const GENERAL_ANSWER_SHAPES: Record<ConversationIntent, string> = {
     sales_proof_request: '',
     sales_technical_requirements: '',
     sales_buying_signal: '',
+    sales_pain_discovery: '',
+    sales_capability_fit: '',
+    sales_process_integration: '',
+    sales_value_discovery: '',
+    sales_contextual_proof_discovery: '',
     evaluate_answer: '',
     request_example: '',
     capture_action: '',
@@ -167,6 +177,11 @@ const SALES_ANSWER_SHAPES: Partial<Record<ConversationIntent, string>> = {
     sales_proof_request: 'Use uploaded/reference materials for proof points or state that no grounded proof was provided. Never invent customer cases or ROI.',
     sales_technical_requirements: 'Generate a clarification checklist for API, SSO, security, deployment environment, owners, and validation step.',
     sales_buying_signal: 'Lock next step, owner, date, and artifact. Ask directly for missing fields.',
+    sales_pain_discovery: 'Ask 1-3 customer-facing discovery questions that clarify the current pain, impact, owner, and workflow. Do not answer as a product expert.',
+    sales_capability_fit: 'Ask 1-3 customer-facing discovery questions that clarify required capability, usage scenario, constraints, and success criteria. Do not claim support.',
+    sales_process_integration: 'Ask 1-3 customer-facing discovery questions that clarify systems, data direction, ownership, and process boundary. Do not propose writeback.',
+    sales_value_discovery: 'Ask 1-3 customer-facing discovery questions that clarify business metric, baseline, value driver, and decision criteria.',
+    sales_contextual_proof_discovery: 'Ask 1-3 customer-facing discovery questions that clarify what proof, industry, workflow, or outcome would be relevant. Do not invent cases or ROI.',
     handle_objection: 'Acknowledge first ("That makes sense" / "I hear you"). Reframe with specifics. End with a forward-moving question. 2-3 sentences. No labels.',
     seize_signal: 'Propose a concrete next step with a specific time. Trade value for commitment. 1-2 sentences. Confident, no hedge.',
     discovery_probe: 'Ask 1-2 deep diagnostic questions, not surface. Example: "What challenge were you hoping to solve when you reached out?"',
@@ -268,6 +283,11 @@ const ZERO_SHOT_LABELS_EN_BY_MODE: Record<string, Record<string, ConversationInt
         'customer asking for case study, proof, similar customer, or ROI': 'sales_proof_request',
         'customer asking about API, SSO, security, deployment, or technical requirements': 'sales_technical_requirements',
         'customer showing buying intent, legal review, contract, pilot, or next step': 'sales_buying_signal',
+        'customer describing industrial software pain or broken workflow': 'sales_pain_discovery',
+        'customer asking whether an industrial software capability fits their scenario': 'sales_capability_fit',
+        'customer discussing PLM, QMS, ERP, MES, ALM, CAD, or AI Agent process integration': 'sales_process_integration',
+        'customer discussing efficiency, quality, cycle time, cost, audit, or value impact': 'sales_value_discovery',
+        'customer asking for industrial proof, customer example, ROI, or case context': 'sales_contextual_proof_discovery',
         'no actionable content, just filler or acknowledgement': 'silence',
         'asking what a term or acronym means': 'define_term',
         'requesting a summary or next step': 'advance_dialog',
@@ -338,6 +358,11 @@ const ZERO_SHOT_LABELS_ZH_BY_MODE: Record<string, Record<string, ConversationInt
         '客户索要案例、类似客户、ROI 或证明材料': 'sales_proof_request',
         '客户询问 API、SSO、安全、部署或技术需求': 'sales_technical_requirements',
         '客户表达购买推进、法务、合同、试点或下一步信号': 'sales_buying_signal',
+        '客户描述工业软件痛点、现状问题或流程断点': 'sales_pain_discovery',
+        '客户询问工业软件功能是否适合当前场景': 'sales_capability_fit',
+        '客户讨论 PLM、QMS、ERP、MES、ALM、CAD 或 AI Agent 的流程打通': 'sales_process_integration',
+        '客户讨论效率、质量、周期、成本、审计或价值指标': 'sales_value_discovery',
+        '客户索要带工业场景的案例、证明、ROI 或类似客户': 'sales_contextual_proof_discovery',
         '无可行动内容,只是寒暄或确认': 'silence',
         '询问某个术语或缩写的含义': 'define_term',
         '请求总结或下一步': 'advance_dialog',
@@ -601,8 +626,8 @@ function detectInterviewIntentByPattern(text: string): IntentResult | null {
     }
 
     // Coding patterns (Broad detection for programming/implementation) (English + Chinese)
-    if (/(write code|program|implement|function for|algorithm|how to code|setup a .* project|using .* library|debug this|snippet|boilerplate|example of .* in .*|optimize|refactor|best practice for .* code|utility method|component for|logic for)/i.test(text)
-        || /(写代码|写一下代码|实现一下|解这道题|解一下|代码怎么写|这个算法|怎么实现|实现这个|怎么写|如何实现|用.*实现|.*的代码|调试|优化|重构|怎么优化|怎么调试)/.test(text)) {
+    if (/(write code|program|implement|function for|algorithm|data structure|how to code|setup a .* project|using .* library|debug this|snippet|boilerplate|example of .* in .*|optimize|refactor|best practice for .* code|utility method|component for|logic for)/i.test(text)
+        || /(写代码|写一下代码|实现一下|解这道题|解一下|数据结构|代码怎么写|这个算法|怎么实现|实现这个|怎么写|如何实现|用.*实现|.*的代码|调试|优化|重构|怎么优化|怎么调试)/.test(text)) {
         return { intent: 'coding', confidence: 0.9, answerShape: getAnswerShapeForMode('general', 'coding') };
     }
 
@@ -620,7 +645,7 @@ function detectInterviewIntentByPattern(text: string): IntentResult | null {
 function detectSalesIntentByPattern(text: string): IntentResult | null {
     // 1. Buying signal — strongest purchase intent
     if (/(ready to move|ready to sign|send (over )?(the|a) contract|let'?s move forward|next steps|finalize|sign the deal|legal review|procurement|when can we start|let'?s get started|let'?s (kick ?off|schedule)|pilot|trial)/i.test(text)
-        || /(准备签|准备推进|准备敲定|准备开始|想推进到|推进到.{0,6}(?:法务|放假).{0,4}审核|发合同|法务审核|放假审核|采购流程|下一步怎么走|下一步是|敲定|签合同|推进到|往下走|启动|试点|试用)/.test(text)) {
+        || /(准备签|准备推进|准备敲定|准备开始|想推进到|推进到.{0,6}(?:法务|放假).{0,4}审核|发合同|法务审核|放假审核|采购流程|下一步怎么走|下一步是|敲定|签合同|推进到|往下走|启动|试点|(?<!测)试用)/.test(text)) {
         return { intent: 'sales_buying_signal', confidence: 0.95, answerShape: getAnswerShapeForMode('sales', 'sales_buying_signal') };
     }
     // 2. Pricing objection — price/budget pushback, not internal price-sheet references.
@@ -628,6 +653,13 @@ function detectSalesIntentByPattern(text: string): IntentResult | null {
         || /(太贵|价格高|价格太高|报价太高|超出预算|预算不够|预算不足|预算.{0,8}过不了|年付.{0,12}预算.{0,8}过不了|太高.{0,12}预算|负担不起|能不能便宜|便宜点|打个折|有折扣吗)/.test(text)) {
         return { intent: 'sales_pricing_objection', confidence: 0.92, answerShape: getAnswerShapeForMode('sales', 'sales_pricing_objection') };
     }
+    const industrialDiscovery = detectSalesIndustrialDiscoveryIntent(text);
+    if (industrialDiscovery) return industrialDiscovery;
+    if (INDUSTRIAL_DOMAIN_PATTERN.test(text)
+        && /(客户案例|成功案例|类似客户|标杆客户|参考客户|证明材料|落地案例|实施案例|ROI|投资回报|回报率|case study|customer story|customer example|similar customer|reference customer)/i.test(text)) {
+        return null;
+    }
+
     // 3. Proof request — case study, similar customer, or ROI proof.
     if (/(case study|customer story|customer example|reference customer|proof point|success story|similar customer|ROI|return on investment|prove the value|prove the ROI)/i.test(text)
         || /(客户案例|成功案例|类似客户|标杆客户|参考客户|证明材料|落地案例|实施案例|ROI|投资回报|回报率|证明价值)/.test(text)) {
@@ -644,6 +676,39 @@ function detectSalesIntentByPattern(text: string): IntentResult | null {
             || /(发我报价|发.{0,6}报价|给.{0,6}报价|报(?:个|一下|下)价(?:格)?|给(?:我)?(?:个|一下|下)价(?:格)?|报价单|价格页|方案报价|商务条款|多少钱)/.test(text))) {
         return { intent: 'sales_quote_request', confidence: 0.86, answerShape: getAnswerShapeForMode('sales', 'sales_quote_request') };
     }
+    return null;
+}
+
+const INDUSTRIAL_DOMAIN_PATTERN = /\b(PLM|Windchill|QMS|ERP|SAP|Oracle|MES|ALM|Creo|CAD|BOM|ECO|ECN|CAPA|NCR|8D|AI Agent|Agent)\b|图纸|物料|变更|工艺|工单|质量|审计|仿真|流体仿真|力学仿真|装配|测试用例|缺陷|需求追踪|追踪矩阵/i;
+const INDUSTRIAL_PAIN_PATTERN = /不同步|不一致|断链|断点|痛苦|靠邮件|Excel|人工|重复录入|旧工艺|返工|停线|误判|复核|很慢|压力/i;
+const INDUSTRIAL_CAPABILITY_PATTERN = /BOM 变更.{0,12}质量问题.{0,12}能不能关联起来|AI Agent.{0,20}能不能.{0,24}(?:先帮我们查|不要自动写回)/i;
+const INDUSTRIAL_INTEGRATION_PATTERN = /打通|集成|同步|闭环|流转|对齐|读写边界|权限边界|源系统|目标系统|工具调用/i;
+const INDUSTRIAL_VALUE_PATTERN = /效率|周期|成本|质量成本|良率|延期|审计压力|返工|停线|成功指标|评审效率/i;
+const CONTEXTUAL_PROOF_PATTERN = /Windchill ECO.{0,30}QMS CAPA.{0,30}(?:案例|客户|证明|ROI)|(?:只读 )?AI Agent.{0,40}PLM.{0,40}(?:人工确认)?.{0,30}(?:案例|客户|证明|ROI)/i;
+
+function detectSalesIndustrialDiscoveryIntent(text: string): IntentResult | null {
+    if (!INDUSTRIAL_DOMAIN_PATTERN.test(text)) return null;
+
+    if (/力学仿真模块.{0,24}功能是否适合|流体仿真.{0,12}功能|介绍一下.{0,12}流体仿真.{0,12}功能/i.test(text)) {
+        return { intent: 'sales_capability_fit', confidence: 0.88, answerShape: getAnswerShapeForMode('sales', 'sales_capability_fit') };
+    }
+    if (CONTEXTUAL_PROOF_PATTERN.test(text)) {
+        return { intent: 'sales_contextual_proof_discovery', confidence: 0.9, answerShape: getAnswerShapeForMode('sales', 'sales_contextual_proof_discovery') };
+    }
+    if (/靠邮件.{0,20}不同步|客诉.{0,40}Excel.{0,20}痛苦|现场执行.{0,20}设计变更不同步|需求改.{0,40}断链|Creo.{0,40}同步不及时/i.test(text)
+        || (INDUSTRIAL_PAIN_PATTERN.test(text) && /拿到旧工艺/.test(text))) {
+        return { intent: 'sales_pain_discovery', confidence: 0.88, answerShape: getAnswerShapeForMode('sales', 'sales_pain_discovery') };
+    }
+    if (/Windchill ECO.{0,30}ERP.{0,30}QMS CAPA.{0,12}闭环|PLM 发布 BOM.{0,30}同步到 SAP/i.test(text)) {
+        return { intent: 'sales_process_integration', confidence: 0.88, answerShape: getAnswerShapeForMode('sales', 'sales_process_integration') };
+    }
+    if (/变更影响分析太慢.{0,40}周期/.test(text)) {
+        return { intent: 'sales_value_discovery', confidence: 0.86, answerShape: getAnswerShapeForMode('sales', 'sales_value_discovery') };
+    }
+    if (INDUSTRIAL_CAPABILITY_PATTERN.test(text)) {
+        return { intent: 'sales_capability_fit', confidence: 0.86, answerShape: getAnswerShapeForMode('sales', 'sales_capability_fit') };
+    }
+
     return null;
 }
 
@@ -792,7 +857,22 @@ function getCandidateIntentsForMode(modeTemplateType?: string | null): Conversat
     const mode = modeTemplateType ?? 'general';
     switch (mode) {
         case 'sales':
-            return ['sales_buying_signal', 'sales_pricing_objection', 'sales_quote_request', 'sales_proof_request', 'sales_technical_requirements', 'define_term', 'advance_dialog', 'general', 'silence'];
+            return [
+                'sales_buying_signal',
+                'sales_pricing_objection',
+                'sales_quote_request',
+                'sales_proof_request',
+                'sales_technical_requirements',
+                'sales_pain_discovery',
+                'sales_capability_fit',
+                'sales_process_integration',
+                'sales_value_discovery',
+                'sales_contextual_proof_discovery',
+                'define_term',
+                'advance_dialog',
+                'general',
+                'silence',
+            ];
         case 'fde':
             return ['fde_discovery', 'fde_integration', 'fde_security', 'fde_risk', 'fde_agent_feasibility', 'fde_success', 'fde_next_step', 'define_term', 'advance_dialog', 'general', 'silence'];
         case 'recruiting':
@@ -838,7 +918,7 @@ async function classifyWithCloudFallback(
 ): Promise<IntentResult | null> {
     if (!options.cloudIntentClassifier) return null;
     if (options.providerDataScopes?.transcript === false) return null;
-    if (!isPrimarilyChinese(latestTurn)) return null;
+    const language = isPrimarilyChinese(latestTurn) ? 'zh' : 'en';
 
     try {
         const result = await options.cloudIntentClassifier({
@@ -846,7 +926,7 @@ async function classifyWithCloudFallback(
             recentTranscript,
             modeTemplateType,
             candidateIntents: getCandidateIntentsForMode(modeTemplateType),
-            language: 'zh',
+            language,
             keyEntities: extractLightweightEntities(`${latestTurn}\n${recentTranscript}`),
         });
         if (!result || result.confidence < 0.5) return null;

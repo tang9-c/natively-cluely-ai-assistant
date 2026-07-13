@@ -28,6 +28,11 @@ export type ConversationIntent =
     | 'sales_proof_request'
     | 'sales_technical_requirements'
     | 'sales_buying_signal'
+    | 'sales_pain_discovery'
+    | 'sales_capability_fit'
+    | 'sales_process_integration'
+    | 'sales_value_discovery'
+    | 'sales_contextual_proof_discovery'
 
     // ===== Recruiting mode (extras) =====
     | 'evaluate_answer'
@@ -84,6 +89,11 @@ const GENERAL_ANSWER_SHAPES: Record<ConversationIntent, string> = {
     sales_proof_request: '',
     sales_technical_requirements: '',
     sales_buying_signal: '',
+    sales_pain_discovery: '',
+    sales_capability_fit: '',
+    sales_process_integration: '',
+    sales_value_discovery: '',
+    sales_contextual_proof_discovery: '',
     evaluate_answer: '',
     request_example: '',
     capture_action: '',
@@ -108,6 +118,11 @@ const SALES_ANSWER_SHAPES: Partial<Record<ConversationIntent, string>> = {
     sales_proof_request: 'Use uploaded/reference materials for proof points or state that no grounded proof was provided. Never invent customer cases or ROI.',
     sales_technical_requirements: 'Generate a clarification checklist for API, SSO, security, deployment environment, owners, and validation step.',
     sales_buying_signal: 'Lock next step, owner, date, and artifact. Ask directly for missing fields.',
+    sales_pain_discovery: 'Ask 1-3 customer-facing discovery questions that clarify the current pain, impact, owner, and workflow. Do not answer as a product expert.',
+    sales_capability_fit: 'Ask 1-3 customer-facing discovery questions that clarify required capability, usage scenario, constraints, and success criteria. Do not claim support.',
+    sales_process_integration: 'Ask 1-3 customer-facing discovery questions that clarify systems, data direction, ownership, and process boundary. Do not propose writeback.',
+    sales_value_discovery: 'Ask 1-3 customer-facing discovery questions that clarify business metric, baseline, value driver, and decision criteria.',
+    sales_contextual_proof_discovery: 'Ask 1-3 customer-facing discovery questions that clarify what proof, industry, workflow, or outcome would be relevant. Do not invent cases or ROI.',
     handle_objection: 'Acknowledge first ("That makes sense" / "I hear you"). Reframe with specifics. End with a forward-moving question. 2-3 sentences. No labels.',
     seize_signal: 'Propose a concrete next step with a specific time. Trade value for commitment. 1-2 sentences. Confident, no hedge.',
     discovery_probe: 'Ask 1-2 deep diagnostic questions, not surface. Example: "What challenge were you hoping to solve when you reached out?"',
@@ -189,6 +204,11 @@ const ZERO_SHOT_LABELS_EN_BY_MODE: Record<string, Record<string, ConversationInt
         'customer asking for case study, proof, similar customer, or ROI': 'sales_proof_request',
         'customer asking about API, SSO, security, deployment, or technical requirements': 'sales_technical_requirements',
         'customer showing buying intent, legal review, contract, pilot, or next step': 'sales_buying_signal',
+        'customer describing industrial software pain or broken workflow': 'sales_pain_discovery',
+        'customer asking whether an industrial software capability fits their scenario': 'sales_capability_fit',
+        'customer discussing PLM, QMS, ERP, MES, ALM, CAD, or AI Agent process integration': 'sales_process_integration',
+        'customer discussing efficiency, quality, cycle time, cost, audit, or value impact': 'sales_value_discovery',
+        'customer asking for industrial proof, customer example, ROI, or case context': 'sales_contextual_proof_discovery',
         'no actionable content, just filler or acknowledgement': 'silence',
         'asking what a term or acronym means': 'define_term',
         'requesting a summary or next step': 'advance_dialog',
@@ -252,6 +272,11 @@ const ZERO_SHOT_LABELS_ZH_BY_MODE: Record<string, Record<string, ConversationInt
         '客户索要案例、类似客户、ROI 或证明材料': 'sales_proof_request',
         '客户询问 API、SSO、安全、部署或技术需求': 'sales_technical_requirements',
         '客户表达购买推进、法务、合同、试点或下一步信号': 'sales_buying_signal',
+        '客户描述工业软件痛点、现状问题或流程断点': 'sales_pain_discovery',
+        '客户询问工业软件功能是否适合当前场景': 'sales_capability_fit',
+        '客户讨论 PLM、QMS、ERP、MES、ALM、CAD 或 AI Agent 的流程打通': 'sales_process_integration',
+        '客户讨论效率、质量、周期、成本、审计或价值指标': 'sales_value_discovery',
+        '客户索要带工业场景的案例、证明、ROI 或类似客户': 'sales_contextual_proof_discovery',
         '无可行动内容,只是寒暄或确认': 'silence',
         '询问某个术语或缩写的含义': 'define_term',
         '请求总结或下一步': 'advance_dialog',

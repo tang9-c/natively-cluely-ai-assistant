@@ -44,6 +44,11 @@ export const DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE: Record<string, IntentKeywordCo
         { intent: 'sales_proof_request', keywordsCsv: 'case study,customer story,customer example,reference customer,proof point,success story,similar customer,ROI,return on investment,客户案例,成功案例,类似客户,标杆客户,参考客户,证明材料,ROI,投资回报,回报率,成功证明' },
         { intent: 'sales_technical_requirements', keywordsCsv: 'API,SSO,SAML,OAuth,SCIM,security,deployment,production,sandbox,integration,architecture,technical requirements,API 接口,SSO,单点登录,安全,部署,生产环境,沙盒,集成,技术需求,技术要求,架构要求,对接方式' },
         { intent: 'sales_buying_signal', keywordsCsv: 'ready to move,ready to sign,next steps,legal review,procurement,contract,pilot,trial,finalize,when can we start,准备签,准备推进,下一步,法务审核,采购流程,合同,试点,试用,敲定,启动' },
+        { intent: 'sales_pain_discovery', keywordsCsv: 'broken workflow,manual workaround,duplicated entry,out of sync,version mismatch,workflow pain,流程不同步,靠邮件通知,靠 Excel 跟踪,重复录入,版本不一致,流程断点,返工停线,审计痛苦' },
+        { intent: 'sales_capability_fit', keywordsCsv: 'does it support,can it handle,fit our scenario,capability fit,module capability,能不能支持,是否适合,功能是否匹配,模块功能,能不能追溯,能不能校验' },
+        { intent: 'sales_process_integration', keywordsCsv: 'process integration,closed loop,data synchronization,system handoff,read write boundary,流程打通,形成闭环,系统同步,数据流转,读写边界,权限边界,源系统目标系统' },
+        { intent: 'sales_value_discovery', keywordsCsv: 'cycle time,quality cost,audit pressure,review efficiency,rework rate,效率提升,周期缩短,质量成本,审计压力,评审效率,返工率,良率,成功指标' },
+        { intent: 'sales_contextual_proof_discovery', keywordsCsv: 'similar industrial customer,industrial case study,proof in this workflow,ROI for this process,工业客户案例,类似制造客户,场景案例,闭环案例,落地证明,这个流程的 ROI' },
     ],
     'team-meet': [
         { intent: 'capture_action', keywordsCsv: 'i.ll do,i.ll send,i.ll handle,i.ll own,i.ll take,i.ll follow up,i.ll write,i.ll ship,i.ll PR,i.ll merge,i.m gonna,let me by,action item,to-do,assigned to,owner is,i can have by,by monday,by tuesday,by wednesday,by thursday,by friday,by EOD,by EOW,by next week,我来做,我来发,我来负责,我来处理,我跟进,我写,我来 PR,我提,我合,交给我,我包了,分配给,行动项,待办,跟进项,周五前,周一前,下周三前,今天内,尽快,交付' },
@@ -64,7 +69,7 @@ export const INTENT_MATCH_ORDER_BY_TEMPLATE: Record<string, ConversationIntent[]
     'technical-interview': ['clarification', 'follow_up', 'deep_dive', 'behavioral', 'example_request', 'summary_probe', 'coding'],
     fde: ['fde_security', 'fde_risk', 'fde_agent_feasibility', 'fde_next_step', 'fde_integration', 'fde_success', 'fde_discovery'],
     recruiting: ['request_example', 'clarification', 'follow_up', 'deep_dive', 'behavioral', 'example_request', 'summary_probe', 'coding'],
-    sales: ['sales_buying_signal', 'sales_pricing_objection', 'sales_quote_request', 'sales_proof_request', 'sales_technical_requirements'],
+    sales: ['sales_buying_signal', 'sales_pricing_objection', 'sales_quote_request', 'sales_contextual_proof_discovery', 'sales_proof_request', 'sales_technical_requirements', 'sales_pain_discovery', 'sales_capability_fit', 'sales_process_integration', 'sales_value_discovery'],
     'team-meet': ['capture_action', 'capture_decision', 'capture_risk', 'status_update'],
     lecture: ['explain_concept', 'render_formula', 'answer_class_question'],
 };
