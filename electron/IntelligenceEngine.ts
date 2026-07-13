@@ -14,7 +14,7 @@ import {
 import type { ModeEventContext } from './llm';
 import type { WhatToAnswerTraceSink } from './llm/WhatToAnswerLLM';
 import type { CodeHintTrace } from './llm/CodeHintLLM';
-import type { ProviderDataScope } from './llm/ProviderRouter';
+import type { ProviderDataScope, ProviderDataScopePolicy } from './llm/ProviderRouter';
 import type { TranscriptTurn } from './llm';
 import type {
     CloudIntentClassifierInput,
@@ -25,6 +25,7 @@ import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEng
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
 import type { DynamicActionOutputType } from './services/dynamic-actions/DynamicAction';
 import { DynamicActionContinuationService } from './services/dynamic-actions/DynamicActionContinuationService';
+import { DynamicActionContinuationPlanner } from './services/dynamic-actions/DynamicActionContinuationPlanner';
 import {
     CloudSemanticGateError,
     cloudFailureReasonFromError,
@@ -39,6 +40,7 @@ import { SkillActivationManager } from './services/SkillActivationManager';
 import { SkillsManager } from './services/SkillsManager';
 import { SkillWatcherService, type SkillWatcherSuggestion } from './services/SkillWatcherService';
 import { isLocalIntentClassifierAvailable } from './services/LocalModelManager';
+import { redactForLog } from './utils/redactForLog';
 import { ModesManager } from './services/ModesManager';
 import { keywordRowsToMap } from './llm/IntentKeywordDefaults';
 import { evaluateSpeakerContextForAnswer } from './services/context/SpeakerContextPolicy';
@@ -177,7 +179,7 @@ export class IntelligenceEngine extends EventEmitter {
     // setSessionContext call (or per-test injection). Null while engine has no
     // active meeting, so detectAndEmitDynamicActions becomes a no-op safely.
     private dynamicActionEngine: DynamicActionEngine | null = null;
-    private dynamicActionContinuationService = new DynamicActionContinuationService();
+    private dynamicActionContinuationService: DynamicActionContinuationService;
     private currentSessionId: string | null = null;
     private currentDynamicActionModeId: string | null = null;
     private currentDynamicActionTemplateType: string | null = null;
@@ -456,6 +458,12 @@ export class IntelligenceEngine extends EventEmitter {
         super();
         this.llmHelper = llmHelper;
         this.session = session;
+        this.dynamicActionContinuationService = new DynamicActionContinuationService({
+            planner: new DynamicActionContinuationPlanner((prompt, options) =>
+                this.llmHelper.generateContentStructured(prompt, options)),
+            traceSink: (event) =>
+                getContextQualityDiagnosticsCollector().recordDynamicActionContinuationTrace(event),
+        });
         this.initializeLLMs();
 
         // Dedicated channel: LLMHelper invokes this when KnowledgeOrchestrator
@@ -587,6 +595,12 @@ export class IntelligenceEngine extends EventEmitter {
         // Fire-and-forget by design: intent confirmation is auxiliary and must
         // never block or break the primary transcript path.
         if (segment.final) {
+            if (segment.speaker === 'interviewer') {
+                const providerDataScopes = this.buildIntentClassificationOptions().providerDataScopes;
+                this.observeDynamicActionContinuation(segment, providerDataScopes).catch((error) => {
+                    console.warn('[IntelligenceEngine] continuation observation failed', redactForLog([error]));
+                });
+            }
             this.detectConfirmAndEmitDynamicActions(segment).catch((err) => {
                 console.warn('[IntelligenceEngine] detectConfirmAndEmitDynamicActions failed', (err as Error)?.message);
             });
@@ -731,6 +745,22 @@ export class IntelligenceEngine extends EventEmitter {
                 ? entry.answer.join('\n').trim().length > 0
                 : typeof entry.answer === 'string' && entry.answer.trim().length > 0)
         );
+    }
+
+    private async observeDynamicActionContinuation(
+        segment: TranscriptSegment,
+        providerDataScopes?: ProviderDataScopePolicy,
+    ): Promise<void> {
+        if (!this.currentSessionId || !this.currentDynamicActionModeId || !this.currentDynamicActionTemplateType) return;
+        await this.dynamicActionContinuationService.observeFinalCustomerTurn({
+            sessionId: this.currentSessionId,
+            modeId: this.currentDynamicActionModeId,
+            modeTemplateType: this.currentDynamicActionTemplateType,
+            speaker: 'interviewer',
+            text: segment.text,
+            timestamp: segment.timestamp,
+            providerDataScopes,
+        });
     }
 
     // For tests — injection seam.

@@ -200,6 +200,38 @@ test('context quality diagnostics count fallback and omitted context reasons pre
   assert.equal(summary.context.retrievalTimingMs.business_system.average, 100);
 });
 
+test('context quality diagnostics aggregate continuation traces without raw content', async () => {
+  const { summarizeContextQualityDiagnostics } = await loadDiagnostics();
+  const summary = summarizeContextQualityDiagnostics({
+    dynamicActionContinuationEvents: [
+      {
+        event: 'registered',
+        sessionId: 's1',
+        parentActionId: 'parent-1',
+        plannerAttempts: 0,
+        observedCustomerTurns: 0,
+        text: 'PRIVATE_CUSTOMER_TURN_SHOULD_NOT_APPEAR',
+      },
+      {
+        event: 'degraded',
+        sessionId: 's1',
+        parentActionId: 'parent-1',
+        reasonCode: 'provider_scope_denied',
+        plannerAttempts: 1,
+        observedCustomerTurns: 2,
+        text: 'PRIVATE_CUSTOMER_TURN_SHOULD_NOT_APPEAR',
+      },
+    ],
+  });
+
+  assert.equal(summary.continuation.events.registered, 1);
+  assert.equal(summary.continuation.events.degraded, 1);
+  assert.equal(summary.continuation.reasons.provider_scope_denied, 1);
+  assert.equal(summary.continuation.plannerAttempts, 1);
+  assert.equal(summary.continuation.observedCustomerTurns, 2);
+  assert.doesNotMatch(JSON.stringify(summary), /PRIVATE_CUSTOMER_TURN_SHOULD_NOT_APPEAR/);
+});
+
 test('context quality diagnostics collector stores only summary-safe fields', async () => {
   const {
     ContextQualityDiagnosticsCollector,

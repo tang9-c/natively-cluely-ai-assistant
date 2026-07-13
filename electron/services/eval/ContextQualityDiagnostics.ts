@@ -1,5 +1,6 @@
 import type { AnswerDegradedReason, AnswerQualityMetrics } from '../../db/DatabaseManager';
 import type { CodeHintTrace } from '../../llm/CodeHintLLM';
+import type { ContinuationTraceEvent } from '../dynamic-actions/DynamicActionContinuation';
 import type { DynamicActionLifecycleEvent } from '../dynamic-actions/DynamicActionLifecycle';
 import type { SemanticGateArbitrationStatus, SemanticGateTrace } from '../dynamic-actions/ModeEventClassifier';
 import type { RealtimeContextSource } from '../context/RealtimeContextOrchestrator';
@@ -33,6 +34,7 @@ export type DynamicActionLifecycleEventInput = DynamicActionLifecycleEvent;
 export interface ContextQualityDiagnosticsInput {
     dynamicActions?: ContextQualityDynamicActionInput[];
     dynamicActionLifecycleEvents?: DynamicActionLifecycleEventInput[];
+    dynamicActionContinuationEvents?: ContinuationTraceEvent[];
     answerQualityMetrics?: AnswerQualityMetrics;
     contextPlans?: ContextQualityPlanInput[];
     codeHints?: ContextQualityCodeHintInput[];
@@ -63,6 +65,12 @@ export interface ContextQualityDiagnosticsSummary {
         localFallbackRate: number;
         localFallbackPassRate: number;
         localFallbackRejectRate: number;
+    };
+    continuation: {
+        events: Counter;
+        reasons: Counter;
+        plannerAttempts: number;
+        observedCustomerTurns: number;
     };
     answerQuality: AnswerQualityMetrics;
     context: {
@@ -201,6 +209,20 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
         increment(lifecycleEvents, event.event);
     }
 
+    const continuationEvents: Counter = {};
+    const continuationReasons: Counter = {};
+    let continuationPlannerAttempts = 0;
+    let continuationObservedCustomerTurns = 0;
+    for (const event of input.dynamicActionContinuationEvents ?? []) {
+        increment(continuationEvents, event.event);
+        increment(continuationReasons, event.reasonCode);
+        continuationPlannerAttempts = Math.max(continuationPlannerAttempts, event.plannerAttempts ?? 0);
+        continuationObservedCustomerTurns = Math.max(
+            continuationObservedCustomerTurns,
+            event.observedCustomerTurns ?? 0,
+        );
+    }
+
     for (const action of actions) {
         increment(actionTypes, action.type ?? action.semanticGate?.actionType);
         increment(decisions, action.semanticGate?.decision);
@@ -313,6 +335,12 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
             localFallbackRejectRate: rate(localFallbackRejects, actions.length),
         },
         answerQuality: input.answerQualityMetrics ?? EMPTY_ANSWER_QUALITY,
+        continuation: {
+            events: continuationEvents,
+            reasons: continuationReasons,
+            plannerAttempts: continuationPlannerAttempts,
+            observedCustomerTurns: continuationObservedCustomerTurns,
+        },
         context: {
             injectedSources,
             omittedSources,
@@ -336,6 +364,7 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
 export class ContextQualityDiagnosticsCollector {
     private readonly dynamicActions: ContextQualityDynamicActionInput[] = [];
     private readonly dynamicActionLifecycleEvents: DynamicActionLifecycleEventInput[] = [];
+    private readonly dynamicActionContinuationEvents: ContinuationTraceEvent[] = [];
     private readonly contextPlans: ContextQualityPlanInput[] = [];
     private readonly codeHints: ContextQualityCodeHintInput[] = [];
     private readonly maxEntries: number;
@@ -386,6 +415,19 @@ export class ContextQualityDiagnosticsCollector {
         this.trimToMaxEntries(this.dynamicActionLifecycleEvents);
     }
 
+    recordDynamicActionContinuationTrace(event: ContinuationTraceEvent): void {
+        this.dynamicActionContinuationEvents.push({
+            event: event.event,
+            sessionId: event.sessionId,
+            parentActionId: event.parentActionId,
+            reasonCode: event.reasonCode,
+            plannerAttempts: event.plannerAttempts,
+            observedCustomerTurns: event.observedCustomerTurns,
+            durationMs: event.durationMs,
+        });
+        this.trimToMaxEntries(this.dynamicActionContinuationEvents);
+    }
+
     recordContextPlan(plan: ContextQualityPlanInput): void {
         this.contextPlans.push({
             injectedSources: [...(plan.injectedSources ?? [])],
@@ -428,6 +470,7 @@ export class ContextQualityDiagnosticsCollector {
                 } : undefined,
             })),
             dynamicActionLifecycleEvents: this.dynamicActionLifecycleEvents.map((event) => ({ ...event })),
+            dynamicActionContinuationEvents: this.dynamicActionContinuationEvents.map((event) => ({ ...event })),
             answerQualityMetrics: this.answerQualityMetrics ? { ...this.answerQualityMetrics } : undefined,
             contextPlans: this.contextPlans.map((plan) => ({
                 injectedSources: [...(plan.injectedSources ?? [])],
@@ -450,6 +493,7 @@ export class ContextQualityDiagnosticsCollector {
     clear(): void {
         this.dynamicActions.length = 0;
         this.dynamicActionLifecycleEvents.length = 0;
+        this.dynamicActionContinuationEvents.length = 0;
         this.contextPlans.length = 0;
         this.codeHints.length = 0;
         this.answerQualityMetrics = undefined;
