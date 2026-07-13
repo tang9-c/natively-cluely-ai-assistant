@@ -3,9 +3,11 @@ import { escapeXmlText } from '../ModesManager';
 import {
     CJK_RELEVANCE_THRESHOLD_MULTIPLIER,
     computeLexicalScore,
+    computeWeightedLexicalScore,
     hasCjkText,
     wordsOf,
 } from './LexicalScoring';
+import type { WeightedMaterialQueryTerm } from './MaterialQueryAnalysis';
 
 export type MaterialRagScope = 'global' | 'mode' | 'scenario' | 'meeting';
 
@@ -119,6 +121,7 @@ export class MaterialRagRetriever {
         topK?: number;
         hasTranscript?: boolean;
         format?: 'mode_xml' | 'material_xml' | 'none';
+        weightedTerms?: WeightedMaterialQueryTerm[];
     }): Promise<MaterialRagContext> {
         const queryText = params.query.trim();
         const queryWords = new Set(wordsOf(queryText));
@@ -143,7 +146,7 @@ export class MaterialRagRetriever {
         let degradedReason: MaterialRagContext['degradedReason'];
         if (this.embeddingPipeline?.isReady()) {
             try {
-                scored = await this.scoreHybrid(candidates, queryWords, queryText, relevanceThreshold, hasCjkQuery);
+                scored = await this.scoreHybrid(candidates, queryWords, queryText, relevanceThreshold, hasCjkQuery, params.weightedTerms);
             } catch (error) {
                 usedFallback = true;
                 degradedReason = 'hybrid_threw';
@@ -154,7 +157,7 @@ export class MaterialRagRetriever {
                     modeId: params.filters?.modeId,
                     errorClass: error instanceof Error ? error.constructor.name : typeof error,
                 });
-                scored = this.scoreLexical(candidates, queryWords, relevanceThreshold, hasCjkQuery);
+                scored = this.scoreLexical(candidates, queryWords, relevanceThreshold, hasCjkQuery, params.weightedTerms);
             }
         } else {
             usedFallback = true;
@@ -165,7 +168,7 @@ export class MaterialRagRetriever {
                 queryTokenCount: queryWords.size,
                 modeId: params.filters?.modeId,
             });
-            scored = this.scoreLexical(candidates, queryWords, relevanceThreshold, hasCjkQuery);
+            scored = this.scoreLexical(candidates, queryWords, relevanceThreshold, hasCjkQuery, params.weightedTerms);
         }
 
         scored.sort((a, b) => this.rankingScore(b) - this.rankingScore(a));
@@ -254,7 +257,14 @@ export class MaterialRagRetriever {
         return candidates;
     }
 
-    private async scoreHybrid(candidates: Candidate[], queryWords: Set<string>, queryText: string, minScore: number, hasCjkQuery: boolean): Promise<Candidate[]> {
+    private async scoreHybrid(
+        candidates: Candidate[],
+        queryWords: Set<string>,
+        queryText: string,
+        minScore: number,
+        hasCjkQuery: boolean,
+        weightedTerms?: WeightedMaterialQueryTerm[],
+    ): Promise<Candidate[]> {
         const queryEmbedding = await this.embeddingPipeline!.getEmbeddingForQuery(queryText);
         let chunkEmbeddings: number[][] = candidates.map((candidate) => candidate.source.embedding ?? []);
         try {
@@ -277,20 +287,40 @@ export class MaterialRagRetriever {
         return candidates
             .map((candidate, index) => ({
                 ...candidate,
-                ftsScore: computeLexicalScore(candidate.text, queryWords, hasCjkQuery),
+                ftsScore: this.computeCandidateLexicalScore(candidate.text, queryWords, hasCjkQuery, weightedTerms),
                 vectorScore: chunkEmbeddings[index] ? cosine(queryEmbedding, chunkEmbeddings[index]) : 0,
             }))
             .filter((candidate) => this.finalScore(candidate) >= minScore);
     }
 
-    private scoreLexical(candidates: Candidate[], queryWords: Set<string>, minScore: number, hasCjkQuery: boolean): Candidate[] {
+    private scoreLexical(
+        candidates: Candidate[],
+        queryWords: Set<string>,
+        minScore: number,
+        hasCjkQuery: boolean,
+        weightedTerms?: WeightedMaterialQueryTerm[],
+    ): Candidate[] {
         return candidates
             .map((candidate) => ({
                 ...candidate,
-                ftsScore: computeLexicalScore(candidate.text, queryWords, hasCjkQuery),
+                ftsScore: this.computeCandidateLexicalScore(candidate.text, queryWords, hasCjkQuery, weightedTerms),
                 vectorScore: 0,
             }))
             .filter((candidate) => candidate.ftsScore >= minScore);
+    }
+
+    private computeCandidateLexicalScore(
+        text: string,
+        queryWords: Set<string>,
+        hasCjkQuery: boolean,
+        weightedTerms?: WeightedMaterialQueryTerm[],
+    ): number {
+        const lexicalScore = computeLexicalScore(text, queryWords, hasCjkQuery);
+        if (!weightedTerms?.length) return lexicalScore;
+        return Math.max(
+            lexicalScore,
+            computeWeightedLexicalScore(text, weightedTerms, hasCjkQuery),
+        );
     }
 
     private finalScore(candidate: Candidate): number {

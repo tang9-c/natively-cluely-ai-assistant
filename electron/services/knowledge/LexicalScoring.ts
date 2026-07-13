@@ -1,3 +1,5 @@
+import type { WeightedMaterialQueryTerm } from './MaterialQueryAnalysis';
+
 export const CJK_RETRIEVAL_TERMS = [
     '价格', '产品', '案例', '报价', '报价单', '预算', '成本', '合同', 'roi',
     '竞品', '上线', '回本', '价值', '客户', '异议', '法务', '审批', '折扣',
@@ -66,4 +68,32 @@ export function computeLexicalScore(
         ? Math.min(chunkUniqueSize, CJK_CHUNK_UNIQUE_TOKEN_CAP)
         : chunkUniqueSize;
     return matches / Math.sqrt(queryWords.size * Math.max(1, normalizedChunkSize));
+}
+
+export function computeWeightedLexicalScore(
+    chunk: string,
+    weightedTerms: WeightedMaterialQueryTerm[] | undefined,
+    hasCjkQuery: boolean,
+): number {
+    if (!weightedTerms || weightedTerms.length === 0) return 0;
+    const normalizedChunk = chunk.toLowerCase();
+    let matchedWeight = 0;
+    let totalWeight = 0;
+    for (const weightedTerm of weightedTerms) {
+        const term = String(weightedTerm.term || '').trim();
+        if (!term) continue;
+        const weight = Math.max(0, Number(weightedTerm.weight || 0));
+        if (weight <= 0) continue;
+        totalWeight += weight;
+        if (normalizedChunk.includes(term.toLowerCase())) {
+            matchedWeight += weight;
+        }
+    }
+    if (totalWeight <= 0) return 0;
+    const chunkWords = wordsOf(chunk);
+    const chunkUniqueSize = new Set(chunkWords).size;
+    const normalizedChunkSize = hasCjkQuery
+        ? Math.min(chunkUniqueSize, CJK_CHUNK_UNIQUE_TOKEN_CAP)
+        : chunkUniqueSize;
+    return matchedWeight / Math.sqrt(totalWeight * Math.max(1, normalizedChunkSize));
 }
