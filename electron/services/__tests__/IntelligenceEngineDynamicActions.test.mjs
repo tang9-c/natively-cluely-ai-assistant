@@ -27,6 +27,11 @@ async function loadSessionTracker() {
   return import(pathToFileURL(sessionPath).href);
 }
 
+async function loadDynamicActionEngine() {
+  const enginePath = path.resolve(__dirname, '../../../dist-electron/electron/services/dynamic-actions/DynamicActionEngine.js');
+  return import(pathToFileURL(enginePath).href);
+}
+
 // Minimal LLMHelper stub — engine touches getActiveModel, isStreamingSupported,
 // and setNegotiationCoachingHandler in its constructor / initializeLLMs path.
 // Other LLM methods are unused because we only invoke handleTranscript.
@@ -63,6 +68,27 @@ async function makeEngine(helper = new StubLLMHelper()) {
 }
 
 const waitForAsyncSignals = () => new Promise(resolve => setTimeout(resolve, 80));
+
+function buildStoredDiscoveryAction(overrides = {}) {
+  return {
+    id: 'parent',
+    sessionId: 'session-1',
+    modeId: 'sales',
+    modeTemplateType: 'sales',
+    type: 'discovery_question',
+    label: '追问关键问题',
+    productContract: { outputType: 'spoken_response', userAction: '追问', riskState: 'normal' },
+    confidence: 0.9,
+    priority: 0.9,
+    evidenceRefs: [],
+    status: 'candidate',
+    createdAt: Date.now(),
+    promptInstruction: '',
+    sourceIntent: 'sales_capability_fit',
+    latestTurn: '是否支持流体仿真？',
+    ...overrides,
+  };
+}
 
 describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
   test('handleTranscript emits dynamic_action_emitted for matching trigger pack', async () => {
@@ -688,5 +714,46 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
   test('acceptDynamicAction returns null when no engine bound', async () => {
     const { engine } = await makeEngine();
     assert.equal(engine.acceptDynamicAction('any'), null);
+  });
+
+  test('continuation registers only after non-empty completed usage exists', async () => {
+    const { engine, session } = await makeEngine();
+    const { DynamicActionEngine } = await loadDynamicActionEngine();
+    const dynamicActionEngine = new DynamicActionEngine();
+    engine._setDynamicActionEngineForTest(dynamicActionEngine);
+    engine.setDynamicActionContext({ sessionId: 'session-1', modeId: 'sales', modeTemplateType: 'sales' });
+
+    const registered = [];
+    engine._setDynamicActionContinuationServiceForTest({
+      registerCompletedAction: (value) => { registered.push(value.id); return null; },
+      cancelForContext: () => undefined,
+    });
+    dynamicActionEngine.getStore().addAction(buildStoredDiscoveryAction({ id: 'parent-complete-1' }));
+
+    engine.acceptDynamicAction('parent-complete-1');
+    engine.completeDynamicAction('parent-complete-1');
+    assert.deepEqual(registered, []);
+
+    session.pushUsage({
+      type: 'assist',
+      timestamp: Date.now(),
+      question: '追问',
+      answer: '请问对象、指标和验收标准分别是什么？',
+      metadata: { source: 'dynamic_action', actionId: 'parent-complete-1', generationStatus: 'completed' },
+    });
+    engine.completeDynamicAction('parent-complete-1');
+    assert.deepEqual(registered, ['parent-complete-1']);
+
+    dynamicActionEngine.getStore().addAction(buildStoredDiscoveryAction({ id: 'parent-stale-mode' }));
+    session.pushUsage({
+      type: 'assist',
+      timestamp: Date.now(),
+      question: '追问',
+      answer: '有效问题',
+      metadata: { source: 'dynamic_action', actionId: 'parent-stale-mode', generationStatus: 'completed' },
+    });
+    engine.setDynamicActionContext({ sessionId: 'session-1', modeId: 'fde', modeTemplateType: 'fde' });
+    engine.completeDynamicAction('parent-stale-mode');
+    assert.deepEqual(registered, ['parent-complete-1']);
   });
 });

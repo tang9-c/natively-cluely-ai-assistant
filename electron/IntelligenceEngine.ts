@@ -24,6 +24,7 @@ import type {
 import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEngine';
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
 import type { DynamicActionOutputType } from './services/dynamic-actions/DynamicAction';
+import { DynamicActionContinuationService } from './services/dynamic-actions/DynamicActionContinuationService';
 import {
     CloudSemanticGateError,
     cloudFailureReasonFromError,
@@ -176,6 +177,7 @@ export class IntelligenceEngine extends EventEmitter {
     // setSessionContext call (or per-test injection). Null while engine has no
     // active meeting, so detectAndEmitDynamicActions becomes a no-op safely.
     private dynamicActionEngine: DynamicActionEngine | null = null;
+    private dynamicActionContinuationService = new DynamicActionContinuationService();
     private currentSessionId: string | null = null;
     private currentDynamicActionModeId: string | null = null;
     private currentDynamicActionTemplateType: string | null = null;
@@ -608,6 +610,13 @@ export class IntelligenceEngine extends EventEmitter {
         modeTemplateType: string;
     }): void {
         const { sessionId, modeId, modeTemplateType } = params;
+        const previousSessionId = this.currentSessionId;
+        const contextChanged = Boolean(
+            previousSessionId &&
+            (previousSessionId !== sessionId ||
+                this.currentDynamicActionModeId !== modeId ||
+                this.currentDynamicActionTemplateType !== modeTemplateType)
+        );
         if (!this.dynamicActionEngine) {
             this.dynamicActionEngine = new DynamicActionEngine();
         }
@@ -615,12 +624,16 @@ export class IntelligenceEngine extends EventEmitter {
         if (this.currentSessionId && this.currentSessionId !== sessionId) {
             this.dynamicActionEngine = new DynamicActionEngine();
         }
+        if (contextChanged) {
+            this.dynamicActionContinuationService.cancelForContext(previousSessionId ?? undefined);
+        }
         this.currentSessionId = sessionId;
         this.currentDynamicActionModeId = modeId;
         this.currentDynamicActionTemplateType = modeTemplateType;
     }
 
     clearDynamicActionContext(): void {
+        this.dynamicActionContinuationService.cancelForContext(this.currentSessionId ?? undefined);
         this.currentSessionId = null;
         this.currentDynamicActionModeId = null;
         this.currentDynamicActionTemplateType = null;
@@ -648,7 +661,17 @@ export class IntelligenceEngine extends EventEmitter {
     completeDynamicAction(actionId: string): DynamicAction | null {
         if (!this.dynamicActionEngine) return null;
         this.dynamicActionEngine.completeAction(actionId);
-        return this.dynamicActionEngine.getStore().getAction(actionId) ?? null;
+        const action = this.dynamicActionEngine.getStore().getAction(actionId) ?? null;
+        const belongsToCurrentContext = Boolean(
+            action &&
+            action.sessionId === this.currentSessionId &&
+            action.modeId === this.currentDynamicActionModeId &&
+            action.modeTemplateType === this.currentDynamicActionTemplateType
+        );
+        if (action && belongsToCurrentContext && this.hasCompletedDynamicActionUsage(actionId)) {
+            this.dynamicActionContinuationService.registerCompletedAction(action);
+        }
+        return action;
     }
 
     markDynamicActionGenerationFailed(actionId: string): DynamicAction | null {
@@ -699,9 +722,26 @@ export class IntelligenceEngine extends EventEmitter {
         });
     }
 
+    private hasCompletedDynamicActionUsage(actionId: string): boolean {
+        return this.session.getFullUsage().some((entry) =>
+            entry?.metadata?.source === 'dynamic_action' &&
+            entry?.metadata?.actionId === actionId &&
+            entry?.metadata?.generationStatus === 'completed' &&
+            (Array.isArray(entry.answer)
+                ? entry.answer.join('\n').trim().length > 0
+                : typeof entry.answer === 'string' && entry.answer.trim().length > 0)
+        );
+    }
+
     // For tests — injection seam.
     _setDynamicActionEngineForTest(engine: DynamicActionEngine | null): void {
         this.dynamicActionEngine = engine;
+    }
+
+    _setDynamicActionContinuationServiceForTest(
+        service: Pick<DynamicActionContinuationService, 'registerCompletedAction' | 'cancelForContext'>,
+    ): void {
+        this.dynamicActionContinuationService = service as DynamicActionContinuationService;
     }
 
     _setIntentClassificationOptionsForTest(options: IntentClassificationOptions | null): void {
