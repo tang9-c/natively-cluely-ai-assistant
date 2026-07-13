@@ -88,6 +88,68 @@ test('post-call carryover preserves accepted team blocker artifacts', async () =
   assert.ok(result.followUpDraft.includes('安全审批'));
 });
 
+test('post-call carryover keeps sales capability confirmations separate from action items', async () => {
+  const { buildPostCallEnhancements } = await loadWorkflow();
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'sales',
+    transcript: [],
+    summaryData: { overview: 'Customer asked whether the platform supports SSO and audit export.', actionItems: [] },
+    dynamicActionArtifacts: [
+      {
+        actionId: 'capability_child_1',
+        parentActionId: 'technical_parent_1',
+        modeTemplateType: 'sales',
+        actionType: 'capability_fit_answer',
+        outputType: 'spoken_response',
+        structuredSummary: 'We can confirm SSO and audit export based on the security note, then validate the exact IdP and export format in a PoC.',
+        missingFields: [],
+        groundedSources: [{ evidenceId: 'ev_1', type: 'material', label: 'Security note', status: 'used' }],
+        acceptedAt: 1000,
+        evaluationResult: 'passed',
+        generationStatus: 'completed',
+      },
+      {
+        actionId: 'capability_child_2',
+        parentActionId: 'technical_parent_2',
+        modeTemplateType: 'sales',
+        actionType: 'capability_fit_answer',
+        outputType: 'spoken_response',
+        structuredSummary: '资料不足，先不要承诺 ROI 或自动写回。建议用客户样本做一次只读验证。',
+        missingFields: [],
+        groundedSources: [{ type: 'material', label: 'case search', status: 'not_found' }],
+        acceptedAt: 1001,
+        evaluationResult: 'safe_fallback',
+        generationStatus: 'completed',
+      },
+      {
+        actionId: 'buying_1',
+        modeTemplateType: 'sales',
+        actionType: 'buying_signal',
+        outputType: 'action_item',
+        structuredSummary: 'Owner: Mei\nDeliverable: schedule security PoC\nDue: Friday',
+        missingFields: [],
+        groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+        acceptedAt: 1002,
+        generationStatus: 'completed',
+      },
+    ],
+  });
+
+  assert.equal(result.acceptedCapabilityFitRecords.length, 2);
+  assert.equal(result.acceptedCapabilityFitRecords[0].parentActionId, 'technical_parent_1');
+  assert.equal(result.acceptedCapabilityFitRecords[0].groundingStatus, 'grounded');
+  assert.equal(result.acceptedCapabilityFitRecords[1].groundingStatus, 'needs_confirmation');
+  assert.ok(result.followUpDraft.includes('Capability confirmation:'));
+  assert.ok(result.followUpDraft.includes('Security note'));
+  assert.ok(result.followUpDraft.includes('needs confirmation with trusted material or a PoC'));
+  assert.ok(result.actionItemsStructured.some((item) => /schedule security PoC/i.test(item.text)));
+  assert.equal(
+    result.actionItemsStructured.some((item) => /SSO and audit export based on the security note/i.test(item.text)),
+    false,
+  );
+  assert.ok(result.coachingInsights.some((insight) => insight.type === 'sales_capability_confirmation'));
+});
+
 test('MeetingPersistence maps flat dynamic action usage into carryover artifacts', async () => {
   const { buildDynamicActionArtifactActionsFromUsage } = await loadMeetingPersistence();
   const { buildDynamicActionArtifacts } = await import(pathToFileURL(path.join(root, 'dist-electron/electron/services/dynamic-actions/DynamicActionArtifacts.js')).href);

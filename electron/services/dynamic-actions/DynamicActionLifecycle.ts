@@ -22,6 +22,7 @@ export type DynamicActionGenerationStatusForLifecycle =
 export interface DynamicActionLifecycleEvent {
   event: DynamicActionLifecycleEventName;
   actionId?: string;
+  parentActionId?: string;
   actionType: string;
   modeId?: string;
   modeTemplateType: string;

@@ -526,6 +526,7 @@ ${baseRules}
 
 export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<{
     id: string;
+    parentActionId?: string;
     modeTemplateType: string;
     type: string;
     productContract: { outputType: any };
@@ -537,6 +538,7 @@ export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<
 }> {
     const actionsById = new Map<string, {
         id: string;
+        parentActionId?: string;
         modeTemplateType: string;
         type: string;
         productContract: { outputType: any };
@@ -559,6 +561,7 @@ export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<
             ? metadata.actionType.trim()
             : '';
         const outputType = typeof metadata.outputType === 'string' ? metadata.outputType.trim() : '';
+        const parentActionId = typeof metadata.parentActionId === 'string' ? metadata.parentActionId.trim() : '';
         const createdAt = typeof item?.timestamp === 'number' ? item.timestamp : 0;
         const generationStatus = normalizeDynamicActionGenerationStatus(item);
         const triggerSource = normalizeDynamicActionTriggerSource(metadata.triggerSource);
@@ -581,6 +584,7 @@ export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<
         if (!existing) {
             actionsById.set(actionId, {
                 id: actionId,
+                ...(parentActionId ? { parentActionId } : {}),
                 modeTemplateType,
                 type: actionType,
                 productContract: { outputType },
@@ -598,6 +602,7 @@ export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<
         }
         if (!existing.modeTemplateType && modeTemplateType) existing.modeTemplateType = modeTemplateType;
         if (!existing.type && actionType) existing.type = actionType;
+        if (!existing.parentActionId && parentActionId) existing.parentActionId = parentActionId;
         if (!existing.productContract?.outputType && outputType) existing.productContract = { outputType };
         if ((!existing.createdAt || createdAt < existing.createdAt) && createdAt > 0) existing.createdAt = createdAt;
         if (!existing.latestTurn && latestTurn) existing.latestTurn = latestTurn;

@@ -3749,6 +3749,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       getContextQualityDiagnosticsCollector().recordDynamicActionLifecycleEvent({
         event,
         actionId: action.id,
+        parentActionId: action.parentActionId,
         actionType: action.type,
         modeId: action.modeId,
         modeTemplateType: action.modeTemplateType,
@@ -3769,6 +3770,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         status: action.status,
         properties: {
           actionId: action.id,
+          ...(action.parentActionId ? { parentActionId: action.parentActionId } : {}),
           actionType: action.type,
           modeTemplateType: action.modeTemplateType,
           outputType: action.productContract.outputType,

@@ -3675,6 +3675,7 @@ export class AppState {
         getContextQualityDiagnosticsCollector().recordDynamicActionLifecycleEvent({
           event: 'shown',
           actionId: shownAction.id,
+          parentActionId: shownAction.parentActionId,
           actionType: shownAction.type,
           modeId: shownAction.modeId,
           modeTemplateType: shownAction.modeTemplateType,
@@ -3698,6 +3699,7 @@ export class AppState {
           status: shownAction?.status,
           properties: {
             actionId: shownAction?.id,
+            ...(shownAction?.parentActionId ? { parentActionId: shownAction.parentActionId } : {}),
             actionType: shownAction?.type,
             modeTemplateType: shownAction?.modeTemplateType,
             outputType: shownAction?.productContract?.outputType,

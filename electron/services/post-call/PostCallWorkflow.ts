@@ -50,12 +50,23 @@ export interface AcceptedBlockerRecord {
   sourceActionId: string;
 }
 
+export interface AcceptedCapabilityFitRecord {
+  actionId: string;
+  parentActionId?: string;
+  summary: string;
+  groundingStatus: 'grounded' | 'needs_confirmation';
+  groundedSourceLabels: string[];
+  evaluationResult?: 'passed' | 'safe_fallback';
+  sourceActionId: string;
+}
+
 export interface PostCallEnhancements {
   schemaVersion: 2;
   actionItemsStructured: StructuredActionItem[];
   acceptedActionItems: StructuredActionItem[];
   acceptedDecisionRecords: AcceptedDecisionRecord[];
   acceptedBlockerRecords: AcceptedBlockerRecord[];
+  acceptedCapabilityFitRecords: AcceptedCapabilityFitRecord[];
   followUpDraft: string;
   coachingInsights: CoachingInsight[];
 }
@@ -78,6 +89,7 @@ const SALES_ACTION_LABELS: Record<string, string> = {
   case_study_request: 'Sales proof/case-study follow-up',
   technical_requirements: 'Sales technical requirements checklist',
   buying_signal: 'Sales next step',
+  capability_fit_answer: 'Sales capability confirmation',
 };
 const RECRUITING_LOGISTICS_PATTERN = /\b(compensation|salary|timeline|notice period|availability|start date)\b|(?:薪资|签证|入职时间|搬迁|远程|混合办公|offer|JD|岗位)/i;
 const TEAM_OWNERSHIP_PATTERN = /\b(owner|by|deadline|due|next step|action item)\b|(?:负责人|我来负责|我负责|我来做|行动项|截止|周[一二三四五六日天]前|星期[一二三四五六日天]前)/i;
@@ -112,6 +124,9 @@ export function buildPostCallEnhancements(params: {
   const acceptedBlockerRecords = params.dynamicActionArtifacts?.length
     ? collectAcceptedTeamBlockerRecords(params.dynamicActionArtifacts)
     : [];
+  const acceptedCapabilityFitRecords = params.dynamicActionArtifacts?.length
+    ? collectAcceptedCapabilityFitRecords(params.dynamicActionArtifacts)
+    : [];
   const coachingInsights = generateCoachingInsights(
     params.transcript,
     params.modeTemplateType,
@@ -125,9 +140,11 @@ export function buildPostCallEnhancements(params: {
     acceptedActionItems,
     acceptedDecisionRecords,
     acceptedBlockerRecords,
+    acceptedCapabilityFitRecords,
     followUpDraft: buildFollowUpDraft(params.modeTemplateType, actionItemsStructured, params.summaryData, {
       acceptedDecisionRecords,
       acceptedBlockerRecords,
+      acceptedCapabilityFitRecords,
     }),
     coachingInsights,
   };
@@ -187,6 +204,7 @@ export function buildFollowUpDraft(
   acceptedRecords?: {
     acceptedDecisionRecords?: AcceptedDecisionRecord[];
     acceptedBlockerRecords?: AcceptedBlockerRecord[];
+    acceptedCapabilityFitRecords?: AcceptedCapabilityFitRecord[];
   },
 ): string {
   const greeting = modeTemplateType === 'sales' || modeTemplateType === 'recruiting' || modeTemplateType === 'fde'
@@ -222,7 +240,17 @@ export function buildFollowUpDraft(
     lines.push('', 'Blockers:', ...blockerLines);
   }
 
-  if (nextSteps.length === 0 && decisionLines.length === 0 && blockerLines.length === 0) {
+  const capabilityLines = (acceptedRecords?.acceptedCapabilityFitRecords ?? []).map((record) => {
+    const suffix = record.groundingStatus === 'grounded'
+      ? `; grounded in: ${record.groundedSourceLabels.join(', ')}`
+      : '; needs confirmation with trusted material or a PoC before sharing';
+    return `- ${record.summary}${suffix}`;
+  });
+  if (capabilityLines.length > 0) {
+    lines.push('', 'Capability confirmation:', ...capabilityLines);
+  }
+
+  if (nextSteps.length === 0 && decisionLines.length === 0 && blockerLines.length === 0 && capabilityLines.length === 0) {
     lines.push('', 'I will follow up if anything else is needed.');
   }
 
@@ -269,6 +297,9 @@ export function generateCoachingInsights(
     }
     if (acceptedSalesArtifacts.some((artifact) => artifact.actionType === 'technical_requirements')) {
       add('sales_technical_followup', 'Technical requirements captured', 'Technical requirements were discussed. Confirm API, SSO, security, deployment environment, owner, and validation step.', 'info');
+    }
+    if (acceptedSalesArtifacts.some((artifact) => artifact.actionType === 'capability_fit_answer')) {
+      add('sales_capability_confirmation', 'Capability answer accepted during call', 'A capability-fit answer was generated. Reuse it only when it is grounded in trusted materials or confirmed through a PoC.', 'info');
     }
     if (acceptedSalesArtifacts.some((artifact) =>
       artifact.actionType === 'buying_signal' &&
@@ -340,6 +371,7 @@ function mergeAcceptedActionArtifacts(
   for (const artifact of artifacts) {
     if (artifact.modeTemplateType === 'sales') {
       if (!isSalesDynamicActionType(artifact.actionType)) continue;
+      if (artifact.actionType === 'capability_fit_answer') continue;
       if (!isAcceptedActionCarryoverStatus(artifact.generationStatus)) continue;
     } else {
       if (artifact.modeTemplateType !== 'team-meet') continue;
@@ -422,6 +454,50 @@ function collectAcceptedTeamBlockerRecords(artifacts: ActionArtifact[]): Accepte
       nextUnblockStep: labeledLine(artifact.structuredSummary, /^(next unblock step|解阻|下一步)\s*[:：]/i),
     }))
     .filter((record) => Boolean(record.blocker));
+}
+
+function collectAcceptedCapabilityFitRecords(artifacts: ActionArtifact[]): AcceptedCapabilityFitRecord[] {
+  return artifacts
+    .filter((artifact) =>
+      artifact.modeTemplateType === 'sales' &&
+      artifact.actionType === 'capability_fit_answer' &&
+      isAcceptedActionCarryoverStatus(artifact.generationStatus)
+    )
+    .map((artifact) => {
+      const usedSources = artifact.groundedSources.filter((source) =>
+        source.status === 'used' &&
+        ['material', 'pptx', 'business_context'].includes(source.type)
+      );
+      const groundingStatus = usedSources.length > 0 && artifact.evaluationResult !== 'safe_fallback'
+        ? 'grounded'
+        : 'needs_confirmation';
+      const groundedSourceLabels = usedSources
+        .map((source) => source.label.trim())
+        .filter(Boolean)
+        .slice(0, 3);
+      return {
+        actionId: artifact.actionId,
+        ...(artifact.parentActionId ? { parentActionId: artifact.parentActionId } : {}),
+        sourceActionId: artifact.parentActionId ?? artifact.actionId,
+        summary: summarizeCapabilityFitRecord(artifact.structuredSummary),
+        groundingStatus,
+        groundedSourceLabels,
+        ...(artifact.evaluationResult ? { evaluationResult: artifact.evaluationResult } : {}),
+      };
+    })
+    .filter((record) => Boolean(record.summary));
+}
+
+function summarizeCapabilityFitRecord(summary: string): string {
+  const cleaned = summary
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^[-*\d.、\s]+/, '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+  return cleaned.length > 180 ? `${cleaned.slice(0, 177).trim()}...` : cleaned;
 }
 
 function labeledLine(summary: string, label: RegExp): string | undefined {

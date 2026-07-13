@@ -544,6 +544,7 @@ describe('buildDynamicActionArtifactActionsFromUsage', () => {
         metadata: {
           source: 'dynamic_action',
           actionId: 'a',
+          parentActionId: 'parent-a',
           actionType: 'pricing_objection',
           outputType: 'spoken_response',
           modeTemplateType: 'sales',
@@ -554,6 +555,7 @@ describe('buildDynamicActionArtifactActionsFromUsage', () => {
     ]);
 
     assert.equal(actions[0].triggerSource, 'auto_countdown');
+    assert.equal(actions[0].parentActionId, 'parent-a');
   });
 });
 

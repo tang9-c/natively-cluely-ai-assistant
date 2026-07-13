@@ -47,6 +47,37 @@ test('builds artifact from completed dynamic action and nearest usage answer', a
   ]);
 });
 
+test('capability artifact preserves parent and runtime evaluation result', async () => {
+  const { buildDynamicActionArtifacts } = await loadHelper();
+  const artifacts = buildDynamicActionArtifacts({
+    actions: [action({
+      id: 'child-1',
+      parentActionId: 'parent-1',
+      modeTemplateType: 'sales',
+      type: 'capability_fit_answer',
+      productContract: { outputType: 'spoken_response' },
+      status: 'completed',
+      createdAt: 1,
+    })],
+    usage: [{
+      timestamp: 2,
+      answer: '当前资料不足，建议做 PoC。',
+      metadata: {
+        source: 'dynamic_action',
+        actionId: 'child-1',
+        parentActionId: 'parent-1',
+        actionType: 'capability_fit_answer',
+        outputType: 'spoken_response',
+        generationStatus: 'completed',
+        evaluationResult: 'safe_fallback',
+        groundedSources: [{ type: 'material', label: 'search', status: 'not_found' }],
+      },
+    }],
+  });
+  assert.equal(artifacts[0].parentActionId, 'parent-1');
+  assert.equal(artifacts[0].evaluationResult, 'safe_fallback');
+});
+
 test('does not use ordinary assist usage without dynamic_action metadata', async () => {
   const { buildDynamicActionArtifacts } = await loadHelper();
   const artifacts = buildDynamicActionArtifacts({

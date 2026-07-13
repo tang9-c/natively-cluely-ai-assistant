@@ -403,6 +403,7 @@ export class ContextQualityDiagnosticsCollector {
         this.dynamicActionLifecycleEvents.push({
             event: event.event,
             actionId: event.actionId,
+            parentActionId: event.parentActionId,
             actionType: event.actionType,
             modeId: event.modeId,
             modeTemplateType: event.modeTemplateType,

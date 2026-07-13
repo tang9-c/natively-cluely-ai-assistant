@@ -2,6 +2,7 @@ import type { DynamicActionOutputType } from './DynamicAction';
 
 export interface ActionArtifact {
   actionId: string;
+  parentActionId?: string;
   modeTemplateType: 'sales' | 'fde' | 'team-meet';
   actionType: string;
   outputType: DynamicActionOutputType;
@@ -15,6 +16,7 @@ export interface ActionArtifact {
   }>;
   acceptedAt: number;
   acceptTriggerSource?: 'manual' | 'auto_countdown';
+  evaluationResult?: 'passed' | 'safe_fallback';
   generationStatus: 'completed' | 'generated_failed' | 'not_generated';
 }
 
@@ -26,6 +28,7 @@ export interface BuildDynamicActionArtifactsInput {
     productContract: { outputType: DynamicActionOutputType };
     status: string;
     createdAt: number;
+    parentActionId?: string;
     latestTurn?: string;
     retrievalQuery?: string;
     triggerSource?: 'manual' | 'auto_countdown';
@@ -55,6 +58,9 @@ export function buildDynamicActionArtifacts(input: BuildDynamicActionArtifactsIn
         normalizeAcceptTriggerSource(action.triggerSource);
       return {
         actionId: action.id,
+        ...((usage?.metadata?.parentActionId || action.parentActionId) ? {
+          parentActionId: String(usage?.metadata?.parentActionId || action.parentActionId),
+        } : {}),
         modeTemplateType: action.modeTemplateType as ActionArtifact['modeTemplateType'],
         actionType: action.type,
         outputType: action.productContract.outputType,
@@ -63,6 +69,9 @@ export function buildDynamicActionArtifacts(input: BuildDynamicActionArtifactsIn
         groundedSources: normalizeGroundedSources(usage?.metadata, structuredSummary),
         acceptedAt: action.createdAt,
         ...(acceptTriggerSource ? { acceptTriggerSource } : {}),
+        ...(normalizeEvaluationResult(usage?.metadata?.evaluationResult) ? {
+          evaluationResult: normalizeEvaluationResult(usage?.metadata?.evaluationResult),
+        } : {}),
         generationStatus:
           action.status === 'generated_failed'
             ? 'generated_failed'
@@ -71,6 +80,10 @@ export function buildDynamicActionArtifacts(input: BuildDynamicActionArtifactsIn
               : 'not_generated',
       };
     });
+}
+
+function normalizeEvaluationResult(value: unknown): ActionArtifact['evaluationResult'] | undefined {
+  return value === 'passed' || value === 'safe_fallback' ? value : undefined;
 }
 
 function normalizeAcceptTriggerSource(value: unknown): ActionArtifact['acceptTriggerSource'] | undefined {
@@ -140,10 +153,19 @@ function deriveMissingFields(mode: string, actionType: string, text: string): st
 
 function normalizeGroundedSources(metadata: any, fallbackText: string): ActionArtifact['groundedSources'] {
   if (Array.isArray(metadata?.groundedSources)) {
-    return metadata.groundedSources.filter((item: any) =>
-      ['material', 'pptx', 'screen', 'business_context', 'transcript'].includes(item?.type) &&
-      ['used', 'not_found', 'scope_denied', 'failed'].includes(item?.status)
-    );
+    return metadata.groundedSources
+      .filter((item: any) =>
+        ['material', 'pptx', 'screen', 'business_context', 'transcript'].includes(item?.type) &&
+        ['used', 'not_found', 'scope_denied', 'failed'].includes(item?.status)
+      )
+      .map((item: any) => ({
+        ...(typeof item.evidenceId === 'string' && item.evidenceId.trim()
+          ? { evidenceId: item.evidenceId.trim().slice(0, 80) }
+          : {}),
+        type: item.type,
+        label: typeof item.label === 'string' ? item.label.slice(0, 160) : '',
+        status: item.status,
+      }));
   }
   return fallbackText ? [{ type: 'transcript', label: 'accepted action', status: 'used' }] : [];
 }
