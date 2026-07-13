@@ -3,6 +3,7 @@ import path from 'path';
 import { DynamicActionEngine } from '../dynamic-actions/DynamicActionEngine';
 import type { DynamicAction } from '../dynamic-actions/DynamicAction';
 import { buildDynamicActionArtifacts } from '../dynamic-actions/DynamicActionArtifacts';
+import { evaluateDynamicActionAcceptedOutput } from '../dynamic-actions/DynamicActionAcceptedOutputEvaluator';
 import { evaluateFdeAcceptedOutput } from '../dynamic-actions/FdeAcceptedOutputEvaluator';
 import { evaluateTeamMeetingAcceptedOutput } from '../dynamic-actions/TeamMeetingAcceptedOutputEvaluator';
 import type {
@@ -208,7 +209,7 @@ function runAcceptedActionPathForFixture(fixture: DynamicActionProductFixture, a
     artifact?.missingFields ?? [],
     expected.acceptedMissingFields ?? [],
   );
-  const acceptedOutputFailures = evaluateAcceptedOutputForMode(fixture, artifact, expected.acceptedAnswer);
+  const acceptedOutputFailures = evaluateAcceptedOutputForMode(fixture, artifact, expected.acceptedAnswer, action);
 
   return {
     acceptedPathPassed: acceptedOutputFailures.length === 0 && groundingFailures.length === 0 && missingFieldFailures.length === 0,
@@ -240,6 +241,7 @@ function evaluateAcceptedOutputForMode(
   fixture: DynamicActionProductFixture,
   artifact: any,
   answerText: string,
+  action?: DynamicAction,
 ): string[] {
   const patternResult = evaluatePatternExpectations(answerText, {
     required: fixture.expected.requiredAnswerPatterns ?? [],
@@ -259,9 +261,22 @@ function evaluateAcceptedOutputForMode(
           missingFields: artifact?.missingFields ?? [],
         }).failures
     : [];
+  const genericResult = evaluateDynamicActionAcceptedOutput({
+    actionType: artifact?.actionType ?? fixture.expected.actionType ?? '',
+    outputType: artifact?.outputType ?? 'spoken_response',
+    answerText,
+    missingFields: artifact?.missingFields ?? [],
+    groundedSources: artifact?.groundedSources ?? [],
+    sourceUtterance: action?.latestTurn ?? fixture.transcriptTurns.map((turn) => turn.text).join('\n'),
+    sourceIntent: action?.sourceIntent,
+  });
   return [
     ...patternResult.missingRequired.map((pattern) => `missing_answer:${pattern}`),
     ...patternResult.matchedForbidden.map((pattern) => `forbidden_answer:${pattern}`),
+    ...genericResult.requiredPatternFailures.map((failure) => `accepted_required:${failure}`),
+    ...genericResult.forbiddenPatternFailures.map((failure) => `accepted_forbidden:${failure}`),
+    ...genericResult.groundingFailures.map((failure) => `accepted_grounding:${failure}`),
+    ...genericResult.missingFieldFailures.map((failure) => `accepted_missing_field:${failure}`),
     ...modeFailures,
   ];
 }

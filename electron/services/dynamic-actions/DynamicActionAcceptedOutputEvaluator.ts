@@ -7,6 +7,8 @@ export interface AcceptedOutputEvaluationInput {
   answerText: string;
   groundedSources?: ActionArtifact['groundedSources'];
   missingFields?: string[];
+  sourceUtterance?: string;
+  sourceIntent?: string;
 }
 
 export interface AcceptedOutputEvaluationResult {
@@ -61,6 +63,22 @@ export function evaluateDynamicActionAcceptedOutput(
     forbidPattern('invented_customer_or_roi', /Fortune\s*500|世界500强|ROI\s*(都|guarantee|至少|很高|\d)|客户都/i);
   }
 
+  if (input.actionType === 'discovery_question') {
+    const questionCount = countQuestionLikeSentences(answer);
+    if (questionCount < 1 || questionCount > 3) {
+      requiredPatternFailures.push('discovery_question_count_1_to_3');
+    }
+    forbidPattern('discovery_capability_claim', /我们支持|我们可以|产品能够|一定支持|保证支持|fully support|we support|we can support|our product can/i);
+    forbidPattern('discovery_invented_case_or_roi', /Fortune\s*500|世界500强|标杆客户|ROI\s*(至少|guarantee|>|超过|都|很高|\d)|\d+\s*%|\$|¥|人民币|USD|CNY/i);
+    if (questionCount === 0) {
+      requiredPatternFailures.push('discovery_question_shape');
+    }
+    const anchors = extractAnchorTerms(input.sourceUtterance);
+    if (anchors.length > 0 && !anchors.some((term) => answer.toLocaleLowerCase().includes(term.toLocaleLowerCase()))) {
+      requiredPatternFailures.push('discovery_source_anchor');
+    }
+  }
+
   if (input.actionType === 'technical_requirements') {
     requirePattern('checklist_shape', /(^|\n)\s*[-*]\s*(API|SSO|Environment|Validation|Auth|安全|环境|验证)/i);
     forbidPattern('capability_promise', /一定支持|保证支持|guarantee|fully support all|所有.*都支持/i);
@@ -95,4 +113,36 @@ export function evaluateDynamicActionAcceptedOutput(
     groundingFailures,
     missingFieldFailures,
   };
+}
+
+function countQuestionLikeSentences(answer: string): number {
+  const explicitQuestionMarks = answer.match(/[?？]/g)?.length ?? 0;
+  if (explicitQuestionMarks > 0) return explicitQuestionMarks;
+  return answer
+    .split(/[\n。！？!?]+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) =>
+      /^(?:[-*]\s*)?(?:您|你|贵司|团队|现在|当前|这个|这类|谁|什么|哪些|哪一|如何|能否|是否|有没有|what|which|who|how|can|could|would|does|do)/i.test(part) ||
+      /(?:吗|么|呢)$/.test(part)
+    ).length;
+}
+
+function extractAnchorTerms(sourceUtterance?: string): string[] {
+  const source = String(sourceUtterance || '');
+  if (!source.trim()) return [];
+  const anchorPatterns = [
+    /\b(?:PLM|Windchill|QMS|ERP|SAP|Oracle|MES|ALM|Creo|CAD|BOM|ECO|ECN|CAPA|NCR|8D|AI Agent|Agent)\b/gi,
+    /(?:图纸|物料|变更|工艺|工单|质量|审计|仿真|流体仿真|力学仿真|装配|测试用例|缺陷|需求追踪|追踪矩阵|流道|冷却液)/g,
+    /(?:质量经理|工程师|审计员|采购|法务|工艺员|设计师|测试经理|产品经理|quality manager|auditor|engineer|buyer|procurement)/gi,
+    /(?:审计通过率|关闭周期|周期|良率|返工率|成本|质量成本|效率|评审效率|交付周期|cycle time|yield|rework rate|cost|audit pass rate)/gi,
+  ];
+  const anchors = new Set<string>();
+  for (const pattern of anchorPatterns) {
+    for (const match of source.matchAll(pattern)) {
+      const value = match[0]?.trim();
+      if (value) anchors.add(value);
+    }
+  }
+  return Array.from(anchors);
 }
