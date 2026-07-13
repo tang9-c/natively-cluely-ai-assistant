@@ -84,6 +84,32 @@ describe('sales industrial discovery intent classification', () => {
     }
   });
 
+  test('sales cloud candidates prioritize industrial discovery before generic proof and technical intents', async () => {
+    const { classifyIntent } = loadClassifier();
+    const utterance = '我们想确认流体仿真模块是否适合电池包冷却液流道。';
+    let candidateIntents = [];
+
+    await classifyIntent(utterance, `[INTERVIEWER]: ${utterance}`, 0, 'sales', {
+      cloudIntentClassifier: async (input) => {
+        candidateIntents = input.candidateIntents;
+        return { intent: 'sales_capability_fit', confidence: 0.83 };
+      },
+    });
+
+    assert.deepEqual(candidateIntents.slice(0, 8), [
+      'sales_buying_signal',
+      'sales_pricing_objection',
+      'sales_quote_request',
+      'sales_contextual_proof_discovery',
+      'sales_capability_fit',
+      'sales_process_integration',
+      'sales_value_discovery',
+      'sales_pain_discovery',
+    ]);
+    assert.ok(candidateIntents.indexOf('sales_proof_request') > candidateIntents.indexOf('sales_pain_discovery'));
+    assert.ok(candidateIntents.indexOf('sales_technical_requirements') > candidateIntents.indexOf('sales_pain_discovery'));
+  });
+
   test('natural Tier 2 industrial sales phrasings are exposed to cloud classifier', async () => {
     const { classifyIntent } = loadClassifier();
 

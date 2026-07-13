@@ -135,7 +135,7 @@ test('sales dynamic actions have product-specific card contracts', async () => {
     ['pricing_objection', 'Handle pricing objection', 'spoken_response', '回应价格异议', /价格|预算/],
     ['pricing_request', 'Draft quote email', 'email_draft', '生成报价邮件', /报价|邮件/],
     ['case_study_request', 'Share relevant case study', 'spoken_response', '引用案例证明', /案例|证明/],
-    ['discovery_question', 'Ask discovery question', 'spoken_response', '提出发现问题', /发现问题|工业软件|功能适配|流程打通/],
+    ['discovery_question', 'Ask discovery question', 'spoken_response', '追问关键问题', /发现问题|工业软件|功能适配|流程打通/],
     ['technical_requirements', 'Clarify technical requirements', 'checklist', '澄清技术需求', /技术|集成|安全/],
     ['buying_signal', 'Seize buying signal', 'action_item', '锁定推进下一步', /owner|负责人|日期|产物|artifact/],
   ];

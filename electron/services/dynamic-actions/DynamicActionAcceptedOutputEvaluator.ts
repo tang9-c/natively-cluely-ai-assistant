@@ -68,6 +68,9 @@ export function evaluateDynamicActionAcceptedOutput(
     if (questionCount < 1 || questionCount > 3) {
       requiredPatternFailures.push('discovery_question_count_1_to_3');
     }
+    if (!containsOnlyQuestions(answer)) {
+      requiredPatternFailures.push('discovery_only_questions');
+    }
     forbidPattern('discovery_capability_claim', /我们支持|我们可以|产品能够|一定支持|保证支持|fully support|we support|we can support|our product can/i);
     forbidPattern('discovery_invented_case_or_roi', /Fortune\s*500|世界500强|标杆客户|ROI\s*(至少|guarantee|>|超过|都|很高|\d)|\d+\s*%|\$|¥|人民币|USD|CNY/i);
     if (questionCount === 0) {
@@ -76,6 +79,10 @@ export function evaluateDynamicActionAcceptedOutput(
     const anchors = extractAnchorTerms(input.sourceUtterance);
     if (anchors.length > 0 && !anchors.some((term) => answer.toLocaleLowerCase().includes(term.toLocaleLowerCase()))) {
       requiredPatternFailures.push('discovery_source_anchor');
+    }
+    const intentDirectionFailure = evaluateDiscoveryIntentDirection(input.sourceIntent, answer);
+    if (intentDirectionFailure) {
+      requiredPatternFailures.push(intentDirectionFailure);
     }
   }
 
@@ -126,6 +133,38 @@ function countQuestionLikeSentences(answer: string): number {
       /^(?:[-*]\s*)?(?:您|你|贵司|团队|现在|当前|这个|这类|谁|什么|哪些|哪一|如何|能否|是否|有没有|what|which|who|how|can|could|would|does|do)/i.test(part) ||
       /(?:吗|么|呢)$/.test(part)
     ).length;
+}
+
+function containsOnlyQuestions(answer: string): boolean {
+  const segments = splitAnswerSegments(answer);
+  return segments.length > 0 && segments.every(isQuestionLikeSegment);
+}
+
+function splitAnswerSegments(answer: string): string[] {
+  return answer
+    .split(/(?<=[?？。.!！])|\n+/)
+    .map((part) => part.replace(/^[-*\d.、)\s]+/, '').trim())
+    .filter(Boolean);
+}
+
+function isQuestionLikeSegment(segment: string): boolean {
+  return /[?？]$/.test(segment) ||
+    /^(?:您|你|贵司|团队|现在|当前|这个|这类|谁|什么|哪些|哪一|如何|能否|是否|有没有|what|which|who|how|can|could|would|does|do)/i.test(segment) ||
+    /(?:吗|么|呢)$/.test(segment);
+}
+
+function evaluateDiscoveryIntentDirection(sourceIntent: string | undefined, answer: string): string | undefined {
+  if (!sourceIntent) return undefined;
+  const directionPatterns: Record<string, RegExp> = {
+    sales_pain_discovery: /流程|断点|缺口|workaround|补|谁|影响|impact|痛点|现状/i,
+    sales_capability_fit: /目标工作流|工作流|对象|验收|验证|标准|acceptance|validation|workflow|fit|适合/i,
+    sales_process_integration: /源系统|目标系统|数据方向|读写边界|边界|owner|负责|source system|target system|data direction|handoff/i,
+    sales_value_discovery: /周期|成本|质量|审计|返工|效率|成功指标|metric|cycle time|cost|rework|audit|success/i,
+    sales_contextual_proof_discovery: /行业|流程|系统组合|数据对象|成功指标|case|proof|ROI|类似|案例|证明|metric/i,
+  };
+  const pattern = directionPatterns[sourceIntent];
+  if (!pattern) return undefined;
+  return pattern.test(answer) ? undefined : `discovery_intent_direction_${sourceIntent}`;
 }
 
 function extractAnchorTerms(sourceUtterance?: string): string[] {

@@ -40,7 +40,7 @@ describe('sales industrial discovery dynamic actions', () => {
       assert.ok(action, `${fixture.notes} should emit ${fixture.expectedAction}; got ${actions.map(item => item.type).join(', ')}`);
       assert.equal(action.sourceIntent, fixture.expectedIntent, fixture.notes);
       assert.equal(action.latestTurn, fixture.utterance, fixture.notes);
-      assert.equal(action.productContract.userAction, '提出发现问题', fixture.notes);
+      assert.equal(action.productContract.userAction, '追问关键问题', fixture.notes);
       assert.equal(action.semanticGate?.decision, 'pass', fixture.notes);
       assert.equal(action.semanticGate?.semanticIntent, fixture.expectedIntent, fixture.notes);
     }

@@ -151,7 +151,7 @@ function resolveRiskState(input: { autoSurfacePolicy?: AutoSurfacePolicy; confid
 function buildUserAction(input: ContractInput, outputType: DynamicActionOutputType): string {
     if (input.type === 'pricing_request') return '生成报价邮件';
     if (input.type === 'case_study_request') return '引用案例证明';
-    if (input.type === 'discovery_question') return '提出发现问题';
+    if (input.type === 'discovery_question') return '追问关键问题';
     if (input.type === 'technical_requirements') return '澄清技术需求';
     if (input.type === 'buying_signal') return '锁定推进下一步';
     if (/pricing|objection|pushback|budget/.test(input.type)) return '回应价格异议';
