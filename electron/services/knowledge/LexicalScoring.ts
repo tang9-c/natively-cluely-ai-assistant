@@ -85,7 +85,7 @@ export function computeWeightedLexicalScore(
         const weight = Math.max(0, Number(weightedTerm.weight || 0));
         if (weight <= 0) continue;
         totalWeight += weight;
-        if (normalizedChunk.includes(term.toLowerCase())) {
+        if (normalizedChunk.includes(term.toLowerCase()) && !isLocallyNegated(chunk, term)) {
             matchedWeight += weight;
         }
     }
@@ -96,4 +96,9 @@ export function computeWeightedLexicalScore(
         ? Math.min(chunkUniqueSize, CJK_CHUNK_UNIQUE_TOKEN_CAP)
         : chunkUniqueSize;
     return matchedWeight / Math.sqrt(totalWeight * Math.max(1, normalizedChunkSize));
+}
+
+function isLocallyNegated(text: string, term: string): boolean {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?:没有|无|不含|不包含|不是|并非)[^。！？,.，；;]{0,8}${escaped}`, 'i').test(text);
 }

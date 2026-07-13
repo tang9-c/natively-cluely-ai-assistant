@@ -63,6 +63,9 @@ function extractNegatedTerms(text: string): string[] {
 
 function extractCjkStrongPhrases(text: string): string[] {
     const phrases: string[] = [];
+    if (text.includes('产品定价')) phrases.push('产品定价');
+    if (text.includes('定价')) phrases.push('定价');
+    if (text.includes('价格')) phrases.push('价格');
     const hasKnownForceModule = text.includes('力学仿真模块');
     if (hasKnownForceModule) phrases.push('力学仿真模块');
     const moduleMatch = hasKnownForceModule
@@ -105,7 +108,7 @@ export function analyzeMaterialQuery(query: string): MaterialQueryAnalysis {
         ...(latestTurn.match(TECH_ACRONYM_GLOBAL_RE) ?? []),
         ...entities.filter((entity) => TECH_ACRONYM_RE.test(entity) || LATIN_PROPER_RE.test(entity)),
     ]);
-    const cjkStrongTerms = extractCjkStrongPhrases(latestTurn);
+    const cjkStrongTerms = extractCjkStrongPhrases(latestTurn).filter((term) => !downrankTerms.includes(term));
     const strongTerms = unique([
         ...cjkStrongTerms,
         ...acronymTerms,

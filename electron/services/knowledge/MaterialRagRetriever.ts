@@ -317,10 +317,8 @@ export class MaterialRagRetriever {
     ): number {
         const lexicalScore = computeLexicalScore(text, queryWords, hasCjkQuery);
         if (!weightedTerms?.length) return lexicalScore;
-        return Math.max(
-            lexicalScore,
-            computeWeightedLexicalScore(text, weightedTerms, hasCjkQuery),
-        );
+        const weightedScore = computeWeightedLexicalScore(text, weightedTerms, hasCjkQuery);
+        return weightedScore > 0 ? weightedScore : lexicalScore;
     }
 
     private finalScore(candidate: Candidate): number {

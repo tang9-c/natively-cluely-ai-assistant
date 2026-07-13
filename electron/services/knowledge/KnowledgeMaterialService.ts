@@ -5,6 +5,7 @@ import { DatabaseManager, type KnowledgeMaterialChunkInput } from '../../db/Data
 import { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
 import { DocumentTextExtractor } from '../profile/DocumentTextExtractor';
 import { MaterialRagRetriever, type MaterialRagSource } from './MaterialRagRetriever';
+import { analyzeMaterialQuery, termsForCandidateFiltering } from './MaterialQueryAnalysis';
 
 type MaterialStatus = 'queued' | 'indexing' | 'complete' | 'failed' | 'deleted';
 
@@ -169,9 +170,14 @@ export class KnowledgeMaterialService {
     async searchWithDiagnostics(query: string, options: KnowledgeMaterialSearchOptions = {}): Promise<KnowledgeMaterialSearchResponse> {
         const limit = options.limit ?? 6;
         const candidateLimit = options.candidateLimit ?? 200;
+        const queryAnalysis = analyzeMaterialQuery(query);
+        const candidateTerms = termsForCandidateFiltering(queryAnalysis);
+        const minStructuredRows = queryAnalysis.strongTerms.length > 0
+            ? Math.min(20, candidateLimit)
+            : 1;
         const candidateReader = (this.db as any).getKnowledgeMaterialCandidateChunks;
         const rows = typeof candidateReader === 'function'
-            ? candidateReader.call(this.db, query, { ...options, limit, candidateLimit, withEmbeddingsOnly: false })
+            ? candidateReader.call(this.db, query, { ...options, limit, candidateLimit, withEmbeddingsOnly: false, candidateTerms, minStructuredRows })
             : this.db.getKnowledgeMaterialChunks({ withEmbeddingsOnly: false }).slice(0, candidateLimit);
         if (rows.length === 0) return { hits: [] };
 
@@ -194,6 +200,7 @@ export class KnowledgeMaterialService {
             filters: { scopes: ['global'] },
             topK: limit,
             format: 'none',
+            weightedTerms: queryAnalysis.weightedTerms,
         });
 
         return {

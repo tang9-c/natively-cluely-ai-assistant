@@ -198,6 +198,80 @@ test('searchWithDiagnostics with options.limit > candidateLimit still works', as
   assert.deepEqual(result.hits, []);
 });
 
+test('searchWithDiagnostics passes strong candidate terms to bounded candidate query', async () => {
+  const db = createDbStub();
+  let observedOptions;
+  db.getKnowledgeMaterialCandidateChunks = (query, options) => {
+    observedOptions = options;
+    return [{
+      id: 1,
+      material_id: 'force',
+      chunk_index: 0,
+      cleaned_text: '力学仿真模块支持结构分析和产品适配验证。',
+      parent_text: '力学仿真模块支持结构分析和产品适配验证。',
+      token_count: 20,
+      embedding: null,
+      file_name: 'force.md',
+      title: '力学仿真模块说明',
+      file_hash: 'hash_force',
+      material_updated_at: '2026-01-01T00:00:00.000Z',
+    }];
+  };
+  const service = new KnowledgeMaterialService(db, null);
+
+  await service.searchWithDiagnostics(`mode:sales
+intent:case_study_request
+entities:今天, 价格, 案例
+language:zh
+latestTurn:我们今天先不谈价格，先搞清楚力学仿真模块的功能是否适合我们的产品，你能不能介绍一下功能和案例`, { limit: 2, candidateLimit: 25 });
+
+  assert.ok(observedOptions.candidateTerms.includes('力学仿真模块'));
+  assert.ok(observedOptions.candidateTerms.includes('力学仿真'));
+  assert.equal(observedOptions.candidateTerms.includes('mode'), false);
+});
+
+test('searchWithDiagnostics ranks force simulation material above generic case material', async () => {
+  const db = createDbStub();
+  const now = '2026-01-01T00:00:00.000Z';
+  db.getKnowledgeMaterialCandidateChunks = () => [
+    {
+      id: 1,
+      material_id: 'generic',
+      chunk_index: 0,
+      cleaned_text: '这是一份客户案例和产品功能介绍，没有仿真或结构分析内容。',
+      parent_text: '这是一份客户案例和产品功能介绍，没有仿真或结构分析内容。',
+      token_count: 20,
+      embedding: null,
+      file_name: 'case.md',
+      title: '客户案例',
+      file_hash: 'hash_generic',
+      material_updated_at: now,
+    },
+    {
+      id: 2,
+      material_id: 'force',
+      chunk_index: 0,
+      cleaned_text: '力学仿真模块支持结构分析、CAE 验证、产品适配评估，并包含客户实施案例。',
+      parent_text: '力学仿真模块支持结构分析、CAE 验证、产品适配评估，并包含客户实施案例。',
+      token_count: 25,
+      embedding: null,
+      file_name: 'force.md',
+      title: '力学仿真模块案例',
+      file_hash: 'hash_force',
+      material_updated_at: now,
+    },
+  ];
+  const service = new KnowledgeMaterialService(db, null);
+
+  const result = await service.searchWithDiagnostics(`mode:sales
+intent:case_study_request
+entities:今天, 价格, 案例
+language:zh
+latestTurn:我们今天先不谈价格，先搞清楚力学仿真模块的功能是否适合我们的产品，你能不能介绍一下功能和案例`, { limit: 2, candidateLimit: 25 });
+
+  assert.equal(result.hits[0].sourceId, 'force');
+});
+
 test('createMaterialRecord returns __filePath for queued records but not failed ones', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'material-rec-'));
   try {
