@@ -1994,10 +1994,17 @@ export class DatabaseManager {
 
     public getKnowledgeMaterialCandidateChunks(
         query: string,
-        options: { limit?: number; candidateLimit?: number; withEmbeddingsOnly?: boolean } = {},
+        options: {
+            limit?: number;
+            candidateLimit?: number;
+            withEmbeddingsOnly?: boolean;
+            candidateTerms?: string[];
+            minStructuredRows?: number;
+        } = {},
     ): any[] {
         if (!this.db) return [];
         const candidateLimit = Math.max(1, Math.min(1000, Number(options.candidateLimit ?? 200)));
+        const minStructuredRows = Math.max(0, Math.min(candidateLimit, Number(options.minStructuredRows ?? Math.min(20, candidateLimit))));
         const embeddingClause = options.withEmbeddingsOnly ? 'AND c.embedding IS NOT NULL' : '';
         const selectSql = `
             SELECT
@@ -2015,27 +2022,52 @@ export class DatabaseManager {
             ORDER BY m.updated_at DESC, c.chunk_index ASC
             LIMIT ?
         `;
-        const terms = extractKnowledgeMaterialCandidateTerms(query);
+        const terms = (Array.isArray(options.candidateTerms) && options.candidateTerms.length > 0)
+            ? options.candidateTerms.map((term) => String(term || '').trim()).filter(Boolean).slice(0, 12)
+            : extractKnowledgeMaterialCandidateTerms(query);
+        const readBroadFallbackRows = (limit: number, excludeChunkIds: Set<number> = new Set()): any[] => {
+            if (!this.db || limit <= 0) return [];
+            const rows = this.db.prepare(`
+                ${selectSql}
+                ${orderAndLimitSql}
+            `).all(Math.min(candidateLimit, limit + excludeChunkIds.size));
+            return rows.filter((row: any) => !excludeChunkIds.has(Number(row.id))).slice(0, limit);
+        };
         if (terms.length > 0) {
             const clauses: string[] = [];
             const params: string[] = [];
+            const tierParts: string[] = [];
+            const tierParams: string[] = [];
             for (const term of terms) {
-                clauses.push('(m.title LIKE ? OR m.file_name LIKE ? OR c.cleaned_text LIKE ? OR c.parent_text LIKE ?)');
+                clauses.push('(m.title LIKE ? ESCAPE \'\\\' OR m.file_name LIKE ? ESCAPE \'\\\' OR c.parent_text LIKE ? ESCAPE \'\\\' OR c.cleaned_text LIKE ? ESCAPE \'\\\')');
                 const likeTerm = `%${escapeSqlLike(term)}%`;
                 params.push(likeTerm, likeTerm, likeTerm, likeTerm);
+                tierParts.push(`
+                    CASE
+                        WHEN m.title LIKE ? ESCAPE '\\' THEN 40
+                        WHEN m.file_name LIKE ? ESCAPE '\\' THEN 35
+                        WHEN c.parent_text LIKE ? ESCAPE '\\' THEN 25
+                        WHEN c.cleaned_text LIKE ? ESCAPE '\\' THEN 10
+                        ELSE 0
+                    END
+                `);
+                tierParams.push(likeTerm, likeTerm, likeTerm, likeTerm);
             }
             const rows = this.db.prepare(`
                 ${selectSql}
                 AND (${clauses.join(' OR ')})
-                ${orderAndLimitSql}
-            `).all(...params, candidateLimit);
-            if (rows.length > 0) return rows;
+                ORDER BY (${tierParts.join(' + ')}) DESC, m.updated_at DESC, c.chunk_index ASC
+                LIMIT ?
+            `).all(...params, ...tierParams, candidateLimit);
+            if (rows.length >= minStructuredRows || rows.length >= candidateLimit) return rows;
+            if (rows.length > 0) {
+                const seenChunkIds = new Set(rows.map((row: any) => Number(row.id)));
+                const fillRows = readBroadFallbackRows(candidateLimit - rows.length, seenChunkIds);
+                return [...rows, ...fillRows];
+            }
         }
 
-        return this.db.prepare(`
-            ${selectSql}
-            ${orderAndLimitSql}
-        `).all(candidateLimit);
+        return readBroadFallbackRows(candidateLimit);
     }
 
     public getKnowledgeMaterialChunkById(chunkId: number): any | null {

@@ -267,6 +267,165 @@ describe('DatabaseManager — getKnowledgeMaterialChunks / getKnowledgeMaterialC
     const rows = manager.getKnowledgeMaterialCandidateChunks('zzz', { candidateLimit: 1 });
     assert.equal(rows.length, 1);
   });
+
+  it('getKnowledgeMaterialCandidateChunks prioritizes title matches before candidateLimit', () => {
+    manager.upsertKnowledgeMaterial({
+      id: 'old_title',
+      fileName: 'force-simulation-case.md',
+      title: '力学仿真模块客户案例',
+      mimeOrExt: 'md',
+      fileHash: 'h_old_title',
+      status: 'complete',
+    });
+    manager.replaceKnowledgeMaterialChunks('old_title', [
+      { chunkIndex: 0, cleanedText: '这份资料介绍结构分析和仿真模块落地案例。', tokenCount: 20 },
+    ]);
+    manager.upsertKnowledgeMaterial({
+      id: 'new_body',
+      fileName: 'pricing.md',
+      title: '最新价格资料',
+      mimeOrExt: 'md',
+      fileHash: 'h_new_body',
+      status: 'complete',
+    });
+    manager.replaceKnowledgeMaterialChunks('new_body', [
+      { chunkIndex: 0, cleanedText: '这是一段普通正文，偶然提到力学仿真模块，但重点是报价。', tokenCount: 20 },
+    ]);
+
+    const rows = manager.getKnowledgeMaterialCandidateChunks('力学仿真模块 案例', {
+      candidateLimit: 1,
+      candidateTerms: ['力学仿真模块', '案例'],
+    });
+
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].material_id, 'old_title');
+  });
+
+  it('getKnowledgeMaterialCandidateChunks treats candidateTerms as recall OR signals', () => {
+    manager.upsertKnowledgeMaterial({
+      id: 'only_force',
+      fileName: 'force.md',
+      title: '力学仿真能力说明',
+      mimeOrExt: 'md',
+      fileHash: 'h_force',
+      status: 'complete',
+    });
+    manager.replaceKnowledgeMaterialChunks('only_force', [
+      { chunkIndex: 0, cleanedText: '力学仿真模块支持结构分析和产品适配验证。', tokenCount: 20 },
+    ]);
+
+    const rows = manager.getKnowledgeMaterialCandidateChunks('力学仿真模块 客户案例', {
+      candidateLimit: 10,
+      candidateTerms: ['力学仿真模块', '客户案例'],
+    });
+
+    assert.ok(rows.some((row) => row.material_id === 'only_force'));
+  });
+
+  it('getKnowledgeMaterialCandidateChunks prioritizes file-name matches before body matches', () => {
+    manager.upsertKnowledgeMaterial({
+      id: 'file_match',
+      fileName: 'windchill-qms-readonly.md',
+      title: '集成说明',
+      mimeOrExt: 'md',
+      fileHash: 'h_file',
+      status: 'complete',
+    });
+    manager.replaceKnowledgeMaterialChunks('file_match', [
+      { chunkIndex: 0, cleanedText: '这份资料介绍只读同步和权限验证。', tokenCount: 20 },
+    ]);
+    manager.upsertKnowledgeMaterial({
+      id: 'body_match',
+      fileName: 'generic.md',
+      title: '通用资料',
+      mimeOrExt: 'md',
+      fileHash: 'h_body',
+      status: 'complete',
+    });
+    manager.replaceKnowledgeMaterialChunks('body_match', [
+      { chunkIndex: 0, cleanedText: '正文里提到 Windchill QMS，但主要是泛化流程介绍。', tokenCount: 20 },
+    ]);
+
+    const rows = manager.getKnowledgeMaterialCandidateChunks('Windchill QMS', {
+      candidateLimit: 1,
+      candidateTerms: ['Windchill', 'QMS'],
+    });
+
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].material_id, 'file_match');
+  });
+
+  it('getKnowledgeMaterialCandidateChunks prioritizes parent text matches before child-only matches', () => {
+    manager.upsertKnowledgeMaterial({
+      id: 'parent_match',
+      fileName: 'parent.md',
+      title: '父块资料',
+      mimeOrExt: 'md',
+      fileHash: 'h_parent',
+      status: 'complete',
+    });
+    manager.replaceKnowledgeMaterialChunks('parent_match', [
+      {
+        chunkIndex: 0,
+        cleanedText: '这个子块只说验证步骤。',
+        parentText: 'Windchill BOM 只读同步到 QMS CAPA 的权限边界验证步骤。',
+        tokenCount: 20,
+      },
+    ]);
+    manager.upsertKnowledgeMaterial({
+      id: 'child_match',
+      fileName: 'child.md',
+      title: '子块资料',
+      mimeOrExt: 'md',
+      fileHash: 'h_child',
+      status: 'complete',
+    });
+    manager.replaceKnowledgeMaterialChunks('child_match', [
+      { chunkIndex: 0, cleanedText: 'Windchill BOM QMS CAPA 这些词出现在孤立子块里。', tokenCount: 20 },
+    ]);
+
+    const rows = manager.getKnowledgeMaterialCandidateChunks('Windchill BOM QMS CAPA', {
+      candidateLimit: 1,
+      candidateTerms: ['Windchill', 'BOM', 'QMS', 'CAPA'],
+    });
+
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].material_id, 'parent_match');
+  });
+
+  it('getKnowledgeMaterialCandidateChunks fills sparse structured results from broad fallback rows', () => {
+    manager.upsertKnowledgeMaterial({
+      id: 'structured_hit',
+      fileName: 'force.md',
+      title: '力学仿真模块',
+      mimeOrExt: 'md',
+      fileHash: 'h_structured',
+      status: 'complete',
+    });
+    manager.replaceKnowledgeMaterialChunks('structured_hit', [
+      { chunkIndex: 0, cleanedText: '力学仿真模块支持结构分析。', tokenCount: 20 },
+    ]);
+    manager.upsertKnowledgeMaterial({
+      id: 'broad_fill',
+      fileName: 'fallback.md',
+      title: '补齐资料',
+      mimeOrExt: 'md',
+      fileHash: 'h_broad',
+      status: 'complete',
+    });
+    manager.replaceKnowledgeMaterialChunks('broad_fill', [
+      { chunkIndex: 0, cleanedText: '这份资料没有命中强词，但可用于 broad fallback 补齐候选池。', tokenCount: 20 },
+    ]);
+
+    const rows = manager.getKnowledgeMaterialCandidateChunks('力学仿真模块', {
+      candidateLimit: 4,
+      minStructuredRows: 3,
+      candidateTerms: ['力学仿真模块'],
+    });
+
+    assert.ok(rows.some((row) => row.material_id === 'structured_hit'));
+    assert.ok(rows.some((row) => row.material_id === 'broad_fill'));
+  });
 });
 
 describe('DatabaseManager — deleteKnowledgeMaterial / getMaterialQueueStatus / markKnowledgeMaterialEmbeddingsFailed', () => {
