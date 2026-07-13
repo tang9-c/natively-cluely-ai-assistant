@@ -38,3 +38,11 @@ test('dynamic action artifacts remain transient and do not add durable artifact 
   assert.doesNotMatch(rendererFiles, /localStorage\.(setItem|getItem)[\s\S]{0,160}(artifact|dynamic_action)/i);
   assert.match(artifact, /not a persisted database record|transient/i);
 });
+
+test('continuation remains an in-memory service contract', () => {
+  const continuationSource = fs.readFileSync(
+    path.join(root, 'electron/services/dynamic-actions/DynamicActionContinuation.ts'),
+    'utf8',
+  );
+  assert.doesNotMatch(continuationSource, /CREATE TABLE|ALTER TABLE|DatabaseManager|better-sqlite3/);
+});

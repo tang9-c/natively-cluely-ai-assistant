@@ -1,7 +1,12 @@
 import type { EvidenceRef } from './DynamicAction';
 
 export type SignalStatus = 'candidate' | 'confirmed' | 'cooling_down' | 'expired';
-export type SignalConfirmationSource = 'trigger' | 'cloud_intent' | 'local_intent' | 'heuristic';
+export type SignalConfirmationSource =
+    | 'trigger'
+    | 'cloud_intent'
+    | 'local_intent'
+    | 'heuristic'
+    | 'continuation_planner';
 
 export const SIGNAL_THRESHOLDS = {
     INTERNAL_MIN: 0.55,

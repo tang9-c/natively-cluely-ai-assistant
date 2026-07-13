@@ -14,7 +14,12 @@ export type ActionStatus =
 export type AutoSurfacePolicy = 'auto' | 'card' | 'silent';
 export type DynamicActionAcceptTriggerSource = 'manual' | 'auto_countdown';
 export type SignalStatus = 'candidate' | 'confirmed' | 'cooling_down' | 'expired';
-export type SignalConfirmationSource = 'trigger' | 'cloud_intent' | 'local_intent' | 'heuristic';
+export type SignalConfirmationSource =
+    | 'trigger'
+    | 'cloud_intent'
+    | 'local_intent'
+    | 'heuristic'
+    | 'continuation_planner';
 
 export type DynamicActionOutputType =
     | 'spoken_response'
@@ -50,6 +55,7 @@ export interface EvidenceRef {
 
 export interface DynamicAction {
     id: string;
+    parentActionId?: string;
     sessionId: string;
     modeId: string;
     modeTemplateType: string;
