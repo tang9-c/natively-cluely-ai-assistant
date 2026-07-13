@@ -2004,7 +2004,7 @@ export class DatabaseManager {
     ): any[] {
         if (!this.db) return [];
         const candidateLimit = Math.max(1, Math.min(1000, Number(options.candidateLimit ?? 200)));
-        const minStructuredRows = Math.max(0, Math.min(candidateLimit, Number(options.minStructuredRows ?? 1)));
+        const minStructuredRows = Math.max(0, Math.min(candidateLimit, Number(options.minStructuredRows ?? Math.min(20, candidateLimit))));
         const embeddingClause = options.withEmbeddingsOnly ? 'AND c.embedding IS NOT NULL' : '';
         const selectSql = `
             SELECT
