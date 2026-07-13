@@ -10,6 +10,8 @@ This design adds five sales semantic intents and maps all five to one dynamic ac
 
 When the user accepts the card, the assistant must output only 1-3 questions that can be asked directly to the customer. It must not answer product capability, invent cases, invent ROI, or wait on slow external context before generating the questions.
 
+This is Phase 1 of the sales discovery loop. It does not complete the later grounded capability-answer step. After the seller asks discovery questions and the customer provides enough context, a later Phase 2 should answer capability fit using grounded material/business context.
+
 ## Goals
 
 - Recognize industrial software sales discovery moments in sales mode.
@@ -18,6 +20,7 @@ When the user accepts the card, the assistant must output only 1-3 questions tha
 - Preserve existing sales actions for pricing, quote, proof, technical requirements, and buying signals.
 - Reuse existing intent classification, semantic gate, dynamic action, product contract, context decision, and accepted-output evaluation paths.
 - Avoid new database schema, UI systems, retrieval systems, model providers, or technology stacks.
+- Define the boundary between Phase 1 discovery questions and a later Phase 2 grounded capability answer.
 
 ## Non-Goals
 
@@ -27,6 +30,7 @@ When the user accepts the card, the assistant must output only 1-3 questions tha
 - Do not add PLM/QMS/ERP/MES writeback or automated enterprise-system operations.
 - Do not make Material RAG or Windchill required for `discovery_question`.
 - Do not claim the product has a capability, case study, ROI metric, or customer reference unless grounded by existing trusted context outside this action.
+- Do not implement the Phase 2 grounded capability-answer flow in this design.
 
 ## Existing Architecture
 
@@ -178,6 +182,34 @@ Evaluator requirements:
 
 This evaluator should be covered by tests with representative generated outputs.
 
+## Phase 2 Boundary: Grounded Capability Answer
+
+The full product loop does not end at discovery questions. If the customer answers the follow-up questions with concrete workflow, object, metric, environment, or validation context, the assistant should later be able to help answer the original capability question.
+
+Example:
+
+```text
+Customer: 请介绍一下你们在流体仿真方面的功能。
+Assistant Phase 1: Ask what product scenario, flow condition, success metric, and validation artifact matter.
+Customer: 我们主要看电池包冷却液流道，关注压降、流速分布和温升。
+Assistant Phase 2: Ground capability-fit answer in uploaded material or business context.
+```
+
+Phase 2 should be designed separately. Its likely contract:
+
+- Detect that the customer has supplied enough context after a discovery question.
+- Trigger a capability-fit answer, not another discovery question.
+- Require grounded context before making capability claims.
+- Prefer Material RAG for product capability, case, deck, PDF, or uploaded-document grounding.
+- Use business-system context only when it is already available or clearly relevant to the customer's system/process objects.
+- Clearly separate:
+  - capabilities supported by available trusted material,
+  - capabilities that may fit but require confirmation,
+  - capabilities that cannot be claimed from current evidence.
+- Never invent cases, ROI, customer names, benchmark metrics, or unsupported product functions.
+
+Phase 1 should leave enough trace for Phase 2 to use later, such as the accepted `discovery_question` action, semantic intent, source utterance, and customer follow-up turn. Phase 1 does not need to implement this state machine or answer generation.
+
 ## Test Matrix
 
 Create a structured fixture matrix with fields:
@@ -243,6 +275,7 @@ Do not isolate all coverage in new test files if existing regression suites alre
 - `discovery_question` context need uses ready-only material/business context and does not require screen.
 - Accepted output contains only 1-3 questions.
 - Accepted output does not include capability claims or invented cases/ROI.
+- Phase 1 records enough action/intent context for a later Phase 2 design, but does not answer product capability questions itself.
 - Pricing, quote, generic proof, technical requirements, and buying signal regressions still pass.
 - No database schema, provider routing, STT, summary, RAG algorithm, or renderer layout changes are required.
 
