@@ -7,22 +7,30 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
 
-// 静态 wiring 测试:确保生产路径 ipcHandlers.ts 真的在构造 BusinessSystemContextService
-// 时显式注入 plmAdapter。否则这次加的 Windchill adapter 等于"代码存在但生产不调用"。
+// 静态 wiring 测试:确保生产 IPC 路径通过上下文准备模块构造 BusinessSystemContextService
+// 并显式注入 plmAdapter。否则 Windchill adapter 等于"代码存在但生产不调用"。
 test('ipcHandlers wires plmAdapter into BusinessSystemContextService', () => {
-    const source = fs.readFileSync(path.join(root, 'electron/ipcHandlers.ts'), 'utf8');
-
-    // 必须加载 createWindchillBusinessContextAdapter(ipcHandlers.ts 内部用 require,不是 import)
-    assert.match(
-        source,
-        /require\s*\(\s*['"]\.\/services\/business-system\/WindchillBusinessContextAdapter['"]\s*\)/,
-        'ipcHandlers.ts should require the Windchill adapter factory',
+    const ipcSource = fs.readFileSync(path.join(root, 'electron/ipcHandlers.ts'), 'utf8');
+    const contextSource = fs.readFileSync(
+        path.join(root, 'electron/services/context/WhatToSayContextPreparation.ts'),
+        'utf8',
     );
 
-    // 必须传 plmAdapter 字段
     assert.match(
-        source,
+        ipcSource,
+        /prepareWhatToSayContext/,
+        'ipcHandlers.ts should call the context preparation module used by generate-what-to-say',
+    );
+
+    assert.match(
+        contextSource,
+        /from\s+['"]\.\.\/business-system\/WindchillBusinessContextAdapter['"]/,
+        'WhatToSayContextPreparation.ts should import the Windchill adapter factory',
+    );
+
+    assert.match(
+        contextSource,
         /new\s+BusinessSystemContextService\(\s*\{[\s\S]*?plmAdapter\s*:\s*createWindchillBusinessContextAdapter/,
-        'ipcHandlers.ts must pass plmAdapter (from createWindchillBusinessContextAdapter) into BusinessSystemContextService',
+        'WhatToSayContextPreparation.ts must pass plmAdapter into BusinessSystemContextService',
     );
 });
