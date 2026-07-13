@@ -30,6 +30,9 @@ const isSemiAutoAction = (action: DynamicActionPayload): boolean =>
 
 const buildDynamicActionModeEvent = (action: DynamicActionPayload): DynamicActionModeEvent => ({
   actionId: action.id,
+  parentActionId: action.parentActionId,
+  actionType: action.type,
+  sourceIntent: action.sourceIntent,
   modeTemplateType: action.modeTemplateType,
   intent: action.sourceIntent || action.type,
   confidence: action.confidence,

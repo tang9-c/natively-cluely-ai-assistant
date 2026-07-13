@@ -34,6 +34,7 @@ import {
     type ModeEventContextTurn,
     type SemanticGateTrace,
 } from './services/dynamic-actions/ModeEventClassifier';
+import { buildRetrievalQuery } from './services/dynamic-actions/ModeEventUtils';
 import { ScreenContext } from './services/screen/types';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
 import { SkillActivationManager } from './services/SkillActivationManager';
@@ -752,7 +753,7 @@ export class IntelligenceEngine extends EventEmitter {
         providerDataScopes?: ProviderDataScopePolicy,
     ): Promise<void> {
         if (!this.currentSessionId || !this.currentDynamicActionModeId || !this.currentDynamicActionTemplateType) return;
-        await this.dynamicActionContinuationService.observeFinalCustomerTurn({
+        const outcome = await this.dynamicActionContinuationService.observeFinalCustomerTurn({
             sessionId: this.currentSessionId,
             modeId: this.currentDynamicActionModeId,
             modeTemplateType: this.currentDynamicActionTemplateType,
@@ -761,6 +762,56 @@ export class IntelligenceEngine extends EventEmitter {
             timestamp: segment.timestamp,
             providerDataScopes,
         });
+        if (outcome.kind !== 'ready' || !outcome.continuation || !outcome.plannerResult) return;
+        const continuation = outcome.continuation;
+        const slots = outcome.plannerResult.extractedSlots;
+        const slotEntities = [
+            slots.object,
+            slots.workflow,
+            slots.environment,
+            slots.validationNeed,
+            ...(slots.metrics ?? []),
+            ...(slots.systemObjects ?? []),
+        ].filter((value): value is string => Boolean(value?.trim()));
+        const latestTurn = continuation.collectedCustomerTurns.at(-1)?.text ?? continuation.originalTurn;
+        const action = this.dynamicActionEngine?.enqueueDerivedAction({
+            sessionId: continuation.sessionId,
+            modeId: continuation.modeId,
+            modeTemplateType: 'sales',
+            type: 'capability_fit_answer',
+            parentActionId: continuation.parentActionId,
+            sourceIntent: continuation.sourceIntent,
+            latestTurn,
+            evidenceRefs: [
+                ...continuation.originalEvidenceRefs.slice(0, 1),
+                ...continuation.collectedCustomerTurns.slice(-1).map((turn) => ({
+                    source: 'transcript' as const,
+                    text: turn.text,
+                    timestamp: turn.timestamp,
+                    speaker: 'interviewer',
+                })),
+            ],
+            keyEntities: [...continuation.keyEntities, ...slotEntities],
+            retrievalQuery: buildRetrievalQuery({
+                modeTemplateType: 'sales',
+                intent: continuation.sourceIntent,
+                keyEntities: [...continuation.keyEntities, ...slotEntities],
+                latestTurn,
+                language: continuation.language,
+            }),
+            confidence: outcome.plannerResult.confidence,
+            language: continuation.language,
+        });
+        if (action) {
+            this.dynamicActionContinuationService.markEmitted(continuation.sessionId, continuation.parentActionId);
+            this.emit('dynamic_action_emitted', action);
+        } else {
+            this.dynamicActionContinuationService.markEmitted(
+                continuation.sessionId,
+                continuation.parentActionId,
+                'derived_action_deduplicated',
+            );
+        }
     }
 
     // For tests — injection seam.
@@ -1072,6 +1123,8 @@ export class IntelligenceEngine extends EventEmitter {
         const shouldPersist = options?.persist !== false;
         const dynamicActionModeEvent = options?.modeEvent as (ModeEventContext & {
             actionId?: string;
+            parentActionId?: string;
+            actionType?: string;
             sourceIntent?: string;
             productContract?: {
                 outputType?: DynamicActionOutputType;
@@ -1366,8 +1419,10 @@ export class IntelligenceEngine extends EventEmitter {
                 ...(isDynamicActionUsage ? {
                     metadata: {
                         source: 'dynamic_action',
-                        actionType: dynamicActionModeEvent?.sourceIntent ?? dynamicActionModeEvent?.intent,
+                        actionType: dynamicActionModeEvent?.actionType ?? dynamicActionModeEvent?.intent,
+                        sourceIntent: dynamicActionModeEvent?.sourceIntent,
                         actionId: dynamicActionModeEvent?.actionId,
+                        parentActionId: dynamicActionModeEvent?.parentActionId,
                         modeTemplateType: dynamicActionModeEvent?.modeTemplateType,
                         retrievalQuery: dynamicActionModeEvent?.retrievalQuery,
                         outputType: dynamicActionModeEvent?.productContract?.outputType,

@@ -17,6 +17,10 @@ import { buildRetrievalQuery, detectLanguage, escapeXmlText } from "../services/
 import type { TranscriptEmotionSource } from "../../shared/senseVoiceEmotion";
 
 export interface ModeEventContext {
+    actionId?: string;
+    parentActionId?: string;
+    actionType?: string;
+    sourceIntent?: string;
     modeTemplateType?: string;
     intent?: string;
     confidence?: number;
@@ -62,6 +66,8 @@ function buildModeEventPromptBlock(modeEvent?: ModeEventContext, intentResult?: 
     const language = modeEvent.language || detectLanguage(`${modeEvent.latestTurn || ''}\n${modeEvent.retrievalQuery || ''}`);
     const lines = [
         `modeTemplateType: ${modeEvent.modeTemplateType || 'active'}`,
+        modeEvent.actionType ? `actionType: ${modeEvent.actionType}` : '',
+        modeEvent.sourceIntent ? `sourceIntent: ${modeEvent.sourceIntent}` : '',
         `intent: ${modeEvent.intent || intentResult?.intent || 'unknown'}`,
         `confidence: ${modeEvent.confidence ?? intentResult?.confidence ?? 'unknown'}`,
         modeEvent.answerShape || intentResult?.answerShape ? `answerShape: ${modeEvent.answerShape || intentResult?.answerShape}` : '',

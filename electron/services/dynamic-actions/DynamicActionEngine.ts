@@ -46,6 +46,8 @@ const SALES_PROMPT_INSTRUCTIONS: Record<string, string> = {
         'You are in Sales mode. The prospect raised technical, security, API, SSO, integration, or deployment requirements. Clarify systems, APIs, auth, deployment environment, security constraints, owners, and the smallest validation step. Do not promise capability before validation.',
     buying_signal:
         'You are in Sales mode. The prospect showed buying or next-step intent. Lock next step, owner, date, and artifact. If owner/date/artifact is missing, ask for the missing field instead of inventing it.',
+    capability_fit_answer:
+        'You are in Sales mode. The prospect has clarified a capability-fit object, scenario, metric, or validation need. Generate a short answer the seller can say aloud. Separate confirmed facts from what still needs validation. Use trusted material or readonly business context when present. If grounding is insufficient, say the current materials are not enough and propose a small validation step. Do not invent customer names, ROI, prices, contract terms, or automatic PLM/QMS writeback.',
 };
 
 const FDE_PROMPT_INSTRUCTIONS: Record<string, string> = {
@@ -271,6 +273,61 @@ export class DynamicActionEngine {
 
     getTopActions(sessionId: string, maxAgeMs: number = 60000): DynamicAction[] {
         return this.getTopActionsWithExpired(sessionId, maxAgeMs).actions;
+    }
+
+    enqueueDerivedAction(input: EnqueueDerivedActionInput): DynamicAction | null {
+        const existing = this.store.getAllActions(input.sessionId).some((action) =>
+            action.type === input.type && action.parentActionId === input.parentActionId
+        );
+        if (existing) return null;
+
+        const createdAt = input.createdAt ?? Date.now();
+        const confidence = Math.max(0, Math.min(1, input.confidence));
+        const evidenceRefs = input.evidenceRefs.slice(0, 2).map((item) => ({
+            ...item,
+            text: item.text.slice(0, 280),
+        }));
+        const productContract = buildDynamicActionProductContract({
+            type: input.type,
+            label: '生成能力匹配回答',
+            modeTemplateType: 'sales',
+            confidence,
+            autoSurfacePolicy: 'card',
+            evidenceRefs,
+        });
+        const action: DynamicAction = {
+            id: `action_${crypto.randomUUID()}`,
+            sessionId: input.sessionId,
+            modeId: input.modeId,
+            modeTemplateType: input.modeTemplateType,
+            type: input.type,
+            label: '生成能力匹配回答',
+            productContract,
+            confidence,
+            priority: confidence,
+            evidenceRefs,
+            status: 'candidate',
+            createdAt,
+            expiresAt: createdAt + 60_000,
+            promptInstruction: SALES_PROMPT_INSTRUCTIONS.capability_fit_answer,
+            parentActionId: input.parentActionId,
+            sourceIntent: input.sourceIntent,
+            latestTurn: input.latestTurn.slice(0, 600),
+            language: input.language,
+            keyEntities: [...new Set(input.keyEntities)].slice(0, 12),
+            retrievalQuery: input.retrievalQuery.slice(0, 800),
+            autoSurfacePolicy: 'card',
+            autoTriggerEligible: false,
+            autoTriggerReason: 'continuation_requires_manual_acceptance',
+            signalStatus: 'confirmed',
+            evidenceCount: evidenceRefs.length,
+            confirmationSource: 'continuation_planner',
+            confirmedIntent: input.sourceIntent,
+        };
+        const deduplicated = this.store.deduplicate(action);
+        if (!deduplicated) return null;
+        this.store.addAction(deduplicated);
+        return deduplicated;
     }
 
     getTopActionsWithExpired(
@@ -604,4 +661,20 @@ export class DynamicActionEngine {
                 : { maxWords: 120, format: 'bullets', tone: 'clear' },
         };
     }
+}
+
+export interface EnqueueDerivedActionInput {
+    sessionId: string;
+    modeId: string;
+    modeTemplateType: 'sales';
+    type: 'capability_fit_answer';
+    parentActionId: string;
+    sourceIntent: 'sales_capability_fit' | 'sales_contextual_proof_discovery';
+    latestTurn: string;
+    evidenceRefs: EvidenceRef[];
+    keyEntities: string[];
+    retrievalQuery: string;
+    confidence: number;
+    language?: string;
+    createdAt?: number;
 }

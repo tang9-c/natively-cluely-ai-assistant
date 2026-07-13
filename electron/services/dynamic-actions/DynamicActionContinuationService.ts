@@ -118,6 +118,14 @@ export class DynamicActionContinuationService {
         this.activeBySession.delete(sessionId);
     }
 
+    markEmitted(sessionId: string, parentActionId: string, reasonCode?: string): void {
+        const record = this.activeBySession.get(sessionId);
+        if (!record || record.parentActionId !== parentActionId || record.state !== 'ready') return;
+        record.state = transitionContinuationState('ready', 'emitted');
+        this.activeBySession.delete(sessionId);
+        this.trace(record, 'emitted', reasonCode);
+    }
+
     async observeFinalCustomerTurn(input: ContinuationObservationInput): Promise<ContinuationObservationOutcome> {
         const record = this.getActiveForSession(input.sessionId);
         if (!record || !this.planner) return { kind: 'none' };

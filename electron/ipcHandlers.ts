@@ -130,6 +130,9 @@ async function testQCloudApiKeyConnection(apiKey: string): Promise<void> {
 
 type SanitizedModeEvent = ModeEventContext & {
   actionId?: string;
+  parentActionId?: string;
+  actionType?: string;
+  sourceIntent?: string;
   productContract?: {
     outputType?: DynamicActionOutputType;
     contextNeedDecision?: ContextNeedDecision;
@@ -152,6 +155,8 @@ function sanitizeModeEvent(modeEvent: unknown): SanitizedModeEvent | undefined {
 
   for (const key of [
     'modeTemplateType',
+    'actionType',
+    'sourceIntent',
     'intent',
     'latestTurn',
     'emotion',
@@ -166,6 +171,7 @@ function sanitizeModeEvent(modeEvent: unknown): SanitizedModeEvent | undefined {
   }
 
   assignString('actionId');
+  assignString('parentActionId');
 
   if (typeof raw.confidence === 'number' && Number.isFinite(raw.confidence)) {
     cleaned.confidence = raw.confidence;

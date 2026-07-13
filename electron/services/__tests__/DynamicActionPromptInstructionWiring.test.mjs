@@ -38,6 +38,9 @@ test('dynamic action accept forwards modeEvent retrieval metadata', () => {
 
   assert.match(bar, /type DynamicActionModeEvent/);
   assert.match(bar, /actionId:\s*action\.id/);
+  assert.match(bar, /actionType:\s*action\.type/);
+  assert.match(bar, /sourceIntent:\s*action\.sourceIntent/);
+  assert.match(bar, /parentActionId:\s*action\.parentActionId/);
   assert.match(bar, /modeTemplateType:\s*action\.modeTemplateType/);
   assert.match(bar, /intent:\s*action\.sourceIntent\s*\|\|\s*action\.type/);
   assert.match(bar, /confidence:\s*action\.confidence/);
@@ -51,6 +54,9 @@ test('dynamic action accept forwards modeEvent retrieval metadata', () => {
   assert.match(bar, /answerShape:\s*action\.answerStyle\?\.format/);
   assert.match(bar, /modeEvent:\s*buildDynamicActionModeEvent\(action\)/);
   assert.match(rendererTypes, /actionId\?: string/);
+  assert.match(rendererTypes, /parentActionId\?: string/);
+  assert.match(rendererTypes, /actionType\?: string/);
+  assert.match(rendererTypes, /sourceIntent\?: string/);
   assert.match(rendererTypes, /from '..\/..\/shared\/contextNeedDecision'/);
   assert.doesNotMatch(rendererTypes, /export interface ContextNeedDecision\s*\{/);
   assert.match(rendererTypes, /productContract\?: \{\s*outputType:\s*DynamicActionOutputType\s*contextNeedDecision\?: ContextNeedDecision\s*\}/);
@@ -254,8 +260,10 @@ test('dynamic action usage entries preserve action metadata for post-call artifa
 
   assert.match(source, /metadata:\s*\{/);
   assert.match(source, /source:\s*['"]dynamic_action['"]/);
-  assert.match(source, /actionType:\s*dynamicActionModeEvent\?\.sourceIntent\s*\?\?\s*dynamicActionModeEvent\?\.intent/);
+  assert.match(source, /actionType:\s*dynamicActionModeEvent\?\.actionType\s*\?\?\s*dynamicActionModeEvent\?\.intent/);
+  assert.match(source, /sourceIntent:\s*dynamicActionModeEvent\?\.sourceIntent/);
   assert.match(source, /actionId:\s*dynamicActionModeEvent\?\.actionId/);
+  assert.match(source, /parentActionId:\s*dynamicActionModeEvent\?\.parentActionId/);
   assert.match(source, /outputType:\s*dynamicActionModeEvent\?\.productContract\?\.outputType/);
   assert.match(source, /isDynamicActionUsage/);
   assert.doesNotMatch(source, /outputType:\s*dynamicActionModeEvent\?\.productContract\?\.outputType[\s\S]{0,120}answerShape/);

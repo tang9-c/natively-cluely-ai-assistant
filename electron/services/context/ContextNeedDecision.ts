@@ -108,6 +108,16 @@ export function buildDynamicActionContextNeedDecision(input: {
     evidenceRefs?: EvidenceRef[];
 }): ContextNeedDecision {
     const type = compact(input.type);
+    if (type === 'capability_fit_answer') {
+        return {
+            material: 'required',
+            business: 'use_if_ready',
+            screen: 'not_needed',
+            confidence: 1,
+            reason: 'Capability-fit answers require trusted material grounding and may use ready readonly business context.',
+            decidedBy: 'dynamic_action_contract',
+        };
+    }
     const text = [
         type,
         input.label,

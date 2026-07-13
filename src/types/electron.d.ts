@@ -58,6 +58,7 @@ export interface DynamicActionProductContract {
 
 export interface DynamicActionPayload {
   id: string
+  parentActionId?: string
   sessionId: string
   modeId: string
   modeTemplateType: string
@@ -84,7 +85,7 @@ export interface DynamicActionPayload {
   autoTriggerReason?: string
   signalStatus?: 'candidate' | 'confirmed' | 'cooling_down' | 'expired'
   evidenceCount?: number
-  confirmationSource?: 'trigger' | 'cloud_intent' | 'local_intent' | 'heuristic'
+  confirmationSource?: 'trigger' | 'cloud_intent' | 'local_intent' | 'heuristic' | 'continuation_planner'
   confirmedIntent?: string
   semanticGate?: DynamicActionSemanticGate
   answerStyle?: {
@@ -101,6 +102,9 @@ type MeetingStartStatus = {
 
 export interface DynamicActionModeEvent {
   actionId?: string
+  parentActionId?: string
+  actionType?: string
+  sourceIntent?: string
   modeTemplateType?: string
   intent?: string
   confidence?: number

@@ -148,6 +148,31 @@ test('sales dynamic actions have product-specific card contracts', async () => {
   }
 });
 
+test('capability fit answer has fixed grounding-first product contract', async () => {
+  const { buildDynamicActionProductContract } = await loadHelper();
+
+  const contract = buildDynamicActionProductContract(baseInput({
+    type: 'capability_fit_answer',
+    label: 'Generate capability fit answer',
+    modeTemplateType: 'sales',
+    confidence: 0.91,
+    evidenceRefs: [{ source: 'transcript', text: '对象是电池包冷却液流道，指标是压降和温升。' }],
+  }));
+
+  assert.equal(contract.userAction, '生成能力匹配回答');
+  assert.equal(contract.outputType, 'spoken_response');
+  assert.equal(contract.outputPromise, '生成一段可直接说出口、带证据边界的能力匹配回答');
+  assert.equal(contract.riskState, 'normal');
+  assert.deepEqual(contract.contextNeedDecision, {
+    material: 'required',
+    business: 'use_if_ready',
+    screen: 'not_needed',
+    confidence: 1,
+    reason: 'Capability-fit answers require trusted material grounding and may use ready readonly business context.',
+    decidedBy: 'dynamic_action_contract',
+  });
+});
+
 test('dynamic action contracts carry context need decisions for material, business, and unknown cases', async () => {
   const { buildDynamicActionProductContract } = await loadHelper();
 
