@@ -26,6 +26,7 @@ const CJK_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=H
 const TECH_ACRONYM_RE = /\b[A-Z][A-Z0-9-]{1,}\b/;
 const TECH_ACRONYM_GLOBAL_RE = /\b[A-Z][A-Z0-9-]{1,}\b/g;
 const LATIN_PROPER_RE = /^[A-Z][A-Za-z0-9-]{2,}$/;
+const LATIN_PROPER_GLOBAL_RE = /\b[A-Z][A-Za-z0-9-]{2,}\b/g;
 
 function unique(values: string[]): string[] {
     const seen = new Set<string>();
@@ -106,6 +107,7 @@ export function analyzeMaterialQuery(query: string): MaterialQueryAnalysis {
     const downrankTerms = extractNegatedTerms(latestTurn);
     const acronymTerms = unique([
         ...(latestTurn.match(TECH_ACRONYM_GLOBAL_RE) ?? []),
+        ...(latestTurn.match(LATIN_PROPER_GLOBAL_RE) ?? []),
         ...entities.filter((entity) => TECH_ACRONYM_RE.test(entity) || LATIN_PROPER_RE.test(entity)),
     ]);
     const cjkStrongTerms = extractCjkStrongPhrases(latestTurn).filter((term) => !downrankTerms.includes(term));
