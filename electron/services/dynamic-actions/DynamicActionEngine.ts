@@ -21,6 +21,7 @@ const HIGH_RISK_ACTION_TYPES = new Set([
     'pricing_objection',
     'pricing_request',
     'case_study_request',
+    'discovery_question',
     'technical_requirements',
     'buying_signal',
 ]);
@@ -39,6 +40,8 @@ const SALES_PROMPT_INSTRUCTIONS: Record<string, string> = {
         'You are in Sales mode. The prospect asked for a quote, proposal, pricing, or commercial terms. Generate an email draft with greeting, short body, and sign-off. Use [CUSTOMER_NAME], [QUOTE_AMOUNT], [SCOPE], and [NEXT_STEP] unless exact trusted context provides values. Do not invent pricing, customer names, account numbers, contract terms, or commercial terms.',
     case_study_request:
         'You are in Sales mode. The prospect asked for a case study, similar customer, ROI, or proof. Use uploaded/reference/trusted context first. If no grounded case or proof is present, say that the provided materials do not include a matching proof point and ask what proof would be useful. Do not invent customer names, metrics, outcomes, or ROI.',
+    discovery_question:
+        'You are in Sales mode. The prospect described an industrial software pain, capability-fit question, process-integration need, value driver, or contextual proof request. Generate only 1-3 customer-facing discovery questions. Do not claim product capabilities, invent ROI, invent customer names, or answer as a domain expert.',
     technical_requirements:
         'You are in Sales mode. The prospect raised technical, security, API, SSO, integration, or deployment requirements. Clarify systems, APIs, auth, deployment environment, security constraints, owners, and the smallest validation step. Do not promise capability before validation.',
     buying_signal:
@@ -164,11 +167,12 @@ export class DynamicActionEngine {
             confirmationSource: this.confirmationSourceFor(params.intentResult),
             confirmedIntent: params.intentResult?.intent,
         }));
-        const synthTrigger = matchedTriggers.length === 0
-            ? this.synthesizeTrigger(modeTemplateType, params.intentResult)
-            : null;
+        const synthTrigger = this.synthesizeTrigger(modeTemplateType, params.intentResult);
+        const shouldAddSynthTrigger = synthTrigger
+            ? !matchedTriggers.some(({ trigger }) => trigger.type === synthTrigger.type)
+            : false;
 
-        if (synthTrigger) {
+        if (synthTrigger && shouldAddSynthTrigger) {
             triggerCandidates.push({
                 trigger: synthTrigger,
                 match: params.intentResult?.intent ?? synthTrigger.type,
@@ -411,7 +415,7 @@ export class DynamicActionEngine {
             status: 'candidate',
             createdAt: params.now,
             promptInstruction: params.trigger.promptInstruction,
-            sourceIntent: params.trigger.type,
+            sourceIntent: params.confirmedIntent ?? params.semanticGate?.semanticIntent ?? params.trigger.type,
             latestTurn: params.transcript,
             language: params.language,
             emotion: params.emotion,
@@ -510,6 +514,11 @@ export class DynamicActionEngine {
                 sales_pricing_objection: 'pricing_objection',
                 sales_quote_request: 'pricing_request',
                 sales_proof_request: 'case_study_request',
+                sales_pain_discovery: 'discovery_question',
+                sales_capability_fit: 'discovery_question',
+                sales_process_integration: 'discovery_question',
+                sales_value_discovery: 'discovery_question',
+                sales_contextual_proof_discovery: 'discovery_question',
                 sales_technical_requirements: 'technical_requirements',
                 sales_buying_signal: 'buying_signal',
                 handle_objection: 'pricing_objection',
@@ -561,6 +570,7 @@ export class DynamicActionEngine {
             pricing_objection: '处理价格异议',
             pricing_request: '生成报价邮件',
             case_study_request: '引用案例证明',
+            discovery_question: '提出发现问题',
             technical_requirements: '澄清技术需求',
             buying_signal: '推进下一步',
             action_item: '捕捉行动项',
@@ -589,7 +599,9 @@ export class DynamicActionEngine {
             promptInstruction: FDE_PROMPT_INSTRUCTIONS[type]
                 ?? SALES_PROMPT_INSTRUCTIONS[type]
                 ?? `You are in ${modeTemplateType} mode. Respond in Chinese first and help the user handle the detected ${type} intent.`,
-            answerStyle: { maxWords: 120, format: 'bullets', tone: 'clear' },
+            answerStyle: type === 'discovery_question'
+                ? { maxWords: 90, format: 'short_script', tone: 'consultative' }
+                : { maxWords: 120, format: 'bullets', tone: 'clear' },
         };
     }
 }

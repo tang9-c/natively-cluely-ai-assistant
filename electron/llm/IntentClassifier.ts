@@ -919,6 +919,12 @@ async function classifyWithCloudFallback(
     if (!options.cloudIntentClassifier) return null;
     if (options.providerDataScopes?.transcript === false) return null;
     const language = isPrimarilyChinese(latestTurn) ? 'zh' : 'en';
+    if (
+        language === 'en' &&
+        !((modeTemplateType ?? 'general') === 'sales' && INDUSTRIAL_DOMAIN_PATTERN.test(latestTurn))
+    ) {
+        return null;
+    }
 
     try {
         const result = await options.cloudIntentClassifier({

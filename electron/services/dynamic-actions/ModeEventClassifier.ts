@@ -107,6 +107,7 @@ const HIGH_RISK_ACTIONS = new Set([
     'pricing_objection',
     'pricing_request',
     'case_study_request',
+    'discovery_question',
     'technical_requirements',
     'buying_signal',
 ]);
@@ -220,6 +221,13 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
             (candidate.actionType === 'buying_signal' && intent === 'sales_buying_signal') ||
             (candidate.actionType === 'pricing_request' && intent === 'sales_quote_request') ||
             (candidate.actionType === 'case_study_request' && intent === 'sales_proof_request') ||
+            (candidate.actionType === 'discovery_question' && (
+                intent === 'sales_pain_discovery' ||
+                intent === 'sales_capability_fit' ||
+                intent === 'sales_process_integration' ||
+                intent === 'sales_value_discovery' ||
+                intent === 'sales_contextual_proof_discovery'
+            )) ||
             (candidate.actionType === 'technical_requirements' && intent === 'sales_technical_requirements') ||
             (candidate.actionType === 'technical_requirements' && intent === 'fde_integration') ||
             (candidate.actionType === 'case_study_request' && intent === 'example_request');

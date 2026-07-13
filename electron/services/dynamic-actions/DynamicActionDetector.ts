@@ -133,6 +133,29 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         answerStyle: { maxWords: 160, format: 'email', tone: 'consultative' },
     },
     {
+        type: 'discovery_question',
+        patterns: [
+            /\b(PLM|Windchill|QMS|ERP|SAP|Oracle|MES|ALM|Creo|CAD|BOM|ECO|ECN|CAPA|NCR|AI Agent|Agent)\b.{0,100}\b(pain|workflow|capability|fit|integrat|sync|cycle time|quality cost|case study|customer example|ROI)\b/i,
+            zh(
+                'BOM.{0,30}(不同步|关联|闭环|变更)',
+                'CAPA.{0,30}(闭环|关闭周期|审计|质量成本)',
+                'PLM.{0,40}(QMS|ERP|MES|ALM|Creo|BOM|ECO|CAPA|闭环|打通|同步|案例)',
+                'QMS.{0,40}(CAPA|NCR|审计|MES|PLM|闭环|案例)',
+                'MES.{0,40}(设计变更|旧工艺|工单|现场执行|闭环|案例)',
+                'ALM.{0,40}(需求|测试|缺陷|追踪矩阵|案例)',
+                'Creo.{0,40}(图纸|仿真|设计变更|功能|案例)',
+                '流体仿真.{0,30}(功能|适合|模块)',
+                '力学仿真.{0,30}(功能|适合|模块)',
+                'AI Agent.{0,40}(变更影响|PLM|QMS|只读|人工确认|案例)'
+            ),
+        ],
+        priority: 0.89,
+        label: 'Ask discovery question',
+        promptInstruction:
+            'You are in Sales mode. The prospect described an industrial software pain, capability-fit question, process-integration need, value driver, or contextual proof request. Generate only 1-3 customer-facing discovery questions. Do not claim product capabilities, invent ROI, invent customer names, or answer as a domain expert.',
+        answerStyle: { maxWords: 90, format: 'short_script', tone: 'consultative' },
+    },
+    {
         type: 'case_study_request',
         patterns: [
             /\b(case study|customer story|customer example|reference customer|proof point|success story|similar customer|implementation example|ROI|return on investment)\b/i,
@@ -491,7 +514,7 @@ function shouldSuppressSalesTrigger(trigger: ActionTrigger, transcript: string, 
     const text = transcript.replace(/\s+/g, ' ').trim();
     if (
         /^(internal|internal teammate|teammate|me|host)$/i.test((speaker ?? '').trim()) &&
-        ['pricing_objection', 'pricing_request', 'case_study_request', 'technical_requirements', 'buying_signal'].includes(trigger.type)
+        ['pricing_objection', 'pricing_request', 'case_study_request', 'technical_requirements', 'buying_signal', 'discovery_question'].includes(trigger.type)
     ) {
         return true;
     }
@@ -503,6 +526,9 @@ function shouldSuppressSalesTrigger(trigger: ActionTrigger, transcript: string, 
     }
     if (trigger.type === 'technical_requirements') {
         return /(internal folder|internal file|our drive|内部文件夹|内部资料|内部核对|内部复盘|不是客户在问|不是客户要|no customer ask|not a customer ask|客户身份错配|identity mismatch|文件夹里的方案标题)/i.test(text);
+    }
+    if (trigger.type === 'discovery_question') {
+        return /(文件名|会议标题|PPT 标题|PPT标题|议程|还没开始|稍后再聊|内部路线图代号|只是标题|just a title|agenda item)/i.test(text);
     }
     return false;
 }
