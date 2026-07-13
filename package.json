@@ -42,6 +42,7 @@
     "test:quality:gate": "node scripts/context-quality-gate.mjs --run",
     "test:quality:gate:no-build": "node scripts/context-quality-gate.mjs --run --no-build",
     "bench:screen-understanding": "npm run build:electron && node scripts/bench-screen-understanding.mjs",
+    "bench:material-rag-candidates": "npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/__tests__/MaterialRagCandidateFiltering.bench.test.mjs",
     "test:dynamic-actions:product": "npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/qa/__tests__/DynamicActionFixtureRunner.test.mjs && node scripts/run-dynamic-actions-product.mjs",
     "test:dynamic-actions:replay": "npm run build:electron && ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/qa/__tests__/DynamicActionReplayRunner.test.mjs && node scripts/run-dynamic-actions-replay.mjs",
     "test:dynamic-actions:sales-replay:real-stt": "npm run build:electron && node scripts/run-sales-real-stt-replay.mjs",
