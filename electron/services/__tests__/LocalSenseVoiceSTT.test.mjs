@@ -142,6 +142,53 @@ test('LocalSenseVoiceSTT applies final term correction while preserving SenseVoi
   ]);
 });
 
+test('LocalSenseVoiceSTT suppresses short SenseVoice language-drift hallucinations', async () => {
+  const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+  const cases = [
+    '<|en|><|NEUTRAL|><|Speech|>There.',
+    '<|ja|><|NEUTRAL|><|Speech|>といでね。',
+  ];
+
+  for (const text of cases) {
+    const worker = new FakeSenseVoiceWorker({ text });
+    const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+    const transcripts = [];
+    stt.on('transcript', event => transcripts.push(event));
+
+    stt.setRecognitionLanguage('chinese');
+    stt.start();
+    stt.write(loudPcm());
+    stt.notifySpeechEnded();
+    await stt.drainFinals(1000);
+    stt.stop();
+
+    assert.deepEqual(transcripts, []);
+  }
+});
+
+test('LocalSenseVoiceSTT keeps normal Chinese and mixed business transcript text', async () => {
+  const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+  const worker = new FakeSenseVoiceWorker({ text: '<|zh|><|NEUTRAL|><|Speech|>我们讨论 API、SSO 和 PLM 集成。' });
+  const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+  const transcripts = [];
+  stt.on('transcript', event => transcripts.push(event));
+
+  stt.setRecognitionLanguage('chinese');
+  stt.start();
+  stt.write(loudPcm());
+  stt.notifySpeechEnded();
+  await stt.drainFinals(1000);
+  stt.stop();
+
+  assert.deepEqual(transcripts, [
+    {
+      text: '我们讨论 API、SSO 和 PLM 集成。',
+      isFinal: true,
+      confidence: 0.9,
+    },
+  ]);
+});
+
 describe('LocalSenseVoiceSTT — lifecycle guards', () => {
   test('start() is idempotent: a second call does not spawn a second worker', async () => {
     const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();

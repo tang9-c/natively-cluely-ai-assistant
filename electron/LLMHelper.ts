@@ -65,6 +65,11 @@ const MAX_OUTPUT_TOKENS = 65536
 const OPENAI_COMPAT_MAX_COMPLETION_TOKENS = 12288
 const CLAUDE_MAX_OUTPUT_TOKENS = 64000
 const STRUCTURED_DEFAULT_TIMEOUT_MS = 45_000
+let warnedMissingPrimaryApiKey = false
+
+function isElectronNodeTestRuntime(): boolean {
+  return process.env.ELECTRON_RUN_AS_NODE === '1' || process.env.NODE_ENV === 'test'
+}
 
 interface StructuredGenerationOptions {
   taskLabel?: string;
@@ -244,7 +249,8 @@ export class LLMHelper {
         httpOptions: { apiVersion: "v1alpha" }
       })
       // console.log(`[LLMHelper] Using Google Gemini 3 with model: ${this.geminiModel} (v1alpha API)`)
-    } else {
+    } else if (!isElectronNodeTestRuntime() && !warnedMissingPrimaryApiKey) {
+      warnedMissingPrimaryApiKey = true
       console.warn("[LLMHelper] No API key provided. Client will be uninitialized until key is set.")
     }
   }
@@ -3255,7 +3261,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           }
         }
       } catch (_modeErr: any) {
-        console.warn('[LLMHelper] ModesManager injection failed (non-fatal):', _modeErr?.message);
+        if (!isElectronNodeTestRuntime()) {
+          console.warn('[LLMHelper] ModesManager injection failed (non-fatal):', _modeErr?.message);
+        }
       }
     }
 

@@ -1,17 +1,19 @@
 #!/usr/bin/env node
 /**
- * Manual Doubao AUC real-request test.
+ * Doubao AUC real-request test.
  *
- * This script is intentionally NOT included in npm test. It calls the real
- * Volcengine Doubao AUC endpoint and requires an explicit API key + audio file.
+ * This script is included in npm run test:all. It calls the real Volcengine
+ * Doubao AUC endpoint and requires a valid AUC API key. If no audio path is
+ * supplied, it uses the repository's standard real-audio fixture.
  *
  * Usage:
- *   DOUBAO_API_KEY=your-auc-key npm run test:doubao-auc:real -- /path/to/audio.wav
- *   DOUBAO_API_KEY=your-auc-key npm run test:doubao-auc:real -- --language zh-CN
+ *   DOUBAO_AUC_API_KEY=your-auc-key npm run test:doubao-auc:real -- /path/to/audio.wav
+ *   DOUBAO_AUC_API_KEY=your-auc-key npm run test:doubao-auc:real -- --language zh-CN
+ *   # DOUBAO_API_KEY is still accepted as a fallback for older local setups.
  *   # If no path is given, defaults to tests/fixtures/audio/real-conversation-2p-60s.wav
  *   # See tests/fixtures/audio/README.md to set up the default fixture.
  *
- * DO NOT print API keys. Keep this script opt-in only.
+ * DO NOT print API keys.
  */
 
 import axios from 'axios';
@@ -29,13 +31,15 @@ const RESOURCE_ID = 'volc.seedasr.auc';
 const STATUS_OK = '20000000';
 const STATUS_PROCESSING = new Set(['20000001', '20000002']);
 const STATUS_SILENT = '20000003';
+const STATUS_INVALID_API_KEY = '45000010';
 
 function usage() {
   console.log(`Manual Doubao AUC speaker separation test
 
 Usage:
-  DOUBAO_API_KEY=your-auc-key npm run test:doubao-auc:real -- /path/to/audio.wav
-  DOUBAO_API_KEY=your-auc-key npm run test:doubao-auc:real -- --language zh-CN
+  DOUBAO_AUC_API_KEY=your-auc-key npm run test:doubao-auc:real -- /path/to/audio.wav
+  DOUBAO_AUC_API_KEY=your-auc-key npm run test:doubao-auc:real -- --language zh-CN
+  # DOUBAO_API_KEY is still accepted as a fallback for older local setups.
   # If no path is given, defaults to tests/fixtures/audio/real-conversation-2p-60s.wav
   # (a 60s real Mandarin 2-person conversation; see tests/fixtures/audio/README.md)
 
@@ -48,8 +52,16 @@ Options:
 
 Notes:
   - This makes a real network request and may incur Volcengine usage cost.
-  - API key is read from DOUBAO_API_KEY only and is never printed.
-  - The script is not included in npm test.`);
+  - API key is read from DOUBAO_AUC_API_KEY first, then DOUBAO_API_KEY, and is never printed.
+  - npm run test:all runs this script by default when a key is present.`);
+}
+
+function resolveDoubaoAucApiKey() {
+  const aucKey = process.env.DOUBAO_AUC_API_KEY;
+  if (aucKey?.trim()) return { value: aucKey.trim(), envName: 'DOUBAO_AUC_API_KEY' };
+  const fallbackKey = process.env.DOUBAO_API_KEY;
+  if (fallbackKey?.trim()) return { value: fallbackKey.trim(), envName: 'DOUBAO_API_KEY' };
+  return null;
 }
 
 function parseArgs(argv) {
@@ -213,6 +225,20 @@ function summarizeHeaders(headers) {
   };
 }
 
+function formatSubmitFailure(httpStatus, headersSummary, data, keyEnvName) {
+  if (headersSummary.statusCode === STATUS_INVALID_API_KEY || /Invalid X-Api-Key/i.test(headersSummary.message || '')) {
+    return [
+      `Submit failed: status=${STATUS_INVALID_API_KEY}, message=Invalid X-Api-Key`,
+      `The value from ${keyEnvName} is not valid for Doubao AUC resource ${RESOURCE_ID}.`,
+      'Use a Volcengine AUC-enabled key in DOUBAO_AUC_API_KEY, or update DOUBAO_API_KEY if it is meant to be the AUC key.',
+    ].join(' ');
+  }
+  if (httpStatus >= 400) {
+    return `Submit HTTP ${httpStatus}: ${JSON.stringify(data)}`;
+  }
+  return `Submit failed: status=${headersSummary.statusCode}, message=${headersSummary.message || 'Unknown'}`;
+}
+
 async function postJson(url, body, headers, timeout) {
   return axios.post(url, body, {
     headers,
@@ -221,11 +247,11 @@ async function postJson(url, body, headers, timeout) {
   });
 }
 
-async function transcribeReal({ apiKey, audioPath, language, pollIntervalMs, maxAttempts }) {
+async function transcribeReal({ apiKey, apiKeyEnvName, audioPath, language, pollIntervalMs, maxAttempts }) {
   const audioBuffer = fs.readFileSync(audioPath);
   const requestId = createRequestId();
   const authHeader = {
-    'X-Api-Key': apiKey.trim(),
+    'X-Api-Key': apiKey,
     'X-Api-Resource-Id': RESOURCE_ID,
   };
   const requestBody = buildRequestBody(audioPath, audioBuffer.toString('base64'), language);
@@ -260,10 +286,10 @@ async function transcribeReal({ apiKey, audioPath, language, pollIntervalMs, max
   });
 
   if (submitResponse.status >= 400) {
-    throw new Error(`Submit HTTP ${submitResponse.status}: ${JSON.stringify(submitResponse.data)}`);
+    throw new Error(formatSubmitFailure(submitResponse.status, submitHeaders, submitResponse.data, apiKeyEnvName));
   }
   if (submitHeaders.statusCode && submitHeaders.statusCode !== STATUS_OK) {
-    throw new Error(`Submit failed: status=${submitHeaders.statusCode}, message=${submitHeaders.message || 'Unknown'}`);
+    throw new Error(formatSubmitFailure(submitResponse.status, submitHeaders, submitResponse.data, apiKeyEnvName));
   }
 
   const immediate = extractTranscription(submitResponse.data);
@@ -347,9 +373,9 @@ function printSummary({ transcription, attempts, finalResponse, raw }) {
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
-  const apiKey = process.env.DOUBAO_API_KEY;
-  if (!apiKey || !apiKey.trim()) {
-    throw new Error('Missing DOUBAO_API_KEY. Example: DOUBAO_API_KEY=xxx npm run test:doubao-auc:real -- /path/to/audio.wav');
+  const apiKey = resolveDoubaoAucApiKey();
+  if (!apiKey) {
+    throw new Error('Missing DOUBAO_AUC_API_KEY or DOUBAO_API_KEY. Example: DOUBAO_AUC_API_KEY=xxx npm run test:doubao-auc:real -- /path/to/audio.wav');
   }
   if (!opts.audioPath) {
     // Default to the standard fixture (60s real Mandarin 2-person conversation)
@@ -379,7 +405,7 @@ async function main() {
     throw new Error(`Audio file does not exist: ${opts.audioPath}`);
   }
 
-  const result = await transcribeReal({ apiKey, ...opts });
+  const result = await transcribeReal({ apiKey: apiKey.value, apiKeyEnvName: apiKey.envName, ...opts });
   printSummary({ ...result, raw: opts.raw });
 }
 

@@ -41,13 +41,8 @@ function runStage(stage) {
     if (missing.length === stage.blockedOnMissingEnv.length) {
       const reason = `missing ${stage.blockedOnMissingEnv.join(' or ')}`;
       console.log(`\n[test:all] stage=${stage.name} result=BLOCKED reason=${reason}`);
-      return { name: stage.name, status: 0, blocked: true, reason, durationMs: 0 };
+      return { name: stage.name, status: 1, blocked: true, reason, durationMs: 0 };
     }
-  }
-
-  if (stage.skipUnless && !stage.skipUnless()) {
-    console.log(`\n[test:all] stage=${stage.name} result=SKIP reason=${stage.skipReason}`);
-    return { name: stage.name, status: 0, skipped: true, durationMs: 0 };
   }
 
   console.log(`\n[test:all] stage=${stage.name} command=${stage.command} ${stage.args.join(' ')}`);
@@ -55,8 +50,13 @@ function runStage(stage) {
   const result = spawnSync(stage.command, stage.args, {
     cwd: repoRoot,
     env: { ...process.env, ...(stage.env ?? {}) },
-    stdio: 'inherit',
+    encoding: 'utf8',
+    maxBuffer: 256 * 1024 * 1024,
   });
+  const stdout = filterKnownTestNoise(result.stdout ?? '');
+  const stderr = filterKnownTestNoise(result.stderr ?? '');
+  if (stdout) process.stdout.write(stdout);
+  if (stderr) process.stderr.write(stderr);
   const durationMs = Date.now() - startedAt;
   const status = result.status ?? 1;
 
@@ -67,6 +67,14 @@ function runStage(stage) {
   }
 
   return { name: stage.name, status, durationMs };
+}
+
+function filterKnownTestNoise(output) {
+  return output
+    .split(/\r?\n/)
+    .filter((line) => !/^\(node:\d+\) \[DEP0040\] DeprecationWarning: The `punycode` module is deprecated\./.test(line))
+    .join('\n')
+    .replace(/\n?$/, output.endsWith('\n') ? '\n' : '');
 }
 
 const nodeTestFiles = [
@@ -152,8 +160,7 @@ const stages = [
     name: 'doubao-auc-real',
     command: npmCmd,
     args: ['run', 'test:doubao-auc:real'],
-    skipUnless: () => process.env.DOUBAO_AUC_REAL_TESTS === '1',
-    skipReason: 'set DOUBAO_AUC_REAL_TESTS=1 to run live Doubao AUC API test',
+    blockedOnMissingEnv: ['DOUBAO_AUC_API_KEY', 'DOUBAO_API_KEY'],
   },
   {
     name: 'screen-understanding-bench',

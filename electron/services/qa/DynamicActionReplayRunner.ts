@@ -52,7 +52,15 @@ export interface ReplayReport {
   passedEntries: number;
   environmentStatus: ReplayEnvironmentStatus;
   assetCoverage: ReplayAssetCoverage;
+  assetCoverageFailures: ReplayAssetCoverageFailure[];
   entries: ReplayReportEntry[];
+}
+
+export interface ReplayAssetCoverageFailure {
+  modeTemplateType: ReplayCoverageMode;
+  requiredReal: number;
+  availableReal: number;
+  missingReal: number;
 }
 
 export interface ReplayReportEntry {
@@ -171,18 +179,38 @@ export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<
     });
   }
 
+  const assetCoverage = buildAssetCoverage(allEntries, audioRoot);
   const report: ReplayReport = {
     totalEntries: entries.length,
     skippedEntries: reportEntries.filter((entry) => entry.status === 'skipped').length,
     failedEntries: reportEntries.filter((entry) => entry.status === 'failed').length,
     passedEntries: reportEntries.filter((entry) => entry.status === 'passed').length,
     environmentStatus: input.environmentStatus ?? (input.transcribeAudio ? 'ok' : 'not_applicable'),
-    assetCoverage: buildAssetCoverage(allEntries, audioRoot),
+    assetCoverage,
+    assetCoverageFailures: buildAssetCoverageFailures(assetCoverage, input.modeTemplateTypes),
     entries: reportEntries,
   };
   fs.mkdirSync(input.outputDir, { recursive: true });
   fs.writeFileSync(path.join(input.outputDir, 'replay-report.json'), JSON.stringify(report, null, 2));
   return report;
+}
+
+function buildAssetCoverageFailures(
+  coverage: ReplayAssetCoverage,
+  modeTemplateTypes?: string[],
+): ReplayAssetCoverageFailure[] {
+  const modes: ReplayCoverageMode[] = ['sales', 'fde', 'team-meet'];
+  const requestedModes = modeTemplateTypes?.length
+    ? modes.filter((mode) => modeTemplateTypes.includes(mode))
+    : modes;
+  return requestedModes
+    .map((mode) => ({
+      modeTemplateType: mode,
+      requiredReal: coverage.requiredReal[mode],
+      availableReal: coverage.availableReal[mode],
+      missingReal: coverage.blockedReal[mode],
+    }))
+    .filter((failure) => failure.missingReal > 0);
 }
 
 function loadContinuationFixture(

@@ -15,6 +15,7 @@ test('Sales and team-meet real STT replay scripts are wired as blocked-capable s
   const pkg = JSON.parse(read('package.json'));
   const salesScript = read('scripts/run-sales-real-stt-replay.mjs');
   const teamScript = read('scripts/run-team-meet-real-stt-replay.mjs');
+  const replayLib = read('scripts/dynamic-action-real-stt-replay-lib.mjs');
   const allRunner = read('scripts/run-test-all.mjs');
 
   assert.equal(
@@ -29,6 +30,9 @@ test('Sales and team-meet real STT replay scripts are wired as blocked-capable s
   assert.match(teamScript, /modeTemplateType:\s*'team-meet'/);
   assert.match(salesScript, /DO NOT print API keys/i);
   assert.match(teamScript, /DO NOT print API keys/i);
+  assert.match(replayLib, /assetCoverageFailures/);
+  assert.match(replayLib, /Missing required real audio assets/);
+  assert.match(replayLib, /process\.exit\(1\)/);
 
   for (const stageName of ['sales-real-stt-replay', 'team-meet-real-stt-replay']) {
     const stageStart = allRunner.indexOf(`name: '${stageName}'`);

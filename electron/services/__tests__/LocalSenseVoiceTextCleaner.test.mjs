@@ -54,3 +54,34 @@ test('SenseVoice parser hides neutral emotion from UI payload', async () => {
     }
   );
 });
+
+test('SenseVoice hallucination guard drops short language-drift fragments in Chinese meetings', async () => {
+  const { parseSenseVoiceOutput, shouldDropSenseVoiceHallucination } = await loadTextCleaner();
+
+  assert.equal(
+    shouldDropSenseVoiceHallucination(
+      parseSenseVoiceOutput('<|en|><|NEUTRAL|><|Speech|>There.'),
+      { recognitionLanguageKey: 'chinese' },
+    ),
+    true,
+  );
+  assert.equal(
+    shouldDropSenseVoiceHallucination(
+      parseSenseVoiceOutput('<|ja|><|NEUTRAL|><|Speech|>といでね。'),
+      { recognitionLanguageKey: 'chinese' },
+    ),
+    true,
+  );
+});
+
+test('SenseVoice hallucination guard keeps normal mixed Chinese business terms', async () => {
+  const { parseSenseVoiceOutput, shouldDropSenseVoiceHallucination } = await loadTextCleaner();
+
+  assert.equal(
+    shouldDropSenseVoiceHallucination(
+      parseSenseVoiceOutput('<|zh|><|NEUTRAL|><|Speech|>我们讨论 API、SSO 和 PLM 集成。'),
+      { recognitionLanguageKey: 'chinese' },
+    ),
+    false,
+  );
+});

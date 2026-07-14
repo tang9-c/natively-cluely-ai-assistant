@@ -40,34 +40,28 @@ test.describe('Research Pipeline E2E', () => {
   test('Settings → Research tab shows the Tavily API key input', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 
-    // Open Settings. The Natively launcher exposes a settings button via
-    // aria-label; if it isn't reachable from the first window, skip.
+    // Open Settings from the Launcher. This must fail loudly if the entrypoint
+    // regresses; otherwise the whole Settings/RAG configuration path can look
+    // green while being unreachable in the real app.
     const settingsBtn = page
-      .locator('button[aria-label*="settings" i], button:has-text("Settings")')
+      .locator('[data-testid="launcher-settings-button"], button[aria-label="打开设置"], button[title="设置"]')
       .first();
-    const settingsVisible = await settingsBtn.isVisible().catch(() => false);
-    if (!settingsVisible) {
-      test.skip(true, 'Settings button not reachable from the launcher window');
-      return;
-    }
+    await expect(settingsBtn, 'Launcher Settings button should be reachable').toBeVisible();
     await settingsBtn.click();
-    await page.waitForTimeout(500);
+    await expect(page.locator('#settings-panel'), 'Settings panel should open from Launcher').toBeVisible({ timeout: 5_000 });
 
-    // Switch to the Research tab inside Settings. Tabs use role=tab and
-    // carry a Chinese label "研究" / "Research". If absent, the settings
-    // surface is structured differently in this build — skip gracefully.
-    const researchTab = page
-      .getByRole('tab', { name: /研究|Research/i })
+    // The product labels this combined area as "知识源"; it contains network
+    // research, uploaded materials, and business-system sources.
+    const knowledgeTab = page
+      .getByRole('button', { name: /知识源|Research/i })
       .first();
-    const tabVisible = await researchTab.isVisible().catch(() => false);
-    if (!tabVisible) {
-      test.skip(true, 'Research tab not found inside Settings — UI may differ');
-      return;
-    }
-    await researchTab.click();
+    await expect(knowledgeTab, 'Knowledge/Research settings tab should be reachable').toBeVisible();
+    await knowledgeTab.click();
 
-    // The ResearchTabBody renders a password-style Tavily key input.
-    const tavilyInput = page.locator('input[type="password"]').first();
+    // The ResearchTabBody renders a password-style Tavily key input. Avoid
+    // placeholder matching because a saved key intentionally replaces the
+    // placeholder with bullets.
+    const tavilyInput = page.getByTestId('network-research-card').locator('input[type="password"]').first();
     await expect(tavilyInput).toBeVisible();
   });
 

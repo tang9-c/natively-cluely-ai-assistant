@@ -42,6 +42,11 @@ test('replay manifest has sales, FDE, team-meet, and recruiting generated audio 
   assert.equal(report.assetCoverage.blockedReal.sales, 15);
   assert.equal(report.assetCoverage.blockedReal.fde, 10);
   assert.equal(report.assetCoverage.blockedReal['team-meet'], 5);
+  assert.deepEqual(report.assetCoverageFailures, [
+    { modeTemplateType: 'sales', requiredReal: 15, availableReal: 0, missingReal: 15 },
+    { modeTemplateType: 'fde', requiredReal: 10, availableReal: 0, missingReal: 10 },
+    { modeTemplateType: 'team-meet', requiredReal: 5, availableReal: 0, missingReal: 5 },
+  ]);
   assert.ok(fs.existsSync(path.join(outputDir, 'replay-report.json')));
 });
 
@@ -71,6 +76,7 @@ test('recruiting audio replay runs through STT output and dynamic action detecti
   assert.equal(report.skippedEntries, 0);
   assert.equal(report.failedEntries, 0);
   assert.equal(report.environmentStatus, 'ok');
+  assert.deepEqual(report.assetCoverageFailures, []);
   assert.equal(audioInputs.length, 3);
   assert.ok(audioInputs.every((input) => input.audioPath.endsWith('.wav')));
 
@@ -111,6 +117,9 @@ test('sales audio replay runs through STT output and dynamic action detection', 
   assert.equal(report.totalEntries, 4);
   assert.equal(report.skippedEntries, 0);
   assert.equal(report.failedEntries, 0);
+  assert.deepEqual(report.assetCoverageFailures, [
+    { modeTemplateType: 'sales', requiredReal: 15, availableReal: 0, missingReal: 15 },
+  ]);
   assert.equal(audioInputs.length, 4);
   assert.ok(audioInputs.every((input) => input.audioPath.endsWith('.wav')));
 

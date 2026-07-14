@@ -73,24 +73,16 @@ test.describe('FINDING-006: Natively E2E smoke', () => {
   test('settings panel opens and closes', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 
-    // Click the settings button/icon — placeholder selector.
-    const settingsBtn = page.locator('button[aria-label*="settings" i], button:has-text("Settings")').first();
-    const settingsVisible = await settingsBtn.isVisible().catch(() => false);
+    const settingsBtn = page
+      .locator('[data-testid="launcher-settings-button"], button[aria-label="打开设置"], button[title="设置"]')
+      .first();
+    await expect(settingsBtn, 'Launcher Settings button should be reachable').toBeVisible();
 
-    if (settingsVisible) {
-      await settingsBtn.click();
-      await page.waitForTimeout(500);
+    await settingsBtn.click();
+    const settingsPanel = page.locator('#settings-panel');
+    await expect(settingsPanel, 'Settings panel should open from Launcher').toBeVisible({ timeout: 5_000 });
 
-      // Close again
-      const closeBtn = page.locator('button[aria-label*="close" i], button:has-text("Close")').first();
-      if (await closeBtn.isVisible()) {
-        await closeBtn.click();
-      }
-    }
-
-    // Settings not yet rendered is not a test failure — skip with a note
-    if (!settingsVisible) {
-      test.skip('Settings button not found in this UI layout');
-    }
+    await page.getByRole('button', { name: /关闭/ }).first().click();
+    await expect(settingsPanel, 'Settings panel should close from its close action').toBeHidden({ timeout: 5_000 });
   });
 });

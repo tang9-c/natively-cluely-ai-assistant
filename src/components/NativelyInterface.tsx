@@ -4661,6 +4661,9 @@ Provide only the answer, nothing else.`;
                                             }
                                         `}
                         style={appearance.iconStyle}
+                        title="设置"
+                        aria-label="打开设置"
+                        data-testid="overlay-settings-button"
                       >
                         <SlidersHorizontal className="w-3.5 h-3.5" />
                       </button>

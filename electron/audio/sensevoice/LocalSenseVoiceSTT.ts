@@ -10,7 +10,7 @@ import {
 } from './types';
 import { resolveSenseVoiceModelFiles } from './modelManager';
 import { resolveSenseVoiceWorkerPath } from './workerPathResolver';
-import { parseSenseVoiceOutput } from './textCleaner';
+import { parseSenseVoiceOutput, shouldDropSenseVoiceHallucination } from './textCleaner';
 import { applySenseVoiceTermCorrection } from './termCorrection';
 import { isVerboseLogging } from '../../verboseLog';
 
@@ -264,6 +264,16 @@ export class LocalSenseVoiceSTT extends BaseSTT {
         inFlightTasks: this.inFlightTasks,
       });
       if (text) {
+        if (shouldDropSenseVoiceHallucination({ ...parsed, text }, { recognitionLanguageKey: this._languageKey })) {
+          debugLog('drop-hallucination', {
+            taskId: message.taskId,
+            language: parsed.language,
+            textLength: text.length,
+          });
+          this.pendingAudioByTaskId.delete(message.taskId);
+          this.flushPendingAudio();
+          return;
+        }
         const segment = {
           text,
           isFinal: true,

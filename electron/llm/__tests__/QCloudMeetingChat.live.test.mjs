@@ -7,7 +7,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const helperPath = path.resolve(__dirname, '../../../dist-electron/electron/LLMHelper.js');
 
-const RUN_LIVE = process.env.QCLOUD_LIVE_CHAT_TESTS === '1';
 const QCLOUD_KEY = process.env.QCLOUD_LIVE_API_KEY || process.env.NATIVELY_API_KEY;
 
 async function drainStream(stream) {
@@ -20,12 +19,8 @@ async function drainStream(stream) {
 
 test('live QCLOUD key can answer a meeting chat turn through LLMHelper.streamChat()', {
   timeout: 30000,
-  skip: !RUN_LIVE
-    ? 'Set QCLOUD_LIVE_CHAT_TESTS=1 to run the live QCLOUD meeting chat smoke test.'
-    : !QCLOUD_KEY
-      ? 'Set QCLOUD_LIVE_API_KEY or NATIVELY_API_KEY to run the live QCLOUD meeting chat smoke test.'
-      : false,
 }, async () => {
+  assert.ok(QCLOUD_KEY, 'Set QCLOUD_LIVE_API_KEY or NATIVELY_API_KEY to run the live QCLOUD meeting chat smoke test.');
   const { LLMHelper } = await import(pathToFileURL(helperPath).href);
   const helper = new LLMHelper();
   helper.setNativelyKey(QCLOUD_KEY);

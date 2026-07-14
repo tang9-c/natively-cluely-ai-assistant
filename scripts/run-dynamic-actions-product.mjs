@@ -19,7 +19,36 @@ console.log(JSON.stringify({
   modeScores: report.modeScores,
 }, null, 2));
 
-const fde = report.modeScores.fde;
-const team = report.modeScores['team-meet'];
-if (fde && (fde.recallRate <= 0.75 || fde.falsePositiveRate >= 0.10)) process.exitCode = 1;
-if (team && (team.recallRate <= 0.85 || team.falsePositiveRate >= 0.10)) process.exitCode = 1;
+const failures = [];
+
+function addScoreFailures(label, score) {
+  if (!score) return;
+  if (score.recallNumerator !== score.recallDenominator) {
+    failures.push(`${label}: recall ${score.recallNumerator}/${score.recallDenominator}`);
+  }
+  if (score.falsePositiveNumerator !== 0) {
+    failures.push(`${label}: false positives ${score.falsePositiveNumerator}/${score.falsePositiveDenominator}`);
+  }
+  for (const fixtureId of score.answerQualityFailures ?? []) {
+    failures.push(`${label}: answer quality failed ${fixtureId}`);
+  }
+  for (const fixtureId of score.groundingFailures ?? []) {
+    failures.push(`${label}: grounding failed ${fixtureId}`);
+  }
+  for (const fixtureId of score.missingFieldFailures ?? []) {
+    failures.push(`${label}: missing field failed ${fixtureId}`);
+  }
+}
+
+addScoreFailures('all', report.score);
+for (const [mode, score] of Object.entries(report.modeScores)) {
+  addScoreFailures(mode, score);
+}
+for (const invalid of report.invalidFixtures ?? []) {
+  failures.push(`invalid fixture ${invalid.file}${invalid.fixtureId ? `:${invalid.fixtureId}` : ''}: ${invalid.error}`);
+}
+
+if (failures.length > 0) {
+  console.error(`Dynamic action product quality gate failed:\n- ${failures.join('\n- ')}`);
+  process.exit(1);
+}

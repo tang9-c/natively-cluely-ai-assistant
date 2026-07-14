@@ -424,8 +424,8 @@ const FDE_TRIGGERS: ActionTrigger[] = [
     {
         type: 'fde_risk_blocker',
         patterns: [
-            /\b(blocker|blocked|dependency|risk|timeline|delay|migration|cutover|rollback|edge case|launch risk|NCR|CAPA|8D|non-conformance|traceability|quality|audit)\b/i,
-            zh('阻塞', '卡住', '依赖', '风险', '延期', '迁移', '切换', '回滚', '边界情况', '上线风险', '不确定', 'NCR', 'CAPA', '8D', '质量', '追溯', '审计', '偏差'),
+            /\b(blocker|blocked|dependency|risk|timeline|delay|migration|cutover|rollback|edge case|launch risk|non-conformance|traceability|quality risk|audit risk)\b/i,
+            zh('阻塞', '卡住', '依赖', '风险', '延期', '迁移', '切换', '回滚', '边界情况', '上线风险', '不确定', '质量风险', '追溯风险', '审计风险', '偏差'),
         ],
         priority: 0.9,
         label: 'Unblock deployment risk',
@@ -484,8 +484,8 @@ const FDE_TRIGGERS: ActionTrigger[] = [
     {
         type: 'fde_discovery_probe',
         patterns: [
-            /\b(current workflow|current process|business process|user workflow|stakeholder|requirements|what are you trying to solve|what does success look like|PLM|BOM|ECO|ECN|revision|version|release|part number|drawing|material master|routing|manufacturing)\b/i,
-            zh('现有流程', '当前流程', '业务流程', '用户流程', '需求是什么', '想解决什么', '谁会使用', '谁负责', '干系人', '业务场景', '客户现场', 'PLM', 'BOM', 'ECO', 'ECN', '版本', '变更单', '发布', '图纸', '物料', '工艺'),
+            /\b(current workflow|current process|business process|user workflow|stakeholder|requirements|what are you trying to solve|what does success look like|PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|revision|version|release|part number|drawing|material master|routing|manufacturing|quality object)\b/i,
+            zh('现有流程', '当前流程', '业务流程', '用户流程', '需求是什么', '想解决什么', '谁会使用', '谁负责', '干系人', '业务场景', '客户现场', 'PLM', 'QMS', 'BOM', 'ECO', 'ECN', 'CAPA', 'NCR', '8D', '版本', '变更单', '发布', '图纸', '物料', '工艺', '质量对象'),
         ],
         priority: 0.84,
         label: 'Probe deployment context',
@@ -542,7 +542,7 @@ function shouldSuppressFdeTrigger(trigger: ActionTrigger, transcript: string): b
     if (/(上周话题|old topic|still joining the call|还在加入会议|测试麦克风)/i.test(text)) return true;
     if (
         trigger.type === 'fde_discovery_probe' &&
-        !/(客户|customer|PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|流程|权限|验收|集成|AI Agent|智能体|物料|图纸|变更|质量)/i.test(text)
+        !/(客户|customer|PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|part number|drawing revision|material master|workflow|process|流程|权限|验收|集成|AI Agent|智能体|物料|图纸|变更|质量|质量对象)/i.test(text)
     ) {
         return true;
     }

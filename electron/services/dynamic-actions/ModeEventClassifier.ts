@@ -255,7 +255,31 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
                 semanticProvider: 'local_intent',
             };
         }
-        if (includesAny(text, ['too expensive', 'too pricey', 'too high', 'out of budget', '价格太高', '报价太高', '太贵', '超出预算', '预算过不了', '预算这一关就过不了', '预算不够', '预算不足'])) {
+        if (includesAny(text, [
+            'too expensive',
+            'too pricey',
+            'too high',
+            'out of budget',
+            'cannot afford',
+            "can't afford",
+            'reduce the price',
+            'lower the price',
+            'do better on price',
+            'discount',
+            '价格太高',
+            '报价太高',
+            '太贵',
+            '超出预算',
+            '预算过不了',
+            '预算这一关就过不了',
+            '预算不够',
+            '预算不足',
+            '负担不起',
+            '便宜点',
+            '能不能便宜',
+            '打个折',
+            '有折扣吗',
+        ])) {
             return {
                 ...base,
                 decision: 'pass',
@@ -278,7 +302,22 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
                 semanticProvider: 'local_intent',
             };
         }
-        if (includesAny(text, ['send me pricing', 'quote', 'proposal', 'what does it cost', '发我报价', '报价单', '发一版报价', '给客户发一版报价', '报个价格', '给个价格', '多少钱'])) {
+        if (includesAny(text, [
+            'send me pricing',
+            'quote',
+            'proposal',
+            'commercial terms',
+            'what does it cost',
+            '发我报价',
+            '报价单',
+            '发一版报价',
+            '给客户发一版报价',
+            '报个价格',
+            '给个价格',
+            '方案报价',
+            '商务条款',
+            '多少钱',
+        ])) {
             return {
                 ...base,
                 decision: 'pass',

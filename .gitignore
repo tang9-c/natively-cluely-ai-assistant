@@ -279,3 +279,8 @@ tests/fixtures/audio/*.mp3
 tests/fixtures/audio/*.flac
 tests/fixtures/audio/*.m4a
 tests/fixtures/audio/*.ogg
+
+# Local dynamic-action real replay assets (real customer meetings; do not upload)
+tests/fixtures/dynamic-actions/replay/audio/real/
+tests/fixtures/dynamic-actions/replay/transcripts/real/
+tests/fixtures/dynamic-actions/replay/private/
