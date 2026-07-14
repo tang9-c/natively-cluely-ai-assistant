@@ -135,8 +135,8 @@ export class IntelligenceManager extends EventEmitter {
     // Transcript Handling (delegates to engine)
     // ============================================
 
-    handleTranscript(segment: import('./SessionTracker').TranscriptSegment): void {
-        this.engine.handleTranscript(segment);
+    handleTranscript(segment: import('./SessionTracker').TranscriptSegment) {
+        return this.engine.handleTranscript(segment);
     }
 
     async handleSuggestionTrigger(trigger: import('./SessionTracker').SuggestionTrigger): Promise<void> {

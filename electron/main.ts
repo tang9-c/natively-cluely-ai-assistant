@@ -1296,20 +1296,26 @@ export class AppState {
         endTimestampMs: segment.endTimestampMs,
         emotion: segment.emotion,
         emotionSource: segment.emotionSource,
-        speakerVerification: segment.speakerVerification
+        speakerVerification: segment.speakerVerification,
+        coalescedFromCount: segment.coalescedFromCount,
+        coalescedProvider: segment.coalescedProvider,
+        rawSegmentIds: segment.rawSegmentIds
       };
 
       this.logMeetingEchoDiagnostics(speaker, segment.text, segment.isFinal, receivedAt);
 
-      this.intelligenceManager.handleTranscript(transcriptPayload);
+      const transcriptResult = this.intelligenceManager.handleTranscript(transcriptPayload);
 
       // Feed final transcript to JIT RAG indexer
       if (segment.isFinal && this.ragManager) {
-        this.ragManager.feedLiveTranscript([{
-          speaker: speaker,
-          text: segment.text,
-          timestamp: receivedAt
-        }]);
+        if (!transcriptResult?.mergedIntoPrevious) {
+          const ragTranscript = transcriptResult?.segment ?? transcriptPayload;
+          this.ragManager.feedLiveTranscript([{
+            speaker: ragTranscript.speaker,
+            text: ragTranscript.text,
+            timestamp: ragTranscript.timestamp
+          }]);
+        }
       }
 
       if (segment.isFinal && segment.text.trim()) {

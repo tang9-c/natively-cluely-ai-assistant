@@ -611,7 +611,10 @@ export class IntelligenceEngine extends EventEmitter {
     /**
      * Process transcript from native audio, and trigger follow-up if appropriate
      */
-    handleTranscript(segment: TranscriptSegment, skipRefinementCheck: boolean = false): void {
+    handleTranscript(
+        segment: TranscriptSegment,
+        skipRefinementCheck: boolean = false,
+    ): { role: 'interviewer' | 'user' | 'assistant'; segment: TranscriptSegment; mergedIntoPrevious?: boolean } | null {
         const result = this.session.handleTranscript(segment);
         this.lastTranscriptTime = Date.now();
 
@@ -641,6 +644,7 @@ export class IntelligenceEngine extends EventEmitter {
             });
         }
 
+        return result;
     }
 
     // Phase 3 dynamic actions — public API ===========================================================

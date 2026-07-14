@@ -41,6 +41,9 @@ export interface TranscriptSegment {
     emotion?: TranscriptEmotion;
     emotionSource?: TranscriptEmotionSource;
     speakerVerification?: SpeakerVerificationMetadata;
+    coalescedFromCount?: number;
+    coalescedProvider?: 'post_stt' | 'local_vad';
+    rawSegmentIds?: string[];
 }
 
 export interface SttWarning {

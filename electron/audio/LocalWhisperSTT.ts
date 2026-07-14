@@ -95,7 +95,7 @@ export class LocalWhisperSTT extends BaseSTT {
     // Gap-flush: ensures a segment closes even if Rust SilenceSuppressor
     // stops sending audio before VAD's hangover completes.
     private gapFlushTimer: ReturnType<typeof setTimeout> | null = null;
-    private static readonly GAP_FLUSH_MS = 400;
+    private static readonly GAP_FLUSH_MS = 1000;
     // 5s grace timer for the previous worker to finish in-flight transcribes
     // before we terminate it. Tracked so rapid stop/start cycles or app quit
     // don't pin the event loop with stale termination timers.
@@ -186,11 +186,14 @@ export class LocalWhisperSTT extends BaseSTT {
         if (this.channelLabel === 'system' && this.language.startsWith('zh')) {
             return {
                 rmsThreshold: 0.004,
-                hangoverFrames: 18,
-                minSpeechFrames: 3,
+                hangoverFrames: 30,
+                minSpeechFrames: 4,
             };
         }
-        return {};
+        return {
+            hangoverFrames: 30,
+            minSpeechFrames: 4,
+        };
     }
 
     /**

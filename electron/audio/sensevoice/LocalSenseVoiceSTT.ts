@@ -54,7 +54,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
   private pendingAudioByTaskId = new Map<string, Float32Array>();
   private inFlightTasks = 0;
   private gapFlushTimer: ReturnType<typeof setTimeout> | null = null;
-  private static readonly GAP_FLUSH_MS = 400;
+  private static readonly GAP_FLUSH_MS = 1000;
 
   constructor(options: LocalSenseVoiceSTTOptions = {}) {
     super();
@@ -188,12 +188,16 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     if (this.channelLabel === 'system') {
       return {
         rmsThreshold: 0.004,
-        hangoverFrames: 18,
-        minSpeechFrames: 3,
+        hangoverFrames: 30,
+        minSpeechFrames: 4,
         ...this.vadOptions,
       };
     }
-    return this.vadOptions ?? {};
+    return {
+      hangoverFrames: 30,
+      minSpeechFrames: 4,
+      ...this.vadOptions,
+    };
   }
 
   private spawnWorker(): void {

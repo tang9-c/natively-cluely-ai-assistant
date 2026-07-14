@@ -4,6 +4,7 @@
 
 import { RecapLLM } from './llm';
 import { isVerboseLogging } from './verboseLog';
+import { TranscriptSegmentCoalescer } from './TranscriptSegmentCoalescer';
 import type { SpeakerVerificationMetadata } from './services/speaker/speakerVerificationTypes';
 import type { TranscriptEmotionSource } from '../shared/senseVoiceEmotion';
 
@@ -23,6 +24,9 @@ export interface TranscriptSegment {
     emotion?: string;
     emotionSource?: TranscriptEmotionSource;
     speakerVerification?: SpeakerVerificationMetadata;
+    coalescedFromCount?: number;
+    coalescedProvider?: 'post_stt' | 'local_vad';
+    rawSegmentIds?: string[];
 }
 
 export interface SuggestionTrigger {
@@ -72,6 +76,7 @@ export class SessionTracker {
     private fullTranscript: TranscriptSegment[] = [];
     private fullUsage: any[] = []; // UsageInteraction
     private sessionStartTime: number = Date.now();
+    private readonly transcriptCoalescer = new TranscriptSegmentCoalescer();
 
     // Rolling summarization: epoch summaries preserve early context when arrays are compacted
     private static readonly MAX_EPOCH_SUMMARIES = 5;
@@ -227,7 +232,7 @@ export class SessionTracker {
      * Only stores FINAL transcripts.
      * Returns { role, isRefinementCandidate } so the engine can decide whether to trigger follow-up.
      */
-    addTranscript(segment: TranscriptSegment): { role: 'interviewer' | 'user' | 'assistant' } | null {
+    addTranscript(segment: TranscriptSegment): { role: 'interviewer' | 'user' | 'assistant'; segment: TranscriptSegment; mergedIntoPrevious?: boolean } | null {
         if (!segment.final) return null;
 
         const role = this.mapSpeakerToRole(segment.speaker);
@@ -244,35 +249,68 @@ export class SessionTracker {
             return null;
         }
 
-        this.contextItems.push({
-            role,
-            text,
-            timestamp: segment.timestamp,
-            speakerId: segment.speakerId,
-            speakerLabel: segment.speakerLabel,
-            emotion: segment.emotion,
-            emotionSource: segment.emotionSource,
-            speakerVerification: segment.speakerVerification,
-        });
-
-        this.evictOldEntries();
-
         // Filter out internal system prompts that might be passed via IPC
         const isInternalPrompt = text.startsWith("You are a real-time interview assistant") ||
             text.startsWith("You are a helper") ||
             text.startsWith("CONTEXT:");
 
         if (!isInternalPrompt) {
-            // Add to session transcript
+            const previous = this.fullTranscript[this.fullTranscript.length - 1];
+            const merged = this.transcriptCoalescer.tryMerge(previous, segment);
+            if (merged.merged) {
+                const mergedSegment = merged.segment;
+                this.fullTranscript[this.fullTranscript.length - 1] = mergedSegment;
+                if (lastItem && lastItem.role === role) {
+                    lastItem.text = mergedSegment.text;
+                    lastItem.timestamp = mergedSegment.timestamp;
+                    lastItem.speakerId = mergedSegment.speakerId;
+                    lastItem.speakerLabel = mergedSegment.speakerLabel;
+                    lastItem.emotion = mergedSegment.emotion;
+                    lastItem.emotionSource = mergedSegment.emotionSource;
+                    lastItem.speakerVerification = mergedSegment.speakerVerification;
+                }
+
+                this.evictOldEntries();
+                void this.compactTranscriptIfNeeded().catch(e =>
+                    console.warn('[SessionTracker] compactTranscript error (non-fatal):', e)
+                );
+                return { role, segment: mergedSegment, mergedIntoPrevious: true };
+            }
+
+            this.contextItems.push({
+                role,
+                text,
+                timestamp: segment.timestamp,
+                speakerId: segment.speakerId,
+                speakerLabel: segment.speakerLabel,
+                emotion: segment.emotion,
+                emotionSource: segment.emotionSource,
+                speakerVerification: segment.speakerVerification,
+            });
+
+            this.evictOldEntries();
+
             this.fullTranscript.push(segment);
             // Compact transcript with summarization instead of losing early context
             // Fire-and-forget: sync context; errors are caught internally
             void this.compactTranscriptIfNeeded().catch(e =>
                 console.warn('[SessionTracker] compactTranscript error (non-fatal):', e)
             );
+        } else {
+            this.contextItems.push({
+                role,
+                text,
+                timestamp: segment.timestamp,
+                speakerId: segment.speakerId,
+                speakerLabel: segment.speakerLabel,
+                emotion: segment.emotion,
+                emotionSource: segment.emotionSource,
+                speakerVerification: segment.speakerVerification,
+            });
+            this.evictOldEntries();
         }
 
-        return { role };
+        return { role, segment };
     }
 
     /**
@@ -337,7 +375,7 @@ export class SessionTracker {
     /**
      * Handle incoming transcript from native audio service
      */
-    handleTranscript(segment: TranscriptSegment): { role: 'interviewer' | 'user' | 'assistant' } | null {
+    handleTranscript(segment: TranscriptSegment): { role: 'interviewer' | 'user' | 'assistant'; segment: TranscriptSegment; mergedIntoPrevious?: boolean } | null {
         // Track interim segments for both interviewer AND user to prevent
         // data loss on stop — the interviewer path has always done this;
         // user (mic) previously only logged and dropped the last interim

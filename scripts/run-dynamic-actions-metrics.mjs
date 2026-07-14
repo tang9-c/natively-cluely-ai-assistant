@@ -28,7 +28,10 @@ function readRequiredJson(fileName) {
 
 function readOptionalTelemetry() {
   if (!fs.existsSync(telemetryPath)) {
-    return { records: [], warnings: [`Optional telemetry JSONL missing: ${telemetryPath}`] };
+    return {
+      records: [],
+      warnings: [`Optional telemetry JSONL missing: ${telemetryPath}`],
+    };
   }
   return parseTelemetryJsonlLines(fs.readFileSync(telemetryPath, 'utf8'));
 }

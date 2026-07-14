@@ -283,6 +283,9 @@ interface ElectronAPI {
       final: boolean;
       emotion?: TranscriptEmotion;
       emotionSource?: TranscriptEmotionSource;
+      coalescedFromCount?: number;
+      coalescedProvider?: 'post_stt' | 'local_vad';
+      rawSegmentIds?: string[];
     }) => void,
   ) => () => void;
   onNativeAudioSuggestion: (
@@ -1333,6 +1336,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       final: boolean;
       emotion?: TranscriptEmotion;
       emotionSource?: TranscriptEmotionSource;
+      coalescedFromCount?: number;
+      coalescedProvider?: 'post_stt' | 'local_vad';
+      rawSegmentIds?: string[];
     }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);

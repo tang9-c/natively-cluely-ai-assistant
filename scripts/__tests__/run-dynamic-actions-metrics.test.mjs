@@ -83,3 +83,51 @@ test('dynamic action metrics CLI fails when required product or replay reports a
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Missing required dynamic action QA report/);
 });
+
+test('dynamic action metrics CLI warns instead of failing when telemetry JSONL is missing', () => {
+  const reportDir = tempDir();
+  fs.writeFileSync(path.join(reportDir, 'product-report.json'), JSON.stringify({
+    totalFixtures: 1,
+    results: [
+      { fixtureId: 's1', actionType: 'pricing_objection', shouldEmit: true, emitted: true, actionTypeMatched: true, outputTypeMatched: true },
+    ],
+  }), 'utf8');
+  fs.writeFileSync(path.join(reportDir, 'replay-report.json'), JSON.stringify({
+    totalEntries: 0,
+    skippedEntries: 0,
+    failedEntries: 0,
+    passedEntries: 0,
+    environmentStatus: 'not_applicable',
+    entries: [{
+      id: 'continuation-positive',
+      status: 'passed',
+      continuation: {
+        fixtureId: 'c1',
+        shouldEmit: true,
+        initialActionCompleted: true,
+        plannerCalls: 1,
+        plannerCallsWithoutPending: 0,
+        parentActionId: 'p1',
+        childActionId: 'c1',
+        derivedActionEmitted: true,
+        duplicateDerivedActions: 0,
+        unsafeVisibleAnswerCount: 0,
+        finalTurnToDerivedCardMs: 100,
+        visibleAnswerKind: 'generated',
+        postCallCarryover: true,
+        passed: true
+      }
+    }],
+  }), 'utf8');
+
+  const result = spawnSync(process.execPath, ['scripts/run-dynamic-actions-metrics.mjs'], {
+    cwd: process.cwd(),
+    env: { ...process.env, DYNAMIC_ACTIONS_REPORT_DIR: reportDir },
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.doesNotMatch(result.stderr, /Missing required dynamic action telemetry JSONL/);
+  const summary = JSON.parse(fs.readFileSync(path.join(reportDir, 'metrics-report.json'), 'utf8'));
+  assert.deepEqual(summary.warnings, [`Optional telemetry JSONL missing: ${path.join(reportDir, 'telemetry.jsonl')}`]);
+});
