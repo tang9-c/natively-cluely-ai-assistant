@@ -41,3 +41,26 @@ test('Sales and team-meet real STT replay scripts are wired as blocked-capable s
     assert.match(allRunner.slice(stageStart, stageEnd), /blockedOnMissingEnv/);
   }
 });
+
+test('local sales real STT smoke script targets one ignored private entry without coverage gate', () => {
+  const pkg = JSON.parse(read('package.json'));
+  const localScript = read('scripts/run-sales-local-real-stt-smoke.mjs');
+
+  assert.equal(
+    pkg.scripts['test:dynamic-actions:sales-replay:real-stt:local'],
+    'npm run build:electron && node scripts/run-sales-local-real-stt-smoke.mjs',
+  );
+  assert.match(localScript, /--entry sales-real-001/);
+  assert.match(localScript, /audio\/real\/sales/);
+  assert.match(localScript, /transcripts\/real\/sales/);
+  assert.match(localScript, /sales-real-\\d\{3\}/);
+  assert.match(localScript, /expectedAction/);
+  assert.match(localScript, /startSec/);
+  assert.match(localScript, /durationSec/);
+  assert.match(localScript, /clipDurationSec/);
+  assert.match(localScript, /ffmpeg/);
+  assert.match(localScript, /blocked_missing_credentials/);
+  assert.doesNotMatch(localScript, /replay-manifest\.json/);
+  assert.doesNotMatch(localScript, /assetCoverageFailures/);
+  assert.doesNotMatch(localScript, /广州酒家|禾望电气|德康威尔|康瑞电子|稳健医疗/);
+});
