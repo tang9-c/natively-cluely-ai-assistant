@@ -31,6 +31,24 @@ test('profile onboarding actions share a persistent dismiss helper', () => {
   assert.ok(helperUses.length >= 3, 'profile button, ignore, and try actions should reuse dismiss helper');
 });
 
+test('profile onboarding exposes an explicit close button in the popover', () => {
+  const profilePopoverStart = source.indexOf('{showProfileOnboarding && (');
+  assert.ok(profilePopoverStart >= 0, 'profile onboarding conditional should exist');
+  const profileBlock = source.slice(profilePopoverStart, source.indexOf('</AnimatePresence>', profilePopoverStart));
+
+  assert.match(profileBlock, /aria-label="关闭档案智能提示"/);
+  assert.match(profileBlock, /dismissProfileOnboarding\(\)/);
+});
+
+test('modes onboarding exposes an explicit close button in the popover', () => {
+  const modesPopoverStart = source.indexOf('{showModesOnboarding && (');
+  assert.ok(modesPopoverStart >= 0, 'modes onboarding conditional should exist');
+  const modesBlock = source.slice(modesPopoverStart, source.indexOf('</AnimatePresence>', modesPopoverStart));
+
+  assert.match(modesBlock, /aria-label="关闭模式提示"/);
+  assert.match(modesBlock, /dismissModesOnboarding\(\)/);
+});
+
 test('delayed profile onboarding re-checks seen flag before showing', () => {
   assert.match(source, /const shouldShowProfileOnboarding = \(\) =>/);
   assert.match(source, /if \(mounted && shouldShowProfileOnboarding\(\)\) setShowProfileOnboarding\(true\)/);

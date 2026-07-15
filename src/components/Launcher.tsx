@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Telescope } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Telescope, X } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
 import icon from "./icon.png";
 import mainui from "../UI_comp/mainui.png";
@@ -463,6 +463,21 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                         ? 'bg-white/70 border-t border-l border-black/5 backdrop-blur-[40px]' 
                                         : 'bg-[#18181A]/70 border-t border-l border-white/5 backdrop-blur-[40px]'
                                     }`} />
+                                    <button
+                                        type="button"
+                                        aria-label="关闭档案智能提示"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            dismissProfileOnboarding();
+                                        }}
+                                        className={`absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full transition-all active:scale-95 no-drag ${
+                                            isLight
+                                                ? 'text-slate-500 hover:bg-slate-100/70 hover:text-slate-800'
+                                                : 'text-slate-400 hover:bg-white/10 hover:text-slate-100'
+                                        }`}
+                                    >
+                                        <X size={14} />
+                                    </button>
                                     
                                     <div className="relative flex gap-3">
                                         <div className={`w-9 h-9 flex items-center justify-center shrink-0 rounded-full ${
@@ -552,6 +567,21 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                         ? 'bg-white/70 border-t border-l border-black/5 backdrop-blur-[40px]' 
                                         : 'bg-[#18181A]/70 border-t border-l border-white/5 backdrop-blur-[40px]'
                                     }`} />
+                                    <button
+                                        type="button"
+                                        aria-label="关闭模式提示"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            dismissModesOnboarding();
+                                        }}
+                                        className={`absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full transition-all active:scale-95 no-drag ${
+                                            isLight
+                                                ? 'text-slate-500 hover:bg-slate-100/70 hover:text-slate-800'
+                                                : 'text-slate-400 hover:bg-white/10 hover:text-slate-100'
+                                        }`}
+                                    >
+                                        <X size={14} />
+                                    </button>
                                     
                                     <div className="relative flex gap-3">
                                         <div className={`w-9 h-9 flex items-center justify-center shrink-0 rounded-full ${
