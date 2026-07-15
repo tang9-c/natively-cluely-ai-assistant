@@ -126,6 +126,22 @@ test('Doubao table diagnostics are reported separately from dynamic context', ()
   assert.doesNotMatch(script, /industrial-corpus-context[\s\S]{0,300}fallback/);
 });
 
+test('STT benchmark compare script is wired for private diff reports', () => {
+  const pkg = JSON.parse(read('package.json'));
+  const compareScript = path.join(repoRoot, 'scripts/compare-stt-benchmark-reports.mjs');
+
+  assert.equal(pkg.scripts['test:stt:benchmark:compare'], 'node scripts/compare-stt-benchmark-reports.mjs');
+  assert.equal(fs.existsSync(compareScript), true);
+  const script = fs.readFileSync(compareScript, 'utf8');
+  assert.match(script, /--baseline <path>/);
+  assert.match(script, /--after <path>/);
+  assert.match(script, /--baseline-filter <key=value,key=value>/);
+  assert.match(script, /--after-filter <key=value,key=value>/);
+  assert.match(script, /averageCharacterErrorRateDelta/);
+  assert.match(script, /keywordRecallDelta/);
+  assert.match(script, /private\/stt-benchmark\/compare/);
+});
+
 test('STT benchmark helpers align timestamped transcript windows and score quality', async () => {
   const benchmark = await import('../run-sales-local-stt-benchmark.mjs');
   const rawTranscript = [
