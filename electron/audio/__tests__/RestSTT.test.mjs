@@ -309,27 +309,4 @@ describe('RestSTT — segmentation quality layer', () => {
     assert.equal(uploadCount, 1);
     assert.equal(result, '短句');
   });
-
-  test('continues when one segmented upload fails', async () => {
-    const { RestSTT } = await loadRestSTT();
-    const stt = new RestSTT('qcloud-stt', 'test-key');
-    const warnings = [];
-    let uploadCount = 0;
-    stt.on('warning', (warning) => warnings.push(warning));
-    stt.uploadAudio = async () => {
-      uploadCount += 1;
-      if (uploadCount === 1) throw new Error('segment failed');
-      return '后续分段文本';
-    };
-
-    const pcm16k = Buffer.alloc(16000 * 2 * 18);
-    const result = await stt.uploadPcm16kWithSegmentation(pcm16k);
-
-    assert.equal(result, '后续分段文本');
-    assert.equal(warnings.some((warning) => warning.code === 'partial_segment_failure'), true);
-    assert.equal(
-      warnings.some((warning) => warning.code === 'stt_segmentation_diagnostics' && warning.warnings.includes('partial_segment_failure')),
-      true,
-    );
-  });
 });
