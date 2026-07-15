@@ -54,7 +54,11 @@
     "test:coverage:baseline": "node scripts/coverage/baseline.mjs",
     "test:coverage:diff": "node scripts/coverage/diff-against-baseline.mjs",
     "test:coverage:threshold": "node scripts/coverage/check-threshold.mjs",
-    "test:dynamic-actions:sales-replay:real-stt:local": "npm run build:electron && node scripts/run-sales-local-real-stt-smoke.mjs"
+    "test:dynamic-actions:sales-replay:real-stt:local": "npm run build:electron && node scripts/run-sales-local-real-stt-smoke.mjs",
+    "test:dynamic-actions:sales-replay:stt-benchmark:local": "npm run build:electron && node scripts/run-sales-local-stt-benchmark.mjs",
+    "test:stt:qcloud-auc:matrix": "npm run build:electron && node scripts/run-stt-provider-matrix-local.mjs --providers qcloud-auc --parameter-groups all",
+    "test:stt:provider-matrix:local": "npm run build:electron && node scripts/run-stt-provider-matrix-local.mjs",
+    "test:stt:segmentation:unit": "npm run build:electron && node --test electron/audio/__tests__/SttSegmentation.test.mjs"
   },
   "build": {
     "generateUpdatesFilesForAllChannels": true,
