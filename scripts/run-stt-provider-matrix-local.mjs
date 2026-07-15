@@ -37,6 +37,15 @@ Options:
   --segmentation-modes <a,b>           full,chunks,overlap; default full
   --pre-roll-sec <n>                   Extra bounded audio before each non-full segment, default 0
   --post-roll-sec <n>                  Extra bounded audio after each non-full segment, default 0
+  --boosting-table-id <id>             Doubao AUC corpus boosting table id
+  --boosting-table-name <name>         Doubao AUC corpus boosting table name
+  --correct-table-id <id>              Doubao AUC corpus replacement table id
+  --correct-table-name <name>          Doubao AUC corpus replacement table name
+  --sensevoice-term-correction <mode>  off | industrial, default industrial
+  --sensevoice-term <canonical=variant1|variant2>
+  --local-channel-profile <name>       mic | system, default system
+  --preprocessing-profiles <a,b>       baseline,soxr,fixed-frame-system-normalized
+  --normalization-frame-ms <n>         Fixed-frame normalization duration, default 100
   --help                              Show this help`);
 }
 
@@ -47,7 +56,7 @@ function splitCsv(value) {
     .filter(Boolean);
 }
 
-function parseArgs(argv) {
+export function parseMatrixArgs(argv) {
   const opts = {
     entries: [],
     providers: ['qcloud-auc', 'local-sensevoice'],
@@ -56,6 +65,15 @@ function parseArgs(argv) {
     segmentationModes: ['full'],
     preRollSec: 0,
     postRollSec: 0,
+    boostingTableId: '',
+    boostingTableName: '',
+    correctTableId: '',
+    correctTableName: '',
+    sensevoiceTermCorrection: 'industrial',
+    sensevoiceTerms: [],
+    localChannelProfile: 'system',
+    preprocessingProfiles: ['baseline'],
+    normalizationFrameMs: 100,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -103,14 +121,55 @@ function parseArgs(argv) {
       opts.postRollSec = Number(argv[++index]);
       continue;
     }
+    if (arg === '--boosting-table-id') {
+      opts.boostingTableId = String(argv[++index] ?? '');
+      continue;
+    }
+    if (arg === '--boosting-table-name') {
+      opts.boostingTableName = String(argv[++index] ?? '');
+      continue;
+    }
+    if (arg === '--correct-table-id') {
+      opts.correctTableId = String(argv[++index] ?? '');
+      continue;
+    }
+    if (arg === '--correct-table-name') {
+      opts.correctTableName = String(argv[++index] ?? '');
+      continue;
+    }
+    if (arg === '--sensevoice-term-correction') {
+      opts.sensevoiceTermCorrection = String(argv[++index] ?? '');
+      continue;
+    }
+    if (arg === '--sensevoice-term') {
+      opts.sensevoiceTerms.push(String(argv[++index] ?? ''));
+      continue;
+    }
+    if (arg === '--local-channel-profile') {
+      opts.localChannelProfile = String(argv[++index] ?? '');
+      continue;
+    }
+    if (arg === '--preprocessing-profiles') {
+      opts.preprocessingProfiles = splitCsv(argv[++index]);
+      continue;
+    }
+    if (arg === '--normalization-frame-ms') {
+      opts.normalizationFrameMs = Number(argv[++index]);
+      continue;
+    }
     throw new Error(`Unknown option: ${arg}`);
   }
 
   if (opts.entries.length === 0) {
     throw new Error('--entry or --entries is required');
   }
+  if (!Number.isInteger(opts.normalizationFrameMs) || opts.normalizationFrameMs < 20 || opts.normalizationFrameMs > 500) {
+    throw new Error('--normalization-frame-ms must be an integer between 20 and 500');
+  }
   return opts;
 }
+
+const parseArgs = parseMatrixArgs;
 
 function parseJsonFromOutput(output) {
   const text = String(output ?? '');
@@ -124,28 +183,47 @@ function parseJsonFromOutput(output) {
   }
 }
 
-function runOne({ entry, provider, parameterGroup, window, segmentationMode, preRollSec, postRollSec }) {
+export function buildBenchmarkChildArgs(testCase, options) {
   const args = [
     'scripts/run-sales-local-stt-benchmark.mjs',
     '--entry',
-    entry,
+    testCase.entry,
     '--provider',
-    provider,
+    testCase.provider,
     '--start-sec',
-    String(window.startSec),
+    String(testCase.window.startSec),
     '--duration-sec',
-    String(window.durationSec),
+    String(testCase.window.durationSec),
     '--segmentation-mode',
-    segmentationMode,
+    testCase.segmentationMode,
     '--pre-roll-sec',
-    String(preRollSec),
+    String(testCase.preRollSec),
     '--post-roll-sec',
-    String(postRollSec),
+    String(testCase.postRollSec),
+    '--sensevoice-term-correction',
+    options.sensevoiceTermCorrection,
+    '--local-channel-profile',
+    options.localChannelProfile,
+    '--preprocessing-profile',
+    testCase.preprocessingProfile,
+    '--normalization-frame-ms',
+    String(options.normalizationFrameMs),
   ];
-  if (provider === 'qcloud-auc') {
-    args.push('--parameter-group', parameterGroup);
+  for (const term of options.sensevoiceTerms) {
+    args.push('--sensevoice-term', term);
   }
+  if (options.boostingTableId) args.push('--boosting-table-id', options.boostingTableId);
+  if (options.boostingTableName) args.push('--boosting-table-name', options.boostingTableName);
+  if (options.correctTableId) args.push('--correct-table-id', options.correctTableId);
+  if (options.correctTableName) args.push('--correct-table-name', options.correctTableName);
+  if (testCase.provider === 'qcloud-auc') {
+    args.push('--parameter-group', testCase.parameterGroup);
+  }
+  return args;
+}
 
+function runOne(testCase, options) {
+  const args = buildBenchmarkChildArgs(testCase, options);
   const result = spawnSync('node', args, {
     cwd: root,
     encoding: 'utf8',
@@ -153,19 +231,20 @@ function runOne({ entry, provider, parameterGroup, window, segmentationMode, pre
   });
   const report = parseJsonFromOutput(result.stdout) ?? {
     status: result.status === 0 ? 'passed' : 'failed',
-    provider,
-    entry,
-    parameterGroup: provider === 'qcloud-auc' ? parameterGroup : null,
+    provider: testCase.provider,
+    entry: testCase.entry,
+    parameterGroup: testCase.provider === 'qcloud-auc' ? testCase.parameterGroup : null,
     reason: result.stderr || result.stdout || 'benchmark did not emit JSON',
   };
   return {
     exitCode: result.status ?? 1,
-    entry,
-    provider,
-    parameterGroup: provider === 'qcloud-auc' ? parameterGroup : null,
-    segmentationMode,
-    clipStartSec: window.startSec,
-    clipDurationSec: window.durationSec,
+    entry: testCase.entry,
+    provider: testCase.provider,
+    parameterGroup: testCase.provider === 'qcloud-auc' ? testCase.parameterGroup : null,
+    segmentationMode: testCase.segmentationMode,
+    preprocessingProfile: testCase.preprocessingProfile,
+    clipStartSec: testCase.window.startSec,
+    clipDurationSec: testCase.window.durationSec,
     status: report.status,
     environmentStatus: report.environmentStatus,
     providerStatus: report.providerStatus,
@@ -211,15 +290,18 @@ export function buildMatrixCases(opts) {
       for (const parameterGroup of parameterGroups) {
         for (const window of opts.windows) {
           for (const segmentationMode of opts.segmentationModes) {
-            cases.push({
-              entry,
-              provider,
-              parameterGroup,
-              window,
-              segmentationMode,
-              preRollSec: opts.preRollSec,
-              postRollSec: opts.postRollSec,
-            });
+            for (const preprocessingProfile of opts.preprocessingProfiles) {
+              cases.push({
+                entry,
+                provider,
+                parameterGroup,
+                window,
+                segmentationMode,
+                preprocessingProfile,
+                preRollSec: opts.preRollSec,
+                postRollSec: opts.postRollSec,
+              });
+            }
           }
         }
       }
@@ -231,7 +313,7 @@ export function buildMatrixCases(opts) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   const cases = buildMatrixCases(opts);
-  const results = cases.map(runOne);
+  const results = cases.map((testCase) => runOne(testCase, opts));
   const aggregate = {
     status: results.some((result) => result.status === 'failed') ? 'failed' : 'completed',
     generatedAt: new Date().toISOString(),

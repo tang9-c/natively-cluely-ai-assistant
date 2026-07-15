@@ -83,6 +83,87 @@ test('STT provider matrix scripts are wired and aggregate blocked/failed states'
   assert.match(matrix, /private\/stt-benchmark\/matrix/);
 });
 
+test('STT provider matrix forwards provider and local model options to benchmark children', async () => {
+  const matrixSource = read('scripts/run-stt-provider-matrix-local.mjs');
+  const benchmarkSource = read('scripts/run-sales-local-stt-benchmark.mjs');
+  const requiredOptions = [
+    '--boosting-table-id',
+    '--boosting-table-name',
+    '--correct-table-id',
+    '--correct-table-name',
+    '--sensevoice-term-correction',
+    '--sensevoice-term',
+    '--local-channel-profile',
+    '--preprocessing-profiles',
+    '--normalization-frame-ms',
+  ];
+  for (const option of requiredOptions) assert.match(matrixSource, new RegExp(option));
+
+  const matrix = await import('../run-stt-provider-matrix-local.mjs');
+  const options = matrix.parseMatrixArgs([
+    '--entry', 'sales-real-001',
+    '--providers', 'qcloud-auc',
+    '--boosting-table-id', 'boost-id-a',
+    '--boosting-table-name', 'boost-name-a',
+    '--correct-table-id', 'correct-id-a',
+    '--correct-table-name', 'correct-name-a',
+    '--sensevoice-term-correction', 'industrial',
+    '--sensevoice-term', 'PLM=皮诶勒姆',
+    '--local-channel-profile', 'system',
+    '--preprocessing-profiles', 'baseline,soxr',
+    '--normalization-frame-ms', '100',
+  ]);
+  const [testCase] = matrix.buildMatrixCases(options);
+  const childArgs = matrix.buildBenchmarkChildArgs(testCase, options);
+  for (const [flag, value] of [
+    ['--boosting-table-id', 'boost-id-a'],
+    ['--boosting-table-name', 'boost-name-a'],
+    ['--correct-table-id', 'correct-id-a'],
+    ['--correct-table-name', 'correct-name-a'],
+    ['--sensevoice-term-correction', 'industrial'],
+    ['--sensevoice-term', 'PLM=皮诶勒姆'],
+    ['--local-channel-profile', 'system'],
+    ['--preprocessing-profile', 'baseline'],
+    ['--normalization-frame-ms', '100'],
+  ]) {
+    const index = childArgs.indexOf(flag);
+    assert.notEqual(index, -1, `${flag} missing from child args`);
+    assert.equal(childArgs[index + 1], value);
+  }
+
+  assert.match(benchmarkSource, /defaultTermCorrections\.js/);
+  assert.match(benchmarkSource, /DEFAULT_SENSEVOICE_TERM_CORRECTIONS/);
+  assert.doesNotMatch(benchmarkSource, /DOMAIN_KEYWORDS\.map\(\(keyword[\s\S]{0,120}variants:\s*\[\]/);
+});
+
+test('STT benchmark configuration fingerprint changes without exposing raw table names', async () => {
+  const benchmark = await import('../run-sales-local-stt-benchmark.mjs');
+  const base = {
+    provider: 'qcloud-auc',
+    parameterGroup: 'qcloud-current',
+    boostingTableId: '',
+    correctTableId: '',
+    correctTableName: '',
+    sensevoiceTermCorrection: 'off',
+    localChannelProfile: 'system',
+    preprocessingProfile: 'baseline',
+    normalizationFrameMs: 100,
+  };
+  const left = benchmark.buildBenchmarkConfigurationForProvider({
+    ...base,
+    boostingTableName: 'private-table-left',
+  });
+  const right = benchmark.buildBenchmarkConfigurationForProvider({
+    ...base,
+    boostingTableName: 'private-table-right',
+  });
+
+  assert.notEqual(left.configurationFingerprint, right.configurationFingerprint);
+  assert.equal(JSON.stringify(left).includes('private-table-left'), false);
+  assert.equal(JSON.stringify(right).includes('private-table-right'), false);
+  assert.equal(left.hasBoostingTableName, true);
+});
+
 test('STT benchmark loads compiled segmentation helper and reports raw/deduped diagnostics', () => {
   const script = read('scripts/run-sales-local-stt-benchmark.mjs');
 

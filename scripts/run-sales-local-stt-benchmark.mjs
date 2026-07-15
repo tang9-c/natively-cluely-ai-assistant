@@ -9,7 +9,9 @@ import axios from 'axios';
 import 'dotenv/config';
 import mammoth from 'mammoth';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -20,6 +22,7 @@ import {
 } from './stt-benchmark/referenceQuality.mjs';
 
 const root = process.cwd();
+const require = createRequire(import.meta.url);
 const ENTRY_PATTERN = /^sales-real-\d{3}$/;
 const DEFAULT_CER_THRESHOLD = 0.35;
 const DEFAULT_KEYWORD_RECALL_THRESHOLD = 0.75;
@@ -116,6 +119,9 @@ Options:
   --sensevoice-term-correction <mode>  off | industrial, default off
   --sensevoice-term <canonical=variant1|variant2>
                                       Add one explicit Local SenseVoice correction rule for benchmark
+  --local-channel-profile <name>       mic | system, default system
+  --preprocessing-profile <name>       baseline | soxr | fixed-frame-system-normalized, default baseline
+  --normalization-frame-ms <n>         Fixed-frame normalization duration, default 100
   --boosting-table-id <id>             Doubao AUC corpus boosting table id
   --boosting-table-name <name>         Doubao AUC corpus boosting table name
   --correct-table-id <id>              Doubao AUC corpus replacement table id
@@ -154,6 +160,9 @@ function parseArgs(argv) {
     postRollSec: 0,
     sensevoiceTermCorrection: 'off',
     sensevoiceTerms: [],
+    localChannelProfile: 'system',
+    preprocessingProfile: 'baseline',
+    normalizationFrameMs: 100,
     boostingTableId: process.env.DOUBAO_AUC_BOOSTING_TABLE_ID || process.env.QCLOUD_AUC_BOOSTING_TABLE_ID || '',
     boostingTableName: process.env.DOUBAO_AUC_BOOSTING_TABLE_NAME || process.env.QCLOUD_AUC_BOOSTING_TABLE_NAME || '',
     correctTableId: process.env.DOUBAO_AUC_CORRECT_TABLE_ID || process.env.QCLOUD_AUC_CORRECT_TABLE_ID || '',
@@ -220,6 +229,18 @@ function parseArgs(argv) {
       const canonical = value.slice(0, separator).trim();
       const variants = value.slice(separator + 1).split('|').map((item) => item.trim()).filter(Boolean);
       opts.sensevoiceTerms.push({ canonical, variants });
+      continue;
+    }
+    if (arg === '--local-channel-profile') {
+      opts.localChannelProfile = String(argv[++index] ?? '');
+      continue;
+    }
+    if (arg === '--preprocessing-profile') {
+      opts.preprocessingProfile = String(argv[++index] ?? '');
+      continue;
+    }
+    if (arg === '--normalization-frame-ms') {
+      opts.normalizationFrameMs = Number(argv[++index]);
       continue;
     }
     if (arg === '--boosting-table-id') {
@@ -304,6 +325,15 @@ function parseArgs(argv) {
   if (!['off', 'industrial'].includes(opts.sensevoiceTermCorrection)) {
     throw new Error('--sensevoice-term-correction must be off or industrial');
   }
+  if (!['mic', 'system'].includes(opts.localChannelProfile)) {
+    throw new Error('--local-channel-profile must be mic or system');
+  }
+  if (!['baseline', 'soxr', 'fixed-frame-system-normalized'].includes(opts.preprocessingProfile)) {
+    throw new Error('--preprocessing-profile must be baseline, soxr, or fixed-frame-system-normalized');
+  }
+  if (!Number.isInteger(opts.normalizationFrameMs) || opts.normalizationFrameMs < 20 || opts.normalizationFrameMs > 500) {
+    throw new Error('--normalization-frame-ms must be an integer between 20 and 500');
+  }
   if (!Number.isFinite(opts.startSec) || opts.startSec < 0) {
     throw new Error('--start-sec must be a non-negative number');
   }
@@ -348,7 +378,7 @@ function parseArgs(argv) {
 
 function buildClip(inputPath, opts) {
   const outputPath = path.join(os.tmpdir(), `${opts.entry}-benchmark-${Date.now()}-${process.pid}.wav`);
-  const result = spawnSync('ffmpeg', [
+  const ffmpegArgs = [
     '-y',
     '-hide_banner',
     '-loglevel',
@@ -359,19 +389,70 @@ function buildClip(inputPath, opts) {
     String(opts.durationSec),
     '-i',
     inputPath,
+  ];
+  if (opts.preprocessingProfile === 'soxr') {
+    ffmpegArgs.push('-af', 'aresample=16000:resampler=soxr:precision=28');
+  }
+  ffmpegArgs.push(
     '-ar',
     '16000',
     '-ac',
     '1',
+    '-c:a',
+    'pcm_s16le',
     outputPath,
-  ], {
+  );
+  const result = spawnSync('ffmpeg', ffmpegArgs, {
     cwd: root,
     encoding: 'utf8',
   });
   if (result.status !== 0) {
     throw new Error(`ffmpeg clip failed: ${result.stderr || result.stdout || 'unknown error'}`);
   }
+  validateGeneratedClip(outputPath);
   return outputPath;
+}
+
+function probeAudio(inputPath) {
+  const result = spawnSync('ffprobe', [
+    '-v',
+    'error',
+    '-select_streams',
+    'a:0',
+    '-show_entries',
+    'format=format_name:stream=codec_name,sample_rate,channels',
+    '-of',
+    'json',
+    inputPath,
+  ], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  if (result.status !== 0) return null;
+  try {
+    const parsed = JSON.parse(result.stdout || '{}');
+    const stream = parsed.streams?.[0] ?? {};
+    return {
+      formatName: parsed.format?.format_name ?? null,
+      codecName: stream.codec_name ?? null,
+      sampleRate: Number(stream.sample_rate) || null,
+      channels: Number(stream.channels) || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function validateGeneratedClip(outputPath) {
+  const probe = probeAudio(outputPath);
+  if (
+    !probe
+    || probe.codecName !== 'pcm_s16le'
+    || probe.sampleRate !== 16000
+    || probe.channels !== 1
+  ) {
+    throw new Error('Generated benchmark clip must be PCM s16le 16 kHz mono WAV');
+  }
 }
 
 function buildRawPcmFromWav(inputPath, opts) {
@@ -892,21 +973,20 @@ function resolveSenseVoiceModelsDir() {
 }
 
 function buildSenseVoiceTermCorrection(opts) {
-  const terms = [];
-  if (opts.sensevoiceTermCorrection === 'industrial') {
-    terms.push(...DOMAIN_KEYWORDS.map((keyword, index) => ({
-      id: `industrial-${index}`,
-      canonical: keyword,
-      variants: [],
-      enabled: true,
-    })));
-  }
-  terms.push(...opts.sensevoiceTerms.map((term, index) => ({
+  const defaultTermsPath = path.join(root, 'dist-electron/electron/audio/sensevoice/defaultTermCorrections.js');
+  const { DEFAULT_SENSEVOICE_TERM_CORRECTIONS, mergeSenseVoiceTermCorrections } = require(defaultTermsPath);
+  const explicitTerms = opts.sensevoiceTerms.map((term, index) => ({
     id: `custom-${index}`,
     canonical: term.canonical,
     variants: term.variants,
     enabled: true,
-  })));
+  }));
+  if (opts.sensevoiceTermCorrection === 'industrial') {
+    const terms = mergeSenseVoiceTermCorrections(explicitTerms);
+    return { enabled: terms.length > 0, terms };
+  }
+  const terms = explicitTerms.length > 0 ? explicitTerms : [];
+  void DEFAULT_SENSEVOICE_TERM_CORRECTIONS;
   return { enabled: terms.length > 0, terms };
 }
 
@@ -963,23 +1043,77 @@ function summarizeSenseVoiceCorrectionDiagnostics({ correctionConfig, rawText, c
   };
 }
 
+function stableJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJson(item)).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function buildConfigurationFingerprint(opts, correctionConfig) {
+  const canonical = {
+    provider: opts.provider,
+    parameterGroup: opts.parameterGroup,
+    boostingTableId: String(opts.boostingTableId ?? '').trim(),
+    boostingTableName: String(opts.boostingTableName ?? '').trim(),
+    correctTableId: String(opts.correctTableId ?? '').trim(),
+    correctTableName: String(opts.correctTableName ?? '').trim(),
+    sensevoiceTermCorrection: opts.sensevoiceTermCorrection,
+    sensevoiceTerms: correctionConfig.terms.map((term) => ({
+      canonical: term.canonical,
+      variants: term.variants ?? [],
+      enabled: term.enabled !== false,
+    })),
+    localChannelProfile: opts.localChannelProfile,
+    preprocessingProfile: opts.preprocessingProfile,
+    normalizationFrameMs: opts.normalizationFrameMs,
+  };
+  return createHash('sha256').update(stableJson(canonical)).digest('hex');
+}
+
+function buildBenchmarkConfiguration(opts, correctionConfig) {
+  return {
+    provider: opts.provider,
+    parameterGroup: opts.parameterGroup,
+    hasBoostingTableId: Boolean(opts.boostingTableId),
+    hasBoostingTableName: Boolean(opts.boostingTableName),
+    hasCorrectTableId: Boolean(opts.correctTableId),
+    hasCorrectTableName: Boolean(opts.correctTableName),
+    sensevoiceTermCorrection: opts.sensevoiceTermCorrection,
+    sensevoiceTermCount: correctionConfig.terms.length,
+    localChannelProfile: opts.localChannelProfile,
+    preprocessingProfile: opts.preprocessingProfile,
+    normalizationFrameMs: opts.normalizationFrameMs,
+    configurationFingerprint: buildConfigurationFingerprint(opts, correctionConfig),
+  };
+}
+
+export function buildBenchmarkConfigurationForProvider(opts, correctionConfig = null) {
+  return buildBenchmarkConfiguration(opts, correctionConfig ?? { enabled: false, terms: [] });
+}
+
 async function transcribeLocalSenseVoiceOnce({ LocalSenseVoiceSTT, modelFiles, clipPath, opts, termCorrection }) {
   const pcmPath = buildRawPcmFromWav(clipPath, opts);
   const transcriptParts = [];
   const errors = [];
+  const channelProfiles = {
+    mic: { channel: 'mic', vadOptions: { hangoverFrames: 30, minSpeechFrames: 4 } },
+    system: { channel: 'system', vadOptions: { rmsThreshold: 0.004, hangoverFrames: 30, minSpeechFrames: 4 } },
+  };
+  const channelProfile = channelProfiles[opts.localChannelProfile] ?? channelProfiles.system;
   try {
     const stt = new LocalSenseVoiceSTT({
       modelFiles,
       termCorrection,
-      vadOptions: {
-        minSpeechFrames: 2,
-        hangoverFrames: 20,
-      },
+      vadOptions: channelProfile.vadOptions,
     });
     stt.setSampleRate(16000);
     stt.setAudioChannelCount(1);
     stt.setRecognitionLanguage('chinese');
-    stt.setChannel('mic');
+    stt.setChannel(channelProfile.channel);
     stt.on('transcript', (segment) => {
       if (segment?.text) transcriptParts.push(segment.text);
     });
@@ -1028,6 +1162,10 @@ async function transcribeClipWithLocalSenseVoice({ clipPath, opts }) {
         termCorrectionEnabled: opts.sensevoiceTermCorrection !== 'off' || opts.sensevoiceTerms.length > 0,
         termCorrectionMode: opts.sensevoiceTermCorrection,
         customTermCount: opts.sensevoiceTerms.length,
+        localChannelProfile: opts.localChannelProfile,
+        preprocessingProfile: opts.preprocessingProfile,
+        normalizationFrameMs: opts.normalizationFrameMs,
+        benchmarkConfiguration: buildBenchmarkConfigurationForProvider(opts),
         modelsDir,
       },
     };
@@ -1071,6 +1209,10 @@ async function transcribeClipWithLocalSenseVoice({ clipPath, opts }) {
       termCorrectionEnabled: opts.sensevoiceTermCorrection !== 'off' || opts.sensevoiceTerms.length > 0,
       termCorrectionMode: opts.sensevoiceTermCorrection,
       customTermCount: opts.sensevoiceTerms.length,
+      localChannelProfile: opts.localChannelProfile,
+      preprocessingProfile: opts.preprocessingProfile,
+      normalizationFrameMs: opts.normalizationFrameMs,
+      benchmarkConfiguration: buildBenchmarkConfigurationForProvider(opts, correctionConfig),
       modelsDir,
       modelFile: path.basename(modelFiles.modelFile),
     },
@@ -1346,6 +1488,8 @@ function buildReportPayload({
   transcribeResult,
 }) {
   const providerConfig = transcribeResult.providerConfig ?? {};
+  const benchmarkConfiguration = providerConfig.benchmarkConfiguration
+    ?? buildBenchmarkConfigurationForProvider(opts);
   const report = {
     environmentStatus: 'ok',
     providerStatus: 'ok',
@@ -1353,6 +1497,7 @@ function buildReportPayload({
     entry: opts.entry,
     provider: opts.provider,
     providerConfig,
+    benchmarkConfiguration,
     providerErrorCode: null,
     providerErrorType: null,
     parameterGroup: opts.provider === 'qcloud-auc' ? opts.parameterGroup : null,
@@ -1360,6 +1505,7 @@ function buildReportPayload({
     unsupportedFields: providerConfig.unsupportedFields ?? [],
     ignoredOrUnconfirmedFields: providerConfig.ignoredOrUnconfirmedFields ?? [],
     localModelStatus: transcribeResult.localModelStatus ?? null,
+    sourceAudioProbe: opts.sourceAudioProbe ?? null,
     requestedStartSec: opts.requestedStartSec ?? opts.startSec,
     requestedDurationSec: opts.requestedDurationSec ?? opts.durationSec,
     clipStartSec: opts.startSec,
@@ -1425,6 +1571,7 @@ function buildInvalidReferenceReport({ opts, referenceWindow, audioDurationSec }
     entry: opts.entry,
     provider: opts.provider,
     providerConfig: {},
+    benchmarkConfiguration: buildBenchmarkConfigurationForProvider(opts),
     providerErrorCode: null,
     providerErrorType: null,
     parameterGroup: opts.provider === 'qcloud-auc' ? opts.parameterGroup : null,
@@ -1432,6 +1579,7 @@ function buildInvalidReferenceReport({ opts, referenceWindow, audioDurationSec }
     unsupportedFields: [],
     ignoredOrUnconfirmedFields: [],
     localModelStatus: null,
+    sourceAudioProbe: opts.sourceAudioProbe ?? null,
     requestedStartSec: opts.startSec,
     requestedDurationSec: opts.durationSec,
     clipStartSec: opts.startSec,
@@ -1477,6 +1625,8 @@ async function runBenchmark(opts) {
   if (!fs.existsSync(transcriptPath)) {
     throw new Error(`Missing private transcript asset for ${opts.entry}`);
   }
+  const sourceAudioProbe = probeAudio(audioPath);
+  const baseOpts = { ...opts, sourceAudioProbe };
 
   const rawReferenceText = await readDocxText(transcriptPath);
   const referenceSegments = extractTimedReferenceSegments(rawReferenceText);
@@ -1489,7 +1639,7 @@ async function runBenchmark(opts) {
   });
   if (referenceWindow.status !== 'aligned') {
     const report = buildInvalidReferenceReport({
-      opts,
+      opts: baseOpts,
       referenceWindow,
       audioDurationSec: readAudioDurationSec(audioPath),
     });
@@ -1499,6 +1649,7 @@ async function runBenchmark(opts) {
 
   const alignedOpts = {
     ...opts,
+    sourceAudioProbe,
     requestedStartSec: opts.startSec,
     requestedDurationSec: opts.durationSec,
     startSec: referenceWindow.actualStartSec,
@@ -1520,6 +1671,8 @@ async function runBenchmark(opts) {
       entry: opts.entry,
       provider: opts.provider,
       providerConfig: transcribeResult.providerConfig ?? {},
+      benchmarkConfiguration: transcribeResult.providerConfig?.benchmarkConfiguration
+        ?? buildBenchmarkConfigurationForProvider(alignedOpts),
       providerErrorCode: null,
       providerErrorType: null,
       parameterGroup: opts.provider === 'qcloud-auc' ? opts.parameterGroup : null,
