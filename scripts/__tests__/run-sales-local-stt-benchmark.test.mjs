@@ -115,6 +115,17 @@ test('SenseVoice correction diagnostics keep raw and corrected metrics separate'
   assert.doesNotMatch(script, /correctedComparison\s*:\s*comparison,\s*rawComparison\s*:\s*comparison/);
 });
 
+test('Doubao table diagnostics are reported separately from dynamic context', () => {
+  const script = read('scripts/run-sales-local-stt-benchmark.mjs');
+
+  assert.match(script, /doubaoVocabularyTableDiagnostics/);
+  assert.match(script, /boostingTableId/);
+  assert.match(script, /correctTableId/);
+  assert.match(script, /ignoredOrUnconfirmedFields/);
+  assert.match(script, /providerErrorCode/);
+  assert.doesNotMatch(script, /industrial-corpus-context[\s\S]{0,300}fallback/);
+});
+
 test('STT benchmark helpers align timestamped transcript windows and score quality', async () => {
   const benchmark = await import('../run-sales-local-stt-benchmark.mjs');
   const rawTranscript = [

@@ -719,6 +719,29 @@ function getQcloudParameterFields(parameterGroup, opts = {}) {
   };
 }
 
+function buildDoubaoVocabularyTableDiagnostics(opts, providerResult) {
+  const sentFields = [];
+  if (opts.boostingTableId) sentFields.push('boosting_table_id');
+  if (opts.boostingTableName) sentFields.push('boosting_table_name');
+  if (opts.correctTableId) sentFields.push('correct_table_id');
+  if (opts.correctTableName) sentFields.push('correct_table_name');
+
+  return {
+    boostingTableId: opts.boostingTableId ? '[configured]' : null,
+    boostingTableName: opts.boostingTableName ? '[configured]' : null,
+    correctTableId: opts.correctTableId ? '[configured]' : null,
+    correctTableName: opts.correctTableName ? '[configured]' : null,
+    providerAcceptedFields: providerResult?.gatewayFieldStatus
+      ? Object.entries(providerResult.gatewayFieldStatus)
+        .filter(([, status]) => status === 'accepted')
+        .map(([field]) => field)
+      : [],
+    ignoredOrUnconfirmedFields: providerResult?.ignoredOrUnconfirmedFields || [],
+    providerErrorCode: providerResult?.providerErrorCode || null,
+    sentFields,
+  };
+}
+
 async function importAucClient() {
   const aucClientPath = path.join(root, 'dist-electron/electron/audio/doubaoAucClient.js');
   if (!fs.existsSync(aucClientPath)) {
@@ -1338,6 +1361,9 @@ function buildReportPayload({
     },
     comparison,
     termCorrectionDiagnostics: transcribeResult.termCorrectionDiagnostics ?? null,
+    doubaoVocabularyTableDiagnostics: ['qcloud-auc', 'direct-doubao-auc'].includes(opts.provider)
+      ? buildDoubaoVocabularyTableDiagnostics(opts, providerConfig)
+      : null,
     alignmentSearch: {
       enabled: alignmentSearch.enabled,
       searchSec: alignmentSearch.searchSec,
@@ -1429,6 +1455,9 @@ async function runBenchmark(opts) {
       gatewayFieldStatus: {},
       unsupportedFields: [],
       ignoredOrUnconfirmedFields: [],
+      doubaoVocabularyTableDiagnostics: ['qcloud-auc', 'direct-doubao-auc'].includes(opts.provider)
+        ? buildDoubaoVocabularyTableDiagnostics(opts, transcribeResult.providerConfig ?? {})
+        : null,
       localModelStatus: transcribeResult.localModelStatus ?? null,
       clipStartSec: opts.startSec,
       clipDurationSec: opts.durationSec,
@@ -1500,6 +1529,12 @@ async function main() {
       gatewayFieldStatus: attemptedQcloudConfig.gatewayFieldStatus,
       unsupportedFields: attemptedQcloudConfig.unsupportedFields,
       ignoredOrUnconfirmedFields: attemptedQcloudConfig.ignoredOrUnconfirmedFields,
+      doubaoVocabularyTableDiagnostics: ['qcloud-auc', 'direct-doubao-auc'].includes(opts.provider)
+        ? buildDoubaoVocabularyTableDiagnostics(opts, {
+          ...attemptedQcloudConfig,
+          providerErrorCode: err.providerErrorCode ?? null,
+        })
+        : null,
       localModelStatus: null,
       clipStartSec: opts.startSec,
       clipDurationSec: opts.durationSec,
