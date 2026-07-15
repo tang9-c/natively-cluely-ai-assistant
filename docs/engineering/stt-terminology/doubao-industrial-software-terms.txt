@@ -1,0 +1,55 @@
+PLM
+产品生命周期管理
+QMS
+质量管理系统
+ERP
+企业资源计划
+MES
+制造执行系统
+ALM
+应用生命周期管理
+CAD
+CAE
+CAM
+Creo
+PTC Creo
+Windchill
+PTC Windchill
+Feigenbaum QMS
+费根鲍姆 QMS
+BOM
+物料清单
+ECO
+工程变更单
+ECR
+工程变更请求
+APQP
+PPAP
+SPC
+FMEA
+MBD
+流体仿真
+CFD
+流体力学仿真
+力学仿真
+结构力学仿真
+结构仿真
+热仿真
+需求
+痛点
+功能
+功能模块
+案例
+应用案例
+流程
+业务流程
+图纸
+工程图纸
+审批
+追溯
+质量闭环
+AI 智能体
+智能体
+知识库
+自动化
+工作流

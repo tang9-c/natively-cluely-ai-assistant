@@ -1,0 +1,37 @@
+category,term,aliases,notes
+plm,PLM,产品生命周期管理|Product Lifecycle Management,industrial software acronym
+qms,QMS,质量管理系统|Quality Management System,industrial software acronym
+erp,ERP,企业资源计划|Enterprise Resource Planning,industrial software acronym
+mes,MES,制造执行系统|Manufacturing Execution System,industrial software acronym
+alm,ALM,应用生命周期管理|Application Lifecycle Management,industrial software acronym
+cad,CAD,计算机辅助设计,industrial software acronym
+cae,CAE,计算机辅助工程,industrial software acronym
+cam,CAM,计算机辅助制造,industrial software acronym
+product,Creo,PTC Creo|Creo Parametric,3D design software
+product,Windchill,PTC Windchill,PLM product
+product,Feigenbaum QMS,费根鲍姆 QMS,QMS product phrase
+plm,BOM,物料清单|Bill of Materials,manufacturing term
+plm,ECO,工程变更单|Engineering Change Order,manufacturing term
+plm,ECR,工程变更请求|Engineering Change Request,manufacturing term
+quality,APQP,产品质量先期策划,quality term
+quality,PPAP,生产件批准程序,quality term
+quality,SPC,统计过程控制,quality term
+quality,FMEA,失效模式与影响分析,quality term
+quality,MBD,基于模型的定义,engineering term
+simulation,流体仿真,CFD|流体力学仿真,simulation term
+simulation,力学仿真,结构力学仿真,simulation term
+simulation,结构仿真,结构分析,simulation term
+simulation,热仿真,热分析,simulation term
+sales,需求,业务需求|技术需求,sales discovery term
+sales,痛点,现状问题|业务痛点,sales discovery term
+sales,功能,功能模块|产品功能,sales discovery term
+sales,案例,行业案例|应用案例,sales discovery term
+process,流程,业务流程|审批流程,process term
+process,图纸,工程图纸|设计图纸,engineering artifact
+process,审批,流程审批|变更审批,process term
+process,追溯,质量追溯|全链路追溯,process term
+process,质量闭环,问题闭环|整改闭环,quality term
+ai,AI 智能体,智能体|Agent,AI term
+ai,知识库,资料库|企业知识库,AI term
+ai,自动化,流程自动化|业务自动化,AI term
+ai,工作流,业务工作流|审批工作流,AI term

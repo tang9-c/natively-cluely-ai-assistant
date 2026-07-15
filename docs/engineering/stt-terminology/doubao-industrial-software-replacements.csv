@@ -1,0 +1,11 @@
+canonical,variants,reason
+MES供应商,麦供应商,validated stable benchmark miss
+PLM,皮诶勒姆|P L M,common acronym spelling variants
+QMS,Q M S|质量管理,common acronym spelling variants
+ERP,E R P,common acronym spelling variants
+Creo,克里奥|Creo 软件,common product spelling variants
+Windchill,Windchill 系统|温彻,common product spelling variants
+BOM,B O M|物料清单,common acronym spelling variants
+ECO,E C O|工程变更单,common acronym spelling variants
+ECR,E C R|工程变更请求,common acronym spelling variants
+FMEA,F M E A|失效模式分析,common acronym spelling variants
