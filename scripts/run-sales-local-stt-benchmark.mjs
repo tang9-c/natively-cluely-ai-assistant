@@ -875,39 +875,67 @@ function buildSenseVoiceTermCorrection(opts) {
   return { enabled: terms.length > 0, terms };
 }
 
-async function transcribeClipWithLocalSenseVoice({ clipPath, opts }) {
-  const sttPath = path.join(root, 'dist-electron/electron/audio/sensevoice/LocalSenseVoiceSTT.js');
-  const modelManagerPath = path.join(root, 'dist-electron/electron/audio/sensevoice/modelManager.js');
-  if (!fs.existsSync(sttPath) || !fs.existsSync(modelManagerPath)) {
-    throw new Error('Missing dist-electron Local SenseVoice files. Run npm run build:electron first.');
+function countOccurrences(text, needle) {
+  if (!text || !needle) return 0;
+  let count = 0;
+  let index = 0;
+  while ((index = String(text).indexOf(needle, index)) !== -1) {
+    count += 1;
+    index += needle.length;
   }
+  return count;
+}
 
-  const modelManager = await import(pathToFileURL(modelManagerPath).href);
-  const modelsDir = resolveSenseVoiceModelsDir();
-  if (!modelManager.isSenseVoiceModelCached(undefined, modelsDir)) {
-    return {
-      blocked: true,
-      environmentStatus: 'blocked_missing_local_sensevoice_model',
-      reason: `Local SenseVoice model is not available under ${modelsDir}`,
-      localModelStatus: 'missing',
-      providerConfig: {
-        termCorrectionEnabled: opts.sensevoiceTermCorrection !== 'off' || opts.sensevoiceTerms.length > 0,
-        termCorrectionMode: opts.sensevoiceTermCorrection,
-        customTermCount: opts.sensevoiceTerms.length,
-        modelsDir,
-      },
-    };
+function countSenseVoiceCorrectionHits(rawText, correctedText, terms) {
+  const hits = [];
+  for (const term of terms) {
+    for (const variant of term.variants || []) {
+      const rawCount = countOccurrences(rawText, variant);
+      const correctedCount = countOccurrences(correctedText, term.canonical);
+      const count = Math.min(rawCount, correctedCount);
+      if (count > 0) {
+        hits.push({ canonical: term.canonical, variant, count });
+      }
+    }
   }
+  return hits;
+}
 
-  const { LocalSenseVoiceSTT } = await import(pathToFileURL(sttPath).href);
-  const modelFiles = modelManager.resolveSenseVoiceModelFiles(undefined, modelsDir);
+function summarizeSenseVoiceCorrectionDiagnostics({ correctionConfig, rawText, correctedText, referenceText }) {
+  const hits = rawText
+    ? countSenseVoiceCorrectionHits(rawText, correctedText, correctionConfig.terms)
+    : [];
+  const rawComparison = rawText && referenceText
+    ? compareTranscripts({ referenceText, hypothesisText: rawText })
+    : null;
+  const correctedComparison = rawText && referenceText
+    ? compareTranscripts({ referenceText, hypothesisText: correctedText })
+    : null;
+
+  return {
+    enabled: correctionConfig.enabled,
+    ruleCount: correctionConfig.terms.length,
+    correctionHitCount: hits.reduce((sum, hit) => sum + hit.count, 0),
+    hits,
+    rawComparison,
+    correctedComparison,
+    cerDelta: rawComparison && correctedComparison
+      ? Number((correctedComparison.characterErrorRate - rawComparison.characterErrorRate).toFixed(4))
+      : null,
+    keywordRecallDelta: rawComparison && correctedComparison
+      ? Number((correctedComparison.keywordRecall - rawComparison.keywordRecall).toFixed(4))
+      : null,
+  };
+}
+
+async function transcribeLocalSenseVoiceOnce({ LocalSenseVoiceSTT, modelFiles, clipPath, opts, termCorrection }) {
   const pcmPath = buildRawPcmFromWav(clipPath, opts);
   const transcriptParts = [];
   const errors = [];
   try {
     const stt = new LocalSenseVoiceSTT({
       modelFiles,
-      termCorrection: buildSenseVoiceTermCorrection(opts),
+      termCorrection,
       vadOptions: {
         minSpeechFrames: 2,
         hangoverFrames: 20,
@@ -940,20 +968,78 @@ async function transcribeClipWithLocalSenseVoice({ clipPath, opts }) {
       err.providerErrorType = 'local_sensevoice_error';
       throw err;
     }
+    return transcriptParts.join(' ');
+  } finally {
+    fs.rmSync(pcmPath, { force: true });
+  }
+}
+
+async function transcribeClipWithLocalSenseVoice({ clipPath, opts }) {
+  const sttPath = path.join(root, 'dist-electron/electron/audio/sensevoice/LocalSenseVoiceSTT.js');
+  const modelManagerPath = path.join(root, 'dist-electron/electron/audio/sensevoice/modelManager.js');
+  if (!fs.existsSync(sttPath) || !fs.existsSync(modelManagerPath)) {
+    throw new Error('Missing dist-electron Local SenseVoice files. Run npm run build:electron first.');
+  }
+
+  const modelManager = await import(pathToFileURL(modelManagerPath).href);
+  const modelsDir = resolveSenseVoiceModelsDir();
+  if (!modelManager.isSenseVoiceModelCached(undefined, modelsDir)) {
     return {
-      text: transcriptParts.join(' '),
-      localModelStatus: 'available',
+      blocked: true,
+      environmentStatus: 'blocked_missing_local_sensevoice_model',
+      reason: `Local SenseVoice model is not available under ${modelsDir}`,
+      localModelStatus: 'missing',
       providerConfig: {
         termCorrectionEnabled: opts.sensevoiceTermCorrection !== 'off' || opts.sensevoiceTerms.length > 0,
         termCorrectionMode: opts.sensevoiceTermCorrection,
         customTermCount: opts.sensevoiceTerms.length,
         modelsDir,
-        modelFile: path.basename(modelFiles.modelFile),
       },
     };
-  } finally {
-    fs.rmSync(pcmPath, { force: true });
   }
+
+  const { LocalSenseVoiceSTT } = await import(pathToFileURL(sttPath).href);
+  const modelFiles = modelManager.resolveSenseVoiceModelFiles(undefined, modelsDir);
+  const correctionConfig = buildSenseVoiceTermCorrection(opts);
+  const needsRawComparison = correctionConfig.enabled && correctionConfig.terms.length > 0;
+  const rawText = needsRawComparison
+    ? await transcribeLocalSenseVoiceOnce({
+      LocalSenseVoiceSTT,
+      modelFiles,
+      clipPath,
+      opts,
+      termCorrection: { enabled: false, terms: [] },
+    })
+    : null;
+  const correctedText = await transcribeLocalSenseVoiceOnce({
+    LocalSenseVoiceSTT,
+    modelFiles,
+    clipPath,
+    opts,
+    termCorrection: correctionConfig,
+  });
+
+  return {
+    text: correctedText,
+    rawTextForCorrectionDiagnostics: rawText,
+    correctedTextForCorrectionDiagnostics: correctedText,
+    termCorrectionDiagnostics: needsRawComparison
+      ? summarizeSenseVoiceCorrectionDiagnostics({
+        correctionConfig,
+        rawText,
+        correctedText,
+        referenceText: opts.__referenceTextForCorrectionDiagnostics || '',
+      })
+      : null,
+    localModelStatus: 'available',
+    providerConfig: {
+      termCorrectionEnabled: opts.sensevoiceTermCorrection !== 'off' || opts.sensevoiceTerms.length > 0,
+      termCorrectionMode: opts.sensevoiceTermCorrection,
+      customTermCount: opts.sensevoiceTerms.length,
+      modelsDir,
+      modelFile: path.basename(modelFiles.modelFile),
+    },
+  };
 }
 
 async function transcribeClip({ clipPath, entry, opts }) {
@@ -1019,21 +1105,25 @@ function createSegments(opts) {
 
 async function transcribeWindowSet({ audioPath, entry, opts, referenceWindow }) {
   const segmentationHelper = await loadSegmentationHelper();
+  const benchmarkOpts = {
+    ...opts,
+    __referenceTextForCorrectionDiagnostics: referenceWindow.text,
+  };
   const plan = segmentationHelper.buildSttSegmentPlan({
-    mode: opts.segmentationMode,
-    sourceStartSec: opts.startSec,
-    sourceDurationSec: opts.durationSec,
-    segmentDurationSec: opts.segmentationMode === 'full' ? opts.durationSec : opts.segmentDurationSec,
-    overlapSec: opts.segmentationMode === 'overlap' ? opts.overlapSec : 0,
-    preRollSec: opts.segmentationMode === 'full' ? 0 : opts.preRollSec,
-    postRollSec: opts.segmentationMode === 'full' ? 0 : opts.postRollSec,
+    mode: benchmarkOpts.segmentationMode,
+    sourceStartSec: benchmarkOpts.startSec,
+    sourceDurationSec: benchmarkOpts.durationSec,
+    segmentDurationSec: benchmarkOpts.segmentationMode === 'full' ? benchmarkOpts.durationSec : benchmarkOpts.segmentDurationSec,
+    overlapSec: benchmarkOpts.segmentationMode === 'overlap' ? benchmarkOpts.overlapSec : 0,
+    preRollSec: benchmarkOpts.segmentationMode === 'full' ? 0 : benchmarkOpts.preRollSec,
+    postRollSec: benchmarkOpts.segmentationMode === 'full' ? 0 : benchmarkOpts.postRollSec,
   });
   const segments = plan.segments;
   const results = [];
   const segmentTranscripts = [];
 
   for (const segment of segments) {
-    const segmentOpts = makeWindowOpts(opts, segment.audioStartSec, segment.audioDurationSec);
+    const segmentOpts = makeWindowOpts(benchmarkOpts, segment.audioStartSec, segment.audioDurationSec);
     const clipPath = buildClip(audioPath, segmentOpts);
     const startedAt = Date.now();
     try {
@@ -1067,6 +1157,9 @@ async function transcribeWindowSet({ audioPath, entry, opts, referenceWindow }) 
         normalizedChars: normalizedText.length,
         providerConfig: providerResult.providerConfig,
         localModelStatus: providerResult.localModelStatus,
+        rawTextForCorrectionDiagnostics: providerResult.rawTextForCorrectionDiagnostics,
+        correctedTextForCorrectionDiagnostics: providerResult.correctedTextForCorrectionDiagnostics,
+        termCorrectionDiagnostics: providerResult.termCorrectionDiagnostics,
       });
     } catch {
       const transcribeLatencyMs = Date.now() - startedAt;
@@ -1102,6 +1195,47 @@ async function transcribeWindowSet({ audioPath, entry, opts, referenceWindow }) 
   const text = opts.segmentationMode === 'full' ? rawText : dedupedText;
   const firstConfig = results.find((segment) => segment.providerConfig)?.providerConfig ?? {};
   const localModelStatus = results.find((segment) => segment.localModelStatus)?.localModelStatus;
+  const correctionParts = results.filter((segment) => segment.termCorrectionDiagnostics);
+  const termCorrectionDiagnostics = correctionParts.length > 0
+    ? summarizeSenseVoiceCorrectionDiagnostics({
+      correctionConfig: {
+        enabled: true,
+        terms: [],
+      },
+      rawText: segmentationHelper.mergeSegmentTranscripts(correctionParts.map((segment) => ({
+        segmentId: segment.segmentId,
+        provider: opts.provider,
+        text: segment.rawTextForCorrectionDiagnostics || '',
+        normalizedText: normalizeTranscriptForSttBenchmark(segment.rawTextForCorrectionDiagnostics || ''),
+        transcribeLatencyMs: segment.transcribeLatencyMs,
+        providerStatus: 'ok',
+      }))),
+      correctedText: segmentationHelper.mergeSegmentTranscripts(correctionParts.map((segment) => ({
+        segmentId: segment.segmentId,
+        provider: opts.provider,
+        text: segment.correctedTextForCorrectionDiagnostics || '',
+        normalizedText: normalizeTranscriptForSttBenchmark(segment.correctedTextForCorrectionDiagnostics || ''),
+        transcribeLatencyMs: segment.transcribeLatencyMs,
+        providerStatus: 'ok',
+      }))),
+      referenceText: referenceWindow.text,
+    })
+    : null;
+  if (termCorrectionDiagnostics) {
+    const diagnostics = correctionParts.map((segment) => segment.termCorrectionDiagnostics);
+    const hitMap = new Map();
+    for (const diagnostic of diagnostics) {
+      for (const hit of diagnostic.hits || []) {
+        const key = `${hit.canonical}\u0000${hit.variant}`;
+        const existing = hitMap.get(key) || { canonical: hit.canonical, variant: hit.variant, count: 0 };
+        existing.count += hit.count;
+        hitMap.set(key, existing);
+      }
+    }
+    termCorrectionDiagnostics.ruleCount = Math.max(...diagnostics.map((diagnostic) => diagnostic.ruleCount || 0));
+    termCorrectionDiagnostics.hits = [...hitMap.values()];
+    termCorrectionDiagnostics.correctionHitCount = termCorrectionDiagnostics.hits.reduce((sum, hit) => sum + hit.count, 0);
+  }
   const rawComparison = compareTranscripts({
     referenceText: referenceWindow.text,
     hypothesisText: rawText,
@@ -1150,6 +1284,7 @@ async function transcribeWindowSet({ audioPath, entry, opts, referenceWindow }) 
     dedupedText,
     providerConfig: firstConfig,
     localModelStatus,
+    termCorrectionDiagnostics,
     transcribeLatencyMs: results.reduce((sum, segment) => sum + segment.transcribeLatencyMs, 0),
     segmentation,
   };
@@ -1202,6 +1337,7 @@ function buildReportPayload({
       lengthRatio: 0.75,
     },
     comparison,
+    termCorrectionDiagnostics: transcribeResult.termCorrectionDiagnostics ?? null,
     alignmentSearch: {
       enabled: alignmentSearch.enabled,
       searchSec: alignmentSearch.searchSec,

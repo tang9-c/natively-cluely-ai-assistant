@@ -104,6 +104,17 @@ test('STT provider matrix preserves segmentation diagnostics in aggregate cases'
   assert.match(matrix, /postRollSec/);
 });
 
+test('SenseVoice correction diagnostics keep raw and corrected metrics separate', () => {
+  const script = read('scripts/run-sales-local-stt-benchmark.mjs');
+
+  assert.match(script, /termCorrectionDiagnostics/);
+  assert.match(script, /rawComparison/);
+  assert.match(script, /correctedComparison/);
+  assert.match(script, /keywordRecallDelta/);
+  assert.match(script, /correctionHitCount/);
+  assert.doesNotMatch(script, /correctedComparison\s*:\s*comparison,\s*rawComparison\s*:\s*comparison/);
+});
+
 test('STT benchmark helpers align timestamped transcript windows and score quality', async () => {
   const benchmark = await import('../run-sales-local-stt-benchmark.mjs');
   const rawTranscript = [
