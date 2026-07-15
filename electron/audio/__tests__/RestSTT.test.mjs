@@ -273,3 +273,40 @@ describe('RestSTT — drainFinals', () => {
     stt.stop();
   });
 });
+
+describe('RestSTT — segmentation quality layer', () => {
+  test('segments long AUC uploads and dedupes overlap text', async () => {
+    const { RestSTT } = await loadRestSTT();
+    const stt = new RestSTT('qcloud-stt', 'test-key');
+    const warnings = [];
+    const uploadSizes = [];
+    stt.on('warning', (warning) => warnings.push(warning));
+    stt.uploadAudio = async (wavBuffer) => {
+      uploadSizes.push(wavBuffer.length);
+      return uploadSizes.length === 1 ? '我们先看 MES 供应商的流程' : '供应商的流程还有图纸审批';
+    };
+
+    const pcm16k = Buffer.alloc(16000 * 2 * 18);
+    const result = await stt.uploadPcm16kWithSegmentation(pcm16k);
+
+    assert.equal(uploadSizes.length > 1, true);
+    assert.equal(result, '我们先看 MES 供应商的流程还有图纸审批');
+    assert.equal(warnings.some((warning) => warning.code === 'stt_segmentation_diagnostics'), true);
+  });
+
+  test('falls back to normal single upload for short audio', async () => {
+    const { RestSTT } = await loadRestSTT();
+    const stt = new RestSTT('qcloud-stt', 'test-key');
+    let uploadCount = 0;
+    stt.uploadAudio = async () => {
+      uploadCount += 1;
+      return '短句';
+    };
+
+    const pcm16k = Buffer.alloc(16000 * 2 * 3);
+    const result = await stt.uploadPcm16kWithSegmentation(pcm16k);
+
+    assert.equal(uploadCount, 1);
+    assert.equal(result, '短句');
+  });
+});

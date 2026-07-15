@@ -26,9 +26,15 @@ import {
     transcribeDoubaoAucFile,
     transcribeNewApiDoubaoAucMultipartFile,
     type DoubaoAucTranscriptionResult,
+    type DoubaoAucUtterance,
 } from './doubaoAucClient';
 import { SpeakerDiarizationAligner } from './SpeakerDiarizationAligner';
 import { buffer16ToFloat32 } from '../services/speaker/speakerAudioUtils';
+import {
+    buildSegmentationDiagnostics,
+    buildSttSegmentPlan,
+    dedupeOverlappedTranscript,
+} from './SttSegmentation';
 
 export type RestSttProvider = 'groq' | 'openai' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'doubao' | 'doubao-auc' | 'qcloud-stt';
 export type SpeakerSeparationMode = 'auto' | 'off';
@@ -254,6 +260,11 @@ const SAFETY_NET_INTERVAL_MS = 10000;
 // Silence threshold - if RMS is below this, skip the upload
 const SILENCE_RMS_THRESHOLD = 50;
 const AUC_MIC_SILENCE_RMS_THRESHOLD = 15;
+const REST_STT_SEGMENT_DURATION_SEC = 10;
+const REST_STT_SEGMENT_OVERLAP_SEC = 2;
+const REST_STT_SEGMENT_PRE_ROLL_SEC = 1;
+const REST_STT_SEGMENT_POST_ROLL_SEC = 1;
+const REST_STT_MIN_SEGMENTED_UPLOAD_SEC = 12;
 
 export class RestSTT extends BaseSTT {
     private provider: RestSttProvider;
@@ -488,12 +499,9 @@ export class RestSTT extends BaseSTT {
             ? rawPcm
             : this.resampleTo16kHz(rawPcm);
 
-        // Add WAV header — stamp with actual rate/channel after resampling (always 16kHz mono)
-        const wavBuffer = this.addWavHeader(pcm16k, TARGET_RATE);
-
         this.isUploading = true;
         const uploadPromise = (async () => {
-            const transcript = await this.uploadAudio(wavBuffer);
+            const transcript = await this.uploadPcm16kWithSegmentation(pcm16k, trigger);
             await this.emitUploadResult(transcript, pcm16k);
         })()
             .catch(err => {
@@ -574,6 +582,134 @@ export class RestSTT extends BaseSTT {
         const startByte = Math.max(0, Math.floor((startMs / 1000) * 16000) * 2);
         const endByte = Math.min(pcm16k.length, Math.ceil((endMs / 1000) * 16000) * 2);
         return buffer16ToFloat32(pcm16k.subarray(startByte, endByte));
+    }
+
+    private shouldUseSegmentedUpload(pcm16k: Buffer): boolean {
+        if (this.provider !== 'qcloud-stt' && this.provider !== 'doubao-auc') return false;
+        const durationSec = pcm16k.length / (16_000 * 2);
+        return durationSec >= REST_STT_MIN_SEGMENTED_UPLOAD_SEC;
+    }
+
+    private slicePcm16kBySeconds(pcm16k: Buffer, startSec: number, durationSec: number): Buffer {
+        const startByte = Math.max(0, Math.floor(startSec * 16_000) * 2);
+        const endByte = Math.min(pcm16k.length, Math.ceil((startSec + durationSec) * 16_000) * 2);
+        return pcm16k.subarray(startByte, endByte);
+    }
+
+    private textFromUploadResult(result: string | DoubaoAucTranscriptionResult): string {
+        if (typeof result === 'string') return result;
+        if (typeof result.text === 'string' && result.text.trim()) return result.text;
+        return (result.utterances || []).map((utterance) => utterance.text || '').join('');
+    }
+
+    private offsetDoubaoAucResult(
+        result: DoubaoAucTranscriptionResult,
+        offsetMs: number,
+    ): DoubaoAucTranscriptionResult {
+        return {
+            ...result,
+            utterances: Array.isArray(result.utterances)
+                ? result.utterances.map((utterance) => ({
+                    ...utterance,
+                    startMs: typeof utterance.startMs === 'number' ? utterance.startMs + offsetMs : utterance.startMs,
+                    endMs: typeof utterance.endMs === 'number' ? utterance.endMs + offsetMs : utterance.endMs,
+                }))
+                : [],
+        };
+    }
+
+    private mergeDoubaoAucSegmentResults(results: DoubaoAucTranscriptionResult[]): DoubaoAucTranscriptionResult {
+        const utterances = results
+            .flatMap((result) => Array.isArray(result.utterances) ? result.utterances : [])
+            .sort((a, b) => (a.startMs ?? 0) - (b.startMs ?? 0));
+        const deduped: DoubaoAucUtterance[] = [];
+        for (const utterance of utterances) {
+            const previous = deduped[deduped.length - 1];
+            if (previous && previous.text?.trim() === utterance.text?.trim()) continue;
+            deduped.push(utterance);
+        }
+        return {
+            ...results[0],
+            text: dedupeOverlappedTranscript(results.map((result) => this.textFromUploadResult(result))),
+            utterances: deduped,
+        };
+    }
+
+    public async uploadPcm16kWithSegmentation(
+        pcm16k: Buffer,
+        trigger: string = 'manual',
+    ): Promise<string | DoubaoAucTranscriptionResult> {
+        if (!this.shouldUseSegmentedUpload(pcm16k)) {
+            const result = await this.uploadAudio(this.addWavHeader(pcm16k, 16_000));
+            const text = this.textFromUploadResult(result);
+            const diagnostics = buildSegmentationDiagnostics({
+                mode: 'full',
+                overlapSec: 0,
+                rawText: text,
+                dedupedText: text,
+                segmentCount: 1,
+                failedSegmentCount: 0,
+            });
+            this.emitWarning({
+                code: 'stt_segmentation_diagnostics',
+                message: 'STT single upload diagnostics recorded',
+                provider: this.provider,
+                trigger: 'single-upload',
+                rawChars: diagnostics.rawChars,
+                dedupedChars: diagnostics.dedupedChars,
+                removedDuplicateChars: diagnostics.removedDuplicateChars,
+                warnings: diagnostics.warnings,
+            });
+            return result;
+        }
+
+        const durationSec = pcm16k.length / (16_000 * 2);
+        const plan = buildSttSegmentPlan({
+            mode: 'overlap',
+            sourceStartSec: 0,
+            sourceDurationSec: durationSec,
+            segmentDurationSec: REST_STT_SEGMENT_DURATION_SEC,
+            overlapSec: REST_STT_SEGMENT_OVERLAP_SEC,
+            preRollSec: REST_STT_SEGMENT_PRE_ROLL_SEC,
+            postRollSec: REST_STT_SEGMENT_POST_ROLL_SEC,
+        });
+        const rawTexts: string[] = [];
+        const aucResults: DoubaoAucTranscriptionResult[] = [];
+
+        for (const segment of plan.segments) {
+            const segmentPcm = this.slicePcm16kBySeconds(pcm16k, segment.audioStartSec, segment.audioDurationSec);
+            const result = await this.uploadAudio(this.addWavHeader(segmentPcm, 16_000));
+            rawTexts.push(this.textFromUploadResult(result));
+            if (typeof result !== 'string') {
+                aucResults.push(this.offsetDoubaoAucResult(result, Math.round(segment.audioStartSec * 1000)));
+            }
+        }
+
+        const rawText = rawTexts.join('');
+        const dedupedText = dedupeOverlappedTranscript(rawTexts);
+        const diagnostics = buildSegmentationDiagnostics({
+            mode: 'overlap',
+            overlapSec: REST_STT_SEGMENT_OVERLAP_SEC,
+            rawText,
+            dedupedText,
+            segmentCount: plan.segments.length,
+            failedSegmentCount: 0,
+        });
+        this.emitWarning({
+            code: 'stt_segmentation_diagnostics',
+            message: 'STT segmented upload diagnostics recorded',
+            provider: this.provider,
+            trigger,
+            rawChars: diagnostics.rawChars,
+            dedupedChars: diagnostics.dedupedChars,
+            removedDuplicateChars: diagnostics.removedDuplicateChars,
+            warnings: diagnostics.warnings,
+        });
+
+        if (aucResults.length === plan.segments.length) {
+            return this.mergeDoubaoAucSegmentResults(aucResults);
+        }
+        return dedupedText;
     }
 
     private async uploadAudio(wavBuffer: Buffer): Promise<string | DoubaoAucTranscriptionResult> {
