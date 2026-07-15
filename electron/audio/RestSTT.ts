@@ -675,14 +675,30 @@ export class RestSTT extends BaseSTT {
         });
         const rawTexts: string[] = [];
         const aucResults: DoubaoAucTranscriptionResult[] = [];
+        let failedSegmentCount = 0;
 
         for (const segment of plan.segments) {
-            const segmentPcm = this.slicePcm16kBySeconds(pcm16k, segment.audioStartSec, segment.audioDurationSec);
-            const result = await this.uploadAudio(this.addWavHeader(segmentPcm, 16_000));
-            rawTexts.push(this.textFromUploadResult(result));
-            if (typeof result !== 'string') {
-                aucResults.push(this.offsetDoubaoAucResult(result, Math.round(segment.audioStartSec * 1000)));
+            try {
+                const segmentPcm = this.slicePcm16kBySeconds(pcm16k, segment.audioStartSec, segment.audioDurationSec);
+                const result = await this.uploadAudio(this.addWavHeader(segmentPcm, 16_000));
+                rawTexts.push(this.textFromUploadResult(result));
+                if (typeof result !== 'string') {
+                    aucResults.push(this.offsetDoubaoAucResult(result, Math.round(segment.audioStartSec * 1000)));
+                }
+            } catch (error) {
+                failedSegmentCount += 1;
+                this.emitWarning({
+                    code: 'partial_segment_failure',
+                    message: 'One STT segment failed during segmented upload',
+                    provider: this.provider,
+                    segmentId: segment.id,
+                    errorName: error instanceof Error ? error.name : 'UnknownError',
+                });
             }
+        }
+
+        if (rawTexts.length === 0 && aucResults.length === 0) {
+            throw new Error('All STT segments failed during segmented upload');
         }
 
         const rawText = rawTexts.join('');
@@ -693,20 +709,21 @@ export class RestSTT extends BaseSTT {
             rawText,
             dedupedText,
             segmentCount: plan.segments.length,
-            failedSegmentCount: 0,
+            failedSegmentCount,
         });
         this.emitWarning({
             code: 'stt_segmentation_diagnostics',
             message: 'STT segmented upload diagnostics recorded',
             provider: this.provider,
-            trigger,
+            trigger: 'segmented-upload',
+            flushTrigger: trigger,
             rawChars: diagnostics.rawChars,
             dedupedChars: diagnostics.dedupedChars,
             removedDuplicateChars: diagnostics.removedDuplicateChars,
             warnings: diagnostics.warnings,
         });
 
-        if (aucResults.length === plan.segments.length) {
+        if (aucResults.length > 0) {
             return this.mergeDoubaoAucSegmentResults(aucResults);
         }
         return dedupedText;
