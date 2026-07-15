@@ -142,6 +142,29 @@ test('STT benchmark compare script is wired for private diff reports', () => {
   assert.match(script, /private\/stt-benchmark\/compare/);
 });
 
+test('Doubao corpus field validation script compares id and name variants without private text', () => {
+  const pkg = JSON.parse(read('package.json'));
+  const validationScript = path.join(repoRoot, 'scripts/run-doubao-corpus-field-validation.mjs');
+
+  assert.equal(
+    pkg.scripts['test:stt:doubao-corpus-fields:local'],
+    'npm run build:electron && node scripts/run-doubao-corpus-field-validation.mjs',
+  );
+  assert.equal(fs.existsSync(validationScript), true);
+  const script = fs.readFileSync(validationScript, 'utf8');
+  assert.match(script, /--boosting-table-id <id>/);
+  assert.match(script, /--boosting-table-name <name>/);
+  assert.match(script, /--correct-table-id <id>/);
+  assert.match(script, /--correct-table-name <name>/);
+  assert.match(script, /baseline/);
+  assert.match(script, /id-only/);
+  assert.match(script, /name-only/);
+  assert.match(script, /id-and-name/);
+  assert.match(script, /doubao-corpus-field-validation/);
+  assert.match(script, /privateReportPath/);
+  assert.doesNotMatch(script, /privateTextPreview|includePrivateText/);
+});
+
 test('STT benchmark helpers align timestamped transcript windows and score quality', async () => {
   const benchmark = await import('../run-sales-local-stt-benchmark.mjs');
   const rawTranscript = [

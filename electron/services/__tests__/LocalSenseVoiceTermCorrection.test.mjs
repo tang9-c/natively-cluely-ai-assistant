@@ -5,9 +5,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const modulePath = path.resolve(__dirname, '../../../dist-electron/electron/audio/sensevoice/termCorrection.js');
+const defaultTermsPath = path.resolve(__dirname, '../../../dist-electron/electron/audio/sensevoice/defaultTermCorrections.js');
 
 async function loadTermCorrection() {
   return import(pathToFileURL(modulePath).href);
+}
+
+async function loadDefaultTerms() {
+  return import(pathToFileURL(defaultTermsPath).href);
 }
 
 test('applySenseVoiceTermCorrection replaces enabled variants with canonical terms', async () => {
@@ -103,5 +108,28 @@ test('applySenseVoiceTermCorrection resolves equal-length same-offset ties by se
       { id: 'second', canonical: 'Second Canonical', variants: ['内提夫利'], enabled: true },
     ]),
     'First Canonical',
+  );
+});
+
+test('default SenseVoice industrial term corrections cover PLM and MES variants', async () => {
+  const { applySenseVoiceTermCorrection } = await loadTermCorrection();
+  const { DEFAULT_SENSEVOICE_TERM_CORRECTIONS } = await loadDefaultTerms();
+
+  assert.equal(
+    applySenseVoiceTermCorrection('麦供应商和皮诶勒姆需要打通。', DEFAULT_SENSEVOICE_TERM_CORRECTIONS),
+    'MES供应商和PLM需要打通。',
+  );
+});
+
+test('default SenseVoice term corrections are overridden by user canonical entries', async () => {
+  const { applySenseVoiceTermCorrection } = await loadTermCorrection();
+  const { mergeSenseVoiceTermCorrections } = await loadDefaultTerms();
+  const merged = mergeSenseVoiceTermCorrections([
+    { id: 'user-plm', canonical: 'PLM', variants: ['用户自定义PLM错词'], enabled: true },
+  ]);
+
+  assert.equal(
+    applySenseVoiceTermCorrection('皮诶勒姆和用户自定义PLM错词都出现了。', merged),
+    '皮诶勒姆和PLM都出现了。',
   );
 });

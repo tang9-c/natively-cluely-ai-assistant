@@ -59,6 +59,14 @@ interface RestSttProviderConfig {
 
 type ProviderConfigFactory = (apiKey: string, region?: string, languageKey?: string, options?: RestSttOptions) => RestSttProviderConfig;
 
+const DEFAULT_QCLOUD_AUC_BOOSTING_TABLE_NAME = 'doubaoboostingind';
+const DEFAULT_QCLOUD_AUC_CORRECT_TABLE_NAME = 'doubaoreplacements';
+
+function resolveQCloudAucTableName(envName: string, defaultValue: string): string {
+    const configuredValue = process.env[envName];
+    return typeof configuredValue === 'string' ? configuredValue.trim() : defaultValue;
+}
+
 const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
     groq: (apiKey, region, languageKey) => {
         const lang = (languageKey && languageKey !== 'auto') ? RECOGNITION_LANGUAGES[languageKey]?.iso639 : undefined;
@@ -217,6 +225,14 @@ const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
             || requestedBcp47 === 'zh-CN';
         const enableSpeakerSeparation =
             speakerSeparationMode === 'auto' && languageSupportsSpeakerSeparation;
+        const boostingTableName = resolveQCloudAucTableName(
+            'QCLOUD_AUC_BOOSTING_TABLE_NAME',
+            DEFAULT_QCLOUD_AUC_BOOSTING_TABLE_NAME,
+        );
+        const correctTableName = resolveQCloudAucTableName(
+            'QCLOUD_AUC_CORRECT_TABLE_NAME',
+            DEFAULT_QCLOUD_AUC_CORRECT_TABLE_NAME,
+        );
 
         return {
             endpoint: `${QCLOUD_LLM_BASE_URL}/v1/doubao/audio/auc`,
@@ -235,6 +251,8 @@ const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
                 enable_emotion_detection: 'true',
                 show_utterances: 'true',
                 enable_itn: 'true',
+                ...(boostingTableName ? { boosting_table_name: boostingTableName } : {}),
+                ...(correctTableName ? { correct_table_name: correctTableName } : {}),
             }),
             extractTranscript: extractDoubaoAucTranscript,
         };

@@ -56,6 +56,7 @@
     "test:coverage:threshold": "node scripts/coverage/check-threshold.mjs",
     "test:dynamic-actions:sales-replay:real-stt:local": "npm run build:electron && node scripts/run-sales-local-real-stt-smoke.mjs",
     "test:dynamic-actions:sales-replay:stt-benchmark:local": "npm run build:electron && node scripts/run-sales-local-stt-benchmark.mjs",
+    "test:stt:doubao-corpus-fields:local": "npm run build:electron && node scripts/run-doubao-corpus-field-validation.mjs",
     "test:stt:benchmark:compare": "node scripts/compare-stt-benchmark-reports.mjs",
     "test:stt:qcloud-auc:matrix": "npm run build:electron && node scripts/run-stt-provider-matrix-local.mjs --providers qcloud-auc --parameter-groups all",
     "test:stt:provider-matrix:local": "npm run build:electron && node scripts/run-stt-provider-matrix-local.mjs",

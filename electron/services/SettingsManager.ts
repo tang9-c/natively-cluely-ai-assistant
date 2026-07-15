@@ -2,6 +2,7 @@ import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { sanitizeSenseVoiceTerms } from '../audio/sensevoice/termCorrection';
+import { mergeSenseVoiceTermCorrections } from '../audio/sensevoice/defaultTermCorrections';
 import type { SenseVoiceTermCorrectionConfig, SenseVoiceTermEntry } from '../audio/sensevoice/types';
 
 export interface AppSettings {
@@ -134,7 +135,7 @@ export class SettingsManager {
 
     public getLocalSenseVoiceTermCorrectionConfig(): SenseVoiceTermCorrectionConfig {
         return {
-            terms: sanitizeSenseVoiceTerms(this.settings.localSenseVoiceTerms ?? []),
+            terms: mergeSenseVoiceTermCorrections(this.settings.localSenseVoiceTerms ?? []),
             enabled: this.settings.localSenseVoiceCorrectionEnabled !== false,
         };
     }

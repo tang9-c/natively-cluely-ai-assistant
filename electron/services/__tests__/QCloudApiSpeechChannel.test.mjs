@@ -17,6 +17,35 @@ async function loadClient() {
   return import(pathToFileURL(clientPath).href);
 }
 
+async function withQCloudAucTableEnv(values, fn) {
+  const previousBoostingTableName = process.env.QCLOUD_AUC_BOOSTING_TABLE_NAME;
+  const previousCorrectTableName = process.env.QCLOUD_AUC_CORRECT_TABLE_NAME;
+  try {
+    if (Object.prototype.hasOwnProperty.call(values, 'boosting')) {
+      process.env.QCLOUD_AUC_BOOSTING_TABLE_NAME = values.boosting;
+    } else {
+      delete process.env.QCLOUD_AUC_BOOSTING_TABLE_NAME;
+    }
+    if (Object.prototype.hasOwnProperty.call(values, 'correct')) {
+      process.env.QCLOUD_AUC_CORRECT_TABLE_NAME = values.correct;
+    } else {
+      delete process.env.QCLOUD_AUC_CORRECT_TABLE_NAME;
+    }
+    await fn();
+  } finally {
+    if (previousBoostingTableName === undefined) {
+      delete process.env.QCLOUD_AUC_BOOSTING_TABLE_NAME;
+    } else {
+      process.env.QCLOUD_AUC_BOOSTING_TABLE_NAME = previousBoostingTableName;
+    }
+    if (previousCorrectTableName === undefined) {
+      delete process.env.QCLOUD_AUC_CORRECT_TABLE_NAME;
+    } else {
+      process.env.QCLOUD_AUC_CORRECT_TABLE_NAME = previousCorrectTableName;
+    }
+  }
+}
+
 test('QCLOUD API speech channel uses Bearer auth and QCLOUD advanced AUC endpoints', async () => {
   const { RestSTT } = await loadRestSTT();
   const stt = new RestSTT('qcloud-stt', 'qcloud-test-key');
@@ -29,17 +58,32 @@ test('QCLOUD API speech channel uses Bearer auth and QCLOUD advanced AUC endpoin
   assert.equal(stt.config.authHeader['X-Api-Resource-Id'], undefined);
 });
 
-test('QCLOUD API speech channel multipart form enables speaker, emotion, utterances, and ITN', async () => {
-  const { RestSTT } = await loadRestSTT();
-  const stt = new RestSTT('qcloud-stt', 'qcloud-test-key');
-  const fields = stt.config.buildMultipartFields?.();
+test('QCLOUD API speech channel multipart form enables speaker, emotion, utterances, ITN, and Doubao vocabulary tables', async () => {
+  await withQCloudAucTableEnv({}, async () => {
+    const { RestSTT } = await loadRestSTT();
+    const stt = new RestSTT('qcloud-stt', 'qcloud-test-key');
+    const fields = stt.config.buildMultipartFields?.();
 
-  assert.deepEqual(fields, {
-    model: 'bigmodel',
-    enable_speaker_info: 'true',
-    enable_emotion_detection: 'true',
-    show_utterances: 'true',
-    enable_itn: 'true',
+    assert.deepEqual(fields, {
+      model: 'bigmodel',
+      enable_speaker_info: 'true',
+      enable_emotion_detection: 'true',
+      show_utterances: 'true',
+      enable_itn: 'true',
+      boosting_table_name: 'doubaoboostingind',
+      correct_table_name: 'doubaoreplacements',
+    });
+  });
+});
+
+test('QCLOUD API speech channel allows Doubao vocabulary table names to be overridden for validation', async () => {
+  await withQCloudAucTableEnv({ boosting: 'custom-hotwords', correct: 'custom-replacements' }, async () => {
+    const { RestSTT } = await loadRestSTT();
+    const stt = new RestSTT('qcloud-stt', 'qcloud-test-key');
+    const fields = stt.config.buildMultipartFields?.();
+
+    assert.equal(fields.boosting_table_name, 'custom-hotwords');
+    assert.equal(fields.correct_table_name, 'custom-replacements');
   });
 });
 
