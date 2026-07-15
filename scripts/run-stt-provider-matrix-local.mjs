@@ -170,19 +170,22 @@ function runOne({ entry, provider, parameterGroup, window, segmentationMode, pre
     environmentStatus: report.environmentStatus,
     providerStatus: report.providerStatus,
     comparison: report.comparison,
+    referenceAlignmentStatus: report.referenceAlignmentStatus,
     segmentationDiagnostics: report.segmentation?.diagnostics ?? null,
     rawComparison: report.segmentation?.rawComparison ?? null,
     dedupedComparison: report.segmentation?.dedupedComparison ?? null,
     localModelStatus: report.localModelStatus,
     privateReportPath: report.privateReportPath,
-    reason: report.reason,
+    reason: report.reason === 'invalid_boundary_window' ? 'invalid_boundary_window' : report.reason,
   };
 }
 
 function summarize(results) {
-  const counts = { passed: 0, failed: 0, blocked: 0, skipped: 0 };
+  const counts = { passed: 0, failed: 0, blocked: 0, skipped: 0, invalidReference: 0 };
   for (const result of results) {
-    if (Object.prototype.hasOwnProperty.call(counts, result.status)) {
+    if (result.status === 'invalid_reference') {
+      counts.invalidReference += 1;
+    } else if (Object.prototype.hasOwnProperty.call(counts, result.status)) {
       counts[result.status] += 1;
     }
   }

@@ -13,6 +13,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import {
+  calculateEditBreakdown,
+  extractTimedReferenceSegments,
+  selectBoundaryAlignedWindow,
+} from './stt-benchmark/referenceQuality.mjs';
 
 const root = process.cwd();
 const ENTRY_PATTERN = /^sales-real-\d{3}$/;
@@ -509,6 +514,7 @@ export function compareTranscripts({ referenceText, hypothesisText }) {
   const referenceNormalized = normalizeTranscriptForSttBenchmark(referenceText);
   const hypothesisNormalized = normalizeTranscriptForSttBenchmark(hypothesisText);
   const distance = levenshteinDistance(referenceNormalized, hypothesisNormalized);
+  const breakdown = calculateEditBreakdown(referenceNormalized, hypothesisNormalized);
   const referenceChars = referenceNormalized.length;
   const hypothesisChars = hypothesisNormalized.length;
   const characterErrorRate = referenceChars === 0 ? 1 : distance / referenceChars;
@@ -523,6 +529,12 @@ export function compareTranscripts({ referenceText, hypothesisText }) {
     referenceChars,
     hypothesisChars,
     editDistance: distance,
+    insertions: breakdown.insertions,
+    deletions: breakdown.deletions,
+    substitutions: breakdown.substitutions,
+    deletionRate: referenceChars === 0 ? 1 : Number((breakdown.deletions / referenceChars).toFixed(4)),
+    insertionRate: referenceChars === 0 ? 1 : Number((breakdown.insertions / referenceChars).toFixed(4)),
+    substitutionRate: referenceChars === 0 ? 1 : Number((breakdown.substitutions / referenceChars).toFixed(4)),
     characterErrorRate: Number(characterErrorRate.toFixed(4)),
     similarity: Number(Math.max(0, 1 - characterErrorRate).toFixed(4)),
     lengthRatio: referenceChars === 0 ? 0 : Number((hypothesisChars / referenceChars).toFixed(4)),
@@ -1348,8 +1360,19 @@ function buildReportPayload({
     unsupportedFields: providerConfig.unsupportedFields ?? [],
     ignoredOrUnconfirmedFields: providerConfig.ignoredOrUnconfirmedFields ?? [],
     localModelStatus: transcribeResult.localModelStatus ?? null,
+    requestedStartSec: opts.requestedStartSec ?? opts.startSec,
+    requestedDurationSec: opts.requestedDurationSec ?? opts.durationSec,
     clipStartSec: opts.startSec,
     clipDurationSec: opts.durationSec,
+    referenceWindow: {
+      status: referenceWindow.status,
+      requestedStartSec: referenceWindow.requestedStartSec,
+      requestedDurationSec: referenceWindow.requestedDurationSec,
+      actualStartSec: referenceWindow.actualStartSec,
+      actualEndSec: referenceWindow.actualEndSec,
+      actualDurationSec: referenceWindow.actualDurationSec,
+      segmentCount: referenceWindow.segmentCount,
+    },
     audioDurationSec,
     transcribeLatencyMs: transcribeResult.transcribeLatencyMs,
     referenceAlignmentStatus: referenceWindow.status,
@@ -1365,6 +1388,7 @@ function buildReportPayload({
       ? buildDoubaoVocabularyTableDiagnostics(opts, providerConfig)
       : null,
     alignmentSearch: {
+      diagnosticOnly: true,
       enabled: alignmentSearch.enabled,
       searchSec: alignmentSearch.searchSec,
       stepSec: alignmentSearch.stepSec,
@@ -1390,6 +1414,33 @@ function buildReportPayload({
   }
 
   return report;
+}
+
+function buildInvalidReferenceReport({ opts, referenceWindow, audioDurationSec }) {
+  return {
+    environmentStatus: 'ok',
+    providerStatus: 'not_called',
+    status: 'invalid_reference',
+    reason: 'invalid_boundary_window',
+    entry: opts.entry,
+    provider: opts.provider,
+    providerConfig: {},
+    providerErrorCode: null,
+    providerErrorType: null,
+    parameterGroup: opts.provider === 'qcloud-auc' ? opts.parameterGroup : null,
+    gatewayFieldStatus: {},
+    unsupportedFields: [],
+    ignoredOrUnconfirmedFields: [],
+    localModelStatus: null,
+    requestedStartSec: opts.startSec,
+    requestedDurationSec: opts.durationSec,
+    clipStartSec: opts.startSec,
+    clipDurationSec: opts.durationSec,
+    audioDurationSec,
+    referenceAlignmentStatus: referenceWindow.status,
+    referenceSegmentCount: referenceWindow.segmentCount ?? 0,
+    includePrivateText: false,
+  };
 }
 
 function reportOutputPath(opts) {
@@ -1428,16 +1479,36 @@ async function runBenchmark(opts) {
   }
 
   const rawReferenceText = await readDocxText(transcriptPath);
-  const referenceSegments = extractTimedTranscriptSegments(rawReferenceText);
-  const referenceWindow = selectReferenceWindow(referenceSegments, opts);
+  const referenceSegments = extractTimedReferenceSegments(rawReferenceText);
+  const referenceWindow = selectBoundaryAlignedWindow(referenceSegments, {
+    requestedStartSec: opts.startSec,
+    requestedDurationSec: opts.durationSec,
+    maxStartShiftSec: 45,
+    minDurationRatio: 0.75,
+    maxDurationRatio: 1.25,
+  });
   if (referenceWindow.status !== 'aligned') {
-    throw new Error(`Unable to align DOCX reference transcript to clip window: ${referenceWindow.status}`);
+    const report = buildInvalidReferenceReport({
+      opts,
+      referenceWindow,
+      audioDurationSec: readAudioDurationSec(audioPath),
+    });
+    writeAndPrintReport(report, opts);
+    return report;
   }
+
+  const alignedOpts = {
+    ...opts,
+    requestedStartSec: opts.startSec,
+    requestedDurationSec: opts.durationSec,
+    startSec: referenceWindow.actualStartSec,
+    durationSec: referenceWindow.actualDurationSec,
+  };
 
   const transcribeResult = await transcribeWindowSet({
     audioPath,
     entry: opts.entry,
-    opts,
+    opts: alignedOpts,
     referenceWindow,
   });
 
@@ -1459,8 +1530,10 @@ async function runBenchmark(opts) {
         ? buildDoubaoVocabularyTableDiagnostics(opts, transcribeResult.providerConfig ?? {})
         : null,
       localModelStatus: transcribeResult.localModelStatus ?? null,
-      clipStartSec: opts.startSec,
-      clipDurationSec: opts.durationSec,
+      requestedStartSec: opts.startSec,
+      requestedDurationSec: opts.durationSec,
+      clipStartSec: alignedOpts.startSec,
+      clipDurationSec: alignedOpts.durationSec,
       audioDurationSec: readAudioDurationSec(audioPath),
       reason: transcribeResult.reason,
     };
@@ -1481,7 +1554,7 @@ async function runBenchmark(opts) {
     alignmentSearch,
   });
   const report = buildReportPayload({
-    opts,
+    opts: alignedOpts,
     comparison,
     diagnostics,
     referenceWindow,

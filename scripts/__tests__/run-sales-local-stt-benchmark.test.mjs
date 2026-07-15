@@ -190,6 +190,20 @@ test('STT benchmark helpers align timestamped transcript windows and score quali
   assert.deepEqual(result.missingKeywords, []);
 });
 
+test('benchmark status excludes invalid reference windows and never gates on best offset', () => {
+  const script = read('scripts/run-sales-local-stt-benchmark.mjs');
+  assert.match(script, /invalid_boundary_window/);
+  assert.match(script, /diagnosticOnly:\s*true/);
+  const buildStatus = script.slice(script.indexOf('function buildStatus'), script.indexOf('function buildReportPayload'));
+  assert.doesNotMatch(buildStatus, /bestComparison|bestReferenceOffsetSec/);
+});
+
+test('provider matrix counts invalid references separately from model failures', () => {
+  const matrix = read('scripts/run-stt-provider-matrix-local.mjs');
+  assert.match(matrix, /invalidReference/);
+  assert.match(matrix, /invalid_boundary_window/);
+});
+
 test('STT benchmark diagnostics flag likely mismatch causes without private text', async () => {
   const benchmark = await import('../run-sales-local-stt-benchmark.mjs');
   const result = benchmark.compareTranscripts({
