@@ -37,7 +37,11 @@ test('electron-builder mac release targets are architecture-neutral so workflows
   assert.match(mainSource, /LEGACY_USER_DATA_DIR_NAME\s*=\s*'Natively'/);
   assert.match(mainSource, /app\.getPath\('userData'\)/);
   assert.match(mainSource, /fs\.cpSync\(legacyUserDataPath,\s*cueUpUserDataPath/);
-  assert.doesNotMatch(mainSource, /app\.setPath\('userData'/);
+  assert.match(
+    mainSource,
+    /if \(sttQualityAcceptanceContext\.enabled && sttQualityAcceptanceContext\.userDataDir\) \{\s*app\.setPath\('userData', sttQualityAcceptanceContext\.userDataDir\);\s*\}/,
+    'STT quality acceptance may override userData only inside its isolated acceptance-context guard',
+  );
   assert.deepEqual(macTargets.map((target) => target.target), ['zip', 'dmg']);
   for (const target of macTargets) {
     assert.equal(target.arch, undefined, 'mac target arch must be controlled by workflow CLI flags');
