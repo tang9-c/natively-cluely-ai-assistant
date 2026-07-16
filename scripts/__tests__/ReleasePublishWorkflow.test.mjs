@@ -58,6 +58,9 @@ test('release-publish workflow aggregates builds per commit SHA and creates a dr
     /actions\/workflows\/\$\{wf_id\}\/runs\?head_sha=\$\{HEAD_SHA\}&per_page=1/
   );
 
+  // Must cache workflow IDs to disk so iterations don't re-resolve.
+  assert.match(wf, /\/tmp\/wf_ids\.json/);
+
   // Must download artifacts by workflow display name and prefix.
   assert.match(wf, /gh run download/);
   assert.match(wf, /cueup-intel-mac-/);
@@ -68,8 +71,10 @@ test('release-publish workflow aggregates builds per commit SHA and creates a dr
   assert.match(wf, /Skip when triggering build did not succeed/);
 
   // Idempotency check before creating a release.
-  assert.match(wf, /Skip if draft release already exists for this tag/);
+  assert.match(wf, /Skip upload if release already has the expected artifacts/);
   assert.match(wf, /gh release view/);
+  // Self-healing: an existing-but-empty release must be re-uploaded.
+  assert.match(wf, /Release exists but has no assets; will upload/);
 
   // Must publish a DRAFT release via softprops/action-gh-release.
   assert.match(wf, /softprops\/action-gh-release@v2/);
@@ -92,6 +97,37 @@ test('release-publish workflow aggregates builds per commit SHA and creates a dr
   // Fail-on-unmatched must be off: a missing architecture should still produce
   // a partial release rather than failing the whole publish.
   assert.match(wf, /fail_on_unmatched_files:\s*false/);
+});
+
+test('release-publish workflow avoids the steps.outputs.* subshell bug', () => {
+  // Regression guard: GitHub Actions does not support a `*` wildcard in
+  // `${{ steps.X.outputs.* }}` — it renders as the literal string "Array" and
+  // any writes to $GITHUB_OUTPUT from a pipeline (while read) subshell are lost.
+  // The workflow must therefore iterate on-disk JSON files via process
+  // substitution instead of relying on step outputs.
+  const wf = readWorkflow();
+
+  assert.ok(
+    !wf.includes('${{ steps.workflows.outputs.*'),
+    'workflow must not use ${{ steps.X.outputs.* }} (no wildcard support; was rendered as literal "Array")',
+  );
+
+  // The polling loop and the discover loop must iterate via process substitution,
+  // not a pipeline (which spawns a subshell that loses $GITHUB_OUTPUT writes).
+  assert.match(
+    wf,
+    /while IFS= read -r row[\s\S]*?done < <\(jq -c '\.\[\]' \/tmp\/wf_ids\.json\)/,
+    'polling step must use process substitution to iterate /tmp/wf_ids.json',
+  );
+
+  // No step should write to $GITHUB_OUTPUT from inside a pipeline (`| while read`).
+  // The fix is to write to /tmp/*.json files instead.
+  const subshellOutputWrites = wf.match(/[^|]\s*\|\s*while[\s\S]{0,200}>>\s*"\$GITHUB_OUTPUT"/g) || [];
+  assert.equal(
+    subshellOutputWrites.length,
+    0,
+    `no step should write to $GITHUB_OUTPUT from a pipeline (subshell); offenders: ${subshellOutputWrites.join(' | ')}`,
+  );
 });
 
 test('release-publish workflow does not modify the per-arch build workflows', () => {

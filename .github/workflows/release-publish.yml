@@ -54,53 +54,42 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "Computed release tag: ${TAG}"
 
-      - name: Resolve workflow IDs by display name
-        id: workflows
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-        run: |
-          # Look up the workflow file IDs for each build workflow so subsequent
-          # steps can query runs per workflow instead of filtering the full list.
-          build_json="$(gh api "repos/${REPO}/actions/workflows" --jq '
-            [.workflows[]
-              | select(.name == "Build Intel Mac"
-                     or .name == "Build ARM64 Mac"
-                     or .name == "Build Windows x64")
-              | {id: .id, name: .name}]
-          ')"
-          echo "${build_json}" | jq -c '.[]' | while read -r row; do
-            wf_id=$(echo "${row}" | jq -r '.id')
-            wf_name=$(echo "${row}" | jq -r '.name')
-            echo "${wf_name}=${wf_id}" >> "$GITHUB_OUTPUT"
-          done
-          echo "Resolved workflows:"
-          cat "$GITHUB_OUTPUT" | grep -E '^Build ' || true
-
       - name: Wait for all expected builds to settle at this commit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          # Build a "<wf_id>=<wf_name>" map from prior step outputs.
-          declare -A WF_IDS
-          while IFS='=' read -r key value; do
-            WF_IDS["${key}"]="${value}"
-          done < <(echo "${{ steps.workflows.outputs.* }}" | tr ' ' '\n' | grep -E '^Build ' || true)
+          # Resolve the three build workflow IDs once and cache them on disk so
+          # subsequent steps can iterate without re-querying or relying on
+          # ${{ steps.*.outputs.* }} (which is fragile in subshells).
+          gh api "repos/${REPO}/actions/workflows?per_page=100" --jq '
+            [.workflows[]
+              | select(.name == "Build Intel Mac"
+                     or .name == "Build ARM64 Mac"
+                     or .name == "Build Windows x64")
+              | {id: .id, name: .name}]
+          ' > /tmp/wf_ids.json
 
-          if [ "${#WF_IDS[@]}" -eq 0 ]; then
-            echo "No build workflows resolved; aborting."
-            exit 0
+          count=$(jq 'length' /tmp/wf_ids.json)
+          if [ "${count}" -eq 0 ]; then
+            echo "::error::Could not find any of the three expected build workflows in ${REPO}."
+            exit 1
           fi
+          echo "Resolved ${count} build workflows:"
+          jq -r '.[] | "  \(.name) -> id=\(.id)"' /tmp/wf_ids.json
 
           # Poll up to 50 × 30s = 25 minutes for all expected builds.
           for attempt in $(seq 1 50); do
             all_done=true
             any_failed=false
             status_lines=()
-            for wf_name in "${!WF_IDS[@]}"; do
-              wf_id="${WF_IDS[${wf_name}]}"
+
+            # Process substitution keeps the while loop in the main shell so
+            # writes to the script's local variables survive.
+            while IFS= read -r row; do
+              wf_id=$(echo "${row}" | jq -r '.id')
+              wf_name=$(echo "${row}" | jq -r '.name')
               result=$(gh api "repos/${REPO}/actions/workflows/${wf_id}/runs?head_sha=${HEAD_SHA}&per_page=1" \
                 --jq '.workflow_runs[0] | "\(.status)|\(.conclusion)"' 2>/dev/null || echo "|")
               status="${result%%|*}"
@@ -111,7 +100,7 @@ jobs:
               elif [ "${conclusion}" != "success" ]; then
                 any_failed=true
               fi
-            done
+            done < <(jq -c '.[]' /tmp/wf_ids.json)
 
             echo "[poll ${attempt}]"
             printf '%s\n' "${status_lines[@]}"
@@ -131,7 +120,6 @@ jobs:
           done
 
       - name: Discover successful build runs and their artifact names
-        id: builds
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -145,30 +133,37 @@ jobs:
             ["Build Windows x64"]="cueup-windows-x64-"
           )
 
-          outputs_json='{"builds":[]}'
-          for wf_name in "${!ARTIFACT_PREFIX[@]}"; do
-            prefix="${ARTIFACT_PREFIX[${wf_name}]}"
-            run_id=$(gh api "repos/${REPO}/actions/runs?head_sha=${HEAD_SHA}&status=completed&conclusion=success&per_page=100" \
-              --jq ".workflow_runs[] | select(.name == \"${wf_name}\") | .id" | head -n1)
-            if [ -z "${run_id}" ] || [ "${run_id}" = "null" ]; then
+          # Build /tmp/builds.json by iterating /tmp/wf_ids.json (built in the
+          # previous step) and looking up each workflow's most recent successful
+          # run at this SHA. Writes go to a file, not to $GITHUB_OUTPUT, to
+          # avoid the subshell-pipeline output-loss bug.
+          jq -n '{builds: []}' > /tmp/builds.json
+          while IFS= read -r row; do
+            wf_id=$(echo "${row}" | jq -r '.id')
+            wf_name=$(echo "${row}" | jq -r '.name')
+            prefix="${ARTIFACT_PREFIX[${wf_name}]:-}"
+            if [ -z "${prefix}" ]; then
+              echo "${wf_name}: no artifact prefix registered, skipping"
+              continue
+            fi
+            run_id=$(gh api "repos/${REPO}/actions/workflows/${wf_id}/runs?head_sha=${HEAD_SHA}&status=completed&conclusion=success&per_page=1" \
+              --jq '.workflow_runs[0].id // empty')
+            if [ -z "${run_id}" ]; then
               echo "${wf_name}: no successful run at this SHA, skipping"
               continue
             fi
             echo "${wf_name}: run_id=${run_id} prefix=${prefix}"
-            outputs_json=$(echo "${outputs_json}" | jq \
-              --arg name "${wf_name}" \
-              --argjson run_id "${run_id}" \
-              --arg prefix "${prefix}" \
-              '.builds += [{name: $name, run_id: $run_id, artifact_prefix: $prefix}]')
-          done
+            jq --arg name "${wf_name}" \
+               --argjson run_id "${run_id}" \
+               --arg prefix "${prefix}" \
+               '.builds += [{name: $name, run_id: $run_id, artifact_prefix: $prefix}]' \
+               /tmp/builds.json > /tmp/builds.json.new
+            mv /tmp/builds.json.new /tmp/builds.json
+          done < <(jq -c '.[]' /tmp/wf_ids.json)
 
-          echo "${outputs_json}" | jq -c '.builds' > /tmp/builds.json
-          echo "builds_json<<EOF" >> "$GITHUB_OUTPUT"
-          cat /tmp/builds.json >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
-          count=$(jq 'length' /tmp/builds.json)
-          echo "builds_count=${count}" >> "$GITHUB_OUTPUT"
+          count=$(jq '.builds | length' /tmp/builds.json)
+          echo "Total successful build runs: ${count}"
+          jq -r '.builds[] | "  \(.name) -> run=\(.run_id) prefix=\(.artifact_prefix)"' /tmp/builds.json
           if [ "${count}" -eq 0 ]; then
             echo "::error::No successful build runs found at SHA ${HEAD_SHA}; nothing to publish."
             exit 1
@@ -225,20 +220,32 @@ jobs:
           echo "Release body preview:"
           head -40 /tmp/release-body.md
 
-      - name: Skip if draft release already exists for this tag
+      - name: Skip upload if release already has the expected artifacts
         id: existing
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${{ steps.tag.outputs.tag }}"
-          if gh release view "${tag}" > /dev/null 2>&1; then
-            echo "Release ${tag} already exists; skipping creation."
+          if ! gh release view "${tag}" > /dev/null 2>&1; then
+            echo "Release ${tag} does not exist yet."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Release exists — but is it populated? A previously-published empty
+          # draft must be re-uploaded so this workflow is self-healing for the
+          # case where a prior run lost assets (subshell bug, GH outage, etc.).
+          existing_assets=$(gh release view "${tag}" --json assets --jq '.assets | length')
+          echo "Release ${tag} exists with ${existing_assets} asset(s)."
+          if [ "${existing_assets}" -gt 0 ]; then
+            echo "Release already populated; skipping upload to avoid duplicating assets."
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
+            echo "Release exists but has no assets; will upload."
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Upload artifacts to a new draft release
+      - name: Upload artifacts to a new (or empty) draft release
         if: steps.existing.outputs.exists != 'true'
         uses: softprops/action-gh-release@v2
         with:
