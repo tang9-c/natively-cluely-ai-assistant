@@ -29,6 +29,7 @@ import {
 } from './doubaoAucClient';
 import { SpeakerDiarizationAligner } from './SpeakerDiarizationAligner';
 import { buffer16ToFloat32 } from '../services/speaker/speakerAudioUtils';
+import { sanitizeSttQualityDiagnostic } from './SttQualityDiagnostics';
 
 export type RestSttProvider = 'groq' | 'openai' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'doubao' | 'doubao-auc' | 'qcloud-stt';
 export type SpeakerSeparationMode = 'auto' | 'off';
@@ -287,6 +288,8 @@ export class RestSTT extends BaseSTT {
     private isUploading = false;
     private flushPending = false;  // Bug #2 fix: queue flush when upload in progress
     private currentUploadPromise: Promise<void> | null = null;
+    private segmentSequence = 0;
+    private previousTranscriptTail = '';
 
     // Audio config (must match SystemAudioCapture output)
     private bitsPerSample = 16;
@@ -476,6 +479,14 @@ export class RestSTT extends BaseSTT {
         this.chunks = [];
         const currentBytes = this.totalBufferedBytes;
         this.totalBufferedBytes = 0;
+        const segmentSequence = ++this.segmentSequence;
+        const inputDurationMs = this.calculatePcmDurationMs(currentBytes, this._sampleRate, this._numChannels);
+        const inputChunkSizes = currentChunks.map(chunk => chunk.length).sort((a, b) => a - b);
+        const inputChunkBytesMin = inputChunkSizes[0] ?? 0;
+        const inputChunkBytesMax = inputChunkSizes[inputChunkSizes.length - 1] ?? 0;
+        const inputChunkBytesMedian = inputChunkSizes.length === 0
+            ? 0
+            : inputChunkSizes[Math.floor(inputChunkSizes.length / 2)];
 
         // Concatenate all chunks
         const rawPcm = Buffer.concat(currentChunks);
@@ -510,12 +521,52 @@ export class RestSTT extends BaseSTT {
         const wavBuffer = this.addWavHeader(pcm16k, TARGET_RATE);
 
         this.isUploading = true;
+        const uploadStartedAt = Date.now();
         const uploadPromise = (async () => {
             const transcript = await this.uploadAudio(wavBuffer);
+            const uploadCompletedAt = Date.now();
+            const outputText = this.extractOutputTextForDiagnostics(transcript);
+            this.emitQualityDiagnostic({
+                provider: this.provider,
+                speaker: this.options.speaker || 'interviewer',
+                segmentSequence,
+                trigger,
+                inputDurationMs,
+                bufferedBytes: currentBytes,
+                inputChunkCount: currentChunks.length,
+                inputChunkBytesMin,
+                inputChunkBytesMedian,
+                inputChunkBytesMax,
+                uploadLatencyMs: uploadCompletedAt - uploadStartedAt,
+                speechEndToFinalMs: uploadCompletedAt - uploadStartedAt,
+                outputChars: outputText.trim().length,
+                duplicateBoundaryDetected: this.detectDuplicateBoundary(outputText),
+                status: 'completed',
+            });
             await this.emitUploadResult(transcript, pcm16k);
         })()
             .catch(err => {
-                console.error(`[RestSTT] Upload error:`, err);
+                this.emitQualityDiagnostic({
+                    provider: this.provider,
+                    speaker: this.options.speaker || 'interviewer',
+                    segmentSequence,
+                    trigger,
+                    inputDurationMs,
+                    bufferedBytes: currentBytes,
+                    inputChunkCount: currentChunks.length,
+                    inputChunkBytesMin,
+                    inputChunkBytesMedian,
+                    inputChunkBytesMax,
+                    uploadLatencyMs: Date.now() - uploadStartedAt,
+                    outputChars: 0,
+                    duplicateBoundaryDetected: false,
+                    status: 'failed',
+                });
+                console.error(`[RestSTT] Upload error:`, {
+                    name: err?.name,
+                    status: err?.response?.status,
+                    code: err?.code,
+                });
                 this.emit('error', err instanceof Error ? err : new Error(String(err)));
             })
             .finally(() => {
@@ -533,6 +584,55 @@ export class RestSTT extends BaseSTT {
 
         this.currentUploadPromise = uploadPromise;
         return uploadPromise;
+    }
+
+    private calculatePcmDurationMs(bytes: number, sampleRate: number, channelCount: number): number {
+        const bytesPerSecond = sampleRate * channelCount * (this.bitsPerSample / 8);
+        return bytesPerSecond > 0 ? Math.round((bytes / bytesPerSecond) * 1000) : 0;
+    }
+
+    private extractOutputTextForDiagnostics(transcript: string | DoubaoAucTranscriptionResult): string {
+        if (typeof transcript === 'string') return transcript;
+        return extractDoubaoAucTranscript(transcript);
+    }
+
+    private normalizeForBoundaryDiagnostics(text: string): string {
+        return String(text ?? '')
+            .normalize('NFKC')
+            .replace(/[^\p{L}\p{N}\s]+/gu, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    private detectDuplicateBoundary(text: string): boolean {
+        const current = this.normalizeForBoundaryDiagnostics(text);
+        const previous = this.previousTranscriptTail;
+        this.previousTranscriptTail = current.slice(-120);
+        if (!previous || !current) return false;
+        const compactPrevious = previous.replace(/\s+/g, '');
+        const compactCurrent = current.replace(/\s+/g, '');
+        const maxCompact = Math.min(compactPrevious.length, compactCurrent.length, 80);
+        for (let size = maxCompact; size >= 12; size -= 1) {
+            if (compactPrevious.slice(-size) === compactCurrent.slice(0, size)) return true;
+        }
+        const previousWords = previous.split(/\s+/).filter(Boolean);
+        const currentWords = current.split(/\s+/).filter(Boolean);
+        const maxWords = Math.min(previousWords.length, currentWords.length, 20);
+        for (let size = maxWords; size >= 6; size -= 1) {
+            if (previousWords.slice(-size).join(' ') === currentWords.slice(0, size).join(' ')) return true;
+        }
+        return false;
+    }
+
+    private emitQualityDiagnostic(value: Record<string, unknown>): void {
+        const diagnostic = sanitizeSttQualityDiagnostic({
+            code: 'rest_stt_upload_diagnostics',
+            ...value,
+            inputSampleRate: this._sampleRate,
+            inputChannelCount: this._numChannels,
+            policyProfile: 'current',
+        });
+        if (diagnostic) this.emit('quality-diagnostic', diagnostic);
     }
 
     /**

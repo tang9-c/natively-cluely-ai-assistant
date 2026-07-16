@@ -41,6 +41,7 @@ const originalLog = console.log;
 const originalWarn = console.warn;
 const originalError = console.error;
 const LEGACY_USER_DATA_DIR_NAME = 'Natively';
+let sttQualityAcceptanceContext: SttQualityAcceptanceContext = { enabled: false, reason: 'not_configured' };
 
 function hasCueUpUserData(userDataPath: string): boolean {
   return [
@@ -51,6 +52,7 @@ function hasCueUpUserData(userDataPath: string): boolean {
     'whisper-models',
     'sensevoice-models',
     'skills',
+    '.cueup-stt-quality-isolated',
   ].some((entry) => fs.existsSync(path.join(userDataPath, entry)));
 }
 
@@ -314,13 +316,18 @@ import { AudioDevices } from "./audio/AudioDevices"
 import { loadNativeModule } from "./audio/nativeModuleLoader"
 import { BaseSTT, type TranscriptSegment } from "./audio/BaseSTT"
 import { createSTTProvider } from "./audio/sttRegistry"
-import { normalizePcm16Chunk, measurePcm16Level } from "./audio/audioLevelNormalizer"
+import { measureSystemAudioPcm16Level, preprocessCurrentChineseSystemAudio } from "./audio/SystemAudioPreprocessing"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
 import { warmupIntentClassifier } from "./llm"
 import { isLocalIntentClassifierAvailable } from "./services/LocalModelManager"
 import { resolveMacScreenPermissionHealth } from "./permissions/macPermissionHealth"
+import {
+  resolveSttQualityAcceptanceContext,
+  SttQualityDiagnosticsCollector,
+  type SttQualityAcceptanceContext,
+} from "./services/SttQualityDiagnosticsCollector"
 
 /** Unified type for all STT providers */
 type STTProvider = BaseSTT;
@@ -451,6 +458,7 @@ export class AppState {
     interviewer: { peak: 0, at: 0 },
     user: { peak: 0, at: 0 },
   };
+  private sttQualityDiagnosticsCollector: SttQualityDiagnosticsCollector | null = null;
   private _ollamaBootstrapPromise: Promise<void> | null = null;
   private screenshotCaptureInProgress: boolean = false;
 
@@ -479,6 +487,7 @@ export class AppState {
     this._verboseLogging = settingsManager.get('verboseLogging') ?? false;
     setVerboseLoggingFlag(this._verboseLogging);
     console.log(`[AppState] Initialized with verboseLogging=${this._verboseLogging}`);
+    this.sttQualityDiagnosticsCollector = new SttQualityDiagnosticsCollector(sttQualityAcceptanceContext);
 
     // 2. Initialize Helpers with loaded state
     this.windowHelper = new WindowHelper(this)
@@ -1462,6 +1471,10 @@ export class AppState {
         { provider: sttProvider, message: w?.message, droppedBytes: w?.droppedBytes });
     });
 
+    stt.on('quality-diagnostic', (diagnostic: unknown) => {
+      this.sttQualityDiagnosticsCollector?.write(diagnostic);
+    });
+
     // Auto language detection: NativelyProSTT emits 'languageDetected' when the
     // backend resolves the language from the first audio batch. Notify the renderer
     // so the settings UI can show what was detected.
@@ -1670,15 +1683,11 @@ export class AppState {
 
       let sttChunk = chunk;
       if (shouldNormalizeChineseSystemAudio) {
-        const normalized = normalizePcm16Chunk(chunk, {
-          targetRms: 0.015,
-          maxGain: 4,
-          silenceRms: 0.0005,
-        });
+        const normalized = preprocessCurrentChineseSystemAudio(chunk);
         sttChunk = normalized.chunk;
         if (normalized.gain > 1) gainAppliedCount++;
         if (levelLogCount < 5 || chunkCount % 500 === 0) {
-          const after = normalized.gain > 1 ? measurePcm16Level(sttChunk) : normalized.before;
+          const after = normalized.gain > 1 ? measureSystemAudioPcm16Level(sttChunk) : normalized.before;
           console.log(
             `${prefix}SystemAudio level: rms=${normalized.before.rms.toFixed(5)} peak=${normalized.before.peak.toFixed(5)} gain=${normalized.gain.toFixed(2)} afterRms=${after.rms.toFixed(5)} gainApplied=${gainAppliedCount}`,
           );
@@ -4382,6 +4391,11 @@ export class AppState {
 // Application initialization
 
 async function initializeApp() {
+  sttQualityAcceptanceContext = resolveSttQualityAcceptanceContext();
+  if (sttQualityAcceptanceContext.enabled && sttQualityAcceptanceContext.userDataDir) {
+    app.setPath('userData', sttQualityAcceptanceContext.userDataDir);
+  }
+
   // 1. Enforce single instance — prevent duplicate dock icons from leftover processes.
   // In development mode with hot-reload this is still safe because electron is restarted
   // by the build step, not re-launched by concurrently while the old process is alive.

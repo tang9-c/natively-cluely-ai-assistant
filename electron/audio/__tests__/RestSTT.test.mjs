@@ -261,6 +261,31 @@ describe('RestSTT — flushAndUpload early-return paths', () => {
   });
 });
 
+describe('RestSTT — quality diagnostics', () => {
+  test('emits privacy-safe upload diagnostics without transcript text', async () => {
+    const { RestSTT } = await loadRestSTT();
+    const stt = new RestSTT('groq', 'k');
+    const diagnostics = [];
+    stt.on('quality-diagnostic', diagnostic => diagnostics.push(diagnostic));
+    stt.uploadAudio = async () => '测试正文';
+    stt.start();
+    stt.setSampleRate(16000);
+    stt.setAudioChannelCount(1);
+    stt.write(loudPcm16le(32000));
+    await stt.flushAndUpload('speech-ended');
+    stt.stop();
+
+    const diagnostic = diagnostics.find(item => item.code === 'rest_stt_upload_diagnostics');
+    assert.ok(diagnostic, 'expected rest_stt_upload_diagnostics');
+    assert.equal(diagnostic.inputDurationMs, 2000);
+    assert.equal(diagnostic.outputChars, 4);
+    assert.equal(diagnostic.segmentSequence, 1);
+    assert.equal(typeof diagnostic.speechEndToFinalMs, 'number');
+    assert.equal(JSON.stringify(diagnostic).includes('测试正文'), false);
+    assert.equal(Object.hasOwn(diagnostic, 'text'), false);
+  });
+});
+
 describe('RestSTT — drainFinals', () => {
   test('returns quickly when there is no in-flight upload', async () => {
     const { RestSTT } = await loadRestSTT();

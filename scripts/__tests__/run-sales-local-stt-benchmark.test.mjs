@@ -279,6 +279,17 @@ test('benchmark status excludes invalid reference windows and never gates on bes
   assert.doesNotMatch(buildStatus, /bestComparison|bestReferenceOffsetSec/);
 });
 
+test('benchmark prepare-only writes prepared corpus manifest without meeting id', () => {
+  const script = read('scripts/run-sales-local-stt-benchmark.mjs');
+  assert.match(script, /--prepare-only/);
+  assert.match(script, /--prepared-output-dir/);
+  assert.match(script, /prepared-corpus-manifest\.json/);
+  assert.match(script, /clipSha256/);
+  const prepareBlock = script.slice(script.indexOf('function writePreparedCorpus'), script.indexOf('async function runBenchmark'));
+  assert.match(prepareBlock, /referenceWindowId/);
+  assert.doesNotMatch(prepareBlock, /meetingId/);
+});
+
 test('provider matrix counts invalid references separately from model failures', () => {
   const matrix = read('scripts/run-stt-provider-matrix-local.mjs');
   assert.match(matrix, /invalidReference/);

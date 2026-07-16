@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const vadPath = path.resolve(__dirname, '../../../dist-electron/electron/audio/whisper/vadProcessor.js');
 const normalizerPath = path.resolve(__dirname, '../../../dist-electron/electron/audio/audioLevelNormalizer.js');
+const systemPreprocessingPath = path.resolve(__dirname, '../../../dist-electron/electron/audio/SystemAudioPreprocessing.js');
 
 async function loadVadProcessor() {
   return import(pathToFileURL(vadPath).href);
@@ -13,6 +14,10 @@ async function loadVadProcessor() {
 
 async function loadAudioLevelNormalizer() {
   return import(pathToFileURL(normalizerPath).href);
+}
+
+async function loadSystemAudioPreprocessing() {
+  return import(pathToFileURL(systemPreprocessingPath).href);
 }
 
 function tone(rms, durationMs = 420, sampleRate = 16000) {
@@ -65,4 +70,19 @@ test('normalizePcm16Chunk raises quiet system audio toward target RMS without cl
   assert.ok(output.gain <= 4, 'gain must respect maxGain');
   assert.ok(after.rms > before.rms, 'normalized audio should have higher RMS');
   assert.ok(after.peak <= 1, 'normalized audio must stay within int16 range');
+});
+
+test('current system-audio preprocessing preserves existing normalization parameters', async () => {
+  const { normalizePcm16Chunk } = await loadAudioLevelNormalizer();
+  const { preprocessCurrentChineseSystemAudio } = await loadSystemAudioPreprocessing();
+  const input = Buffer.alloc(960 * 2);
+  for (let i = 0; i < 960; i++) {
+    const sample = Math.round(180 * Math.sin(2 * Math.PI * i / 48));
+    input.writeInt16LE(sample, i * 2);
+  }
+
+  const direct = normalizePcm16Chunk(input, { targetRms: 0.015, maxGain: 4, silenceRms: 0.0005 });
+  const helper = preprocessCurrentChineseSystemAudio(input);
+  assert.deepEqual(helper.chunk, direct.chunk);
+  assert.equal(helper.gain, direct.gain);
 });

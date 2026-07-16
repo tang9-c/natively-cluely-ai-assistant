@@ -75,6 +75,49 @@ export interface ReplayReportEntry {
   failureStage?: 'initial_action' | 'continuation' | 'runtime_evaluation' | 'post_call';
 }
 
+export interface DynamicActionReplayTranscriptRow {
+  speaker: string;
+  content: string;
+  timestamp_ms?: number;
+}
+
+export interface DynamicActionReplayAssessmentInput {
+  rows: DynamicActionReplayTranscriptRow[];
+  modeTemplateType: string;
+  sessionId: string;
+  language?: string;
+  expectedActionType?: string;
+}
+
+export function assessDynamicActionTranscriptRows(input: DynamicActionReplayAssessmentInput): {
+  emitted: boolean;
+  actionTypes: string[];
+  matched: boolean;
+} {
+  const engine = new DynamicActionEngine();
+  const actionTypes: string[] = [];
+  for (const row of [...input.rows].sort((left, right) => (left.timestamp_ms ?? 0) - (right.timestamp_ms ?? 0))) {
+    if (!row.content?.trim()) continue;
+    const actions = engine.detectActions({
+      transcript: row.content,
+      speaker: row.speaker,
+      modeTemplateType: input.modeTemplateType,
+      modeId: input.modeTemplateType,
+      sessionId: input.sessionId,
+      language: input.language,
+    });
+    actionTypes.push(...actions.map((action) => action.type));
+    if (input.expectedActionType && actionTypes.includes(input.expectedActionType)) {
+      break;
+    }
+  }
+  return {
+    emitted: actionTypes.length > 0,
+    actionTypes,
+    matched: input.expectedActionType ? actionTypes.includes(input.expectedActionType) : actionTypes.length > 0,
+  };
+}
+
 export function loadFixtureBackedSttTranscripts(input: {
   manifestPath: string;
   fixtureRoot?: string;

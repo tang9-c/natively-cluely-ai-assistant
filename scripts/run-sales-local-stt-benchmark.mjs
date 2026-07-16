@@ -138,6 +138,8 @@ Options:
   --cer-threshold <n>                  Passing CER threshold, default ${DEFAULT_CER_THRESHOLD}
   --keyword-recall-threshold <n>       Passing keyword recall threshold, default ${DEFAULT_KEYWORD_RECALL_THRESHOLD}
   --include-private-text               Include short transcript previews in the ignored local report/stdout
+  --prepare-only                       Build aligned PCM WAV and manifest without calling an STT provider
+  --prepared-output-dir <dir>          Output directory for --prepare-only corpus
   --help                              Show this help
 
 Notes:
@@ -178,6 +180,8 @@ function parseArgs(argv) {
     cerThreshold: DEFAULT_CER_THRESHOLD,
     keywordRecallThreshold: DEFAULT_KEYWORD_RECALL_THRESHOLD,
     includePrivateText: false,
+    prepareOnly: false,
+    preparedOutputDir: '',
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -307,6 +311,14 @@ function parseArgs(argv) {
       opts.includePrivateText = true;
       continue;
     }
+    if (arg === '--prepare-only') {
+      opts.prepareOnly = true;
+      continue;
+    }
+    if (arg === '--prepared-output-dir') {
+      opts.preparedOutputDir = String(argv[++index] ?? '');
+      continue;
+    }
     throw new Error(`Unknown option: ${arg}`);
   }
 
@@ -372,6 +384,9 @@ function parseArgs(argv) {
   }
   if (!Number.isFinite(opts.keywordRecallThreshold) || opts.keywordRecallThreshold < 0 || opts.keywordRecallThreshold > 1) {
     throw new Error('--keyword-recall-threshold must be between 0 and 1');
+  }
+  if (opts.prepareOnly && !opts.preparedOutputDir) {
+    throw new Error('--prepared-output-dir is required with --prepare-only');
   }
   return opts;
 }
@@ -1616,6 +1631,46 @@ function writeAndPrintReport(report, opts) {
   }, null, 2));
 }
 
+function sha256File(filePath) {
+  return createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+function writePreparedCorpus({ opts, alignedOpts, referenceWindow, audioPath }) {
+  const outputDir = path.resolve(opts.preparedOutputDir);
+  fs.mkdirSync(outputDir, { recursive: true });
+  const tempClip = buildClip(audioPath, alignedOpts);
+  const clipPath = path.join(outputDir, `${opts.entry}-${referenceWindow.actualStartSec}s-${referenceWindow.actualDurationSec}s.wav`);
+  fs.copyFileSync(tempClip, clipPath);
+  fs.rmSync(tempClip, { force: true });
+  const referenceWindowId = `${opts.entry}:${referenceWindow.actualStartSec}-${referenceWindow.actualEndSec}`;
+  const referenceReport = path.join(outputDir, `${opts.entry}-reference.json`);
+  fs.writeFileSync(referenceReport, JSON.stringify({
+    entry: opts.entry,
+    referenceWindowId,
+    referenceWindow,
+    referenceText: referenceWindow.text,
+  }, null, 2));
+  const manifestEntry = {
+    entry: opts.entry,
+    clipPath,
+    clipSha256: sha256File(clipPath),
+    referenceReport,
+    referenceWindowId,
+  };
+  const manifestPath = path.join(outputDir, 'prepared-corpus-manifest.json');
+  const existing = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, 'utf8')) : [];
+  const next = existing.filter((entry) => entry.entry !== opts.entry);
+  next.push(manifestEntry);
+  fs.writeFileSync(manifestPath, JSON.stringify(next, null, 2));
+  console.log(JSON.stringify({
+    status: 'prepared',
+    entry: opts.entry,
+    preparedManifestPath: manifestPath,
+    preparedEntry: manifestEntry,
+  }, null, 2));
+  return manifestEntry;
+}
+
 async function runBenchmark(opts) {
   const audioPath = path.join(root, 'tests/fixtures/dynamic-actions/replay/audio/real/sales', `${opts.entry}.wav`);
   const transcriptPath = path.join(root, 'tests/fixtures/dynamic-actions/replay/transcripts/real/sales', `${opts.entry}.docx`);
@@ -1655,6 +1710,10 @@ async function runBenchmark(opts) {
     startSec: referenceWindow.actualStartSec,
     durationSec: referenceWindow.actualDurationSec,
   };
+
+  if (opts.prepareOnly) {
+    return writePreparedCorpus({ opts, alignedOpts, referenceWindow, audioPath });
+  }
 
   const transcribeResult = await transcribeWindowSet({
     audioPath,
