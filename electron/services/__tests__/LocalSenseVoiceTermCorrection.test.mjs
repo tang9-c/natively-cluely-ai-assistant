@@ -111,13 +111,16 @@ test('applySenseVoiceTermCorrection resolves equal-length same-offset ties by se
   );
 });
 
-test('default SenseVoice industrial term corrections cover PLM and MES variants', async () => {
+test('default SenseVoice industrial term corrections cover industrial ASR variants', async () => {
   const { applySenseVoiceTermCorrection } = await loadTermCorrection();
   const { DEFAULT_SENSEVOICE_TERM_CORRECTIONS } = await loadDefaultTerms();
 
   assert.equal(
-    applySenseVoiceTermCorrection('麦供应商和皮诶勒姆需要打通。', DEFAULT_SENSEVOICE_TERM_CORRECTIONS),
-    'MES供应商和PLM需要打通。',
+    applySenseVoiceTermCorrection(
+      '麦供应商和皮诶勒姆需要打通，PTC克瑞欧和温切尔也要支持流体防真工作留。',
+      DEFAULT_SENSEVOICE_TERM_CORRECTIONS,
+    ),
+    'MES供应商和PLM需要打通，PTC Creo和Windchill也要支持流体仿真工作流。',
   );
 });
 
