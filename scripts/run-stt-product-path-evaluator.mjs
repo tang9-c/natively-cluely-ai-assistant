@@ -150,7 +150,12 @@ export async function evaluateProductPath(opts) {
         WHERE meeting_id = ?
         ORDER BY timestamp_ms ASC
       `).all(run.meetingId);
-      const unexpectedSpeakerTranscriptCount = rows.filter(row => row.speaker !== 'interviewer' && String(row.content ?? '').trim()).length;
+      const assistantTranscriptCount = rows.filter(row => row.speaker === 'assistant' && String(row.content ?? '').trim()).length;
+      const unexpectedAudioTranscriptCount = rows.filter(row => (
+        row.speaker !== 'interviewer'
+        && row.speaker !== 'assistant'
+        && String(row.content ?? '').trim()
+      )).length;
       const interviewerRows = rows.filter(row => row.speaker === 'interviewer');
       const transcript = interviewerRows.map(row => row.content).join(' ');
       const comparison = compare(loadReferenceText(run.referenceReport), transcript);
@@ -168,10 +173,11 @@ export async function evaluateProductPath(opts) {
       const dynamicActionPassed = expectation.shouldEmit ? actionAssessment.matched : !actionAssessment.emitted;
       entries.push({
         entry: run.entry,
-        status: unexpectedSpeakerTranscriptCount === 0 && dynamicActionPassed ? 'passed' : 'failed',
+        status: unexpectedAudioTranscriptCount === 0 && dynamicActionPassed ? 'passed' : 'failed',
         characterErrorRate: comparison.characterErrorRate,
         lengthRatio: comparison.lengthRatio,
-        unexpectedSpeakerTranscriptCount,
+        unexpectedAudioTranscriptCount,
+        assistantTranscriptCount,
         dynamicActionPassed,
       });
     }

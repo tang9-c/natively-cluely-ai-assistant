@@ -141,6 +141,67 @@ test('product-path evaluator fails fixtures contaminated by microphone rows with
   });
 
   assert.equal(report.status, 'failed');
-  assert.equal(report.entries[0].unexpectedSpeakerTranscriptCount, 1);
+  assert.equal(report.entries[0].unexpectedAudioTranscriptCount, 1);
   assert.equal(fs.readFileSync(outputPath, 'utf8').includes('private microphone text'), false);
+});
+
+test('product-path evaluator allows assistant messages in saved meeting transcript', async () => {
+  const fixture = makeFixture();
+
+  const referenceReport = path.join(fixture.root, 'reference.json');
+  const runManifest = path.join(fixture.root, 'run.json');
+  const expectations = path.join(fixture.root, 'expectations.json');
+  const diagnostics = path.join(fixture.root, 'diagnostics.jsonl');
+  const outputDir = path.join(fixture.root, 'reports');
+  fs.writeFileSync(referenceReport, JSON.stringify({ referenceText: 'system audio' }));
+  fs.writeFileSync(runManifest, JSON.stringify([{
+    entry: 'sales-real-003',
+    meetingId: 'meeting-3',
+    clipSha256: 'clip',
+    referenceReport,
+    referenceWindowId: 'window-1',
+  }]));
+  fs.writeFileSync(expectations, JSON.stringify([{
+    entry: 'sales-real-003',
+    modeTemplateType: 'sales',
+    speaker: 'interviewer',
+    language: 'english',
+    shouldEmit: false,
+  }]));
+  fs.writeFileSync(diagnostics, JSON.stringify({
+    code: 'stt_quality_meeting_mapping',
+    runtimeSessionId: 'run-3',
+    meetingId: 'meeting-3',
+  }));
+
+  const { report, outputPath } = await evaluateProductPath({
+    userDataDir: fixture.userDataDir,
+    runManifest,
+    expectationsManifest: expectations,
+    diagnosticsJsonl: diagnostics,
+    outputDir,
+    transcriptRowsByMeeting: {
+      'meeting-3': [
+        {
+          speaker: 'interviewer',
+          speaker_id: null,
+          speaker_label: null,
+          content: 'system audio',
+          timestamp_ms: 100,
+        },
+        {
+          speaker: 'assistant',
+          speaker_id: null,
+          speaker_label: null,
+          content: 'assistant generated answer',
+          timestamp_ms: 101,
+        },
+      ],
+    },
+  });
+
+  assert.equal(report.status, 'passed');
+  assert.equal(report.entries[0].unexpectedAudioTranscriptCount, 0);
+  assert.equal(report.entries[0].assistantTranscriptCount, 1);
+  assert.equal(fs.readFileSync(outputPath, 'utf8').includes('assistant generated answer'), false);
 });
