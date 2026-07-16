@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import packageJson from '../../package.json';
 import {
     X, Mic, Speaker, Monitor, Keyboard, User, LifeBuoy, LogOut, Upload,
@@ -11,6 +11,7 @@ import {
 import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
 import { HelpSettings } from './settings/HelpSettings';
+import { shouldShowHelpScrollHint } from './settings/helpScrollHint';
 import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { NativelyApiSettings } from './settings/NativelyApiSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
@@ -423,6 +424,17 @@ const screenRecordingFallbackReasons = new Set([
 const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, initialTab = 'general' }) => {
     const isLight = useResolvedTheme() === 'light';
     const [activeTab, setActiveTab] = useState<SettingsTab>(normalizeSettingsTab(initialTab));
+    const settingsContentRef = useRef<HTMLDivElement>(null);
+    const [showHelpScrollHint, setShowHelpScrollHint] = useState(false);
+
+    const syncHelpScrollHint = useCallback(() => {
+        const container = settingsContentRef.current;
+        setShowHelpScrollHint(
+            activeTab === 'help'
+            && container !== null
+            && shouldShowHelpScrollHint(container),
+        );
+    }, [activeTab]);
 
     // Sync active tab when modal opens
     useEffect(() => {
@@ -430,6 +442,24 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
             setActiveTab(normalizeSettingsTab(initialTab));
         }
     }, [isOpen, initialTab]);
+
+    useEffect(() => {
+        const container = settingsContentRef.current;
+        if (!isOpen || !container || activeTab !== 'help') {
+            setShowHelpScrollHint(false);
+            return;
+        }
+
+        syncHelpScrollHint();
+        const observer = new ResizeObserver(syncHelpScrollHint);
+        observer.observe(container);
+        const helpContent = container.querySelector('[data-help-scroll-content]');
+        if (helpContent) {
+            observer.observe(helpContent);
+        }
+
+        return () => observer.disconnect();
+    }, [activeTab, isOpen, syncHelpScrollHint]);
 
     const { shortcuts, updateShortcut, resetShortcuts } = useShortcuts();
     const [isMousePassthrough, setIsMousePassthrough] = useState(false);
@@ -1624,7 +1654,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                         </div>
 
                         {/* Content */}
-                        <div className="flex-1 bg-bg-main overflow-y-auto p-8 relative">
+                        <div className="flex-1 min-w-0 relative overflow-hidden bg-bg-main">
+                            <div
+                                ref={settingsContentRef}
+                                onScroll={syncHelpScrollHint}
+                                className="h-full overflow-y-auto p-8"
+                            >
                             {activeTab === 'general' && (
                                 <div className="space-y-6 animated fadeIn">
                                     <div className="space-y-3.5">
@@ -2954,6 +2989,24 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                             {activeTab === 'about' && (
                                 <AboutSection />
                             )}
+                            </div>
+                            <AnimatePresence>
+                                {activeTab === 'help' && showHelpScrollHint && (
+                                    <motion.div
+                                        aria-hidden="true"
+                                        initial={{ opacity: 0, y: 4 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: 4 }}
+                                        transition={{ duration: 0.16, ease: 'easeOut' }}
+                                        className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center"
+                                    >
+                                        <div className="flex items-center gap-1.5 rounded-full border border-border-subtle bg-bg-elevated/90 px-3 py-1.5 text-[11px] font-medium text-text-secondary shadow-lg backdrop-blur-md">
+                                            <span>向下滚动查看更多</span>
+                                            <ChevronDown className="h-3.5 w-3.5 animate-bounce motion-reduce:animate-none" />
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </div>
                     </div>
                     </motion.div>

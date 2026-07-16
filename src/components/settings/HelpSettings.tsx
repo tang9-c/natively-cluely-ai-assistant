@@ -862,7 +862,7 @@ export const HelpSettings: React.FC = () => {
                 </p>
             </div>
 
-            <div className="flex-1 space-y-2">
+            <div data-help-scroll-content className="flex-1 space-y-2">
 
                 <SetupGuide />
 
