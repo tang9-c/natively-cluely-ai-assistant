@@ -12,26 +12,11 @@ import {
     ModeEventContextTurn,
     SemanticGateTrace,
 } from './ModeEventClassifier';
+import { getActionGatePolicy } from './ModeActionPolicy';
 import { SignalStateTracker, SignalConfirmationSource } from './SignalStateTracker';
 import type { IntentResult } from '../../llm/IntentClassifier';
 import type { ProviderDataScopePolicy } from '../../llm/ProviderRouter';
 import type { TranscriptEmotionSource } from '../../../shared/senseVoiceEmotion';
-
-const HIGH_RISK_ACTION_TYPES = new Set([
-    'pricing_objection',
-    'pricing_request',
-    'case_study_request',
-    'discovery_question',
-    'technical_requirements',
-    'buying_signal',
-]);
-
-const FAST_PATH_ACTION_TYPES = new Set([
-    'send_contract',
-    'schedule_meeting',
-    'coding_problem',
-    'action_item',
-]);
 
 const SALES_PROMPT_INSTRUCTIONS: Record<string, string> = {
     pricing_objection:
@@ -86,10 +71,9 @@ export class DynamicActionEngine {
     }
 
     /**
-     * Legacy synchronous regex detector used by older tests and low-risk trigger
-     * pack smoke checks. Production dynamic action emission must use
-     * assessSignals(), which applies action-level semantic gating before storing
-     * or emitting high-risk actions.
+     * Legacy synchronous regex detector for explicit regex smoke tests only.
+     * Do not use this for production emission, product fixture acceptance, or
+     * replay evaluation that claims semantic-gate behavior.
      */
     detectActions(params: {
         transcript: string;
@@ -184,14 +168,22 @@ export class DynamicActionEngine {
             });
         }
 
-        const gateCandidates: ModeEventCandidate[] = triggerCandidates.map(candidate => ({
-            actionType: candidate.trigger.type,
-            label: candidate.trigger.label,
-            match: candidate.match,
-            confidence: candidate.confidence,
-            highRisk: HIGH_RISK_ACTION_TYPES.has(candidate.trigger.type),
-            fastPathEligible: FAST_PATH_ACTION_TYPES.has(candidate.trigger.type),
-        }));
+        const gateCandidates: ModeEventCandidate[] = triggerCandidates.map(candidate => {
+            const policy = getActionGatePolicy(modeTemplateType, candidate.trigger.type);
+            return {
+                actionType: candidate.trigger.type,
+                label: candidate.trigger.label,
+                match: candidate.match,
+                confidence: candidate.confidence,
+                highRisk: policy.riskLevel === 'high',
+                fastPathEligible: policy.fastPathEligible,
+                riskLevel: policy.riskLevel,
+                gateStrategy: policy.gateStrategy,
+                allowLocalFallbackOnCloudFailure: policy.allowLocalFallbackOnCloudFailure,
+                requiredEvidence: policy.requiredEvidence,
+                localFallbackEvidence: policy.localFallbackEvidence,
+            };
+        });
         const gateDecisions = await this.semanticGate.assess({
             transcript,
             recentContextTurns: params.recentContextTurns,

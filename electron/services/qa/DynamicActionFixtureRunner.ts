@@ -19,6 +19,7 @@ import {
 export interface ProductRunnerInput {
   fixtureDir: string;
   outputDir: string;
+  semanticGateMode?: DynamicActionProductFixtureRunnerSemanticGateMode;
 }
 
 export interface ProductRunnerReport {
@@ -28,6 +29,8 @@ export interface ProductRunnerReport {
   modeScores: ReturnType<typeof scoreDynamicActionProductFixturesByMode>;
   invalidFixtures: InvalidFixtureRecord[];
 }
+
+export type DynamicActionProductFixtureRunnerSemanticGateMode = 'real' | 'fixture_oracle';
 
 export interface InvalidFixtureRecord {
   file: string;
@@ -75,6 +78,7 @@ export async function runDynamicActionProductFixtures(input: ProductRunnerInput)
     const transcript = fixture.transcriptTurns.map((turn) => turn.text).join('\n');
     const runnerMode = fixture.assessment?.runnerMode ?? 'assessSignals';
     const traces: unknown[] = [];
+    const semanticGateMode = input.semanticGateMode ?? 'real';
     const actions = runnerMode === 'regex'
       ? engine.detectActions({
           transcript,
@@ -93,6 +97,19 @@ export async function runDynamicActionProductFixtures(input: ProductRunnerInput)
           recentContextTurns: fixture.assessment?.recentContextTurns,
           intentResult: fixture.assessment?.intentResult as any,
           providerDataScopes: fixture.assessment?.providerDataScopes as any,
+          cloudClassifier: semanticGateMode === 'fixture_oracle'
+            ? async input => input.candidates.map(candidate => ({
+                actionType: candidate.actionType,
+                decision: fixture.expected.shouldEmit
+                  ? candidate.actionType === fixture.expected.actionType ? 'pass' : 'reject'
+                  : 'reject',
+                confidence: 0.95,
+                reasons: ['fixture_expected_semantic_gate'],
+                rejectedCandidates: fixture.expected.shouldEmit && candidate.actionType === fixture.expected.actionType
+                  ? []
+                  : [candidate.actionType],
+              }))
+            : undefined,
           semanticGateTraceSink: (trace) => traces.push(trace),
         });
     const matchedAction = fixture.expected.actionType
@@ -120,6 +137,7 @@ export async function runDynamicActionProductFixtures(input: ProductRunnerInput)
       modeTemplateType: fixture.modeTemplateType,
       actionType: fixture.expected.actionType,
       runnerMode,
+      semanticGateMode,
       shouldEmit: fixture.expected.shouldEmit,
       emitted: actions.length > 0,
       actionTypeMatched: !!matchedAction || (!fixture.expected.actionType && actions.length === 0),
@@ -138,6 +156,7 @@ export async function runDynamicActionProductFixtures(input: ProductRunnerInput)
       missingFieldFailures,
       acceptedPathPassed: acceptedPath.acceptedPathPassed,
       acceptedArtifact: acceptedPath.acceptedArtifact,
+      traces,
     });
   }
 

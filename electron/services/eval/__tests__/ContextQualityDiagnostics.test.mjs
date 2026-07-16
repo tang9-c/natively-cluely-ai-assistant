@@ -30,7 +30,7 @@ test('context quality diagnostics summarize gate, answer, and context metrics wi
           rejectedCandidates: ['pricing_request'],
           usedLocalIntentModel: false,
           usedCloudArbitration: false,
-          semanticProvider: 'local_intent',
+          semanticProvider: 'local_rule',
           arbitrationStatus: 'local_only_not_needed',
           upgradedByRepeatedEvidence: false,
         },
@@ -150,7 +150,7 @@ test('context quality diagnostics count fallback and omitted context reasons pre
         rejectedCandidates: [],
         usedLocalIntentModel: fallback,
         usedCloudArbitration: false,
-        semanticProvider: index === 2 ? 'unavailable' : 'local_intent',
+        semanticProvider: index === 2 ? 'unavailable' : 'local_rule',
         degradedReason: index === 2 ? 'provider_scope_denied' : undefined,
         arbitrationStatus: fallback
           ? 'local_fallback_cloud_unavailable'
@@ -263,6 +263,8 @@ test('context quality diagnostics collector stores only summary-safe fields', as
   assert.doesNotMatch(JSON.stringify(snapshot), /secret customer transcript|pricing page/);
   const summary = summarizeContextQualityDiagnostics(snapshot);
   assert.equal(summary.dynamicActions.localFallbackRejectRate, 1);
+  assert.equal(summary.dynamicActions.semanticProviders.intent_result, 1);
+  assert.equal(summary.dynamicActions.semanticProviders.local_intent, undefined);
   assert.equal(summary.context.nonTokenBudgetOmitCount, 1);
 });
 
@@ -392,7 +394,7 @@ test('context quality diagnostics collector keeps a bounded recent sample', asyn
       rejectedCandidates: [],
       usedLocalIntentModel: true,
       usedCloudArbitration: false,
-      semanticProvider: 'local_intent',
+      semanticProvider: 'local_rule',
       upgradedByRepeatedEvidence: false,
     });
     collector.recordContextPlan({

@@ -17,6 +17,17 @@ async function loadEngine() {
   return engineMod.DynamicActionEngine;
 }
 
+function allowExpectedAction(expectedAction, semanticIntent) {
+  return async input => input.candidates.map(candidate => ({
+    actionType: candidate.actionType,
+    decision: candidate.actionType === expectedAction ? 'pass' : 'reject',
+    confidence: candidate.actionType === expectedAction ? 0.92 : 0.76,
+    semanticIntent: candidate.actionType === expectedAction ? semanticIntent : candidate.actionType,
+    reasons: candidate.actionType === expectedAction ? ['fixture_expected_action'] : ['fixture_rejected_candidate'],
+    rejectedCandidates: candidate.actionType === expectedAction ? [] : [candidate.actionType],
+  }));
+}
+
 describe('sales industrial discovery dynamic actions', () => {
   test('sales industrial discovery intents map to one discovery_question card', async () => {
     const DynamicActionEngine = await loadEngine();
@@ -34,6 +45,7 @@ describe('sales industrial discovery dynamic actions', () => {
           confidence: 0.9,
           answerShape: 'ask discovery questions',
         },
+        cloudClassifier: allowExpectedAction(fixture.expectedAction, fixture.expectedIntent),
       });
 
       const action = actions.find(item => item.type === fixture.expectedAction);
@@ -62,6 +74,7 @@ describe('sales industrial discovery dynamic actions', () => {
           confidence: 0.9,
           answerShape: 'expected conflict action',
         },
+        cloudClassifier: allowExpectedAction(fixture.expectedAction, fixture.expectedIntent),
       });
 
       const action = actions.find(item => item.type === fixture.expectedAction);
@@ -137,6 +150,7 @@ describe('sales industrial discovery dynamic actions', () => {
           confidence: 0.9,
           answerShape: 'mode-specific action',
         },
+        cloudClassifier: allowExpectedAction(fixture.expectedAction, fixture.expectedIntent),
       });
 
       assert.equal(actions.some(item => item.type === fixture.mustNotAction), false, fixture.notes);

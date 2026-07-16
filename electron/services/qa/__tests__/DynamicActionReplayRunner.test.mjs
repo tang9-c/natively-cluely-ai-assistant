@@ -66,6 +66,7 @@ test('recruiting audio replay runs through STT output and dynamic action detecti
     outputDir,
     audioRoot: process.cwd(),
     modeTemplateTypes: ['recruiting'],
+    semanticGateMode: 'fixture_oracle',
     transcribeAudio: async ({ entry, audioPath }) => {
       audioInputs.push({ id: entry.id, audioPath });
       return sttTranscripts.get(entry.id);
@@ -76,6 +77,7 @@ test('recruiting audio replay runs through STT output and dynamic action detecti
   assert.equal(report.skippedEntries, 0);
   assert.equal(report.failedEntries, 0);
   assert.equal(report.environmentStatus, 'ok');
+  assert.ok(report.entries.every((entry) => entry.semanticGateMode === 'fixture_oracle'));
   assert.deepEqual(report.assetCoverageFailures, []);
   assert.equal(audioInputs.length, 3);
   assert.ok(audioInputs.every((input) => input.audioPath.endsWith('.wav')));
@@ -105,6 +107,7 @@ test('sales audio replay runs through STT output and dynamic action detection', 
     outputDir,
     audioRoot: process.cwd(),
     modeTemplateTypes: ['sales'],
+    semanticGateMode: 'fixture_oracle',
     transcribeAudio: async ({ entry, audioPath }) => {
       audioInputs.push({ id: entry.id, audioPath });
       if (entry.id === 'sales-replay-internal-price-identity-001') {
@@ -117,6 +120,7 @@ test('sales audio replay runs through STT output and dynamic action detection', 
   assert.equal(report.totalEntries, 4);
   assert.equal(report.skippedEntries, 0);
   assert.equal(report.failedEntries, 0);
+  assert.ok(report.entries.every((entry) => entry.semanticGateMode === 'fixture_oracle'));
   assert.deepEqual(report.assetCoverageFailures, [
     { modeTemplateType: 'sales', requiredReal: 15, availableReal: 0, missingReal: 15 },
   ]);
@@ -135,6 +139,29 @@ test('sales audio replay runs through STT output and dynamic action detection', 
   assert.equal(byId.get('sales-replay-internal-price-identity-001')?.status, 'passed');
   assert.equal(byId.get('sales-replay-internal-price-identity-001')?.emitted, false);
   assert.ok(fs.existsSync(path.join(outputDir, 'replay-report.json')));
+});
+
+test('audio replay defaults to real semantic gate instead of fixture oracle', async () => {
+  const { runDynamicActionReplay, loadFixtureBackedSttTranscripts } = await load();
+  const manifestPath = path.join(process.cwd(), 'tests/fixtures/dynamic-actions/replay/replay-manifest.json');
+  const outputDir = path.join(process.cwd(), 'reports/dynamic-actions-real-gate-replay-test');
+  fs.rmSync(outputDir, { recursive: true, force: true });
+
+  const sttTranscripts = loadFixtureBackedSttTranscripts({
+    manifestPath,
+    fixtureRoot: path.join(process.cwd(), 'tests/fixtures/dynamic-actions/product'),
+  });
+  const report = await runDynamicActionReplay({
+    manifestPath,
+    outputDir,
+    audioRoot: process.cwd(),
+    modeTemplateTypes: ['sales'],
+    transcribeAudio: async ({ entry }) => sttTranscripts.get(entry.id),
+  });
+
+  assert.equal(report.totalEntries, 4);
+  assert.ok(report.entries.every((entry) => entry.semanticGateMode === 'real'));
+  assert.ok(report.failedEntries > 0);
 });
 
 test('replay runner resolves audio paths from explicit audio root', async () => {

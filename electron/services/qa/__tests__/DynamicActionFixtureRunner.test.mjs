@@ -79,6 +79,8 @@ test('product runner marks assessSignals as the default runner mode', async () =
 
   const report = await runDynamicActionProductFixtures({ fixtureDir, outputDir });
   assert.equal(report.results[0].runnerMode, 'assessSignals');
+  assert.equal(report.results[0].semanticGateMode, 'real');
+  assert.ok(report.results[0].traces.length > 0);
 });
 
 test('product runner validates accepted output through artifact builder', async () => {

@@ -383,6 +383,59 @@ test('FDE mode does not fall back to interview default keywords', () => {
   assert.equal(rows.some(row => row.intent === 'coding'), false);
 });
 
+test('sales default intent keywords avoid broad noisy install-time triggers', () => {
+  const defaultsPath = path.resolve(
+    __dirname, '../../../dist-electron/electron/llm/IntentKeywordDefaults.js',
+  );
+  const { defaultKeywordRowsForTemplate } = cjsRequire(defaultsPath);
+  const rows = defaultKeywordRowsForTemplate('sales');
+  const byIntent = new Map(rows.map(row => [row.intent, row.keywordsCsv]));
+
+  assert.doesNotMatch(byIntent.get('sales_quote_request') ?? '', /(^|,)多少钱(,|$)/);
+  assert.doesNotMatch(byIntent.get('sales_proof_request') ?? '', /(^|,)案例(,|$)/);
+  assert.doesNotMatch(byIntent.get('sales_buying_signal') ?? '', /(^|,)(启动|试点)(,|$)/);
+});
+
+describe('IntentResult provenance', () => {
+  test('pattern result has source=pattern', async () => {
+    const { classifyIntent } = loadModule();
+    const result = await classifyIntent('你们这个模块多少钱？', '', 0, 'sales');
+    assert.equal(result.intent, 'sales_quote_request');
+    assert.equal(result.source, 'pattern');
+  });
+
+  test('cloud-first result has source=cloud', async () => {
+    const { classifyIntent } = loadModule();
+    const result = await classifyIntent('这个方案是否适合我们？', '', 0, 'sales', {
+      cloudFirst: true,
+      cloudIntentClassifier: async () => ({ intent: 'sales_capability_fit', confidence: 0.91 }),
+    });
+    assert.equal(result.intent, 'sales_capability_fit');
+    assert.equal(result.source, 'cloud');
+  });
+
+  test('local SLM result is normalized to source=local_slm', async () => {
+    const { classifyIntent } = loadModule();
+    const result = await classifyIntent('能介绍一下类似场景吗？', '', 0, 'sales', {
+      localIntentEnhancementEnabled: true,
+      localIntentEnhancementAvailable: true,
+      localIntentClassifier: async () => ({
+        intent: 'sales_proof_request',
+        confidence: 0.82,
+        answerShape: 'local test shape',
+      }),
+    });
+    assert.equal(result.intent, 'sales_proof_request');
+    assert.equal(result.source, 'local_slm');
+  });
+
+  test('context fallback has source=context', async () => {
+    const { classifyIntent } = loadModule();
+    const result = await classifyIntent(null, '前面聊了很多，继续问一个问题', 1, 'general');
+    assert.equal(result.source, 'context');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Mode isolation — regex for one mode should NOT fire for another mode
 // ---------------------------------------------------------------------------

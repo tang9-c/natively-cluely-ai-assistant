@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { DynamicActionEngine } from '../dynamic-actions/DynamicActionEngine';
+import type { DynamicActionFixtureRunnerMode } from '../dynamic-actions/DynamicActionProductFixtures';
 import type { DynamicActionProductFixture } from '../dynamic-actions/DynamicActionProductFixtures';
 import {
   loadDynamicActionContinuationFixtures,
@@ -19,6 +20,7 @@ export interface ReplayManifestEntry {
   speakerCount: number;
   syntheticAudio?: boolean;
   continuationFixture?: string;
+  runnerMode?: DynamicActionFixtureRunnerMode;
 }
 
 export interface ReplayRunnerInput {
@@ -28,6 +30,7 @@ export interface ReplayRunnerInput {
   fixtureRoot?: string;
   continuationFixtureRoot?: string;
   modeTemplateTypes?: string[];
+  semanticGateMode?: DynamicActionReplaySemanticGateMode;
   environmentStatus?: ReplayEnvironmentStatus;
   transcribeAudio?: (input: {
     entry: ReplayManifestEntry;
@@ -37,6 +40,7 @@ export interface ReplayRunnerInput {
 
 export type ReplayEnvironmentStatus = 'ok' | 'blocked_missing_credentials' | 'not_applicable';
 export type ReplayCoverageMode = 'sales' | 'fde' | 'team-meet';
+export type DynamicActionReplaySemanticGateMode = 'real' | 'fixture_oracle';
 
 export interface ReplayAssetCoverage {
   requiredReal: Record<ReplayCoverageMode, number>;
@@ -70,6 +74,7 @@ export interface ReplayReportEntry {
   emitted?: boolean;
   actionType?: string;
   expectedActionType?: string;
+  semanticGateMode?: DynamicActionReplaySemanticGateMode;
   transcriptLength?: number;
   continuation?: ContinuationFixtureResult;
   failureStage?: 'initial_action' | 'continuation' | 'runtime_evaluation' | 'post_call';
@@ -87,25 +92,62 @@ export interface DynamicActionReplayAssessmentInput {
   sessionId: string;
   language?: string;
   expectedActionType?: string;
+  shouldEmit?: boolean;
+  runnerMode?: DynamicActionFixtureRunnerMode;
+  semanticGateMode?: DynamicActionReplaySemanticGateMode;
 }
 
-export function assessDynamicActionTranscriptRows(input: DynamicActionReplayAssessmentInput): {
+export async function assessDynamicActionTranscriptRows(input: DynamicActionReplayAssessmentInput): Promise<{
   emitted: boolean;
   actionTypes: string[];
   matched: boolean;
-} {
+}> {
   const engine = new DynamicActionEngine();
   const actionTypes: string[] = [];
-  for (const row of [...input.rows].sort((left, right) => (left.timestamp_ms ?? 0) - (right.timestamp_ms ?? 0))) {
+  const sortedRows = [...input.rows].sort((left, right) => (left.timestamp_ms ?? 0) - (right.timestamp_ms ?? 0));
+  for (const [index, row] of sortedRows.entries()) {
     if (!row.content?.trim()) continue;
-    const actions = engine.detectActions({
-      transcript: row.content,
-      speaker: row.speaker,
-      modeTemplateType: input.modeTemplateType,
-      modeId: input.modeTemplateType,
-      sessionId: input.sessionId,
-      language: input.language,
-    });
+    const runnerMode = input.runnerMode ?? 'assessSignals';
+    const semanticGateMode = input.semanticGateMode ?? 'real';
+    const actions = runnerMode === 'regex'
+      ? engine.detectActions({
+          transcript: row.content,
+          speaker: row.speaker,
+          modeTemplateType: input.modeTemplateType,
+          modeId: input.modeTemplateType,
+          sessionId: input.sessionId,
+          language: input.language,
+        })
+      : await engine.assessSignals({
+          transcript: row.content,
+          speaker: row.speaker,
+          modeTemplateType: input.modeTemplateType,
+          modeId: input.modeTemplateType,
+          sessionId: input.sessionId,
+          language: input.language,
+          cloudClassifier: semanticGateMode === 'fixture_oracle'
+            ? async gateInput => gateInput.candidates.map(candidate => ({
+                actionType: candidate.actionType,
+                decision: input.shouldEmit === false
+                  ? 'reject'
+                  : input.expectedActionType
+                    ? candidate.actionType === input.expectedActionType ? 'pass' : 'reject'
+                    : 'pass',
+                confidence: 0.95,
+                reasons: ['replay_expected_semantic_gate'],
+                rejectedCandidates: input.shouldEmit === false || (
+                  input.expectedActionType && candidate.actionType !== input.expectedActionType
+                )
+                  ? [candidate.actionType]
+                  : [],
+              }))
+            : undefined,
+          recentContextTurns: sortedRows.slice(0, index).map((turn) => ({
+            speaker: turn.speaker,
+            text: turn.content,
+            timestamp: turn.timestamp_ms,
+          })),
+        });
     actionTypes.push(...actions.map((action) => action.type));
     if (input.expectedActionType && actionTypes.includes(input.expectedActionType)) {
       break;
@@ -177,14 +219,38 @@ export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<
       continue;
     }
 
-    const actions = engine.detectActions({
-      transcript,
-      speaker: fixture.transcriptTurns[0]?.speaker,
-      modeTemplateType: entry.modeTemplateType,
-      modeId: entry.modeTemplateType,
-      sessionId: `replay-${entry.id}`,
-      language: entry.language,
-    });
+    const runnerMode = entry.runnerMode ?? 'assessSignals';
+    const semanticGateMode = input.semanticGateMode ?? 'real';
+    const actions = runnerMode === 'regex'
+      ? engine.detectActions({
+          transcript,
+          speaker: fixture.transcriptTurns[0]?.speaker,
+          modeTemplateType: entry.modeTemplateType,
+          modeId: entry.modeTemplateType,
+          sessionId: `replay-${entry.id}`,
+          language: entry.language,
+        })
+      : await engine.assessSignals({
+          transcript,
+          speaker: fixture.transcriptTurns[0]?.speaker,
+          modeTemplateType: entry.modeTemplateType,
+          modeId: entry.modeTemplateType,
+          sessionId: `replay-${entry.id}`,
+          language: entry.language,
+          cloudClassifier: semanticGateMode === 'fixture_oracle'
+            ? async input => input.candidates.map(candidate => ({
+                actionType: candidate.actionType,
+                decision: fixture.expected.shouldEmit
+                  ? candidate.actionType === fixture.expected.actionType ? 'pass' : 'reject'
+                  : 'reject',
+                confidence: 0.95,
+                reasons: ['replay_expected_semantic_gate'],
+                rejectedCandidates: fixture.expected.shouldEmit && candidate.actionType === fixture.expected.actionType
+                  ? []
+                  : [candidate.actionType],
+              }))
+            : undefined,
+        });
     const expectedActionType = fixture.expected.actionType;
     const matchedAction = expectedActionType
       ? actions.find((action) => action.type === expectedActionType)
@@ -216,6 +282,7 @@ export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<
       emitted,
       actionType: matchedAction?.type ?? actions[0]?.type,
       expectedActionType,
+      semanticGateMode,
       transcriptLength: transcript.length,
       ...(continuation ? { continuation } : {}),
       ...(failureStage ? { failureStage } : {}),

@@ -140,7 +140,11 @@ test('FDE product fixtures meet release gates', async () => {
 
   const outDir = path.join(root, 'reports/dynamic-actions-fde-test');
   fs.rmSync(outDir, { recursive: true, force: true });
-  const report = await runDynamicActionProductFixtures({ fixtureDir, outputDir: outDir });
+  const report = await runDynamicActionProductFixtures({
+    fixtureDir,
+    outputDir: outDir,
+    semanticGateMode: 'fixture_oracle',
+  });
   const fde = report.modeScores.fde;
 
   const falsePositiveIds = report.results

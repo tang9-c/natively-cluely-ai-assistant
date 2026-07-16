@@ -429,6 +429,8 @@ export class IntelligenceEngine extends EventEmitter {
             `intentResult: ${JSON.stringify(input.intentResult ?? null)}`,
             `currentFinalTranscript: ${JSON.stringify(input.transcript)}`,
             `recentContextTurns: ${JSON.stringify(input.recentContextTurns.slice(-6))}`,
+            `policySummary: ${JSON.stringify(input.policySummary ?? null)}`,
+            'If cloud semantic arbitration is unavailable, the current local zero-shot intent model is not an allowed fallback. Fallback is controlled only by action policy and deterministic local_rule evidence.',
             `candidates: ${JSON.stringify(input.candidates)}`,
             '',
             '返回格式: {"actions":[{"actionType":"...","decision":"pass|reject|defer","confidence":0.0,"semanticIntent":"...","reasons":["..."],"rejectedCandidates":["..."]}]}',

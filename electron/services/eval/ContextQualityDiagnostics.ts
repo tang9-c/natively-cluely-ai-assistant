@@ -2,14 +2,22 @@ import type { AnswerDegradedReason, AnswerQualityMetrics } from '../../db/Databa
 import type { CodeHintTrace } from '../../llm/CodeHintLLM';
 import type { ContinuationTraceEvent } from '../dynamic-actions/DynamicActionContinuation';
 import type { DynamicActionLifecycleEvent } from '../dynamic-actions/DynamicActionLifecycle';
-import type { SemanticGateArbitrationStatus, SemanticGateTrace } from '../dynamic-actions/ModeEventClassifier';
+import type {
+    SemanticGateArbitrationStatus,
+    SemanticGateProvider,
+    SemanticGateTrace,
+} from '../dynamic-actions/ModeEventClassifier';
 import type { RealtimeContextSource } from '../context/RealtimeContextOrchestrator';
 
 type Counter = Record<string, number>;
+type HistoricalSemanticGateProvider = SemanticGateProvider | 'local_intent';
+type HistoricalSemanticGateTrace = Omit<SemanticGateTrace, 'semanticProvider'> & {
+    semanticProvider?: HistoricalSemanticGateProvider;
+};
 
 export interface ContextQualityDynamicActionInput {
     type?: string;
-    semanticGate?: Partial<SemanticGateTrace>;
+    semanticGate?: Partial<HistoricalSemanticGateTrace>;
 }
 
 export interface ContextQualityPlanInput {
@@ -160,6 +168,13 @@ function increment(counter: Counter, key: unknown): void {
     counter[key] = (counter[key] ?? 0) + 1;
 }
 
+export function normalizeSemanticGateProvider(
+    provider?: HistoricalSemanticGateProvider,
+): SemanticGateProvider | undefined {
+    if (provider === 'local_intent') return 'intent_result';
+    return provider;
+}
+
 function rate(count: number, total: number): number {
     return total > 0 ? count / total : 0;
 }
@@ -226,7 +241,7 @@ export function summarizeContextQualityDiagnostics(input: ContextQualityDiagnost
     for (const action of actions) {
         increment(actionTypes, action.type ?? action.semanticGate?.actionType);
         increment(decisions, action.semanticGate?.decision);
-        increment(semanticProviders, action.semanticGate?.semanticProvider);
+        increment(semanticProviders, normalizeSemanticGateProvider(action.semanticGate?.semanticProvider));
         increment(arbitrationStatuses, action.semanticGate?.arbitrationStatus);
         if (action.semanticGate?.arbitrationStatus === 'cloud_used') cloudUsed += 1;
         if (action.semanticGate?.arbitrationStatus === 'local_only_by_privacy') privacyLocal += 1;
@@ -390,7 +405,7 @@ export class ContextQualityDiagnosticsCollector {
                 rejectedCandidates: [...trace.rejectedCandidates],
                 usedLocalIntentModel: trace.usedLocalIntentModel,
                 usedCloudArbitration: trace.usedCloudArbitration,
-                semanticProvider: trace.semanticProvider,
+                semanticProvider: normalizeSemanticGateProvider(trace.semanticProvider),
                 arbitrationStatus: trace.arbitrationStatus,
                 degradedReason: trace.degradedReason,
                 upgradedByRepeatedEvidence: trace.upgradedByRepeatedEvidence,

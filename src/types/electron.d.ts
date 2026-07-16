@@ -29,7 +29,7 @@ export interface DynamicActionSemanticGate {
   rejectedCandidates: string[]
   usedLocalIntentModel: boolean
   usedCloudArbitration: boolean
-  semanticProvider: 'local_intent' | 'cloud_llm' | 'rule_fast_path' | 'unavailable'
+  semanticProvider: 'intent_result' | 'local_rule' | 'cloud_llm' | 'rule_fast_path' | 'unavailable'
   arbitrationStatus: 'cloud_used' | 'local_only_by_privacy' | 'local_fallback_cloud_unavailable' | 'cloud_unavailable' | 'local_only_not_needed'
   degradedReason?: string
   upgradedByRepeatedEvidence: boolean

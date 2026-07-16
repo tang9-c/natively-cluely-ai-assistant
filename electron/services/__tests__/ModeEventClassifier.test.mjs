@@ -13,21 +13,50 @@ async function loadClassifier() {
   return mod;
 }
 
-function candidate(actionType, match, confidence = 0.9) {
+function policyDefaults(actionType) {
+  const highRiskActions = ['pricing_objection', 'pricing_request', 'case_study_request', 'discovery_question', 'technical_requirements', 'buying_signal', 'coding_problem', 'system_design_prompt'];
+  const localFallbackByAction = {
+    pricing_objection: [{ includeAny: ['太贵', '价格太高', '预算不够', '预算不足', '预算过不了', 'out of budget', 'too expensive'], rejectAny: ['报价表', '价格页', '成本数据'] }],
+    pricing_request: [{ includeAny: ['发我报价', '发一版报价', '给客户发一版报价', '报个价格', '给个价格', '报价单', '模块多少钱', 'what does it cost', 'proposal'], rejectAny: ['报价表在这', '内部报价', '价格页'] }],
+    buying_signal: [{ includeAny: ['发合同', '法务审核', '放假审核', '准备签', '准备推进', '安排时间', 'send contract', 'legal review'] }],
+  };
+  const riskLevel = highRiskActions.includes(actionType) ? 'high' : 'medium';
+  return {
+    riskLevel,
+    gateStrategy: riskLevel === 'high' ? 'required' : 'preferred',
+    allowLocalFallbackOnCloudFailure: Boolean(localFallbackByAction[actionType]),
+    requiredEvidence: [],
+    localFallbackEvidence: localFallbackByAction[actionType] ?? [],
+  };
+}
+
+function candidate(actionType, match, confidence = 0.9, overrides = {}) {
+  const policy = { ...policyDefaults(actionType), ...overrides };
   return {
     actionType,
     label: actionType,
     match,
     confidence,
-    highRisk: ['pricing_objection', 'pricing_request', 'case_study_request', 'technical_requirements', 'buying_signal'].includes(actionType),
+    highRisk: policy.riskLevel === 'high',
     fastPathEligible: false,
+    riskLevel: policy.riskLevel,
+    gateStrategy: policy.gateStrategy,
+    allowLocalFallbackOnCloudFailure: policy.allowLocalFallbackOnCloudFailure,
+    requiredEvidence: policy.requiredEvidence,
+    localFallbackEvidence: policy.localFallbackEvidence,
   };
 }
 
 describe('ModeEventClassifier', () => {
   test('rejects neutral price mention while passing case and technical needs', async () => {
     const { ModeEventClassifier } = await loadClassifier();
-    const classifier = new ModeEventClassifier();
+    const classifier = new ModeEventClassifier({
+      cloudClassifier: async () => [
+        { actionType: 'pricing_objection', decision: 'reject', confidence: 0.86, semanticIntent: 'neutral_pricing_reference', reasons: ['neutral_pricing_reference'] },
+        { actionType: 'case_study_request', decision: 'pass', confidence: 0.91, semanticIntent: 'case_or_proof_request', reasons: ['case_request'] },
+        { actionType: 'technical_requirements', decision: 'pass', confidence: 0.9, semanticIntent: 'technical_requirements', reasons: ['technical_need'] },
+      ],
+    });
     const decisions = await classifier.assess({
       transcript: '价格先放一边，我们想看客户案例和 API 集成要求',
       recentContextTurns: [],
@@ -39,7 +68,8 @@ describe('ModeEventClassifier', () => {
         candidate('technical_requirements', 'API 集成要求'),
       ],
       activeActionTypes: [],
-      intentResult: { intent: 'discovery_probe', confidence: 0.7, answerShape: 'brief' },
+      intentResult: { intent: 'discovery_probe', confidence: 0.7, answerShape: 'brief', source: 'context' },
+      providerDataScopes: { transcript: true },
     });
 
     assert.equal(decisions.find(d => d.candidate.actionType === 'pricing_objection')?.decision, 'reject');
@@ -81,6 +111,86 @@ describe('ModeEventClassifier', () => {
     assert.equal(decisions.find(d => d.candidate.actionType === 'technical_requirements')?.decision, 'pass');
   });
 
+  test('required sales case study uses cloud before local pass', async () => {
+    const { ModeEventClassifier } = await loadClassifier();
+    const cloudCalls = [];
+    const classifier = new ModeEventClassifier({
+      cloudClassifier: async input => {
+        cloudCalls.push(input);
+        return [{ actionType: 'case_study_request', decision: 'pass', confidence: 0.91, reasons: ['customer asks for case'] }];
+      },
+    });
+    const decisions = await classifier.assess({
+      transcript: '有没有类似客户案例？',
+      modeTemplateType: 'sales',
+      candidates: [candidate('case_study_request', '案例')],
+      providerDataScopes: { transcript: true },
+    });
+    assert.equal(cloudCalls.length, 1);
+    assert.equal(decisions[0].decision, 'pass');
+    assert.equal(decisions[0].semanticProvider, 'cloud_llm');
+  });
+
+  test('cloud unavailable without local fallback defers required action', async () => {
+    const { ModeEventClassifier } = await loadClassifier();
+    const classifier = new ModeEventClassifier({ cloudClassifier: async () => null });
+    const decisions = await classifier.assess({
+      transcript: '有没有类似客户案例？',
+      modeTemplateType: 'sales',
+      candidates: [candidate('case_study_request', '案例')],
+      providerDataScopes: { transcript: true },
+    });
+    assert.equal(decisions[0].decision, 'defer');
+    assert.equal(decisions[0].semanticProvider, 'unavailable');
+    assert.equal(decisions[0].degradedReason, 'cloud_provider_unavailable');
+  });
+
+  test('explicit pricing request can pass as local_rule when cloud is unavailable', async () => {
+    const { ModeEventClassifier } = await loadClassifier();
+    const classifier = new ModeEventClassifier({ cloudClassifier: async () => null });
+    const decisions = await classifier.assess({
+      transcript: '这个模块多少钱？请发我报价。',
+      modeTemplateType: 'sales',
+      candidates: [candidate('pricing_request', '多少钱')],
+      providerDataScopes: { transcript: true },
+    });
+    assert.equal(decisions[0].decision, 'pass');
+    assert.equal(decisions[0].semanticProvider, 'local_rule');
+    assert.equal(decisions[0].arbitrationStatus, 'local_fallback_cloud_unavailable');
+  });
+
+  test('local SLM intent result cannot approve required action', async () => {
+    const { ModeEventClassifier } = await loadClassifier();
+    const classifier = new ModeEventClassifier({ cloudClassifier: async () => null });
+    const decisions = await classifier.assess({
+      transcript: '你们在跨境电商这个行业有哪些案例？',
+      modeTemplateType: 'sales',
+      candidates: [candidate('case_study_request', '案例')],
+      intentResult: { intent: 'sales_proof_request', confidence: 0.91, answerShape: 'test', source: 'local_slm' },
+      providerDataScopes: { transcript: true },
+    });
+    assert.equal(decisions[0].decision, 'defer');
+    assert.ok(decisions[0].reasons.includes('local_zero_shot_intent_not_authoritative'));
+  });
+
+  test('only local_slm intent-result passes are marked as local model usage', async () => {
+    const { ModeEventClassifier } = await loadClassifier();
+    const classifier = new ModeEventClassifier();
+    const decisions = await classifier.assess({
+      transcript: '请发我报价。',
+      modeTemplateType: 'sales',
+      candidates: [candidate('pricing_request', '报价', 0.86, {
+        riskLevel: 'medium',
+        gateStrategy: 'optional',
+      })],
+      intentResult: { intent: 'sales_quote_request', confidence: 0.91, answerShape: '报价', source: 'local_slm' },
+    });
+
+    assert.equal(decisions[0].decision, 'pass');
+    assert.equal(decisions[0].semanticProvider, 'intent_result');
+    assert.equal(decisions[0].usedLocalIntentModel, true);
+  });
+
   test('scope denial degrades high-risk candidates instead of pretending semantic confirmation', async () => {
     const { ModeEventClassifier } = await loadClassifier();
     const classifier = new ModeEventClassifier({
@@ -109,7 +219,7 @@ describe('ModeEventClassifier', () => {
     const { ModeEventClassifier } = await loadClassifier();
     const classifier = new ModeEventClassifier();
 
-    for (const transcript of ['发我报价', '给客户发一版报价', '多少钱']) {
+    for (const transcript of ['发我报价', '给客户发一版报价', '模块多少钱']) {
       const decisions = await classifier.assess({
         transcript,
         recentContextTurns: [],
@@ -120,14 +230,20 @@ describe('ModeEventClassifier', () => {
       });
 
       assert.equal(decisions[0].decision, 'pass', transcript);
-      assert.equal(decisions[0].semanticProvider, 'local_intent', transcript);
+      assert.equal(decisions[0].semanticProvider, 'local_rule', transcript);
       assert.equal(decisions[0].semanticIntent, 'pricing_request', transcript);
     }
   });
 
-  test('passes explicit Chinese case requests through local semantic gate', async () => {
+  test('uses cloud for explicit Chinese case requests before allowing required pass', async () => {
     const { ModeEventClassifier } = await loadClassifier();
-    const classifier = new ModeEventClassifier();
+    const cloudCalls = [];
+    const classifier = new ModeEventClassifier({
+      cloudClassifier: async input => {
+        cloudCalls.push(input);
+        return [{ actionType: 'case_study_request', decision: 'pass', confidence: 0.91, semanticIntent: 'case_or_proof_request', reasons: ['customer_asks_for_case'] }];
+      },
+    });
 
     for (const transcript of ['我们想看案例', '有类似客户吗', '给一个成功案例', '客户要证明材料']) {
       const decisions = await classifier.assess({
@@ -137,12 +253,13 @@ describe('ModeEventClassifier', () => {
         speaker: 'interviewer',
         candidates: [candidate('case_study_request', transcript, 0.87)],
         activeActionTypes: [],
+        providerDataScopes: { transcript: true },
       });
 
       assert.equal(decisions[0].decision, 'pass', transcript);
-      assert.equal(decisions[0].semanticProvider, 'local_intent', transcript);
-      assert.equal(decisions[0].semanticIntent, 'case_or_proof_request', transcript);
+      assert.equal(decisions[0].semanticProvider, 'cloud_llm', transcript);
     }
+    assert.equal(cloudCalls.length, 4);
   });
 
   test('falls back to clear local English price objection when cloud arbitration is unavailable', async () => {
@@ -162,7 +279,7 @@ describe('ModeEventClassifier', () => {
     });
 
     assert.equal(decisions[0].decision, 'pass');
-    assert.equal(decisions[0].semanticProvider, 'local_intent');
+    assert.equal(decisions[0].semanticProvider, 'local_rule');
     assert.equal(decisions[0].semanticIntent, 'pricing_objection');
     assert.equal(decisions[0].arbitrationStatus, 'local_fallback_cloud_unavailable');
     assert.ok(decisions[0].reasons.includes('cloud_provider_unavailable'));
@@ -194,9 +311,10 @@ describe('ModeEventClassifier', () => {
 
     assert.equal(decisions.find(d => d.candidate.actionType === 'pricing_objection')?.decision, 'reject');
     assert.equal(decisions.find(d => d.candidate.actionType === 'pricing_request')?.decision, 'reject');
-    assert.equal(decisions.find(d => d.candidate.actionType === 'case_study_request')?.decision, 'pass');
-    assert.equal(decisions.find(d => d.candidate.actionType === 'technical_requirements')?.decision, 'pass');
-    assert.ok(decisions.every(d => d.reasons.includes('cloud_unavailable_local_fallback')));
+    assert.equal(decisions.find(d => d.candidate.actionType === 'case_study_request')?.decision, 'defer');
+    assert.equal(decisions.find(d => d.candidate.actionType === 'technical_requirements')?.decision, 'defer');
+    assert.ok(decisions.find(d => d.candidate.actionType === 'pricing_objection')?.reasons.includes('cloud_unavailable_local_fallback'));
+    assert.ok(decisions.find(d => d.candidate.actionType === 'pricing_request')?.reasons.includes('cloud_unavailable_local_fallback'));
   });
 
   test('degrades every high-risk candidate when transcript scope is denied', async () => {
@@ -274,6 +392,7 @@ describe('ModeEventClassifier', () => {
     assert.equal(caseDecision?.decision, 'pass');
     assert.equal(caseDecision?.semanticProvider, 'cloud_llm');
     assert.equal(caseDecision?.arbitrationStatus, 'cloud_used');
+    assert.equal(caseDecision?.usedLocalIntentModel, false);
   });
 
   test('maps cloud timeout and invalid JSON to degraded reasons while falling back locally', async () => {
@@ -318,8 +437,12 @@ describe('ModeEventClassifier', () => {
       providerDataScopes: { transcript: true },
     });
 
-    assert.ok(invalidJsonDecisions.every(d => d.arbitrationStatus === 'local_fallback_cloud_unavailable'));
-    assert.ok(invalidJsonDecisions.every(d => d.reasons.includes('cloud_invalid_json')));
+    const invalidPricing = invalidJsonDecisions.find(d => d.candidate.actionType === 'pricing_objection');
+    const invalidCase = invalidJsonDecisions.find(d => d.candidate.actionType === 'case_study_request');
+    assert.equal(invalidPricing?.arbitrationStatus, 'local_fallback_cloud_unavailable');
+    assert.ok(invalidPricing?.reasons.includes('cloud_invalid_json'));
+    assert.equal(invalidCase?.decision, 'defer');
+    assert.equal(invalidCase?.degradedReason, 'cloud_invalid_json');
 
     const noLocalFallbackClassifier = new ModeEventClassifier({
       cloudClassifier: async () => {

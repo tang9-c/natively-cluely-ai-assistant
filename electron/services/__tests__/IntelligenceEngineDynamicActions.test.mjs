@@ -384,6 +384,9 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
               confidence: 0.87,
               highRisk: true,
               fastPathEligible: false,
+              riskLevel: 'high',
+              gateStrategy: 'required',
+              allowLocalFallbackOnCloudFailure: false,
             },
             {
               actionType: 'pricing_request',
@@ -392,8 +395,32 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
               confidence: 0.86,
               highRisk: true,
               fastPathEligible: false,
+              riskLevel: 'high',
+              gateStrategy: 'required',
+              allowLocalFallbackOnCloudFailure: true,
             },
           ],
+          policySummary: {
+            modeTemplateType: input.modeTemplateType,
+            actions: [
+              {
+                actionType: 'case_study_request',
+                riskLevel: 'high',
+                gateStrategy: 'required',
+                requiredEvidence: [],
+                localFallbackEvidence: [],
+                allowLocalFallbackOnCloudFailure: false,
+              },
+              {
+                actionType: 'pricing_request',
+                riskLevel: 'high',
+                gateStrategy: 'required',
+                requiredEvidence: [],
+                localFallbackEvidence: [{ includeAny: ['pricing'], rejectAny: ['pricing page'] }],
+                allowLocalFallbackOnCloudFailure: true,
+              },
+            ],
+          },
         });
         gateResults.push(result);
         return [];
@@ -414,8 +441,12 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
 
     const gateCall = helper.structuredCalls.find(call => call.options?.taskLabel === 'dynamic-action-semantic-gate');
     assert.ok(gateCall, 'expected dynamic action semantic gate structured call');
+    assert.match(gateCall.prompt, /policySummary/);
     assert.match(gateCall.prompt, /case_study_request/);
     assert.match(gateCall.prompt, /pricing_request/);
+    assert.match(gateCall.prompt, /required/);
+    assert.match(gateCall.prompt, /high/);
+    assert.match(gateCall.prompt, /local zero-shot intent model is not an allowed fallback/i);
     assert.deepEqual(gateResults[0]?.map(item => [item.actionType, item.decision]), [
       ['case_study_request', 'pass'],
       ['pricing_request', 'reject'],
@@ -424,12 +455,14 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
 
   test('cloud intent prompt keeps triggering turn and speaker-diverse meeting context', async () => {
     const helper = new StubLLMHelper({
-      structuredResponses: ['{"intent":"fde_next_step","confidence":0.96}'],
+      structuredResponses: [
+        '{"intent":"fde_next_step","confidence":0.96}',
+        '{"actions":[{"actionType":"fde_next_step","decision":"pass","confidence":0.93,"semanticIntent":"fde_next_step","reasons":["cloud_confirmed_fde_next_step"],"rejectedCandidates":[]}]}',
+      ],
     });
     const { engine } = await makeEngine(helper);
     const emitted = [];
     engine.on('dynamic_action_emitted', (action) => emitted.push(action));
-    engine.setDynamicActionContext({ sessionId: 's-speakers', modeId: 'm-fde', modeTemplateType: 'fde' });
 
     const base = Date.now();
     const segments = [
@@ -448,13 +481,16 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       { speaker: 'interviewer', speakerId: 's-jordan', speakerLabel: 'Jordan', text: '下一步需要负责人，明天前确认上线计划。', timestamp: base + 13, final: true },
     ];
 
-    for (const segment of segments) {
+    for (const segment of segments.slice(0, -1)) {
       engine.handleTranscript(segment, true);
     }
+    engine.setDynamicActionContext({ sessionId: 's-speakers', modeId: 'm-fde', modeTemplateType: 'fde' });
+    engine.handleTranscript(segments.at(-1), true);
     await waitForAsyncSignals();
 
-    assert.ok(helper.structuredCalls.length >= 1);
-    const lastPrompt = helper.structuredCalls.at(-1).prompt;
+    const intentCall = helper.structuredCalls.find(call => call.options?.taskLabel === 'intent-classification');
+    assert.ok(intentCall, 'expected cloud intent classification call');
+    const lastPrompt = intentCall.prompt;
     assert.match(lastPrompt, /\[INTERVIEWER: Jordan\]: 下一步需要负责人，明天前确认上线计划。/);
     assert.match(lastPrompt, /\[INTERVIEWER: Priya\]: priya described the security review requirements\./);
     assert.match(lastPrompt, /\[INTERVIEWER: Mei\]: mei raised integration ownership and api constraints\./);
@@ -559,7 +595,13 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
   });
 
   test('final Chinese case request emits case_study_request dynamic action', async () => {
-    const { engine } = await makeEngine();
+    const helper = new StubLLMHelper({
+      structuredResponses: [
+        '{"intent":"sales_proof_request","confidence":0.96}',
+        '{"actions":[{"actionType":"case_study_request","decision":"pass","confidence":0.92,"semanticIntent":"case_or_proof_request","reasons":["cloud_confirmed_case_request"],"rejectedCandidates":[]}]}',
+      ],
+    });
+    const { engine } = await makeEngine(helper);
     const emitted = [];
     engine.on('dynamic_action_emitted', (action) => emitted.push(action));
     engine.setDynamicActionContext({ sessionId: 's-case-request', modeId: 'm-sales', modeTemplateType: 'sales' });
@@ -575,6 +617,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     const action = emitted.find(item => item.type === 'case_study_request');
     assert.ok(action, `expected case_study_request; got ${emitted.map(item => item.type).join(', ')}`);
     assert.equal(action.semanticGate?.decision, 'pass');
+    assert.equal(action.semanticGate?.semanticProvider, 'cloud_llm');
   });
 
   test('final English price objection emits when dynamic action cloud gate fails', async () => {
@@ -595,7 +638,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     const action = emitted.find(item => item.type === 'pricing_objection');
     assert.ok(action, `expected pricing_objection; got ${emitted.map(item => item.type).join(', ')}`);
     assert.equal(action.semanticGate?.decision, 'pass');
-    assert.equal(action.semanticGate?.semanticProvider, 'local_intent');
+    assert.equal(action.semanticGate?.semanticProvider, 'local_rule');
   });
 
   test('non-final transcript does not emit dynamic actions', async () => {

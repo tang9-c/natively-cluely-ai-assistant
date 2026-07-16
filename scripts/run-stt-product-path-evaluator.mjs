@@ -159,7 +159,7 @@ export async function evaluateProductPath(opts) {
       const interviewerRows = rows.filter(row => row.speaker === 'interviewer');
       const transcript = interviewerRows.map(row => row.content).join(' ');
       const comparison = compare(loadReferenceText(run.referenceReport), transcript);
-      const actionAssessment = assessDynamicActionTranscriptRows({
+      const actionAssessment = await assessDynamicActionTranscriptRows({
         rows: interviewerRows.map(row => ({
           speaker: row.speaker,
           content: row.content,
@@ -169,6 +169,7 @@ export async function evaluateProductPath(opts) {
         sessionId: `product-path-${run.entry}`,
         language: expectation.language,
         expectedActionType: expectation.expectedActionType,
+        shouldEmit: expectation.shouldEmit,
       });
       const dynamicActionPassed = expectation.shouldEmit ? actionAssessment.matched : !actionAssessment.emitted;
       entries.push({

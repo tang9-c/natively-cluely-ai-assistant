@@ -17,6 +17,7 @@ const report = await runDynamicActionReplay({
   manifestPath,
   outputDir: path.join(root, 'reports/dynamic-actions'),
   audioRoot: root,
+  semanticGateMode: 'fixture_oracle',
   transcribeAudio: async ({ entry }) => sttTranscripts.get(entry.id),
 });
 

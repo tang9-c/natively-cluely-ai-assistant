@@ -220,7 +220,14 @@ test('FDE intent result can synthesize action when regex does not match', async 
       intent: 'fde_risk',
       confidence: 0.9,
       answerShape: 'Name blocker and next unblock step.',
+      source: 'cloud',
     },
+    cloudClassifier: async input => input.candidates.map(candidate => ({
+      actionType: candidate.actionType,
+      decision: candidate.actionType === 'fde_risk_blocker' ? 'pass' : 'reject',
+      confidence: candidate.actionType === 'fde_risk_blocker' ? 0.92 : 0.8,
+      reasons: candidate.actionType === 'fde_risk_blocker' ? ['cloud_confirmed_fde_risk'] : ['cloud_rejected_candidate'],
+    })),
     now: 1_000,
   });
 
@@ -241,7 +248,14 @@ test('assessSignals synthesizes confirmed FDE AI Agent feasibility action from i
       intent: 'fde_agent_feasibility',
       confidence: 0.92,
       answerShape: 'Explain the AI Agent boundary as a checklist.',
+      source: 'cloud',
     },
+    cloudClassifier: async input => input.candidates.map(candidate => ({
+      actionType: candidate.actionType,
+      decision: candidate.actionType === 'fde_agent_feasibility' ? 'pass' : 'reject',
+      confidence: candidate.actionType === 'fde_agent_feasibility' ? 0.93 : 0.8,
+      reasons: candidate.actionType === 'fde_agent_feasibility' ? ['cloud_confirmed_agent_boundary'] : ['cloud_rejected_candidate'],
+    })),
     now: 2_000,
   });
 
@@ -771,7 +785,7 @@ test('assessSignals covers seven real modes with Chinese-first confirmed actions
       modeTemplateType,
       modeId: `mode_${modeTemplateType}`,
       sessionId: `session_${modeTemplateType}_${expectedType}`,
-      intentResult: { intent: 'general', confidence: 0.82, answerShape: '中文回答' },
+      intentResult: { intent: 'general', confidence: 0.82, answerShape: '中文回答', source: 'context' },
       now: Date.now(),
     });
     assert.ok(
@@ -779,6 +793,66 @@ test('assessSignals covers seven real modes with Chinese-first confirmed actions
       `${modeTemplateType} should confirm ${expectedType}; got ${actions.map(a => `${a.type}:${a.signalStatus}`).join(', ')}`,
     );
   }
+});
+
+test('all 8 active modes emit only after policy gate allows the candidate', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const cases = [
+    { modeTemplateType: 'general', transcript: '帮我总结一下刚才他们决定了什么', expectedAction: 'general_summarize' },
+    { modeTemplateType: 'sales', transcript: '这个模块多少钱？请发我报价。', expectedAction: 'pricing_request' },
+    { modeTemplateType: 'fde', transcript: '这个 QMS 权限和审计日志怎么处理？', expectedAction: 'fde_security_review' },
+    { modeTemplateType: 'recruiting', transcript: '候选人问 offer 和入职时间怎么安排', expectedAction: 'candidate_concern' },
+    { modeTemplateType: 'team-meet', transcript: '张三周五前发集成方案', expectedAction: 'action_item' },
+    { modeTemplateType: 'looking-for-work', transcript: '请介绍一下你自己', expectedAction: 'intro_pitch' },
+    { modeTemplateType: 'technical-interview', transcript: '设计一个支持百万用户的通知系统', expectedAction: 'system_design_prompt' },
+    { modeTemplateType: 'lecture', transcript: '这个概念是什么意思，举个例子', expectedAction: 'concept_explanation' },
+  ];
+
+  for (const item of cases) {
+    const engine = new DynamicActionEngine();
+    const actions = await engine.assessSignals({
+      transcript: item.transcript,
+      modeTemplateType: item.modeTemplateType,
+      modeId: item.modeTemplateType,
+      sessionId: `policy_${item.modeTemplateType}`,
+      cloudClassifier: async input => input.candidates.map(candidate => ({
+        actionType: candidate.actionType,
+        decision: candidate.actionType === item.expectedAction ? 'pass' : 'reject',
+        confidence: 0.92,
+        reasons: ['policy_gate_allowed_expected_candidate'],
+        rejectedCandidates: candidate.actionType === item.expectedAction ? [] : [candidate.actionType],
+      })),
+    });
+    assert.ok(
+      actions.some(action => action.type === item.expectedAction),
+      `${item.modeTemplateType} should emit ${item.expectedAction}`,
+    );
+  }
+});
+
+test('FDE high-risk candidate defers without cloud semantic confirmation', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+  const traces = [];
+  const actions = await engine.assessSignals({
+    transcript: '这个 QMS 权限和审计日志怎么处理？',
+    modeTemplateType: 'fde',
+    modeId: 'fde',
+    sessionId: 'policy_fde_no_cloud',
+    cloudClassifier: async () => null,
+    semanticGateTraceSink: trace => traces.push(trace),
+  });
+
+  assert.equal(actions.some(action => action.type === 'fde_security_review'), false);
+  const trace = traces.find(item => item.actionType === 'fde_security_review');
+  assert.equal(trace?.decision, 'defer');
+  assert.equal(trace?.semanticProvider, 'unavailable');
+  assert.ok(
+    trace?.degradedReason === 'cloud_provider_unavailable' ||
+      trace?.reasons.includes('local_zero_shot_intent_not_authoritative') ||
+      trace?.reasons.includes('cloud_semantic_gate_unavailable'),
+    JSON.stringify(trace),
+  );
 });
 
 test('assessSignals uses classifier intent to synthesize high-confidence sales action without regex match', async () => {
@@ -791,7 +865,13 @@ test('assessSignals uses classifier intent to synthesize high-confidence sales a
     modeTemplateType: 'sales',
     modeId: 'mode_sales',
     sessionId: 'session_synth',
-    intentResult: { intent: 'handle_objection', confidence: 0.91, answerShape: '处理异议' },
+    intentResult: { intent: 'handle_objection', confidence: 0.91, answerShape: '处理异议', source: 'cloud' },
+    cloudClassifier: async input => input.candidates.map(candidate => ({
+      actionType: candidate.actionType,
+      decision: candidate.actionType === 'pricing_objection' ? 'pass' : 'reject',
+      confidence: candidate.actionType === 'pricing_objection' ? 0.92 : 0.8,
+      reasons: candidate.actionType === 'pricing_objection' ? ['cloud_confirmed_pricing_objection'] : ['cloud_rejected_candidate'],
+    })),
     emotion: 'angry',
     emotionSource: 'sensevoice',
     now: 10_000,
@@ -905,7 +985,16 @@ test('assessSignals rejects sidelined pricing while passing case and technical n
     modeTemplateType: 'sales',
     modeId: 'mode_sales',
     sessionId: 'session_semantic_gate_mixed_cn',
-    intentResult: { intent: 'discovery_probe', confidence: 0.9, answerShape: '澄清需求' },
+    intentResult: { intent: 'discovery_probe', confidence: 0.9, answerShape: '澄清需求', source: 'context' },
+    cloudClassifier: async input => input.candidates.map(candidate => ({
+      actionType: candidate.actionType,
+      decision: candidate.actionType === 'pricing_objection' ? 'reject' : 'pass',
+      confidence: candidate.actionType === 'pricing_objection' ? 0.84 : 0.91,
+      reasons: candidate.actionType === 'pricing_objection'
+        ? ['neutral_pricing_reference']
+        : ['cloud_confirmed_required_candidate'],
+      rejectedCandidates: candidate.actionType === 'pricing_objection' ? ['pricing_objection'] : [],
+    })),
     now: 20_000,
   });
 
@@ -913,6 +1002,86 @@ test('assessSignals rejects sidelined pricing while passing case and technical n
   assert.ok(actions.some(action => action.type === 'case_study_request'));
   assert.ok(actions.some(action => action.type === 'technical_requirements'));
   assert.ok(actions.every(action => action.semanticGate?.decision === 'pass'));
+});
+
+test('semantic-gated path rejects cloud-rejected sales case mention', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = await engine.assessSignals({
+    transcript: '材料里有成功案例这个章节。',
+    modeTemplateType: 'sales',
+    modeId: 'sales',
+    sessionId: 'semantic_gate_rejects_case_title',
+    cloudClassifier: async () => [{
+      actionType: 'case_study_request',
+      decision: 'reject',
+      confidence: 0.93,
+      reasons: ['section_title_only'],
+      rejectedCandidates: ['case_study_request'],
+    }],
+  });
+
+  assert.equal(actions.length, 0);
+});
+
+test('assessSignals rejects common sales false-positive turns when semantic gate rejects them', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const falsePositiveSalesTurns = [
+    '后面我会介绍几个案例，先看产品架构。',
+    '材料里有成功案例这个章节。',
+    '报价表我们内部再整理。',
+    'BOM 这个词前面材料里有。',
+  ];
+
+  for (const transcript of falsePositiveSalesTurns) {
+    const engine = new DynamicActionEngine();
+    const actions = await engine.assessSignals({
+      transcript,
+      modeTemplateType: 'sales',
+      modeId: 'sales',
+      sessionId: `sales_false_positive_${transcript}`,
+      cloudClassifier: async input => input.candidates.map(candidate => ({
+        actionType: candidate.actionType,
+        decision: 'reject',
+        confidence: 0.9,
+        reasons: ['neutral_mention'],
+        rejectedCandidates: [candidate.actionType],
+      })),
+    });
+    assert.equal(actions.length, 0, transcript);
+  }
+});
+
+test('assessSignals keeps real-meeting sales positives behind policy gate', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const truePositiveSalesTurns = [
+    { transcript: '你们这个科目的，全部搞下来是多少钱？', expectedAction: 'pricing_request' },
+    { transcript: '你们能回头给我们展示一下成功的案例吗？', expectedAction: 'case_study_request' },
+    { transcript: '我知道你们的太贵了。', expectedAction: 'pricing_objection' },
+    { transcript: '细节那些我们后面下一步再安排，我们把人确定好再过来。', expectedAction: 'buying_signal' },
+    { transcript: 'PLM 也可以监控库存，然后会不会自动更新一个新的物料推到 ERP？', expectedAction: 'discovery_question' },
+  ];
+
+  for (const item of truePositiveSalesTurns) {
+    const engine = new DynamicActionEngine();
+    const actions = await engine.assessSignals({
+      transcript: item.transcript,
+      modeTemplateType: 'sales',
+      modeId: 'sales',
+      sessionId: `sales_true_positive_${item.expectedAction}`,
+      cloudClassifier: async input => input.candidates.map(candidate => ({
+        actionType: candidate.actionType,
+        decision: candidate.actionType === item.expectedAction ? 'pass' : 'reject',
+        confidence: 0.92,
+        reasons: candidate.actionType === item.expectedAction
+          ? ['real_meeting_positive']
+          : ['cloud_rejected_candidate'],
+        rejectedCandidates: candidate.actionType === item.expectedAction ? [] : [candidate.actionType],
+      })),
+    });
+    assert.ok(actions.some(action => action.type === item.expectedAction), item.transcript);
+  }
 });
 
 test('assessSignals defers high-risk candidate when transcript scope is denied', async () => {
@@ -936,7 +1105,7 @@ test('assessSignals defers high-risk candidate when transcript scope is denied',
 test('assessSignals emits explicit Chinese pricing request actions', async () => {
   const { DynamicActionEngine } = await loadModules();
 
-  for (const transcript of ['发我报价', '给客户发一版报价', '多少钱']) {
+  for (const transcript of ['发我报价', '给客户发一版报价', '模块多少钱']) {
     const engine = new DynamicActionEngine();
     const actions = await engine.assessSignals({
       transcript,
@@ -951,7 +1120,51 @@ test('assessSignals emits explicit Chinese pricing request actions', async () =>
     assert.ok(action, `expected pricing_request for ${transcript}; got ${actions.map(item => item.type).join(', ')}`);
     assert.equal(action.answerStyle?.format, 'email');
     assert.equal(action.semanticGate?.decision, 'pass');
-    assert.equal(action.semanticGate?.semanticProvider, 'local_intent');
+    assert.equal(action.semanticGate?.semanticProvider, 'local_rule');
+  }
+});
+
+test('assessSignals does not emit sales cards for broad internal cost, proof, or kickoff mentions', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const falsePositiveCases = [
+    {
+      transcript: '作为管理层，我想看这个季度这些变更到底浪费多少钱。',
+      unexpectedType: 'pricing_request',
+    },
+    {
+      transcript: '后面因为本身也会介绍案例嘛，我把案例全部放在一个单独章节。',
+      unexpectedType: 'case_study_request',
+    },
+    {
+      transcript: '我们分阶段一和阶段二，一阶段上线完之后，紧接着会启动二阶段。',
+      unexpectedType: 'buying_signal',
+    },
+    {
+      transcript: '这个流程先在某个市为试点，用 AI 连续计算来抓违规点。',
+      unexpectedType: 'buying_signal',
+    },
+    {
+      transcript: '明白，再往下走。',
+      unexpectedType: 'buying_signal',
+    },
+  ];
+
+  for (const { transcript, unexpectedType } of falsePositiveCases) {
+    const engine = new DynamicActionEngine();
+    const actions = await engine.assessSignals({
+      transcript,
+      speaker: 'prospect',
+      modeTemplateType: 'sales',
+      modeId: 'mode_sales',
+      sessionId: `session_sales_broad_negative_${unexpectedType}_${transcript.length}`,
+      now: 20_000,
+    });
+
+    assert.equal(
+      actions.some(action => action.type === unexpectedType),
+      false,
+      `unexpected ${unexpectedType} for: ${transcript}; got ${actions.map(action => action.type).join(', ')}`,
+    );
   }
 });
 
@@ -966,13 +1179,19 @@ test('assessSignals emits explicit Chinese case request actions', async () => {
       modeTemplateType: 'sales',
       modeId: 'mode_sales',
       sessionId: `session_case_request_${transcript}`,
+      cloudClassifier: async input => input.candidates.map(candidate => ({
+        actionType: candidate.actionType,
+        decision: candidate.actionType === 'case_study_request' ? 'pass' : 'reject',
+        confidence: candidate.actionType === 'case_study_request' ? 0.92 : 0.8,
+        reasons: candidate.actionType === 'case_study_request' ? ['cloud_confirmed_case_request'] : ['cloud_rejected_candidate'],
+      })),
       now: 20_000,
     });
 
     const action = actions.find(item => item.type === 'case_study_request');
     assert.ok(action, `expected case_study_request for ${transcript}; got ${actions.map(item => item.type).join(', ')}`);
     assert.equal(action.semanticGate?.decision, 'pass');
-    assert.equal(action.semanticGate?.semanticProvider, 'local_intent');
+    assert.equal(action.semanticGate?.semanticProvider, 'cloud_llm');
   }
 });
 
@@ -993,7 +1212,7 @@ test('assessSignals falls back to local English price objection when cloud retur
   const action = actions.find(item => item.type === 'pricing_objection');
   assert.ok(action, `expected pricing_objection; got ${actions.map(item => item.type).join(', ')}`);
   assert.equal(action.semanticGate?.decision, 'pass');
-  assert.equal(action.semanticGate?.semanticProvider, 'local_intent');
+  assert.equal(action.semanticGate?.semanticProvider, 'local_rule');
   assert.ok(action.semanticGate?.reasons.includes('cloud_unavailable_local_fallback'));
 });
 
@@ -1013,9 +1232,8 @@ test('assessSignals keeps neutral pricing references rejected when cloud returns
 
   assert.equal(actions.some(item => item.type === 'pricing_request'), false);
   assert.equal(actions.some(item => item.type === 'pricing_objection'), false);
-  assert.ok(actions.some(item => item.type === 'case_study_request'));
-  assert.ok(actions.some(item => item.type === 'technical_requirements'));
-  assert.ok(actions.every(item => item.semanticGate?.decision === 'pass'));
+  assert.equal(actions.some(item => item.type === 'case_study_request'), false);
+  assert.equal(actions.some(item => item.type === 'technical_requirements'), false);
 });
 
 test('assessSignals uses injected cloud classifier for English high-risk candidates', async () => {
@@ -1056,6 +1274,59 @@ test('assessSignals uses injected cloud classifier for English high-risk candida
   assert.equal(caseAction?.semanticGate?.semanticProvider, 'cloud_llm');
 });
 
+test('assessSignals enriches sales regex candidates with policy metadata', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const calls = [];
+  const engine = new DynamicActionEngine();
+
+  await engine.assessSignals({
+    transcript: '有没有类似客户案例？',
+    speaker: 'Customer',
+    modeTemplateType: 'sales',
+    modeId: 'sales',
+    sessionId: 'policy_sales_regex',
+    cloudClassifier: async input => {
+      calls.push(input);
+      return [{ actionType: 'case_study_request', decision: 'defer', confidence: 0.7 }];
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].candidates[0].actionType, 'case_study_request');
+  assert.equal(calls[0].candidates[0].riskLevel, 'high');
+  assert.equal(calls[0].candidates[0].gateStrategy, 'required');
+  assert.equal(calls[0].candidates[0].allowLocalFallbackOnCloudFailure, false);
+});
+
+test('assessSignals enriches synthetic intent candidates with the same policy metadata', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const calls = [];
+  const engine = new DynamicActionEngine();
+
+  await engine.assessSignals({
+    transcript: '这个说法本身没有案例关键词',
+    speaker: 'Customer',
+    modeTemplateType: 'sales',
+    modeId: 'sales',
+    sessionId: 'policy_sales_synthetic',
+    intentResult: {
+      intent: 'sales_proof_request',
+      confidence: 0.91,
+      answerShape: 'test',
+      source: 'cloud',
+    },
+    cloudClassifier: async input => {
+      calls.push(input);
+      return [{ actionType: 'case_study_request', decision: 'defer', confidence: 0.7 }];
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].candidates[0].actionType, 'case_study_request');
+  assert.equal(calls[0].candidates[0].riskLevel, 'high');
+  assert.equal(calls[0].candidates[0].gateStrategy, 'required');
+});
+
 describe('DynamicActionEngine real meeting semantic gate fixtures', () => {
   const fixtures = [
     {
@@ -1065,10 +1336,13 @@ describe('DynamicActionEngine real meeting semantic gate fixtures', () => {
       currentTranscript: '价格先放一边，我们想看案例',
       speaker: 'buyer-a',
       providerDataScopes: { transcript: true },
-      cloudClassifierResult: null,
+      cloudClassifierResult: [
+        { actionType: 'pricing_objection', decision: 'reject', confidence: 0.86, semanticIntent: 'neutral_pricing_reference', reasons: ['cloud_rejected_pricing_reference'], rejectedCandidates: ['pricing_objection'] },
+        { actionType: 'case_study_request', decision: 'pass', confidence: 0.92, semanticIntent: 'case_or_proof_request', reasons: ['cloud_confirmed_case_request'] },
+      ],
       expectedActions: ['case_study_request'],
       expectedRejectedActions: ['pricing_request', 'pricing_objection'],
-      expectedTraceReasons: ['case_or_proof_request'],
+      expectedTraceReasons: ['cloud_confirmed_case_request'],
     },
     {
       name: '英文转折：not the pricing page, we need proof from a similar customer',
@@ -1177,9 +1451,9 @@ describe('DynamicActionEngine real meeting semantic gate fixtures', () => {
       speaker: 'buyer',
       providerDataScopes: { transcript: true },
       cloudClassifierResult: [{ actionType: 'pricing_request', decision: 'approve', confidence: 0.9 }],
-      expectedActions: ['case_study_request'],
+      expectedActions: [],
       expectedRejectedActions: ['pricing_request'],
-      expectedTraceReasons: ['cloud_invalid_json', 'cloud_unavailable_local_fallback'],
+      expectedTraceReasons: ['cloud_invalid_json'],
     },
   ];
 
@@ -2042,6 +2316,12 @@ describe('DynamicActionEngine semantic gate trace sink', () => {
       modeTemplateType: 'sales',
       modeId: 'm_sales_trace',
       sessionId: 's_sink_failure',
+      cloudClassifier: async input => input.candidates.map(candidate => ({
+        actionType: candidate.actionType,
+        decision: candidate.actionType === 'case_study_request' ? 'pass' : 'reject',
+        confidence: candidate.actionType === 'case_study_request' ? 0.92 : 0.8,
+        reasons: candidate.actionType === 'case_study_request' ? ['cloud_confirmed_case_request'] : ['cloud_rejected_candidate'],
+      })),
       semanticGateTraceSink: () => {
         throw new Error('diagnostics unavailable');
       },

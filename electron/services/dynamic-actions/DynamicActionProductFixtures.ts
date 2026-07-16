@@ -58,6 +58,7 @@ export interface DynamicActionProductFixtureResult {
   modeTemplateType: DynamicActionProductFixture['modeTemplateType'];
   actionType?: string;
   runnerMode: DynamicActionFixtureRunnerMode;
+  semanticGateMode?: 'real' | 'fixture_oracle';
   shouldEmit: boolean;
   emitted: boolean;
   actionTypeMatched: boolean;
@@ -71,6 +72,7 @@ export interface DynamicActionProductFixtureResult {
   missingFieldFailures: string[];
   acceptedPathPassed?: boolean;
   acceptedArtifact?: unknown;
+  traces?: unknown[];
 }
 
 export interface DynamicActionProductScore {

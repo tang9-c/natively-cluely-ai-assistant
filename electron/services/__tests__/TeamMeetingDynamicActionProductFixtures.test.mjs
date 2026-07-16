@@ -124,7 +124,11 @@ test('team-meet product fixtures meet release gates', async () => {
 
   const outDir = path.join(root, 'reports/dynamic-actions-team-test');
   fs.rmSync(outDir, { recursive: true, force: true });
-  const report = await runDynamicActionProductFixtures({ fixtureDir, outputDir: outDir });
+  const report = await runDynamicActionProductFixtures({
+    fixtureDir,
+    outputDir: outDir,
+    semanticGateMode: 'fixture_oracle',
+  });
   const team = report.modeScores['team-meet'];
 
   const unexpectedTeamResults = report.results

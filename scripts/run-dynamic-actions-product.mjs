@@ -10,10 +10,12 @@ const { runDynamicActionProductFixtures } = await import(moduleUrl);
 const report = await runDynamicActionProductFixtures({
   fixtureDir: path.join(root, 'tests/fixtures/dynamic-actions/product'),
   outputDir: path.join(root, 'reports/dynamic-actions'),
+  semanticGateMode: 'fixture_oracle',
 });
 
 console.log(JSON.stringify({
   totalFixtures: report.totalFixtures,
+  semanticGateMode: 'fixture_oracle',
   recallRate: report.score.recallRate,
   falsePositiveRate: report.score.falsePositiveRate,
   modeScores: report.modeScores,

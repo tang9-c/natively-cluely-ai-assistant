@@ -97,7 +97,7 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         type: 'pricing_objection',
         patterns: [
             /\b(expensive|too pricey|price (?:is|seems|looks|feels) (?:a bit |really |too )?(?:high|expensive)|pricing (?:is|seems|looks|feels) (?:a bit |really |too )?(?:high|expensive)|cost (?:is|seems|looks|feels) (?:a bit |really |too )?(?:high|expensive)|too much|out of (?:our|my|the) budget|not in (?:our|my|the) budget|can't afford|cannot afford|do better on price|lower the price|reduce the price|discount)\b/i,
-            zh('太贵', '价格高', '价格太高', '报价太高', '预算不够', '预算不足', '预算.{0,8}过不了', '年付.{0,12}预算.{0,8}过不了', '太高.{0,12}预算', '成本', '费用', '负担不起'),
+            zh('太贵', '价格高', '价格太高', '报价太高', '预算不够', '预算不足', '预算.{0,8}过不了', '年付.{0,12}预算.{0,8}过不了', '太高.{0,12}预算', '负担不起'),
         ],
         priority: 0.9,
         label: 'Handle pricing objection',
@@ -124,7 +124,7 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         type: 'pricing_request',
         patterns: [
             /\b(send me pricing|pricing page|quote|proposal|commercials|what does it cost)\b/i,
-            zh('发我报价', '发.{0,6}报价', '给.{0,6}报价', '报(?:个|一下|下)价(?:格)?', '给(?:我)?(?:个|一下|下)价(?:格)?', '报价单', '价格页', '方案报价', '商务条款', '多少钱'),
+            zh('发我报价', '发.{0,6}报价', '给.{0,6}报价', '报(?:个|一下|下)价(?:格)?', '给(?:我)?(?:个|一下|下)价(?:格)?', '报价单', '价格页', '方案报价', '商务条款', '(模块|维护费|全部|整体|搞下来|系统).{0,8}多少钱'),
         ],
         priority: 0.86,
         label: 'Draft quote email',
@@ -159,7 +159,7 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         type: 'case_study_request',
         patterns: [
             /\b(case study|customer story|customer example|reference customer|proof point|success story|similar customer|implementation example|ROI|return on investment)\b/i,
-            zh('客户案例', '成功案例', '案例', '标杆客户', '参考客户', '类似客户', '落地案例', '实施案例', '证明材料', '投资回报', '回报率'),
+            zh('客户案例', '成功案例', '参考客户', '类似客户', '落地案例', '实施案例', '证明材料', '投资回报', '回报率', '想看.{0,8}案例', '有没有.{0,8}案例', '能不能.{0,8}案例', '展示.{0,12}案例', '分享.{0,8}案例', '给.{0,8}案例'),
         ],
         priority: 0.87,
         label: 'Share relevant case study',
@@ -398,7 +398,7 @@ const TECHNICAL_TRIGGERS: ActionTrigger[] = [
         type: 'system_design_prompt',
         patterns: [
             /\b(design a system|system design|architecture|scale to|distributed|throughput)\b/i,
-            zh('设计一个系统', '系统设计', '架构', '扩展到', '分布式', '吞吐量'),
+            zh('设计一个系统', '设计一个.{0,16}系统', '系统设计', '架构', '扩展到', '分布式', '吞吐量'),
         ],
         priority: 0.89,
         label: 'Structure system design',

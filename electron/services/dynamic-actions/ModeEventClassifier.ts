@@ -1,8 +1,14 @@
 import type { IntentResult } from '../../llm/IntentClassifier';
 import type { ProviderDataScopePolicy } from '../../llm/ProviderRouter';
+import type { ActionRiskLevel, GateStrategy, LocalFallbackEvidence } from './ModeActionPolicy';
 
 export type SemanticGateDecision = 'pass' | 'reject' | 'defer' | 'fast_path';
-export type SemanticGateProvider = 'local_intent' | 'cloud_llm' | 'rule_fast_path' | 'unavailable';
+export type SemanticGateProvider =
+    | 'intent_result'
+    | 'local_rule'
+    | 'cloud_llm'
+    | 'rule_fast_path'
+    | 'unavailable';
 export type SemanticGateArbitrationStatus =
     'cloud_used' |
     'local_only_by_privacy' |
@@ -35,6 +41,11 @@ export interface ModeEventCandidate {
     confidence: number;
     highRisk: boolean;
     fastPathEligible: boolean;
+    riskLevel?: ActionRiskLevel;
+    gateStrategy?: GateStrategy;
+    allowLocalFallbackOnCloudFailure?: boolean;
+    requiredEvidence?: string[];
+    localFallbackEvidence?: LocalFallbackEvidence[];
 }
 
 export interface SemanticGateTrace {
@@ -74,6 +85,17 @@ export interface CloudSemanticGateInput {
     speaker?: string;
     candidates: ModeEventCandidate[];
     intentResult?: IntentResult;
+    policySummary?: {
+        modeTemplateType: string;
+        actions: Array<{
+            actionType: string;
+            riskLevel?: ActionRiskLevel;
+            gateStrategy?: GateStrategy;
+            requiredEvidence?: string[];
+            localFallbackEvidence?: LocalFallbackEvidence[];
+            allowLocalFallbackOnCloudFailure?: boolean;
+        }>;
+    };
 }
 
 export interface CloudSemanticGateResult {
@@ -119,7 +141,7 @@ const FAST_PATH_ACTIONS = new Set([
     'action_item',
 ]);
 
-function includesAny(text: string, terms: string[]): boolean {
+function includesAny(text: string, terms: string[] = []): boolean {
     const lower = text.toLowerCase();
     return terms.some(term => lower.includes(term.toLowerCase()));
 }
@@ -201,19 +223,101 @@ function isEnglishOrMixed(text: string): boolean {
     return /[A-Za-z]/.test(text);
 }
 
-function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandidate): ModeEventGateDecision | null {
+function textIncludesAny(text: string, terms: string[] = []): boolean {
+    return includesAny(text, terms);
+}
+
+function matchesLocalFallbackEvidence(text: string, candidate: ModeEventCandidate): boolean {
+    const evidence = candidate.localFallbackEvidence ?? [];
+    if (!evidence.length) return false;
+    return evidence.some(item => {
+        if (item.rejectAny?.length && textIncludesAny(text, item.rejectAny)) return false;
+        if (!textIncludesAny(text, item.includeAny)) return false;
+        if (item.requireAllAny?.length) {
+            return item.requireAllAny.every(group => textIncludesAny(text, group));
+        }
+        return true;
+    });
+}
+
+function isAuthoritativeIntentSource(intentResult?: IntentResult): boolean {
+    return intentResult?.source === 'cloud' || intentResult?.source === 'pattern';
+}
+
+interface LocalDecisionOptions {
+    allowIntentResult: boolean;
+    allowLocalRule: boolean;
+    cloudFailureReason?: CloudSemanticGateFailureReason;
+}
+
+function fastPathDecision(candidate: ModeEventCandidate): ModeEventGateDecision {
+    return {
+        candidate,
+        decision: 'fast_path',
+        confidence: clampConfidence(candidate.confidence),
+        semanticIntent: candidate.actionType,
+        reasons: ['rule_fast_path'],
+        rejectedCandidates: [],
+        usedLocalIntentModel: false,
+        usedCloudArbitration: false,
+        semanticProvider: 'rule_fast_path',
+        arbitrationStatus: 'local_only_not_needed',
+    };
+}
+
+function localPassDecision(candidate: ModeEventCandidate, reason: string): ModeEventGateDecision {
+    return {
+        candidate,
+        decision: 'pass',
+        confidence: clampConfidence(candidate.confidence),
+        semanticIntent: candidate.actionType,
+        reasons: [reason],
+        rejectedCandidates: [],
+        usedLocalIntentModel: false,
+        usedCloudArbitration: false,
+        semanticProvider: 'local_rule',
+        arbitrationStatus: 'local_only_not_needed',
+    };
+}
+
+function degradedDecision(
+    candidate: ModeEventCandidate,
+    degradedReason: string,
+    arbitrationStatus: SemanticGateArbitrationStatus,
+    reasons: string[] = [degradedReason],
+): ModeEventGateDecision {
+    return {
+        candidate,
+        decision: 'defer',
+        confidence: Math.min(0.7, clampConfidence(candidate.confidence)),
+        semanticIntent: candidate.actionType,
+        reasons,
+        rejectedCandidates: [],
+        usedLocalIntentModel: false,
+        usedCloudArbitration: false,
+        semanticProvider: 'unavailable',
+        arbitrationStatus,
+        degradedReason,
+    };
+}
+
+function localDecisionFor(
+    input: ModeEventGateInput,
+    candidate: ModeEventCandidate,
+    options: LocalDecisionOptions = { allowIntentResult: true, allowLocalRule: true },
+): ModeEventGateDecision | null {
     const text = input.transcript;
     const base = {
         candidate,
         rejectedCandidates: [] as string[],
         usedLocalIntentModel: false,
         usedCloudArbitration: false,
-        arbitrationStatus: 'local_only_not_needed' as const,
+        arbitrationStatus: options.cloudFailureReason ? 'local_fallback_cloud_unavailable' as const : 'local_only_not_needed' as const,
     };
     const intent = input.intentResult?.intent;
     const intentConfidence = input.intentResult?.confidence ?? 0;
 
-    if (intentConfidence >= 0.85) {
+    if (options.allowIntentResult && intentConfidence >= 0.85) {
         const intentMatchesCandidate =
             (candidate.actionType === 'pricing_objection' && intent === 'handle_objection') ||
             (candidate.actionType === 'pricing_objection' && intent === 'sales_pricing_objection') ||
@@ -230,7 +334,14 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
             )) ||
             (candidate.actionType === 'technical_requirements' && intent === 'sales_technical_requirements') ||
             (candidate.actionType === 'technical_requirements' && intent === 'fde_integration') ||
-            (candidate.actionType === 'case_study_request' && intent === 'example_request');
+            (candidate.actionType === 'case_study_request' && intent === 'example_request') ||
+            (candidate.actionType === 'fde_discovery_probe' && intent === 'fde_discovery') ||
+            (candidate.actionType === 'fde_integration_check' && intent === 'fde_integration') ||
+            (candidate.actionType === 'fde_security_review' && intent === 'fde_security') ||
+            (candidate.actionType === 'fde_risk_blocker' && intent === 'fde_risk') ||
+            (candidate.actionType === 'fde_agent_feasibility' && intent === 'fde_agent_feasibility') ||
+            (candidate.actionType === 'fde_success_criteria' && intent === 'fde_success') ||
+            (candidate.actionType === 'fde_next_step' && intent === 'fde_next_step');
         if (intentMatchesCandidate) {
             return {
                 ...base,
@@ -238,23 +349,43 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
                 confidence: Math.max(candidate.confidence, intentConfidence),
                 semanticIntent: intent,
                 reasons: ['intent_result_confirms_candidate'],
-                usedLocalIntentModel: true,
-                semanticProvider: 'local_intent',
+                usedLocalIntentModel: input.intentResult?.source === 'local_slm',
+                semanticProvider: 'intent_result',
             };
         }
     }
 
+    const cloudUnavailableReasons = options.cloudFailureReason
+        ? [options.cloudFailureReason, 'cloud_unavailable_local_fallback']
+        : [];
+
+    if (options.allowLocalRule && candidate.actionType === 'pricing_objection' && includesAny(text, ['price list', 'pricing page', '成本数据', '价格先放一边'])) {
+        return {
+            ...base,
+            decision: 'reject',
+            confidence: 0.85,
+            semanticIntent: 'neutral_pricing_reference',
+            reasons: ['neutral_pricing_reference', ...cloudUnavailableReasons],
+            semanticProvider: 'local_rule',
+        };
+    }
+
+    if (options.allowLocalRule && candidate.actionType === 'pricing_request' && includesAny(text, ['price list', 'pricing page', '成本数据', '价格页'])) {
+        return {
+            ...base,
+            decision: 'reject',
+            confidence: 0.82,
+            semanticIntent: 'neutral_pricing_reference',
+            reasons: ['neutral_pricing_reference', ...cloudUnavailableReasons],
+            semanticProvider: 'local_rule',
+        };
+    }
+
+    if (!options.allowLocalRule || !matchesLocalFallbackEvidence(text, candidate)) {
+        return null;
+    }
+
     if (candidate.actionType === 'pricing_objection') {
-        if (includesAny(text, ['price list', 'pricing page', '成本数据', '价格先放一边'])) {
-            return {
-                ...base,
-                decision: 'reject',
-                confidence: 0.85,
-                semanticIntent: 'neutral_pricing_reference',
-                reasons: ['neutral_pricing_reference'],
-                semanticProvider: 'local_intent',
-            };
-        }
         if (includesAny(text, [
             'too expensive',
             'too pricey',
@@ -285,23 +416,13 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
                 decision: 'pass',
                 confidence: Math.max(candidate.confidence, 0.9),
                 semanticIntent: 'pricing_objection',
-                reasons: ['explicit_price_pushback'],
-                semanticProvider: 'local_intent',
+                reasons: ['explicit_price_pushback', ...cloudUnavailableReasons],
+                semanticProvider: 'local_rule',
             };
         }
     }
 
     if (candidate.actionType === 'pricing_request') {
-        if (includesAny(text, ['price list', 'pricing page', '成本数据', '价格页'])) {
-            return {
-                ...base,
-                decision: 'reject',
-                confidence: 0.82,
-                semanticIntent: 'neutral_pricing_reference',
-                reasons: ['neutral_pricing_reference'],
-                semanticProvider: 'local_intent',
-            };
-        }
         if (includesAny(text, [
             'send me pricing',
             'quote',
@@ -316,15 +437,19 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
             '给个价格',
             '方案报价',
             '商务条款',
-            '多少钱',
+            '模块多少钱',
+            '维护费多少钱',
+            '整体多少钱',
+            '全部多少钱',
+            '搞下来是多少钱',
         ])) {
             return {
                 ...base,
                 decision: 'pass',
                 confidence: Math.max(candidate.confidence, 0.88),
                 semanticIntent: 'pricing_request',
-                reasons: ['explicit_quote_or_pricing_request'],
-                semanticProvider: 'local_intent',
+                reasons: ['explicit_quote_or_pricing_request', ...cloudUnavailableReasons],
+                semanticProvider: 'local_rule',
             };
         }
     }
@@ -335,8 +460,8 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
             decision: 'pass',
             confidence: Math.max(candidate.confidence, 0.9),
             semanticIntent: 'explicit_next_step_or_contract',
-            reasons: ['explicit_next_step_or_contract'],
-            semanticProvider: 'local_intent',
+            reasons: ['explicit_next_step_or_contract', ...cloudUnavailableReasons],
+            semanticProvider: 'local_rule',
         };
     }
 
@@ -356,7 +481,6 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
         '想看案例',
         '类似客户',
         '证明材料',
-        '标杆客户',
         '落地案例',
         '实施案例',
     ])) {
@@ -365,8 +489,8 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
             decision: 'pass',
             confidence: Math.max(candidate.confidence, 0.88),
             semanticIntent: 'case_or_proof_request',
-            reasons: ['case_or_proof_request'],
-            semanticProvider: 'local_intent',
+            reasons: ['case_or_proof_request', ...cloudUnavailableReasons],
+            semanticProvider: 'local_rule',
         };
     }
 
@@ -376,12 +500,13 @@ function localDecisionFor(input: ModeEventGateInput, candidate: ModeEventCandida
             decision: 'pass',
             confidence: Math.max(candidate.confidence, 0.88),
             semanticIntent: 'technical_requirements',
-            reasons: ['technical_or_integration_need'],
-            semanticProvider: 'local_intent',
+            reasons: ['technical_or_integration_need', ...cloudUnavailableReasons],
+            semanticProvider: 'local_rule',
         };
     }
 
-    return null;
+    return localPassDecision(candidate, options.cloudFailureReason ? 'local_fallback_evidence' : 'local_rule_evidence');
+
 }
 
 function shouldUseCloud(input: ModeEventGateInput): boolean {
@@ -409,79 +534,60 @@ export class ModeEventClassifier {
     async assess(input: ModeEventGateInput): Promise<ModeEventGateDecision[]> {
         const decisions = new Map<string, ModeEventGateDecision>();
 
-        for (const candidate of input.candidates) {
-            const fastPath = candidate.fastPathEligible || FAST_PATH_ACTIONS.has(candidate.actionType);
-            const highRisk = candidate.highRisk || HIGH_RISK_ACTIONS.has(candidate.actionType);
+        const cloudCandidates: ModeEventCandidate[] = [];
 
-            if (fastPath && !highRisk) {
-                decisions.set(candidate.actionType, {
-                    candidate,
-                    decision: 'fast_path',
-                    confidence: clampConfidence(candidate.confidence),
-                    semanticIntent: candidate.actionType,
-                    reasons: ['rule_fast_path'],
-                    rejectedCandidates: [],
-                    usedLocalIntentModel: false,
-                    usedCloudArbitration: false,
-                    semanticProvider: 'rule_fast_path',
-                    arbitrationStatus: 'local_only_not_needed',
-                });
+        for (const candidate of input.candidates) {
+            const strategy = candidate.gateStrategy ?? (candidate.highRisk ? 'required' : 'optional');
+            const highRisk = candidate.riskLevel === 'high' || candidate.highRisk;
+
+            if (candidate.fastPathEligible && strategy === 'never') {
+                decisions.set(candidate.actionType, fastPathDecision(candidate));
                 continue;
             }
 
             if (highRisk && input.providerDataScopes?.transcript === false) {
+                decisions.set(candidate.actionType, degradedDecision(candidate, 'provider_scope_denied', 'local_only_by_privacy'));
                 continue;
             }
 
-            if (shouldUseCloudBeforeLocal(input, candidate) && (input.cloudClassifier || this.options.cloudClassifier)) {
+            if (strategy === 'required' || strategy === 'preferred') {
+                cloudCandidates.push(candidate);
                 continue;
             }
 
-            const localDecision = localDecisionFor(input, candidate);
-            if (localDecision) {
-                decisions.set(candidate.actionType, localDecision);
-                continue;
-            }
-
-            if (!highRisk) {
-                decisions.set(candidate.actionType, {
-                    candidate,
-                    decision: 'pass',
-                    confidence: clampConfidence(candidate.confidence),
-                    semanticIntent: candidate.actionType,
-                    reasons: ['low_risk_candidate'],
-                    rejectedCandidates: [],
-                    usedLocalIntentModel: false,
-                    usedCloudArbitration: false,
-                    semanticProvider: 'local_intent',
-                    arbitrationStatus: 'local_only_not_needed',
-                });
-            }
+            const localDecision = localDecisionFor(input, candidate, { allowIntentResult: true, allowLocalRule: true });
+            decisions.set(candidate.actionType, localDecision ?? localPassDecision(candidate, 'optional_candidate'));
         }
 
-        const unresolvedHighRisk = input.candidates.filter(candidate =>
-            (candidate.highRisk || HIGH_RISK_ACTIONS.has(candidate.actionType)) &&
-            !decisions.has(candidate.actionType)
-        );
+        const unresolvedCloudCandidates = cloudCandidates.filter(candidate => !decisions.has(candidate.actionType));
+        if (unresolvedCloudCandidates.length > 0) {
+            const cloudClassifier = input.providerDataScopes?.transcript === false
+                ? undefined
+                : input.cloudClassifier ?? this.options.cloudClassifier;
+            const validTypes = new Set(unresolvedCloudCandidates.map(candidate => candidate.actionType));
+            let cloudResults: CloudSemanticGateResult[] = [];
+            let cloudFailureReason: CloudSemanticGateFailureReason | undefined;
 
-        if (unresolvedHighRisk.length > 0) {
-            if (input.providerDataScopes?.transcript === false) {
-                for (const candidate of unresolvedHighRisk) {
-                    decisions.set(candidate.actionType, this.degraded(candidate, 'provider_scope_denied', 'local_only_by_privacy'));
-                }
-            } else if (shouldUseCloud({ ...input, candidates: unresolvedHighRisk }) && (input.cloudClassifier || this.options.cloudClassifier)) {
-                const cloudClassifier = input.cloudClassifier ?? this.options.cloudClassifier;
-                const validTypes = new Set(unresolvedHighRisk.map(candidate => candidate.actionType));
-                let cloudResults: CloudSemanticGateResult[] = [];
-                let cloudFailureReason: CloudSemanticGateFailureReason | undefined;
+            if (cloudClassifier) {
                 try {
-                    const rawCloudResults = await cloudClassifier?.({
+                    const rawCloudResults = await cloudClassifier({
                         transcript: input.transcript,
                         recentContextTurns: input.recentContextTurns ?? [],
                         modeTemplateType: input.modeTemplateType,
                         speaker: input.speaker,
-                        candidates: unresolvedHighRisk,
+                        candidates: unresolvedCloudCandidates,
                         intentResult: input.intentResult,
+                        policySummary: {
+                            modeTemplateType: input.modeTemplateType,
+                            actions: unresolvedCloudCandidates.map(candidate => ({
+                                actionType: candidate.actionType,
+                                riskLevel: candidate.riskLevel,
+                                gateStrategy: candidate.gateStrategy,
+                                requiredEvidence: candidate.requiredEvidence,
+                                localFallbackEvidence: candidate.localFallbackEvidence,
+                                allowLocalFallbackOnCloudFailure: candidate.allowLocalFallbackOnCloudFailure,
+                            })),
+                        },
                     });
                     const normalized = normalizeCloudResults(rawCloudResults, validTypes);
                     cloudResults = normalized.results;
@@ -489,48 +595,63 @@ export class ModeEventClassifier {
                 } catch (error) {
                     cloudFailureReason = cloudFailureReasonFromError(error);
                 }
-                for (const result of cloudResults ?? []) {
-                    const candidate = unresolvedHighRisk.find(item => item.actionType === result.actionType);
-                    if (!candidate) continue;
-                    decisions.set(result.actionType, {
-                        candidate,
-                        decision: result.decision,
-                        confidence: clampConfidence(result.confidence),
-                        semanticIntent: result.semanticIntent,
-                        reasons: result.reasons ?? ['cloud_semantic_confirmation'],
-                        rejectedCandidates: result.rejectedCandidates ?? [],
-                        usedLocalIntentModel: false,
-                        usedCloudArbitration: true,
-                        semanticProvider: 'cloud_llm',
-                        arbitrationStatus: 'cloud_used',
-                    });
-                }
-                for (const candidate of unresolvedHighRisk) {
-                    if (decisions.has(candidate.actionType)) continue;
-                    const fallbackDecision = localDecisionFor(input, candidate);
-                    if (fallbackDecision && (fallbackDecision.decision === 'pass' || fallbackDecision.decision === 'reject')) {
-                        const cloudUnavailableReasons = [
-                            ...(cloudFailureReason ? [cloudFailureReason] : ['cloud_semantic_gate_unavailable']),
-                            'cloud_unavailable_local_fallback',
-                        ];
-                        decisions.set(candidate.actionType, {
-                            ...fallbackDecision,
-                            reasons: [...fallbackDecision.reasons, ...cloudUnavailableReasons],
-                            arbitrationStatus: 'local_fallback_cloud_unavailable',
-                        });
-                        continue;
-                    }
-                    const reason = cloudFailureReason ?? 'cloud_semantic_gate_unavailable';
-                    decisions.set(candidate.actionType, this.degraded(candidate, reason, 'cloud_unavailable'));
-                }
             } else {
-                for (const candidate of unresolvedHighRisk) {
-                    decisions.set(candidate.actionType, this.degraded(candidate, 'local_intent_unavailable', 'local_only_not_needed'));
+                cloudFailureReason = input.providerDataScopes?.transcript === false
+                    ? 'cloud_provider_unavailable'
+                    : 'cloud_provider_unavailable';
+            }
+
+            for (const result of cloudResults) {
+                const candidate = unresolvedCloudCandidates.find(item => item.actionType === result.actionType);
+                if (!candidate) continue;
+                decisions.set(result.actionType, {
+                    candidate,
+                    decision: result.decision,
+                    confidence: clampConfidence(result.confidence),
+                    semanticIntent: result.semanticIntent,
+                    reasons: result.reasons ?? ['cloud_semantic_confirmation'],
+                    rejectedCandidates: result.rejectedCandidates ?? [],
+                    usedLocalIntentModel: false,
+                    usedCloudArbitration: true,
+                    semanticProvider: 'cloud_llm',
+                    arbitrationStatus: 'cloud_used',
+                });
+            }
+
+            for (const candidate of unresolvedCloudCandidates) {
+                if (decisions.has(candidate.actionType)) continue;
+                const reason = cloudFailureReason ?? 'cloud_provider_unavailable';
+                const fallbackDecision = localDecisionFor(input, candidate, {
+                    allowIntentResult: false,
+                    allowLocalRule: candidate.allowLocalFallbackOnCloudFailure === true,
+                    cloudFailureReason: reason,
+                });
+                if (fallbackDecision && (fallbackDecision.decision === 'pass' || fallbackDecision.decision === 'reject')) {
+                    decisions.set(candidate.actionType, {
+                        ...fallbackDecision,
+                        usedCloudArbitration: Boolean(cloudClassifier),
+                        arbitrationStatus: 'local_fallback_cloud_unavailable',
+                    });
+                    continue;
                 }
+
+                if (input.intentResult?.source === 'local_slm') {
+                    decisions.set(candidate.actionType, degradedDecision(
+                        candidate,
+                        'local_zero_shot_intent_not_authoritative',
+                        'cloud_unavailable',
+                        ['local_zero_shot_intent_not_authoritative', reason],
+                    ));
+                    continue;
+                }
+
+                decisions.set(candidate.actionType, degradedDecision(candidate, reason, 'cloud_unavailable'));
             }
         }
 
-        return input.candidates.map(candidate => decisions.get(candidate.actionType) ?? this.degraded(candidate, 'semantic_gate_unavailable', 'local_only_not_needed'));
+        return input.candidates.map(candidate =>
+            decisions.get(candidate.actionType) ?? degradedDecision(candidate, 'semantic_gate_unavailable', 'local_only_not_needed')
+        );
     }
 
     private degraded(

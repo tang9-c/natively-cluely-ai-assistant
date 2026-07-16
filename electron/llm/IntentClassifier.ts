@@ -74,10 +74,16 @@ export type ConversationIntent =
     // ===== Fallback =====
     | 'general';           // Default fallback
 
-export interface IntentResult {
+export type IntentResultSource = 'pattern' | 'cloud' | 'local_slm' | 'context';
+
+export interface RawIntentResult {
     intent: ConversationIntent;
     confidence: number;
     answerShape: string;
+}
+
+export interface IntentResult extends RawIntentResult {
+    source: IntentResultSource;
 }
 
 export interface CloudIntentClassifierInput {
@@ -100,7 +106,7 @@ export interface IntentClassificationOptions {
     cloudFirst?: boolean;
     localIntentEnhancementEnabled?: boolean;
     localIntentEnhancementAvailable?: boolean;
-    localIntentClassifier?: (text: string, modeTemplateType?: string | null) => Promise<IntentResult | null>;
+    localIntentClassifier?: (text: string, modeTemplateType?: string | null) => Promise<RawIntentResult | null>;
     customIntentKeywords?: IntentKeywordMap;
 }
 
@@ -469,7 +475,7 @@ export function detectIntentByPattern(
     lastInterviewerTurn: string,
     modeTemplateType?: string | null,
     customIntentKeywords?: IntentKeywordMap,
-): IntentResult | null {
+): RawIntentResult | null {
     const text = lastInterviewerTurn.toLowerCase().trim();
     const mode = modeTemplateType ?? 'general';
     if (customIntentKeywords) {
@@ -586,7 +592,7 @@ export function getShapeForMode(
  * the interview family and `general` mode. Exposed for unit tests and for
  * the dispatcher above.
  */
-function detectInterviewIntentByPattern(text: string): IntentResult | null {
+function detectInterviewIntentByPattern(text: string): RawIntentResult | null {
     // Clarification patterns (English + Chinese)
     // NOTE: "详细讲" is intentionally NOT here — it's the deep_dive cue. Keep
     // this list to short follow-up clarifications only.
@@ -642,10 +648,10 @@ function detectInterviewIntentByPattern(text: string): IntentResult | null {
  * Sales mode regex (English + Chinese). Order matters: more specific intents
  * are tested first so they win on overlapping inputs.
  */
-function detectSalesIntentByPattern(text: string): IntentResult | null {
+function detectSalesIntentByPattern(text: string): RawIntentResult | null {
     // 1. Buying signal — strongest purchase intent
-    if (/(ready to move|ready to sign|send (over )?(the|a) contract|let'?s move forward|next steps|finalize|sign the deal|legal review|procurement|when can we start|let'?s get started|let'?s (kick ?off|schedule)|pilot|trial)/i.test(text)
-        || /(准备签|准备推进|准备敲定|准备开始|想推进到|推进到.{0,6}(?:法务|放假).{0,4}审核|发合同|法务审核|放假审核|采购流程|下一步怎么走|下一步是|敲定|签合同|推进到|往下走|启动|试点|(?<!测)试用)/.test(text)) {
+    if (/(ready to move|ready to sign|send (over )?(the|a) contract|let'?s move forward|next steps|finalize|sign the deal|legal review|procurement|when can we start|let'?s get started|let'?s (kick ?off|schedule))/i.test(text)
+        || /(准备签|准备推进|准备敲定|准备开始|想推进到|推进到.{0,6}(?:法务|放假).{0,4}审核|发合同|法务审核|放假审核|采购流程|下一步怎么走|下一步是|下一步.{0,20}(?:法务|合同|采购|安排)|敲定|签合同|推进到)/.test(text)) {
         return { intent: 'sales_buying_signal', confidence: 0.95, answerShape: getAnswerShapeForMode('sales', 'sales_buying_signal') };
     }
     // 2. Pricing objection — price/budget pushback, not internal price-sheet references.
@@ -656,13 +662,13 @@ function detectSalesIntentByPattern(text: string): IntentResult | null {
     const industrialDiscovery = detectSalesIndustrialDiscoveryIntent(text);
     if (industrialDiscovery) return industrialDiscovery;
     if (INDUSTRIAL_DOMAIN_PATTERN.test(text)
-        && /(客户案例|成功案例|类似客户|标杆客户|参考客户|证明材料|落地案例|实施案例|ROI|投资回报|回报率|case study|customer story|customer example|similar customer|reference customer)/i.test(text)) {
+        && /(客户案例|成功案例|类似客户|参考客户|证明材料|落地案例|实施案例|ROI|投资回报|回报率|case study|customer story|customer example|similar customer|reference customer)/i.test(text)) {
         return null;
     }
 
     // 3. Proof request — case study, similar customer, or ROI proof.
     if (/(case study|customer story|customer example|reference customer|proof point|success story|similar customer|ROI|return on investment|prove the value|prove the ROI)/i.test(text)
-        || /(客户案例|成功案例|类似客户|标杆客户|参考客户|证明材料|落地案例|实施案例|ROI|投资回报|回报率|证明价值)/.test(text)) {
+        || /(客户案例|成功案例|类似客户|参考客户|证明材料|落地案例|实施案例|ROI|投资回报|回报率|证明价值|想看.{0,8}案例|有没有.{0,8}案例|能不能.{0,8}案例|分享.{0,8}案例|给.{0,8}案例)/.test(text)) {
         return { intent: 'sales_proof_request', confidence: 0.88, answerShape: getAnswerShapeForMode('sales', 'sales_proof_request') };
     }
     // 4. Technical requirements — clarify before promising capability.
@@ -673,7 +679,7 @@ function detectSalesIntentByPattern(text: string): IntentResult | null {
     // 5. Quote request — external ask for pricing/proposal/commercial terms.
     if (!/(我们的报价表|内部报价|报价表在这|等客户问再发|internal price|price sheet)/i.test(text)
         && (/(send me pricing|send pricing|send (over )?(the|a) proposal|send (over )?(the|a) quote|pricing page|quote|proposal|commercials|commercial terms|what does it cost)/i.test(text)
-            || /(发我报价|发.{0,6}报价|给.{0,6}报价|报(?:个|一下|下)价(?:格)?|给(?:我)?(?:个|一下|下)价(?:格)?|报价单|价格页|方案报价|商务条款|多少钱)/.test(text))) {
+            || /(发我报价|发.{0,6}报价|给.{0,6}报价|报(?:个|一下|下)价(?:格)?|给(?:我)?(?:个|一下|下)价(?:格)?|报价单|价格页|方案报价|商务条款|(模块|维护费|全部|整体|搞下来|系统).{0,8}多少钱)/.test(text))) {
         return { intent: 'sales_quote_request', confidence: 0.86, answerShape: getAnswerShapeForMode('sales', 'sales_quote_request') };
     }
     return null;
@@ -686,7 +692,7 @@ const INDUSTRIAL_INTEGRATION_PATTERN = /打通|集成|同步|闭环|流转|对�
 const INDUSTRIAL_VALUE_PATTERN = /效率|周期|成本|质量成本|良率|延期|审计压力|返工|停线|成功指标|评审效率/i;
 const CONTEXTUAL_PROOF_PATTERN = /Windchill ECO.{0,30}QMS CAPA.{0,30}(?:案例|客户|证明|ROI)|(?:只读 )?AI Agent.{0,40}PLM.{0,40}(?:人工确认)?.{0,30}(?:案例|客户|证明|ROI)/i;
 
-function detectSalesIndustrialDiscoveryIntent(text: string): IntentResult | null {
+function detectSalesIndustrialDiscoveryIntent(text: string): RawIntentResult | null {
     if (!INDUSTRIAL_DOMAIN_PATTERN.test(text)) return null;
 
     if (/力学仿真模块.{0,24}功能是否适合|流体仿真.{0,12}功能|介绍一下.{0,12}流体仿真.{0,12}功能/i.test(text)) {
@@ -716,7 +722,7 @@ function detectSalesIndustrialDiscoveryIntent(text: string): IntentResult | null
  * Team-meet mode regex (English + Chinese). Captures action items, decisions,
  * risks, and status updates as discrete intents.
  */
-function detectTeamMeetIntentByPattern(text: string): IntentResult | null {
+function detectTeamMeetIntentByPattern(text: string): RawIntentResult | null {
     // 1. Action item — ownership + commitment.
     // Debug session 2026-06-23: removed three overly-broad Chinese tokens that
     // were shadowing later, more-specific intents:
@@ -754,7 +760,7 @@ function detectTeamMeetIntentByPattern(text: string): IntentResult | null {
  * Lecture mode regex (English + Chinese). Detects concept introduction,
  * formula rendering, and class questions.
  */
-function detectLectureIntentByPattern(text: string): IntentResult | null {
+function detectLectureIntentByPattern(text: string): RawIntentResult | null {
     // 1. Concept introduction
     if (/(this is (called|known as)|the (concept|principle|idea) of|by definition|definition of|introducing|let'?s define|we define|theorem of|principle of|the (term|word) .* means|recall that .* (means|is))/i.test(text)
         || /(这个叫|叫做|所谓的|定义为|引入|概念是|这个概念|.*的概念|术语|.*的意思是|.*的含义|.*的定义|定理|原理|原则)/.test(text)) {
@@ -773,7 +779,7 @@ function detectLectureIntentByPattern(text: string): IntentResult | null {
     return null;
 }
 
-function detectFdeIntentByPattern(text: string): IntentResult | null {
+function detectFdeIntentByPattern(text: string): RawIntentResult | null {
     if (/(PLM|QMS|ERP|MES|document system|Windchill).*(data direction|read[- ]?write|read[- ]?only|write[- ]?back|role|permission|environment|sandbox|production|integration)/i.test(text)
         || /(ERP|MES|PLM|QMS|文档系统|Windchill).*(数据方向|读写边界|只读|写回|角色|权限|环境|沙盒|生产环境|测试环境|集成|打通)/i.test(text)) {
         return { intent: 'fde_integration', confidence: 0.9, answerShape: getAnswerShapeForMode('fde', 'fde_integration') };
@@ -814,7 +820,7 @@ function detectFdeIntentByPattern(text: string): IntentResult | null {
  * perspective. Falls back to the interview regex for behavioral / follow-up /
  * clarification signals.
  */
-function detectRecruitingIntentByPattern(text: string): IntentResult | null {
+function detectRecruitingIntentByPattern(text: string): RawIntentResult | null {
     // Request example from candidate
     if (/(can you give (me )?a (specific )?example|walk me through (a specific|specifically)|do you have an example|a concrete example|for instance|what'?s a time when|how did you (handle|approach|decide))/i.test(text)
         || /(举一个.{0,5}例子|讲一个.{0,5}例子|举.{0,3}例子|讲.{0,3}例子|具体例子|具体说说|能不能举例|你能不能.*举|讲讲你当时怎么|你怎么处理的|怎么决定的|讲个.{0,3}例子|给我一个例子)/.test(text)) {
@@ -835,7 +841,7 @@ function detectIntentByContext(
     recentTranscript: string,
     assistantMessageCount: number,
     modeTemplateType?: string | null,
-): IntentResult {
+): RawIntentResult {
     // If we've given multiple answers and interviewer is probing, likely follow_up
     if (assistantMessageCount >= 2) {
         // Check if interviewer is drilling down
@@ -910,12 +916,16 @@ function extractLightweightEntities(text: string): string[] {
     return Array.from(entities);
 }
 
+function withIntentSource(result: RawIntentResult, source: IntentResultSource): IntentResult {
+    return Object.assign({}, result, { source });
+}
+
 async function classifyWithCloudFallback(
     latestTurn: string,
     recentTranscript: string,
     modeTemplateType: string | null | undefined,
     options: IntentClassificationOptions,
-): Promise<IntentResult | null> {
+): Promise<RawIntentResult | null> {
     if (!options.cloudIntentClassifier) return null;
     if (options.providerDataScopes?.transcript === false) return null;
     const language = isPrimarilyChinese(latestTurn) ? 'zh' : 'en';
@@ -978,20 +988,20 @@ export async function classifyIntent(
         if (options.cloudFirst === true) {
             const cloudFirstResult = await classifyWithCloudFallback(lastInterviewerTurn, recentTranscript, modeTemplateType, options);
             if (cloudFirstResult) {
-                return cloudFirstResult;
+                return withIntentSource(cloudFirstResult, 'cloud');
             }
         }
 
         const patternResult = detectIntentByPattern(lastInterviewerTurn, modeTemplateType, options.customIntentKeywords);
         if (patternResult) {
-            return patternResult;
+            return withIntentSource(patternResult, 'pattern');
         }
 
         // Tier 2: Cloud intent fallback for Chinese low-confidence turns.
         if (options.cloudFirst !== true) {
             const cloudResult = await classifyWithCloudFallback(lastInterviewerTurn, recentTranscript, modeTemplateType, options);
             if (cloudResult) {
-                return cloudResult;
+                return withIntentSource(cloudResult, 'cloud');
             }
         }
 
@@ -1002,14 +1012,14 @@ export async function classifyIntent(
             if (options.localIntentEnhancementEnabled === true && options.localIntentEnhancementAvailable === true) {
                 const slmResult = await localClassifier(lastInterviewerTurn, modeTemplateType);
                 if (slmResult) {
-                    return slmResult;
+                    return withIntentSource(slmResult, 'local_slm');
                 }
             }
         }
     }
 
     // Tier 4: Fall back to context-based heuristic
-    return detectIntentByContext(recentTranscript, assistantMessageCount, modeTemplateType);
+    return withIntentSource(detectIntentByContext(recentTranscript, assistantMessageCount, modeTemplateType), 'context');
 }
 
 /**
