@@ -1,0 +1,271 @@
+# Aggregate distributable artifacts from the manual build-* workflows into a
+# single draft GitHub Release.
+#
+# Trigger: workflow_run on completion of any of the three build workflows.
+# Concurrency is keyed on the commit SHA so all three architectures settle
+# into the same release.
+#
+# Tag format: v<package.json#version>-sha-<short-sha>, e.g. v2.7.0-sha-12c69499.
+# Maintainers review and publish the draft from https://github.com/<owner>/<repo>/releases.
+
+name: Release Publish
+
+on:
+  workflow_run:
+    workflows:
+      - Build Intel Mac
+      - Build ARM64 Mac
+      - Build Windows x64
+    types:
+      - completed
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    name: Publish draft release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    concurrency:
+      group: release-publish-${{ github.event.workflow_run.head_sha }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Skip when triggering build did not succeed
+        if: github.event.workflow_run.conclusion != 'success'
+        run: |
+          echo "Triggering workflow '${{ github.event.workflow_run.name }}' finished with '${{ github.event.workflow_run.conclusion }}' — skipping release publish."
+          exit 0
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Compute release tag from package.json + commit SHA
+        id: tag
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          SHA_SHORT="${HEAD_SHA::7}"
+          TAG="v${VERSION}-sha-${SHA_SHORT}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Computed release tag: ${TAG}"
+
+      - name: Resolve workflow IDs by display name
+        id: workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Look up the workflow file IDs for each build workflow so subsequent
+          # steps can query runs per workflow instead of filtering the full list.
+          build_json="$(gh api "repos/${REPO}/actions/workflows" --jq '
+            [.workflows[]
+              | select(.name == "Build Intel Mac"
+                     or .name == "Build ARM64 Mac"
+                     or .name == "Build Windows x64")
+              | {id: .id, name: .name}]
+          ')"
+          echo "${build_json}" | jq -c '.[]' | while read -r row; do
+            wf_id=$(echo "${row}" | jq -r '.id')
+            wf_name=$(echo "${row}" | jq -r '.name')
+            echo "${wf_name}=${wf_id}" >> "$GITHUB_OUTPUT"
+          done
+          echo "Resolved workflows:"
+          cat "$GITHUB_OUTPUT" | grep -E '^Build ' || true
+
+      - name: Wait for all expected builds to settle at this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # Build a "<wf_id>=<wf_name>" map from prior step outputs.
+          declare -A WF_IDS
+          while IFS='=' read -r key value; do
+            WF_IDS["${key}"]="${value}"
+          done < <(echo "${{ steps.workflows.outputs.* }}" | tr ' ' '\n' | grep -E '^Build ' || true)
+
+          if [ "${#WF_IDS[@]}" -eq 0 ]; then
+            echo "No build workflows resolved; aborting."
+            exit 0
+          fi
+
+          # Poll up to 50 × 30s = 25 minutes for all expected builds.
+          for attempt in $(seq 1 50); do
+            all_done=true
+            any_failed=false
+            status_lines=()
+            for wf_name in "${!WF_IDS[@]}"; do
+              wf_id="${WF_IDS[${wf_name}]}"
+              result=$(gh api "repos/${REPO}/actions/workflows/${wf_id}/runs?head_sha=${HEAD_SHA}&per_page=1" \
+                --jq '.workflow_runs[0] | "\(.status)|\(.conclusion)"' 2>/dev/null || echo "|")
+              status="${result%%|*}"
+              conclusion="${result##*|}"
+              status_lines+=("  ${wf_name}: status=${status} conclusion=${conclusion}")
+              if [ "${status}" != "completed" ]; then
+                all_done=false
+              elif [ "${conclusion}" != "success" ]; then
+                any_failed=true
+              fi
+            done
+
+            echo "[poll ${attempt}]"
+            printf '%s\n' "${status_lines[@]}"
+
+            if [ "${all_done}" = "true" ]; then
+              if [ "${any_failed}" = "true" ]; then
+                echo "At least one build did not succeed; will still attempt to publish whatever artifacts succeeded."
+              fi
+              break
+            fi
+
+            if [ "${attempt}" -eq 50 ]; then
+              echo "Timed out waiting for sibling builds; aborting."
+              exit 0
+            fi
+            sleep 30
+          done
+
+      - name: Discover successful build runs and their artifact names
+        id: builds
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # Map of workflow display name → artifact name prefix.
+          # Keep in sync with .github/workflows/build-*.yml upload-artifact names.
+          declare -A ARTIFACT_PREFIX=(
+            ["Build Intel Mac"]="cueup-intel-mac-"
+            ["Build ARM64 Mac"]="cueup-arm64-mac-"
+            ["Build Windows x64"]="cueup-windows-x64-"
+          )
+
+          outputs_json='{"builds":[]}'
+          for wf_name in "${!ARTIFACT_PREFIX[@]}"; do
+            prefix="${ARTIFACT_PREFIX[${wf_name}]}"
+            run_id=$(gh api "repos/${REPO}/actions/runs?head_sha=${HEAD_SHA}&status=completed&conclusion=success&per_page=100" \
+              --jq ".workflow_runs[] | select(.name == \"${wf_name}\") | .id" | head -n1)
+            if [ -z "${run_id}" ] || [ "${run_id}" = "null" ]; then
+              echo "${wf_name}: no successful run at this SHA, skipping"
+              continue
+            fi
+            echo "${wf_name}: run_id=${run_id} prefix=${prefix}"
+            outputs_json=$(echo "${outputs_json}" | jq \
+              --arg name "${wf_name}" \
+              --argjson run_id "${run_id}" \
+              --arg prefix "${prefix}" \
+              '.builds += [{name: $name, run_id: $run_id, artifact_prefix: $prefix}]')
+          done
+
+          echo "${outputs_json}" | jq -c '.builds' > /tmp/builds.json
+          echo "builds_json<<EOF" >> "$GITHUB_OUTPUT"
+          cat /tmp/builds.json >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+          count=$(jq 'length' /tmp/builds.json)
+          echo "builds_count=${count}" >> "$GITHUB_OUTPUT"
+          if [ "${count}" -eq 0 ]; then
+            echo "::error::No successful build runs found at SHA ${HEAD_SHA}; nothing to publish."
+            exit 1
+          fi
+
+      - name: Download distributable artifacts from each successful run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p artifacts
+          jq -c '.[]' /tmp/builds.json | while read -r row; do
+            wf_name=$(echo "${row}" | jq -r '.name')
+            run_id=$(echo "${row}" | jq -r '.run_id')
+            prefix=$(echo "${row}" | jq -r '.artifact_prefix')
+            safe_dir=$(echo "${wf_name}" | tr ' ' '-')
+            target="artifacts/${safe_dir}"
+            mkdir -p "${target}"
+            echo "::group::Downloading artifacts for ${wf_name} (run ${run_id})"
+            gh run download "${run_id}" --dir "${target}" --pattern "${prefix}*" || {
+              echo "::warning::gh run download failed for ${wf_name}; will retry with broader pattern"
+              gh run download "${run_id}" --dir "${target}"
+            }
+            echo "::endgroup::"
+          done
+
+          echo "Downloaded artifact tree:"
+          find artifacts -type f -printf '  %p (%s bytes)\n' | sort
+
+      - name: Compose release body from RELEASE_TEMPLATE + commit info
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          template=".github/RELEASE_TEMPLATE.md"
+          if [ -f "${template}" ]; then
+            {
+              cat "${template}"
+              echo ""
+              echo "## Architectures in this release"
+              jq -r '.[].name' /tmp/builds.json | sed 's/^/- /'
+              echo ""
+              echo "## Source"
+              echo "Commit: \`${HEAD_SHA}\` — https://github.com/${REPO}/commit/${HEAD_SHA}"
+            } > /tmp/release-body.md
+          else
+            {
+              echo "## Source"
+              echo "Commit: \`${HEAD_SHA}\` — https://github.com/${REPO}/commit/${HEAD_SHA}"
+              echo ""
+              echo "## Architectures"
+              jq -r '.[].name' /tmp/builds.json | sed 's/^/- /'
+            } > /tmp/release-body.md
+          fi
+          echo "Release body preview:"
+          head -40 /tmp/release-body.md
+
+      - name: Skip if draft release already exists for this tag
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          if gh release view "${tag}" > /dev/null 2>&1; then
+            echo "Release ${tag} already exists; skipping creation."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload artifacts to a new draft release
+        if: steps.existing.outputs.exists != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          draft: true
+          generate_release_notes: false
+          body_path: /tmp/release-body.md
+          fail_on_unmatched_files: false
+          files: |
+            artifacts/Build-Intel-Mac/release/*.zip
+            artifacts/Build-Intel-Mac/release/*.dmg
+            artifacts/Build-Intel-Mac/release/*.blockmap
+            artifacts/Build-Intel-Mac/release/latest-mac.yml
+            artifacts/Build-Intel-Mac/release/OPEN-UNSIGNED-CUEUP-MAC.sh
+            artifacts/Build-Intel-Mac/release/INSTALL-UNSIGNED-MACOS.txt
+            artifacts/Build-Intel-Mac/release/size-report.txt
+            artifacts/Build-ARM64-Mac/release/*arm64*.zip
+            artifacts/Build-ARM64-Mac/release/*arm64*.dmg
+            artifacts/Build-ARM64-Mac/release/*arm64*.blockmap
+            artifacts/Build-ARM64-Mac/release/latest-mac.yml
+            artifacts/Build-ARM64-Mac/release/OPEN-UNSIGNED-CUEUP-MAC.sh
+            artifacts/Build-ARM64-Mac/release/INSTALL-UNSIGNED-MACOS.txt
+            artifacts/Build-ARM64-Mac/release/size-report.txt
+            artifacts/Build-Windows-x64/release/*.exe
+            artifacts/Build-Windows-x64/release/*.blockmap
+            artifacts/Build-Windows-x64/release/latest.yml
+            artifacts/Build-Windows-x64/release/size-report.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

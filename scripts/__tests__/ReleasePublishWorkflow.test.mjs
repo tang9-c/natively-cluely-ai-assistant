@@ -1,0 +1,119 @@
+import assert from 'node:assert/strict';
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import test from 'node:test';
+
+const repoRoot = process.cwd();
+
+function readWorkflow() {
+  const path = join(repoRoot, '.github', 'workflows', 'release-publish.yml');
+  if (!existsSync(path)) {
+    throw new Error(`Expected workflow file to exist at ${path}`);
+  }
+  return readFileSync(path, 'utf8');
+}
+
+test('release-publish workflow exists and is well-formed', () => {
+  const wf = readWorkflow();
+
+  assert.match(wf, /^name:\s*Release Publish$/m, 'workflow must declare name "Release Publish"');
+
+  // Trigger: workflow_run listening to the three build workflows.
+  assert.match(wf, /on:\s*\n\s*workflow_run:/m, 'workflow must trigger on workflow_run');
+  assert.match(wf, /\bworkflows:\s*\n(?:\s+-\s+[^\n]+\n)+/m);
+  assert.match(wf, /^\s*-\s+Build Intel Mac\s*$/m);
+  assert.match(wf, /^\s*-\s+Build ARM64 Mac\s*$/m);
+  assert.match(wf, /^\s*-\s+Build Windows x64\s*$/m);
+  assert.match(wf, /types:\s*\n\s*-\s*completed/m);
+
+  // Permissions required to create releases and query workflow runs.
+  assert.match(wf, /contents:\s*write/);
+  assert.match(wf, /actions:\s*read/);
+});
+
+test('release-publish workflow aggregates builds per commit SHA and creates a draft', () => {
+  const wf = readWorkflow();
+
+  // Concurrency group must be keyed on the head SHA so concurrent builds converge.
+  assert.match(
+    wf,
+    /concurrency:\s*\n\s*group:\s*release-publish-\$\{\{\s*github\.event\.workflow_run\.head_sha\s*\}\}/m,
+    'concurrency group must be keyed on the triggering commit SHA'
+  );
+  assert.match(
+    wf,
+    /cancel-in-progress:\s*false/,
+    'cancel-in-progress must be false so all sibling builds can finish'
+  );
+
+  // Tag derivation must use package.json version + short SHA, format v<X>-sha-<7>.
+  assert.match(wf, /require\(['"]\.\/package\.json['"]\)/);
+  assert.match(wf, /\$\{HEAD_SHA::7\}/);
+  assert.match(wf, /TAG="v\$\{VERSION\}-sha-\$\{SHA_SHORT\}"/);
+
+  // Polling step must wait for all sibling builds before downloading.
+  assert.match(wf, /Wait for all expected builds to settle/);
+  assert.match(
+    wf,
+    /actions\/workflows\/\$\{wf_id\}\/runs\?head_sha=\$\{HEAD_SHA\}&per_page=1/
+  );
+
+  // Must download artifacts by workflow display name and prefix.
+  assert.match(wf, /gh run download/);
+  assert.match(wf, /cueup-intel-mac-/);
+  assert.match(wf, /cueup-arm64-mac-/);
+  assert.match(wf, /cueup-windows-x64-/);
+
+  // Must skip when a build did not succeed.
+  assert.match(wf, /Skip when triggering build did not succeed/);
+
+  // Idempotency check before creating a release.
+  assert.match(wf, /Skip if draft release already exists for this tag/);
+  assert.match(wf, /gh release view/);
+
+  // Must publish a DRAFT release via softprops/action-gh-release.
+  assert.match(wf, /softprops\/action-gh-release@v2/);
+  assert.match(wf, /draft:\s*true/);
+  assert.match(wf, /tag_name:\s*\$\{\{\s*steps\.tag\.outputs\.tag\s*\}\}/);
+
+  // Must upload the canonical release artifacts.
+  for (const pattern of [
+    'artifacts/Build-Intel-Mac/release/*.zip',
+    'artifacts/Build-Intel-Mac/release/*.dmg',
+    'artifacts/Build-Intel-Mac/release/OPEN-UNSIGNED-CUEUP-MAC.sh',
+    'artifacts/Build-ARM64-Mac/release/*arm64*.zip',
+    'artifacts/Build-ARM64-Mac/release/*arm64*.dmg',
+    'artifacts/Build-Windows-x64/release/*.exe',
+    'artifacts/Build-Windows-x64/release/latest.yml',
+  ]) {
+    assert.ok(wf.includes(pattern), `Expected release upload to include pattern: ${pattern}`);
+  }
+
+  // Fail-on-unmatched must be off: a missing architecture should still produce
+  // a partial release rather than failing the whole publish.
+  assert.match(wf, /fail_on_unmatched_files:\s*false/);
+});
+
+test('release-publish workflow does not modify the per-arch build workflows', () => {
+  const wf = readWorkflow();
+
+  // Must not change build-* workflow files — those are protected by their own tests.
+  for (const forbidden of [
+    'build-intel-mac.yml',
+    'build-arm64-mac.yml',
+    'build-windows-x64.yml',
+  ]) {
+    assert.ok(
+      !wf.includes(forbidden),
+      `release-publish.yml must not reference ${forbidden}; build workflows are owned by MacX64NativeSmoke and WindowsX64BuildWorkflow tests`
+    );
+  }
+
+  // Must keep electron-builder in --publish never mode across the board.
+  for (const forbidden of [
+    '--publish always',
+    '--publish onTagOrDraft',
+  ]) {
+    assert.ok(!wf.includes(forbidden), `release-publish.yml must not switch to ${forbidden}`);
+  }
+});
