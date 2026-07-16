@@ -91,13 +91,16 @@ test('product-path evaluator fails fixtures contaminated by microphone rows with
   const diagnostics = path.join(fixture.root, 'diagnostics.jsonl');
   const outputDir = path.join(fixture.root, 'reports');
   fs.writeFileSync(referenceReport, JSON.stringify({ referenceText: 'system audio' }));
-  fs.writeFileSync(runManifest, JSON.stringify([{
-    entry: 'sales-real-002',
-    meetingId: 'meeting-2',
-    clipSha256: 'clip',
-    referenceReport,
-    referenceWindowId: 'window-1',
-  }]));
+  fs.writeFileSync(runManifest, JSON.stringify({
+    createdAt: new Date(0).toISOString(),
+    entries: [{
+      entry: 'sales-real-002',
+      meetingId: 'meeting-2',
+      clipSha256: 'clip',
+      referenceReport,
+      referenceWindowId: 'window-1',
+    }],
+  }));
   fs.writeFileSync(expectations, JSON.stringify([{
     entry: 'sales-real-002',
     modeTemplateType: 'sales',

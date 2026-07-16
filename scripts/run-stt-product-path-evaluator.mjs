@@ -3,7 +3,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import Database from 'better-sqlite3';
 import {
   calculateEditBreakdown,
 } from './stt-benchmark/referenceQuality.mjs';
@@ -88,6 +87,12 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
+function normalizeRunManifest(value) {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.entries)) return value.entries;
+  throw new Error('Run manifest must be an array or an object with an entries array');
+}
+
 function readDiagnostics(filePath) {
   if (!fs.existsSync(filePath)) return [];
   return fs.readFileSync(filePath, 'utf8')
@@ -120,13 +125,15 @@ export async function evaluateProductPath(opts) {
     throw new Error('Missing isolated user-data marker');
   }
   const dbPath = path.join(userDataDir, 'natively.db');
-  const runManifest = readJson(opts.runManifest);
+  const runManifest = normalizeRunManifest(readJson(opts.runManifest));
   const expectations = new Map(readJson(opts.expectationsManifest).map(entry => [entry.entry, entry]));
   const diagnostics = readDiagnostics(opts.diagnosticsJsonl);
   const uploadDiagnostics = diagnostics.filter(item => item.code === 'rest_stt_upload_diagnostics');
   const mappings = diagnostics.filter(item => item.code === 'stt_quality_meeting_mapping');
   const mappingByMeeting = new Map(mappings.map(item => [item.meetingId, item.runtimeSessionId]));
-  const db = opts.transcriptRowsByMeeting ? null : new Database(dbPath, { readonly: true, fileMustExist: true });
+  const db = opts.transcriptRowsByMeeting
+    ? null
+    : new (await import('better-sqlite3')).default(dbPath, { readonly: true, fileMustExist: true });
   const { assessDynamicActionTranscriptRows } = await loadDynamicActionHelper();
   const entries = [];
 
