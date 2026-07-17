@@ -188,7 +188,7 @@ test('Dispatching open-research-panel opens the ResearchPanel overlay', async ({
 ```
 
 **根因**:`scripts/test-doubao-auc-real.mjs` 调用原始 `openspeech-direct.zijieapi.com` 端点,需要真实 Doubao AUC key(火山引擎后台开通)。
-**QCLOUD key(`sk-z08O...`)不兼容**此端点,QCLOUD key 工作的端点是 `aigw.feigenbaum.com.cn/v1/doubao/audio/auc/*`(新方案 v8)。
+**QCLOUD key(`sk-z08O...`)不兼容**此端点,QCLOUD key 工作的端点是 `obzbovrjewzd.sealosbja.site/v1/doubao/audio/auc/*`(新方案 v8)。
 
 **这是环境配置问题,不是代码 Bug。**
 

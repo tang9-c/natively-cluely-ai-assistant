@@ -1,4 +1,4 @@
-export const QCLOUD_LLM_BASE_URL = "https://aigw.feigenbaum.com.cn";
+export const QCLOUD_LLM_BASE_URL = "https://obzbovrjewzd.sealosbja.site";
 export const QCLOUD_CHAT_MODEL = "lite32k";
 export const QCLOUD_DEFAULT_OUTPUT_TOKENS = 8_192;
 export const QCLOUD_PPTX_ENHANCE_OUTPUT_TOKENS = 2_048;
