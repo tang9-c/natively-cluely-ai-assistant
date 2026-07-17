@@ -130,6 +130,33 @@ test('release-publish workflow avoids the steps.outputs.* subshell bug', () => {
   );
 });
 
+test('release-publish workflow indexes /tmp/builds.json by .builds[]', () => {
+  // /tmp/builds.json is written as {"builds":[{name,run_id,artifact_prefix},...]}.
+  // A naive `jq '.[]'` iterates over the top-level object's keys (a single
+  // array value) and tries to index that array with .name/.run_id, producing
+  // `jq: error: Cannot index array with string "name"`. Every READ of
+  // /tmp/builds.json must therefore use `.builds[]` (or `.builds | length`).
+  // The WRITE line `jq -n '{builds: []}' > /tmp/builds.json` is exempt — it
+  // creates the file and does not read it.
+  const wf = readWorkflow();
+
+  // Match reads only: `jq ... /tmp/builds.json` where the file is the final
+  // argument (not redirected-to). The redirect-to form starts with `>`.
+  const readCalls = wf.match(/jq[^\n>]*\/tmp\/builds\.json/g) || [];
+  assert.ok(readCalls.length >= 3, `expected at least 3 reads of /tmp/builds.json, found ${readCalls.length}: ${readCalls.join(' | ')}`);
+
+  for (const call of readCalls) {
+    assert.ok(
+      /\.builds\b/.test(call),
+      `read of /tmp/builds.json must reference .builds (offender: ${call})`,
+    );
+  }
+
+  // Spot-check the specific failure modes we have already seen in production.
+  assert.match(wf, /jq -c '\.builds\[\]' \/tmp\/builds\.json/, 'download step must iterate .builds[]');
+  assert.match(wf, /jq -r '\.builds\[\]\.name' \/tmp\/builds\.json/, 'compose step must list .builds[].name');
+});
+
 test('release-publish workflow does not modify the per-arch build workflows', () => {
   const wf = readWorkflow();
 

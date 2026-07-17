@@ -174,7 +174,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p artifacts
-          jq -c '.[]' /tmp/builds.json | while read -r row; do
+          # /tmp/builds.json shape is {"builds":[{name,run_id,artifact_prefix},...]} —
+          # iterate the inner array, not the top-level object keys.
+          jq -c '.builds[]' /tmp/builds.json | while read -r row; do
             wf_name=$(echo "${row}" | jq -r '.name')
             run_id=$(echo "${row}" | jq -r '.run_id')
             prefix=$(echo "${row}" | jq -r '.artifact_prefix')
@@ -203,7 +205,7 @@ jobs:
               cat "${template}"
               echo ""
               echo "## Architectures in this release"
-              jq -r '.[].name' /tmp/builds.json | sed 's/^/- /'
+              jq -r '.builds[].name' /tmp/builds.json | sed 's/^/- /'
               echo ""
               echo "## Source"
               echo "Commit: \`${HEAD_SHA}\` — https://github.com/${REPO}/commit/${HEAD_SHA}"
@@ -214,7 +216,7 @@ jobs:
               echo "Commit: \`${HEAD_SHA}\` — https://github.com/${REPO}/commit/${HEAD_SHA}"
               echo ""
               echo "## Architectures"
-              jq -r '.[].name' /tmp/builds.json | sed 's/^/- /'
+              jq -r '.builds[].name' /tmp/builds.json | sed 's/^/- /'
             } > /tmp/release-body.md
           fi
           echo "Release body preview:"
