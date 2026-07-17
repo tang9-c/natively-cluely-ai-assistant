@@ -79,14 +79,17 @@ jobs:
           echo "Resolved ${count} build workflows:"
           jq -r '.[] | "  \(.name) -> id=\(.id)"' /tmp/wf_ids.json
 
-          # Poll up to 50 × 30s = 25 minutes for all expected builds.
+          # Poll up to 50 × 30s = 25 minutes for sibling builds that are still running.
+          # A workflow that has NO runs at this SHA (status=null) is treated as
+          # "not part of this release" and skipped — release-publish should
+          # happily aggregate whichever architectures were actually built, rather
+          # than block forever waiting for builds that were never triggered.
           for attempt in $(seq 1 50); do
             all_done=true
             any_failed=false
+            any_in_flight=false
             status_lines=()
 
-            # Process substitution keeps the while loop in the main shell so
-            # writes to the script's local variables survive.
             while IFS= read -r row; do
               wf_id=$(echo "${row}" | jq -r '.id')
               wf_name=$(echo "${row}" | jq -r '.name')
@@ -95,10 +98,19 @@ jobs:
               status="${result%%|*}"
               conclusion="${result##*|}"
               status_lines+=("  ${wf_name}: status=${status} conclusion=${conclusion}")
-              if [ "${status}" != "completed" ]; then
+
+              if [ "${status}" = "null" ] || [ -z "${status}" ]; then
+                # No runs at this SHA — this workflow simply isn't part of
+                # this release. Do not block waiting for it.
+                :
+              elif [ "${status}" = "completed" ]; then
+                if [ "${conclusion}" != "success" ]; then
+                  any_failed=true
+                fi
+              else
+                # in_progress / queued / requested / waiting / pending
                 all_done=false
-              elif [ "${conclusion}" != "success" ]; then
-                any_failed=true
+                any_in_flight=true
               fi
             done < <(jq -c '.[]' /tmp/wf_ids.json)
 
@@ -107,13 +119,16 @@ jobs:
 
             if [ "${all_done}" = "true" ]; then
               if [ "${any_failed}" = "true" ]; then
-                echo "At least one build did not succeed; will still attempt to publish whatever artifacts succeeded."
+                echo "At least one in-flight build did not succeed; will still attempt to publish whatever artifacts succeeded."
+              fi
+              if [ "${any_in_flight}" = "false" ]; then
+                echo "No runs exist for some architectures at this SHA; publishing whatever is available."
               fi
               break
             fi
 
             if [ "${attempt}" -eq 50 ]; then
-              echo "Timed out waiting for sibling builds; aborting."
+              echo "Timed out waiting for in-flight builds; aborting."
               exit 0
             fi
             sleep 30

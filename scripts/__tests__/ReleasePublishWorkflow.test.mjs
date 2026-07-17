@@ -157,6 +157,42 @@ test('release-publish workflow indexes /tmp/builds.json by .builds[]', () => {
   assert.match(wf, /jq -r '\.builds\[\]\.name' \/tmp\/builds\.json/, 'compose step must list .builds[].name');
 });
 
+test('release-publish polling treats "no runs at SHA" as "skip", not "wait"', () => {
+  // Regression guard: when release-publish is triggered by Windows x64 but
+  // the user never ran Intel/ARM64 Mac at this SHA, the API returns
+  // status=null for those workflows. The polling loop used to treat null as
+  // "still running" and block for the full 15-minute job timeout, producing
+  // `Error: The operation was canceled`. It must instead publish whatever
+  // is available and skip architectures that were never built.
+  const wf = readWorkflow();
+
+  // The polling step must explicitly check for the null/empty case before
+  // the `status != "completed"` branch. We check for the three key tokens
+  // that prove the guard exists, rather than a brittle single regex that
+  // breaks when shell whitespace shifts.
+  assert.ok(
+    wf.includes('"${status}" = "null"'),
+    'polling step must compare status against the literal string "null"',
+  );
+  assert.ok(
+    wf.includes('-z "${status}"'),
+    'polling step must also defend against an empty status string',
+  );
+  assert.match(
+    wf,
+    /elif \[\s*"\${status}" = "completed" \]/,
+    'polling step must branch on status="completed" as a distinct case',
+  );
+
+  // The wording around "no runs" / "publishing whatever is available" must be
+  // present so users can read the run log and understand why a subset was published.
+  assert.match(
+    wf,
+    /No runs exist for some architectures at this SHA; publishing whatever is available/,
+    'polling step must log a human-readable explanation when some architectures are missing',
+  );
+});
+
 test('release-publish workflow does not modify the per-arch build workflows', () => {
   const wf = readWorkflow();
 
