@@ -83,13 +83,13 @@ test('release-publish workflow aggregates builds per commit SHA and creates a dr
 
   // Must upload the canonical release artifacts.
   for (const pattern of [
-    'artifacts/Build-Intel-Mac/release/*.zip',
-    'artifacts/Build-Intel-Mac/release/*.dmg',
-    'artifacts/Build-Intel-Mac/release/OPEN-UNSIGNED-CUEUP-MAC.sh',
-    'artifacts/Build-ARM64-Mac/release/*arm64*.zip',
-    'artifacts/Build-ARM64-Mac/release/*arm64*.dmg',
-    'artifacts/Build-Windows-x64/release/*.exe',
-    'artifacts/Build-Windows-x64/release/latest.yml',
+    'artifacts/Build-Intel-Mac/cueup-intel-mac-*/*.zip',
+    'artifacts/Build-Intel-Mac/cueup-intel-mac-*/*.dmg',
+    'artifacts/Build-Intel-Mac/cueup-intel-mac-*/OPEN-UNSIGNED-CUEUP-MAC.sh',
+    'artifacts/Build-ARM64-Mac/cueup-arm64-mac-*/*arm64*.zip',
+    'artifacts/Build-ARM64-Mac/cueup-arm64-mac-*/*arm64*.dmg',
+    'artifacts/Build-Windows-x64/cueup-windows-x64-*/*.exe',
+    'artifacts/Build-Windows-x64/cueup-windows-x64-*/latest.yml',
   ]) {
     assert.ok(wf.includes(pattern), `Expected release upload to include pattern: ${pattern}`);
   }
@@ -97,6 +97,37 @@ test('release-publish workflow aggregates builds per commit SHA and creates a dr
   // Fail-on-unmatched must be off: a missing architecture should still produce
   // a partial release rather than failing the whole publish.
   assert.match(wf, /fail_on_unmatched_files:\s*false/);
+});
+
+test('release-publish upload globs match gh run download artifact directories', () => {
+  // Regression guard: `gh run download --dir artifacts/Build-Windows-x64
+  // --pattern cueup-windows-x64-*` extracts files under an artifact-name
+  // directory, for example:
+  // artifacts/Build-Windows-x64/cueup-windows-x64-29580681109/CueUp-Setup-2.7.0.exe
+  //
+  // The workflow used to upload artifacts/Build-Windows-x64/release/*.exe,
+  // which matched nothing and created an empty draft release.
+  const wf = readWorkflow();
+
+  assert.ok(
+    wf.includes('artifacts/Build-Windows-x64/cueup-windows-x64-*/*.exe'),
+    'Windows release upload must match the artifact-name directory created by gh run download',
+  );
+  assert.ok(
+    wf.includes('artifacts/Build-Intel-Mac/cueup-intel-mac-*/*.dmg'),
+    'Intel Mac release upload must match the artifact-name directory created by gh run download',
+  );
+  assert.ok(
+    wf.includes('artifacts/Build-ARM64-Mac/cueup-arm64-mac-*/*arm64*.dmg'),
+    'ARM64 Mac release upload must match the artifact-name directory created by gh run download',
+  );
+
+  const staleReleaseSubdirGlobs = wf.match(/artifacts\/Build-[^\n]+\/release\/[^\n]+/g) || [];
+  assert.deepEqual(
+    staleReleaseSubdirGlobs,
+    [],
+    `release upload globs must not target stale release/ subdirectories: ${staleReleaseSubdirGlobs.join(', ')}`,
+  );
 });
 
 test('release-publish workflow avoids the steps.outputs.* subshell bug', () => {
