@@ -19,6 +19,10 @@ function loudPcm(bytes = 12000) {
   return buffer;
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 class FakeSenseVoiceWorker extends EventEmitter {
   constructor({ text = '你好，欢迎参加会议。', delayMs = 0 } = {}) {
     super();
@@ -189,6 +193,53 @@ test('LocalSenseVoiceSTT keeps normal Chinese and mixed business transcript text
   ]);
 });
 
+describe('LocalSenseVoiceSTT — VAD flush timing', () => {
+  test('notifySpeechEnded debounce is cancelled when audio continues', async () => {
+    const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+    const worker = new FakeSenseVoiceWorker();
+    const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+
+    stt.start();
+    stt.write(loudPcm());
+    stt.notifySpeechEnded();
+    await sleep(200);
+    stt.write(loudPcm());
+    await sleep(850);
+
+    assert.equal(worker.messages.some(message => message.type === 'transcribe'), false);
+    stt.stop();
+  });
+
+  test('notifySpeechEnded debounce flushes VAD when no audio resumes', async () => {
+    const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+    const worker = new FakeSenseVoiceWorker();
+    const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+
+    stt.start();
+    stt.write(loudPcm());
+    stt.notifySpeechEnded();
+    await sleep(900);
+
+    assert.equal(worker.messages.some(message => message.type === 'transcribe'), true);
+    stt.stop();
+  });
+
+  test('finalize flushes VAD immediately without waiting for debounce', async () => {
+    const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+    const worker = new FakeSenseVoiceWorker();
+    const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+
+    stt.start();
+    stt.write(loudPcm());
+    stt.notifySpeechEnded();
+    stt.finalize();
+    await sleep(20);
+
+    assert.equal(worker.messages.some(message => message.type === 'transcribe'), true);
+    stt.stop();
+  });
+});
+
 describe('LocalSenseVoiceSTT — lifecycle guards', () => {
   test('start() is idempotent: a second call does not spawn a second worker', async () => {
     const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
@@ -276,7 +327,7 @@ describe('LocalSenseVoiceSTT — worker error handling', () => {
     stt.start();
     // Push enough loud audio to emit at least one VAD segment.
     for (let i = 0; i < 5; i++) stt.write(loudPcm());
-    stt.notifySpeechEnded();
+    stt.finalize();
     // Wait one tick so dispatchFinal has run, then another so the FakeWorker
     // postMessage setTimeout can't drain pendingAudio.
     await new Promise(r => setImmediate(r));

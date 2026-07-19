@@ -54,7 +54,9 @@ export class LocalSenseVoiceSTT extends BaseSTT {
   private pendingAudioByTaskId = new Map<string, Float32Array>();
   private inFlightTasks = 0;
   private gapFlushTimer: ReturnType<typeof setTimeout> | null = null;
-  private static readonly GAP_FLUSH_MS = 1000;
+  private speechEndedFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly GAP_FLUSH_MS = 1800;
+  private static readonly SPEECH_ENDED_FLUSH_DEBOUNCE_MS = 800;
 
   constructor(options: LocalSenseVoiceSTTOptions = {}) {
     super();
@@ -107,10 +109,6 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       workerReady: this.workerReady,
     });
     this._isActive = false;
-    if (this.gapFlushTimer) {
-      clearTimeout(this.gapFlushTimer);
-      this.gapFlushTimer = null;
-    }
     this.finalize();
     this.vad = null;
     const worker = this.worker;
@@ -123,6 +121,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
 
   write(chunk: Buffer): void {
     if (!this._isActive || !this.vad) return;
+    this.cancelSpeechEndedFlushTimer();
     const f32 = resampleToF32(chunk, this.inputSampleRate);
     const segments = this.vad.push(f32);
     debugLog('write', {
@@ -138,7 +137,8 @@ export class LocalSenseVoiceSTT extends BaseSTT {
 
   notifySpeechEnded(): void {
     debugLog('speech-ended', { channel: this.channelLabel || '(unset)' });
-    this.flushVad();
+    if (!this._isActive || !this.vad) return;
+    this.resetSpeechEndedFlushTimer();
   }
 
   finalize(): void {
@@ -319,10 +319,8 @@ export class LocalSenseVoiceSTT extends BaseSTT {
 
   private flushVad(): void {
     if (!this.vad) return;
-    if (this.gapFlushTimer) {
-      clearTimeout(this.gapFlushTimer);
-      this.gapFlushTimer = null;
-    }
+    this.cancelGapFlushTimer();
+    this.cancelSpeechEndedFlushTimer();
     const segments = this.vad.flush();
     debugLog('vad-flush', { emittedSegments: segments.length });
     segments.forEach(segment => this.dispatchFinal(segment.samples));
@@ -373,12 +371,34 @@ export class LocalSenseVoiceSTT extends BaseSTT {
   }
 
   private resetGapFlushTimer(): void {
-    if (this.gapFlushTimer) clearTimeout(this.gapFlushTimer);
+    this.cancelGapFlushTimer();
     this.gapFlushTimer = setTimeout(() => {
       this.gapFlushTimer = null;
       if (this._isActive) {
         this.flushVad();
       }
     }, LocalSenseVoiceSTT.GAP_FLUSH_MS);
+  }
+
+  private cancelGapFlushTimer(): void {
+    if (!this.gapFlushTimer) return;
+    clearTimeout(this.gapFlushTimer);
+    this.gapFlushTimer = null;
+  }
+
+  private resetSpeechEndedFlushTimer(): void {
+    this.cancelSpeechEndedFlushTimer();
+    this.speechEndedFlushTimer = setTimeout(() => {
+      this.speechEndedFlushTimer = null;
+      if (this._isActive) {
+        this.flushVad();
+      }
+    }, LocalSenseVoiceSTT.SPEECH_ENDED_FLUSH_DEBOUNCE_MS);
+  }
+
+  private cancelSpeechEndedFlushTimer(): void {
+    if (!this.speechEndedFlushTimer) return;
+    clearTimeout(this.speechEndedFlushTimer);
+    this.speechEndedFlushTimer = null;
   }
 }

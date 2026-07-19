@@ -1,6 +1,7 @@
 export interface TranscriptCoalescingOptions {
     enabled?: boolean;
     maxGapMs?: number;
+    zhIncompleteFragmentMaxGapMs?: number;
     maxMergedChars?: number;
 }
 
@@ -32,7 +33,22 @@ export interface TranscriptCoalescingResult<T extends CoalescableTranscriptSegme
 }
 
 const DEFAULT_MAX_GAP_MS = 1200;
-const DEFAULT_MAX_MERGED_CHARS = 180;
+const DEFAULT_ZH_INCOMPLETE_FRAGMENT_MAX_GAP_MS = 3000;
+const DEFAULT_MAX_MERGED_CHARS = 320;
+const ZH_INCOMPLETE_FRAGMENT_MAX_CHARS = 12;
+const ZH_INCOMPLETE_ENDINGS = [
+    '如果',
+    '那么',
+    '以及',
+    '包含',
+    '通常包含',
+    '是否有',
+    '变更中',
+    '产',
+    '产品',
+    '成本',
+    '物料',
+];
 
 function normalizeText(text: string): string {
     return (text || '').replace(/\s+/g, ' ').trim();
@@ -44,6 +60,34 @@ function textLengthForLimit(text: string): number {
 
 function endsWithHardBoundary(text: string): boolean {
     return /[。！？!?；;.]$/.test(normalizeText(text));
+}
+
+function hasCjk(text: string): boolean {
+    return /[\u3400-\u9fff]/.test(normalizeText(text));
+}
+
+function compactZhLength(text: string): number {
+    return normalizeText(text).replace(/\s+/g, '').length;
+}
+
+function endsWithIncompleteZhStructure(text: string): boolean {
+    const compact = normalizeText(text).replace(/\s+/g, '');
+    return ZH_INCOMPLETE_ENDINGS.some(ending => compact.endsWith(ending));
+}
+
+function isZhIncompleteFragment(text: string): boolean {
+    if (!hasCjk(text) || endsWithHardBoundary(text)) return false;
+    return compactZhLength(text) <= ZH_INCOMPLETE_FRAGMENT_MAX_CHARS || endsWithIncompleteZhStructure(text);
+}
+
+function canUseZhIncompleteGap(
+    previous: CoalescableTranscriptSegment,
+    next: CoalescableTranscriptSegment,
+): boolean {
+    if (!hasCjk(previous.text) || !hasCjk(next.text) || endsWithHardBoundary(previous.text)) return false;
+    return isZhIncompleteFragment(previous.text)
+        || isZhIncompleteFragment(next.text)
+        || ((previous.coalescedFromCount ?? 1) > 1 && isMostlyCjk(previous.text) && isMostlyCjk(next.text));
 }
 
 function isMostlyCjk(text: string): boolean {
@@ -105,11 +149,13 @@ function rawSegmentIdsFor(a: CoalescableTranscriptSegment, b: CoalescableTranscr
 export class TranscriptSegmentCoalescer {
     private readonly enabled: boolean;
     private readonly maxGapMs: number;
+    private readonly zhIncompleteFragmentMaxGapMs: number;
     private readonly maxMergedChars: number;
 
     constructor(options: TranscriptCoalescingOptions = {}) {
         this.enabled = options.enabled ?? true;
         this.maxGapMs = options.maxGapMs ?? DEFAULT_MAX_GAP_MS;
+        this.zhIncompleteFragmentMaxGapMs = options.zhIncompleteFragmentMaxGapMs ?? DEFAULT_ZH_INCOMPLETE_FRAGMENT_MAX_GAP_MS;
         this.maxMergedChars = options.maxMergedChars ?? DEFAULT_MAX_MERGED_CHARS;
     }
 
@@ -123,16 +169,17 @@ export class TranscriptSegmentCoalescer {
 
         if (!sameOptionalValue(previous.speaker, next.speaker)) return { merged: false, segment: next, reason: 'speaker_changed' };
         if (!sameOptionalValue(previous.speakerId, next.speakerId)) return { merged: false, segment: next, reason: 'speaker_id_changed' };
-        if (!sameOptionalValue(previous.speakerLabel, next.speakerLabel)) return { merged: false, segment: next, reason: 'speaker_label_changed' };
         if (!sameOptionalValue(previous.providerSpeakerId, next.providerSpeakerId)) return { merged: false, segment: next, reason: 'provider_speaker_changed' };
         if (!sameOptionalValue(previous.diarizationProvider, next.diarizationProvider)) return { merged: false, segment: next, reason: 'provider_changed' };
-        if (!sameOptionalValue(previous.emotion, next.emotion)) return { merged: false, segment: next, reason: 'emotion_changed' };
-        if (!sameOptionalValue(previous.emotionSource, next.emotionSource)) return { merged: false, segment: next, reason: 'emotion_source_changed' };
-        if (!sameJsonValue(previous.speakerVerification, next.speakerVerification)) return { merged: false, segment: next, reason: 'speaker_verification_changed' };
 
         const gapMs = segmentStartMs(next) - segmentEndMs(previous);
-        if (gapMs < 0 || gapMs > this.maxGapMs) return { merged: false, segment: next, reason: 'gap_too_large' };
         if (endsWithHardBoundary(previous.text)) return { merged: false, segment: next, reason: 'hard_sentence_boundary' };
+        const usedZhIncompleteGap = gapMs > this.maxGapMs
+            && gapMs <= this.zhIncompleteFragmentMaxGapMs
+            && canUseZhIncompleteGap(previous, next);
+        if (gapMs < 0 || (!usedZhIncompleteGap && gapMs > this.maxGapMs)) {
+            return { merged: false, segment: next, reason: 'gap_too_large' };
+        }
         if (isClearLanguageSwitch(previous.text, next.text)) return { merged: false, segment: next, reason: 'language_switch' };
 
         const mergedText = joinTranscriptText(previous.text, next.text);
@@ -141,6 +188,11 @@ export class TranscriptSegmentCoalescer {
         }
 
         const rawSegmentIds = rawSegmentIdsFor(previous, next);
+        const emotionMatches = sameOptionalValue(previous.emotion, next.emotion)
+            && sameOptionalValue(previous.emotionSource, next.emotionSource);
+        const hasMetadataSoftMismatch = !sameOptionalValue(previous.speakerLabel, next.speakerLabel)
+            || !emotionMatches
+            || !sameJsonValue(previous.speakerVerification, next.speakerVerification);
         const mergedSegment = {
             ...previous,
             text: mergedText,
@@ -153,7 +205,15 @@ export class TranscriptSegmentCoalescer {
             ...(rawSegmentIds ? { rawSegmentIds } : {}),
         } as T;
 
-        return { merged: true, segment: mergedSegment };
+        if (!emotionMatches) {
+            delete (mergedSegment as Partial<CoalescableTranscriptSegment>).emotion;
+            delete (mergedSegment as Partial<CoalescableTranscriptSegment>).emotionSource;
+        }
+
+        return {
+            merged: true,
+            segment: mergedSegment,
+            reason: usedZhIncompleteGap ? 'zh_incomplete_fragment_gap' : (hasMetadataSoftMismatch ? 'metadata_soft_mismatch' : undefined),
+        };
     }
 }
-
