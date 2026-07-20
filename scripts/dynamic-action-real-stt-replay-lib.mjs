@@ -1,6 +1,6 @@
 import axios from 'axios';
 import 'dotenv/config';
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, verify as verifySignature } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -24,16 +24,14 @@ function hasCompleteRecruitingLabel(label) {
   return label && typeof label === 'object'
     && typeof label.turnId === 'string'
     && label.turnId.trim().length > 0
-    && typeof label.transcript === 'string'
-    && label.transcript.trim().length > 0
     && typeof label.transcriptSha256 === 'string'
-    && label.transcriptSha256 === sha256(label.transcript)
+    && /^[a-f0-9]{64}$/.test(label.transcriptSha256)
+    && !Object.hasOwn(label, 'transcript')
+    && !Object.hasOwn(label, 'speakerRole')
     && Object.hasOwn(label, 'expectedActionType')
     && (label.expectedActionType === null || (
       typeof label.expectedActionType === 'string' && label.expectedActionType.trim().length > 0
     ))
-    && typeof label.speakerRole === 'string'
-    && label.speakerRole.trim().length > 0
     && typeof label.policyGroundingRequired === 'boolean'
     && typeof label.continuationChildExpected === 'boolean';
 }
@@ -43,6 +41,10 @@ function hasCompleteAttestedObservation(observation) {
     && typeof observation.meetingId === 'string'
     && typeof observation.turnId === 'string'
     && typeof observation.transcriptSha256 === 'string'
+    && typeof observation.providerSpeakerId === 'string'
+    && observation.providerSpeakerId.trim().length > 0
+    && typeof observation.speakerRole === 'string'
+    && observation.speakerRole.trim().length > 0
     && typeof observation.classifierTraceId === 'string'
     && observation.classifierTraceId.trim().length > 0
     && Array.isArray(observation.observedActionTypes)
@@ -64,27 +66,53 @@ function hasCompleteAttestedObservation(observation) {
     && typeof observation.unsafeVisibleAnswer === 'boolean';
 }
 
-export function signRecruitingReleaseAttestation(payload, key) {
-  return createHmac('sha256', key).update(JSON.stringify(payload)).digest('hex');
+export function buildRecruitingReplayDigest({ assets, observations }) {
+  const canonicalAssets = assets
+    .map(asset => ({
+      meetingId: asset.meetingId,
+      audioSha256: asset.audioSha256,
+      captureId: asset.captureId,
+    }))
+    .sort((left, right) => left.meetingId.localeCompare(right.meetingId));
+  const canonicalObservations = observations
+    .map(observation => ({
+      meetingId: observation.meetingId,
+      turnId: observation.turnId,
+      transcriptSha256: observation.transcriptSha256,
+      providerSpeakerId: observation.providerSpeakerId,
+      speakerRole: observation.speakerRole,
+      classifierTraceId: observation.classifierTraceId,
+      observedActionTypes: [...observation.observedActionTypes].sort(),
+    }))
+    .sort((left, right) => `${left.meetingId}:${left.turnId}`.localeCompare(`${right.meetingId}:${right.turnId}`));
+  return sha256(JSON.stringify({ assets: canonicalAssets, observations: canonicalObservations }));
 }
 
-export function verifyRecruitingReleaseAttestation(document, key) {
+export function verifyRecruitingReleaseAttestation(document, publicKey) {
   if (!document || typeof document !== 'object' || !document.payload || typeof document.signature !== 'string') {
     return null;
   }
-  if (typeof key !== 'string' || Buffer.byteLength(key) < 32) return null;
-  const expected = signRecruitingReleaseAttestation(document.payload, key);
-  const actualBuffer = Buffer.from(document.signature, 'hex');
-  const expectedBuffer = Buffer.from(expected, 'hex');
-  if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) return null;
+  if (typeof publicKey !== 'string' || !publicKey.trim()) return null;
+  try {
+    const valid = verifySignature(
+      null,
+      Buffer.from(JSON.stringify(document.payload)),
+      publicKey,
+      Buffer.from(document.signature, 'base64'),
+    );
+    if (!valid) return null;
+  } catch {
+    return null;
+  }
   const payload = document.payload;
   if (payload.source !== 'production_replay' || typeof payload.runId !== 'string' || !payload.runId.trim()) return null;
   if (!Array.isArray(payload.assets) || !Array.isArray(payload.observations)) return null;
+  if (payload.replayDigest !== buildRecruitingReplayDigest(payload)) return null;
   return payload;
 }
 
-export function evaluateRecruitingRealAssetGate({ entries, audioRoot, attestationDocument, attestationKey }) {
-  const attestation = verifyRecruitingReleaseAttestation(attestationDocument, attestationKey);
+export function evaluateRecruitingRealAssetGate({ entries, audioRoot, attestationDocument, attestationPublicKey }) {
+  const attestation = verifyRecruitingReleaseAttestation(attestationDocument, attestationPublicKey);
   const seenAudioPaths = new Set();
   const seenAudioHashes = new Set();
   const seenMeetingIds = new Set();
@@ -269,7 +297,7 @@ Options:
 
 Notes:
   - This makes real network requests and may incur STT usage cost.
-  - Real recruiting release runs also require RECRUITING_RELEASE_ATTESTATION_PATH and RECRUITING_RELEASE_ATTESTATION_KEY.
+  - Real recruiting release runs also require RECRUITING_RELEASE_ATTESTATION_PATH and RECRUITING_RELEASE_ATTESTATION_PUBLIC_KEY_PATH.
   - API keys are read from environment variables and are never printed.`);
 }
 
@@ -331,12 +359,13 @@ export async function runRealSttReplay({
 
   const manifestPath = path.join(root, 'tests/fixtures/dynamic-actions/replay/replay-manifest.json');
   let recruitingReleaseAttestationDocument;
-  let recruitingReleaseAttestationKey;
+  let recruitingReleaseAttestationPublicKey;
   if (modeTemplateType === 'recruiting' && semanticGateMode === 'real') {
     const entries = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const attestationPath = process.env.RECRUITING_RELEASE_ATTESTATION_PATH;
-    const attestationKey = process.env.RECRUITING_RELEASE_ATTESTATION_KEY;
+    const attestationPublicKeyPath = process.env.RECRUITING_RELEASE_ATTESTATION_PUBLIC_KEY_PATH;
     let attestationDocument;
+    let attestationPublicKey;
     if (attestationPath && fs.existsSync(attestationPath)) {
       try {
         attestationDocument = JSON.parse(fs.readFileSync(attestationPath, 'utf8'));
@@ -344,11 +373,14 @@ export async function runRealSttReplay({
         attestationDocument = undefined;
       }
     }
+    if (attestationPublicKeyPath && fs.existsSync(attestationPublicKeyPath)) {
+      attestationPublicKey = fs.readFileSync(attestationPublicKeyPath, 'utf8');
+    }
     const assetGate = evaluateRecruitingRealAssetGate({
       entries,
       audioRoot: root,
       attestationDocument,
-      attestationKey,
+      attestationPublicKey,
     });
     if (assetGate.status !== 'ready') {
       const blockedReport = {
@@ -361,7 +393,7 @@ export async function runRealSttReplay({
       return blockedReport;
     }
     recruitingReleaseAttestationDocument = attestationDocument;
-    recruitingReleaseAttestationKey = attestationKey;
+    recruitingReleaseAttestationPublicKey = attestationPublicKey;
   }
 
   const replayModuleUrl = pathToFileURL(
@@ -376,7 +408,7 @@ export async function runRealSttReplay({
 
   const { runDynamicActionReplay } = await import(replayModuleUrl);
   const {
-    extractDoubaoAucTranscript,
+    extractDoubaoAucTranscriptionJson,
     transcribeNewApiDoubaoAucMultipartFile,
   } = await import(aucClientUrl);
   const {
@@ -398,9 +430,9 @@ export async function runRealSttReplay({
     return { data: response.data, headers: response.headers };
   }
 
-  async function transcribeAudio(audioPath) {
+  async function transcribeAudio(audioPath, entry) {
     const audioBuffer = fs.readFileSync(audioPath);
-    return transcribeNewApiDoubaoAucMultipartFile({
+    const serialized = await transcribeNewApiDoubaoAucMultipartFile({
       submitEndpoint: QCLOUD_STT_SUBMIT_ENDPOINT,
       queryEndpoint: QCLOUD_STT_QUERY_ENDPOINT,
       authHeader: { Authorization: `Bearer ${apiKey.trim()}` },
@@ -414,11 +446,21 @@ export async function runRealSttReplay({
         show_utterances: 'true',
         enable_itn: 'true',
       },
-      extractTranscript: extractDoubaoAucTranscript,
+      extractTranscript: extractDoubaoAucTranscriptionJson,
       post,
       pollIntervalMs: opts.pollIntervalMs,
       maxAttempts: opts.maxAttempts,
     });
+    const transcription = JSON.parse(serialized);
+    const meetingId = entry.realAsset?.meetingId ?? entry.id;
+    return {
+      text: transcription.text,
+      finalTurns: transcription.utterances.map((utterance, index) => ({
+        turnId: `${meetingId}-turn-${index + 1}`,
+        transcript: utterance.text,
+        providerSpeakerId: utterance.providerSpeakerId ?? '',
+      })),
+    };
   }
 
   const cloudClassifier = semanticGateMode === 'real'
@@ -438,9 +480,9 @@ export async function runRealSttReplay({
     semanticGateMode,
     cloudClassifier,
     recruitingReleaseAttestationDocument,
-    recruitingReleaseAttestationKey,
+    recruitingReleaseAttestationPublicKey,
     environmentStatus: 'ok',
-    transcribeAudio: async ({ audioPath }) => transcribeAudio(audioPath),
+    transcribeAudio: async ({ entry, audioPath }) => transcribeAudio(audioPath, entry),
   });
 
   console.log(JSON.stringify(report, null, 2));

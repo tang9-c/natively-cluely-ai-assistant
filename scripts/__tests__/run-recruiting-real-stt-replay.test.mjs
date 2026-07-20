@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -47,6 +47,18 @@ function createReplayFixture({ modeTemplateType = 'recruiting', transcript, expe
     syntheticAudio: true,
   }]), 'utf8');
   return { root, fixtureRoot, audioRoot, manifestPath };
+}
+
+function signReleaseAttestation(payload) {
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+  return {
+    document: {
+      payload,
+      signature: sign(null, Buffer.from(JSON.stringify(payload)), privateKey).toString('base64'),
+    },
+    publicKey: publicKey.export({ type: 'spki', format: 'pem' }),
+    privateKey,
+  };
 }
 
 test('Recruiting real STT replay is part of the default full test list and validates only recruiting audio fixtures', () => {
@@ -220,11 +232,10 @@ test('QA QCloud classifier redacts provider failures', async () => {
 
 test('real recruiting asset gate requires hashed real recordings and unique complete final-turn labels', async () => {
   const {
+    buildRecruitingReplayDigest,
     evaluateRecruitingRealAssetGate,
-    signRecruitingReleaseAttestation,
   } = await import('../dynamic-action-real-stt-replay-lib.mjs');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-recruiting-assets-'));
-  const attestationKey = 'release-attestation-test-key-32-bytes';
   const realEntries = Array.from({ length: 5 }, (_, index) => {
     const audioPath = `meeting-${index}.wav`;
     const audio = `real meeting audio ${index}`;
@@ -243,10 +254,8 @@ test('real recruiting asset gate requires hashed real recordings and unique comp
         const transcript = `candidate final turn ${index}-${turnIndex}`;
         return {
           turnId: `turn-${index}-${turnIndex}`,
-          transcript,
           transcriptSha256: createHash('sha256').update(transcript).digest('hex'),
           expectedActionType: null,
-          speakerRole: 'candidate',
           policyGroundingRequired: false,
           continuationChildExpected: false,
         };
@@ -271,6 +280,8 @@ test('real recruiting asset gate requires hashed real recordings and unique comp
       meetingId: entry.realAsset.meetingId,
       turnId: label.turnId,
       transcriptSha256: label.transcriptSha256,
+      providerSpeakerId: `speaker-${entry.realAsset.meetingId}`,
+      speakerRole: 'candidate',
       classifierTraceId: `trace-${entry.realAsset.meetingId}-${index}`,
       observedActionTypes: [],
       parentActionId: null,
@@ -284,16 +295,15 @@ test('real recruiting asset gate requires hashed real recordings and unique comp
       unsafeVisibleAnswer: false,
     }))),
   };
-  const attestationDocument = {
-    payload: attestationPayload,
-    signature: signRecruitingReleaseAttestation(attestationPayload, attestationKey),
-  };
+  attestationPayload.replayDigest = buildRecruitingReplayDigest(attestationPayload);
+  const signedAttestation = signReleaseAttestation(attestationPayload);
+  const attestationDocument = signedAttestation.document;
 
   assert.deepEqual(evaluateRecruitingRealAssetGate({
     entries: [...realEntries, syntheticEntry],
     audioRoot: root,
     attestationDocument,
-    attestationKey,
+    attestationPublicKey: signedAttestation.publicKey,
   }), {
     status: 'ready',
     requiredRealMeetings: 5,
@@ -311,7 +321,7 @@ test('real recruiting asset gate requires hashed real recordings and unique comp
     ],
     audioRoot: root,
     attestationDocument,
-    attestationKey,
+    attestationPublicKey: signedAttestation.publicKey,
   });
   assert.equal(duplicateGate.status, 'BLOCKED_REAL_RECRUITING_ASSETS');
   assert.ok(duplicateGate.invalidReasons.includes('duplicate_audio_sha256'));
@@ -322,7 +332,7 @@ test('real recruiting asset gate requires hashed real recordings and unique comp
     entries: [...realEntries, syntheticEntry],
     audioRoot: root,
     attestationDocument,
-    attestationKey,
+    attestationPublicKey: signedAttestation.publicKey,
   }), {
     status: 'BLOCKED_REAL_RECRUITING_ASSETS',
     requiredRealMeetings: 5,
@@ -335,12 +345,12 @@ test('real recruiting asset gate requires hashed real recordings and unique comp
   const tampered = structuredClone(realEntries);
   tampered[0].realAsset.audioSha256 = '0'.repeat(64);
   tampered[1].labeledFinalTurns[0].turnId = tampered[0].labeledFinalTurns[0].turnId;
-  tampered[2].labeledFinalTurns[0].transcript = '   ';
+  tampered[2].labeledFinalTurns[0].transcriptSha256 = 'not-a-hash';
   const tamperedGate = evaluateRecruitingRealAssetGate({
     entries: tampered,
     audioRoot: root,
     attestationDocument,
-    attestationKey,
+    attestationPublicKey: signedAttestation.publicKey,
   });
   assert.equal(tamperedGate.status, 'BLOCKED_REAL_RECRUITING_ASSETS');
   assert.ok(tamperedGate.invalidReasons.includes('audio_sha256_mismatch'));
@@ -350,14 +360,17 @@ test('real recruiting asset gate requires hashed real recordings and unique comp
   assert.equal(evaluateRecruitingRealAssetGate({
     entries: realEntries,
     audioRoot: root,
-    attestationDocument: { ...attestationDocument, signature: '0'.repeat(64) },
-    attestationKey,
+    attestationDocument: { ...attestationDocument, signature: Buffer.alloc(64).toString('base64') },
+    attestationPublicKey: signedAttestation.publicKey,
   }).status, 'BLOCKED_REAL_RECRUITING_ASSETS');
 });
 
 test('real recruiting replay evaluates each labeled final turn and reports prediction-derived release metrics', async () => {
-  const { runDynamicActionReplay } = await import(replayModuleUrl);
-  const { signRecruitingReleaseAttestation } = await import('../dynamic-action-real-stt-replay-lib.mjs');
+  const {
+    buildRecruitingClassifierTraceId,
+    buildRecruitingReplayDigest,
+    runDynamicActionReplay,
+  } = await import(replayModuleUrl);
   const fixture = createReplayFixture({
     transcript: 'Can you confirm visa support?',
     expected: { shouldEmit: true, actionType: 'candidate_concern', outputType: 'spoken_response' },
@@ -375,19 +388,15 @@ test('real recruiting replay evaluates each labeled final turn and reports predi
   manifest[0].labeledFinalTurns = [
     {
       turnId: 'turn-concern',
-      transcript: concernTranscript,
       transcriptSha256: createHash('sha256').update(concernTranscript).digest('hex'),
       expectedActionType: 'candidate_concern',
-      speakerRole: 'candidate',
       policyGroundingRequired: true,
       continuationChildExpected: false,
     },
     {
       turnId: 'turn-neutral',
-      transcript: neutralTranscript,
       transcriptSha256: createHash('sha256').update(neutralTranscript).digest('hex'),
       expectedActionType: null,
-      speakerRole: 'candidate',
       policyGroundingRequired: false,
       continuationChildExpected: false,
     },
@@ -407,7 +416,17 @@ test('real recruiting replay evaluates each labeled final turn and reports predi
         meetingId: 'private-meeting-1',
         turnId: 'turn-concern',
         transcriptSha256: manifest[0].labeledFinalTurns[0].transcriptSha256,
-        classifierTraceId: 'trace-concern',
+        providerSpeakerId: 'speaker-candidate',
+        speakerRole: 'candidate',
+        classifierTraceId: buildRecruitingClassifierTraceId({
+          meetingId: 'private-meeting-1',
+          turnId: 'turn-concern',
+          transcriptSha256: manifest[0].labeledFinalTurns[0].transcriptSha256,
+          providerSpeakerId: 'speaker-candidate',
+          speakerRole: 'candidate',
+          actionTypes: ['candidate_concern'],
+          classifierInvoked: true,
+        }),
         observedActionTypes: ['candidate_concern'],
         parentActionId: 'parent-concern',
         childActionIds: [],
@@ -423,7 +442,17 @@ test('real recruiting replay evaluates each labeled final turn and reports predi
         meetingId: 'private-meeting-1',
         turnId: 'turn-neutral',
         transcriptSha256: manifest[0].labeledFinalTurns[1].transcriptSha256,
-        classifierTraceId: 'trace-neutral',
+        providerSpeakerId: 'speaker-candidate',
+        speakerRole: 'candidate',
+        classifierTraceId: buildRecruitingClassifierTraceId({
+          meetingId: 'private-meeting-1',
+          turnId: 'turn-neutral',
+          transcriptSha256: manifest[0].labeledFinalTurns[1].transcriptSha256,
+          providerSpeakerId: 'speaker-candidate',
+          speakerRole: 'candidate',
+          actionTypes: [],
+          classifierInvoked: false,
+        }),
         observedActionTypes: [],
         parentActionId: null,
         childActionIds: [],
@@ -437,14 +466,9 @@ test('real recruiting replay evaluates each labeled final turn and reports predi
       },
     ],
   };
-  const recruitingReleaseAttestationKey = 'runner-attestation-test-key-32-bytes';
-  const recruitingReleaseAttestationDocument = {
-    payload: recruitingReleaseAttestationPayload,
-    signature: signRecruitingReleaseAttestation(
-      recruitingReleaseAttestationPayload,
-      recruitingReleaseAttestationKey,
-    ),
-  };
+  recruitingReleaseAttestationPayload.replayDigest = buildRecruitingReplayDigest(recruitingReleaseAttestationPayload);
+  const signedAttestation = signReleaseAttestation(recruitingReleaseAttestationPayload);
+  const recruitingReleaseAttestationDocument = signedAttestation.document;
 
   const classifiedTranscripts = [];
   const report = await runDynamicActionReplay({
@@ -455,7 +479,7 @@ test('real recruiting replay evaluates each labeled final turn and reports predi
     modeTemplateTypes: ['recruiting'],
     semanticGateMode: 'real',
     recruitingReleaseAttestationDocument,
-    recruitingReleaseAttestationKey,
+    recruitingReleaseAttestationPublicKey: signedAttestation.publicKey,
     cloudClassifier: async input => {
       classifiedTranscripts.push(input.transcript);
       return input.candidates.map(candidate => ({
@@ -466,7 +490,13 @@ test('real recruiting replay evaluates each labeled final turn and reports predi
         confidence: 0.95,
       }));
     },
-    transcribeAudio: async () => 'Can you confirm visa support?',
+    transcribeAudio: async () => ({
+      text: `${concernTranscript} ${neutralTranscript}`,
+      finalTurns: [
+        { turnId: 'turn-concern', transcript: concernTranscript, providerSpeakerId: 'speaker-candidate' },
+        { turnId: 'turn-neutral', transcript: neutralTranscript, providerSpeakerId: 'speaker-candidate' },
+      ],
+    }),
   });
 
   assert.ok(classifiedTranscripts.includes(concernTranscript));
@@ -477,16 +507,17 @@ test('real recruiting replay evaluates each labeled final turn and reports predi
   assert.equal(report.recruitingRelease?.metrics.overallFalsePositiveRate, 0);
   assert.deepEqual(report.recruitingRelease?.turns.map(turn => turn.turnId), ['turn-concern', 'turn-neutral']);
   assert.equal(report.recruitingRelease?.turns[0].classifierInvoked, true);
-  assert.equal(report.recruitingRelease?.turns[0].classifierTraceId, 'trace-concern');
+  assert.equal(report.recruitingRelease?.turns[0].classifierTraceId, recruitingReleaseAttestationPayload.observations[0].classifierTraceId);
   assert.ok(report.recruitingRelease?.gateFailures.includes('real_recruiting_meetings'));
   assert.ok(report.recruitingRelease?.gateFailures.includes('labeled_recruiting_final_turns'));
   assert.doesNotMatch(JSON.stringify(report), /Can you confirm visa support for this role|Thank you for the clarification/);
 
   const mismatchedPayload = structuredClone(recruitingReleaseAttestationPayload);
   mismatchedPayload.observations[0].observedActionTypes = [];
+  mismatchedPayload.replayDigest = buildRecruitingReplayDigest(mismatchedPayload);
   const mismatchedAttestationDocument = {
     payload: mismatchedPayload,
-    signature: signRecruitingReleaseAttestation(mismatchedPayload, recruitingReleaseAttestationKey),
+    signature: sign(null, Buffer.from(JSON.stringify(mismatchedPayload)), signedAttestation.privateKey).toString('base64'),
   };
   const mismatchReport = await runDynamicActionReplay({
     manifestPath: fixture.manifestPath,
@@ -496,7 +527,7 @@ test('real recruiting replay evaluates each labeled final turn and reports predi
     modeTemplateTypes: ['recruiting'],
     semanticGateMode: 'real',
     recruitingReleaseAttestationDocument: mismatchedAttestationDocument,
-    recruitingReleaseAttestationKey,
+    recruitingReleaseAttestationPublicKey: signedAttestation.publicKey,
     cloudClassifier: async input => input.candidates.map(candidate => ({
       actionType: candidate.actionType,
       decision: input.transcript === concernTranscript && candidate.actionType === 'candidate_concern'
@@ -504,7 +535,13 @@ test('real recruiting replay evaluates each labeled final turn and reports predi
         : 'reject',
       confidence: 0.95,
     })),
-    transcribeAudio: async () => 'Can you confirm visa support?',
+    transcribeAudio: async () => ({
+      text: `${concernTranscript} ${neutralTranscript}`,
+      finalTurns: [
+        { turnId: 'turn-concern', transcript: concernTranscript, providerSpeakerId: 'speaker-candidate' },
+        { turnId: 'turn-neutral', transcript: neutralTranscript, providerSpeakerId: 'speaker-candidate' },
+      ],
+    }),
   });
   assert.ok(mismatchReport.recruitingRelease?.gateFailures.includes('runtime_observation_action_mismatch'));
 
@@ -517,18 +554,303 @@ test('real recruiting replay evaluates each labeled final turn and reports predi
     semanticGateMode: 'real',
     recruitingReleaseAttestationDocument: {
       ...recruitingReleaseAttestationDocument,
-      signature: '0'.repeat(64),
+      signature: Buffer.alloc(64).toString('base64'),
     },
-    recruitingReleaseAttestationKey,
+    recruitingReleaseAttestationPublicKey: signedAttestation.publicKey,
     cloudClassifier: async input => input.candidates.map(candidate => ({
       actionType: candidate.actionType,
       decision: 'reject',
       confidence: 0.95,
     })),
-    transcribeAudio: async () => 'Can you confirm visa support?',
+    transcribeAudio: async () => ({
+      text: `${concernTranscript} ${neutralTranscript}`,
+      finalTurns: [
+        { turnId: 'turn-concern', transcript: concernTranscript, providerSpeakerId: 'speaker-candidate' },
+        { turnId: 'turn-neutral', transcript: neutralTranscript, providerSpeakerId: 'speaker-candidate' },
+      ],
+    }),
   });
   assert.ok(unverifiedReport.recruitingRelease?.gateFailures.includes('trusted_runtime_attestation_missing'));
   assert.equal(unverifiedReport.recruitingRelease?.provenance.attestationRunId, 'missing');
+});
+
+test('real recruiting release classifies only STT final turns and rejects label transcript substitution', async () => {
+  const { runDynamicActionReplay } = await import(replayModuleUrl);
+  const fixture = createReplayFixture({
+    transcript: 'Fixture-level text.',
+    expected: { shouldEmit: false, actionType: null, outputType: 'checklist' },
+  });
+  const manifest = JSON.parse(fs.readFileSync(fixture.manifestPath, 'utf8'));
+  const audioPath = path.join(fixture.audioRoot, 'meeting.wav');
+  const actualTranscript = 'Is this role fully remote?';
+  const substitutedLabelTranscript = 'Can you confirm visa support?';
+  manifest[0].syntheticAudio = false;
+  manifest[0].realAsset = {
+    sourceKind: 'real_recording',
+    meetingId: 'private-meeting-stt-binding',
+    audioSha256: createHash('sha256').update(fs.readFileSync(audioPath)).digest('hex'),
+  };
+  manifest[0].labeledFinalTurns = [{
+    turnId: 'turn-1',
+    transcript: substitutedLabelTranscript,
+    transcriptSha256: createHash('sha256').update(substitutedLabelTranscript).digest('hex'),
+    expectedActionType: 'candidate_concern',
+    policyGroundingRequired: true,
+    continuationChildExpected: false,
+  }];
+  fs.writeFileSync(fixture.manifestPath, JSON.stringify(manifest), 'utf8');
+
+  const classifiedTranscripts = [];
+  const report = await runDynamicActionReplay({
+    manifestPath: fixture.manifestPath,
+    fixtureRoot: fixture.fixtureRoot,
+    audioRoot: fixture.audioRoot,
+    outputDir: path.join(fixture.root, 'stt-binding'),
+    modeTemplateTypes: ['recruiting'],
+    semanticGateMode: 'real',
+    cloudClassifier: async input => {
+      classifiedTranscripts.push(input.transcript);
+      return input.candidates.map(candidate => ({
+        actionType: candidate.actionType,
+        decision: 'reject',
+        confidence: 0.95,
+      }));
+    },
+    transcribeAudio: async () => ({
+      text: actualTranscript,
+      finalTurns: [{ turnId: 'turn-1', transcript: actualTranscript, providerSpeakerId: 'speaker-candidate' }],
+    }),
+  });
+
+  assert.ok(classifiedTranscripts.includes(actualTranscript));
+  assert.ok(!classifiedTranscripts.includes(substitutedLabelTranscript));
+  assert.ok(report.recruitingRelease?.gateFailures.includes('stt_final_turn_transcript_mismatch'));
+});
+
+test('real recruiting release requires an external Ed25519 signature bound to the actual replay digest', async () => {
+  const {
+    buildRecruitingClassifierTraceId,
+    buildRecruitingReplayDigest,
+    runDynamicActionReplay,
+  } = await import(replayModuleUrl);
+  const fixture = createReplayFixture({
+    transcript: 'Thank you for the clarification.',
+    expected: { shouldEmit: false, actionType: null, outputType: 'checklist' },
+  });
+  const manifest = JSON.parse(fs.readFileSync(fixture.manifestPath, 'utf8'));
+  const audioPath = path.join(fixture.audioRoot, 'meeting.wav');
+  const transcript = 'Thank you for the clarification.';
+  const transcriptSha256 = createHash('sha256').update(transcript).digest('hex');
+  const audioSha256 = createHash('sha256').update(fs.readFileSync(audioPath)).digest('hex');
+  const meetingId = 'private-meeting-signed';
+  const turnId = 'turn-neutral';
+  const providerSpeakerId = 'speaker-candidate';
+  const speakerRole = 'candidate';
+  const classifierTraceId = buildRecruitingClassifierTraceId({
+    meetingId,
+    turnId,
+    transcriptSha256,
+    providerSpeakerId,
+    speakerRole,
+    actionTypes: [],
+    classifierInvoked: false,
+  });
+  const assets = [{ meetingId, audioSha256, captureId: 'capture-private-meeting-signed' }];
+  const observations = [{
+    meetingId,
+    turnId,
+    transcriptSha256,
+    providerSpeakerId,
+    speakerRole,
+    classifierTraceId,
+    observedActionTypes: [],
+    parentActionId: null,
+    childActionIds: [],
+    finalTurnAtMs: 1000,
+    completedAtMs: 1100,
+    childEmittedAtMs: null,
+    policyGroundingUsed: false,
+    positivePolicyCommitment: false,
+    candidateFacingEvidenceLeak: false,
+    unsafeVisibleAnswer: false,
+  }];
+  const payload = {
+    runId: 'production-run-signed',
+    source: 'production_replay',
+    replayDigest: buildRecruitingReplayDigest({ assets, observations }),
+    assets,
+    observations,
+  };
+  const signed = signReleaseAttestation(payload);
+  manifest[0].syntheticAudio = false;
+  manifest[0].realAsset = { sourceKind: 'real_recording', meetingId, audioSha256 };
+  manifest[0].labeledFinalTurns = [{
+    turnId,
+    transcriptSha256,
+    expectedActionType: null,
+    policyGroundingRequired: false,
+    continuationChildExpected: false,
+  }];
+  fs.writeFileSync(fixture.manifestPath, JSON.stringify(manifest), 'utf8');
+
+  const report = await runDynamicActionReplay({
+    manifestPath: fixture.manifestPath,
+    fixtureRoot: fixture.fixtureRoot,
+    audioRoot: fixture.audioRoot,
+    outputDir: path.join(fixture.root, 'signed-replay'),
+    modeTemplateTypes: ['recruiting'],
+    semanticGateMode: 'real',
+    recruitingReleaseAttestationDocument: signed.document,
+    recruitingReleaseAttestationPublicKey: signed.publicKey,
+    cloudClassifier: async input => input.candidates.map(candidate => ({
+      actionType: candidate.actionType,
+      decision: 'reject',
+      confidence: 0.95,
+    })),
+    transcribeAudio: async () => ({
+      text: transcript,
+      finalTurns: [{ turnId, transcript, providerSpeakerId }],
+    }),
+  });
+  assert.ok(!report.recruitingRelease?.gateFailures.includes('trusted_runtime_attestation_missing'));
+  assert.ok(!report.recruitingRelease?.gateFailures.includes('actual_replay_digest_mismatch'));
+
+  const tampered = structuredClone(signed.document);
+  tampered.payload.replayDigest = '0'.repeat(64);
+  const tamperedReport = await runDynamicActionReplay({
+    manifestPath: fixture.manifestPath,
+    fixtureRoot: fixture.fixtureRoot,
+    audioRoot: fixture.audioRoot,
+    outputDir: path.join(fixture.root, 'tampered-replay'),
+    modeTemplateTypes: ['recruiting'],
+    semanticGateMode: 'real',
+    recruitingReleaseAttestationDocument: tampered,
+    recruitingReleaseAttestationPublicKey: signed.publicKey,
+    cloudClassifier: async () => [],
+    transcribeAudio: async () => ({ text: transcript, finalTurns: [{ turnId, transcript, providerSpeakerId }] }),
+  });
+  assert.ok(tamperedReport.recruitingRelease?.gateFailures.includes('trusted_runtime_attestation_missing'));
+});
+
+test('real recruiting release speaker input comes from attested STT speaker identity, not the label', async () => {
+  const {
+    buildRecruitingClassifierTraceId,
+    buildRecruitingReplayDigest,
+    runDynamicActionReplay,
+  } = await import(replayModuleUrl);
+  const transcript = 'Is this role fully remote?';
+  const transcriptSha256 = createHash('sha256').update(transcript).digest('hex');
+  const fixture = createReplayFixture({
+    transcript,
+    expected: { shouldEmit: true, actionType: 'candidate_concern', outputType: 'spoken_response' },
+  });
+  const manifest = JSON.parse(fs.readFileSync(fixture.manifestPath, 'utf8'));
+  const audioPath = path.join(fixture.audioRoot, 'meeting.wav');
+  const audioSha256 = createHash('sha256').update(fs.readFileSync(audioPath)).digest('hex');
+  const meetingId = 'private-meeting-speaker';
+  const turnId = 'turn-speaker';
+  const providerSpeakerId = 'speaker-2';
+  const speakerRole = 'candidate';
+  const assets = [{ meetingId, audioSha256, captureId: 'capture-private-meeting-speaker' }];
+  const observations = [{
+    meetingId,
+    turnId,
+    transcriptSha256,
+    providerSpeakerId,
+    speakerRole,
+    classifierTraceId: buildRecruitingClassifierTraceId({
+      meetingId,
+      turnId,
+      transcriptSha256,
+      providerSpeakerId,
+      speakerRole,
+      actionTypes: ['candidate_concern'],
+      classifierInvoked: true,
+    }),
+    observedActionTypes: ['candidate_concern'],
+    parentActionId: 'parent-speaker',
+    childActionIds: [],
+    finalTurnAtMs: 1000,
+    completedAtMs: 1100,
+    childEmittedAtMs: null,
+    policyGroundingUsed: true,
+    positivePolicyCommitment: false,
+    candidateFacingEvidenceLeak: false,
+    unsafeVisibleAnswer: false,
+  }];
+  const payload = {
+    runId: 'production-run-speaker',
+    source: 'production_replay',
+    replayDigest: buildRecruitingReplayDigest({ assets, observations }),
+    assets,
+    observations,
+  };
+  const signed = signReleaseAttestation(payload);
+  manifest[0].syntheticAudio = false;
+  manifest[0].realAsset = { sourceKind: 'real_recording', meetingId, audioSha256 };
+  manifest[0].labeledFinalTurns = [{
+    turnId,
+    transcriptSha256,
+    expectedActionType: 'candidate_concern',
+    speakerRole: 'recruiter',
+    policyGroundingRequired: true,
+    continuationChildExpected: false,
+  }];
+  fs.writeFileSync(fixture.manifestPath, JSON.stringify(manifest), 'utf8');
+
+  const classifierSpeakers = [];
+  const report = await runDynamicActionReplay({
+    manifestPath: fixture.manifestPath,
+    fixtureRoot: fixture.fixtureRoot,
+    audioRoot: fixture.audioRoot,
+    outputDir: path.join(fixture.root, 'speaker-binding'),
+    modeTemplateTypes: ['recruiting'],
+    semanticGateMode: 'real',
+    recruitingReleaseAttestationDocument: signed.document,
+    recruitingReleaseAttestationPublicKey: signed.publicKey,
+    cloudClassifier: async input => {
+      classifierSpeakers.push(input.speaker);
+      return input.candidates.map(candidate => ({
+        actionType: candidate.actionType,
+        decision: candidate.actionType === 'candidate_concern' ? 'pass' : 'reject',
+        confidence: 0.95,
+      }));
+    },
+    transcribeAudio: async () => ({
+      text: transcript,
+      finalTurns: [{ turnId, transcript, providerSpeakerId }],
+    }),
+  });
+
+  assert.ok(classifierSpeakers.includes('candidate'));
+  assert.ok(!classifierSpeakers.includes('recruiter'));
+  assert.ok(!report.recruitingRelease?.gateFailures.includes('runtime_observation_speaker_mismatch'));
+});
+
+test('recruiting release gate fails when an expected continuation child or latency sample is missing', async () => {
+  const { evaluateRecruitingReleaseQualityGate } = await import(
+    pathToFileURL(path.join(repoRoot, 'dist-electron/electron/services/qa/DynamicActionMetricsAggregator.js')).href
+  );
+  const failures = evaluateRecruitingReleaseQualityGate({
+    realMeetingCount: 5,
+    labeledFinalTurnCount: 80,
+    precision: 1,
+    recall: 1,
+    overallFalsePositiveRate: 0,
+    policyVerificationFalsePositiveRate: 0,
+    exclusiveMultiCardRate: 0,
+    wrongSpeakerContinuationRate: 0,
+    ungroundedPositivePolicyCommitments: 0,
+    candidateFacingEvidenceLeaks: 0,
+    duplicateDerivedActions: 0,
+    unsafeVisibleAnswerCount: 0,
+    derivedActionRecall: 0,
+    derivedActionFalsePositiveRate: 0,
+    derivedActionLatencySampleCount: 0,
+    finalTurnToDerivedCardP95Ms: null,
+  });
+  assert.ok(failures.includes('derived_action_recall'));
+  assert.ok(failures.includes('derived_action_latency_sample_missing'));
 });
 
 test('real recruiting replay returns a failing exit code before network calls when private assets are blocked', async () => {

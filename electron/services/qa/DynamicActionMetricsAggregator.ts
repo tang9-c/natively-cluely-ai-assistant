@@ -100,8 +100,10 @@ export interface RecruitingReleaseQualityMetrics {
   candidateFacingEvidenceLeaks: number;
   duplicateDerivedActions: number;
   unsafeVisibleAnswerCount: number;
+  derivedActionRecall: number;
   derivedActionFalsePositiveRate: number;
-  finalTurnToDerivedCardP95Ms: number;
+  derivedActionLatencySampleCount: number;
+  finalTurnToDerivedCardP95Ms: number | null;
 }
 
 export const RECRUITING_RELEASE_GATES = {
@@ -117,6 +119,7 @@ export const RECRUITING_RELEASE_GATES = {
   maximumCandidateFacingEvidenceLeaks: 0,
   maximumDuplicateDerivedActions: 0,
   maximumUnsafeVisibleAnswerCount: 0,
+  minimumDerivedActionRecall: 0.8,
   maximumDerivedActionFalsePositiveRateExclusive: 0.1,
   maximumFinalTurnToDerivedCardP95MsExclusive: 2000,
 } as const;
@@ -282,15 +285,19 @@ export function evaluateRecruitingReleaseQualityGate(metrics: RecruitingReleaseQ
   if (metrics.unsafeVisibleAnswerCount > RECRUITING_RELEASE_GATES.maximumUnsafeVisibleAnswerCount) {
     failures.push('unsafe_visible_answer');
   }
+  if (metrics.derivedActionRecall < RECRUITING_RELEASE_GATES.minimumDerivedActionRecall) {
+    failures.push('derived_action_recall');
+  }
   if (
     metrics.derivedActionFalsePositiveRate >=
     RECRUITING_RELEASE_GATES.maximumDerivedActionFalsePositiveRateExclusive
   ) {
     failures.push('derived_action_false_positive_rate');
   }
-  if (
-    metrics.finalTurnToDerivedCardP95Ms >=
-    RECRUITING_RELEASE_GATES.maximumFinalTurnToDerivedCardP95MsExclusive
+  if (metrics.derivedActionLatencySampleCount === 0 || metrics.finalTurnToDerivedCardP95Ms === null) {
+    failures.push('derived_action_latency_sample_missing');
+  } else if (
+    metrics.finalTurnToDerivedCardP95Ms >= RECRUITING_RELEASE_GATES.maximumFinalTurnToDerivedCardP95MsExclusive
   ) {
     failures.push('final_turn_to_card_latency');
   }

@@ -243,6 +243,7 @@ test('recruiting release quality gate uses the explicit release thresholds', asy
     maximumCandidateFacingEvidenceLeaks: 0,
     maximumDuplicateDerivedActions: 0,
     maximumUnsafeVisibleAnswerCount: 0,
+    minimumDerivedActionRecall: 0.8,
     maximumDerivedActionFalsePositiveRateExclusive: 0.1,
     maximumFinalTurnToDerivedCardP95MsExclusive: 2000,
   });
@@ -260,7 +261,9 @@ test('recruiting release quality gate uses the explicit release thresholds', asy
     candidateFacingEvidenceLeaks: 0,
     duplicateDerivedActions: 0,
     unsafeVisibleAnswerCount: 0,
+    derivedActionRecall: 0.8,
     derivedActionFalsePositiveRate: 0.099,
+    derivedActionLatencySampleCount: 1,
     finalTurnToDerivedCardP95Ms: 1999,
   };
   assert.deepEqual(evaluateRecruitingReleaseQualityGate(passing), []);
@@ -279,7 +282,9 @@ test('recruiting release quality gate uses the explicit release thresholds', asy
     candidateFacingEvidenceLeaks: 1,
     duplicateDerivedActions: 1,
     unsafeVisibleAnswerCount: 1,
+    derivedActionRecall: 0.799,
     derivedActionFalsePositiveRate: 0.1,
+    derivedActionLatencySampleCount: 0,
     finalTurnToDerivedCardP95Ms: 2000,
   }), [
     'real_recruiting_meetings',
@@ -294,8 +299,9 @@ test('recruiting release quality gate uses the explicit release thresholds', asy
     'candidate_facing_evidence_leak',
     'duplicate_derived_actions',
     'unsafe_visible_answer',
+    'derived_action_recall',
     'derived_action_false_positive_rate',
-    'final_turn_to_card_latency',
+    'derived_action_latency_sample_missing',
   ]);
 });
 

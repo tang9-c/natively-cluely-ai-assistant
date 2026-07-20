@@ -481,10 +481,7 @@ function getDerivedFixtureChildren(
     derivedType: string;
   },
 ): DynamicAction[] {
-  const store = (engine as unknown as {
-    store: { getAllActions: (sessionId: string) => DynamicAction[] };
-  }).store;
-  return store.getAllActions(criteria.sessionId).filter((action) =>
+  return engine.getStore().getAllActions(criteria.sessionId).filter((action) =>
     action.modeId === criteria.modeId &&
     action.modeTemplateType === criteria.modeTemplateType &&
     action.parentActionId === criteria.parentActionId &&
