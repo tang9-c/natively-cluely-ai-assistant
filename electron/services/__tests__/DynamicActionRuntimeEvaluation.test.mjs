@@ -422,8 +422,11 @@ test('candidate policy claims for start dates and offers require supported recru
   }
 });
 
-test('candidate concern is fail-closed except for explicit recruiting-material insufficiency', async () => {
-  const { evaluateDynamicActionAcceptedOutput } = await import(pathToFileURL(evaluatorPath).href);
+test('candidate concern is fail-closed except for the exact deterministic fallback', async () => {
+  const {
+    buildRecruitingPolicySafeFallback,
+    evaluateDynamicActionAcceptedOutput,
+  } = await import(pathToFileURL(evaluatorPath).href);
   const unavailable = { verdict: 'unavailable', evidenceIds: [], reasonCode: 'no_injected_evidence', verificationSource: 'continuation_grounding_verifier' };
   const substantiveAnswers = [
     '这个岗位无需到岗。',
@@ -443,8 +446,8 @@ test('candidate concern is fail-closed except for explicit recruiting-material i
   }
 
   const safeAnswers = [
-    '当前招聘材料不足，不能确认这项政策。请向招聘负责人核实。',
-    'The recruiting materials are not enough to confirm this policy. Please verify it with the recruiter.',
+    buildRecruitingPolicySafeFallback('zh'),
+    buildRecruitingPolicySafeFallback('en'),
   ];
   for (const answerText of safeAnswers) {
     const result = evaluateDynamicActionAcceptedOutput({
@@ -456,6 +459,56 @@ test('candidate concern is fail-closed except for explicit recruiting-material i
     });
     assert.equal(result.passed, true, answerText);
   }
+
+  const appendedAnswers = [
+    `${buildRecruitingPolicySafeFallback('zh')} 这个岗位永久远程。`,
+    `${buildRecruitingPolicySafeFallback('en')} We will extend an offer.`,
+  ];
+  for (const answerText of appendedAnswers) {
+    const result = evaluateDynamicActionAcceptedOutput({
+      actionType: 'candidate_concern',
+      outputType: 'spoken_response',
+      answerText,
+      groundedSources: [],
+      claimGrounding: unavailable,
+    });
+    assert.ok(result.groundingFailures.includes('recruiting_policy_claim_not_supported_by_material'), answerText);
+  }
+});
+
+test('candidate concern runtime replaces an escaped model answer with the deterministic fallback', async () => {
+  const { buildRecruitingPolicySafeFallback } = await import(pathToFileURL(evaluatorPath).href);
+  const modelAnswer = `${buildRecruitingPolicySafeFallback('zh')} 这个岗位永久远程。`;
+  const { engine } = await runtimeEvaluationHarness([modelAnswer]);
+  engine._setDynamicActionClaimGroundingVerifierForTest({
+    verify: async () => ({
+      verdict: 'unavailable',
+      evidenceIds: [],
+      reasonCode: 'no_injected_evidence',
+      verificationSource: 'continuation_grounding_verifier',
+    }),
+  });
+
+  const answer = await engine.runWhatShouldISay('候选人询问远程政策', 0.9, undefined, {
+    skipCooldown: true,
+    source: 'dynamic_action',
+    modeEvent: {
+      actionId: 'candidate-concern-child',
+      actionType: 'candidate_concern',
+      parentActionId: 'candidate-concern-parent',
+      productContract: { outputType: 'spoken_response' },
+    },
+    dynamicActionValidation: {
+      actionType: 'candidate_concern',
+      parentActionId: 'candidate-concern-parent',
+      grounding: { groundedSources: [], injectedEvidence: [] },
+      providerDataScopes: { transcript: true, reference_files: true },
+      deferUserVisibleEmission: true,
+      language: 'zh',
+    },
+  });
+
+  assert.equal(answer, buildRecruitingPolicySafeFallback('zh'));
 });
 
 test('candidate concern substantive answers require both used material and supported verification', async () => {
@@ -485,14 +538,24 @@ test('recruiting safety classifications reject equivalent Chinese and English ex
   const { evaluateDynamicActionAcceptedOutput } = await import(pathToFileURL(evaluatorPath).href);
   const cases = [
     ['visible_interview_method_classification', '这是一次压力测试'],
+    ['visible_interview_method_classification', '当前采用结构化面试'],
     ['visible_interview_method_classification', 'This is a stress test interview.'],
+    ['visible_interview_method_classification', 'Current method is structured interview.'],
     ['visible_interview_method_classification', 'We are conducting a pressure interview.'],
     ['final_hiring_judgment_or_ranking', 'we should hire her'],
+    ['final_hiring_judgment_or_ranking', 'We should definitely hire her.'],
     ['final_hiring_judgment_or_ranking', 'The candidate is not a fit.'],
+    ['final_hiring_judgment_or_ranking', 'Rank her first.'],
     ['final_hiring_judgment_or_ranking', '她不适合这个岗位。'],
+    ['final_hiring_judgment_or_ranking', '建议直接录用。'],
+    ['final_hiring_judgment_or_ranking', '建议直接淘汰。'],
+    ['final_hiring_judgment_or_ranking', '建议排第一。'],
     ['protected_class_basis', '候选人的国籍不符合团队要求。'],
-    ['protected_class_basis', '需要核实国籍政策。'],
-    ['protected_class_basis', 'We need to verify the candidate nationality policy.'],
+    ['protected_class_basis', 'Women are not suitable for this role.'],
+    ['protected_class_basis', '女性不适合出差。'],
+    ['protected_class_basis', '已婚可能影响工作。'],
+    ['aggressive_recruiting_pressure', 'I do not believe you are capable.'],
+    ['aggressive_recruiting_pressure', '你这个回答太差了。'],
     ['aggressive_recruiting_pressure', '你必须今天接受 offer。'],
     ['aggressive_recruiting_pressure', '今天必须接受录用通知。'],
     ['aggressive_recruiting_pressure', 'You must accept the offer today.'],
@@ -515,6 +578,8 @@ test('recruiting safety classifications allow ordinary job evidence descriptions
     ['已观察证据：候选人负责跨国发布并处理高压项目。待验证：事故率口径。', '候选人负责跨国发布并处理高压项目。'],
     ['Evidence observed: candidate handled a high-pressure rollout and documented the test plan. Needs verification: metric definition.', 'candidate handled a high-pressure rollout and documented the test plan'],
     ['Evidence observed: candidate managed the migration and traced release failures. Needs verification: incident rate.', 'candidate managed the migration and traced release failures'],
+    ['Evidence observed: candidate mentioned age; it must not be used in hiring. Needs verification: rollout scope.', 'candidate mentioned age; it must not be used in hiring during the rollout'],
+    ['已观察证据：候选人提到年龄，但不得作为录用依据。待验证：发布范围。', '候选人提到年龄，但不得作为录用依据，并说明了发布范围。'],
   ];
   for (const [answerText, transcript] of cases) {
     const result = evaluateDynamicActionAcceptedOutput({
@@ -524,5 +589,40 @@ test('recruiting safety classifications allow ordinary job evidence descriptions
       transcriptEvidence: [transcript],
     });
     assert.equal(result.passed, true, answerText);
+  }
+});
+
+test('candidate evidence transcript anchors ignore English stopwords and require matching numbers', async () => {
+  const { evaluateDynamicActionAcceptedOutput } = await import(pathToFileURL(evaluatorPath).href);
+  const cases = [
+    {
+      answerText: 'Evidence observed: candidate led the 50-person team. Needs verification: team scope.',
+      transcriptEvidence: ['Candidate participated in the rollout.'],
+      passed: false,
+    },
+    {
+      answerText: 'Evidence observed: candidate led the Atlas rollout. Needs verification: rollout scope.',
+      transcriptEvidence: ['Candidate explained how she led the Atlas rollout.'],
+      passed: true,
+    },
+    {
+      answerText: 'Evidence observed: candidate reduced incidents by 30%. Needs verification: measurement window.',
+      transcriptEvidence: ['Candidate said she reduced incidents by 30 percent.'],
+      passed: true,
+    },
+    {
+      answerText: 'Evidence observed: candidate reduced incidents by 30%. Needs verification: measurement window.',
+      transcriptEvidence: ['Candidate said she reduced incidents by 20%.'],
+      passed: false,
+    },
+  ];
+  for (const testCase of cases) {
+    const result = evaluateDynamicActionAcceptedOutput({
+      actionType: 'candidate_evidence_summary',
+      outputType: 'spoken_response',
+      answerText: testCase.answerText,
+      transcriptEvidence: testCase.transcriptEvidence,
+    });
+    assert.equal(result.passed, testCase.passed, testCase.answerText);
   }
 });

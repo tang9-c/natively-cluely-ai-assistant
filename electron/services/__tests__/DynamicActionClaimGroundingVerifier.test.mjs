@@ -10,6 +10,13 @@ async function loadVerifier() {
   )).href);
 }
 
+async function loadEvaluator() {
+  return import(pathToFileURL(path.join(
+    process.cwd(),
+    'dist-electron/electron/services/dynamic-actions/DynamicActionAcceptedOutputEvaluator.js',
+  )).href);
+}
+
 function input(overrides = {}) {
   return {
     answerText: '可以确认支持压降分析。',
@@ -75,7 +82,8 @@ test('verifier fails closed for unknown evidence ids, invalid json, timeout and 
   assert.equal(calls, 0);
 });
 
-test('recruiting verification is skipped only for explicit safe insufficiency answers', async () => {
+test('recruiting verification is skipped only for the exact deterministic fallback', async () => {
+  const { buildRecruitingPolicySafeFallback } = await loadEvaluator();
   let calls = 0;
   const verifier = await verifierWithGenerator(async () => {
     calls += 1;
@@ -87,8 +95,8 @@ test('recruiting verification is skipped only for explicit safe insufficiency an
     providerDataScopes: { transcript: true, reference_files: true },
   };
   const safeAnswers = [
-    '当前招聘材料不足，不能确认这项政策。请向招聘负责人核实。',
-    'The recruiting materials are not enough to confirm this policy. Please verify it with the recruiter.',
+    buildRecruitingPolicySafeFallback('zh'),
+    buildRecruitingPolicySafeFallback('en'),
   ];
   for (const answerText of safeAnswers) {
     const verdict = await verifier.verify({ ...recruitingInput, answerText });
@@ -100,6 +108,8 @@ test('recruiting verification is skipped only for explicit safe insufficiency an
     'This role is fully work-from-home.',
     '候选人可以九月入职。',
     'We will extend an offer.',
+    `${buildRecruitingPolicySafeFallback('zh')} 这个岗位永久远程。`,
+    `${buildRecruitingPolicySafeFallback('en')} We will extend an offer.`,
   ];
   for (const answerText of substantiveAnswers) {
     const verdict = await verifier.verify({ ...recruitingInput, answerText });

@@ -102,7 +102,7 @@ export function evaluateDynamicActionAcceptedOutput(
 
   if (input.actionType === 'candidate_concern') {
     const usedPolicyGrounding = hasUsedGrounding(['material', 'pptx']);
-    const isSafeInsufficiency = isRecruitingPolicySafeInsufficiencyAnswer(answer);
+    const isSafeInsufficiency = isExactRecruitingPolicySafeFallback(answer);
     if (!isSafeInsufficiency &&
       (!usedPolicyGrounding || input.claimGrounding?.verdict !== 'supported')) {
       groundingFailures.push('recruiting_policy_claim_not_supported_by_material');
@@ -110,8 +110,7 @@ export function evaluateDynamicActionAcceptedOutput(
     if (!usedPolicyGrounding && !isSafeInsufficiency) {
       groundingFailures.push('candidate_concern_requires_insufficiency_and_confirmation');
     }
-    forbidRecruitingMethodClassification(forbidPattern);
-    forbidRecruitingFinalJudgments(forbidPattern);
+    appendRecruitingSafetyFailures(answer, forbiddenPatternFailures);
   }
 
   if (input.actionType === 'candidate_evidence_summary') {
@@ -120,8 +119,7 @@ export function evaluateDynamicActionAcceptedOutput(
     if (!hasTranscriptEvidenceAnchors(answer, input.transcriptEvidence)) {
       groundingFailures.push('candidate_evidence_summary_requires_transcript_anchor');
     }
-    forbidRecruitingMethodClassification(forbidPattern);
-    forbidRecruitingFinalJudgments(forbidPattern);
+    appendRecruitingSafetyFailures(answer, forbiddenPatternFailures);
   }
 
   if (input.actionType === 'discovery_question') {
@@ -191,16 +189,15 @@ export function containsPositiveRecruitingPolicyClaim(answer: string): boolean {
   return /远程办公|混合办公|签证(?:转移|支持)?|搬迁|薪酬|工资|薪资|(?:[一二三四五六七八九十]|1[0-2]|0?[1-9])月(?:份)?入职|(?:发放|发送|提供)(?:录用通知|\s*offer)|录用通知|\b(?:can|will)\s+(?:start|begin)\s+in\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)\b|\b(?:can|will)\s+(?:issue|send|extend|make)\s+(?:an\s+)?offer\b|\b(?:职级|入职日期|start date|remote(?: work)?|hybrid|visa|relocation|compensation|salary|level)\b/i.test(answer);
 }
 
-export function isRecruitingPolicySafeInsufficiencyAnswer(answer: string): boolean {
-  const statesRecruitingMaterialInsufficiency =
-    /(?:当前|现有)?招聘(?:政策)?材料(?:还|仍)?不足|招聘材料无法支持确认|(?:current|available|existing)?\s*recruiting materials?\s+(?:are|is)?\s*(?:not enough|insufficient)|not enough recruiting material/i.test(answer);
-  const requestsRecruitingConfirmation =
-    /招聘负责人|招聘团队|hiring team|recruiter|招聘方.{0,8}(?:核实|确认)|(?:核实|确认).{0,8}(?:招聘负责人|招聘团队|招聘方)|verify.{0,24}(?:recruiter|hiring team)|confirm.{0,24}(?:recruiter|hiring team)/i.test(answer);
-  return statesRecruitingMaterialInsufficiency && requestsRecruitingConfirmation;
+export function isExactRecruitingPolicySafeFallback(answer: string): boolean {
+  const normalizedAnswer = normalizeDeterministicFallback(answer);
+  return ['zh', 'en'].some((language) =>
+    normalizedAnswer === normalizeDeterministicFallback(buildRecruitingPolicySafeFallback(language))
+  );
 }
 
 export function requiresRecruitingPolicyVerification(answer: string): boolean {
-  return !isRecruitingPolicySafeInsufficiencyAnswer(answer);
+  return !isExactRecruitingPolicySafeFallback(answer);
 }
 
 export function buildCapabilityFitSafeFallback(language?: string): string {
@@ -227,39 +224,90 @@ export function buildRecruitingEvidenceSafeFallback(language?: string): string {
     : '当前回答还没有提供足够的可验证岗位证据。请只记录已观察事实，并把缺失证据标为待追问；不要据此作出录用或淘汰判断。';
 }
 
-function forbidRecruitingMethodClassification(
-  forbidPattern: (label: string, pattern: RegExp) => void,
-): void {
-  forbidPattern(
-    'visible_interview_method_classification',
-    /(?:当前|这是|本次|本轮|属于|按).{0,12}(?:STAR|BEI|结构化面试|压力面试|压力测试)|(?:STAR|BEI).{0,12}(?:分类|classif)|\b(?:this|it)\s+is\s+(?:an?\s+)?(?:star|bei|structured|stress|pressure)(?:[- ]test)?\s+(?:interview|test)\b|\b(?:we\s+are|currently)\s+(?:conducting\s+)?(?:an?\s+)?(?:stress|pressure|structured)\s+interview\b/i,
-  );
+function normalizeDeterministicFallback(value: string): string {
+  return value.normalize('NFKC').replace(/\s+/g, ' ').trim();
 }
 
-function forbidRecruitingFinalJudgments(
-  forbidPattern: (label: string, pattern: RegExp) => void,
-): void {
-  forbidPattern(
-    'final_hiring_judgment_or_ranking',
-    /不建议(?:继续)?推进|建议(?:立即)?(?:录用|淘汰)|(?:录用|淘汰|拒绝)候选人|(?:他|她|候选人).{0,6}不适合(?:这个|该)?岗位|排名|最(?:强|佳)候选人|\b(?:i|we)\s+(?:do not|don't)\s+recommend\s+(?:proceeding|moving forward|continuing)\b|\b(?:i|we)\s+should\s+(?:hire|reject|advance|drop)\b|\bnot\s+(?:a\s+)?fit\b|must hire|hire immediately|reject candidate|top candidate/i,
-  );
-  forbidPattern(
-    'protected_class_basis',
-    /性别|年龄|民族|种族|国籍|宗教|婚姻|怀孕|残障|\b(?:gender|age|race|nationality|citizenship|religion|disability|marital(?:\s+status)?)\b/i,
-  );
-  forbidPattern(
-    'aggressive_recruiting_pressure',
-    /(?:你.{0,6})?(?:必须|务必).{0,8}(?:今天|马上|立即).{0,8}(?:接受|签署).{0,6}(?:offer|录用通知)|(?:今天|马上|立即).{0,6}(?:必须|务必).{0,8}(?:接受|签署).{0,6}(?:offer|录用通知)|必须(?:马上|立即)(?:录用|接受)|强烈建议(?:马上|立即)?录用|逼迫|施压|\byou\s+(?:must|have\s+to)\s+(?:accept|sign).{0,12}(?:offer|employment).{0,12}(?:today|immediately|now)\b|pressure.{0,20}(?:accept|hire)/i,
-  );
+function appendRecruitingSafetyFailures(answer: string, failures: string[]): void {
+  if (containsVisibleInterviewMethodClassification(answer)) {
+    failures.push('visible_interview_method_classification');
+  }
+  if (containsFinalHiringJudgmentOrRanking(answer)) {
+    failures.push('final_hiring_judgment_or_ranking');
+  }
+  if (containsAggressiveRecruitingPressure(answer)) {
+    failures.push('aggressive_recruiting_pressure');
+  }
+  if (containsProtectedClassBasis(answer)) {
+    failures.push('protected_class_basis');
+  }
+}
+
+function containsVisibleInterviewMethodClassification(answer: string): boolean {
+  const patterns = [
+    /(?:当前|这是|本次|本轮|属于|按).{0,12}(?:STAR|BEI|结构化面试|压力面试|压力测试)/i,
+    /(?:STAR|BEI).{0,12}(?:分类|classif)/i,
+    /\bcurrent\s+(?:interview\s+)?method\s+is\s+(?:an?\s+)?(?:structured|stress|pressure)(?:[- ]test)?\s+(?:interview|test)\b/i,
+    /\b(?:this|it)\s+is\s+(?:an?\s+)?(?:star|bei|structured|stress|pressure)(?:[- ]test)?\s+(?:interview|test)\b/i,
+    /\b(?:we\s+are|currently)\s+(?:conducting\s+)?(?:an?\s+)?(?:stress|pressure|structured)\s+interview\b/i,
+  ];
+  return patterns.some((pattern) => pattern.test(answer));
+}
+
+function containsFinalHiringJudgmentOrRanking(answer: string): boolean {
+  const patterns = [
+    /不建议(?:继续)?推进|建议(?:直接|立即|马上)?(?:录用|淘汰)|(?:录用|淘汰|拒绝)候选人/i,
+    /建议(?:把)?(?:他|她|候选人)?排(?:在)?第一|(?:他|她|候选人).{0,6}不适合(?:这个|该)?岗位|排名|最(?:强|佳)候选人/i,
+    /\b(?:i|we)\s+(?:do not|don't)\s+recommend\s+(?:proceeding|moving forward|continuing)\b/i,
+    /\b(?:i|we)\s+should\s+(?:definitely\s+)?(?:hire|reject|advance|drop)\b/i,
+    /\bnot\s+(?:a\s+)?fit\b|\brank\s+(?:him|her|them|the candidate)\s+first\b/i,
+    /\bmust hire\b|\bhire immediately\b|\breject candidate\b|\btop candidate\b/i,
+  ];
+  return patterns.some((pattern) => pattern.test(answer));
+}
+
+function containsAggressiveRecruitingPressure(answer: string): boolean {
+  const patterns = [
+    /\bi\s+do\s+not\s+believe\s+you\s+are\s+capable\b|\byou(?:'re| are)\s+not\s+capable\b/i,
+    /你(?:这个|的)?回答.{0,6}(?:太差|很差|糟糕)|你.{0,6}(?:没有能力|不具备能力)/i,
+    /(?:你.{0,6})?(?:必须|务必).{0,8}(?:今天|马上|立即).{0,8}(?:接受|签署).{0,6}(?:offer|录用通知)/i,
+    /(?:今天|马上|立即).{0,6}(?:必须|务必).{0,8}(?:接受|签署).{0,6}(?:offer|录用通知)|必须(?:马上|立即)(?:录用|接受)/i,
+    /\byou\s+(?:must|have\s+to)\s+(?:accept|sign).{0,12}(?:offer|employment).{0,12}(?:today|immediately|now)\b/i,
+    /强烈建议(?:马上|立即)?录用|逼迫|施压|pressure.{0,20}(?:accept|hire)/i,
+  ];
+  return patterns.some((pattern) => pattern.test(answer));
+}
+
+function containsProtectedClassBasis(answer: string): boolean {
+  const protectedAttribute = /女性|男性|性别|年龄|民族|种族|国籍|宗教|婚姻|已婚|未婚|怀孕|残障|\b(?:women|woman|men|man|female|male|gender|age|race|nationality|citizenship|religion|disability|married|marital(?:\s+status)?)\b/i;
+  const unsafeRelations = [
+    /(?:女性|男性|已婚|未婚|怀孕|残障|性别|年龄|民族|种族|国籍|宗教|婚姻).{0,16}(?:不适合|不符合|不能胜任|不建议录用|应当淘汰|影响(?:工作|表现|出差|录用|晋升))/i,
+    /(?:因为|由于).{0,12}(?:女性|男性|已婚|未婚|怀孕|残障|性别|年龄|民族|种族|国籍|宗教|婚姻).{0,16}(?:拒绝|淘汰|不录用|不推进)/i,
+    /\b(?:women|woman|men|man|female|male|married|pregnant|disabled)\b.{0,24}\b(?:not suitable|unfit|not a fit|cannot perform|should not be hired|should be rejected)\b/i,
+    /\b(?:gender|age|race|nationality|citizenship|religion|disability|marital status)\b.{0,24}\b(?:makes?|means?|affects?|impacts?|disqualif(?:y|ies))\b.{0,16}\b(?:work|performance|travel|suitability|hiring|promotion)\b/i,
+  ];
+  return answer
+    .split(/[。.!！；;\n]+/)
+    .map((segment) => segment.trim())
+    .filter((segment) => protectedAttribute.test(segment))
+    .some((segment) => unsafeRelations.some((pattern) => pattern.test(segment)));
 }
 
 function hasTranscriptEvidenceAnchors(answer: string, transcriptEvidence: string[] | undefined): boolean {
   const evidenceSegments = extractEvidenceSegments(answer);
+  const transcriptText = (transcriptEvidence ?? []).join('\n');
   const transcriptAnchors = new Set(
     (transcriptEvidence ?? []).flatMap(extractJobRelatedAnchors),
   );
+  const transcriptNumbers = new Set(extractNormalizedNumericAnchors(transcriptText));
   return evidenceSegments.length > 0 && transcriptAnchors.size > 0 && evidenceSegments.every((segment) => {
     const anchors = extractJobRelatedAnchors(segment);
+    const numericAnchors = extractNormalizedNumericAnchors(segment);
+    if (!numericAnchors.every((anchor) => transcriptNumbers.has(anchor))) return false;
+    if (/[a-z]/i.test(segment)) {
+      const semanticAnchors = anchors.filter((anchor) => !/^\d/.test(anchor));
+      return semanticAnchors.length > 0 && semanticAnchors.some((anchor) => transcriptAnchors.has(anchor));
+    }
     return anchors.length > 0 && anchors.some((anchor) => transcriptAnchors.has(anchor));
   });
 }
@@ -277,6 +325,8 @@ function extractJobRelatedAnchors(value: string): string[] {
   const ignored = new Set([
     '候选人', '候选', '选人', '已观察', '观察证据', '证据', '结果', '待验证', '缺失', '自己',
     'candidate', 'evidence', 'observed', 'result', 'missing', 'verification', 'needs',
+    'the', 'and', 'in', 'a', 'an', 'to', 'of', 'for', 'with', 'is', 'was', 'were', 'it', 'this', 'that',
+    'as', 'at', 'by', 'from', 'on', 'or', 'be', 'been', 'being', 'she', 'he', 'they', 'her', 'him', 'them',
   ]);
   const anchors = new Set<string>();
   for (const token of normalized.match(/[a-z][a-z0-9_-]{1,}|\d+(?:\.\d+)?|[\p{Script=Han}]{2,}/gu) ?? []) {
@@ -303,6 +353,22 @@ function extractJobRelatedAnchors(value: string): string[] {
     if (!ignored.has(token)) anchors.add(token);
   }
   return [...anchors];
+}
+
+function extractNormalizedNumericAnchors(value: string): string[] {
+  const anchors = new Set<string>();
+  for (const match of value.matchAll(/百分之\s*(\d[\d,]*(?:\.\d+)?)/g)) {
+    anchors.add(`${normalizeNumber(match[1])}%`);
+  }
+  for (const match of value.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(%|percent(?:age)?\b)?/gi)) {
+    anchors.add(`${normalizeNumber(match[1])}${match[2] ? '%' : ''}`);
+  }
+  return [...anchors];
+}
+
+function normalizeNumber(value: string): string {
+  const normalized = Number(value.replace(/,/g, ''));
+  return Number.isFinite(normalized) ? String(normalized) : value.replace(/,/g, '');
 }
 
 function forbidUnpromptedTechnicalJargon(answer: string, sourceUtterance: string | undefined, failures: string[]): void {
