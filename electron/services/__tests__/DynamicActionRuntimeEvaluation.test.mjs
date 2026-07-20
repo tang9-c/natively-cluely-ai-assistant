@@ -421,3 +421,108 @@ test('candidate policy claims for start dates and offers require supported recru
     assert.ok(result.groundingFailures.includes('recruiting_policy_claim_not_supported_by_material'));
   }
 });
+
+test('candidate concern is fail-closed except for explicit recruiting-material insufficiency', async () => {
+  const { evaluateDynamicActionAcceptedOutput } = await import(pathToFileURL(evaluatorPath).href);
+  const unavailable = { verdict: 'unavailable', evidenceIds: [], reasonCode: 'no_injected_evidence', verificationSource: 'continuation_grounding_verifier' };
+  const substantiveAnswers = [
+    '这个岗位无需到岗。',
+    'This role is fully work-from-home.',
+    '候选人可以九月入职。',
+    'We will extend an offer.',
+  ];
+  for (const answerText of substantiveAnswers) {
+    const result = evaluateDynamicActionAcceptedOutput({
+      actionType: 'candidate_concern',
+      outputType: 'spoken_response',
+      answerText,
+      groundedSources: [],
+      claimGrounding: unavailable,
+    });
+    assert.ok(result.groundingFailures.includes('recruiting_policy_claim_not_supported_by_material'), answerText);
+  }
+
+  const safeAnswers = [
+    '当前招聘材料不足，不能确认这项政策。请向招聘负责人核实。',
+    'The recruiting materials are not enough to confirm this policy. Please verify it with the recruiter.',
+  ];
+  for (const answerText of safeAnswers) {
+    const result = evaluateDynamicActionAcceptedOutput({
+      actionType: 'candidate_concern',
+      outputType: 'spoken_response',
+      answerText,
+      groundedSources: [],
+      claimGrounding: unavailable,
+    });
+    assert.equal(result.passed, true, answerText);
+  }
+});
+
+test('candidate concern substantive answers require both used material and supported verification', async () => {
+  const { evaluateDynamicActionAcceptedOutput } = await import(pathToFileURL(evaluatorPath).href);
+  const groundedSources = [{ evidenceId: 'recruiting-1', type: 'material', label: 'recruiting-policy.pdf', status: 'used' }];
+  const answerText = 'This role is fully work-from-home.';
+  const unsupported = evaluateDynamicActionAcceptedOutput({
+    actionType: 'candidate_concern',
+    outputType: 'spoken_response',
+    answerText,
+    groundedSources,
+    claimGrounding: { verdict: 'unsupported', evidenceIds: [], reasonCode: 'claim_not_supported', verificationSource: 'continuation_grounding_verifier' },
+  });
+  assert.ok(unsupported.groundingFailures.includes('recruiting_policy_claim_not_supported_by_material'));
+
+  const supported = evaluateDynamicActionAcceptedOutput({
+    actionType: 'candidate_concern',
+    outputType: 'spoken_response',
+    answerText,
+    groundedSources,
+    claimGrounding: { verdict: 'supported', evidenceIds: ['recruiting-1'], reasonCode: 'claims_supported', verificationSource: 'continuation_grounding_verifier' },
+  });
+  assert.equal(supported.passed, true);
+});
+
+test('recruiting safety classifications reject equivalent Chinese and English expressions', async () => {
+  const { evaluateDynamicActionAcceptedOutput } = await import(pathToFileURL(evaluatorPath).href);
+  const cases = [
+    ['visible_interview_method_classification', '这是一次压力测试'],
+    ['visible_interview_method_classification', 'This is a stress test interview.'],
+    ['visible_interview_method_classification', 'We are conducting a pressure interview.'],
+    ['final_hiring_judgment_or_ranking', 'we should hire her'],
+    ['final_hiring_judgment_or_ranking', 'The candidate is not a fit.'],
+    ['final_hiring_judgment_or_ranking', '她不适合这个岗位。'],
+    ['protected_class_basis', '候选人的国籍不符合团队要求。'],
+    ['protected_class_basis', '需要核实国籍政策。'],
+    ['protected_class_basis', 'We need to verify the candidate nationality policy.'],
+    ['aggressive_recruiting_pressure', '你必须今天接受 offer。'],
+    ['aggressive_recruiting_pressure', '今天必须接受录用通知。'],
+    ['aggressive_recruiting_pressure', 'You must accept the offer today.'],
+    ['aggressive_recruiting_pressure', 'You have to sign the offer now.'],
+  ];
+  for (const [failure, unsafeText] of cases) {
+    const result = evaluateDynamicActionAcceptedOutput({
+      actionType: 'candidate_evidence_summary',
+      outputType: 'spoken_response',
+      answerText: `Evidence observed: candidate led the rollout. ${unsafeText}. Needs verification: metric definition.`,
+      transcriptEvidence: ['candidate led the rollout'],
+    });
+    assert.ok(result.forbiddenPatternFailures.includes(failure), `${failure}: ${unsafeText}`);
+  }
+});
+
+test('recruiting safety classifications allow ordinary job evidence descriptions', async () => {
+  const { evaluateDynamicActionAcceptedOutput } = await import(pathToFileURL(evaluatorPath).href);
+  const cases = [
+    ['已观察证据：候选人负责跨国发布并处理高压项目。待验证：事故率口径。', '候选人负责跨国发布并处理高压项目。'],
+    ['Evidence observed: candidate handled a high-pressure rollout and documented the test plan. Needs verification: metric definition.', 'candidate handled a high-pressure rollout and documented the test plan'],
+    ['Evidence observed: candidate managed the migration and traced release failures. Needs verification: incident rate.', 'candidate managed the migration and traced release failures'],
+  ];
+  for (const [answerText, transcript] of cases) {
+    const result = evaluateDynamicActionAcceptedOutput({
+      actionType: 'candidate_evidence_summary',
+      outputType: 'spoken_response',
+      answerText,
+      transcriptEvidence: [transcript],
+    });
+    assert.equal(result.passed, true, answerText);
+  }
+});

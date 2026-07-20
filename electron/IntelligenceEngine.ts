@@ -452,6 +452,7 @@ export class IntelligenceEngine extends EventEmitter {
                 maxOutputTokens: 256,
                 perProviderTimeoutMs: 2500,
                 maxRotations: 1,
+                requireCloudProvider: true,
             });
         } catch (error) {
             throw new CloudSemanticGateError(cloudFailureReasonFromError(error));

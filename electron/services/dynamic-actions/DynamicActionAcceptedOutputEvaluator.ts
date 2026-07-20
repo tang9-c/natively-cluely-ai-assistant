@@ -102,13 +102,12 @@ export function evaluateDynamicActionAcceptedOutput(
 
   if (input.actionType === 'candidate_concern') {
     const usedPolicyGrounding = hasUsedGrounding(['material', 'pptx']);
-    const statesInsufficiency = /招聘材料不足|材料不足|不能确认|无法确认|not enough|cannot confirm/i.test(answer);
-    const requestsConfirmation = /招聘负责人|hiring team|recruiter|核实|确认|verify|confirm/i.test(answer);
-    if (containsPositiveRecruitingPolicyClaim(answer) &&
+    const isSafeInsufficiency = isRecruitingPolicySafeInsufficiencyAnswer(answer);
+    if (!isSafeInsufficiency &&
       (!usedPolicyGrounding || input.claimGrounding?.verdict !== 'supported')) {
       groundingFailures.push('recruiting_policy_claim_not_supported_by_material');
     }
-    if (!usedPolicyGrounding && (!statesInsufficiency || !requestsConfirmation)) {
+    if (!usedPolicyGrounding && !isSafeInsufficiency) {
       groundingFailures.push('candidate_concern_requires_insufficiency_and_confirmation');
     }
     forbidRecruitingMethodClassification(forbidPattern);
@@ -192,6 +191,18 @@ export function containsPositiveRecruitingPolicyClaim(answer: string): boolean {
   return /远程办公|混合办公|签证(?:转移|支持)?|搬迁|薪酬|工资|薪资|(?:[一二三四五六七八九十]|1[0-2]|0?[1-9])月(?:份)?入职|(?:发放|发送|提供)(?:录用通知|\s*offer)|录用通知|\b(?:can|will)\s+(?:start|begin)\s+in\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)\b|\b(?:can|will)\s+(?:issue|send|extend|make)\s+(?:an\s+)?offer\b|\b(?:职级|入职日期|start date|remote(?: work)?|hybrid|visa|relocation|compensation|salary|level)\b/i.test(answer);
 }
 
+export function isRecruitingPolicySafeInsufficiencyAnswer(answer: string): boolean {
+  const statesRecruitingMaterialInsufficiency =
+    /(?:当前|现有)?招聘(?:政策)?材料(?:还|仍)?不足|招聘材料无法支持确认|(?:current|available|existing)?\s*recruiting materials?\s+(?:are|is)?\s*(?:not enough|insufficient)|not enough recruiting material/i.test(answer);
+  const requestsRecruitingConfirmation =
+    /招聘负责人|招聘团队|hiring team|recruiter|招聘方.{0,8}(?:核实|确认)|(?:核实|确认).{0,8}(?:招聘负责人|招聘团队|招聘方)|verify.{0,24}(?:recruiter|hiring team)|confirm.{0,24}(?:recruiter|hiring team)/i.test(answer);
+  return statesRecruitingMaterialInsufficiency && requestsRecruitingConfirmation;
+}
+
+export function requiresRecruitingPolicyVerification(answer: string): boolean {
+  return !isRecruitingPolicySafeInsufficiencyAnswer(answer);
+}
+
 export function buildCapabilityFitSafeFallback(language?: string): string {
   return language === 'en'
     ? 'The current materials are not enough to confirm this capability. Please verify it against the capability matrix or run a PoC with one real object and acceptance metric; no automatic PLM or QMS writeback is assumed.'
@@ -219,15 +230,27 @@ export function buildRecruitingEvidenceSafeFallback(language?: string): string {
 function forbidRecruitingMethodClassification(
   forbidPattern: (label: string, pattern: RegExp) => void,
 ): void {
-  forbidPattern('visible_interview_method_classification', /(?:当前|这是|按|属于).{0,12}(?:STAR|BEI|结构化面试|压力面试)|(?:STAR|BEI).{0,12}(?:分类|classif)|\b(?:this is|currently)\s+(?:a\s+)?stress interview\b/i);
+  forbidPattern(
+    'visible_interview_method_classification',
+    /(?:当前|这是|本次|本轮|属于|按).{0,12}(?:STAR|BEI|结构化面试|压力面试|压力测试)|(?:STAR|BEI).{0,12}(?:分类|classif)|\b(?:this|it)\s+is\s+(?:an?\s+)?(?:star|bei|structured|stress|pressure)(?:[- ]test)?\s+(?:interview|test)\b|\b(?:we\s+are|currently)\s+(?:conducting\s+)?(?:an?\s+)?(?:stress|pressure|structured)\s+interview\b/i,
+  );
 }
 
 function forbidRecruitingFinalJudgments(
   forbidPattern: (label: string, pattern: RegExp) => void,
 ): void {
-  forbidPattern('final_hiring_judgment_or_ranking', /不建议(?:继续)?推进|建议(?:立即)?(?:录用|淘汰)|(?:录用|淘汰|拒绝)候选人|排名|最(?:强|佳)候选人|\b(?:i|we)\s+(?:do not|don't)\s+recommend\s+(?:proceeding|moving forward|continuing)\b|must hire|hire immediately|reject candidate|top candidate/i);
-  forbidPattern('protected_class_basis', /性别|年龄|民族|种族|宗教|婚姻|怀孕|残障|gender|age|race|religion|disability|marital/i);
-  forbidPattern('aggressive_recruiting_pressure', /必须(?:马上|立即)(?:录用|接受)|强烈建议(?:马上|立即)?录用|逼迫|施压|pressure.*(?:accept|hire)/i);
+  forbidPattern(
+    'final_hiring_judgment_or_ranking',
+    /不建议(?:继续)?推进|建议(?:立即)?(?:录用|淘汰)|(?:录用|淘汰|拒绝)候选人|(?:他|她|候选人).{0,6}不适合(?:这个|该)?岗位|排名|最(?:强|佳)候选人|\b(?:i|we)\s+(?:do not|don't)\s+recommend\s+(?:proceeding|moving forward|continuing)\b|\b(?:i|we)\s+should\s+(?:hire|reject|advance|drop)\b|\bnot\s+(?:a\s+)?fit\b|must hire|hire immediately|reject candidate|top candidate/i,
+  );
+  forbidPattern(
+    'protected_class_basis',
+    /性别|年龄|民族|种族|国籍|宗教|婚姻|怀孕|残障|\b(?:gender|age|race|nationality|citizenship|religion|disability|marital(?:\s+status)?)\b/i,
+  );
+  forbidPattern(
+    'aggressive_recruiting_pressure',
+    /(?:你.{0,6})?(?:必须|务必).{0,8}(?:今天|马上|立即).{0,8}(?:接受|签署).{0,6}(?:offer|录用通知)|(?:今天|马上|立即).{0,6}(?:必须|务必).{0,8}(?:接受|签署).{0,6}(?:offer|录用通知)|必须(?:马上|立即)(?:录用|接受)|强烈建议(?:马上|立即)?录用|逼迫|施压|\byou\s+(?:must|have\s+to)\s+(?:accept|sign).{0,12}(?:offer|employment).{0,12}(?:today|immediately|now)\b|pressure.{0,20}(?:accept|hire)/i,
+  );
 }
 
 function hasTranscriptEvidenceAnchors(answer: string, transcriptEvidence: string[] | undefined): boolean {

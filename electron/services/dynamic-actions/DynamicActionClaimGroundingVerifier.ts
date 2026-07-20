@@ -7,7 +7,7 @@ import {
 import type { InjectedGroundingEvidence } from './DynamicActionRuntimeGrounding';
 import {
     containsPositiveCapabilityClaim,
-    containsPositiveRecruitingPolicyClaim,
+    requiresRecruitingPolicyVerification,
 } from './DynamicActionAcceptedOutputEvaluator';
 
 export type ClaimGroundingVerdictCode = 'not_required' | 'supported' | 'unsupported' | 'unavailable';
@@ -42,7 +42,7 @@ export class DynamicActionClaimGroundingVerifier {
         providerDataScopes?: ProviderDataScopePolicy;
     }): Promise<ClaimGroundingVerdict> {
         const hasPositiveClaim = input.claimDomain === 'recruiting_policy'
-            ? containsPositiveRecruitingPolicyClaim(input.answerText)
+            ? requiresRecruitingPolicyVerification(input.answerText)
             : containsPositiveCapabilityClaim(input.answerText);
         if (!hasPositiveClaim) return buildNotRequiredClaimGroundingVerdict();
         if (input.evidence.length === 0) return unavailableVerdict('no_injected_evidence');

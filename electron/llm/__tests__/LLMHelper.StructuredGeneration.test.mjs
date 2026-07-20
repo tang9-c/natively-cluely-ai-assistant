@@ -183,4 +183,94 @@ describe('LLMHelper structured generation', () => {
       'company-research must route to the Doubao Pro model, not the Lite tier',
     );
   });
+
+  test('generateContentStructured() keeps Ollama available by default', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    let ollamaCalls = 0;
+    helper.useOllama = true;
+    helper.ollamaModel = 'local-structured-model';
+    helper.checkOllamaAvailable = async () => true;
+    helper.callOllama = async () => {
+      ollamaCalls += 1;
+      return '{"source":"ollama"}';
+    };
+
+    const result = await helper.generateContentStructured('return json', {
+      maxRotations: 1,
+      perProviderTimeoutMs: 100,
+    });
+
+    assert.equal(result, '{"source":"ollama"}');
+    assert.equal(ollamaCalls, 1);
+  });
+
+  test('cloud-only structured generation excludes local and unverified providers', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    const calls = { ollamaAvailability: 0, ollama: 0, custom: 0, curl: 0, codex: 0 };
+    helper.useOllama = true;
+    helper.checkOllamaAvailable = async () => {
+      calls.ollamaAvailability += 1;
+      return true;
+    };
+    helper.callOllama = async () => {
+      calls.ollama += 1;
+      return '{"source":"ollama"}';
+    };
+    helper.customProvider = { name: 'unverified-custom', curlCommand: 'curl https://example.test' };
+    helper.executeCustomProvider = async () => {
+      calls.custom += 1;
+      return '{"source":"custom"}';
+    };
+    helper.activeCurlProvider = { name: 'unverified-curl' };
+    helper.chatWithCurl = async () => {
+      calls.curl += 1;
+      return '{"source":"curl"}';
+    };
+    helper.codexCliConfig = { ...helper.codexCliConfig, enabled: true, model: 'local-codex' };
+    helper.generateWithCodexCli = async () => {
+      calls.codex += 1;
+      return '{"source":"codex"}';
+    };
+
+    await assert.rejects(
+      helper.generateContentStructured('PRIVATE_TRANSCRIPT_MUST_NOT_BE_LOGGED', {
+        requireCloudProvider: true,
+        maxRotations: 1,
+        perProviderTimeoutMs: 100,
+      }),
+      /No cloud reasoning model available/,
+    );
+    assert.deepEqual(calls, { ollamaAvailability: 0, ollama: 0, custom: 0, curl: 0, codex: 0 });
+  });
+
+  test('cloud-only structured generation does not log provider-echoed prompt content', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    const sentinel = 'PRIVATE_TRANSCRIPT_ECHO_8C31';
+    const warnings = [];
+    const originalWarn = console.warn;
+    helper.openaiClient = {};
+    helper.generateWithOpenai = async () => {
+      throw new Error(`provider rejected request containing ${sentinel}`);
+    };
+    console.warn = (...args) => warnings.push(args.map(String).join(' '));
+    try {
+      await assert.rejects(
+        helper.generateContentStructured(sentinel, {
+          requireCloudProvider: true,
+          maxRotations: 1,
+          perProviderTimeoutMs: 100,
+        }),
+        error => {
+          assert.doesNotMatch(error.message, new RegExp(sentinel));
+          return true;
+        },
+      );
+    } finally {
+      console.warn = originalWarn;
+    }
+    assert.doesNotMatch(warnings.join('\n'), new RegExp(sentinel));
+  });
 });

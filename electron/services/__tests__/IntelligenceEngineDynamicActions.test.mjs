@@ -40,12 +40,14 @@ class StubLLMHelper {
     this.structuredResponses = options.structuredResponses ?? [];
     this.structuredCalls = [];
     this.throwStructured = options.throwStructured ?? false;
+    this.throwCloudOnly = options.throwCloudOnly ?? false;
   }
   getActiveModel() { return { provider: 'gemini', model: 'gemini-3-flash' }; }
   isStreamingSupported() { return true; }
   setNegotiationCoachingHandler(_fn) { /* no-op for test */ }
   async generateContentStructured(prompt, options) {
     this.structuredCalls.push({ prompt, options });
+    if (this.throwCloudOnly && options?.requireCloudProvider) throw new Error('No cloud reasoning model available');
     if (this.throwStructured) throw new Error('cloud down');
     return this.structuredResponses.shift() ?? '{"intent":"general","confidence":0.5}';
   }
@@ -441,6 +443,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
 
     const gateCall = helper.structuredCalls.find(call => call.options?.taskLabel === 'dynamic-action-semantic-gate');
     assert.ok(gateCall, 'expected dynamic action semantic gate structured call');
+    assert.equal(gateCall.options.requireCloudProvider, true);
     assert.match(gateCall.prompt, /policySummary/);
     assert.match(gateCall.prompt, /case_study_request/);
     assert.match(gateCall.prompt, /pricing_request/);
@@ -451,6 +454,30 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       ['case_study_request', 'pass'],
       ['pricing_request', 'reject'],
     ]);
+  });
+
+  test('recruiting semantic gate cannot create candidate_concern from local-only structured generation', async () => {
+    const helper = new StubLLMHelper({
+      throwCloudOnly: true,
+      structuredResponses: ['{"intent":"recruiting_policy_question","confidence":0.97}'],
+    });
+    const { engine } = await makeEngine(helper);
+    const emitted = [];
+    engine.on('dynamic_action_emitted', action => emitted.push(action));
+    engine.setDynamicActionContext({ sessionId: 's-recruiting-local-only', modeId: 'm-recruiting', modeTemplateType: 'recruiting' });
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: '候选人问这个岗位是否可以完全远程办公。',
+      timestamp: Date.now(),
+      final: true,
+    }, true);
+    await waitForAsyncSignals();
+
+    const gateCall = helper.structuredCalls.find(call => call.options?.taskLabel === 'dynamic-action-semantic-gate');
+    assert.ok(gateCall, 'expected recruiting semantic gate call');
+    assert.equal(gateCall.options.requireCloudProvider, true);
+    assert.equal(emitted.some(action => action.type === 'candidate_concern'), false);
   });
 
   test('cloud intent prompt keeps triggering turn and speaker-diverse meeting context', async () => {

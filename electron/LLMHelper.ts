@@ -76,6 +76,7 @@ interface StructuredGenerationOptions {
   perProviderTimeoutMs?: number;
   maxOutputTokens?: number;
   maxRotations?: number;
+  requireCloudProvider?: boolean;
 }
 
 interface ProviderRequestOptions {
@@ -1873,11 +1874,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const maxOutputTokens = options.maxOutputTokens;
     const maxRotations = options.maxRotations ?? 3;
     const taskLabel = options.taskLabel ?? 'structured';
+    const requireCloudProvider = options.requireCloudProvider === true;
 
     // Priority 0: Codex CLI (when enabled). Structured-JSON workloads still
     // benefit from the user's selected backend; downstream callers run their
     // own JSON-extraction regex so prose-around-JSON is tolerated.
-    if (this.codexCliConfig.enabled) {
+    if (!requireCloudProvider && this.codexCliConfig.enabled) {
       providers.push({
         name: `Codex CLI (${this.codexCliConfig.model})`,
         execute: () => this.generateWithCodexCli(message),
@@ -1979,7 +1981,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // to be re-verified against the current Groq model catalog.
 
     // Priority 7: Ollama (on-device fallback — last resort, no cloud dependency)
-    if (this.useOllama && await this.checkOllamaAvailable()) {
+    if (!requireCloudProvider && this.useOllama && await this.checkOllamaAvailable()) {
       providers.push({
         name: `Ollama (${this.ollamaModel})`,
         execute: () => this.callOllama(message)
@@ -1987,7 +1989,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
 
     // Priority 8: Custom / cURL providers (OpenRouter etc.)
-    if (this.customProvider) {
+    if (!requireCloudProvider && this.customProvider) {
       providers.push({
         name: `Custom Provider (${this.customProvider.name})`,
         execute: () => this.executeCustomProvider(
@@ -1998,7 +2000,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           ''
         )
       });
-    } else if (this.activeCurlProvider) {
+    } else if (!requireCloudProvider && this.activeCurlProvider) {
       providers.push({
         name: `cURL Provider (${this.activeCurlProvider.name})`,
         execute: () => this.chatWithCurl(message)
@@ -2019,6 +2021,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
 
     if (providers.length === 0) {
+      if (requireCloudProvider) {
+        throw new Error('No cloud reasoning model available. Please configure an explicit remote cloud provider (OpenAI, Claude, Gemini, Doubao, or QCLOUD API).');
+      }
       throw new Error('No reasoning model available. Please configure an API key (OpenAI, Claude, Gemini, Groq, Doubao, QCLOUD API) or a custom provider.');
     }
 
@@ -2056,7 +2061,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           console.warn(`[LLMHelper] ⚠️ ${provider.name} returned empty response`);
           lastFailureByProvider.set(provider.name, 'empty response');
         } catch (error: any) {
-          const reason = (error?.message ?? String(error)).toString().slice(0, 240);
+          const rawReason = (error?.message ?? String(error)).toString();
+          const reason = requireCloudProvider
+            ? (/timeout|timed out/i.test(rawReason) ? 'provider_timeout' : 'provider_request_failed')
+            : rawReason.slice(0, 240);
           console.warn(`[LLMHelper] ⚠️ Structured generation: ${provider.name} failed: ${reason}`);
           lastFailureByProvider.set(provider.name, reason);
         }
