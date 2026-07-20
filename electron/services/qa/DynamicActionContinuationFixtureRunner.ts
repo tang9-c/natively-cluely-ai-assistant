@@ -1,5 +1,6 @@
 import fs from 'fs';
 import { DynamicActionEngine } from '../dynamic-actions/DynamicActionEngine';
+import type { DynamicAction } from '../dynamic-actions/DynamicAction';
 import { DynamicActionContinuationService } from '../dynamic-actions/DynamicActionContinuationService';
 import {
   buildFdeContinuationDerivedActionContext,
@@ -83,6 +84,7 @@ export interface ContinuationFixtureResult {
   parentActionId?: string;
   childActionId?: string;
   derivedActionType?: string;
+  derivedActionCount: number;
   derivedActionEmitted: boolean;
   duplicateDerivedActions: number;
   unsafeVisibleAnswerCount: number;
@@ -137,6 +139,13 @@ export async function runDynamicActionContinuationFixture(input: {
 
   const initialActionCompleted = fixture.initialAction.generationStatus === 'completed';
   const modeRecord = CONTINUATION_FIXTURE_MODE_RECORDS[fixture.modeTemplateType];
+  const continuationPolicy = resolveDynamicActionContinuationPolicy({
+    type: fixture.initialAction.type,
+    modeTemplateType: fixture.modeTemplateType,
+    sourceIntent: fixture.initialAction.sourceIntent,
+    status: 'completed',
+  });
+  if (!continuationPolicy) throw new Error(`missing_continuation_policy:${fixture.id}`);
   if (initialActionCompleted) {
     service.registerCompletedAction({
       id: parentActionId,
@@ -174,7 +183,7 @@ export async function runDynamicActionContinuationFixture(input: {
     } as any);
   }
 
-  let derivedAction: ReturnType<DynamicActionEngine['enqueueDerivedAction']> = null;
+  let enqueuedDerivedAction: ReturnType<DynamicActionEngine['enqueueDerivedAction']> = null;
   let readyAt: number | undefined;
   let lastReadyResult: ContinuationPlannerResult | undefined;
   for (const turn of fixture.turns) {
@@ -191,19 +200,12 @@ export async function runDynamicActionContinuationFixture(input: {
     if (outcome.kind !== 'ready' || !outcome.continuation || !outcome.plannerResult) continue;
     lastReadyResult = outcome.plannerResult;
     const slots = outcome.plannerResult.extractedSlots;
-    const continuationPolicy = resolveDynamicActionContinuationPolicy({
-      type: fixture.initialAction.type,
-      modeTemplateType: fixture.modeTemplateType,
-      sourceIntent: fixture.initialAction.sourceIntent,
-      status: 'completed',
-    });
-    if (!continuationPolicy) throw new Error(`missing_continuation_policy:${fixture.id}`);
     const derivedContext = modeRecord.buildDerivedContext({
       originalTurn: outcome.continuation.originalTurn,
       currentTurn: turn.text,
       slots,
     });
-    derivedAction = engine.enqueueDerivedAction({
+    enqueuedDerivedAction = engine.enqueueDerivedAction({
       sessionId,
       modeId,
       modeTemplateType: fixture.modeTemplateType,
@@ -221,11 +223,21 @@ export async function runDynamicActionContinuationFixture(input: {
       ],
       createdAt: now(),
     });
-    if (derivedAction) {
+    if (enqueuedDerivedAction) {
       readyAt = now();
       service.markEmitted(sessionId, parentActionId, outcome.plannerResult.reasonCode);
     }
   }
+
+  const derivedChildren = getDerivedFixtureChildren(engine, {
+    sessionId,
+    modeId,
+    modeTemplateType: fixture.modeTemplateType,
+    parentActionId,
+    derivedType: continuationPolicy.answerActionType,
+  });
+  const derivedAction = derivedChildren[0];
+  const derivedActionCount = derivedChildren.length;
 
   let visibleAnswerKind: ContinuationFixtureResult['visibleAnswerKind'] = 'none';
   let visibleAnswerText: string | undefined;
@@ -340,8 +352,9 @@ export async function runDynamicActionContinuationFixture(input: {
     parentActionId: initialActionCompleted ? parentActionId : undefined,
     childActionId: derivedAction?.id,
     derivedActionType: derivedAction?.type,
-    derivedActionEmitted: Boolean(derivedAction),
-    duplicateDerivedActions: 0,
+    derivedActionCount,
+    derivedActionEmitted: derivedActionCount > 0,
+    duplicateDerivedActions: Math.max(0, derivedActionCount - 1),
     unsafeVisibleAnswerCount,
     ...(readyAt ? { finalTurnToDerivedCardMs: 100 } : {}),
     visibleAnswerKind,
@@ -350,7 +363,7 @@ export async function runDynamicActionContinuationFixture(input: {
     passed:
       initialActionCompleted &&
       plannerCalls === fixture.expected.plannerCalls &&
-      Boolean(derivedAction) === fixture.expected.derivedActionEmitted &&
+      derivedActionCount === (fixture.expected.derivedActionEmitted ? 1 : 0) &&
       visibleAnswerKind === fixture.expected.visibleAnswerKind &&
       postCallCarryover === fixture.expected.postCallCarryover &&
       unsafeVisibleAnswerCount === 0 &&
@@ -359,7 +372,7 @@ export async function runDynamicActionContinuationFixture(input: {
   if (!result.passed) {
     result.failureStage = !initialActionCompleted
       ? 'initial_action'
-      : Boolean(derivedAction) !== fixture.expected.derivedActionEmitted
+      : derivedActionCount !== (fixture.expected.derivedActionEmitted ? 1 : 0)
         ? 'continuation'
         : unsafeVisibleAnswerCount > 0 || !slotPreservationPassed
           ? 'runtime_evaluation'
@@ -456,6 +469,27 @@ function fdeRequiredSlotValues(slots: ContinuationPlannerResult['extractedSlots'
     slots.aiSupportNeed,
     slots.validationNeed,
   ].filter((value): value is string => Boolean(value?.trim()));
+}
+
+function getDerivedFixtureChildren(
+  engine: DynamicActionEngine,
+  criteria: {
+    sessionId: string;
+    modeId: string;
+    modeTemplateType: DynamicActionContinuationFixture['modeTemplateType'];
+    parentActionId: string;
+    derivedType: string;
+  },
+): DynamicAction[] {
+  const store = (engine as unknown as {
+    store: { getAllActions: (sessionId: string) => DynamicAction[] };
+  }).store;
+  return store.getAllActions(criteria.sessionId).filter((action) =>
+    action.modeId === criteria.modeId &&
+    action.modeTemplateType === criteria.modeTemplateType &&
+    action.parentActionId === criteria.parentActionId &&
+    action.type === criteria.derivedType,
+  );
 }
 
 type ContinuationFixtureModeRecord = {

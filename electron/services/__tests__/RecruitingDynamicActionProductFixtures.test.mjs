@@ -15,6 +15,33 @@ const engineUrl = pathToFileURL(
 const fixtureDir = path.join(root, 'tests/fixtures/dynamic-actions/product');
 const fixturePath = path.join(fixtureDir, 'recruiting.json');
 
+const deterministicRecruitingClassifier = async (input) => {
+  const transcript = input.transcript.toLocaleLowerCase();
+  const candidateTypes = new Set(input.candidates.map((candidate) => candidate.actionType));
+  const policyTypes = new Set(input.policySummary.actions.map((action) => action.actionType));
+  const canDecide = (actionType) => candidateTypes.has(actionType) && policyTypes.has(actionType);
+  const isCandidate = input.speaker === 'candidate';
+  const isInterviewer = input.speaker === 'interviewer';
+  const policyConcern = /签证|薪资|offer|入职时间|远程|混合办公|搬迁|安全审查|visa|compensation|salary|offer|start date|remote|hybrid|relocation|security/.test(transcript);
+  const policyRequest = /确认|说明|担心|支持|可以吗|吗|\?|？|confirm|concern|can you|support|timeline/.test(transcript);
+  const experienceRequest = /tell me about.*experience|walk me through.*background|specific example|concrete example|give me an example|why this role|讲讲你的经验|介绍一下你的背景|具体的例子|举个具体例子|举一个具体例子|举一个例子/.test(transcript);
+  const explicitInterest = /i(?:'m| am) (?:very )?interested in (?:this )?(?:role|position)|i(?:'d| would) love to join|i(?:'m| am) excited (?:about|to join) (?:this )?(?:role|team)|this (?:role|position) really interests me|我对这个岗位很感兴趣|我对这个职位很感兴趣|我很想加入|我很期待加入|这个岗位很吸引我/.test(transcript);
+
+  return input.candidates.map((candidate) => {
+    const pass =
+      (candidate.actionType === 'candidate_concern' && isCandidate && policyConcern && policyRequest) ||
+      (candidate.actionType === 'candidate_experience_probe' && isInterviewer && experienceRequest) ||
+      (candidate.actionType === 'strong_fit_signal' && isCandidate && explicitInterest);
+    return {
+      actionType: candidate.actionType,
+      decision: pass && canDecide(candidate.actionType) ? 'pass' : 'reject',
+      confidence: pass ? 0.95 : 0.9,
+      reasons: [pass ? 'deterministic_recruiting_classifier_pass' : 'deterministic_recruiting_classifier_reject'],
+      rejectedCandidates: pass ? [] : [candidate.actionType],
+    };
+  });
+};
+
 test('recruiting product fixtures cover the release matrix', () => {
   const fixtures = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
   const positives = fixtures.filter((fixture) => fixture.expected.shouldEmit);
@@ -53,7 +80,8 @@ test('recruiting product fixtures exercise the deterministic action and accepted
   const report = await runDynamicActionProductFixtures({
     fixtureDir,
     outputDir,
-    semanticGateMode: 'fixture_oracle',
+    semanticGateMode: 'real',
+    cloudClassifier: deterministicRecruitingClassifier,
   });
   const recruiting = report.modeScores.recruiting;
   const results = report.results.filter((result) => result.modeTemplateType === 'recruiting');
@@ -67,7 +95,7 @@ test('recruiting product fixtures exercise the deterministic action and accepted
   assert.deepEqual(recruiting.answerQualityFailures, []);
   assert.deepEqual(recruiting.groundingFailures, []);
   assert.deepEqual(recruiting.missingFieldFailures, []);
-  assert.equal(results.every((result) => result.semanticGateMode === 'fixture_oracle'), true);
+  assert.equal(results.every((result) => result.semanticGateMode === 'real'), true);
   assert.equal(collisions.every((result) => !result.emitted || result.actionTypeMatched), true);
   for (const fixture of fixtures.filter((item) => (item.tags ?? []).includes('multi_candidate_collision'))) {
     const actions = await engine.assessSignals({
@@ -77,14 +105,39 @@ test('recruiting product fixtures exercise the deterministic action and accepted
       sessionId: fixture.id,
       language: fixture.language,
       speaker: fixture.transcriptTurns.at(-1)?.speaker,
-      cloudClassifier: async (input) => input.candidates.map((candidate) => ({
-        actionType: candidate.actionType,
-        decision: 'pass',
-        confidence: 0.95,
-        reasons: ['collision_policy_test'],
-        rejectedCandidates: [],
-      })),
+      cloudClassifier: deterministicRecruitingClassifier,
     });
-    assert.ok(actions.length <= 1, `collision emitted ${actions.length} cards: ${fixture.id}`);
+    assert.equal(actions.length, 1, `collision must emit one card: ${fixture.id}`);
   }
+});
+
+test('deterministic recruiting classifier ignores a conflicting fixture expectation', async () => {
+  const input = {
+    transcript: 'I am very interested in this role.',
+    speaker: 'candidate',
+    candidates: [
+      { actionType: 'candidate_concern' },
+      { actionType: 'strong_fit_signal' },
+    ],
+    policySummary: {
+      actions: [
+        { actionType: 'candidate_concern' },
+        { actionType: 'strong_fit_signal' },
+      ],
+    },
+  };
+  const baseline = await deterministicRecruitingClassifier(input);
+  const conflictingExpected = await deterministicRecruitingClassifier({
+    ...input,
+    expected: { shouldEmit: true, actionType: 'candidate_concern' },
+  });
+
+  assert.deepEqual(conflictingExpected, baseline);
+  assert.deepEqual(
+    baseline.map((result) => [result.actionType, result.decision]),
+    [
+      ['candidate_concern', 'reject'],
+      ['strong_fit_signal', 'pass'],
+    ],
+  );
 });

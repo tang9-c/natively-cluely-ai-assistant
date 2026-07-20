@@ -87,9 +87,14 @@ test('recruiting continuation fixtures emit neutral evidence summaries only afte
   assert.equal(positives.every((result) =>
     result.derivedActionEmitted &&
     result.derivedActionType === 'candidate_evidence_summary' &&
+    result.derivedActionCount === 1 &&
     result.duplicateDerivedActions === 0,
   ), true);
-  assert.equal(negatives.every((result) => !result.derivedActionEmitted && result.visibleAnswerKind === 'none'), true);
+  assert.equal(negatives.every((result) =>
+    !result.derivedActionEmitted &&
+    result.derivedActionCount === 0 &&
+    result.visibleAnswerKind === 'none',
+  ), true);
   assert.equal(positives.every((result) => result.visibleAnswerKind === 'generated' && result.postCallCarryover), true);
   assert.deepEqual(
     new Set(negatives.map((result) => fixtures.find((fixture) => fixture.id === result.fixtureId)?.negativeReason)),

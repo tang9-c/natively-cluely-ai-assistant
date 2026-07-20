@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { DynamicActionEngine } from '../dynamic-actions/DynamicActionEngine';
 import type { DynamicAction } from '../dynamic-actions/DynamicAction';
+import type { CloudSemanticGateClassifier } from '../dynamic-actions/ModeEventClassifier';
 import { buildDynamicActionArtifacts } from '../dynamic-actions/DynamicActionArtifacts';
 import { evaluateDynamicActionAcceptedOutput } from '../dynamic-actions/DynamicActionAcceptedOutputEvaluator';
 import { evaluateFdeAcceptedOutput } from '../dynamic-actions/FdeAcceptedOutputEvaluator';
@@ -20,6 +21,7 @@ export interface ProductRunnerInput {
   fixtureDir: string;
   outputDir: string;
   semanticGateMode?: DynamicActionProductFixtureRunnerSemanticGateMode;
+  cloudClassifier?: CloudSemanticGateClassifier;
 }
 
 export interface ProductRunnerReport {
@@ -97,7 +99,7 @@ export async function runDynamicActionProductFixtures(input: ProductRunnerInput)
           recentContextTurns: fixture.assessment?.recentContextTurns,
           intentResult: fixture.assessment?.intentResult as any,
           providerDataScopes: fixture.assessment?.providerDataScopes as any,
-          cloudClassifier: semanticGateMode === 'fixture_oracle'
+          cloudClassifier: input.cloudClassifier ?? (semanticGateMode === 'fixture_oracle'
             ? async input => input.candidates.map(candidate => ({
                 actionType: candidate.actionType,
                 decision: fixture.expected.shouldEmit
@@ -109,7 +111,7 @@ export async function runDynamicActionProductFixtures(input: ProductRunnerInput)
                   ? []
                   : [candidate.actionType],
               }))
-            : undefined,
+            : undefined),
           semanticGateTraceSink: (trace) => traces.push(trace),
         });
     const matchedAction = fixture.expected.actionType
