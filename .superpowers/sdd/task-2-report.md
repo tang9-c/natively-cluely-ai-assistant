@@ -125,3 +125,41 @@ rtk npm run build:electron:tsc && rtk node --test electron/llm/__tests__/LLMHelp
 ### Concerns
 
 - None. The default structured-generation route and existing capability/FDE evaluator behavior are unchanged.
+
+## Final Reviewer Follow-up: Evaluator Escape Closure
+
+### Implementation
+
+- Code commit: `f2f83d2d fix(recruiting): close evaluator escape paths`.
+- Replaced the phrase-based recruiting insufficiency exception with `isExactRecruitingPolicySafeFallback()`. After Unicode and whitespace normalization, an ungrounded answer passes only when it equals the Chinese or English output of `buildRecruitingPolicySafeFallback()`. Prefixes, suffixes, policy commitments, and paraphrases fail closed.
+- Confirmed the runtime order in `IntelligenceEngine.runWhatShouldISay()`: the model answer is verified and evaluated before fallback substitution. An escaped raw answer therefore fails evaluation and is replaced by the existing deterministic fallback; no paraphrase exception was added.
+- Split recruiting safety into four independent helpers: visible interview method classification, final hiring judgment/ranking, aggressive recruiting pressure, and protected-class basis. Protected attributes are rejected only when the same statement links them to suitability, a hiring decision, or work impact. Explicit statements excluding age or another attribute from hiring remain allowed.
+- English transcript anchors now remove common function-word stopwords. Numeric and percentage claims additionally require the same normalized numeric anchor in transcript evidence, while still requiring a shared nonnumeric action/entity anchor. The existing Chinese tokenization path remains intact.
+
+### RED Evidence
+
+The first TDD run compiled and failed 6 tests for the intended reasons:
+
+- deterministic fallback plus a permanent-remote or offer commitment was treated as safe by both evaluator and verifier;
+- runtime returned the escaped model answer instead of substituting the deterministic fallback;
+- `Current method is structured interview` was not classified;
+- the protected-class keyword rule rejected an explicit safe exclusion statement;
+- `led the 50-person team` passed against unrelated transcript evidence solely through shared stopwords.
+
+### GREEN Evidence
+
+Command:
+
+```bash
+rtk npm run build:electron:tsc && rtk node --test electron/services/__tests__/DynamicActionRuntimeEvaluation.test.mjs electron/services/__tests__/DynamicActionClaimGroundingVerifier.test.mjs electron/llm/__tests__/LLMHelper.StructuredGeneration.test.mjs electron/services/__tests__/IntelligenceEngineDynamicActions.test.mjs
+```
+
+- Electron TypeScript compilation passed.
+- 53 tests passed, 0 failed.
+- Table-driven coverage includes every reviewer probe, protected-class safe counterexamples, unrelated English stopword evidence, real shared action/entity evidence, and matching/mismatching percentages.
+- Cloud-only structured generation, prompt-log privacy, and local-only recruiting defer tests remained green.
+- Code-review graph reported no affected execution flow; manual review covered the `.mjs` tests that the graph did not associate with the TypeScript evaluator.
+
+### Concerns
+
+- None. This round changes only the evaluator and its two focused test files; `.tmp/` remains untouched.
