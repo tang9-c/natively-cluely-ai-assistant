@@ -37,6 +37,11 @@ export type ConversationIntent =
     // ===== Recruiting mode (extras) =====
     | 'evaluate_answer'
     | 'request_example'
+    | 'recruiting_scorecard_gap'
+    | 'recruiting_bei_evidence_gap'
+    | 'recruiting_situational_evidence_gap'
+    | 'recruiting_risk_verification'
+    | 'recruiting_policy_question'
 
     // ===== Team-meet mode intents =====
     | 'capture_action'
@@ -96,6 +101,11 @@ const GENERAL_ANSWER_SHAPES: Record<ConversationIntent, string> = {
     sales_contextual_proof_discovery: '',
     evaluate_answer: '',
     request_example: '',
+    recruiting_scorecard_gap: '',
+    recruiting_bei_evidence_gap: '',
+    recruiting_situational_evidence_gap: '',
+    recruiting_risk_verification: '',
+    recruiting_policy_question: '',
     capture_action: '',
     capture_decision: '',
     capture_risk: '',
@@ -133,6 +143,11 @@ const SALES_ANSWER_SHAPES: Partial<Record<ConversationIntent, string>> = {
 const RECRUITING_ANSWER_SHAPES: Partial<Record<ConversationIntent, string>> = {
     evaluate_answer: '[Observation 1-2 sentences about ownership/specificity/depth]. Ask them: "[exact probe question]". No labels, no preamble.',
     request_example: 'Push for concrete example with measurable outcome. E.g. "Walk me through specifically what you personally decided — not the team."',
+    recruiting_scorecard_gap: 'Name one job-related evidence gap and ask one neutral follow-up. Do not score or classify the candidate.',
+    recruiting_bei_evidence_gap: 'Ask one direct follow-up for personal Action, Result, ownership, or a measurable outcome. Do not mention BEI or STAR unless the interviewer already used that term.',
+    recruiting_situational_evidence_gap: 'Ask one follow-up about prioritization, tradeoff, communication, or risk handling based on the candidate answer. Do not announce an interview method.',
+    recruiting_risk_verification: 'Describe the claim as needing verification and ask one job-related evidence question. Do not label the person as risky.',
+    recruiting_policy_question: 'Answer only from trusted recruiting policy material; otherwise say the policy must be confirmed by the recruiter or hiring team.',
     define_term: 'Define the role/jargon term in 1 sentence. Connect to the JD or scorecard criteria if available.',
 };
 
@@ -228,6 +243,11 @@ const ZERO_SHOT_LABELS_EN_BY_MODE: Record<string, Record<string, ConversationInt
         'no actionable content, just filler or acknowledgement': 'silence',
     },
     'recruiting': {
+        'candidate asking about recruiting policy such as compensation, visa, remote work, relocation, offer, level, or start date': 'recruiting_policy_question',
+        'candidate claim needs job-related verification because details conflict or need corroboration': 'recruiting_risk_verification',
+        'candidate answer lacks evidence for a job-related scorecard dimension': 'recruiting_scorecard_gap',
+        'candidate answer lacks personal action, result, ownership, or a measurable outcome': 'recruiting_bei_evidence_gap',
+        'candidate answer lacks prioritization, tradeoff, communication, or risk-handling evidence': 'recruiting_situational_evidence_gap',
         'evaluating a candidate answer and probing deeper': 'evaluate_answer',
         'requesting a concrete example or instance from a candidate': 'request_example',
         'no actionable content, just filler or acknowledgement': 'silence',
@@ -296,6 +316,11 @@ const ZERO_SHOT_LABELS_ZH_BY_MODE: Record<string, Record<string, ConversationInt
         '无可行动内容,只是寒暄或确认': 'silence',
     },
     'recruiting': {
+        '候选人询问薪资、签证、远程、搬迁、offer、职级或入职时间等招聘政策': 'recruiting_policy_question',
+        '候选人陈述前后不一致或需要核实岗位相关主张': 'recruiting_risk_verification',
+        '候选人回答缺少岗位评分维度所需证据': 'recruiting_scorecard_gap',
+        '候选人回答缺少个人行动、结果、归属或可衡量产出': 'recruiting_bei_evidence_gap',
+        '候选人回答缺少基于其回答的优先级、取舍、沟通或风险处理证据': 'recruiting_situational_evidence_gap',
         '评估候选人回答并深入追问': 'evaluate_answer',
         '要求候选人给出具体例子': 'request_example',
         '无可行动内容,只是寒暄或确认': 'silence',

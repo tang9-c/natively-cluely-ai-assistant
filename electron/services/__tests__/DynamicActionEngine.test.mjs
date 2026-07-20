@@ -51,6 +51,84 @@ test('Pricing objection detected in Sales transcript creates pricing_objection a
   assert.ok(pricingAction.evidenceRefs[0].text.includes('price'));
 });
 
+test('recruiting evidence rubric intents converge on candidate_experience_probe', async () => {
+  const mappings = [
+    'recruiting_scorecard_gap',
+    'recruiting_bei_evidence_gap',
+    'recruiting_situational_evidence_gap',
+    'recruiting_risk_verification',
+  ];
+  for (const intent of mappings) {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const actions = await engine.assessSignals({
+      transcript: '候选人的回答没有讲清个人行动、结果指标和风险取舍。',
+      speaker: 'interviewer',
+      modeTemplateType: 'recruiting',
+      modeId: `mode-${intent}`,
+      sessionId: `session-${intent}`,
+      intentResult: { intent, confidence: 0.94, answerShape: '', source: 'cloud' },
+      cloudClassifier: async ({ candidates }) => candidates.map((candidate) => ({
+        actionType: candidate.actionType,
+        decision: 'pass',
+        confidence: 0.93,
+        reasons: ['recruiting_evidence_gap'],
+        rejectedCandidates: [],
+      })),
+    });
+    assert.deepEqual(actions.map((action) => action.type), ['candidate_experience_probe']);
+  }
+});
+
+test('one recruiting turn emits at most one exclusive live-assist card', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+  const actions = await engine.assessSignals({
+    transcript: '我担心签证政策，也想补充刚才没有说清楚的个人贡献。',
+    speaker: 'interviewer',
+    modeTemplateType: 'recruiting',
+    modeId: 'mode-recruiting-exclusive',
+    sessionId: 'session-recruiting-exclusive',
+    intentResult: { intent: 'recruiting_policy_question', confidence: 0.95, answerShape: '', source: 'cloud' },
+    cloudClassifier: async ({ candidates }) => candidates.map((candidate) => ({
+      actionType: candidate.actionType,
+      decision: 'pass',
+      confidence: candidate.actionType === 'candidate_concern' ? 0.96 : 0.9,
+      reasons: ['mixed_recruiting_turn'],
+      rejectedCandidates: [],
+    })),
+  });
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].type, 'candidate_concern');
+});
+
+test('recruiting arbitration traces rejected siblings without storing them', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+  const traces = [];
+  const actions = await engine.assessSignals({
+    transcript: '我很感兴趣，但我担心签证政策。',
+    speaker: 'interviewer',
+    modeTemplateType: 'recruiting',
+    modeId: 'mode-recruiting-trace',
+    sessionId: 'session-recruiting-trace',
+    cloudClassifier: async ({ candidates }) => candidates.map((candidate) => ({
+      actionType: candidate.actionType,
+      decision: 'pass',
+      confidence: candidate.actionType === 'candidate_concern' ? 0.96 : 0.9,
+      reasons: ['mixed_recruiting_turn'],
+      rejectedCandidates: [],
+    })),
+    semanticGateTraceSink: (trace) => traces.push(trace),
+  });
+
+  assert.deepEqual(actions.map((action) => action.type), ['candidate_concern']);
+  const rejectedSibling = traces.find((trace) => trace.actionType === 'strong_fit_signal');
+  assert.equal(rejectedSibling?.decision, 'reject');
+  assert.ok(rejectedSibling?.reasons.includes('exclusive_group_arbitration_lost'));
+  assert.deepEqual(engine.getStore().getAllActions('session-recruiting-trace').map((action) => action.type), ['candidate_concern']);
+});
+
 test('detected actions include product contract copy', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
@@ -787,6 +865,13 @@ test('assessSignals covers seven real modes with Chinese-first confirmed actions
       modeId: `mode_${modeTemplateType}`,
       sessionId: `session_${modeTemplateType}_${expectedType}`,
       intentResult: { intent: 'general', confidence: 0.82, answerShape: '中文回答', source: 'context' },
+      cloudClassifier: async ({ candidates }) => candidates.map((candidate) => ({
+        actionType: candidate.actionType,
+        decision: 'pass',
+        confidence: 0.92,
+        reasons: ['fixture_cloud_confirmation'],
+        rejectedCandidates: [],
+      })),
       now: Date.now(),
     });
     assert.ok(
@@ -2034,7 +2119,7 @@ describe('ActionTrigger fixtures — recruiting mode', () => {
     });
     const a = findAction(actions, 'strong_fit_signal');
     assert.ok(a);
-    assert.equal(a.label, 'Reinforce positive signal');
+    assert.equal(a.label, '候选人表达了岗位兴趣');
     assert.equal(a.priority, 0.9);
   });
 
@@ -2047,7 +2132,7 @@ describe('ActionTrigger fixtures — recruiting mode', () => {
     });
     const a = findAction(actions, 'candidate_experience_probe');
     assert.ok(a);
-    assert.equal(a.label, 'Guide candidate story');
+    assert.equal(a.label, '追问岗位相关证据');
     assert.equal(a.priority, 0.84);
   });
 });

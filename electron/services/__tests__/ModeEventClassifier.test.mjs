@@ -466,3 +466,40 @@ describe('ModeEventClassifier', () => {
     assert.equal(noLocalFallbackDecisions[0].reasons.includes('cloud_unavailable_local_fallback'), false);
   });
 });
+
+test('selectPassedGateDecisions keeps one exclusive decision by cloud confidence, priority, then action type', async () => {
+  const { selectPassedGateDecisions } = await loadClassifier();
+  const decisions = [
+    {
+      candidate: { actionType: 'candidate_experience_probe', exclusiveGroup: 'recruiting_live_assist', selectionPriority: 80 },
+      decision: 'pass', confidence: 0.96,
+    },
+    {
+      candidate: { actionType: 'candidate_concern', exclusiveGroup: 'recruiting_live_assist', selectionPriority: 100 },
+      decision: 'pass', confidence: 0.96,
+    },
+    {
+      candidate: { actionType: 'strong_fit_signal', exclusiveGroup: 'recruiting_live_assist', selectionPriority: 60 },
+      decision: 'pass', confidence: 0.99,
+    },
+    {
+      candidate: { actionType: 'pricing_request' },
+      decision: 'pass', confidence: 0.91,
+    },
+  ];
+
+  const selected = selectPassedGateDecisions(decisions);
+  assert.deepEqual(selected.map((item) => item.candidate.actionType), [
+    'strong_fit_signal',
+    'pricing_request',
+  ]);
+
+  const priorityTie = selectPassedGateDecisions(decisions.slice(0, 2));
+  assert.deepEqual(priorityTie.map((item) => item.candidate.actionType), ['candidate_concern']);
+
+  const actionTypeTie = selectPassedGateDecisions([
+    { candidate: { actionType: 'candidate_alpha', exclusiveGroup: 'tie', selectionPriority: 80 }, decision: 'pass', confidence: 0.96 },
+    { candidate: { actionType: 'candidate_beta', exclusiveGroup: 'tie', selectionPriority: 80 }, decision: 'pass', confidence: 0.96 },
+  ]);
+  assert.deepEqual(actionTypeTie.map((item) => item.candidate.actionType), ['candidate_alpha']);
+});

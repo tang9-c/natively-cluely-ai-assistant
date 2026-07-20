@@ -46,6 +46,8 @@ export interface ModeEventCandidate {
     allowLocalFallbackOnCloudFailure?: boolean;
     requiredEvidence?: string[];
     localFallbackEvidence?: LocalFallbackEvidence[];
+    exclusiveGroup?: string;
+    selectionPriority?: number;
 }
 
 export interface SemanticGateTrace {
@@ -76,6 +78,36 @@ export interface ModeEventGateDecision {
     semanticProvider: SemanticGateProvider;
     arbitrationStatus: SemanticGateArbitrationStatus;
     degradedReason?: string;
+}
+
+export function selectPassedGateDecisions(decisions: ModeEventGateDecision[]): ModeEventGateDecision[] {
+    const passed = decisions.filter(decision =>
+        decision.decision === 'pass' || decision.decision === 'fast_path'
+    );
+    const selectedTypes = new Set<string>();
+    const groups = new Map<string, ModeEventGateDecision[]>();
+
+    for (const decision of passed) {
+        const group = decision.candidate.exclusiveGroup;
+        if (!group) {
+            selectedTypes.add(decision.candidate.actionType);
+            continue;
+        }
+        const grouped = groups.get(group) ?? [];
+        grouped.push(decision);
+        groups.set(group, grouped);
+    }
+
+    for (const group of groups.values()) {
+        group.sort((left, right) =>
+            right.confidence - left.confidence ||
+            (right.candidate.selectionPriority ?? 0) - (left.candidate.selectionPriority ?? 0) ||
+            left.candidate.actionType.localeCompare(right.candidate.actionType)
+        );
+        selectedTypes.add(group[0].candidate.actionType);
+    }
+
+    return passed.filter(decision => selectedTypes.has(decision.candidate.actionType));
 }
 
 export interface CloudSemanticGateInput {

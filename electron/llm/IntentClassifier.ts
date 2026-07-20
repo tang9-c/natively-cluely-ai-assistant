@@ -50,6 +50,11 @@ export type ConversationIntent =
     // ===== Recruiting mode (extras) =====
     | 'evaluate_answer'    // Candidate just answered; evaluate + probe
     | 'request_example'    // "Give me a concrete example"
+    | 'recruiting_scorecard_gap'
+    | 'recruiting_bei_evidence_gap'
+    | 'recruiting_situational_evidence_gap'
+    | 'recruiting_risk_verification'
+    | 'recruiting_policy_question'
 
     // ===== Team-meet mode intents =====
     | 'capture_action'     // Action item, ownership, deadline
@@ -161,6 +166,11 @@ const GENERAL_ANSWER_SHAPES: Record<ConversationIntent, string> = {
     sales_contextual_proof_discovery: '',
     evaluate_answer: '',
     request_example: '',
+    recruiting_scorecard_gap: '',
+    recruiting_bei_evidence_gap: '',
+    recruiting_situational_evidence_gap: '',
+    recruiting_risk_verification: '',
+    recruiting_policy_question: '',
     capture_action: '',
     capture_decision: '',
     capture_risk: '',

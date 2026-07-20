@@ -15,6 +15,8 @@ export interface ActionGatePolicy {
     allowLocalFallbackOnCloudFailure: boolean;
     requiredEvidence: string[];
     localFallbackEvidence: LocalFallbackEvidence[];
+    exclusiveGroup?: string;
+    selectionPriority?: number;
 }
 
 export const FIRST_CLASS_MODE_TEMPLATE_TYPES = [
@@ -42,6 +44,7 @@ function policy(
     localFallbackEvidence: LocalFallbackEvidence[] = [],
     requiredEvidence: string[] = [],
     fastPathEligible = false,
+    arbitration?: Pick<ActionGatePolicy, 'exclusiveGroup' | 'selectionPriority'>,
 ): ActionGatePolicy {
     return {
         actionType,
@@ -51,6 +54,7 @@ function policy(
         allowLocalFallbackOnCloudFailure,
         requiredEvidence,
         localFallbackEvidence,
+        ...arbitration,
     };
 }
 
@@ -82,9 +86,18 @@ const POLICIES: Record<string, Record<string, ActionGatePolicy>> = {
         fde_next_step: policy('fde_next_step', 'high', 'required', false),
     },
     recruiting: {
-        candidate_concern: policy('candidate_concern', 'medium', 'preferred', true, [{ includeAny: ['offer', '入职时间', '签证', '薪资', 'remote', 'hybrid'] }]),
-        strong_fit_signal: policy('strong_fit_signal', 'medium', 'preferred', true, [{ includeAny: ['很感兴趣', '很匹配', 'great fit', 'love this'] }]),
-        candidate_experience_probe: policy('candidate_experience_probe', 'medium', 'preferred', true, [{ includeAny: ['讲讲你的经验', '具体例子', 'tell me about your experience', 'give me an example'] }]),
+        candidate_concern: policy('candidate_concern', 'high', 'required', false, [], [
+            'counterpart explicitly asks or expresses concern about recruiting policy',
+            'policy category is compensation, visa, remote work, relocation, offer, level, or start date',
+        ], false, { exclusiveGroup: 'recruiting_live_assist', selectionPriority: 100 }),
+        candidate_experience_probe: policy('candidate_experience_probe', 'high', 'required', false, [], [
+            'counterpart answer or claim lacks observable job-related evidence',
+            'follow-up can request personal action, result, ownership, tradeoff, or verification',
+        ], false, { exclusiveGroup: 'recruiting_live_assist', selectionPriority: 80 }),
+        strong_fit_signal: policy('strong_fit_signal', 'high', 'required', false, [], [
+            'counterpart explicitly expresses interest in the role or company',
+            'do not infer hiring fit from interest',
+        ], false, { exclusiveGroup: 'recruiting_live_assist', selectionPriority: 60 }),
     },
     'team-meet': {
         action_item: policy('action_item', 'medium', 'preferred', true, [{ includeAny: ['我来做', '周五前', 'by Friday', 'assigned to'] }], ['owner_or_actor', 'action', 'deadline_or_commitment']),

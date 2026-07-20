@@ -11,6 +11,7 @@ import {
     ModeEventClassifierOptions,
     ModeEventContextTurn,
     SemanticGateTrace,
+    selectPassedGateDecisions,
 } from './ModeEventClassifier';
 import { getActionGatePolicy } from './ModeActionPolicy';
 import { SignalStateTracker, SignalConfirmationSource } from './SignalStateTracker';
@@ -184,6 +185,8 @@ export class DynamicActionEngine {
                 allowLocalFallbackOnCloudFailure: policy.allowLocalFallbackOnCloudFailure,
                 requiredEvidence: policy.requiredEvidence,
                 localFallbackEvidence: policy.localFallbackEvidence,
+                exclusiveGroup: policy.exclusiveGroup,
+                selectionPriority: policy.selectionPriority,
             };
         });
         const gateDecisions = await this.semanticGate.assess({
@@ -197,8 +200,31 @@ export class DynamicActionEngine {
             providerDataScopes: params.providerDataScopes,
             cloudClassifier: params.cloudClassifier,
         });
+        const passedGateDecisions = selectPassedGateDecisions(gateDecisions);
+        const selectedActionTypes = new Set(passedGateDecisions.map(decision => decision.candidate.actionType));
+        const selectedByExclusiveGroup = new Map(
+            passedGateDecisions
+                .filter(decision => decision.candidate.exclusiveGroup)
+                .map(decision => [decision.candidate.exclusiveGroup!, decision.candidate.actionType])
+        );
+        const selectedGateDecisions = gateDecisions.map(decision => {
+            const exclusiveGroup = decision.candidate.exclusiveGroup;
+            if (
+                !exclusiveGroup ||
+                !['pass', 'fast_path'].includes(decision.decision) ||
+                selectedActionTypes.has(decision.candidate.actionType)
+            ) {
+                return decision;
+            }
+            return {
+                ...decision,
+                decision: 'reject' as const,
+                reasons: [...decision.reasons, 'exclusive_group_arbitration_lost'],
+                rejectedCandidates: [...decision.rejectedCandidates, selectedByExclusiveGroup.get(exclusiveGroup) ?? ''],
+            };
+        });
         const allRegexCandidates = gateCandidates.map(candidate => `${candidate.actionType}:${candidate.match}`);
-        for (const gateDecision of gateDecisions) {
+        for (const gateDecision of selectedGateDecisions) {
             try {
                 params.semanticGateTraceSink?.(
                     this.buildSemanticGateTrace(gateDecision, allRegexCandidates, false)
@@ -209,7 +235,7 @@ export class DynamicActionEngine {
         }
 
         for (const candidate of triggerCandidates) {
-            const gateDecision = gateDecisions.find(decision => decision.candidate.actionType === candidate.trigger.type);
+            const gateDecision = selectedGateDecisions.find(decision => decision.candidate.actionType === candidate.trigger.type);
             if (!gateDecision || !['pass', 'fast_path'].includes(gateDecision.decision)) continue;
 
             const evidenceRef: EvidenceRef = {
@@ -587,8 +613,15 @@ export class DynamicActionEngine {
                 advance_dialog: 'fde_next_step',
             },
             recruiting: {
+                recruiting_policy_question: 'candidate_concern',
+                recruiting_scorecard_gap: 'candidate_experience_probe',
+                recruiting_bei_evidence_gap: 'candidate_experience_probe',
+                recruiting_situational_evidence_gap: 'candidate_experience_probe',
+                recruiting_risk_verification: 'candidate_experience_probe',
                 evaluate_answer: 'candidate_experience_probe',
                 request_example: 'candidate_experience_probe',
+                behavioral: 'candidate_experience_probe',
+                example_request: 'candidate_experience_probe',
             },
             'team-meet': {
                 capture_action: 'action_item',

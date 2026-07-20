@@ -68,3 +68,24 @@ describe('ModeActionPolicy', () => {
     assert.ok(getActionGatePolicy('technical-interview', 'screen_coding_problem').localFallbackEvidence.length > 0);
   });
 });
+
+test('recruiting live-assist policies require cloud evidence and share exclusive arbitration', async () => {
+  const { getActionGatePolicy } = await loadPolicy();
+  const concern = getActionGatePolicy('recruiting', 'candidate_concern');
+  const probe = getActionGatePolicy('recruiting', 'candidate_experience_probe');
+  const interest = getActionGatePolicy('recruiting', 'strong_fit_signal');
+
+  assert.equal(concern.riskLevel, 'high');
+  assert.equal(concern.gateStrategy, 'required');
+  assert.equal(concern.allowLocalFallbackOnCloudFailure, false);
+  assert.deepEqual(concern.requiredEvidence, [
+    'counterpart explicitly asks or expresses concern about recruiting policy',
+    'policy category is compensation, visa, remote work, relocation, offer, level, or start date',
+  ]);
+  assert.equal(concern.exclusiveGroup, 'recruiting_live_assist');
+  assert.equal(concern.selectionPriority, 100);
+  assert.equal(probe.exclusiveGroup, 'recruiting_live_assist');
+  assert.equal(probe.selectionPriority, 80);
+  assert.equal(interest.exclusiveGroup, 'recruiting_live_assist');
+  assert.equal(interest.selectionPriority, 60);
+});

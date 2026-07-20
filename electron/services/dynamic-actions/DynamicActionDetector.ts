@@ -192,7 +192,7 @@ const RECRUITING_TRIGGERS: ActionTrigger[] = [
         priority: 0.85,
         label: 'Address candidate concern',
         promptInstruction:
-            'You are in Recruiting mode. The candidate has raised a concern. Address it factually and empathetically.',
+            'You are in Recruiting mode. Answer a recruiting policy or concern only from trusted material; otherwise state that the recruiter or hiring team must confirm it. Do not invent policy details.',
         answerStyle: { maxWords: 100, format: 'bullets', tone: 'empathetic' },
     },
     {
@@ -202,9 +202,9 @@ const RECRUITING_TRIGGERS: ActionTrigger[] = [
             zh('很感兴趣', '很喜欢', '正好符合', '很匹配', '非常适合'),
         ],
         priority: 0.9,
-        label: 'Reinforce positive signal',
+        label: '候选人表达了岗位兴趣',
         promptInstruction:
-            "You are in Recruiting mode. The candidate is showing strong interest. Reinforce why this role is a great match.",
+            'You are in Recruiting mode. Acknowledge that the candidate expressed interest in the role. Do not claim the candidate is a strong fit or make a hiring judgment.',
         answerStyle: { maxWords: 60, format: 'bullets', tone: 'encouraging' },
     },
     {
@@ -214,9 +214,9 @@ const RECRUITING_TRIGGERS: ActionTrigger[] = [
             zh('讲讲你的经验', '介绍一下你的背景', '为什么这个岗位', '为什么感兴趣', '具体的例子', '举个具体例子', '举一个具体例子', '举一个例子'),
         ],
         priority: 0.84,
-        label: 'Guide candidate story',
+        label: '追问岗位相关证据',
         promptInstruction:
-            'You are in Recruiting mode. Help assess and guide the candidate response around experience, motivation, and fit.',
+            'You are in Recruiting mode. Ask one neutral follow-up for observable job-related evidence such as personal action, result, ownership, tradeoff, or verification. Do not name an interview method or judge the candidate.',
         answerStyle: { maxWords: 100, format: 'bullets', tone: 'structured' },
     },
 ];
