@@ -258,12 +258,25 @@ function containsFinalHiringJudgmentOrRanking(answer: string): boolean {
   const patterns = [
     /不建议(?:继续)?推进|建议(?:直接|立即|马上)?(?:录用|淘汰)|(?:录用|淘汰|拒绝)候选人/i,
     /建议(?:把)?(?:他|她|候选人)?排(?:在)?第一|(?:他|她|候选人).{0,6}不适合(?:这个|该)?岗位|排名|最(?:强|佳)候选人/i,
+    /(?:^|[，,：:\s])直接录用(?:她|他|候选人)?(?:$|[，,：:\s])|淘汰(?:她|他|候选人)/i,
     /\b(?:i|we)\s+(?:do not|don't)\s+recommend\s+(?:proceeding|moving forward|continuing)\b/i,
     /\b(?:i|we)\s+should\s+(?:definitely\s+)?(?:hire|reject|advance|drop)\b/i,
+    /\bdefinitely\s+hire\s+(?:this|the)\s+candidate\b|\breject\s+(?:this|the)\s+candidate\b/i,
     /\bnot\s+(?:a\s+)?fit\b|\brank\s+(?:him|her|them|the candidate)\s+first\b/i,
     /\bmust hire\b|\bhire immediately\b|\breject candidate\b|\btop candidate\b/i,
   ];
-  return patterns.some((pattern) => pattern.test(answer));
+  return splitRecruitingSafetySentences(answer).some((sentence) =>
+    !isExplicitFinalJudgmentProhibition(sentence) &&
+    patterns.some((pattern) => pattern.test(sentence))
+  );
+}
+
+function isExplicitFinalJudgmentProhibition(sentence: string): boolean {
+  const patterns = [
+    /(?:不要|不得|不应|不能|不可).{0,10}(?:据此)?(?:直接)?(?:录用|淘汰|拒绝|排第一|排名)/i,
+    /\b(?:do not|don't|must not|should not|cannot)\s+(?:directly\s+)?(?:hire|reject|rank)\b/i,
+  ];
+  return patterns.some((pattern) => pattern.test(sentence));
 }
 
 function containsAggressiveRecruitingPressure(answer: string): boolean {
@@ -279,18 +292,37 @@ function containsAggressiveRecruitingPressure(answer: string): boolean {
 }
 
 function containsProtectedClassBasis(answer: string): boolean {
-  const protectedAttribute = /女性|男性|性别|年龄|民族|种族|国籍|宗教|婚姻|已婚|未婚|怀孕|残障|\b(?:women|woman|men|man|female|male|gender|age|race|nationality|citizenship|religion|disability|married|marital(?:\s+status)?)\b/i;
+  const protectedAttribute = /女性|男性|性别|年龄|民族|种族|国籍|宗教|婚姻|已婚|未婚|怀孕|残障|\b(?:women|woman|men|man|female|male|gender|age|old|race|nationality|citizenship|religion|disability|married|marital(?:\s+status)?)\b/i;
   const unsafeRelations = [
     /(?:女性|男性|已婚|未婚|怀孕|残障|性别|年龄|民族|种族|国籍|宗教|婚姻).{0,16}(?:不适合|不符合|不能胜任|不建议录用|应当淘汰|影响(?:工作|表现|出差|录用|晋升))/i,
+    /宗教.{0,8}(?:原因)?(?:导致|使得|让)?(?:候选人)?(?:不稳定|不可靠)|(?:年龄太大|太老).{0,8}(?:不适合|不能胜任)/i,
     /(?:因为|由于).{0,12}(?:女性|男性|已婚|未婚|怀孕|残障|性别|年龄|民族|种族|国籍|宗教|婚姻).{0,16}(?:拒绝|淘汰|不录用|不推进)/i,
     /\b(?:women|woman|men|man|female|male|married|pregnant|disabled)\b.{0,24}\b(?:not suitable|unfit|not a fit|cannot perform|should not be hired|should be rejected)\b/i,
+    /\btoo\s+old\s+for\s+(?:this|the)?\s*role\b|\bmarital\s+status\s+is\s+(?:a\s+)?concern\b/i,
+    /\breligion\b.{0,16}\b(?:makes?|means?)\b.{0,16}\b(?:unstable|unreliable|unfit)\b/i,
     /\b(?:gender|age|race|nationality|citizenship|religion|disability|marital status)\b.{0,24}\b(?:makes?|means?|affects?|impacts?|disqualif(?:y|ies))\b.{0,16}\b(?:work|performance|travel|suitability|hiring|promotion)\b/i,
   ];
+  return splitRecruitingSafetySentences(answer).some((sentence) =>
+    protectedAttribute.test(sentence) &&
+    !isExplicitProtectedClassExclusion(sentence) &&
+    unsafeRelations.some((pattern) => pattern.test(sentence))
+  );
+}
+
+function isExplicitProtectedClassExclusion(sentence: string): boolean {
+  const patterns = [
+    /(?:不得|不应|不能|不可).{0,8}(?:将|把)?.{0,8}(?:年龄|宗教|性别|婚姻|国籍|民族|种族|残障).{0,10}(?:作为|用于).{0,8}(?:录用|招聘|淘汰|判断|依据|决策)/i,
+    /(?:年龄|宗教|性别|婚姻|国籍|民族|种族|残障).{0,12}(?:不得|不应|不能|不可|不影响).{0,12}(?:影响|作为|用于)?.{0,8}(?:录用|招聘|淘汰|判断|依据|决策)/i,
+    /\b(?:gender|age|race|nationality|citizenship|religion|disability|marital status)\b.{0,16}\b(?:does not|doesn't|must not|should not|cannot)\b.{0,16}\b(?:affect|impact|be used)\b.{0,12}\b(?:hiring|employment|selection|decision)\b/i,
+  ];
+  return patterns.some((pattern) => pattern.test(sentence));
+}
+
+function splitRecruitingSafetySentences(answer: string): string[] {
   return answer
     .split(/[。.!！；;\n]+/)
-    .map((segment) => segment.trim())
-    .filter((segment) => protectedAttribute.test(segment))
-    .some((segment) => unsafeRelations.some((pattern) => pattern.test(segment)));
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
 }
 
 function hasTranscriptEvidenceAnchors(answer: string, transcriptEvidence: string[] | undefined): boolean {
