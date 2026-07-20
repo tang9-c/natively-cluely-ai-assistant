@@ -39,6 +39,7 @@ import { QaReportService } from './services/qa/QaReportService';
 import { telemetryService } from './services/telemetry/TelemetryService';
 import type { DynamicActionOutputType } from './services/dynamic-actions/DynamicAction';
 import { buildDynamicActionRuntimeGrounding } from './services/dynamic-actions/DynamicActionRuntimeGrounding';
+import { getDynamicActionRuntimeValidationPolicy } from './services/dynamic-actions/DynamicActionRuntimeValidationPolicy';
 import {
   lifecycleEventToTelemetryName,
   type DynamicActionAcceptTriggerSourceForLifecycle,
@@ -3278,8 +3279,8 @@ export function initializeIpcHandlers(appState: AppState): void {
           embeddingReady,
           realtimeContextPlan,
         } = contextPreparation;
-        const isRuntimeValidatedDynamicAnswer = sanitizedModeEvent?.actionType === 'capability_fit_answer' ||
-          sanitizedModeEvent?.actionType === 'fde_grounded_answer';
+        const runtimeValidationPolicy = getDynamicActionRuntimeValidationPolicy(sanitizedModeEvent?.actionType);
+        const isRuntimeValidatedDynamicAnswer = Boolean(runtimeValidationPolicy);
         const grounding = buildDynamicActionRuntimeGrounding({
           actionType: sanitizedModeEvent?.actionType,
           realtimeContextPlan,
@@ -3351,8 +3352,8 @@ export function initializeIpcHandlers(appState: AppState): void {
               whatToAnswerTrace = trace;
             },
             providerScopePolicy: providerScopes,
-            dynamicActionValidation: isRuntimeValidatedDynamicAnswer ? {
-              actionType: sanitizedModeEvent?.actionType ?? 'capability_fit_answer',
+            dynamicActionValidation: runtimeValidationPolicy ? {
+              actionType: runtimeValidationPolicy.actionType,
               sourceIntent: sanitizedModeEvent?.sourceIntent,
               parentActionId: sanitizedModeEvent?.parentActionId,
               grounding,
@@ -3360,6 +3361,11 @@ export function initializeIpcHandlers(appState: AppState): void {
               deferUserVisibleEmission: true,
               language: sanitizedModeEvent?.language,
               sourceUtterance: question,
+              transcriptEvidence: runtimeValidationPolicy.evidenceKind === 'transcript_evidence'
+                ? [sanitizedModeEvent?.latestTurn, sanitizedModeEvent?.retrievalQuery]
+                  .filter((value): value is string => Boolean(value?.trim()))
+                  .map((value) => value.slice(0, 1200))
+                : undefined,
             } : undefined,
             dynamicActionEvaluationSink: (trace) => {
               runtimeEvaluationTrace = trace;

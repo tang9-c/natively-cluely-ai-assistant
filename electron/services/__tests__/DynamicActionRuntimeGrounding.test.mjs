@@ -91,3 +91,63 @@ test('FDE grounded answers reuse injected material and business context groundin
   assert.ok(grounding.groundedSources.some((source) => source.type === 'business_context' && source.status === 'used'));
   assert.doesNotMatch(JSON.stringify(grounding.groundedSources), /ECO 流程|Windchill 只读/);
 });
+
+test('recruiting runtime policy separates external policy and transcript evidence', async () => {
+  const {
+    buildDynamicActionRuntimeGrounding,
+  } = await loadGrounding();
+  const {
+    getDynamicActionRuntimeValidationPolicy,
+    buildDynamicActionRuntimeSafeFallback,
+  } = await import(pathToFileURL(path.join(
+    process.cwd(),
+    'dist-electron/electron/services/dynamic-actions/DynamicActionRuntimeValidationPolicy.js',
+  )).href);
+  const realtimeContextPlan = {
+    injected: [
+      {
+        source: 'uploaded_material',
+        sourceId: 'recruiting-policy.pdf',
+        chunkId: 'remote-work',
+        text: '招聘政策说明远程办公需由招聘负责人确认。',
+        tokenCount: 16,
+      },
+      {
+        source: 'business_system',
+        sourceId: 'windchill-readonly',
+        chunkId: 'part',
+        text: 'Windchill 只读查询结果。',
+        tokenCount: 8,
+      },
+    ],
+    omitted: [],
+    sourceStatus: {},
+    degradedReasons: [],
+    contextFingerprint: 'recruiting',
+    retrievalTimingMs: {},
+  };
+  const sharedInput = {
+    realtimeContextPlan,
+    citations: [{ citationId: 'c-policy', sourceType: 'uploaded_material', sourceId: 'recruiting-policy.pdf', chunkId: 'remote-work', title: 'recruiting-policy.pdf' }],
+    materialRagAttempted: true,
+    uploadedMaterialHitCount: 1,
+    degradedReasons: [],
+    businessSystemResult: { kind: 'context', status: 'ok', sourceName: 'Windchill' },
+  };
+
+  const concern = buildDynamicActionRuntimeGrounding({ actionType: 'candidate_concern', ...sharedInput });
+  const summary = buildDynamicActionRuntimeGrounding({ actionType: 'candidate_evidence_summary', ...sharedInput });
+
+  assert.deepEqual(getDynamicActionRuntimeValidationPolicy('candidate_concern'), {
+    actionType: 'candidate_concern',
+    evidenceKind: 'external_policy',
+    claimDomain: 'recruiting_policy',
+  });
+  assert.equal(getDynamicActionRuntimeValidationPolicy('candidate_evidence_summary')?.evidenceKind, 'transcript_evidence');
+  assert.equal(concern.injectedEvidence.length, 1);
+  assert.equal(concern.injectedEvidence[0].type, 'material');
+  assert.equal(summary.injectedEvidence.length, 0);
+  assert.equal(summary.groundedSources.length, 0);
+  assert.match(buildDynamicActionRuntimeSafeFallback('candidate_concern', 'zh'), /招聘材料不足/);
+  assert.match(buildDynamicActionRuntimeSafeFallback('candidate_evidence_summary', 'zh'), /可验证岗位证据/);
+});

@@ -11,6 +11,7 @@ export interface AcceptedOutputEvaluationInput {
   sourceUtterance?: string;
   sourceIntent?: string;
   claimGrounding?: ClaimGroundingVerdict;
+  transcriptEvidence?: string[];
 }
 
 export interface AcceptedOutputEvaluationResult {
@@ -99,6 +100,29 @@ export function evaluateDynamicActionAcceptedOutput(
     enforceCapabilityFitLength(answer, requiredPatternFailures);
   }
 
+  if (input.actionType === 'candidate_concern') {
+    const usedPolicyGrounding = hasUsedGrounding(['material', 'pptx']);
+    const statesInsufficiency = /招聘材料不足|材料不足|不能确认|无法确认|not enough|cannot confirm/i.test(answer);
+    const requestsConfirmation = /招聘负责人|hiring team|recruiter|核实|确认|verify|confirm/i.test(answer);
+    if (containsPositiveRecruitingPolicyClaim(answer) &&
+      (!usedPolicyGrounding || input.claimGrounding?.verdict !== 'supported')) {
+      groundingFailures.push('recruiting_policy_claim_not_supported_by_material');
+    }
+    if (!usedPolicyGrounding && (!statesInsufficiency || !requestsConfirmation)) {
+      groundingFailures.push('candidate_concern_requires_insufficiency_and_confirmation');
+    }
+    forbidRecruitingJudgmentPatterns(forbidPattern);
+  }
+
+  if (input.actionType === 'candidate_evidence_summary') {
+    requirePattern('evidence_observed_structure', /已观察证据|evidence observed/i);
+    requirePattern('missing_or_needs_verification_structure', /缺失|待验证|missing|needs verification/i);
+    if (!hasTranscriptEvidenceAnchors(answer, input.transcriptEvidence)) {
+      groundingFailures.push('candidate_evidence_summary_requires_transcript_anchor');
+    }
+    forbidRecruitingJudgmentPatterns(forbidPattern);
+  }
+
   if (input.actionType === 'discovery_question') {
     const questionCount = countQuestionLikeSentences(answer);
     if (questionCount < 1 || questionCount > 3) {
@@ -162,6 +186,10 @@ export function containsPositiveCapabilityClaim(answer: string): boolean {
   return /可以确认|确认支持|支持|能够|具备|can confirm|supports?|is supported|we can/i.test(answer);
 }
 
+export function containsPositiveRecruitingPolicyClaim(answer: string): boolean {
+  return /远程办公|混合办公|签证(?:转移|支持)?|搬迁|薪酬|工资|薪资|(?:offer|职级|入职日期|start date|remote(?: work)?|hybrid|visa|relocation|compensation|salary|level)\b/i.test(answer);
+}
+
 export function buildCapabilityFitSafeFallback(language?: string): string {
   return language === 'en'
     ? 'The current materials are not enough to confirm this capability. Please verify it against the capability matrix or run a PoC with one real object and acceptance metric; no automatic PLM or QMS writeback is assumed.'
@@ -172,6 +200,79 @@ export function buildFdeGroundedAnswerSafeFallback(language?: string): string {
   return language === 'en'
     ? 'The current material is not enough to confirm this process or AI capability. AI can only be treated as a process check or prompt after validation, with key approvals kept under human confirmation. Validate it with one real process sample, test data, owner, human confirmation point, and acceptance criteria; no automatic PLM or QMS writeback is assumed.'
     : '当前资料不足，不能确认这个流程或 AI 能力。AI 只能在验证后作为流程检查或提示辅助，关键审批仍需人审。建议用一个真实流程样本、测试数据、负责人、人审点和验收标准做验证；这里不承诺自动写回 PLM 或 QMS。';
+}
+
+export function buildRecruitingPolicySafeFallback(language?: string): string {
+  return language === 'en'
+    ? 'The current recruiting materials are not enough to confirm this policy. Please verify it with the recruiter or hiring team before sharing a commitment.'
+    : '当前招聘材料不足，不能确认这项政策。建议先向招聘负责人或 hiring team 核实后再回复候选人。';
+}
+
+export function buildRecruitingEvidenceSafeFallback(language?: string): string {
+  return language === 'en'
+    ? 'The current answer does not provide enough verifiable job-related evidence. Record only what was observed and mark the missing evidence for follow-up; do not make a hiring decision from this answer.'
+    : '当前回答还没有提供足够的可验证岗位证据。请只记录已观察事实，并把缺失证据标为待追问；不要据此作出录用或淘汰判断。';
+}
+
+function forbidRecruitingJudgmentPatterns(
+  forbidPattern: (label: string, pattern: RegExp) => void,
+): void {
+  forbidPattern('final_hiring_judgment_or_ranking', /建议(?:立即)?(?:录用|淘汰)|(?:录用|淘汰|拒绝)候选人|排名|最(?:强|佳)候选人|must hire|hire immediately|reject candidate|top candidate/i);
+  forbidPattern('protected_class_basis', /性别|年龄|民族|种族|宗教|婚姻|怀孕|残障|gender|age|race|religion|disability|marital/i);
+  forbidPattern('visible_interview_method_classification', /(?:这是|按|属于).{0,12}(?:STAR|BEI|结构化面试)|(?:STAR|BEI).{0,12}(?:分类|classif)/i);
+  forbidPattern('aggressive_recruiting_pressure', /必须(?:马上|立即)(?:录用|接受)|强烈建议(?:马上|立即)?录用|逼迫|施压|pressure.*(?:accept|hire)/i);
+}
+
+function hasTranscriptEvidenceAnchors(answer: string, transcriptEvidence: string[] | undefined): boolean {
+  const evidenceSegments = extractEvidenceSegments(answer);
+  const transcriptAnchors = new Set(
+    (transcriptEvidence ?? []).flatMap(extractJobRelatedAnchors),
+  );
+  return evidenceSegments.length > 0 && transcriptAnchors.size > 0 && evidenceSegments.every((segment) => {
+    const anchors = extractJobRelatedAnchors(segment);
+    return anchors.length > 0 && anchors.some((anchor) => transcriptAnchors.has(anchor));
+  });
+}
+
+function extractEvidenceSegments(answer: string): string[] {
+  const observedMatch = answer.match(/(?:已观察证据|evidence observed)\s*[:：]?\s*([\s\S]*?)(?=(?:缺失|待验证|missing|needs verification)\s*[:：]?|$)/i);
+  return observedMatch?.[1]
+    .split(/[。.!！；;\n]+/)
+    .map((segment) => segment.replace(/^(?:结果|result)\s*[:：]?\s*/i, '').trim())
+    .filter(Boolean) ?? [];
+}
+
+function extractJobRelatedAnchors(value: string): string[] {
+  const normalized = value.toLocaleLowerCase().replace(/\s+/g, ' ').trim();
+  const ignored = new Set([
+    '候选人', '候选', '选人', '已观察', '观察证据', '证据', '结果', '待验证', '缺失', '自己',
+    'candidate', 'evidence', 'observed', 'result', 'missing', 'verification', 'needs',
+  ]);
+  const anchors = new Set<string>();
+  for (const token of normalized.match(/[a-z][a-z0-9_-]{1,}|\d+(?:\.\d+)?|[\p{Script=Han}]{2,}/gu) ?? []) {
+    if (/^[\p{Script=Han}]{2}$/u.test(token)) {
+      if (!ignored.has(token)) anchors.add(token);
+      continue;
+    }
+    if (/^[\p{Script=Han}]{3,}$/u.test(token)) {
+      for (let index = 0; index <= token.length - 2; index += 1) {
+        const anchor = token.slice(index, index + 2);
+        if (!ignored.has(anchor)) anchors.add(anchor);
+      }
+      continue;
+    }
+    if (/^[\p{Script=Han}]+$/u.test(token)) {
+      for (let size = 2; size <= Math.min(4, token.length); size += 1) {
+        for (let index = 0; index <= token.length - size; index += 1) {
+          const anchor = token.slice(index, index + size);
+          if (!ignored.has(anchor)) anchors.add(anchor);
+        }
+      }
+      continue;
+    }
+    if (!ignored.has(token)) anchors.add(token);
+  }
+  return [...anchors];
 }
 
 function forbidUnpromptedTechnicalJargon(answer: string, sourceUtterance: string | undefined, failures: string[]): void {

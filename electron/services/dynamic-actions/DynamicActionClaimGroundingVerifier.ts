@@ -5,7 +5,10 @@ import {
     type ProviderDataScopePolicy,
 } from '../../llm/ProviderRouter';
 import type { InjectedGroundingEvidence } from './DynamicActionRuntimeGrounding';
-import { containsPositiveCapabilityClaim } from './DynamicActionAcceptedOutputEvaluator';
+import {
+    containsPositiveCapabilityClaim,
+    containsPositiveRecruitingPolicyClaim,
+} from './DynamicActionAcceptedOutputEvaluator';
 
 export type ClaimGroundingVerdictCode = 'not_required' | 'supported' | 'unsupported' | 'unavailable';
 
@@ -35,9 +38,13 @@ export class DynamicActionClaimGroundingVerifier {
     async verify(input: {
         answerText: string;
         evidence: InjectedGroundingEvidence[];
+        claimDomain: 'capability' | 'recruiting_policy';
         providerDataScopes?: ProviderDataScopePolicy;
     }): Promise<ClaimGroundingVerdict> {
-        if (!containsPositiveCapabilityClaim(input.answerText)) return notRequiredVerdict();
+        const hasPositiveClaim = input.claimDomain === 'recruiting_policy'
+            ? containsPositiveRecruitingPolicyClaim(input.answerText)
+            : containsPositiveCapabilityClaim(input.answerText);
+        if (!hasPositiveClaim) return buildNotRequiredClaimGroundingVerdict();
         if (input.evidence.length === 0) return unavailableVerdict('no_injected_evidence');
 
         const requiredScopes: ProviderDataScope[] = ['transcript'];
@@ -68,10 +75,22 @@ export class DynamicActionClaimGroundingVerifier {
     }
 }
 
-function buildVerifierPrompt(input: { answerText: string; evidence: InjectedGroundingEvidence[] }): string {
+function buildVerifierPrompt(input: {
+    answerText: string;
+    evidence: InjectedGroundingEvidence[];
+    claimDomain: 'capability' | 'recruiting_policy';
+}): string {
+    const instructions = input.claimDomain === 'recruiting_policy'
+        ? [
+            '你是 recruiting policy claim grounding verifier。只返回 JSON，不生成用户可见回答。',
+            '逐条核对回答中的薪酬、签证、远程办公、搬迁、offer、职级和入职日期声明是否被招聘材料 excerpt 支持。',
+        ]
+        : [
+            '你是 capability claim grounding verifier。只返回 JSON，不生成用户可见回答。',
+            '逐条核对回答里的正向产品能力声明是否被 evidence excerpt 支持。',
+        ];
     return [
-        '你是 capability claim grounding verifier。只返回 JSON，不生成用户可见回答。',
-        '逐条核对回答里的正向产品能力声明是否被 evidence excerpt 支持。',
+        ...instructions,
         '任一正向声明没有证据支持，返回 unsupported。',
         `answerText: ${JSON.stringify(input.answerText.slice(0, 2_000))}`,
         `evidence: ${JSON.stringify(input.evidence.map((item) => ({
@@ -84,7 +103,7 @@ function buildVerifierPrompt(input: { answerText: string; evidence: InjectedGrou
     ].join('\n');
 }
 
-function notRequiredVerdict(): ClaimGroundingVerdict {
+export function buildNotRequiredClaimGroundingVerdict(): ClaimGroundingVerdict {
     return {
         verdict: 'not_required',
         evidenceIds: [],

@@ -256,3 +256,34 @@ test('FDE runtime evaluation uses FDE safe fallback when validation fails', asyn
   assert.equal(usage.metadata.evaluationResult, 'safe_fallback');
   assert.equal(usage.metadata.actionType, 'fde_grounded_answer');
 });
+
+test('candidate policy claim fails without external recruiting evidence', async () => {
+  const { evaluateDynamicActionAcceptedOutput } = await import(pathToFileURL(evaluatorPath).href);
+  const result = evaluateDynamicActionAcceptedOutput({
+    actionType: 'candidate_concern',
+    outputType: 'spoken_response',
+    answerText: '这个岗位支持远程办公，也支持签证转移。',
+    groundedSources: [],
+    claimGrounding: { verdict: 'unavailable', evidenceIds: [], reasonCode: 'no_injected_evidence', verificationSource: 'continuation_grounding_verifier' },
+  });
+  assert.equal(result.passed, false);
+});
+
+test('candidate evidence summary must be anchored to transcript evidence', async () => {
+  const { evaluateDynamicActionAcceptedOutput } = await import(pathToFileURL(evaluatorPath).href);
+  const supported = evaluateDynamicActionAcceptedOutput({
+    actionType: 'candidate_evidence_summary',
+    outputType: 'spoken_response',
+    answerText: '已观察证据：候选人负责灰度方案。结果：事故率下降 30%。待验证：统计口径。',
+    transcriptEvidence: ['候选人补充说自己负责灰度方案，事故率下降 30%，统计口径还需要确认。'],
+  });
+  assert.equal(supported.passed, true);
+
+  const unsupported = evaluateDynamicActionAcceptedOutput({
+    actionType: 'candidate_evidence_summary',
+    outputType: 'spoken_response',
+    answerText: '已观察证据：候选人管理过 50 人团队，因此建议录用。待验证：无。',
+    transcriptEvidence: ['候选人只说自己参与了灰度方案。'],
+  });
+  assert.equal(unsupported.passed, false);
+});

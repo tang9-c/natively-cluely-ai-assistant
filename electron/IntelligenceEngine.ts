@@ -30,15 +30,18 @@ import {
     DynamicActionContinuationPlanner,
 } from './services/dynamic-actions/DynamicActionContinuationPlanner';
 import {
-    buildCapabilityFitSafeFallback,
-    buildFdeGroundedAnswerSafeFallback,
     evaluateDynamicActionAcceptedOutput,
 } from './services/dynamic-actions/DynamicActionAcceptedOutputEvaluator';
 import {
+    buildNotRequiredClaimGroundingVerdict,
     DynamicActionClaimGroundingVerifier,
     type ClaimGroundingVerdict,
 } from './services/dynamic-actions/DynamicActionClaimGroundingVerifier';
 import type { DynamicActionRuntimeGrounding } from './services/dynamic-actions/DynamicActionRuntimeGrounding';
+import {
+    buildDynamicActionRuntimeSafeFallback,
+    getDynamicActionRuntimeValidationPolicy,
+} from './services/dynamic-actions/DynamicActionRuntimeValidationPolicy';
 import {
     CloudSemanticGateError,
     cloudFailureReasonFromError,
@@ -153,6 +156,7 @@ export interface DynamicActionRuntimeValidation {
     deferUserVisibleEmission: boolean;
     language?: string;
     sourceUtterance?: string;
+    transcriptEvidence?: string[];
 }
 
 export interface DynamicActionRuntimeEvaluationTrace {
@@ -1460,11 +1464,17 @@ export class IntelligenceEngine extends EventEmitter {
             let evaluationResult: 'passed' | 'safe_fallback' | undefined;
             let claimGrounding: ClaimGroundingVerdict | undefined;
             if (options?.dynamicActionValidation) {
-                claimGrounding = await this.dynamicActionClaimGroundingVerifier.verify({
-                    answerText: fullAnswer,
-                    evidence: options.dynamicActionValidation.grounding.injectedEvidence,
-                    providerDataScopes: options.dynamicActionValidation.providerDataScopes,
-                });
+                const validationPolicy = getDynamicActionRuntimeValidationPolicy(
+                    options.dynamicActionValidation.actionType,
+                );
+                claimGrounding = validationPolicy?.evidenceKind === 'transcript_evidence'
+                    ? buildNotRequiredClaimGroundingVerdict()
+                    : await this.dynamicActionClaimGroundingVerifier.verify({
+                        answerText: fullAnswer,
+                        evidence: options.dynamicActionValidation.grounding.injectedEvidence,
+                        claimDomain: validationPolicy?.claimDomain ?? 'capability',
+                        providerDataScopes: options.dynamicActionValidation.providerDataScopes,
+                    });
                 const evaluation = evaluateDynamicActionAcceptedOutput({
                     actionType: options.dynamicActionValidation.actionType,
                     outputType: dynamicActionModeEvent?.productContract?.outputType ?? 'spoken_response',
@@ -1473,12 +1483,14 @@ export class IntelligenceEngine extends EventEmitter {
                     claimGrounding,
                     sourceIntent: options.dynamicActionValidation.sourceIntent,
                     sourceUtterance: options.dynamicActionValidation.sourceUtterance ?? question,
+                    transcriptEvidence: options.dynamicActionValidation.transcriptEvidence,
                 });
                 evaluationResult = evaluation.passed ? 'passed' : 'safe_fallback';
                 if (!evaluation.passed) {
-                    visibleAnswer = options.dynamicActionValidation.actionType === 'fde_grounded_answer'
-                        ? buildFdeGroundedAnswerSafeFallback(options.dynamicActionValidation.language)
-                        : buildCapabilityFitSafeFallback(options.dynamicActionValidation.language);
+                    visibleAnswer = buildDynamicActionRuntimeSafeFallback(
+                        options.dynamicActionValidation.actionType,
+                        options.dynamicActionValidation.language,
+                    ) ?? fullAnswer;
                 }
                 options.dynamicActionEvaluationSink?.({
                     actionType: options.dynamicActionValidation.actionType,

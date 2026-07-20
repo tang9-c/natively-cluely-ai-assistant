@@ -108,6 +108,26 @@ export function buildDynamicActionContextNeedDecision(input: {
     evidenceRefs?: EvidenceRef[];
 }): ContextNeedDecision {
     const type = compact(input.type);
+    if (type === 'candidate_concern') {
+        return {
+            material: 'required',
+            business: 'not_needed',
+            screen: 'not_needed',
+            confidence: 1,
+            reason: 'Candidate policy answers require trusted recruiting material and do not use business-system context.',
+            decidedBy: 'dynamic_action_contract',
+        };
+    }
+    if (type === 'candidate_evidence_summary') {
+        return {
+            material: 'not_needed',
+            business: 'not_needed',
+            screen: 'not_needed',
+            confidence: 1,
+            reason: 'Candidate evidence summaries use bounded transcript evidence carried by the action event.',
+            decidedBy: 'dynamic_action_contract',
+        };
+    }
     if (type === 'capability_fit_answer') {
         return {
             material: 'required',

@@ -3,6 +3,7 @@ import type { AnswerCitationRecord, AnswerDegradedReason } from '../../db/Databa
 import type { RealtimeContextCandidate, RealtimeContextPlan } from '../context/RealtimeContextOrchestrator';
 import type { BusinessSystemServiceResult } from '../business-system/BusinessSystemContextService';
 import type { ActionArtifact } from './DynamicActionArtifacts';
+import { getDynamicActionRuntimeValidationPolicy } from './DynamicActionRuntimeValidationPolicy';
 
 export interface InjectedGroundingEvidence {
     evidenceId: string;
@@ -26,12 +27,15 @@ export function buildDynamicActionRuntimeGrounding(input: {
     degradedReasons: AnswerDegradedReason[];
     businessSystemResult: BusinessSystemServiceResult;
 }): DynamicActionRuntimeGrounding {
-    if (!['capability_fit_answer', 'fde_grounded_answer'].includes(input.actionType ?? '')) {
+    const policy = getDynamicActionRuntimeValidationPolicy(input.actionType);
+    if (!policy || policy.evidenceKind === 'transcript_evidence') {
         return { groundedSources: [], injectedEvidence: [] };
     }
 
     const injectedEvidence = input.realtimeContextPlan.injected
-        .filter((candidate) => candidate.source === 'uploaded_material' || candidate.source === 'business_system')
+        .filter((candidate) =>
+            candidate.source === 'uploaded_material' ||
+            (policy.evidenceKind === 'external_capability' && candidate.source === 'business_system'))
         .map((candidate) => {
             const citation = input.citations.find((item) =>
                 item.sourceId === candidate.sourceId &&
@@ -58,7 +62,7 @@ export function buildDynamicActionRuntimeGrounding(input: {
         status: 'used',
     }));
 
-    appendNonUsedSourceStatuses(groundedSources, input);
+    appendNonUsedSourceStatuses(groundedSources, input, policy.evidenceKind === 'external_capability');
     return { groundedSources, injectedEvidence };
 }
 
@@ -86,6 +90,7 @@ function appendNonUsedSourceStatuses(
         degradedReasons: AnswerDegradedReason[];
         businessSystemResult: BusinessSystemServiceResult;
     },
+    includeBusinessStatus: boolean,
 ): void {
     const hasUsedMaterial = groundedSources.some((source) =>
         (source.type === 'material' || source.type === 'pptx') && source.status === 'used');
@@ -95,7 +100,7 @@ function appendNonUsedSourceStatuses(
     if (input.degradedReasons.includes('uploaded_material_context_truncated') && !hasUsedMaterial) {
         groundedSources.push({ type: 'material', label: 'uploaded material context', status: 'failed' });
     }
-    if (input.businessSystemResult.kind === 'fixed_reply') {
+    if (includeBusinessStatus && input.businessSystemResult.kind === 'fixed_reply') {
         groundedSources.push({ type: 'business_context', label: input.businessSystemResult.sourceName || 'business system', status: 'failed' });
     }
 }
