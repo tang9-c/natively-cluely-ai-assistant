@@ -287,3 +287,137 @@ test('candidate evidence summary must be anchored to transcript evidence', async
   });
   assert.equal(unsupported.passed, false);
 });
+
+test('transcript evidence action acceptance omits retrieval content from usage metadata', async () => {
+  const { engine, session } = await runtimeEvaluationHarness(['unused']);
+  const SENTINEL = 'CANDIDATE_RETRIEVAL_QUERY_SENTINEL_4A6E';
+
+  engine.recordDynamicActionUsage({
+    id: 'candidate-summary-accepted',
+    type: 'candidate_evidence_summary',
+    label: '总结候选人证据',
+    modeTemplateType: 'recruiting',
+    retrievalQuery: SENTINEL,
+    productContract: { userAction: '总结候选人证据', outputType: 'spoken_response' },
+  }, 'accepted');
+
+  const metadata = session.getFullUsage().at(-1).metadata;
+  assert.equal(metadata.evidenceKind, 'transcript_evidence');
+  assert.equal('retrievalQuery' in metadata, false);
+  assert.doesNotMatch(JSON.stringify(metadata), new RegExp(SENTINEL));
+});
+
+test('transcript evidence reaches the evaluator without entering completed usage metadata', async () => {
+  const SENTINEL = 'CANDIDATE_TRANSCRIPT_EVIDENCE_SENTINEL_1D92';
+  const boundedEvidence = `Candidate led the rollout ${SENTINEL}.`.slice(0, 1200);
+  const { engine, session } = await runtimeEvaluationHarness([
+    `Evidence observed: Candidate led the rollout ${SENTINEL}. Needs verification: metric definition.`,
+  ]);
+  let verifierCalls = 0;
+  const traces = [];
+  engine._setDynamicActionClaimGroundingVerifierForTest({
+    verify: async () => {
+      verifierCalls += 1;
+      throw new Error('transcript evidence must not call external verifier');
+    },
+  });
+
+  const answer = await engine.runWhatShouldISay('summarize candidate evidence', 0.9, undefined, {
+    skipCooldown: true,
+    source: 'dynamic_action',
+    modeEvent: {
+      actionId: 'candidate-summary-completed',
+      actionType: 'candidate_evidence_summary',
+      parentActionId: 'candidate-summary-parent',
+      retrievalQuery: SENTINEL,
+      latestTurn: SENTINEL,
+      productContract: { outputType: 'spoken_response' },
+    },
+    dynamicActionValidation: {
+      actionType: 'candidate_evidence_summary',
+      parentActionId: 'candidate-summary-parent',
+      grounding: { groundedSources: [], injectedEvidence: [] },
+      deferUserVisibleEmission: true,
+      language: 'en',
+      transcriptEvidence: [boundedEvidence],
+    },
+    dynamicActionEvaluationSink: (trace) => traces.push(trace),
+  });
+
+  assert.match(answer, new RegExp(SENTINEL));
+  assert.equal(verifierCalls, 0);
+  const metadata = session.getFullUsage().at(-1).metadata;
+  assert.equal(metadata.evidenceKind, 'transcript_evidence');
+  assert.equal(metadata.claimGroundingVerdict, 'not_required');
+  assert.equal('retrievalQuery' in metadata, false);
+  assert.doesNotMatch(JSON.stringify(metadata), new RegExp(SENTINEL));
+  assert.doesNotMatch(JSON.stringify(traces), new RegExp(SENTINEL));
+});
+
+test('candidate evidence summaries reject stress-interview method classification without rejecting ordinary evidence', async () => {
+  const { evaluateDynamicActionAcceptedOutput } = await import(pathToFileURL(evaluatorPath).href);
+  const input = {
+    actionType: 'candidate_evidence_summary',
+    outputType: 'spoken_response',
+    transcriptEvidence: ['候选人负责灰度方案并处理高压项目。'],
+  };
+  const ordinary = evaluateDynamicActionAcceptedOutput({
+    ...input,
+    answerText: '已观察证据：候选人负责灰度方案并处理高压项目。待验证：事故率口径。',
+  });
+  const chinese = evaluateDynamicActionAcceptedOutput({
+    ...input,
+    answerText: '已观察证据：候选人负责灰度方案。待验证：事故率口径。当前是压力面试。',
+  });
+  const english = evaluateDynamicActionAcceptedOutput({
+    ...input,
+    answerText: 'Evidence observed: candidate handled a high-pressure project. Needs verification: metric definition. This is a stress interview.',
+    transcriptEvidence: ['candidate handled a high-pressure project'],
+  });
+
+  assert.equal(ordinary.passed, true);
+  assert.ok(chinese.forbiddenPatternFailures.includes('visible_interview_method_classification'));
+  assert.ok(english.forbiddenPatternFailures.includes('visible_interview_method_classification'));
+});
+
+test('candidate evidence summaries reject final advancement judgments in Chinese and English', async () => {
+  const { evaluateDynamicActionAcceptedOutput } = await import(pathToFileURL(evaluatorPath).href);
+  const input = {
+    actionType: 'candidate_evidence_summary',
+    outputType: 'spoken_response',
+    transcriptEvidence: ['候选人负责灰度方案。'],
+  };
+  const chinese = evaluateDynamicActionAcceptedOutput({
+    ...input,
+    answerText: '已观察证据：候选人负责灰度方案。不建议继续推进。待验证：事故率口径。',
+  });
+  const english = evaluateDynamicActionAcceptedOutput({
+    actionType: 'candidate_evidence_summary',
+    outputType: 'spoken_response',
+    answerText: 'Evidence observed: candidate led rollout. I do not recommend proceeding. Needs verification: metric definition.',
+    transcriptEvidence: ['candidate led rollout'],
+  });
+
+  assert.ok(chinese.forbiddenPatternFailures.includes('final_hiring_judgment_or_ranking'));
+  assert.ok(english.forbiddenPatternFailures.includes('final_hiring_judgment_or_ranking'));
+});
+
+test('candidate policy claims for start dates and offers require supported recruiting material in Chinese and English', async () => {
+  const { evaluateDynamicActionAcceptedOutput } = await import(pathToFileURL(evaluatorPath).href);
+  const cases = [
+    '候选人可以九月入职。',
+    '我们会发放录用通知。',
+    'The candidate can start in September.',
+    'We can issue an offer.',
+  ];
+  for (const answerText of cases) {
+    const result = evaluateDynamicActionAcceptedOutput({
+      actionType: 'candidate_concern',
+      outputType: 'spoken_response',
+      answerText,
+      groundedSources: [],
+      claimGrounding: { verdict: 'unavailable', evidenceIds: [], reasonCode: 'no_injected_evidence', verificationSource: 'continuation_grounding_verifier' },
+    });
+    assert.ok(result.groundingFailures.includes('recruiting_policy_claim_not_supported_by_material'));
+  }
+});

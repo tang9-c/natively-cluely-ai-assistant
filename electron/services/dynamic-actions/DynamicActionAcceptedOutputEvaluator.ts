@@ -111,7 +111,8 @@ export function evaluateDynamicActionAcceptedOutput(
     if (!usedPolicyGrounding && (!statesInsufficiency || !requestsConfirmation)) {
       groundingFailures.push('candidate_concern_requires_insufficiency_and_confirmation');
     }
-    forbidRecruitingJudgmentPatterns(forbidPattern);
+    forbidRecruitingMethodClassification(forbidPattern);
+    forbidRecruitingFinalJudgments(forbidPattern);
   }
 
   if (input.actionType === 'candidate_evidence_summary') {
@@ -120,7 +121,8 @@ export function evaluateDynamicActionAcceptedOutput(
     if (!hasTranscriptEvidenceAnchors(answer, input.transcriptEvidence)) {
       groundingFailures.push('candidate_evidence_summary_requires_transcript_anchor');
     }
-    forbidRecruitingJudgmentPatterns(forbidPattern);
+    forbidRecruitingMethodClassification(forbidPattern);
+    forbidRecruitingFinalJudgments(forbidPattern);
   }
 
   if (input.actionType === 'discovery_question') {
@@ -187,7 +189,7 @@ export function containsPositiveCapabilityClaim(answer: string): boolean {
 }
 
 export function containsPositiveRecruitingPolicyClaim(answer: string): boolean {
-  return /远程办公|混合办公|签证(?:转移|支持)?|搬迁|薪酬|工资|薪资|(?:offer|职级|入职日期|start date|remote(?: work)?|hybrid|visa|relocation|compensation|salary|level)\b/i.test(answer);
+  return /远程办公|混合办公|签证(?:转移|支持)?|搬迁|薪酬|工资|薪资|(?:[一二三四五六七八九十]|1[0-2]|0?[1-9])月(?:份)?入职|(?:发放|发送|提供)(?:录用通知|\s*offer)|录用通知|\b(?:can|will)\s+(?:start|begin)\s+in\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)\b|\b(?:can|will)\s+(?:issue|send|extend|make)\s+(?:an\s+)?offer\b|\b(?:职级|入职日期|start date|remote(?: work)?|hybrid|visa|relocation|compensation|salary|level)\b/i.test(answer);
 }
 
 export function buildCapabilityFitSafeFallback(language?: string): string {
@@ -214,12 +216,17 @@ export function buildRecruitingEvidenceSafeFallback(language?: string): string {
     : '当前回答还没有提供足够的可验证岗位证据。请只记录已观察事实，并把缺失证据标为待追问；不要据此作出录用或淘汰判断。';
 }
 
-function forbidRecruitingJudgmentPatterns(
+function forbidRecruitingMethodClassification(
   forbidPattern: (label: string, pattern: RegExp) => void,
 ): void {
-  forbidPattern('final_hiring_judgment_or_ranking', /建议(?:立即)?(?:录用|淘汰)|(?:录用|淘汰|拒绝)候选人|排名|最(?:强|佳)候选人|must hire|hire immediately|reject candidate|top candidate/i);
+  forbidPattern('visible_interview_method_classification', /(?:当前|这是|按|属于).{0,12}(?:STAR|BEI|结构化面试|压力面试)|(?:STAR|BEI).{0,12}(?:分类|classif)|\b(?:this is|currently)\s+(?:a\s+)?stress interview\b/i);
+}
+
+function forbidRecruitingFinalJudgments(
+  forbidPattern: (label: string, pattern: RegExp) => void,
+): void {
+  forbidPattern('final_hiring_judgment_or_ranking', /不建议(?:继续)?推进|建议(?:立即)?(?:录用|淘汰)|(?:录用|淘汰|拒绝)候选人|排名|最(?:强|佳)候选人|\b(?:i|we)\s+(?:do not|don't)\s+recommend\s+(?:proceeding|moving forward|continuing)\b|must hire|hire immediately|reject candidate|top candidate/i);
   forbidPattern('protected_class_basis', /性别|年龄|民族|种族|宗教|婚姻|怀孕|残障|gender|age|race|religion|disability|marital/i);
-  forbidPattern('visible_interview_method_classification', /(?:这是|按|属于).{0,12}(?:STAR|BEI|结构化面试)|(?:STAR|BEI).{0,12}(?:分类|classif)/i);
   forbidPattern('aggressive_recruiting_pressure', /必须(?:马上|立即)(?:录用|接受)|强烈建议(?:马上|立即)?录用|逼迫|施压|pressure.*(?:accept|hire)/i);
 }
 

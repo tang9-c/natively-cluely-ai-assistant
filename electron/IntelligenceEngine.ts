@@ -764,22 +764,33 @@ export class IntelligenceEngine extends EventEmitter {
         generationStatus: 'accepted' | 'auto_generated' | 'generated_failed',
         triggerSource?: 'manual' | 'auto_countdown',
     ): void {
+        const validationPolicy = getDynamicActionRuntimeValidationPolicy(action.type);
         this.session.pushUsage({
             type: 'assist',
             timestamp: Date.now(),
             question: action.productContract?.userAction || action.label || action.type,
             answer: null,
-            metadata: {
-                source: 'dynamic_action',
-                actionType: action.type,
-                actionId: action.id,
-                modeTemplateType: action.modeTemplateType,
-                retrievalQuery: action.retrievalQuery,
-                outputType: action.productContract?.outputType,
-                generationStatus,
-                ...(triggerSource ? { triggerSource } : {}),
-                groundedSources: [],
-            },
+            metadata: validationPolicy?.evidenceKind === 'transcript_evidence'
+                ? {
+                    source: 'dynamic_action',
+                    actionType: action.type,
+                    actionId: action.id,
+                    evidenceKind: validationPolicy.evidenceKind,
+                    outputType: action.productContract?.outputType,
+                    generationStatus,
+                    ...(triggerSource ? { triggerSource } : {}),
+                }
+                : {
+                    source: 'dynamic_action',
+                    actionType: action.type,
+                    actionId: action.id,
+                    modeTemplateType: action.modeTemplateType,
+                    retrievalQuery: action.retrievalQuery,
+                    outputType: action.productContract?.outputType,
+                    generationStatus,
+                    ...(triggerSource ? { triggerSource } : {}),
+                    groundedSources: [],
+                },
         });
     }
 
@@ -1463,16 +1474,16 @@ export class IntelligenceEngine extends EventEmitter {
             let visibleAnswer = fullAnswer;
             let evaluationResult: 'passed' | 'safe_fallback' | undefined;
             let claimGrounding: ClaimGroundingVerdict | undefined;
+            const runtimeValidationPolicy = options?.dynamicActionValidation
+                ? getDynamicActionRuntimeValidationPolicy(options.dynamicActionValidation.actionType)
+                : null;
             if (options?.dynamicActionValidation) {
-                const validationPolicy = getDynamicActionRuntimeValidationPolicy(
-                    options.dynamicActionValidation.actionType,
-                );
-                claimGrounding = validationPolicy?.evidenceKind === 'transcript_evidence'
+                claimGrounding = runtimeValidationPolicy?.evidenceKind === 'transcript_evidence'
                     ? buildNotRequiredClaimGroundingVerdict()
                     : await this.dynamicActionClaimGroundingVerifier.verify({
                         answerText: fullAnswer,
                         evidence: options.dynamicActionValidation.grounding.injectedEvidence,
-                        claimDomain: validationPolicy?.claimDomain ?? 'capability',
+                        claimDomain: runtimeValidationPolicy?.claimDomain ?? 'capability',
                         providerDataScopes: options.dynamicActionValidation.providerDataScopes,
                     });
                 const evaluation = evaluateDynamicActionAcceptedOutput({
@@ -1532,23 +1543,38 @@ export class IntelligenceEngine extends EventEmitter {
                 question: usageQuestion,
                 answer: visibleAnswer,
                 ...(isDynamicActionUsage ? {
-                    metadata: {
-                        source: 'dynamic_action',
-                        actionType: dynamicActionModeEvent?.actionType ?? dynamicActionModeEvent?.intent,
-                        sourceIntent: dynamicActionModeEvent?.sourceIntent,
-                        actionId: dynamicActionModeEvent?.actionId,
-                        parentActionId: dynamicActionModeEvent?.parentActionId,
-                        modeTemplateType: dynamicActionModeEvent?.modeTemplateType,
-                        retrievalQuery: dynamicActionModeEvent?.retrievalQuery,
-                        outputType: dynamicActionModeEvent?.productContract?.outputType,
-                        generationStatus: 'completed',
-                        groundedSources: options?.dynamicActionValidation?.grounding.groundedSources ?? [],
-                        ...(evaluationResult ? { evaluationResult } : {}),
-                        ...(claimGrounding ? {
-                            claimGroundingVerdict: claimGrounding.verdict,
-                            claimGroundingReasonCode: claimGrounding.reasonCode,
-                        } : {}),
-                    },
+                    metadata: runtimeValidationPolicy?.evidenceKind === 'transcript_evidence'
+                        ? {
+                            source: 'dynamic_action',
+                            actionType: dynamicActionModeEvent?.actionType ?? dynamicActionModeEvent?.intent,
+                            actionId: dynamicActionModeEvent?.actionId,
+                            parentActionId: dynamicActionModeEvent?.parentActionId,
+                            evidenceKind: runtimeValidationPolicy.evidenceKind,
+                            outputType: dynamicActionModeEvent?.productContract?.outputType,
+                            generationStatus: 'completed',
+                            ...(evaluationResult ? { evaluationResult } : {}),
+                            ...(claimGrounding ? {
+                                claimGroundingVerdict: claimGrounding.verdict,
+                                claimGroundingReasonCode: claimGrounding.reasonCode,
+                            } : {}),
+                        }
+                        : {
+                            source: 'dynamic_action',
+                            actionType: dynamicActionModeEvent?.actionType ?? dynamicActionModeEvent?.intent,
+                            sourceIntent: dynamicActionModeEvent?.sourceIntent,
+                            actionId: dynamicActionModeEvent?.actionId,
+                            parentActionId: dynamicActionModeEvent?.parentActionId,
+                            modeTemplateType: dynamicActionModeEvent?.modeTemplateType,
+                            retrievalQuery: dynamicActionModeEvent?.retrievalQuery,
+                            outputType: dynamicActionModeEvent?.productContract?.outputType,
+                            generationStatus: 'completed',
+                            groundedSources: options?.dynamicActionValidation?.grounding.groundedSources ?? [],
+                            ...(evaluationResult ? { evaluationResult } : {}),
+                            ...(claimGrounding ? {
+                                claimGroundingVerdict: claimGrounding.verdict,
+                                claimGroundingReasonCode: claimGrounding.reasonCode,
+                            } : {}),
+                        },
                 } : {}),
             };
 
