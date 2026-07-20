@@ -59,8 +59,7 @@ export function buildDynamicActionArtifacts(input: BuildDynamicActionArtifactsIn
         normalizeAcceptTriggerSource(usage?.metadata?.triggerSource) ??
         normalizeAcceptTriggerSource(action.triggerSource);
       const sourceIntent =
-        normalizeSourceIntent(usage?.metadata?.sourceIntent) ??
-        normalizeSourceIntent(action.sourceIntent);
+        normalizeSourceIntent(usage?.metadata?.sourceIntent);
       return {
         actionId: action.id,
         ...((usage?.metadata?.parentActionId || action.parentActionId) ? {

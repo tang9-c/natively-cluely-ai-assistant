@@ -123,7 +123,6 @@ const RECRUITING_ARTIFACT_ACTION_TYPES = new Set([
   'candidate_concern',
   'strong_fit_signal',
 ]);
-const RECRUITING_INTERNAL_FOLLOW_UP_PATTERN = /candidate evidence|scorecard|gap|risk|hire|reject|protected class|age|gender|race|ethnicity|religion|disability|候选人证据|评分卡|缺口|风险|录用|淘汰|受保护|年龄|性别|种族|民族|宗教|残障/i;
 const RECRUITING_LOGISTICS_PATTERN = /\b(compensation|salary|timeline|notice period|availability|start date)\b|(?:薪资|签证|入职时间|搬迁|远程|混合办公|offer|JD|岗位)/i;
 const TEAM_OWNERSHIP_PATTERN = /\b(owner|by|deadline|due|next step|action item)\b|(?:负责人|我来负责|我负责|我来做|行动项|截止|周[一二三四五六日天]前|星期[一二三四五六日天]前)/i;
 const TEAM_DECISION_PATTERN = /\b(decided|approved|confirmed|final decision)\b|(?:决定|就选|我们定|最终决定|批准|确认|通过)/i;
@@ -256,17 +255,17 @@ export function buildFollowUpDraft(
     : 'Hi team,';
   const lines = [greeting, '', 'Thanks for the conversation today.'];
 
-  const isCandidateFacingRecruitingDraft = modeTemplateType === 'recruiting';
+  if (modeTemplateType === 'recruiting') {
+    lines.push('', 'Our recruiting team will follow up with next steps.', '', 'Best,');
+    return lines.join('\n');
+  }
+
   const overview = summaryData?.overview?.trim();
-  if (overview && (!isCandidateFacingRecruitingDraft || !RECRUITING_INTERNAL_FOLLOW_UP_PATTERN.test(overview))) {
+  if (overview) {
     lines.push('', overview);
   }
 
   const nextSteps = actionItems
-    .filter((item) =>
-      !isCandidateFacingRecruitingDraft ||
-      (RECRUITING_LOGISTICS_PATTERN.test(item.text) && !RECRUITING_INTERNAL_FOLLOW_UP_PATTERN.test(item.text))
-    )
     .map(item => {
       const owner = item.owner ? `${item.owner}: ` : '';
       const deadline = item.deadline ? ` by ${item.deadline}` : '';

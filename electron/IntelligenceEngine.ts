@@ -760,7 +760,7 @@ export class IntelligenceEngine extends EventEmitter {
     }
 
     private recordDynamicActionUsage(
-        action: Pick<DynamicAction, 'id' | 'type' | 'label' | 'modeTemplateType' | 'retrievalQuery' | 'productContract'>,
+        action: Pick<DynamicAction, 'id' | 'type' | 'label' | 'modeTemplateType' | 'sourceIntent' | 'retrievalQuery' | 'productContract'>,
         generationStatus: 'accepted' | 'auto_generated' | 'generated_failed',
         triggerSource?: 'manual' | 'auto_countdown',
     ): void {
@@ -775,6 +775,8 @@ export class IntelligenceEngine extends EventEmitter {
                     source: 'dynamic_action',
                     actionType: action.type,
                     actionId: action.id,
+                    modeTemplateType: action.modeTemplateType,
+                    sourceIntent: action.sourceIntent,
                     evidenceKind: validationPolicy.evidenceKind,
                     outputType: action.productContract?.outputType,
                     generationStatus,
@@ -785,6 +787,7 @@ export class IntelligenceEngine extends EventEmitter {
                     actionType: action.type,
                     actionId: action.id,
                     modeTemplateType: action.modeTemplateType,
+                    sourceIntent: action.sourceIntent,
                     retrievalQuery: action.retrievalQuery,
                     outputType: action.productContract?.outputType,
                     generationStatus,
@@ -1562,8 +1565,10 @@ export class IntelligenceEngine extends EventEmitter {
                         ? {
                             source: 'dynamic_action',
                             actionType: dynamicActionModeEvent?.actionType ?? dynamicActionModeEvent?.intent,
+                            sourceIntent: dynamicActionModeEvent?.sourceIntent,
                             actionId: dynamicActionModeEvent?.actionId,
                             parentActionId: dynamicActionModeEvent?.parentActionId,
+                            modeTemplateType: dynamicActionModeEvent?.modeTemplateType,
                             evidenceKind: runtimeValidationPolicy.evidenceKind,
                             outputType: dynamicActionModeEvent?.productContract?.outputType,
                             generationStatus: 'completed',

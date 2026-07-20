@@ -32,6 +32,21 @@ async function loadDynamicActionEngine() {
   return import(pathToFileURL(enginePath).href);
 }
 
+async function loadMeetingPersistence() {
+  const persistencePath = path.resolve(__dirname, '../../../dist-electron/electron/MeetingPersistence.js');
+  return import(pathToFileURL(persistencePath).href);
+}
+
+async function loadDynamicActionArtifacts() {
+  const artifactPath = path.resolve(__dirname, '../../../dist-electron/electron/services/dynamic-actions/DynamicActionArtifacts.js');
+  return import(pathToFileURL(artifactPath).href);
+}
+
+async function loadPostCallWorkflow() {
+  const workflowPath = path.resolve(__dirname, '../../../dist-electron/electron/services/post-call/PostCallWorkflow.js');
+  return import(pathToFileURL(workflowPath).href);
+}
+
 // Minimal LLMHelper stub — engine touches getActiveModel, isStreamingSupported,
 // and setNegotiationCoachingHandler in its constructor / initializeLLMs path.
 // Other LLM methods are unused because we only invoke handleTranscript.
@@ -243,6 +258,54 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(usage[0].metadata.generationStatus, 'accepted');
     assert.equal(usage[0].question, action.productContract.userAction);
     assert.equal(usage[1].metadata.generationStatus, 'generated_failed');
+  });
+
+  test('recruiting transcript evidence usage preserves metadata provenance through post-call records', async () => {
+    const { engine, session } = await makeEngine();
+    const { DynamicActionEngine } = await loadDynamicActionEngine();
+    const { buildDynamicActionArtifactActionsFromUsage } = await loadMeetingPersistence();
+    const { buildDynamicActionArtifacts } = await loadDynamicActionArtifacts();
+    const { buildPostCallEnhancements } = await loadPostCallWorkflow();
+    const dynamicActionEngine = new DynamicActionEngine();
+    engine._setDynamicActionEngineForTest(dynamicActionEngine);
+    engine.setDynamicActionContext({
+      sessionId: 'recruiting-session',
+      modeId: 'recruiting-mode',
+      modeTemplateType: 'recruiting',
+    });
+    dynamicActionEngine.getStore().addAction(buildStoredDiscoveryAction({
+      id: 'recruiting-evidence-1',
+      sessionId: 'recruiting-session',
+      modeId: 'recruiting-mode',
+      modeTemplateType: 'recruiting',
+      type: 'candidate_evidence_summary',
+      label: '生成候选人证据摘要',
+      sourceIntent: 'recruiting_bei_evidence_gap',
+      latestTurn: '候选人负责灰度方案，结果指标仍待验证。',
+      productContract: { outputType: 'checklist', userAction: '生成候选人证据摘要', riskState: 'normal' },
+    }));
+
+    assert.ok(engine.acceptDynamicAction('recruiting-evidence-1'));
+    const usage = session.getFullUsage().filter((item) => item?.metadata?.actionId === 'recruiting-evidence-1');
+    assert.equal(usage.length, 1);
+    assert.equal(usage[0].metadata.modeTemplateType, 'recruiting');
+    assert.equal(usage[0].metadata.sourceIntent, 'recruiting_bei_evidence_gap');
+    assert.equal('retrievalQuery' in usage[0].metadata, false);
+    assert.equal('latestTurn' in usage[0].metadata, false);
+    assert.equal('transcriptEvidence' in usage[0].metadata, false);
+
+    const actions = buildDynamicActionArtifactActionsFromUsage(usage);
+    const artifacts = buildDynamicActionArtifacts({ actions, usage });
+    const result = buildPostCallEnhancements({
+      modeTemplateType: 'recruiting',
+      transcript: [],
+      dynamicActionArtifacts: artifacts,
+    });
+
+    assert.equal(artifacts[0].modeTemplateType, 'recruiting');
+    assert.equal(artifacts[0].sourceIntent, 'recruiting_bei_evidence_gap');
+    assert.equal(result.acceptedRecruitingRecords.length, 1);
+    assert.equal(result.acceptedRecruitingRecords[0].sourceIntent, 'recruiting_bei_evidence_gap');
   });
 
   test('active dynamic action suppresses duplicate suggestion-trigger answer for same sales intent', async () => {

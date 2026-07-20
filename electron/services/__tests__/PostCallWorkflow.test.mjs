@@ -310,8 +310,13 @@ test('buildPostCallEnhancements handles Chinese recruiting logistics and follow-
 test('recruiting follow-up never exposes English or Chinese internal evaluation content', () => {
   const result = buildPostCallEnhancements({
     modeTemplateType: 'recruiting',
-    transcript: [],
-    summaryData: { overview: 'Thank you for speaking with us.', actionItems: [] },
+    transcript: [{ speaker: 'interviewer', text: 'I will send the Evidence and Protected-class information.', timestamp: 1 }],
+    summaryData: {
+      overview: 'EVIDENCE: scorecard gaps, RISKS, and Protected-class information; 薪资和年龄需要评估。',
+      actionItems: ['Send salary and age details.', 'Review rejected candidates and evidence.'],
+      keyPoints: ['Evidence collected.'],
+      sections: [{ title: 'Risk', bullets: ['Protected-class information'] }],
+    },
     dynamicActionArtifacts: [
       {
         actionId: 'recruiting-probe-1',
@@ -345,7 +350,9 @@ test('recruiting follow-up never exposes English or Chinese internal evaluation 
   assert.ok(result.coachingInsights.some((item) => item.type === 'recruiting_evidence_gap'));
   assert.ok(result.coachingInsights.some((item) => item.type === 'recruiting_candidate_interest'));
   assert.ok(result.coachingInsights.some((item) => item.type === 'recruiting_policy_confirmation_needed'));
-  assert.doesNotMatch(result.followUpDraft, /scorecard|risk|hire|reject|录用|淘汰|年龄|性别|age|gender/i);
+  assert.equal(result.followUpDraft, 'Hi,\n\nThanks for the conversation today.\n\nOur recruiting team will follow up with next steps.\n\nBest,');
+  assert.doesNotMatch(result.followUpDraft, /evidence|protected-class|scorecard|risk|hire|reject|录用|淘汰|薪资|年龄|age|gender/i);
+  assert.match(result.acceptedRecruitingRecords[0].summary, /Scorecard gap/i);
 });
 
 test('fde post-call insights flag customer goal without success metric', () => {

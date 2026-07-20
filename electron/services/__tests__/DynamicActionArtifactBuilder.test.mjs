@@ -105,7 +105,7 @@ test('builds recruiting artifact and preserves source intent from usage metadata
   assert.equal(artifacts[0].sourceIntent, 'recruiting_bei_evidence_gap');
 });
 
-test('uses action source intent when matching usage has none', async () => {
+test('does not use action source intent when matching usage has none', async () => {
   const { buildDynamicActionArtifacts } = await loadHelper();
   const artifacts = buildDynamicActionArtifacts({
     actions: [action({
@@ -113,10 +113,17 @@ test('uses action source intent when matching usage has none', async () => {
       type: 'candidate_experience_probe',
       sourceIntent: 'recruiting_situational_evidence_gap',
     })],
-    usage: [],
+    usage: [{
+      timestamp: 2,
+      answer: 'Internal probe.',
+      metadata: {
+        source: 'dynamic_action',
+        actionId: 'action_1',
+      },
+    }],
   });
 
-  assert.equal(artifacts[0].sourceIntent, 'recruiting_situational_evidence_gap');
+  assert.equal('sourceIntent' in artifacts[0], false);
 });
 
 test('does not use ordinary assist usage without dynamic_action metadata', async () => {
