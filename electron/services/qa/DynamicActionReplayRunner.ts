@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { DynamicActionEngine } from '../dynamic-actions/DynamicActionEngine';
+import type { CloudSemanticGateClassifier } from '../dynamic-actions/ModeEventClassifier';
 import type { DynamicActionFixtureRunnerMode } from '../dynamic-actions/DynamicActionProductFixtures';
 import type { DynamicActionProductFixture } from '../dynamic-actions/DynamicActionProductFixtures';
 import {
@@ -21,6 +22,14 @@ export interface ReplayManifestEntry {
   syntheticAudio?: boolean;
   continuationFixture?: string;
   runnerMode?: DynamicActionFixtureRunnerMode;
+  labeledFinalTurns?: ReplayLabeledFinalTurn[];
+}
+
+export interface ReplayLabeledFinalTurn {
+  expectedActionType: string | null;
+  speakerRole: string;
+  policyGroundingRequired: boolean;
+  continuationChildExpected: boolean;
 }
 
 export interface ReplayRunnerInput {
@@ -31,6 +40,7 @@ export interface ReplayRunnerInput {
   continuationFixtureRoot?: string;
   modeTemplateTypes?: string[];
   semanticGateMode?: DynamicActionReplaySemanticGateMode;
+  cloudClassifier?: CloudSemanticGateClassifier;
   environmentStatus?: ReplayEnvironmentStatus;
   transcribeAudio?: (input: {
     entry: ReplayManifestEntry;
@@ -39,7 +49,7 @@ export interface ReplayRunnerInput {
 }
 
 export type ReplayEnvironmentStatus = 'ok' | 'blocked_missing_credentials' | 'not_applicable';
-export type ReplayCoverageMode = 'sales' | 'fde' | 'team-meet';
+export type ReplayCoverageMode = 'sales' | 'fde' | 'team-meet' | 'recruiting';
 export type DynamicActionReplaySemanticGateMode = 'real' | 'fixture_oracle';
 
 export interface ReplayAssetCoverage {
@@ -179,6 +189,10 @@ export function loadFixtureBackedSttTranscripts(input: {
 }
 
 export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<ReplayReport> {
+  const semanticGateMode = input.semanticGateMode ?? 'real';
+  if (semanticGateMode === 'real' && !input.cloudClassifier) {
+    throw new Error('semanticGateMode "real" requires cloudClassifier');
+  }
   const allEntries = JSON.parse(fs.readFileSync(input.manifestPath, 'utf8')) as ReplayManifestEntry[];
   const entries = input.modeTemplateTypes?.length
     ? allEntries.filter((entry) => input.modeTemplateTypes?.includes(entry.modeTemplateType))
@@ -220,7 +234,6 @@ export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<
     }
 
     const runnerMode = entry.runnerMode ?? 'assessSignals';
-    const semanticGateMode = input.semanticGateMode ?? 'real';
     const actions = runnerMode === 'regex'
       ? engine.detectActions({
           transcript,
@@ -249,7 +262,7 @@ export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<
                   ? []
                   : [candidate.actionType],
               }))
-            : undefined,
+            : input.cloudClassifier,
         });
     const expectedActionType = fixture.expected.actionType;
     const matchedAction = expectedActionType
@@ -309,7 +322,7 @@ function buildAssetCoverageFailures(
   coverage: ReplayAssetCoverage,
   modeTemplateTypes?: string[],
 ): ReplayAssetCoverageFailure[] {
-  const modes: ReplayCoverageMode[] = ['sales', 'fde', 'team-meet'];
+  const modes: ReplayCoverageMode[] = ['sales', 'fde', 'team-meet', 'recruiting'];
   const requestedModes = modeTemplateTypes?.length
     ? modes.filter((mode) => modeTemplateTypes.includes(mode))
     : modes;
@@ -339,10 +352,10 @@ function loadContinuationFixture(
 }
 
 function buildAssetCoverage(entries: ReplayManifestEntry[], audioRoot: string): ReplayAssetCoverage {
-  const requiredReal: Record<ReplayCoverageMode, number> = { sales: 15, fde: 10, 'team-meet': 5 };
-  const availableReal: Record<ReplayCoverageMode, number> = { sales: 0, fde: 0, 'team-meet': 0 };
-  const availableSynthetic: Record<ReplayCoverageMode, number> = { sales: 0, fde: 0, 'team-meet': 0 };
-  const modes = new Set<ReplayCoverageMode>(['sales', 'fde', 'team-meet']);
+  const requiredReal: Record<ReplayCoverageMode, number> = { sales: 15, fde: 10, 'team-meet': 5, recruiting: 5 };
+  const availableReal: Record<ReplayCoverageMode, number> = { sales: 0, fde: 0, 'team-meet': 0, recruiting: 0 };
+  const availableSynthetic: Record<ReplayCoverageMode, number> = { sales: 0, fde: 0, 'team-meet': 0, recruiting: 0 };
+  const modes = new Set<ReplayCoverageMode>(['sales', 'fde', 'team-meet', 'recruiting']);
 
   for (const entry of entries) {
     const mode = entry.modeTemplateType as ReplayCoverageMode;
@@ -366,6 +379,7 @@ function buildAssetCoverage(entries: ReplayManifestEntry[], audioRoot: string): 
       sales: Math.max(requiredReal.sales - availableReal.sales, 0),
       fde: Math.max(requiredReal.fde - availableReal.fde, 0),
       'team-meet': Math.max(requiredReal['team-meet'] - availableReal['team-meet'], 0),
+      recruiting: Math.max(requiredReal.recruiting - availableReal.recruiting, 0),
     },
   };
 }

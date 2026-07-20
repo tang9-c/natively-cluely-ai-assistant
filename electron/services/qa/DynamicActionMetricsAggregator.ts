@@ -1,7 +1,7 @@
 import type { AnswerQualityMetrics } from '../../db/DatabaseManager';
 import type { ReplayAssetCoverage, ReplayEnvironmentStatus, ReplayReport } from './DynamicActionReplayRunner';
 
-type ModeId = 'sales' | 'fde' | 'team-meet';
+type ModeId = 'sales' | 'fde' | 'team-meet' | 'recruiting';
 
 export interface TelemetryLikeRecord {
   name: string;
@@ -87,7 +87,41 @@ export interface ContinuationQaMetrics {
   finalTurnToDerivedCardP95Ms: number;
 }
 
-const MODES: ModeId[] = ['sales', 'fde', 'team-meet'];
+export interface RecruitingReleaseQualityMetrics {
+  realMeetingCount: number;
+  labeledFinalTurnCount: number;
+  precision: number;
+  recall: number;
+  overallFalsePositiveRate: number;
+  policyVerificationFalsePositiveRate: number;
+  exclusiveMultiCardRate: number;
+  wrongSpeakerContinuationRate: number;
+  ungroundedPositivePolicyCommitments: number;
+  candidateFacingEvidenceLeaks: number;
+  duplicateDerivedActions: number;
+  unsafeVisibleAnswerCount: number;
+  derivedActionFalsePositiveRate: number;
+  finalTurnToDerivedCardP95Ms: number;
+}
+
+export const RECRUITING_RELEASE_GATES = {
+  minimumRealMeetings: 5,
+  minimumLabeledFinalTurns: 80,
+  minimumPrecision: 0.9,
+  minimumRecall: 0.8,
+  maximumOverallFalsePositiveRateExclusive: 0.1,
+  maximumPolicyVerificationFalsePositiveRateExclusive: 0.05,
+  maximumExclusiveMultiCardRate: 0,
+  maximumWrongSpeakerContinuationRate: 0,
+  maximumUngroundedPositivePolicyCommitments: 0,
+  maximumCandidateFacingEvidenceLeaks: 0,
+  maximumDuplicateDerivedActions: 0,
+  maximumUnsafeVisibleAnswerCount: 0,
+  maximumDerivedActionFalsePositiveRateExclusive: 0.1,
+  maximumFinalTurnToDerivedCardP95MsExclusive: 2000,
+} as const;
+
+const MODES: ModeId[] = ['sales', 'fde', 'team-meet', 'recruiting'];
 
 export function parseTelemetryJsonlLines(content: string): {
   records: TelemetryLikeRecord[];
@@ -208,6 +242,61 @@ export function evaluateContinuationQualityGate(metrics: ContinuationQaMetrics):
   return failures;
 }
 
+export function evaluateRecruitingReleaseQualityGate(metrics: RecruitingReleaseQualityMetrics): string[] {
+  const failures: string[] = [];
+  if (metrics.realMeetingCount < RECRUITING_RELEASE_GATES.minimumRealMeetings) {
+    failures.push('real_recruiting_meetings');
+  }
+  if (metrics.labeledFinalTurnCount < RECRUITING_RELEASE_GATES.minimumLabeledFinalTurns) {
+    failures.push('labeled_recruiting_final_turns');
+  }
+  if (metrics.precision < RECRUITING_RELEASE_GATES.minimumPrecision) failures.push('precision');
+  if (metrics.recall < RECRUITING_RELEASE_GATES.minimumRecall) failures.push('recall');
+  if (metrics.overallFalsePositiveRate >= RECRUITING_RELEASE_GATES.maximumOverallFalsePositiveRateExclusive) {
+    failures.push('overall_false_positive_rate');
+  }
+  if (
+    metrics.policyVerificationFalsePositiveRate >=
+    RECRUITING_RELEASE_GATES.maximumPolicyVerificationFalsePositiveRateExclusive
+  ) {
+    failures.push('policy_verification_false_positive_rate');
+  }
+  if (metrics.exclusiveMultiCardRate > RECRUITING_RELEASE_GATES.maximumExclusiveMultiCardRate) {
+    failures.push('exclusive_multi_card_rate');
+  }
+  if (metrics.wrongSpeakerContinuationRate > RECRUITING_RELEASE_GATES.maximumWrongSpeakerContinuationRate) {
+    failures.push('wrong_speaker_continuation_rate');
+  }
+  if (
+    metrics.ungroundedPositivePolicyCommitments >
+    RECRUITING_RELEASE_GATES.maximumUngroundedPositivePolicyCommitments
+  ) {
+    failures.push('ungrounded_positive_policy_commitment');
+  }
+  if (metrics.candidateFacingEvidenceLeaks > RECRUITING_RELEASE_GATES.maximumCandidateFacingEvidenceLeaks) {
+    failures.push('candidate_facing_evidence_leak');
+  }
+  if (metrics.duplicateDerivedActions > RECRUITING_RELEASE_GATES.maximumDuplicateDerivedActions) {
+    failures.push('duplicate_derived_actions');
+  }
+  if (metrics.unsafeVisibleAnswerCount > RECRUITING_RELEASE_GATES.maximumUnsafeVisibleAnswerCount) {
+    failures.push('unsafe_visible_answer');
+  }
+  if (
+    metrics.derivedActionFalsePositiveRate >=
+    RECRUITING_RELEASE_GATES.maximumDerivedActionFalsePositiveRateExclusive
+  ) {
+    failures.push('derived_action_false_positive_rate');
+  }
+  if (
+    metrics.finalTurnToDerivedCardP95Ms >=
+    RECRUITING_RELEASE_GATES.maximumFinalTurnToDerivedCardP95MsExclusive
+  ) {
+    failures.push('final_turn_to_card_latency');
+  }
+  return failures;
+}
+
 function aggregateContinuationMetrics(replayReport?: ReplayReport | null): ContinuationQaMetrics {
   const continuationResults = (replayReport?.entries ?? [])
     .map((entry) => entry.continuation)
@@ -235,10 +324,10 @@ function aggregateContinuationMetrics(replayReport?: ReplayReport | null): Conti
 
 function emptyAssetCoverage(): ReplayAssetCoverage {
   return {
-    requiredReal: { sales: 15, fde: 10, 'team-meet': 5 },
-    availableReal: { sales: 0, fde: 0, 'team-meet': 0 },
-    availableSynthetic: { sales: 0, fde: 0, 'team-meet': 0 },
-    blockedReal: { sales: 15, fde: 10, 'team-meet': 5 },
+    requiredReal: { sales: 15, fde: 10, 'team-meet': 5, recruiting: 5 },
+    availableReal: { sales: 0, fde: 0, 'team-meet': 0, recruiting: 0 },
+    availableSynthetic: { sales: 0, fde: 0, 'team-meet': 0, recruiting: 0 },
+    blockedReal: { sales: 15, fde: 10, 'team-meet': 5, recruiting: 5 },
   };
 }
 

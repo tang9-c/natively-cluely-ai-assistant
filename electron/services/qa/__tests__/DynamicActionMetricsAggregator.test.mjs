@@ -38,6 +38,29 @@ test('aggregates all dynamic action lifecycle counts by stable telemetry event n
   });
 });
 
+test('aggregates recruiting lifecycle counts under modeQuality.recruiting', async () => {
+  const { aggregateDynamicActionQaMetrics } = await load();
+  const summary = aggregateDynamicActionQaMetrics({
+    telemetryRecords: [
+      { name: 'dynamic_action_shown', timestamp: '2026-07-20T00:00:00.000Z', modeId: 'recruiting', properties: { actionType: 'candidate_concern' } },
+      { name: 'dynamic_action_accepted', timestamp: '2026-07-20T00:00:01.000Z', modeId: 'recruiting', properties: { actionType: 'candidate_concern' } },
+      { name: 'dynamic_action_completed', timestamp: '2026-07-20T00:00:02.000Z', modeId: 'recruiting', properties: { actionType: 'candidate_concern' } },
+    ],
+    fixtureResults: [],
+    answerQualityMetrics: null,
+  });
+
+  assert.deepEqual(summary.modeQuality.recruiting, {
+    shown: 1,
+    accepted: 1,
+    auto_generated: 0,
+    dismissed: 0,
+    expired: 0,
+    generated_failed: 0,
+    completed: 1,
+  });
+});
+
 test('keeps legacy status compatibility without changing the new lifecycle names', async () => {
   const { aggregateDynamicActionQaMetrics } = await load();
   const summary = aggregateDynamicActionQaMetrics({
@@ -197,6 +220,80 @@ test('continuation quality gate reports every boundary failure', async () => {
     'parent_child_correlation',
     'unsafe_visible_answer',
     'derived_action_recall',
+    'derived_action_false_positive_rate',
+    'final_turn_to_card_latency',
+  ]);
+});
+
+test('recruiting release quality gate uses the explicit release thresholds', async () => {
+  const {
+    RECRUITING_RELEASE_GATES,
+    evaluateRecruitingReleaseQualityGate,
+  } = await load();
+  assert.deepEqual(RECRUITING_RELEASE_GATES, {
+    minimumRealMeetings: 5,
+    minimumLabeledFinalTurns: 80,
+    minimumPrecision: 0.9,
+    minimumRecall: 0.8,
+    maximumOverallFalsePositiveRateExclusive: 0.1,
+    maximumPolicyVerificationFalsePositiveRateExclusive: 0.05,
+    maximumExclusiveMultiCardRate: 0,
+    maximumWrongSpeakerContinuationRate: 0,
+    maximumUngroundedPositivePolicyCommitments: 0,
+    maximumCandidateFacingEvidenceLeaks: 0,
+    maximumDuplicateDerivedActions: 0,
+    maximumUnsafeVisibleAnswerCount: 0,
+    maximumDerivedActionFalsePositiveRateExclusive: 0.1,
+    maximumFinalTurnToDerivedCardP95MsExclusive: 2000,
+  });
+
+  const passing = {
+    realMeetingCount: 5,
+    labeledFinalTurnCount: 80,
+    precision: 0.9,
+    recall: 0.8,
+    overallFalsePositiveRate: 0.099,
+    policyVerificationFalsePositiveRate: 0.049,
+    exclusiveMultiCardRate: 0,
+    wrongSpeakerContinuationRate: 0,
+    ungroundedPositivePolicyCommitments: 0,
+    candidateFacingEvidenceLeaks: 0,
+    duplicateDerivedActions: 0,
+    unsafeVisibleAnswerCount: 0,
+    derivedActionFalsePositiveRate: 0.099,
+    finalTurnToDerivedCardP95Ms: 1999,
+  };
+  assert.deepEqual(evaluateRecruitingReleaseQualityGate(passing), []);
+
+  assert.deepEqual(evaluateRecruitingReleaseQualityGate({
+    ...passing,
+    realMeetingCount: 4,
+    labeledFinalTurnCount: 79,
+    precision: 0.899,
+    recall: 0.799,
+    overallFalsePositiveRate: 0.1,
+    policyVerificationFalsePositiveRate: 0.05,
+    exclusiveMultiCardRate: 0.01,
+    wrongSpeakerContinuationRate: 0.01,
+    ungroundedPositivePolicyCommitments: 1,
+    candidateFacingEvidenceLeaks: 1,
+    duplicateDerivedActions: 1,
+    unsafeVisibleAnswerCount: 1,
+    derivedActionFalsePositiveRate: 0.1,
+    finalTurnToDerivedCardP95Ms: 2000,
+  }), [
+    'real_recruiting_meetings',
+    'labeled_recruiting_final_turns',
+    'precision',
+    'recall',
+    'overall_false_positive_rate',
+    'policy_verification_false_positive_rate',
+    'exclusive_multi_card_rate',
+    'wrong_speaker_continuation_rate',
+    'ungrounded_positive_policy_commitment',
+    'candidate_facing_evidence_leak',
+    'duplicate_derived_actions',
+    'unsafe_visible_answer',
     'derived_action_false_positive_rate',
     'final_turn_to_card_latency',
   ]);

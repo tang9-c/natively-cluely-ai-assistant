@@ -5,6 +5,84 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const root = process.cwd();
+const semanticGateModuleUrl = pathToFileURL(
+  path.join(root, 'dist-electron/electron/services/dynamic-actions/ModeEventClassifier.js'),
+).href;
+
+function extractQCloudContent(data) {
+  if (typeof data === 'string') return data;
+  const content = data?.choices?.[0]?.message?.content ?? data?.content;
+  return typeof content === 'string' ? content : '';
+}
+
+function hasCompleteRecruitingLabel(label) {
+  return label && typeof label === 'object'
+    && Object.hasOwn(label, 'expectedActionType')
+    && (label.expectedActionType === null || typeof label.expectedActionType === 'string')
+    && typeof label.speakerRole === 'string'
+    && label.speakerRole.trim().length > 0
+    && typeof label.policyGroundingRequired === 'boolean'
+    && typeof label.continuationChildExpected === 'boolean';
+}
+
+export function evaluateRecruitingRealAssetGate({ entries, audioRoot }) {
+  const realMeetingsByAudioPath = new Map();
+  for (const entry of entries) {
+    if (entry.modeTemplateType !== 'recruiting' || entry.syntheticAudio === true) continue;
+    const audioPath = path.isAbsolute(entry.audioPath)
+      ? entry.audioPath
+      : path.resolve(audioRoot, entry.audioPath);
+    if (fs.existsSync(audioPath) && !realMeetingsByAudioPath.has(audioPath)) {
+      realMeetingsByAudioPath.set(audioPath, entry);
+    }
+  }
+  const realMeetings = [...realMeetingsByAudioPath.values()];
+  const availableLabeledFinalTurns = realMeetings.reduce(
+    (count, entry) => count + (entry.labeledFinalTurns ?? []).filter(hasCompleteRecruitingLabel).length,
+    0,
+  );
+  const coverage = {
+    requiredRealMeetings: 5,
+    availableRealMeetings: realMeetings.length,
+    requiredLabeledFinalTurns: 80,
+    availableLabeledFinalTurns,
+  };
+  return {
+    status: realMeetings.length >= coverage.requiredRealMeetings
+      && availableLabeledFinalTurns >= coverage.requiredLabeledFinalTurns
+      ? 'ready'
+      : 'BLOCKED_REAL_RECRUITING_ASSETS',
+    ...coverage,
+  };
+}
+
+export function createQCloudReplaySemanticClassifier({ apiKey, endpoint, model, post }) {
+  const authorization = `Bearer ${apiKey.trim()}`;
+  return async input => {
+    const {
+      buildCloudSemanticGatePrompt,
+      CloudSemanticGateError,
+      cloudFailureReasonFromError,
+      parseCloudSemanticGateResponse,
+    } = await import(semanticGateModuleUrl);
+    try {
+      const response = await post(endpoint, {
+        model,
+        messages: [{ role: 'user', content: buildCloudSemanticGatePrompt(input) }],
+        max_tokens: 256,
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authorization,
+        },
+        timeout: 2500,
+      });
+      return parseCloudSemanticGateResponse(extractQCloudContent(response.data), input.candidates);
+    } catch (error) {
+      throw new CloudSemanticGateError(cloudFailureReasonFromError(error));
+    }
+  };
+}
 
 export function usage(label, scriptName) {
   console.log(`${label} real STT replay
@@ -55,7 +133,13 @@ export function parseArgs(argv, label, scriptName) {
   return opts;
 }
 
-export async function runRealSttReplay({ label, scriptName, modeTemplateType, outputDirName }) {
+export async function runRealSttReplay({
+  label,
+  scriptName,
+  modeTemplateType,
+  outputDirName,
+  semanticGateMode = 'fixture_oracle',
+}) {
   const opts = parseArgs(process.argv.slice(2), label, scriptName);
   const apiKey = process.env.QCLOUD_LIVE_API_KEY || process.env.NATIVELY_API_KEY;
   if (!apiKey || !apiKey.trim()) {
@@ -66,6 +150,20 @@ export async function runRealSttReplay({ label, scriptName, modeTemplateType, ou
       modeTemplateTypes: [modeTemplateType],
     }, null, 2));
     process.exit(0);
+  }
+
+  const manifestPath = path.join(root, 'tests/fixtures/dynamic-actions/replay/replay-manifest.json');
+  if (modeTemplateType === 'recruiting' && semanticGateMode === 'real') {
+    const entries = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const assetGate = evaluateRecruitingRealAssetGate({ entries, audioRoot: root });
+    if (assetGate.status !== 'ready') {
+      console.log(JSON.stringify({
+        environmentStatus: 'blocked_real_recruiting_assets',
+        ...assetGate,
+        syntheticAssetsCountTowardGate: false,
+      }, null, 2));
+      process.exit(0);
+    }
   }
 
   const replayModuleUrl = pathToFileURL(
@@ -84,6 +182,8 @@ export async function runRealSttReplay({ label, scriptName, modeTemplateType, ou
     transcribeNewApiDoubaoAucMultipartFile,
   } = await import(aucClientUrl);
   const {
+    QCLOUD_CHAT_COMPLETIONS_ENDPOINT,
+    QCLOUD_CHAT_MODEL,
     QCLOUD_STT_QUERY_ENDPOINT,
     QCLOUD_STT_SUBMIT_ENDPOINT,
   } = await import(constantsUrl);
@@ -123,12 +223,22 @@ export async function runRealSttReplay({ label, scriptName, modeTemplateType, ou
     });
   }
 
+  const cloudClassifier = semanticGateMode === 'real'
+    ? createQCloudReplaySemanticClassifier({
+        apiKey,
+        endpoint: QCLOUD_CHAT_COMPLETIONS_ENDPOINT,
+        model: QCLOUD_CHAT_MODEL,
+        post,
+      })
+    : undefined;
+
   const report = await runDynamicActionReplay({
-    manifestPath: path.join(root, 'tests/fixtures/dynamic-actions/replay/replay-manifest.json'),
+    manifestPath,
     outputDir: path.join(root, 'reports', outputDirName),
     audioRoot: root,
     modeTemplateTypes: [modeTemplateType],
-    semanticGateMode: 'fixture_oracle',
+    semanticGateMode,
+    cloudClassifier,
     environmentStatus: 'ok',
     transcribeAudio: async ({ audioPath }) => transcribeAudio(audioPath),
   });
@@ -138,6 +248,9 @@ export async function runRealSttReplay({ label, scriptName, modeTemplateType, ou
     console.error(`[${label} real STT replay] Missing required real audio assets: ${report.assetCoverageFailures
       .map((failure) => `${failure.modeTemplateType} ${failure.availableReal}/${failure.requiredReal} real assets`)
       .join(', ')}`);
+    if (modeTemplateType === 'recruiting') {
+      console.error('BLOCKED_REAL_RECRUITING_ASSETS');
+    }
   }
   if (report.failedEntries > 0 || report.skippedEntries > 0) process.exit(1);
 }

@@ -44,8 +44,10 @@ import {
     getDynamicActionRuntimeValidationPolicy,
 } from './services/dynamic-actions/DynamicActionRuntimeValidationPolicy';
 import {
+    buildCloudSemanticGatePrompt,
     CloudSemanticGateError,
     cloudFailureReasonFromError,
+    parseCloudSemanticGateResponse,
     type CloudSemanticGateInput,
     type CloudSemanticGateResult,
     type ModeEventContextTurn,
@@ -426,25 +428,7 @@ export class IntelligenceEngine extends EventEmitter {
     private async classifyDynamicActionWithCloud(
         input: CloudSemanticGateInput,
     ): Promise<CloudSemanticGateResult[] | null> {
-        const candidateTypes = new Set(input.candidates.map(candidate => candidate.actionType));
-        const prompt = [
-            '你是会议实时助手的动态动作语义门控，只返回 JSON，不生成回答建议。',
-            '根据当前 final transcript、最近几轮上下文、当前 mode、说话人、已有 intentResult 和候选动作，判断每个候选动作是否应该通过。',
-            'regex 只是候选来源；必须理解整体语义后再决定 pass、reject 或 defer。',
-            '中性提及、被否定、先放一边、只是页面/列表/数据名词，不应触发高风险动作。',
-            '只能返回 candidates 中存在的 actionType。confidence 必须是 0 到 1 的数字。',
-            '',
-            `modeTemplateType: ${input.modeTemplateType}`,
-            `speaker: ${input.speaker ?? ''}`,
-            `intentResult: ${JSON.stringify(input.intentResult ?? null)}`,
-            `currentFinalTranscript: ${JSON.stringify(input.transcript)}`,
-            `recentContextTurns: ${JSON.stringify(input.recentContextTurns.slice(-6))}`,
-            `policySummary: ${JSON.stringify(input.policySummary ?? null)}`,
-            'If cloud semantic arbitration is unavailable, the current local zero-shot intent model is not an allowed fallback. Fallback is controlled only by action policy and deterministic local_rule evidence.',
-            `candidates: ${JSON.stringify(input.candidates)}`,
-            '',
-            '返回格式: {"actions":[{"actionType":"...","decision":"pass|reject|defer","confidence":0.0,"semanticIntent":"...","reasons":["..."],"rejectedCandidates":["..."]}]}',
-        ].join('\n');
+        const prompt = buildCloudSemanticGatePrompt(input);
 
         let raw: string;
         try {
@@ -459,42 +443,7 @@ export class IntelligenceEngine extends EventEmitter {
             throw new CloudSemanticGateError(cloudFailureReasonFromError(error));
         }
 
-        const jsonText = raw.match(/\{[\s\S]*\}/)?.[0];
-        if (!jsonText) throw new CloudSemanticGateError('cloud_invalid_json');
-
-        let parsed: { actions?: Array<Partial<CloudSemanticGateResult>> };
-        try {
-            parsed = JSON.parse(jsonText) as {
-                actions?: Array<Partial<CloudSemanticGateResult>>;
-            };
-        } catch {
-            throw new CloudSemanticGateError('cloud_invalid_json');
-        }
-        if (!Array.isArray(parsed.actions)) throw new CloudSemanticGateError('cloud_invalid_json');
-
-        const results: CloudSemanticGateResult[] = [];
-        for (const item of parsed.actions) {
-            const actionType = item.actionType;
-            const decision = item.decision;
-            const confidence = Number(item.confidence);
-            if (!actionType || !candidateTypes.has(actionType)) continue;
-            if (decision !== 'pass' && decision !== 'reject' && decision !== 'defer') continue;
-            if (!Number.isFinite(confidence)) continue;
-            results.push({
-                actionType,
-                decision,
-                confidence: Math.max(0, Math.min(1, confidence)),
-                semanticIntent: typeof item.semanticIntent === 'string' ? item.semanticIntent : undefined,
-                reasons: Array.isArray(item.reasons)
-                    ? item.reasons.filter(reason => typeof reason === 'string').slice(0, 5)
-                    : undefined,
-                rejectedCandidates: Array.isArray(item.rejectedCandidates)
-                    ? item.rejectedCandidates.filter(candidate => typeof candidate === 'string').slice(0, 10)
-                    : undefined,
-            });
-        }
-        if (parsed.actions.length > 0 && results.length === 0) throw new CloudSemanticGateError('cloud_invalid_json');
-        return results.length > 0 ? results : null;
+        return parseCloudSemanticGateResponse(raw, input.candidates);
     }
 
     constructor(llmHelper: LLMHelper, session: SessionTracker) {
