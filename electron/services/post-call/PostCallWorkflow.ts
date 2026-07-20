@@ -60,6 +60,18 @@ export interface AcceptedCapabilityFitRecord {
   sourceActionId: string;
 }
 
+export interface AcceptedFdeRecord {
+  actionId: string;
+  parentActionId?: string;
+  actionType: string;
+  summary: string;
+  missingFields: string[];
+  groundingStatus: 'grounded' | 'needs_confirmation';
+  groundedSourceLabels: string[];
+  evaluationResult?: 'passed' | 'safe_fallback';
+  sourceActionId: string;
+}
+
 export interface PostCallEnhancements {
   schemaVersion: 2;
   actionItemsStructured: StructuredActionItem[];
@@ -67,6 +79,7 @@ export interface PostCallEnhancements {
   acceptedDecisionRecords: AcceptedDecisionRecord[];
   acceptedBlockerRecords: AcceptedBlockerRecord[];
   acceptedCapabilityFitRecords: AcceptedCapabilityFitRecord[];
+  acceptedFdeRecords: AcceptedFdeRecord[];
   followUpDraft: string;
   coachingInsights: CoachingInsight[];
 }
@@ -127,6 +140,9 @@ export function buildPostCallEnhancements(params: {
   const acceptedCapabilityFitRecords = params.dynamicActionArtifacts?.length
     ? collectAcceptedCapabilityFitRecords(params.dynamicActionArtifacts)
     : [];
+  const acceptedFdeRecords = params.dynamicActionArtifacts?.length
+    ? collectAcceptedFdeRecords(params.dynamicActionArtifacts)
+    : [];
   const coachingInsights = generateCoachingInsights(
     params.transcript,
     params.modeTemplateType,
@@ -141,10 +157,12 @@ export function buildPostCallEnhancements(params: {
     acceptedDecisionRecords,
     acceptedBlockerRecords,
     acceptedCapabilityFitRecords,
+    acceptedFdeRecords,
     followUpDraft: buildFollowUpDraft(params.modeTemplateType, actionItemsStructured, params.summaryData, {
       acceptedDecisionRecords,
       acceptedBlockerRecords,
       acceptedCapabilityFitRecords,
+      acceptedFdeRecords,
     }),
     coachingInsights,
   };
@@ -205,6 +223,7 @@ export function buildFollowUpDraft(
     acceptedDecisionRecords?: AcceptedDecisionRecord[];
     acceptedBlockerRecords?: AcceptedBlockerRecord[];
     acceptedCapabilityFitRecords?: AcceptedCapabilityFitRecord[];
+    acceptedFdeRecords?: AcceptedFdeRecord[];
   },
 ): string {
   const greeting = modeTemplateType === 'sales' || modeTemplateType === 'recruiting' || modeTemplateType === 'fde'
@@ -250,7 +269,47 @@ export function buildFollowUpDraft(
     lines.push('', 'Capability confirmation:', ...capabilityLines);
   }
 
-  if (nextSteps.length === 0 && decisionLines.length === 0 && blockerLines.length === 0 && capabilityLines.length === 0) {
+  const fdeRecords = acceptedRecords?.acceptedFdeRecords ?? [];
+  const processLines = fdeRecords
+    .filter((record) => record.actionType === 'fde_grounded_answer')
+    .map(formatFdeFollowUpLine);
+  if (processLines.length > 0) {
+    lines.push('', 'Process confirmation:', ...processLines);
+  }
+
+  const aiBoundaryLines = fdeRecords
+    .filter((record) =>
+      record.actionType === 'fde_agent_feasibility' ||
+      (record.actionType === 'fde_grounded_answer' && /AI|智能体|人审|只读|writeback|human/i.test(record.summary)))
+    .map(formatFdeFollowUpLine);
+  if (aiBoundaryLines.length > 0) {
+    lines.push('', 'AI support boundary:', ...aiBoundaryLines);
+  }
+
+  const validationLines = fdeRecords
+    .filter((record) => ['fde_next_step', 'fde_success_criteria'].includes(record.actionType))
+    .map(formatFdeFollowUpLine);
+  if (validationLines.length > 0) {
+    lines.push('', 'Validation next steps:', ...validationLines);
+  }
+
+  const fdeRiskLines = fdeRecords
+    .filter((record) => record.actionType === 'fde_risk_blocker')
+    .map(formatFdeFollowUpLine);
+  if (fdeRiskLines.length > 0) {
+    lines.push('', 'Delivery risks:', ...fdeRiskLines);
+  }
+
+  if (
+    nextSteps.length === 0 &&
+    decisionLines.length === 0 &&
+    blockerLines.length === 0 &&
+    capabilityLines.length === 0 &&
+    processLines.length === 0 &&
+    aiBoundaryLines.length === 0 &&
+    validationLines.length === 0 &&
+    fdeRiskLines.length === 0
+  ) {
     lines.push('', 'I will follow up if anything else is needed.');
   }
 
@@ -316,6 +375,10 @@ export function generateCoachingInsights(
       add('uncertainty_pattern', 'Uncertainty appeared in answers', 'Review these moments and prepare a tighter explanation or fallback answer.', 'info', firstMatch(text, /[^。！？.!?]*(?:i don'?t know|not sure|maybe|i think|不确定|不会|不太会|没有把握|需要优化|复杂度|补(?:一个)?项目例子)[^。！？.!?]*/i));
     }
   } else if (modeTemplateType === 'fde') {
+    const acceptedFdeArtifacts = (dynamicActionArtifacts ?? []).filter((artifact) =>
+      artifact.modeTemplateType === 'fde' &&
+      isAcceptedActionCarryoverStatus(artifact.generationStatus)
+    );
     const hasGoal = FDE_GOAL_PATTERN.test(text);
     const hasSuccessMetric = FDE_SUCCESS_METRIC_PATTERN.test(text);
     const hasIntegration = FDE_INTEGRATION_PATTERN.test(text);
@@ -338,6 +401,21 @@ export function generateCoachingInsights(
     }
     if (FDE_EMOTION_PATTERN.test(text)) {
       add('emotion_signal_detected', 'Customer emotion signal detected', 'The customer expressed concern, frustration, urgency, skepticism, excitement, or hesitation. Reflect this in the follow-up and risk plan.', 'info');
+    }
+    if (acceptedFdeArtifacts.some((artifact) => artifact.actionType === 'fde_grounded_answer')) {
+      add('fde_process_confirmation', 'FDE process or AI support answer accepted', 'A grounded FDE answer was accepted. Carry the process facts, AI boundary, and validation step into follow-up.', 'info');
+    }
+    if (acceptedFdeArtifacts.some((artifact) => artifact.actionType === 'fde_agent_feasibility')) {
+      add('fde_ai_boundary_followup', 'AI Agent boundary needs follow-up', 'Confirm readonly behavior, human confirmation, and no-writeback boundaries before delivery commitment.', 'info');
+    }
+    if (acceptedFdeArtifacts.some((artifact) =>
+      ['fde_next_step', 'fde_success_criteria'].includes(artifact.actionType) &&
+      artifact.missingFields.some((field) => /owner|date|artifact|test_data|acceptance_criteria/i.test(field))
+    )) {
+      add('fde_validation_missing_fields', 'FDE validation fields are missing', 'Accepted FDE next-step or success-criteria output is missing owner, date, artifact, test data, or acceptance criteria.', 'opportunity');
+    }
+    if (acceptedFdeArtifacts.some((artifact) => artifact.actionType === 'fde_risk_blocker')) {
+      add('fde_delivery_risk_followup', 'FDE delivery risk accepted during call', 'A risk or blocker was captured and should be tracked with impact, dependency, owner, and unblock artifact.', 'warning');
     }
   } else if (modeTemplateType === 'team-meet') {
     if (TEAM_DECISION_PATTERN.test(text)) {
@@ -489,6 +567,40 @@ function collectAcceptedCapabilityFitRecords(artifacts: ActionArtifact[]): Accep
     .filter((record) => Boolean(record.summary));
 }
 
+function collectAcceptedFdeRecords(artifacts: ActionArtifact[]): AcceptedFdeRecord[] {
+  return artifacts
+    .filter((artifact) =>
+      artifact.modeTemplateType === 'fde' &&
+      isAcceptedActionCarryoverStatus(artifact.generationStatus)
+    )
+    .map((artifact) => {
+      const usedSources = artifact.groundedSources.filter((source) =>
+        source.status === 'used' &&
+        ['material', 'pptx', 'business_context'].includes(source.type)
+      );
+      const groundingStatus: AcceptedFdeRecord['groundingStatus'] =
+        usedSources.length > 0 && artifact.evaluationResult !== 'safe_fallback'
+          ? 'grounded'
+          : 'needs_confirmation';
+      const groundedSourceLabels = usedSources
+        .map((source) => source.label.trim())
+        .filter(Boolean)
+        .slice(0, 3);
+      return {
+        actionId: artifact.actionId,
+        ...(artifact.parentActionId ? { parentActionId: artifact.parentActionId } : {}),
+        actionType: artifact.actionType,
+        sourceActionId: artifact.parentActionId ?? artifact.actionId,
+        summary: summarizeCapabilityFitRecord(artifact.structuredSummary),
+        missingFields: artifact.missingFields,
+        groundingStatus,
+        groundedSourceLabels,
+        ...(artifact.evaluationResult ? { evaluationResult: artifact.evaluationResult } : {}),
+      };
+    })
+    .filter((record) => Boolean(record.summary));
+}
+
 function summarizeCapabilityFitRecord(summary: string): string {
   const cleaned = summary
     .split(/\r?\n/)
@@ -499,6 +611,20 @@ function summarizeCapabilityFitRecord(summary: string): string {
     .trim();
   if (!cleaned) return '';
   return cleaned.length > 180 ? `${cleaned.slice(0, 177).trim()}...` : cleaned;
+}
+
+function formatFdeFollowUpLine(record: AcceptedFdeRecord): string {
+  const suffixes: string[] = [];
+  if (record.groundingStatus === 'grounded' && record.groundedSourceLabels.length > 0) {
+    suffixes.push(`grounded in: ${record.groundedSourceLabels.join(', ')}`);
+  }
+  if (record.groundingStatus === 'needs_confirmation') {
+    suffixes.push('needs confirmation with sample process/test data');
+  }
+  if (record.missingFields.length > 0) {
+    suffixes.push(`missing: ${record.missingFields.join(', ')}`);
+  }
+  return `- ${record.summary}${suffixes.length > 0 ? `; ${suffixes.join('; ')}` : ''}`;
 }
 
 function labeledLine(summary: string, label: RegExp): string | undefined {

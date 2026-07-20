@@ -25,9 +25,13 @@ import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEng
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
 import type { DynamicActionOutputType } from './services/dynamic-actions/DynamicAction';
 import { DynamicActionContinuationService } from './services/dynamic-actions/DynamicActionContinuationService';
-import { DynamicActionContinuationPlanner } from './services/dynamic-actions/DynamicActionContinuationPlanner';
+import {
+    buildFdeContinuationDerivedActionContext,
+    DynamicActionContinuationPlanner,
+} from './services/dynamic-actions/DynamicActionContinuationPlanner';
 import {
     buildCapabilityFitSafeFallback,
+    buildFdeGroundedAnswerSafeFallback,
     evaluateDynamicActionAcceptedOutput,
 } from './services/dynamic-actions/DynamicActionAcceptedOutputEvaluator';
 import {
@@ -148,6 +152,7 @@ export interface DynamicActionRuntimeValidation {
     providerDataScopes?: ProviderDataScopePolicy;
     deferUserVisibleEmission: boolean;
     language?: string;
+    sourceUtterance?: string;
 }
 
 export interface DynamicActionRuntimeEvaluationTrace {
@@ -802,40 +807,56 @@ export class IntelligenceEngine extends EventEmitter {
         if (outcome.kind !== 'ready' || !outcome.continuation || !outcome.plannerResult) return;
         const continuation = outcome.continuation;
         const slots = outcome.plannerResult.extractedSlots;
-        const slotEntities = [
-            slots.object,
-            slots.workflow,
-            slots.environment,
-            slots.validationNeed,
-            ...(slots.metrics ?? []),
-            ...(slots.systemObjects ?? []),
-        ].filter((value): value is string => Boolean(value?.trim()));
         const latestTurn = continuation.collectedCustomerTurns.at(-1)?.text ?? continuation.originalTurn;
+        const baseEvidenceRefs = [
+            ...continuation.originalEvidenceRefs.slice(0, 1),
+            ...continuation.collectedCustomerTurns.slice(-1).map((turn) => ({
+                source: 'transcript' as const,
+                text: turn.text,
+                timestamp: turn.timestamp,
+                speaker: 'interviewer',
+            })),
+        ];
+
+        const derivedContext = continuation.modeTemplateType === 'fde'
+            ? buildFdeContinuationDerivedActionContext({
+                originalTurn: continuation.originalTurn,
+                currentTurn: latestTurn,
+                slots,
+            })
+            : (() => {
+                const slotEntities = [
+                    slots.object,
+                    slots.workflow,
+                    slots.environment,
+                    slots.validationNeed,
+                    ...(slots.metrics ?? []),
+                    ...(slots.systemObjects ?? []),
+                ].filter((value): value is string => Boolean(value?.trim()));
+                const keyEntities = [...continuation.keyEntities, ...slotEntities];
+                return {
+                    keyEntities,
+                    retrievalQuery: buildRetrievalQuery({
+                        modeTemplateType: 'sales',
+                        intent: continuation.sourceIntent,
+                        keyEntities,
+                        latestTurn,
+                        language: continuation.language,
+                    }),
+                };
+            })();
+
         const action = this.dynamicActionEngine?.enqueueDerivedAction({
             sessionId: continuation.sessionId,
             modeId: continuation.modeId,
-            modeTemplateType: 'sales',
-            type: 'capability_fit_answer',
+            modeTemplateType: continuation.modeTemplateType,
+            type: continuation.modeTemplateType === 'fde' ? 'fde_grounded_answer' : 'capability_fit_answer',
             parentActionId: continuation.parentActionId,
             sourceIntent: continuation.sourceIntent,
             latestTurn,
-            evidenceRefs: [
-                ...continuation.originalEvidenceRefs.slice(0, 1),
-                ...continuation.collectedCustomerTurns.slice(-1).map((turn) => ({
-                    source: 'transcript' as const,
-                    text: turn.text,
-                    timestamp: turn.timestamp,
-                    speaker: 'interviewer',
-                })),
-            ],
-            keyEntities: [...continuation.keyEntities, ...slotEntities],
-            retrievalQuery: buildRetrievalQuery({
-                modeTemplateType: 'sales',
-                intent: continuation.sourceIntent,
-                keyEntities: [...continuation.keyEntities, ...slotEntities],
-                latestTurn,
-                language: continuation.language,
-            }),
+            evidenceRefs: baseEvidenceRefs,
+            keyEntities: [...continuation.keyEntities, ...derivedContext.keyEntities],
+            retrievalQuery: derivedContext.retrievalQuery,
             confidence: outcome.plannerResult.confidence,
             language: continuation.language,
         });
@@ -1451,10 +1472,13 @@ export class IntelligenceEngine extends EventEmitter {
                     groundedSources: options.dynamicActionValidation.grounding.groundedSources,
                     claimGrounding,
                     sourceIntent: options.dynamicActionValidation.sourceIntent,
+                    sourceUtterance: options.dynamicActionValidation.sourceUtterance ?? question,
                 });
                 evaluationResult = evaluation.passed ? 'passed' : 'safe_fallback';
                 if (!evaluation.passed) {
-                    visibleAnswer = buildCapabilityFitSafeFallback(options.dynamicActionValidation.language);
+                    visibleAnswer = options.dynamicActionValidation.actionType === 'fde_grounded_answer'
+                        ? buildFdeGroundedAnswerSafeFallback(options.dynamicActionValidation.language)
+                        : buildCapabilityFitSafeFallback(options.dynamicActionValidation.language);
                 }
                 options.dynamicActionEvaluationSink?.({
                     actionType: options.dynamicActionValidation.actionType,

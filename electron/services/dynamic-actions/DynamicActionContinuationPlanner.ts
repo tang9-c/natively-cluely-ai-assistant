@@ -13,7 +13,8 @@ export type ContinuationPlannerFailureReason =
     | 'planner_provider_unavailable';
 
 export interface ContinuationPlannerInput {
-    modeTemplateType: 'sales';
+    modeTemplateType: 'sales' | 'fde';
+    parentActionType: string;
     sourceIntent: DynamicActionContinuationSourceIntent;
     originalTurn: string;
     keyEntities: string[];
@@ -32,6 +33,17 @@ export interface ContinuationPlannerResult {
         environment?: string;
         validationNeed?: string;
         systemObjects?: string[];
+        asIsProcess?: string;
+        targetProcess?: string;
+        processObject?: string;
+        roles?: string[];
+        handoffs?: string[];
+        exceptions?: string[];
+        humanConfirmation?: string;
+        aiSupportNeed?: string;
+        systems?: string[];
+        permissionBoundary?: string;
+        integrationMethod?: string;
     };
     reasonCode: 'sufficient_customer_detail' | 'insufficient_customer_detail' | 'unrelated_turn';
     decisionSource: 'continuation_planner';
@@ -66,16 +78,7 @@ export class DynamicActionContinuationPlanner {
             throw error;
         }
 
-        const prompt = [
-            '你是销售会议 continuation planner。只返回 JSON，不生成回答。',
-            '判断客户是否补齐了对象、工作流、指标、环境或验证要求。',
-            'decision 只能是 trigger_grounded_answer、continue_collecting、ignore。',
-            `sourceIntent: ${input.sourceIntent}`,
-            `originalTurn: ${JSON.stringify(input.originalTurn)}`,
-            `keyEntities: ${JSON.stringify(input.keyEntities.slice(0, 12))}`,
-            `customerTurns: ${JSON.stringify(input.collectedCustomerTurns.slice(-6))}`,
-            '返回格式: {"decision":"...","confidence":0.0,"extractedSlots":{},"reasonCode":"..."}',
-        ].join('\n');
+        const prompt = buildContinuationPlannerPrompt(input);
 
         let raw: string;
         try {
@@ -120,7 +123,7 @@ export class DynamicActionContinuationPlanner {
             throw new ContinuationPlannerError('planner_invalid_json');
         }
 
-        const extractedSlots = parseContinuationSlots(parsed.extractedSlots);
+        const extractedSlots = parseContinuationSlots(parsed.extractedSlots, input.modeTemplateType);
         return {
             decision: decision as ContinuationPlannerDecision,
             confidence,
@@ -131,15 +134,34 @@ export class DynamicActionContinuationPlanner {
     }
 }
 
-const SLOT_KEYS = new Set(['object', 'workflow', 'metrics', 'environment', 'validationNeed', 'systemObjects']);
-const ARRAY_SLOT_KEYS = new Set(['metrics', 'systemObjects']);
+const SALES_SLOT_KEYS = new Set(['object', 'workflow', 'metrics', 'environment', 'validationNeed', 'systemObjects']);
+const FDE_SLOT_KEYS = new Set([
+    'asIsProcess',
+    'targetProcess',
+    'processObject',
+    'roles',
+    'handoffs',
+    'exceptions',
+    'humanConfirmation',
+    'aiSupportNeed',
+    'validationNeed',
+    'systems',
+    'permissionBoundary',
+    'environment',
+    'integrationMethod',
+]);
+const ARRAY_SLOT_KEYS = new Set(['metrics', 'systemObjects', 'roles', 'handoffs', 'exceptions', 'systems']);
 
-export function parseContinuationSlots(value: unknown): ContinuationPlannerResult['extractedSlots'] {
+export function parseContinuationSlots(
+    value: unknown,
+    modeTemplateType: 'sales' | 'fde' = 'sales',
+): ContinuationPlannerResult['extractedSlots'] {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         throw new ContinuationPlannerError('planner_invalid_json');
     }
     const record = value as Record<string, unknown>;
-    if (Object.keys(record).some((key) => !SLOT_KEYS.has(key))) {
+    const allowedKeys = modeTemplateType === 'fde' ? FDE_SLOT_KEYS : SALES_SLOT_KEYS;
+    if (Object.keys(record).some((key) => !allowedKeys.has(key))) {
         throw new ContinuationPlannerError('planner_invalid_json');
     }
     const result: Record<string, string | string[]> = {};
@@ -158,4 +180,72 @@ export function parseContinuationSlots(value: unknown): ContinuationPlannerResul
         result[key] = item.trim();
     }
     return result as ContinuationPlannerResult['extractedSlots'];
+}
+
+export function buildFdeContinuationDerivedActionContext(input: {
+    originalTurn: string;
+    currentTurn: string;
+    slots: ContinuationPlannerResult['extractedSlots'];
+}): { keyEntities: string[]; retrievalQuery: string } {
+    const slots = input.slots;
+    const keyEntities = uniqueStrings([
+        slots.processObject,
+        slots.asIsProcess,
+        slots.targetProcess,
+        slots.humanConfirmation,
+        slots.aiSupportNeed,
+        slots.validationNeed,
+        ...(slots.roles ?? []),
+        ...(slots.handoffs ?? []),
+        ...(slots.exceptions ?? []),
+        ...(slots.systems ?? []),
+    ]).slice(0, 12);
+
+    const retrievalQuery = [
+        input.originalTurn,
+        input.currentTurn,
+        slots.asIsProcess && `当前流程: ${slots.asIsProcess}`,
+        slots.targetProcess && `目标流程: ${slots.targetProcess}`,
+        slots.processObject && `流程对象: ${slots.processObject}`,
+        slots.humanConfirmation && `人审点: ${slots.humanConfirmation}`,
+        slots.aiSupportNeed && `AI 支持需求: ${slots.aiSupportNeed}`,
+        slots.validationNeed && `验证需求: ${slots.validationNeed}`,
+    ].filter((value): value is string => Boolean(value && value.trim())).join('\n');
+
+    return { keyEntities, retrievalQuery };
+}
+
+function uniqueStrings(values: Array<string | undefined>): string[] {
+    return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))];
+}
+
+function buildContinuationPlannerPrompt(input: ContinuationPlannerInput): string {
+    const commonLines = [
+        `sourceIntent: ${input.sourceIntent}`,
+        `parentActionType: ${input.parentActionType}`,
+        `originalTurn: ${JSON.stringify(input.originalTurn)}`,
+        `keyEntities: ${JSON.stringify(input.keyEntities.slice(0, 12))}`,
+        `customerTurns: ${JSON.stringify(input.collectedCustomerTurns.slice(-6))}`,
+        `currentTurn: ${JSON.stringify(input.currentTurn)}`,
+        '返回格式: {"decision":"...","confidence":0.0,"extractedSlots":{},"reasonCode":"..."}',
+    ];
+
+    if (input.modeTemplateType === 'fde') {
+        return [
+            '你是 FDE 会议 continuation planner。只返回 JSON，不生成回答。',
+            'FDE 场景优先判断客户是否补齐了制造业流程信息，而不是系统架构细节。',
+            '重点识别当前流程、目标流程、流程对象、角色、交接、例外、人审点、AI 支持需求、验证方式。',
+            '系统、权限、环境和集成方式只作为支撑字段；只有客户明确提到时才抽取。',
+            '允许的 extractedSlots key 只有 asIsProcess、targetProcess、processObject、roles、handoffs、exceptions、humanConfirmation、aiSupportNeed、validationNeed、systems、permissionBoundary、environment、integrationMethod。',
+            'decision 只能是 trigger_grounded_answer、continue_collecting、ignore。',
+            ...commonLines,
+        ].join('\n');
+    }
+
+    return [
+        '你是销售会议 continuation planner。只返回 JSON，不生成回答。',
+        '判断客户是否补齐了对象、工作流、指标、环境或验证要求。',
+        'decision 只能是 trigger_grounded_answer、continue_collecting、ignore。',
+        ...commonLines,
+    ].join('\n');
 }

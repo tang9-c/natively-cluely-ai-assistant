@@ -50,6 +50,8 @@ const FDE_PROMPT_INSTRUCTIONS: Record<string, string> = {
         'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Convert the validation discussion into acceptance criteria covering accuracy, permission boundary, human confirmation point, audit traceability, test data, owner, date, and validation artifact.',
     fde_next_step:
         'You are in FDE mode for manufacturing PLM / QMS / enterprise AI Agent deployment. Convert the discussion into owner, deliverable, date, validation artifact, test data, and acceptance criteria. Ask directly for any missing owner/date/artifact field instead of inventing it.',
+    fde_grounded_answer:
+        'You are in FDE mode for manufacturing process and enterprise AI Agent deployment. Generate a short spoken response grounded in trusted material, readonly business context, or transcript evidence. Prioritize the customer process, roles, handoffs, human confirmation point, quality object, and validation plan. Explain AI Agent capability in business process terms; do not use LLM/RAG/tool-call jargon unless the customer used it first. Separate confirmed facts from what still needs validation. If grounding is insufficient, say so and propose the smallest sample-process validation step. Do not promise automatic approval, writeback, update, or creation in PLM/QMS.',
 };
 
 export class DynamicActionEngine {
@@ -281,8 +283,8 @@ export class DynamicActionEngine {
         }));
         const productContract = buildDynamicActionProductContract({
             type: input.type,
-            label: '生成能力匹配回答',
-            modeTemplateType: 'sales',
+            label: derivedActionLabel(input.type),
+            modeTemplateType: input.modeTemplateType,
             confidence,
             autoSurfacePolicy: 'card',
             evidenceRefs,
@@ -293,7 +295,7 @@ export class DynamicActionEngine {
             modeId: input.modeId,
             modeTemplateType: input.modeTemplateType,
             type: input.type,
-            label: '生成能力匹配回答',
+            label: derivedActionLabel(input.type),
             productContract,
             confidence,
             priority: confidence,
@@ -301,7 +303,7 @@ export class DynamicActionEngine {
             status: 'candidate',
             createdAt,
             expiresAt: createdAt + 60_000,
-            promptInstruction: SALES_PROMPT_INSTRUCTIONS.capability_fit_answer,
+            promptInstruction: derivedActionPromptInstruction(input.type),
             parentActionId: input.parentActionId,
             sourceIntent: input.sourceIntent,
             latestTurn: input.latestTurn.slice(0, 600),
@@ -637,6 +639,7 @@ export class DynamicActionEngine {
             fde_agent_feasibility: '判断 AI Agent 可行性',
             fde_success_criteria: '定义验收标准',
             fde_next_step: '锁定下一步',
+            fde_grounded_answer: '生成 FDE 流程验证回应',
         };
         const label = labels[type];
         if (!label) return null;
@@ -658,10 +661,19 @@ export class DynamicActionEngine {
 export interface EnqueueDerivedActionInput {
     sessionId: string;
     modeId: string;
-    modeTemplateType: 'sales';
-    type: 'capability_fit_answer';
+    modeTemplateType: 'sales' | 'fde';
+    type: 'capability_fit_answer' | 'fde_grounded_answer';
     parentActionId: string;
-    sourceIntent: 'sales_capability_fit' | 'sales_contextual_proof_discovery';
+    sourceIntent:
+        | 'sales_capability_fit'
+        | 'sales_contextual_proof_discovery'
+        | 'fde_discovery'
+        | 'fde_integration'
+        | 'fde_security'
+        | 'fde_risk'
+        | 'fde_agent_feasibility'
+        | 'fde_success'
+        | 'fde_next_step';
     latestTurn: string;
     evidenceRefs: EvidenceRef[];
     keyEntities: string[];
@@ -669,4 +681,16 @@ export interface EnqueueDerivedActionInput {
     confidence: number;
     language?: string;
     createdAt?: number;
+}
+
+function derivedActionLabel(type: EnqueueDerivedActionInput['type']): string {
+    return type === 'fde_grounded_answer'
+        ? '生成 FDE 流程验证回应'
+        : '生成能力匹配回答';
+}
+
+function derivedActionPromptInstruction(type: EnqueueDerivedActionInput['type']): string {
+    return type === 'fde_grounded_answer'
+        ? FDE_PROMPT_INSTRUCTIONS.fde_grounded_answer
+        : SALES_PROMPT_INSTRUCTIONS.capability_fit_answer;
 }

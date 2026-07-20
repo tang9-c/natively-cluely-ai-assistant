@@ -1,11 +1,17 @@
 import fs from 'fs';
 import { DynamicActionEngine } from '../dynamic-actions/DynamicActionEngine';
 import { DynamicActionContinuationService } from '../dynamic-actions/DynamicActionContinuationService';
-import { ContinuationPlannerError, type ContinuationPlannerResult } from '../dynamic-actions/DynamicActionContinuationPlanner';
+import {
+  buildFdeContinuationDerivedActionContext,
+  ContinuationPlannerError,
+  type ContinuationPlannerResult,
+} from '../dynamic-actions/DynamicActionContinuationPlanner';
+import type { EnqueueDerivedActionInput } from '../dynamic-actions/DynamicActionEngine';
 import { buildRealtimeContextPlan, type RealtimeContextCandidate } from '../context/RealtimeContextOrchestrator';
 import { buildDynamicActionRuntimeGrounding } from '../dynamic-actions/DynamicActionRuntimeGrounding';
 import {
   buildCapabilityFitSafeFallback,
+  buildFdeGroundedAnswerSafeFallback,
   evaluateDynamicActionAcceptedOutput,
 } from '../dynamic-actions/DynamicActionAcceptedOutputEvaluator';
 import { buildDynamicActionArtifacts } from '../dynamic-actions/DynamicActionArtifacts';
@@ -17,10 +23,10 @@ import type { ClaimGroundingVerdict } from '../dynamic-actions/DynamicActionClai
 export interface DynamicActionContinuationFixture {
   id: string;
   language: 'zh' | 'en' | 'mixed';
-  modeTemplateType: 'sales';
+  modeTemplateType: 'sales' | 'fde';
   initialAction: {
-    type: 'discovery_question';
-    sourceIntent: 'sales_capability_fit' | 'sales_contextual_proof_discovery';
+    type: string;
+    sourceIntent: string;
     generationStatus: 'completed' | 'generated_failed';
   };
   turns: Array<{
@@ -68,6 +74,7 @@ export interface ContinuationFixtureResult {
   unsafeVisibleAnswerCount: number;
   finalTurnToDerivedCardMs?: number;
   visibleAnswerKind: 'generated' | 'safe_fallback' | 'none';
+  visibleAnswerText?: string;
   postCallCarryover: boolean;
   passed: boolean;
   failureStage?: 'initial_action' | 'continuation' | 'runtime_evaluation' | 'post_call';
@@ -92,7 +99,7 @@ export async function runDynamicActionContinuationFixture(input: {
     return clock;
   });
   const sessionId = `continuation-fixture-${fixture.id}`;
-  const modeId = 'sales';
+  const modeId = fixture.modeTemplateType;
   const parentActionId = `parent-${fixture.id}`;
   let plannerCalls = 0;
   const plannerResults = [...fixture.plannerResults];
@@ -120,13 +127,13 @@ export async function runDynamicActionContinuationFixture(input: {
       id: parentActionId,
       sessionId,
       modeId,
-      modeTemplateType: 'sales',
+      modeTemplateType: fixture.modeTemplateType,
       type: fixture.initialAction.type,
-      label: 'Capability discovery',
+      label: fixture.modeTemplateType === 'fde' ? 'FDE process discovery' : 'Capability discovery',
       productContract: {
-        outputType: 'clarifying_questions',
-        whyNow: 'Customer is describing capability fit.',
-        userAction: 'Ask a focused capability question',
+        outputType: 'checklist',
+        whyNow: fixture.modeTemplateType === 'fde' ? 'Customer is describing manufacturing process or AI validation context.' : 'Customer is describing capability fit.',
+        userAction: fixture.modeTemplateType === 'fde' ? 'Clarify FDE process context' : 'Ask a focused capability question',
         evidenceSummary: 'discovery turn',
         outputPromise: 'short questions',
         riskState: 'normal',
@@ -140,8 +147,10 @@ export async function runDynamicActionContinuationFixture(input: {
       createdAt: now(),
       expiresAt: now() + 60_000,
       promptInstruction: '',
-      sourceIntent: fixture.initialAction.sourceIntent,
-      latestTurn: 'Can you share the object, workflow, and validation metric?',
+      sourceIntent: fixture.initialAction.sourceIntent as EnqueueDerivedActionInput['sourceIntent'],
+      latestTurn: fixture.modeTemplateType === 'fde'
+        ? '请补充当前流程、流程对象、人审点和验证方式。'
+        : 'Can you share the object, workflow, and validation metric?',
       language: fixture.language,
       keyEntities: [],
       retrievalQuery: '',
@@ -160,7 +169,7 @@ export async function runDynamicActionContinuationFixture(input: {
     const outcome = await service.observeFinalCustomerTurn({
       sessionId,
       modeId,
-      modeTemplateType: 'sales',
+      modeTemplateType: fixture.modeTemplateType,
       speaker: 'interviewer',
       text: turn.text,
       timestamp: now(),
@@ -169,25 +178,34 @@ export async function runDynamicActionContinuationFixture(input: {
     if (outcome.kind !== 'ready' || !outcome.continuation || !outcome.plannerResult) continue;
     lastReadyResult = outcome.plannerResult;
     const slots = outcome.plannerResult.extractedSlots;
+    const derivedType = fixture.modeTemplateType === 'fde' ? 'fde_grounded_answer' : 'capability_fit_answer';
+    const fdeContext = fixture.modeTemplateType === 'fde'
+      ? buildFdeContinuationDerivedActionContext({
+        originalTurn: outcome.continuation.originalTurn,
+        currentTurn: turn.text,
+        slots,
+      })
+      : null;
+    const salesKeyEntities = [
+      slots.object,
+      slots.workflow,
+      slots.environment,
+      slots.validationNeed,
+      ...(slots.metrics ?? []),
+      ...(slots.systemObjects ?? []),
+    ].filter((value): value is string => Boolean(value));
     derivedAction = engine.enqueueDerivedAction({
       sessionId,
       modeId,
-      modeTemplateType: 'sales',
-      type: 'capability_fit_answer',
+      modeTemplateType: fixture.modeTemplateType,
+      type: derivedType,
       parentActionId,
-      sourceIntent: fixture.initialAction.sourceIntent,
+      sourceIntent: fixture.initialAction.sourceIntent as EnqueueDerivedActionInput['sourceIntent'],
       latestTurn: turn.text,
       confidence: outcome.plannerResult.confidence,
       language: fixture.language,
-      keyEntities: [
-        slots.object,
-        slots.workflow,
-        slots.environment,
-        slots.validationNeed,
-        ...(slots.metrics ?? []),
-        ...(slots.systemObjects ?? []),
-      ].filter((value): value is string => Boolean(value)),
-      retrievalQuery: [outcome.continuation.originalTurn, turn.text].filter(Boolean).join('\n'),
+      keyEntities: fdeContext?.keyEntities ?? salesKeyEntities,
+      retrievalQuery: fdeContext?.retrievalQuery ?? [outcome.continuation.originalTurn, turn.text].filter(Boolean).join('\n'),
       evidenceRefs: [
         ...outcome.continuation.originalEvidenceRefs,
         { source: 'transcript', text: turn.text, timestamp: now() },
@@ -201,6 +219,7 @@ export async function runDynamicActionContinuationFixture(input: {
   }
 
   let visibleAnswerKind: ContinuationFixtureResult['visibleAnswerKind'] = 'none';
+  let visibleAnswerText: string | undefined;
   let unsafeVisibleAnswerCount = 0;
   let postCallCarryover = false;
   if (derivedAction && lastReadyResult) {
@@ -215,7 +234,7 @@ export async function runDynamicActionContinuationFixture(input: {
       degradedReasons: fixture.grounding.degradedReasons,
     });
     const runtimeGrounding = buildDynamicActionRuntimeGrounding({
-      actionType: 'capability_fit_answer',
+      actionType: derivedAction.type,
       realtimeContextPlan,
       citations: fixture.grounding.citations,
       materialRagAttempted: fixture.grounding.materialRagAttempted,
@@ -225,7 +244,7 @@ export async function runDynamicActionContinuationFixture(input: {
     });
     const claimGrounding = buildFixtureClaimVerdict(fixture, runtimeGrounding.injectedEvidence.map((item) => item.evidenceId));
     const evaluation = evaluateDynamicActionAcceptedOutput({
-      actionType: 'capability_fit_answer',
+      actionType: derivedAction.type,
       outputType: derivedAction.productContract.outputType,
       answerText: fixture.generatedAnswer,
       groundedSources: runtimeGrounding.groundedSources,
@@ -235,10 +254,13 @@ export async function runDynamicActionContinuationFixture(input: {
     });
     const visibleAnswer = evaluation.passed
       ? fixture.generatedAnswer
-      : buildCapabilityFitSafeFallback(fixture.language === 'en' ? 'en' : 'zh');
+      : derivedAction.type === 'fde_grounded_answer'
+        ? buildFdeGroundedAnswerSafeFallback(fixture.language === 'en' ? 'en' : 'zh')
+        : buildCapabilityFitSafeFallback(fixture.language === 'en' ? 'en' : 'zh');
     visibleAnswerKind = evaluation.passed ? 'generated' : 'safe_fallback';
+    visibleAnswerText = visibleAnswer;
     unsafeVisibleAnswerCount = evaluateDynamicActionAcceptedOutput({
-      actionType: 'capability_fit_answer',
+      actionType: derivedAction.type,
       outputType: derivedAction.productContract.outputType,
       answerText: visibleAnswer,
       groundedSources: runtimeGrounding.groundedSources,
@@ -250,8 +272,8 @@ export async function runDynamicActionContinuationFixture(input: {
       actions: [{
         id: derivedAction.id,
         parentActionId,
-        modeTemplateType: 'sales',
-        type: 'capability_fit_answer',
+        modeTemplateType: fixture.modeTemplateType,
+        type: derivedAction.type,
         productContract: { outputType: derivedAction.productContract.outputType },
         status: 'completed',
         createdAt: derivedAction.createdAt,
@@ -266,8 +288,8 @@ export async function runDynamicActionContinuationFixture(input: {
           source: 'dynamic_action',
           actionId: derivedAction.id,
           parentActionId,
-          actionType: 'capability_fit_answer',
-          modeTemplateType: 'sales',
+          actionType: derivedAction.type,
+          modeTemplateType: fixture.modeTemplateType,
           outputType: derivedAction.productContract.outputType,
           generationStatus: 'completed',
           evaluationResult: evaluation.passed ? 'passed' : 'safe_fallback',
@@ -276,7 +298,7 @@ export async function runDynamicActionContinuationFixture(input: {
       }],
     });
     const postCall = buildPostCallEnhancements({
-      modeTemplateType: 'sales',
+      modeTemplateType: fixture.modeTemplateType,
       transcript: fixture.turns.map((turn, index) => ({
         speaker: turn.speaker,
         text: turn.text,
@@ -285,8 +307,16 @@ export async function runDynamicActionContinuationFixture(input: {
       summaryData: { overview: 'Continuation fixture.', actionItems: [] },
       dynamicActionArtifacts: artifacts,
     });
-    postCallCarryover = postCall.acceptedCapabilityFitRecords.some((record) => record.actionId === derivedAction?.id);
+    postCallCarryover = fixture.modeTemplateType === 'fde'
+      ? postCall.coachingInsights.some((insight) =>
+        ['fde_process_confirmation', 'fde_ai_boundary_followup', 'fde_validation_missing_fields', 'fde_delivery_risk_followup'].includes(insight.type))
+      : postCall.acceptedCapabilityFitRecords.some((record) => record.actionId === derivedAction?.id);
   }
+
+  const slotPreservationPassed = !derivedAction || fixture.modeTemplateType !== 'fde' || !lastReadyResult
+    ? true
+    : fdeRequiredSlotValues(lastReadyResult.extractedSlots).every((value) =>
+      derivedAction.keyEntities?.includes(value) || derivedAction.retrievalQuery?.includes(value));
 
   const result: ContinuationFixtureResult = {
     fixtureId: fixture.id,
@@ -301,6 +331,7 @@ export async function runDynamicActionContinuationFixture(input: {
     unsafeVisibleAnswerCount,
     ...(readyAt ? { finalTurnToDerivedCardMs: 100 } : {}),
     visibleAnswerKind,
+    ...(visibleAnswerText ? { visibleAnswerText } : {}),
     postCallCarryover,
     passed:
       initialActionCompleted &&
@@ -308,14 +339,15 @@ export async function runDynamicActionContinuationFixture(input: {
       Boolean(derivedAction) === fixture.expected.derivedActionEmitted &&
       visibleAnswerKind === fixture.expected.visibleAnswerKind &&
       postCallCarryover === fixture.expected.postCallCarryover &&
-      unsafeVisibleAnswerCount === 0,
+      unsafeVisibleAnswerCount === 0 &&
+      slotPreservationPassed,
   };
   if (!result.passed) {
     result.failureStage = !initialActionCompleted
       ? 'initial_action'
       : Boolean(derivedAction) !== fixture.expected.derivedActionEmitted
         ? 'continuation'
-        : unsafeVisibleAnswerCount > 0
+        : unsafeVisibleAnswerCount > 0 || !slotPreservationPassed
           ? 'runtime_evaluation'
           : 'post_call';
   }
@@ -345,9 +377,11 @@ function buildFixtureClaimVerdict(
 function validateContinuationFixture(fixture: DynamicActionContinuationFixture): void {
   if (!fixture || typeof fixture.id !== 'string' || !fixture.id.trim()) throw new Error('invalid_continuation_fixture:id');
   if (!['zh', 'en', 'mixed'].includes(fixture.language)) throw new Error(`invalid_continuation_fixture_language:${fixture.id}`);
-  if (fixture.modeTemplateType !== 'sales') throw new Error(`invalid_continuation_fixture_mode:${fixture.id}`);
-  if (fixture.initialAction?.type !== 'discovery_question') throw new Error(`invalid_continuation_fixture_initial_action:${fixture.id}`);
-  if (!['sales_capability_fit', 'sales_contextual_proof_discovery'].includes(fixture.initialAction.sourceIntent)) {
+  if (!['sales', 'fde'].includes(fixture.modeTemplateType)) throw new Error(`invalid_continuation_fixture_mode:${fixture.id}`);
+  if (!isValidInitialContinuationAction(fixture.modeTemplateType, fixture.initialAction?.type)) {
+    throw new Error(`invalid_continuation_fixture_initial_action:${fixture.id}`);
+  }
+  if (!isValidContinuationSourceIntent(fixture.modeTemplateType, fixture.initialAction.sourceIntent)) {
     throw new Error(`invalid_continuation_fixture_source_intent:${fixture.id}`);
   }
   if (!['completed', 'generated_failed'].includes(fixture.initialAction.generationStatus)) {
@@ -378,4 +412,33 @@ function validateContinuationFixture(fixture: DynamicActionContinuationFixture):
   if (!fixture.expected || typeof fixture.expected.derivedActionEmitted !== 'boolean') {
     throw new Error(`invalid_continuation_fixture_expected:${fixture.id}`);
   }
+}
+
+function isValidInitialContinuationAction(mode: 'sales' | 'fde', actionType: string): boolean {
+  if (mode === 'sales') return actionType === 'discovery_question';
+  return [
+    'fde_discovery_probe',
+    'fde_risk_blocker',
+    'fde_agent_feasibility',
+    'fde_success_criteria',
+    'fde_next_step',
+    'fde_integration_check',
+    'fde_security_review',
+  ].includes(actionType);
+}
+
+function isValidContinuationSourceIntent(mode: 'sales' | 'fde', sourceIntent: string): boolean {
+  if (mode === 'sales') return ['sales_capability_fit', 'sales_contextual_proof_discovery'].includes(sourceIntent);
+  return ['fde_discovery', 'fde_integration', 'fde_security', 'fde_risk', 'fde_agent_feasibility', 'fde_success', 'fde_next_step'].includes(sourceIntent);
+}
+
+function fdeRequiredSlotValues(slots: ContinuationPlannerResult['extractedSlots']): string[] {
+  return [
+    slots.processObject,
+    slots.asIsProcess,
+    slots.targetProcess,
+    slots.humanConfirmation,
+    slots.aiSupportNeed,
+    slots.validationNeed,
+  ].filter((value): value is string => Boolean(value?.trim()));
 }

@@ -1,0 +1,229 @@
+[
+  {
+    "id": "fde-continuation-eco-approval-process-zh-001",
+    "language": "zh",
+    "modeTemplateType": "fde",
+    "initialAction": { "type": "fde_discovery_probe", "sourceIntent": "fde_discovery", "generationStatus": "completed" },
+    "turns": [
+      { "speaker": "interviewer", "text": "当前 ECO 是研发提交后先到质量经理审批。", "final": true },
+      { "speaker": "interviewer", "text": "AI 只需要检查变更材料是否缺字段，最后还是质量经理人审。", "final": true }
+    ],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [
+      { "decision": "continue_collecting", "confidence": 0.68, "extractedSlots": { "asIsProcess": "ECO 由研发提交后质量经理审批", "processObject": "ECO", "roles": ["研发", "质量经理"] }, "reasonCode": "insufficient_customer_detail", "decisionSource": "continuation_planner" },
+      { "decision": "trigger_grounded_answer", "confidence": 0.92, "extractedSlots": { "asIsProcess": "ECO 由研发提交后质量经理审批", "processObject": "ECO", "roles": ["研发", "质量经理"], "humanConfirmation": "质量经理人审", "aiSupportNeed": "检查变更材料是否缺字段", "validationNeed": "用 3 条真实 ECO 验证" }, "reasonCode": "sufficient_customer_detail", "decisionSource": "continuation_planner" }
+    ],
+    "grounding": {
+      "tokenBudget": 90,
+      "candidates": [{ "source": "uploaded_material", "sourceId": "fde-eco-process.pdf", "chunkId": "eco-approval", "text": "ECO 流程材料说明：AI 可检查变更材料缺字段，质量经理必须进行人工审批，验证需使用真实 ECO 样本。", "tokenCount": 32 }],
+      "citations": [{ "citationId": "fde-c1", "sourceType": "uploaded_material", "sourceId": "fde-eco-process.pdf", "chunkId": "eco-approval", "title": "fde-eco-process.pdf" }],
+      "materialRagAttempted": true,
+      "uploadedMaterialHitCount": 1,
+      "degradedReasons": [],
+      "businessSystemResult": { "kind": "skipped" }
+    },
+    "claimVerifierResult": { "verdict": "supported", "reasonCode": "claims_supported" },
+    "generatedAnswer": "可以确认 ECO 流程里 AI 适合检查变更材料缺字段；质量经理仍做人审。建议用 3 条真实 ECO 和测试数据验证验收标准。",
+    "expected": { "plannerCalls": 2, "derivedActionEmitted": true, "visibleAnswerKind": "generated", "postCallCarryover": true }
+  },
+  {
+    "id": "fde-continuation-capa-closure-zh-001",
+    "language": "zh",
+    "modeTemplateType": "fde",
+    "initialAction": { "type": "fde_success_criteria", "sourceIntent": "fde_success", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "CAPA 关闭前要检查根因、措施和证据附件，质量负责人确认后才能关闭。", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [{ "decision": "trigger_grounded_answer", "confidence": 0.9, "extractedSlots": { "asIsProcess": "CAPA 关闭前检查根因、措施和证据附件", "processObject": "CAPA", "roles": ["质量负责人"], "humanConfirmation": "质量负责人确认关闭", "aiSupportNeed": "提示证据附件缺失", "validationNeed": "用真实 CAPA 样本验证关闭验收标准" }, "reasonCode": "sufficient_customer_detail", "decisionSource": "continuation_planner" }],
+    "grounding": {
+      "tokenBudget": 90,
+      "candidates": [{ "source": "uploaded_material", "sourceId": "qms-capa-validation.pdf", "chunkId": "closure", "text": "CAPA 关闭校验包含根因、措施、证据附件与质量负责人确认，AI 只能提示缺口。", "tokenCount": 24 }],
+      "citations": [{ "citationId": "fde-c2", "sourceType": "uploaded_material", "sourceId": "qms-capa-validation.pdf", "chunkId": "closure", "title": "qms-capa-validation.pdf" }],
+      "materialRagAttempted": true,
+      "uploadedMaterialHitCount": 1,
+      "degradedReasons": [],
+      "businessSystemResult": { "kind": "skipped" }
+    },
+    "claimVerifierResult": { "verdict": "supported", "reasonCode": "claims_supported" },
+    "generatedAnswer": "可以确认 CAPA 关闭流程应先检查根因、措施和证据附件；AI 可提示缺口，但质量负责人做人审。建议用真实 CAPA 测试数据验证验收标准。",
+    "expected": { "plannerCalls": 1, "derivedActionEmitted": true, "visibleAnswerKind": "generated", "postCallCarryover": true }
+  },
+  {
+    "id": "fde-continuation-ncr-capa-loop-zh-001",
+    "language": "zh",
+    "modeTemplateType": "fde",
+    "initialAction": { "type": "fde_risk_blocker", "sourceIntent": "fde_risk", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "NCR 升级到 CAPA 后经常没人跟，AI 需要提醒责任人和证据缺口，但不能自动关闭。", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [{ "decision": "trigger_grounded_answer", "confidence": 0.89, "extractedSlots": { "asIsProcess": "NCR 升级到 CAPA 后责任人跟进不稳定", "processObject": "NCR/CAPA", "roles": ["责任人", "质量"], "handoffs": ["NCR 升级 CAPA"], "humanConfirmation": "质量确认 CAPA 关闭", "aiSupportNeed": "提醒责任人和证据缺口", "validationNeed": "用 NCR 到 CAPA 的样本流程验证" }, "reasonCode": "sufficient_customer_detail", "decisionSource": "continuation_planner" }],
+    "grounding": {
+      "tokenBudget": 90,
+      "candidates": [{ "source": "uploaded_material", "sourceId": "qms-closed-loop.pdf", "chunkId": "ncr-capa", "text": "NCR 到 CAPA 的质量闭环要求责任人跟进、证据补齐和人工确认关闭。", "tokenCount": 20 }],
+      "citations": [{ "citationId": "fde-c3", "sourceType": "uploaded_material", "sourceId": "qms-closed-loop.pdf", "chunkId": "ncr-capa", "title": "qms-closed-loop.pdf" }],
+      "materialRagAttempted": true,
+      "uploadedMaterialHitCount": 1,
+      "degradedReasons": [],
+      "businessSystemResult": { "kind": "skipped" }
+    },
+    "claimVerifierResult": { "verdict": "supported", "reasonCode": "claims_supported" },
+    "generatedAnswer": "可以确认 NCR 到 CAPA 的质量闭环风险在责任人跟进和证据缺口；AI 可提醒，但关闭仍需质量人审。建议用样本流程和测试数据验证验收标准。",
+    "expected": { "plannerCalls": 1, "derivedActionEmitted": true, "visibleAnswerKind": "generated", "postCallCarryover": true }
+  },
+  {
+    "id": "fde-continuation-bom-impact-mixed-001",
+    "language": "mixed",
+    "modeTemplateType": "fde",
+    "initialAction": { "type": "fde_next_step", "sourceIntent": "fde_next_step", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "BOM change 会影响库存和成本，下一步我们需要制造和财务 owner 一起确认测试数据。", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [{ "decision": "trigger_grounded_answer", "confidence": 0.88, "extractedSlots": { "asIsProcess": "BOM change 影响库存和成本", "processObject": "BOM", "roles": ["制造 owner", "财务 owner"], "handoffs": ["制造", "财务"], "validationNeed": "确认测试数据和验收标准" }, "reasonCode": "sufficient_customer_detail", "decisionSource": "continuation_planner" }],
+    "grounding": {
+      "tokenBudget": 90,
+      "candidates": [{ "source": "uploaded_material", "sourceId": "bom-impact-note.pdf", "chunkId": "impact", "text": "BOM 变更验证需要覆盖库存、成本、制造 owner、财务 owner 和测试数据。", "tokenCount": 20 }],
+      "citations": [{ "citationId": "fde-c4", "sourceType": "uploaded_material", "sourceId": "bom-impact-note.pdf", "chunkId": "impact", "title": "bom-impact-note.pdf" }],
+      "materialRagAttempted": true,
+      "uploadedMaterialHitCount": 1,
+      "degradedReasons": [],
+      "businessSystemResult": { "kind": "skipped" }
+    },
+    "claimVerifierResult": { "verdict": "supported", "reasonCode": "claims_supported" },
+    "generatedAnswer": "可以确认 BOM 变更流程要把库存、成本、制造 owner 和财务 owner 放进验证范围；建议用真实 BOM 测试数据定义验收标准。",
+    "expected": { "plannerCalls": 1, "derivedActionEmitted": true, "visibleAnswerKind": "generated", "postCallCarryover": true }
+  },
+  {
+    "id": "fde-continuation-drawing-traceability-zh-001",
+    "language": "zh",
+    "modeTemplateType": "fde",
+    "initialAction": { "type": "fde_integration_check", "sourceIntent": "fde_integration", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "图纸版本追溯主要看设计发布、制造接收和质量记录三段流程。", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [{ "decision": "trigger_grounded_answer", "confidence": 0.87, "extractedSlots": { "asIsProcess": "图纸版本从设计发布到制造接收再进入质量记录", "processObject": "图纸版本", "roles": ["设计", "制造", "质量"], "handoffs": ["设计发布", "制造接收", "质量记录"], "validationNeed": "用图纸版本样本验证追溯链路" }, "reasonCode": "sufficient_customer_detail", "decisionSource": "continuation_planner" }],
+    "grounding": {
+      "tokenBudget": 90,
+      "candidates": [{ "source": "uploaded_material", "sourceId": "drawing-traceability.pdf", "chunkId": "trace", "text": "图纸版本追溯验证覆盖设计发布、制造接收、质量记录和样本验证。", "tokenCount": 20 }],
+      "citations": [{ "citationId": "fde-c5", "sourceType": "uploaded_material", "sourceId": "drawing-traceability.pdf", "chunkId": "trace", "title": "drawing-traceability.pdf" }],
+      "materialRagAttempted": true,
+      "uploadedMaterialHitCount": 1,
+      "degradedReasons": [],
+      "businessSystemResult": { "kind": "skipped" }
+    },
+    "claimVerifierResult": { "verdict": "supported", "reasonCode": "claims_supported" },
+    "generatedAnswer": "可以确认图纸版本追溯流程要覆盖设计发布、制造接收和质量记录；建议用图纸版本样本和测试数据验证追溯验收标准。",
+    "expected": { "plannerCalls": 1, "derivedActionEmitted": true, "visibleAnswerKind": "generated", "postCallCarryover": true }
+  },
+  {
+    "id": "fde-continuation-ai-evidence-question-safe-fallback-zh-001",
+    "language": "zh",
+    "modeTemplateType": "fde",
+    "initialAction": { "type": "fde_agent_feasibility", "sourceIntent": "fde_agent_feasibility", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "客户问 AI 怎么判断 CAPA 证据不足，我们现在没有材料能确认规则。", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [{ "decision": "trigger_grounded_answer", "confidence": 0.86, "extractedSlots": { "asIsProcess": "CAPA 证据检查规则未确认", "processObject": "CAPA", "humanConfirmation": "质量负责人确认", "aiSupportNeed": "判断证据不足", "validationNeed": "补充样本流程和测试数据" }, "reasonCode": "sufficient_customer_detail", "decisionSource": "continuation_planner" }],
+    "grounding": {
+      "tokenBudget": 90,
+      "candidates": [],
+      "citations": [],
+      "materialRagAttempted": true,
+      "uploadedMaterialHitCount": 0,
+      "degradedReasons": [],
+      "businessSystemResult": { "kind": "skipped" }
+    },
+    "claimVerifierResult": { "verdict": "unavailable", "reasonCode": "no_injected_evidence" },
+    "generatedAnswer": "我们可以确认 AI 会自动判断 CAPA 证据不足。",
+    "expected": { "plannerCalls": 1, "derivedActionEmitted": true, "visibleAnswerKind": "safe_fallback", "postCallCarryover": true }
+  },
+  {
+    "id": "fde-continuation-old-topic-negative-001",
+    "language": "zh",
+    "modeTemplateType": "fde",
+    "initialAction": { "type": "fde_discovery_probe", "sourceIntent": "fde_discovery", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "刚才那个流程先不谈了，我们现在聊午饭。", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [{ "decision": "ignore", "confidence": 0.94, "extractedSlots": {}, "reasonCode": "unrelated_turn", "decisionSource": "continuation_planner" }],
+    "grounding": { "tokenBudget": 90, "candidates": [], "citations": [], "materialRagAttempted": true, "uploadedMaterialHitCount": 0, "degradedReasons": [], "businessSystemResult": { "kind": "skipped" } },
+    "claimVerifierResult": { "verdict": "unavailable", "reasonCode": "no_injected_evidence" },
+    "generatedAnswer": "",
+    "expected": { "plannerCalls": 1, "derivedActionEmitted": false, "visibleAnswerKind": "none", "postCallCarryover": false }
+  },
+  {
+    "id": "fde-continuation-non-interviewer-negative-001",
+    "language": "zh",
+    "modeTemplateType": "fde",
+    "initialAction": { "type": "fde_agent_feasibility", "sourceIntent": "fde_agent_feasibility", "generationStatus": "completed" },
+    "turns": [{ "speaker": "user", "text": "我们内部先别承诺 AI 能自动处理 CAPA。", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [],
+    "grounding": { "tokenBudget": 90, "candidates": [], "citations": [], "materialRagAttempted": true, "uploadedMaterialHitCount": 0, "degradedReasons": [], "businessSystemResult": { "kind": "skipped" } },
+    "claimVerifierResult": { "verdict": "unavailable", "reasonCode": "no_injected_evidence" },
+    "generatedAnswer": "",
+    "expected": { "plannerCalls": 0, "derivedActionEmitted": false, "visibleAnswerKind": "none", "postCallCarryover": false }
+  },
+  {
+    "id": "fde-continuation-interim-negative-001",
+    "language": "zh",
+    "modeTemplateType": "fde",
+    "initialAction": { "type": "fde_next_step", "sourceIntent": "fde_next_step", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "下一步我们要看 ECO", "final": false }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [],
+    "grounding": { "tokenBudget": 90, "candidates": [], "citations": [], "materialRagAttempted": true, "uploadedMaterialHitCount": 0, "degradedReasons": [], "businessSystemResult": { "kind": "skipped" } },
+    "claimVerifierResult": { "verdict": "unavailable", "reasonCode": "no_injected_evidence" },
+    "generatedAnswer": "",
+    "expected": { "plannerCalls": 0, "derivedActionEmitted": false, "visibleAnswerKind": "none", "postCallCarryover": false }
+  },
+  {
+    "id": "fde-continuation-scope-denied-negative-001",
+    "language": "en",
+    "modeTemplateType": "fde",
+    "initialAction": { "type": "fde_discovery_probe", "sourceIntent": "fde_discovery", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "The process object is ECO and the human review point is quality sign-off.", "final": true }],
+    "providerDataScopes": { "transcript": false, "reference_files": true },
+    "plannerResults": [],
+    "grounding": { "tokenBudget": 90, "candidates": [], "citations": [], "materialRagAttempted": true, "uploadedMaterialHitCount": 0, "degradedReasons": [], "businessSystemResult": { "kind": "skipped" } },
+    "claimVerifierResult": { "verdict": "unavailable", "reasonCode": "provider_scope_denied" },
+    "generatedAnswer": "",
+    "expected": { "plannerCalls": 0, "derivedActionEmitted": false, "visibleAnswerKind": "none", "postCallCarryover": false }
+  },
+  {
+    "id": "fde-continuation-timeout-negative-001",
+    "language": "en",
+    "modeTemplateType": "fde",
+    "initialAction": { "type": "fde_success_criteria", "sourceIntent": "fde_success", "generationStatus": "completed" },
+    "turns": [
+      { "speaker": "interviewer", "text": "We need validation for CAPA closure.", "final": true },
+      { "speaker": "interviewer", "text": "The role is quality owner.", "final": true },
+      { "speaker": "interviewer", "text": "The test data is three real CAPA samples.", "final": true }
+    ],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [{ "failure": "timeout" }, { "failure": "timeout" }, { "failure": "timeout" }],
+    "grounding": { "tokenBudget": 90, "candidates": [], "citations": [], "materialRagAttempted": true, "uploadedMaterialHitCount": 0, "degradedReasons": [], "businessSystemResult": { "kind": "skipped" } },
+    "claimVerifierResult": { "verdict": "unavailable", "reasonCode": "verifier_timeout" },
+    "generatedAnswer": "",
+    "expected": { "plannerCalls": 3, "derivedActionEmitted": false, "visibleAnswerKind": "none", "postCallCarryover": false }
+  },
+  {
+    "id": "fde-continuation-business-context-not-found-negative-001",
+    "language": "zh",
+    "modeTemplateType": "fde",
+    "initialAction": { "type": "fde_integration_check", "sourceIntent": "fde_integration", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "如果 Windchill 查不到 ECO 状态，我们不要继续生成状态判断。", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [{ "decision": "ignore", "confidence": 0.9, "extractedSlots": {}, "reasonCode": "unrelated_turn", "decisionSource": "continuation_planner" }],
+    "grounding": { "tokenBudget": 90, "candidates": [], "citations": [], "materialRagAttempted": true, "uploadedMaterialHitCount": 0, "degradedReasons": [], "businessSystemResult": { "kind": "fixed_reply", "status": "not_found", "sourceName": "Windchill", "answer": "not found" } },
+    "claimVerifierResult": { "verdict": "unavailable", "reasonCode": "no_injected_evidence" },
+    "generatedAnswer": "Windchill 里的 ECO 已发布。",
+    "expected": { "plannerCalls": 1, "derivedActionEmitted": false, "visibleAnswerKind": "none", "postCallCarryover": false }
+  },
+  {
+    "id": "fde-continuation-ai-mention-no-process-negative-001",
+    "language": "zh",
+    "modeTemplateType": "fde",
+    "initialAction": { "type": "fde_agent_feasibility", "sourceIntent": "fde_agent_feasibility", "generationStatus": "completed" },
+    "turns": [{ "speaker": "interviewer", "text": "AI 最近挺火的，我们先看一下行业新闻。", "final": true }],
+    "providerDataScopes": { "transcript": true, "reference_files": true },
+    "plannerResults": [{ "decision": "ignore", "confidence": 0.93, "extractedSlots": {}, "reasonCode": "unrelated_turn", "decisionSource": "continuation_planner" }],
+    "grounding": { "tokenBudget": 90, "candidates": [], "citations": [], "materialRagAttempted": true, "uploadedMaterialHitCount": 0, "degradedReasons": [], "businessSystemResult": { "kind": "skipped" } },
+    "claimVerifierResult": { "verdict": "unavailable", "reasonCode": "no_injected_evidence" },
+    "generatedAnswer": "",
+    "expected": { "plannerCalls": 1, "derivedActionEmitted": false, "visibleAnswerKind": "none", "postCallCarryover": false }
+  }
+]

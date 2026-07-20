@@ -30,6 +30,36 @@ async function registeredService(planner) {
   return service;
 }
 
+async function emptyService(planner = { decide: async () => readyResult() }) {
+  const { DynamicActionContinuationService } = await import(pathToFileURL(path.join(
+    process.cwd(),
+    'dist-electron/electron/services/dynamic-actions/DynamicActionContinuationService.js',
+  )).href);
+  return new DynamicActionContinuationService({ planner, now: () => 1_000 });
+}
+
+function completedAction(overrides = {}) {
+  return {
+    id: overrides.id ?? 'parent-1',
+    sessionId: overrides.sessionId ?? 'session-1',
+    modeId: overrides.modeId ?? 'sales',
+    modeTemplateType: overrides.modeTemplateType ?? 'sales',
+    type: overrides.type ?? 'discovery_question',
+    label: overrides.label ?? '追问',
+    status: overrides.status ?? 'completed',
+    sourceIntent: overrides.sourceIntent ?? 'sales_capability_fit',
+    latestTurn: overrides.latestTurn ?? '是否支持流体仿真？',
+    evidenceRefs: overrides.evidenceRefs ?? [],
+    keyEntities: overrides.keyEntities ?? [],
+    createdAt: 1,
+    productContract: { outputType: 'spoken_response' },
+    confidence: 0.9,
+    priority: 0.9,
+    promptInstruction: '',
+    ...overrides,
+  };
+}
+
 function turn(overrides = {}) {
   return {
     sessionId: 'session-1',
@@ -49,6 +79,98 @@ const collectingResult = () => ({
   extractedSlots: {},
   reasonCode: 'insufficient_customer_detail',
   decisionSource: 'continuation_planner',
+});
+
+test('completed FDE parent actions register continuations', async () => {
+  const fdeParents = [
+    'fde_discovery_probe',
+    'fde_risk_blocker',
+    'fde_agent_feasibility',
+    'fde_success_criteria',
+    'fde_next_step',
+    'fde_integration_check',
+    'fde_security_review',
+  ];
+  for (const parentActionType of fdeParents) {
+    const service = await emptyService();
+    const record = service.registerCompletedAction(completedAction({
+      id: `parent-${parentActionType}`,
+      modeId: 'fde',
+      modeTemplateType: 'fde',
+      type: parentActionType,
+      sourceIntent: 'fde_discovery',
+      latestTurn: '客户在讨论 ECO 变更审批流程和质量经理人审点。',
+    }));
+    assert.ok(record, `${parentActionType} should register`);
+    assert.equal(record.modeTemplateType, 'fde');
+    assert.equal(record.parentActionType, parentActionType);
+    assert.equal(record.sourceIntent, 'fde_discovery');
+  }
+});
+
+test('FDE continuation registration rejects non-completed and unsupported parent actions', async () => {
+  const service = await emptyService();
+  assert.equal(service.registerCompletedAction(completedAction({
+    modeId: 'fde',
+    modeTemplateType: 'fde',
+    type: 'fde_discovery_probe',
+    sourceIntent: 'fde_discovery',
+    status: 'generated_failed',
+  })), null);
+  assert.equal(service.registerCompletedAction(completedAction({
+    id: 'unsupported-fde-parent',
+    modeId: 'fde',
+    modeTemplateType: 'fde',
+    type: 'fde_grounded_answer',
+    sourceIntent: 'fde_discovery',
+  })), null);
+});
+
+test('sales continuation registration remains sales-only discovery behavior', async () => {
+  const service = await emptyService();
+  const record = service.registerCompletedAction(completedAction());
+  assert.ok(record);
+  assert.equal(record.modeTemplateType, 'sales');
+  assert.equal(record.parentActionType, 'discovery_question');
+  assert.equal(service.registerCompletedAction(completedAction({
+    id: 'sales-non-discovery',
+    type: 'buying_signal',
+    sourceIntent: 'sales_buying_signal',
+  })), null);
+});
+
+test('FDE planner accepts process-first slots and rejects unexpected slot keys', async () => {
+  const { parseContinuationSlots } = await import(pathToFileURL(path.join(
+    process.cwd(),
+    'dist-electron/electron/services/dynamic-actions/DynamicActionContinuationPlanner.js',
+  )).href);
+  const slots = parseContinuationSlots({
+    asIsProcess: 'ECO 由研发提交后质量审批',
+    processObject: 'ECO',
+    roles: ['研发', '质量'],
+    humanConfirmation: '质量经理签核',
+    aiSupportNeed: '检查变更材料是否缺字段',
+    validationNeed: '用 3 条真实 ECO 验证',
+  }, 'fde');
+  assert.equal(slots.asIsProcess, 'ECO 由研发提交后质量审批');
+  assert.deepEqual(slots.roles, ['研发', '质量']);
+  assert.throws(
+    () => parseContinuationSlots({ object: 'sales-only slot' }, 'fde'),
+    /planner_invalid_json/,
+  );
+});
+
+test('sales planner slot parsing remains compatible', async () => {
+  const { parseContinuationSlots } = await import(pathToFileURL(path.join(
+    process.cwd(),
+    'dist-electron/electron/services/dynamic-actions/DynamicActionContinuationPlanner.js',
+  )).href);
+  const slots = parseContinuationSlots({
+    object: '电池包冷却液流道',
+    metrics: ['压降', '温升'],
+  });
+  assert.equal(slots.object, '电池包冷却液流道');
+  assert.deepEqual(slots.metrics, ['压降', '温升']);
 });
 
 const readyResult = () => ({

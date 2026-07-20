@@ -81,6 +81,24 @@ export function evaluateDynamicActionAcceptedOutput(
     enforceCapabilityFitLength(answer, requiredPatternFailures);
   }
 
+  if (input.actionType === 'fde_grounded_answer') {
+    const usedGrounding = hasUsedGrounding(['material', 'pptx', 'business_context']);
+    const statesInsufficiency = /资料不足|信息不足|不能确认|不能承诺|not enough|insufficient|cannot confirm|cannot promise/i.test(answer);
+    const proposesValidation = /PoC|样本流程|样本|测试数据|验证|pilot|sample process|test data|validation|acceptance/i.test(answer);
+    const hasPositiveClaim = containsPositiveCapabilityClaim(answer) ||
+      /已发布|已审批|审批完成|已关闭|Released|Approved|Closed|state is|version/i.test(answer);
+    if (hasPositiveClaim && (!usedGrounding || input.claimGrounding?.verdict !== 'supported')) {
+      groundingFailures.push('fde_claim_not_supported_by_injected_evidence');
+    }
+    if (!usedGrounding && (!statesInsufficiency || !proposesValidation)) {
+      groundingFailures.push('fde_requires_insufficiency_and_validation');
+    }
+    forbidPattern('automatic_plm_qms_writeback_or_approval', /(?:会|可以|可|支持|将|能够|直接).{0,12}自动(?:审批|批准|写回|写入|更新|创建)|auto(?:matically)?\s+(?:approve|write|update|create)|will\s+write\s*back|can\s+write\s*back/i);
+    forbidPattern('invented_business_system_state', /(?:Windchill|PLM|QMS|CAPA|NCR|ECO|ECN|BOM).{0,24}(?:已发布|已审批|审批完成|已关闭|released|approved|closed|version|版本)/i);
+    forbidUnpromptedTechnicalJargon(answer, input.sourceUtterance, forbiddenPatternFailures);
+    enforceCapabilityFitLength(answer, requiredPatternFailures);
+  }
+
   if (input.actionType === 'discovery_question') {
     const questionCount = countQuestionLikeSentences(answer);
     if (questionCount < 1 || questionCount > 3) {
@@ -148,6 +166,20 @@ export function buildCapabilityFitSafeFallback(language?: string): string {
   return language === 'en'
     ? 'The current materials are not enough to confirm this capability. Please verify it against the capability matrix or run a PoC with one real object and acceptance metric; no automatic PLM or QMS writeback is assumed.'
     : '当前资料不足，不能确认这项能力。建议补充产品能力材料，或用一个真实对象和验收指标做 PoC；这里不承诺自动写回 PLM 或 QMS。';
+}
+
+export function buildFdeGroundedAnswerSafeFallback(language?: string): string {
+  return language === 'en'
+    ? 'The current material is not enough to confirm this process or AI capability. AI can only be treated as a process check or prompt after validation, with key approvals kept under human confirmation. Validate it with one real process sample, test data, owner, human confirmation point, and acceptance criteria; no automatic PLM or QMS writeback is assumed.'
+    : '当前资料不足，不能确认这个流程或 AI 能力。AI 只能在验证后作为流程检查或提示辅助，关键审批仍需人审。建议用一个真实流程样本、测试数据、负责人、人审点和验收标准做验证；这里不承诺自动写回 PLM 或 QMS。';
+}
+
+function forbidUnpromptedTechnicalJargon(answer: string, sourceUtterance: string | undefined, failures: string[]): void {
+  const jargonPattern = /\b(?:LLM|RAG|tool call|agent orchestration|embedding)\b/i;
+  if (!jargonPattern.test(answer)) return;
+  if (!jargonPattern.test(String(sourceUtterance || ''))) {
+    failures.push('unprompted_ai_technical_jargon');
+  }
 }
 
 function enforceCapabilityFitLength(answer: string, failures: string[]): void {

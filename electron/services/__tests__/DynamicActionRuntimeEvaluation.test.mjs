@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 const enginePath = path.join(process.cwd(), 'dist-electron/electron/IntelligenceEngine.js');
 const sessionPath = path.join(process.cwd(), 'dist-electron/electron/SessionTracker.js');
 const privacyPath = path.join(process.cwd(), 'scripts/assert-dynamic-action-report-privacy.mjs');
+const evaluatorPath = path.join(process.cwd(), 'dist-electron/electron/services/dynamic-actions/DynamicActionAcceptedOutputEvaluator.js');
 
 class StubLLMHelper {
   getActiveModel() { return { provider: 'gemini', model: 'gemini-3-flash' }; }
@@ -165,4 +166,93 @@ test('runtime evaluation does not persist transcript or evidence sentinels after
       providerBody: SENTINELS.providerBody,
     }],
   }));
+});
+
+test('FDE grounded answer evaluator requires grounding for positive process claims', async () => {
+  const { evaluateDynamicActionAcceptedOutput } = await import(pathToFileURL(evaluatorPath).href);
+  const grounded = evaluateDynamicActionAcceptedOutput({
+    actionType: 'fde_grounded_answer',
+    outputType: 'spoken_response',
+    answerText: '可以确认 ECO 流程里质量经理需要做人审；建议用 3 条真实 ECO 和测试数据验证验收标准。',
+    groundedSources: [{ evidenceId: 'ev-fde', type: 'material', label: 'fde-process.pdf', status: 'used' }],
+    claimGrounding: { verdict: 'supported', evidenceIds: ['ev-fde'], reasonCode: 'claims_supported', verificationSource: 'continuation_grounding_verifier' },
+    sourceUtterance: '客户问 ECO 流程里 AI 怎么辅助检查缺字段。',
+  });
+  const ungrounded = evaluateDynamicActionAcceptedOutput({
+    actionType: 'fde_grounded_answer',
+    outputType: 'spoken_response',
+    answerText: '可以确认系统支持 CAPA 自动关闭。',
+    groundedSources: [],
+    claimGrounding: { verdict: 'unavailable', evidenceIds: [], reasonCode: 'no_injected_evidence', verificationSource: 'continuation_grounding_verifier' },
+    sourceUtterance: '客户问 CAPA 关闭流程。',
+  });
+  assert.equal(grounded.passed, true);
+  assert.equal(ungrounded.passed, false);
+  assert.ok(ungrounded.groundingFailures.includes('fde_claim_not_supported_by_injected_evidence'));
+});
+
+test('FDE grounded answer evaluator rejects automation promises and unprompted AI jargon', async () => {
+  const { evaluateDynamicActionAcceptedOutput } = await import(pathToFileURL(evaluatorPath).href);
+  const automation = evaluateDynamicActionAcceptedOutput({
+    actionType: 'fde_grounded_answer',
+    outputType: 'spoken_response',
+    answerText: 'AI Agent 可以自动写回 PLM 并自动审批 ECO。',
+    groundedSources: [{ evidenceId: 'ev-fde', type: 'material', label: 'fde-process.pdf', status: 'used' }],
+    claimGrounding: { verdict: 'supported', evidenceIds: ['ev-fde'], reasonCode: 'claims_supported', verificationSource: 'continuation_grounding_verifier' },
+    sourceUtterance: '客户问 ECO 审批流程。',
+  });
+  const jargon = evaluateDynamicActionAcceptedOutput({
+    actionType: 'fde_grounded_answer',
+    outputType: 'spoken_response',
+    answerText: '这里可以用 RAG 和 tool call 编排来处理流程。',
+    groundedSources: [],
+    claimGrounding: { verdict: 'unavailable', evidenceIds: [], reasonCode: 'no_injected_evidence', verificationSource: 'continuation_grounding_verifier' },
+    sourceUtterance: '客户问 AI 怎么辅助检查缺字段。',
+  });
+  assert.equal(automation.passed, false);
+  assert.ok(automation.forbiddenPatternFailures.includes('automatic_plm_qms_writeback_or_approval'));
+  assert.equal(jargon.passed, false);
+  assert.ok(jargon.forbiddenPatternFailures.includes('unprompted_ai_technical_jargon'));
+});
+
+test('FDE runtime evaluation uses FDE safe fallback when validation fails', async () => {
+  const { engine, session } = await runtimeEvaluationHarness(['可以确认支持自动写回 QMS。']);
+  engine._setDynamicActionClaimGroundingVerifierForTest({
+    verify: async () => ({
+      verdict: 'unsupported',
+      evidenceIds: [],
+      reasonCode: 'claim_not_supported',
+      verificationSource: 'continuation_grounding_verifier',
+    }),
+  });
+
+  const answer = await engine.runWhatShouldISay('客户问 AI 怎么辅助 CAPA 关闭流程。', 0.9, undefined, {
+    skipCooldown: true,
+    source: 'dynamic_action',
+    modeEvent: {
+      actionId: 'fde-child-1',
+      actionType: 'fde_grounded_answer',
+      parentActionId: 'fde-parent-1',
+      productContract: { outputType: 'spoken_response' },
+    },
+    dynamicActionValidation: {
+      actionType: 'fde_grounded_answer',
+      parentActionId: 'fde-parent-1',
+      grounding: {
+        groundedSources: [],
+        injectedEvidence: [],
+      },
+      providerDataScopes: { transcript: true, reference_files: true },
+      deferUserVisibleEmission: true,
+      language: 'zh',
+      sourceUtterance: '客户问 AI 怎么辅助 CAPA 关闭流程。',
+    },
+  });
+
+  assert.match(answer, /当前资料不足/);
+  assert.match(answer, /真实流程样本/);
+  assert.doesNotMatch(answer, /自动写回 QMS/);
+  const usage = session.getFullUsage().at(-1);
+  assert.equal(usage.metadata.evaluationResult, 'safe_fallback');
+  assert.equal(usage.metadata.actionType, 'fde_grounded_answer');
 });

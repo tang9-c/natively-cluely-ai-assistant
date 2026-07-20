@@ -93,6 +93,12 @@ export function explainDynamicActionForUser(input: Pick<DynamicAction, 'type' | 
             severity: 'info',
         };
     }
+    if (input.type === 'fde_grounded_answer') {
+        return {
+            whyNow: '客户已补充流程、角色、质量对象或 AI 边界信息，可以基于可信资料回应。',
+            severity: 'info',
+        };
+    }
     if (input.type === 'pricing_request') {
         return { whyNow: '对方正在索要报价、proposal 或商务条款，适合生成一封不编价格和条款的跟进邮件。', severity: 'info' };
     }
@@ -156,6 +162,7 @@ function resolveRiskState(input: { autoSurfacePolicy?: AutoSurfacePolicy; confid
 
 function buildUserAction(input: ContractInput, outputType: DynamicActionOutputType): string {
     if (input.type === 'capability_fit_answer') return '生成能力匹配回答';
+    if (input.type === 'fde_grounded_answer') return '生成 FDE 流程验证回应';
     if (input.type === 'pricing_request') return '生成报价邮件';
     if (input.type === 'case_study_request') return '引用案例证明';
     if (input.type === 'discovery_question') return '追问关键问题';
@@ -178,6 +185,7 @@ function buildUserAction(input: ContractInput, outputType: DynamicActionOutputTy
 
 function outputPromiseFor(actionType: string, outputType: DynamicActionOutputType): string {
     if (actionType === 'capability_fit_answer') return '生成一段可直接说出口、带证据边界的能力匹配回答';
+    if (actionType === 'fde_grounded_answer') return '生成一段可直接说出口、带证据边界的流程或 AI 支持回应';
     if (actionType === 'discovery_question') return '生成 1-3 个可直接问客户的发现问题';
     switch (outputType) {
         case 'checklist':

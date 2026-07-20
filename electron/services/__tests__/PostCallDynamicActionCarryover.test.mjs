@@ -150,6 +150,86 @@ test('post-call carryover keeps sales capability confirmations separate from act
   assert.ok(result.coachingInsights.some((insight) => insight.type === 'sales_capability_confirmation'));
 });
 
+test('post-call carryover preserves accepted FDE grounded answers without action item pollution', async () => {
+  const { buildPostCallEnhancements } = await loadWorkflow();
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'fde',
+    transcript: [{ speaker: 'Customer', text: 'ECO 流程需要 AI 帮忙检查缺字段，但质量经理要做人审。', timestamp: 1 }],
+    summaryData: { overview: 'FDE process review.', actionItems: [] },
+    dynamicActionArtifacts: [{
+      actionId: 'fde_grounded_1',
+      parentActionId: 'fde_parent_1',
+      modeTemplateType: 'fde',
+      actionType: 'fde_grounded_answer',
+      outputType: 'spoken_response',
+      structuredSummary: '可以确认 ECO 流程里 AI 适合检查缺字段；质量经理仍需要做人审。建议用 3 条真实 ECO 和测试数据验证验收标准。',
+      missingFields: [],
+      groundedSources: [{ evidenceId: 'ev-fde', type: 'material', label: 'fde-process.pdf', status: 'used' }],
+      acceptedAt: 1000,
+      evaluationResult: 'passed',
+      generationStatus: 'completed',
+    }],
+  });
+
+  assert.equal(result.acceptedFdeRecords.length, 1);
+  assert.match(result.followUpDraft, /Process confirmation:/);
+  assert.match(result.followUpDraft, /AI support boundary:/);
+  assert.match(result.followUpDraft, /fde-process\.pdf/);
+  assert.equal(result.actionItemsStructured.some((item) => /检查缺字段/.test(item.text)), false);
+  assert.ok(result.coachingInsights.some((insight) => insight.type === 'fde_process_confirmation'));
+});
+
+test('post-call carryover emits FDE AI boundary, validation, and risk insights', async () => {
+  const { buildPostCallEnhancements } = await loadWorkflow();
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'fde',
+    transcript: [],
+    summaryData: { overview: 'FDE delivery review.', actionItems: [] },
+    dynamicActionArtifacts: [
+      {
+        actionId: 'fde_agent_1',
+        modeTemplateType: 'fde',
+        actionType: 'fde_agent_feasibility',
+        outputType: 'checklist',
+        structuredSummary: 'AI Agent 只能只读提示 CAPA 证据缺口，需要质量经理人工确认，不自动写回 QMS。',
+        missingFields: [],
+        groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+        acceptedAt: 1000,
+        generationStatus: 'completed',
+      },
+      {
+        actionId: 'fde_next_1',
+        modeTemplateType: 'fde',
+        actionType: 'fde_next_step',
+        outputType: 'checklist',
+        structuredSummary: '需要确认 owner、date、artifact、test data 和 acceptance criteria。',
+        missingFields: ['owner', 'date', 'artifact', 'test_data', 'acceptance_criteria'],
+        groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+        acceptedAt: 1001,
+        generationStatus: 'completed',
+      },
+      {
+        actionId: 'fde_risk_1',
+        modeTemplateType: 'fde',
+        actionType: 'fde_risk_blocker',
+        outputType: 'checklist',
+        structuredSummary: '风险：客户 CAPA 流程 owner 不明确，会影响上线验证。',
+        missingFields: [],
+        groundedSources: [{ type: 'transcript', label: 'accepted action', status: 'used' }],
+        acceptedAt: 1002,
+        generationStatus: 'completed',
+      },
+    ],
+  });
+
+  assert.match(result.followUpDraft, /AI support boundary:/);
+  assert.match(result.followUpDraft, /Validation next steps:/);
+  assert.match(result.followUpDraft, /Delivery risks:/);
+  assert.ok(result.coachingInsights.some((insight) => insight.type === 'fde_ai_boundary_followup'));
+  assert.ok(result.coachingInsights.some((insight) => insight.type === 'fde_validation_missing_fields'));
+  assert.ok(result.coachingInsights.some((insight) => insight.type === 'fde_delivery_risk_followup'));
+});
+
 test('MeetingPersistence maps flat dynamic action usage into carryover artifacts', async () => {
   const { buildDynamicActionArtifactActionsFromUsage } = await loadMeetingPersistence();
   const { buildDynamicActionArtifacts } = await import(pathToFileURL(path.join(root, 'dist-electron/electron/services/dynamic-actions/DynamicActionArtifacts.js')).href);

@@ -3278,7 +3278,8 @@ export function initializeIpcHandlers(appState: AppState): void {
           embeddingReady,
           realtimeContextPlan,
         } = contextPreparation;
-        const isCapabilityFitAnswer = sanitizedModeEvent?.actionType === 'capability_fit_answer';
+        const isRuntimeValidatedDynamicAnswer = sanitizedModeEvent?.actionType === 'capability_fit_answer' ||
+          sanitizedModeEvent?.actionType === 'fde_grounded_answer';
         const grounding = buildDynamicActionRuntimeGrounding({
           actionType: sanitizedModeEvent?.actionType,
           realtimeContextPlan,
@@ -3300,7 +3301,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           };
         }
 
-        if (businessSystemResult.kind === 'fixed_reply' && !isCapabilityFitAnswer) {
+        if (businessSystemResult.kind === 'fixed_reply' && !isRuntimeValidatedDynamicAnswer) {
           const businessSystemDegradedReason = businessSystemDegradedReasonForStatus(businessSystemResult.status);
           const contextTrace = DatabaseManager.getInstance().saveAnswerContextTrace(
             buildBusinessSystemFixedReplyTraceInput({
@@ -3350,14 +3351,15 @@ export function initializeIpcHandlers(appState: AppState): void {
               whatToAnswerTrace = trace;
             },
             providerScopePolicy: providerScopes,
-            dynamicActionValidation: isCapabilityFitAnswer ? {
-              actionType: 'capability_fit_answer',
+            dynamicActionValidation: isRuntimeValidatedDynamicAnswer ? {
+              actionType: sanitizedModeEvent?.actionType ?? 'capability_fit_answer',
               sourceIntent: sanitizedModeEvent?.sourceIntent,
               parentActionId: sanitizedModeEvent?.parentActionId,
               grounding,
               providerDataScopes: providerScopes,
               deferUserVisibleEmission: true,
               language: sanitizedModeEvent?.language,
+              sourceUtterance: question,
             } : undefined,
             dynamicActionEvaluationSink: (trace) => {
               runtimeEvaluationTrace = trace;

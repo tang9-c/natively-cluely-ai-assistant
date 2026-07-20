@@ -26,7 +26,7 @@ export function buildDynamicActionRuntimeGrounding(input: {
     degradedReasons: AnswerDegradedReason[];
     businessSystemResult: BusinessSystemServiceResult;
 }): DynamicActionRuntimeGrounding {
-    if (input.actionType !== 'capability_fit_answer') {
+    if (!['capability_fit_answer', 'fde_grounded_answer'].includes(input.actionType ?? '')) {
         return { groundedSources: [], injectedEvidence: [] };
     }
 

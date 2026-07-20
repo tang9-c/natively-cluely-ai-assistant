@@ -63,9 +63,10 @@ export class DynamicActionContinuationService {
 
         const record: PendingActionContinuation = {
             parentActionId: action.id,
+            parentActionType: action.type,
             sessionId: action.sessionId,
             modeId: action.modeId,
-            modeTemplateType: 'sales',
+            modeTemplateType: action.modeTemplateType as PendingActionContinuation['modeTemplateType'],
             sourceIntent: action.sourceIntent as PendingActionContinuation['sourceIntent'],
             originalTurn: action.latestTurn?.trim() || '',
             originalEvidenceRefs: action.evidenceRefs.slice(0, 2).map((item) => ({
@@ -191,7 +192,8 @@ export class DynamicActionContinuationService {
         let result: ContinuationPlannerResult;
         try {
             result = await this.planner!.decide({
-                modeTemplateType: 'sales',
+                modeTemplateType: record.modeTemplateType,
+                parentActionType: record.parentActionType,
                 sourceIntent: record.sourceIntent,
                 originalTurn: record.originalTurn,
                 keyEntities: record.keyEntities,

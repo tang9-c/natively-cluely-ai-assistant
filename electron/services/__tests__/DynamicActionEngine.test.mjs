@@ -9,6 +9,7 @@ const enginePath = path.join(root, 'dist-electron/electron/services/dynamic-acti
 const storePath = path.join(root, 'dist-electron/electron/services/dynamic-actions/DynamicActionStore.js');
 const detectorPath = path.join(root, 'dist-electron/electron/services/dynamic-actions/DynamicActionDetector.js');
 const actionPath = path.join(root, 'dist-electron/electron/services/dynamic-actions/DynamicAction.js');
+const policyPath = path.join(root, 'dist-electron/electron/services/dynamic-actions/ModeActionPolicy.js');
 
 async function loadModules() {
   const [engineMod, storeMod, detectorMod, actionMod] = await Promise.all([
@@ -1296,6 +1297,25 @@ test('assessSignals enriches sales regex candidates with policy metadata', async
   assert.equal(calls[0].candidates[0].riskLevel, 'high');
   assert.equal(calls[0].candidates[0].gateStrategy, 'required');
   assert.equal(calls[0].candidates[0].allowLocalFallbackOnCloudFailure, false);
+});
+
+test('all FDE policies keep local fallback disabled', async () => {
+  const { getActionGatePolicy } = await import(pathToFileURL(policyPath).href);
+  for (const actionType of [
+    'fde_discovery_probe',
+    'fde_integration_check',
+    'fde_security_review',
+    'fde_risk_blocker',
+    'fde_agent_feasibility',
+    'fde_success_criteria',
+    'fde_next_step',
+  ]) {
+    const policy = getActionGatePolicy('fde', actionType);
+    assert.equal(policy.riskLevel, 'high');
+    assert.equal(policy.gateStrategy, 'required');
+    assert.equal(policy.allowLocalFallbackOnCloudFailure, false);
+    assert.deepEqual(policy.localFallbackEvidence, []);
+  }
 });
 
 test('assessSignals enriches synthetic intent candidates with the same policy metadata', async () => {
