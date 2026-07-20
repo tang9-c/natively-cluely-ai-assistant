@@ -72,7 +72,7 @@ export function verifyRecruitingReleaseAttestation(document, key) {
   if (!document || typeof document !== 'object' || !document.payload || typeof document.signature !== 'string') {
     return null;
   }
-  if (typeof key !== 'string' || key.length < 16) return null;
+  if (typeof key !== 'string' || Buffer.byteLength(key) < 32) return null;
   const expected = signRecruitingReleaseAttestation(document.payload, key);
   const actualBuffer = Buffer.from(document.signature, 'hex');
   const expectedBuffer = Buffer.from(expected, 'hex');
@@ -95,6 +95,8 @@ export function evaluateRecruitingRealAssetGate({ entries, audioRoot, attestatio
   if (!attestation) invalidReasons.add('trusted_attestation_missing_or_invalid');
   const attestedAssets = new Map();
   const attestedObservations = new Map();
+  const attestedCaptureIds = new Set();
+  const attestedClassifierTraceIds = new Set();
   for (const asset of attestation?.assets ?? []) {
     if (!asset || typeof asset.meetingId !== 'string' || typeof asset.audioSha256 !== 'string'
       || typeof asset.captureId !== 'string' || !asset.captureId.trim()) {
@@ -102,6 +104,8 @@ export function evaluateRecruitingRealAssetGate({ entries, audioRoot, attestatio
       continue;
     }
     if (attestedAssets.has(asset.meetingId)) invalidReasons.add('duplicate_attested_meeting_id');
+    if (attestedCaptureIds.has(asset.captureId)) invalidReasons.add('duplicate_attested_capture_id');
+    attestedCaptureIds.add(asset.captureId);
     attestedAssets.set(asset.meetingId, asset);
   }
   for (const observation of attestation?.observations ?? []) {
@@ -111,6 +115,10 @@ export function evaluateRecruitingRealAssetGate({ entries, audioRoot, attestatio
     }
     const key = `${observation.meetingId}:${observation.turnId}`;
     if (attestedObservations.has(key)) invalidReasons.add('duplicate_attested_observation');
+    if (attestedClassifierTraceIds.has(observation.classifierTraceId)) {
+      invalidReasons.add('duplicate_classifier_trace_id');
+    }
+    attestedClassifierTraceIds.add(observation.classifierTraceId);
     attestedObservations.set(key, observation);
   }
   for (const entry of entries) {
@@ -322,7 +330,8 @@ export async function runRealSttReplay({
   }
 
   const manifestPath = path.join(root, 'tests/fixtures/dynamic-actions/replay/replay-manifest.json');
-  let recruitingReleaseAttestation;
+  let recruitingReleaseAttestationDocument;
+  let recruitingReleaseAttestationKey;
   if (modeTemplateType === 'recruiting' && semanticGateMode === 'real') {
     const entries = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const attestationPath = process.env.RECRUITING_RELEASE_ATTESTATION_PATH;
@@ -351,7 +360,8 @@ export async function runRealSttReplay({
       process.exitCode = 1;
       return blockedReport;
     }
-    recruitingReleaseAttestation = verifyRecruitingReleaseAttestation(attestationDocument, attestationKey);
+    recruitingReleaseAttestationDocument = attestationDocument;
+    recruitingReleaseAttestationKey = attestationKey;
   }
 
   const replayModuleUrl = pathToFileURL(
@@ -427,7 +437,8 @@ export async function runRealSttReplay({
     modeTemplateTypes: [modeTemplateType],
     semanticGateMode,
     cloudClassifier,
-    recruitingReleaseAttestation,
+    recruitingReleaseAttestationDocument,
+    recruitingReleaseAttestationKey,
     environmentStatus: 'ok',
     transcribeAudio: async ({ audioPath }) => transcribeAudio(audioPath),
   });

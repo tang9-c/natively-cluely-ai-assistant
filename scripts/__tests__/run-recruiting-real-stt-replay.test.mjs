@@ -224,7 +224,7 @@ test('real recruiting asset gate requires hashed real recordings and unique comp
     signRecruitingReleaseAttestation,
   } = await import('../dynamic-action-real-stt-replay-lib.mjs');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-recruiting-assets-'));
-  const attestationKey = 'release-attestation-test-key';
+  const attestationKey = 'release-attestation-test-key-32-bytes';
   const realEntries = Array.from({ length: 5 }, (_, index) => {
     const audioPath = `meeting-${index}.wav`;
     const audio = `real meeting audio ${index}`;
@@ -357,6 +357,7 @@ test('real recruiting asset gate requires hashed real recordings and unique comp
 
 test('real recruiting replay evaluates each labeled final turn and reports prediction-derived release metrics', async () => {
   const { runDynamicActionReplay } = await import(replayModuleUrl);
+  const { signRecruitingReleaseAttestation } = await import('../dynamic-action-real-stt-replay-lib.mjs');
   const fixture = createReplayFixture({
     transcript: 'Can you confirm visa support?',
     expected: { shouldEmit: true, actionType: 'candidate_concern', outputType: 'spoken_response' },
@@ -393,7 +394,7 @@ test('real recruiting replay evaluates each labeled final turn and reports predi
   ];
   fs.writeFileSync(fixture.manifestPath, JSON.stringify(manifest), 'utf8');
 
-  const recruitingReleaseAttestation = {
+  const recruitingReleaseAttestationPayload = {
     runId: 'production-run-1',
     source: 'production_replay',
     assets: [{
@@ -436,6 +437,14 @@ test('real recruiting replay evaluates each labeled final turn and reports predi
       },
     ],
   };
+  const recruitingReleaseAttestationKey = 'runner-attestation-test-key-32-bytes';
+  const recruitingReleaseAttestationDocument = {
+    payload: recruitingReleaseAttestationPayload,
+    signature: signRecruitingReleaseAttestation(
+      recruitingReleaseAttestationPayload,
+      recruitingReleaseAttestationKey,
+    ),
+  };
 
   const classifiedTranscripts = [];
   const report = await runDynamicActionReplay({
@@ -445,7 +454,8 @@ test('real recruiting replay evaluates each labeled final turn and reports predi
     outputDir: path.join(fixture.root, 'release'),
     modeTemplateTypes: ['recruiting'],
     semanticGateMode: 'real',
-    recruitingReleaseAttestation,
+    recruitingReleaseAttestationDocument,
+    recruitingReleaseAttestationKey,
     cloudClassifier: async input => {
       classifiedTranscripts.push(input.transcript);
       return input.candidates.map(candidate => ({
@@ -472,8 +482,12 @@ test('real recruiting replay evaluates each labeled final turn and reports predi
   assert.ok(report.recruitingRelease?.gateFailures.includes('labeled_recruiting_final_turns'));
   assert.doesNotMatch(JSON.stringify(report), /Can you confirm visa support for this role|Thank you for the clarification/);
 
-  const mismatchedAttestation = structuredClone(recruitingReleaseAttestation);
-  mismatchedAttestation.observations[0].observedActionTypes = [];
+  const mismatchedPayload = structuredClone(recruitingReleaseAttestationPayload);
+  mismatchedPayload.observations[0].observedActionTypes = [];
+  const mismatchedAttestationDocument = {
+    payload: mismatchedPayload,
+    signature: signRecruitingReleaseAttestation(mismatchedPayload, recruitingReleaseAttestationKey),
+  };
   const mismatchReport = await runDynamicActionReplay({
     manifestPath: fixture.manifestPath,
     fixtureRoot: fixture.fixtureRoot,
@@ -481,7 +495,8 @@ test('real recruiting replay evaluates each labeled final turn and reports predi
     outputDir: path.join(fixture.root, 'release-mismatch'),
     modeTemplateTypes: ['recruiting'],
     semanticGateMode: 'real',
-    recruitingReleaseAttestation: mismatchedAttestation,
+    recruitingReleaseAttestationDocument: mismatchedAttestationDocument,
+    recruitingReleaseAttestationKey,
     cloudClassifier: async input => input.candidates.map(candidate => ({
       actionType: candidate.actionType,
       decision: input.transcript === concernTranscript && candidate.actionType === 'candidate_concern'
@@ -492,6 +507,28 @@ test('real recruiting replay evaluates each labeled final turn and reports predi
     transcribeAudio: async () => 'Can you confirm visa support?',
   });
   assert.ok(mismatchReport.recruitingRelease?.gateFailures.includes('runtime_observation_action_mismatch'));
+
+  const unverifiedReport = await runDynamicActionReplay({
+    manifestPath: fixture.manifestPath,
+    fixtureRoot: fixture.fixtureRoot,
+    audioRoot: fixture.audioRoot,
+    outputDir: path.join(fixture.root, 'release-unverified'),
+    modeTemplateTypes: ['recruiting'],
+    semanticGateMode: 'real',
+    recruitingReleaseAttestationDocument: {
+      ...recruitingReleaseAttestationDocument,
+      signature: '0'.repeat(64),
+    },
+    recruitingReleaseAttestationKey,
+    cloudClassifier: async input => input.candidates.map(candidate => ({
+      actionType: candidate.actionType,
+      decision: 'reject',
+      confidence: 0.95,
+    })),
+    transcribeAudio: async () => 'Can you confirm visa support?',
+  });
+  assert.ok(unverifiedReport.recruitingRelease?.gateFailures.includes('trusted_runtime_attestation_missing'));
+  assert.equal(unverifiedReport.recruitingRelease?.provenance.attestationRunId, 'missing');
 });
 
 test('real recruiting replay returns a failing exit code before network calls when private assets are blocked', async () => {

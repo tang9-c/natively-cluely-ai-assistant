@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { DynamicActionEngine } from '../dynamic-actions/DynamicActionEngine';
 import type { CloudSemanticGateClassifier } from '../dynamic-actions/ModeEventClassifier';
 import type { DynamicActionFixtureRunnerMode } from '../dynamic-actions/DynamicActionProductFixtures';
@@ -53,6 +54,11 @@ export interface ReplayRecruitingReleaseAttestation {
   observations: ReplayAttestedFinalTurnObservation[];
 }
 
+export interface ReplayRecruitingReleaseAttestationDocument {
+  payload: ReplayRecruitingReleaseAttestation;
+  signature: string;
+}
+
 export interface ReplayAttestedRealAsset {
   meetingId: string;
   audioSha256: string;
@@ -85,7 +91,8 @@ export interface ReplayRunnerInput {
   modeTemplateTypes?: string[];
   semanticGateMode?: DynamicActionReplaySemanticGateMode;
   cloudClassifier?: CloudSemanticGateClassifier;
-  recruitingReleaseAttestation?: ReplayRecruitingReleaseAttestation;
+  recruitingReleaseAttestationDocument?: ReplayRecruitingReleaseAttestationDocument;
+  recruitingReleaseAttestationKey?: string;
   environmentStatus?: ReplayEnvironmentStatus;
   transcribeAudio?: (input: {
     entry: ReplayManifestEntry;
@@ -374,7 +381,9 @@ export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<
     ? await evaluateRecruitingLabeledFinalTurns(
         entries,
         input.cloudClassifier!,
-        input.recruitingReleaseAttestation,
+        input.recruitingReleaseAttestationDocument,
+        input.recruitingReleaseAttestationKey,
+        audioRoot,
       )
     : undefined;
   const report: ReplayReport = {
@@ -396,8 +405,11 @@ export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<
 async function evaluateRecruitingLabeledFinalTurns(
   entries: ReplayManifestEntry[],
   cloudClassifier: CloudSemanticGateClassifier,
-  attestation?: ReplayRecruitingReleaseAttestation,
+  attestationDocument: ReplayRecruitingReleaseAttestationDocument | undefined,
+  attestationKey: string | undefined,
+  audioRoot: string,
 ): Promise<ReplayRecruitingReleaseReport> {
+  const attestation = verifyRecruitingReleaseAttestationDocument(attestationDocument, attestationKey);
   const recruitingEntries = entries.filter(entry =>
     entry.modeTemplateType === 'recruiting'
     && entry.syntheticAudio === false
@@ -430,6 +442,7 @@ async function evaluateRecruitingLabeledFinalTurns(
   if (!attestation || attestation.source !== 'production_replay') {
     integrityFailures.add('trusted_runtime_attestation_missing');
   }
+  validateAttestedAssets(recruitingEntries, attestation, audioRoot, integrityFailures);
 
   for (const entry of recruitingEntries) {
     const engine = new DynamicActionEngine();
@@ -544,6 +557,61 @@ async function evaluateRecruitingLabeledFinalTurns(
       meetingIds: [...new Set(recruitingEntries.map(entry => entry.realAsset!.meetingId))],
     },
   };
+}
+
+function verifyRecruitingReleaseAttestationDocument(
+  document: ReplayRecruitingReleaseAttestationDocument | undefined,
+  key: string | undefined,
+): ReplayRecruitingReleaseAttestation | undefined {
+  if (!document || typeof key !== 'string' || Buffer.byteLength(key) < 32) return undefined;
+  if (!document.payload || typeof document.signature !== 'string') return undefined;
+  const expected = createHmac('sha256', key).update(JSON.stringify(document.payload)).digest('hex');
+  const actualBuffer = Buffer.from(document.signature, 'hex');
+  const expectedBuffer = Buffer.from(expected, 'hex');
+  if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) {
+    return undefined;
+  }
+  const payload = document.payload;
+  if (payload.source !== 'production_replay' || !payload.runId?.trim()) return undefined;
+  if (!Array.isArray(payload.assets) || !Array.isArray(payload.observations)) return undefined;
+  return payload;
+}
+
+function validateAttestedAssets(
+  entries: ReplayManifestEntry[],
+  attestation: ReplayRecruitingReleaseAttestation | undefined,
+  audioRoot: string,
+  failures: Set<string>,
+): void {
+  if (!attestation) return;
+  const assets = new Map(attestation.assets.map(asset => [asset.meetingId, asset]));
+  const seenCaptureIds = new Set<string>();
+  const seenAudioHashes = new Set<string>();
+  if (assets.size !== attestation.assets.length) failures.add('duplicate_attested_meeting_id');
+  for (const asset of attestation.assets) {
+    if (!asset.captureId?.trim()) failures.add('attested_capture_id_missing');
+    if (seenCaptureIds.has(asset.captureId)) failures.add('duplicate_attested_capture_id');
+    if (seenAudioHashes.has(asset.audioSha256)) failures.add('duplicate_attested_audio_sha256');
+    seenCaptureIds.add(asset.captureId);
+    seenAudioHashes.add(asset.audioSha256);
+  }
+  for (const entry of entries) {
+    const provenance = entry.realAsset;
+    const asset = provenance ? assets.get(provenance.meetingId) : undefined;
+    if (!provenance || !asset || !asset.captureId?.trim() || asset.audioSha256 !== provenance.audioSha256) {
+      failures.add('attested_asset_mismatch');
+      continue;
+    }
+    const audioPath = path.isAbsolute(entry.audioPath)
+      ? entry.audioPath
+      : path.resolve(audioRoot, entry.audioPath);
+    if (!fs.existsSync(audioPath)) {
+      failures.add('attested_audio_missing');
+      continue;
+    }
+    const actualSha256 = createHash('sha256').update(fs.readFileSync(audioPath)).digest('hex');
+    if (actualSha256 !== asset.audioSha256) failures.add('attested_audio_sha256_mismatch');
+  }
 }
 
 function sameStringSet(left: string[], right: string[]): boolean {
