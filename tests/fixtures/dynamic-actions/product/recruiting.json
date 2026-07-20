@@ -1,135 +1,52 @@
 [
-  {
-    "id": "recruiting-candidate-concern-zh-001",
-    "modeTemplateType": "recruiting",
-    "language": "zh",
-    "transcriptTurns": [
-      {
-        "speaker": "candidate",
-        "text": "我比较担心签证和入职时间的问题，想确认一下公司能不能支持。",
-        "final": true
-      }
-    ],
-    "expected": {
-      "shouldEmit": true,
-      "actionType": "candidate_concern",
-      "outputType": "spoken_response"
-    },
-    "tags": [
-      "candidate_concern",
-      "zh",
-      "visa",
-      "start_date"
-    ],
-    "sourceRefs": [
-      "tests/fixtures/modes/recruiting/recruiting_hiring_policy.json",
-      "tests/fixtures/modes/recruiting/recruiting_compensation_policy.txt"
-    ]
-  },
-  {
-    "id": "recruiting-experience-probe-en-001",
-    "modeTemplateType": "recruiting",
-    "language": "en",
-    "transcriptTurns": [
-      {
-        "speaker": "interviewer",
-        "text": "Can you give me a specific example of a backend project where you owned the design and rollout?",
-        "final": true
-      }
-    ],
-    "expected": {
-      "shouldEmit": true,
-      "actionType": "candidate_experience_probe",
-      "outputType": "spoken_response"
-    },
-    "tags": [
-      "experience_probe",
-      "en",
-      "backend",
-      "ownership"
-    ],
-    "sourceRefs": [
-      "tests/fixtures/modes/recruiting/recruiting_scorecard.csv",
-      "tests/fixtures/modes/recruiting/recruiting_backend_jd.md"
-    ]
-  },
-  {
-    "id": "recruiting-strong-fit-zh-001",
-    "modeTemplateType": "recruiting",
-    "language": "zh",
-    "transcriptTurns": [
-      {
-        "speaker": "candidate",
-        "text": "这个岗位和我之前做的平台工程非常匹配，我也很感兴趣。",
-        "final": true
-      }
-    ],
-    "expected": {
-      "shouldEmit": true,
-      "actionType": "strong_fit_signal",
-      "outputType": "spoken_response"
-    },
-    "tags": [
-      "strong_fit",
-      "zh",
-      "candidate_interest"
-    ],
-    "sourceRefs": [
-      "tests/fixtures/modes/recruiting/recruiting_backend_jd.md"
-    ]
-  },
-  {
-    "id": "recruiting-scorecard-context-en-001",
-    "modeTemplateType": "recruiting",
-    "language": "en",
-    "transcriptTurns": [
-      {
-        "speaker": "interviewer",
-        "text": "Tell me about your experience with incident response and how you measure impact after a production issue.",
-        "final": true
-      }
-    ],
-    "expected": {
-      "shouldEmit": true,
-      "actionType": "candidate_experience_probe",
-      "outputType": "spoken_response"
-    },
-    "tags": [
-      "experience_probe",
-      "scorecard",
-      "incident_response"
-    ],
-    "sourceRefs": [
-      "tests/fixtures/modes/recruiting/recruiting_scorecard.csv"
-    ]
-  },
-  {
-    "id": "recruiting-negative-identity-mismatch-mixed-001",
-    "modeTemplateType": "recruiting",
-    "language": "mixed",
-    "transcriptTurns": [
-      {
-        "speaker": "internal",
-        "text": "Internal note: please check the pay band in the ATS after the call, but don't treat this as a candidate concern.",
-        "final": true
-      },
-      {
-        "speaker": "candidate",
-        "text": "我刚才只是确认面试流程，没有提出待遇或入职安排的问题。",
-        "final": true
-      }
-    ],
-    "expected": {
-      "shouldEmit": false
-    },
-    "negativeReason": "internal_chatter",
-    "tags": [
-      "identity_mismatch",
-      "false_positive_guard",
-      "mixed"
-    ],
-    "sourceRefs": [
-      "tests/fixtures/modes/recruiting/recruiting_ats_export.xml"
-    ]
-  }
+  {"id":"recruiting-concern-zh-visa-001","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"candidate","text":"我想确认签证支持和入职时间。","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_concern","outputType":"spoken_response","acceptedAnswer":"当前招聘材料不足，不能确认这项政策。建议先向招聘负责人或 hiring team 核实后再回复候选人。"},"tags":["candidate_concern","zh","visa"]},
+  {"id":"recruiting-concern-zh-compensation-002","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"candidate","text":"这个岗位的薪资范围和 offer 流程可以说明吗？","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_concern","outputType":"spoken_response","acceptedAnswer":"当前招聘材料不足，不能确认这项政策。建议先向招聘负责人或 hiring team 核实后再回复候选人。"},"tags":["candidate_concern","zh","compensation"]},
+  {"id":"recruiting-concern-zh-remote-003","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"candidate","text":"我担心远程和混合办公政策，能确认吗？","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_concern","outputType":"spoken_response","acceptedAnswer":"当前招聘材料不足，不能确认这项政策。建议先向招聘负责人或 hiring team 核实后再回复候选人。"},"tags":["candidate_concern","zh","remote"]},
+  {"id":"recruiting-concern-zh-relocation-004","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"candidate","text":"如果需要搬迁，公司会支持吗？","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_concern","outputType":"spoken_response","acceptedAnswer":"当前招聘材料不足，不能确认这项政策。建议先向招聘负责人或 hiring team 核实后再回复候选人。"},"tags":["candidate_concern","zh","relocation"]},
+  {"id":"recruiting-concern-en-visa-005","modeTemplateType":"recruiting","language":"en","transcriptTurns":[{"speaker":"candidate","text":"Can you confirm visa support and the start date?","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_concern","outputType":"spoken_response","acceptedAnswer":"The current recruiting materials are not enough to confirm this policy. Please verify it with the recruiter or hiring team before sharing a commitment."},"tags":["candidate_concern","en","visa"]},
+  {"id":"recruiting-concern-en-offer-006","modeTemplateType":"recruiting","language":"en","transcriptTurns":[{"speaker":"candidate","text":"I have a concern about the offer timeline and compensation.","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_concern","outputType":"spoken_response","acceptedAnswer":"The current recruiting materials are not enough to confirm this policy. Please verify it with the recruiter or hiring team before sharing a commitment."},"tags":["candidate_concern","en","offer"]},
+  {"id":"recruiting-concern-mixed-remote-007","modeTemplateType":"recruiting","language":"mixed","transcriptTurns":[{"speaker":"candidate","text":"这个 role 可以 remote work 吗？我想确认 start date。","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_concern","outputType":"spoken_response","acceptedAnswer":"当前招聘材料不足，不能确认这项政策。建议先向招聘负责人或 hiring team 核实后再回复候选人。"},"tags":["candidate_concern","mixed","remote"]},
+  {"id":"recruiting-concern-mixed-security-008","modeTemplateType":"recruiting","language":"mixed","transcriptTurns":[{"speaker":"candidate","text":"安全审查会影响我的入职时间吗，can you confirm?","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_concern","outputType":"spoken_response","acceptedAnswer":"当前招聘材料不足，不能确认这项政策。建议先向招聘负责人或 hiring team 核实后再回复候选人。"},"tags":["candidate_concern","mixed","start_date"]},
+
+  {"id":"recruiting-probe-en-action-001","modeTemplateType":"recruiting","language":"en","transcriptTurns":[{"speaker":"interviewer","text":"Tell me about your experience owning a production migration.","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","personal_action","en"]},
+  {"id":"recruiting-probe-en-result-002","modeTemplateType":"recruiting","language":"en","transcriptTurns":[{"speaker":"interviewer","text":"Give me a specific example of a result you delivered.","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","result","en"]},
+  {"id":"recruiting-probe-en-ownership-003","modeTemplateType":"recruiting","language":"en","transcriptTurns":[{"speaker":"interviewer","text":"Walk me through your background and ownership on the service rollout.","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","ownership","en"]},
+  {"id":"recruiting-probe-en-tradeoff-004","modeTemplateType":"recruiting","language":"en","transcriptTurns":[{"speaker":"interviewer","text":"Can you give me an example of a tradeoff you made and how you verified it?","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","tradeoff_or_verification","en"]},
+  {"id":"recruiting-probe-en-action-005","modeTemplateType":"recruiting","language":"en","transcriptTurns":[{"speaker":"interviewer","text":"Tell me about your experience leading an incident response.","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","personal_action","en"]},
+  {"id":"recruiting-probe-en-result-006","modeTemplateType":"recruiting","language":"en","transcriptTurns":[{"speaker":"interviewer","text":"Give me a concrete example of how you measured impact after a launch.","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","result","en"]},
+  {"id":"recruiting-probe-zh-action-007","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"interviewer","text":"讲讲你的经验：你在服务发布中具体做了什么？","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","personal_action","zh"]},
+  {"id":"recruiting-probe-zh-result-008","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"interviewer","text":"举个具体例子，说明你的结果和影响。","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","result","zh"]},
+  {"id":"recruiting-probe-zh-ownership-009","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"interviewer","text":"介绍一下你的背景，以及你对上线决策的 ownership。","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","ownership","zh"]},
+  {"id":"recruiting-probe-zh-tradeoff-010","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"interviewer","text":"举一个例子，说说你做过的取舍和验证方式。","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","tradeoff_or_verification","zh"]},
+  {"id":"recruiting-probe-zh-action-011","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"interviewer","text":"为什么这个岗位？请讲讲你的经验和个人行动。","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","personal_action","zh"]},
+  {"id":"recruiting-probe-zh-result-012","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"interviewer","text":"请举个具体例子，说明你如何验证结果。","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","result","zh"]},
+  {"id":"recruiting-probe-mixed-action-013","modeTemplateType":"recruiting","language":"mixed","transcriptTurns":[{"speaker":"interviewer","text":"Tell me about your experience，你在 incident response 里做了什么？","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","personal_action","mixed"]},
+  {"id":"recruiting-probe-mixed-result-014","modeTemplateType":"recruiting","language":"mixed","transcriptTurns":[{"speaker":"interviewer","text":"Give me an example，结果和 impact 怎么验证？","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","result","mixed"]},
+  {"id":"recruiting-probe-mixed-ownership-015","modeTemplateType":"recruiting","language":"mixed","transcriptTurns":[{"speaker":"interviewer","text":"Walk me through your background，谁负责 rollout 的关键决策？","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","ownership","mixed"]},
+  {"id":"recruiting-probe-mixed-tradeoff-016","modeTemplateType":"recruiting","language":"mixed","transcriptTurns":[{"speaker":"interviewer","text":"具体的例子：what tradeoff did you make and how did you verify it?","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","tradeoff_or_verification","mixed"]},
+  {"id":"recruiting-probe-en-action-017","modeTemplateType":"recruiting","language":"en","transcriptTurns":[{"speaker":"interviewer","text":"Tell me about your experience with a difficult customer escalation.","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","personal_action","en"]},
+  {"id":"recruiting-probe-zh-ownership-018","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"interviewer","text":"介绍一下你的背景，并举个具体例子说明你承担的责任。","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_experience_probe","outputType":"spoken_response"},"tags":["candidate_experience_probe","ownership","zh"]},
+
+  {"id":"recruiting-interest-zh-001","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"candidate","text":"我对这个岗位很感兴趣。","final":true}],"expected":{"shouldEmit":true,"actionType":"strong_fit_signal","outputType":"spoken_response"},"tags":["strong_fit_signal","explicit_interest","zh"]},
+  {"id":"recruiting-interest-zh-002","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"candidate","text":"我很想加入这个团队。","final":true}],"expected":{"shouldEmit":true,"actionType":"strong_fit_signal","outputType":"spoken_response"},"tags":["strong_fit_signal","explicit_interest","zh"]},
+  {"id":"recruiting-interest-en-003","modeTemplateType":"recruiting","language":"en","transcriptTurns":[{"speaker":"candidate","text":"I am very interested in this role.","final":true}],"expected":{"shouldEmit":true,"actionType":"strong_fit_signal","outputType":"spoken_response"},"tags":["strong_fit_signal","explicit_interest","en"]},
+  {"id":"recruiting-interest-mixed-004","modeTemplateType":"recruiting","language":"mixed","transcriptTurns":[{"speaker":"candidate","text":"这个 position really interests me，我很期待加入。","final":true}],"expected":{"shouldEmit":true,"actionType":"strong_fit_signal","outputType":"spoken_response"},"tags":["strong_fit_signal","explicit_interest","mixed"]},
+
+  {"id":"recruiting-collision-001","modeTemplateType":"recruiting","language":"en","transcriptTurns":[{"speaker":"interviewer","text":"Tell me about your experience owning a migration.","final":true},{"speaker":"candidate","text":"I am very interested in this role, and can you confirm visa support?","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_concern","outputType":"spoken_response","acceptedAnswer":"The current recruiting materials are not enough to confirm this policy. Please verify it with the recruiter or hiring team before sharing a commitment."},"tags":["multi_candidate_collision","candidate_concern","en"]},
+  {"id":"recruiting-collision-002","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"interviewer","text":"讲讲你的经验，举个具体例子。","final":true},{"speaker":"candidate","text":"我对这个岗位很感兴趣，也想确认薪资范围。","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_concern","outputType":"spoken_response","acceptedAnswer":"当前招聘材料不足，不能确认这项政策。建议先向招聘负责人或 hiring team 核实后再回复候选人。"},"tags":["multi_candidate_collision","candidate_concern","zh"]},
+  {"id":"recruiting-collision-003","modeTemplateType":"recruiting","language":"mixed","transcriptTurns":[{"speaker":"interviewer","text":"Give me an example of your ownership.","final":true},{"speaker":"candidate","text":"I am excited to join this team，但我担心 remote work 政策。","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_concern","outputType":"spoken_response","acceptedAnswer":"当前招聘材料不足，不能确认这项政策。建议先向招聘负责人或 hiring team 核实后再回复候选人。"},"tags":["multi_candidate_collision","candidate_concern","mixed"]},
+  {"id":"recruiting-collision-004","modeTemplateType":"recruiting","language":"en","transcriptTurns":[{"speaker":"interviewer","text":"Walk me through your background.","final":true},{"speaker":"candidate","text":"This role really interests me, but I have a concern about relocation.","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_concern","outputType":"spoken_response","acceptedAnswer":"The current recruiting materials are not enough to confirm this policy. Please verify it with the recruiter or hiring team before sharing a commitment."},"tags":["multi_candidate_collision","candidate_concern","en"]},
+  {"id":"recruiting-collision-005","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"interviewer","text":"举一个例子说明你的结果。","final":true},{"speaker":"candidate","text":"我很想加入，同时想确认 offer 流程。","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_concern","outputType":"spoken_response","acceptedAnswer":"当前招聘材料不足，不能确认这项政策。建议先向招聘负责人或 hiring team 核实后再回复候选人。"},"tags":["multi_candidate_collision","candidate_concern","zh"]},
+  {"id":"recruiting-collision-006","modeTemplateType":"recruiting","language":"mixed","transcriptTurns":[{"speaker":"interviewer","text":"Tell me about your experience with a launch.","final":true},{"speaker":"candidate","text":"这个岗位很吸引我，不过 start date 可以确认吗？","final":true}],"expected":{"shouldEmit":true,"actionType":"candidate_concern","outputType":"spoken_response","acceptedAnswer":"当前招聘材料不足，不能确认这项政策。建议先向招聘负责人或 hiring team 核实后再回复候选人。"},"tags":["multi_candidate_collision","candidate_concern","mixed"]},
+
+  {"id":"recruiting-negative-small-talk-001","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"candidate","text":"今天天气不错，谢谢你。","final":true}],"expected":{"shouldEmit":false},"negativeReason":"unrelated_small_talk","tags":["negative","zh"]},
+  {"id":"recruiting-negative-internal-002","modeTemplateType":"recruiting","language":"en","transcriptTurns":[{"speaker":"internal","text":"Internal note: update the ATS after the call.","final":true}],"expected":{"shouldEmit":false},"negativeReason":"internal_chatter","tags":["negative","internal"]},
+  {"id":"recruiting-negative-no-policy-003","modeTemplateType":"recruiting","language":"mixed","transcriptTurns":[{"speaker":"candidate","text":"我只是想了解面试流程，no policy question today.","final":true}],"expected":{"shouldEmit":false},"negativeReason":"low_value","tags":["negative","mixed"]},
+  {"id":"recruiting-negative-technical-004","modeTemplateType":"recruiting","language":"en","transcriptTurns":[{"speaker":"candidate","text":"I use TypeScript and enjoy distributed systems.","final":true}],"expected":{"shouldEmit":false},"negativeReason":"missing_evidence","tags":["negative","en"]},
+  {"id":"recruiting-negative-family-005","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"candidate","text":"我会照顾家人，也会按时完成工作安排。","final":true}],"expected":{"shouldEmit":false},"negativeReason":"unrelated_small_talk","tags":["negative","protected_context"]},
+  {"id":"recruiting-negative-process-006","modeTemplateType":"recruiting","language":"en","transcriptTurns":[{"speaker":"interviewer","text":"We will explain the interview process and next meeting format.","final":true}],"expected":{"shouldEmit":false},"negativeReason":"low_value","tags":["negative","en"]},
+  {"id":"recruiting-negative-internal-007","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"internal","text":"内部备注：会后整理候选人材料。","final":true}],"expected":{"shouldEmit":false},"negativeReason":"internal_chatter","tags":["negative","internal"]},
+  {"id":"recruiting-negative-greeting-008","modeTemplateType":"recruiting","language":"mixed","transcriptTurns":[{"speaker":"candidate","text":"Nice to meet you，很高兴认识大家。","final":true}],"expected":{"shouldEmit":false},"negativeReason":"unrelated_small_talk","tags":["negative","mixed"]},
+  {"id":"recruiting-negative-role-title-009","modeTemplateType":"recruiting","language":"en","transcriptTurns":[{"speaker":"candidate","text":"The backend role sounds technical.","final":true}],"expected":{"shouldEmit":false},"negativeReason":"low_value","tags":["negative","en"]},
+  {"id":"recruiting-negative-handoff-010","modeTemplateType":"recruiting","language":"zh","transcriptTurns":[{"speaker":"candidate","text":"谢谢，我等下一轮通知。","final":true}],"expected":{"shouldEmit":false},"negativeReason":"unrelated_small_talk","tags":["negative","zh"]}
 ]

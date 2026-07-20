@@ -3,17 +3,21 @@ import { DynamicActionEngine } from '../dynamic-actions/DynamicActionEngine';
 import { DynamicActionContinuationService } from '../dynamic-actions/DynamicActionContinuationService';
 import {
   buildFdeContinuationDerivedActionContext,
+  buildRecruitingContinuationDerivedActionContext,
   ContinuationPlannerError,
   type ContinuationPlannerResult,
 } from '../dynamic-actions/DynamicActionContinuationPlanner';
+import { resolveDynamicActionContinuationPolicy } from '../dynamic-actions/DynamicActionContinuation';
 import type { EnqueueDerivedActionInput } from '../dynamic-actions/DynamicActionEngine';
 import { buildRealtimeContextPlan, type RealtimeContextCandidate } from '../context/RealtimeContextOrchestrator';
 import { buildDynamicActionRuntimeGrounding } from '../dynamic-actions/DynamicActionRuntimeGrounding';
 import {
-  buildCapabilityFitSafeFallback,
-  buildFdeGroundedAnswerSafeFallback,
   evaluateDynamicActionAcceptedOutput,
 } from '../dynamic-actions/DynamicActionAcceptedOutputEvaluator';
+import {
+  buildDynamicActionRuntimeSafeFallback,
+  getDynamicActionRuntimeValidationPolicy,
+} from '../dynamic-actions/DynamicActionRuntimeValidationPolicy';
 import { buildDynamicActionArtifacts } from '../dynamic-actions/DynamicActionArtifacts';
 import { buildPostCallEnhancements } from '../post-call/PostCallWorkflow';
 import type { AnswerCitationRecord, AnswerDegradedReason } from '../../db/DatabaseManager';
@@ -23,7 +27,7 @@ import type { ClaimGroundingVerdict } from '../dynamic-actions/DynamicActionClai
 export interface DynamicActionContinuationFixture {
   id: string;
   language: 'zh' | 'en' | 'mixed';
-  modeTemplateType: 'sales' | 'fde';
+  modeTemplateType: 'sales' | 'fde' | 'recruiting';
   initialAction: {
     type: string;
     sourceIntent: string;
@@ -53,6 +57,15 @@ export interface DynamicActionContinuationFixture {
     reasonCode: ClaimGroundingVerdict['reasonCode'];
   };
   generatedAnswer: string;
+  negativeReason?:
+    | 'wrong_speaker'
+    | 'interim_turn'
+    | 'unrelated_topic'
+    | 'provider_scope_denial'
+    | 'planner_timeout'
+    | 'invalid_json'
+    | 'final_hiring_judgment'
+    | 'unsupported_invented_evidence';
   expected: {
     plannerCalls: number;
     derivedActionEmitted: boolean;
@@ -69,6 +82,7 @@ export interface ContinuationFixtureResult {
   plannerCallsWithoutPending: number;
   parentActionId?: string;
   childActionId?: string;
+  derivedActionType?: string;
   derivedActionEmitted: boolean;
   duplicateDerivedActions: number;
   unsafeVisibleAnswerCount: number;
@@ -122,6 +136,7 @@ export async function runDynamicActionContinuationFixture(input: {
   });
 
   const initialActionCompleted = fixture.initialAction.generationStatus === 'completed';
+  const modeRecord = CONTINUATION_FIXTURE_MODE_RECORDS[fixture.modeTemplateType];
   if (initialActionCompleted) {
     service.registerCompletedAction({
       id: parentActionId,
@@ -129,11 +144,11 @@ export async function runDynamicActionContinuationFixture(input: {
       modeId,
       modeTemplateType: fixture.modeTemplateType,
       type: fixture.initialAction.type,
-      label: fixture.modeTemplateType === 'fde' ? 'FDE process discovery' : 'Capability discovery',
+      label: modeRecord.initialActionLabel,
       productContract: {
         outputType: 'checklist',
-        whyNow: fixture.modeTemplateType === 'fde' ? 'Customer is describing manufacturing process or AI validation context.' : 'Customer is describing capability fit.',
-        userAction: fixture.modeTemplateType === 'fde' ? 'Clarify FDE process context' : 'Ask a focused capability question',
+        whyNow: modeRecord.initialWhyNow,
+        userAction: modeRecord.initialUserAction,
         evidenceSummary: 'discovery turn',
         outputPromise: 'short questions',
         riskState: 'normal',
@@ -148,9 +163,7 @@ export async function runDynamicActionContinuationFixture(input: {
       expiresAt: now() + 60_000,
       promptInstruction: '',
       sourceIntent: fixture.initialAction.sourceIntent as EnqueueDerivedActionInput['sourceIntent'],
-      latestTurn: fixture.modeTemplateType === 'fde'
-        ? '请补充当前流程、流程对象、人审点和验证方式。'
-        : 'Can you share the object, workflow, and validation metric?',
+      latestTurn: modeRecord.initialTurn,
       language: fixture.language,
       keyEntities: [],
       retrievalQuery: '',
@@ -178,34 +191,30 @@ export async function runDynamicActionContinuationFixture(input: {
     if (outcome.kind !== 'ready' || !outcome.continuation || !outcome.plannerResult) continue;
     lastReadyResult = outcome.plannerResult;
     const slots = outcome.plannerResult.extractedSlots;
-    const derivedType = fixture.modeTemplateType === 'fde' ? 'fde_grounded_answer' : 'capability_fit_answer';
-    const fdeContext = fixture.modeTemplateType === 'fde'
-      ? buildFdeContinuationDerivedActionContext({
-        originalTurn: outcome.continuation.originalTurn,
-        currentTurn: turn.text,
-        slots,
-      })
-      : null;
-    const salesKeyEntities = [
-      slots.object,
-      slots.workflow,
-      slots.environment,
-      slots.validationNeed,
-      ...(slots.metrics ?? []),
-      ...(slots.systemObjects ?? []),
-    ].filter((value): value is string => Boolean(value));
+    const continuationPolicy = resolveDynamicActionContinuationPolicy({
+      type: fixture.initialAction.type,
+      modeTemplateType: fixture.modeTemplateType,
+      sourceIntent: fixture.initialAction.sourceIntent,
+      status: 'completed',
+    });
+    if (!continuationPolicy) throw new Error(`missing_continuation_policy:${fixture.id}`);
+    const derivedContext = modeRecord.buildDerivedContext({
+      originalTurn: outcome.continuation.originalTurn,
+      currentTurn: turn.text,
+      slots,
+    });
     derivedAction = engine.enqueueDerivedAction({
       sessionId,
       modeId,
       modeTemplateType: fixture.modeTemplateType,
-      type: derivedType,
+      type: continuationPolicy.answerActionType,
       parentActionId,
       sourceIntent: fixture.initialAction.sourceIntent as EnqueueDerivedActionInput['sourceIntent'],
       latestTurn: turn.text,
       confidence: outcome.plannerResult.confidence,
       language: fixture.language,
-      keyEntities: fdeContext?.keyEntities ?? salesKeyEntities,
-      retrievalQuery: fdeContext?.retrievalQuery ?? [outcome.continuation.originalTurn, turn.text].filter(Boolean).join('\n'),
+      keyEntities: derivedContext.keyEntities,
+      retrievalQuery: derivedContext.retrievalQuery,
       evidenceRefs: [
         ...outcome.continuation.originalEvidenceRefs,
         { source: 'transcript', text: turn.text, timestamp: now() },
@@ -223,6 +232,7 @@ export async function runDynamicActionContinuationFixture(input: {
   let unsafeVisibleAnswerCount = 0;
   let postCallCarryover = false;
   if (derivedAction && lastReadyResult) {
+    const runtimePolicy = getDynamicActionRuntimeValidationPolicy(derivedAction.type);
     const realtimeContextPlan = buildRealtimeContextPlan({
       candidates: fixture.grounding.candidates,
       tokenBudget: fixture.grounding.tokenBudget,
@@ -251,12 +261,15 @@ export async function runDynamicActionContinuationFixture(input: {
       sourceUtterance: derivedAction.latestTurn,
       sourceIntent: derivedAction.sourceIntent,
       claimGrounding,
+      transcriptEvidence: runtimePolicy?.evidenceKind === 'transcript_evidence'
+        ? fixture.turns.map((turn) => turn.text)
+        : undefined,
     });
-    const visibleAnswer = evaluation.passed
-      ? fixture.generatedAnswer
-      : derivedAction.type === 'fde_grounded_answer'
-        ? buildFdeGroundedAnswerSafeFallback(fixture.language === 'en' ? 'en' : 'zh')
-        : buildCapabilityFitSafeFallback(fixture.language === 'en' ? 'en' : 'zh');
+    const fallback = buildDynamicActionRuntimeSafeFallback(
+      derivedAction.type,
+      fixture.language === 'en' ? 'en' : 'zh',
+    );
+    const visibleAnswer = evaluation.passed ? fixture.generatedAnswer : fallback ?? fixture.generatedAnswer;
     visibleAnswerKind = evaluation.passed ? 'generated' : 'safe_fallback';
     visibleAnswerText = visibleAnswer;
     unsafeVisibleAnswerCount = evaluateDynamicActionAcceptedOutput({
@@ -267,6 +280,9 @@ export async function runDynamicActionContinuationFixture(input: {
       sourceUtterance: derivedAction.latestTurn,
       sourceIntent: derivedAction.sourceIntent,
       claimGrounding: evaluation.passed ? claimGrounding : { verdict: 'unavailable', evidenceIds: [], reasonCode: 'no_injected_evidence', verificationSource: 'continuation_grounding_verifier' },
+      transcriptEvidence: runtimePolicy?.evidenceKind === 'transcript_evidence'
+        ? fixture.turns.map((turn) => turn.text)
+        : undefined,
     }).passed ? 0 : 1;
     const artifacts = buildDynamicActionArtifacts({
       actions: [{
@@ -307,15 +323,12 @@ export async function runDynamicActionContinuationFixture(input: {
       summaryData: { overview: 'Continuation fixture.', actionItems: [] },
       dynamicActionArtifacts: artifacts,
     });
-    postCallCarryover = fixture.modeTemplateType === 'fde'
-      ? postCall.coachingInsights.some((insight) =>
-        ['fde_process_confirmation', 'fde_ai_boundary_followup', 'fde_validation_missing_fields', 'fde_delivery_risk_followup'].includes(insight.type))
-      : postCall.acceptedCapabilityFitRecords.some((record) => record.actionId === derivedAction?.id);
+    postCallCarryover = modeRecord.hasPostCallCarryover(postCall, derivedAction.id);
   }
 
-  const slotPreservationPassed = !derivedAction || fixture.modeTemplateType !== 'fde' || !lastReadyResult
+  const slotPreservationPassed = !derivedAction || !lastReadyResult
     ? true
-    : fdeRequiredSlotValues(lastReadyResult.extractedSlots).every((value) =>
+    : modeRecord.requiredSlotValues(lastReadyResult.extractedSlots).every((value) =>
       derivedAction.keyEntities?.includes(value) || derivedAction.retrievalQuery?.includes(value));
 
   const result: ContinuationFixtureResult = {
@@ -326,6 +339,7 @@ export async function runDynamicActionContinuationFixture(input: {
     plannerCallsWithoutPending: 0,
     parentActionId: initialActionCompleted ? parentActionId : undefined,
     childActionId: derivedAction?.id,
+    derivedActionType: derivedAction?.type,
     derivedActionEmitted: Boolean(derivedAction),
     duplicateDerivedActions: 0,
     unsafeVisibleAnswerCount,
@@ -377,7 +391,7 @@ function buildFixtureClaimVerdict(
 function validateContinuationFixture(fixture: DynamicActionContinuationFixture): void {
   if (!fixture || typeof fixture.id !== 'string' || !fixture.id.trim()) throw new Error('invalid_continuation_fixture:id');
   if (!['zh', 'en', 'mixed'].includes(fixture.language)) throw new Error(`invalid_continuation_fixture_language:${fixture.id}`);
-  if (!['sales', 'fde'].includes(fixture.modeTemplateType)) throw new Error(`invalid_continuation_fixture_mode:${fixture.id}`);
+  if (!CONTINUATION_FIXTURE_MODE_RECORDS[fixture.modeTemplateType]) throw new Error(`invalid_continuation_fixture_mode:${fixture.id}`);
   if (!isValidInitialContinuationAction(fixture.modeTemplateType, fixture.initialAction?.type)) {
     throw new Error(`invalid_continuation_fixture_initial_action:${fixture.id}`);
   }
@@ -414,22 +428,23 @@ function validateContinuationFixture(fixture: DynamicActionContinuationFixture):
   }
 }
 
-function isValidInitialContinuationAction(mode: 'sales' | 'fde', actionType: string): boolean {
-  if (mode === 'sales') return actionType === 'discovery_question';
-  return [
-    'fde_discovery_probe',
-    'fde_risk_blocker',
-    'fde_agent_feasibility',
-    'fde_success_criteria',
-    'fde_next_step',
-    'fde_integration_check',
-    'fde_security_review',
-  ].includes(actionType);
+function isValidInitialContinuationAction(mode: DynamicActionContinuationFixture['modeTemplateType'], actionType: string): boolean {
+  return Boolean(resolveDynamicActionContinuationPolicy({
+    type: actionType,
+    modeTemplateType: mode,
+    sourceIntent: CONTINUATION_FIXTURE_MODE_RECORDS[mode]?.defaultSourceIntent ?? '',
+    status: 'completed',
+  }));
 }
 
-function isValidContinuationSourceIntent(mode: 'sales' | 'fde', sourceIntent: string): boolean {
-  if (mode === 'sales') return ['sales_capability_fit', 'sales_contextual_proof_discovery'].includes(sourceIntent);
-  return ['fde_discovery', 'fde_integration', 'fde_security', 'fde_risk', 'fde_agent_feasibility', 'fde_success', 'fde_next_step'].includes(sourceIntent);
+function isValidContinuationSourceIntent(mode: DynamicActionContinuationFixture['modeTemplateType'], sourceIntent: string): boolean {
+  const actionType = CONTINUATION_FIXTURE_MODE_RECORDS[mode]?.initialActionForIntent(sourceIntent);
+  return Boolean(actionType && resolveDynamicActionContinuationPolicy({
+    type: actionType,
+    modeTemplateType: mode,
+    sourceIntent,
+    status: 'completed',
+  }));
 }
 
 function fdeRequiredSlotValues(slots: ContinuationPlannerResult['extractedSlots']): string[] {
@@ -442,3 +457,80 @@ function fdeRequiredSlotValues(slots: ContinuationPlannerResult['extractedSlots'
     slots.validationNeed,
   ].filter((value): value is string => Boolean(value?.trim()));
 }
+
+type ContinuationFixtureModeRecord = {
+  defaultSourceIntent: string;
+  initialActionLabel: string;
+  initialWhyNow: string;
+  initialUserAction: string;
+  initialTurn: string;
+  initialActionForIntent: (sourceIntent: string) => string | undefined;
+  buildDerivedContext: (input: {
+    originalTurn: string;
+    currentTurn: string;
+    slots: ContinuationPlannerResult['extractedSlots'];
+  }) => { keyEntities: string[]; retrievalQuery: string };
+  requiredSlotValues: (slots: ContinuationPlannerResult['extractedSlots']) => string[];
+  hasPostCallCarryover: (postCall: ReturnType<typeof buildPostCallEnhancements>, actionId: string) => boolean;
+};
+
+const CONTINUATION_FIXTURE_MODE_RECORDS: Record<DynamicActionContinuationFixture['modeTemplateType'], ContinuationFixtureModeRecord> = {
+  sales: {
+    defaultSourceIntent: 'sales_capability_fit',
+    initialActionLabel: 'Capability discovery',
+    initialWhyNow: 'Customer is describing capability fit.',
+    initialUserAction: 'Ask a focused capability question',
+    initialTurn: 'Can you share the object, workflow, and validation metric?',
+    initialActionForIntent: (sourceIntent) =>
+      ['sales_capability_fit', 'sales_contextual_proof_discovery'].includes(sourceIntent) ? 'discovery_question' : undefined,
+    buildDerivedContext: ({ originalTurn, currentTurn, slots }) => ({
+      keyEntities: [
+        slots.object,
+        slots.workflow,
+        slots.environment,
+        slots.validationNeed,
+        ...(slots.metrics ?? []),
+        ...(slots.systemObjects ?? []),
+      ].filter((value): value is string => Boolean(value)),
+      retrievalQuery: [originalTurn, currentTurn].filter(Boolean).join('\n'),
+    }),
+    requiredSlotValues: () => [],
+    hasPostCallCarryover: (postCall, actionId) =>
+      postCall.acceptedCapabilityFitRecords.some((record) => record.actionId === actionId),
+  },
+  fde: {
+    defaultSourceIntent: 'fde_discovery',
+    initialActionLabel: 'FDE process discovery',
+    initialWhyNow: 'Customer is describing manufacturing process or AI validation context.',
+    initialUserAction: 'Clarify FDE process context',
+    initialTurn: '请补充当前流程、流程对象、人审点和验证方式。',
+    initialActionForIntent: (sourceIntent) => ({
+      fde_discovery: 'fde_discovery_probe',
+      fde_integration: 'fde_integration_check',
+      fde_security: 'fde_security_review',
+      fde_risk: 'fde_risk_blocker',
+      fde_agent_feasibility: 'fde_agent_feasibility',
+      fde_success: 'fde_success_criteria',
+      fde_next_step: 'fde_next_step',
+    })[sourceIntent],
+    buildDerivedContext: buildFdeContinuationDerivedActionContext,
+    requiredSlotValues: fdeRequiredSlotValues,
+    hasPostCallCarryover: (postCall) => postCall.coachingInsights.some((insight) =>
+      ['fde_process_confirmation', 'fde_ai_boundary_followup', 'fde_validation_missing_fields', 'fde_delivery_risk_followup'].includes(insight.type)),
+  },
+  recruiting: {
+    defaultSourceIntent: 'recruiting_scorecard_gap',
+    initialActionLabel: 'Candidate evidence follow-up',
+    initialWhyNow: 'Interviewer is collecting job-related evidence.',
+    initialUserAction: 'Ask a neutral evidence follow-up',
+    initialTurn: 'Please share one concrete action, result, and what still needs verification.',
+    initialActionForIntent: (sourceIntent) =>
+      ['recruiting_scorecard_gap', 'recruiting_bei_evidence_gap', 'recruiting_situational_evidence_gap', 'recruiting_risk_verification', 'evaluate_answer', 'request_example'].includes(sourceIntent)
+        ? 'candidate_experience_probe'
+        : undefined,
+    buildDerivedContext: buildRecruitingContinuationDerivedActionContext,
+    requiredSlotValues: () => [],
+    hasPostCallCarryover: (postCall, actionId) =>
+      postCall.acceptedRecruitingRecords.some((record) => record.actionId === actionId),
+  },
+};

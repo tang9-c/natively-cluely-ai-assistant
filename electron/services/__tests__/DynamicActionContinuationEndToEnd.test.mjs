@@ -71,6 +71,41 @@ test('FDE continuation fixtures meet process-first release gates', async () => {
   }
 });
 
+test('recruiting continuation fixtures emit neutral evidence summaries only after eligible evidence', async () => {
+  const { loadDynamicActionContinuationFixtures, runDynamicActionContinuationFixture } = await import(moduleUrl);
+  const fixtures = loadDynamicActionContinuationFixtures(
+    path.join(process.cwd(), 'tests/fixtures/dynamic-actions/continuation/recruiting.json'),
+  );
+  const results = [];
+  for (const fixture of fixtures) results.push(await runDynamicActionContinuationFixture({ fixture }));
+
+  const positives = results.filter((result) => result.shouldEmit);
+  const negatives = results.filter((result) => !result.shouldEmit);
+  assert.equal(fixtures.length, 16);
+  assert.equal(positives.length, 8);
+  assert.equal(negatives.length, 8);
+  assert.equal(positives.every((result) =>
+    result.derivedActionEmitted &&
+    result.derivedActionType === 'candidate_evidence_summary' &&
+    result.duplicateDerivedActions === 0,
+  ), true);
+  assert.equal(negatives.every((result) => !result.derivedActionEmitted && result.visibleAnswerKind === 'none'), true);
+  assert.equal(positives.every((result) => result.visibleAnswerKind === 'generated' && result.postCallCarryover), true);
+  assert.deepEqual(
+    new Set(negatives.map((result) => fixtures.find((fixture) => fixture.id === result.fixtureId)?.negativeReason)),
+    new Set([
+      'wrong_speaker',
+      'interim_turn',
+      'unrelated_topic',
+      'provider_scope_denial',
+      'planner_timeout',
+      'invalid_json',
+      'final_hiring_judgment',
+      'unsupported_invented_evidence',
+    ]),
+  );
+});
+
 function mentionsArchitectureContext(text) {
   return /API|SSO|接口|端点|系统架构|架构|endpoint|auth|sandbox|production|集成方式|权限/i.test(text);
 }
