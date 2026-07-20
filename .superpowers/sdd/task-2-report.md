@@ -84,3 +84,44 @@ Before the reviewer fix, the build passed and five runtime tests failed as expec
 - No second cloud gate was added. `IntelligenceEngine.runWhatShouldISay()` invokes the grounded-claim verifier only when a caller has already supplied `dynamicActionValidation`; it does not create or authorize an action.
 - The existing `partial invalid cloud JSON defers every required recruiting candidate without fallback` test in `electron/services/__tests__/ModeEventClassifier.test.mjs` proves that a failed/partial cloud semantic gate returns `defer` with `cloud_invalid_json` for every required recruiting candidate.
 - Therefore a failed cloud gate yields no approved recruiting action for the runtime path to validate. The claim verifier remains post-action grounding validation with its existing timeout and provider-routing behavior.
+
+## Second Reviewer Follow-up: Cloud Boundary and Fail-Closed Recruiting
+
+### Implementation
+
+- Code commit: `f17376c4 fix(recruiting): enforce cloud gate and fail-closed policy`.
+- Added the backward-compatible `StructuredGenerationOptions.requireCloudProvider` boundary. Its default remains `false`, preserving the existing Codex CLI, Ollama, custom, and cURL structured-generation fallbacks.
+- With `requireCloudProvider: true`, structured generation admits only explicitly remote OpenAI, Claude, Gemini, Doubao, and QCLOUD providers. Codex CLI, Ollama, custom providers, and cURL providers are not inspected or invoked. Cloud-only provider errors are reduced to `provider_timeout` or `provider_request_failed`, so an upstream error cannot echo prompt/transcript content into logs or diagnostics.
+- `IntelligenceEngine.classifyDynamicActionWithCloud()` now sets `requireCloudProvider: true`. No cloud provider or exhaustion throws through the existing `CloudSemanticGateError` mapping; `ModeEventClassifier` then applies the existing required-action defer policy instead of authorizing a local semantic result.
+- `candidate_concern` is fail-closed. Only an explicit recruiting-material insufficiency answer that also directs the user to a recruiter/hiring team may skip claim verification. Every other answer requires both a used recruiting material/PPTX source and a `supported` claim-grounding verdict.
+- The claim verifier uses the same safe-insufficiency exception. It no longer treats an answer as unverified merely because it is absent from a positive-policy keyword list.
+- Recruiting safety rules remain separated into method classification, final hiring judgment, protected-class basis, and aggressive pressure categories. Table-driven Chinese/English tests cover stress-test classification, hire/not-fit judgments, nationality, same-day offer pressure, and ordinary evidence false-positive guards.
+
+### RED Evidence
+
+The first focused run compiled and then failed 7 of 50 tests: cloud-only invoked Codex CLI, the semantic-gate option was absent, local-only recruiting was not deferred at the provider boundary, substantive recruiting answers skipped verification, and the new safety equivalents were accepted.
+
+A second table-driven RED run failed the pressure-interview variant and showed that the old unbounded English `age`/`race` alternatives misclassified `managed`/`traced` evidence. After fixing those, a final RED sentinel test proved provider errors could echo prompt content into the cloud-only exception and warning log.
+
+### GREEN Evidence
+
+Command:
+
+```bash
+rtk npm run build:electron:tsc && rtk node --test electron/llm/__tests__/LLMHelper.StructuredGeneration.test.mjs electron/services/__tests__/ContextNeedDecision.test.mjs electron/services/__tests__/DynamicActionRuntimeGrounding.test.mjs electron/services/__tests__/DynamicActionRuntimeEvaluation.test.mjs electron/services/__tests__/DynamicActionClaimGroundingVerifier.test.mjs electron/services/__tests__/IntelligenceEngineDynamicActions.test.mjs electron/services/__tests__/ModeEventClassifier.test.mjs
+```
+
+- Electron TypeScript compilation passed.
+- 73 tests passed, 0 failed across the reviewer coverage and original Task 2 focused suites.
+- Default structured generation still used Ollama; cloud-only generation invoked none of Ollama, Codex CLI, custom, or cURL providers and did not leak a provider-echoed prompt sentinel.
+- The local-only recruiting engine test emitted no `candidate_concern`. The existing `partial invalid cloud JSON defers every required recruiting candidate without fallback` test also remained green, proving the verifier cannot become an action-entry path after cloud-gate failure.
+
+### Call Order and Record Boundary
+
+- The action-entry order is: `IntelligenceEngine.classifyDynamicActionWithCloud()` -> cloud-only `generateContentStructured()` -> `CloudSemanticGateError` on unavailable/invalid cloud -> `ModeEventClassifier` defer for required recruiting actions. `DynamicActionClaimGroundingVerifier.verify()` is reached only later from accepted-answer runtime validation and cannot create or authorize an action.
+- `candidate_evidence_summary.visibleAnswer` remains unchanged. Task 2 requires its accepted answer to be evaluated against bounded in-process transcript evidence; Task 4 Step 3 explicitly stores the accepted `structuredSummary` in internal recruiting records, caps summaries to 180 characters, and forbids retaining extra raw transcript. Task 4 Step 4 keeps those records in internal coaching and excludes them from candidate-facing follow-up drafts.
+- This internal accepted-answer record is distinct from raw transcript evidence. The existing metadata tests remain green and prove `latestTurn`, `retrievalQuery`, transcript evidence, and excerpts are absent from usage metadata and runtime diagnostics.
+
+### Concerns
+
+- None. The default structured-generation route and existing capability/FDE evaluator behavior are unchanged.
