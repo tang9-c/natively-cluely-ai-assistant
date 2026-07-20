@@ -28,24 +28,28 @@ test('replay manifest has sales, FDE, team-meet, and recruiting generated audio 
   const report = await runDynamicActionReplay({
     manifestPath,
     outputDir,
+    semanticGateMode: 'fixture_oracle',
   });
   assert.ok(report.totalEntries >= 6);
   assert.equal(report.failedEntries, 0);
   assert.equal(report.skippedEntries, report.totalEntries);
   assert.equal(report.entries[0].reason, 'audio_replay_not_enabled_in_this_phase');
   assert.equal(report.environmentStatus, 'not_applicable');
-  assert.deepEqual(report.assetCoverage.requiredReal, { sales: 15, fde: 10, 'team-meet': 5 });
+  assert.deepEqual(report.assetCoverage.requiredReal, { sales: 15, fde: 10, 'team-meet': 5, recruiting: 5 });
   assert.equal(report.assetCoverage.availableSynthetic.sales, 4);
   assert.equal(report.assetCoverage.availableSynthetic.fde, 2);
   assert.equal(report.assetCoverage.availableSynthetic['team-meet'], 1);
+  assert.equal(report.assetCoverage.availableSynthetic.recruiting, 3);
   assert.equal(report.assetCoverage.availableReal.sales, 0);
   assert.equal(report.assetCoverage.blockedReal.sales, 15);
   assert.equal(report.assetCoverage.blockedReal.fde, 10);
   assert.equal(report.assetCoverage.blockedReal['team-meet'], 5);
+  assert.equal(report.assetCoverage.blockedReal.recruiting, 5);
   assert.deepEqual(report.assetCoverageFailures, [
     { modeTemplateType: 'sales', requiredReal: 15, availableReal: 0, missingReal: 15 },
     { modeTemplateType: 'fde', requiredReal: 10, availableReal: 0, missingReal: 10 },
     { modeTemplateType: 'team-meet', requiredReal: 5, availableReal: 0, missingReal: 5 },
+    { modeTemplateType: 'recruiting', requiredReal: 5, availableReal: 0, missingReal: 5 },
   ]);
   assert.ok(fs.existsSync(path.join(outputDir, 'replay-report.json')));
 });
@@ -78,7 +82,9 @@ test('recruiting audio replay runs through STT output and dynamic action detecti
   assert.equal(report.failedEntries, 0);
   assert.equal(report.environmentStatus, 'ok');
   assert.ok(report.entries.every((entry) => entry.semanticGateMode === 'fixture_oracle'));
-  assert.deepEqual(report.assetCoverageFailures, []);
+  assert.deepEqual(report.assetCoverageFailures, [
+    { modeTemplateType: 'recruiting', requiredReal: 5, availableReal: 0, missingReal: 5 },
+  ]);
   assert.equal(audioInputs.length, 3);
   assert.ok(audioInputs.every((input) => input.audioPath.endsWith('.wav')));
 
@@ -141,7 +147,7 @@ test('sales audio replay runs through STT output and dynamic action detection', 
   assert.ok(fs.existsSync(path.join(outputDir, 'replay-report.json')));
 });
 
-test('audio replay defaults to real semantic gate instead of fixture oracle', async () => {
+test('audio replay defaults to real semantic gate and rejects a missing classifier', async () => {
   const { runDynamicActionReplay, loadFixtureBackedSttTranscripts } = await load();
   const manifestPath = path.join(process.cwd(), 'tests/fixtures/dynamic-actions/replay/replay-manifest.json');
   const outputDir = path.join(process.cwd(), 'reports/dynamic-actions-real-gate-replay-test');
@@ -151,17 +157,16 @@ test('audio replay defaults to real semantic gate instead of fixture oracle', as
     manifestPath,
     fixtureRoot: path.join(process.cwd(), 'tests/fixtures/dynamic-actions/product'),
   });
-  const report = await runDynamicActionReplay({
-    manifestPath,
-    outputDir,
-    audioRoot: process.cwd(),
-    modeTemplateTypes: ['sales'],
-    transcribeAudio: async ({ entry }) => sttTranscripts.get(entry.id),
-  });
-
-  assert.equal(report.totalEntries, 4);
-  assert.ok(report.entries.every((entry) => entry.semanticGateMode === 'real'));
-  assert.ok(report.failedEntries > 0);
+  await assert.rejects(
+    runDynamicActionReplay({
+      manifestPath,
+      outputDir,
+      audioRoot: process.cwd(),
+      modeTemplateTypes: ['sales'],
+      transcribeAudio: async ({ entry }) => sttTranscripts.get(entry.id),
+    }),
+    /semanticGateMode "real" requires cloudClassifier/,
+  );
 });
 
 test('replay runner resolves audio paths from explicit audio root', async () => {
@@ -194,6 +199,7 @@ test('replay runner resolves audio paths from explicit audio root', async () => 
       manifestPath,
       outputDir: path.join(dir, 'out'),
       audioRoot,
+      semanticGateMode: 'fixture_oracle',
     });
     assert.equal(report.failedEntries, 0);
     assert.equal(report.entries[0].reason, 'audio_replay_not_enabled_in_this_phase');

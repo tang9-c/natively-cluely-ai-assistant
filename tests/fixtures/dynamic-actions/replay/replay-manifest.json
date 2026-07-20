@@ -81,7 +81,7 @@
   {
     "id": "recruiting-replay-candidate-concern-zh-001",
     "modeTemplateType": "recruiting",
-    "sourceFixture": "tests/fixtures/dynamic-actions/product/recruiting.json#recruiting-candidate-concern-zh-001",
+    "sourceFixture": "tests/fixtures/dynamic-actions/product/recruiting.json#recruiting-concern-zh-visa-001",
     "audioPath": "tests/fixtures/dynamic-actions/replay/audio/recruiting-candidate-concern-zh-001.wav",
     "expectedMissingAudio": false,
     "language": "zh",
@@ -92,7 +92,7 @@
   {
     "id": "recruiting-replay-experience-probe-en-001",
     "modeTemplateType": "recruiting",
-    "sourceFixture": "tests/fixtures/dynamic-actions/product/recruiting.json#recruiting-experience-probe-en-001",
+    "sourceFixture": "tests/fixtures/dynamic-actions/product/recruiting.json#recruiting-probe-en-ownership-003",
     "audioPath": "tests/fixtures/dynamic-actions/replay/audio/recruiting-experience-probe-en-001.wav",
     "expectedMissingAudio": false,
     "language": "en",
@@ -103,7 +103,7 @@
   {
     "id": "recruiting-replay-identity-mismatch-mixed-001",
     "modeTemplateType": "recruiting",
-    "sourceFixture": "tests/fixtures/dynamic-actions/product/recruiting.json#recruiting-negative-identity-mismatch-mixed-001",
+    "sourceFixture": "tests/fixtures/dynamic-actions/product/recruiting.json#recruiting-negative-internal-002",
     "audioPath": "tests/fixtures/dynamic-actions/replay/audio/recruiting-identity-mismatch-mixed-001.wav",
     "expectedMissingAudio": false,
     "language": "mixed",
