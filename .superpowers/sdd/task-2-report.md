@@ -195,3 +195,33 @@ rtk npm run build:electron:tsc && rtk node --test electron/services/__tests__/Dy
 ### Concerns
 
 - None. `.tmp/` remains untouched.
+
+## Same-Sentence Contrast Bypass Fix
+
+### Implementation
+
+- Code commit: `66f6a290 fix(recruiting): split safety checks at contrast clauses`.
+- Replaced sentence-only safety iteration with `splitRecruitingSafetyClauses()`: text is first split at the existing sentence boundaries, then at explicit English and Chinese contrast connectors (`but`, `however`, `yet`, `但`, `但是`, `然而`, `不过`, `却`).
+- Final-judgment exclusion and protected-class exclusion now apply only to the current clause. A safe first clause cannot suppress an unsafe clause after a contrast connector.
+- Kept the existing pure safe sentence behavior and added one narrow final-judgment pattern for `最终还是直接录用她`.
+
+### RED Evidence
+
+The TDD run compiled and failed at `Do not hire based on this alone, but definitely hire this candidate.` because the first clause's prohibition short-circuited the entire sentence. After clause splitting, the next RED exposed the narrow Chinese form `最终还是直接录用她`, which was then covered without broadening to arbitrary uses of `录用`.
+
+### GREEN Evidence
+
+Command:
+
+```bash
+rtk npm run build:electron:tsc && rtk node --test electron/services/__tests__/DynamicActionRuntimeEvaluation.test.mjs electron/services/__tests__/DynamicActionClaimGroundingVerifier.test.mjs
+```
+
+- Electron TypeScript compilation passed.
+- 21 tests passed, 0 failed.
+- All five verbatim contrast probes are rejected; the existing pure safe final-judgment and protected-class exclusions still pass.
+- Code-review graph reported risk 0.00 with no affected flow or indexed test gap.
+
+### Concerns
+
+- None. `.tmp/` remains untouched.
