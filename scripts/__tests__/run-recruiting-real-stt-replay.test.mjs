@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -217,31 +218,51 @@ test('QA QCloud classifier redacts provider failures', async () => {
   );
 });
 
-test('real recruiting asset gate requires five non-synthetic meetings and eighty complete final-turn labels', async () => {
+test('real recruiting asset gate requires hashed real recordings and unique complete final-turn labels', async () => {
   const { evaluateRecruitingRealAssetGate } = await import('../dynamic-action-real-stt-replay-lib.mjs');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-recruiting-assets-'));
-  const completeLabel = {
-    expectedActionType: null,
-    speakerRole: 'candidate',
-    policyGroundingRequired: false,
-    continuationChildExpected: false,
-  };
   const realEntries = Array.from({ length: 5 }, (_, index) => {
     const audioPath = `meeting-${index}.wav`;
-    fs.writeFileSync(path.join(root, audioPath), 'real meeting audio', 'utf8');
+    const audio = `real meeting audio ${index}`;
+    fs.writeFileSync(path.join(root, audioPath), audio, 'utf8');
     return {
       id: `meeting-${index}`,
       modeTemplateType: 'recruiting',
       audioPath,
       syntheticAudio: false,
-      labeledFinalTurns: Array.from({ length: 16 }, () => ({ ...completeLabel })),
+      realAsset: {
+        sourceKind: 'real_recording',
+        meetingId: `private-meeting-${index}`,
+        audioSha256: createHash('sha256').update(audio).digest('hex'),
+      },
+      labeledFinalTurns: Array.from({ length: 16 }, (_, turnIndex) => {
+        const transcript = `candidate final turn ${index}-${turnIndex}`;
+        return {
+          turnId: `turn-${index}-${turnIndex}`,
+          transcript,
+          transcriptSha256: createHash('sha256').update(transcript).digest('hex'),
+          expectedActionType: null,
+          speakerRole: 'candidate',
+          policyGroundingRequired: false,
+          continuationChildExpected: false,
+          runtimeObservation: {
+            policyGroundingUsed: false,
+            positivePolicyCommitment: false,
+            candidateFacingEvidenceLeak: false,
+            unsafeVisibleAnswer: false,
+            continuationChildEmitted: false,
+            derivedActionCount: 0,
+            finalTurnToDerivedCardMs: null,
+          },
+        };
+      }),
     };
   });
   const syntheticEntry = {
     ...realEntries[0],
     id: 'synthetic-meeting',
     syntheticAudio: true,
-    labeledFinalTurns: Array.from({ length: 100 }, () => ({ ...completeLabel })),
+    realAsset: undefined,
   };
 
   assert.deepEqual(evaluateRecruitingRealAssetGate({
@@ -253,6 +274,7 @@ test('real recruiting asset gate requires five non-synthetic meetings and eighty
     availableRealMeetings: 5,
     requiredLabeledFinalTurns: 80,
     availableLabeledFinalTurns: 80,
+    invalidReasons: [],
   });
 
   assert.deepEqual(evaluateRecruitingRealAssetGate({
@@ -268,6 +290,7 @@ test('real recruiting asset gate requires five non-synthetic meetings and eighty
     availableRealMeetings: 4,
     requiredLabeledFinalTurns: 80,
     availableLabeledFinalTurns: 64,
+    invalidReasons: ['duplicate_audio_path', 'duplicate_meeting_id', 'duplicate_turn_id'],
   });
 
   realEntries[4].labeledFinalTurns.pop();
@@ -280,7 +303,132 @@ test('real recruiting asset gate requires five non-synthetic meetings and eighty
     availableRealMeetings: 5,
     requiredLabeledFinalTurns: 80,
     availableLabeledFinalTurns: 79,
+    invalidReasons: [],
   });
+
+  const tampered = structuredClone(realEntries);
+  tampered[0].realAsset.audioSha256 = '0'.repeat(64);
+  tampered[1].labeledFinalTurns[0].turnId = tampered[0].labeledFinalTurns[0].turnId;
+  tampered[2].labeledFinalTurns[0].transcript = '   ';
+  const tamperedGate = evaluateRecruitingRealAssetGate({ entries: tampered, audioRoot: root });
+  assert.equal(tamperedGate.status, 'BLOCKED_REAL_RECRUITING_ASSETS');
+  assert.deepEqual(tamperedGate.invalidReasons, [
+    'audio_sha256_mismatch',
+    'duplicate_turn_id',
+    'invalid_final_turn_label',
+  ]);
+});
+
+test('real recruiting replay evaluates each labeled final turn and reports prediction-derived release metrics', async () => {
+  const { runDynamicActionReplay } = await import(replayModuleUrl);
+  const fixture = createReplayFixture({
+    transcript: 'Can you confirm visa support?',
+    expected: { shouldEmit: true, actionType: 'candidate_concern', outputType: 'spoken_response' },
+  });
+  const manifest = JSON.parse(fs.readFileSync(fixture.manifestPath, 'utf8'));
+  const audioPath = path.join(fixture.audioRoot, 'meeting.wav');
+  const concernTranscript = 'Can you confirm visa support for this role?';
+  const neutralTranscript = 'Thank you for the clarification.';
+  manifest[0].syntheticAudio = false;
+  manifest[0].realAsset = {
+    sourceKind: 'real_recording',
+    meetingId: 'private-meeting-1',
+    audioSha256: createHash('sha256').update(fs.readFileSync(audioPath)).digest('hex'),
+  };
+  manifest[0].labeledFinalTurns = [
+    {
+      turnId: 'turn-concern',
+      transcript: concernTranscript,
+      transcriptSha256: createHash('sha256').update(concernTranscript).digest('hex'),
+      expectedActionType: 'candidate_concern',
+      speakerRole: 'candidate',
+      policyGroundingRequired: true,
+      continuationChildExpected: false,
+      runtimeObservation: {
+        policyGroundingUsed: true,
+        positivePolicyCommitment: false,
+        candidateFacingEvidenceLeak: false,
+        unsafeVisibleAnswer: false,
+        continuationChildEmitted: false,
+        derivedActionCount: 0,
+        finalTurnToDerivedCardMs: null,
+      },
+    },
+    {
+      turnId: 'turn-neutral',
+      transcript: neutralTranscript,
+      transcriptSha256: createHash('sha256').update(neutralTranscript).digest('hex'),
+      expectedActionType: null,
+      speakerRole: 'candidate',
+      policyGroundingRequired: false,
+      continuationChildExpected: false,
+      runtimeObservation: {
+        policyGroundingUsed: false,
+        positivePolicyCommitment: false,
+        candidateFacingEvidenceLeak: false,
+        unsafeVisibleAnswer: false,
+        continuationChildEmitted: false,
+        derivedActionCount: 0,
+        finalTurnToDerivedCardMs: null,
+      },
+    },
+  ];
+  fs.writeFileSync(fixture.manifestPath, JSON.stringify(manifest), 'utf8');
+
+  const classifiedTranscripts = [];
+  const report = await runDynamicActionReplay({
+    manifestPath: fixture.manifestPath,
+    fixtureRoot: fixture.fixtureRoot,
+    audioRoot: fixture.audioRoot,
+    outputDir: path.join(fixture.root, 'release'),
+    modeTemplateTypes: ['recruiting'],
+    semanticGateMode: 'real',
+    cloudClassifier: async input => {
+      classifiedTranscripts.push(input.transcript);
+      return input.candidates.map(candidate => ({
+        actionType: candidate.actionType,
+        decision: input.transcript === concernTranscript && candidate.actionType === 'candidate_concern'
+          ? 'pass'
+          : 'reject',
+        confidence: 0.95,
+      }));
+    },
+    transcribeAudio: async () => 'Can you confirm visa support?',
+  });
+
+  assert.ok(classifiedTranscripts.includes(concernTranscript));
+  assert.equal(report.recruitingRelease?.metrics.realMeetingCount, 1);
+  assert.equal(report.recruitingRelease?.metrics.labeledFinalTurnCount, 2);
+  assert.equal(report.recruitingRelease?.metrics.precision, 1);
+  assert.equal(report.recruitingRelease?.metrics.recall, 1);
+  assert.equal(report.recruitingRelease?.metrics.overallFalsePositiveRate, 0);
+  assert.deepEqual(report.recruitingRelease?.turns.map(turn => turn.turnId), ['turn-concern', 'turn-neutral']);
+  assert.ok(report.recruitingRelease?.gateFailures.includes('real_recruiting_meetings'));
+  assert.ok(report.recruitingRelease?.gateFailures.includes('labeled_recruiting_final_turns'));
+  assert.doesNotMatch(JSON.stringify(report), /Can you confirm visa support for this role|Thank you for the clarification/);
+});
+
+test('real recruiting replay returns a failing exit code before network calls when private assets are blocked', async () => {
+  const { runRealSttReplay } = await import('../dynamic-action-real-stt-replay-lib.mjs');
+  const previousApiKey = process.env.QCLOUD_LIVE_API_KEY;
+  const previousExitCode = process.exitCode;
+  process.env.QCLOUD_LIVE_API_KEY = 'preflight-only-test-key';
+  process.exitCode = undefined;
+  try {
+    const result = await runRealSttReplay({
+      label: 'Recruiting',
+      scriptName: 'test:dynamic-actions:recruiting-replay:real-stt',
+      modeTemplateType: 'recruiting',
+      outputDirName: 'unused-preflight-test',
+      semanticGateMode: 'real',
+    });
+    assert.equal(result.status, 'BLOCKED_REAL_RECRUITING_ASSETS');
+    assert.equal(process.exitCode, 1);
+  } finally {
+    if (previousApiKey === undefined) delete process.env.QCLOUD_LIVE_API_KEY;
+    else process.env.QCLOUD_LIVE_API_KEY = previousApiKey;
+    process.exitCode = previousExitCode;
+  }
 });
 
 test('fixture oracle remains deterministic for existing sales and FDE replay modes', async () => {

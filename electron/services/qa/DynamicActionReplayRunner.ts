@@ -10,6 +10,10 @@ import {
   type ContinuationFixtureResult,
   type DynamicActionContinuationFixture,
 } from './DynamicActionContinuationFixtureRunner';
+import {
+  evaluateRecruitingReleaseQualityGate,
+  type RecruitingReleaseQualityMetrics,
+} from './DynamicActionMetricsAggregator';
 
 export interface ReplayManifestEntry {
   id: string;
@@ -20,16 +24,37 @@ export interface ReplayManifestEntry {
   language: string;
   speakerCount: number;
   syntheticAudio?: boolean;
+  realAsset?: ReplayRealAssetProvenance;
   continuationFixture?: string;
   runnerMode?: DynamicActionFixtureRunnerMode;
   labeledFinalTurns?: ReplayLabeledFinalTurn[];
 }
 
+export interface ReplayRealAssetProvenance {
+  sourceKind: 'real_recording';
+  meetingId: string;
+  audioSha256: string;
+}
+
 export interface ReplayLabeledFinalTurn {
+  turnId: string;
+  transcript: string;
+  transcriptSha256: string;
   expectedActionType: string | null;
   speakerRole: string;
   policyGroundingRequired: boolean;
   continuationChildExpected: boolean;
+  runtimeObservation: ReplayFinalTurnRuntimeObservation;
+}
+
+export interface ReplayFinalTurnRuntimeObservation {
+  policyGroundingUsed: boolean;
+  positivePolicyCommitment: boolean;
+  candidateFacingEvidenceLeak: boolean;
+  unsafeVisibleAnswer: boolean;
+  continuationChildEmitted: boolean;
+  derivedActionCount: number;
+  finalTurnToDerivedCardMs: number | null;
 }
 
 export interface ReplayRunnerInput {
@@ -68,6 +93,25 @@ export interface ReplayReport {
   assetCoverage: ReplayAssetCoverage;
   assetCoverageFailures: ReplayAssetCoverageFailure[];
   entries: ReplayReportEntry[];
+  recruitingRelease?: ReplayRecruitingReleaseReport;
+}
+
+export interface ReplayRecruitingReleaseReport {
+  metrics: RecruitingReleaseQualityMetrics;
+  gateFailures: string[];
+  turns: ReplayRecruitingTurnResult[];
+  provenance: {
+    sourceKind: 'real_recording';
+    meetingIds: string[];
+  };
+}
+
+export interface ReplayRecruitingTurnResult {
+  meetingId: string;
+  turnId: string;
+  expectedActionType: string | null;
+  actionTypes: string[];
+  elapsedMs: number;
 }
 
 export interface ReplayAssetCoverageFailure {
@@ -303,6 +347,9 @@ export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<
   }
 
   const assetCoverage = buildAssetCoverage(allEntries, audioRoot);
+  const recruitingRelease = semanticGateMode === 'real' && entries.some(entry => entry.modeTemplateType === 'recruiting')
+    ? await evaluateRecruitingLabeledFinalTurns(entries, input.cloudClassifier!)
+    : undefined;
   const report: ReplayReport = {
     totalEntries: entries.length,
     skippedEntries: reportEntries.filter((entry) => entry.status === 'skipped').length,
@@ -312,10 +359,138 @@ export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<
     assetCoverage,
     assetCoverageFailures: buildAssetCoverageFailures(assetCoverage, input.modeTemplateTypes),
     entries: reportEntries,
+    ...(recruitingRelease ? { recruitingRelease } : {}),
   };
   fs.mkdirSync(input.outputDir, { recursive: true });
   fs.writeFileSync(path.join(input.outputDir, 'replay-report.json'), JSON.stringify(report, null, 2));
   return report;
+}
+
+async function evaluateRecruitingLabeledFinalTurns(
+  entries: ReplayManifestEntry[],
+  cloudClassifier: CloudSemanticGateClassifier,
+): Promise<ReplayRecruitingReleaseReport> {
+  const recruitingEntries = entries.filter(entry =>
+    entry.modeTemplateType === 'recruiting'
+    && entry.syntheticAudio === false
+    && entry.realAsset?.sourceKind === 'real_recording');
+  const turns: ReplayRecruitingTurnResult[] = [];
+  let truePositiveCards = 0;
+  let predictedCards = 0;
+  let expectedPositiveTurns = 0;
+  let falsePositiveNegativeTurns = 0;
+  let negativeTurns = 0;
+  let policyVerificationFailures = 0;
+  let policyVerificationTurns = 0;
+  let exclusiveMultiCardTurns = 0;
+  let wrongSpeakerContinuationTurns = 0;
+  let nonCandidateTurns = 0;
+  let ungroundedPositivePolicyCommitments = 0;
+  let candidateFacingEvidenceLeaks = 0;
+  let duplicateDerivedActions = 0;
+  let unsafeVisibleAnswerCount = 0;
+  let derivedFalsePositiveTurns = 0;
+  let derivedNegativeTurns = 0;
+  const derivedLatencies: number[] = [];
+
+  for (const entry of recruitingEntries) {
+    const engine = new DynamicActionEngine();
+    const recentContextTurns: Array<{ speaker: string; text: string }> = [];
+    for (const label of entry.labeledFinalTurns ?? []) {
+      const startedAt = Date.now();
+      const actions = await engine.assessSignals({
+        transcript: label.transcript,
+        speaker: label.speakerRole,
+        modeTemplateType: 'recruiting',
+        modeId: 'recruiting',
+        sessionId: `recruiting-release-${entry.realAsset!.meetingId}`,
+        language: entry.language,
+        cloudClassifier,
+        recentContextTurns,
+      });
+      const elapsedMs = Date.now() - startedAt;
+      const actionTypes = actions.map(action => action.type);
+      turns.push({
+        meetingId: entry.realAsset!.meetingId,
+        turnId: label.turnId,
+        expectedActionType: label.expectedActionType,
+        actionTypes,
+        elapsedMs,
+      });
+      recentContextTurns.push({ speaker: label.speakerRole, text: label.transcript });
+
+      predictedCards += actionTypes.length;
+      if (label.expectedActionType) {
+        expectedPositiveTurns += 1;
+        if (actionTypes.includes(label.expectedActionType)) truePositiveCards += 1;
+      } else {
+        negativeTurns += 1;
+        if (actionTypes.length > 0) falsePositiveNegativeTurns += 1;
+      }
+      if (actionTypes.length > 1) exclusiveMultiCardTurns += 1;
+
+      const observation = label.runtimeObservation;
+      if (label.policyGroundingRequired) {
+        policyVerificationTurns += 1;
+        if (observation.positivePolicyCommitment && !observation.policyGroundingUsed) {
+          policyVerificationFailures += 1;
+        }
+      }
+      if (label.speakerRole !== 'candidate') {
+        nonCandidateTurns += 1;
+        if (observation.continuationChildEmitted) wrongSpeakerContinuationTurns += 1;
+      }
+      if (observation.positivePolicyCommitment && !observation.policyGroundingUsed) {
+        ungroundedPositivePolicyCommitments += 1;
+      }
+      if (observation.candidateFacingEvidenceLeak) candidateFacingEvidenceLeaks += 1;
+      if (observation.unsafeVisibleAnswer) unsafeVisibleAnswerCount += 1;
+      duplicateDerivedActions += Math.max(0, observation.derivedActionCount - 1);
+      if (!label.continuationChildExpected) {
+        derivedNegativeTurns += 1;
+        if (observation.continuationChildEmitted) derivedFalsePositiveTurns += 1;
+      }
+      if (observation.continuationChildEmitted && observation.finalTurnToDerivedCardMs !== null) {
+        derivedLatencies.push(observation.finalTurnToDerivedCardMs);
+      }
+    }
+  }
+
+  const metrics: RecruitingReleaseQualityMetrics = {
+    realMeetingCount: new Set(recruitingEntries.map(entry => entry.realAsset!.meetingId)).size,
+    labeledFinalTurnCount: turns.length,
+    precision: rate(truePositiveCards, predictedCards),
+    recall: rate(truePositiveCards, expectedPositiveTurns),
+    overallFalsePositiveRate: rate(falsePositiveNegativeTurns, negativeTurns),
+    policyVerificationFalsePositiveRate: rate(policyVerificationFailures, policyVerificationTurns),
+    exclusiveMultiCardRate: rate(exclusiveMultiCardTurns, turns.length),
+    wrongSpeakerContinuationRate: rate(wrongSpeakerContinuationTurns, nonCandidateTurns),
+    ungroundedPositivePolicyCommitments,
+    candidateFacingEvidenceLeaks,
+    duplicateDerivedActions,
+    unsafeVisibleAnswerCount,
+    derivedActionFalsePositiveRate: rate(derivedFalsePositiveTurns, derivedNegativeTurns),
+    finalTurnToDerivedCardP95Ms: percentile95(derivedLatencies),
+  };
+  return {
+    metrics,
+    gateFailures: evaluateRecruitingReleaseQualityGate(metrics),
+    turns,
+    provenance: {
+      sourceKind: 'real_recording',
+      meetingIds: [...new Set(recruitingEntries.map(entry => entry.realAsset!.meetingId))],
+    },
+  };
+}
+
+function rate(numerator: number, denominator: number): number {
+  return denominator > 0 ? numerator / denominator : 0;
+}
+
+function percentile95(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.max(0, Math.ceil(sorted.length * 0.95) - 1)];
 }
 
 function buildAssetCoverageFailures(
@@ -366,7 +541,9 @@ function buildAssetCoverage(entries: ReplayManifestEntry[], audioRoot: string): 
     if (!fs.existsSync(audioPath)) continue;
     if (entry.syntheticAudio === true) {
       availableSynthetic[mode] += 1;
-    } else {
+    } else if (mode !== 'recruiting' || (
+      entry.syntheticAudio === false && entry.realAsset?.sourceKind === 'real_recording'
+    )) {
       availableReal[mode] += 1;
     }
   }
