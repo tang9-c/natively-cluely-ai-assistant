@@ -80,3 +80,43 @@ test('enqueueDerivedAction stores one FDE grounded answer card per parent', asyn
   assert.equal(duplicate, null);
   assert.equal(engine.getStore().getAllActions('fde-session').length, 1);
 });
+
+test('enqueueDerivedAction stores one recruiting evidence summary card per parent', async () => {
+  const { DynamicActionEngine } = await loadEngine();
+  const engine = new DynamicActionEngine();
+  const input = {
+    sessionId: 'recruiting-session',
+    modeId: 'recruiting',
+    modeTemplateType: 'recruiting',
+    type: 'candidate_evidence_summary',
+    parentActionId: 'recruiting-parent-1',
+    sourceIntent: 'recruiting_bei_evidence_gap',
+    latestTurn: '我负责灰度方案，事故率下降了 30%。',
+    evidenceRefs: [{ source: 'transcript', text: '我负责灰度方案，事故率下降了 30%。', speaker: 'interviewer' }],
+    keyEntities: ['事故响应与风险控制', '灰度方案', '个人 ownership', '风险取舍'],
+    retrievalQuery: [
+      '请补充你个人采取的行动。',
+      '我负责灰度方案，事故率下降了 30%。',
+      '已观察证据: 候选人负责灰度方案并将事故率降低 30%',
+      '缺失证据: 个人 ownership；风险取舍',
+      '验证需求: 需验证事故率指标的统计口径',
+    ].join('\n'),
+    confidence: 0.91,
+    language: 'zh',
+    createdAt: 1_000,
+  };
+  const first = engine.enqueueDerivedAction(input);
+  const duplicate = engine.enqueueDerivedAction({ ...input, latestTurn: '再次补充事故率口径', createdAt: 2_000 });
+  assert.equal(first.type, 'candidate_evidence_summary');
+  assert.equal(first.parentActionId, 'recruiting-parent-1');
+  assert.equal(first.modeTemplateType, 'recruiting');
+  assert.equal(first.label, '生成候选人证据摘要');
+  assert.deepEqual(first.evidenceRefs, input.evidenceRefs);
+  assert.ok(first.keyEntities.includes('个人 ownership'));
+  assert.match(first.retrievalQuery, /已观察证据/);
+  assert.match(first.retrievalQuery, /验证需求/);
+  assert.equal(first.autoSurfacePolicy, 'card');
+  assert.equal(first.autoTriggerEligible, false);
+  assert.equal(duplicate, null);
+  assert.equal(engine.getStore().getAllActions('recruiting-session').length, 1);
+});

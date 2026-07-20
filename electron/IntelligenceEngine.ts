@@ -27,6 +27,7 @@ import type { DynamicActionOutputType } from './services/dynamic-actions/Dynamic
 import { DynamicActionContinuationService } from './services/dynamic-actions/DynamicActionContinuationService';
 import {
     buildFdeContinuationDerivedActionContext,
+    buildRecruitingContinuationDerivedActionContext,
     DynamicActionContinuationPlanner,
 } from './services/dynamic-actions/DynamicActionContinuationPlanner';
 import {
@@ -642,12 +643,10 @@ export class IntelligenceEngine extends EventEmitter {
         // Fire-and-forget by design: intent confirmation is auxiliary and must
         // never block or break the primary transcript path.
         if (segment.final) {
-            if (segment.speaker === 'interviewer') {
-                const providerDataScopes = this.buildIntentClassificationOptions().providerDataScopes;
-                this.observeDynamicActionContinuation(segment, providerDataScopes).catch((error) => {
-                    console.warn('[IntelligenceEngine] continuation observation failed', redactForLog([error]));
-                });
-            }
+            const providerDataScopes = this.buildIntentClassificationOptions().providerDataScopes;
+            this.observeDynamicActionContinuation(segment, providerDataScopes).catch((error) => {
+                console.warn('[IntelligenceEngine] continuation observation failed', redactForLog([error]));
+            });
             this.detectConfirmAndEmitDynamicActions(segment).catch((err) => {
                 console.warn('[IntelligenceEngine] detectConfirmAndEmitDynamicActions failed', (err as Error)?.message);
             });
@@ -815,7 +814,7 @@ export class IntelligenceEngine extends EventEmitter {
             sessionId: this.currentSessionId,
             modeId: this.currentDynamicActionModeId,
             modeTemplateType: this.currentDynamicActionTemplateType,
-            speaker: 'interviewer',
+            speaker: segment.speaker === 'interviewer' ? 'interviewer' : 'user',
             text: segment.text,
             timestamp: segment.timestamp,
             providerDataScopes,
@@ -840,7 +839,13 @@ export class IntelligenceEngine extends EventEmitter {
                 currentTurn: latestTurn,
                 slots,
             })
-            : (() => {
+            : continuation.modeTemplateType === 'recruiting'
+                ? buildRecruitingContinuationDerivedActionContext({
+                    originalTurn: continuation.originalTurn,
+                    currentTurn: latestTurn,
+                    slots,
+                })
+                : (() => {
                 const slotEntities = [
                     slots.object,
                     slots.workflow,
@@ -866,7 +871,11 @@ export class IntelligenceEngine extends EventEmitter {
             sessionId: continuation.sessionId,
             modeId: continuation.modeId,
             modeTemplateType: continuation.modeTemplateType,
-            type: continuation.modeTemplateType === 'fde' ? 'fde_grounded_answer' : 'capability_fit_answer',
+            type: continuation.modeTemplateType === 'fde'
+                ? 'fde_grounded_answer'
+                : continuation.modeTemplateType === 'recruiting'
+                    ? 'candidate_evidence_summary'
+                    : 'capability_fit_answer',
             parentActionId: continuation.parentActionId,
             sourceIntent: continuation.sourceIntent,
             latestTurn,

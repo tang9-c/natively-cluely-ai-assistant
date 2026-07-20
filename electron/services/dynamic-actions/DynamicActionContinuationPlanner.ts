@@ -13,7 +13,7 @@ export type ContinuationPlannerFailureReason =
     | 'planner_provider_unavailable';
 
 export interface ContinuationPlannerInput {
-    modeTemplateType: 'sales' | 'fde';
+    modeTemplateType: 'sales' | 'fde' | 'recruiting';
     parentActionType: string;
     sourceIntent: DynamicActionContinuationSourceIntent;
     originalTurn: string;
@@ -44,6 +44,13 @@ export interface ContinuationPlannerResult {
         systems?: string[];
         permissionBoundary?: string;
         integrationMethod?: string;
+        scorecardDimension?: string;
+        evidenceObserved?: string;
+        missingEvidence?: string[];
+        starMissing?: string[];
+        candidateClaim?: string;
+        riskToVerify?: string;
+        recommendedProbe?: string;
     };
     reasonCode: 'sufficient_customer_detail' | 'insufficient_customer_detail' | 'unrelated_turn';
     decisionSource: 'continuation_planner';
@@ -150,17 +157,39 @@ const FDE_SLOT_KEYS = new Set([
     'environment',
     'integrationMethod',
 ]);
-const ARRAY_SLOT_KEYS = new Set(['metrics', 'systemObjects', 'roles', 'handoffs', 'exceptions', 'systems']);
+const RECRUITING_SLOT_KEYS = new Set([
+    'scorecardDimension',
+    'evidenceObserved',
+    'missingEvidence',
+    'starMissing',
+    'candidateClaim',
+    'riskToVerify',
+    'recommendedProbe',
+]);
+const ARRAY_SLOT_KEYS = new Set([
+    'metrics',
+    'systemObjects',
+    'roles',
+    'handoffs',
+    'exceptions',
+    'systems',
+    'missingEvidence',
+    'starMissing',
+]);
 
 export function parseContinuationSlots(
     value: unknown,
-    modeTemplateType: 'sales' | 'fde' = 'sales',
+    modeTemplateType: 'sales' | 'fde' | 'recruiting' = 'sales',
 ): ContinuationPlannerResult['extractedSlots'] {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         throw new ContinuationPlannerError('planner_invalid_json');
     }
     const record = value as Record<string, unknown>;
-    const allowedKeys = modeTemplateType === 'fde' ? FDE_SLOT_KEYS : SALES_SLOT_KEYS;
+    const allowedKeys = modeTemplateType === 'fde'
+        ? FDE_SLOT_KEYS
+        : modeTemplateType === 'recruiting'
+            ? RECRUITING_SLOT_KEYS
+            : SALES_SLOT_KEYS;
     if (Object.keys(record).some((key) => !allowedKeys.has(key))) {
         throw new ContinuationPlannerError('planner_invalid_json');
     }
@@ -215,6 +244,33 @@ export function buildFdeContinuationDerivedActionContext(input: {
     return { keyEntities, retrievalQuery };
 }
 
+export function buildRecruitingContinuationDerivedActionContext(input: {
+    originalTurn: string;
+    currentTurn: string;
+    slots: ContinuationPlannerResult['extractedSlots'];
+}): { keyEntities: string[]; retrievalQuery: string } {
+    const slots = input.slots;
+    const keyEntities = uniqueStrings([
+        slots.scorecardDimension,
+        slots.evidenceObserved,
+        slots.candidateClaim,
+        slots.riskToVerify,
+        slots.recommendedProbe,
+        ...(slots.missingEvidence ?? []),
+        ...(slots.starMissing ?? []),
+    ]).slice(0, 12);
+    const retrievalQuery = [
+        input.originalTurn,
+        input.currentTurn,
+        slots.evidenceObserved && `已观察证据: ${slots.evidenceObserved}`,
+        slots.missingEvidence?.length && `缺失证据: ${slots.missingEvidence.join('；')}`,
+        slots.starMissing?.length && `STAR 缺失: ${slots.starMissing.join('；')}`,
+        slots.riskToVerify && `验证需求: ${slots.riskToVerify}`,
+    ].filter((value): value is string => Boolean(value && value.trim())).join('\n').slice(0, 800);
+
+    return { keyEntities, retrievalQuery };
+}
+
 function uniqueStrings(values: Array<string | undefined>): string[] {
     return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))];
 }
@@ -237,6 +293,18 @@ function buildContinuationPlannerPrompt(input: ContinuationPlannerInput): string
             '重点识别当前流程、目标流程、流程对象、角色、交接、例外、人审点、AI 支持需求、验证方式。',
             '系统、权限、环境和集成方式只作为支撑字段；只有客户明确提到时才抽取。',
             '允许的 extractedSlots key 只有 asIsProcess、targetProcess、processObject、roles、handoffs、exceptions、humanConfirmation、aiSupportNeed、validationNeed、systems、permissionBoundary、environment、integrationMethod。',
+            'decision 只能是 trigger_grounded_answer、continue_collecting、ignore。',
+            ...commonLines,
+        ].join('\n');
+    }
+
+    if (input.modeTemplateType === 'recruiting') {
+        return [
+            '你是 recruiting continuation planner。只返回 JSON，不生成用户可见回答。',
+            '不要判断或输出当前使用哪种面试方法。',
+            '只判断候选人是否补充了与岗位相关、可验证的个人行动、结果、ownership、取舍或风险处理证据。',
+            '把未被回答支持的内容放入 missingEvidence 或 riskToVerify，不要推断录用、淘汰或候选人等级。',
+            '允许的 extractedSlots key 只有 scorecardDimension、evidenceObserved、missingEvidence、starMissing、candidateClaim、riskToVerify、recommendedProbe。',
             'decision 只能是 trigger_grounded_answer、continue_collecting、ignore。',
             ...commonLines,
         ].join('\n');

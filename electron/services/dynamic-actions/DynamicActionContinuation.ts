@@ -2,8 +2,11 @@ import type { ProviderDataScopePolicy } from '../../llm/ProviderRouter';
 import type { DynamicAction, EvidenceRef } from './DynamicAction';
 
 export type DynamicActionContinuationGoal = 'answer_when_grounded';
-export type DynamicActionContinuationModeTemplateType = 'sales' | 'fde';
-export type DynamicActionContinuationAnswerActionType = 'capability_fit_answer' | 'fde_grounded_answer';
+export type DynamicActionContinuationModeTemplateType = 'sales' | 'fde' | 'recruiting';
+export type DynamicActionContinuationAnswerActionType =
+    | 'capability_fit_answer'
+    | 'fde_grounded_answer'
+    | 'candidate_evidence_summary';
 export type SalesDynamicActionContinuationSourceIntent =
     | 'sales_capability_fit'
     | 'sales_contextual_proof_discovery';
@@ -15,9 +18,17 @@ export type FdeDynamicActionContinuationSourceIntent =
     | 'fde_agent_feasibility'
     | 'fde_success'
     | 'fde_next_step';
+export type RecruitingDynamicActionContinuationSourceIntent =
+    | 'recruiting_scorecard_gap'
+    | 'recruiting_bei_evidence_gap'
+    | 'recruiting_situational_evidence_gap'
+    | 'recruiting_risk_verification'
+    | 'evaluate_answer'
+    | 'request_example';
 export type DynamicActionContinuationSourceIntent =
     | SalesDynamicActionContinuationSourceIntent
-    | FdeDynamicActionContinuationSourceIntent;
+    | FdeDynamicActionContinuationSourceIntent
+    | RecruitingDynamicActionContinuationSourceIntent;
 export type DynamicActionContinuationState =
     | 'pending'
     | 'planning'
@@ -29,9 +40,15 @@ export type DynamicActionContinuationState =
 export interface DynamicActionContinuationPolicy {
     goal: DynamicActionContinuationGoal;
     answerActionType: DynamicActionContinuationAnswerActionType;
+    observedSpeaker: 'interviewer' | 'user';
     maxPlannerAttempts: 3;
     expiresAfterCustomerTurns: 6;
     expiresAfterMs: 300_000;
+}
+
+interface DynamicActionContinuationModePolicy extends DynamicActionContinuationPolicy {
+    parentActionTypes: ReadonlySet<string>;
+    sourceIntents: ReadonlySet<DynamicActionContinuationSourceIntent>;
 }
 
 export interface PendingActionContinuation {
@@ -41,6 +58,7 @@ export interface PendingActionContinuation {
     modeId: string;
     modeTemplateType: DynamicActionContinuationModeTemplateType;
     sourceIntent: DynamicActionContinuationSourceIntent;
+    observedSpeaker: 'interviewer' | 'user';
     originalTurn: string;
     originalEvidenceRefs: EvidenceRef[];
     keyEntities: string[];
@@ -75,30 +93,58 @@ export interface ContinuationTraceEvent {
 export const DYNAMIC_ACTION_CONTINUATION_POLICY: DynamicActionContinuationPolicy = {
     goal: 'answer_when_grounded',
     answerActionType: 'capability_fit_answer',
+    observedSpeaker: 'interviewer',
     maxPlannerAttempts: 3,
     expiresAfterCustomerTurns: 6,
     expiresAfterMs: 300_000,
 };
 
-const FDE_CONTINUATION_PARENT_ACTION_TYPES = new Set([
-    'fde_discovery_probe',
-    'fde_risk_blocker',
-    'fde_agent_feasibility',
-    'fde_success_criteria',
-    'fde_next_step',
-    'fde_integration_check',
-    'fde_security_review',
-]);
-
-const FDE_CONTINUATION_SOURCE_INTENTS = new Set([
-    'fde_discovery',
-    'fde_integration',
-    'fde_security',
-    'fde_risk',
-    'fde_agent_feasibility',
-    'fde_success',
-    'fde_next_step',
-]);
+const DYNAMIC_ACTION_CONTINUATION_MODE_POLICIES: Record<
+DynamicActionContinuationModeTemplateType,
+DynamicActionContinuationModePolicy
+> = {
+    sales: {
+        ...DYNAMIC_ACTION_CONTINUATION_POLICY,
+        parentActionTypes: new Set(['discovery_question']),
+        sourceIntents: new Set(['sales_capability_fit', 'sales_contextual_proof_discovery']),
+    },
+    fde: {
+        ...DYNAMIC_ACTION_CONTINUATION_POLICY,
+        parentActionTypes: new Set([
+            'fde_discovery_probe',
+            'fde_risk_blocker',
+            'fde_agent_feasibility',
+            'fde_success_criteria',
+            'fde_next_step',
+            'fde_integration_check',
+            'fde_security_review',
+        ]),
+        sourceIntents: new Set([
+            'fde_discovery',
+            'fde_integration',
+            'fde_security',
+            'fde_risk',
+            'fde_agent_feasibility',
+            'fde_success',
+            'fde_next_step',
+        ]),
+        answerActionType: 'fde_grounded_answer',
+    },
+    recruiting: {
+        ...DYNAMIC_ACTION_CONTINUATION_POLICY,
+        parentActionTypes: new Set(['candidate_experience_probe']),
+        sourceIntents: new Set([
+            'recruiting_scorecard_gap',
+            'recruiting_bei_evidence_gap',
+            'recruiting_situational_evidence_gap',
+            'recruiting_risk_verification',
+            'evaluate_answer',
+            'request_example',
+        ]),
+        answerActionType: 'candidate_evidence_summary',
+        observedSpeaker: 'interviewer',
+    },
+};
 
 const ALLOWED_TRANSITIONS: Record<DynamicActionContinuationState, DynamicActionContinuationState[]> = {
     pending: ['planning', 'expired', 'cancelled'],
@@ -116,27 +162,14 @@ export function resolveDynamicActionContinuationPolicy(
         return null;
     }
 
-    if (action.modeTemplateType === 'sales') {
-        if (action.type !== 'discovery_question') return null;
-        if (
-            action.sourceIntent !== 'sales_capability_fit' &&
-            action.sourceIntent !== 'sales_contextual_proof_discovery'
-        ) {
-            return null;
-        }
-        return { ...DYNAMIC_ACTION_CONTINUATION_POLICY };
+    const policy = DYNAMIC_ACTION_CONTINUATION_MODE_POLICIES[
+        action.modeTemplateType as DynamicActionContinuationModeTemplateType
+    ];
+    if (!policy || !policy.parentActionTypes.has(action.type)) return null;
+    if (!action.sourceIntent || !policy.sourceIntents.has(action.sourceIntent as DynamicActionContinuationSourceIntent)) {
+        return null;
     }
-
-    if (action.modeTemplateType === 'fde') {
-        if (!FDE_CONTINUATION_PARENT_ACTION_TYPES.has(action.type)) return null;
-        if (!action.sourceIntent || !FDE_CONTINUATION_SOURCE_INTENTS.has(action.sourceIntent)) return null;
-        return {
-            ...DYNAMIC_ACTION_CONTINUATION_POLICY,
-            answerActionType: 'fde_grounded_answer',
-        };
-    }
-
-    return null;
+    return { ...policy };
 }
 
 export function transitionContinuationState(

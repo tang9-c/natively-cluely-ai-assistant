@@ -694,8 +694,8 @@ export class DynamicActionEngine {
 export interface EnqueueDerivedActionInput {
     sessionId: string;
     modeId: string;
-    modeTemplateType: 'sales' | 'fde';
-    type: 'capability_fit_answer' | 'fde_grounded_answer';
+    modeTemplateType: 'sales' | 'fde' | 'recruiting';
+    type: 'capability_fit_answer' | 'fde_grounded_answer' | 'candidate_evidence_summary';
     parentActionId: string;
     sourceIntent:
         | 'sales_capability_fit'
@@ -706,7 +706,13 @@ export interface EnqueueDerivedActionInput {
         | 'fde_risk'
         | 'fde_agent_feasibility'
         | 'fde_success'
-        | 'fde_next_step';
+        | 'fde_next_step'
+        | 'recruiting_scorecard_gap'
+        | 'recruiting_bei_evidence_gap'
+        | 'recruiting_situational_evidence_gap'
+        | 'recruiting_risk_verification'
+        | 'evaluate_answer'
+        | 'request_example';
     latestTurn: string;
     evidenceRefs: EvidenceRef[];
     keyEntities: string[];
@@ -717,13 +723,27 @@ export interface EnqueueDerivedActionInput {
 }
 
 function derivedActionLabel(type: EnqueueDerivedActionInput['type']): string {
-    return type === 'fde_grounded_answer'
-        ? '生成 FDE 流程验证回应'
-        : '生成能力匹配回答';
+    return DERIVED_ACTION_METADATA[type].label;
 }
 
 function derivedActionPromptInstruction(type: EnqueueDerivedActionInput['type']): string {
-    return type === 'fde_grounded_answer'
-        ? FDE_PROMPT_INSTRUCTIONS.fde_grounded_answer
-        : SALES_PROMPT_INSTRUCTIONS.capability_fit_answer;
+    return DERIVED_ACTION_METADATA[type].promptInstruction;
 }
+
+const DERIVED_ACTION_METADATA: Record<EnqueueDerivedActionInput['type'], {
+    label: string;
+    promptInstruction: string;
+}> = {
+    capability_fit_answer: {
+        label: '生成能力匹配回答',
+        promptInstruction: SALES_PROMPT_INSTRUCTIONS.capability_fit_answer,
+    },
+    fde_grounded_answer: {
+        label: '生成 FDE 流程验证回应',
+        promptInstruction: FDE_PROMPT_INSTRUCTIONS.fde_grounded_answer,
+    },
+    candidate_evidence_summary: {
+        label: '生成候选人证据摘要',
+        promptInstruction: 'You are in Recruiting mode. Generate a concise, neutral summary of the candidate evidence grounded in transcript evidence. Separate observed evidence, missing evidence, and risks to verify. Do not infer interview method, hiring recommendation, candidate level, or outcome.',
+    },
+};

@@ -24,7 +24,7 @@ export interface ContinuationObservationInput {
     sessionId: string;
     modeId: string;
     modeTemplateType: string;
-    speaker: 'interviewer';
+    speaker: 'interviewer' | 'user';
     text: string;
     timestamp: number;
     providerDataScopes?: ProviderDataScopePolicy;
@@ -68,6 +68,7 @@ export class DynamicActionContinuationService {
             modeId: action.modeId,
             modeTemplateType: action.modeTemplateType as PendingActionContinuation['modeTemplateType'],
             sourceIntent: action.sourceIntent as PendingActionContinuation['sourceIntent'],
+            observedSpeaker: policy.observedSpeaker,
             originalTurn: action.latestTurn?.trim() || '',
             originalEvidenceRefs: action.evidenceRefs.slice(0, 2).map((item) => ({
                 ...item,
@@ -131,6 +132,10 @@ export class DynamicActionContinuationService {
         const record = this.getActiveForSession(input.sessionId);
         if (!record || !this.planner) return { kind: 'none' };
         if (record.modeId !== input.modeId || record.modeTemplateType !== input.modeTemplateType) return { kind: 'none' };
+        if (input.speaker !== record.observedSpeaker) {
+            this.trace(record, 'observed', 'speaker_mismatch');
+            return { kind: 'none', reasonCode: 'speaker_mismatch' };
+        }
 
         const text = input.text.replace(/\s+/g, ' ').trim();
         if (!text) return { kind: 'none' };
