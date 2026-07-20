@@ -107,7 +107,7 @@ test('recruiting arbitration traces rejected siblings without storing them', asy
   const engine = new DynamicActionEngine();
   const traces = [];
   const actions = await engine.assessSignals({
-    transcript: '我很感兴趣，但我担心签证政策。',
+    transcript: '我对这个岗位很感兴趣，但我担心签证政策。',
     speaker: 'interviewer',
     modeTemplateType: 'recruiting',
     modeId: 'mode-recruiting-trace',
@@ -127,6 +127,37 @@ test('recruiting arbitration traces rejected siblings without storing them', asy
   assert.equal(rejectedSibling?.decision, 'reject');
   assert.ok(rejectedSibling?.reasons.includes('exclusive_group_arbitration_lost'));
   assert.deepEqual(engine.getStore().getAllActions('session-recruiting-trace').map((action) => action.type), ['candidate_concern']);
+});
+
+test('strong_fit_signal requires explicit candidate interest and passes through the cloud gate', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const interviewerEvaluation = engine.detectActions({
+    transcript: '这个候选人很匹配这个岗位，经验也很适合。',
+    speaker: 'interviewer',
+    modeTemplateType: 'recruiting',
+    modeId: 'mode-recruiting-interest',
+    sessionId: 'session-recruiting-interviewer-evaluation',
+  });
+  assert.equal(interviewerEvaluation.some((action) => action.type === 'strong_fit_signal'), false);
+
+  const candidateInterest = await engine.assessSignals({
+    transcript: '我对这个岗位很感兴趣，也很期待加入团队。',
+    speaker: 'candidate',
+    modeTemplateType: 'recruiting',
+    modeId: 'mode-recruiting-interest',
+    sessionId: 'session-recruiting-candidate-interest',
+    cloudClassifier: async ({ candidates }) => candidates.map((candidate) => ({
+      actionType: candidate.actionType,
+      decision: 'pass',
+      confidence: 0.95,
+      reasons: ['candidate_explicit_role_interest'],
+      rejectedCandidates: [],
+    })),
+  });
+  assert.deepEqual(candidateInterest.map((action) => action.type), ['strong_fit_signal']);
+  assert.equal(candidateInterest[0].semanticGate?.semanticProvider, 'cloud_llm');
 });
 
 test('detected actions include product contract copy', async () => {
@@ -2110,11 +2141,11 @@ describe('ActionTrigger fixtures — recruiting mode', () => {
     assert.equal(a.priority, 0.85);
   });
 
-  test('strong_fit_signal (zh: 很匹配) → priority 0.9', async () => {
+  test('strong_fit_signal (zh: 明确岗位兴趣) → priority 0.9', async () => {
     const { DynamicActionEngine } = await loadModules();
     const engine = new DynamicActionEngine();
     const actions = engine.detectActions({
-      transcript: '这个岗位很匹配,我很感兴趣',
+      transcript: '我对这个岗位很感兴趣，也很期待加入团队',
       modeTemplateType: 'recruiting', modeId: 'm_r', sessionId: 's_r_sf',
     });
     const a = findAction(actions, 'strong_fit_signal');

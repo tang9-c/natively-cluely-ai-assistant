@@ -636,6 +636,12 @@ export class ModeEventClassifier {
             for (const result of cloudResults) {
                 const candidate = unresolvedCloudCandidates.find(item => item.actionType === result.actionType);
                 if (!candidate) continue;
+                const rejectPartialRecruitingResult =
+                    cloudFailureReason === 'cloud_invalid_json' &&
+                    input.modeTemplateType === 'recruiting' &&
+                    candidate.gateStrategy === 'required' &&
+                    candidate.allowLocalFallbackOnCloudFailure === false;
+                if (rejectPartialRecruitingResult) continue;
                 decisions.set(result.actionType, {
                     candidate,
                     decision: result.decision,

@@ -503,3 +503,50 @@ test('selectPassedGateDecisions keeps one exclusive decision by cloud confidence
   ]);
   assert.deepEqual(actionTypeTie.map((item) => item.candidate.actionType), ['candidate_alpha']);
 });
+
+test('partial invalid cloud JSON defers every required recruiting candidate without fallback', async () => {
+  const { ModeEventClassifier } = await loadClassifier();
+  const classifier = new ModeEventClassifier({
+    cloudClassifier: async () => [
+      { actionType: 'candidate_concern', decision: 'pass', confidence: 0.95, reasons: ['policy_question'] },
+      { actionType: 'candidate_experience_probe', decision: 'approve', confidence: 0.9 },
+    ],
+  });
+
+  const decisions = await classifier.assess({
+    transcript: '我担心签证政策，也想补充个人贡献。',
+    modeTemplateType: 'recruiting',
+    candidates: [
+      candidate('candidate_concern', '签证政策', 0.9, {
+        riskLevel: 'high', gateStrategy: 'required', allowLocalFallbackOnCloudFailure: false,
+      }),
+      candidate('candidate_experience_probe', '个人贡献', 0.88, {
+        riskLevel: 'high', gateStrategy: 'required', allowLocalFallbackOnCloudFailure: false,
+      }),
+    ],
+    providerDataScopes: { transcript: true },
+  });
+
+  assert.deepEqual(decisions.map((decision) => decision.decision), ['defer', 'defer']);
+  assert.deepEqual(decisions.map((decision) => decision.degradedReason), ['cloud_invalid_json', 'cloud_invalid_json']);
+});
+
+test('partial invalid cloud JSON preserves valid required sales decisions', async () => {
+  const { ModeEventClassifier } = await loadClassifier();
+  const classifier = new ModeEventClassifier({
+    cloudClassifier: async () => [
+      { actionType: 'case_study_request', decision: 'pass', confidence: 0.95, reasons: ['customer_proof'] },
+      { actionType: 'pricing_request', decision: 'approve', confidence: 0.9 },
+    ],
+  });
+
+  const decisions = await classifier.assess({
+    transcript: '我们想看一个类似客户案例。',
+    modeTemplateType: 'sales',
+    candidates: [candidate('case_study_request', '类似客户案例')],
+    providerDataScopes: { transcript: true },
+  });
+
+  assert.equal(decisions[0].decision, 'pass');
+  assert.equal(decisions[0].semanticProvider, 'cloud_llm');
+});

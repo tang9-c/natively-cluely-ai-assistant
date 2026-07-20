@@ -198,8 +198,8 @@ const RECRUITING_TRIGGERS: ActionTrigger[] = [
     {
         type: 'strong_fit_signal',
         patterns: [
-            /\b(excited|love this|exactly what|great fit|perfect match)\b/i,
-            zh('很感兴趣', '很喜欢', '正好符合', '很匹配', '非常适合'),
+            /\b(i(?:'m| am) (?:very )?interested in (?:this )?(?:role|position)|i(?:'d| would) love to join|i(?:'m| am) excited (?:about|to join) (?:this )?(?:role|team)|this (?:role|position) really interests me)\b/i,
+            zh('我对这个岗位很感兴趣', '我对这个职位很感兴趣', '我很想加入', '我很期待加入', '这个岗位很吸引我'),
         ],
         priority: 0.9,
         label: '候选人表达了岗位兴趣',
