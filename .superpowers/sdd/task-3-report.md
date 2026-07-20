@@ -33,3 +33,17 @@ SUCCESS
 ## Concerns
 - `candidate_evidence_summary` 使用已有通用 product-contract fallback；本任务未改动 brief 外的 `DynamicActionProductContract.ts`，但 card 仍保持 `autoSurfacePolicy: 'card'` 与 `autoTriggerEligible: false`。
 - `.tmp/` 是既有未跟踪目录，未读取、修改或纳入提交。
+
+## Reviewer Fix: Derived Action Parent-Aware Dedupe
+- 根因：`enqueueDerivedAction()` 已先按 `type + parentActionId` 检查，但之后错误调用普通 live-action 的 `store.deduplicate()`；后者按 `type + latestTurn` 去重，导致不同 parent 的同文案 child 被抑制。
+- 修复：derived path 在 parent-aware 前置检查后直接 `addAction()`；普通 `detectActions` 和 `assessSignals` 路径仍保留通用 `store.deduplicate()`。
+- `IntelligenceEngine` 仅在 `enqueueDerivedAction()` 返回 child，或 store 已确认存在同 session、同 derived type、同 parent child 时标记 continuation emitted。
+- 回归测试：两个 recruiting parent 以相同 `latestTurn` 入队后产生两个 child，各自保存正确 parent ID；同 parent 再次入队仍返回 `null`，总数保持一个。
+
+## Reviewer Fix Verification
+1. `rtk npm run build:electron:tsc && rtk node --test electron/services/__tests__/DynamicActionContinuationDerivedAction.test.mjs`
+   - 红灯：第二个不同 parent child 被错误压制，符合根因预期。
+2. `rtk npm run build:electron:tsc && rtk node --test electron/services/__tests__/DynamicActionContinuationObservation.test.mjs electron/services/__tests__/DynamicActionContinuationDerivedAction.test.mjs electron/services/__tests__/DynamicActionContinuationEndToEnd.test.mjs`
+   - 绿灯：Electron TypeScript 编译通过；18/18 tests passed。
+3. `rtk git diff --check`
+   - 通过。

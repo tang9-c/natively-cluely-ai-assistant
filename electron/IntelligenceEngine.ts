@@ -867,15 +867,18 @@ export class IntelligenceEngine extends EventEmitter {
                 };
             })();
 
-        const action = this.dynamicActionEngine?.enqueueDerivedAction({
+        const dynamicActionEngine = this.dynamicActionEngine;
+        if (!dynamicActionEngine) return;
+        const derivedActionType = continuation.modeTemplateType === 'fde'
+            ? 'fde_grounded_answer'
+            : continuation.modeTemplateType === 'recruiting'
+                ? 'candidate_evidence_summary'
+                : 'capability_fit_answer';
+        const action = dynamicActionEngine.enqueueDerivedAction({
             sessionId: continuation.sessionId,
             modeId: continuation.modeId,
             modeTemplateType: continuation.modeTemplateType,
-            type: continuation.modeTemplateType === 'fde'
-                ? 'fde_grounded_answer'
-                : continuation.modeTemplateType === 'recruiting'
-                    ? 'candidate_evidence_summary'
-                    : 'capability_fit_answer',
+            type: derivedActionType,
             parentActionId: continuation.parentActionId,
             sourceIntent: continuation.sourceIntent,
             latestTurn,
@@ -888,7 +891,9 @@ export class IntelligenceEngine extends EventEmitter {
         if (action) {
             this.dynamicActionContinuationService.markEmitted(continuation.sessionId, continuation.parentActionId);
             this.emit('dynamic_action_emitted', action);
-        } else {
+        } else if (dynamicActionEngine.getStore().getAllActions(continuation.sessionId).some((existing) =>
+            existing.type === derivedActionType && existing.parentActionId === continuation.parentActionId
+        )) {
             this.dynamicActionContinuationService.markEmitted(
                 continuation.sessionId,
                 continuation.parentActionId,

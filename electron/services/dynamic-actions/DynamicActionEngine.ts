@@ -344,10 +344,8 @@ export class DynamicActionEngine {
             confirmationSource: 'continuation_planner',
             confirmedIntent: input.sourceIntent,
         };
-        const deduplicated = this.store.deduplicate(action);
-        if (!deduplicated) return null;
-        this.store.addAction(deduplicated);
-        return deduplicated;
+        this.store.addAction(action);
+        return action;
     }
 
     getTopActionsWithExpired(
