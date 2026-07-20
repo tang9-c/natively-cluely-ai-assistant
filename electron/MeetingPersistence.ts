@@ -527,6 +527,7 @@ ${baseRules}
 export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<{
     id: string;
     parentActionId?: string;
+    sourceIntent?: string;
     modeTemplateType: string;
     type: string;
     productContract: { outputType: any };
@@ -539,6 +540,7 @@ export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<
     const actionsById = new Map<string, {
         id: string;
         parentActionId?: string;
+        sourceIntent?: string;
         modeTemplateType: string;
         type: string;
         productContract: { outputType: any };
@@ -562,6 +564,7 @@ export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<
             : '';
         const outputType = typeof metadata.outputType === 'string' ? metadata.outputType.trim() : '';
         const parentActionId = typeof metadata.parentActionId === 'string' ? metadata.parentActionId.trim() : '';
+        const sourceIntent = typeof metadata.sourceIntent === 'string' ? metadata.sourceIntent.trim() : '';
         const createdAt = typeof item?.timestamp === 'number' ? item.timestamp : 0;
         const generationStatus = normalizeDynamicActionGenerationStatus(item);
         const triggerSource = normalizeDynamicActionTriggerSource(metadata.triggerSource);
@@ -585,6 +588,7 @@ export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<
             actionsById.set(actionId, {
                 id: actionId,
                 ...(parentActionId ? { parentActionId } : {}),
+                ...(sourceIntent ? { sourceIntent } : {}),
                 modeTemplateType,
                 type: actionType,
                 productContract: { outputType },
@@ -603,6 +607,7 @@ export function buildDynamicActionArtifactActionsFromUsage(usage: any[]): Array<
         if (!existing.modeTemplateType && modeTemplateType) existing.modeTemplateType = modeTemplateType;
         if (!existing.type && actionType) existing.type = actionType;
         if (!existing.parentActionId && parentActionId) existing.parentActionId = parentActionId;
+        if (!existing.sourceIntent && sourceIntent) existing.sourceIntent = sourceIntent;
         if (!existing.productContract?.outputType && outputType) existing.productContract = { outputType };
         if ((!existing.createdAt || createdAt < existing.createdAt) && createdAt > 0) existing.createdAt = createdAt;
         if (!existing.latestTurn && latestTurn) existing.latestTurn = latestTurn;

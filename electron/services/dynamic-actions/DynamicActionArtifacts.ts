@@ -3,8 +3,9 @@ import type { DynamicActionOutputType } from './DynamicAction';
 export interface ActionArtifact {
   actionId: string;
   parentActionId?: string;
-  modeTemplateType: 'sales' | 'fde' | 'team-meet';
+  modeTemplateType: 'sales' | 'fde' | 'recruiting' | 'team-meet';
   actionType: string;
+  sourceIntent?: string;
   outputType: DynamicActionOutputType;
   structuredSummary: string;
   missingFields: string[];
@@ -29,6 +30,7 @@ export interface BuildDynamicActionArtifactsInput {
     status: string;
     createdAt: number;
     parentActionId?: string;
+    sourceIntent?: string;
     latestTurn?: string;
     retrievalQuery?: string;
     triggerSource?: 'manual' | 'auto_countdown';
@@ -42,7 +44,7 @@ export interface BuildDynamicActionArtifactsInput {
   }>;
 }
 
-const ARTIFACT_MODES = new Set(['sales', 'fde', 'team-meet']);
+const ARTIFACT_MODES = new Set(['sales', 'fde', 'recruiting', 'team-meet']);
 
 export function buildDynamicActionArtifacts(input: BuildDynamicActionArtifactsInput): ActionArtifact[] {
   // Dynamic action artifacts are transient post-call inputs, not a persisted database record.
@@ -56,6 +58,9 @@ export function buildDynamicActionArtifacts(input: BuildDynamicActionArtifactsIn
       const acceptTriggerSource =
         normalizeAcceptTriggerSource(usage?.metadata?.triggerSource) ??
         normalizeAcceptTriggerSource(action.triggerSource);
+      const sourceIntent =
+        normalizeSourceIntent(usage?.metadata?.sourceIntent) ??
+        normalizeSourceIntent(action.sourceIntent);
       return {
         actionId: action.id,
         ...((usage?.metadata?.parentActionId || action.parentActionId) ? {
@@ -63,6 +68,7 @@ export function buildDynamicActionArtifacts(input: BuildDynamicActionArtifactsIn
         } : {}),
         modeTemplateType: action.modeTemplateType as ActionArtifact['modeTemplateType'],
         actionType: action.type,
+        ...(sourceIntent ? { sourceIntent } : {}),
         outputType: action.productContract.outputType,
         structuredSummary,
         missingFields: deriveMissingFields(action.modeTemplateType, action.type, structuredSummary),
@@ -80,6 +86,10 @@ export function buildDynamicActionArtifacts(input: BuildDynamicActionArtifactsIn
               : 'not_generated',
       };
     });
+}
+
+function normalizeSourceIntent(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
 function normalizeEvaluationResult(value: unknown): ActionArtifact['evaluationResult'] | undefined {

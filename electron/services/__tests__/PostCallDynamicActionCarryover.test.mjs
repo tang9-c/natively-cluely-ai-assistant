@@ -179,6 +179,33 @@ test('post-call carryover preserves accepted FDE grounded answers without action
   assert.ok(result.coachingInsights.some((insight) => insight.type === 'fde_process_confirmation'));
 });
 
+test('recruiting evidence is internal and never copied into candidate follow-up draft', async () => {
+  const { buildPostCallEnhancements } = await loadWorkflow();
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'recruiting',
+    transcript: [{ speaker: 'interviewer', text: '我负责灰度方案，结果指标还需要核实。', timestamp: 1 }],
+    summaryData: { overview: 'Recruiting interview.', actionItems: [] },
+    dynamicActionArtifacts: [{
+      actionId: 'recruiting-evidence-1',
+      parentActionId: 'recruiting-parent-1',
+      modeTemplateType: 'recruiting',
+      actionType: 'candidate_evidence_summary',
+      sourceIntent: 'recruiting_bei_evidence_gap',
+      outputType: 'checklist',
+      generationStatus: 'completed',
+      structuredSummary: '已观察证据：候选人负责灰度方案。待验证：结果指标。',
+      groundedSources: [],
+      missingFields: ['result_metric'],
+      acceptedAt: 1,
+    }],
+  });
+
+  assert.equal(result.acceptedRecruitingRecords.length, 1);
+  assert.equal(result.acceptedRecruitingRecords[0].sourceIntent, 'recruiting_bei_evidence_gap');
+  assert.ok(result.coachingInsights.some((item) => item.type === 'recruiting_evidence_summary'));
+  assert.doesNotMatch(result.followUpDraft, /灰度方案|结果指标|Candidate evidence|Scorecard gaps|Risks to verify/i);
+});
+
 test('post-call carryover emits FDE AI boundary, validation, and risk insights', async () => {
   const { buildPostCallEnhancements } = await loadWorkflow();
   const result = buildPostCallEnhancements({

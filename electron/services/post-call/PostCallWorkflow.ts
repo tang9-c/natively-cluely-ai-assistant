@@ -72,6 +72,18 @@ export interface AcceptedFdeRecord {
   sourceActionId: string;
 }
 
+export interface AcceptedRecruitingRecord {
+  actionId: string;
+  parentActionId?: string;
+  actionType: string;
+  sourceIntent?: string;
+  summary: string;
+  missingFields: string[];
+  groundingStatus: 'grounded' | 'needs_confirmation';
+  evaluationResult?: 'passed' | 'safe_fallback';
+  sourceActionId: string;
+}
+
 export interface PostCallEnhancements {
   schemaVersion: 2;
   actionItemsStructured: StructuredActionItem[];
@@ -80,6 +92,7 @@ export interface PostCallEnhancements {
   acceptedBlockerRecords: AcceptedBlockerRecord[];
   acceptedCapabilityFitRecords: AcceptedCapabilityFitRecord[];
   acceptedFdeRecords: AcceptedFdeRecord[];
+  acceptedRecruitingRecords: AcceptedRecruitingRecord[];
   followUpDraft: string;
   coachingInsights: CoachingInsight[];
 }
@@ -104,6 +117,13 @@ const SALES_ACTION_LABELS: Record<string, string> = {
   buying_signal: 'Sales next step',
   capability_fit_answer: 'Sales capability confirmation',
 };
+const RECRUITING_ARTIFACT_ACTION_TYPES = new Set([
+  'candidate_evidence_summary',
+  'candidate_experience_probe',
+  'candidate_concern',
+  'strong_fit_signal',
+]);
+const RECRUITING_INTERNAL_FOLLOW_UP_PATTERN = /candidate evidence|scorecard|gap|risk|hire|reject|protected class|age|gender|race|ethnicity|religion|disability|候选人证据|评分卡|缺口|风险|录用|淘汰|受保护|年龄|性别|种族|民族|宗教|残障/i;
 const RECRUITING_LOGISTICS_PATTERN = /\b(compensation|salary|timeline|notice period|availability|start date)\b|(?:薪资|签证|入职时间|搬迁|远程|混合办公|offer|JD|岗位)/i;
 const TEAM_OWNERSHIP_PATTERN = /\b(owner|by|deadline|due|next step|action item)\b|(?:负责人|我来负责|我负责|我来做|行动项|截止|周[一二三四五六日天]前|星期[一二三四五六日天]前)/i;
 const TEAM_DECISION_PATTERN = /\b(decided|approved|confirmed|final decision)\b|(?:决定|就选|我们定|最终决定|批准|确认|通过)/i;
@@ -143,11 +163,15 @@ export function buildPostCallEnhancements(params: {
   const acceptedFdeRecords = params.dynamicActionArtifacts?.length
     ? collectAcceptedFdeRecords(params.dynamicActionArtifacts)
     : [];
+  const acceptedRecruitingRecords = params.dynamicActionArtifacts?.length
+    ? collectAcceptedRecruitingRecords(params.dynamicActionArtifacts)
+    : [];
   const coachingInsights = generateCoachingInsights(
     params.transcript,
     params.modeTemplateType,
     params.summaryData,
     params.dynamicActionArtifacts,
+    acceptedRecruitingRecords,
   );
 
   return {
@@ -158,6 +182,7 @@ export function buildPostCallEnhancements(params: {
     acceptedBlockerRecords,
     acceptedCapabilityFitRecords,
     acceptedFdeRecords,
+    acceptedRecruitingRecords,
     followUpDraft: buildFollowUpDraft(params.modeTemplateType, actionItemsStructured, params.summaryData, {
       acceptedDecisionRecords,
       acceptedBlockerRecords,
@@ -231,15 +256,22 @@ export function buildFollowUpDraft(
     : 'Hi team,';
   const lines = [greeting, '', 'Thanks for the conversation today.'];
 
-  if (summaryData?.overview) {
-    lines.push('', summaryData.overview.trim());
+  const isCandidateFacingRecruitingDraft = modeTemplateType === 'recruiting';
+  const overview = summaryData?.overview?.trim();
+  if (overview && (!isCandidateFacingRecruitingDraft || !RECRUITING_INTERNAL_FOLLOW_UP_PATTERN.test(overview))) {
+    lines.push('', overview);
   }
 
-  const nextSteps = actionItems.map(item => {
-    const owner = item.owner ? `${item.owner}: ` : '';
-    const deadline = item.deadline ? ` by ${item.deadline}` : '';
-    return `- ${owner}${item.text}${deadline}`;
-  });
+  const nextSteps = actionItems
+    .filter((item) =>
+      !isCandidateFacingRecruitingDraft ||
+      (RECRUITING_LOGISTICS_PATTERN.test(item.text) && !RECRUITING_INTERNAL_FOLLOW_UP_PATTERN.test(item.text))
+    )
+    .map(item => {
+      const owner = item.owner ? `${item.owner}: ` : '';
+      const deadline = item.deadline ? ` by ${item.deadline}` : '';
+      return `- ${owner}${item.text}${deadline}`;
+    });
 
   if (nextSteps.length > 0) {
     lines.push('', 'Next steps:', ...nextSteps);
@@ -322,6 +354,7 @@ export function generateCoachingInsights(
   modeTemplateType: PostCallModeType | null | undefined,
   summaryData?: { sections?: Array<{ title: string; bullets: string[] }> },
   dynamicActionArtifacts?: ActionArtifact[],
+  acceptedRecruitingRecords: AcceptedRecruitingRecord[] = [],
 ): CoachingInsight[] {
   const text = transcript.map(segment => segment.text).join('\n');
   const insights: CoachingInsight[] = [];
@@ -367,6 +400,20 @@ export function generateCoachingInsights(
       add('sales_next_step_missing_fields', 'Next step is missing owner, date, or artifact', 'Buying signal was accepted, but owner/date/artifact is not fully explicit. Confirm the missing fields before follow-up.', 'opportunity');
     }
   } else if (modeTemplateType === 'recruiting') {
+    let needsPolicyConfirmation = false;
+    for (const record of acceptedRecruitingRecords) {
+      if (record.actionType === 'candidate_evidence_summary') {
+        add('recruiting_evidence_summary', 'Internal candidate evidence recorded', 'Candidate evidence is available for internal recruiter review.', 'info');
+      } else if (record.actionType === 'strong_fit_signal') {
+        add('recruiting_candidate_interest', 'Candidate expressed interest', 'Candidate expressed interest was captured for internal recruiter review.', 'info');
+      } else {
+        add('recruiting_evidence_gap', 'Candidate evidence needs follow-up', 'Additional candidate evidence should be confirmed internally before a hiring decision.', 'opportunity');
+      }
+      if (record.evaluationResult === 'safe_fallback') needsPolicyConfirmation = true;
+    }
+    if (needsPolicyConfirmation) {
+      add('recruiting_policy_confirmation_needed', 'Recruiting policy confirmation needed', 'Confirm the recruiting policy boundary before relying on this internal record.', 'warning');
+    }
     if (!RECRUITING_LOGISTICS_PATTERN.test(text)) {
       add('missing_logistics', 'Recruiting logistics not captured', 'Consider confirming compensation, timing, and availability before closing the screen.', 'opportunity');
     }
@@ -595,6 +642,33 @@ function collectAcceptedFdeRecords(artifacts: ActionArtifact[]): AcceptedFdeReco
         missingFields: artifact.missingFields,
         groundingStatus,
         groundedSourceLabels,
+        ...(artifact.evaluationResult ? { evaluationResult: artifact.evaluationResult } : {}),
+      };
+    })
+    .filter((record) => Boolean(record.summary));
+}
+
+function collectAcceptedRecruitingRecords(artifacts: ActionArtifact[]): AcceptedRecruitingRecord[] {
+  return artifacts
+    .filter((artifact) =>
+      artifact.modeTemplateType === 'recruiting' &&
+      RECRUITING_ARTIFACT_ACTION_TYPES.has(artifact.actionType) &&
+      isAcceptedActionCarryoverStatus(artifact.generationStatus)
+    )
+    .map((artifact) => {
+      const groundingStatus: AcceptedRecruitingRecord['groundingStatus'] =
+        artifact.groundedSources.some((source) => source.status === 'used') && artifact.evaluationResult !== 'safe_fallback'
+          ? 'grounded'
+          : 'needs_confirmation';
+      return {
+        actionId: artifact.actionId,
+        ...(artifact.parentActionId ? { parentActionId: artifact.parentActionId } : {}),
+        actionType: artifact.actionType,
+        ...(artifact.sourceIntent ? { sourceIntent: artifact.sourceIntent } : {}),
+        sourceActionId: artifact.parentActionId ?? artifact.actionId,
+        summary: summarizeCapabilityFitRecord(artifact.structuredSummary),
+        missingFields: artifact.missingFields,
+        groundingStatus,
         ...(artifact.evaluationResult ? { evaluationResult: artifact.evaluationResult } : {}),
       };
     })

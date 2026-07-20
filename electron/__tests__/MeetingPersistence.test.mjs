@@ -557,6 +557,41 @@ describe('buildDynamicActionArtifactActionsFromUsage', () => {
     assert.equal(actions[0].triggerSource, 'auto_countdown');
     assert.equal(actions[0].parentActionId, 'parent-a');
   });
+
+  test('preserves recruiting source intent from metadata when merging by action id', () => {
+    const actions = buildDynamicActionArtifactActionsFromUsage([
+      {
+        timestamp: 100,
+        question: 'Do not infer a source intent from this question.',
+        answer: 'Do not infer a source intent from this answer.',
+        metadata: {
+          source: 'dynamic_action',
+          actionId: 'recruiting-evidence-1',
+          actionType: 'candidate_evidence_summary',
+          outputType: 'checklist',
+          modeTemplateType: 'recruiting',
+          generationStatus: 'accepted',
+        },
+      },
+      {
+        timestamp: 200,
+        question: 'The source intent exists only in metadata.',
+        answer: 'Internal evidence summary.',
+        metadata: {
+          source: 'dynamic_action',
+          actionId: 'recruiting-evidence-1',
+          actionType: 'candidate_evidence_summary',
+          outputType: 'checklist',
+          modeTemplateType: 'recruiting',
+          sourceIntent: 'recruiting_bei_evidence_gap',
+          generationStatus: 'completed',
+        },
+      },
+    ]);
+
+    assert.equal(actions.length, 1);
+    assert.equal(actions[0].sourceIntent, 'recruiting_bei_evidence_gap');
+  });
 });
 
 describe('MeetingPersistence.recoverUnprocessedMeetings', () => {

@@ -78,6 +78,47 @@ test('capability artifact preserves parent and runtime evaluation result', async
   assert.equal(artifacts[0].evaluationResult, 'safe_fallback');
 });
 
+test('builds recruiting artifact and preserves source intent from usage metadata', async () => {
+  const { buildDynamicActionArtifacts } = await loadHelper();
+  const artifacts = buildDynamicActionArtifacts({
+    actions: [action({
+      id: 'recruiting-child-1',
+      parentActionId: 'recruiting-parent-1',
+      modeTemplateType: 'recruiting',
+      type: 'candidate_evidence_summary',
+      sourceIntent: 'recruiting_scorecard_gap',
+      productContract: { outputType: 'checklist' },
+    })],
+    usage: [{
+      timestamp: 2,
+      answer: 'Candidate evidence is ready for internal review.',
+      metadata: {
+        source: 'dynamic_action',
+        actionId: 'recruiting-child-1',
+        sourceIntent: 'recruiting_bei_evidence_gap',
+      },
+    }],
+  });
+
+  assert.equal(artifacts.length, 1);
+  assert.equal(artifacts[0].modeTemplateType, 'recruiting');
+  assert.equal(artifacts[0].sourceIntent, 'recruiting_bei_evidence_gap');
+});
+
+test('uses action source intent when matching usage has none', async () => {
+  const { buildDynamicActionArtifacts } = await loadHelper();
+  const artifacts = buildDynamicActionArtifacts({
+    actions: [action({
+      modeTemplateType: 'recruiting',
+      type: 'candidate_experience_probe',
+      sourceIntent: 'recruiting_situational_evidence_gap',
+    })],
+    usage: [],
+  });
+
+  assert.equal(artifacts[0].sourceIntent, 'recruiting_situational_evidence_gap');
+});
+
 test('does not use ordinary assist usage without dynamic_action metadata', async () => {
   const { buildDynamicActionArtifacts } = await loadHelper();
   const artifacts = buildDynamicActionArtifacts({

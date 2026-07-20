@@ -307,6 +307,47 @@ test('buildPostCallEnhancements handles Chinese recruiting logistics and follow-
   assert.ok(!result.coachingInsights.some(insight => insight.type === 'missing_logistics'));
 });
 
+test('recruiting follow-up never exposes English or Chinese internal evaluation content', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'recruiting',
+    transcript: [],
+    summaryData: { overview: 'Thank you for speaking with us.', actionItems: [] },
+    dynamicActionArtifacts: [
+      {
+        actionId: 'recruiting-probe-1',
+        modeTemplateType: 'recruiting',
+        actionType: 'candidate_experience_probe',
+        sourceIntent: 'recruiting_scorecard_gap',
+        outputType: 'checklist',
+        structuredSummary: 'Scorecard gap: verify risk ownership before any hire or reject decision.',
+        missingFields: ['risk_ownership'],
+        groundedSources: [],
+        acceptedAt: 1,
+        generationStatus: 'completed',
+      },
+      {
+        actionId: 'recruiting-interest-1',
+        modeTemplateType: 'recruiting',
+        actionType: 'strong_fit_signal',
+        sourceIntent: 'recruiting_candidate_interest',
+        outputType: 'spoken_response',
+        structuredSummary: '候选人对岗位表示兴趣；不要写录用、淘汰、年龄或性别。',
+        missingFields: [],
+        groundedSources: [],
+        acceptedAt: 2,
+        evaluationResult: 'safe_fallback',
+        generationStatus: 'completed',
+      },
+    ],
+  });
+
+  assert.equal(result.acceptedRecruitingRecords.length, 2);
+  assert.ok(result.coachingInsights.some((item) => item.type === 'recruiting_evidence_gap'));
+  assert.ok(result.coachingInsights.some((item) => item.type === 'recruiting_candidate_interest'));
+  assert.ok(result.coachingInsights.some((item) => item.type === 'recruiting_policy_confirmation_needed'));
+  assert.doesNotMatch(result.followUpDraft, /scorecard|risk|hire|reject|录用|淘汰|年龄|性别|age|gender/i);
+});
+
 test('fde post-call insights flag customer goal without success metric', () => {
   const result = buildPostCallEnhancements({
     modeTemplateType: 'fde',
@@ -399,6 +440,8 @@ test('post-call schema remains JSON-safe and excludes raw transcript fields', ()
     'acceptedBlockerRecords',
     'acceptedCapabilityFitRecords',
     'acceptedDecisionRecords',
+    'acceptedFdeRecords',
+    'acceptedRecruitingRecords',
     'actionItemsStructured',
     'coachingInsights',
     'followUpDraft',
