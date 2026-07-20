@@ -77,3 +77,59 @@ Final output:
 - No remaining implementation concerns for Task 1.
 - By design, recruiting live-assist cards defer when cloud confirmation is unavailable or transcript scope is denied; this is the required cloud-only boundary.
 - The report is committed separately after `f598df98`, because the brief's exact functional `git add` list excluded it.
+
+## Reviewer Follow-up: Partial Invalid JSON and Interest Trigger
+
+### Implementation
+
+- A `cloud_invalid_json` response now prevents recruiting candidates that are cloud-required and disallow local fallback from adopting any otherwise-valid partial cloud result. They remain unresolved and therefore defer with `cloud_invalid_json`.
+- The restriction is explicitly scoped to `modeTemplateType === 'recruiting'`; Sales and FDE retain their existing partial-result behavior.
+- `strong_fit_signal` now requires a candidate's explicit interest in the role or team. Interviewer statements that a candidate is a great fit or a perfect match no longer trigger it.
+
+### RED Evidence
+
+Command:
+
+```bash
+rtk npm run build:electron:tsc && rtk node --test electron/services/__tests__/DynamicActionEngine.test.mjs electron/services/__tests__/ModeEventClassifier.test.mjs electron/services/__tests__/ModeActionPolicy.test.mjs
+```
+
+Key output before the reviewer fixes:
+
+- Electron TypeScript build passed.
+- Focused tests: 149 total, 147 passed, 2 failed.
+- A valid `candidate_concern` pass plus an invalid cloud entry produced `['pass', 'defer']`, rather than deferring both required recruiting candidates.
+- `这个候选人很匹配这个岗位，经验也很适合。` incorrectly triggered `strong_fit_signal`.
+
+### GREEN Evidence
+
+Command:
+
+```bash
+rtk npm run build:electron:tsc && rtk node --test electron/services/__tests__/DynamicActionEngine.test.mjs electron/services/__tests__/ModeEventClassifier.test.mjs electron/services/__tests__/ModeActionPolicy.test.mjs
+```
+
+Final output:
+
+- Electron TypeScript build passed.
+- 149 tests passed, 0 failed, 16 suites.
+- A partial-invalid recruiting cloud response defers every required/no-fallback candidate with `cloud_invalid_json`.
+- A partial-invalid Sales response continues to accept its valid cloud decision, proving the recruiting guard did not change Sales behavior.
+- Interviewer match evaluation does not trigger `strong_fit_signal`; explicit candidate role interest can pass through the cloud gate.
+
+### Files
+
+- `electron/services/dynamic-actions/ModeEventClassifier.ts`
+- `electron/services/dynamic-actions/DynamicActionDetector.ts`
+- `electron/services/__tests__/ModeEventClassifier.test.mjs`
+- `electron/services/__tests__/DynamicActionEngine.test.mjs`
+
+### Commit
+
+- `84a9802f` `fix(recruiting): defer partial invalid cloud gates`
+
+### Self-Review and Concerns
+
+- `git diff --check` passed before staging; the code commit contains only the four Task 1 source/test files listed above.
+- Code-review graph review identified `ModeEventClassifier.assess()` as the affected path; focused tests exercise the new defer path and the preserved Sales path.
+- No remaining implementation concerns. `.tmp/` remained untracked and untouched.
