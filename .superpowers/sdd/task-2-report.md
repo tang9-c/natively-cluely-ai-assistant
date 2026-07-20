@@ -48,3 +48,39 @@ The same focused command passed after implementation:
 ## Concerns
 
 - `candidate_evidence_summary` is intentionally only a Task 2 runtime contract. Task 3 remains responsible for producing that derived action.
+
+## Reviewer Follow-up: Transcript Privacy and Recruiting Boundaries
+
+### Implementation
+
+- `IntelligenceEngine.recordDynamicActionUsage()` now emits a minimal metadata shape for the `transcript_evidence` policy. It omits `retrievalQuery`, mode context, and source content while retaining action identity, `evidenceKind`, output type, and generation status.
+- Completed transcript-evidence runtime usage follows the same boundary. It records action identity, `evidenceKind`, evaluation result, and claim-grounding verdict/reason, but not `latestTurn`, `retrievalQuery`, transcript evidence, source intent, or grounded excerpts.
+- The evaluator keeps transcript evidence in memory for the bounded runtime validation only. The new tests prove it still receives and validates the supplied evidence while the external claim verifier is bypassed.
+- Recruiting safety checks are now maintained in separate categories: visible method classification, final hiring judgments, and externally grounded policy claims. They reject Chinese and English stress-interview classification, non-advancement judgments, unsupported start-date commitments, and unsupported offer commitments without matching ordinary high-pressure project evidence.
+
+### RED Evidence
+
+Command:
+
+```bash
+rtk npm run build:electron:tsc && rtk node --test electron/services/__tests__/DynamicActionRuntimeEvaluation.test.mjs
+```
+
+Before the reviewer fix, the build passed and five runtime tests failed as expected:
+
+- Accepted and completed transcript-evidence metadata had no `evidenceKind` privacy shape.
+- Stress-interview method classification was accepted.
+- Final non-advancement judgments were accepted.
+- Start-date and offer policy claims did not consistently produce the recruiting-material grounding failure.
+
+### GREEN Evidence
+
+- The same Electron TypeScript build plus runtime evaluation command passed: 12 tests, 0 failures.
+- `rtk node --test electron/services/__tests__/ModeEventClassifier.test.mjs` passed: 18 tests, 0 failures.
+- `git diff --check` passed before staging.
+
+### Cloud Gate Ordering Evidence
+
+- No second cloud gate was added. `IntelligenceEngine.runWhatShouldISay()` invokes the grounded-claim verifier only when a caller has already supplied `dynamicActionValidation`; it does not create or authorize an action.
+- The existing `partial invalid cloud JSON defers every required recruiting candidate without fallback` test in `electron/services/__tests__/ModeEventClassifier.test.mjs` proves that a failed/partial cloud semantic gate returns `defer` with `cloud_invalid_json` for every required recruiting candidate.
+- Therefore a failed cloud gate yields no approved recruiting action for the runtime path to validate. The claim verifier remains post-action grounding validation with its existing timeout and provider-routing behavior.
