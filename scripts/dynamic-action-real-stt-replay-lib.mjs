@@ -1,6 +1,6 @@
 import axios from 'axios';
 import 'dotenv/config';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -21,7 +21,6 @@ function sha256(value) {
 }
 
 function hasCompleteRecruitingLabel(label) {
-  const observation = label?.runtimeObservation;
   return label && typeof label === 'object'
     && typeof label.turnId === 'string'
     && label.turnId.trim().length > 0
@@ -36,27 +35,84 @@ function hasCompleteRecruitingLabel(label) {
     && typeof label.speakerRole === 'string'
     && label.speakerRole.trim().length > 0
     && typeof label.policyGroundingRequired === 'boolean'
-    && typeof label.continuationChildExpected === 'boolean'
-    && observation && typeof observation === 'object'
+    && typeof label.continuationChildExpected === 'boolean';
+}
+
+function hasCompleteAttestedObservation(observation) {
+  return observation && typeof observation === 'object'
+    && typeof observation.meetingId === 'string'
+    && typeof observation.turnId === 'string'
+    && typeof observation.transcriptSha256 === 'string'
+    && typeof observation.classifierTraceId === 'string'
+    && observation.classifierTraceId.trim().length > 0
+    && Array.isArray(observation.observedActionTypes)
+    && observation.observedActionTypes.every(value => typeof value === 'string')
+    && (observation.parentActionId === null || typeof observation.parentActionId === 'string')
+    && Array.isArray(observation.childActionIds)
+    && observation.childActionIds.every(value => typeof value === 'string' && value.trim().length > 0)
+    && Number.isFinite(observation.finalTurnAtMs)
+    && Number.isFinite(observation.completedAtMs)
+    && observation.completedAtMs >= observation.finalTurnAtMs
+    && (observation.childEmittedAtMs === null || (
+      Number.isFinite(observation.childEmittedAtMs)
+      && observation.childEmittedAtMs >= observation.finalTurnAtMs
+      && observation.childEmittedAtMs <= observation.completedAtMs
+    ))
     && typeof observation.policyGroundingUsed === 'boolean'
     && typeof observation.positivePolicyCommitment === 'boolean'
     && typeof observation.candidateFacingEvidenceLeak === 'boolean'
-    && typeof observation.unsafeVisibleAnswer === 'boolean'
-    && typeof observation.continuationChildEmitted === 'boolean'
-    && Number.isInteger(observation.derivedActionCount)
-    && observation.derivedActionCount >= 0
-    && (observation.finalTurnToDerivedCardMs === null || (
-      Number.isFinite(observation.finalTurnToDerivedCardMs)
-      && observation.finalTurnToDerivedCardMs >= 0
-    ));
+    && typeof observation.unsafeVisibleAnswer === 'boolean';
 }
 
-export function evaluateRecruitingRealAssetGate({ entries, audioRoot }) {
+export function signRecruitingReleaseAttestation(payload, key) {
+  return createHmac('sha256', key).update(JSON.stringify(payload)).digest('hex');
+}
+
+export function verifyRecruitingReleaseAttestation(document, key) {
+  if (!document || typeof document !== 'object' || !document.payload || typeof document.signature !== 'string') {
+    return null;
+  }
+  if (typeof key !== 'string' || key.length < 16) return null;
+  const expected = signRecruitingReleaseAttestation(document.payload, key);
+  const actualBuffer = Buffer.from(document.signature, 'hex');
+  const expectedBuffer = Buffer.from(expected, 'hex');
+  if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) return null;
+  const payload = document.payload;
+  if (payload.source !== 'production_replay' || typeof payload.runId !== 'string' || !payload.runId.trim()) return null;
+  if (!Array.isArray(payload.assets) || !Array.isArray(payload.observations)) return null;
+  return payload;
+}
+
+export function evaluateRecruitingRealAssetGate({ entries, audioRoot, attestationDocument, attestationKey }) {
+  const attestation = verifyRecruitingReleaseAttestation(attestationDocument, attestationKey);
   const seenAudioPaths = new Set();
+  const seenAudioHashes = new Set();
   const seenMeetingIds = new Set();
   const seenTurnIds = new Set();
+  const seenTranscriptHashes = new Set();
   const realMeetings = [];
   const invalidReasons = new Set();
+  if (!attestation) invalidReasons.add('trusted_attestation_missing_or_invalid');
+  const attestedAssets = new Map();
+  const attestedObservations = new Map();
+  for (const asset of attestation?.assets ?? []) {
+    if (!asset || typeof asset.meetingId !== 'string' || typeof asset.audioSha256 !== 'string'
+      || typeof asset.captureId !== 'string' || !asset.captureId.trim()) {
+      invalidReasons.add('invalid_attested_asset');
+      continue;
+    }
+    if (attestedAssets.has(asset.meetingId)) invalidReasons.add('duplicate_attested_meeting_id');
+    attestedAssets.set(asset.meetingId, asset);
+  }
+  for (const observation of attestation?.observations ?? []) {
+    if (!hasCompleteAttestedObservation(observation)) {
+      invalidReasons.add('invalid_attested_observation');
+      continue;
+    }
+    const key = `${observation.meetingId}:${observation.turnId}`;
+    if (attestedObservations.has(key)) invalidReasons.add('duplicate_attested_observation');
+    attestedObservations.set(key, observation);
+  }
   for (const entry of entries) {
     if (entry.modeTemplateType !== 'recruiting' || entry.syntheticAudio === true) continue;
     if (entry.syntheticAudio !== false) {
@@ -67,6 +123,7 @@ export function evaluateRecruitingRealAssetGate({ entries, audioRoot }) {
       ? entry.audioPath
       : path.resolve(audioRoot, entry.audioPath);
     const provenance = entry.realAsset;
+    const attestedAsset = provenance?.meetingId ? attestedAssets.get(provenance.meetingId) : undefined;
     let meetingValid = true;
     if (!fs.existsSync(audioPath)) {
       invalidReasons.add('audio_missing');
@@ -89,10 +146,20 @@ export function evaluateRecruitingRealAssetGate({ entries, audioRoot }) {
         meetingValid = false;
       }
       seenMeetingIds.add(provenance.meetingId);
-      if (fs.existsSync(audioPath) && sha256(fs.readFileSync(audioPath)) !== provenance.audioSha256) {
+      if (!attestedAsset || attestedAsset.audioSha256 !== provenance.audioSha256) {
+        invalidReasons.add('asset_not_in_trusted_attestation');
+        meetingValid = false;
+      }
+      const actualAudioSha256 = fs.existsSync(audioPath) ? sha256(fs.readFileSync(audioPath)) : null;
+      if (actualAudioSha256 !== provenance.audioSha256) {
         invalidReasons.add('audio_sha256_mismatch');
         meetingValid = false;
       }
+      if (seenAudioHashes.has(provenance.audioSha256)) {
+        invalidReasons.add('duplicate_audio_sha256');
+        meetingValid = false;
+      }
+      seenAudioHashes.add(provenance.audioSha256);
     }
 
     const labels = Array.isArray(entry.labeledFinalTurns) ? entry.labeledFinalTurns : [];
@@ -111,6 +178,20 @@ export function evaluateRecruitingRealAssetGate({ entries, audioRoot }) {
           meetingValid = false;
         }
         seenTurnIds.add(label.turnId);
+      }
+      if (typeof label?.transcriptSha256 === 'string') {
+        if (seenTranscriptHashes.has(label.transcriptSha256)) {
+          invalidReasons.add('duplicate_transcript_sha256');
+          meetingValid = false;
+        }
+        seenTranscriptHashes.add(label.transcriptSha256);
+      }
+      const observation = provenance?.meetingId && label?.turnId
+        ? attestedObservations.get(`${provenance.meetingId}:${label.turnId}`)
+        : undefined;
+      if (!observation || observation.transcriptSha256 !== label?.transcriptSha256) {
+        invalidReasons.add('attested_observation_missing_or_mismatched');
+        meetingValid = false;
       }
     }
     if (meetingValid) {
@@ -180,6 +261,7 @@ Options:
 
 Notes:
   - This makes real network requests and may incur STT usage cost.
+  - Real recruiting release runs also require RECRUITING_RELEASE_ATTESTATION_PATH and RECRUITING_RELEASE_ATTESTATION_KEY.
   - API keys are read from environment variables and are never printed.`);
 }
 
@@ -225,19 +307,40 @@ export async function runRealSttReplay({
   const opts = parseArgs(process.argv.slice(2), label, scriptName);
   const apiKey = process.env.QCLOUD_LIVE_API_KEY || process.env.NATIVELY_API_KEY;
   if (!apiKey || !apiKey.trim()) {
-    console.log(JSON.stringify({
+    const missingCredentialsReport = {
       environmentStatus: 'blocked_missing_credentials',
       status: 'blocked',
       reason: `Missing QCLOUD_LIVE_API_KEY or NATIVELY_API_KEY for ${label} real STT replay.`,
       modeTemplateTypes: [modeTemplateType],
-    }, null, 2));
+    };
+    console.log(JSON.stringify(missingCredentialsReport, null, 2));
+    if (modeTemplateType === 'recruiting' && semanticGateMode === 'real') {
+      process.exitCode = 1;
+      return missingCredentialsReport;
+    }
     process.exit(0);
   }
 
   const manifestPath = path.join(root, 'tests/fixtures/dynamic-actions/replay/replay-manifest.json');
+  let recruitingReleaseAttestation;
   if (modeTemplateType === 'recruiting' && semanticGateMode === 'real') {
     const entries = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    const assetGate = evaluateRecruitingRealAssetGate({ entries, audioRoot: root });
+    const attestationPath = process.env.RECRUITING_RELEASE_ATTESTATION_PATH;
+    const attestationKey = process.env.RECRUITING_RELEASE_ATTESTATION_KEY;
+    let attestationDocument;
+    if (attestationPath && fs.existsSync(attestationPath)) {
+      try {
+        attestationDocument = JSON.parse(fs.readFileSync(attestationPath, 'utf8'));
+      } catch {
+        attestationDocument = undefined;
+      }
+    }
+    const assetGate = evaluateRecruitingRealAssetGate({
+      entries,
+      audioRoot: root,
+      attestationDocument,
+      attestationKey,
+    });
     if (assetGate.status !== 'ready') {
       const blockedReport = {
         environmentStatus: 'blocked_real_recruiting_assets',
@@ -248,6 +351,7 @@ export async function runRealSttReplay({
       process.exitCode = 1;
       return blockedReport;
     }
+    recruitingReleaseAttestation = verifyRecruitingReleaseAttestation(attestationDocument, attestationKey);
   }
 
   const replayModuleUrl = pathToFileURL(
@@ -323,6 +427,7 @@ export async function runRealSttReplay({
     modeTemplateTypes: [modeTemplateType],
     semanticGateMode,
     cloudClassifier,
+    recruitingReleaseAttestation,
     environmentStatus: 'ok',
     transcribeAudio: async ({ audioPath }) => transcribeAudio(audioPath),
   });
@@ -345,6 +450,6 @@ export async function runRealSttReplay({
       console.error('BLOCKED_REAL_RECRUITING_ASSETS');
     }
   }
-  if (report.failedEntries > 0 || report.skippedEntries > 0) process.exitCode = 1;
+  if (report.failedEntries > 0 || report.skippedEntries > 0) process.exit(1);
   return report;
 }

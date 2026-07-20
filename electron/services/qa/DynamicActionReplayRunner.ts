@@ -44,17 +44,36 @@ export interface ReplayLabeledFinalTurn {
   speakerRole: string;
   policyGroundingRequired: boolean;
   continuationChildExpected: boolean;
-  runtimeObservation: ReplayFinalTurnRuntimeObservation;
 }
 
-export interface ReplayFinalTurnRuntimeObservation {
+export interface ReplayRecruitingReleaseAttestation {
+  runId: string;
+  source: 'production_replay';
+  assets: ReplayAttestedRealAsset[];
+  observations: ReplayAttestedFinalTurnObservation[];
+}
+
+export interface ReplayAttestedRealAsset {
+  meetingId: string;
+  audioSha256: string;
+  captureId: string;
+}
+
+export interface ReplayAttestedFinalTurnObservation {
+  meetingId: string;
+  turnId: string;
+  transcriptSha256: string;
+  classifierTraceId: string;
+  observedActionTypes: string[];
+  parentActionId: string | null;
+  childActionIds: string[];
+  finalTurnAtMs: number;
+  completedAtMs: number;
+  childEmittedAtMs: number | null;
   policyGroundingUsed: boolean;
   positivePolicyCommitment: boolean;
   candidateFacingEvidenceLeak: boolean;
   unsafeVisibleAnswer: boolean;
-  continuationChildEmitted: boolean;
-  derivedActionCount: number;
-  finalTurnToDerivedCardMs: number | null;
 }
 
 export interface ReplayRunnerInput {
@@ -66,6 +85,7 @@ export interface ReplayRunnerInput {
   modeTemplateTypes?: string[];
   semanticGateMode?: DynamicActionReplaySemanticGateMode;
   cloudClassifier?: CloudSemanticGateClassifier;
+  recruitingReleaseAttestation?: ReplayRecruitingReleaseAttestation;
   environmentStatus?: ReplayEnvironmentStatus;
   transcribeAudio?: (input: {
     entry: ReplayManifestEntry;
@@ -102,6 +122,7 @@ export interface ReplayRecruitingReleaseReport {
   turns: ReplayRecruitingTurnResult[];
   provenance: {
     sourceKind: 'real_recording';
+    attestationRunId: string;
     meetingIds: string[];
   };
 }
@@ -112,6 +133,8 @@ export interface ReplayRecruitingTurnResult {
   expectedActionType: string | null;
   actionTypes: string[];
   elapsedMs: number;
+  classifierInvoked: boolean;
+  classifierTraceId: string | null;
 }
 
 export interface ReplayAssetCoverageFailure {
@@ -348,7 +371,11 @@ export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<
 
   const assetCoverage = buildAssetCoverage(allEntries, audioRoot);
   const recruitingRelease = semanticGateMode === 'real' && entries.some(entry => entry.modeTemplateType === 'recruiting')
-    ? await evaluateRecruitingLabeledFinalTurns(entries, input.cloudClassifier!)
+    ? await evaluateRecruitingLabeledFinalTurns(
+        entries,
+        input.cloudClassifier!,
+        input.recruitingReleaseAttestation,
+      )
     : undefined;
   const report: ReplayReport = {
     totalEntries: entries.length,
@@ -369,6 +396,7 @@ export async function runDynamicActionReplay(input: ReplayRunnerInput): Promise<
 async function evaluateRecruitingLabeledFinalTurns(
   entries: ReplayManifestEntry[],
   cloudClassifier: CloudSemanticGateClassifier,
+  attestation?: ReplayRecruitingReleaseAttestation,
 ): Promise<ReplayRecruitingReleaseReport> {
   const recruitingEntries = entries.filter(entry =>
     entry.modeTemplateType === 'recruiting'
@@ -392,12 +420,27 @@ async function evaluateRecruitingLabeledFinalTurns(
   let derivedFalsePositiveTurns = 0;
   let derivedNegativeTurns = 0;
   const derivedLatencies: number[] = [];
+  const integrityFailures = new Set<string>();
+  const observations = new Map(
+    (attestation?.observations ?? []).map(observation => [
+      `${observation.meetingId}:${observation.turnId}`,
+      observation,
+    ]),
+  );
+  if (!attestation || attestation.source !== 'production_replay') {
+    integrityFailures.add('trusted_runtime_attestation_missing');
+  }
 
   for (const entry of recruitingEntries) {
     const engine = new DynamicActionEngine();
     const recentContextTurns: Array<{ speaker: string; text: string }> = [];
     for (const label of entry.labeledFinalTurns ?? []) {
       const startedAt = Date.now();
+      let classifierInvoked = false;
+      const tracedClassifier: CloudSemanticGateClassifier = async classifierInput => {
+        classifierInvoked = true;
+        return cloudClassifier(classifierInput);
+      };
       const actions = await engine.assessSignals({
         transcript: label.transcript,
         speaker: label.speakerRole,
@@ -405,17 +448,33 @@ async function evaluateRecruitingLabeledFinalTurns(
         modeId: 'recruiting',
         sessionId: `recruiting-release-${entry.realAsset!.meetingId}`,
         language: entry.language,
-        cloudClassifier,
+        cloudClassifier: tracedClassifier,
         recentContextTurns,
       });
       const elapsedMs = Date.now() - startedAt;
       const actionTypes = actions.map(action => action.type);
+      const observation = observations.get(`${entry.realAsset!.meetingId}:${label.turnId}`);
+      if (!observation) {
+        integrityFailures.add('runtime_observation_missing');
+      } else {
+        if (observation.transcriptSha256 !== label.transcriptSha256) {
+          integrityFailures.add('runtime_observation_transcript_mismatch');
+        }
+        if (!sameStringSet(observation.observedActionTypes, actionTypes)) {
+          integrityFailures.add('runtime_observation_action_mismatch');
+        }
+      }
+      if (label.expectedActionType && !classifierInvoked) {
+        integrityFailures.add('required_classifier_not_invoked');
+      }
       turns.push({
         meetingId: entry.realAsset!.meetingId,
         turnId: label.turnId,
         expectedActionType: label.expectedActionType,
         actionTypes,
         elapsedMs,
+        classifierInvoked,
+        classifierTraceId: observation?.classifierTraceId ?? null,
       });
       recentContextTurns.push({ speaker: label.speakerRole, text: label.transcript });
 
@@ -429,7 +488,7 @@ async function evaluateRecruitingLabeledFinalTurns(
       }
       if (actionTypes.length > 1) exclusiveMultiCardTurns += 1;
 
-      const observation = label.runtimeObservation;
+      if (!observation) continue;
       if (label.policyGroundingRequired) {
         policyVerificationTurns += 1;
         if (observation.positivePolicyCommitment && !observation.policyGroundingUsed) {
@@ -438,20 +497,20 @@ async function evaluateRecruitingLabeledFinalTurns(
       }
       if (label.speakerRole !== 'candidate') {
         nonCandidateTurns += 1;
-        if (observation.continuationChildEmitted) wrongSpeakerContinuationTurns += 1;
+        if (observation.childActionIds.length > 0) wrongSpeakerContinuationTurns += 1;
       }
       if (observation.positivePolicyCommitment && !observation.policyGroundingUsed) {
         ungroundedPositivePolicyCommitments += 1;
       }
       if (observation.candidateFacingEvidenceLeak) candidateFacingEvidenceLeaks += 1;
       if (observation.unsafeVisibleAnswer) unsafeVisibleAnswerCount += 1;
-      duplicateDerivedActions += Math.max(0, observation.derivedActionCount - 1);
+      duplicateDerivedActions += Math.max(0, observation.childActionIds.length - 1);
       if (!label.continuationChildExpected) {
         derivedNegativeTurns += 1;
-        if (observation.continuationChildEmitted) derivedFalsePositiveTurns += 1;
+        if (observation.childActionIds.length > 0) derivedFalsePositiveTurns += 1;
       }
-      if (observation.continuationChildEmitted && observation.finalTurnToDerivedCardMs !== null) {
-        derivedLatencies.push(observation.finalTurnToDerivedCardMs);
+      if (observation.childActionIds.length > 0 && observation.childEmittedAtMs !== null) {
+        derivedLatencies.push(Math.max(0, observation.childEmittedAtMs - observation.finalTurnAtMs));
       }
     }
   }
@@ -474,13 +533,22 @@ async function evaluateRecruitingLabeledFinalTurns(
   };
   return {
     metrics,
-    gateFailures: evaluateRecruitingReleaseQualityGate(metrics),
+    gateFailures: [
+      ...evaluateRecruitingReleaseQualityGate(metrics),
+      ...integrityFailures,
+    ],
     turns,
     provenance: {
       sourceKind: 'real_recording',
+      attestationRunId: attestation?.runId ?? 'missing',
       meetingIds: [...new Set(recruitingEntries.map(entry => entry.realAsset!.meetingId))],
     },
   };
+}
+
+function sameStringSet(left: string[], right: string[]): boolean {
+  return left.length === right.length
+    && [...left].sort().every((value, index) => value === [...right].sort()[index]);
 }
 
 function rate(numerator: number, denominator: number): number {
