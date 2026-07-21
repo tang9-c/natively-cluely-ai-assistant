@@ -365,6 +365,56 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     assert.ok(final.detailedSummary.actionItems.includes('Alice owns docs'));
   });
 
+  test('structured summary receives the first 50000 context characters', async () => {
+    const session = buildMockSession();
+    const calls = [];
+    const llm = {
+      generateMeetingSummary: async (_prompt, context) => {
+        calls.push(context);
+        return JSON.stringify({ overview: 'summary', keyPoints: [], actionItems: [] });
+      },
+    };
+    const mp = new MeetingPersistence(session, llm);
+    const context = `${'甲'.repeat(50000)}尾部不应进入本次摘要`;
+
+    await mp.processAndSaveMeeting(
+      buildSnapshot({ context }),
+      'm-summary-context-limit',
+      { title: '已有标题' },
+    );
+
+    assert.equal(calls.length, 1, 'calendar title avoids the separate title generation call');
+    assert.equal(calls[0].length, 50000);
+    assert.equal(calls[0], context.slice(0, 50000));
+  });
+
+  test('Groq-style summary field is persisted as the overview shown in meeting details', async () => {
+    const db = DatabaseManager.getInstance();
+    const session = buildMockSession();
+    let calls = 0;
+    const llm = {
+      generateMeetingSummary: async () => {
+        calls += 1;
+        if (calls === 1) return null;
+        return JSON.stringify({
+          summary: '讨论了 Q3 里程碑。',
+          keyPoints: ['确认路线图'],
+          actionItems: ['Alice 整理文档'],
+          decisions: ['按原计划推进'],
+        });
+      },
+    };
+    const mp = new MeetingPersistence(session, llm);
+
+    await mp.processAndSaveMeeting(buildSnapshot(), 'm-groq-summary-field');
+
+    const final = db.getMeetingDetails('m-groq-summary-field');
+    assert.ok(final, 'meeting should be saved');
+    assert.equal(final.detailedSummary.overview, '讨论了 Q3 里程碑。');
+    assert.deepEqual(final.detailedSummary.keyPoints, ['确认路线图']);
+    assert.deepEqual(final.detailedSummary.actionItems, ['Alice 整理文档']);
+  });
+
   test('LLM title that returns closing-summary prose is sanitized before save', async () => {
     const db = DatabaseManager.getInstance();
     const session = buildMockSession();

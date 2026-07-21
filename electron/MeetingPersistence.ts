@@ -349,7 +349,7 @@ ${baseRules}
                     groqSummaryPrompt = GROQ_SUMMARY_JSON_PROMPT;
                 }
 
-                const generatedSummary = await this.llmHelper.generateMeetingSummary(summaryPrompt, data.context.substring(0, 10000), groqSummaryPrompt);
+                const generatedSummary = await this.llmHelper.generateMeetingSummary(summaryPrompt, data.context.substring(0, 50000), groqSummaryPrompt);
 
                 if (generatedSummary) {
                     // Strip markdown fences if present
@@ -376,7 +376,15 @@ ${baseRules}
                             if (modeNoteSections.length > 0) {
                                 console.warn('[MeetingPersistence] Mode sections expected but LLM did not return "sections" key. Falling back to generic.');
                             }
-                            summaryData = parsed;
+                            summaryData = {
+                                ...parsed,
+                                // Legacy Groq summaries use `summary`; the persisted/UI contract uses `overview`.
+                                overview: typeof parsed.overview === 'string'
+                                    ? parsed.overview
+                                    : typeof parsed.summary === 'string'
+                                        ? parsed.summary
+                                        : undefined,
+                            };
                         }
                     } catch (e) {
                         console.warn('[MeetingPersistence] Failed to parse summary JSON', {
