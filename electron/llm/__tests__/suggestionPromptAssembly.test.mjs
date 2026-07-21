@@ -214,7 +214,10 @@ test('WhatToAnswerLLM uses structured mode event for RAG query and prompt contex
     confidence: 0.92,
     latestTurn: '这个价格太高了, 老板可能不会批',
     emotion: 'angry',
-    emotionSource: 'sensevoice',
+    emotionSource: 'doubao-auc',
+    emotionDegree: 'strong',
+    emotionScore: 0.96,
+    emotionDegreeScore: 0.91,
     language: 'zh',
     keyEntities: ['价格', '老板', '审批'],
     retrievalQuery: 'sales pricing_objection 价格 老板 审批 这个价格太高了 angry zh',
@@ -257,6 +260,10 @@ test('WhatToAnswerLLM uses structured mode event for RAG query and prompt contex
   assert.match(message, /这个价格太高了/);
   assert.match(message, /<emotion_context>/);
   assert.match(message, /angry/);
+  assert.match(message, /doubao-auc/);
+  assert.match(message, /strong/);
+  assert.match(message, /0\.96/);
+  assert.match(message, /0\.91/);
   assert.match(message, /<key_entities>/);
   assert.match(message, /价格/);
   assert.match(message, /ROI playbook and pricing guardrails/);

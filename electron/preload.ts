@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ModeEventContext } from './llm';
-import type { TranscriptEmotion, TranscriptEmotionSource } from '../shared/senseVoiceEmotion';
+import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../shared/senseVoiceEmotion';
 
 // Types for the exposed Electron API
 type ResearchProgressStage =
@@ -283,6 +283,9 @@ interface ElectronAPI {
       final: boolean;
       emotion?: TranscriptEmotion;
       emotionSource?: TranscriptEmotionSource;
+      emotionDegree?: TranscriptEmotionDegree;
+      emotionScore?: number;
+      emotionDegreeScore?: number;
       coalescedFromCount?: number;
       coalescedProvider?: 'post_stt' | 'local_vad';
       rawSegmentIds?: string[];
@@ -1336,6 +1339,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       final: boolean;
       emotion?: TranscriptEmotion;
       emotionSource?: TranscriptEmotionSource;
+      emotionDegree?: TranscriptEmotionDegree;
+      emotionScore?: number;
+      emotionDegreeScore?: number;
       coalescedFromCount?: number;
       coalescedProvider?: 'post_stt' | 'local_vad';
       rawSegmentIds?: string[];

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { SENSEVOICE_EMOTION_LABELS } from '../../shared/senseVoiceEmotion';
-import type { TranscriptEmotion } from '../../shared/senseVoiceEmotion';
+import { SENSEVOICE_EMOTION_LABELS, TRANSCRIPT_EMOTION_DEGREE_LABELS } from '../../shared/senseVoiceEmotion';
+import type { TranscriptEmotion, TranscriptEmotionDegree } from '../../shared/senseVoiceEmotion';
 import type { NativeAudioTranscriptPayload } from '../types/electron';
 
 interface SuggestionOverlayProps {
@@ -23,7 +23,7 @@ export const SuggestionOverlay: React.FC<SuggestionOverlayProps> = ({ className 
     const [isConnected, setIsConnected] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [currentTranscript, setCurrentTranscript] = useState<Transcript | null>(null);
-    const [displayedEmotion, setDisplayedEmotion] = useState<TranscriptEmotion | null>(null);
+    const [displayedEmotion, setDisplayedEmotion] = useState<{ emotion: TranscriptEmotion; emotionDegree?: TranscriptEmotionDegree } | null>(null);
     const [suggestion, setSuggestion] = useState<GeneratedSuggestion | null>(null);
     const [error, setError] = useState<string | null>(null);
     const emotionClearTimerRef = useRef<number | null>(null);
@@ -40,11 +40,11 @@ export const SuggestionOverlay: React.FC<SuggestionOverlayProps> = ({ className 
             setDisplayedEmotion(null);
         };
 
-        const showDisplayedEmotion = (emotion: TranscriptEmotion) => {
+        const showDisplayedEmotion = (emotion: TranscriptEmotion, emotionDegree?: TranscriptEmotionDegree) => {
             if (emotionClearTimerRef.current !== null) {
                 window.clearTimeout(emotionClearTimerRef.current);
             }
-            setDisplayedEmotion(emotion);
+            setDisplayedEmotion({ emotion, emotionDegree });
             emotionClearTimerRef.current = window.setTimeout(() => setDisplayedEmotion(null), 4000);
         };
 
@@ -68,7 +68,7 @@ export const SuggestionOverlay: React.FC<SuggestionOverlayProps> = ({ className 
             window.electronAPI.onNativeAudioTranscript((transcript) => {
                 setCurrentTranscript(transcript);
                 if (transcript.emotion && transcript.emotionSource) {
-                    showDisplayedEmotion(transcript.emotion);
+                    showDisplayedEmotion(transcript.emotion, transcript.emotionDegree);
                 } else {
                     clearDisplayedEmotion();
                 }
@@ -135,7 +135,7 @@ export const SuggestionOverlay: React.FC<SuggestionOverlayProps> = ({ className 
                         </span>
                         {displayedEmotion && (
                             <span className="rounded border border-amber-400/20 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-200">
-                                情绪 {SENSEVOICE_EMOTION_LABELS[displayedEmotion]}
+                                情绪 {SENSEVOICE_EMOTION_LABELS[displayedEmotion.emotion]}{displayedEmotion.emotionDegree ? ` ${TRANSCRIPT_EMOTION_DEGREE_LABELS[displayedEmotion.emotionDegree]}` : ''}
                             </span>
                         )}
                         {!currentTranscript.final && (

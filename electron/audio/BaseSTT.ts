@@ -24,7 +24,7 @@
  */
 
 import { EventEmitter } from 'events';
-import type { TranscriptEmotion, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion';
+import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion';
 import type { SpeakerVerificationAnnotator } from '../services/speaker/SpeakerVerificationAnnotator';
 import type { SpeakerVerificationMetadata } from '../services/speaker/speakerVerificationTypes';
 
@@ -40,6 +40,9 @@ export interface TranscriptSegment {
     endTimestampMs?: number;
     emotion?: TranscriptEmotion;
     emotionSource?: TranscriptEmotionSource;
+    emotionDegree?: TranscriptEmotionDegree;
+    emotionScore?: number;
+    emotionDegreeScore?: number;
     speakerVerification?: SpeakerVerificationMetadata;
     coalescedFromCount?: number;
     coalescedProvider?: 'post_stt' | 'local_vad';

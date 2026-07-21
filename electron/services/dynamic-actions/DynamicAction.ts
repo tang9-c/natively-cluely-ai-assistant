@@ -1,5 +1,5 @@
 import type { SemanticGateTrace } from './ModeEventClassifier';
-import type { TranscriptEmotionSource } from '../../../shared/senseVoiceEmotion';
+import type { TranscriptEmotionDegree, TranscriptEmotionSource } from '../../../shared/senseVoiceEmotion';
 import type { ContextNeedDecision } from '../context/ContextNeedDecision';
 
 export type ActionStatus =
@@ -80,6 +80,9 @@ export interface DynamicAction {
     language?: string;
     emotion?: string;
     emotionSource?: TranscriptEmotionSource;
+    emotionDegree?: TranscriptEmotionDegree;
+    emotionScore?: number;
+    emotionDegreeScore?: number;
     keyEntities?: string[];
     retrievalQuery?: string;
     autoSurfacePolicy?: AutoSurfacePolicy;

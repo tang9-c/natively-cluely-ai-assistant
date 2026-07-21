@@ -6,7 +6,7 @@ import { RecapLLM } from './llm';
 import { isVerboseLogging } from './verboseLog';
 import { TranscriptSegmentCoalescer } from './TranscriptSegmentCoalescer';
 import type { SpeakerVerificationMetadata } from './services/speaker/speakerVerificationTypes';
-import type { TranscriptEmotionSource } from '../shared/senseVoiceEmotion';
+import type { TranscriptEmotionDegree, TranscriptEmotionSource } from '../shared/senseVoiceEmotion';
 
 export interface TranscriptSegment {
     marker?: string;
@@ -23,6 +23,9 @@ export interface TranscriptSegment {
     endTimestampMs?: number;
     emotion?: string;
     emotionSource?: TranscriptEmotionSource;
+    emotionDegree?: TranscriptEmotionDegree;
+    emotionScore?: number;
+    emotionDegreeScore?: number;
     speakerVerification?: SpeakerVerificationMetadata;
     coalescedFromCount?: number;
     coalescedProvider?: 'post_stt' | 'local_vad';

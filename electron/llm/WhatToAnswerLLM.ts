@@ -14,7 +14,7 @@ import type {
     AnswerSourceStatus,
 } from "../db/DatabaseManager";
 import { buildRetrievalQuery, detectLanguage, escapeXmlText } from "../services/dynamic-actions/ModeEventUtils";
-import type { TranscriptEmotionSource } from "../../shared/senseVoiceEmotion";
+import type { TranscriptEmotionDegree, TranscriptEmotionSource } from "../../shared/senseVoiceEmotion";
 
 export interface ModeEventContext {
     actionId?: string;
@@ -27,6 +27,9 @@ export interface ModeEventContext {
     latestTurn?: string;
     emotion?: string;
     emotionSource?: TranscriptEmotionSource;
+    emotionDegree?: TranscriptEmotionDegree;
+    emotionScore?: number;
+    emotionDegreeScore?: number;
     language?: string;
     keyEntities?: string[];
     retrievalQuery?: string;
@@ -89,6 +92,9 @@ function buildEmotionPromptBlock(modeEvent?: ModeEventContext): string | undefin
     return `<emotion_context>
 speaker_emotion: ${escapeXmlText(modeEvent.emotion)}
 source: ${escapeXmlText(modeEvent.emotionSource || 'unknown')}
+${modeEvent.emotionDegree ? `strength: ${escapeXmlText(modeEvent.emotionDegree)}` : ''}
+${modeEvent.emotionScore != null ? `emotion_confidence: ${modeEvent.emotionScore}` : ''}
+${modeEvent.emotionDegreeScore != null ? `strength_confidence: ${modeEvent.emotionDegreeScore}` : ''}
 Use this as a reasoning signal for tone, risk, and urgency. Do not quote it as transcript content.
 </emotion_context>`;
 }

@@ -20,6 +20,9 @@ export interface CoalescableTranscriptSegment {
     endTimestampMs?: number;
     emotion?: string;
     emotionSource?: string;
+    emotionDegree?: string;
+    emotionScore?: number;
+    emotionDegreeScore?: number;
     speakerVerification?: unknown;
     coalescedFromCount?: number;
     coalescedProvider?: 'post_stt' | 'local_vad';
@@ -189,7 +192,10 @@ export class TranscriptSegmentCoalescer {
 
         const rawSegmentIds = rawSegmentIdsFor(previous, next);
         const emotionMatches = sameOptionalValue(previous.emotion, next.emotion)
-            && sameOptionalValue(previous.emotionSource, next.emotionSource);
+            && sameOptionalValue(previous.emotionSource, next.emotionSource)
+            && sameOptionalValue(previous.emotionDegree, next.emotionDegree)
+            && sameOptionalValue(previous.emotionScore, next.emotionScore)
+            && sameOptionalValue(previous.emotionDegreeScore, next.emotionDegreeScore);
         const hasMetadataSoftMismatch = !sameOptionalValue(previous.speakerLabel, next.speakerLabel)
             || !emotionMatches
             || !sameJsonValue(previous.speakerVerification, next.speakerVerification);
@@ -208,6 +214,9 @@ export class TranscriptSegmentCoalescer {
         if (!emotionMatches) {
             delete (mergedSegment as Partial<CoalescableTranscriptSegment>).emotion;
             delete (mergedSegment as Partial<CoalescableTranscriptSegment>).emotionSource;
+            delete (mergedSegment as Partial<CoalescableTranscriptSegment>).emotionDegree;
+            delete (mergedSegment as Partial<CoalescableTranscriptSegment>).emotionScore;
+            delete (mergedSegment as Partial<CoalescableTranscriptSegment>).emotionDegreeScore;
         }
 
         return {

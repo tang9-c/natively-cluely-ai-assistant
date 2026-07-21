@@ -1,5 +1,5 @@
-import type { TranscriptEmotion, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
-export type { TranscriptEmotion, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
+import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
+export type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
 import type { ContextNeedDecision } from '../../shared/contextNeedDecision'
 export type {
   ContextNeedDecision,
@@ -78,6 +78,9 @@ export interface DynamicActionPayload {
   language?: string
   emotion?: string
   emotionSource?: TranscriptEmotionSource
+  emotionDegree?: TranscriptEmotionDegree
+  emotionScore?: number
+  emotionDegreeScore?: number
   keyEntities?: string[]
   retrievalQuery?: string
   autoSurfacePolicy?: 'auto' | 'card' | 'silent'
@@ -111,6 +114,9 @@ export interface DynamicActionModeEvent {
   latestTurn?: string
   emotion?: string
   emotionSource?: TranscriptEmotionSource
+  emotionDegree?: TranscriptEmotionDegree
+  emotionScore?: number
+  emotionDegreeScore?: number
   language?: string
   keyEntities?: string[]
   retrievalQuery?: string
@@ -314,6 +320,9 @@ export interface NativeAudioTranscriptPayload {
   endTimestampMs?: number
   emotion?: TranscriptEmotion
   emotionSource?: TranscriptEmotionSource
+  emotionDegree?: TranscriptEmotionDegree
+  emotionScore?: number
+  emotionDegreeScore?: number
   speakerVerification?: SpeakerVerificationMetadata
   coalescedFromCount?: number
   coalescedProvider?: 'post_stt' | 'local_vad'

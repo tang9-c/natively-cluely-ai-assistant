@@ -2569,12 +2569,18 @@ describe('DynamicActionEngine emotion propagation', () => {
       speaker: 'Prospect',
       modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_emo_detect',
       emotion: 'angry',
-      emotionSource: 'sensevoice',
+      emotionSource: 'doubao-auc',
+      emotionDegree: 'strong',
+      emotionScore: 0.96,
+      emotionDegreeScore: 0.91,
     });
     const a = findAction(actions, 'pricing_objection');
     assert.ok(a);
     assert.equal(a.emotion, 'angry');
-    assert.equal(a.emotionSource, 'sensevoice');
+    assert.equal(a.emotionSource, 'doubao-auc');
+    assert.equal(a.emotionDegree, 'strong');
+    assert.equal(a.emotionScore, 0.96);
+    assert.equal(a.emotionDegreeScore, 0.91);
   });
 
   test('detectActions: no emotion param → action.emotion is undefined', async () => {
@@ -2602,6 +2608,14 @@ describe('DynamicActionEngine emotion propagation', () => {
     assert.ok(actions.length > 0);
     assert.equal(actions[0].emotion, 'sad');
     assert.equal(actions[0].emotionSource, 'sensevoice');
+  });
+
+  test('emotion strength and confidence scale the objection boost conservatively', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+
+    assert.ok(Math.abs(engine.applyEmotionBoost('pricing_objection', 0.8, 'angry', 'strong', 1, 1) - 0.84) < 1e-9);
+    assert.ok(Math.abs(engine.applyEmotionBoost('pricing_objection', 0.8, 'angry', 'weak', 0.5, 0.5) - 0.81) < 1e-9);
   });
 });
 

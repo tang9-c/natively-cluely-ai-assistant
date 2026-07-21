@@ -203,6 +203,7 @@ const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
                         enable_itn: true,
                         enable_punc: true,
                         enable_ddc: false,
+                        enable_emotion_detection: true,
                         enable_speaker_info: enableSpeakerSeparation,
                         ...(enableSpeakerSeparation ? { ssd_version: '200' } : {}),
                         enable_channel_split: false,
@@ -667,7 +668,13 @@ export class RestSTT extends BaseSTT {
             const utteranceSamples = this.slicePcm16kByTime(pcm16k, utterance.startMs, utterance.endMs);
             const speakerVerification = await this.speakerVerificationAnnotator?.annotate(utteranceSamples);
             const emotionMetadata = utterance.emotion && utterance.emotion !== 'neutral'
-                ? { emotion: utterance.emotion, emotionSource: 'qcloud' as const }
+                ? {
+                    emotion: utterance.emotion,
+                    emotionSource: (this.provider === 'doubao-auc' ? 'doubao-auc' : 'qcloud') as 'doubao-auc' | 'qcloud',
+                    ...(utterance.emotionDegree ? { emotionDegree: utterance.emotionDegree } : {}),
+                    ...(utterance.emotionScore != null ? { emotionScore: utterance.emotionScore } : {}),
+                    ...(utterance.emotionDegreeScore != null ? { emotionDegreeScore: utterance.emotionDegreeScore } : {}),
+                }
                 : {};
             this.emit('transcript', {
                 text: utterance.text.trim(),

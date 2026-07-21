@@ -17,7 +17,7 @@ import { getActionGatePolicy } from './ModeActionPolicy';
 import { SignalStateTracker, SignalConfirmationSource } from './SignalStateTracker';
 import type { IntentResult } from '../../llm/IntentClassifier';
 import type { ProviderDataScopePolicy } from '../../llm/ProviderRouter';
-import type { TranscriptEmotionSource } from '../../../shared/senseVoiceEmotion';
+import type { TranscriptEmotionDegree, TranscriptEmotionSource } from '../../../shared/senseVoiceEmotion';
 
 const SALES_PROMPT_INSTRUCTIONS: Record<string, string> = {
     pricing_objection:
@@ -86,6 +86,9 @@ export class DynamicActionEngine {
         sessionId: string;
         emotion?: string;
         emotionSource?: TranscriptEmotionSource;
+        emotionDegree?: TranscriptEmotionDegree;
+        emotionScore?: number;
+        emotionDegreeScore?: number;
         language?: string;
     }): DynamicAction[] {
         const { transcript, speaker, modeTemplateType, modeId, sessionId } = params;
@@ -110,6 +113,9 @@ export class DynamicActionEngine {
                 keyEntities,
                 emotion: params.emotion,
                 emotionSource: params.emotionSource,
+                emotionDegree: params.emotionDegree,
+                emotionScore: params.emotionScore,
+                emotionDegreeScore: params.emotionDegreeScore,
                 confidence: trigger.priority,
                 now,
                 autoSurfaceEligible: trigger.priority >= 0.9,
@@ -135,6 +141,9 @@ export class DynamicActionEngine {
         sessionId: string;
         emotion?: string;
         emotionSource?: TranscriptEmotionSource;
+        emotionDegree?: TranscriptEmotionDegree;
+        emotionScore?: number;
+        emotionDegreeScore?: number;
         language?: string;
         intentResult?: IntentResult;
         recentContextTurns?: ModeEventContextTurn[];
@@ -244,7 +253,14 @@ export class DynamicActionEngine {
                 timestamp: now,
                 speaker,
             };
-            const adjustedConfidence = this.applyEmotionBoost(candidate.trigger.type, gateDecision.confidence, params.emotion);
+            const adjustedConfidence = this.applyEmotionBoost(
+                candidate.trigger.type,
+                gateDecision.confidence,
+                params.emotion,
+                params.emotionDegree,
+                params.emotionScore,
+                params.emotionDegreeScore,
+            );
             const signal = this.signalTracker.assess({
                 sessionId,
                 modeTemplateType,
@@ -271,6 +287,9 @@ export class DynamicActionEngine {
                 keyEntities,
                 emotion: params.emotion,
                 emotionSource: params.emotionSource,
+                emotionDegree: params.emotionDegree,
+                emotionScore: params.emotionScore,
+                emotionDegreeScore: params.emotionDegreeScore,
                 confidence: signal.state.confidence,
                 now,
                 autoSurfaceEligible: signal.autoSurfaceEligible || this.isStrongAutoSignal(candidate.trigger.type, signal.state.confidence),
@@ -441,6 +460,9 @@ export class DynamicActionEngine {
         keyEntities: string[];
         emotion?: string;
         emotionSource?: TranscriptEmotionSource;
+        emotionDegree?: TranscriptEmotionDegree;
+        emotionScore?: number;
+        emotionDegreeScore?: number;
         confidence: number;
         now: number;
         autoSurfaceEligible: boolean;
@@ -495,6 +517,9 @@ export class DynamicActionEngine {
             language: params.language,
             emotion: params.emotion,
             emotionSource: params.emotionSource,
+            emotionDegree: params.emotionDegree,
+            emotionScore: params.emotionScore,
+            emotionDegreeScore: params.emotionDegreeScore,
             keyEntities: params.keyEntities,
             retrievalQuery,
             autoSurfacePolicy,
@@ -547,14 +572,27 @@ export class DynamicActionEngine {
         return intentResult.confidence >= 0.5 ? 'cloud_intent' : 'heuristic';
     }
 
-    private applyEmotionBoost(type: string, confidence: number, emotion?: string): number {
+    private applyEmotionBoost(
+        type: string,
+        confidence: number,
+        emotion?: string,
+        emotionDegree?: TranscriptEmotionDegree,
+        emotionScore?: number,
+        emotionDegreeScore?: number,
+    ): number {
         if (!emotion) return confidence;
         const negative = ['angry', 'sad', 'fearful', 'disgusted'].includes(emotion);
         const positive = ['happy', 'surprised'].includes(emotion);
         const objectionLike = /(objection|pushback|risk|blocker|concern|weakness)/.test(type);
         const positiveLike = /(buying_signal|strong_fit|fit_signal)/.test(type);
-        if (negative && objectionLike) return Math.min(0.98, confidence + 0.04);
-        if (positive && positiveLike) return Math.min(0.98, confidence + 0.04);
+        const degreeMultiplier = emotionDegree === 'weak' ? 0.5 : emotionDegree === 'medium' ? 0.75 : 1;
+        const availableScores = [emotionScore, emotionDegreeScore].filter((score): score is number => (
+            typeof score === 'number' && score >= 0 && score <= 1
+        ));
+        const scoreMultiplier = availableScores.length > 0 ? Math.min(...availableScores) : 1;
+        const boost = 0.04 * degreeMultiplier * scoreMultiplier;
+        if (negative && objectionLike) return Math.min(0.98, confidence + boost);
+        if (positive && positiveLike) return Math.min(0.98, confidence + boost);
         return confidence;
     }
 

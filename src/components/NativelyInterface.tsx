@@ -52,8 +52,8 @@ import {
   OVERLAY_OPACITY_DEFAULT,
 } from '../lib/overlayAppearance';
 import { NegotiationCoachingCard } from './NegotiationCoachingCard';
-import { SENSEVOICE_EMOTION_LABELS } from '../../shared/senseVoiceEmotion';
-import type { TranscriptEmotion } from '../../shared/senseVoiceEmotion';
+import { SENSEVOICE_EMOTION_LABELS, TRANSCRIPT_EMOTION_DEGREE_LABELS } from '../../shared/senseVoiceEmotion';
+import type { TranscriptEmotion, TranscriptEmotionDegree } from '../../shared/senseVoiceEmotion';
 import {
   buildLatestAnswerTrustExplanation,
   type CitationStatus,
@@ -562,6 +562,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [isInterviewerSpeaking, setIsInterviewerSpeaking] = useState(false); // Track if actively speaking
   const [detectedEmotion, setDetectedEmotion] = useState<{
     emotion: TranscriptEmotion;
+    emotionDegree?: TranscriptEmotionDegree;
     label: string;
     speaker: string;
     receivedAt: number;
@@ -593,6 +594,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     setDetectedEmotion({
       emotion: transcript.emotion,
+      emotionDegree: transcript.emotionDegree,
       label,
       speaker: transcript.speaker === 'user' ? '你' : '面试官',
       receivedAt: Date.now(),
@@ -4265,6 +4267,7 @@ Provide only the answer, nothing else.`;
                       <span className="text-amber-500/80">情绪</span>
                       <span>{detectedEmotion.speaker}</span>
                       <span>{detectedEmotion.label}</span>
+                      {detectedEmotion.emotionDegree && <span>{TRANSCRIPT_EMOTION_DEGREE_LABELS[detectedEmotion.emotionDegree]}</span>}
                     </div>
                   </motion.div>
                 )}

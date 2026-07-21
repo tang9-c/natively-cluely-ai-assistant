@@ -215,6 +215,47 @@ test('Doubao AUC structured extraction preserves optional QCLOUD emotion metadat
     });
 });
 
+test('Doubao AUC explicitly enables emotion detection and emits complete Doubao emotion metadata', async () => {
+    const { RestSTT } = await loadRestSTT();
+    const stt = new RestSTT('doubao-auc', 'test-api-key');
+    const requestBody = stt.config.buildRequestBody('base64-wav', 'audio/wav');
+    const transcripts = [];
+
+    stt.on('transcript', event => transcripts.push(event));
+    await stt.emitUploadResult({
+        text: '这个价格无法接受。',
+        utterances: [{
+            text: '这个价格无法接受。',
+            startMs: 0,
+            endMs: 900,
+            providerSpeakerId: '1',
+            emotion: 'angry',
+            emotionDegree: 'strong',
+            emotionScore: 0.96,
+            emotionDegreeScore: 0.91,
+        }],
+    }, Buffer.alloc(32_000));
+
+    assert.equal(requestBody.request.enable_emotion_detection, true);
+    assert.equal(transcripts.length, 1);
+    assert.deepEqual(transcripts[0], {
+        text: '这个价格无法接受。',
+        isFinal: true,
+        confidence: 1,
+        speakerId: 'interviewer-1',
+        speakerLabel: 'Interviewer 1',
+        providerSpeakerId: '1',
+        diarizationProvider: 'doubao-auc',
+        startTimestampMs: 0,
+        endTimestampMs: 900,
+        emotion: 'angry',
+        emotionSource: 'doubao-auc',
+        emotionDegree: 'strong',
+        emotionScore: 0.96,
+        emotionDegreeScore: 0.91,
+    });
+});
+
 test('Doubao AUC returns empty text for silent status without throwing', async () => {
     const { transcribeDoubaoAucFile, extractDoubaoAucTranscript } = await loadClient();
     const post = async (url) => {
