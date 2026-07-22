@@ -38,6 +38,9 @@ jobs:
       - name: Install sharp macOS dependencies
         run: node scripts/ensure-sharp-mac-deps.js
 
+      - name: Validate ARM64 RAG release assets
+        run: node scripts/verify-rag-release-assets.js --platform=darwin --arch=arm64
+
       - name: Package arm64 with electron-builder
         run: |
           rm -rf release

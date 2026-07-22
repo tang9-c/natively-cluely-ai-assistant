@@ -99,6 +99,8 @@
     ],
     "asarUnpack": [
       "dist-electron/electron/rag/vectorSearchWorker.js",
+      "node_modules/bindings/**",
+      "node_modules/file-uri-to-path/**",
       "**/*.node",
       "**/*.dylib",
       "**/*.dll"

@@ -46,6 +46,10 @@ jobs:
           npm run build:electron
           npm run build:native
 
+      - name: Validate Windows RAG release assets
+        shell: bash
+        run: node scripts/verify-rag-release-assets.js --platform=win32 --arch=x64
+
       - name: Package x64 with electron-builder
         shell: bash
         run: |

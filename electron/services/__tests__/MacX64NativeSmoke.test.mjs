@@ -55,6 +55,8 @@ test('electron-builder mac release targets are architecture-neutral so workflows
   assert.ok(pkg.build.files.includes('!node_modules/app-builder-bin/**'), 'electron-builder helper binaries must not be bundled in app resources');
   assert.ok(pkg.build.asarUnpack.includes('**/*.node'), '.node files must be unpacked outside app.asar');
   assert.ok(pkg.build.asarUnpack.includes('**/*.dylib'), '.dylib files must be unpacked outside app.asar');
+  assert.ok(pkg.build.asarUnpack.includes('node_modules/bindings/**'));
+  assert.ok(pkg.build.asarUnpack.includes('node_modules/file-uri-to-path/**'));
   assert.ok(
     pkg.build.asarUnpack.includes('dist-electron/electron/rag/vectorSearchWorker.js'),
     'RAG worker thread entrypoint must be unpacked outside app.asar so worker_threads can load it',
@@ -76,6 +78,8 @@ test('mac release workflows build one architecture each and upload size audit re
   const intelWorkflow = read('.github/workflows/build-intel-mac.yml');
   const armWorkflow = read('.github/workflows/build-arm64-mac.yml');
 
+  assert.match(intelWorkflow, /verify-rag-release-assets\.js --platform=darwin --arch=x64/);
+  assert.match(armWorkflow, /verify-rag-release-assets\.js --platform=darwin --arch=arm64/);
   assert.match(intelWorkflow, /^name:\s*Build Intel Mac$/m);
   assert.match(intelWorkflow, /Install Rosetta for x64 native build scripts/);
   assert.match(intelWorkflow, /softwareupdate --install-rosetta --agree-to-license/);
