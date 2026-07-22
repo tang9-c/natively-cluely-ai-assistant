@@ -4,8 +4,8 @@ import path from 'path';
 import { app } from 'electron';
 import fs from 'fs';
 import * as crypto from 'crypto';
-import * as sqliteVec from 'sqlite-vec';
 import { buildLegacySpaceCaseSql } from '../rag/embeddingSpace';
+import { resolveSqliteVecExtensionPath } from './sqliteVecExtensionPath';
 import {
     DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE,
     type IntentKeywordConfig,
@@ -495,15 +495,7 @@ export class DatabaseManager {
 
             // Load sqlite-vec extension for native vector search
             try {
-                // 1. sqlite-vec's getLoadablePath() returns a path inside app.asar
-                //    (e.g. .../app.asar/node_modules/sqlite-vec-darwin-arm64/vec0.dylib)
-                //    but dlopen() needs real files on disk, not files inside the asar archive.
-                //    electron-builder's asarUnpack puts them in app.asar.unpacked instead.
-                // 2. better-sqlite3's loadExtension() auto-appends the platform extension
-                //    (.dylib/.so/.dll), so we strip it to avoid vec0.dylib.dylib.
-                let extPath = sqliteVec.getLoadablePath();
-                extPath = extPath.replace('app.asar', 'app.asar.unpacked');
-                extPath = extPath.replace(/\.(dylib|so|dll)$/, '');
+                const extPath = resolveSqliteVecExtensionPath();
                 this.db.loadExtension(extPath);
                 this.resolvedExtPath = extPath; // Store for worker thread access
                 console.log('[DatabaseManager] sqlite-vec extension loaded successfully');
