@@ -50,6 +50,8 @@ interface Meeting {
         overview?: string;
         actionItems: string[];
         keyPoints: string[];
+        decisions?: string[];
+        openQuestions?: string[];
         actionItemsTitle?: string;
         keyPointsTitle?: string;
         sections?: Array<{ title: string; bullets: string[] }>;
@@ -584,6 +586,34 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || '无
                                                             </p>
                                                         )}
                                                     </div>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </section>
+                                )}
+
+                                {meeting.detailedSummary?.decisions && meeting.detailedSummary.decisions.length > 0 && (
+                                    <section className="mb-8">
+                                        <h2 className="text-lg font-semibold text-text-primary mb-4">决策项</h2>
+                                        <ul className="space-y-3">
+                                            {meeting.detailedSummary.decisions.map((decision, index) => (
+                                                <li key={index} className="flex items-start gap-3 group">
+                                                    <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary shrink-0" />
+                                                    <p className="text-sm text-text-secondary leading-relaxed">{decision}</p>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </section>
+                                )}
+
+                                {meeting.detailedSummary?.openQuestions && meeting.detailedSummary.openQuestions.length > 0 && (
+                                    <section className="mb-8">
+                                        <h2 className="text-lg font-semibold text-text-primary mb-4">待确认事项</h2>
+                                        <ul className="space-y-3">
+                                            {meeting.detailedSummary.openQuestions.map((question, index) => (
+                                                <li key={index} className="flex items-start gap-3 group">
+                                                    <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-tertiary shrink-0" />
+                                                    <p className="text-sm text-text-secondary leading-relaxed">{question}</p>
                                                 </li>
                                             ))}
                                         </ul>
