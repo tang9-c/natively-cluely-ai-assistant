@@ -62,14 +62,17 @@ export class EmbeddingProviderResolver {
    * probeAvailable(). Local probes are cheap + deterministic, so they don't
    * need retry.
    */
-  static async resolve(config: AppAPIConfig): Promise<IEmbeddingProvider> {
+  static async resolve(
+    config: AppAPIConfig,
+    validatedLocalProvider?: IEmbeddingProvider,
+  ): Promise<IEmbeddingProvider> {
     const candidates: IEmbeddingProvider[] = [];
 
     let embeddingsDenied = false;
 
     // --- Local-first: bundled on-device model (always available post-install) ---
     if (!embeddingsDenied) {
-      candidates.push(new LocalEmbeddingProvider());
+      candidates.push(validatedLocalProvider ?? new LocalEmbeddingProvider());
     }
     // --- Local Ollama (if running + model pulled) ---
     candidates.push(new OllamaEmbeddingProvider(config.ollamaUrl || 'http://localhost:11434'));
@@ -134,7 +137,7 @@ export class EmbeddingProviderResolver {
 
     if (embeddingsDenied) {
       console.warn('[ScopeFallback] embeddings denied; Ollama unavailable, using bundled local embedding model');
-      return new LocalEmbeddingProvider();
+      return validatedLocalProvider ?? new LocalEmbeddingProvider();
     }
 
     // This should never happen since LocalEmbeddingProvider.isAvailable()

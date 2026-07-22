@@ -13,7 +13,7 @@ const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
 test('LocalEmbeddingProvider points Transformers local model path at bundled models', () => {
   const src = read('electron/rag/providers/LocalEmbeddingProvider.ts');
 
-  assert.match(src, /env\.localModelPath\s*=\s*this\.modelPath/);
+  assert.match(src, /env\.localModelPath\s*=\s*rootPath/);
   assert.match(src, /env\.allowLocalModels\s*=\s*true/);
   assert.match(src, /local_files_only:\s*true/);
 });
@@ -47,13 +47,18 @@ test('LocalModelManager requires the intent classifier int8 artifact, not fp32 m
   assert.doesNotMatch(src, /requiredFiles:\s*\['onnx\/model\.onnx'\]/);
 });
 
-test('LocalEmbeddingProvider prefers downloaded userData models before bundled fallback', () => {
-  const src = read('electron/rag/providers/LocalEmbeddingProvider.ts');
+test('LocalEmbeddingProvider validates downloaded models before bundled fallback', () => {
+  const provider = read('electron/rag/providers/LocalEmbeddingProvider.ts');
+  const validator = read('electron/rag/providers/LocalEmbeddingModelValidator.ts');
 
-  assert.match(src, /app\.getPath\('userData'\), 'models'/);
-  assert.match(src, /process\.resourcesPath/);
-  assert.match(src, /fs\.existsSync/);
-  assert.match(src, /env\.localModelPath\s*=\s*this\.modelPath/);
+  assert.match(provider, /app\.getPath\('userData'\), 'models'/);
+  assert.match(provider, /process\.resourcesPath/);
+  assert.match(provider, /loadFirstValidatedEmbeddingModel/);
+  assert.match(provider, /env\.localModelPath\s*=\s*rootPath/);
+  assert.match(validator, /LOCAL_EMBEDDING_REQUIRED_FILES/);
+  assert.match(validator, /onnx\/model_int8\.onnx/);
+  assert.match(validator, /tokenizer\.json/);
+  assert.match(validator, /tokenizer_config\.json/);
 });
 
 test('download-models does not install optional multilingual intent classifier by default', () => {

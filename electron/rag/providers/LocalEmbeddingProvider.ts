@@ -1,9 +1,13 @@
 // @huggingface/transformers is ESM-only — must use dynamic import()
-import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
 import { IEmbeddingProvider } from './IEmbeddingProvider';
+import {
+  EmbeddingModelCandidate,
+  loadFirstValidatedEmbeddingModel,
+} from './LocalEmbeddingModelValidator';
 import { embeddingSpaceKey } from '../embeddingSpace';
+import { telemetryService } from '../../services/telemetry/TelemetryService';
 
 export class LocalEmbeddingProvider implements IEmbeddingProvider {
   readonly name = 'local';
@@ -25,7 +29,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     this.space = embeddingSpaceKey({ name: this.name, model: this.model, dimensions: this.dimensions });
   }
 
-  private resolveModelPath(): string {
+  private resolveModelCandidates(): EmbeddingModelCandidate[] {
     const downloadedModelsPath =
       typeof app.getPath === 'function'
         ? path.join(app.getPath('userData'), 'models')
@@ -34,8 +38,10 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'resources'),
       'models'
     );
-    const modelDir = path.join(downloadedModelsPath, this.model);
-    return fs.existsSync(modelDir) ? downloadedModelsPath : bundledModelsPath;
+    return [
+      { source: 'downloaded', rootPath: downloadedModelsPath },
+      { source: 'bundled', rootPath: bundledModelsPath },
+    ];
   }
 
   async isAvailable(): Promise<boolean> {
@@ -47,8 +53,8 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     try {
       await this.ensureLoaded();
       return true;
-    } catch (e) {
-      console.error('[LocalEmbeddingProvider] Model failed to load:', e);
+    } catch {
+      console.error('[LocalEmbeddingProvider] Model failed to load', { code: 'validation_failed' });
       return false;
     }
   }
@@ -78,7 +84,6 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       // packages like @huggingface/transformers. The new Function() trick is opaque
       // to the TypeScript compiler so it is left as a real import() call.
       const { pipeline, env } = await (new Function('return import("@huggingface/transformers")')()) as any;
-      this.modelPath = this.resolveModelPath();
 
       // Route ONNX/WASM through a worker thread. Without this, transformers.js
       // loads WASM on the main thread where Electron's main-process origin
@@ -89,17 +94,35 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
         env.backends.onnx.wasm.proxy = true;
       }
 
-      // Prefer downloaded userData models, but fall back to the bundled copy.
-      env.cacheDir = this.modelPath;
-      env.localModelPath = this.modelPath;
-      env.allowLocalModels = true;
-      env.allowRemoteModels = true;
-      env.remoteHost = (process.env.HF_ENDPOINT || 'https://modelscope.cn/models').replace(/\/$/, '') + '/';
-
-      this.pipe = await pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', {
-        local_files_only: true,
-        model_file_name: 'model_int8',
+      const loaded = await loadFirstValidatedEmbeddingModel({
+        candidates: this.resolveModelCandidates(),
+        dimensions: this.dimensions,
+        createPipeline: async (rootPath) => {
+          env.cacheDir = rootPath;
+          env.localModelPath = rootPath;
+          env.allowLocalModels = true;
+          env.allowRemoteModels = false;
+          return pipeline('feature-extraction', this.model, {
+            local_files_only: true,
+            model_file_name: 'model_int8',
+          });
+        },
+        onValidation: (event) => {
+          console.info('[LocalEmbeddingProvider] Model validation', event);
+          telemetryService.track({
+            name: 'rag_embedding_model_validation',
+            status: event.status,
+            properties: {
+              source: event.source,
+              stage: event.stage,
+              code: event.code,
+              appVersion: typeof app.getVersion === 'function' ? app.getVersion() : 'unknown',
+            },
+          });
+        },
       });
+      this.modelPath = loaded.rootPath;
+      this.pipe = loaded.pipeline;
     })();
 
     try {

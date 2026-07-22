@@ -107,7 +107,7 @@ export class EmbeddingPipeline {
 
         // ── Step 2: Resolve primary provider.
         try {
-            this.provider = await EmbeddingProviderResolver.resolve(config);
+            this.provider = await EmbeddingProviderResolver.resolve(config, this.fallbackProvider ?? undefined);
             console.log(`[EmbeddingPipeline] Ready with provider: ${this.provider.name} (${this.provider.dimensions}d)`);
 
             // If the primary IS local, point fallbackProvider at the same instance to avoid

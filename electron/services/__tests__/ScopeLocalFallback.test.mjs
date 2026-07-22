@@ -19,14 +19,14 @@ test('embeddings scope denial routes through Ollama before local fallback', () =
   assert.match(src, /error instanceof ProviderScopeError/);
   assert.match(src, /\[ScopeFallback\] embeddings denied for cloud; routing to Ollama/);
   assert.match(src, /candidates\.push\(new OllamaEmbeddingProvider/);
-  assert.match(src, /if \(!embeddingsDenied\) \{\s*candidates\.push\(new LocalEmbeddingProvider\(\)\)/);
+  assert.match(src, /candidates\.push\(validatedLocalProvider \?\? new LocalEmbeddingProvider\(\)\)/);
 });
 
 test('embeddings scope denial gracefully omits embeddings when Ollama is unavailable', () => {
   const src = read('electron/rag/EmbeddingProviderResolver.ts');
 
   assert.match(src, /\[ScopeFallback\] embeddings denied; Ollama unavailable, using bundled local embedding model/);
-  assert.match(src, /return new LocalEmbeddingProvider\(\)/);
+  assert.match(src, /return validatedLocalProvider \?\? new LocalEmbeddingProvider\(\)/);
 });
 
 test('transcript scope denial routes full context to Ollama when available', () => {

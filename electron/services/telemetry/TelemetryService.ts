@@ -29,6 +29,7 @@ export type TelemetryEventName =
   | 'rag_hit'
   | 'rag_miss'
   | 'rag_lexical_fallback'
+  | 'rag_embedding_model_validation'
   | 'screen_context_captured'
   | 'screen_context_error'
   | 'post_call_summary_started'
