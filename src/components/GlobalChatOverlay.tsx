@@ -23,6 +23,8 @@ interface GlobalChatOverlayProps {
     queryNonce?: number;
 }
 
+const globalFallbackSystemPrompt = `You are a meeting assistant. ALWAYS answer in Simplified Chinese, regardless of the language of the user's question. Keep professional acronyms such as KPI when useful, but explain them in Chinese. Be concise and never invent meeting content.`;
+
 // ============================================
 // Typing Indicator Component
 // ============================================
@@ -290,7 +292,12 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                 });
 
                 // Call standard chat
-                await window.electronAPI?.streamGeminiChat(question, undefined, undefined, { skipSystemPrompt: false, ignoreKnowledgeMode: true });
+                await window.electronAPI?.streamGeminiChat(
+                    question,
+                    undefined,
+                    globalFallbackSystemPrompt,
+                    { skipSystemPrompt: true, ignoreKnowledgeMode: true },
+                );
             }
 
         } catch (error) {

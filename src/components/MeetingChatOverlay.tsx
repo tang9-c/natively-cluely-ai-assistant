@@ -44,6 +44,12 @@ interface MeetingChatOverlayProps {
 
 type ChatState = 'idle' | 'opening' | 'waiting_for_llm' | 'streaming_response' | 'error' | 'closing';
 
+function buildMeetingFallbackSystemPrompt(contextString: string): string {
+    return `You are recalling a specific meeting. Answer questions ONLY about this meeting. ALWAYS answer in Simplified Chinese, regardless of the language of the user's question. Keep professional acronyms such as KPI when useful, but explain them in Chinese. Be concise (2-4 sentences). Sound natural, like a human recalling. If information is not present, say so briefly in Chinese. Never guess.
+
+${contextString}`;
+}
+
 // ============================================
 // Typing Indicator Component
 // ============================================
@@ -366,9 +372,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
 
                     // FALLBACK LOGIC
                     const contextString = buildContextString();
-                    const systemPrompt = `You are recalling a specific meeting. Answer questions ONLY about this meeting. Be concise (2-4 sentences). Sound natural, like a human recalling. If information is not present, say so briefly. Never guess.
-
-${contextString}`;
+                    const systemPrompt = buildMeetingFallbackSystemPrompt(contextString);
 
                     streamBuffer.reset();
                     const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string) => {
@@ -417,9 +421,7 @@ ${contextString}`;
             } else {
                 // No meeting ID, standard fallback
                 const contextString = buildContextString();
-                const systemPrompt = `You are recalling a specific meeting. Answer questions ONLY about this meeting. Be concise (2-4 sentences). Sound natural, like a human recalling. If information is not present, say so briefly. Never guess.
-
-${contextString}`;
+                const systemPrompt = buildMeetingFallbackSystemPrompt(contextString);
 
                 // Switch to Gemini streaming (RAF-batched)
                 streamBuffer.reset();
