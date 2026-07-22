@@ -171,7 +171,10 @@ describe('MeetingPersistence.deep — stopMeeting duration branches', () => {
     const result = await mp.stopMeeting();
     assert.ok(result, 'meeting id must be returned');
     // Wait for final save to complete
-    const final = await waitForMeeting(db, result);
+    const final = await waitFor(() => {
+      const meeting = db.getMeetingDetails(result);
+      return meeting?.title !== 'Processing...' ? meeting : null;
+    });
     assert.ok(final);
     assert.equal(final.id, result);
   });
@@ -195,7 +198,10 @@ describe('MeetingPersistence.deep — stopMeeting metadata.scenario + doNotPersi
     const mp = new MeetingPersistence(session, llm);
     const result = await mp.stopMeeting();
     assert.ok(result);
-    const final = await waitForMeeting(db, result);
+    const final = await waitFor(() => {
+      const meeting = db.getMeetingDetails(result);
+      return meeting?.title === 'Sprint' ? meeting : null;
+    });
     assert.ok(final);
     assert.equal(final.title, 'Sprint');
   });
@@ -227,7 +233,10 @@ describe('MeetingPersistence.deep — stopMeeting metadata.scenario + doNotPersi
     const llm = buildMockLLMHelper();
     const mp = new MeetingPersistence(session, llm);
     const result = await mp.stopMeeting();
-    const final = await waitForMeeting(db, result);
+    const final = await waitFor(() => {
+      const meeting = db.getMeetingDetails(result);
+      return meeting?.source === 'calendar' ? meeting : null;
+    });
     assert.ok(final);
     assert.equal(final.source, 'calendar');
   });
@@ -240,7 +249,10 @@ describe('MeetingPersistence.deep — stopMeeting metadata.scenario + doNotPersi
     const llm = buildMockLLMHelper();
     const mp = new MeetingPersistence(session, llm);
     const result = await mp.stopMeeting();
-    const final = await waitForMeeting(db, result);
+    const final = await waitFor(() => {
+      const meeting = db.getMeetingDetails(result);
+      return meeting?.calendarEventId === 'evt-deep-001' ? meeting : null;
+    });
     assert.ok(final);
     assert.equal(final.calendarEventId, 'evt-deep-001');
   });
@@ -394,6 +406,53 @@ describe('MeetingPersistence.deep — processAndSaveMeeting LLM failure paths', 
       final.detailedSummary.sections.map(section => section.bullets),
       [[], [], [], [], [], []],
     );
+  });
+
+  test('long meeting summary uses chunks that include tail content', async () => {
+    const db = DatabaseManager.getInstance();
+    const session = buildMockSession();
+    const calls = [];
+    const llm = {
+      generateMeetingSummary: async (prompt, context) => {
+        calls.push({ prompt, context });
+        if (calls.length === 1) return '中文会议标题';
+        if (prompt.includes('归并')) {
+          return JSON.stringify({
+            overview: '完整会议摘要',
+            keyPoints: ['头部事项', '尾部事项'],
+            actionItems: ['尾部确认下周提供测试数据'],
+            decisions: ['先按只读方式验证'],
+            openQuestions: [],
+          });
+        }
+        return JSON.stringify({
+          overview: context.includes('尾部确认下周提供测试数据') ? '尾部摘要' : '片段摘要',
+          keyPoints: [],
+          actionItems: context.includes('尾部确认下周提供测试数据') ? ['尾部确认下周提供测试数据'] : [],
+          decisions: [],
+          openQuestions: [],
+        });
+      },
+    };
+    const mp = new MeetingPersistence(session, llm);
+    const context = `头部事项\n${'中间填充。'.repeat(12000)}\n尾部确认下周提供测试数据`;
+
+    await mp.processAndSaveMeeting(
+      buildSnapshot({
+        context,
+        transcript: [
+          { speaker: '客户', text: '头部事项', timestamp: 1 },
+          { speaker: '客户', text: '中间内容', timestamp: 2 },
+          { speaker: '客户', text: '尾部确认下周提供测试数据', timestamp: 3 },
+        ],
+      }),
+      'm-full-transcript-summary',
+    );
+
+    const final = db.getMeetingDetails('m-full-transcript-summary');
+    assert.equal(final.detailedSummary.overview, '完整会议摘要');
+    assert.deepEqual(final.detailedSummary.actionItems, ['尾部确认下周提供测试数据']);
+    assert.ok(calls.some((call) => call.context.includes('尾部确认下周提供测试数据')));
   });
 });
 

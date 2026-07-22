@@ -7,6 +7,7 @@ import { LLMHelper } from './LLMHelper';
 import { DatabaseManager, Meeting } from './db/DatabaseManager';
 import { GROQ_TITLE_PROMPT, GROQ_SUMMARY_JSON_PROMPT } from './llm';
 import { buildPostCallEnhancements } from './services/post-call/PostCallWorkflow';
+import { generateFullTranscriptSummary, type PostCallSummaryData } from './services/post-call/PostCallSummaryGenerator';
 import { buildDynamicActionArtifacts } from './services/dynamic-actions/DynamicActionArtifacts';
 import { telemetryService } from './services/telemetry/TelemetryService';
 import type { ProviderDataScopePolicy } from './llm/ProviderRouter';
@@ -190,7 +191,7 @@ export class MeetingPersistence {
         modeSnapshot?: { id: string; name: string; templateType: string } | null
     ): Promise<void> {
         let title = "Untitled Session";
-        let summaryData: { overview?: string; actionItems: string[], keyPoints: string[], sections?: Array<{ title: string; bullets: string[] }> } = { actionItems: [], keyPoints: [] };
+        let summaryData: PostCallSummaryData = { actionItems: [], keyPoints: [], decisions: [], openQuestions: [] };
         const hasSummarizableTranscript = data.transcript.length > 2;
         // Phase 6 — post_call_summary lifecycle telemetry. Wrapped in try/catch
         // around track calls so a telemetry sink fault never breaks persistence.
@@ -220,7 +221,7 @@ export class MeetingPersistence {
         try {
             // Generate Title (only if not set by calendar)
             if (hasSummarizableTranscript && (!metadata || !metadata.title)) {
-                const titlePrompt = `Generate a concise 3-6 word title for this meeting context. Output ONLY the title text. Do not use quotes or conversational filler.`;
+                const titlePrompt = `为这次会议生成一个简洁的中文标题，长度为 3 到 8 个中文词。只输出标题文本，不要解释，不要引号，不要 markdown，不要包含任何中英文标点符号。`;
                 const groqTitlePrompt = GROQ_TITLE_PROMPT;
 
                 const generatedTitle = await this.llmHelper.generateMeetingSummary(titlePrompt, data.context.substring(0, 5000), groqTitlePrompt);
@@ -288,118 +289,47 @@ export class MeetingPersistence {
 
             // Generate Structured Summary
             if (hasSummarizableTranscript) {
-                const buildEmptyModeSections = () => modeNoteSections.map(s => ({
-                    title: s.title,
-                    bullets: [] as string[],
-                }));
                 const baseRules = `规则：
-- 不要编造上下文中不存在的信息
-- 可以推断讨论中合理隐含的行动项或后续步骤
-- 不要解释或定义提到的概念
-- 不要使用“会议涵盖了……”或“讨论了各种……”等空话
-- 不要提及转录、AI 或摘要
-- 不要听起来像 AI 助手
-- 像一位资深产品经理的内部笔记
+- 只基于会议中实际出现的信息总结，不编造未提到的事实、数字、结论或责任人。
+- 可以自动纠正明显的转录错别字、同音误识别、拼写错误和常见中英文术语识别错误，但不得改变原意；无法确定时保留原表达。
+- 对金额、日期、数量、公司名、人名、系统名、合同条款等高风险信息，不要自行猜测修正；只有上下文非常明确时才可规范化。
+- 可以提炼会议中明确或高度确定的隐含行动项，但不能把泛泛的“后面看看”“再确认一下”“有机会聊”自动写成行动项。
+- 行动项应尽量包含执行人、动作、交付物、时间点或验证方式；缺失关键信息时，放入待确认事项，而不是强行补全。
+- 决策项只记录已经明确达成一致、确认、选定、批准或否定的内容。
+- 过滤口语填充词、重复表达、语气词和转录噪音，例如“嗯”“啊”“就是说”“然后呢”“我我我”。
+- 保留业务事实、客户诉求、约束条件、风险、异议、决策、行动项和待确认问题。
+- 不解释或定义会议中提到的概念、系统、缩写或行业术语，除非会议中有人明确解释过。
+- 不使用“会议涵盖了”“讨论了各种”“大家围绕”等空泛套话。
+- 不提及转录、AI、模型或摘要生成过程。
+- 不输出英文标题或英文模板句，除非会议原文中的专有名词必须保留。
+- 语气像一位资深产品经理写给内部团队的会议笔记。
 
-风格：冷静、中立、专业、便于速览。短 bullet，不使用子 bullet。`;
+风格：
+- 使用简体中文。
+- 冷静、中立、专业，便于快速浏览。
+- 每条 bullet 只表达一个具体事实、结论、风险或动作。
+- bullet 要短，不使用子 bullet。
+- 优先写具体信息，避免抽象概括。`;
 
-                let summaryPrompt: string;
                 let groqSummaryPrompt: string;
 
                 if (modeNoteSections.length > 0) {
-                    // Mode-specific structured notes — sections as object with title keys
-                    const sectionList = modeNoteSections
-                        .map(s => s.description?.trim()
-                            ? `- "${s.title}": ${s.description}`
-                            : `- "${s.title}"`)
-                        .join('\n');
-                    const sectionKeys = modeNoteSections
-                        .map(s => `    "${s.title}": []`)
-                        .join(',\n');
-
-                    summaryPrompt = `你是一位静默的会议记录员。从下面的对话转录中提取结构化笔记。
-${modeContextBlock}
-${baseRules}
-
-需要填充的分区（只提取转录中实际存在的内容）：
-${sectionList}
-
-只返回合法的 JSON——不要 markdown 围栏、不要注释、不要额外 key。每个分区的值是一个字符串数组，数组元素是直接摘自对话的简洁事实 bullet。如果某个分区没有相关内容，使用 []。
-
-{
-  "overview": "1-2 句话概括讨论内容",
-  "sections": {
-${sectionKeys}
-  }
-}`;
                     console.log('[MeetingPersistence] Using mode-specific prompt with sections:', modeNoteSections.map(s => s.title));
-                    groqSummaryPrompt = summaryPrompt;
+                    groqSummaryPrompt = GROQ_SUMMARY_JSON_PROMPT;
                 } else {
-                    // Default generic notes
-                    summaryPrompt = `你是一位静默的会议总结员。将这段对话转换为简洁的内部会议笔记。
-
-${baseRules}
-
-只返回合法 JSON（不要 markdown 代码块）：
-{
-  "overview": "1-2 句话描述讨论内容",
-  "keyPoints": ["3-6 个具体 bullet——每个 bullet 等于一个具体话题或观点"],
-  "actionItems": ["具体的后续步骤、分配的任务或隐含的跟进事项。如果确实没有，返回空数组"]
-}`;
                     groqSummaryPrompt = GROQ_SUMMARY_JSON_PROMPT;
                 }
 
-                const generatedSummary = await this.llmHelper.generateMeetingSummary(summaryPrompt, data.context.substring(0, 50000), groqSummaryPrompt);
-
-                if (generatedSummary) {
-                    // Strip markdown fences if present
-                    const jsonMatch = generatedSummary.match(/```(?:json)?\n?([\s\S]*?)\n?```/) || [null, generatedSummary];
-                    const jsonStr = (jsonMatch[1] || generatedSummary).trim();
-                    console.log('[MeetingPersistence] LLM summary response received', { length: jsonStr.length });
-                    try {
-                        const parsed = JSON.parse(jsonStr);
-                        if (modeNoteSections.length > 0 && parsed.sections && typeof parsed.sections === 'object') {
-                            // Convert sections object into typed array preserving template order
-                            const sectionsArr: Array<{ title: string; bullets: string[] }> = modeNoteSections
-                                .map(s => ({
-                                    title: s.title,
-                                    bullets: Array.isArray(parsed.sections[s.title]) ? parsed.sections[s.title] as string[] : [],
-                                }));
-                            console.log('[MeetingPersistence] Parsed mode sections:', sectionsArr.map(s => `${s.title}(${s.bullets.length})`));
-                            summaryData = {
-                                overview: parsed.overview,
-                                actionItems: [],
-                                keyPoints: [],
-                                sections: sectionsArr,
-                            };
-                        } else {
-                            if (modeNoteSections.length > 0) {
-                                console.warn('[MeetingPersistence] Mode sections expected but LLM did not return "sections" key. Falling back to generic.');
-                            }
-                            summaryData = {
-                                ...parsed,
-                                // Legacy Groq summaries use `summary`; the persisted/UI contract uses `overview`.
-                                overview: typeof parsed.overview === 'string'
-                                    ? parsed.overview
-                                    : typeof parsed.summary === 'string'
-                                        ? parsed.summary
-                                        : undefined,
-                            };
-                        }
-                    } catch (e) {
-                        console.warn('[MeetingPersistence] Failed to parse summary JSON', {
-                            responseLength: jsonStr.length,
-                            errorName: e instanceof Error ? e.name : 'UnknownError',
-                            errorMessage: e instanceof Error ? e.message : String(e),
-                        });
-                        if (modeNoteSections.length > 0) {
-                            summaryData = {
-                                ...summaryData,
-                                sections: buildEmptyModeSections(),
-                            };
-                        }
-                    }
-                }
+                summaryData = await generateFullTranscriptSummary({
+                    llmHelper: this.llmHelper,
+                    transcript: data.transcript,
+                    context: data.context,
+                    modeTemplateType: modeSnapshot?.templateType,
+                    modeNoteSections,
+                    modeContextBlock,
+                    baseRules,
+                    groqSummaryPrompt,
+                });
             } else {
                 console.log("Transcript too short for summary generation.");
             }
