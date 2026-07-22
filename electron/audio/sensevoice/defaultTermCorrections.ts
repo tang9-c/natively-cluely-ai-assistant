@@ -93,9 +93,15 @@ export const DEFAULT_SENSEVOICE_TERM_CORRECTIONS: SenseVoiceTermEntry[] = saniti
     enabled: true,
   },
   {
+    id: 'industrial-ptc',
+    canonical: 'PTC',
+    variants: ['PDC'],
+    enabled: true,
+  },
+  {
     id: 'industrial-ptc-creo',
     canonical: 'PTC Creo',
-    variants: ['PTC克瑞欧', 'PTC可瑞欧', 'PTCCreo'],
+    variants: ['PTC克瑞欧', 'PTC可瑞欧', 'PTCCreo', 'PDC克瑞欧', 'PDC可瑞欧', 'PDCCreo'],
     enabled: true,
   },
   {
@@ -107,7 +113,7 @@ export const DEFAULT_SENSEVOICE_TERM_CORRECTIONS: SenseVoiceTermEntry[] = saniti
   {
     id: 'industrial-ptc-windchill',
     canonical: 'PTC Windchill',
-    variants: ['PTC温切尔', 'PTC温秋', 'PTC温球'],
+    variants: ['PTC温切尔', 'PTC温秋', 'PTC温球', 'PDC温切尔', 'PDC温秋', 'PDC温球'],
     enabled: true,
   },
   {

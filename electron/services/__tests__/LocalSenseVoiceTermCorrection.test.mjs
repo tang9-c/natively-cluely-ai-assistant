@@ -117,10 +117,23 @@ test('default SenseVoice industrial term corrections cover industrial ASR varian
 
   assert.equal(
     applySenseVoiceTermCorrection(
-      '麦供应商和皮诶勒姆需要打通，PTC克瑞欧和温切尔也要支持流体防真工作留。',
+      '麦供应商和皮诶勒姆需要打通，PDC克瑞欧和温切尔也要支持流体防真工作留。',
       DEFAULT_SENSEVOICE_TERM_CORRECTIONS,
     ),
     'MES供应商和PLM需要打通，PTC Creo和Windchill也要支持流体仿真工作流。',
+  );
+});
+
+test('default SenseVoice industrial term corrections replace standalone PDC with PTC', async () => {
+  const { applySenseVoiceTermCorrection } = await loadTermCorrection();
+  const { DEFAULT_SENSEVOICE_TERM_CORRECTIONS } = await loadDefaultTerms();
+
+  assert.equal(
+    applySenseVoiceTermCorrection(
+      '客户提到 PDC 和 Creo 的许可边界，但 PDCA 不应该被误改。',
+      DEFAULT_SENSEVOICE_TERM_CORRECTIONS,
+    ),
+    '客户提到 PTC 和 Creo 的许可边界，但 PDCA 不应该被误改。',
   );
 });
 
