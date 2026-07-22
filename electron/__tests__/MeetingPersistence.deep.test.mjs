@@ -454,6 +454,58 @@ describe('MeetingPersistence.deep — processAndSaveMeeting LLM failure paths', 
     assert.deepEqual(final.detailedSummary.actionItems, ['尾部确认下周提供测试数据']);
     assert.ok(calls.some((call) => call.context.includes('尾部确认下周提供测试数据')));
   });
+
+  test('LLM post-call enhancements are merged into detailedSummary', async () => {
+    const db = DatabaseManager.getInstance();
+    const session = buildMockSession();
+    let callIndex = 0;
+    const llm = {
+      generateMeetingSummary: async () => {
+        callIndex += 1;
+        if (callIndex === 1) return '中文会议标题';
+        if (callIndex === 2) {
+          return JSON.stringify({
+            overview: '客户确认 FDE 验证安排。',
+            keyPoints: [],
+            actionItems: ['客户下周提供测试数据'],
+            decisions: ['第一阶段只读接入 PLM'],
+            openQuestions: [],
+          });
+        }
+        return JSON.stringify({
+          coachingInsights: [
+            {
+              type: 'fde_validation_gap',
+              title: '验证材料需要明确',
+              detail: '客户已经确认测试数据，需要继续明确验收口径。',
+              severity: 'opportunity',
+              evidence: '客户下周提供测试数据',
+            },
+          ],
+          followUpDraft: '您好，我们会基于只读接入范围准备验证材料。',
+        });
+      },
+    };
+    const mp = new MeetingPersistence(session, llm);
+
+    await mp.processAndSaveMeeting(
+      buildSnapshot({
+        context: '客户下周提供测试数据。第一阶段只读接入 PLM。',
+        transcript: [
+          { speaker: '客户', text: '客户下周提供测试数据。', timestamp: 1 },
+          { speaker: '我们', text: '第一阶段只读接入 PLM。', timestamp: 2 },
+          { speaker: '客户', text: '好的。', timestamp: 3 },
+        ],
+      }),
+      'm-llm-enhancements',
+      null,
+      { id: 'mode-fde', name: 'FDE', templateType: 'fde' },
+    );
+
+    const final = db.getMeetingDetails('m-llm-enhancements');
+    assert.equal(final.detailedSummary.coachingInsights[0].title, '验证材料需要明确');
+    assert.match(final.detailedSummary.followUpDraft, /只读接入范围/);
+  });
 });
 
 describe('MeetingPersistence.deep — recoverUnprocessedMeetings edge cases', () => {

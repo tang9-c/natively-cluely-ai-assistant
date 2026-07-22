@@ -8,6 +8,7 @@ import { DatabaseManager, Meeting } from './db/DatabaseManager';
 import { GROQ_TITLE_PROMPT, GROQ_SUMMARY_JSON_PROMPT } from './llm';
 import { buildPostCallEnhancements } from './services/post-call/PostCallWorkflow';
 import { generateFullTranscriptSummary, type PostCallSummaryData } from './services/post-call/PostCallSummaryGenerator';
+import { generatePostCallLlmEnhancements } from './services/post-call/PostCallLlmEnhancements';
 import { buildDynamicActionArtifacts } from './services/dynamic-actions/DynamicActionArtifacts';
 import { telemetryService } from './services/telemetry/TelemetryService';
 import type { ProviderDataScopePolicy } from './llm/ProviderRouter';
@@ -339,14 +340,24 @@ export class MeetingPersistence {
                 usage: data.usage,
             });
 
+            const deterministicPostCall = buildPostCallEnhancements({
+                transcript: data.transcript,
+                modeTemplateType: modeSnapshot?.templateType,
+                summaryData,
+                dynamicActionArtifacts,
+            });
+            const llmEnhancements = await generatePostCallLlmEnhancements({
+                llmHelper: this.llmHelper,
+                transcript: data.transcript,
+                modeTemplateType: modeSnapshot?.templateType,
+                summaryData,
+                deterministicEnhancements: deterministicPostCall,
+            });
+
             summaryData = {
                 ...summaryData,
-                ...buildPostCallEnhancements({
-                    transcript: data.transcript,
-                    modeTemplateType: modeSnapshot?.templateType,
-                    summaryData,
-                    dynamicActionArtifacts,
-                }),
+                ...deterministicPostCall,
+                ...llmEnhancements,
             };
         } catch (e) {
             console.error("Error generating meeting metadata", e);
