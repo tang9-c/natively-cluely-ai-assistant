@@ -74,6 +74,94 @@ test('generateFullTranscriptSummary summarizes every chunk before final merge', 
   assert.deepEqual(summary.decisions, ['第一阶段先确认集成边界']);
 });
 
+test('generateFullTranscriptSummary keeps user-derived content out of system prompts', async () => {
+  const calls = [];
+  const llmHelper = {
+    generateMeetingSummary: async (prompt, context) => {
+      calls.push({ prompt, context });
+      if (prompt.includes('归并')) {
+        return JSON.stringify({
+          overview: '完整摘要',
+          sections: { '客户目标': ['客户要降低追溯成本'] },
+          actionItems: [],
+          decisions: [],
+          openQuestions: [],
+        });
+      }
+      return JSON.stringify({
+        overview: '局部摘要包含客户要降低追溯成本',
+        sections: { '客户目标': ['客户要降低追溯成本'] },
+        actionItems: [],
+        decisions: [],
+        openQuestions: [],
+      });
+    },
+  };
+
+  await generateFullTranscriptSummary({
+    llmHelper,
+    transcript: [],
+    context: '客户原文敏感内容 '.repeat(300),
+    modeTemplateType: 'fde',
+    modeNoteSections: [{ title: '客户目标', description: '客户目标描述' }],
+    modeContextBlock: '客户资料敏感片段',
+    baseRules: '规则：只基于会议内容。',
+    groqSummaryPrompt: 'fallback',
+    maxChunkChars: 1000,
+  });
+
+  assert.ok(calls.length > 1);
+  for (const call of calls) {
+    assert.ok(!call.prompt.includes('客户原文敏感内容'));
+    assert.ok(!call.prompt.includes('客户资料敏感片段'));
+    assert.ok(!call.prompt.includes('局部摘要包含客户要降低追溯成本'));
+  }
+  assert.ok(calls.some(call => call.context.includes('客户原文敏感内容')));
+  assert.ok(calls.some(call => call.context.includes('客户资料敏感片段')));
+  assert.ok(calls.some(call => call.context.includes('局部摘要包含客户要降低追溯成本')));
+});
+
+test('generateFullTranscriptSummary locally merges partials when final merge fails', async () => {
+  const llmHelper = {
+    generateMeetingSummary: async (prompt, context) => {
+      if (prompt.includes('归并')) throw new Error('merge unavailable');
+      if (context.includes('尾部')) {
+        return JSON.stringify({
+          overview: '尾部摘要',
+          keyPoints: ['尾部确认验收标准'],
+          actionItems: ['客户下周提供测试数据'],
+          decisions: ['采用只读接入'],
+          openQuestions: ['写回边界待确认'],
+        });
+      }
+      return JSON.stringify({
+        overview: '头部摘要',
+        keyPoints: ['头部确认 SRM 现状'],
+        actionItems: [],
+        decisions: [],
+        openQuestions: [],
+      });
+    },
+  };
+
+  const summary = await generateFullTranscriptSummary({
+    llmHelper,
+    transcript: [],
+    context: '头部 SRM 现状。\n' + '中段 '.repeat(900) + '\n尾部 确认验收标准。',
+    modeTemplateType: 'fde',
+    modeNoteSections: [],
+    modeContextBlock: '',
+    baseRules: '规则：只基于会议内容。',
+    groqSummaryPrompt: 'fallback',
+    maxChunkChars: 1000,
+  });
+
+  assert.deepEqual(summary.keyPoints, ['头部确认 SRM 现状', '尾部确认验收标准']);
+  assert.deepEqual(summary.actionItems, ['客户下周提供测试数据']);
+  assert.deepEqual(summary.decisions, ['采用只读接入']);
+  assert.deepEqual(summary.openQuestions, ['写回边界待确认']);
+});
+
 test('generateFullTranscriptSummary preserves mode section order during final merge', async () => {
   const llmHelper = {
     generateMeetingSummary: async (prompt) => {

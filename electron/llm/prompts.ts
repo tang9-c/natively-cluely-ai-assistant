@@ -777,13 +777,15 @@ export const GROQ_TITLE_PROMPT = `为这次会议生成一个简洁的中文标�
  */
 export const GROQ_SUMMARY_JSON_PROMPT = `你是一位静默的会议总结员。将这段对话转换为简洁的内部会议笔记。
 
-输出一个 JSON 对象，必须且只能包含以下四个 key，key 名称不能变：
-- "summary" (string): 一段话的概述
+输出一个 JSON 对象，key 名称不能变：
+- "overview" (string): 1-2 句话概述
 - "keyPoints" (string 数组): 关键要点 bullet 列表
 - "actionItems" (string 数组): 带负责人的行动项，例如 "Bob: 周三前起草邀请文案"
 - "decisions" (string 数组): 明确的决策
+- "openQuestions" (string 数组): 待确认事项或开放问题
+- "sections" (object，可选): 如果系统提示要求特定分区，用分区标题作为 key，value 为 string 数组
 
-不要使用 "overview"、"highlights" 或这些 key 的同义词。以上四个 key 必须存在，即使没有内容也要返回空数组。
+以上 key 必须存在，即使没有内容也要返回空数组。不要使用 "summary"、"highlights" 或这些 key 的同义词。
 
 规则：
 - 不要编造信息。
@@ -793,10 +795,12 @@ export const GROQ_SUMMARY_JSON_PROMPT = `你是一位静默的会议总结员。
 
 响应格式（仅 JSON）：
 {
-  "summary": "一段话的概述",
+  "overview": "一段话的概述",
   "keyPoints": ["3-6 个具体 bullet"],
   "actionItems": ["负责人: 具体下一步", "..."],
-  "decisions": ["明确的决策 1", "..."]
+  "decisions": ["明确的决策 1", "..."],
+  "openQuestions": ["待确认事项 1", "..."],
+  "sections": {}
 }
 `;
 

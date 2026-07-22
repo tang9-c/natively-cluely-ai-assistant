@@ -158,6 +158,20 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         let textToCopy = '';
 
         if (activeTab === 'summary' && meeting.detailedSummary) {
+            const formatList = (items?: string[]) => items && items.length > 0
+                ? items.map(item => `- ${item}`).join('\n')
+                : '无';
+            const sectionsText = meeting.detailedSummary.sections && meeting.detailedSummary.sections.length > 0
+                ? meeting.detailedSummary.sections
+                    .filter(section => section.bullets.length > 0)
+                    .map(section => `${section.title}：\n${formatList(section.bullets)}`)
+                    .join('\n\n')
+                : '';
+            const coachingText = meeting.detailedSummary.coachingInsights && meeting.detailedSummary.coachingInsights.length > 0
+                ? meeting.detailedSummary.coachingInsights
+                    .map(insight => `- ${insight.title}：${insight.detail}${insight.evidence ? `\n  证据：${insight.evidence}` : ''}`)
+                    .join('\n')
+                : '';
             textToCopy = `
 会议：${meeting.title}
 日期：${new Date(meeting.date).toLocaleDateString()}
@@ -166,10 +180,18 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
 ${meeting.detailedSummary.overview || ''}
 
 行动项：
-${meeting.detailedSummary.actionItems?.map(item => `- ${item}`).join('\n') || '无'}
+${formatList(meeting.detailedSummary.actionItems)}
 
 要点：
-${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || '无'}
+${formatList(meeting.detailedSummary.keyPoints)}
+
+决策项：
+${formatList(meeting.detailedSummary.decisions)}
+
+待确认事项：
+${formatList(meeting.detailedSummary.openQuestions)}
+
+${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `辅导：\n${coachingText}\n\n` : ''}${meeting.detailedSummary.followUpDraft ? `跟进草稿：\n${meeting.detailedSummary.followUpDraft}` : ''}
             `.trim();
         } else if (activeTab === 'transcript' && meeting.transcript) {
             textToCopy = meeting.transcript.map(t => `[${formatTime(t.timestamp)}] ${t.speaker === 'user' ? '我' : '对方'}: ${t.text}`).join('\n');

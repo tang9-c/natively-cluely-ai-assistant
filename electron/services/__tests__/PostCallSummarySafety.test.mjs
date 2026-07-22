@@ -27,6 +27,16 @@ test('MeetingPersistence summary uses buildSummarySafeModeContextBlock with scop
   assert.match(src, /includeReferenceSnippets: referenceSnippetsAllowed/);
 });
 
+test('Groq summary prompt matches current post-call JSON schema', () => {
+  const src = read('electron/llm/prompts.ts');
+
+  assert.match(src, /"overview"/);
+  assert.match(src, /"openQuestions"/);
+  assert.match(src, /"sections"/);
+  assert.doesNotMatch(src, /不要使用 "overview"/);
+  assert.doesNotMatch(src, /必须且只能包含以下四个 key/);
+});
+
 test('ModesManager exposes buildSummarySafeModeContextBlock and gates raw bodies', () => {
   const src = read('electron/services/ModesManager.ts');
 

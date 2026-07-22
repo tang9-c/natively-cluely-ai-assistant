@@ -75,6 +75,65 @@ test('generatePostCallLlmEnhancements drops insights without evidence', async ()
   assert.equal(result.followUpDraft, '');
 });
 
+test('generatePostCallLlmEnhancements keeps meeting content out of system prompt', async () => {
+  const calls = [];
+  const llmHelper = {
+    generateMeetingSummary: async (prompt, context) => {
+      calls.push({ prompt, context });
+      return JSON.stringify({ coachingInsights: [], followUpDraft: '' });
+    },
+  };
+
+  await generatePostCallLlmEnhancements({
+    llmHelper,
+    transcript: [{ speaker: '客户', text: '客户敏感原文证据', timestamp: 1 }],
+    modeTemplateType: 'fde',
+    summaryData: {
+      overview: '客户敏感摘要',
+      keyPoints: ['客户敏感要点'],
+      actionItems: [],
+      decisions: [],
+      openQuestions: [],
+    },
+    deterministicEnhancements: { acceptedFdeRecords: [{ summary: '客户敏感确定性记录' }] },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.ok(!calls[0].prompt.includes('客户敏感原文证据'));
+  assert.ok(!calls[0].prompt.includes('客户敏感摘要'));
+  assert.ok(!calls[0].prompt.includes('客户敏感确定性记录'));
+  assert.ok(calls[0].context.includes('客户敏感原文证据'));
+  assert.ok(calls[0].context.includes('客户敏感摘要'));
+  assert.ok(calls[0].context.includes('客户敏感确定性记录'));
+});
+
+test('generatePostCallLlmEnhancements drops fabricated evidence not present in transcript', async () => {
+  const llmHelper = {
+    generateMeetingSummary: async () => JSON.stringify({
+      coachingInsights: [
+        {
+          type: 'fde_validation_gap',
+          title: '不能显示',
+          detail: '证据并不存在。',
+          severity: 'warning',
+          evidence: '客户已经承诺明天签合同',
+        },
+      ],
+      followUpDraft: '',
+    }),
+  };
+
+  const result = await generatePostCallLlmEnhancements({
+    llmHelper,
+    transcript: [{ speaker: '客户', text: '客户只说下周再确认测试数据', timestamp: 1 }],
+    modeTemplateType: 'fde',
+    summaryData: { overview: '摘要', keyPoints: [], actionItems: [], decisions: [], openQuestions: [] },
+    deterministicEnhancements: emptyDeterministicEnhancements,
+  });
+
+  assert.deepEqual(result.coachingInsights, []);
+});
+
 test('generatePostCallLlmEnhancements returns empty fallback on malformed JSON or provider error', async () => {
   for (const generateMeetingSummary of [
     async () => 'not json',

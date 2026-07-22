@@ -120,10 +120,67 @@ function buildSectionKeys(modeNoteSections: Array<{ title: string; description: 
   return modeNoteSections.map((section) => `    "${section.title}": []`).join(',\n');
 }
 
+function joinContextParts(parts: string[]): string {
+  return parts
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function buildChunkContext(params: GenerateFullTranscriptSummaryParams, chunk: string): string {
+  return joinContextParts([
+    params.modeContextBlock ? `模式上下文：\n${params.modeContextBlock}` : '',
+    `会议片段：\n${chunk}`,
+  ]);
+}
+
+function buildMergeContext(params: GenerateFullTranscriptSummaryParams, chunkSummaries: PostCallSummaryData[]): string {
+  return joinContextParts([
+    params.modeContextBlock ? `模式上下文：\n${params.modeContextBlock}` : '',
+    `局部摘要 JSON：\n${JSON.stringify(chunkSummaries)}`,
+  ]);
+}
+
+function uniqueStrings(items: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of items) {
+    const normalized = item.trim();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
+function mergePartialsLocally(
+  partials: PostCallSummaryData[],
+  modeNoteSections: Array<{ title: string; description: string }>
+): PostCallSummaryData {
+  const summary: PostCallSummaryData = {
+    overview: uniqueStrings(partials.map((partial) => partial.overview || '')).join('。'),
+    keyPoints: uniqueStrings(partials.flatMap((partial) => partial.keyPoints || [])),
+    actionItems: uniqueStrings(partials.flatMap((partial) => partial.actionItems || [])),
+    decisions: uniqueStrings(partials.flatMap((partial) => partial.decisions || [])),
+    openQuestions: uniqueStrings(partials.flatMap((partial) => partial.openQuestions || [])),
+  };
+
+  if (modeNoteSections.length > 0) {
+    summary.sections = modeNoteSections.map((section) => ({
+      title: section.title,
+      bullets: uniqueStrings(partials.flatMap((partial) => {
+        const matched = partial.sections?.find((candidate) => candidate.title === section.title);
+        return matched?.bullets || [];
+      })),
+    }));
+  }
+
+  return summary;
+}
+
 function buildChunkPrompt(params: GenerateFullTranscriptSummaryParams, chunkIndex: number, totalChunks: number): string {
   if (params.modeNoteSections.length > 0) {
     return `你是一位静默的会议记录员。下面是完整会议的第 ${chunkIndex + 1}/${totalChunks} 个片段，请只总结本片段中实际出现的信息。
-${params.modeContextBlock}
 ${params.baseRules}
 
 需要填充的分区：
@@ -158,10 +215,8 @@ ${params.baseRules}
 }
 
 function buildMergePrompt(params: GenerateFullTranscriptSummaryParams, chunkSummaries: PostCallSummaryData[]): string {
-  const serialized = JSON.stringify(chunkSummaries);
   if (params.modeNoteSections.length > 0) {
     return `你是一位资深产品经理。请将下面这些局部会议摘要归并为一份完整会议摘要。
-${params.modeContextBlock}
 ${params.baseRules}
 
 归并规则：
@@ -172,9 +227,6 @@ ${params.baseRules}
 
 需要填充的分区：
 ${buildSectionList(params.modeNoteSections)}
-
-局部摘要 JSON：
-${serialized}
 
 只返回合法 JSON，不要 markdown 围栏：
 {
@@ -197,9 +249,6 @@ ${params.baseRules}
 - 去重相同事项。
 - 行动项必须是可执行动作；泛泛的下一步放入 openQuestions。
 
-局部摘要 JSON：
-${serialized}
-
 只返回合法 JSON，不要 markdown 代码块：
 {
   "overview": "1-2 句话描述完整会议",
@@ -219,8 +268,8 @@ export async function generateFullTranscriptSummary(params: GenerateFullTranscri
     try {
       const raw = await params.llmHelper.generateMeetingSummary(
         buildChunkPrompt(params, i, chunks.length),
-        chunks[i],
-        params.groqSummaryPrompt,
+        buildChunkContext(params, chunks[i]),
+        undefined,
       );
       const parsed = raw ? parseSummaryJson(raw, params.modeNoteSections) : null;
       if (parsed) partials.push(parsed);
@@ -241,8 +290,8 @@ export async function generateFullTranscriptSummary(params: GenerateFullTranscri
   try {
     const raw = await params.llmHelper.generateMeetingSummary(
       buildMergePrompt(params, partials),
-      JSON.stringify(partials),
-      params.groqSummaryPrompt,
+      buildMergeContext(params, partials),
+      undefined,
     );
     return parseSummaryJson(raw, params.modeNoteSections) ?? emptySummary(params.modeNoteSections);
   } catch (err) {
@@ -251,6 +300,6 @@ export async function generateFullTranscriptSummary(params: GenerateFullTranscri
       partialCount: partials.length,
       modeTemplateType: params.modeTemplateType,
     });
-    return partials[0] ?? emptySummary(params.modeNoteSections);
+    return mergePartialsLocally(partials, params.modeNoteSections);
   }
 }

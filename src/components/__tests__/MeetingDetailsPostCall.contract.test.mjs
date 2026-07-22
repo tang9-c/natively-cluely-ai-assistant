@@ -17,3 +17,12 @@ test('MeetingDetails keeps empty coaching and follow-up sections hidden', () => 
   assert.match(source, /coachingInsights && meeting\.detailedSummary\.coachingInsights\.length > 0/);
   assert.match(source, /followUpDraft && meeting\.detailedSummary\.followUpDraft\.trim\(\)/);
 });
+
+test('MeetingDetails copy full summary includes post-call enhanced fields', () => {
+  const copyBlock = source.slice(source.indexOf('const handleCopy'), source.indexOf('const handleRunTranscriptSkill'));
+
+  assert.match(copyBlock, /detailedSummary\.decisions/);
+  assert.match(copyBlock, /detailedSummary\.openQuestions/);
+  assert.match(copyBlock, /detailedSummary\.sections/);
+  assert.match(copyBlock, /detailedSummary\.followUpDraft/);
+});

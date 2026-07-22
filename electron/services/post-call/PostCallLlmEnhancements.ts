@@ -51,11 +51,32 @@ function transcriptEvidenceWindow(transcript: PostCallTranscriptSegment[]): stri
   ].join('\n');
 }
 
+function transcriptEvidenceText(transcript: PostCallTranscriptSegment[]): string {
+  return transcript
+    .filter((segment) => segment?.text?.trim())
+    .map((segment) => segment.text.trim())
+    .join('\n');
+}
+
+function normalizeEvidence(value: string): string {
+  return value
+    .replace(/[“”"']/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
+function hasTranscriptEvidence(evidence: string, transcript: PostCallTranscriptSegment[]): boolean {
+  const normalizedEvidence = normalizeEvidence(evidence);
+  if (!normalizedEvidence) return false;
+  const normalizedTranscript = normalizeEvidence(transcriptEvidenceText(transcript));
+  return normalizedTranscript.includes(normalizedEvidence);
+}
+
 function normalizeSeverity(value: unknown): Severity {
   return value === 'warning' || value === 'opportunity' || value === 'info' ? value : 'info';
 }
 
-function parseEnhancements(raw: string): LlmPostCallEnhancements {
+function parseEnhancements(raw: string, transcript: PostCallTranscriptSegment[]): LlmPostCallEnhancements {
   const parsed = JSON.parse(stripJsonFences(raw));
   const coachingInsights = Array.isArray(parsed.coachingInsights)
     ? parsed.coachingInsights
@@ -64,6 +85,7 @@ function parseEnhancements(raw: string): LlmPostCallEnhancements {
         const detail = typeof item.detail === 'string' ? item.detail.trim() : '';
         const evidence = typeof item.evidence === 'string' ? item.evidence.trim() : '';
         if (!title || !detail || !evidence) return null;
+        if (!hasTranscriptEvidence(evidence, transcript)) return null;
         return {
           id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `llm_insight_${index + 1}`,
           type: typeof item.type === 'string' && item.type.trim() ? item.type.trim() : 'post_call_insight',
@@ -97,15 +119,6 @@ function buildPrompt(params: GeneratePostCallLlmEnhancementsParams): string {
 
 模式：${params.modeTemplateType || 'general'}
 
-正文摘要 JSON：
-${JSON.stringify(params.summaryData)}
-
-确定性记录 JSON：
-${JSON.stringify(params.deterministicEnhancements)}
-
-证据窗口：
-${transcriptEvidenceWindow(params.transcript)}
-
 响应格式：
 {
   "coachingInsights": [
@@ -123,15 +136,16 @@ ${transcriptEvidenceWindow(params.transcript)}
 
 export async function generatePostCallLlmEnhancements(params: GeneratePostCallLlmEnhancementsParams): Promise<LlmPostCallEnhancements> {
   try {
+    const evidenceWindow = transcriptEvidenceWindow(params.transcript);
     const raw = await params.llmHelper.generateMeetingSummary(
       buildPrompt(params),
       JSON.stringify({
         summaryData: params.summaryData,
         deterministicEnhancements: params.deterministicEnhancements,
-        evidenceWindow: transcriptEvidenceWindow(params.transcript),
+        evidenceWindow,
       }),
     );
-    return raw ? parseEnhancements(raw) : EMPTY_ENHANCEMENTS;
+    return raw ? parseEnhancements(raw, params.transcript) : EMPTY_ENHANCEMENTS;
   } catch (err) {
     console.warn('[PostCallLlmEnhancements] generation failed', {
       errorName: err instanceof Error ? err.name : 'UnknownError',
