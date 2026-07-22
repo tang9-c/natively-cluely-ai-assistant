@@ -165,13 +165,7 @@ export function buildPostCallEnhancements(params: {
   const acceptedRecruitingRecords = params.dynamicActionArtifacts?.length
     ? collectAcceptedRecruitingRecords(params.dynamicActionArtifacts)
     : [];
-  const coachingInsights = generateCoachingInsights(
-    params.transcript,
-    params.modeTemplateType,
-    params.summaryData,
-    params.dynamicActionArtifacts,
-    acceptedRecruitingRecords,
-  );
+  const coachingInsights: CoachingInsight[] = [];
 
   return {
     schemaVersion: 2,
@@ -182,12 +176,7 @@ export function buildPostCallEnhancements(params: {
     acceptedCapabilityFitRecords,
     acceptedFdeRecords,
     acceptedRecruitingRecords,
-    followUpDraft: buildFollowUpDraft(params.modeTemplateType, actionItemsStructured, params.summaryData, {
-      acceptedDecisionRecords,
-      acceptedBlockerRecords,
-      acceptedCapabilityFitRecords,
-      acceptedFdeRecords,
-    }),
+    followUpDraft: '',
     coachingInsights,
   };
 }

@@ -37,7 +37,8 @@ test('post-call summary preserves accepted team action artifacts', async () => {
 
   assert.ok(result.actionItemsStructured.some((item) => /launch checklist/i.test(item.text)));
   assert.ok(result.acceptedActionItems.some((item) => /launch checklist/i.test(item.text)));
-  assert.ok(result.coachingInsights.some((insight) => insight.type === 'accepted_dynamic_action'));
+  assert.deepEqual(result.coachingInsights, []);
+  assert.equal(result.followUpDraft, '');
 });
 
 test('post-call carryover preserves accepted team decision artifacts', async () => {
@@ -61,7 +62,8 @@ test('post-call carryover preserves accepted team decision artifacts', async () 
 
   assert.equal(result.acceptedDecisionRecords.length, 1);
   assert.match(result.acceptedDecisionRecords[0].decision, /Postgres/);
-  assert.ok(result.followUpDraft.includes('Postgres'));
+  assert.deepEqual(result.coachingInsights, []);
+  assert.equal(result.followUpDraft, '');
 });
 
 test('post-call carryover preserves accepted team blocker artifacts', async () => {
@@ -85,7 +87,8 @@ test('post-call carryover preserves accepted team blocker artifacts', async () =
 
   assert.equal(result.acceptedBlockerRecords.length, 1);
   assert.match(result.acceptedBlockerRecords[0].blocker, /安全审批/);
-  assert.ok(result.followUpDraft.includes('安全审批'));
+  assert.deepEqual(result.coachingInsights, []);
+  assert.equal(result.followUpDraft, '');
 });
 
 test('post-call carryover keeps sales capability confirmations separate from action items', async () => {
@@ -139,15 +142,13 @@ test('post-call carryover keeps sales capability confirmations separate from act
   assert.equal(result.acceptedCapabilityFitRecords[0].parentActionId, 'technical_parent_1');
   assert.equal(result.acceptedCapabilityFitRecords[0].groundingStatus, 'grounded');
   assert.equal(result.acceptedCapabilityFitRecords[1].groundingStatus, 'needs_confirmation');
-  assert.ok(result.followUpDraft.includes('Capability confirmation:'));
-  assert.ok(result.followUpDraft.includes('Security note'));
-  assert.ok(result.followUpDraft.includes('needs confirmation with trusted material or a PoC'));
   assert.ok(result.actionItemsStructured.some((item) => /schedule security PoC/i.test(item.text)));
   assert.equal(
     result.actionItemsStructured.some((item) => /SSO and audit export based on the security note/i.test(item.text)),
     false,
   );
-  assert.ok(result.coachingInsights.some((insight) => insight.type === 'sales_capability_confirmation'));
+  assert.deepEqual(result.coachingInsights, []);
+  assert.equal(result.followUpDraft, '');
 });
 
 test('post-call carryover preserves accepted FDE grounded answers without action item pollution', async () => {
@@ -172,11 +173,11 @@ test('post-call carryover preserves accepted FDE grounded answers without action
   });
 
   assert.equal(result.acceptedFdeRecords.length, 1);
-  assert.match(result.followUpDraft, /Process confirmation:/);
-  assert.match(result.followUpDraft, /AI support boundary:/);
-  assert.match(result.followUpDraft, /fde-process\.pdf/);
+  assert.match(result.acceptedFdeRecords[0].summary, /ECO 流程/);
+  assert.match(result.acceptedFdeRecords[0].groundedSourceLabels.join(' '), /fde-process\.pdf/);
   assert.equal(result.actionItemsStructured.some((item) => /检查缺字段/.test(item.text)), false);
-  assert.ok(result.coachingInsights.some((insight) => insight.type === 'fde_process_confirmation'));
+  assert.deepEqual(result.coachingInsights, []);
+  assert.equal(result.followUpDraft, '');
 });
 
 test('recruiting evidence is internal and never copied into candidate follow-up draft', async () => {
@@ -202,8 +203,8 @@ test('recruiting evidence is internal and never copied into candidate follow-up 
 
   assert.equal(result.acceptedRecruitingRecords.length, 1);
   assert.equal(result.acceptedRecruitingRecords[0].sourceIntent, 'recruiting_bei_evidence_gap');
-  assert.ok(result.coachingInsights.some((item) => item.type === 'recruiting_evidence_summary'));
-  assert.doesNotMatch(result.followUpDraft, /灰度方案|结果指标|Candidate evidence|Scorecard gaps|Risks to verify/i);
+  assert.deepEqual(result.coachingInsights, []);
+  assert.equal(result.followUpDraft, '');
 });
 
 test('post-call carryover emits FDE AI boundary, validation, and risk insights', async () => {
@@ -249,12 +250,12 @@ test('post-call carryover emits FDE AI boundary, validation, and risk insights',
     ],
   });
 
-  assert.match(result.followUpDraft, /AI support boundary:/);
-  assert.match(result.followUpDraft, /Validation next steps:/);
-  assert.match(result.followUpDraft, /Delivery risks:/);
-  assert.ok(result.coachingInsights.some((insight) => insight.type === 'fde_ai_boundary_followup'));
-  assert.ok(result.coachingInsights.some((insight) => insight.type === 'fde_validation_missing_fields'));
-  assert.ok(result.coachingInsights.some((insight) => insight.type === 'fde_delivery_risk_followup'));
+  assert.equal(result.acceptedFdeRecords.length, 3);
+  assert.ok(result.acceptedFdeRecords.some((record) => record.actionType === 'fde_agent_feasibility'));
+  assert.ok(result.acceptedFdeRecords.some((record) => record.actionType === 'fde_next_step'));
+  assert.ok(result.acceptedFdeRecords.some((record) => record.actionType === 'fde_risk_blocker'));
+  assert.deepEqual(result.coachingInsights, []);
+  assert.equal(result.followUpDraft, '');
 });
 
 test('MeetingPersistence maps flat dynamic action usage into carryover artifacts', async () => {
@@ -297,7 +298,8 @@ test('MeetingPersistence maps flat dynamic action usage into carryover artifacts
   });
 
   assert.ok(result.actionItemsStructured.some((item) => /launch checklist/i.test(item.text)));
-  assert.ok(result.coachingInsights.some((insight) => insight.type === 'accepted_dynamic_action'));
+  assert.deepEqual(result.coachingInsights, []);
+  assert.equal(result.followUpDraft, '');
 });
 
 test('MeetingPersistence skips non-dynamic or incomplete usage entries', async () => {
@@ -431,10 +433,8 @@ test('post-call carryover preserves accepted fallback artifacts when generation 
       result.actionItemsStructured.some((item) => /launch readiness checklist/i.test(item.text)),
       `${generationStatus} fallback artifact should remain in post-call action items`,
     );
-    assert.ok(
-      result.coachingInsights.some((insight) => insight.type === 'accepted_dynamic_action'),
-      `${generationStatus} fallback artifact should be reflected in post-call coaching insights`,
-    );
+    assert.deepEqual(result.coachingInsights, []);
+    assert.equal(result.followUpDraft, '');
   }
 });
 

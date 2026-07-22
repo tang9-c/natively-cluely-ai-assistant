@@ -78,7 +78,7 @@ test('generateCoachingInsights flags Chinese sales objection with no captured ob
   assert.ok(insights.some(insight => insight.evidence?.includes('价格太高')));
 });
 
-test('buildPostCallEnhancements extracts Chinese sales next steps into follow-up draft', () => {
+test('buildPostCallEnhancements extracts Chinese sales next steps without visible rule follow-up', () => {
   const result = buildPostCallEnhancements({
     modeTemplateType: 'sales',
     transcript: [
@@ -88,12 +88,49 @@ test('buildPostCallEnhancements extracts Chinese sales next steps into follow-up
   });
 
   assert.ok(result.actionItemsStructured.some(item => /发案例和报价单/.test(item.text)));
-  assert.match(result.followUpDraft, /Next steps:/);
-  assert.match(result.followUpDraft, /发案例和报价单/);
-  assert.ok(!result.coachingInsights.some(insight => insight.type === 'missing_next_step'));
+  assert.equal(result.followUpDraft, '');
+  assert.deepEqual(result.coachingInsights, []);
 });
 
-test('buildPostCallEnhancements extracts Chinese team-meet actions and coaching signals', () => {
+test('buildPostCallEnhancements does not generate visible FDE coaching from broad keywords', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'fde',
+    transcript: [
+      { speaker: '客户', text: '我们需要追溯 CAD Creo，也要看权限管理和质量记录。顺便说一句网络速度满意吗。', timestamp: 10 },
+    ],
+    summaryData: { overview: '客户讨论追溯和权限。', actionItems: [], keyPoints: [] },
+  });
+
+  assert.deepEqual(result.coachingInsights, []);
+  assert.equal(result.followUpDraft, '');
+  assert.ok(Array.isArray(result.actionItemsStructured));
+});
+
+test('buildPostCallEnhancements preserves accepted dynamic records while visible enhancements stay empty', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'fde',
+    transcript: [{ speaker: '客户', text: '请确认第一阶段只读接入 PLM。', timestamp: 10 }],
+    dynamicActionArtifacts: [
+      {
+        actionId: 'fde_1',
+        modeTemplateType: 'fde',
+        actionType: 'fde_process_confirmation',
+        outputType: 'text',
+        structuredSummary: 'Process confirmation: 第一阶段只读接入 PLM',
+        missingFields: [],
+        groundedSources: [{ type: 'transcript', label: 'accepted fde', status: 'used' }],
+        acceptedAt: 1000,
+        generationStatus: 'completed',
+      },
+    ],
+  });
+
+  assert.equal(result.acceptedFdeRecords.length, 1);
+  assert.deepEqual(result.coachingInsights, []);
+  assert.equal(result.followUpDraft, '');
+});
+
+test('buildPostCallEnhancements extracts Chinese team-meet actions without visible rule coaching', () => {
   const result = buildPostCallEnhancements({
     modeTemplateType: 'team-meet',
     transcript: [
@@ -104,9 +141,8 @@ test('buildPostCallEnhancements extracts Chinese team-meet actions and coaching 
 
   assert.ok(result.actionItemsStructured.some(item => /我来负责/.test(item.text)));
   assert.ok(result.actionItemsStructured.some(item => item.deadline === '周五前'));
-  assert.ok(result.coachingInsights.some(insight => insight.type === 'decision_captured'));
-  assert.ok(result.coachingInsights.some(insight => insight.type === 'risk_captured'));
-  assert.ok(!result.coachingInsights.some(insight => insight.type === 'missing_ownership'));
+  assert.deepEqual(result.coachingInsights, []);
+  assert.equal(result.followUpDraft, '');
 });
 
 test('buildPostCallEnhancements keeps team-meet behavior unchanged without artifacts', () => {
@@ -157,7 +193,8 @@ test('buildPostCallEnhancements carries accepted team artifacts even when genera
 
   assert.ok(result.actionItemsStructured.some((item) => /launch checklist/i.test(item.text)));
   assert.ok(result.actionItemsStructured.some((item) => /fallback checklist/i.test(item.text)));
-  assert.ok(result.coachingInsights.some((insight) => insight.type === 'accepted_dynamic_action'));
+  assert.deepEqual(result.coachingInsights, []);
+  assert.equal(result.followUpDraft, '');
 });
 
 test('sales post-call carries accepted quote and proof artifacts into follow-up', () => {
@@ -196,7 +233,7 @@ test('sales post-call carries accepted quote and proof artifacts into follow-up'
   assert.match(text, /Halcyon Industries/);
 });
 
-test('sales post-call flags buying signal when owner date or artifact is missing', () => {
+test('sales post-call preserves buying signal artifacts without visible rule coaching', () => {
   const result = buildPostCallEnhancements({
     modeTemplateType: 'sales',
     transcript: [{ speaker: 'Customer', text: '下一步我们让法务看看合同。', timestamp: 20 }],
@@ -215,10 +252,9 @@ test('sales post-call flags buying signal when owner date or artifact is missing
     ],
   });
 
-  assert.ok(result.coachingInsights.some((insight) =>
-    insight.type === 'sales_next_step_missing_fields'
-    && /owner|date|artifact|负责人|日期|产物/i.test(insight.detail)
-  ));
+  assert.ok(result.actionItemsStructured.some((item) => /contract summary/i.test(item.text)));
+  assert.deepEqual(result.coachingInsights, []);
+  assert.equal(result.followUpDraft, '');
 });
 
 test('sales post-call carries all five accepted sales action artifacts', () => {
@@ -347,15 +383,12 @@ test('recruiting follow-up never exposes English or Chinese internal evaluation 
   });
 
   assert.equal(result.acceptedRecruitingRecords.length, 2);
-  assert.ok(result.coachingInsights.some((item) => item.type === 'recruiting_evidence_gap'));
-  assert.ok(result.coachingInsights.some((item) => item.type === 'recruiting_candidate_interest'));
-  assert.ok(result.coachingInsights.some((item) => item.type === 'recruiting_policy_confirmation_needed'));
-  assert.equal(result.followUpDraft, 'Hi,\n\nThanks for the conversation today.\n\nOur recruiting team will follow up with next steps.\n\nBest,');
-  assert.doesNotMatch(result.followUpDraft, /evidence|protected-class|scorecard|risk|hire|reject|录用|淘汰|薪资|年龄|age|gender/i);
+  assert.deepEqual(result.coachingInsights, []);
+  assert.equal(result.followUpDraft, '');
   assert.match(result.acceptedRecruitingRecords[0].summary, /Scorecard gap/i);
 });
 
-test('fde post-call insights flag customer goal without success metric', () => {
+test('fde post-call does not expose rule insights for customer goal without success metric', () => {
   const result = buildPostCallEnhancements({
     modeTemplateType: 'fde',
     transcript: [
@@ -364,11 +397,11 @@ test('fde post-call insights flag customer goal without success metric', () => {
     summaryData: { sections: [] },
   });
 
-  assert.ok(result.coachingInsights.some(insight => insight.type === 'missing_success_metric'));
-  assert.ok(result.coachingInsights.some(insight => insight.type === 'missing_delivery_next_step'));
+  assert.deepEqual(result.coachingInsights, []);
+  assert.equal(result.followUpDraft, '');
 });
 
-test('fde post-call insights detect integration ownership, security, scope, and emotion signals', () => {
+test('fde post-call does not expose rule insights for broad integration and security signals', () => {
   const result = buildPostCallEnhancements({
     modeTemplateType: 'fde',
     transcript: [
@@ -377,11 +410,8 @@ test('fde post-call insights detect integration ownership, security, scope, and 
     summaryData: { sections: [] },
   });
 
-  assert.ok(result.coachingInsights.some(insight => insight.type === 'missing_integration_owner'));
-  assert.ok(result.coachingInsights.some(insight => insight.type === 'security_risk_captured'));
-  assert.ok(result.coachingInsights.some(insight => insight.type === 'scope_change_detected'));
-  assert.ok(result.coachingInsights.some(insight => insight.type === 'emotion_signal_detected'));
-  assert.match(result.followUpDraft, /^Hi,/);
+  assert.deepEqual(result.coachingInsights, []);
+  assert.equal(result.followUpDraft, '');
 });
 
 test('generateCoachingInsights flags Chinese lecture study follow-up', () => {
@@ -428,8 +458,8 @@ test('buildPostCallEnhancements returns schema v2 payload', () => {
 
   assert.equal(result.schemaVersion, 2);
   assert.ok(Array.isArray(result.actionItemsStructured));
-  assert.ok(result.followUpDraft.includes('Lecture covered graph traversal'));
-  assert.ok(result.coachingInsights.some(insight => insight.type === 'study_follow_up'));
+  assert.equal(result.followUpDraft, '');
+  assert.deepEqual(result.coachingInsights, []);
 });
 
 test('post-call schema remains JSON-safe and excludes raw transcript fields', () => {
