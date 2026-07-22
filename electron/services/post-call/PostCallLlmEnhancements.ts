@@ -23,7 +23,7 @@ export interface GeneratePostCallLlmEnhancementsParams {
   transcript: PostCallTranscriptSegment[];
   modeTemplateType?: string | null;
   summaryData: PostCallSummaryData;
-  deterministicEnhancements: Record<string, unknown>;
+  deterministicEnhancements: unknown;
 }
 
 const EMPTY_ENHANCEMENTS: LlmPostCallEnhancements = {

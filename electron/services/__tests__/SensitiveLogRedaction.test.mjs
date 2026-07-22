@@ -86,6 +86,8 @@ test('speaker verification logs do not include raw audio or embedding values', (
 test('IPC and meeting summary logs avoid answer and LLM response snippets', () => {
   const ipc = read('electron/ipcHandlers.ts');
   const persistence = read('electron/MeetingPersistence.ts');
+  const summaryGenerator = read('electron/services/post-call/PostCallSummaryGenerator.ts');
+  const llmEnhancements = read('electron/services/post-call/PostCallLlmEnhancements.ts');
   const intentWorker = read('electron/llm/intentClassifierWorkerProcess.ts');
 
   assert.match(ipc, /gemini - chat response received`, \{ length: result\?\.length \?\? 0 \}/);
@@ -93,11 +95,15 @@ test('IPC and meeting summary logs avoid answer and LLM response snippets', () =
   assert.doesNotMatch(ipc, /console\.log[\s\S]{0,140}result\.substring\(/);
   assert.doesNotMatch(ipc, /console\.log[\s\S]{0,140}getLastAssistantMessage\(\)\?\.substring\(/);
 
-  assert.match(persistence, /LLM summary response received', \{ length: jsonStr\.length \}/);
-  assert.match(persistence, /Failed to parse summary JSON'[\s\S]{0,180}responseLength: jsonStr\.length/);
-  assert.match(persistence, /errorName: e instanceof Error \? e\.name : 'UnknownError'/);
-  assert.match(persistence, /errorMessage: e instanceof Error \? e\.message : String\(e\)/);
-  assert.doesNotMatch(persistence, /Failed to parse summary JSON'[\s\S]{0,180}error: e/);
+  assert.match(summaryGenerator, /chunk summary failed'[\s\S]{0,260}errorName: err instanceof Error \? err\.name : 'UnknownError'/);
+  assert.match(summaryGenerator, /chunkIndex: i/);
+  assert.match(summaryGenerator, /chunkCount: chunks\.length/);
+  assert.match(summaryGenerator, /inputLength: chunks\[i\]\?\.length \?\? 0/);
+  assert.match(llmEnhancements, /generation failed'[\s\S]{0,220}errorName: err instanceof Error \? err\.name : 'UnknownError'/);
+  assert.match(llmEnhancements, /transcriptSegmentCount: params\.transcript\.length/);
+  assert.doesNotMatch(summaryGenerator, /console\.(log|warn|error)[\s\S]{0,140}prompt/);
+  assert.doesNotMatch(summaryGenerator, /console\.(log|warn|error)[\s\S]{0,140}context/);
+  assert.doesNotMatch(llmEnhancements, /console\.(log|warn|error)[\s\S]{0,140}evidenceWindow/);
   assert.doesNotMatch(persistence, /Raw LLM summary response/);
   assert.doesNotMatch(persistence, /Raw response:', jsonStr\.substring/);
 

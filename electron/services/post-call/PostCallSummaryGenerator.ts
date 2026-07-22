@@ -75,7 +75,7 @@ function emptySummary(modeNoteSections: Array<{ title: string; description: stri
     decisions: [],
     openQuestions: [],
     ...(modeNoteSections.length > 0
-      ? { sections: modeNoteSections.map((section) => ({ title: section.title, bullets: [] })) }
+      ? { sections: modeNoteSections.map((section) => ({ title: section.title, bullets: [] as string[] })) }
       : {}),
   };
 }

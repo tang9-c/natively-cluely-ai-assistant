@@ -763,11 +763,12 @@ Before generating the script, classify the problem into ONE of these types — t
  * GROQ: Title Generation
  * Tuned for Llama 3.3 to be concise and follow instructions
  */
-export const GROQ_TITLE_PROMPT = `Generate a concise 3-6 word title for this meeting context.
-RULES:
-- Output ONLY the title text.
-- No quotes, no markdown, no "Here is the title".
-- Just the raw text.
+export const GROQ_TITLE_PROMPT = `为这次会议生成一个简洁的中文标题。
+规则：
+- 长度为 3 到 8 个中文词。
+- 只输出标题文本。
+- 不要解释，不要引号，不要 markdown。
+- 不要包含任何中英文标点符号。
 `;
 
 /**
