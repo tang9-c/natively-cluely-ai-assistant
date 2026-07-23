@@ -7,7 +7,7 @@ import {
     SlidersHorizontal, PointerOff, ArrowRight, LayoutGrid, DollarSign, Building2
 } from 'lucide-react';
 import { SiOpenai, SiGoogle } from 'react-icons/si';
-import { useShortcuts } from '../../hooks/useShortcuts';
+import { useShortcuts, ShortcutConfig } from '../../hooks/useShortcuts';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { isMac, getModifierSymbol } from '../../utils/platformUtils';
 import nativelyIcon from '../icon.png';
@@ -780,13 +780,12 @@ const SetupGuide = () => {
         },
         {
             title: '个性化（可选）',
-            desc: '在档案智能中上传简历和职位描述，关联 Google 日历，或选择适合你会议的模式。',
-        },
-        {
-            title: '一切就绪。',
-            desc: null,
+            desc: '在启动器打开“档案智能”入口，上传简历和职位描述；在启动器打开“公司调研”运行独立公司情报调研；或选择适合你会议的模式。',
         },
     ];
+
+    const readyTitle = '一切就绪';
+    const readyDesc = '完成上面四个步骤即可开会。可随时用以下快捷键唤起 CueUp。';
 
     const hotkeys = [
         { label: '切换显示', kbd: `${cmd}H` },
@@ -817,28 +816,39 @@ const SetupGuide = () => {
                             </div>
 
                             {/* Content */}
-                            <div className={`flex-1 min-w-0 ${isLast ? 'pb-0' : 'pb-6'}`} style={{ paddingTop: 3 }}>
+                            <div className={`flex-1 min-w-0 ${isLast ? 'pb-4' : 'pb-6'}`} style={{ paddingTop: 3 }}>
                                 <p className="text-[14px] font-semibold text-text-primary leading-snug">{step.title}</p>
                                 {step.desc && (
                                     <p className="text-[13px] text-text-secondary leading-relaxed mt-0.5">{step.desc}</p>
-                                )}
-                                {isLast && (
-                                    <div className="flex items-center gap-4 mt-3 flex-wrap">
-                                        {hotkeys.map((h, hi) => (
-                                            <React.Fragment key={h.kbd}>
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="text-[12px] text-text-secondary">{h.label}</span>
-                                                    <kbd className="font-mono text-[11px] font-semibold text-text-primary bg-bg-item-surface border border-border-subtle rounded-md px-1.5 py-0.5 leading-none">{h.kbd}</kbd>
-                                                </div>
-                                                {hi < hotkeys.length - 1 && <span className="text-border-subtle text-[12px] select-none">·</span>}
-                                            </React.Fragment>
-                                        ))}
-                                    </div>
                                 )}
                             </div>
                         </div>
                     );
                 })}
+
+                {/* Done state — visually a continuation of the timeline, not a 5th step */}
+                <div className="flex gap-4">
+                    <div className="flex flex-col items-center shrink-0" style={{ width: 28 }}>
+                        <div className="w-7 h-7 rounded-full bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-500" strokeWidth={2.5} />
+                        </div>
+                    </div>
+                    <div className="flex-1 min-w-0 pb-0" style={{ paddingTop: 3 }}>
+                        <p className="text-[14px] font-semibold text-text-primary leading-snug">{readyTitle}</p>
+                        <p className="text-[13px] text-text-secondary leading-relaxed mt-0.5">{readyDesc}</p>
+                        <div className="flex items-center gap-4 mt-3 flex-wrap">
+                            {hotkeys.map((h, hi) => (
+                                <React.Fragment key={h.kbd}>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-[12px] text-text-secondary">{h.label}</span>
+                                        <kbd className="font-mono text-[11px] font-semibold text-text-primary bg-bg-item-surface border border-border-subtle rounded-md px-1.5 py-0.5 leading-none">{h.kbd}</kbd>
+                                    </div>
+                                    {hi < hotkeys.length - 1 && <span className="text-border-subtle text-[12px] select-none">·</span>}
+                                </React.Fragment>
+                            ))}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );
@@ -875,8 +885,8 @@ export const HelpSettings: React.FC = () => {
                     <div className="space-y-4">
                         <p>
                             {isMac
-                                ? 'CueUp 完全在本地运行，但需要操作系统权限来访问屏幕内容和全局快捷键。你的系统设置应如下所示：'
-                                : 'CueUp 完全在本地运行。Windows 会在你第一次开始会议时提示麦克风权限——不需要其他操作系统权限。'}
+                                ? 'CueUp 优先在本地运行：本地 SenseVoice 转录、本地模型与本地存储默认启用。但你可以在“设置 → AI 提供商”和“设置 → 音频”中配置云端 LLM/STT，并在数据范围允许时由 CueUp 按需走云端路径。它仍需要操作系统权限来访问屏幕内容和全局快捷键。你的系统设置应如下所示：'
+                                : 'CueUp 优先在本地运行：本地 SenseVoice、转录与存储默认启用。配置云端 LLM/STT 后仍会按你的设置走云端路径。Windows 会在你第一次开始会议时提示麦克风权限——不需要其他操作系统权限。'}
                         </p>
                         {isMac && <MockPermissionsAnim />}
                         <div className="space-y-3 mt-4">
@@ -917,7 +927,7 @@ export const HelpSettings: React.FC = () => {
                                     <Globe size={14} className="text-green-500" /> 语言与地区口音
                                 </h5>
                                 <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                    在提供商列表下方，你必须指定 <strong>语言</strong> 你将使用的语言（例如，中文）。最重要的是，确保选择你特定的地区 <span className={kbdClass}>口音/地区</span> 映射（例如， <em>en-US</em> vs <em>en-GB</em> vs <em>en-IN</em>），因为 STT 后端会根据此映射大幅提升基于地区变音的转录准确性。
+                                    在 <strong>设置 → 音频</strong> 标签下，你必须指定 <strong>语言</strong> 你将使用的语言（例如，中文）。最重要的是，确保选择你特定的地区 <span className={kbdClass}>口音/地区</span> 映射（例如， <em>en-US</em> vs <em>en-GB</em> vs <em>en-IN</em>），因为 STT 后端会根据此映射大幅提升基于地区变音的转录准确性。
                                 </p>
                             </div>
                         </div>
@@ -1160,22 +1170,24 @@ export const HelpSettings: React.FC = () => {
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                             {([
-                                { Icon: Pencil, color: 'blue', title: '怎么回答？', badge: null, bc: '', kbd: ['⌘', '1'], desc: '读取当前转录内容和屏幕，然后流式生成精确的朗读回答。' },
-                                { Icon: Lightbulb, color: 'violet', title: '头脑风暴', badge: '面试开启', bc: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', kbd: ['⌘', '3'], desc: '当面试模式开启时，回顾变为头脑风暴——深度多步策略。' },
-                                { Icon: HelpCircle, color: 'teal', title: '跟进问题', badge: null, bc: '', kbd: ['⌘', '4'], desc: '建议下一个逻辑问题，让对话顺畅进行。' },
-                                { Icon: Zap, color: 'emerald', title: '立即回答', badge: null, bc: '', kbd: ['⌘', '5'], desc: '录制麦克风和屏幕内容，立即触发 AI 查询。' },
-                                { Icon: MessageSquare, color: 'indigo', title: '澄清', badge: null, bc: '', kbd: ['⌘', '2'], desc: '当话题不清楚时，从潜在音频中生成尖锐的探查问题。' },
-                                { Icon: RefreshCw, color: 'amber', title: '回顾', badge: '面试关闭', bc: 'bg-red-500/10 text-red-400 border-red-500/30', kbd: ['⌘', '3'], desc: '当你跟不上时，将过去 5 分钟的内容浓缩为要点。' },
-                                { Icon: Sparkles, color: 'sky', title: '代码提示', badge: null, bc: '', kbd: ['⌘', '6'], desc: '读取你的屏幕，引导你走向正确的代码实现。' },
-                                { Icon: Monitor, color: 'rose', title: '截图提问', badge: null, bc: '', kbd: ['⌘', '⇧', 'H'], desc: '强制全屏截图并立即通过大语言模型处理。' },
-                                { Icon: EyeOff, color: 'slate', title: '隐形执行', badge: null, bc: '', kbd: ['⌘', '↵'], desc: '在后台处理内容，从不显示界面。' },
-                            ] as Array<{ Icon: React.ElementType; color: 'blue' | 'violet' | 'teal' | 'emerald' | 'indigo' | 'amber' | 'sky' | 'rose' | 'slate'; title: string; badge: string | null; bc: string; kbd: string[]; desc: string }>).map(({ Icon, color, title, badge, bc, kbd, desc }) => {
-                                const resolvedKbd = kbd.map(k =>
+                                { Icon: Pencil, color: 'blue', title: '怎么回答？', badge: null, bc: '', shortcutKey: 'whatToAnswer' as const, desc: '读取当前转录内容和屏幕，然后流式生成精确的朗读回答。' },
+                                { Icon: Lightbulb, color: 'violet', title: '头脑风暴', badge: '面试开启', bc: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', shortcutKey: 'brainstorm' as const, desc: '当面试模式开启时，回顾变为头脑风暴——深度多步策略。' },
+                                { Icon: HelpCircle, color: 'teal', title: '跟进问题', badge: null, bc: '', shortcutKey: 'followUp' as const, desc: '建议下一个逻辑问题，让对话顺畅进行。' },
+                                { Icon: Zap, color: 'emerald', title: '立即回答', badge: null, bc: '', shortcutKey: 'answer' as const, desc: '录制麦克风和屏幕内容，立即触发 AI 查询。' },
+                                { Icon: MessageSquare, color: 'indigo', title: '澄清', badge: null, bc: '', shortcutKey: 'clarify' as const, desc: '当话题不清楚时，从潜在音频中生成尖锐的探查问题。' },
+                                { Icon: RefreshCw, color: 'amber', title: '回顾', badge: '面试关闭', bc: 'bg-red-500/10 text-red-400 border-red-500/30', shortcutKey: 'recap' as const, desc: '当你跟不上时，将过去 5 分钟的内容浓缩为要点。' },
+                                { Icon: Sparkles, color: 'sky', title: '代码提示', badge: null, bc: '', shortcutKey: 'codeHint' as const, desc: '读取你的屏幕，引导你走向正确的代码实现。' },
+                                { Icon: Monitor, color: 'rose', title: '截图提问', badge: null, bc: '', shortcutKey: 'takeScreenshot' as const, desc: '强制全屏截图并立即通过大语言模型处理。' },
+                                { Icon: EyeOff, color: 'slate', title: '隐形执行', badge: null, bc: '', shortcutKey: 'processScreenshots' as const, desc: '在后台处理内容，从不显示界面。' },
+                            ] as Array<{ Icon: React.ElementType; color: 'blue' | 'violet' | 'teal' | 'emerald' | 'indigo' | 'amber' | 'sky' | 'rose' | 'slate'; title: string; badge: string | null; bc: string; shortcutKey: keyof ShortcutConfig; desc: string }>).map(({ Icon, color, title, badge, bc, shortcutKey, desc }) => {
+                                const rawKbd = shortcuts[shortcutKey];
+                                const hasShortcut = Array.isArray(rawKbd) && rawKbd.length > 0;
+                                const resolvedKbd = hasShortcut ? rawKbd.map(k =>
                                     k === '⌘' ? getModifierSymbol('cmd')
                                   : k === '⇧' ? getModifierSymbol('shift')
                                   : k === '⌥' ? getModifierSymbol('option')
                                   : k
-                                );
+                                ) : [];
                                 const t = {
                                     blue: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(59,130,246,0.2),0_4px_12px_rgba(59,130,246,0.07)]' },
                                     violet: { bg: 'bg-violet-500/10', text: 'text-violet-400', border: 'border-violet-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(139,92,246,0.2),0_4px_12px_rgba(139,92,246,0.07)]' },
@@ -1209,10 +1221,14 @@ export const HelpSettings: React.FC = () => {
                                         </div>
 
                                         {/* Line 3 — Shortcut */}
-                                        <div className="flex items-center gap-1">
-                                            {resolvedKbd.map((key, i) => (
-                                                <span key={i} className="px-1.5 py-0.5 rounded text-[10px] font-mono inline-block bg-bg-elevated text-text-secondary">{key}</span>
-                                            ))}
+                                        <div className="flex items-center gap-1 min-h-[18px]">
+                                            {hasShortcut ? (
+                                                resolvedKbd.map((key, i) => (
+                                                    <span key={i} className="px-1.5 py-0.5 rounded text-[10px] font-mono inline-block bg-bg-elevated text-text-secondary">{key}</span>
+                                                ))
+                                            ) : (
+                                                <span className="text-[10px] text-text-tertiary/70 font-medium">未设置</span>
+                                            )}
                                         </div>
 
                                         {/* Divider */}
@@ -1448,7 +1464,7 @@ export const HelpSettings: React.FC = () => {
                                         <Building2 className="w-4 h-4 text-purple-400" /> 公司情报
                                     </h4>
                                     <p className="text-[11px] text-text-secondary leading-relaxed">
-                                        上传 JD 后点击 <strong>立即研究</strong>，CueUp 会整理公司资料，包括近期动态、产品范围和文化信号；结果会缓存并注入后续回答，让你不用临场补课。
+                                        在启动器标题栏点击 <strong>公司调研</strong> 入口（独立公司情报调研面板），输入公司名称或上传 JD 后点击 <strong>立即研究</strong>，CueUp 会整理公司资料，包括近期动态、产品范围和文化信号；结果会缓存并注入后续回答，让你不用临场补课。
                                     </p>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
@@ -1475,7 +1491,7 @@ export const HelpSettings: React.FC = () => {
                                         <Upload className="w-4 h-4 text-emerald-500" /> 使用方法
                                     </h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>打开 <strong>设置 → 档案智能</strong></li>
+                                        <li>在启动器标题栏点击 <strong>档案智能</strong> 入口（独立面板）</li>
                                         <li>滚动到 <strong>自定义上下文</strong> 文本框</li>
                                         <li>直接输入任意内容 — 800 毫秒后自动保存</li>
                                         <li>最多 4,000 字符，带实时字数统计</li>
@@ -1503,13 +1519,14 @@ export const HelpSettings: React.FC = () => {
 
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                             {([
-                                { name: 'Interview', desc: 'STAR 格式回答、行为故事、分步编码提示。' },
+                                { name: 'General', desc: '默认通用模式，无特定主题时的兜底助手。' },
+                                { name: 'Interview', desc: 'STAR 格式回答、行为故事、分步编码提示；覆盖数据结构与算法/系统设计推理。' },
                                 { name: 'Sales', desc: '异议处理、发现性问题、产品推销框架。' },
                                 { name: 'FDE', desc: '客户现场发现、多人会议事实捕捉、交付风险与下一步推进。' },
                                 { name: 'Recruiting', desc: '候选人评估、职位描述交叉参考、结构化评估。' },
                                 { name: 'Team Meet', desc: '行动项、公告、阻塞项、决策——自动提取。' },
+                                { name: 'Looking for work', desc: '求职与面试准备，简历对齐、行为问题与谈判话术。' },
                                 { name: 'Lecture', desc: '概念拆解、直觉优先的解释、公式笔记。' },
-                                { name: 'Technical', desc: '数据结构与算法/系统设计推理、边界情况、复杂度分析。' },
                             ] as Array<{ name: string; desc: string }>).map(({ name, desc }) => (
                                 <div key={name} className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h5 className="font-semibold text-sm text-text-primary mb-1">{name}</h5>
