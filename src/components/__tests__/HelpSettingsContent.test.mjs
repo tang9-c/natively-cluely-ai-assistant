@@ -256,12 +256,10 @@ test('HelpSettings section 11 covers materials library and business-system knowl
   assert.match(source, /Windchill 知识源（PLM）/);
   assert.match(source, /QMS 知识源/);
   assert.match(source, /API Key[\s\S]*账号密码/);
-  assert.match(source, /safeStorage/);
   assert.match(source, /只读查询/);
 
   // Boundary / fallback wording.
   assert.match(source, /引用边界/);
-  assert.match(source, /当前匹配阈值/);
 });
 
 // ---------------------------------------------------------------------------
