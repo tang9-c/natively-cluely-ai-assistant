@@ -1171,7 +1171,7 @@ export const HelpSettings: React.FC = () => {
                         </div>
 
                         <div className="space-y-3 pt-4">
-                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">4. 云提供商数据范围</h4>
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">云提供商数据范围</h4>
                             <p className="text-xs text-text-secondary leading-relaxed">
                                 CueUp 把每一类用户数据抽象成独立的数据范围，让你能逐项决定是否允许云端提供商接收。当前共 6 项：
                                 <strong className="text-text-primary">转写内容</strong>、<strong className="text-text-primary">截图</strong>、<strong className="text-text-primary">参考文件</strong>、<strong className="text-text-primary">画像历史</strong>、<strong className="text-text-primary">云端向量</strong>、<strong className="text-text-primary">会后总结</strong>。
@@ -1301,7 +1301,7 @@ export const HelpSettings: React.FC = () => {
                                 <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl">
                                     <h5 className="font-semibold text-[12px] text-text-primary mb-1">高置信度自动动作</h5>
                                     <p className="text-[11px] text-text-secondary leading-relaxed">
-                                        对于同时满足自动策略与高置信度（≥0.9）的动作，卡片会出现约 <strong>5 秒</strong> 的自动倒计时；倒计时归零后自动执行。按 <kbd className={kbdClass}>Tab</kbd> 可立即接受当前主卡片，无需等待倒计时。同屏最多显示 <strong>3 张</strong> 卡片，超出按优先级滚动淘汰。这些倒计时和上限由后端策略决定，不在帮助页提供修改入口。
+                                        符合自动执行条件且达到当前置信度阈值的卡片，会显示约 <strong>5 秒</strong> 的自动倒计时；倒计时归零后自动执行。按 <kbd className={kbdClass}>Tab</kbd> 可立即接受当前主卡片，无需等待倒计时。界面同一时间按优先级最多展示 <strong>3 张</strong> 卡片，超出后新的会替换旧的。
                                     </p>
                                 </div>
                             </div>
@@ -1380,30 +1380,28 @@ export const HelpSettings: React.FC = () => {
                                 <Sparkles className="w-4 h-4 text-accent-primary" /> 会后增强字段
                             </h4>
                             <p className="text-[12px] text-text-secondary leading-relaxed">
-                                会议详情除了摘要、原始转录和用量统计，还可能显示一组结构化的“会后增强”结果。它们由后端基于会议内容和已接受的动态动作生成，遵循 <code className="bg-bg-tertiary px-1.5 py-0.5 rounded text-[11px] font-mono border border-border-subtle">schemaVersion: 2</code> 的事实。常见字段包括：
+                                会议结束后，后端会基于会议内容和已接受的动态动作生成一组结构化的“会后增强”结果，遵循 <code className="bg-bg-tertiary px-1.5 py-0.5 rounded text-[11px] font-mono border border-border-subtle">schemaVersion: 2</code> 的事实。需要区分两层事实：哪些字段会写入会议详情（详情页可见）、哪些只是后端保存的内部结构化数据（当前不在详情页展示）。
                             </p>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
                                 <div className="p-3 bg-bg-item-surface border border-border-subtle rounded-xl">
-                                    <h5 className="font-semibold text-[12px] text-text-primary mb-1">通用结果</h5>
+                                    <h5 className="font-semibold text-[12px] text-text-primary mb-1">会议详情页可见</h5>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                         <li>结构化行动项（任务、负责人、截止时间）</li>
-                                        <li>会议决策记录</li>
-                                        <li>阻塞项与依赖</li>
-                                        <li>能力匹配问答的会议后留底</li>
-                                        <li>跟进邮件/消息草稿</li>
+                                        <li>会议决策</li>
+                                        <li>会议中的开放问题</li>
                                         <li>会议辅导洞察</li>
+                                        <li>跟进邮件/消息草稿</li>
                                     </ul>
                                 </div>
                                 <div className="p-3 bg-bg-item-surface border border-border-subtle rounded-xl">
-                                    <h5 className="font-semibold text-[12px] text-text-primary mb-1">模式专属结果</h5>
-                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
-                                        <li>FDE 模式：现场发现、集成/安全/风险/成功标准/下一步的留底记录</li>
-                                        <li>Recruiting 模式：候选人证据、追问、顾虑、岗位兴趣匹配记录</li>
-                                    </ul>
+                                    <h5 className="font-semibold text-[12px] text-text-primary mb-1">后端保存的内部结构化数据</h5>
+                                    <p className="text-[11px] text-text-secondary leading-relaxed">
+                                        阻塞项留底、能力匹配问答留底，以及 FDE（现场发现/集成/安全/风险/成功标准/下一步）和 Recruiting（候选人证据/追问/顾虑/岗位兴趣匹配）的模式专属留底都会作为 <code className="bg-bg-tertiary px-1 rounded text-[10px]">schemaVersion: 2</code> 的一部分保存到本地，但当前不在会议详情页渲染，未来版本可能接入更多视图。
+                                    </p>
                                 </div>
                             </div>
                             <p className="text-[11px] text-text-tertiary mt-3 leading-relaxed">
-                                这些字段不是每次会议都会出现，也不是同一会议每次都会填满——只有当对应信号出现且被生成流程接受时才会写入。对外使用前请人工复核，不要把它们当作直接结论。
+                                这些字段不是每次会议都会出现，也不是同一会议每次都会填满——只有当对应信号出现且被生成流程接受时才会写入。在会议详情看到的内容可直接对外使用前请人工复核。
                             </p>
                         </div>
                     </div>
@@ -1562,7 +1560,7 @@ export const HelpSettings: React.FC = () => {
                                         <Building2 className="w-4 h-4 text-purple-400" /> 公司情报
                                     </h4>
                                     <p className="text-[11px] text-text-secondary leading-relaxed">
-                                        在启动器标题栏点击 <strong>公司调研</strong> 入口（独立公司情报调研面板），输入公司名称或上传 JD 后点击 <strong>立即研究</strong>，CueUp 会按 6 个维度整理公司资料：经营实力、业务版图、战略动向、关键人画像、技术与资产现状、采购合规历史。同一公司短时间内重复研究时会优先复用缓存，需要时可用 <strong>强制刷新</strong> 重新拉取。当上游检索失败或被降级时，面板会显示明确的失败或 fallback 横幅，结果不会被静默替换为编造内容。
+                                        在启动器标题栏点击 <strong>公司调研</strong> 入口（独立公司情报调研面板），输入公司名称后点击 <strong>立即调研</strong>，CueUp 会按 6 个维度整理公司资料：经营实力、业务版图、战略动向、关键人画像、技术与资产现状、采购合规历史。同一公司短时间内重复研究时会优先复用缓存，需要时可用 <strong>强制刷新</strong> 重新拉取。当上游检索失败或被降级时，面板会显示明确的失败或 fallback 横幅，结果不会被静默替换为编造内容。
                                     </p>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
@@ -1688,7 +1686,7 @@ export const HelpSettings: React.FC = () => {
                                 <Lightbulb className="w-4 h-4 text-amber-500" /> 意图词（按模式编辑）
                             </h4>
                             <p className="text-[12px] text-text-secondary leading-relaxed">
-                                每个模式允许你维护一组“意图词”，用于在该模式下提醒 CueUp 当前重点关注哪些信号。多个词用英文逗号分隔；每组最多 2000 字符。常见用途：
+                                每个模式允许你维护一组“意图词”，保存后会作为该模式下关键词意图识别的输入信号之一。多个词用英文逗号分隔；每组最多 2000 字符。常见用途：
                             </p>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3">
                                 {([
@@ -1705,7 +1703,7 @@ export const HelpSettings: React.FC = () => {
                                 ))}
                             </div>
                             <p className="text-[11px] text-text-tertiary mt-3 leading-relaxed">
-                                关键词本身只影响本模式的提示拼接；分类器候选、关键词正则匹配、意图到动作映射以及动态动作触发包由代码侧统一维护。在帮助页不要承诺“改关键词后立即影响所有分类逻辑”——它只是给本模式一个稳定的提示上下文。
+                                意图类型清单、意图到动作映射以及其它分类规则仍由应用代码统一维护，用户在模式设置中编辑的意图词只参与当前模式的关键词意图识别，不会自动改写上面这些代码侧规则。
                             </p>
                         </div>
                     </div>
@@ -1824,7 +1822,7 @@ export const HelpSettings: React.FC = () => {
                                 <Sparkles className="w-4 h-4" /> 引用边界
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                两类资料都会以“检索到的片段”形式注入到回答上下文。如果资料与会议问题匹配度低，CueUp 会明确表示未找到资料并给出可读性更强的兜底回答，而不是编造引用。检索是否开启、是否回退到关键词匹配，可在对应设置卡片顶部状态里查看。
+                                两类资料都会以“检索到的片段”形式注入到回答上下文：仅达到当前匹配阈值的片段会被加入，其余资料不会被强行引用；未达到阈值时 CueUp 可能退回通用上下文，按模型自身判断给出回答。涉及金额、合规、责任归属等重要结论，请在发送前打开对应原始资料核对，不要仅凭检索片段做对外承诺。检索是否开启、是否回退到关键词匹配，可在对应设置卡片顶部状态里查看。
                             </p>
                         </div>
                     </div>
