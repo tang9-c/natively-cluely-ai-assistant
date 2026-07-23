@@ -37,6 +37,7 @@ import { runTranscriptSkillExport, type TranscriptSkillRunInput } from './servic
 import { getContextQualityDiagnosticsCollector } from './services/eval/ContextQualityDiagnostics';
 import { QaReportService } from './services/qa/QaReportService';
 import { telemetryService } from './services/telemetry/TelemetryService';
+import { RemoteAdService } from './services/launcher-ads/RemoteAdService';
 import type { DynamicActionOutputType } from './services/dynamic-actions/DynamicAction';
 import { buildDynamicActionRuntimeGrounding } from './services/dynamic-actions/DynamicActionRuntimeGrounding';
 import { getDynamicActionRuntimeValidationPolicy } from './services/dynamic-actions/DynamicActionRuntimeValidationPolicy';
@@ -3209,6 +3210,19 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch {
       console.warn('[IPC] Invalid URL in open-external');
     }
+  });
+
+  safeHandle('get-launcher-ads', async () => {
+    return RemoteAdService.getInstance().getAds();
+  });
+
+  safeHandle('open-ad-link', async (_event, url: string) => {
+    if (typeof url !== 'string' || !RemoteAdService.isAllowedTargetUrl(url)) {
+      console.warn('[LauncherAds] Blocked invalid target URL');
+      return { success: false };
+    }
+    await shell.openExternal(url);
+    return { success: true };
   });
 
   // ==========================================

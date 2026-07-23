@@ -1121,6 +1121,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+  getLauncherAds: () => ipcRenderer.invoke('get-launcher-ads'),
+  openAdLink: (url: string) => ipcRenderer.invoke('open-ad-link', url),
   setOverlayMousePassthrough: (enabled: boolean) =>
     ipcRenderer.invoke('set-overlay-mouse-passthrough', enabled),
   toggleOverlayMousePassthrough: () => ipcRenderer.invoke('toggle-overlay-mouse-passthrough'),

@@ -359,6 +359,17 @@ export interface LocalSenseVoiceTermEntry {
   enabled: boolean
 }
 
+export interface LauncherAd {
+  id: string
+  imageUrl: string
+  targetUrl?: string
+  alt: string
+  startsAt?: string
+  endsAt?: string
+  priority: number
+  builtin?: boolean
+}
+
 export interface ElectronAPI {
   // @ipc-channel update-content-dimensions
   updateContentDimensions: (dimensions: {
@@ -438,6 +449,10 @@ export interface ElectronAPI {
   onEnsureExpanded: (callback: () => void) => () => void
   // @ipc-channel open-external
   openExternal: (url: string) => Promise<void>
+  // @ipc-channel get-launcher-ads
+  getLauncherAds: () => Promise<LauncherAd[]>
+  // @ipc-channel open-ad-link
+  openAdLink: (url: string) => Promise<{ success: boolean }>
   // @ipc-channel set-overlay-mouse-passthrough
   setOverlayMousePassthrough: (enabled: boolean) => Promise<{ success: boolean }>
   // @ipc-channel toggle-overlay-mouse-passthrough
