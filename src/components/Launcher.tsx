@@ -12,6 +12,7 @@ import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { isMac } from '../utils/platformUtils';
 import WindowControls from './WindowControls';
+import { LauncherAdCarousel } from './launcher/LauncherAdCarousel';
 
 interface Meeting {
     id: string;
@@ -826,15 +827,9 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
 
 
 
-                                        {/* Right Secondary Card — placeholder */}
-                                        <div className="md:col-span-1 rounded-xl overflow-hidden bg-bg-elevated relative group flex flex-col shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
-                                            <div className="absolute inset-0 bg-gradient-to-br from-violet-900/30 to-indigo-950/50" />
-                                            <div className="relative z-10 w-full flex flex-col items-center h-full pt-6 text-center">
-                                                <h3 className="text-[19px] leading-tight mb-4 tracking-[-0.01em]">
-                                                    <span className="block font-semibold text-white">CueUp</span>
-                                                    <span className="block font-medium text-white/60 text-[0.95em]">AI Meeting Assistant</span>
-                                                </h3>
-                                            </div>
+                                        {/* Right Secondary Card — remote ad carousel */}
+                                        <div className="md:col-span-1 h-full" data-testid="launcher-ad-carousel">
+                                            <LauncherAdCarousel className="h-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]" />
                                         </div>
                                     </div>
                                 </div>
