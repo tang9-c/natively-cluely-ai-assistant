@@ -10,6 +10,8 @@ function isHttpsUrl(value: unknown): value is string {
   }
 }
 
+export { isHttpsUrl };
+
 function parseOptionalDate(value: unknown): string | undefined | null {
   if (value === undefined) return undefined;
   if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) return null;

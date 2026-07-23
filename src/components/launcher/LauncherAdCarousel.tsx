@@ -33,8 +33,11 @@ export function LauncherAdCarousel({ className }: LauncherAdCarouselProps) {
     id: 'cueup-default-renderer', imageUrl: defaultLauncherAd,
     alt: 'CueUp AI Meeting Assistant', priority: 0, builtin: true,
   }), []);
-  const availableAds = ads.filter((ad) => !failedIds.has(ad.id));
-  const displayAds = availableAds.length ? availableAds : [defaultAd];
+  // 边界 0：主进程可能返回 builtin = true 的 DEFAULT_LAUNCHER_AD（imageUrl 是
+  // 'cueup://...' 协议，<img> 无法渲染）。过滤掉 builtin，只接受真实远端广告；
+  // 若过滤后为空则使用本地打包资源的 fallback，绝不让 cueup:// 出现在 <img src> 里。
+  const remoteAds = ads.filter((ad) => !ad.builtin && !failedIds.has(ad.id));
+  const displayAds = remoteAds.length ? remoteAds : [defaultAd];
   // 边界 1：当过滤导致长度变短时，把索引归一化而不是 mod（避免瞬间跳到末尾）
   const safeIndex = displayAds.length === 0 ? 0 : Math.min(activeIndex, displayAds.length - 1);
   const activeAd = displayAds[safeIndex];

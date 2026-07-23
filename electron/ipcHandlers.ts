@@ -3213,12 +3213,32 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('get-launcher-ads', async () => {
-    return RemoteAdService.getInstance().getAds();
+    // M3: contract-stable fallback. Any unexpected error from
+    // RemoteAdService.getAds must not propagate to the renderer; return []
+    // so the renderer's empty-array branch uses its own renderer-side default.
+    try {
+      return await RemoteAdService.getInstance().getAds();
+    } catch (error) {
+      console.error('[LauncherAds] get-launcher-ads failed:', redactForLog([error]));
+      return [];
+    }
   });
 
   safeHandle('open-ad-link', async (_event, url: string) => {
-    if (typeof url !== 'string' || !RemoteAdService.isAllowedTargetUrl(url)) {
-      console.warn('[LauncherAds] Blocked invalid target URL');
+    if (typeof url !== 'string') {
+      console.warn('[LauncherAds] Blocked invalid target URL', redactForLog([{ reason: 'non-string' }]));
+      return { success: false };
+    }
+    let parsedProtocol = 'unknown';
+    let parsedHostname = 'unknown';
+    try {
+      const parsed = new URL(url);
+      parsedProtocol = parsed.protocol;
+      parsedHostname = parsed.hostname;
+    } catch { /* fall through with unknown */ }
+    if (!RemoteAdService.isAllowedTargetUrl(url)) {
+      console.warn('[LauncherAds] Blocked invalid target URL',
+        redactForLog([{ protocol: parsedProtocol, hostname: parsedHostname }]));
       return { success: false };
     }
     await shell.openExternal(url);

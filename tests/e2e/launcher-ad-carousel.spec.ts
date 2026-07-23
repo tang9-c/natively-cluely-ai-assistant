@@ -10,7 +10,12 @@ import { expect, test } from './fixtures';
 test('launcher shows a usable ad carousel without blocking primary actions', async ({ page }) => {
   const carousel = page.getByTestId('launcher-ad-carousel');
   await expect(carousel).toBeVisible();
-  await expect(carousel.getByRole('img').first()).toHaveAttribute('alt', /CueUp|广告/);
+  const img = carousel.getByRole('img').first();
+  await expect(img).toHaveAttribute('alt', /CueUp|广告/);
+  // C1 防御：实际渲染的 <img> 必须能加载到像素（naturalWidth > 0）。
+  // 防止 cueup:// 协议或远端失效时退回一个 broken image。
+  await expect(img).toHaveJSProperty('naturalWidth', expect.any(Number));
+  await expect(img).not.toHaveJSProperty('naturalWidth', 0);
   await expect(page.getByRole('button', { name: /启动会议|显示会议界面/ })).toBeVisible();
 });
 

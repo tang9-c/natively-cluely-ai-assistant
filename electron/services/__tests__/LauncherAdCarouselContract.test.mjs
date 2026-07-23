@@ -24,4 +24,7 @@ test('carousel owns timing, pause, fallback, reduced motion, keyboard, and built
   assert.match(code, /new\s+Image\(\)/);
   // safeIndex 必须在过滤后归一化
   assert.match(code, /Math\.min\(activeIndex/);
+  // C1: must strip builtin ads from the main process payload before display so
+  // the cueup:// imageUrl never leaks into <img src>
+  assert.match(code, /\.filter\(\s*\(ad\)\s*=>\s*!\s*ad\.builtin/);
 });

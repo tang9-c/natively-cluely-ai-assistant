@@ -8,7 +8,7 @@ import {
   DEFAULT_LAUNCHER_AD,
   type LauncherAd,
 } from './RemoteAdTypes';
-import { validateRemoteAdConfig } from './RemoteAdValidator';
+import { isHttpsUrl, validateRemoteAdConfig } from './RemoteAdValidator';
 
 interface CachedAds { fetchedAt: string; config: unknown }
 interface RemoteAdDependencies {
@@ -34,19 +34,36 @@ async function fetchJson(url: string): Promise<unknown> {
   return JSON.parse(text);
 }
 
-const defaultDependencies = (): RemoteAdDependencies => ({
-  configUrl: process.env.CUEUP_LAUNCHER_ADS_URL?.trim() ?? '',
-  now: () => new Date(),
-  readCache: () => {
-    try { return JSON.parse(fs.readFileSync(cachePath(), 'utf8')) as CachedAds; }
-    catch { return null; }
-  },
-  writeCache: (cache) => {
-    try { fs.writeFileSync(cachePath(), JSON.stringify(cache), 'utf8'); }
-    catch (error) { console.warn('[LauncherAds] Cache write failed', redactForLog([error])); }
-  },
-  fetchJson,
-});
+const defaultDependencies = (): RemoteAdDependencies => {
+  // I1: CUEUP_LAUNCHER_ADS_URL 必须是 https://，否则视为空配置走缓存 + 内置 fallback，
+  // 不允许在网络边界放过 http:// 绕开 HTTPS-only 不变量。
+  const rawConfigUrl = process.env.CUEUP_LAUNCHER_ADS_URL?.trim() ?? '';
+  const safeConfigUrl = rawConfigUrl && isHttpsUrl(rawConfigUrl) ? rawConfigUrl : '';
+  if (rawConfigUrl && !safeConfigUrl) {
+    let protocol = 'unknown';
+    let hostname = 'unknown';
+    try {
+      const parsed = new URL(rawConfigUrl);
+      protocol = parsed.protocol;
+      hostname = parsed.hostname;
+    } catch { /* leave defaults */ }
+    console.warn('[LauncherAds] Ignoring non-https configUrl',
+      redactForLog([{ protocol, hostname }]));
+  }
+  return {
+    configUrl: safeConfigUrl,
+    now: () => new Date(),
+    readCache: () => {
+      try { return JSON.parse(fs.readFileSync(cachePath(), 'utf8')) as CachedAds; }
+      catch { return null; }
+    },
+    writeCache: (cache) => {
+      try { fs.writeFileSync(cachePath(), JSON.stringify(cache), 'utf8'); }
+      catch (error) { console.warn('[LauncherAds] Cache write failed', redactForLog([error])); }
+    },
+    fetchJson,
+  };
+};
 
 export class RemoteAdService {
   private static instance: RemoteAdService | null = null;
