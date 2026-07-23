@@ -4,7 +4,7 @@ import {
     Command, Monitor, Mic, Settings, Zap, Key, User, Play, Image, ArrowUp, FileText, Sparkles, Search, ChevronUp, Copy,
     FileJson, MessageSquare, Briefcase, Eye, EyeOff, ChevronDown, ChevronRight, HelpCircle, Upload, CheckCircle2,
     RefreshCw, Trash2, Check, ExternalLink, Volume2, Globe, Brain, Cpu, Calendar, Star, CreditCard, X, Pencil, Lightbulb,
-    SlidersHorizontal, PointerOff, ArrowRight, LayoutGrid, DollarSign, Building2
+    SlidersHorizontal, PointerOff, ArrowRight, LayoutGrid, DollarSign, Building2, Database
 } from 'lucide-react';
 import { SiOpenai, SiGoogle } from 'react-icons/si';
 import { useShortcuts, ShortcutConfig } from '../../hooks/useShortcuts';
@@ -1014,6 +1014,27 @@ export const HelpSettings: React.FC = () => {
                                     语音页底部有 <strong>Speaker separation</strong> 开关。设置为 Auto 时，CueUp 会在支持的云端通道上启用说话人分离；本地 SenseVoice 不会假装提供该能力，界面会明确显示不可用状态。
                                 </p>
                             </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
+                                <h5 className="font-semibold text-sm text-text-primary">Local SenseVoice · 术语/热词纠错</h5>
+                                <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
+                                    本地 SenseVoice 设置页支持按术语维护“规范词 + 变体”，例如把容易听错的客户名、产品代号统一替换为期望写法。每条术语可独立启用或停用，整体纠错开关关闭时所有条目不生效。修改并保存后从下一次转写会话开始生效，已经写出的旧转录不会被回填。
+                                </p>
+                            </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
+                                <h5 className="font-semibold text-sm text-text-primary">Local Whisper · 麦克风与系统音频</h5>
+                                <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
+                                    Local Whisper 支持分别为麦克风通道和系统音频通道选择模型，例如把更大、更准的模型留给系统回环，麦克风通道保留更轻量的模型。选择语言后，CueUp 会自动判断所选模型是否兼容，必要时给出“将自动调整”的明确提示并落到实际支持的模型上，避免静默切换。
+                                </p>
+                            </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
+                                <h5 className="font-semibold text-sm text-text-primary">说话人验证 vs. 通用说话人分离</h5>
+                                <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
+                                    语音页的 <strong>Speaker separation</strong> 只是把音频按声学特征切成不同说话人；<strong>我的声音</strong>（设置侧“说话人验证”标签）则会注册本机声纹，把识别出的“本人”发言打上 ME 标签，用于后续角色化记录。两者各司其职，没有覆盖关系。
+                                </p>
+                            </div>
                         </div>
 
                     </div>
@@ -1149,6 +1170,24 @@ export const HelpSettings: React.FC = () => {
                             </div>
                         </div>
 
+                        <div className="space-y-3 pt-4">
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">4. 云提供商数据范围</h4>
+                            <p className="text-xs text-text-secondary leading-relaxed">
+                                CueUp 把每一类用户数据抽象成独立的数据范围，让你能逐项决定是否允许云端提供商接收。当前共 6 项：
+                                <strong className="text-text-primary">转写内容</strong>、<strong className="text-text-primary">截图</strong>、<strong className="text-text-primary">参考文件</strong>、<strong className="text-text-primary">画像历史</strong>、<strong className="text-text-primary">云端向量</strong>、<strong className="text-text-primary">会后总结</strong>。
+                                关闭某一项后，CueUp 会尽量使用本地路径或降级到不依赖该项的模型，但能否完全离线取决于当时可用的本地模型与通道——并非所有场景都能保证完全本地化。
+                            </p>
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
+                                <h5 className="font-semibold text-[13px] text-text-primary">典型取舍</h5>
+                                <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                    <li>关闭 <strong>截图</strong> 后，云端模型无法看到你的屏幕内容，但本地视觉模型仍可能可用；不存在视觉替代时会给出明确降级提示。</li>
+                                    <li>关闭 <strong>转写内容</strong> 后，会议期间的实时上下文将不再发送给云端，依赖该数据的提示（例如会议追问）将受限制。</li>
+                                    <li>关闭 <strong>云端向量</strong> 后，向量检索仍优先走本地 Embedding；只有显式选用云端 Embedding 时才会真正拦截。</li>
+                                    <li>关闭 <strong>会后总结</strong> 后，本地规则提取仍会执行，但 LLM 增强的总结、行动项等会跳过云端路径或直接返回本地结果。</li>
+                                </ul>
+                            </div>
+                        </div>
+
                     </div>
                 </AccordionSection>
 
@@ -1241,6 +1280,33 @@ export const HelpSettings: React.FC = () => {
                             })}
                         </div>
 
+                        <div className="border-t border-border-subtle pt-6">
+                            <h4 className="font-bold text-sm text-text-primary flex items-center gap-2 mb-3">
+                                <Zap className="w-4 h-4 text-accent-primary" /> 动态动作卡片
+                            </h4>
+                            <p className="text-[12px] text-text-secondary leading-relaxed">
+                                除了上面手动触发的快捷操作，CueUp 还会基于当前会议信号、可信证据和所选模式，主动在界面右侧弹出动态动作卡片。出现时机由后端事件流决定，不会和任何用户设置开关重复。
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                                <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl">
+                                    <h5 className="font-semibold text-[12px] text-text-primary mb-1">可能的输出形态</h5>
+                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                        <li>直接说出口的回答片段</li>
+                                        <li>可勾选的验证检查清单</li>
+                                        <li>邮件草稿（含报价/合同/案例请求等）</li>
+                                        <li>行动项（含负责人与截止时间）</li>
+                                        <li>决策记录（含依据）</li>
+                                    </ul>
+                                </div>
+                                <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl">
+                                    <h5 className="font-semibold text-[12px] text-text-primary mb-1">高置信度自动动作</h5>
+                                    <p className="text-[11px] text-text-secondary leading-relaxed">
+                                        对于同时满足自动策略与高置信度（≥0.9）的动作，卡片会出现约 <strong>5 秒</strong> 的自动倒计时；倒计时归零后自动执行。按 <kbd className={kbdClass}>Tab</kbd> 可立即接受当前主卡片，无需等待倒计时。同屏最多显示 <strong>3 张</strong> 卡片，超出按优先级滚动淘汰。这些倒计时和上限由后端策略决定，不在帮助页提供修改入口。
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
 
                     </div>
                 </AccordionSection>
@@ -1307,6 +1373,38 @@ export const HelpSettings: React.FC = () => {
                                     </p>
                                 </div>
                             </div>
+                        </div>
+
+                        <div className="border-t border-border-subtle pt-6">
+                            <h4 className="font-bold text-sm text-text-primary flex items-center gap-2 mb-3">
+                                <Sparkles className="w-4 h-4 text-accent-primary" /> 会后增强字段
+                            </h4>
+                            <p className="text-[12px] text-text-secondary leading-relaxed">
+                                会议详情除了摘要、原始转录和用量统计，还可能显示一组结构化的“会后增强”结果。它们由后端基于会议内容和已接受的动态动作生成，遵循 <code className="bg-bg-tertiary px-1.5 py-0.5 rounded text-[11px] font-mono border border-border-subtle">schemaVersion: 2</code> 的事实。常见字段包括：
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                                <div className="p-3 bg-bg-item-surface border border-border-subtle rounded-xl">
+                                    <h5 className="font-semibold text-[12px] text-text-primary mb-1">通用结果</h5>
+                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                        <li>结构化行动项（任务、负责人、截止时间）</li>
+                                        <li>会议决策记录</li>
+                                        <li>阻塞项与依赖</li>
+                                        <li>能力匹配问答的会议后留底</li>
+                                        <li>跟进邮件/消息草稿</li>
+                                        <li>会议辅导洞察</li>
+                                    </ul>
+                                </div>
+                                <div className="p-3 bg-bg-item-surface border border-border-subtle rounded-xl">
+                                    <h5 className="font-semibold text-[12px] text-text-primary mb-1">模式专属结果</h5>
+                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                        <li>FDE 模式：现场发现、集成/安全/风险/成功标准/下一步的留底记录</li>
+                                        <li>Recruiting 模式：候选人证据、追问、顾虑、岗位兴趣匹配记录</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <p className="text-[11px] text-text-tertiary mt-3 leading-relaxed">
+                                这些字段不是每次会议都会出现，也不是同一会议每次都会填满——只有当对应信号出现且被生成流程接受时才会写入。对外使用前请人工复核，不要把它们当作直接结论。
+                            </p>
                         </div>
                     </div>
                 </AccordionSection>
@@ -1464,7 +1562,7 @@ export const HelpSettings: React.FC = () => {
                                         <Building2 className="w-4 h-4 text-purple-400" /> 公司情报
                                     </h4>
                                     <p className="text-[11px] text-text-secondary leading-relaxed">
-                                        在启动器标题栏点击 <strong>公司调研</strong> 入口（独立公司情报调研面板），输入公司名称或上传 JD 后点击 <strong>立即研究</strong>，CueUp 会整理公司资料，包括近期动态、产品范围和文化信号；结果会缓存并注入后续回答，让你不用临场补课。
+                                        在启动器标题栏点击 <strong>公司调研</strong> 入口（独立公司情报调研面板），输入公司名称或上传 JD 后点击 <strong>立即研究</strong>，CueUp 会按 6 个维度整理公司资料：经营实力、业务版图、战略动向、关键人画像、技术与资产现状、采购合规历史。同一公司短时间内重复研究时会优先复用缓存，需要时可用 <strong>强制刷新</strong> 重新拉取。当上游检索失败或被降级时，面板会显示明确的失败或 fallback 横幅，结果不会被静默替换为编造内容。
                                     </p>
                                 </div>
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
@@ -1584,6 +1682,32 @@ export const HelpSettings: React.FC = () => {
                                 CueUp 提供 8 种专家模式：General、Sales、FDE、Recruiting、Team Meet、Looking for work、Technical Interview 和 Lecture。每个模式都有针对性的系统提示和笔记结构，帮助你在不同场景下获得最佳辅助。
                             </p>
                         </div>
+
+                        <div className="border-t border-border-subtle pt-6">
+                            <h4 className="font-bold text-sm text-text-primary flex items-center gap-2 mb-3">
+                                <Lightbulb className="w-4 h-4 text-amber-500" /> 意图词（按模式编辑）
+                            </h4>
+                            <p className="text-[12px] text-text-secondary leading-relaxed">
+                                每个模式允许你维护一组“意图词”，用于在该模式下提醒 CueUp 当前重点关注哪些信号。多个词用英文逗号分隔；每组最多 2000 字符。常见用途：
+                            </p>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3">
+                                {([
+                                    { name: '澄清', desc: '当对方要求解释、澄清或说明时触发' },
+                                    { name: '跟进', desc: '会议末尾或后续推进项' },
+                                    { name: '行动项', desc: '需要落到负责人和截止时间的任务' },
+                                    { name: '决策', desc: '会上确认的共识或拍板' },
+                                    { name: '风险阻塞', desc: '依赖、卡点、延期、权限等信号' },
+                                ] as Array<{ name: string; desc: string }>).map(({ name, desc }) => (
+                                    <div key={name} className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                        <h5 className="font-semibold text-[12px] text-text-primary mb-0.5">{name}</h5>
+                                        <p className="text-[11px] text-text-secondary leading-relaxed">{desc}</p>
+                                    </div>
+                                ))}
+                            </div>
+                            <p className="text-[11px] text-text-tertiary mt-3 leading-relaxed">
+                                关键词本身只影响本模式的提示拼接；分类器候选、关键词正则匹配、意图到动作映射以及动态动作触发包由代码侧统一维护。在帮助页不要承诺“改关键词后立即影响所有分类逻辑”——它只是给本模式一个稳定的提示上下文。
+                            </p>
+                        </div>
                     </div>
                 </AccordionSection>
 
@@ -1659,6 +1783,49 @@ export const HelpSettings: React.FC = () => {
                                     </p>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </AccordionSection>
+
+                <AccordionSection title="11. 资料库与业务系统知识源" icon={<Upload className="w-4 h-4" />}>
+                    <div className="space-y-6">
+                        <p className="text-[13px]">CueUp 在会议回答中可以直接引用两类外部资料：本地“资料库”和受控的“业务系统知识源”。两者都用于补充事实，但接入方式和能力范围不同。</p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-blue-500" /> 资料库（本地文件）
+                                </h4>
+                                <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                    <li>支持 <strong>PDF、DOCX、Markdown、TXT、PPTX</strong> 五种格式。</li>
+                                    <li><strong>PPTX</strong> 需要先在“设置 → 语音”配置并选择 <strong>QCLOUD API</strong>，旧版 <code className="bg-bg-tertiary px-1 rounded text-[10px]">.ppt</code> 不支持。</li>
+                                    <li>上传后资料会进入“加入索引队列”，处理完成变为“已索引”，失败会标记错误并可重试。</li>
+                                    <li>当语义索引不可用（未配置 Embedding 或部分资料索引失败）时，CueUp 会退回<strong>关键词匹配</strong>，并在面板上以琥珀色横幅提示。</li>
+                                    <li>已索引资料支持 <strong>重新索引</strong>（基于已提取文本重建）和 <strong>重新上传新文件</strong>，但不会回填历史会议结果。</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Database className="w-4 h-4 text-violet-500" /> 业务系统知识源
+                                </h4>
+                                <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                    <li>支持连接 <strong>Windchill 知识源（PLM）</strong>、<strong>QMS 知识源</strong> 以及其它受控业务系统。</li>
+                                    <li>认证方式支持 <strong>API Key</strong> 或 <strong>账号密码</strong>，凭据通过 Electron safeStorage 加密保存。</li>
+                                    <li>当前仅用作<strong>只读查询</strong>：CueUp 只读取对方返回的字段用于检索与回答，不会写入、审批或代你承诺任何业务动作。</li>
+                                    <li>写入、审批、业务承诺等动作始终需要人工在原系统里确认，不要让 AI 输出直接触发。</li>
+                                    <li>认证失败时面板会提示“请检查 API Key 或账号密码”，可立即在设置里更新凭据。</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                            <h4 className="text-[13px] font-semibold text-amber-500 flex items-center gap-2 mb-1">
+                                <Sparkles className="w-4 h-4" /> 引用边界
+                            </h4>
+                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
+                                两类资料都会以“检索到的片段”形式注入到回答上下文。如果资料与会议问题匹配度低，CueUp 会明确表示未找到资料并给出可读性更强的兜底回答，而不是编造引用。检索是否开启、是否回退到关键词匹配，可在对应设置卡片顶部状态里查看。
+                            </p>
                         </div>
                     </div>
                 </AccordionSection>
