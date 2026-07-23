@@ -314,8 +314,8 @@ test('HelpSettings accurately describes business system credential storage', () 
   // safeStorage is the project-wide default for credential at-rest encryption
   // in user-visible docs, but the current implementation does not actually use
   // safeStorage for this on-disk file. Don't surface that internal mismatch in
-  // user-facing help.
-  assert.doesNotMatch(source, /凭据通过 Electron safeStorage 加密保存/);
+  // user-facing help. The bare /safeStorage/ guard covers every mention,
+  // including the "凭据通过 Electron safeStorage 加密保存" wording.
   assert.doesNotMatch(source, /safeStorage/);
 });
 
