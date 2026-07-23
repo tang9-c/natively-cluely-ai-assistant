@@ -1686,7 +1686,10 @@ export const HelpSettings: React.FC = () => {
                                 <Lightbulb className="w-4 h-4 text-amber-500" /> 意图词（按模式编辑）
                             </h4>
                             <p className="text-[12px] text-text-secondary leading-relaxed">
-                                每个模式允许你维护一组“意图词”，保存后会作为该模式下关键词意图识别的输入信号之一。多个词用英文逗号分隔；每组最多 2000 字符。常见用途：
+                                每个模式允许你维护一组“意图词”，保存后会作为该模式下关键词意图识别的输入信号之一。多个词用英文逗号分隔；每组最多 2000 字符。
+                            </p>
+                            <p className="text-[12px] text-text-secondary leading-relaxed mt-2">
+                                以下是常见用途示例，并不是固定的五个意图类型——具体可用标签由当前模式和代码侧分类器共同维护，例如 <code className="bg-bg-tertiary px-1 rounded text-[10px]">clarification</code>、<code className="bg-bg-tertiary px-1 rounded text-[10px]">follow_up</code>、<code className="bg-bg-tertiary px-1 rounded text-[10px]">capture_action</code>、<code className="bg-bg-tertiary px-1 rounded text-[10px]">capture_decision</code>、<code className="bg-bg-tertiary px-1 rounded text-[10px]">capture_risk</code> 等，以及销售、招聘、FDE 等模式专属意图。
                             </p>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3">
                                 {([
@@ -1809,7 +1812,7 @@ export const HelpSettings: React.FC = () => {
                                 </h4>
                                 <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                     <li>支持连接 <strong>Windchill 知识源（PLM）</strong>、<strong>QMS 知识源</strong> 以及其它受控业务系统。</li>
-                                    <li>认证方式支持 <strong>API Key</strong> 或 <strong>账号密码</strong>，凭据通过 Electron safeStorage 加密保存。</li>
+                                    <li>认证方式支持 <strong>API Key</strong> 或 <strong>账号密码</strong>，凭据保存在本机凭据文件中；保存后设置面板不会回显已保存的 Key 或密码原文。</li>
                                     <li>当前仅用作<strong>只读查询</strong>：CueUp 只读取对方返回的字段用于检索与回答，不会写入、审批或代你承诺任何业务动作。</li>
                                     <li>写入、审批、业务承诺等动作始终需要人工在原系统里确认，不要让 AI 输出直接触发。</li>
                                     <li>认证失败时面板会提示“请检查 API Key 或账号密码”，可立即在设置里更新凭据。</li>
@@ -1822,7 +1825,7 @@ export const HelpSettings: React.FC = () => {
                                 <Sparkles className="w-4 h-4" /> 引用边界
                             </h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                两类资料都会以“检索到的片段”形式注入到回答上下文：仅达到当前匹配阈值的片段会被加入，其余资料不会被强行引用；未达到阈值时 CueUp 可能退回通用上下文，按模型自身判断给出回答。涉及金额、合规、责任归属等重要结论，请在发送前打开对应原始资料核对，不要仅凭检索片段做对外承诺。检索是否开启、是否回退到关键词匹配，可在对应设置卡片顶部状态里查看。
+                                两类资料都会以“检索到的片段”形式注入到回答上下文：仅达到当前检索门槛（相似度门槛）的片段会被加入，其余资料不会被强行引用；未达到门槛时 CueUp 可能退回通用上下文，按模型自身判断给出回答。涉及金额、合规、责任归属等重要结论，请在发送前打开对应原始资料核对，不要仅凭检索片段做对外承诺。检索是否开启、是否回退到关键词匹配，可在对应设置卡片顶部状态里查看。
                             </p>
                         </div>
                     </div>

@@ -303,3 +303,37 @@ test('SenseVoice term canonical form is PTC, with PDC as a legacy variant', () =
   // Confirm PDC only appears as a legacy variant, not as a canonical form.
   assert.ok(!/canonical: 'PDC/.test(source), 'PDC 不应再作为 canonical 词');
 });
+
+test('HelpSettings accurately describes business system credential storage', () => {
+  const source = read('src/components/settings/HelpSettings.tsx');
+
+  assert.match(source, /业务系统知识源/);
+  assert.match(source, /凭据保存在本机凭据文件中/);
+  assert.match(source, /不会回显已保存的 Key 或密码原文/);
+
+  // safeStorage is the project-wide default for credential at-rest encryption
+  // in user-visible docs, but the current implementation does not actually use
+  // safeStorage for this on-disk file. Don't surface that internal mismatch in
+  // user-facing help.
+  assert.doesNotMatch(source, /凭据通过 Electron safeStorage 加密保存/);
+  assert.doesNotMatch(source, /safeStorage/);
+});
+
+test('HelpSettings describes intent keywords as usage examples, not a fixed set', () => {
+  const source = read('src/components/settings/HelpSettings.tsx');
+
+  assert.match(source, /意图词（按模式编辑）/);
+  assert.match(source, /常见用途示例/);
+  assert.match(source, /并不是固定的五个意图类型/);
+  assert.match(source, /capture_action/);
+  assert.match(source, /capture_decision/);
+  assert.match(source, /capture_risk/);
+});
+
+test('HelpSettings describes retrieval gating in user-facing terms', () => {
+  const source = read('src/components/settings/HelpSettings.tsx');
+
+  assert.match(source, /当前检索门槛/);
+  assert.match(source, /相似度门槛/);
+  assert.match(source, /退回通用上下文/);
+});
