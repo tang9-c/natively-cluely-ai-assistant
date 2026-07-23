@@ -1,14 +1,14 @@
 # Archived WhisperLive Local STT Setup
 
-> **Current status:** This document describes the older WhisperLive-based `Local STT` development path. The current CueUp speech setup is centered on **Local SenseVoice**, **QCLOUD API**, and **Doubao AUC**. Use the in-app Help & Settings guide or the README speech-provider section for the maintained setup path.
+> **Current status (Archived):** This document describes the older WhisperLive-based `Local STT` development path. The current CueUp speech setup is centered on **Local SenseVoice**, **QCLOUD API**, and **Doubao AUC**. Use the in-app **Help & Settings → 音频语音转文字提供商设置** section or the README speech-provider section for the maintained setup path. Do **not** resurrect the WhisperLive adapter — it is not wired into the current SpeechProvider registry.
 >
 > The old `npm run test:local-stt` command is no longer present in `package.json`; use the current provider-specific tests such as `electron/services/__tests__/LocalSenseVoiceSTT.test.mjs`, `electron/services/__tests__/QCloudApiSpeechChannel.test.mjs`, or `electron/services/__tests__/DoubaoAucRestSTT.test.mjs` when validating speech changes.
 
-This guide is for running the CueUp source tree that includes the new `Local STT` provider. Your already-installed CueUp app will not have this feature until you build and run this modified project or package a new installer from it.
+This guide is retained only as historical context for the CueUp source tree that previously included a standalone WhisperLive `Local STT` provider. The WhisperLive companion document (`WHISPERLIVE_LOCAL_STT_SETUP.md`) is no longer shipped in this repository and **does not exist** at the previously linked path — any reference to it is intentionally removed below. Your already-installed CueUp app will not have a working `Local STT (WhisperLive)` option until (and unless) the project re-introduces it through the current provider pipeline.
 
 ## 1. Prerequisites
 
-Install these first:
+Install these first if you still want to browse the historic build commands:
 
 - Node.js 22 LTS. Avoid Node 23.x for this project because some dependencies warn that they support `^20.19.0 || ^22.13.0 || >=24`, not Node 23.
 - npm, included with Node.
@@ -45,9 +45,9 @@ If those commands work, run:
 npm run build:native
 ```
 
-## 3. Verify the Build
+## 3. Verify the Build (Current Speech Paths)
 
-Run the same checks used for the local-STT implementation:
+Run the checks used for the maintained speech providers (Local SenseVoice / QCLOUD API / Doubao AUC):
 
 ```powershell
 npm run typecheck:electron
@@ -57,7 +57,7 @@ npm run build:electron
 ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/__tests__/LocalSenseVoiceSTT.test.mjs electron/services/__tests__/QCloudApiSpeechChannel.test.mjs electron/services/__tests__/DoubaoAucRestSTT.test.mjs
 ```
 
-These current speech tests cover the maintained Local SenseVoice, QCLOUD API, and Doubao AUC paths. The archived WhisperLive flow is not covered by a package script anymore.
+These current speech tests cover the maintained Local SenseVoice, QCLOUD API, and Doubao AUC paths. The archived WhisperLive flow is intentionally **not** covered by a package script and is not part of the recommended setup path.
 
 ## 4. Run CueUp in Development Mode
 
@@ -67,24 +67,21 @@ For day-to-day testing, run:
 npm run app:dev
 ```
 
-This starts Vite and then launches Electron. Use this mode first to confirm Local STT works before packaging an installer.
+This starts Vite and then launches Electron. Use this mode first to confirm the current speech providers work before packaging an installer.
 
-## 5. Configure Local STT in CueUp
+## 5. Configure Speech-to-Text in CueUp (Maintained Path)
 
-1. Start WhisperLive separately. See [WHISPERLIVE_LOCAL_STT_SETUP.md](./WHISPERLIVE_LOCAL_STT_SETUP.md).
-2. Open CueUp.
-3. Go to Settings -> Audio -> Speech Provider.
-4. Select `Local STT`.
-5. Use:
-   - Adapter: `WhisperLive WebSocket`
-   - Server URL: `ws://127.0.0.1:9090`
-   - Model: `small` to start
-   - Server VAD: enabled
-   - Audio Format: `Float32`
-6. Click `Save`.
-7. Click `Test Connection`.
+Open CueUp and navigate **Settings → 音频** (Audio). Pick whichever provider best matches your meeting:
 
-When `Test Connection` says connected, start a meeting or audio capture flow. CueUp opens separate local STT streams for system audio and microphone, so WhisperLive must allow at least two clients.
+| Provider | When to choose it | Notes |
+| --- | --- | --- |
+| **Local SenseVoice** | Default for Chinese-first local meetings; do not want raw audio sent to the cloud. | Model is downloaded inside the app on first use; ensure the SenseVoice model is installed in the Local Models panel. |
+| **QCLOUD API** | Need cloud Chinese-first transcription with speaker separation. | Reuses the QCLOUD key already configured under **Settings → AI Providers**. |
+| **Doubao AUC** | Longer meetings that need speaker separation, sentence-level info, or emotion metadata from the cloud. | Requires a Doubao speech key saved in CueUp. |
+
+Click **Test Connection** after switching providers to confirm the key/credentials are accepted. The audio routing (microphone / speaker loopback / language / accent) is controlled on the same page; see the in-app Help & Settings guide for details.
+
+If you specifically need the historic WhisperLive flow, do **not** enable it through CueUp — the binary path is not part of the maintained app and the companion install guide has been removed from this repository. Use the maintained providers above instead.
 
 ## 6. Package a Local Installer
 
@@ -103,22 +100,19 @@ npm run build:native
 npm run app:build
 ```
 
-## 7. Expected Behavior
+## 7. Expected Behaviour (Current Speech Providers)
 
-- Local STT failures are intentionally quiet in the overlay.
-- Settings -> Audio -> `Test Connection` is the place to diagnose local endpoint problems.
-- CueUp does not start, install, or supervise WhisperLive. WhisperLive must be running before you use Local STT.
-- `Float32` works with the default WhisperLive server.
-- `PCM16` only works if WhisperLive is started with `--raw_pcm_input`.
+- Provider failures are intentionally quiet in the overlay; surface details via the Settings → 音频 → **Test Connection** button.
+- CueUp does not auto-start or supervise any third-party STT daemon for the maintained providers.
+- Switching providers does not require restarting CueUp — the next capture session uses the new selection.
 
 ## 8. Quick Troubleshooting
 
-- `Test Connection` fails: confirm WhisperLive is running on port `9090`.
-- Transcription is blank: start with `Float32`, model `small`, and Server VAD enabled.
-- It disconnects mid-meeting: increase WhisperLive `--max_connection_time`.
-- Only one channel works: run WhisperLive with `--max_clients 4` or higher.
-- Existing installed app lacks Local STT: run this source build with `npm run app:dev` or install the new packaged artifact from `release/`.
-- `Electron failed to install correctly`: the Electron binary did not download or unpack correctly. Delete `node_modules\electron`, reinstall Electron, then rerun dev mode:
+- **No provider selected**: open Settings → 音频 and choose one of Local SenseVoice / QCLOUD API / Doubao AUC. The dropdown defaults to Local SenseVoice.
+- **Cloud provider test fails**: confirm the relevant key (QCLOUD or Doubao) is saved under Settings → AI Providers and has permission for STT.
+- **Local SenseVoice missing**: open the Local Models panel and download the SenseVoice model.
+- **Transcription is empty or in the wrong language**: pick the matching language/accent on the audio settings card.
+- **`Electron failed to install correctly`**: the Electron binary did not download or unpack correctly. Delete `node_modules\electron`, reinstall Electron, then rerun dev mode:
 
 ```powershell
 Remove-Item -Recurse -Force node_modules\electron
