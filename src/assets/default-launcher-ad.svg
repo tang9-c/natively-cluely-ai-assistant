@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 396" role="img" aria-labelledby="title desc">
+  <title id="title">CueUp AI Meeting Assistant</title>
+  <desc id="desc">关键时刻，给你一句能用的回答</desc>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#312e81"/><stop offset=".55" stop-color="#4338ca"/><stop offset="1" stop-color="#0f172a"/></linearGradient></defs>
+  <rect width="640" height="396" rx="36" fill="url(#g)"/>
+  <circle cx="530" cy="76" r="120" fill="#60a5fa" opacity=".18"/>
+  <text x="48" y="78" fill="white" font-family="system-ui,sans-serif" font-size="28" font-weight="700">CueUp</text>
+  <text x="48" y="270" fill="white" font-family="system-ui,sans-serif" font-size="34" font-weight="700">关键时刻，</text>
+  <text x="48" y="316" fill="white" font-family="system-ui,sans-serif" font-size="34" font-weight="700">给你一句能用的回答</text>
+</svg>
