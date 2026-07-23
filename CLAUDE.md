@@ -6,6 +6,16 @@ Unless explicitly overridden, these rules apply to all tasks in this project.
 
 Core tendency: for non-trivial work, prefer caution over speed; for trivial tasks, use independent judgment and proceed.
 
+### Rule 0: Verify Against Reality
+
+Before modifying code or performing any file operation, read the actual current contents first. Never make changes based on memory or assumptions.
+
+Every conclusion must be grounded in actual terminal or tool output. Never fabricate errors, version information, command results, or repository state.
+
+When information is insufficient or uncertain, proactively use the available tools to verify it. Never fill in missing details by guessing.
+
+Never invent functions, APIs, configuration options, files, or behavior that do not exist. If something cannot be verified or is unknown, say so explicitly.
+
 ### Rule 1: Think Before Coding
 
 State your assumptions explicitly. When something is uncertain, ask questions instead of guessing blindly.
