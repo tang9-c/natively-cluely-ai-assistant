@@ -17,6 +17,10 @@ export interface ParsedReleaseNotes {
 export class ReleaseNotesManager {
     private static instance: ReleaseNotesManager;
     private cachedNotes: ParsedReleaseNotes | null = null;
+    private cachedAt: number = 0;
+    // 10 minutes — keeps the cache useful for repeated UI lookups in a single
+    // session but ensures autoUpdater-triggered fetches don't read stale data.
+    private static readonly CACHE_TTL_MS = 10 * 60 * 1000;
     private readonly repoOwner = "tang9-c";
     private readonly repoName = "natively-cluely-ai-assistant";
 
@@ -30,7 +34,12 @@ export class ReleaseNotesManager {
     }
 
     public async fetchReleaseNotes(version: string, forceRefresh = false): Promise<ParsedReleaseNotes | null> {
-        if (!forceRefresh && this.cachedNotes && this.cachedNotes.version === version) {
+        const cacheFresh =
+            this.cachedNotes &&
+            this.cachedNotes.version === version &&
+            Date.now() - this.cachedAt < ReleaseNotesManager.CACHE_TTL_MS;
+
+        if (!forceRefresh && cacheFresh) {
             console.log("[ReleaseNotesManager] Returning cached release notes for", version);
             return this.cachedNotes;
         }
@@ -68,6 +77,7 @@ export class ReleaseNotesManager {
 
             const parsed = this.parseReleaseNotes(body, tagName, htmlUrl);
             this.cachedNotes = parsed;
+            this.cachedAt = Date.now();
             return parsed;
 
         } catch (error) {

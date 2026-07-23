@@ -380,34 +380,39 @@ export function initializeIpcHandlers(appState: AppState): void {
     return contribution;
   };
 
-  // --- NEW Test Helper ---
-  safeHandle('test-release-fetch', async () => {
-    try {
-      console.log('[IPC] Manual Test Fetch triggered (forcing refresh)...');
-      const { ReleaseNotesManager } = require('./update/ReleaseNotesManager');
-      const notes = await ReleaseNotesManager.getInstance().fetchReleaseNotes('latest', true);
+  // --- Test Helper (dev-only) ---
+  // Test-only IPC that forces a release-notes fetch and broadcasts a fake
+  // update-available event. Guarded so it cannot be invoked from production
+  // builds, where it would let any renderer spoof an update notification.
+  if (!app.isPackaged) {
+    safeHandle('test-release-fetch', async () => {
+      try {
+        console.log('[IPC] Manual Test Fetch triggered (forcing refresh)...');
+        const { ReleaseNotesManager } = require('./update/ReleaseNotesManager');
+        const notes = await ReleaseNotesManager.getInstance().fetchReleaseNotes('latest', true);
 
-      if (notes) {
-        console.log('[IPC] Notes fetched for:', notes.version);
-        const info = {
-          version: notes.version || 'latest',
-          files: [] as any[],
-          path: '',
-          sha512: '',
-          releaseName: notes.summary,
-          releaseNotes: notes.fullBody,
-          parsedNotes: notes,
-        };
-        // Send to renderer
-        appState.getMainWindow()?.webContents.send('update-available', info);
-        return { success: true };
+        if (notes) {
+          console.log('[IPC] Notes fetched for:', notes.version);
+          const info = {
+            version: notes.version || 'latest',
+            files: [] as any[],
+            path: '',
+            sha512: '',
+            releaseName: notes.summary,
+            releaseNotes: notes.fullBody,
+            parsedNotes: notes,
+          };
+          // Send to renderer
+          appState.getMainWindow()?.webContents.send('update-available', info);
+          return { success: true };
+        }
+        return { success: false, error: 'No notes returned' };
+      } catch (err: any) {
+        console.error('[IPC] test-release-fetch failed:', err);
+        return { success: false, error: err.message };
       }
-      return { success: false, error: 'No notes returned' };
-    } catch (err: any) {
-      console.error('[IPC] test-release-fetch failed:', err);
-      return { success: false, error: err.message };
-    }
-  });
+    });
+  }
 
   safeHandle('get-recognition-languages', async () => {
     return RECOGNITION_LANGUAGES;
@@ -921,7 +926,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('download-update', async () => {
     try {
       console.log('[IPC] Download update requested');
-      appState.downloadUpdate();
+      await appState.downloadUpdate();
       return { success: true };
     } catch (err: any) {
       console.error('[IPC] download-update failed:', err);

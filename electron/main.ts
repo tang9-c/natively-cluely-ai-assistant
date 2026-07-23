@@ -872,9 +872,11 @@ export class AppState {
       console.log("[AutoUpdater] Update available:", info.version)
       this.updateAvailable = true
 
-      // Fetch structured release notes
+      // Fetch structured release notes. Force-refresh because the user is being
+      // notified about a new version: a stale cached body from the previous
+      // version would render misleading release notes in the UI.
       const releaseManager = ReleaseNotesManager.getInstance();
-      const notes = await releaseManager.fetchReleaseNotes(info.version);
+      const notes = await releaseManager.fetchReleaseNotes(info.version, true);
 
       // Notify renderer that an update is available with parsed notes if available
       this.broadcast("update-available", {
@@ -911,7 +913,7 @@ export class AppState {
 
     // Start checking for updates with a 10-second delay
     setTimeout(() => {
-      if (process.env.NODE_ENV === "development") {
+      if (!app.isPackaged) {
         console.log("[AutoUpdater] Development mode: Skipping auto check (use manual button)");
       } else {
         autoUpdater.checkForUpdatesAndNotify().catch(err => {
@@ -959,23 +961,69 @@ export class AppState {
           this.broadcast("update-not-available", { version: currentVersion });
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('[AutoUpdater] Manual update check failed:', err);
+      // Surface failure to the renderer so the UI doesn't get stuck in 'checking'.
+      const errorMessage = err?.message || err?.toString() || 'Update check failed';
+      this.broadcast("update-error", errorMessage);
     }
   }
 
   private isVersionNewer(current: string, latest: string): boolean {
-    // EC-01 fix: strip pre-release suffixes (e.g. "2.1.0-beta.1" → "2.1.0")
-    // before splitting so Number() never returns NaN on comparison.
-    const stripPre = (v: string) => v.replace(/-.*$/, '');
-    const c = stripPre(current).split('.').map(Number);
-    const l = stripPre(latest).split('.').map(Number);
+    // semver-aware comparison. Handles:
+    //  - 4+ segment version numbers (e.g. "1.0.0.1")
+    //  - pre-release tags: a version with a pre-release is OLDER than the same
+    //    version without one (2.1.0-beta.1 < 2.1.0). When both have pre-release
+    //    tags, lexical comparison of dot-separated identifiers is used, with
+    //    numeric identifiers compared as numbers.
+    //  - build metadata (+build.123) is ignored per semver spec.
+    const parse = (v: string) => {
+      const [core, pre = ''] = v.replace(/^v/, '').split('-', 2);
+      const buildStripped = (pre.split('+')[0] || '');
+      const preIds = buildStripped ? buildStripped.split('.') : [];
+      const mainIds = core.split('.').map((n) => {
+        const num = parseInt(n, 10);
+        return Number.isFinite(num) ? num : 0;
+      });
+      return { mainIds, preIds };
+    };
 
-    for (let i = 0; i < 3; i++) {
-      const cv = c[i] || 0;
-      const lv = l[i] || 0;
+    const comparePreId = (a: string, b: string): number => {
+      const an = parseInt(a, 10);
+      const bn = parseInt(b, 10);
+      const aIsNum = Number.isFinite(an) && String(an) === a;
+      const bIsNum = Number.isFinite(bn) && String(bn) === b;
+      if (aIsNum && bIsNum) return an - bn;
+      if (aIsNum) return -1; // numeric identifiers have lower precedence than non-numeric
+      if (bIsNum) return 1;
+      return a < b ? -1 : a > b ? 1 : 0;
+    };
+
+    const c = parse(current);
+    const l = parse(latest);
+    const len = Math.max(c.mainIds.length, l.mainIds.length);
+    for (let i = 0; i < len; i++) {
+      const cv = c.mainIds[i] || 0;
+      const lv = l.mainIds[i] || 0;
       if (lv > cv) return true;
       if (lv < cv) return false;
+    }
+
+    // Main versions are equal; pre-release decides. A version WITHOUT a
+    // pre-release is newer than one with (e.g. 2.1.0 > 2.1.0-rc.1).
+    if (c.preIds.length === 0 && l.preIds.length === 0) return false;
+    if (c.preIds.length === 0) return false; // current is stable, latest is pre-release: latest is NOT newer
+    if (l.preIds.length === 0) return true;  // current is pre-release, latest is stable: latest IS newer
+
+    const preLen = Math.max(c.preIds.length, l.preIds.length);
+    for (let i = 0; i < preLen; i++) {
+      // Per semver: a larger set of pre-release fields has HIGHER precedence
+      // than a smaller set (when all preceding identifiers are equal). So
+      // 2.1.0-beta.1 > 2.1.0-beta, and 2.1.0-rc.1 > 2.1.0-rc.1.0.
+      if (c.preIds[i] === undefined) return true;  // latest has more identifiers → newer
+      if (l.preIds[i] === undefined) return false; // current has more identifiers → latest is NOT newer
+      const cmp = comparePreId(c.preIds[i], l.preIds[i]);
+      if (cmp !== 0) return cmp < 0;
     }
     return false;
   }
@@ -998,8 +1046,14 @@ export class AppState {
           await shell.openPath(updateDir)
           console.log('[AutoUpdater] Opened update directory:', updateDir)
 
-          // Quit the app so user can install new version
-          setTimeout(() => app.quit(), 1000)
+          // Notify renderer so the UI can prompt the user with manual install instructions
+          this.broadcast("update-manual-install-required", {
+            reason: 'unsigned-macos',
+            message: '已打开 Finder,请将 CueUp 拖入 Applications 文件夹覆盖安装。'
+          })
+
+          // Give the user time to read the prompt before quitting the app
+          setTimeout(() => app.quit(), 3000)
           return
         }
       } catch (err) {
@@ -1022,7 +1076,7 @@ export class AppState {
     console.log('[AutoUpdater] Manual check for updates requested')
     try {
       // In development mode, use manual GitHub API check (electron-updater skips in dev)
-      if (process.env.NODE_ENV === "development") {
+      if (!app.isPackaged) {
         await this.checkForUpdatesManual()
       } else {
         await autoUpdater.checkForUpdatesAndNotify()
@@ -1034,16 +1088,17 @@ export class AppState {
     }
   }
 
-  public downloadUpdate(): void {
+  public async downloadUpdate(): Promise<void> {
     console.log('[AutoUpdater] Starting download...')
     try {
       // Errors during download are surfaced via autoUpdater.on("error") which
       // already broadcasts "update-error". Do not broadcast here to avoid duplicates.
-      autoUpdater.downloadUpdate().catch(err => {
-        console.error('[AutoUpdater] downloadUpdate failed:', err)
-      })
+      await autoUpdater.downloadUpdate()
     } catch (err: any) {
-      console.error('[AutoUpdater] downloadUpdate exception:', err)
+      console.error('[AutoUpdater] downloadUpdate failed:', err)
+      const errorMessage = err?.message || err?.toString() || 'Update download failed'
+      this.broadcast("update-error", errorMessage)
+      throw err
     }
   }
 
