@@ -35,6 +35,19 @@ test('structured QCLOUD classification propagates its short timeout to fetch', (
   );
 });
 
+test('non-streaming chat propagates total timeout to Natively provider calls', () => {
+  const llm = read('electron/LLMHelper.ts');
+  const chatStart = llm.indexOf('public async chatWithGemini(');
+  const chatBlock = llm.slice(
+    chatStart,
+    llm.indexOf('async chatWithGeminiStream(', chatStart),
+  );
+
+  const timeoutForwardingCalls = chatBlock.match(/timeoutMs:\s*chatPromptOptions\?\.totalTimeoutMs/g) ?? [];
+
+  assert.equal(timeoutForwardingCalls.length, 2);
+});
+
 test('meeting summary gives QCLOUD a summary-sized timeout budget', () => {
   const llm = read('electron/LLMHelper.ts');
   const summaryBlock = llm.slice(

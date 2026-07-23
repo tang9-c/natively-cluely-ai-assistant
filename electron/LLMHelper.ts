@@ -1704,7 +1704,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
         if (nativelyKey) {
           try {
-            return await this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudImagePaths, { maxOutputTokens: chatPromptOptions?.maxOutputTokens });
+            return await this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudImagePaths, {
+              maxOutputTokens: chatPromptOptions?.maxOutputTokens,
+              timeoutMs: chatPromptOptions?.totalTimeoutMs,
+            });
           } catch (err: any) {
             console.warn('[LLMHelper] QCLOUD API failed in chatWithGemini, falling back to Gemini:', err.message);
             // Fall through to smart dynamic fallback below
@@ -1778,7 +1781,13 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         if (routedProvider.status !== 'available') continue;
         switch (routedProvider.provider) {
           case 'natively':
-            providers.push({ name: routedProvider.name, execute: () => this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined, { maxOutputTokens: chatPromptOptions?.maxOutputTokens }) });
+            providers.push({
+              name: routedProvider.name,
+              execute: () => this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined, {
+                maxOutputTokens: chatPromptOptions?.maxOutputTokens,
+                timeoutMs: chatPromptOptions?.totalTimeoutMs,
+              }),
+            });
             break;
           case 'groq':
             if (cloudIsMultimodal) {

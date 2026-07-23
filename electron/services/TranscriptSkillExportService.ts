@@ -7,6 +7,8 @@ import { getDeniedDataScopes } from '../llm/ProviderRouter';
 import { SettingsManager } from './SettingsManager';
 import { SkillsManager } from './SkillsManager';
 
+const TRANSCRIPT_SKILL_TIMEOUT_MS = 120_000;
+
 export interface TranscriptSkillRunInput {
   skillId: string;
   meetingId?: string;
@@ -30,6 +32,7 @@ interface TranscriptSkillLlm {
     chatPromptOptions?: {
       activeSkill?: { id: string; name: string; promptBlock: string } | null;
       maxOutputTokens?: number;
+      totalTimeoutMs?: number;
     },
   ): Promise<string>;
 }
@@ -83,8 +86,13 @@ export async function runTranscriptSkillExport(
         promptBlock,
       },
       maxOutputTokens: QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS,
+      totalTimeoutMs: TRANSCRIPT_SKILL_TIMEOUT_MS,
     },
   );
+
+  if (isLlmFailureFallback(generatedMarkdown)) {
+    return { success: false, error: 'AI 服务未返回有效内容，请稍后重试。' };
+  }
 
   const filePath = writeMarkdownExport({
     skillId: skill.id,
@@ -124,6 +132,19 @@ function writeMarkdownExport(input: {
 
 function estimateTokenCount(text: string): number {
   return Math.ceil(text.length / 4);
+}
+
+function isLlmFailureFallback(value: string): boolean {
+  const normalized = value.trim();
+  if (!normalized) return true;
+
+  return [
+    "I apologize, but I couldn't generate a response. Please try again.",
+    'No AI providers configured',
+    'Authentication failed',
+    'The AI service is currently overloaded',
+    'I encountered an error:',
+  ].some(pattern => normalized.includes(pattern));
 }
 
 function sanitizeFilePart(value: string): string {
