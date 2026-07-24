@@ -392,7 +392,8 @@ export class RAGRetriever {
         // Decision patterns
         if (/\b(decide|decision|agreed|conclusion|settled|determined|resolved)\b/.test(lower) ||
             /what did we (decide|agree|conclude)/.test(lower) ||
-            /did we (decide|agree|settle)/.test(lower)) {
+            /did we (decide|agree|settle)/.test(lower) ||
+            /(决定|确定|结论|同意|最终.{0,6}(定|选))/.test(query)) {
             return 'decision_recall';
         }
 
@@ -402,20 +403,23 @@ export class RAGRetriever {
             return 'speaker_lookup';
         }
         if (/what did (\w+|he|she|they) say/.test(lower) ||
-            /who said/.test(lower)) {
+            /who said/.test(lower) ||
+            /(谁说|谁提到|谁建议|谁提出|说了什么|提到什么)/.test(query)) {
             return 'speaker_lookup';
         }
 
         // Action items patterns
         if (/\b(action|task|todo|to-do|follow[- ]?up|next step|assigned|deadline)\b/.test(lower) ||
             /what (are|were) (my|the|our) (action|task|todo)/.test(lower) ||
-            /what (do i|should i|need to) do/.test(lower)) {
+            /what (do i|should i|need to) do/.test(lower) ||
+            /(行动项|下一步|跟进|负责|截止|要做什么|需要做什么)/.test(query)) {
             return 'action_items';
         }
 
         // Summary patterns
         if (/\b(summar|overview|recap|highlights?|key points?)\b/.test(lower) ||
-            /^(summarize|recap|give me a summary)/.test(lower)) {
+            /^(summarize|recap|give me a summary)/.test(lower) ||
+            /(总结|概括|回顾|要点|重点)/.test(query)) {
             return 'summary';
         }
 

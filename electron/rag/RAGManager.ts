@@ -8,10 +8,27 @@ import { preprocessTranscript, RawSegment } from './TranscriptPreprocessor';
 import { chunkTranscript } from './SemanticChunker';
 import { VectorStore } from './VectorStore';
 import { EmbeddingPipeline } from './EmbeddingPipeline';
-import { RAGRetriever } from './RAGRetriever';
+import { RAGRetriever, type QueryIntent } from './RAGRetriever';
 import { LiveRAGIndexer } from './LiveRAGIndexer';
 import { buildRAGPrompt, NO_CONTEXT_FALLBACK, NO_GLOBAL_CONTEXT_FALLBACK } from './prompts';
 import type { ProviderDataScopePolicy } from '../llm/ProviderRouter';
+import type { MeetingSearchResult } from '../../shared/meetingSearch';
+import { fingerprintTranscript, type FingerprintTranscriptRow } from './MeetingTranscriptFingerprint';
+import {
+    assembleMeetingEvidence,
+    expandMeetingRetrievalQuery,
+    type MeetingSummaryEvidence,
+} from './MeetingEvidenceAssembler';
+
+export type MeetingQueryPreparation =
+    | {
+        status: 'ready';
+        meetingId: string;
+        query: string;
+        formattedContext: string;
+        intent: QueryIntent;
+    }
+    | Exclude<MeetingSearchResult, { status: 'success' }>;
 
 export interface RAGManagerConfig {
     db: Database.Database;
@@ -40,6 +57,7 @@ export class RAGManager {
     private retriever: RAGRetriever;
     private llmHelper: LLMHelper | null = null;
     private liveIndexer: LiveRAGIndexer;
+    private ensureMeetingIndexInFlight = new Map<string, Promise<void>>();
     /** Guards against concurrent reprocessMeeting() calls for the same meeting ID. */
     private _reprocessInFlight = new Set<string>();
 
@@ -111,6 +129,186 @@ export class RAGManager {
      */
     isReady(): boolean {
         return this.embeddingPipeline.isReady() && this.llmHelper !== null;
+    }
+
+    private async ensureMeetingIndex(
+        meetingId: string,
+        transcriptRows: FingerprintTranscriptRow[]
+    ): Promise<void> {
+        const transcriptHash = fingerprintTranscript(transcriptRows);
+        const isCurrent = () => {
+            const state = this.vectorStore.getMeetingChunkState(meetingId);
+            return state.indexState === 'complete'
+                && state.chunkCount > 0
+                && state.transcriptHash === transcriptHash;
+        };
+
+        if (isCurrent()) return;
+
+        const existing = this.ensureMeetingIndexInFlight.get(meetingId);
+        if (existing) {
+            await existing;
+            return;
+        }
+
+        const buildPromise = Promise.resolve().then(async () => {
+            if (isCurrent()) return;
+
+            this.vectorStore.markMeetingIndexState(meetingId, 'building');
+            try {
+                const rawSegments: RawSegment[] = transcriptRows.map(row => ({
+                    speaker: row.speaker ?? '发言人',
+                    text: row.content,
+                    timestamp: row.timestampMs,
+                }));
+                const chunks = chunkTranscript(
+                    meetingId,
+                    preprocessTranscript(rawSegments)
+                );
+                if (chunks.length === 0) {
+                    throw new Error('No searchable transcript chunks');
+                }
+
+                this.vectorStore.replaceMeetingChunksAtomically(
+                    meetingId,
+                    chunks,
+                    transcriptHash
+                );
+                if (this.embeddingPipeline.isReady()) {
+                    await this.embeddingPipeline.queueMeeting(meetingId);
+                }
+            } catch {
+                this.vectorStore.markMeetingIndexState(meetingId, 'failed');
+                throw new Error('Meeting index rebuild failed');
+            }
+        });
+
+        this.ensureMeetingIndexInFlight.set(meetingId, buildPromise);
+        try {
+            await buildPromise;
+        } finally {
+            if (this.ensureMeetingIndexInFlight.get(meetingId) === buildPromise) {
+                this.ensureMeetingIndexInFlight.delete(meetingId);
+            }
+        }
+    }
+
+    async prepareMeetingQuery(
+        meetingId: string,
+        query: string
+    ): Promise<MeetingQueryPreparation> {
+        const meeting = this.db.prepare(`
+            SELECT id, summary_json
+            FROM meetings
+            WHERE id = ?
+        `).get(meetingId) as { id: string; summary_json: string | null } | undefined;
+        if (!meeting) {
+            return { status: 'meeting_not_found', message: '无法找到本次会议。' };
+        }
+
+        const transcriptRows = this.db.prepare(`
+            SELECT
+                id,
+                speaker,
+                timestamp_ms AS timestampMs,
+                content
+            FROM transcripts
+            WHERE meeting_id = ?
+            ORDER BY timestamp_ms ASC, id ASC
+        `).all(meetingId) as FingerprintTranscriptRow[];
+        if (!transcriptRows.some(row => row.content?.trim())) {
+            return {
+                status: 'transcript_unavailable',
+                message: '本次会议没有可供搜索的转录内容。',
+            };
+        }
+
+        try {
+            await this.ensureMeetingIndex(meetingId, transcriptRows);
+        } catch {
+            return {
+                status: 'query_failed',
+                message: '本次会议搜索暂时不可用，请稍后重试。',
+            };
+        }
+
+        let summary: MeetingSummaryEvidence = {};
+        try {
+            const parsed = JSON.parse(meeting.summary_json || '{}');
+            summary = parsed?.detailedSummary ?? {};
+        } catch {
+            summary = {};
+        }
+
+        const intent = this.retriever.detectIntent(query);
+        const retrievalQuery = expandMeetingRetrievalQuery(query, intent, summary);
+        let retrieved;
+        try {
+            retrieved = await this.retriever.retrieve(retrievalQuery, {
+                meetingId,
+                intent,
+                maxTokens: 1500,
+            });
+        } catch {
+            return {
+                status: 'query_failed',
+                message: '本次会议搜索暂时不可用，请稍后重试。',
+            };
+        }
+
+        const assembled = assembleMeetingEvidence({
+            meetingId,
+            intent,
+            summary,
+            retrievedChunks: retrieved.chunks,
+            timelineChunks: this.vectorStore.getChunksForMeeting(meetingId),
+            maxTokens: 1500,
+        });
+        if (assembled.evidence.length === 0) {
+            return {
+                status: 'no_match',
+                message: `本次会议中没有找到与“${query}”相关的内容。`,
+            };
+        }
+        if (!this.llmHelper) {
+            return {
+                status: 'llm_unavailable',
+                message: '会议内容已找到，但当前无法生成回答，请稍后重试。',
+            };
+        }
+
+        return {
+            status: 'ready',
+            meetingId,
+            query,
+            formattedContext: assembled.formattedContext,
+            intent,
+        };
+    }
+
+    async *streamMeetingAnswer(
+        prepared: Extract<MeetingQueryPreparation, { status: 'ready' }>,
+        abortSignal?: AbortSignal
+    ): AsyncGenerator<string, void, unknown> {
+        if (!this.llmHelper) {
+            throw new Error('LLM helper not initialized');
+        }
+        const prompt = buildRAGPrompt(
+            prepared.query,
+            prepared.formattedContext,
+            'meeting',
+            prepared.intent
+        );
+        const stream = this.llmHelper.streamChatWithGemini(
+            prompt,
+            undefined,
+            undefined,
+            true
+        );
+        for await (const chunk of stream) {
+            if (abortSignal?.aborted) return;
+            yield chunk;
+        }
     }
 
     /**
