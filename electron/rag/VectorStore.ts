@@ -25,6 +25,8 @@ export interface ScoredChunk extends StoredChunk {
     finalScore?: number;
 }
 
+export type MeetingIndexState = 'missing' | 'building' | 'complete' | 'failed';
+
 function parseDateLike(value: unknown): number | null {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
     if (typeof value !== 'string' || !value.trim()) return null;
@@ -211,6 +213,115 @@ export class VectorStore {
 
         insertAll();
         return ids;
+    }
+
+    getMeetingChunkState(meetingId: string): {
+        chunkCount: number;
+        transcriptHash: string | null;
+        indexState: MeetingIndexState;
+    } {
+        const row = this.db.prepare(`
+            SELECT
+                m.rag_transcript_hash,
+                m.rag_index_state,
+                COUNT(c.id) AS chunk_count
+            FROM meetings m
+            LEFT JOIN chunks c ON c.meeting_id = m.id
+            WHERE m.id = ?
+            GROUP BY m.id
+        `).get(meetingId) as {
+            rag_transcript_hash: string | null;
+            rag_index_state: MeetingIndexState;
+            chunk_count: number;
+        } | undefined;
+
+        return {
+            chunkCount: row?.chunk_count ?? 0,
+            transcriptHash: row?.rag_transcript_hash ?? null,
+            indexState: row?.rag_index_state ?? 'missing',
+        };
+    }
+
+    markMeetingIndexState(
+        meetingId: string,
+        state: Exclude<MeetingIndexState, 'complete'>
+    ): void {
+        this.db.prepare(`
+            UPDATE meetings
+            SET rag_index_state = ?
+            WHERE id = ?
+        `).run(state, meetingId);
+    }
+
+    replaceMeetingChunksAtomically(
+        meetingId: string,
+        chunks: Chunk[],
+        transcriptHash: string
+    ): void {
+        const replace = this.db.transaction(() => {
+            const oldRows = this.db.prepare(
+                'SELECT id FROM chunks WHERE meeting_id = ?'
+            ).all(meetingId) as Array<{ id: number }>;
+            const oldChunkIds = oldRows.map(row => row.id);
+
+            if (oldChunkIds.length > 0) {
+                const placeholders = oldChunkIds.map(() => '?').join(',');
+                const vecTables = this.db.prepare(`
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'table' AND name LIKE 'vec_chunks_%'
+                `).all() as Array<{ name: string }>;
+
+                for (const { name } of vecTables) {
+                    if (!/^vec_chunks_\d+$/.test(name)) continue;
+                    this.db.prepare(
+                        `DELETE FROM ${name} WHERE chunk_id IN (${placeholders})`
+                    ).run(...oldChunkIds);
+                }
+            }
+
+            this.db.prepare(
+                'DELETE FROM embedding_queue WHERE meeting_id = ?'
+            ).run(meetingId);
+            this.db.prepare(
+                'DELETE FROM chunks WHERE meeting_id = ?'
+            ).run(meetingId);
+
+            const insertChunk = this.db.prepare(`
+                INSERT INTO chunks (
+                    meeting_id,
+                    chunk_index,
+                    speaker,
+                    start_timestamp_ms,
+                    end_timestamp_ms,
+                    cleaned_text,
+                    token_count
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `);
+            for (const chunk of chunks) {
+                insertChunk.run(
+                    meetingId,
+                    chunk.chunkIndex,
+                    chunk.speaker,
+                    chunk.startMs,
+                    chunk.endMs,
+                    chunk.text,
+                    chunk.tokenCount
+                );
+            }
+
+            const update = this.db.prepare(`
+                UPDATE meetings
+                SET rag_transcript_hash = ?, rag_index_state = 'complete'
+                WHERE id = ?
+            `).run(transcriptHash, meetingId);
+            if (update.changes !== 1) {
+                throw new Error('Meeting not found while replacing RAG chunks');
+            }
+        });
+
+        replace();
     }
 
     /**
