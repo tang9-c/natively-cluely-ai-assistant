@@ -61,6 +61,7 @@ import {
 import { CHAT_MODE_PROMPT } from './llm/prompts';
 import type { ModeEventContext } from './llm';
 import type { ChatPromptOptions } from './llm/chatPromptAssembly';
+import { getDeniedDataScopes } from './llm/ProviderRouter';
 import type { ResearchProgress } from './services/research/types';
 import { LlmInvalidFormatError } from './services/research/ResearchDossierBuilder';
 import { getOpenAtLoginForPlatform, setOpenAtLoginForPlatform } from './utils/loginItemSettings';
@@ -72,6 +73,9 @@ import {
   shouldUseLiveRagQuery,
 } from './rag/LiveRagQueryGuard';
 import { buildRealtimeDiagnosticsSummary } from '../shared/realtimeAnswerTrustViewModel';
+import type { MeetingSearchRequest, MeetingSearchResult } from '../shared/meetingSearch';
+import { executeMeetingSearch } from './rag/MeetingSearchFlow';
+import { MeetingSearchRequestRegistry } from './rag/MeetingSearchRequestRegistry';
 
 const QCLOUD_KEY_PATTERN = /^sk-[A-Za-z0-9_-]{32,}$/;
 const EMBEDDING_READY_STATUS_WAIT_MS = 2_500;
@@ -4002,60 +4006,61 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // Store active query abort controllers for cancellation
   const activeRAGQueries = new Map<string, AbortController>();
+  const activeMeetingSearchRequests = new MeetingSearchRequestRegistry();
 
   // Query meeting with RAG (meeting-scoped)
   safeHandle(
     'rag:query-meeting',
-    async (event, { meetingId, query }: { meetingId: string; query: string }) => {
-      const ragManager = appState.getRAGManager();
-
-      if (!ragManager || !ragManager.isReady()) {
-        // Fallback to regular chat if RAG not available
-        console.log('[RAG] Not ready, falling back to regular chat');
-        return { fallback: true };
-      }
-
-      // For completed meetings, check if post-meeting RAG is processed.
-      // For live meetings with JIT indexing, let RAGManager.queryMeeting() decide.
+    async (event, request: MeetingSearchRequest): Promise<MeetingSearchResult> => {
       if (
-        !ragManager.isMeetingProcessed(meetingId) &&
-        !ragManager.isLiveIndexingActive(meetingId)
+        !request
+        || typeof request.meetingId !== 'string'
+        || typeof request.query !== 'string'
+        || typeof request.requestId !== 'string'
+        || !request.meetingId
+        || !request.query.trim()
+        || !request.requestId
       ) {
-        console.log(
-          `[RAG] Meeting ${meetingId} not processed and no JIT indexing, falling back to regular chat`,
-        );
-        return { fallback: true };
+        return {
+          status: 'query_failed',
+          message: '本次会议搜索暂时不可用，请稍后重试。',
+        };
       }
 
-      const abortController = new AbortController();
-      const queryKey = `meeting-${meetingId}`;
-      activeRAGQueries.set(queryKey, abortController);
+      const policy = SettingsManager.getInstance().get('providerDataScopes');
+      if (getDeniedDataScopes(['transcript'], policy).length > 0) {
+        return {
+          status: 'scope_denied',
+          message: '当前隐私设置不允许使用会议转录进行搜索。',
+        };
+      }
 
+      const ragManager = appState.getRAGManager();
+      if (!ragManager) {
+        return {
+          status: 'query_failed',
+          message: '本次会议搜索暂时不可用，请稍后重试。',
+        };
+      }
+
+      const controller = activeMeetingSearchRequests.start(
+        event.sender.id,
+        request.meetingId,
+        request.requestId
+      );
       try {
-        const stream = ragManager.queryMeeting(meetingId, query, abortController.signal);
-
-        for await (const chunk of stream) {
-          if (abortController.signal.aborted) break;
-          event.sender.send('rag:stream-chunk', { meetingId, chunk });
-        }
-
-        event.sender.send('rag:stream-complete', { meetingId });
-        return { success: true };
-      } catch (error: any) {
-        if (error.name !== 'AbortError') {
-          const msg = error.message || '';
-          // If specific RAG failures, return fallback to use transcript window
-          if (msg.includes('NO_RELEVANT_CONTEXT') || msg.includes('NO_MEETING_EMBEDDINGS')) {
-            console.log(`[RAG] Query failed with '${msg}', falling back to regular chat`);
-            return { fallback: true };
-          }
-
-          console.error('[RAG] Query error:', error);
-          event.sender.send('rag:stream-error', { meetingId, error: msg });
-        }
-        return { success: false, error: error.message };
+        return await executeMeetingSearch({
+          ragManager,
+          request,
+          signal: controller.signal,
+          send: (channel, payload) => event.sender.send(channel, payload),
+        });
       } finally {
-        activeRAGQueries.delete(queryKey);
+        activeMeetingSearchRequests.finish(
+          event.sender.id,
+          request.meetingId,
+          request.requestId
+        );
       }
     },
   );
@@ -4160,14 +4165,24 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Cancel active RAG query
   safeHandle(
     'rag:cancel-query',
-    async (_, { meetingId, global }: { meetingId?: string; global?: boolean }) => {
-      const queryKey = global ? 'global' : `meeting-${meetingId}`;
+    async (
+      event,
+      {
+        meetingId,
+        requestId,
+        global,
+      }: { meetingId?: string; requestId?: string; global?: boolean }
+    ) => {
+      if (!global && meetingId && requestId) {
+        activeMeetingSearchRequests.cancel(event.sender.id, meetingId, requestId);
+      }
 
-      // Cancel any matching key
-      for (const [key, controller] of activeRAGQueries) {
-        if (key.startsWith(queryKey) || (global && key.startsWith('global'))) {
-          controller.abort();
-          activeRAGQueries.delete(key);
+      if (global) {
+        for (const [key, controller] of activeRAGQueries) {
+          if (key.startsWith('global')) {
+            controller.abort();
+            activeRAGQueries.delete(key);
+          }
         }
       }
 
