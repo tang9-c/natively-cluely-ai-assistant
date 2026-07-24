@@ -35,6 +35,9 @@ function runFromVersion(version, customContext) {
       is_active INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE meetings (
+      id TEXT PRIMARY KEY
+    );
   `);
   db.pragma(`user_version = ${version}`);
   db.prepare('INSERT INTO modes (id, name, template_type, custom_context, is_active) VALUES (?, ?, ?, ?, 1)')
