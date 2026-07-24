@@ -26,7 +26,7 @@ test('product fixtures include sales, FDE, team-meet, and recruiting schema fiel
   assert.equal(counts.sales, 50);
   assert.equal(counts.fde, 40);
   assert.equal(counts['team-meet'], 30);
-  assert.equal(counts.recruiting, 5);
+  assert.equal(counts.recruiting, 46);
 });
 
 test('product runner writes JSON and Markdown reports', async () => {
@@ -37,7 +37,7 @@ test('product runner writes JSON and Markdown reports', async () => {
     fixtureDir: path.join(process.cwd(), 'tests/fixtures/dynamic-actions/product'),
     outputDir: outDir,
   });
-  assert.equal(report.totalFixtures, 125);
+  assert.equal(report.totalFixtures, 166);
   assert.equal(report.results.find((entry) => entry.fixtureId === 'sales-pricing-objection-zh-001')?.actionType, 'pricing_objection');
   assert.ok(fs.existsSync(path.join(outDir, 'product-report.json')));
   assert.ok(fs.existsSync(path.join(outDir, 'product-report.md')));

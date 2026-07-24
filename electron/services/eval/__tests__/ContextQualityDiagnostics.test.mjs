@@ -364,13 +364,18 @@ test('context quality diagnostics exposes safe dynamic action arbitration labels
 
 test('dynamic action cloud adapter preserves typed failure reasons for production diagnostics', () => {
   const source = fs.readFileSync(path.resolve(root, 'electron/IntelligenceEngine.ts'), 'utf8');
+  const classifierSource = fs.readFileSync(
+    path.resolve(root, 'electron/services/dynamic-actions/ModeEventClassifier.ts'),
+    'utf8',
+  );
   const methodSource = source.slice(
     source.indexOf('private async classifyDynamicActionWithCloud'),
     source.indexOf('constructor(llmHelper', source.indexOf('private async classifyDynamicActionWithCloud')),
   );
 
   assert.match(methodSource, /throw new CloudSemanticGateError\(cloudFailureReasonFromError\(error\)\)/);
-  assert.match(methodSource, /throw new CloudSemanticGateError\('cloud_invalid_json'\)/);
+  assert.match(methodSource, /return parseCloudSemanticGateResponse\(raw,\s*input\.candidates\)/);
+  assert.match(classifierSource, /throw new CloudSemanticGateError\('cloud_invalid_json'\)/);
   assert.doesNotMatch(methodSource, /catch\s*\([^)]*\)\s*\{[\s\S]{0,220}return null;/);
 });
 

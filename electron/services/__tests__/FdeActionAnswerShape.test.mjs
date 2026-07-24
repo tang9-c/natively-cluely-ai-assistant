@@ -42,7 +42,10 @@ test('fde synthesized intent actions use specialized prompt instructions', () =>
   assert.match(engine, /fdePromptInstructions|FDE_PROMPT_INSTRUCTIONS/);
   assert.match(engine, /fde_integration_check[\s\S]*PLM \/ QMS|fde_integration_check[\s\S]*制造业/);
   assert.match(engine, /fde_next_step[\s\S]*owner[\s\S]*date[\s\S]*artifact/);
-  assert.doesNotMatch(engine, /You are in \$\{modeTemplateType\} mode\. Respond in Chinese first and help the user handle the detected \$\{type\} intent[\s\S]*fde_/);
+  assert.match(
+    engine,
+    /promptInstruction:\s*FDE_PROMPT_INSTRUCTIONS\[type\][\s\S]{0,120}SALES_PROMPT_INSTRUCTIONS\[type\][\s\S]{0,220}You are in \$\{modeTemplateType\} mode/,
+  );
 });
 
 test('fde main and tiny prompts are specialized for manufacturing PLM QMS AI Agent delivery', () => {

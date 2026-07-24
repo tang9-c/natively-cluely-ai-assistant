@@ -15,9 +15,12 @@ test('only completed sales capability discovery resolves continuation policy', a
   assert.deepEqual(resolveDynamicActionContinuationPolicy({ ...base, sourceIntent: 'sales_capability_fit' }), {
     goal: 'answer_when_grounded',
     answerActionType: 'capability_fit_answer',
+    observedSpeaker: 'interviewer',
     maxPlannerAttempts: 3,
     expiresAfterCustomerTurns: 6,
     expiresAfterMs: 300_000,
+    parentActionTypes: new Set(['discovery_question']),
+    sourceIntents: new Set(['sales_capability_fit', 'sales_contextual_proof_discovery']),
   });
   assert.ok(resolveDynamicActionContinuationPolicy({ ...base, sourceIntent: 'sales_contextual_proof_discovery' }));
   assert.equal(resolveDynamicActionContinuationPolicy({ ...base, sourceIntent: 'sales_pain_discovery' }), null);

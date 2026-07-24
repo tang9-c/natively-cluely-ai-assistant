@@ -546,8 +546,8 @@ const CONTINUATION_FIXTURE_MODE_RECORDS: Record<DynamicActionContinuationFixture
     })[sourceIntent],
     buildDerivedContext: buildFdeContinuationDerivedActionContext,
     requiredSlotValues: fdeRequiredSlotValues,
-    hasPostCallCarryover: (postCall) => postCall.coachingInsights.some((insight) =>
-      ['fde_process_confirmation', 'fde_ai_boundary_followup', 'fde_validation_missing_fields', 'fde_delivery_risk_followup'].includes(insight.type)),
+    hasPostCallCarryover: (postCall, actionId) =>
+      postCall.acceptedFdeRecords.some((record) => record.actionId === actionId),
   },
   recruiting: {
     defaultSourceIntent: 'recruiting_scorecard_gap',

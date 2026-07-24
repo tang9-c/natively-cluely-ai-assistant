@@ -65,8 +65,8 @@ test('LLMHelper passes explicit QCLOUD output budgets for chat and PPTX call sit
   assert.match(helper, /private clampQCloudMaxOutputTokens/);
   assert.match(helper, /generatePptxKnowledgeWithNatively\([\s\S]*options:\s*ProviderRequestOptions\s*=\s*\{\}/);
   assert.match(helper, /this\.generateWithNatively\(userMessage,\s*systemPrompt,\s*imagePaths,\s*\{\s*\.\.\.options,\s*dataScopes\s*\}\)/);
-  assert.match(helper, /this\.generateWithNatively\(cloudUserContent,\s*openaiSystemPrompt,\s*cloudImagePaths,\s*\{\s*maxOutputTokens:\s*chatPromptOptions\?\.maxOutputTokens\s*\}\)/);
-  assert.match(helper, /this\.streamWithNatively\(userContent,\s*finalSystemPrompt,\s*imagePaths,\s*\{\s*maxOutputTokens:\s*chatPromptOptions\?\.maxOutputTokens\s*\}\)/);
+  assert.match(helper, /this\.generateWithNatively\(cloudUserContent,\s*openaiSystemPrompt,\s*cloudImagePaths,\s*\{[\s\S]{0,180}maxOutputTokens:\s*chatPromptOptions\?\.maxOutputTokens,[\s\S]{0,180}timeoutMs:\s*chatPromptOptions\?\.totalTimeoutMs/);
+  assert.match(helper, /this\.streamWithNatively\(userContent,\s*finalSystemPrompt,\s*imagePaths,\s*\{[\s\S]{0,500}maxOutputTokens:\s*chatPromptOptions\?\.maxOutputTokens,[\s\S]{0,500}totalTimeoutMs:\s*chatPromptOptions\?\.totalTimeoutMs/);
 });
 
 test('streamChat uses real QCLOUD SSE stream for the selected QCLOUD model', () => {

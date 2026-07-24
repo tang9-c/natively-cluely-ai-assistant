@@ -258,7 +258,7 @@ test('runWhatShouldISay can emit dynamic action answers without persistence', ()
 test('dynamic action usage entries preserve action metadata for post-call artifacts', () => {
   const source = read('electron/IntelligenceEngine.ts');
 
-  assert.match(source, /metadata:\s*\{/);
+  assert.match(source, /metadata:\s*runtimeValidationPolicy\?\.evidenceKind\s*===\s*['"]transcript_evidence['"]/);
   assert.match(source, /source:\s*['"]dynamic_action['"]/);
   assert.match(source, /actionType:\s*dynamicActionModeEvent\?\.actionType\s*\?\?\s*dynamicActionModeEvent\?\.intent/);
   assert.match(source, /sourceIntent:\s*dynamicActionModeEvent\?\.sourceIntent/);
