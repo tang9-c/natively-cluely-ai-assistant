@@ -85,37 +85,37 @@ export class RAGRetriever {
             modeIntent: options.modeIntent ?? intent,
         });
 
-        // 1. Embed the query
-        let queryEmbedding: number[];
-        try {
-            queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(retrievalQuery);
-        } catch (error) {
-            console.error('[RAGRetriever] Failed to embed query:', error);
-            // Return empty context on embedding failure
-            return {
-                chunks: [],
-                formattedContext: '',
-                totalTokens: 0,
-                meetingIds: [],
-                intent,
-                retrievalQuery,
-                citations: []
-            };
-        }
-
-        // 2. Retrieve candidates with hybrid vector + lexical search.
-        const spaceKey = this.embeddingPipeline.getActiveSpaceKey();
-        const vectorCandidates = await this.vectorStore.searchSimilar(queryEmbedding, {
-            meetingId,
-            limit: topK * 2,
-            minSimilarity: 0.25,
-            spaceKey
-        });
+        // Text retrieval is the baseline for meeting search. Semantic retrieval
+        // is an optional recall enhancement and must not make lexical search
+        // unavailable when the embedding provider fails.
         const lexicalCandidates = await this.vectorStore.searchLexical(retrievalQuery, {
             meetingId,
             limit: topK * 2,
         });
+        let vectorCandidates: ScoredChunk[] = [];
+
+        if (this.embeddingPipeline.isReady()) {
+            try {
+                const queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(retrievalQuery);
+                const spaceKey = this.embeddingPipeline.getActiveSpaceKey();
+                vectorCandidates = await this.vectorStore.searchSimilar(queryEmbedding, {
+                    meetingId,
+                    limit: topK * 2,
+                    minSimilarity: 0.25,
+                    spaceKey
+                });
+            } catch {
+                console.warn('[RAGRetriever] Semantic retrieval unavailable', {
+                    meetingIdPresent: Boolean(meetingId),
+                    errorType: 'embedding_query_failed',
+                });
+            }
+        }
+
         let candidates = this.mergeHybridCandidates(vectorCandidates, lexicalCandidates, retrievalQuery);
+        if (meetingId) {
+            candidates = candidates.filter(chunk => chunk.meetingId === meetingId);
+        }
 
         if (candidates.length === 0) {
             console.log('[RAGRetriever] No similar chunks found');
