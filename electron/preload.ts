@@ -1,6 +1,23 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ModeEventContext } from './llm';
 import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../shared/senseVoiceEmotion';
+import type {
+  MeetingSearchChunkEvent,
+  MeetingSearchCompleteEvent,
+  MeetingSearchErrorEvent,
+  MeetingSearchRequest,
+  MeetingSearchResult,
+} from '../shared/meetingSearch';
+
+type RAGStreamChunkPayload =
+  | MeetingSearchChunkEvent
+  | { meetingId?: string; global?: boolean; live?: boolean; chunk: string };
+type RAGStreamCompletePayload =
+  | MeetingSearchCompleteEvent
+  | { meetingId?: string; global?: boolean; live?: boolean };
+type RAGStreamErrorPayload =
+  | MeetingSearchErrorEvent
+  | { meetingId?: string; global?: boolean; live?: boolean; error: string };
 
 // Types for the exposed Electron API
 type ResearchProgressStage =
@@ -594,9 +611,8 @@ interface ElectronAPI {
 
   // RAG (Retrieval-Augmented Generation) API
   ragQueryMeeting: (
-    meetingId: string,
-    query: string,
-  ) => Promise<{ success?: boolean; fallback?: boolean; error?: string }>;
+    request: MeetingSearchRequest,
+  ) => Promise<MeetingSearchResult>;
   ragQueryLive: (
     query: string,
   ) => Promise<{ success?: boolean; fallback?: boolean; error?: string }>;
@@ -605,6 +621,7 @@ interface ElectronAPI {
   ) => Promise<{ success?: boolean; fallback?: boolean; error?: string }>;
   ragCancelQuery: (options: {
     meetingId?: string;
+    requestId?: string;
     global?: boolean;
   }) => Promise<{ success: boolean }>;
   ragIsMeetingProcessed: (meetingId: string) => Promise<boolean>;
@@ -650,13 +667,13 @@ interface ElectronAPI {
   knowledgeDeleteMaterial: (id: string) => Promise<{ success: boolean; error?: string }>;
   knowledgeReindexMaterial: (id: string) => Promise<{ success: boolean; material?: any; error?: string }>;
   onRAGStreamChunk: (
-    callback: (data: { meetingId?: string; global?: boolean; chunk: string }) => void,
+    callback: (data: RAGStreamChunkPayload) => void,
   ) => () => void;
   onRAGStreamComplete: (
-    callback: (data: { meetingId?: string; global?: boolean }) => void,
+    callback: (data: RAGStreamCompletePayload) => void,
   ) => () => void;
   onRAGStreamError: (
-    callback: (data: { meetingId?: string; global?: boolean; error: string }) => void,
+    callback: (data: RAGStreamErrorPayload) => void,
   ) => () => void;
 
   // Keybind Management
@@ -1899,11 +1916,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   testReleaseFetch: () => ipcRenderer.invoke('test-release-fetch'),
 
   // RAG API
-  ragQueryMeeting: (meetingId: string, query: string) =>
-    ipcRenderer.invoke('rag:query-meeting', { meetingId, query }),
+  ragQueryMeeting: (request: MeetingSearchRequest) =>
+    ipcRenderer.invoke('rag:query-meeting', request),
   ragQueryLive: (query: string) => ipcRenderer.invoke('rag:query-live', { query }),
   ragQueryGlobal: (query: string) => ipcRenderer.invoke('rag:query-global', { query }),
-  ragCancelQuery: (options: { meetingId?: string; global?: boolean }) =>
+  ragCancelQuery: (options: { meetingId?: string; requestId?: string; global?: boolean }) =>
     ipcRenderer.invoke('rag:cancel-query', options),
   ragIsMeetingProcessed: (meetingId: string) =>
     ipcRenderer.invoke('rag:is-meeting-processed', meetingId),
@@ -1942,7 +1959,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   reindexIncompatibleMeetings: () => ipcRenderer.invoke('rag:reindex-incompatible-meetings'),
 
   onRAGStreamChunk: (
-    callback: (data: { meetingId?: string; global?: boolean; chunk: string }) => void,
+    callback: (data: RAGStreamChunkPayload) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('rag:stream-chunk', subscription);
@@ -1950,7 +1967,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('rag:stream-chunk', subscription);
     };
   },
-  onRAGStreamComplete: (callback: (data: { meetingId?: string; global?: boolean }) => void) => {
+  onRAGStreamComplete: (callback: (data: RAGStreamCompletePayload) => void) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('rag:stream-complete', subscription);
     return () => {
@@ -1958,7 +1975,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   onRAGStreamError: (
-    callback: (data: { meetingId?: string; global?: boolean; error: string }) => void,
+    callback: (data: RAGStreamErrorPayload) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('rag:stream-error', subscription);

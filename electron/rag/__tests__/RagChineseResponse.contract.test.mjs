@@ -18,11 +18,11 @@ test('会议和全局 RAG 对中文、英文和纯缩写问题都注入中文回
   }
 });
 
-test('会议与全局普通聊天降级也使用中文系统提示词', () => {
+test('会议搜索不再进入普通聊天降级，全局普通聊天仍使用中文系统提示词', () => {
   const meeting = fs.readFileSync('src/components/MeetingChatOverlay.tsx', 'utf8');
   const global = fs.readFileSync('src/components/GlobalChatOverlay.tsx', 'utf8');
-  assert.match(meeting, ALWAYS_CHINESE);
   assert.match(global, ALWAYS_CHINESE);
-  assert.match(meeting, /buildMeetingFallbackSystemPrompt\(contextString\)/);
+  assert.doesNotMatch(meeting, /buildMeetingFallbackSystemPrompt/);
+  assert.doesNotMatch(meeting, /streamGeminiChat/);
   assert.match(global, /streamGeminiChat\(\s*question,\s*undefined,\s*globalFallbackSystemPrompt,\s*\{\s*skipSystemPrompt:\s*true/);
 });

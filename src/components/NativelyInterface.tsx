@@ -2636,7 +2636,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     if (window.electronAPI.onRAGStreamError) {
       cleanups.push(
-        window.electronAPI.onRAGStreamError((data: { error: string }) => {
+        window.electronAPI.onRAGStreamError((data) => {
+          const error = 'error' in data ? data.error : data.message;
           setIsProcessing(false);
           requestStartTimeRef.current = null;
           setMessages((prev) => {
@@ -2646,7 +2647,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               updated[prev.length - 1] = {
                 ...lastMsg,
                 isStreaming: false,
-                text: lastMsg.text + `\n\n[RAG Error: ${data.error}]`,
+                text: lastMsg.text + `\n\n[RAG Error: ${error}]`,
               };
               return updated;
             }

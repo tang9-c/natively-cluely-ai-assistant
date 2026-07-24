@@ -22,12 +22,3 @@ test('meeting search can submit the same query more than once', () => {
   assert.match(overlay, /\[isOpen, initialQuery, queryNonce\]/);
   assert.match(overlay, /\[initialQuery, queryNonce\]/);
 });
-
-test('meeting search fallback stream completion returns chat state to idle', () => {
-  const source = read('src/components/MeetingChatOverlay.tsx');
-  const fallbackStart = source.indexOf('const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone(() => {');
-  assert.notEqual(fallbackStart, -1, 'fallback done cleanup should exist');
-
-  const fallbackDoneBlock = source.slice(fallbackStart, source.indexOf('const oldErrorCleanup', fallbackStart));
-  assert.match(fallbackDoneBlock, /setChatState\('idle'\)/);
-});

@@ -12,6 +12,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import type { MeetingSearchResult } from '../../shared/meetingSearch';
 
 // ============================================
 // Types 
@@ -43,12 +44,6 @@ interface MeetingChatOverlayProps {
 }
 
 type ChatState = 'idle' | 'opening' | 'waiting_for_llm' | 'streaming_response' | 'error' | 'closing';
-
-function buildMeetingFallbackSystemPrompt(contextString: string): string {
-    return `You are recalling a specific meeting. Answer questions ONLY about this meeting. ALWAYS answer in Simplified Chinese, regardless of the language of the user's question. Keep professional acronyms such as KPI when useful, but explain them in Chinese. Be concise (2-4 sentences). Sound natural, like a human recalling. If information is not present, say so briefly in Chinese. Never guess.
-
-${contextString}`;
-}
 
 // ============================================
 // Typing Indicator Component
@@ -204,7 +199,29 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const chatWindowRef = useRef<HTMLDivElement>(null);
-    const streamBuffer = useStreamBuffer();
+    const {
+        appendToken,
+        getBufferedContent,
+        reset: resetStreamBuffer,
+    } = useStreamBuffer();
+    const activeRequestIdRef = useRef<string | null>(null);
+    const activeStreamCleanupRef = useRef<(() => void) | null>(null);
+
+    const cleanupActiveStreamListeners = useCallback(() => {
+        activeStreamCleanupRef.current?.();
+        activeStreamCleanupRef.current = null;
+    }, []);
+
+    const cancelActiveRequest = useCallback(() => {
+        const requestId = activeRequestIdRef.current;
+        const meetingId = meetingContext.id;
+        if (requestId && meetingId) {
+            void window.electronAPI?.ragCancelQuery({ meetingId, requestId });
+        }
+        activeRequestIdRef.current = null;
+        cleanupActiveStreamListeners();
+        resetStreamBuffer();
+    }, [cleanupActiveStreamListeners, meetingContext.id, resetStreamBuffer]);
 
     // Submit initial query when overlay opens
     useEffect(() => {
@@ -227,11 +244,16 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
     // Reset state when overlay closes
     useEffect(() => {
         if (!isOpen) {
+            cancelActiveRequest();
             setChatState('idle');
             setMessages([]);
             setErrorMessage(null);
         }
-    }, [isOpen]);
+    }, [cancelActiveRequest, isOpen]);
+
+    useEffect(() => () => {
+        cancelActiveRequest();
+    }, [cancelActiveRequest]);
 
     // ESC key handler
     useEffect(() => {
@@ -252,41 +274,15 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
     }, []);
 
     const handleClose = useCallback(() => {
+        cancelActiveRequest();
         onClose();
-    }, [onClose]);
-
-    // Build context string for LLM
-    const buildContextString = useCallback((): string => {
-        const parts: string[] = [];
-
-        parts.push(`MEETING: ${meetingContext.title}`);
-
-        if (meetingContext.summary) {
-            parts.push(`\nSUMMARY:\n${meetingContext.summary}`);
-        }
-
-        if (meetingContext.keyPoints?.length) {
-            parts.push(`\nKEY POINTS:\n${meetingContext.keyPoints.map(p => `- ${p}`).join('\n')}`);
-        }
-
-        if (meetingContext.actionItems?.length) {
-            parts.push(`\nACTION ITEMS:\n${meetingContext.actionItems.map(a => `- ${a}`).join('\n')}`);
-        }
-
-        if (meetingContext.transcript?.length) {
-            const recentTranscript = meetingContext.transcript.slice(-20);
-            const transcriptText = recentTranscript
-                .map(t => `[${t.speaker === 'user' ? 'Me' : 'Them'}]: ${t.text}`)
-                .join('\n');
-            parts.push(`\nRECENT TRANSCRIPT:\n${transcriptText}`);
-        }
-
-        return parts.join('\n');
-    }, [meetingContext]);
+    }, [cancelActiveRequest, onClose]);
 
     // Submit question using RAG streaming
     const submitQuestion = useCallback(async (question: string) => {
-        if (!question.trim() || chatState === 'waiting_for_llm' || chatState === 'streaming_response') return;
+        if (!question.trim()) return;
+
+        cancelActiveRequest();
 
         const userMessage: Message = {
             id: genMessageId(),
@@ -303,10 +299,35 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
         }, 50);
 
         const assistantMessageId = genMessageId();
+        const requestId = genMessageId();
+        const meetingId = meetingContext.id;
+        activeRequestIdRef.current = requestId;
+
+        const replaceAssistant = (content: string) => {
+            setMessages(prev => prev.map(msg =>
+                msg.id === assistantMessageId
+                    ? { ...msg, content, isStreaming: false }
+                    : msg
+            ));
+        };
+
+        const isCurrentEvent = (
+            data: {
+                requestId?: string;
+                meetingId?: string;
+                global?: boolean;
+            }
+        ) => {
+            if (data.requestId !== activeRequestIdRef.current) return false;
+            if (data.meetingId !== meetingId) return false;
+            if (data.global === true) return false;
+            return true;
+        };
 
         try {
             // Add typing indicator delay (200ms) - makes the AI feel "thoughtful"
             await new Promise(resolve => setTimeout(resolve, 200));
+            if (activeRequestIdRef.current !== requestId) return;
 
             // Create assistant message placeholder
             setMessages(prev => [...prev, {
@@ -317,10 +338,12 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
             }]);
 
             // Set up RAG streaming listeners (RAF-batched to avoid per-token re-renders)
-            streamBuffer.reset();
-            const tokenCleanup = window.electronAPI?.onRAGStreamChunk((data: { chunk: string }) => {
+            resetStreamBuffer();
+            let cleanupListeners = () => {};
+            const tokenCleanup = window.electronAPI?.onRAGStreamChunk((data) => {
+                if (!isCurrentEvent(data)) return;
                 setChatState('streaming_response');
-                streamBuffer.appendToken(data.chunk, (content) => {
+                appendToken(data.chunk, (content) => {
                     setMessages(prev => prev.map(msg =>
                         msg.id === assistantMessageId
                             ? { ...msg, content }
@@ -329,153 +352,78 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
                 });
             });
 
-            const doneCleanup = window.electronAPI?.onRAGStreamComplete(() => {
+            const doneCleanup = window.electronAPI?.onRAGStreamComplete((data) => {
+                if (!isCurrentEvent(data)) return;
                 // Final commit — flush any remaining buffered content
-                const finalContent = streamBuffer.getBufferedContent();
-                setMessages(prev => prev.map(msg =>
-                    msg.id === assistantMessageId
-                        ? { ...msg, content: finalContent, isStreaming: false }
-                        : msg
-                ));
+                const finalContent = getBufferedContent();
+                replaceAssistant(finalContent);
                 setChatState('idle');
-                streamBuffer.reset();
-                tokenCleanup?.();
-                doneCleanup?.();
-                errorCleanup?.();
+                activeRequestIdRef.current = null;
+                resetStreamBuffer();
+                cleanupListeners();
             });
 
-            const errorCleanup = window.electronAPI?.onRAGStreamError((data: { error: string }) => {
-                console.error('[MeetingChat] RAG stream error:', data.error);
-                setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
-                setErrorMessage("Couldn't get a response. Please try again.");
+            const errorCleanup = window.electronAPI?.onRAGStreamError((data) => {
+                if (!isCurrentEvent(data)) return;
+                const message = 'message' in data
+                    ? data.message
+                    : '本次会议搜索暂时不可用，请稍后重试。';
+                replaceAssistant(message);
+                setErrorMessage(null);
                 setChatState('error');
-                streamBuffer.reset();
+                activeRequestIdRef.current = null;
+                resetStreamBuffer();
+                cleanupListeners();
+            });
+
+            cleanupListeners = () => {
                 tokenCleanup?.();
                 doneCleanup?.();
                 errorCleanup?.();
-            });
-
-            // Get meeting ID from context for RAG queries
-            const meetingId = meetingContext.id;
-
-            if (meetingId) {
-                // Use RAG-powered meeting query
-                const result = await window.electronAPI?.ragQueryMeeting(meetingId, question);
-
-                // If RAG not available (or failed), fall back to context-window chat
-                if (result?.fallback) {
-                    console.log("[MeetingChat] RAG unavailable, using context window fallback");
-                    // Cleanup RAG listeners since we won't use them
-                    tokenCleanup?.();
-                    doneCleanup?.();
-                    errorCleanup?.();
-
-                    // FALLBACK LOGIC
-                    const contextString = buildContextString();
-                    const systemPrompt = buildMeetingFallbackSystemPrompt(contextString);
-
-                    streamBuffer.reset();
-                    const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string) => {
-                        setChatState('streaming_response');
-                        streamBuffer.appendToken(token, (content) => {
-                            setMessages(prev => prev.map(msg =>
-                                msg.id === assistantMessageId
-                                    ? { ...msg, content }
-                                    : msg
-                            ));
-                        });
-                    });
-
-                    const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone(() => {
-                        const finalContent = streamBuffer.getBufferedContent();
-                        setMessages(prev => prev.map(msg =>
-                            msg.id === assistantMessageId
-                                ? { ...msg, content: finalContent, isStreaming: false }
-                                : msg
-                        ));
-                        setChatState('idle');
-                        streamBuffer.reset();
-                        oldTokenCleanup?.();
-                        oldDoneCleanup?.();
-                        oldErrorCleanup?.();
-                    });
-
-                    const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string) => {
-                        console.error('[MeetingChat] Gemini stream error (fallback):', error);
-                        setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
-                        setErrorMessage("Couldn't get a response. Please check your settings.");
-                        setChatState('error');
-                        streamBuffer.reset();
-                        oldTokenCleanup?.();
-                        oldDoneCleanup?.();
-                        oldErrorCleanup?.();
-                    });
-
-                    await window.electronAPI?.streamGeminiChat(
-                        question,
-                        undefined,
-                        systemPrompt,
-                        { skipSystemPrompt: true, ignoreKnowledgeMode: true }
-                    );
+                if (activeStreamCleanupRef.current === cleanupListeners) {
+                    activeStreamCleanupRef.current = null;
                 }
+            };
+            activeStreamCleanupRef.current = cleanupListeners;
+
+            const result: MeetingSearchResult = meetingId
+                ? await window.electronAPI.ragQueryMeeting({
+                    meetingId,
+                    query: question,
+                    requestId,
+                })
+                : { status: 'meeting_not_found', message: '无法找到本次会议。' };
+
+            if (activeRequestIdRef.current !== requestId) return;
+            if (result.status === 'success') return;
+            if (result.status === 'cancelled') {
+                setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
+                setChatState('idle');
             } else {
-                // No meeting ID, standard fallback
-                const contextString = buildContextString();
-                const systemPrompt = buildMeetingFallbackSystemPrompt(contextString);
-
-                // Switch to Gemini streaming (RAF-batched)
-                streamBuffer.reset();
-                const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string) => {
-                    setChatState('streaming_response');
-                    streamBuffer.appendToken(token, (content) => {
-                        setMessages(prev => prev.map(msg =>
-                            msg.id === assistantMessageId
-                                ? { ...msg, content }
-                                : msg
-                        ));
-                    });
-                });
-
-                const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone(() => {
-                    const finalContent = streamBuffer.getBufferedContent();
-                    setMessages(prev => prev.map(msg =>
-                        msg.id === assistantMessageId
-                            ? { ...msg, content: finalContent, isStreaming: false }
-                            : msg
-                    ));
-                    setChatState('idle');
-                    streamBuffer.reset();
-                    oldTokenCleanup?.();
-                    oldDoneCleanup?.();
-                    oldErrorCleanup?.();
-                });
-
-                const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string) => {
-                    console.error('[MeetingChat] Gemini stream error:', error);
-                    setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
-                    setErrorMessage("Couldn't get a response. Please check your settings.");
-                    setChatState('error');
-                    streamBuffer.reset();
-                    oldTokenCleanup?.();
-                    oldDoneCleanup?.();
-                    oldErrorCleanup?.();
-                });
-
-                await window.electronAPI?.streamGeminiChat(
-                    question,
-                    undefined,
-                    systemPrompt,
-                    { skipSystemPrompt: true, ignoreKnowledgeMode: true }
-                );
+                replaceAssistant(result.message);
+                setChatState(result.status === 'no_match' ? 'idle' : 'error');
             }
+            activeRequestIdRef.current = null;
+            resetStreamBuffer();
+            cleanupListeners();
 
-        } catch (error) {
-            console.error('[MeetingChat] Error:', error);
-            setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
-            setErrorMessage("Something went wrong. Please try again.");
+        } catch {
+            if (activeRequestIdRef.current !== requestId) return;
+            replaceAssistant('本次会议搜索暂时不可用，请稍后重试。');
+            setErrorMessage(null);
             setChatState('error');
+            activeRequestIdRef.current = null;
+            cleanupActiveStreamListeners();
+            resetStreamBuffer();
         }
-    }, [chatState, buildContextString, meetingContext]);
+    }, [
+        appendToken,
+        cancelActiveRequest,
+        cleanupActiveStreamListeners,
+        getBufferedContent,
+        meetingContext.id,
+        resetStreamBuffer,
+    ]);
 
     return (
         <AnimatePresence>

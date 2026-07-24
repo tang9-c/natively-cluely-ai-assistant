@@ -232,8 +232,9 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                 errorCleanup?.();
             });
 
-            const errorCleanup = window.electronAPI?.onRAGStreamError((data: { error: string }) => {
-                console.error('[GlobalChat] RAG stream error:', data.error);
+            const errorCleanup = window.electronAPI?.onRAGStreamError((data) => {
+                const error = 'error' in data ? data.error : data.message;
+                console.error('[GlobalChat] RAG stream error:', error);
                 setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
                 setErrorMessage("Couldn't get a response. Please try again.");
                 setChatState('error');

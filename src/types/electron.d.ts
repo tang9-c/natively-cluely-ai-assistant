@@ -1,6 +1,13 @@
 import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
 export type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
 import type { ContextNeedDecision } from '../../shared/contextNeedDecision'
+import type {
+  MeetingSearchChunkEvent,
+  MeetingSearchCompleteEvent,
+  MeetingSearchErrorEvent,
+  MeetingSearchRequest,
+  MeetingSearchResult,
+} from '../../shared/meetingSearch'
 export type {
   ContextNeedDecision,
   ContextNeedDecisionSource,
@@ -912,13 +919,13 @@ export interface ElectronAPI {
 
   // RAG (Retrieval-Augmented Generation) API
   // @ipc-channel rag:query-meeting
-  ragQueryMeeting: (meetingId: string, query: string) => Promise<{ success?: boolean; fallback?: boolean; error?: string }>
+  ragQueryMeeting: (request: MeetingSearchRequest) => Promise<MeetingSearchResult>
   // @ipc-channel rag:query-live
   ragQueryLive: (query: string) => Promise<{ success?: boolean; fallback?: boolean; error?: string }>
   // @ipc-channel rag:query-global
   ragQueryGlobal: (query: string) => Promise<{ success?: boolean; fallback?: boolean; error?: string }>
   // @ipc-channel rag:cancel-query
-  ragCancelQuery: (options: { meetingId?: string; global?: boolean }) => Promise<{ success: boolean }>
+  ragCancelQuery: (options: { meetingId?: string; requestId?: string; global?: boolean }) => Promise<{ success: boolean }>
   // @ipc-channel rag:is-meeting-processed
   ragIsMeetingProcessed: (meetingId: string) => Promise<boolean>
   // @ipc-channel rag:get-queue-status
@@ -947,9 +954,9 @@ export interface ElectronAPI {
   knowledgeDeleteMaterial: (id: string) => Promise<{ success: boolean; error?: string }>
   // @ipc-channel knowledge:reindex-material
   knowledgeReindexMaterial: (id: string) => Promise<{ success: boolean; material?: KnowledgeMaterial; error?: string }>
-  onRAGStreamChunk: (callback: (data: { meetingId?: string; global?: boolean; chunk: string }) => void) => () => void
-  onRAGStreamComplete: (callback: (data: { meetingId?: string; global?: boolean }) => void) => () => void
-  onRAGStreamError: (callback: (data: { meetingId?: string; global?: boolean; error: string }) => void) => () => void
+  onRAGStreamChunk: (callback: (data: MeetingSearchChunkEvent | { meetingId?: string; global?: boolean; live?: boolean; chunk: string }) => void) => () => void
+  onRAGStreamComplete: (callback: (data: MeetingSearchCompleteEvent | { meetingId?: string; global?: boolean; live?: boolean }) => void) => () => void
+  onRAGStreamError: (callback: (data: MeetingSearchErrorEvent | { meetingId?: string; global?: boolean; live?: boolean; error: string }) => void) => () => void
 
   // Keybind Management
   getKeybinds: () => Promise<Array<{ id: string; label: string; accelerator: string; isGlobal: boolean; defaultAccelerator: string }>>
