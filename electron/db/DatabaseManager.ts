@@ -1563,6 +1563,21 @@ export class DatabaseManager {
             this.db.pragma('user_version = 30');
         }
 
+        // Version 30 -> 31: Track whether persisted RAG chunks represent the
+        // complete current transcript. Existing chunks are preserved and
+        // treated as unverified until the meeting is searched or reprocessed.
+        if (version < 31) {
+            console.log('[DatabaseManager] Applying migration v30 -> v31: Add meeting RAG index state');
+            this.db.transaction(() => {
+                this.db.exec('ALTER TABLE meetings ADD COLUMN rag_transcript_hash TEXT');
+                this.db.exec(`
+                    ALTER TABLE meetings
+                    ADD COLUMN rag_index_state TEXT NOT NULL DEFAULT 'missing'
+                `);
+                this.db.pragma('user_version = 31');
+            })();
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
