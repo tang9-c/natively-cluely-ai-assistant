@@ -16,6 +16,19 @@ export const SALES_INTENT_ENUM = [
   'discovery_probe',
 ];
 
+const KEYWORD_INTENT_HINTS = {
+  sales_pain_discovery: ['不同步', 'Excel', '停线', '痛苦', '断链', '重复录入', '不一致'],
+  sales_capability_fit: ['能不能', '是否适合', '可不可以', '支持', '校验'],
+  sales_process_integration: ['闭环', '同步', '打通', '集成'],
+  sales_value_discovery: ['周期', '良率', '审计', '返工', '效率'],
+  sales_contextual_proof_discovery: ['只读', '人工确认', '类似', '案例', '制造客户'],
+  sales_technical_requirements: ['API', 'SSO', 'SAML', 'OAuth', 'SOC2', '部署', '生产环境'],
+  sales_proof_request: ['客户案例', 'ROI', '参考客户', '案例'],
+  sales_quote_request: ['报价单', '商务条款', '多少钱', '报价', '价格页'],
+  sales_pricing_objection: ['预算', '太贵', '太高', '打折', '折扣', '负担不起'],
+  sales_buying_signal: ['下一步', '法务', '法律', '审核', '发合同', '准备签', '敲定'],
+};
+
 const REQUIRED_TOP_LEVEL_KEYS = [
   'id', 'title', 'language', 'total_duration_ms',
   'speakers', 'scenarios', 'segments', 'expected_intent_coverage',
@@ -78,18 +91,6 @@ export function validateSalesTranscriptFixture(fixturePath) {
     if (seg.expected_intent) {
       coverageReport[seg.expected_intent] = (coverageReport[seg.expected_intent] ?? 0) + 1;
       // trigger_keywords ↔ expected_intent 配对（warning 不阻断）
-      const KEYWORD_INTENT_HINTS = {
-        sales_pain_discovery: ['不同步', 'Excel', '停线', '痛苦', '断链', '重复录入', '不一致'],
-        sales_capability_fit: ['能不能', '是否适合', '可不可以', '支持', '校验'],
-        sales_process_integration: ['闭环', '同步', '打通', '集成'],
-        sales_value_discovery: ['周期', '良率', '审计', '返工', '效率'],
-        sales_contextual_proof_discovery: ['只读', '人工确认', '类似', '案例', '制造客户'],
-        sales_technical_requirements: ['API', 'SSO', 'SAML', 'OAuth', 'SOC2', '部署', '生产环境'],
-        sales_proof_request: ['客户案例', 'ROI', '参考客户', '案例'],
-        sales_quote_request: ['报价单', '商务条款', '多少钱', '报价', '价格页'],
-        sales_pricing_objection: ['预算', '太贵', '太高', '打折', '折扣', '负担不起'],
-        sales_buying_signal: ['下一步', '法务', '法律', '审核', '发合同', '准备签', '敲定'],
-      };
       const hints = KEYWORD_INTENT_HINTS[seg.expected_intent];
       if (hints) {
         const matched = (seg.trigger_keywords ?? []).some(kw => hints.some(h => kw.includes(h) || h.includes(kw)));
@@ -122,5 +123,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
   const result = validateSalesTranscriptFixture(target);
   console.log(JSON.stringify(result, null, 2));
-  process.exit(result.ok && result.warnings.length === 0 ? 0 : 1);
+  process.exit(result.ok ? 0 : 1);
 }
