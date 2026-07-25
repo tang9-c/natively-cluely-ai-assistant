@@ -1,5 +1,7 @@
 export const QCLOUD_LLM_BASE_URL = "https://obzbovrjewzd.sealosbja.site";
 export const QCLOUD_CHAT_MODEL = "lite32k";
+export const QCLOUD_SKILL_CHAT_MODEL = "turbo";
+export const QCLOUD_MEETING_SUMMARY_MODEL = "turbo";
 export const QCLOUD_DEFAULT_OUTPUT_TOKENS = 8_192;
 export const QCLOUD_PPTX_ENHANCE_OUTPUT_TOKENS = 2_048;
 export const QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS = 12_000;

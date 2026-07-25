@@ -418,10 +418,11 @@ test('WhatToAnswerLLM activeSkill injects skill and suppresses active mode suffi
   assert.equal(chunks.join(''), 'ok');
   assert.equal(calls.length, 1);
 
-  const [message, _imagePaths, context, systemPromptOverride, ignoreKnowledgeMode, skipModeInjection] = calls[0];
+  const [message, _imagePaths, context, systemPromptOverride, ignoreKnowledgeMode, skipModeInjection, _packetScopes, chatPromptOptions] = calls[0];
   assert.equal(context, undefined);
   assert.equal(ignoreKnowledgeMode, true);
   assert.equal(skipModeInjection, true);
+  assert.equal(chatPromptOptions.qcloudModel, 'turbo');
   assert.match(systemPromptOverride, /## ACTIVE SKILL/);
   assert.match(systemPromptOverride, /SKILL_SENTINEL/);
   assert.doesNotMatch(systemPromptOverride, /MODE_SENTINEL_SHOULD_NOT_APPEAR/);

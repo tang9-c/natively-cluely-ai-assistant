@@ -29,8 +29,11 @@ import {
   QCLOUD_CHAT_COMPLETIONS_ENDPOINT,
   QCLOUD_CHAT_MODEL,
   QCLOUD_DEFAULT_OUTPUT_TOKENS,
+  QCLOUD_MEETING_SUMMARY_MODEL,
   QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS,
+  QCLOUD_MODEL_SPECS,
   QCLOUD_OPENAI_SDK_BASE_URL,
+  QCLOUD_SKILL_CHAT_MODEL,
   getQCloudModelSpec,
 } from "./llm/QCloudLlmConstants"
 import type { TranscriptTurn } from "./llm/transcriptCleaner"
@@ -82,6 +85,7 @@ interface StructuredGenerationOptions {
 interface ProviderRequestOptions {
   maxOutputTokens?: number;
   timeoutMs?: number;
+  qcloudModel?: string;
   dataScopes?: ProviderDataScope[];
   requestId?: string;
   requestSource?: 'automatic' | 'manual' | 'dynamic_action' | 'other';
@@ -190,8 +194,13 @@ export class LLMHelper {
     return getQCloudModelSpec(model).maxOutputTokens;
   }
 
-  private clampQCloudMaxOutputTokens(requested?: number): number {
-    const max = this.getQCloudMaxOutputTokens(QCLOUD_CHAT_MODEL);
+  private resolveQCloudRequestModel(options: ProviderRequestOptions = {}): string {
+    const requested = options.qcloudModel?.trim();
+    return requested && QCLOUD_MODEL_SPECS[requested] ? requested : QCLOUD_CHAT_MODEL;
+  }
+
+  private clampQCloudMaxOutputTokens(requested?: number, model: string = QCLOUD_CHAT_MODEL): number {
+    const max = this.getQCloudMaxOutputTokens(model);
     const value = requested ?? QCLOUD_DEFAULT_OUTPUT_TOKENS;
     return Math.max(1, Math.min(value, max));
   }
@@ -1670,6 +1679,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       // System prompts for OpenAI/Claude/Codex CLI (skipped if skipSystemPrompt)
       const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(buildProviderSystemPrompt(OPENAI_SYSTEM_PROMPT));
       const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(buildProviderSystemPrompt(CLAUDE_SYSTEM_PROMPT));
+      const qcloudChatModel = chatPromptOptions?.qcloudModel
+        ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_MODEL : undefined);
 
       if (ollamaAvailable) {
         return await this.callOllama(combinedMessages.gemini, imagePaths, undefined);
@@ -1707,6 +1718,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             return await this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudImagePaths, {
               maxOutputTokens: chatPromptOptions?.maxOutputTokens,
               timeoutMs: chatPromptOptions?.totalTimeoutMs,
+              qcloudModel: qcloudChatModel,
             });
           } catch (err: any) {
             console.warn('[LLMHelper] QCLOUD API failed in chatWithGemini, falling back to Gemini:', err.message);
@@ -1786,6 +1798,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
               execute: () => this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined, {
                 maxOutputTokens: chatPromptOptions?.maxOutputTokens,
                 timeoutMs: chatPromptOptions?.totalTimeoutMs,
+                qcloudModel: qcloudChatModel,
               }),
             });
             break;
@@ -2201,10 +2214,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const endpointUrl = QCLOUD_CHAT_COMPLETIONS_ENDPOINT;
     const headers: any = { 'Content-Type': 'application/json', Authorization: `Bearer ${nativelyKey}` };
 
+    const qcloudModel = this.resolveQCloudRequestModel(_options);
     const body: any = {
-      model: QCLOUD_CHAT_MODEL,
+      model: qcloudModel,
       messages: [{ role: 'user', content: userMessage }],
-      max_tokens: this.clampQCloudMaxOutputTokens(_options.maxOutputTokens),
+      max_tokens: this.clampQCloudMaxOutputTokens(_options.maxOutputTokens, qcloudModel),
     };
 
     // Send images as a structured array so the server can build proper Gemini inlineData parts.
@@ -3328,6 +3342,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     });
     const baseSystemPrompt = buildProviderSystemPrompt(HARD_SYSTEM_PROMPT);
     const finalSystemPrompt = this.injectLanguageInstruction(baseSystemPrompt);
+    const qcloudChatModel = chatPromptOptions?.qcloudModel
+      ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_MODEL : undefined);
     // Profile context is already merged into `context` above; cloud and local
     // providers now receive the same combined context.
     const combinedContext = context;
@@ -3427,6 +3443,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       if (!this.hasNatively()) throw new Error('QCLOUD API key not set');
       yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, {
         maxOutputTokens: chatPromptOptions?.maxOutputTokens,
+        qcloudModel: qcloudChatModel,
         dataScopes: ['transcript', ...this.inferContextScopes(cloudCombinedContext)],
         requestId: chatPromptOptions?.requestId,
         requestSource: chatPromptOptions?.requestSource,
@@ -3457,7 +3474,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // 5. Last-resort: QCLOUD API (if user has a key but no cloud provider configured)
     if (this.hasNatively()) {
       try {
-        yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, { maxOutputTokens: chatPromptOptions?.maxOutputTokens });
+        yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, {
+          maxOutputTokens: chatPromptOptions?.maxOutputTokens,
+          qcloudModel: qcloudChatModel,
+        });
         return;
       } catch (e: any) {
         console.warn('[LLMHelper] QCLOUD API last-resort fallback failed:', e.message);
@@ -3501,11 +3521,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
     if (!nativelyKey) throw new Error('QCLOUD API key not set');
 
+    const qcloudModel = this.resolveQCloudRequestModel(options);
     const body: Record<string, unknown> = {
-      model: QCLOUD_CHAT_MODEL,
+      model: qcloudModel,
       messages: [{ role: 'user', content: userContent }],
       stream: true,
-      max_tokens: this.clampQCloudMaxOutputTokens(options.maxOutputTokens),
+      max_tokens: this.clampQCloudMaxOutputTokens(options.maxOutputTokens, qcloudModel),
     };
     if (systemPrompt) body.system = systemPrompt;
     if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {
@@ -4799,7 +4820,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         console.log(`[LLMHelper] Attempting QCLOUD API for summary...`);
         const qcloudSummaryTimeoutMs = 60_000;
         const text = await this.withTimeout(
-          this.generateWithNatively(`Context:\n${context}`, systemPrompt, undefined, { maxOutputTokens: QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS, timeoutMs: qcloudSummaryTimeoutMs }),
+          this.generateWithNatively(`Context:\n${context}`, systemPrompt, undefined, {
+            maxOutputTokens: QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS,
+            timeoutMs: qcloudSummaryTimeoutMs,
+            qcloudModel: QCLOUD_MEETING_SUMMARY_MODEL,
+          }),
           qcloudSummaryTimeoutMs + 5000,
           'QCLOUD API Summary'
         );

@@ -13,6 +13,7 @@ export interface ChatPromptAssemblyInput {
 export interface ChatPromptOptions {
   activeModePrompt?: string;
   activeSkill?: ActiveSkillForPrompt | null;
+  qcloudModel?: string;
   maxOutputTokens?: number;
   requestId?: string;
   requestSource?: 'automatic' | 'manual' | 'dynamic_action' | 'other';

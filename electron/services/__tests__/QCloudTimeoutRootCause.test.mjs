@@ -50,16 +50,17 @@ test('non-streaming chat propagates total timeout to Natively provider calls', (
 
 test('meeting summary gives QCLOUD a summary-sized timeout budget', () => {
   const llm = read('electron/LLMHelper.ts');
+  const constants = read('electron/llm/QCloudLlmConstants.ts');
   const summaryBlock = llm.slice(
     llm.indexOf('// ATTEMPT 1: QCLOUD API'),
     llm.indexOf('// ATTEMPT 2:', llm.indexOf('// ATTEMPT 1: QCLOUD API')),
   );
 
+  assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_MODEL = "turbo"/);
   assert.match(summaryBlock, /const qcloudSummaryTimeoutMs = 60_000;/);
-  assert.match(
-    summaryBlock,
-    /\{ maxOutputTokens: QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS, timeoutMs: qcloudSummaryTimeoutMs \}/,
-  );
+  assert.match(summaryBlock, /maxOutputTokens:\s*QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS/);
+  assert.match(summaryBlock, /timeoutMs:\s*qcloudSummaryTimeoutMs/);
+  assert.match(summaryBlock, /qcloudModel:\s*QCLOUD_MEETING_SUMMARY_MODEL/);
   assert.match(summaryBlock, /qcloudSummaryTimeoutMs \+ 5000/);
 });
 

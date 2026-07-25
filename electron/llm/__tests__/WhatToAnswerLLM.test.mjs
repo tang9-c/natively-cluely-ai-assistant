@@ -208,6 +208,8 @@ test('generateStream() substitutes activeSkill promptBlock for the mode suffix a
 
   assert.equal(buildRetrievedCalled, false, 'skill mode must skip mode-context retrieval');
   const systemPrompt = helper.calls[0][3];
+  const chatPromptOptions = helper.calls[0][7];
+  assert.equal(chatPromptOptions.qcloudModel, 'turbo');
   assert.match(systemPrompt, /CUSTOM_SKILL_BLOCK_HERE/);
   assert.doesNotMatch(systemPrompt, /## ACTIVE MODE\nMODE_SUFFIX/);
   assert.doesNotMatch(systemPrompt, new RegExp(SECRET_TOKEN));

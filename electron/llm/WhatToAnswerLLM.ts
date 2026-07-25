@@ -2,6 +2,7 @@ import { LLMHelper } from "../LLMHelper";
 import { UNIVERSAL_WHAT_TO_ANSWER_PROMPT } from "./prompts";
 import { TINY_WHAT_TO_ANSWER_PROMPT } from "./tinyPrompts";
 import { estimateTokens } from "./modelCapabilities";
+import { QCLOUD_SKILL_CHAT_MODEL } from "./QCloudLlmConstants";
 import { TemporalContext } from "./TemporalContextBuilder";
 import { IntentResult } from "./IntentClassifier";
 import { ScreenContext } from "../services/screen/types";
@@ -483,6 +484,9 @@ ANSWER SHAPE: ${intentResult.answerShape}
             if (modeContextBlock) packetScopes.push('reference_files');
             if (uploadedMaterialContext) packetScopes.push('reference_files');
             if (temporalContext?.hasRecentResponses && temporalContext.previousResponses.length > 0) packetScopes.push('profile_history');
+            const streamChatOptions = activeSkill
+                ? { ...(requestOptions ?? {}), qcloudModel: QCLOUD_SKILL_CHAT_MODEL }
+                : requestOptions;
             for await (const token of this.llmHelper.streamChat(
                 packet.userMessage,
                 imagePaths,
@@ -491,7 +495,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 true,
                 true,
                 packetScopes,
-                requestOptions,
+                streamChatOptions,
             )) {
                 if (MEASURE) {
                     const now = performance.now();

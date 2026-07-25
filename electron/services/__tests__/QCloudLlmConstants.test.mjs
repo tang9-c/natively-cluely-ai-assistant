@@ -13,6 +13,8 @@ test('Electron exposes centralized QCloud LLM constants', () => {
 
   assert.match(constants, /export const QCLOUD_LLM_BASE_URL = "https:\/\/obzbovrjewzd\.sealosbja\.site"/);
   assert.match(constants, /export const QCLOUD_CHAT_MODEL = "lite32k"/);
+  assert.match(constants, /export const QCLOUD_SKILL_CHAT_MODEL = "turbo"/);
+  assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_MODEL = "turbo"/);
   assert.match(constants, /export const QCLOUD_CHAT_ENDPOINT = `\$\{QCLOUD_LLM_BASE_URL\}\/v1\/chat`/);
   assert.match(constants, /export const QCLOUD_MODELS_ENDPOINT = `\$\{QCLOUD_LLM_BASE_URL\}\/v1\/models`/);
   assert.match(constants, /export const QCLOUD_CHAT_COMPLETIONS_ENDPOINT = `\$\{QCLOUD_LLM_BASE_URL\}\/v1\/chat\/completions`/);
@@ -51,11 +53,26 @@ test('LLMHelper routes QCLOUD chat calls through centralized endpoint and model'
   const helper = read('electron/LLMHelper.ts');
 
   assert.match(helper, /QCLOUD_CHAT_COMPLETIONS_ENDPOINT/);
-  assert.match(helper, /model:\s*QCLOUD_CHAT_MODEL/);
-  assert.match(helper, /max_tokens:\s*this\.clampQCloudMaxOutputTokens\(_options\.maxOutputTokens\)/);
-  assert.match(helper, /max_tokens:\s*this\.clampQCloudMaxOutputTokens\(options\.maxOutputTokens\)/);
+  assert.match(helper, /private resolveQCloudRequestModel\(options:\s*ProviderRequestOptions\s*=\s*\{\}\):\s*string/);
+  assert.match(helper, /return requested && QCLOUD_MODEL_SPECS\[requested\] \? requested : QCLOUD_CHAT_MODEL/);
+  assert.match(helper, /const qcloudModel = this\.resolveQCloudRequestModel\(_options\)/);
+  assert.match(helper, /const qcloudModel = this\.resolveQCloudRequestModel\(options\)/);
+  assert.match(helper, /model:\s*qcloudModel/);
+  assert.match(helper, /max_tokens:\s*this\.clampQCloudMaxOutputTokens\(_options\.maxOutputTokens,\s*qcloudModel\)/);
+  assert.match(helper, /max_tokens:\s*this\.clampQCloudMaxOutputTokens\(options\.maxOutputTokens,\s*qcloudModel\)/);
   assert.doesNotMatch(helper, /https:\/\/api\.natively\.software\/v1\/chat/);
   assert.doesNotMatch(helper, /fetch\(QCLOUD_CHAT_ENDPOINT/);
+});
+
+test('LLMHelper uses turbo for QCLOUD skill and meeting summary requests only', () => {
+  const helper = read('electron/LLMHelper.ts');
+
+  assert.match(helper, /QCLOUD_SKILL_CHAT_MODEL/);
+  assert.match(helper, /QCLOUD_MEETING_SUMMARY_MODEL/);
+  assert.match(helper, /chatPromptOptions\?\.activeSkill\s*\?\s*QCLOUD_SKILL_CHAT_MODEL\s*:\s*undefined/);
+  assert.match(helper, /qcloudModel:\s*qcloudChatModel/);
+  assert.match(helper, /qcloudModel:\s*QCLOUD_MEETING_SUMMARY_MODEL/);
+  assert.match(helper, /this\.generateWithNatively\(`Context:\\n\$\{context\}`,\s*systemPrompt,\s*undefined,\s*\{[\s\S]{0,180}QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS[\s\S]{0,180}qcloudModel:\s*QCLOUD_MEETING_SUMMARY_MODEL/);
 });
 
 test('LLMHelper passes explicit QCLOUD output budgets for chat and PPTX call sites', () => {
