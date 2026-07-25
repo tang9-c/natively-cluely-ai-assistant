@@ -61,7 +61,7 @@
     "test:stt:qcloud-auc:matrix": "npm run build:electron && node scripts/run-stt-provider-matrix-local.mjs --providers qcloud-auc --parameter-groups all",
     "test:stt:provider-matrix:local": "npm run build:electron && node scripts/run-stt-provider-matrix-local.mjs",
     "test:stt:segmentation:unit": "npm run build:electron && node --test electron/audio/__tests__/SttSegmentation.test.mjs",
-    "test:sales-transcript": "node tests/utils/sales-transcript-fixture-validator.mjs tests/fixtures/demo/03_master_transcript/sales/sales_full_lifecycle_meeting.json && ELECTRON_E2E=1 npx playwright test tests/e2e/sales-transcript-lifecycle.spec.ts"
+    "test:sales-transcript": "npm run build:electron && node tests/utils/sales-transcript-fixture-validator.mjs tests/fixtures/demo/03_master_transcript/sales/sales_full_lifecycle_meeting.json && ELECTRON_E2E=1 npx playwright test tests/e2e/sales-transcript-lifecycle.spec.ts"
   },
   "build": {
     "generateUpdatesFilesForAllChannels": true,
