@@ -1,0 +1,664 @@
+{
+  "id": "sales_full_lifecycle_meeting",
+  "title": "Natively SaaS 销售全生命周期示例会议",
+  "language": "zh",
+  "total_duration_ms": 560000,
+  "speakers": [
+    {
+      "id": "S1",
+      "name": "李销售",
+      "role": "user",
+      "speaker_label": "李销售 (你)",
+      "scenarios": [
+        "s1_discovery",
+        "s2_tech",
+        "s3_value",
+        "s4_quote",
+        "s5_pricing",
+        "s6_close"
+      ]
+    },
+    {
+      "id": "S2",
+      "name": "张采购",
+      "role": "customer",
+      "speaker_label": "张采购 (客户采购决策人)",
+      "scenarios": [
+        "s1_discovery",
+        "s3_value",
+        "s4_quote",
+        "s5_pricing",
+        "s6_close"
+      ]
+    },
+    {
+      "id": "S3",
+      "name": "王技术",
+      "role": "customer",
+      "speaker_label": "王技术 (客户 IT 架构师)",
+      "scenarios": [
+        "s1_discovery",
+        "s2_tech",
+        "s3_value"
+      ]
+    },
+    {
+      "id": "S4",
+      "name": "周经理",
+      "role": "internal",
+      "speaker_label": "周经理 (销售经理)",
+      "scenarios": [
+        "s6_close"
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "s1_discovery",
+      "title": "开场 + 需求发现",
+      "template_type": "sales",
+      "start_ms": 0,
+      "end_ms": 90000,
+      "expected_intents": [
+        "sales_pain_discovery",
+        "sales_capability_fit"
+      ],
+      "expected_assists": [
+        "discovery_question (pain)",
+        "discovery_question (capability_fit)"
+      ]
+    },
+    {
+      "id": "s2_tech",
+      "title": "技术深挖",
+      "template_type": "sales",
+      "start_ms": 90000,
+      "end_ms": 200000,
+      "expected_intents": [
+        "sales_technical_requirements",
+        "sales_process_integration"
+      ],
+      "expected_assists": [
+        "technical_requirements",
+        "discovery_question (process_integration)"
+      ]
+    },
+    {
+      "id": "s3_value",
+      "title": "价值对齐",
+      "template_type": "sales",
+      "start_ms": 200000,
+      "end_ms": 280000,
+      "expected_intents": [
+        "sales_value_discovery",
+        "sales_contextual_proof_discovery"
+      ],
+      "expected_assists": [
+        "discovery_question (value)",
+        "discovery_question (contextual_proof)"
+      ]
+    },
+    {
+      "id": "s4_quote",
+      "title": "案例 + 报价",
+      "template_type": "sales",
+      "start_ms": 280000,
+      "end_ms": 360000,
+      "expected_intents": [
+        "sales_proof_request",
+        "sales_quote_request"
+      ],
+      "expected_assists": [
+        "case_study_request",
+        "pricing_request"
+      ]
+    },
+    {
+      "id": "s5_pricing",
+      "title": "价格异议",
+      "template_type": "sales",
+      "start_ms": 360000,
+      "end_ms": 440000,
+      "expected_intents": [
+        "sales_pricing_objection"
+      ],
+      "expected_assists": [
+        "pricing_objection"
+      ]
+    },
+    {
+      "id": "s6_close",
+      "title": "签约 + 内部复盘",
+      "template_type": "sales",
+      "start_ms": 440000,
+      "end_ms": 560000,
+      "expected_intents": [
+        "sales_buying_signal"
+      ],
+      "expected_assists": [
+        "buying_signal"
+      ]
+    }
+  ],
+  "segments": [
+    {
+      "id": "seg-001",
+      "scenario": "s1_discovery",
+      "speaker_id": "S1",
+      "speaker_label": "李销售 (你)",
+      "start_ms": 0,
+      "end_ms": 5500,
+      "text": "张总、王工,你们好,我是李销售,今天主要想聊聊 Natively 在 PLM/ERP 场景下的实操经验。",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-002",
+      "scenario": "s1_discovery",
+      "speaker_id": "S2",
+      "speaker_label": "张采购 (客户采购决策人)",
+      "start_ms": 5500,
+      "end_ms": 22000,
+      "text": "我们 PLM 发布 BOM 之后,靠邮件通知下游,经常不同步,设计变更下去了采购还在用旧版本。",
+      "trigger_keywords": [
+        "不同步",
+        "PLM",
+        "BOM"
+      ],
+      "expected_intent": "sales_pain_discovery",
+      "expected_assist": "discovery_question (pain)"
+    },
+    {
+      "id": "seg-003",
+      "scenario": "s1_discovery",
+      "speaker_id": "S1",
+      "speaker_label": "李销售 (你)",
+      "start_ms": 22000,
+      "end_ms": 30000,
+      "text": "不同步具体卡在哪一步?是发布、审批还是物料同步?",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-004",
+      "scenario": "s1_discovery",
+      "speaker_id": "S2",
+      "speaker_label": "张采购 (客户采购决策人)",
+      "start_ms": 30000,
+      "end_ms": 50000,
+      "text": "现场执行发现设计变更不同步,导致停线,客诉也走 Excel 流程,很痛苦。",
+      "trigger_keywords": [
+        "不同步",
+        "停线",
+        "Excel"
+      ],
+      "expected_intent": "sales_pain_discovery",
+      "expected_assist": "discovery_question (pain)"
+    },
+    {
+      "id": "seg-005",
+      "scenario": "s1_discovery",
+      "speaker_id": "S3",
+      "speaker_label": "王技术 (客户 IT 架构师)",
+      "start_ms": 50000,
+      "end_ms": 70000,
+      "text": "你们能不能校验 SAP 物料和 PLM BOM 一致性?AI Agent 是只读还是能写回?",
+      "trigger_keywords": [
+        "SAP",
+        "PLM",
+        "BOM",
+        "AI Agent"
+      ],
+      "expected_intent": "sales_capability_fit",
+      "expected_assist": "discovery_question (capability_fit)"
+    },
+    {
+      "id": "seg-006",
+      "scenario": "s1_discovery",
+      "speaker_id": "S1",
+      "speaker_label": "李销售 (你)",
+      "start_ms": 70000,
+      "end_ms": 78000,
+      "text": "我们默认只读,这个后面可以单独配置。你们场景里的写回边界是什么?",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-007",
+      "scenario": "s1_discovery",
+      "speaker_id": "S3",
+      "speaker_label": "王技术 (客户 IT 架构师)",
+      "start_ms": 78000,
+      "end_ms": 90000,
+      "text": "只读 AI Agent 先帮我们查,不要自动写回 PLM,人工确认后才推进。",
+      "trigger_keywords": [
+        "只读",
+        "AI Agent",
+        "PLM",
+        "人工确认"
+      ],
+      "expected_intent": "sales_capability_fit",
+      "expected_assist": "discovery_question (capability_fit)"
+    },
+    {
+      "id": "seg-008",
+      "scenario": "s1_discovery",
+      "speaker_id": "S2",
+      "speaker_label": "张采购 (客户采购决策人)",
+      "start_ms": 1,
+      "end_ms": 2,
+      "text": "_placeholder_seg008_",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-009",
+      "scenario": "s1_discovery",
+      "speaker_id": "S1",
+      "speaker_label": "李销售 (你)",
+      "start_ms": 2,
+      "end_ms": 3,
+      "text": "_placeholder_seg009_",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-010",
+      "scenario": "s1_discovery",
+      "speaker_id": "S2",
+      "speaker_label": "张采购 (客户采购决策人)",
+      "start_ms": 3,
+      "end_ms": 4,
+      "text": "_placeholder_seg010_",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-011",
+      "scenario": "s2_tech",
+      "speaker_id": "S3",
+      "speaker_label": "王技术 (客户 IT 架构师)",
+      "start_ms": 90000,
+      "end_ms": 130000,
+      "text": "生产环境的部署要求说一下,SSO 对接是 SAML 还是 OAuth?API 走 REST?",
+      "trigger_keywords": [
+        "部署",
+        "SSO",
+        "SAML",
+        "OAuth",
+        "API",
+        "生产环境"
+      ],
+      "expected_intent": "sales_technical_requirements",
+      "expected_assist": "technical_requirements"
+    },
+    {
+      "id": "seg-012",
+      "scenario": "s2_tech",
+      "speaker_id": "S1",
+      "speaker_label": "李销售 (你)",
+      "start_ms": 130000,
+      "end_ms": 145000,
+      "text": "SAML/OAuth 都支持,API 是 REST,生产环境默认多可用区部署。",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-013",
+      "scenario": "s2_tech",
+      "speaker_id": "S3",
+      "speaker_label": "王技术 (客户 IT 架构师)",
+      "start_ms": 145000,
+      "end_ms": 170000,
+      "text": "SOC2 是哪种报告?数据驻留要国内,安全合规要求确认一下。",
+      "trigger_keywords": [
+        "SOC2",
+        "数据驻留",
+        "安全"
+      ],
+      "expected_intent": "sales_technical_requirements",
+      "expected_assist": "technical_requirements"
+    },
+    {
+      "id": "seg-014",
+      "scenario": "s2_tech",
+      "speaker_id": "S1",
+      "speaker_label": "李销售 (你)",
+      "start_ms": 170000,
+      "end_ms": 180000,
+      "text": "我们有 SOC2 Type II,数据驻留可选国内/海外区域。",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-015",
+      "scenario": "s2_tech",
+      "speaker_id": "S2",
+      "speaker_label": "张采购 (客户采购决策人)",
+      "start_ms": 180000,
+      "end_ms": 185000,
+      "text": "流程打通这块也说说?",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-016",
+      "scenario": "s2_tech",
+      "speaker_id": "S2",
+      "speaker_label": "张采购 (客户采购决策人)",
+      "start_ms": 185000,
+      "end_ms": 200000,
+      "text": "你们 Windchill ECO 推 ERP,QMS CAPA 那边怎么形成闭环?",
+      "trigger_keywords": [
+        "Windchill",
+        "ECO",
+        "ERP",
+        "QMS",
+        "CAPA",
+        "闭环"
+      ],
+      "expected_intent": "sales_process_integration",
+      "expected_assist": "discovery_question (process_integration)"
+    },
+    {
+      "id": "seg-017",
+      "scenario": "s2_tech",
+      "speaker_id": "S1",
+      "speaker_label": "李销售 (你)",
+      "start_ms": 90001,
+      "end_ms": 90002,
+      "text": "_placeholder_seg017_",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-018",
+      "scenario": "s3_value",
+      "speaker_id": "S2",
+      "speaker_label": "张采购 (客户采购决策人)",
+      "start_ms": 200000,
+      "end_ms": 230000,
+      "text": "现在变更影响分析太慢,一个周期拖三周,审计压力大,良率也受影响。",
+      "trigger_keywords": [
+        "变更影响分析",
+        "周期",
+        "审计压力",
+        "良率"
+      ],
+      "expected_intent": "sales_value_discovery",
+      "expected_assist": "discovery_question (value)"
+    },
+    {
+      "id": "seg-019",
+      "scenario": "s3_value",
+      "speaker_id": "S1",
+      "speaker_label": "李销售 (你)",
+      "start_ms": 200001,
+      "end_ms": 200002,
+      "text": "_placeholder_seg019_",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-020",
+      "scenario": "s3_value",
+      "speaker_id": "S2",
+      "speaker_label": "张采购 (客户采购决策人)",
+      "start_ms": 200002,
+      "end_ms": 200003,
+      "text": "_placeholder_seg020_",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-021",
+      "scenario": "s3_value",
+      "speaker_id": "S3",
+      "speaker_label": "王技术 (客户 IT 架构师)",
+      "start_ms": 230000,
+      "end_ms": 270000,
+      "text": "只读 AI Agent 做 PLM 但保留人工确认的,有类似制造客户的案例吗?",
+      "trigger_keywords": [
+        "只读",
+        "AI Agent",
+        "PLM",
+        "人工确认",
+        "案例"
+      ],
+      "expected_intent": "sales_contextual_proof_discovery",
+      "expected_assist": "discovery_question (contextual_proof)"
+    },
+    {
+      "id": "seg-022",
+      "scenario": "s3_value",
+      "speaker_id": "S1",
+      "speaker_label": "李销售 (你)",
+      "start_ms": 200003,
+      "end_ms": 200004,
+      "text": "_placeholder_seg022_",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-023",
+      "scenario": "s4_quote",
+      "speaker_id": "S2",
+      "speaker_label": "张采购 (客户采购决策人)",
+      "start_ms": 280000,
+      "end_ms": 310000,
+      "text": "先给我看两个客户案例,我想看落地的 ROI。",
+      "trigger_keywords": [
+        "客户案例",
+        "ROI",
+        "落地"
+      ],
+      "expected_intent": "sales_proof_request",
+      "expected_assist": "case_study_request"
+    },
+    {
+      "id": "seg-024",
+      "scenario": "s4_quote",
+      "speaker_id": "S1",
+      "speaker_label": "李销售 (你)",
+      "start_ms": 280001,
+      "end_ms": 280002,
+      "text": "_placeholder_seg024_",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-025",
+      "scenario": "s4_quote",
+      "speaker_id": "S2",
+      "speaker_label": "张采购 (客户采购决策人)",
+      "start_ms": 280002,
+      "end_ms": 280003,
+      "text": "_placeholder_seg025_",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-026",
+      "scenario": "s4_quote",
+      "speaker_id": "S2",
+      "speaker_label": "张采购 (客户采购决策人)",
+      "start_ms": 310000,
+      "end_ms": 345000,
+      "text": "把商务条款和报价单发我邮箱,500 个席位年付的话整体多少钱?",
+      "trigger_keywords": [
+        "报价单",
+        "商务条款",
+        "多少钱"
+      ],
+      "expected_intent": "sales_quote_request",
+      "expected_assist": "pricing_request"
+    },
+    {
+      "id": "seg-027",
+      "scenario": "s4_quote",
+      "speaker_id": "S1",
+      "speaker_label": "李销售 (你)",
+      "start_ms": 280003,
+      "end_ms": 280004,
+      "text": "_placeholder_seg027_",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-028",
+      "scenario": "s5_pricing",
+      "speaker_id": "S2",
+      "speaker_label": "张采购 (客户采购决策人)",
+      "start_ms": 360000,
+      "end_ms": 395000,
+      "text": "500 个席位年付预算过不了,太高了,能不能打个折?",
+      "trigger_keywords": [
+        "预算过不了",
+        "太高",
+        "打折"
+      ],
+      "expected_intent": "sales_pricing_objection",
+      "expected_assist": "pricing_objection"
+    },
+    {
+      "id": "seg-029",
+      "scenario": "s5_pricing",
+      "speaker_id": "S1",
+      "speaker_label": "李销售 (你)",
+      "start_ms": 360001,
+      "end_ms": 360002,
+      "text": "_placeholder_seg029_",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-030",
+      "scenario": "s5_pricing",
+      "speaker_id": "S2",
+      "speaker_label": "张采购 (客户采购决策人)",
+      "start_ms": 395000,
+      "end_ms": 425000,
+      "text": "折扣最低能到什么程度?",
+      "trigger_keywords": [
+        "折扣",
+        "最低"
+      ],
+      "expected_intent": "sales_pricing_objection",
+      "expected_assist": "pricing_objection"
+    },
+    {
+      "id": "seg-031",
+      "scenario": "s5_pricing",
+      "speaker_id": "S1",
+      "speaker_label": "李销售 (你)",
+      "start_ms": 360002,
+      "end_ms": 360003,
+      "text": "_placeholder_seg031_",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-032",
+      "scenario": "s6_close",
+      "speaker_id": "S2",
+      "speaker_label": "张采购 (客户采购决策人)",
+      "start_ms": 440000,
+      "end_ms": 480000,
+      "text": "价格能接受的话,我们可以先走法律审核,下一步怎么走?",
+      "trigger_keywords": [
+        "法律审核",
+        "下一步"
+      ],
+      "expected_intent": "sales_buying_signal",
+      "expected_assist": "buying_signal"
+    },
+    {
+      "id": "seg-033",
+      "scenario": "s6_close",
+      "speaker_id": "S1",
+      "speaker_label": "李销售 (你)",
+      "start_ms": 440001,
+      "end_ms": 440002,
+      "text": "_placeholder_seg033_",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-034",
+      "scenario": "s6_close",
+      "speaker_id": "S2",
+      "speaker_label": "张采购 (客户采购决策人)",
+      "start_ms": 480000,
+      "end_ms": 520000,
+      "text": "什么时候能发合同?",
+      "trigger_keywords": [
+        "发合同"
+      ],
+      "expected_intent": "sales_buying_signal",
+      "expected_assist": "buying_signal"
+    },
+    {
+      "id": "seg-035",
+      "scenario": "s6_close",
+      "speaker_id": "S1",
+      "speaker_label": "李销售 (你)",
+      "start_ms": 440002,
+      "end_ms": 440003,
+      "text": "_placeholder_seg035_",
+      "trigger_keywords": [],
+      "expected_intent": null,
+      "expected_assist": null
+    },
+    {
+      "id": "seg-036",
+      "scenario": "s6_close",
+      "speaker_id": "S4",
+      "speaker_label": "周经理 (销售经理)",
+      "start_ms": 520000,
+      "end_ms": 560000,
+      "text": "先内部复盘一下,这个事不要对外说,今天不是客户问到的。",
+      "trigger_keywords": [
+        "内部复盘",
+        "不要对外说",
+        "不是客户问到的"
+      ],
+      "expected_intent": null,
+      "expected_assist": null
+    }
+  ],
+  "expected_intent_coverage": {
+    "sales_buying_signal": 2,
+    "sales_pricing_objection": 2,
+    "sales_quote_request": 1,
+    "sales_proof_request": 1,
+    "sales_technical_requirements": 2,
+    "sales_pain_discovery": 2,
+    "sales_capability_fit": 2,
+    "sales_process_integration": 1,
+    "sales_value_discovery": 1,
+    "sales_contextual_proof_discovery": 1,
+    "handle_objection": 0,
+    "seize_signal": 0,
+    "discovery_probe": 0,
+    "internal_chatter_suppression": 1
+  }
+}
