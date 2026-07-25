@@ -50,6 +50,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      # The fixture validator runs as a PR gate in sales-transcript-fixture.yml:
+      # node tests/utils/sales-transcript-fixture-validator.mjs tests/fixtures/demo/03_master_transcript/sales/sales_full_lifecycle_meeting.json
+
       - name: Build renderer, main, and native module
         env:
           NATIVELY_NATIVE_TARGETS: "x86_64-apple-darwin"

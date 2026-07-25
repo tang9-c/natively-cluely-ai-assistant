@@ -1,0 +1,21 @@
+name: Sales Transcript Fixture
+
+on:
+  pull_request:
+
+jobs:
+  validate-sales-transcript-fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Validate sales transcript fixture
+        run: node tests/utils/sales-transcript-fixture-validator.mjs tests/fixtures/demo/03_master_transcript/sales/sales_full_lifecycle_meeting.json
