@@ -68,7 +68,6 @@ export function validateSalesTranscriptFixture(fixturePath) {
   }
 
   // segments 校验 + 覆盖率统计
-  const allSegmentStartEnds = [];
   for (const seg of (fixture.segments ?? [])) {
     if (!speakerIds.has(seg.speaker_id)) errors.push(`segment ${seg.id}: unknown speaker ${seg.speaker_id}`);
     if (!validScenarioIds.has(seg.scenario)) errors.push(`segment ${seg.id}: unknown scenario ${seg.scenario}`);
@@ -76,12 +75,10 @@ export function validateSalesTranscriptFixture(fixturePath) {
     if (seg.expected_intent && !SALES_INTENT_ENUM.includes(seg.expected_intent)) {
       errors.push(`segment ${seg.id}: unknown expected_intent ${seg.expected_intent}`);
     }
-    allSegmentStartEnds.push([seg.start_ms, seg.end_ms]);
     if (seg.expected_intent) {
       coverageReport[seg.expected_intent] = (coverageReport[seg.expected_intent] ?? 0) + 1;
     }
   }
-  allSegmentStartEnds.sort((a, b) => a[0] - b[0]);
 
   // coverage 反向校验
   for (const [intent, required] of Object.entries(fixture.expected_intent_coverage ?? {})) {
