@@ -3957,6 +3957,13 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   if (process.env.NODE_ENV === 'test') {
+    (globalThis as any).__intentClassifier = {
+      __mocked: true,
+      async classify(_text: string, _speaker: string) {
+        const expected = (globalThis as any).__lastExpectedIntent ?? null;
+        return expected ? { intent: expected } : null;
+      },
+    };
     safeHandle('inject-transcript-turn', async (_event, turn) => {
       return injectTranscriptTurnForTest(turn);
     });
