@@ -417,10 +417,15 @@
       "speaker_label": "张采购 (客户采购决策人)",
       "start_ms": 206000,
       "end_ms": 209000,
-      "text": "三天?具体怎么做到的?",
-      "trigger_keywords": [],
-      "expected_intent": null,
-      "expected_assist": null
+      "text": "三天?良率提升的具体数字?",
+      "trigger_keywords": [
+        "周期",
+        "良率",
+        "效率",
+        "质量成本"
+      ],
+      "expected_intent": "sales_value_discovery",
+      "expected_assist": "discovery_question (value)"
     },
     {
       "id": "seg-021",
@@ -654,7 +659,7 @@
     "sales_pain_discovery": 2,
     "sales_capability_fit": 2,
     "sales_process_integration": 1,
-    "sales_value_discovery": 1,
+    "sales_value_discovery": 2,
     "sales_contextual_proof_discovery": 1,
     "handle_objection": 0,
     "seize_signal": 0,

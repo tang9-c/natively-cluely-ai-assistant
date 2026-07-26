@@ -76,7 +76,6 @@ import { buildRealtimeDiagnosticsSummary } from '../shared/realtimeAnswerTrustVi
 import type { MeetingSearchRequest, MeetingSearchResult } from '../shared/meetingSearch';
 import { executeMeetingSearch } from './rag/MeetingSearchFlow';
 import { MeetingSearchRequestRegistry } from './rag/MeetingSearchRequestRegistry';
-import { injectTranscriptTurnForTest } from './test-utils/injectTranscriptTurnForTest';
 
 const QCLOUD_KEY_PATTERN = /^sk-[A-Za-z0-9_-]{32,}$/;
 const EMBEDDING_READY_STATUS_WAIT_MS = 2_500;
@@ -3956,18 +3955,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  if (process.env.NODE_ENV === 'test') {
-    (globalThis as any).__intentClassifier = {
-      __mocked: true,
-      async classify(_text: string, _speaker: string) {
-        const expected = (globalThis as any).__lastExpectedIntent ?? null;
-        return expected ? { intent: expected } : null;
-      },
-    };
-    safeHandle('inject-transcript-turn', async (_event, turn) => {
-      return injectTranscriptTurnForTest(turn);
-    });
-  }
 
   // Service Account Selection
   safeHandle('select-service-account', async () => {

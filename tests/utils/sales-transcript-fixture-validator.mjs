@@ -18,7 +18,7 @@ export const SALES_INTENT_ENUM = [
 
 const KEYWORD_INTENT_HINTS = {
   sales_pain_discovery: ['不同步', 'Excel', '停线', '痛苦', '断链', '重复录入', '不一致'],
-  sales_capability_fit: ['能不能', '是否适合', '可不可以', '支持', '校验'],
+  sales_capability_fit: ['能不能', '是否适合', '可不可以', '支持', '校验', 'SAP', 'PLM', 'BOM', 'AI Agent', '只读', '人工确认', '模块', '功能', '能力'],
   sales_process_integration: ['闭环', '同步', '打通', '集成'],
   sales_value_discovery: ['周期', '良率', '审计', '返工', '效率'],
   sales_contextual_proof_discovery: ['只读', '人工确认', '类似', '案例', '制造客户'],

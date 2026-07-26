@@ -411,12 +411,6 @@ interface ElectronAPI {
     timestamp?: number;
     final?: boolean;
   }) => Promise<{ success: boolean; error?: string }>;
-  injectTranscriptTurn: (turn: {
-    speaker: string;
-    text: string;
-    startMs: number;
-    endMs: number;
-  }) => Promise<{ ok: boolean; lastIntent?: string }>;
   testGetModeContext: () => Promise<{
     success: boolean;
     block?: string;
@@ -1534,12 +1528,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     timestamp?: number;
     final?: boolean;
   }) => ipcRenderer.invoke('test-inject-transcript', segment),
-  injectTranscriptTurn: (turn: {
-    speaker: string;
-    text: string;
-    startMs: number;
-    endMs: number;
-  }) => ipcRenderer.invoke('inject-transcript-turn', turn),
   testGetModeContext: () => ipcRenderer.invoke('test-get-mode-context'),
   resetIntelligence: () => ipcRenderer.invoke('reset-intelligence'),
 
