@@ -365,7 +365,33 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     assert.ok(final.detailedSummary.actionItems.includes('Alice owns docs'));
   });
 
-  test('structured summary receives the first 50000 context characters', async () => {
+  test('title generation failure keeps fallback title and still generates summary', async () => {
+    const db = DatabaseManager.getInstance();
+    const session = buildMockSession();
+    let calls = 0;
+    const llm = {
+      generateMeetingSummary: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error('provider unavailable');
+        return JSON.stringify({
+          overview: 'Summary still generated',
+          keyPoints: ['Title failure is isolated'],
+          actionItems: [],
+        });
+      },
+    };
+    const mp = new MeetingPersistence(session, llm);
+
+    await mp.processAndSaveMeeting(buildSnapshot(), 'm-title-failure');
+
+    const final = db.getMeetingDetails('m-title-failure');
+    assert.ok(final, 'meeting should still be saved');
+    assert.ok(calls >= 2, 'summary generation should run after title generation fails');
+    assert.equal(final.title, 'Untitled Session');
+    assert.equal(final.detailedSummary.overview, 'Summary still generated');
+  });
+
+  test('structured summary chunks long context without dropping its tail', async () => {
     const session = buildMockSession();
     const calls = [];
     const llm = {
@@ -375,7 +401,7 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
       },
     };
     const mp = new MeetingPersistence(session, llm);
-    const context = `${'甲'.repeat(50000)}尾部不应进入本次摘要`;
+    const context = `${'甲'.repeat(50000)}尾部应进入摘要`;
 
     await mp.processAndSaveMeeting(
       buildSnapshot({ context }),
@@ -383,9 +409,13 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
       { title: '已有标题' },
     );
 
-    assert.equal(calls.length, 1, 'calendar title avoids the separate title generation call');
-    assert.equal(calls[0].length, 50000);
-    assert.equal(calls[0], context.slice(0, 50000));
+    const chunkContexts = calls.filter((value) => value.includes('会议片段：'));
+    assert.ok(chunkContexts.length >= 2, 'long transcript should be split into summary chunks');
+    assert.match(chunkContexts[0], /甲{20}/);
+    assert.ok(
+      chunkContexts.some((value) => value.includes('尾部应进入摘要')),
+      'the final transcript tail should reach a summary chunk',
+    );
   });
 
   test('Groq-style summary field is persisted as the overview shown in meeting details', async () => {

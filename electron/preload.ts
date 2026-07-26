@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ModeEventContext } from './llm';
 import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../shared/senseVoiceEmotion';
+import type { DynamicActionAvailabilityEvent } from '../shared/dynamicActionAvailability';
 import type {
   MeetingSearchChunkEvent,
   MeetingSearchCompleteEvent,
@@ -1590,6 +1591,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('intelligence-dynamic-action', subscription);
     return () => {
       ipcRenderer.removeListener('intelligence-dynamic-action', subscription);
+    };
+  },
+  onIntelligenceDynamicActionAvailability: (callback: (data: DynamicActionAvailabilityEvent) => void) => {
+    const subscription = (_: unknown, data: DynamicActionAvailabilityEvent) => callback(data);
+    ipcRenderer.on('intelligence-dynamic-action-availability', subscription);
+    return () => {
+      ipcRenderer.removeListener('intelligence-dynamic-action-availability', subscription);
     };
   },
   onSkillWatcherSuggestionCreated: (callback: (data: { suggestion: SkillWatcherSuggestion }) => void) => {

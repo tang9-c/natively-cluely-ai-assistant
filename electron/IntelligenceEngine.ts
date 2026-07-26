@@ -51,6 +51,7 @@ import {
     type CloudSemanticGateInput,
     type CloudSemanticGateResult,
     type ModeEventContextTurn,
+    type SemanticGateArbitrationStatus,
     type SemanticGateTrace,
 } from './services/dynamic-actions/ModeEventClassifier';
 import { buildRetrievalQuery } from './services/dynamic-actions/ModeEventUtils';
@@ -118,6 +119,7 @@ export interface IntelligenceModeEvents {
     // window.electronAPI.onIntelligenceDynamicAction and renders cards.
     'dynamic_action_emitted': (action: DynamicAction) => void;
     'dynamic_action_gate_trace': (trace: SemanticGateTrace) => void;
+    'dynamic_action_gate_availability': (statuses: SemanticGateArbitrationStatus[]) => void;
     'code_hint_trace': (trace: CodeHintTrace) => void;
     'skill_watcher_suggestion_created': (suggestion: SkillWatcherSuggestion) => void;
 }
@@ -941,6 +943,7 @@ export class IntelligenceEngine extends EventEmitter {
             intentOptions,
         );
 
+        const gateArbitrationStatuses: SemanticGateArbitrationStatus[] = [];
         const newActions = await this.dynamicActionEngine.assessSignals({
             transcript: text,
             speaker: segment.speaker,
@@ -958,9 +961,13 @@ export class IntelligenceEngine extends EventEmitter {
             cloudClassifier: (input) => this.classifyDynamicActionWithCloud(input),
             semanticGateTraceSink: (trace: SemanticGateTrace) => {
                 getContextQualityDiagnosticsCollector().recordDynamicActionTrace(trace);
+                gateArbitrationStatuses.push(trace.arbitrationStatus);
                 this.emit('dynamic_action_gate_trace', trace);
             },
         });
+        if (gateArbitrationStatuses.length > 0) {
+            this.emit('dynamic_action_gate_availability', gateArbitrationStatuses);
+        }
 
         // The store dedupes within the per-session store, so each emitted action
         // is a *new* candidate — safe to forward to renderer for rendering.

@@ -47,7 +47,8 @@ describe('IntentClassifier process isolation', () => {
     assert.ok(preflightIndex >= 0, 'worker should define and call onnxruntime-node preflight');
     assert.ok(importIndex >= 0, 'worker should dynamically import Transformers.js');
     assert.ok(preflightIndex < importIndex, 'preflight must run before Transformers.js import');
-    assert.match(worker, /new Function\('specifier', 'return require\(specifier\)'\)/);
+    assert.doesNotMatch(worker, /new Function\('specifier', 'return require\(specifier\)'\)/);
+    assert.match(worker, /createRequire\(__filename\)/);
     assert.match(worker, /runtimeRequire\('onnxruntime-node'\)/);
     assert.match(worker, /runtimeRequire\('onnxruntime-node\/package\.json'\)/);
     assert.match(worker, /InferenceSession\?\.create/);

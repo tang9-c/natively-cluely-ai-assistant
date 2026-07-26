@@ -63,6 +63,7 @@ export class IntelligenceManager extends EventEmitter {
             // Phase 3: Cluely-style dynamic action card emissions.
             'dynamic_action_emitted',
             'dynamic_action_gate_trace',
+            'dynamic_action_gate_availability',
             'code_hint_trace',
             'skill_watcher_suggestion_created',
         ];

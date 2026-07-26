@@ -5,6 +5,7 @@ import fs from "fs"
 import { autoUpdater } from "electron-updater"
 import type { ProfileOrchestratorRuntime } from "./services/profile/ProfileOrchestratorContract"
 import { formatAcceleratorForPlatform, quitAcceleratorForPlatform } from "./utils/platformAccelerators"
+import { dynamicActionAvailabilityFromArbitrations } from "../shared/dynamicActionAvailability"
 if (!app.isPackaged) {
   require('dotenv').config();
 }
@@ -3820,6 +3821,14 @@ export class AppState {
       if (win) {
         win.webContents.send('intelligence-negotiation-coaching', { payload })
       }
+    })
+
+    this.intelligenceManager.on('dynamic_action_gate_availability', (arbitrationStatuses: string[]) => {
+      const availability = dynamicActionAvailabilityFromArbitrations(arbitrationStatuses);
+      if (!availability) return;
+      const helper = this.getWindowHelper();
+      helper.getLauncherWindow()?.webContents.send('intelligence-dynamic-action-availability', availability);
+      helper.getOverlayWindow()?.webContents.send('intelligence-dynamic-action-availability', availability);
     })
 
     this.intelligenceManager.on('refined_answer_token', (token: string, intent: string) => {

@@ -225,8 +225,14 @@ export class MeetingPersistence {
                 const titlePrompt = `为这次会议生成一个简洁的中文标题，长度为 3 到 8 个中文词。只输出标题文本，不要解释，不要引号，不要 markdown，不要包含任何中英文标点符号。`;
                 const groqTitlePrompt = GROQ_TITLE_PROMPT;
 
-                const generatedTitle = await this.llmHelper.generateMeetingSummary(titlePrompt, data.context.substring(0, 5000), groqTitlePrompt);
-                title = sanitizeGeneratedMeetingTitle(generatedTitle, data.context);
+                try {
+                    const generatedTitle = await this.llmHelper.generateMeetingSummary(titlePrompt, data.context.substring(0, 5000), groqTitlePrompt);
+                    title = sanitizeGeneratedMeetingTitle(generatedTitle, data.context);
+                } catch (error) {
+                    console.warn('[MeetingPersistence] Title generation failed; continuing with fallback title', {
+                        errorName: error instanceof Error ? error.name : 'UnknownError',
+                    });
+                }
             }
 
             // Load template note sections for the mode that was active when meeting stopped.

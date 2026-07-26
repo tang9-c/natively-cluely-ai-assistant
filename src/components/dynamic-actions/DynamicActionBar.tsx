@@ -3,11 +3,14 @@ import type {
   DynamicActionPayload,
 } from '@/types/electron';
 import { AnimatePresence } from 'framer-motion';
+import { CloudOff } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { DynamicActionAvailabilityEvent } from '../../../shared/dynamicActionAvailability';
 import { DynamicActionCard, type DynamicActionCardStatus } from './DynamicActionCard';
 
 const AUTO_TRIGGER_DELAY_MS = 5000;
 const AUTO_TRIGGER_MIN_CONFIDENCE = 0.9;
+const AVAILABILITY_STATUS_TTL_MS = 30_000;
 
 type DynamicActionGenerationOptions = {
   source: 'dynamic_action';
@@ -72,9 +75,11 @@ export const DynamicActionBar: React.FC<Props> = ({
   staleAfterMs = 60_000,
 }) => {
   const [actions, setActions] = useState<DynamicActionView[]>([]);
+  const [availability, setAvailability] = useState<DynamicActionAvailabilityEvent | null>(null);
   const actionsRef = useRef(actions);
   const autoTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const dismissRemovalTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const availabilityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggeringIdsRef = useRef<Set<string>>(new Set());
   actionsRef.current = actions;
 
@@ -199,11 +204,38 @@ export const DynamicActionBar: React.FC<Props> = ({
   }, [handleIncoming]);
 
   useEffect(() => {
+    const clearAvailabilityTimer = () => {
+      if (availabilityTimerRef.current) {
+        clearTimeout(availabilityTimerRef.current);
+        availabilityTimerRef.current = null;
+      }
+    };
+    const off = window.electronAPI?.onIntelligenceDynamicActionAvailability?.((event) => {
+      clearAvailabilityTimer();
+      if (event.status === 'available') {
+        setAvailability(null);
+        return;
+      }
+      setAvailability(event);
+      availabilityTimerRef.current = setTimeout(() => {
+        availabilityTimerRef.current = null;
+        setAvailability(null);
+      }, AVAILABILITY_STATUS_TTL_MS);
+    });
+    return () => {
+      clearAvailabilityTimer();
+      off?.();
+    };
+  }, []);
+
+  useEffect(() => {
     return () => {
       autoTimersRef.current.forEach((timer) => clearTimeout(timer));
       autoTimersRef.current.clear();
       dismissRemovalTimersRef.current.forEach((timer) => clearTimeout(timer));
       dismissRemovalTimersRef.current.clear();
+      if (availabilityTimerRef.current) clearTimeout(availabilityTimerRef.current);
+      availabilityTimerRef.current = null;
       triggeringIdsRef.current.clear();
     };
   }, []);
@@ -260,7 +292,7 @@ export const DynamicActionBar: React.FC<Props> = ({
 
   const visible = useMemo(() => actions.slice(0, maxVisible), [actions, maxVisible]);
 
-  if (visible.length === 0) return null;
+  if (visible.length === 0 && !availability) return null;
 
   return (
     <div
@@ -268,6 +300,26 @@ export const DynamicActionBar: React.FC<Props> = ({
       data-testid="dynamic-action-bar"
       aria-label="建议操作"
     >
+      {availability && (
+        <div
+          role="status"
+          aria-live="polite"
+          data-testid="dynamic-action-availability"
+          className="flex items-start gap-2 rounded-md border border-amber-400/25 bg-amber-400/10 px-2.5 py-2 text-amber-800 shadow-sm dark:text-amber-200"
+        >
+          <CloudOff className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-80" />
+          <div className="min-w-0 text-[11px] leading-snug">
+            <div className="font-semibold">
+              {availability.status === 'local_fallback'
+                ? '云端服务繁忙，部分明确提示已切换为受限本地判断'
+                : '云端服务繁忙，智能卡片暂不可用'}
+            </div>
+            <div className="mt-0.5 opacity-75">
+              会议与转录继续正常，服务恢复后将自动重试
+            </div>
+          </div>
+        </div>
+      )}
       <AnimatePresence initial={false}>
         {visible.map((a, i) => (
           <DynamicActionCard

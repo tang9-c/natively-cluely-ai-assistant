@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+
 import {
     getAnswerShapeForMode,
     getLabelMapForMode,
@@ -42,6 +44,7 @@ let loadFailed = false;
 // load failure as a disabled optional enhancement rather than letting the
 // isolated worker crash during Transformers.js import.
 const TRANSFORMERS_EXPECTED_ONNXRUNTIME_NODE = '1.21.0';
+const runtimeRequire = createRequire(__filename);
 
 function send(message: unknown): void {
     if (typeof process.send === 'function') {
@@ -51,7 +54,6 @@ function send(message: unknown): void {
 
 function preflightOnnxRuntimeNode(): { ok: true; installedVersion: string } | { ok: false; error: string } {
     try {
-        const runtimeRequire = new Function('specifier', 'return require(specifier)') as (specifier: string) => any;
         const ort = runtimeRequire('onnxruntime-node');
         const installedVersion = runtimeRequire('onnxruntime-node/package.json')?.version ?? 'unknown';
         if (typeof ort?.InferenceSession?.create !== 'function') {

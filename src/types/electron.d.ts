@@ -1,4 +1,5 @@
 import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
+import type { DynamicActionAvailabilityEvent } from '../../shared/dynamicActionAvailability'
 export type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
 import type { ContextNeedDecision } from '../../shared/contextNeedDecision'
 import type {
@@ -776,6 +777,7 @@ export interface ElectronAPI {
 
   // Phase 3 — Cluely-style dynamic action cards.
   onIntelligenceDynamicAction: (callback: (data: { action: DynamicActionPayload }) => void) => () => void
+  onIntelligenceDynamicActionAvailability: (callback: (data: DynamicActionAvailabilityEvent) => void) => () => void
   // @ipc-channel dynamic-action:accept
   acceptDynamicAction: (actionId: string, options?: { triggerSource?: 'manual' | 'auto_countdown' }) => Promise<{ success: boolean; action?: DynamicActionPayload; error?: string }>
   // @ipc-channel dynamic-action:complete
