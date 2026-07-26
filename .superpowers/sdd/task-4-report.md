@@ -1,45 +1,86 @@
-# Task 4 Report
+# Task 4 Report: IPC 注入通道（preload + ipcHandlers + NODE_ENV 守卫）
 
-## STATUS
-PASS
+## Status
 
-## 修改内容
-- `ActionArtifact` 现在支持 `recruiting` 并透传可选 `sourceIntent`；仅复用已有 dynamic-action usage metadata，不从 transcript 或 answer 推断。
-- `MeetingPersistence` 按 `actionId` 合并并保留首个有效的 `sourceIntent`。
-- `PostCallWorkflow` 生成仅供内部使用的 `AcceptedRecruitingRecord[]`，保存 action/parent/source intent、180 字符上限 summary、missing fields、evaluation 和 grounding status。
-- Recruiting coaching 仅生成内部 evidence/gap/interest/policy insights；`strong_fit_signal` 对外文字固定为 `Candidate expressed interest`。
-- `followUpDraft` 不接收 recruiting records，并且 recruiting mode 只保留无敏感词的 logistics next steps，避免 transcript action extraction 泄漏内部评估内容。
-- Sales、FDE、team-meet 的 existing carryover 及 focused tests 保持通过。
+DONE
 
-## TDD
-- 红测确认 recruiting artifacts 被旧 `ARTIFACT_MODES` 过滤、`sourceIntent` 未透传、post-call 不存在 `acceptedRecruitingRecords`。
-- 绿测覆盖 artifact builder、MeetingPersistence 按 actionId 合并、中文/英文 no-leak、内部 records 和 coaching insight 保留。
+## Commits made
 
-## 验证
-- `rtk npm run build:electron:tsc`：通过。
-- `rtk node --test electron/services/__tests__/DynamicActionArtifactBuilder.test.mjs electron/services/__tests__/PostCallDynamicActionCarryover.test.mjs electron/services/__tests__/PostCallWorkflow.test.mjs`：49/49 通过。
-- `rtk env ELECTRON_RUN_AS_NODE=1 npx electron --test electron/__tests__/MeetingPersistence.test.mjs`：22/22 通过。
-- `rtk git diff --check`：通过。
+- `5a3f8656` `feat(electron): add inject-transcript-turn IPC for e2e tests (NODE_ENV=test guarded)`
 
-## 自审
-- 确认 `acceptedRecruitingRecords` 未传入 `buildFollowUpDraft()`。
-- 未新增 DB、UI 或 persistence subsystem；未修改 `.tmp/`。
+## Typecheck result
 
-## 提交
-- `9f834325c2754f2317d9cae422dabacd3f62389f` `feat(recruiting): keep candidate evidence in internal post-call coaching`
+`npm run typecheck:electron` — 0 error（clean pass, no output beyond the tsc command echo）。
 
-## Reviewer Fix Addendum
-- `IntelligenceEngine.recordDynamicActionUsage()` 现在在 transcript-evidence 与非 transcript placeholder metadata 中统一写入 `modeTemplateType` 和 `sourceIntent`；transcript-evidence 的 metadata 仍不包含 `retrievalQuery`、`latestTurn` 或 raw evidence。
-- 已完成的 transcript-evidence answer metadata 同样保留 `modeTemplateType` 与 `sourceIntent`。
-- Artifact builder 只从匹配 usage metadata 读取 `sourceIntent`，不再回退到 action 字段；无 usage source intent 时，artifact 不带该字段。
-- Recruiting follow-up 改为固定的 candidate-safe draft，不读取 overview、action items、key points、sections 或 accepted records。
-- 新增真实 `acceptDynamicAction()` usage 到 `MeetingPersistence -> artifact builder -> PostCallWorkflow` 的 recruiting provenance 回归测试，以及 adversarial candidate-follow-up 输入覆盖。
+## Exploration findings
 
-## Reviewer Fix 验证
-- `rtk npm run build:electron:tsc`：通过。
-- `rtk node --test electron/services/__tests__/IntelligenceEngineDynamicActions.test.mjs electron/services/__tests__/DynamicActionArtifactBuilder.test.mjs electron/services/__tests__/PostCallDynamicActionCarryover.test.mjs electron/services/__tests__/PostCallWorkflow.test.mjs`：74/74 通过。
-- `rtk env ELECTRON_RUN_AS_NODE=1 npx electron --test electron/__tests__/MeetingPersistence.test.mjs`：22/22 通过。
-- `rtk git diff --check`：通过。
+### Did `electron/test-utils/` exist?
 
-## Reviewer Fix 提交
-- `48a917e9014967a86531afc2b45df95c3a7798ed` `fix(recruiting): isolate post-call follow-up provenance`
+**No.** `ls electron/test-utils/` returned empty / `missing`. Created the directory via `mkdir -p` per task instructions.
+
+### Existing `__test__` / `inject*Transcript*` patterns
+
+The project already has a parallel channel:
+
+- IPC handler `test-inject-transcript` at `electron/ipcHandlers.ts` line 3921 (registered inline before my change).
+- Preload bridge `testInjectTranscript` at `electron/preload.ts` line 1525 (and `ElectronAPI` interface line 408).
+
+That handler is **inline** (no separate test-utils helper module) — it calls `appState.getIntelligenceManager().addTranscript(...)` directly. The brief specifies a separate helper file `electron/test-utils/injectTranscriptTurnForTest.ts` that talks to `globalThis.__intentClassifier.classify(...)`. So this task introduces the new pattern (separate helper module, IPC forwarder, distinct channel name `inject-transcript-turn`), while the older `test-inject-transcript` channel stays untouched.
+
+### Existing import style
+
+- `electron/ipcHandlers.ts` uses single quotes, paths like `./services/...`, `./rag/...`, `./llm/...`. New import added at the end of the import block (after `MeetingSearchRequestRegistry`) following the same convention.
+- `electron/preload.ts` uses single quotes. New field added to both the `ElectronAPI` interface and the `contextBridge.exposeInMainWorld('electronAPI', { ... })` block in the same neighborhood as `testInjectTranscript`.
+
+### NODE_ENV=test guards in the codebase
+
+`grep` for `NODE_ENV.*test|__test__` showed:
+
+- `electron/LLMHelper.ts:74`
+- `electron/ipcHandlers.ts:3385` (`skipCooldown`)
+- `electron/ipcHandlers.ts:3925` and `3945` (the existing `test-inject-transcript` and `test-get-mode-context` handlers, which return `{ success: false, error: 'test_only' }` when not in test mode)
+
+I followed the brief's spec exactly: `safeHandle('inject-transcript-turn', ...)` registered inside an `if (process.env.NODE_ENV === 'test')` block (rather than the runtime-rejection pattern used by the existing two test handlers). The brief explicitly specifies this style.
+
+### Deviations from the brief
+
+1. **Removed the `import type { IntentClassifier } from '../llm/IntentClassifier';` line from `injectTranscriptTurnForTest.ts`.**
+   The runtime body uses `(globalThis as any).__intentClassifier as { ... }` — the `IntentClassifier` type is never referenced. Per the task instructions ("if the linter may flag it — if so, remove the import type line"), this avoids an unused-import typecheck warning. The helper file's top-of-file comment block and the function JSDoc are preserved.
+2. **Placement in `ipcHandlers.ts`.**
+   The brief says "在 `safeHandle` 注册块底部追加". I placed the `if (process.env.NODE_ENV === 'test') { safeHandle(...) }` block immediately after the existing `safeHandle('test-get-mode-context', ...)` handler and before the `// Service Account Selection` comment. This keeps all test-mode handlers grouped together.
+3. **Placement in `preload.ts`.**
+   The new `injectTranscriptTurn` field was placed directly after `testInjectTranscript` in both the `ElectronAPI` interface and the `contextBridge` block — natural neighborhood for the test-related APIs.
+
+## Files modified / created
+
+| File | Action | Insertions |
+|------|--------|------------|
+| `electron/test-utils/injectTranscriptTurnForTest.ts` | created | 22 lines (`wc -l`) |
+| `electron/ipcHandlers.ts` | modified | +7 lines (1 import + 5 lines for the safeHandle block plus surrounding blank line) |
+| `electron/preload.ts` | modified | +12 lines (5-line type field + 7-line contextBridge entry) |
+
+Total: 3 files changed, 42 insertions (matches `git diff --stat`).
+
+## Verification
+
+- `git diff --check` clean.
+- `npm run typecheck:electron` clean (0 errors).
+- Commit staged only the three brief-specified files; no other working-tree changes touched.
+
+## Task 4 Fix Subagent
+
+### Status
+
+DONE
+
+### Commit
+
+- `58ff83c94a7f67e3ba6495f3d38c6d41c6b78540` (`58ff83c9`) `chore(electron): add trailing newline to test helper`
+
+### Verification
+
+- `wc -l electron/test-utils/injectTranscriptTurnForTest.ts`
+  - before: `22` (last byte `0x7D '}'`, no trailing `\n`)
+  - after:  `23` (last byte `0x0A '\n'`)
+- `git show --stat HEAD` → `1 file changed, 1 insertion(+), 1 deletion(-)` (only the trailing newline).
+- `npm run typecheck:electron` → 0 errors (clean `tsc -p electron/tsconfig.json --noEmit`, no output beyond the npm script header).

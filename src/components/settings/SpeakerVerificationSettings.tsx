@@ -10,10 +10,25 @@ const PROMPTS = [
   '请用你平时说话的方式自由讲一小段最近正在处理的事情。',
 ] as const;
 
+// Keep these thresholds aligned with electron/services/speaker/speakerAudioUtils.measureAudioQuality.
+const MIN_RECORDING_DURATION_MS = 1500;
+const MIN_RECORDING_RMS = 0.005;
+const MIN_RECORDING_VOICE_RATIO = 0.12;
+const VOICE_SAMPLE_THRESHOLD = 0.01;
+
+type RecordingQualityState = 'listening' | 'too_short' | 'too_quiet' | 'not_enough_voice' | 'ready';
+
 interface RecordedSample {
   samples: Float32Array;
   sampleRate: number;
   deviceFingerprint?: string;
+}
+
+interface RecordingMetrics {
+  durationMs: number;
+  rms: number;
+  voiceRatio: number;
+  state: RecordingQualityState;
 }
 
 interface ActiveRecording {
@@ -26,16 +41,88 @@ interface ActiveRecording {
   deviceFingerprint?: string;
 }
 
-async function startActiveRecording(): Promise<ActiveRecording> {
+const EMPTY_RECORDING_METRICS: RecordingMetrics = {
+  durationMs: 0,
+  rms: 0,
+  voiceRatio: 0,
+  state: 'listening',
+};
+
+function qualityFromMetrics(durationMs: number, rms: number, voiceRatio: number): RecordingMetrics {
+  if (durationMs < MIN_RECORDING_DURATION_MS) {
+    return { durationMs, rms, voiceRatio, state: 'too_short' };
+  }
+  if (rms < MIN_RECORDING_RMS) {
+    return { durationMs, rms, voiceRatio, state: 'too_quiet' };
+  }
+  if (voiceRatio < MIN_RECORDING_VOICE_RATIO) {
+    return { durationMs, rms, voiceRatio, state: 'not_enough_voice' };
+  }
+  return { durationMs, rms, voiceRatio, state: 'ready' };
+}
+
+function evaluateRecordingQuality(samples: Float32Array, sampleRate: number): RecordingMetrics {
+  if (samples.length === 0 || !Number.isFinite(sampleRate) || sampleRate <= 0) {
+    return { ...EMPTY_RECORDING_METRICS, state: 'too_short' };
+  }
+
+  let sumSquares = 0;
+  let voiced = 0;
+  for (const value of samples) {
+    sumSquares += value * value;
+    if (Math.abs(value) >= VOICE_SAMPLE_THRESHOLD) voiced += 1;
+  }
+
+  const durationMs = Math.round((samples.length / sampleRate) * 1000);
+  const rms = Math.sqrt(sumSquares / samples.length);
+  const voiceRatio = voiced / samples.length;
+
+  return qualityFromMetrics(durationMs, rms, voiceRatio);
+}
+
+function formatDuration(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function recordingQualityMessage(metrics: RecordingMetrics): string {
+  switch (metrics.state) {
+    case 'too_short':
+      return `继续说话，还需要至少 ${formatDuration(Math.max(0, MIN_RECORDING_DURATION_MS - metrics.durationMs))}`;
+    case 'too_quiet':
+      return '声音偏小，靠近麦克风或提高音量';
+    case 'not_enough_voice':
+      return '有效语音不足，请连续说完本段提示词';
+    case 'ready':
+      return '可以停止本段录音';
+    case 'listening':
+    default:
+      return '正在录音，请按提示词自然说话';
+  }
+}
+
+async function startActiveRecording(onMetrics?: (metrics: RecordingMetrics) => void): Promise<ActiveRecording> {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   const audioContext = new AudioContext();
   const source = audioContext.createMediaStreamSource(stream);
   const processor = audioContext.createScriptProcessor(4096, 1, 1);
   const chunks: Float32Array[] = [];
+  let totalSamples = 0;
+  let sumSquares = 0;
+  let voicedSamples = 0;
   source.connect(processor);
   processor.connect(audioContext.destination);
   processor.onaudioprocess = event => {
-    chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+    const chunk = new Float32Array(event.inputBuffer.getChannelData(0));
+    chunks.push(chunk);
+    totalSamples += chunk.length;
+    for (const value of chunk) {
+      sumSquares += value * value;
+      if (Math.abs(value) >= VOICE_SAMPLE_THRESHOLD) voicedSamples += 1;
+    }
+    const durationMs = Math.round((totalSamples / audioContext.sampleRate) * 1000);
+    const rms = Math.sqrt(sumSquares / totalSamples);
+    const voiceRatio = voicedSamples / totalSamples;
+    onMetrics?.(qualityFromMetrics(durationMs, rms, voiceRatio));
   };
   return {
     tracks: stream.getTracks(),
@@ -76,6 +163,7 @@ export function SpeakerVerificationSettings() {
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recordingMetrics, setRecordingMetrics] = useState<RecordingMetrics>(EMPTY_RECORDING_METRICS);
   const mediaRef = useRef<ActiveRecording | null>(null);
 
   const refresh = async () => {
@@ -135,7 +223,8 @@ export function SpeakerVerificationSettings() {
       if (shouldRestart) {
         setSamples([]);
       }
-      mediaRef.current = await startActiveRecording();
+      setRecordingMetrics(EMPTY_RECORDING_METRICS);
+      mediaRef.current = await startActiveRecording(setRecordingMetrics);
       setRecordingIndex(shouldRestart ? 0 : samples.length);
     } catch (err: any) {
       setError(err?.message ?? '无法启动麦克风录音');
@@ -149,6 +238,12 @@ export function SpeakerVerificationSettings() {
       const sample = await stopActiveRecording(mediaRef.current);
       mediaRef.current = null;
       setRecordingIndex(null);
+      const quality = evaluateRecordingQuality(sample.samples, sample.sampleRate);
+      setRecordingMetrics(quality);
+      if (quality.state !== 'ready') {
+        setError(`本段录音未达标，请重录。${recordingQualityMessage(quality)}`);
+        return;
+      }
       const next = [...samples, sample];
       setSamples(next);
       if (next.length === PROMPTS.length) {
@@ -179,6 +274,7 @@ export function SpeakerVerificationSettings() {
       mediaRef.current = null;
     }
     setRecordingIndex(null);
+    setRecordingMetrics(EMPTY_RECORDING_METRICS);
   };
 
   const deleteProfile = async () => {
@@ -199,7 +295,9 @@ export function SpeakerVerificationSettings() {
 
   const enrolled = status?.enrolled === true;
   const hasCompleteSampleSet = samples.length >= PROMPTS.length;
-  const currentPrompt = PROMPTS[samples.length] ?? PROMPTS[0];
+  const currentPrompt = PROMPTS[recordingIndex ?? samples.length] ?? PROMPTS[0];
+  const recordingQuality = recordingQualityMessage(recordingMetrics);
+  const recordingButtonTitle = recordingMetrics.state === 'ready' ? '可以停止本段录音' : recordingQuality;
 
   return (
     <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
@@ -229,7 +327,7 @@ export function SpeakerVerificationSettings() {
               <Download size={14} />
             </button>
           ) : recordingIndex !== null ? (
-            <button type="button" onClick={finishRecording} disabled={busy} className="rounded-md p-2 bg-red-500/15 text-red-300 disabled:opacity-50" title="完成本段录音">
+            <button type="button" onClick={finishRecording} disabled={busy} className="rounded-md p-2 bg-red-500/15 text-red-300 disabled:opacity-50" title={recordingButtonTitle}>
               <Square size={14} />
             </button>
           ) : (
@@ -258,6 +356,30 @@ export function SpeakerVerificationSettings() {
             第 {Math.min(samples.length + 1, PROMPTS.length)} 段 / 共 {PROMPTS.length} 段
           </div>
           <p className="mt-2 text-xs text-text-primary">{currentPrompt}</p>
+          {recordingIndex !== null && (
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between gap-3 text-[11px]">
+                <span className="font-medium text-red-300">正在录音</span>
+                <span className={recordingMetrics.state === 'ready' ? 'text-emerald-300' : 'text-text-tertiary'}>
+                  {recordingQuality}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-[11px] text-text-tertiary">
+                <div>
+                  <span className="block text-text-secondary">时长</span>
+                  {formatDuration(recordingMetrics.durationMs)}
+                </div>
+                <div>
+                  <span className="block text-text-secondary">音量</span>
+                  {Math.round(Math.min(1, recordingMetrics.rms / 0.05) * 100)}%
+                </div>
+                <div>
+                  <span className="block text-text-secondary">有效语音</span>
+                  {Math.round(recordingMetrics.voiceRatio * 100)}%
+                </div>
+              </div>
+            </div>
+          )}
           {recordingIndex !== null && (
             <button type="button" onClick={cancelRecording} className="mt-2 text-[11px] text-text-tertiary hover:text-text-primary">
               取消本段录音

@@ -1,158 +1,140 @@
-# Task 5 Report: Recruiting Product, Continuation, and Safety Fixture Matrices
+# Task 5 实施报告
 
-## STATUS
-DONE
+## Status
 
-## 实现内容
+**DONE_WITH_CONCERNS**
 
-- 扩充 Recruiting product fixture matrix，并以真实 `DynamicActionFixtureRunner` 驱动 action、独立 deterministic cloud semantic classifier seam、production exclusive arbitration、accepted-output evaluator 路径。
-- 增加 Recruiting continuation fixture matrix，并以真实 `DynamicActionContinuationFixtureRunner` 驱动 parent action、continuation policy、planner、derived action、runtime evaluator、safe fallback 与 post-call carryover。
-- 以 continuation policy 决定 derived action type；以单个 mode-to-context builder record 构造派生上下文；以 `DynamicActionRuntimeValidationPolicy` 选择 safe fallback；并从 engine store 读取实际 child actions 计算 count/duplicate。Sales/FDE fixture 行为保持回归通过。
-- 增加 Recruiting safety matrix，直接使用 Task 2 `evaluateDynamicActionAcceptedOutput`，覆盖可见方法分类、施压语言、最终录用/淘汰/排名、受保护属性依据和无依据 recruiting policy；包含候选人主动提及家庭情境但回答不将其作为招聘依据的合法反例。
+Task 5 的代码与静态验证已完成并提交；按任务上下文的明确要求，没有启动真实 Electron/Playwright e2e。主要关注项是：fixture 实际只有 10 个正向 `sales_*` 意图（brief 写 11 个），且指定的 classifier mock 会直接回显 fixture 的 expected intent，因此该套件验证的是真实 Electron IPC 生命周期与 fixture 覆盖契约，而不是生产 IntentClassifier 的语义准确率。
 
-## Fixture 统计与实际测量
+## Commits made
 
-### Product Matrix
+- `5c4978f1` — `test(e2e): add sales full lifecycle transcript e2e suite`
 
-- 总数：46
-- Positive：36
-  - `candidate_concern`：14（包含 6 个 collision fixture）
-  - `candidate_experience_probe`：18，覆盖 `personal_action`、`result`、`ownership`、`tradeoff_or_verification`
-  - `strong_fit_signal`：4
-- Negative：10
-- 语言：中文、英文、混合语言均覆盖；说话人覆盖 candidate、interviewer、internal。
-- Recall：`36/36 = 1.00`，门槛 `>= 0.80`；由 `semanticGateMode: 'real'` + 独立 `deterministicRecruitingClassifier` seam 测得。
-- False-positive rate：`0/10 = 0.00`，门槛 `< 0.10`；同一独立 seam 测得。
-- Collision：6 个 fixture 均在 `real` gate 下命中预期 action；生产 `assessSignals` exclusive arbitration 每个 collision 实际输出恰好 1 张卡。
-- fixture schema、answer quality、grounding、missing-field failures：均为 `0`。
+提交只包含 Task 5 的三个实现文件；工作区中既有的其他修改以及 `package.json` 中预先存在的 `name: natively -> cueup` 修改均未纳入该提交。
 
-### Continuation Matrix
+## Files modified/created
 
-- 总数：16；Positive：8；Negative：8。
-- Positive：全部派生且实际 child count 均为 `1` 个 `candidate_evidence_summary`，共 `8` 个；重复 derived action `0`；generated visible answer `8`；post-call carryover `8`。
-- Negative：全部不派生卡片，visible answer 均为 `none`，共 `8` 个。
-- Negative reason 全覆盖：`wrong_speaker`、`interim_turn`、`unrelated_topic`、`provider_scope_denial`、`planner_timeout`、`invalid_json`、`final_hiring_judgment`、`unsupported_invented_evidence`。
-- Runner result：`16/16` 通过；unsafe visible answers：`0`。`recruiting-continuation-zh-action-001` 覆盖 collecting 后的重复 eligible turn 与后续 eligible final turn，parent 仍只产生 1 个 store child。
+- Modified: `/Users/tang-codeing/code/natively-cluely-ai-assistant/electron/ipcHandlers.ts`
+- Modified: `/Users/tang-codeing/code/natively-cluely-ai-assistant/package.json`
+- Created: `/Users/tang-codeing/code/natively-cluely-ai-assistant/tests/e2e/sales-transcript-lifecycle.spec.ts`
+- Replaced per requested report path: `/Users/tang-codeing/code/natively-cluely-ai-assistant/.superpowers/sdd/task-5-report.md`
 
-### Safety Matrix
+## Step execution and verification
 
-- Unsafe input：26 条（18 条 candidate evidence summary，8 条 recruiting policy answer），全部被 Task 2 evaluator 拒绝。
-- Unsafe escapes：`0/26`。
-- 合法反例：1 条，通过；候选人主动提及家庭情境时，回答只记录岗位相关已观察证据与待验证项，未将家庭情境作为招聘/录用依据。
+### Step 1 — Existing e2e patterns
 
-## RED：先写测试并确认失败
+Executed all requested exploration commands.
 
-命令：
+Findings:
 
-```bash
-rtk node --test \
-  electron/services/__tests__/RecruitingDynamicActionProductFixtures.test.mjs \
-  electron/services/__tests__/RecruitingDynamicActionAnswerQuality.test.mjs \
-  electron/services/__tests__/DynamicActionContinuationEndToEnd.test.mjs
+- `/Users/tang-codeing/code/natively-cluely-ai-assistant/tests/e2e/fixtures.ts` contains the expected launcher-page lookup implementation and Electron launch pattern.
+- No `tests/e2e/*.test.ts` files exist; existing tests use `.spec.ts`.
+- `electron.launch` is centralized in `tests/e2e/fixtures.ts` among the scanned existing files.
+- `SalesIndustrialIntent.test.mjs` uses injected `cloudIntentClassifier` callbacks in classifier tests.
+- Contrary to the task context, the current `findLauncherPage` declaration is not exported by `fixtures.ts`; only `test` and `expect` are exported.
+
+### Step 1.5 — Main-process mock
+
+Extended the existing `NODE_ENV === 'test'` block immediately before the `inject-transcript-turn` handler. The main-process `globalThis.__intentClassifier` mock is now installed unconditionally and returns `globalThis.__lastExpectedIntent`, including `null` for suppression cases.
+
+### Step 2 — Playwright Electron spec
+
+Created `sales-transcript-lifecycle.spec.ts` with:
+
+- fixture parsing and static validation in `beforeAll`;
+- real Electron launch;
+- sales mode activation through the actual `modesGetAll`/`modesSetActive` preload contract;
+- lifecycle segment injection through `injectTranscriptTurn`;
+- positive intent coverage assertions and three legacy-intent zero assertions;
+- explicit `seg-036` internal-chatter suppression assertion;
+- main-process expected-intent assignment through `ElectronApplication.evaluate` before every transcript injection;
+- renderer-side result reset/mirroring from the IPC response to prevent stale `__lastIntentResult` values。
+
+### Step 3 — package script
+
+Added:
+
+```text
+node tests/utils/sales-transcript-fixture-validator.mjs tests/fixtures/demo/03_master_transcript/sales/sales_full_lifecycle_meeting.json && ELECTRON_E2E=1 npx playwright test tests/e2e/sales-transcript-lifecycle.spec.ts
 ```
 
-结果：7 个子测试中 4 通过、3 失败。
+### Step 4 — Verification
 
-- `recruiting continuation fixtures emit neutral evidence summaries only after eligible evidence`：失败，`tests/fixtures/dynamic-actions/continuation/recruiting.json` 尚不存在（`ENOENT`）。
-- `recruiting product fixtures cover the release matrix`：失败，既有 Recruiting product fixture 只有 5 条，未达到 `>= 40`。
-- `recruiting product fixtures exercise the deterministic action and accepted-output path`：失败，既有矩阵的 recall 为 `0.75`，低于 `0.80` 门槛。
+Executed:
 
-失败原因符合预期：Task 5 的 Recruiting fixture matrix、continuation matrix 和 policy-record runner 接线均尚未实现。Safety evaluator 测试在 RED 阶段已通过，证明该行为来自 Task 2 既有实现；本任务为其补齐具体 release matrix。
+1. Renderer typecheck:
+   - `/Users/tang-codeing/code/natively-cluely-ai-assistant/node_modules/.bin/tsc --noEmit -p /Users/tang-codeing/code/natively-cluely-ai-assistant/tsconfig.json`
+   - Result: **PASS**, exit 0, no diagnostics.
+2. Electron typecheck:
+   - `/Users/tang-codeing/code/natively-cluely-ai-assistant/node_modules/.bin/tsc --noEmit -p /Users/tang-codeing/code/natively-cluely-ai-assistant/electron/tsconfig.json`
+   - Result: **PASS**, exit 0, no diagnostics.
+3. Target Playwright spec standalone typecheck:
+   - TypeScript compile with `--noEmit --target ESNext --module CommonJS --moduleResolution node --esModuleInterop --skipLibCheck --allowJs`.
+   - Result: **PASS**, exit 0, no diagnostics.
+   - An initial compile identified `Object.entries` value type as `unknown`; the coverage object was minimally narrowed to `Record<string, number>`, then the same command passed.
+4. Fixture validator:
+   - Result: **PASS**, `ok: true`, no errors.
+   - Existing non-blocking warnings remain for `seg-005` and `seg-007` keyword/intent strength.
+5. First fixture segment parse:
+   - Result: **PASS**; `seg-001`, `start_ms: 0`, `expected_intent: null` verified.
+6. Playwright discovery configuration:
+   - `playwright.config.ts` exists and uses `testDir: './tests/e2e'`; the target follows Playwright's `.spec.ts` convention.
+7. Package script parse and exact target verification:
+   - Result: **PASS**.
+8. `git diff --check` for Task 5 implementation files:
+   - Result: **PASS**.
 
-## 初始 GREEN：Task 5 实现后验证
+Deferred by explicit instruction:
 
-```bash
-rtk npm run build:electron:tsc
-```
+- `npm run test:sales-transcript`
+- Any command that launches the real Electron application or executes the Playwright tests
 
-结果：通过，`tsc -p electron/tsconfig.json` exit 0。
+The live run is deferred to the merge/dev-machine step.
 
-```bash
-rtk node --test \
-  electron/services/__tests__/RecruitingDynamicActionProductFixtures.test.mjs \
-  electron/services/__tests__/RecruitingDynamicActionAnswerQuality.test.mjs \
-  electron/services/__tests__/DynamicActionContinuationEndToEnd.test.mjs
-```
+### Step 5 — Commit
 
-结果：`7/7` 子测试通过，`0` 失败。
+Committed after all required typechecks passed. Commit: `5c4978f1`.
 
-- Sales continuation zh：通过。
-- FDE continuation release gates：通过。
-- Recruiting continuation matrix：通过。
-- Recruiting unsafe answer matrix：通过。
-- Recruiting legitimate counterexample：通过。
-- Recruiting product release matrix：通过。
-- Recruiting deterministic action / accepted-output / collision path：通过。
+## Deviations from brief
 
-## Reviewer P1 修复：独立 semantic seam 与实际 child count
-
-### RED
-
-```bash
-rtk node --test \
-  electron/services/__tests__/RecruitingDynamicActionProductFixtures.test.mjs \
-  electron/services/__tests__/RecruitingDynamicActionAnswerQuality.test.mjs \
-  electron/services/__tests__/DynamicActionContinuationEndToEnd.test.mjs
-```
-
-结果：8 个子测试中 6 通过、2 失败。
-
-- Recruiting product release gate：失败，旧 runner 未透传外部 classifier，`real` gate 下 recall 为 `0`，符合独立 seam 尚未接通的预期。
-- Recruiting continuation matrix：失败，旧 result 未提供 `derivedActionCount`，无法证明实际 child 数量。
-
-### GREEN
-
-```bash
-rtk npm run build:electron:tsc
-```
-
-结果：通过，`tsc -p electron/tsconfig.json` exit 0。
-
-```bash
-rtk node --test \
-  electron/services/__tests__/RecruitingDynamicActionProductFixtures.test.mjs \
-  electron/services/__tests__/RecruitingDynamicActionAnswerQuality.test.mjs \
-  electron/services/__tests__/DynamicActionContinuationEndToEnd.test.mjs
-```
-
-结果：`8/8` 子测试通过，`0` 失败。包含 Sales continuation、FDE continuation、Recruiting product real-gate seam、classifier expected-conflict guard、Recruiting continuation actual-child-count 和 safety matrix。
-
-## 实际改动文件
-
-仅以下 6 个文件，均属于 Task 5 commit：
-
-- `electron/services/__tests__/DynamicActionContinuationEndToEnd.test.mjs`
-- `electron/services/__tests__/RecruitingDynamicActionAnswerQuality.test.mjs`
-- `electron/services/__tests__/RecruitingDynamicActionProductFixtures.test.mjs`
-- `electron/services/qa/DynamicActionContinuationFixtureRunner.ts`
-- `tests/fixtures/dynamic-actions/continuation/recruiting.json`
-- `tests/fixtures/dynamic-actions/product/recruiting.json`
-
-Reviewer P1 额外改动：
-
-- `electron/services/qa/DynamicActionFixtureRunner.ts`
-- `electron/services/qa/DynamicActionContinuationFixtureRunner.ts`
-- `electron/services/__tests__/RecruitingDynamicActionProductFixtures.test.mjs`
-- `electron/services/__tests__/DynamicActionContinuationEndToEnd.test.mjs`
-- `tests/fixtures/dynamic-actions/continuation/recruiting.json`
-
-## 自审
-
-- `git diff --check` 在 Task 5 commit 前通过。
-- 图谱 change review 未发现超出 fixture runner 与测试范围的受影响生产 flow。
-- Recruiting product release gate 使用 `semanticGateMode: 'real'`，并将测试顶层定义的 `deterministicRecruitingClassifier` 原样传入 runner。该 classifier 只读取 `CloudSemanticGateInput` 的 transcript、speaker、candidates 和 policy summary；它不闭包捕获 fixture、expected、tags 或 id。
-- classifier expected-conflict guard 以相同 classifier input 附加冲突的 `expected.actionType`，确认决策不变；因此 expected 不参与 Recruiting classifier 决策。
-- fixture oracle 仍可供既有 Sales/FDE deterministic CI 使用，但 Recruiting release gate 不使用它，也不将其声明为独立质量度量。
-- continuation result 通过 engine store 按 session、mode、mode template、parentActionId 与 derived type 读取全部实际 children，`derivedActionCount` 和 `duplicateDerivedActions` 不再由 enqueue 返回值或硬编码推断。
-- Sales/FDE continuation E2E 与 Recruiting 目标测试在最终命令中共同通过。
-- 未修改未跟踪 `.tmp/`。
+1. **File extension changed from `.test.ts` to `.spec.ts`.**
+   - Required by the task context and existing Playwright convention.
+   - The package script points to the `.spec.ts` file.
+2. **Removed the `origClassifier && !origClassifier.__mocked` guard.**
+   - Required because production does not initialize `globalThis.__intentClassifier`; retaining the guard would leave transcript injection nonfunctional.
+3. **Assigned expected intent in the Electron main process with `app.evaluate`.**
+   - The brief's `page.evaluate` assignment only affects renderer `window`; renderer and main globals are isolated.
+   - The renderer assignment is still performed before each injection as requested, while `app.evaluate` supplies the value actually consumed by the main-process mock.
+4. **Mirrored the IPC return value into renderer `window.__lastIntentResult`.**
+   - `injectTranscriptTurnForTest` writes `globalThis.__lastIntentResult` in main, which is not visible to renderer `page.waitForFunction`.
+   - The test resets the renderer value before each call and mirrors `lastIntent` from the IPC result, avoiding stale-result races.
+5. **Used a local launcher-page helper instead of importing it from `./fixtures`.**
+   - Actual `fixtures.ts` does not export `findLauncherPage`, despite the task context saying it does.
+   - Modifying `fixtures.ts` was explicitly outside the permitted file list.
+6. **Used the real mode API instead of nonexistent `electronAPI.setMode('sales')`.**
+   - Actual preload exposes `modesGetAll()` and `modesSetActive(id)`; the spec resolves the seeded sales mode by `templateType` and activates its ID.
+7. **Explicit Electron launch environment.**
+   - Added `NODE_ENV=test` so the test-only IPC handler is registered, plus `ELECTRON_E2E=1` and `ELECTRON_E2E_SKIP_AUDIO_START=1` for the e2e environment.
+8. **Package script uses `ELECTRON_E2E=1 npx playwright test` and the `.spec.ts` positional target.**
+   - Required by the task context and existing project run pattern.
+9. **Did not execute RED/GREEN live e2e runs.**
+   - The task context explicitly prohibits attempting the real Electron e2e in this implementation; only non-launching static/type verification was performed.
+10. **Replaced an existing tracked report at the exact requested path instead of creating a new file.**
+    - Repository reality differed from the prompt: the path already contained an unrelated Task 5 report. The exact report path was an explicit requirement, so it was replaced after first reading its contents.
 
 ## Concerns
 
-- 无阻塞 concern。
-- Recruiting 指标来自本地 deterministic classifier seam，不代表或替代生产云 classifier 的实时质量评估；它只用于固定 release matrix 的可重复验证。
+1. The brief says 11 positive `sales_*` intents, but the authoritative fixture's `expected_intent_coverage` currently contains 10 positive `sales_*` keys. The test asserts every positive key present in that fixture and all three legacy zero-count keys; no fixture file was changed because it was outside Task 5's allowed files.
+2. The required mock returns the expected fixture intent directly. Consequently, the suite demonstrates fixture validation, main/renderer IPC plumbing, lifecycle traversal, coverage accounting, and suppression transport. It does not independently prove that the production IntentClassifier would infer those intents from transcript text without the mock.
+3. Because the live Electron test was intentionally deferred, display/runtime behavior remains unverified until the merge/dev-machine execution step.
 
-## Task Commit
+## Task 5 Fix Subagent
 
-- `ce7f0161 test(recruiting): add evidence and safety release matrices`
-- `de54b7f6 test(recruiting): isolate fixture semantic gate`
+- Status: **DONE**
+- Commit: `f515d161`
+- Verification:
+  - Fixture validator: **PASS**, exit code 0 (`ok: true`; two existing non-blocking warnings for `seg-005` and `seg-007`).
+  - Validator regression tests: **PASS**, 4 passed, 0 failed.
+  - Electron typecheck: **PASS**, exit code 0, no TypeScript errors.
+  - `grep '"build:electron"' package.json`: `"build:electron": "node scripts/build-electron.js",` (script is defined).
+  - Staged commit diff contained only the `test:sales-transcript` script-line change; the pre-existing `name` change was not included in the commit.

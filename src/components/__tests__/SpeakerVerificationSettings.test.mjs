@@ -86,3 +86,28 @@ test('three collected enrollment samples switch to re-record instead of a fourth
   assert.match(source, /enrolled \|\| hasCompleteSampleSet \? <RotateCcw/);
   assert.match(source, /setRecordingIndex\(shouldRestart \? 0 : samples\.length\)/);
 });
+
+test('recording UI exposes live quality state and next action guidance', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+  assert.match(source, /RecordingQualityState/);
+  assert.match(source, /recordingMetrics/);
+  assert.match(source, /正在录音/);
+  assert.match(source, /继续说话/);
+  assert.match(source, /声音偏小/);
+  assert.match(source, /有效语音不足/);
+  assert.match(source, /可以停止本段录音/);
+});
+
+test('invalid recording samples are rejected before enrollment', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+  assert.match(source, /evaluateRecordingQuality/);
+  assert.match(source, /quality\.state !== 'ready'/);
+  assert.match(source, /本段录音未达标，请重录/);
+  assert.match(source, /const next = \[\.\.\.samples, sample\]/);
+
+  const qualityCheckIndex = source.indexOf("quality.state !== 'ready'");
+  const appendIndex = source.indexOf('const next = [...samples, sample]');
+  assert.ok(qualityCheckIndex > 0, 'quality check should exist');
+  assert.ok(appendIndex > 0, 'sample append should exist');
+  assert.ok(qualityCheckIndex < appendIndex, 'invalid samples must be rejected before being appended');
+});

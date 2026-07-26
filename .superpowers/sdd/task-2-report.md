@@ -225,3 +225,94 @@ rtk npm run build:electron:tsc && rtk node --test electron/services/__tests__/Dy
 ### Concerns
 
 - None. `.tmp/` remains untouched.
+
+## Task 2: validator 完整性校验（speakers / scenarios / segments / 覆盖率 / 反向）
+
+### Status
+
+- DONE
+- Branch: `ci/intel-mac-workflow`
+- Functional commit: `539fbe52 feat(validator): enforce fixture integrity for sales transcript`
+- Scope limited to brief-specified files: `tests/utils/sales-transcript-fixture-validator.mjs` and `tests/utils/__tests__/sales-transcript-fixture-validator.test.mjs`.
+
+### Implementation
+
+- Appended three new failing tests verbatim from the brief: `detects duplicate speaker ids`, `detects scenario overlap`, `coverage report counts intent occurrences`.
+- Extended `validateSalesTranscriptFixture` in place (no replacement of existing top-level key check). Inserted the new validation blocks immediately above the final `return { ok: errors.length === 0, errors, warnings, coverageReport }`.
+- New checks: speaker-id uniqueness, role whitelist (`user`/`customer`/`internal`), scenario overlap detection by `start_ms < previous.end_ms`, scenario `expected_intents` enum membership, segment speaker/scenario reference legality, segment monotonic `start_ms < end_ms`, segment `expected_intent` enum membership, per-intent `coverageReport` counting, and reverse coverage validation against `expected_intent_coverage` (with `internal_chatter_suppression` excluded per brief).
+
+### RED Evidence
+
+Command:
+
+```bash
+node --test tests/utils/__tests__/sales-transcript-fixture-validator.test.mjs
+```
+
+After appending the 3 tests but before extending the validator:
+
+- `rejects fixture missing required top-level keys`: PASS (the original Task 1 test).
+- `detects duplicate speaker ids`: FAIL — `result.ok` was `true` because the skeleton did not collect duplicate-speaker errors.
+- `detects scenario overlap`: FAIL — `result.ok` was `true` because the skeleton did not detect scenario overlap.
+- `coverage report counts intent occurrences`: FAIL — `coverageReport.sales_pain_discovery` was `undefined` because the skeleton never populated the report.
+
+Total: 4 tests, 1 pass, 3 fail.
+
+### GREEN Evidence
+
+Same command after extending the validator:
+
+- `rejects fixture missing required top-level keys`: PASS.
+- `detects duplicate speaker ids`: PASS — validator emits `duplicate speaker id: S1`.
+- `detects scenario overlap`: PASS — validator emits `scenario overlap: s1 and s2` because s2.start_ms (400) < s1.end_ms (500).
+- `coverage report counts intent occurrences`: PASS — `coverageReport.sales_pain_discovery === 1`.
+
+Total: 4 tests, 4 pass, 0 fail.
+
+### Concerns
+
+- None. The extension is purely additive; the original `return` shape (`{ ok, errors, warnings, coverageReport }`) is preserved, so any existing callers (Task 1 commit `e905872d`) continue to work unchanged. The untracked `.tmp/` directory was not touched.
+
+## Task 2 Fix Subagent
+
+### Status
+
+- DONE
+- Branch: `ci/intel-mac-workflow`
+- Commit: `d1438492 chore(validator): remove unused allSegmentStartEnds tracking`
+- Scope limited strictly to `tests/utils/sales-transcript-fixture-validator.mjs`.
+
+### What Was Removed
+
+- `tests/utils/sales-transcript-fixture-validator.mjs:71` — `const allSegmentStartEnds = [];` (array declaration immediately above the segments loop).
+- `tests/utils/sales-transcript-fixture-validator.mjs:79` — `allSegmentStartEnds.push([seg.start_ms, seg.end_ms]);` (push inside the segments loop).
+- `tests/utils/sales-transcript-fixture-validator.mjs:84` — `allSegmentStartEnds.sort((a, b) => a[0] - b[0]);` (post-loop sort).
+
+The array was collected and sorted but never read; removing it eliminates YAGNI dead code while preserving every existing error-detection branch and `coverageReport` accounting. No other lines in the validator were touched.
+
+### Test Results
+
+Command:
+
+```bash
+node --test tests/utils/__tests__/sales-transcript-fixture-validator.test.mjs
+```
+
+Output:
+
+```text
+✔ rejects fixture missing required top-level keys (1.131791ms)
+✔ detects duplicate speaker ids (0.732458ms)
+✔ detects scenario overlap (0.220458ms)
+✔ coverage report counts intent occurrences (0.381792ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 34.693584
+```
+
+- 4 pass, 0 fail — matches the expected baseline.
