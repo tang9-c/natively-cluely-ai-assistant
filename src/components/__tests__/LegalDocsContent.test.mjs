@@ -27,6 +27,20 @@ test('legal documents use the current CueUp owner and contact information', () =
   assert.doesNotMatch(combined, /evinjohnn\/natively-cluely-ai-assistant/);
 });
 
+test('fork provenance and public copy keep Natively as attribution only', () => {
+  const readme = read('README.md');
+  const provenance = read('FORK_PROVENANCE.md');
+  const about = read('src/components/AboutSection.tsx');
+
+  assert.match(readme, /Natively` 名称仅用于说明上游来源和许可证背景/);
+  assert.match(readme, /CueUp 是独立 fork，不隶属、不受 Natively 或 Natively AI Private Limited 授权、赞助或背书/);
+  assert.match(provenance, /Trademark\/Branding Policy/);
+  assert.match(provenance, /The external product brand for this fork is CueUp/);
+  assert.match(provenance, /must not be used as this fork's application name, package name/);
+  assert.match(provenance, /simple C-shaped sound wave/);
+  assert.match(about, /CueUp 是独立 fork,不隶属、不受 Natively 或 Natively AI Private Limited 授权、赞助或背书/);
+});
+
 test('privacy policy describes current local and speech provider data flows', () => {
   const privacy = read('PRIVACY.md');
 

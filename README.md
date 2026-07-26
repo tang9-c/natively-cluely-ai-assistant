@@ -275,9 +275,11 @@ CueUp 适用于学习、工作辅助、会议复盘、可访问性和个人效�
 
 ## 许可证与来源说明
 
-本项目基于 Natively 开源版本修改而来。原项目曾托管于
-`https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant`，并以 GNU Affero General Public License v3.0（AGPL-3.0）发布。
+本项目基于 Natively 此前以 GNU Affero General Public License v3.0（AGPL-3.0）发布的版本修改而来。原项目曾托管于
+`https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant`。上游后续版本可能使用不同授权条款，本 fork 不从上游新授权版本同步代码或资源，除非完成单独的许可证审查。
 
-本仓库继续遵循 [AGPL-3.0](LICENSE) 发布，并在许可证文件中保留来源说明、原始归属说明和完整许可证文本。
+本仓库继续遵循 [AGPL-3.0](LICENSE) 发布，并在许可证文件中保留来源说明、原始归属说明和完整许可证文本。fork 基准、许可证哈希和上游同步冻结记录见 [FORK_PROVENANCE.md](FORK_PROVENANCE.md)。
+
+`Natively` 名称仅用于说明上游来源和许可证背景，不作为本 fork 的产品品牌、商业名称或背书声明。CueUp 是独立 fork，不隶属、不受 Natively 或 Natively AI Private Limited 授权、赞助或背书。
 
 如果你分发本项目的修改版本，或通过网络向用户提供基于本项目的服务，请按照 AGPL-3.0 保留版权、许可证和修改说明，并向用户提供对应源码。

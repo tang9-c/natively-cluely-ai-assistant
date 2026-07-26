@@ -31,7 +31,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
           关键时刻,给你一句能用的回答
         </p>
         <p className="text-xs text-text-tertiary mt-2 leading-relaxed">
-          本项目 fork 自{" "}
+          本项目基于{" "}
           <a
             href="https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant"
             onClick={(e) =>
@@ -44,7 +44,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
           >
             github.com/Natively-AI-assistant/natively-cluely-ai-assistant
           </a>
-          ,并基于 AGPL-3.0 协议继续发布。源代码、修改记录与许可证请参见原仓库。
+          此前以 AGPL-3.0 协议发布的版本,并由本 fork 继续维护。CueUp 是独立 fork,不隶属、不受 Natively 或 Natively AI Private Limited 授权、赞助或背书。源代码、修改记录与许可证请参见本 fork 仓库。
         </p>
       </div>
 

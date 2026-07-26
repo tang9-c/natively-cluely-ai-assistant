@@ -6,7 +6,7 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, LibraryBig, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff,
-    Star, AlertCircle, Gift, Cpu, Shield, Download
+    Star, AlertCircle, Gift, Cpu, Shield, Download, Cloud
 } from 'lucide-react';
 import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
@@ -19,7 +19,6 @@ import { ResearchTabBody } from './settings/ResearchTabBody';
 import { SpeakerVerificationSettings } from './settings/SpeakerVerificationSettings';
 import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
 import { LocalSenseVoiceModelPanel } from './LocalSenseVoiceModelPanel';
-import { NativelyLogoMark } from './NativelyLogoMark';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { isMac } from '../utils/platformUtils';
@@ -1584,7 +1583,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                         onClick={() => setActiveTab('natively-api')}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${activeTab === 'natively-api' ? 'bg-bg-item-active text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-item-active/50'}`}
                                     >
-                                        <NativelyLogoMark size={16} className={activeTab === 'natively-api' ? 'text-blue-500' : 'text-blue-500/70'} />
+                                        <Cloud size={16} className={activeTab === 'natively-api' ? 'text-blue-500' : 'text-blue-500/70'} />
                                         <span>QCLOUD API</span>
                                     </button>
                                     <button
@@ -2406,7 +2405,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                                 badge: '已保存',
                                                                 desc: '复用 QCLOUD API Key · 中文优先大模型 · 支持说话人分离',
                                                                 color: 'blue',
-                                                                icon: <NativelyLogoMark size={14} className="text-blue-500" />,
+                                                                icon: <Cloud size={14} className="text-blue-500" />,
                                                             }] : []),
                                                             { id: 'doubao-auc', label: 'Doubao AUC（说话人分离）', badge: hasStoredDoubaoKey ? '已保存' : null, desc: '复用 Doubao API Key；AUC 大模型，支持说话人分离', color: 'orange', icon: <Mic size={14} /> },
                                                             { id: 'local-sensevoice', label: '本地 SenseVoice', badge: null, desc: '中文优先的本地语音转写', color: 'green', icon: <Cpu size={14} /> },

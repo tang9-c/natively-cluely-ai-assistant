@@ -3,7 +3,7 @@ import { useStreamBuffer } from '../hooks/useStreamBuffer';
 import { X, Copy, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { genMessageId } from '../utils/messageId';
-import nativelyIcon from './icon.png';
+import cueUpIcon from './icon.png';
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -461,7 +461,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
                         {/* Header with close button */}
                         <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle shrink-0">
                             <div className="flex items-center gap-2 text-text-tertiary">
-                                <img src={nativelyIcon} className="w-3.5 h-3.5 force-black-icon opacity-50" alt="logo" />
+                                <img src={cueUpIcon} className="w-3.5 h-3.5 force-black-icon opacity-50" alt="logo" />
                                 <span className="text-[13px] font-medium">搜索本次会议</span>
                             </div>
                             <button

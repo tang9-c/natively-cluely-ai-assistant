@@ -17,8 +17,12 @@ function readJson(rel) {
 
 test('electron-builder mac release targets are architecture-neutral so workflows can package one arch', () => {
   const pkg = readJson('package.json');
+  const lock = readJson('package-lock.json');
   const macTargets = pkg.build.mac.target;
 
+  assert.equal(pkg.name, 'cueup');
+  assert.equal(lock.name, 'cueup');
+  assert.equal(lock.packages[''].name, 'cueup');
   assert.equal(pkg.build.appId, 'com.electron.meeting-notes', 'appId must stay unchanged for this branding pass');
   assert.equal(pkg.build.productName, 'CueUp');
   assert.equal(pkg.build.mac.icon, 'assets/cueup.icns');
@@ -61,6 +65,37 @@ test('electron-builder mac release targets are architecture-neutral so workflows
     pkg.build.asarUnpack.includes('dist-electron/electron/rag/vectorSearchWorker.js'),
     'RAG worker thread entrypoint must be unpacked outside app.asar so worker_threads can load it',
   );
+});
+
+test('CueUp branding uses non-Natively logo assets for release surfaces', () => {
+  const sourceFiles = [
+    'src/components/SettingsOverlay.tsx',
+    'src/components/settings/Sidebar.tsx',
+    'src/components/settings/NativelyApiSettings.tsx',
+  ].map(read).join('\n');
+
+  assert.doesNotMatch(sourceFiles, /NativelyLogoMark/);
+  assert.doesNotMatch(sourceFiles, /Natively logomark/);
+  assert.match(read('src/components/CueUpLogoMark.tsx'), /C-shaped sound wave/);
+
+  const requiredAssets = [
+    'assets/cueup-logo.svg',
+    'assets/cueup.icns',
+    'assets/icon.png',
+    'assets/iconTemplate.png',
+    'assets/icons/win/icon.ico',
+    'assets/icons/png/icon_16x16.png',
+    'assets/icons/png/icon_512x512.png',
+    'src/assets/logo.webp',
+    'src/components/icon.png',
+    'src/icons/cueup.iconset/icon_512x512@2x.png',
+  ];
+
+  for (const asset of requiredAssets) {
+    assert.ok(fs.existsSync(path.join(root, asset)), `${asset} should exist`);
+  }
+
+  assert.equal(fs.existsSync(path.join(root, 'src/icons/natively.iconset')), false);
 });
 
 test('native build script accepts explicit macOS release targets so CI can build one architecture per workflow', () => {

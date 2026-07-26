@@ -1,11 +1,11 @@
 import {
   AlertCircle,
   CheckCircle,
+  Cloud,
   Loader2,
   Trash2,
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
-import { NativelyLogoMark } from '../NativelyLogoMark';
 
 // ─── Card wrapper ────────────────────────────────────────────
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
@@ -125,7 +125,7 @@ export const NativelyApiSettings: React.FC = () => {
         <div className="flex items-center gap-3 px-5 pt-5 pb-4">
           {/* Tinted icon well — Apple style */}
           <div className="w-9 h-9 rounded-xl bg-blue-500/15 border border-blue-500/20 flex items-center justify-center shrink-0">
-            <NativelyLogoMark size={18} className="text-blue-400" />
+            <Cloud size={18} className="text-blue-400" />
           </div>
           <div className="min-w-0">
             <p className="text-[13px] font-semibold text-text-primary">QCLOUD key</p>

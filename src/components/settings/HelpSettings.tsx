@@ -10,7 +10,7 @@ import { SiOpenai, SiGoogle } from 'react-icons/si';
 import { useShortcuts, ShortcutConfig } from '../../hooks/useShortcuts';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { isMac, getModifierSymbol } from '../../utils/platformUtils';
-import nativelyIcon from '../icon.png';
+import cueUpIcon from '../icon.png';
 
 // ----------------------
 // Animations & Mocks
@@ -51,7 +51,7 @@ const MockAppInterface = () => {
                         {/* Logo Button */}
                         <div className="w-8 h-8 rounded-full bg-bg-item-active flex items-center justify-center border border-border-muted overflow-hidden">
                             <img
-                                src={nativelyIcon}
+                                src={cueUpIcon}
                                 alt="CueUp"
                                 className="w-[20px] h-[20px] object-contain"
                                 style={{ filter: isLight ? 'brightness(0)' : 'brightness(0) invert(1)', opacity: 0.9 }}
@@ -259,7 +259,7 @@ const MockMeetingInterfaceAnim = () => {
                             </div>
                             <div className="flex items-start gap-3">
                                 <div className="mt-0.5 w-5 h-5 rounded-full bg-bg-input flex items-center justify-center border border-border-subtle shrink-0">
-                                    <img src={nativelyIcon} alt="AI" className="w-3 h-3 opacity-50 object-contain force-black-icon" />
+                                    <img src={cueUpIcon} alt="AI" className="w-3 h-3 opacity-50 object-contain force-black-icon" />
                                 </div>
                                 <div>
                                     <div className="text-[10px] text-text-tertiary mb-1 font-medium">10:35 AM</div>
@@ -290,7 +290,7 @@ const MockMeetingChatAnim = () => {
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle shrink-0">
                 <div className="flex items-center gap-2 text-text-tertiary">
-                    <img src={nativelyIcon} className="w-3.5 h-3.5 force-black-icon opacity-50" alt="图标" />
+                    <img src={cueUpIcon} className="w-3.5 h-3.5 force-black-icon opacity-50" alt="图标" />
                     <span className="text-[13px] font-medium">搜索本次会议</span>
                 </div>
                 <X size={16} className="text-text-tertiary" />
@@ -423,7 +423,7 @@ const MockPermissionsAnim = () => {
                 </div>
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
-                        <img src={nativelyIcon} alt="CueUp" className="w-6 h-6 object-contain rounded drop-shadow-sm opacity-90" />
+                        <img src={cueUpIcon} alt="CueUp" className="w-6 h-6 object-contain rounded drop-shadow-sm opacity-90" />
                         <span className="text-text-primary text-sm font-medium">CueUp</span>
                     </div>
 
@@ -464,7 +464,7 @@ const MockPillControlsAnim = () => {
             {/* Logo → Launcher */}
             <div className="flex items-center gap-3 p-3 bg-bg-elevated border border-border-subtle rounded-xl">
                 <div className="w-8 h-8 rounded-full bg-bg-item-active flex items-center justify-center border border-border-muted shrink-0 shadow-sm">
-                    <img src={nativelyIcon} alt="图标" className="w-[18px] h-[18px] object-contain force-black-icon opacity-90" />
+                    <img src={cueUpIcon} alt="图标" className="w-[18px] h-[18px] object-contain force-black-icon opacity-90" />
                 </div>
                 <ArrowRight className="w-3.5 h-3.5 text-text-tertiary shrink-0" />
                 <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -573,7 +573,7 @@ const MockProviderSelectionAnim = () => {
     }, []);
 
     const options = [
-        { id: 'local-sensevoice', label: 'Local SenseVoice', badge: '', recommended: true, desc: '中文优先，本地实时转录', color: 'green', icon: <img src={nativelyIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="CueUp" /> },
+        { id: 'local-sensevoice', label: 'Local SenseVoice', badge: '', recommended: true, desc: '中文优先，本地实时转录', color: 'green', icon: <img src={cueUpIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="CueUp" /> },
         { id: 'qcloud-stt', label: 'QCLOUD API', badge: '已保存', recommended: false, desc: '同一把 QCLOUD key，中文优先并支持说话人分离', color: 'blue', icon: <Mic size={14} /> },
         { id: 'doubao-auc', label: 'Doubao AUC', badge: '已保存', recommended: false, desc: 'AUC BigModel，支持说话人和情绪信息', color: 'orange', icon: <Mic size={14} /> },
     ];
@@ -1093,7 +1093,7 @@ export const HelpSettings: React.FC = () => {
                             <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
                                     <span className="flex items-center gap-2">
-                                        <img src={nativelyIcon} alt="Doubao" className="w-4 h-4 object-contain force-black-icon opacity-80" /> Doubao
+                                        <img src={cueUpIcon} alt="Doubao" className="w-4 h-4 object-contain force-black-icon opacity-80" /> Doubao
                                     </span>
                                     <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.volcengine.com/ark') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 获取密钥</button>
                                 </h5>
@@ -1104,7 +1104,7 @@ export const HelpSettings: React.FC = () => {
                             <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
                                     <span className="flex items-center gap-2">
-                                        <img src={nativelyIcon} alt="QCLOUD API" className="w-4 h-4 object-contain force-black-icon opacity-80" /> QCLOUD API
+                                        <img src={cueUpIcon} alt="QCLOUD API" className="w-4 h-4 object-contain force-black-icon opacity-80" /> QCLOUD API
                                     </span>
                                 </h5>
                                 <p className="text-[11px] opacity-80 mb-2">一把 key 可用于 LLM 路由和可选语音转写。保存时如果当前仍是自动默认模型，CueUp 会把聊天默认切到 QCLOUD；如果你已手动选择模型，会先询问确认。</p>
