@@ -3,6 +3,7 @@
 import { AppState } from "./main"
 import { LLMHelper } from "./LLMHelper"
 import { CredentialsManager } from "./services/CredentialsManager"
+import { buildEmbeddingRuntimeConfig } from "./rag/EmbeddingRuntimeConfig"
 import { app } from "electron"
 // import dotenv from "dotenv" // Removed static import
 
@@ -86,8 +87,6 @@ export class ProcessingHelper {
       console.log("[ProcessingHelper] Loading stored Doubao LLM API Key from CredentialsManager");
       this.llmHelper.setDoubaoApiKey(doubaoKey);
     }
-    const doubaoEmbeddingModel = credManager.getDoubaoEmbeddingModel();
-
     const nativelyKey = credManager.getNativelyApiKey();
     if (nativelyKey) {
       console.log("[ProcessingHelper] Loading stored QCLOUD key from CredentialsManager");
@@ -103,15 +102,7 @@ export class ProcessingHelper {
     const ragManager = this.appState.getRAGManager();
     if (ragManager) {
       console.log("[ProcessingHelper] Initializing RAGManager embeddings with available keys");
-      ragManager.initializeEmbeddings({
-          openaiKey: openaiKey || undefined,
-          geminiKey: geminiKey || undefined,
-          doubaoKey: doubaoKey || process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY || undefined,
-          doubaoEmbeddingModel: doubaoEmbeddingModel || process.env.DOUBAO_EMBEDDING_MODEL || undefined,
-          // Keep runtime re-initialization aligned with AppState.initializeRAGManager().
-          ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
-          providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
-      });
+      ragManager.initializeEmbeddings(buildEmbeddingRuntimeConfig());
 
       // CRITICAL: Retry pending embeddings now that we have a key
       // This ensures any meetings that failed or were queued during startup get processed

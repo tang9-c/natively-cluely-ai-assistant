@@ -47,9 +47,8 @@ export class EmbeddingPipeline {
 
     /**
      * Initialize with provider config (picks best available provider)
-     * Idempotent: re-initialization only runs if the new config adds at least one
-     * key/URL that was not present in the last config (e.g., Ollama becomes available,
-     * or a cloud API key is loaded from CredentialsManager after startup).
+     * Idempotent: re-initialization runs when new provider configuration appears,
+     * or when QCLOUD credentials / embedding privacy policy change.
      * If the config is unchanged or strictly worse, the existing initPromise is returned.
      */
     async initialize(config: AppAPIConfig): Promise<void> {
@@ -62,6 +61,7 @@ export class EmbeddingPipeline {
         // Log only the SHAPE (which keys are present), never the secret values — the
         // config carries API keys and this line would otherwise leak them to logs/crash reports.
         console.log('[EmbeddingPipeline] Initializing with config:', {
+            qcloudKey: !!config.qcloudKey,
             openaiKey: !!config.openaiKey,
             geminiKey: !!config.geminiKey,
             doubaoKey: !!config.doubaoKey,
@@ -74,10 +74,12 @@ export class EmbeddingPipeline {
     }
 
     /**
-     * Returns true if `next` provides at least one credential that `prev` did not have.
-     * Prevents redundant re-initialization when the same keys are passed again.
+     * Returns true when provider selection may change. QCLOUD rotation/removal and
+     * embedding scope changes must replace the active provider immediately.
      */
     private _isConfigImprovement(prev: AppAPIConfig, next: AppAPIConfig): boolean {
+        if (prev.qcloudKey !== next.qcloudKey) return true;
+        if (prev.providerDataScopes?.embeddings !== next.providerDataScopes?.embeddings) return true;
         const hasNew = (prevVal: string | undefined, nextVal: string | undefined) =>
             !prevVal && !!nextVal;
         return (

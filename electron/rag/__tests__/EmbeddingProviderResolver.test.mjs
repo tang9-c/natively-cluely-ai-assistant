@@ -48,6 +48,175 @@ function loadResolver() {
   return import(pathToFileURL(resolverPath).href);
 }
 
+function fakeProvider(name, available, probes) {
+  return {
+    name,
+    model: `${name}-model`,
+    dimensions: 3,
+    space: `${name}:${name}-model:3`,
+    isAvailable: async () => {
+      probes.push(name);
+      return available;
+    },
+    embed: async () => [1, 2, 3],
+    embedQuery: async () => [1, 2, 3],
+    embedBatch: async texts => texts.map(() => [1, 2, 3]),
+  };
+}
+
+function fakeFactories(availability, probes, constructed = []) {
+  const make = name => {
+    constructed.push(name);
+    return fakeProvider(name, availability[name] ?? false, probes);
+  };
+  return {
+    local: () => make('local'),
+    ollama: () => make('ollama'),
+    qcloud: () => make('qcloud'),
+    doubao: () => make('doubao'),
+    openai: () => make('openai'),
+    gemini: () => make('gemini'),
+  };
+}
+
+const allCloudConfig = {
+  qcloudKey: 'fake-qcloud',
+  doubaoKey: 'fake-doubao',
+  doubaoEmbeddingModel: 'ep-test-123',
+  openaiKey: 'fake-openai',
+  geminiKey: 'fake-gemini',
+};
+
+test('EmbeddingProviderResolver selects QCLOUD after local providers fail', async () => {
+  const { EmbeddingProviderResolver } = await loadResolver();
+  const probes = [];
+  const factories = fakeFactories({ qcloud: true }, probes);
+
+  const provider = await EmbeddingProviderResolver.resolve(
+    allCloudConfig,
+    undefined,
+    factories,
+  );
+
+  assert.equal(provider.name, 'qcloud');
+  assert.deepEqual(probes, ['local', 'ollama', 'qcloud']);
+});
+
+test('EmbeddingProviderResolver does not construct or probe cloud when local succeeds', async () => {
+  const { EmbeddingProviderResolver } = await loadResolver();
+  const probes = [];
+  const constructed = [];
+  const factories = fakeFactories({ local: true }, probes, constructed);
+
+  const provider = await EmbeddingProviderResolver.resolve(
+    allCloudConfig,
+    undefined,
+    factories,
+  );
+
+  assert.equal(provider.name, 'local');
+  assert.deepEqual(probes, ['local']);
+  assert.deepEqual(constructed, ['local', 'ollama', 'qcloud', 'doubao', 'openai', 'gemini']);
+});
+
+test('EmbeddingProviderResolver tries direct Doubao after QCLOUD probe retries fail', async () => {
+  const { EmbeddingProviderResolver } = await loadResolver();
+  const probes = [];
+  const factories = fakeFactories({ doubao: true }, probes);
+
+  const provider = await EmbeddingProviderResolver.resolve(
+    allCloudConfig,
+    undefined,
+    factories,
+  );
+
+  assert.equal(provider.name, 'doubao');
+  assert.deepEqual(probes, [
+    'local',
+    'ollama',
+    'qcloud',
+    'qcloud',
+    'qcloud',
+    'doubao',
+  ]);
+});
+
+test('EmbeddingProviderResolver selects Ollama before any cloud provider', async () => {
+  const { EmbeddingProviderResolver } = await loadResolver();
+  const probes = [];
+  const factories = fakeFactories({ ollama: true }, probes);
+
+  const provider = await EmbeddingProviderResolver.resolve(
+    allCloudConfig,
+    undefined,
+    factories,
+  );
+
+  assert.equal(provider.name, 'ollama');
+  assert.deepEqual(probes, ['local', 'ollama']);
+});
+
+test('EmbeddingProviderResolver tries OpenAI after direct Doubao fails', async () => {
+  const { EmbeddingProviderResolver } = await loadResolver();
+  const probes = [];
+  const factories = fakeFactories({ openai: true }, probes);
+
+  const provider = await EmbeddingProviderResolver.resolve(
+    {
+      doubaoKey: 'fake-doubao',
+      doubaoEmbeddingModel: 'ep-test-123',
+      openaiKey: 'fake-openai',
+    },
+    undefined,
+    factories,
+  );
+
+  assert.equal(provider.name, 'openai');
+  assert.deepEqual(probes, [
+    'local',
+    'ollama',
+    'doubao',
+    'doubao',
+    'doubao',
+    'openai',
+  ]);
+});
+
+test('EmbeddingProviderResolver selects Gemini when it is the only configured cloud', async () => {
+  const { EmbeddingProviderResolver } = await loadResolver();
+  const probes = [];
+  const factories = fakeFactories({ gemini: true }, probes);
+
+  const provider = await EmbeddingProviderResolver.resolve(
+    { geminiKey: 'fake-gemini' },
+    undefined,
+    factories,
+  );
+
+  assert.equal(provider.name, 'gemini');
+  assert.deepEqual(probes, ['local', 'ollama', 'gemini']);
+});
+
+test('EmbeddingProviderResolver does not construct cloud providers when embeddings are denied', async () => {
+  const { EmbeddingProviderResolver } = await loadResolver();
+  const probes = [];
+  const constructed = [];
+  const factories = fakeFactories({}, probes, constructed);
+
+  const provider = await EmbeddingProviderResolver.resolve(
+    {
+      ...allCloudConfig,
+      providerDataScopes: { embeddings: false },
+    },
+    undefined,
+    factories,
+  );
+
+  assert.equal(provider.name, 'local');
+  assert.deepEqual(probes, ['local', 'ollama']);
+  assert.deepEqual(constructed, ['local', 'ollama']);
+});
+
 test('EmbeddingProviderResolver skips Doubao when embedding model is not configured', async () => {
   const { EmbeddingProviderResolver } = await loadResolver();
 

@@ -9,6 +9,9 @@ export const QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS = 16_000;
 export const QCLOUD_CHAT_ENDPOINT = `${QCLOUD_LLM_BASE_URL}/v1/chat`;
 export const QCLOUD_MODELS_ENDPOINT = `${QCLOUD_LLM_BASE_URL}/v1/models`;
 export const QCLOUD_CHAT_COMPLETIONS_ENDPOINT = `${QCLOUD_LLM_BASE_URL}/v1/chat/completions`;
+export const QCLOUD_EMBEDDINGS_ENDPOINT = `${QCLOUD_LLM_BASE_URL}/v1/embeddings`;
+export const QCLOUD_EMBEDDING_MODEL = "embedding-vision";
+export const QCLOUD_EMBEDDING_BACKING_MODEL = "doubao-embedding-vision-251215";
 export const QCLOUD_STT_SUBMIT_ENDPOINT = `${QCLOUD_LLM_BASE_URL}/v1/doubao/audio/auc/submit`;
 export const QCLOUD_STT_QUERY_ENDPOINT = `${QCLOUD_LLM_BASE_URL}/v1/doubao/audio/auc/query`;
 

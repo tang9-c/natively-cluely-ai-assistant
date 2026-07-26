@@ -76,6 +76,7 @@ import { buildRealtimeDiagnosticsSummary } from '../shared/realtimeAnswerTrustVi
 import type { MeetingSearchRequest, MeetingSearchResult } from '../shared/meetingSearch';
 import { executeMeetingSearch } from './rag/MeetingSearchFlow';
 import { MeetingSearchRequestRegistry } from './rag/MeetingSearchRequestRegistry';
+import { buildEmbeddingRuntimeConfig } from './rag/EmbeddingRuntimeConfig';
 
 const QCLOUD_KEY_PATTERN = /^sk-[A-Za-z0-9_-]{32,}$/;
 const EMBEDDING_READY_STATUS_WAIT_MS = 2_500;
@@ -1190,6 +1191,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     }
     SettingsManager.getInstance().set('providerDataScopes', sanitized as any);
+    appState.getRAGManager()?.initializeEmbeddings(buildEmbeddingRuntimeConfig());
     broadcast('provider-data-scopes-changed', sanitized);
     return { success: true };
   });
@@ -1457,15 +1459,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const ragManager = appState.getRAGManager();
         if (ragManager) {
           console.log('[IPC] Re-initializing RAG embedding pipeline with Doubao key');
-          const { CredentialsManager } = require('./services/CredentialsManager');
-          ragManager.initializeEmbeddings({
-            openaiKey: CredentialsManager.getInstance().getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
-            geminiKey: CredentialsManager.getInstance().getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
-            doubaoKey: apiKey || process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY || undefined,
-            doubaoEmbeddingModel: CredentialsManager.getInstance().getDoubaoEmbeddingModel() || process.env.DOUBAO_EMBEDDING_MODEL || undefined,
-            ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
-            providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
-          });
+          ragManager.initializeEmbeddings(buildEmbeddingRuntimeConfig());
         }
       },
     },
@@ -1515,6 +1509,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Update LLMHelper immediately (same pattern as other provider keys)
       const llmHelper = appState.processingHelper.getLLMHelper();
       llmHelper.setNativelyKey(trimmedKey || null);
+      appState.getRAGManager()?.initializeEmbeddings(buildEmbeddingRuntimeConfig());
 
       // Sync the model into LLMHelper and notify the UI whenever the effective default changed
       const defaultModel = cm.getDefaultModel();
@@ -2105,14 +2100,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Reinitialize RAG pipeline to pick up the new embedding model
       const ragManager = appState.getRAGManager();
       if (ragManager) {
-        ragManager.initializeEmbeddings({
-          openaiKey: CredentialsManager.getInstance().getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
-          geminiKey: CredentialsManager.getInstance().getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
-          doubaoKey: CredentialsManager.getInstance().getDoubaoLlmApiKey() || process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY || undefined,
-          doubaoEmbeddingModel: model.trim() || undefined,
-          ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
-          providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
-        });
+        ragManager.initializeEmbeddings(buildEmbeddingRuntimeConfig());
       }
       return { success: true };
     } catch (error: any) {

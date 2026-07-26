@@ -994,7 +994,7 @@ export const HelpSettings: React.FC = () => {
                                     <span>2. QCLOUD API</span>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    使用同一把 QCLOUD key 同时支持 LLM 路由和语音转写。保存 key 后，语音提供商下拉会出现 <strong>QCLOUD API</strong>；它默认中文优先，支持说话人分离。Embedding 仍保持本地优先，不会因为配置 QCLOUD 自动切到远程向量模型。
+                                    使用同一把 QCLOUD key 同时支持 LLM 路由和语音转写。保存 key 后，语音提供商下拉会出现 <strong>QCLOUD API</strong>；它默认中文优先，支持说话人分离。Embedding 保持本地优先；本地向量模型不可用时，可使用同一把 QCLOUD key 调用 embedding-vision。云端回退顺序：QCLOUD、豆包 Embedding、OpenAI、Gemini。
                                 </p>
                             </div>
 

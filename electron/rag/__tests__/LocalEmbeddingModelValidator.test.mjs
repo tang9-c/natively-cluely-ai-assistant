@@ -121,7 +121,7 @@ test('LocalEmbeddingProvider 接入顺序回退并只记录安全诊断字段', 
   assert.match(provider, /source:\s*'bundled'/);
   assert.match(provider, /name:\s*'rag_embedding_model_validation'/);
   assert.doesNotMatch(provider, /properties:\s*\{[^}]*rootPath/s);
-  assert.match(resolver, /validatedLocalProvider\s*\?\?\s*new LocalEmbeddingProvider\(\)/);
+  assert.match(resolver, /validatedLocalProvider\s*\?\?\s*factories\.local\(\)/);
   assert.match(embeddingPipeline, /EmbeddingProviderResolver\.resolve\(config, this\.fallbackProvider \?\? undefined\)/);
   assert.match(telemetry, /'rag_embedding_model_validation'/);
 });

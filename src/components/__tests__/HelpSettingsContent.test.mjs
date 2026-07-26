@@ -79,8 +79,8 @@ test('HelpSettings documents Local SenseVoice, QCLOUD API and Doubao AUC equally
   assert.match(source, /QCLOUD API/);
   assert.match(source, /Doubao AUC/);
 
-  // Embedding stays local-first regardless of QCLOUD config.
-  assert.match(source, /Embedding 仍保持本地优先/);
+  // Configuring QCLOUD does not override a healthy local embedding provider.
+  assert.match(source, /Embedding 保持本地优先；本地向量模型不可用时/);
 });
 
 test('HelpSettings documents SenseVoice term correction and Whisper per-channel model', () => {
@@ -278,12 +278,16 @@ test('HelpSettings documents Markdown export flow from transcript via skills', (
 // 10. QCLOUD side panel documents optional STT and local-first embeddings.
 // ---------------------------------------------------------------------------
 
-test('QCLOUD settings guide states STT is optional and embeddings stay local-first', () => {
+test('QCLOUD settings guide explains local-first embeddings and cloud fallback order', () => {
   const source = read('src/components/settings/NativelyApiSettings.tsx');
+  const help = read('src/components/settings/HelpSettings.tsx');
 
   assert.match(source, /可在“语音”标签选择 QCLOUD API/);
-  assert.match(source, /向量模型继续保持本地优先/);
-  assert.match(source, /Embedding 不使用 QCLOUD，保持本地优先/);
+  assert.match(source, /Embedding 保持本地优先；本地向量模型不可用时，可使用同一把 QCLOUD key 调用 embedding-vision。/);
+  assert.match(source, /云端回退顺序：QCLOUD、豆包 Embedding、OpenAI、Gemini。/);
+  assert.match(help, /Embedding 保持本地优先；本地向量模型不可用时，可使用同一把 QCLOUD key 调用 embedding-vision。/);
+  assert.match(help, /云端回退顺序：QCLOUD、豆包 Embedding、OpenAI、Gemini。/);
+  assert.doesNotMatch(source, /Embedding 不使用 QCLOUD/);
   assert.doesNotMatch(source, /实时转录和向量模型不使用 QCLOUD/);
 });
 

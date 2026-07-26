@@ -106,7 +106,7 @@ export const NativelyApiSettings: React.FC = () => {
             QCLOUD API
           </h3>
           <p className="text-[12px] text-text-tertiary mt-0.5 leading-snug">
-            配置 QCLOUD key 后，可将默认聊天模型切换到 QCLOUD；语音提供商下拉可选择 QCLOUD API 转录（中文优先，支持说话人分离），向量模型仍保持本地优先。
+            配置 QCLOUD key 后，可将默认聊天模型切换到 QCLOUD；语音提供商下拉可选择 QCLOUD API 转录（中文优先，支持说话人分离）。Embedding 保持本地优先，仅在本地不可用时使用云端回退。
           </p>
         </div>
         {!isLoading && isSaved && (
@@ -130,7 +130,7 @@ export const NativelyApiSettings: React.FC = () => {
           <div className="min-w-0">
             <p className="text-[13px] font-semibold text-text-primary">QCLOUD key</p>
             <p className="text-[11px] text-text-tertiary leading-snug mt-0.5">
-              QCLOUD 用于 LLM 路由和实时转录（可选，需在语音标签下手动启用）；向量模型不会切换到远程服务。
+              QCLOUD 用于 LLM 路由和实时转录（可选，需在语音标签下手动启用），也可在本地向量模型不可用时提供 Embedding 回退。
             </p>
           </div>
         </div>
@@ -225,7 +225,7 @@ export const NativelyApiSettings: React.FC = () => {
 
           {/* T&C consent */}
           <p className="text-[10.5px] text-text-tertiary leading-relaxed text-center">
-            Embedding 不使用 QCLOUD，保持本地优先。STT 可在“语音”标签下选择 QCLOUD API（同一把 key）。
+            Embedding 保持本地优先；本地向量模型不可用时，可使用同一把 QCLOUD key 调用 embedding-vision。云端回退顺序：QCLOUD、豆包 Embedding、OpenAI、Gemini。
           </p>
         </div>
       </Card>
@@ -242,7 +242,7 @@ export const NativelyApiSettings: React.FC = () => {
             {[
               { step: '1', text: '粘贴你的 QCLOUD key 并保存。' },
               { step: '2', text: '保存成功后，可将聊天默认模型切换为 QCLOUD API；已有手动模型会先询问确认。' },
-              { step: '3', text: '如需云端语音转写，可在“语音”标签选择 QCLOUD API；向量模型继续保持本地优先。' },
+              { step: '3', text: '如需云端语音转写，可在“语音”标签选择 QCLOUD API；Embedding 仅在本地向量模型不可用时按配置回退到云端。' },
             ].map(({ step, text }) => (
               <div key={step} className="flex items-start gap-3">
                 <div className="w-5 h-5 rounded-full bg-bg-input border border-border-subtle flex items-center justify-center text-[10px] font-bold text-text-tertiary shrink-0 mt-[1px]">

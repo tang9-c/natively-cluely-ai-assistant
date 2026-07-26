@@ -87,8 +87,9 @@ test('LLMHelper passes data scopes and policy to routeLLMProviders for fallback 
 test('Embedding provider resolver fails closed when embeddings scope is denied', () => {
   const src = read('electron/rag/EmbeddingProviderResolver.ts');
 
-  assert.match(src, /assertProviderDataScopes\('openai_embeddings', \['embeddings'\], config\.providerDataScopes\)/);
-  assert.match(src, /assertProviderDataScopes\('gemini_embeddings', \['embeddings'\], config\.providerDataScopes\)/);
+  assert.match(src, /assertProviderDataScopes\('cloud_embeddings', \['embeddings'\], config\.providerDataScopes\)/);
+  assert.match(src, /if \(!embeddingsDenied && config\.qcloudKey\)/);
+  assert.match(src, /candidates\.push\(factories\.qcloud\(config\.qcloudKey\)\)/);
 });
 
 test('RAGManager forwards providerDataScopes from config and runtime keys', () => {
@@ -102,12 +103,48 @@ test('runtime embedding reinitialization preserves Doubao endpoint configuration
   const processing = read('electron/ProcessingHelper.ts');
   const ipc = read('electron/ipcHandlers.ts');
   const pipeline = read('electron/rag/EmbeddingPipeline.ts');
+  const runtime = read('electron/rag/EmbeddingRuntimeConfig.ts');
 
-  assert.match(processing, /getDoubaoEmbeddingModel\(\)/);
-  assert.match(processing, /doubaoEmbeddingModel: doubaoEmbeddingModel \|\| process\.env\.DOUBAO_EMBEDDING_MODEL \|\| undefined/);
-  assert.match(processing, /ollamaUrl: process\.env\.OLLAMA_URL \|\| 'http:\/\/localhost:11434'/);
-  assert.match(ipc, /doubaoEmbeddingModel: CredentialsManager\.getInstance\(\)\.getDoubaoEmbeddingModel\(\) \|\| process\.env\.DOUBAO_EMBEDDING_MODEL \|\| undefined/);
+  assert.match(processing, /initializeEmbeddings\(buildEmbeddingRuntimeConfig\(\)\)/);
+  assert.match(runtime, /credentials\.getDoubaoEmbeddingModel\(\)/);
+  assert.match(runtime, /process\.env\.DOUBAO_EMBEDDING_MODEL/);
+  assert.match(runtime, /ollamaUrl: process\.env\.OLLAMA_URL \|\| 'http:\/\/localhost:11434'/);
+  assert.match(ipc, /initializeEmbeddings\(buildEmbeddingRuntimeConfig\(\)\)/);
   assert.match(pipeline, /hasNew\(prev\.doubaoEmbeddingModel, next\.doubaoEmbeddingModel\)/);
+});
+
+test('embedding runtime config includes the saved QCLOUD key and every fallback credential', () => {
+  const runtime = read('electron/rag/EmbeddingRuntimeConfig.ts');
+
+  assert.match(runtime, /qcloudKey:\s*credentials\.getNativelyApiKey\(\)\s*\|\|\s*process\.env\.NATIVE_API_KEY\s*\|\|\s*undefined/);
+  assert.match(runtime, /doubaoKey:/);
+  assert.match(runtime, /doubaoEmbeddingModel:/);
+  assert.match(runtime, /openaiKey:/);
+  assert.match(runtime, /geminiKey:/);
+  assert.match(runtime, /ollamaUrl:/);
+  assert.match(runtime, /providerDataScopes:/);
+});
+
+test('all RAG initialization paths reuse the complete embedding runtime config', () => {
+  const main = read('electron/main.ts');
+  const processing = read('electron/ProcessingHelper.ts');
+  const ipc = read('electron/ipcHandlers.ts');
+  const ragManager = read('electron/rag/RAGManager.ts');
+  const pipeline = read('electron/rag/EmbeddingPipeline.ts');
+
+  assert.match(main, /buildEmbeddingRuntimeConfig\(\)/);
+  assert.match(processing, /initializeEmbeddings\(buildEmbeddingRuntimeConfig\(\)\)/);
+  assert.ok(
+    (ipc.match(/initializeEmbeddings\(buildEmbeddingRuntimeConfig\(\)\)/g) || []).length >= 3,
+    'QCLOUD key, Doubao key, and Doubao model changes must all reinitialize with complete config',
+  );
+  assert.match(ragManager, /qcloudKey\?: string/);
+  assert.match(ragManager, /qcloudKey: config\.qcloudKey/);
+  assert.match(pipeline, /prev\.qcloudKey !== next\.qcloudKey/);
+  assert.match(
+    pipeline,
+    /prev\.providerDataScopes\?\.embeddings !== next\.providerDataScopes\?\.embeddings/,
+  );
 });
 
 test('SettingsManager exposes providerDataScopes setting', () => {
@@ -119,11 +156,15 @@ test('SettingsManager exposes providerDataScopes setting', () => {
 
 test('IPC handlers expose get/set provider-data-scopes and broadcast updates', () => {
   const ipc = read('electron/ipcHandlers.ts');
+  const handlerStart = ipc.indexOf("safeHandle('set-provider-data-scopes'");
+  const handlerEnd = ipc.indexOf("\n  safeHandle(", handlerStart + 1);
+  const scopeHandler = ipc.slice(handlerStart, handlerEnd);
 
   assert.match(ipc, /safeHandle\(['"]get-provider-data-scopes['"]/);
   assert.match(ipc, /safeHandle\(['"]set-provider-data-scopes['"]/);
-  assert.match(ipc, /broadcast\('provider-data-scopes-changed', sanitized\)/);
-  assert.match(ipc, /SettingsManager\.getInstance\(\)\.set\('providerDataScopes'/);
+  assert.match(scopeHandler, /broadcast\('provider-data-scopes-changed', sanitized\)/);
+  assert.match(scopeHandler, /SettingsManager\.getInstance\(\)\.set\('providerDataScopes'/);
+  assert.match(scopeHandler, /initializeEmbeddings\(buildEmbeddingRuntimeConfig\(\)\)/);
 });
 
 test('preload and renderer types expose provider data scope controls', () => {
@@ -163,7 +204,9 @@ test('AIProvidersSettings hides legacy cloud API key provider cards', () => {
 test('main and ProcessingHelper hydrate ragManager.initializeEmbeddings with policy', () => {
   const main = read('electron/main.ts');
   const ph = read('electron/ProcessingHelper.ts');
+  const runtime = read('electron/rag/EmbeddingRuntimeConfig.ts');
 
-  assert.match(main, /providerDataScopes/);
-  assert.match(ph, /providerDataScopes/);
+  assert.match(main, /buildEmbeddingRuntimeConfig\(\)/);
+  assert.match(ph, /buildEmbeddingRuntimeConfig\(\)/);
+  assert.match(runtime, /providerDataScopes/);
 });

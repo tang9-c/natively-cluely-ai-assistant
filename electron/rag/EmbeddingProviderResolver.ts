@@ -4,9 +4,11 @@ import { GeminiEmbeddingProvider } from './providers/GeminiEmbeddingProvider';
 import { OllamaEmbeddingProvider } from './providers/OllamaEmbeddingProvider';
 import { LocalEmbeddingProvider } from './providers/LocalEmbeddingProvider';
 import { DoubaoEmbeddingProvider } from './providers/DoubaoEmbeddingProvider';
+import { QCloudEmbeddingProvider } from './providers/QCloudEmbeddingProvider';
 import { ProviderScopeError, assertProviderDataScopes, type ProviderDataScopePolicy } from '../llm/ProviderRouter';
 
 export interface AppAPIConfig {
+  qcloudKey?: string;
   openaiKey?: string;
   geminiKey?: string;
   geminiEmbeddingModel?: string;
@@ -17,11 +19,29 @@ export interface AppAPIConfig {
   providerDataScopes?: ProviderDataScopePolicy;
 }
 
+export interface EmbeddingProviderFactories {
+  local(): IEmbeddingProvider;
+  ollama(url: string): IEmbeddingProvider;
+  qcloud(key: string): IEmbeddingProvider;
+  doubao(key: string, model: string): IEmbeddingProvider;
+  openai(key: string): IEmbeddingProvider;
+  gemini(key: string, model?: string, dimensions?: number): IEmbeddingProvider;
+}
+
+const DEFAULT_PROVIDER_FACTORIES: EmbeddingProviderFactories = {
+  local: () => new LocalEmbeddingProvider(),
+  ollama: url => new OllamaEmbeddingProvider(url),
+  qcloud: key => new QCloudEmbeddingProvider(key),
+  doubao: (key, model) => new DoubaoEmbeddingProvider(key, model),
+  openai: key => new OpenAIEmbeddingProvider(key),
+  gemini: (key, model, dimensions) => new GeminiEmbeddingProvider(key, model, dimensions),
+};
+
 export class EmbeddingProviderResolver {
   /** Cloud providers get a bounded probe-retry before we demote (hysteresis). */
   private static readonly CLOUD_PROBE_ATTEMPTS = 3;
   private static readonly CLOUD_PROBE_BACKOFF_MS = 400;
-  private static readonly CLOUD_PROVIDER_NAMES = new Set(['openai', 'gemini']);
+  private static readonly CLOUD_PROVIDER_NAMES = new Set(['qcloud', 'doubao', 'openai', 'gemini']);
 
   /**
    * Probe a provider's availability. For CLOUD providers (which require a real
@@ -53,7 +73,7 @@ export class EmbeddingProviderResolver {
    * Runs isAvailable() checks in priority order.
    *
    * Priority order is LOCAL-FIRST: bundled local model → local Ollama →
-   * cloud providers (Doubao / OpenAI / Gemini). Cloud providers are only
+   * cloud providers (QCLOUD / Doubao / OpenAI / Gemini). Cloud providers are only
    * tried as a fallback when local options are unavailable, to keep embedding
    * compute on-device by default for privacy, latency, and cost reasons.
    *
@@ -65,31 +85,25 @@ export class EmbeddingProviderResolver {
   static async resolve(
     config: AppAPIConfig,
     validatedLocalProvider?: IEmbeddingProvider,
+    factories: EmbeddingProviderFactories = DEFAULT_PROVIDER_FACTORIES,
   ): Promise<IEmbeddingProvider> {
     const candidates: IEmbeddingProvider[] = [];
 
     let embeddingsDenied = false;
 
     // --- Local-first: bundled on-device model (always available post-install) ---
-    if (!embeddingsDenied) {
-      candidates.push(validatedLocalProvider ?? new LocalEmbeddingProvider());
-    }
+    const localProvider = validatedLocalProvider ?? factories.local();
+    candidates.push(localProvider);
     // --- Local Ollama (if running + model pulled) ---
-    candidates.push(new OllamaEmbeddingProvider(config.ollamaUrl || 'http://localhost:11434'));
+    candidates.push(factories.ollama(config.ollamaUrl || 'http://localhost:11434'));
 
     // --- Cloud fallback: only reached when local providers above are unavailable ---
-    if (config.doubaoKey) {
+    const hasCloudConfig = Boolean(
+      config.qcloudKey || config.doubaoKey || config.openaiKey || config.geminiKey,
+    );
+    if (hasCloudConfig) {
       try {
-        assertProviderDataScopes('doubao_embeddings', ['embeddings'], config.providerDataScopes);
-        // Use configured endpoint ID, then env var. Skip Doubao entirely if no
-        // endpoint ID is configured — the Ark API requires an endpoint ID, and
-        // probing with a missing/invalid one just produces a 404.
-        const doubaoModel = config.doubaoEmbeddingModel || process.env.DOUBAO_EMBEDDING_MODEL;
-        if (doubaoModel) {
-          candidates.push(new DoubaoEmbeddingProvider(config.doubaoKey, doubaoModel));
-        } else {
-          console.log('[EmbeddingProviderResolver] Doubao API key present but no embedding endpoint ID configured; skipping');
-        }
+        assertProviderDataScopes('cloud_embeddings', ['embeddings'], config.providerDataScopes);
       } catch (error) {
         if (error instanceof ProviderScopeError) {
           embeddingsDenied = true;
@@ -99,31 +113,30 @@ export class EmbeddingProviderResolver {
         }
       }
     }
-    if (config.openaiKey) {
-      try {
-        assertProviderDataScopes('openai_embeddings', ['embeddings'], config.providerDataScopes);
-        candidates.push(new OpenAIEmbeddingProvider(config.openaiKey));
-      } catch (error) {
-        if (error instanceof ProviderScopeError) {
-          embeddingsDenied = true;
-          console.warn('[ScopeFallback] embeddings denied for cloud; routing to Ollama');
-        } else {
-          throw error;
-        }
+
+    if (!embeddingsDenied && config.qcloudKey) {
+      candidates.push(factories.qcloud(config.qcloudKey));
+    }
+    if (!embeddingsDenied && config.doubaoKey) {
+      // Use configured endpoint ID, then env var. Skip Doubao entirely if no
+      // endpoint ID is configured — the Ark API requires an endpoint ID, and
+      // probing with a missing/invalid one just produces a 404.
+      const doubaoModel = config.doubaoEmbeddingModel || process.env.DOUBAO_EMBEDDING_MODEL;
+      if (doubaoModel) {
+        candidates.push(factories.doubao(config.doubaoKey, doubaoModel));
+      } else {
+        console.log('[EmbeddingProviderResolver] Doubao API key present but no embedding endpoint ID configured; skipping');
       }
     }
-    if (config.geminiKey) {
-      try {
-        assertProviderDataScopes('gemini_embeddings', ['embeddings'], config.providerDataScopes);
-        candidates.push(new GeminiEmbeddingProvider(config.geminiKey));
-      } catch (error) {
-        if (error instanceof ProviderScopeError) {
-          embeddingsDenied = true;
-          console.warn('[ScopeFallback] embeddings denied for cloud; routing to Ollama');
-        } else {
-          throw error;
-        }
-      }
+    if (!embeddingsDenied && config.openaiKey) {
+      candidates.push(factories.openai(config.openaiKey));
+    }
+    if (!embeddingsDenied && config.geminiKey) {
+      candidates.push(factories.gemini(
+        config.geminiKey,
+        config.geminiEmbeddingModel,
+        config.geminiEmbeddingDims,
+      ));
     }
 
     for (const provider of candidates) {
@@ -137,7 +150,7 @@ export class EmbeddingProviderResolver {
 
     if (embeddingsDenied) {
       console.warn('[ScopeFallback] embeddings denied; Ollama unavailable, using bundled local embedding model');
-      return validatedLocalProvider ?? new LocalEmbeddingProvider();
+      return localProvider;
     }
 
     // This should never happen since LocalEmbeddingProvider.isAvailable()

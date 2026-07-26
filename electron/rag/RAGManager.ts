@@ -34,6 +34,7 @@ export interface RAGManagerConfig {
     db: Database.Database;
     dbPath: string;       // Passed to VectorStore so worker can open its own read-only connection
     extPath: string;      // Resolved sqlite-vec extension path (no platform suffix)
+    qcloudKey?: string;
     openaiKey?: string;
     geminiKey?: string;
     doubaoKey?: string;
@@ -69,6 +70,7 @@ export class RAGManager {
         this.liveIndexer = new LiveRAGIndexer(this.vectorStore, this.embeddingPipeline);
 
         this.embeddingPipeline.initialize({
+            qcloudKey: config.qcloudKey,
             openaiKey: config.openaiKey,
             geminiKey: config.geminiKey,
             doubaoKey: config.doubaoKey,
@@ -96,7 +98,7 @@ export class RAGManager {
         return this.embeddingPipeline;
     }
 
-    initializeEmbeddings(keys: { openaiKey?: string, geminiKey?: string, doubaoKey?: string, doubaoEmbeddingModel?: string, ollamaUrl?: string, providerDataScopes?: ProviderDataScopePolicy }): void {
+    initializeEmbeddings(keys: { qcloudKey?: string, openaiKey?: string, geminiKey?: string, doubaoKey?: string, doubaoEmbeddingModel?: string, ollamaUrl?: string, providerDataScopes?: ProviderDataScopePolicy }): void {
         const initPromise = this.embeddingPipeline.initialize(keys);
         // After init, backfill embedding_provider on meetings that have embedded chunks
         // but a NULL metadata column (common for meetings embedded before this metadata
