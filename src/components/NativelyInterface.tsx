@@ -1030,7 +1030,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // and the Open Settings button handed Windows shell a URI scheme it
   // couldn't resolve (Microsoft Store popup).
   type SystemAudioWarning = {
-    kind: 'screen-recording-permission' | 'audio-capture-failure';
+    kind: 'screen-recording-permission' | 'audio-capture-failure' | 'microphone-capture-failure';
     message: string;
     backend?: string;
     code?: string;
@@ -1114,6 +1114,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const unsub = window.electronAPI?.onAudioCaptureFailed?.((payload) => {
       if (payload.channel === 'mic') {
         micCaptureFailureRef.current = true;
+        if (payload.terminal || payload.stuck || payload.recommendedFix === 'reset-tcc' || payload.staleGrantSuspected) {
+          setSystemAudioWarning({
+            kind: 'microphone-capture-failure',
+            message: payload.message,
+            backend: payload.backend,
+            code: payload.code,
+            recommendedFix: payload.recommendedFix,
+            staleGrantSuspected: payload.staleGrantSuspected,
+          });
+          setIsExpanded(true);
+        }
         return;
       }
       setSystemAudioIssue(payload.message || '系统音频未捕获');
@@ -1140,7 +1151,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (isRepairingTcc) return;
     setIsRepairingTcc(true);
     try {
-      const result = await window.electronAPI?.repairTccPermission?.('screen');
+      const scope = systemAudioWarning?.kind === 'microphone-capture-failure'
+        ? 'microphone'
+        : 'screen';
+      const result = await window.electronAPI?.repairTccPermission?.(scope);
       if (!result?.success) {
         setSystemAudioWarning((prev) =>
           prev
@@ -1169,7 +1183,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     } finally {
       setIsRepairingTcc(false);
     }
-  }, [isRepairingTcc]);
+  }, [isRepairingTcc, systemAudioWarning?.kind]);
 
   // PR #173: STT not configured warning — shown when provider is 'none' during a meeting
   const [sttNotConfigured, setSttNotConfigured] = useState(false);
@@ -4146,6 +4160,8 @@ Provide only the answer, nothing else.`;
                       <span>
                         {systemAudioWarning.kind === 'screen-recording-permission'
                           ? '屏幕录制权限被拒绝'
+                          : systemAudioWarning.kind === 'microphone-capture-failure'
+                            ? '麦克风未录到声音'
                           : systemAudioWarning.code === 'CORE_AUDIO_TCC_RESET_REQUIRED'
                             ? '系统音频录制权限需要修复'
                           : '音频采集异常'}

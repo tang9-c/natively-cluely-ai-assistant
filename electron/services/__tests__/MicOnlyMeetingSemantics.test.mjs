@@ -162,8 +162,8 @@ test('system-audio warnings are gated behind microphone unavailability in render
 
   assert.match(
     ui,
-    /if \(payload\.channel === 'mic'\) \{[\s\S]*micCaptureFailureRef\.current = true;[\s\S]*return;/,
-    'audio-capture-failed handler should track microphone capture failures separately'
+    /if \(payload\.channel === 'mic'\) \{[\s\S]*micCaptureFailureRef\.current = true;[\s\S]*kind:\s*'microphone-capture-failure'[\s\S]*setIsExpanded\(true\);[\s\S]*return;/,
+    'microphone capture failures should be surfaced immediately instead of being silently tracked'
   );
   assert.match(
     ui,
