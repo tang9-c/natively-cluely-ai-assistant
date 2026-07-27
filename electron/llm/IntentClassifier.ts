@@ -711,7 +711,7 @@ function detectSalesIndustrialDiscoveryIntent(text: string): RawIntentResult | n
     if (CONTEXTUAL_PROOF_PATTERN.test(text)) {
         return { intent: 'sales_contextual_proof_discovery', confidence: 0.9, answerShape: getAnswerShapeForMode('sales', 'sales_contextual_proof_discovery') };
     }
-    if (/靠邮件.{0,20}不同步|客诉.{0,40}Excel.{0,20}痛苦|现场执行.{0,20}设计变更不同步|需求改.{0,40}断链|Creo.{0,40}同步不及时/i.test(text)
+    if (/靠邮件.{0,20}(?:不同步|通知.{0,12}(?:不通|不到|遗漏))|客诉.{0,40}Excel.{0,20}痛苦|现场执行.{0,20}设计变更不同步|需求改.{0,40}断链|Creo.{0,40}同步不及时/i.test(text)
         || (INDUSTRIAL_PAIN_PATTERN.test(text) && /拿到旧工艺/.test(text))) {
         return { intent: 'sales_pain_discovery', confidence: 0.88, answerShape: getAnswerShapeForMode('sales', 'sales_pain_discovery') };
     }

@@ -8,6 +8,7 @@ export const DISCOVERY_INTENTS = [
 
 export const SALES_INDUSTRIAL_POSITIVE_FIXTURES = [
   { domain: 'PLM', utterance: '现在 BOM 变更靠邮件通知，设计、工艺和质量经常不同步。', expectedIntent: 'sales_pain_discovery', expectedAction: 'discovery_question', notes: 'PLM pain' },
+  { domain: 'PLM', utterance: '我们发布 BOM 之后，靠邮件通知下游经常不通，导致工厂还在使用旧版本。', expectedIntent: 'sales_pain_discovery', expectedAction: 'discovery_question', notes: 'PLM mail notification gap' },
   { domain: 'PLM', utterance: 'BOM 变更和质量问题能不能关联起来？', expectedIntent: 'sales_capability_fit', expectedAction: 'discovery_question', notes: 'PLM capability fit' },
   { domain: 'PLM', utterance: 'Windchill ECO、ERP 物料和 QMS CAPA 能不能形成闭环？', expectedIntent: 'sales_process_integration', expectedAction: 'discovery_question', notes: 'PLM integration' },
   { domain: 'PLM', utterance: '变更影响分析太慢，导致图纸发布和工艺更新周期都被拖长。', expectedIntent: 'sales_value_discovery', expectedAction: 'discovery_question', notes: 'PLM value' },

@@ -26,6 +26,7 @@ function loadClassifier() {
 
 const TIER1_EXPLICIT_NOTES = new Set([
   'PLM pain',
+  'PLM mail notification gap',
   'PLM capability fit',
   'PLM integration',
   'PLM value',

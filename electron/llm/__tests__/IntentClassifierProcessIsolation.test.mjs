@@ -1,8 +1,9 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
@@ -12,6 +13,20 @@ function read(relativePath) {
 }
 
 describe('IntentClassifier process isolation', () => {
+  test('worker path resolves from both the standalone llm module and bundled main directory', async (t) => {
+    const modulePath = path.join(root, 'dist-electron/electron/llm/IntentClassifierProcessHost.js');
+    const { resolveIntentClassifierWorkerPath } = await import(`${pathToFileURL(modulePath).href}?worker-path=${Date.now()}`);
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cueup-intent-worker-path-'));
+    t.after(() => fs.rmSync(tempRoot, { recursive: true, force: true }));
+
+    const bundledWorker = path.join(tempRoot, 'llm', 'intentClassifierWorkerProcess.js');
+    fs.mkdirSync(path.dirname(bundledWorker), { recursive: true });
+    fs.writeFileSync(bundledWorker, '');
+
+    assert.equal(resolveIntentClassifierWorkerPath(tempRoot), bundledWorker);
+    assert.equal(resolveIntentClassifierWorkerPath(path.join(tempRoot, 'llm')), bundledWorker);
+  });
+
   test('Electron main classifier does not load transformers or Electron app paths directly', () => {
     const source = read('electron/llm/IntentClassifier.ts');
 

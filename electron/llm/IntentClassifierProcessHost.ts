@@ -1,4 +1,5 @@
 import { ChildProcess, fork } from 'child_process';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { app } from 'electron';
@@ -35,8 +36,12 @@ interface PendingRequest {
 const DEFAULT_CLASSIFY_TIMEOUT_MS = 15_000;
 const DEFAULT_WARMUP_TIMEOUT_MS = 120_000;
 
-function resolveWorkerPath(): string {
-    return path.join(__dirname, 'intentClassifierWorkerProcess.js');
+export function resolveIntentClassifierWorkerPath(baseDir = __dirname): string {
+    const colocatedWorker = path.join(baseDir, 'intentClassifierWorkerProcess.js');
+    if (fs.existsSync(colocatedWorker)) {
+        return colocatedWorker;
+    }
+    return path.join(baseDir, 'llm', 'intentClassifierWorkerProcess.js');
 }
 
 function getRemoteHost(): string {
@@ -50,7 +55,7 @@ export class IntentClassifierProcessHost {
     private unavailableUntil = 0;
 
     constructor(
-        private readonly workerPath = resolveWorkerPath(),
+        private readonly workerPath = resolveIntentClassifierWorkerPath(),
         private readonly classifyTimeoutMs = DEFAULT_CLASSIFY_TIMEOUT_MS,
         private readonly warmupTimeoutMs = DEFAULT_WARMUP_TIMEOUT_MS,
     ) {}
