@@ -31,9 +31,11 @@ import {
   QCLOUD_DEFAULT_OUTPUT_TOKENS,
   QCLOUD_MEETING_SUMMARY_MODEL,
   QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS,
+  QCLOUD_MEETING_SUMMARY_TIMEOUT_MS,
   QCLOUD_MODEL_SPECS,
   QCLOUD_OPENAI_SDK_BASE_URL,
   QCLOUD_SKILL_CHAT_MODEL,
+  QCLOUD_SKILL_CHAT_TIMEOUT_MS,
   getQCloudModelSpec,
 } from "./llm/QCloudLlmConstants"
 import type { TranscriptTurn } from "./llm/transcriptCleaner"
@@ -1681,6 +1683,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(buildProviderSystemPrompt(CLAUDE_SYSTEM_PROMPT));
       const qcloudChatModel = chatPromptOptions?.qcloudModel
         ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_MODEL : undefined);
+      const qcloudChatTimeoutMs = chatPromptOptions?.activeSkill
+        ? QCLOUD_SKILL_CHAT_TIMEOUT_MS
+        : chatPromptOptions?.totalTimeoutMs;
 
       if (ollamaAvailable) {
         return await this.callOllama(combinedMessages.gemini, imagePaths, undefined);
@@ -1717,7 +1722,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           try {
             return await this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudImagePaths, {
               maxOutputTokens: chatPromptOptions?.maxOutputTokens,
-              timeoutMs: chatPromptOptions?.totalTimeoutMs,
+              timeoutMs: qcloudChatTimeoutMs,
               qcloudModel: qcloudChatModel,
             });
           } catch (err: any) {
@@ -1797,7 +1802,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
               name: routedProvider.name,
               execute: () => this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined, {
                 maxOutputTokens: chatPromptOptions?.maxOutputTokens,
-                timeoutMs: chatPromptOptions?.totalTimeoutMs,
+                timeoutMs: qcloudChatTimeoutMs,
                 qcloudModel: qcloudChatModel,
               }),
             });
@@ -3344,6 +3349,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const finalSystemPrompt = this.injectLanguageInstruction(baseSystemPrompt);
     const qcloudChatModel = chatPromptOptions?.qcloudModel
       ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_MODEL : undefined);
+    const qcloudChatTimeoutMs = chatPromptOptions?.activeSkill
+      ? QCLOUD_SKILL_CHAT_TIMEOUT_MS
+      : chatPromptOptions?.totalTimeoutMs;
     // Profile context is already merged into `context` above; cloud and local
     // providers now receive the same combined context.
     const combinedContext = context;
@@ -3449,7 +3457,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         requestSource: chatPromptOptions?.requestSource,
         firstTokenTimeoutMs: chatPromptOptions?.firstTokenTimeoutMs,
         idleTimeoutMs: chatPromptOptions?.idleTimeoutMs,
-        totalTimeoutMs: chatPromptOptions?.totalTimeoutMs,
+        totalTimeoutMs: qcloudChatTimeoutMs,
         abortSignal: chatPromptOptions?.abortSignal,
       });
       return;
@@ -3477,6 +3485,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, {
           maxOutputTokens: chatPromptOptions?.maxOutputTokens,
           qcloudModel: qcloudChatModel,
+          totalTimeoutMs: qcloudChatTimeoutMs,
         });
         return;
       } catch (e: any) {
@@ -4818,7 +4827,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (this.hasNatively()) {
       try {
         console.log(`[LLMHelper] Attempting QCLOUD API for summary...`);
-        const qcloudSummaryTimeoutMs = 60_000;
+        const qcloudSummaryTimeoutMs = QCLOUD_MEETING_SUMMARY_TIMEOUT_MS;
         const text = await this.withTimeout(
           this.generateWithNatively(`Context:\n${context}`, systemPrompt, undefined, {
             maxOutputTokens: QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS,

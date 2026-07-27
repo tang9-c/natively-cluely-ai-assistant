@@ -13,8 +13,10 @@ test('Electron exposes centralized QCloud LLM constants', () => {
 
   assert.match(constants, /export const QCLOUD_LLM_BASE_URL = "https:\/\/obzbovrjewzd\.sealosbja\.site"/);
   assert.match(constants, /export const QCLOUD_CHAT_MODEL = "lite32k"/);
-  assert.match(constants, /export const QCLOUD_SKILL_CHAT_MODEL = "turbo"/);
-  assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_MODEL = "turbo"/);
+  assert.match(constants, /export const QCLOUD_SKILL_CHAT_MODEL = "lite32k"/);
+  assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_MODEL = "lite32k"/);
+  assert.match(constants, /export const QCLOUD_SKILL_CHAT_TIMEOUT_MS = 60_000/);
+  assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_TIMEOUT_MS = 60_000/);
   assert.match(constants, /export const QCLOUD_CHAT_ENDPOINT = `\$\{QCLOUD_LLM_BASE_URL\}\/v1\/chat`/);
   assert.match(constants, /export const QCLOUD_MODELS_ENDPOINT = `\$\{QCLOUD_LLM_BASE_URL\}\/v1\/models`/);
   assert.match(constants, /export const QCLOUD_CHAT_COMPLETIONS_ENDPOINT = `\$\{QCLOUD_LLM_BASE_URL\}\/v1\/chat\/completions`/);
@@ -64,15 +66,21 @@ test('LLMHelper routes QCLOUD chat calls through centralized endpoint and model'
   assert.doesNotMatch(helper, /fetch\(QCLOUD_CHAT_ENDPOINT/);
 });
 
-test('LLMHelper uses turbo for QCLOUD skill and meeting summary requests only', () => {
+test('LLMHelper uses lite32k with a 60 second timeout for QCLOUD skill and meeting summary requests', () => {
   const helper = read('electron/LLMHelper.ts');
 
   assert.match(helper, /QCLOUD_SKILL_CHAT_MODEL/);
+  assert.match(helper, /QCLOUD_SKILL_CHAT_TIMEOUT_MS/);
   assert.match(helper, /QCLOUD_MEETING_SUMMARY_MODEL/);
+  assert.match(helper, /QCLOUD_MEETING_SUMMARY_TIMEOUT_MS/);
   assert.match(helper, /chatPromptOptions\?\.activeSkill\s*\?\s*QCLOUD_SKILL_CHAT_MODEL\s*:\s*undefined/);
+  assert.match(helper, /chatPromptOptions\?\.activeSkill\s*\?\s*QCLOUD_SKILL_CHAT_TIMEOUT_MS\s*:\s*chatPromptOptions\?\.totalTimeoutMs/);
   assert.match(helper, /qcloudModel:\s*qcloudChatModel/);
+  assert.match(helper, /timeoutMs:\s*qcloudChatTimeoutMs/);
+  assert.match(helper, /totalTimeoutMs:\s*qcloudChatTimeoutMs/);
   assert.match(helper, /qcloudModel:\s*QCLOUD_MEETING_SUMMARY_MODEL/);
-  assert.match(helper, /this\.generateWithNatively\(`Context:\\n\$\{context\}`,\s*systemPrompt,\s*undefined,\s*\{[\s\S]{0,180}QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS[\s\S]{0,180}qcloudModel:\s*QCLOUD_MEETING_SUMMARY_MODEL/);
+  assert.match(helper, /const qcloudSummaryTimeoutMs = QCLOUD_MEETING_SUMMARY_TIMEOUT_MS/);
+  assert.match(helper, /this\.generateWithNatively\(`Context:\\n\$\{context\}`,\s*systemPrompt,\s*undefined,\s*\{[\s\S]{0,220}QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS[\s\S]{0,220}qcloudModel:\s*QCLOUD_MEETING_SUMMARY_MODEL/);
 });
 
 test('LLMHelper passes explicit QCLOUD output budgets for chat and PPTX call sites', () => {
@@ -82,8 +90,8 @@ test('LLMHelper passes explicit QCLOUD output budgets for chat and PPTX call sit
   assert.match(helper, /private clampQCloudMaxOutputTokens/);
   assert.match(helper, /generatePptxKnowledgeWithNatively\([\s\S]*options:\s*ProviderRequestOptions\s*=\s*\{\}/);
   assert.match(helper, /this\.generateWithNatively\(userMessage,\s*systemPrompt,\s*imagePaths,\s*\{\s*\.\.\.options,\s*dataScopes\s*\}\)/);
-  assert.match(helper, /this\.generateWithNatively\(cloudUserContent,\s*openaiSystemPrompt,\s*cloudImagePaths,\s*\{[\s\S]{0,180}maxOutputTokens:\s*chatPromptOptions\?\.maxOutputTokens,[\s\S]{0,180}timeoutMs:\s*chatPromptOptions\?\.totalTimeoutMs/);
-  assert.match(helper, /this\.streamWithNatively\(userContent,\s*finalSystemPrompt,\s*imagePaths,\s*\{[\s\S]{0,500}maxOutputTokens:\s*chatPromptOptions\?\.maxOutputTokens,[\s\S]{0,500}totalTimeoutMs:\s*chatPromptOptions\?\.totalTimeoutMs/);
+  assert.match(helper, /this\.generateWithNatively\(cloudUserContent,\s*openaiSystemPrompt,\s*cloudImagePaths,\s*\{[\s\S]{0,180}maxOutputTokens:\s*chatPromptOptions\?\.maxOutputTokens,[\s\S]{0,180}timeoutMs:\s*qcloudChatTimeoutMs/);
+  assert.match(helper, /this\.streamWithNatively\(userContent,\s*finalSystemPrompt,\s*imagePaths,\s*\{[\s\S]{0,500}maxOutputTokens:\s*chatPromptOptions\?\.maxOutputTokens,[\s\S]{0,500}totalTimeoutMs:\s*qcloudChatTimeoutMs/);
 });
 
 test('streamChat uses real QCLOUD SSE stream for the selected QCLOUD model', () => {

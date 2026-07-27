@@ -352,13 +352,15 @@ export class MeetingPersistence {
                 summaryData,
                 dynamicActionArtifacts,
             });
-            const llmEnhancements = await generatePostCallLlmEnhancements({
-                llmHelper: this.llmHelper,
-                transcript: data.transcript,
-                modeTemplateType: modeSnapshot?.templateType,
-                summaryData,
-                deterministicEnhancements: deterministicPostCall,
-            });
+            const llmEnhancements = hasSummarizableTranscript
+                ? await generatePostCallLlmEnhancements({
+                    llmHelper: this.llmHelper,
+                    transcript: data.transcript,
+                    modeTemplateType: modeSnapshot?.templateType,
+                    summaryData,
+                    deterministicEnhancements: deterministicPostCall,
+                })
+                : { coachingInsights: [], followUpDraft: '' };
 
             summaryData = {
                 ...summaryData,

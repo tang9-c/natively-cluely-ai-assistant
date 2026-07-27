@@ -35,7 +35,7 @@ test('structured QCLOUD classification propagates its short timeout to fetch', (
   );
 });
 
-test('non-streaming chat propagates total timeout to Natively provider calls', () => {
+test('non-streaming chat propagates the resolved QCLOUD timeout to Natively provider calls', () => {
   const llm = read('electron/LLMHelper.ts');
   const chatStart = llm.indexOf('public async chatWithGemini(');
   const chatBlock = llm.slice(
@@ -43,9 +43,13 @@ test('non-streaming chat propagates total timeout to Natively provider calls', (
     llm.indexOf('async chatWithGeminiStream(', chatStart),
   );
 
-  const timeoutForwardingCalls = chatBlock.match(/timeoutMs:\s*chatPromptOptions\?\.totalTimeoutMs/g) ?? [];
+  const timeoutForwardingCalls = chatBlock.match(/timeoutMs:\s*qcloudChatTimeoutMs/g) ?? [];
 
   assert.equal(timeoutForwardingCalls.length, 2);
+  assert.match(
+    chatBlock,
+    /chatPromptOptions\?\.activeSkill\s*\?\s*QCLOUD_SKILL_CHAT_TIMEOUT_MS\s*:\s*chatPromptOptions\?\.totalTimeoutMs/,
+  );
 });
 
 test('meeting summary gives QCLOUD a summary-sized timeout budget', () => {
@@ -56,11 +60,12 @@ test('meeting summary gives QCLOUD a summary-sized timeout budget', () => {
     llm.indexOf('// ATTEMPT 2:', llm.indexOf('// ATTEMPT 1: QCLOUD API')),
   );
 
-  assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_MODEL = "turbo"/);
-  assert.match(summaryBlock, /const qcloudSummaryTimeoutMs = 60_000;/);
+  assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_MODEL = "lite32k"/);
+  assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_TIMEOUT_MS = 60_000/);
   assert.match(summaryBlock, /maxOutputTokens:\s*QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS/);
   assert.match(summaryBlock, /timeoutMs:\s*qcloudSummaryTimeoutMs/);
   assert.match(summaryBlock, /qcloudModel:\s*QCLOUD_MEETING_SUMMARY_MODEL/);
+  assert.match(summaryBlock, /const qcloudSummaryTimeoutMs = QCLOUD_MEETING_SUMMARY_TIMEOUT_MS/);
   assert.match(summaryBlock, /qcloudSummaryTimeoutMs \+ 5000/);
 });
 

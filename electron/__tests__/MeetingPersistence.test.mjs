@@ -290,7 +290,13 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
   test('transcript with <= 2 segments still saves the meeting with the data intact', async () => {
     const db = DatabaseManager.getInstance();
     const session = buildMockSession();
-    const llm = { generateMeetingSummary: async () => null };
+    let llmCallCount = 0;
+    const llm = {
+      generateMeetingSummary: async () => {
+        llmCallCount += 1;
+        return null;
+      },
+    };
     const mp = new MeetingPersistence(session, llm);
 
     const snap = buildSnapshot({ transcript: [{ speaker: 'user', text: 'a' }, { speaker: 'assistant', text: 'b' }] });
@@ -301,6 +307,7 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     assert.equal(final.id, 'm-short');
     // The 2-segment transcript is preserved (no LLM-driven truncation)
     assert.ok(final.transcript.length >= 2, 'transcript should be preserved');
+    assert.equal(llmCallCount, 0, 'short meetings must not invoke title, summary, or enhancement LLM calls');
   });
 
   test('uses metadata title when provided (no LLM title call needed)', async () => {
