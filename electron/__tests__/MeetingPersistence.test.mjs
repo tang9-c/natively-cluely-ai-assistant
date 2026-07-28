@@ -372,6 +372,32 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     assert.ok(final.detailedSummary.actionItems.includes('Alice owns docs'));
   });
 
+  test('title generation uses its dedicated output budget without changing the core summary call', async () => {
+    const db = DatabaseManager.getInstance();
+    const session = buildMockSession();
+    const calls = [];
+    const llm = {
+      generateMeetingSummary: async (...args) => {
+        calls.push(args);
+        if (calls.length === 1) return '预算调用标题';
+        return JSON.stringify({ overview: '核心摘要', keyPoints: [], actionItems: [] });
+      },
+    };
+    const mp = new MeetingPersistence(session, llm);
+
+    await mp.processAndSaveMeeting(buildSnapshot(), 'm-title-budget');
+
+    const final = db.getMeetingDetails('m-title-budget');
+    assert.equal(final.title, '预算调用标题');
+    assert.deepEqual(calls[0][3], { maxOutputTokens: 64 });
+    const summaryCall = calls.find(([prompt]) => prompt.includes('只返回合法 JSON'));
+    assert.ok(summaryCall, 'core summary should still be generated after title generation');
+    assert.equal(summaryCall[3], undefined, 'core summary should use LLMHelper default budget');
+    const enhancementCall = calls.find(([prompt]) => prompt.includes('摘要页增强模块'));
+    assert.ok(enhancementCall, 'post-call enhancement should still run after the core summary');
+    assert.deepEqual(enhancementCall[3], { maxOutputTokens: 2048 });
+  });
+
   test('title generation failure keeps fallback title and still generates summary', async () => {
     const db = DatabaseManager.getInstance();
     const session = buildMockSession();

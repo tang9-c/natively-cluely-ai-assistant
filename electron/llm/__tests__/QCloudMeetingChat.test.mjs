@@ -24,6 +24,37 @@ function sseResponse(chunks) {
   }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
 }
 
+test('QCLOUD meeting summary defaults to the core budget and honors a call-scoped override', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (_url, init) => {
+    requests.push(JSON.parse(init.body));
+    return new Response(
+      JSON.stringify({ choices: [{ message: { content: '会议摘要' } }] }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  try {
+    const { LLMHelper } = await import(pathToFileURL(helperPath).href);
+    const helper = new LLMHelper();
+    helper.setNativelyKey('test-qcloud-key');
+
+    assert.equal(await helper.generateMeetingSummary('summary prompt', 'meeting context'), '会议摘要');
+    assert.equal(await helper.generateMeetingSummary('title prompt', 'meeting context', undefined, { maxOutputTokens: 64 }), '会议摘要');
+
+    assert.deepEqual(
+      requests.map(({ model, max_tokens }) => ({ model, max_tokens })),
+      [
+        { model: 'lite32k', max_tokens: 4096 },
+        { model: 'lite32k', max_tokens: 64 },
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('QCLOUD streamChat surfaces QCLOUD failures instead of reporting no provider', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(

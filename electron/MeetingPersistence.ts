@@ -6,6 +6,10 @@ import { SessionTracker, TranscriptSegment } from './SessionTracker';
 import { LLMHelper } from './LLMHelper';
 import { DatabaseManager, Meeting } from './db/DatabaseManager';
 import { GROQ_TITLE_PROMPT, GROQ_SUMMARY_JSON_PROMPT } from './llm';
+import {
+    QCLOUD_MEETING_SUMMARY_ENHANCEMENT_OUTPUT_TOKENS,
+    QCLOUD_MEETING_TITLE_OUTPUT_TOKENS,
+} from './llm/QCloudLlmConstants';
 import { buildPostCallEnhancements } from './services/post-call/PostCallWorkflow';
 import { generateFullTranscriptSummary, type PostCallSummaryData } from './services/post-call/PostCallSummaryGenerator';
 import { generatePostCallLlmEnhancements } from './services/post-call/PostCallLlmEnhancements';
@@ -226,7 +230,12 @@ export class MeetingPersistence {
                 const groqTitlePrompt = GROQ_TITLE_PROMPT;
 
                 try {
-                    const generatedTitle = await this.llmHelper.generateMeetingSummary(titlePrompt, data.context.substring(0, 5000), groqTitlePrompt);
+                    const generatedTitle = await this.llmHelper.generateMeetingSummary(
+                        titlePrompt,
+                        data.context.substring(0, 5000),
+                        groqTitlePrompt,
+                        { maxOutputTokens: QCLOUD_MEETING_TITLE_OUTPUT_TOKENS },
+                    );
                     title = sanitizeGeneratedMeetingTitle(generatedTitle, data.context);
                 } catch (error) {
                     console.warn('[MeetingPersistence] Title generation failed; continuing with fallback title', {
@@ -354,7 +363,14 @@ export class MeetingPersistence {
             });
             const llmEnhancements = hasSummarizableTranscript
                 ? await generatePostCallLlmEnhancements({
-                    llmHelper: this.llmHelper,
+                    llmHelper: {
+                        generateMeetingSummary: (systemPrompt, context, groqSystemPrompt) => this.llmHelper.generateMeetingSummary(
+                            systemPrompt,
+                            context,
+                            groqSystemPrompt,
+                            { maxOutputTokens: QCLOUD_MEETING_SUMMARY_ENHANCEMENT_OUTPUT_TOKENS },
+                        ),
+                    },
                     transcript: data.transcript,
                     modeTemplateType: modeSnapshot?.templateType,
                     summaryData,

@@ -26,6 +26,9 @@ test('QCLOUD model specs declare explicit token windows for supported models', (
   const constants = read('electron/llm/QCloudLlmConstants.ts');
 
   assert.match(constants, /export const QCLOUD_DEFAULT_OUTPUT_TOKENS = 8_192/);
+  assert.match(constants, /export const QCLOUD_MEETING_TITLE_OUTPUT_TOKENS = 64/);
+  assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS = 4_096/);
+  assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_ENHANCEMENT_OUTPUT_TOKENS = 2_048/);
   assert.match(constants, /export const QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS = 16_000/);
   for (const model of ['pro32k', 'lite32k', 'turbo']) {
     assert.match(constants, new RegExp(`${model}[\\s\\S]*maxInputTokens:\\s*224_000`));
@@ -80,7 +83,9 @@ test('LLMHelper uses lite32k with a 60 second timeout for QCLOUD skill and meeti
   assert.match(helper, /totalTimeoutMs:\s*qcloudChatTimeoutMs/);
   assert.match(helper, /qcloudModel:\s*QCLOUD_MEETING_SUMMARY_MODEL/);
   assert.match(helper, /const qcloudSummaryTimeoutMs = QCLOUD_MEETING_SUMMARY_TIMEOUT_MS/);
-  assert.match(helper, /this\.generateWithNatively\(`Context:\\n\$\{context\}`,\s*systemPrompt,\s*undefined,\s*\{[\s\S]{0,220}QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS[\s\S]{0,220}qcloudModel:\s*QCLOUD_MEETING_SUMMARY_MODEL/);
+  assert.match(helper, /generateMeetingSummary\(\s*systemPrompt:\s*string,\s*context:\s*string,\s*groqSystemPrompt\?:\s*string,\s*options\?:\s*\{\s*maxOutputTokens\?:\s*number\s*\},?\s*\)/);
+  assert.match(helper, /maxOutputTokens:\s*options\?\.maxOutputTokens\s*\?\?\s*QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS/);
+  assert.match(helper, /this\.generateWithNatively\(`Context:\\n\$\{context\}`,\s*systemPrompt,\s*undefined,\s*\{[\s\S]{0,220}qcloudModel:\s*QCLOUD_MEETING_SUMMARY_MODEL/);
 });
 
 test('LLMHelper passes explicit QCLOUD output budgets for chat and PPTX call sites', () => {

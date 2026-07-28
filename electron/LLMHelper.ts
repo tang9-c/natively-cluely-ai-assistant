@@ -4780,7 +4780,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
    * 3. Gemini Flash (Retry 2x)
    * 4. Gemini Pro (Retry 5x)
    */
-  public async generateMeetingSummary(systemPrompt: string, context: string, groqSystemPrompt?: string): Promise<string> {
+  public async generateMeetingSummary(
+    systemPrompt: string,
+    context: string,
+    groqSystemPrompt?: string,
+    options?: { maxOutputTokens?: number },
+  ): Promise<string> {
     console.log(`[LLMHelper] generateMeetingSummary called. Context length: ${context.length}`);
     const summaryDeniedScopes = getDeniedDataScopes(['post_call_summary'], this.getProviderScopePolicy());
     if (summaryDeniedScopes.includes('post_call_summary')) {
@@ -4830,7 +4835,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         const qcloudSummaryTimeoutMs = QCLOUD_MEETING_SUMMARY_TIMEOUT_MS;
         const text = await this.withTimeout(
           this.generateWithNatively(`Context:\n${context}`, systemPrompt, undefined, {
-            maxOutputTokens: QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS,
+            maxOutputTokens: options?.maxOutputTokens ?? QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS,
             timeoutMs: qcloudSummaryTimeoutMs,
             qcloudModel: QCLOUD_MEETING_SUMMARY_MODEL,
           }),
