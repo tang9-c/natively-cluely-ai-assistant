@@ -11,11 +11,17 @@ export interface PostCallSummaryData {
   decisions?: string[];
   openQuestions?: string[];
   sections?: Array<{ title: string; bullets: string[] }>;
+  generationStatus?: 'success' | 'failed';
 }
 
 export interface GenerateFullTranscriptSummaryParams {
   llmHelper: {
-    generateMeetingSummary: (systemPrompt: string, context: string, groqSystemPrompt?: string) => Promise<string>;
+    generateMeetingSummary: (
+      systemPrompt: string,
+      context: string,
+      groqSystemPrompt?: string,
+      options?: { maxOutputTokens?: number },
+    ) => Promise<string>;
   };
   transcript: PostCallTranscriptSegment[];
   context: string;
@@ -28,6 +34,7 @@ export interface GenerateFullTranscriptSummaryParams {
 }
 
 const DEFAULT_MAX_CHUNK_CHARS = 24000;
+const DEFAULT_ONE_SHOT_MAX_CHARS = 50000;
 const CHUNK_OVERLAP_CHARS = 1200;
 
 export function chunkTranscriptForSummary(context: string, maxChunkChars = DEFAULT_MAX_CHUNK_CHARS): string[] {
@@ -74,10 +81,15 @@ function emptySummary(modeNoteSections: Array<{ title: string; description: stri
     keyPoints: [],
     decisions: [],
     openQuestions: [],
+    generationStatus: 'failed',
     ...(modeNoteSections.length > 0
       ? { sections: modeNoteSections.map((section) => ({ title: section.title, bullets: [] as string[] })) }
       : {}),
   };
+}
+
+function successfulSummary(summary: PostCallSummaryData): PostCallSummaryData {
+  return { ...summary, generationStatus: 'success' };
 }
 
 function parseSummaryJson(raw: string, modeNoteSections: Array<{ title: string; description: string }>): PostCallSummaryData | null {
@@ -127,18 +139,56 @@ function joinContextParts(parts: string[]): string {
     .join('\n\n');
 }
 
+function buildSummarySchema(params: GenerateFullTranscriptSummaryParams, overview: string): string {
+  if (params.modeNoteSections.length > 0) {
+    return `{
+  "overview": "${overview}",
+  "sections": {
+${buildSectionKeys(params.modeNoteSections)}
+  },
+  "actionItems": [],
+  "decisions": [],
+  "openQuestions": []
+}`;
+  }
+
+  return `{
+  "overview": "${overview}",
+  "keyPoints": ["具体话题或观点"],
+  "actionItems": ["明确可执行的后续事项"],
+  "decisions": ["明确决策"],
+  "openQuestions": ["待确认事项或开放问题"]
+}`;
+}
+
+function appendUserJsonContract(
+  context: string,
+  inputKind: '会议转录' | '局部摘要',
+  params: GenerateFullTranscriptSummaryParams,
+  overview: string,
+): string {
+  return `${context}\n\n--- ${inputKind}结束 ---\n只返回合法 JSON，不要 markdown。\n${buildSummarySchema(params, overview)}`;
+}
+
 function buildChunkContext(params: GenerateFullTranscriptSummaryParams, chunk: string): string {
-  return joinContextParts([
+  return appendUserJsonContract(joinContextParts([
     params.modeContextBlock ? `模式上下文：\n${params.modeContextBlock}` : '',
     `会议片段：\n${chunk}`,
-  ]);
+  ]), '会议转录', params, '本片段 1 句话概括');
 }
 
 function buildMergeContext(params: GenerateFullTranscriptSummaryParams, chunkSummaries: PostCallSummaryData[]): string {
-  return joinContextParts([
+  return appendUserJsonContract(joinContextParts([
     params.modeContextBlock ? `模式上下文：\n${params.modeContextBlock}` : '',
     `局部摘要 JSON：\n${JSON.stringify(chunkSummaries)}`,
-  ]);
+  ]), '局部摘要', params, '1-2 句话描述完整会议');
+}
+
+function buildFullTranscriptContext(params: GenerateFullTranscriptSummaryParams, context: string): string {
+  return appendUserJsonContract(joinContextParts([
+    params.modeContextBlock ? `模式上下文：\n${params.modeContextBlock}` : '',
+    `完整会议转录：\n${context}`,
+  ]), '会议转录', params, '1-2 句话描述完整会议');
 }
 
 function uniqueStrings(items: string[]): string[] {
@@ -260,7 +310,34 @@ ${params.baseRules}
 }
 
 export async function generateFullTranscriptSummary(params: GenerateFullTranscriptSummaryParams): Promise<PostCallSummaryData> {
-  const chunks = chunkTranscriptForSummary(params.context, params.maxChunkChars);
+  const cleanedContext = String(params.context || '').trim();
+  if (!cleanedContext) return emptySummary(params.modeNoteSections);
+
+  const chunkSize = params.maxChunkChars ?? DEFAULT_MAX_CHUNK_CHARS;
+  const oneShotThreshold = params.maxChunkChars ?? DEFAULT_ONE_SHOT_MAX_CHARS;
+
+  if (cleanedContext.length <= oneShotThreshold) {
+    try {
+      const raw = await params.llmHelper.generateMeetingSummary(
+        buildChunkPrompt(params, 0, 1),
+        buildFullTranscriptContext(params, cleanedContext),
+        undefined,
+        { maxOutputTokens: QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS },
+      );
+      const parsed = raw ? parseSummaryJson(raw, params.modeNoteSections) : null;
+      if (parsed) return successfulSummary(parsed);
+    } catch (err) {
+      console.warn('[PostCallSummaryGenerator] one-shot summary failed', {
+        errorName: err instanceof Error ? err.name : 'UnknownError',
+        modeTemplateType: params.modeTemplateType,
+        inputLength: cleanedContext.length,
+      });
+    }
+
+    if (cleanedContext.length <= chunkSize) return emptySummary(params.modeNoteSections);
+  }
+
+  const chunks = chunkTranscriptForSummary(cleanedContext, chunkSize);
   if (chunks.length === 0) return emptySummary(params.modeNoteSections);
 
   const partials: PostCallSummaryData[] = [];
@@ -270,6 +347,7 @@ export async function generateFullTranscriptSummary(params: GenerateFullTranscri
         buildChunkPrompt(params, i, chunks.length),
         buildChunkContext(params, chunks[i]),
         undefined,
+        { maxOutputTokens: QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS },
       );
       const parsed = raw ? parseSummaryJson(raw, params.modeNoteSections) : null;
       if (parsed) partials.push(parsed);
@@ -285,21 +363,24 @@ export async function generateFullTranscriptSummary(params: GenerateFullTranscri
   }
 
   if (partials.length === 0) return emptySummary(params.modeNoteSections);
-  if (partials.length === 1 && chunks.length === 1) return partials[0];
+  if (partials.length === 1 && chunks.length === 1) return successfulSummary(partials[0]);
 
   try {
     const raw = await params.llmHelper.generateMeetingSummary(
       buildMergePrompt(params, partials),
       buildMergeContext(params, partials),
       undefined,
+      { maxOutputTokens: QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS },
     );
-    return parseSummaryJson(raw, params.modeNoteSections) ?? emptySummary(params.modeNoteSections);
+    const merged = parseSummaryJson(raw, params.modeNoteSections);
+    return merged ? successfulSummary(merged) : successfulSummary(mergePartialsLocally(partials, params.modeNoteSections));
   } catch (err) {
     console.warn('[PostCallSummaryGenerator] final summary merge failed', {
       errorName: err instanceof Error ? err.name : 'UnknownError',
       partialCount: partials.length,
       modeTemplateType: params.modeTemplateType,
     });
-    return mergePartialsLocally(partials, params.modeNoteSections);
+    return successfulSummary(mergePartialsLocally(partials, params.modeNoteSections));
   }
 }
+import { QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS } from '../../llm/QCloudLlmConstants';

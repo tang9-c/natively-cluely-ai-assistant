@@ -226,3 +226,126 @@ test('generateFullTranscriptSummary returns empty compatible structure when all 
   assert.deepEqual(summary.openQuestions, []);
   assert.deepEqual(summary.sections, [{ title: '客户目标', bullets: [] }]);
 });
+
+test('generateFullTranscriptSummary sends exactly 50,000 cleaned characters in one core-budget request', async () => {
+  const calls = [];
+  const summary = await generateFullTranscriptSummary({
+    llmHelper: {
+      generateMeetingSummary: async (...args) => {
+        calls.push(args);
+        return JSON.stringify({ overview: '完整摘要', keyPoints: [], actionItems: [] });
+      },
+    },
+    transcript: [],
+    context: `  ${'甲'.repeat(50_000)}  `,
+    modeTemplateType: 'general',
+    modeNoteSections: [],
+    modeContextBlock: '',
+    baseRules: '规则：只基于会议内容。',
+    groqSummaryPrompt: 'fallback',
+  });
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0][1], /完整会议转录：/);
+  assert.deepEqual(calls[0][3], { maxOutputTokens: 4096 });
+  assert.equal(summary.generationStatus, 'success');
+});
+
+for (const [label, response] of [
+  ['throws', () => { throw new Error('one-shot unavailable'); }],
+  ['returns empty text', () => ''],
+  ['returns invalid JSON', () => '{invalid'],
+]) {
+  test(`generateFullTranscriptSummary falls back to chunks when a 24,001-50,000 character one-shot ${label}`, async () => {
+    const calls = [];
+    const summary = await generateFullTranscriptSummary({
+      llmHelper: {
+        generateMeetingSummary: async (...args) => {
+          calls.push(args);
+          if (calls.length === 1) return response();
+          if (args[0].includes('归并')) {
+            return JSON.stringify({ overview: '归并摘要', keyPoints: [], actionItems: [] });
+          }
+          return JSON.stringify({ overview: '局部摘要', keyPoints: [], actionItems: [] });
+        },
+      },
+      transcript: [],
+      context: '会议正文 '.repeat(5_000),
+      modeTemplateType: 'general',
+      modeNoteSections: [],
+      modeContextBlock: '',
+      baseRules: '规则：只基于会议内容。',
+      groqSummaryPrompt: 'fallback',
+    });
+
+    assert.match(calls[0][1], /完整会议转录：/);
+    assert.ok(calls.slice(1).some(([, context]) => context.includes('会议片段：')));
+    assert.ok(calls.slice(1).some(([prompt]) => prompt.includes('归并')));
+    assert.ok(calls.every((args) => JSON.stringify(args[3]) === JSON.stringify({ maxOutputTokens: 4096 })));
+    assert.equal(summary.generationStatus, 'success');
+  });
+}
+
+test('generateFullTranscriptSummary does not retry a failed one-shot at or below the chunk threshold', async () => {
+  const calls = [];
+  const summary = await generateFullTranscriptSummary({
+    llmHelper: {
+      generateMeetingSummary: async (...args) => {
+        calls.push(args);
+        throw new Error('one-shot unavailable');
+      },
+    },
+    transcript: [],
+    context: '会议正文 '.repeat(1_000),
+    modeTemplateType: 'general',
+    modeNoteSections: [],
+    modeContextBlock: '',
+    baseRules: '规则：只基于会议内容。',
+    groqSummaryPrompt: 'fallback',
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(summary.generationStatus, 'failed');
+});
+
+test('generateFullTranscriptSummary skips the full request above 50,000 characters and ends every user context with its schema', async () => {
+  const calls = [];
+  const summary = await generateFullTranscriptSummary({
+    llmHelper: {
+      generateMeetingSummary: async (...args) => {
+        calls.push(args);
+        if (args[0].includes('归并')) {
+          return JSON.stringify({
+            overview: '完整摘要',
+            sections: { 客户目标: ['降低追溯成本'] },
+            actionItems: [],
+            decisions: [],
+            openQuestions: [],
+          });
+        }
+        return JSON.stringify({
+          overview: '局部摘要',
+          sections: { 客户目标: ['降低追溯成本'] },
+          actionItems: [],
+          decisions: [],
+          openQuestions: [],
+        });
+      },
+    },
+    transcript: [],
+    context: '超长会议正文 '.repeat(10_000),
+    modeTemplateType: 'fde',
+    modeNoteSections: [{ title: '客户目标', description: '客户希望达到的业务结果' }],
+    modeContextBlock: '模式资料',
+    baseRules: '规则：只基于会议内容。',
+    groqSummaryPrompt: 'fallback',
+  });
+
+  assert.ok(calls.length > 1);
+  assert.ok(calls.every(([, context]) => !context.includes('完整会议转录：')));
+  for (const [, context, , options] of calls) {
+    assert.match(context, /--- (?:会议转录|局部摘要)结束 ---\n只返回合法 JSON，不要 markdown。\n\{[\s\S]*"客户目标": \[\][\s\S]*\}$/);
+    assert.deepEqual(options, { maxOutputTokens: 4096 });
+  }
+  assert.equal(summary.generationStatus, 'success');
+});
