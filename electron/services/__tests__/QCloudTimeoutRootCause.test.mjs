@@ -62,7 +62,10 @@ test('meeting summary gives QCLOUD a summary-sized timeout budget', () => {
 
   assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_MODEL = "lite32k"/);
   assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_TIMEOUT_MS = 60_000/);
-  assert.match(summaryBlock, /maxOutputTokens:\s*QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS/);
+  assert.match(
+    summaryBlock,
+    /maxOutputTokens:\s*options\?\.maxOutputTokens\s*\?\?\s*QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS/,
+  );
   assert.match(summaryBlock, /timeoutMs:\s*qcloudSummaryTimeoutMs/);
   assert.match(summaryBlock, /qcloudModel:\s*QCLOUD_MEETING_SUMMARY_MODEL/);
   assert.match(summaryBlock, /const qcloudSummaryTimeoutMs = QCLOUD_MEETING_SUMMARY_TIMEOUT_MS/);
