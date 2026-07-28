@@ -145,6 +145,17 @@ describe('Tier 1 regex coverage: FDE mode ≥80%', () => {
 });
 
 describe('FDE manufacturing exact intent routing', () => {
+  test('routes plain PLM workflow and quality objects to discovery', () => {
+    for (const utterance of [
+      '客户现场当前流程是 ECO 先走 PLM，再同步 BOM。',
+      '这个 NCR 已经升级到 CAPA 了。',
+      'We review 8D records in QMS as part of the current workflow.',
+    ]) {
+      const result = detectIntentByPattern(utterance, 'fde');
+      assert.equal(result?.intent, 'fde_discovery', utterance);
+    }
+  });
+
   test('routes ERP/MES data direction and permission boundary to integration clarification', () => {
     const result = detectIntentByPattern('ERP 和 MES 到 QMS 的数据方向、角色权限和读写边界还没确认。', 'fde');
     assert.equal(result?.intent, 'fde_integration');
@@ -153,6 +164,11 @@ describe('FDE manufacturing exact intent routing', () => {
   test('routes readonly and writeback AI Agent boundary to agent feasibility', () => {
     const result = detectIntentByPattern('这个 AI Agent 只能只读分析，不能自动写回 PLM 或 QMS。', 'fde');
     assert.equal(result?.intent, 'fde_agent_feasibility');
+  });
+
+  test('requires explicit risk language before routing quality objects to risk', () => {
+    const result = detectIntentByPattern('这个 CAPA 和 NCR 的审计追踪会影响质量闭环。', 'fde');
+    assert.equal(result?.intent, 'fde_risk');
   });
 });
 

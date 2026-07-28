@@ -347,15 +347,20 @@ describe('ModeEventClassifier', () => {
   test('labels cloud success and local-only-not-needed arbitration states', async () => {
     const { ModeEventClassifier } = await loadClassifier();
     const classifier = new ModeEventClassifier({
-      cloudClassifier: async () => [
-        {
-          actionType: 'case_study_request',
-          decision: 'pass',
-          confidence: 0.92,
-          semanticIntent: 'case_or_proof_request',
-          reasons: ['cloud_confirmed_case_request'],
-        },
-      ],
+      cloudClassifier: async ({ candidates }) => candidates.map((item) => item.actionType === 'case_study_request'
+        ? {
+            actionType: item.actionType,
+            decision: 'pass',
+            confidence: 0.92,
+            semanticIntent: 'case_or_proof_request',
+            reasons: ['cloud_confirmed_case_request'],
+          }
+        : {
+            actionType: item.actionType,
+            decision: 'reject',
+            confidence: 0.8,
+            reasons: ['cloud_rejected_candidate'],
+          }),
     });
 
     const localOnly = await classifier.assess({
@@ -531,7 +536,7 @@ test('partial invalid cloud JSON defers every required recruiting candidate with
   assert.deepEqual(decisions.map((decision) => decision.degradedReason), ['cloud_invalid_json', 'cloud_invalid_json']);
 });
 
-test('partial invalid cloud JSON preserves valid required sales decisions', async () => {
+test('partial invalid cloud JSON defers every sales candidate', async () => {
   const { ModeEventClassifier } = await loadClassifier();
   const classifier = new ModeEventClassifier({
     cloudClassifier: async () => [
@@ -547,6 +552,80 @@ test('partial invalid cloud JSON preserves valid required sales decisions', asyn
     providerDataScopes: { transcript: true },
   });
 
-  assert.equal(decisions[0].decision, 'pass');
-  assert.equal(decisions[0].semanticProvider, 'cloud_llm');
+  assert.equal(decisions[0].decision, 'defer');
+  assert.equal(decisions[0].semanticProvider, 'unavailable');
+  assert.equal(decisions[0].degradedReason, 'cloud_invalid_json');
+});
+
+test('omitted cloud candidate defers the entire target-mode assessment', async () => {
+  const { ModeEventClassifier } = await loadClassifier();
+  const classifier = new ModeEventClassifier({
+    cloudClassifier: async () => [
+      { actionType: 'case_study_request', decision: 'pass', confidence: 0.95 },
+    ],
+  });
+
+  const decisions = await classifier.assess({
+    transcript: '我们想看类似客户案例，也需要确认 SSO 要求。',
+    modeTemplateType: 'sales',
+    candidates: [
+      candidate('case_study_request', '类似客户案例', 0.9, {
+        allowLocalFallbackOnCloudFailure: false,
+      }),
+      candidate('technical_requirements', 'SSO 要求', 0.88, {
+        allowLocalFallbackOnCloudFailure: false,
+      }),
+    ],
+    providerDataScopes: { transcript: true },
+  });
+
+  assert.deepEqual(decisions.map((decision) => decision.decision), ['defer', 'defer']);
+  assert.deepEqual(decisions.map((decision) => decision.degradedReason), ['cloud_invalid_json', 'cloud_invalid_json']);
+});
+
+test('duplicate cloud candidate defers the entire target-mode assessment', async () => {
+  const { ModeEventClassifier } = await loadClassifier();
+  const classifier = new ModeEventClassifier({
+    cloudClassifier: async () => [
+      { actionType: 'candidate_concern', decision: 'pass', confidence: 0.95 },
+      { actionType: 'candidate_concern', decision: 'reject', confidence: 0.8 },
+    ],
+  });
+
+  const decisions = await classifier.assess({
+    transcript: '我担心签证政策。',
+    modeTemplateType: 'recruiting',
+    candidates: [
+      candidate('candidate_concern', '签证政策', 0.9, {
+        riskLevel: 'high',
+        gateStrategy: 'required',
+        allowLocalFallbackOnCloudFailure: false,
+      }),
+    ],
+    providerDataScopes: { transcript: true },
+  });
+
+  assert.equal(decisions[0].decision, 'defer');
+  assert.equal(decisions[0].degradedReason, 'cloud_invalid_json');
+});
+
+test('cloud response parser rejects unknown, duplicate, and omitted action types', async () => {
+  const { CloudSemanticGateError, parseCloudSemanticGateResponse } = await loadClassifier();
+  const candidates = [
+    candidate('case_study_request', '案例'),
+    candidate('technical_requirements', 'SSO'),
+  ];
+  const responses = [
+    '{"actions":[{"actionType":"case_study_request","decision":"pass","confidence":0.9},{"actionType":"unknown_action","decision":"reject","confidence":0.8}]}',
+    '{"actions":[{"actionType":"case_study_request","decision":"pass","confidence":0.9},{"actionType":"case_study_request","decision":"reject","confidence":0.8}]}',
+    '{"actions":[{"actionType":"case_study_request","decision":"pass","confidence":0.9}]}',
+  ];
+
+  for (const response of responses) {
+    assert.throws(
+      () => parseCloudSemanticGateResponse(response, candidates),
+      (error) => error instanceof CloudSemanticGateError && error.reason === 'cloud_invalid_json',
+      response,
+    );
+  }
 });

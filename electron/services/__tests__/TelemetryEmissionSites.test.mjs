@@ -67,12 +67,38 @@ describe('Phase 6 — TelemetryService production emission sites', () => {
   test('MeetingPersistence.ts emits post_call_summary lifecycle', () => {
     const src = read('electron/MeetingPersistence.ts');
     assert.match(src, /name:\s*['"]post_call_summary_started['"]/, 'should emit started');
-    assert.match(src, /name:\s*['"]post_call_summary_completed['"]/, 'should emit completed');
-    assert.match(src, /name:\s*['"]post_call_summary_failed['"]/, 'should emit failed');
+    assert.match(src, /['"]post_call_summary_completed['"]/, 'should emit completed');
+    assert.match(src, /['"]post_call_summary_failed['"]/, 'should emit failed');
     // Must not pass raw transcript text in the property bag — only counts/durations.
     const startedBlock = src.match(/name:\s*['"]post_call_summary_started['"][\s\S]{0,400}/)?.[0] ?? '';
     assert.doesNotMatch(startedBlock, /\btranscript:\s*data\.transcript\b/, 'started event must not include raw transcript array');
     assert.match(startedBlock, /transcriptSegmentCount/, 'started event must include count, not body');
+  });
+
+  test('MeetingPersistence routes generation failures to failed telemetry after a successful save', () => {
+    const src = read('electron/MeetingPersistence.ts');
+    const saveTelemetryBlock = src.slice(
+      src.indexOf('// Phase 6 — post_call_summary lifecycle'),
+      src.indexOf("console.error('[MeetingPersistence] Failed to save meeting:'"),
+    );
+
+    assert.match(saveTelemetryBlock, /summaryData\.generationStatus\s*===\s*['"]failed['"]/);
+    assert.match(
+      saveTelemetryBlock,
+      /name:\s*\w+\s*\?\s*['"]post_call_summary_failed['"]\s*:\s*['"]post_call_summary_completed['"]/,
+    );
+    assert.match(saveTelemetryBlock, /failureStage:\s*['"]generation['"]/);
+  });
+
+  test('MeetingPersistence labels database write failures as persistence telemetry failures', () => {
+    const src = read('electron/MeetingPersistence.ts');
+    const persistenceFailureBlock = src.slice(
+      src.indexOf("console.error('[MeetingPersistence] Failed to save meeting:'"),
+      src.indexOf('\n    }\n\n    /**', src.indexOf("console.error('[MeetingPersistence] Failed to save meeting:'")),
+    );
+
+    assert.match(persistenceFailureBlock, /name:\s*['"]post_call_summary_failed['"]/);
+    assert.match(persistenceFailureBlock, /failureStage:\s*['"]persistence['"]/);
   });
 
   test('telemetry calls are wrapped in try/catch (must never break app)', () => {

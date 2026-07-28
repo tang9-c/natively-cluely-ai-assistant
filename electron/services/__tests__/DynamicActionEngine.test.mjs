@@ -28,6 +28,16 @@ async function loadModules() {
   };
 }
 
+function cloudSelect(actionType, confidence = 0.92) {
+  return async ({ candidates }) => candidates.map((candidate) => ({
+    actionType: candidate.actionType,
+    decision: candidate.actionType === actionType ? 'pass' : 'reject',
+    confidence: candidate.actionType === actionType ? confidence : 0.8,
+    reasons: candidate.actionType === actionType ? ['cloud_selected_candidate'] : ['cloud_rejected_candidate'],
+    rejectedCandidates: candidate.actionType === actionType ? [] : [candidate.actionType],
+  }));
+}
+
 test('Pricing objection detected in Sales transcript creates pricing_objection action', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
@@ -51,7 +61,7 @@ test('Pricing objection detected in Sales transcript creates pricing_objection a
   assert.ok(pricingAction.evidenceRefs[0].text.includes('price'));
 });
 
-test('recruiting evidence rubric intents converge on candidate_experience_probe', async () => {
+test('recruiting evidence rubric intents cannot create detector-less candidates', async () => {
   const mappings = [
     'recruiting_scorecard_gap',
     'recruiting_bei_evidence_gap',
@@ -76,7 +86,7 @@ test('recruiting evidence rubric intents converge on candidate_experience_probe'
         rejectedCandidates: [],
       })),
     });
-    assert.deepEqual(actions.map((action) => action.type), ['candidate_experience_probe']);
+    assert.deepEqual(actions, []);
   }
 });
 
@@ -316,9 +326,35 @@ test('FDE deployment transcript creates integration action', async () => {
   assert.ok(action.keyEntities?.includes('数据源'));
 });
 
-test('FDE intent result can synthesize action when regex does not match', async () => {
+test('FDE detector drops broad discovery when a specific integration candidate exists', async () => {
+  const { DynamicActionDetector, MODE_TRIGGERS } = await loadModules();
+  const detector = new DynamicActionDetector(MODE_TRIGGERS);
+  const matches = detector.detectTriggers({
+    transcript: '客户要把 PLM 的 BOM 通过 API 同步到 ERP，并确认 SSO。',
+    speaker: 'Customer',
+    modeTemplateType: 'fde',
+  });
+
+  assert.ok(matches.some(({ trigger }) => trigger.type === 'fde_integration_check'));
+  assert.equal(matches.some(({ trigger }) => trigger.type === 'fde_discovery_probe'), false);
+});
+
+test('FDE quality object names alone remain discovery candidates instead of risk', async () => {
+  const { DynamicActionDetector, MODE_TRIGGERS } = await loadModules();
+  const detector = new DynamicActionDetector(MODE_TRIGGERS);
+  const matches = detector.detectTriggers({
+    transcript: '客户当前在 QMS 里记录 NCR，再升级为 CAPA 和 8D。',
+    speaker: 'Customer',
+    modeTemplateType: 'fde',
+  });
+
+  assert.deepEqual(matches.map(({ trigger }) => trigger.type), ['fde_discovery_probe']);
+});
+
+test('FDE intent result cannot synthesize action when detector has no candidate', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
+  let cloudCalls = 0;
 
   const actions = await engine.assessSignals({
     transcript: '客户说红线问题还没解决',
@@ -332,19 +368,23 @@ test('FDE intent result can synthesize action when regex does not match', async 
       answerShape: 'Name blocker and next unblock step.',
       source: 'cloud',
     },
-    cloudClassifier: async input => input.candidates.map(candidate => ({
-      actionType: candidate.actionType,
-      decision: candidate.actionType === 'fde_risk_blocker' ? 'pass' : 'reject',
-      confidence: candidate.actionType === 'fde_risk_blocker' ? 0.92 : 0.8,
-      reasons: candidate.actionType === 'fde_risk_blocker' ? ['cloud_confirmed_fde_risk'] : ['cloud_rejected_candidate'],
-    })),
+    cloudClassifier: async input => {
+      cloudCalls += 1;
+      return input.candidates.map(candidate => ({
+        actionType: candidate.actionType,
+        decision: 'pass',
+        confidence: 0.92,
+        reasons: ['cloud_confirmed_fde_risk'],
+      }));
+    },
     now: 1_000,
   });
 
-  assert.ok(actions.some(action => action.type === 'fde_risk_blocker'));
+  assert.deepEqual(actions, []);
+  assert.equal(cloudCalls, 0);
 });
 
-test('assessSignals synthesizes confirmed FDE AI Agent feasibility action from intent runtime mapping', async () => {
+test('FDE agent intent cannot synthesize action when detector has no candidate', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
 
@@ -369,16 +409,7 @@ test('assessSignals synthesizes confirmed FDE AI Agent feasibility action from i
     now: 2_000,
   });
 
-  const action = actions.find(item => item.type === 'fde_agent_feasibility');
-  assert.ok(action, `Expected fde_agent_feasibility; got ${actions.map(item => item.type).join(', ')}`);
-  assert.equal(action.signalStatus, 'confirmed');
-  assert.equal(action.confirmationSource, 'cloud_intent');
-  assert.equal(action.confirmedIntent, 'fde_agent_feasibility');
-  assert.equal(action.productContract?.outputType, 'checklist');
-  assert.equal(action.productContract?.userAction, '判断 AI Agent 可行性边界');
-  assert.match(action.promptInstruction, /human confirmation/i);
-  assert.match(action.promptInstruction, /read-only/i);
-  assert.match(action.promptInstruction, /Do not imply automatic writes.*PLM.*QMS/i);
+  assert.deepEqual(actions, []);
 });
 
 test('dynamic action retrievalQuery uses active-mode entity extraction', async () => {
@@ -972,33 +1003,50 @@ test('FDE high-risk candidate defers without cloud semantic confirmation', async
   );
 });
 
-test('assessSignals uses classifier intent to synthesize high-confidence sales action without regex match', async () => {
+test('sales intent cannot synthesize a suppressed buying signal', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
 
   const actions = await engine.assessSignals({
-    transcript: '这个方案我们内部还要和老板确认一下投入产出',
-    speaker: 'interviewer',
+    transcript: 'Legal review is a later internal topic, no customer ask right now.',
+    speaker: 'Customer',
     modeTemplateType: 'sales',
     modeId: 'mode_sales',
     sessionId: 'session_synth',
-    intentResult: { intent: 'handle_objection', confidence: 0.91, answerShape: '处理异议', source: 'cloud' },
+    intentResult: { intent: 'sales_buying_signal', confidence: 0.91, answerShape: '下一步', source: 'cloud' },
     cloudClassifier: async input => input.candidates.map(candidate => ({
       actionType: candidate.actionType,
-      decision: candidate.actionType === 'pricing_objection' ? 'pass' : 'reject',
-      confidence: candidate.actionType === 'pricing_objection' ? 0.92 : 0.8,
-      reasons: candidate.actionType === 'pricing_objection' ? ['cloud_confirmed_pricing_objection'] : ['cloud_rejected_candidate'],
+      decision: 'pass',
+      confidence: 0.92,
+      reasons: ['cloud_confirmed_buying_signal'],
     })),
-    emotion: 'angry',
-    emotionSource: 'sensevoice',
     now: 10_000,
   });
 
-  const action = actions.find(a => a.type === 'pricing_objection');
-  assert.ok(action, `expected synthesized pricing_objection; got ${actions.map(a => a.type).join(', ')}`);
-  assert.equal(action.confirmationSource, 'cloud_intent');
-  assert.equal(action.confirmedIntent, 'handle_objection');
-  assert.equal(action.emotion, 'angry');
+  assert.deepEqual(actions, []);
+});
+
+test('team intent cannot synthesize a suppressed blocker', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = await engine.assessSignals({
+    transcript: '依赖这个词出现在包管理器日志里，不是项目阻塞。',
+    speaker: 'user',
+    modeTemplateType: 'team-meet',
+    modeId: 'mode_team',
+    sessionId: 'session_team_suppressed',
+    intentResult: { intent: 'capture_risk', confidence: 0.91, answerShape: '阻塞', source: 'cloud' },
+    cloudClassifier: async input => input.candidates.map(candidate => ({
+      actionType: candidate.actionType,
+      decision: 'pass',
+      confidence: 0.92,
+      reasons: ['cloud_confirmed_blocker'],
+    })),
+    now: 10_000,
+  });
+
+  assert.deepEqual(actions, []);
 });
 
 test('assessSignals synthesizes general summary action from custom keyword intent', async () => {
@@ -1092,7 +1140,7 @@ test('assessSignals keeps sub-threshold signals out of top actions', async () =>
   assert.equal(engine.getTopActions(sessionId).length, 0);
 });
 
-test('assessSignals rejects sidelined pricing while passing case and technical needs', async () => {
+test('assessSignals rejects sidelined pricing and emits only the strongest confirmed need', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
 
@@ -1116,8 +1164,8 @@ test('assessSignals rejects sidelined pricing while passing case and technical n
   });
 
   assert.equal(actions.some(action => action.type === 'pricing_objection'), false);
-  assert.ok(actions.some(action => action.type === 'case_study_request'));
   assert.ok(actions.some(action => action.type === 'technical_requirements'));
+  assert.equal(actions.length, 1);
   assert.ok(actions.every(action => action.semanticGate?.decision === 'pass'));
 });
 
@@ -1230,6 +1278,7 @@ test('assessSignals emits explicit Chinese pricing request actions', async () =>
       modeTemplateType: 'sales',
       modeId: 'mode_sales',
       sessionId: `session_pricing_request_${transcript}`,
+      cloudClassifier: cloudSelect('pricing_request'),
       now: 20_000,
     });
 
@@ -1237,7 +1286,7 @@ test('assessSignals emits explicit Chinese pricing request actions', async () =>
     assert.ok(action, `expected pricing_request for ${transcript}; got ${actions.map(item => item.type).join(', ')}`);
     assert.equal(action.answerStyle?.format, 'email');
     assert.equal(action.semanticGate?.decision, 'pass');
-    assert.equal(action.semanticGate?.semanticProvider, 'local_rule');
+    assert.equal(action.semanticGate?.semanticProvider, 'cloud_llm');
   }
 });
 
@@ -1312,7 +1361,7 @@ test('assessSignals emits explicit Chinese case request actions', async () => {
   }
 });
 
-test('assessSignals falls back to local English price objection when cloud returns null', async () => {
+test('assessSignals fails closed for an English price objection when cloud returns null', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
 
@@ -1326,11 +1375,7 @@ test('assessSignals falls back to local English price objection when cloud retur
     now: 20_000,
   });
 
-  const action = actions.find(item => item.type === 'pricing_objection');
-  assert.ok(action, `expected pricing_objection; got ${actions.map(item => item.type).join(', ')}`);
-  assert.equal(action.semanticGate?.decision, 'pass');
-  assert.equal(action.semanticGate?.semanticProvider, 'local_rule');
-  assert.ok(action.semanticGate?.reasons.includes('cloud_unavailable_local_fallback'));
+  assert.deepEqual(actions, []);
 });
 
 test('assessSignals keeps neutral pricing references rejected when cloud returns null', async () => {
@@ -1434,7 +1479,7 @@ test('all FDE policies keep local fallback disabled', async () => {
   }
 });
 
-test('assessSignals enriches synthetic intent candidates with the same policy metadata', async () => {
+test('sales intent-only input does not call the semantic gate', async () => {
   const { DynamicActionEngine } = await loadModules();
   const calls = [];
   const engine = new DynamicActionEngine();
@@ -1457,10 +1502,7 @@ test('assessSignals enriches synthetic intent candidates with the same policy me
     },
   });
 
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].candidates[0].actionType, 'case_study_request');
-  assert.equal(calls[0].candidates[0].riskLevel, 'high');
-  assert.equal(calls[0].candidates[0].gateStrategy, 'required');
+  assert.equal(calls.length, 0);
 });
 
 describe('DynamicActionEngine real meeting semantic gate fixtures', () => {
@@ -1473,7 +1515,6 @@ describe('DynamicActionEngine real meeting semantic gate fixtures', () => {
       speaker: 'buyer-a',
       providerDataScopes: { transcript: true },
       cloudClassifierResult: [
-        { actionType: 'pricing_objection', decision: 'reject', confidence: 0.86, semanticIntent: 'neutral_pricing_reference', reasons: ['cloud_rejected_pricing_reference'], rejectedCandidates: ['pricing_objection'] },
         { actionType: 'case_study_request', decision: 'pass', confidence: 0.92, semanticIntent: 'case_or_proof_request', reasons: ['cloud_confirmed_case_request'] },
       ],
       expectedActions: ['case_study_request'],
@@ -1556,28 +1597,28 @@ describe('DynamicActionEngine real meeting semantic gate fixtures', () => {
       expectedTraceReasons: ['provider_scope_denied'],
     },
     {
-      name: '云端失败兜底：null 使用本地价格异议',
+      name: '云端失败关闭：null 不返回价格异议',
       modeTemplateType: 'sales',
       turns: [],
       currentTranscript: 'This is too expensive for our budget.',
       speaker: 'buyer',
       providerDataScopes: { transcript: true },
       cloudClassifierResult: null,
-      expectedActions: ['pricing_objection'],
-      expectedRejectedActions: [],
-      expectedTraceReasons: ['cloud_provider_unavailable', 'cloud_unavailable_local_fallback'],
+      expectedActions: [],
+      expectedRejectedActions: ['pricing_objection'],
+      expectedTraceReasons: ['cloud_provider_unavailable'],
     },
     {
-      name: '云端失败兜底：timeout 使用本地价格异议',
+      name: '云端失败关闭：timeout 不返回价格异议',
       modeTemplateType: 'sales',
       turns: [],
       currentTranscript: 'This is too expensive for our budget.',
       speaker: 'buyer',
       providerDataScopes: { transcript: true },
       cloudFailure: 'timeout',
-      expectedActions: ['pricing_objection'],
-      expectedRejectedActions: [],
-      expectedTraceReasons: ['cloud_timeout', 'cloud_unavailable_local_fallback'],
+      expectedActions: [],
+      expectedRejectedActions: ['pricing_objection'],
+      expectedTraceReasons: ['cloud_timeout'],
     },
     {
       name: '云端失败兜底：非法结构拒绝中性价格引用',
@@ -1599,7 +1640,7 @@ describe('DynamicActionEngine real meeting semantic gate fixtures', () => {
       const traces = [];
       let cloudCalls = 0;
       const engine = new DynamicActionEngine();
-      const cloudClassifier = async () => {
+      const cloudClassifier = async ({ candidates }) => {
         cloudCalls += 1;
         if (fixture.cloudFailure === 'timeout') {
           const error = new Error('cloud classifier timeout');
@@ -1609,7 +1650,21 @@ describe('DynamicActionEngine real meeting semantic gate fixtures', () => {
         if (fixture.cloudFailure === 'scope_denied') {
           throw new Error('cloud classifier must not be called');
         }
-        return fixture.cloudClassifierResult;
+        if (!Array.isArray(fixture.cloudClassifierResult)) {
+          return fixture.cloudClassifierResult;
+        }
+        const candidateTypes = new Set(candidates.map((candidate) => candidate.actionType));
+        const completeResults = candidates.map((candidate) => (
+          fixture.cloudClassifierResult.find((result) => result.actionType === candidate.actionType) ?? {
+            actionType: candidate.actionType,
+            decision: 'reject',
+            confidence: 0.8,
+            reasons: ['cloud_rejected_candidate'],
+            rejectedCandidates: [candidate.actionType],
+          }
+        ));
+        const extras = fixture.cloudClassifierResult.filter((result) => !candidateTypes.has(result.actionType));
+        return [...completeResults, ...extras];
       };
 
       const actions = await engine.assessSignals({
@@ -1653,6 +1708,7 @@ test('assessSignals requires repeated evidence before auto-surfacing ordinary ob
     modeId: 'mode_sales',
     sessionId,
     intentResult: { intent: 'handle_objection', confidence: 0.9, answerShape: '处理异议' },
+    cloudClassifier: cloudSelect('pricing_objection'),
     now: 10_000,
   });
   const second = await engine.assessSignals({
@@ -1662,6 +1718,7 @@ test('assessSignals requires repeated evidence before auto-surfacing ordinary ob
     modeId: 'mode_sales',
     sessionId,
     intentResult: { intent: 'handle_objection', confidence: 0.92, answerShape: '处理异议' },
+    cloudClassifier: cloudSelect('pricing_objection'),
     now: 30_000,
   });
 
@@ -1684,6 +1741,7 @@ test('findRecentActionForIntent maps classifier intent to active dynamic action'
     modeId: 'mode_sales',
     sessionId,
     intentResult: { intent: 'handle_objection', confidence: 0.92, answerShape: '处理异议' },
+    cloudClassifier: cloudSelect('pricing_objection'),
     now: 10_000,
   });
 
@@ -1917,6 +1975,7 @@ describe('ActionTrigger fixtures — sales mode', () => {
       modeTemplateType: 'sales',
       modeId: 'm_s',
       sessionId: 's_s_bs_legal_asr',
+      cloudClassifier: cloudSelect('buying_signal', 0.95),
     });
     const a = findAction(actions, 'buying_signal');
     assert.ok(a, `expected buying_signal; got ${actions.map(action => action.type).join(', ')}`);
@@ -1932,6 +1991,7 @@ describe('ActionTrigger fixtures — sales mode', () => {
       modeTemplateType: 'sales',
       modeId: 'm_s',
       sessionId: 's_s_po_budget_asr',
+      cloudClassifier: cloudSelect('pricing_objection', 0.9),
     });
     const a = findAction(actions, 'pricing_objection');
     assert.ok(a, `expected pricing_objection; got ${actions.map(action => action.type).join(', ')}`);
@@ -2400,7 +2460,7 @@ describe('DynamicActionEngine priority propagation', () => {
 });
 
 describe('DynamicActionEngine semantic gate trace sink', () => {
-  test('emits reject trace without storing an action when cloud is unavailable', async () => {
+  test('emits defer trace without storing an action when cloud is unavailable', async () => {
     const { DynamicActionEngine } = await loadModules();
     const traces = [];
     const engine = new DynamicActionEngine();
@@ -2417,9 +2477,8 @@ describe('DynamicActionEngine semantic gate trace sink', () => {
     assert.equal(actions.some(action => action.type === 'pricing_request'), false);
     const pricingTrace = traces.find(trace => trace.actionType === 'pricing_request');
     assert.ok(pricingTrace, `expected pricing_request trace; got ${traces.map(trace => trace.actionType).join(', ')}`);
-    assert.equal(pricingTrace.decision, 'reject');
-    assert.ok(pricingTrace.reasons.includes('neutral_pricing_reference'));
-    assert.ok(pricingTrace.reasons.includes('cloud_unavailable_local_fallback'));
+    assert.equal(pricingTrace.decision, 'defer');
+    assert.equal(pricingTrace.degradedReason, 'cloud_provider_unavailable');
   });
 
   test('emits defer trace without storing an action when provider scope denies transcript', async () => {
@@ -2531,6 +2590,7 @@ describe('DynamicActionEngine deduplication', () => {
       modeTemplateType: 'team-meet',
       modeId: 'team-meet',
       sessionId: 'team-dismissal',
+      cloudClassifier: cloudSelect('action_item'),
       now,
     });
     assert.equal(first.length, 1);
@@ -2541,6 +2601,7 @@ describe('DynamicActionEngine deduplication', () => {
       modeTemplateType: 'team-meet',
       modeId: 'team-meet',
       sessionId: 'team-dismissal',
+      cloudClassifier: cloudSelect('action_item'),
       now: now + 60_000,
     });
     assert.equal(second.length, 0);
@@ -2550,6 +2611,7 @@ describe('DynamicActionEngine deduplication', () => {
       modeTemplateType: 'team-meet',
       modeId: 'team-meet',
       sessionId: 'team-dismissal',
+      cloudClassifier: cloudSelect('action_item'),
       now: now + cooldownMs + 1,
     });
     assert.equal(afterCooldown.length, 1);
@@ -2604,6 +2666,7 @@ describe('DynamicActionEngine emotion propagation', () => {
       modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_emo_assess',
       emotion: 'sad',
       emotionSource: 'sensevoice',
+      cloudClassifier: cloudSelect('pricing_objection'),
     });
     assert.ok(actions.length > 0);
     assert.equal(actions[0].emotion, 'sad');
@@ -2674,18 +2737,19 @@ describe('DynamicActionEngine regression — 3 consecutive identical triggers', 
     const engine = new DynamicActionEngine();
     const sessionId = 's_regression_3x_assess';
     const intentResult = { intent: 'handle_objection', confidence: 0.92, answerShape: 'x' };
+    const cloudClassifier = cloudSelect('pricing_objection');
 
     const turn1 = await engine.assessSignals({
       transcript: '太贵了',
-      modeTemplateType: 'sales', modeId: 'm_s', sessionId, intentResult, now: 1_000,
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId, intentResult, cloudClassifier, now: 1_000,
     });
     const turn2 = await engine.assessSignals({
       transcript: '太贵了',
-      modeTemplateType: 'sales', modeId: 'm_s', sessionId, intentResult, now: 2_000,
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId, intentResult, cloudClassifier, now: 2_000,
     });
     const turn3 = await engine.assessSignals({
       transcript: '太贵了',
-      modeTemplateType: 'sales', modeId: 'm_s', sessionId, intentResult, now: 3_000,
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId, intentResult, cloudClassifier, now: 3_000,
     });
 
     assert.equal(turn1.length, 1, 'turn 1: 1 action emitted');

@@ -15,14 +15,22 @@ async function loadTriggers() {
 }
 
 describe('ModeActionPolicy', () => {
-  test('sales and FDE high-risk policies are explicit', async () => {
+  test('dynamic-card target modes are fail-closed and share one exclusive group per mode', async () => {
     const { getActionGatePolicy } = await loadPolicy();
-    assert.equal(getActionGatePolicy('sales', 'case_study_request').riskLevel, 'high');
-    assert.equal(getActionGatePolicy('sales', 'case_study_request').gateStrategy, 'required');
-    assert.equal(getActionGatePolicy('sales', 'case_study_request').allowLocalFallbackOnCloudFailure, false);
-    assert.equal(getActionGatePolicy('sales', 'pricing_request').allowLocalFallbackOnCloudFailure, true);
-    assert.equal(getActionGatePolicy('fde', 'fde_security_review').riskLevel, 'high');
-    assert.equal(getActionGatePolicy('fde', 'fde_security_review').allowLocalFallbackOnCloudFailure, false);
+    const fixtures = [
+      ['sales', ['pricing_objection', 'pricing_request', 'case_study_request', 'discovery_question', 'technical_requirements', 'buying_signal'], 'sales_live_assist'],
+      ['fde', ['fde_discovery_probe', 'fde_integration_check', 'fde_security_review', 'fde_risk_blocker', 'fde_agent_feasibility', 'fde_success_criteria', 'fde_next_step'], 'fde_live_assist'],
+      ['recruiting', ['candidate_concern', 'candidate_experience_probe', 'strong_fit_signal'], 'recruiting_live_assist'],
+      ['team-meet', ['action_item', 'decision_point', 'blocker_check', 'owner_deadline_check'], 'team_meet_live_assist'],
+    ];
+    for (const [mode, actionTypes, exclusiveGroup] of fixtures) {
+      for (const actionType of actionTypes) {
+        const actionPolicy = getActionGatePolicy(mode, actionType);
+        assert.equal(actionPolicy.allowLocalFallbackOnCloudFailure, false, `${mode}:${actionType}`);
+        assert.equal(actionPolicy.exclusiveGroup, exclusiveGroup, `${mode}:${actionType}`);
+        assert.ok(Number.isFinite(actionPolicy.selectionPriority), `${mode}:${actionType}`);
+      }
+    }
   });
 
   test('mode aliases resolve to first-class mode policies', async () => {
@@ -63,7 +71,7 @@ describe('ModeActionPolicy', () => {
 
   test('local fallback evidence is present only when local fallback is allowed', async () => {
     const { getActionGatePolicy } = await loadPolicy();
-    assert.ok(getActionGatePolicy('sales', 'pricing_request').localFallbackEvidence.length > 0);
+    assert.equal(getActionGatePolicy('sales', 'pricing_request').localFallbackEvidence.length, 0);
     assert.equal(getActionGatePolicy('sales', 'case_study_request').localFallbackEvidence.length, 0);
     assert.ok(getActionGatePolicy('technical-interview', 'screen_coding_problem').localFallbackEvidence.length > 0);
   });

@@ -259,6 +259,9 @@ for (const [label, response] of [
   ['throws', () => { throw new Error('one-shot unavailable'); }],
   ['returns empty text', () => ''],
   ['returns invalid JSON', () => '{invalid'],
+  ['returns an empty JSON object', () => '{}'],
+  ['returns an empty JSON array', () => '[]'],
+  ['returns a JSON error object', () => JSON.stringify({ error: 'service busy' })],
 ]) {
   test(`generateFullTranscriptSummary falls back to chunks when a 24,001-50,000 character one-shot ${label}`, async () => {
     const calls = [];

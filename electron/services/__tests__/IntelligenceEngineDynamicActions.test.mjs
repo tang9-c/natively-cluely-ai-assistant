@@ -64,7 +64,22 @@ class StubLLMHelper {
     this.structuredCalls.push({ prompt, options });
     if (this.throwCloudOnly && options?.requireCloudProvider) throw new Error('No cloud reasoning model available');
     if (this.throwStructured) throw new Error('cloud down');
-    return this.structuredResponses.shift() ?? '{"intent":"general","confidence":0.5}';
+    const configured = this.structuredResponses.shift();
+    if (configured) return configured;
+    if (prompt.includes('动态动作语义门控')) {
+      const candidatesJson = prompt.match(/^candidates: (.+)$/m)?.[1];
+      const candidates = candidatesJson ? JSON.parse(candidatesJson) : [];
+      return JSON.stringify({
+        actions: candidates.map((candidate) => ({
+          actionType: candidate.actionType,
+          decision: 'pass',
+          confidence: 0.92,
+          reasons: ['test_cloud_confirmed_candidate'],
+          rejectedCandidates: [],
+        })),
+      });
+    }
+    return '{"intent":"general","confidence":0.5}';
   }
   // Other methods that may be referenced during initializeLLMs():
   getGeminiClient() { return null; }
@@ -143,7 +158,9 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     const helper = new StubLLMHelper({
       structuredResponses: [
         '{"intent":"sales_pricing_objection","confidence":0.92}',
+        '{"actions":[{"actionType":"pricing_objection","decision":"pass","confidence":0.92,"reasons":["cloud_confirmed_pricing_objection"],"rejectedCandidates":[]}]}',
         '{"intent":"sales_pricing_objection","confidence":0.94}',
+        '{"actions":[{"actionType":"pricing_objection","decision":"pass","confidence":0.94,"reasons":["cloud_confirmed_pricing_objection"],"rejectedCandidates":[]}]}',
       ],
     });
     const { engine } = await makeEngine(helper);
@@ -312,6 +329,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     const helper = new StubLLMHelper({
       structuredResponses: [
         '{"intent":"sales_pricing_objection","confidence":0.92}',
+        '{"actions":[{"actionType":"pricing_objection","decision":"pass","confidence":0.92,"reasons":["cloud_confirmed_pricing_objection"],"rejectedCandidates":[]}]}',
         '{"intent":"sales_pricing_objection","confidence":0.92}',
       ],
     });
@@ -652,7 +670,9 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     const helper = new StubLLMHelper({ throwStructured: true });
     const { engine } = await makeEngine(helper);
     const emitted = [];
+    const availability = [];
     engine.on('dynamic_action_emitted', (action) => emitted.push(action));
+    engine.on('dynamic_action_gate_availability', (statuses) => availability.push(...statuses));
     engine.setDynamicActionContext({ sessionId: 's-fail', modeId: 'm-sales', modeTemplateType: 'sales' });
 
     assert.doesNotThrow(() => {
@@ -665,7 +685,8 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     });
     await waitForAsyncSignals();
 
-    assert.ok(emitted.some(a => a.type === 'pricing_objection'), 'rule fallback should still emit after cloud failure');
+    assert.equal(emitted.length, 0);
+    assert.ok(availability.includes('cloud_unavailable'));
   });
 
   test('final Chinese quote request emits pricing_request dynamic action', async () => {
@@ -714,11 +735,13 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(action.semanticGate?.semanticProvider, 'cloud_llm');
   });
 
-  test('final English price objection emits when dynamic action cloud gate fails', async () => {
+  test('final English price objection fails closed when dynamic action cloud gate fails', async () => {
     const helper = new StubLLMHelper({ throwStructured: true });
     const { engine } = await makeEngine(helper);
     const emitted = [];
+    const availability = [];
     engine.on('dynamic_action_emitted', (action) => emitted.push(action));
+    engine.on('dynamic_action_gate_availability', (statuses) => availability.push(...statuses));
     engine.setDynamicActionContext({ sessionId: 's-english-cloud-fail', modeId: 'm-sales', modeTemplateType: 'sales' });
 
     engine.handleTranscript({
@@ -729,10 +752,8 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     }, true);
     await waitForAsyncSignals();
 
-    const action = emitted.find(item => item.type === 'pricing_objection');
-    assert.ok(action, `expected pricing_objection; got ${emitted.map(item => item.type).join(', ')}`);
-    assert.equal(action.semanticGate?.decision, 'pass');
-    assert.equal(action.semanticGate?.semanticProvider, 'local_rule');
+    assert.equal(emitted.length, 0);
+    assert.ok(availability.includes('cloud_unavailable'));
   });
 
   test('non-final transcript does not emit dynamic actions', async () => {

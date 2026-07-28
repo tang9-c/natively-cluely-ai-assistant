@@ -94,6 +94,17 @@ function successfulSummary(summary: PostCallSummaryData): PostCallSummaryData {
   return { ...summary, generationStatus: 'success' };
 }
 
+function hasSummaryContent(summary: PostCallSummaryData): boolean {
+  return Boolean(
+    summary.overview?.trim()
+    || summary.keyPoints.length > 0
+    || summary.actionItems.length > 0
+    || (summary.decisions?.length ?? 0) > 0
+    || (summary.openQuestions?.length ?? 0) > 0
+    || summary.sections?.some((section) => section.bullets.length > 0)
+  );
+}
+
 function parseSummaryJson(raw: string, modeNoteSections: Array<{ title: string; description: string }>): PostCallSummaryData | null {
   try {
     const parsed = JSON.parse(stripJsonFences(raw));
@@ -116,7 +127,7 @@ function parseSummaryJson(raw: string, modeNoteSections: Array<{ title: string; 
         bullets: safeStringArray((rawSections as Record<string, unknown>)[section.title]),
       }));
     }
-    return result;
+    return hasSummaryContent(result) ? result : null;
   } catch {
     return null;
   }

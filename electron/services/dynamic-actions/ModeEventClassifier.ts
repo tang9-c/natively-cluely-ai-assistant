@@ -177,13 +177,21 @@ export function parseCloudSemanticGateResponse(
     if (!Array.isArray(parsed.actions)) throw new CloudSemanticGateError('cloud_invalid_json');
 
     const results: CloudSemanticGateResult[] = [];
+    const seenTypes = new Set<string>();
     for (const item of parsed.actions) {
         const actionType = item.actionType;
         const decision = item.decision;
         const confidence = Number(item.confidence);
-        if (!actionType || !candidateTypes.has(actionType)) continue;
-        if (decision !== 'pass' && decision !== 'reject' && decision !== 'defer') continue;
-        if (!Number.isFinite(confidence)) continue;
+        if (
+            !actionType ||
+            !candidateTypes.has(actionType) ||
+            seenTypes.has(actionType) ||
+            (decision !== 'pass' && decision !== 'reject' && decision !== 'defer') ||
+            !Number.isFinite(confidence)
+        ) {
+            throw new CloudSemanticGateError('cloud_invalid_json');
+        }
+        seenTypes.add(actionType);
         results.push({
             actionType,
             decision,
@@ -197,10 +205,10 @@ export function parseCloudSemanticGateResponse(
                 : undefined,
         });
     }
-    if (parsed.actions.length > 0 && results.length === 0) {
+    if (seenTypes.size !== candidateTypes.size) {
         throw new CloudSemanticGateError('cloud_invalid_json');
     }
-    return results.length > 0 ? results : null;
+    return results;
 }
 
 export interface ModeEventGateInput {
@@ -237,6 +245,14 @@ const FAST_PATH_ACTIONS = new Set([
     'action_item',
 ]);
 
+const ATOMIC_CLOUD_GATE_MODES = new Set([
+    'sales',
+    'fde',
+    'recruiting',
+    'team-meet',
+    'team_meeting',
+]);
+
 function includesAny(text: string, terms: string[] = []): boolean {
     const lower = text.toLowerCase();
     return terms.some(term => lower.includes(term.toLowerCase()));
@@ -271,7 +287,8 @@ export function cloudFailureReasonFromError(error: unknown): CloudSemanticGateFa
 
 function normalizeCloudResults(
     rawResults: unknown,
-    validTypes: Set<string>
+    validTypes: Set<string>,
+    requireCompleteCoverage = false,
 ): { results: CloudSemanticGateResult[]; failureReason?: CloudSemanticGateFailureReason } {
     if (rawResults == null) {
         return { results: [], failureReason: 'cloud_provider_unavailable' };
@@ -281,6 +298,7 @@ function normalizeCloudResults(
     }
 
     const results: CloudSemanticGateResult[] = [];
+    const seenTypes = new Set<string>();
     let hasInvalidResult = false;
     for (const result of rawResults) {
         if (!result || typeof result !== 'object') {
@@ -297,6 +315,11 @@ function normalizeCloudResults(
             hasInvalidResult = true;
             continue;
         }
+        if (seenTypes.has(item.actionType)) {
+            hasInvalidResult = true;
+            continue;
+        }
+        seenTypes.add(item.actionType);
         results.push({
             actionType: item.actionType,
             decision: item.decision,
@@ -307,6 +330,9 @@ function normalizeCloudResults(
                 ? item.rejectedCandidates.filter(candidate => typeof candidate === 'string')
                 : undefined,
         });
+    }
+    if (requireCompleteCoverage && seenTypes.size !== validTypes.size) {
+        hasInvalidResult = true;
     }
 
     return {
@@ -685,8 +711,11 @@ export class ModeEventClassifier {
                             })),
                         },
                     });
-                    const normalized = normalizeCloudResults(rawCloudResults, validTypes);
-                    cloudResults = normalized.results;
+                    const requireAtomicResult = ATOMIC_CLOUD_GATE_MODES.has(input.modeTemplateType);
+                    const normalized = normalizeCloudResults(rawCloudResults, validTypes, requireAtomicResult);
+                    cloudResults = requireAtomicResult && normalized.failureReason
+                        ? []
+                        : normalized.results;
                     cloudFailureReason = normalized.failureReason;
                 } catch (error) {
                     cloudFailureReason = cloudFailureReasonFromError(error);
@@ -700,12 +729,6 @@ export class ModeEventClassifier {
             for (const result of cloudResults) {
                 const candidate = unresolvedCloudCandidates.find(item => item.actionType === result.actionType);
                 if (!candidate) continue;
-                const rejectPartialRecruitingResult =
-                    cloudFailureReason === 'cloud_invalid_json' &&
-                    input.modeTemplateType === 'recruiting' &&
-                    candidate.gateStrategy === 'required' &&
-                    candidate.allowLocalFallbackOnCloudFailure === false;
-                if (rejectPartialRecruitingResult) continue;
                 decisions.set(result.actionType, {
                     candidate,
                     decision: result.decision,

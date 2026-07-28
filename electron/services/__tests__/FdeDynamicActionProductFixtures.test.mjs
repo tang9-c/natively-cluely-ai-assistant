@@ -73,7 +73,7 @@ const fixtures = [
     id: 'fde-plm-bom-eco',
     text: '我们现在要对 BOM 做 ECO 变更，先确认 PLM 里的版本和发布权限。',
     shouldEmit: true,
-    actionType: ['fde_discovery_probe', 'fde_integration_check'],
+    actionType: ['fde_security_review', 'fde_integration_check'],
     outputType: 'checklist',
   },
   {

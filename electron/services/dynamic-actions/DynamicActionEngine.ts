@@ -55,6 +55,14 @@ const FDE_PROMPT_INSTRUCTIONS: Record<string, string> = {
         'You are in FDE mode for manufacturing process and enterprise AI Agent deployment. Generate a short spoken response grounded in trusted material, readonly business context, or transcript evidence. Prioritize the customer process, roles, handoffs, human confirmation point, quality object, and validation plan. Explain AI Agent capability in business process terms; do not use LLM/RAG/tool-call jargon unless the customer used it first. Separate confirmed facts from what still needs validation. If grounding is insufficient, say so and propose the smallest sample-process validation step. Do not promise automatic approval, writeback, update, or creation in PLM/QMS.',
 };
 
+const DETECTOR_ONLY_MODE_TEMPLATE_TYPES = new Set([
+    'sales',
+    'fde',
+    'recruiting',
+    'team-meet',
+    'team_meeting',
+]);
+
 export class DynamicActionEngine {
     private store: DynamicActionStore;
     private detector: DynamicActionDetector;
@@ -165,7 +173,9 @@ export class DynamicActionEngine {
             confirmationSource: this.confirmationSourceFor(params.intentResult),
             confirmedIntent: params.intentResult?.intent,
         }));
-        const synthTrigger = this.synthesizeTrigger(modeTemplateType, params.intentResult);
+        const synthTrigger = DETECTOR_ONLY_MODE_TEMPLATE_TYPES.has(modeTemplateType)
+            ? null
+            : this.synthesizeTrigger(modeTemplateType, params.intentResult);
         const shouldAddSynthTrigger = synthTrigger
             ? !matchedTriggers.some(({ trigger }) => trigger.type === synthTrigger.type)
             : false;

@@ -404,20 +404,25 @@ export class MeetingPersistence {
             const wins = require('electron').BrowserWindow.getAllWindows();
             wins.forEach((w: any) => w.webContents.send('meetings-updated'));
 
-            // Phase 6 — post_call_summary_completed (no transcript / no summary text;
-            // counts and durations only).
+            // Phase 6 — post_call_summary lifecycle (no transcript / no summary text).
             try {
                 const enhancements = (summaryData as any) || {};
+                const summaryGenerationFailed = summaryData.generationStatus === 'failed';
                 telemetryService.track({
-                    name: 'post_call_summary_completed',
+                    name: summaryGenerationFailed ? 'post_call_summary_failed' : 'post_call_summary_completed',
                     modeId: modeSnapshot?.id,
                     durationMs: Date.now() - _postCallStart,
-                    properties: {
-                        modeTemplateType: modeSnapshot?.templateType,
-                        actionItemCount: Array.isArray(enhancements.actionItemsStructured) ? enhancements.actionItemsStructured.length : 0,
-                        coachingInsightCount: Array.isArray(enhancements.coachingInsights) ? enhancements.coachingInsights.length : 0,
-                        sectionsCount: Array.isArray(enhancements.sections) ? enhancements.sections.length : 0,
-                    },
+                    properties: summaryGenerationFailed
+                        ? {
+                            modeTemplateType: modeSnapshot?.templateType,
+                            failureStage: 'generation',
+                        }
+                        : {
+                            modeTemplateType: modeSnapshot?.templateType,
+                            actionItemCount: Array.isArray(enhancements.actionItemsStructured) ? enhancements.actionItemsStructured.length : 0,
+                            coachingInsightCount: Array.isArray(enhancements.coachingInsights) ? enhancements.coachingInsights.length : 0,
+                            sectionsCount: Array.isArray(enhancements.sections) ? enhancements.sections.length : 0,
+                        },
                 });
             } catch { /* non-fatal */ }
 
@@ -428,7 +433,10 @@ export class MeetingPersistence {
                     name: 'post_call_summary_failed',
                     modeId: modeSnapshot?.id,
                     durationMs: Date.now() - _postCallStart,
-                    properties: { errorClass: (error as Error)?.constructor?.name ?? 'Unknown' },
+                    properties: {
+                        failureStage: 'persistence',
+                        errorClass: (error as Error)?.constructor?.name ?? 'Unknown',
+                    },
                 });
             } catch { /* non-fatal */ }
         }

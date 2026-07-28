@@ -602,6 +602,13 @@ export class DynamicActionDetector {
             }
         }
 
+        if (
+            modeTemplateType === 'fde' &&
+            matchedTriggers.some(({ trigger }) => trigger.type !== 'fde_discovery_probe')
+        ) {
+            return matchedTriggers.filter(({ trigger }) => trigger.type !== 'fde_discovery_probe');
+        }
+
         return matchedTriggers;
     }
 

@@ -798,8 +798,8 @@ function detectFdeIntentByPattern(text: string): RawIntentResult | null {
         || /(合规|审计日志|权限|访问控制|数据驻留|加密|安全评审|隐私|敏感数据|脱敏)/.test(text)) {
         return { intent: 'fde_security', confidence: 0.92, answerShape: getAnswerShapeForMode('fde', 'fde_security') };
     }
-    if (/(blocker|blocked|dependency|risk|timeline|delay|migration|cutover|rollback|edge case|launch risk|NCR|CAPA|8D|non-conformance|traceability|quality|audit)/i.test(text)
-        || /(阻塞|卡住|依赖|风险|延期|迁移|切换|回滚|边界情况|上线风险|不确定|NCR|CAPA|8D|质量|追溯|审计|偏差)/.test(text)) {
+    if (/(blocker|blocked|dependency|risk|timeline|delay|migration|cutover|rollback|edge case|launch risk|non-conformance|quality risk|audit risk|impact|affect)/i.test(text)
+        || /(阻塞|卡住|依赖|风险|延期|迁移|切换|回滚|边界情况|上线风险|不确定|质量风险|审计风险|偏差|影响)/.test(text)) {
         return { intent: 'fde_risk', confidence: 0.9, answerShape: getAnswerShapeForMode('fde', 'fde_risk') };
     }
     if (/(agent|AI agent|automation|human in the loop|approval flow|tool call|read[- ]?only|write back|auto[- ]?write|write to PLM|write to QMS)/i.test(text)
@@ -810,16 +810,16 @@ function detectFdeIntentByPattern(text: string): RawIntentResult | null {
         || /(下一步|负责人|跟进|行动项|上线计划|推进计划|灰度|正式上线|周五前|下周)/.test(text)) {
         return { intent: 'fde_next_step', confidence: 0.9, answerShape: getAnswerShapeForMode('fde', 'fde_next_step') };
     }
-    if (/(API|endpoint|webhook|SSO|SAML|OAuth|SCIM|data source|database|warehouse|environment|sandbox|production|staging|integration|PLM|QMS|ERP|MES|document system|data direction|read[- ]?write boundary)/i.test(text)
-        || /(API 接口|接口|端点|回调|单点登录|数据源|数据库|数仓|环境|沙盒|生产环境|测试环境|集成|打通|PLM|QMS|ERP|MES|文档系统|数据方向|读写边界)/.test(text)) {
+    if (/(API|endpoint|webhook|SSO|SAML|OAuth|SCIM|data source|database|warehouse|environment|sandbox|production|staging|integration|data direction|read[- ]?write boundary)/i.test(text)
+        || /(API 接口|接口|端点|回调|单点登录|数据源|数据库|数仓|环境|沙盒|生产环境|测试环境|集成|打通|数据方向|读写边界)/.test(text)) {
         return { intent: 'fde_integration', confidence: 0.88, answerShape: getAnswerShapeForMode('fde', 'fde_integration') };
     }
     if (/(success criteria|acceptance criteria|acceptance test|pilot|POC|measurement|metric|KPI|validation|sign off)/i.test(text)
         || /(验收标准|成功标准|试点|验证|指标|度量|KPI|验收测试|通过标准|效果衡量)/.test(text)) {
         return { intent: 'fde_success', confidence: 0.88, answerShape: getAnswerShapeForMode('fde', 'fde_success') };
     }
-    if (/(current workflow|current process|business process|user workflow|stakeholder|requirements|what are you trying to solve|what does success look like|PLM|BOM|ECO|ECN|revision|version|release|part number|drawing|material master|routing|manufacturing)/i.test(text)
-        || /(现有流程|当前流程|业务流程|用户流程|需求是什么|想解决什么|谁会使用|谁负责|干系人|业务场景|客户现场|PLM|BOM|ECO|ECN|版本|变更单|发布|图纸|物料|工艺)/.test(text)) {
+    if (/(current workflow|current process|business process|user workflow|stakeholder|requirements|what are you trying to solve|what does success look like|PLM|QMS|ERP|MES|BOM|ECO|ECN|CAPA|NCR|8D|revision|version|release|part number|drawing|material master|routing|manufacturing|quality object)/i.test(text)
+        || /(现有流程|当前流程|业务流程|用户流程|需求是什么|想解决什么|谁会使用|谁负责|干系人|业务场景|客户现场|PLM|QMS|ERP|MES|BOM|ECO|ECN|CAPA|NCR|8D|版本|变更单|发布|图纸|物料|工艺|质量对象)/.test(text)) {
         return { intent: 'fde_discovery', confidence: 0.85, answerShape: getAnswerShapeForMode('fde', 'fde_discovery') };
     }
     return null;
