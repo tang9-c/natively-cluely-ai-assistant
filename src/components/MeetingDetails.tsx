@@ -50,6 +50,7 @@ interface Meeting {
         overview?: string;
         actionItems: string[];
         keyPoints: string[];
+        generationStatus?: 'success' | 'failed';
         decisions?: string[];
         openQuestions?: string[];
         actionItemsTitle?: string;
@@ -475,6 +476,12 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                         {/* Using standard divs for content, framer motion for layout */}
                         {activeTab === 'summary' && (
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                {meeting.detailedSummary?.generationStatus === 'failed' && (
+                                    <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+                                        云端摘要暂时生成失败，会议转录已保存。
+                                    </p>
+                                )}
+
                                 {/* Overview - Rendered as Markdown */}
                                 {meeting.detailedSummary?.overview && (
                                 <div className="mb-6 pb-6 border-b border-border-subtle prose prose-sm max-w-none">

@@ -5,6 +5,8 @@ import path from 'node:path';
 
 const sourcePath = path.resolve(process.cwd(), 'src/components/MeetingDetails.tsx');
 const source = fs.readFileSync(sourcePath, 'utf8');
+const databaseSourcePath = path.resolve(process.cwd(), 'electron/db/DatabaseManager.ts');
+const databaseSource = fs.readFileSync(databaseSourcePath, 'utf8');
 
 test('MeetingDetails renders FDE decisions and open questions separately', () => {
   assert.match(source, /决策项/);
@@ -25,4 +27,24 @@ test('MeetingDetails copy full summary includes post-call enhanced fields', () =
   assert.match(copyBlock, /detailedSummary\.openQuestions/);
   assert.match(copyBlock, /detailedSummary\.sections/);
   assert.match(copyBlock, /detailedSummary\.followUpDraft/);
+});
+
+test('MeetingDetails shows the exact failed cloud summary notice only in the summary tab', () => {
+  const summaryTabBlock = source.slice(
+    source.indexOf("{activeTab === 'summary' && ("),
+    source.indexOf("{activeTab === 'transcript' && ("),
+  );
+
+  assert.match(
+    summaryTabBlock,
+    /meeting\.detailedSummary\?\.generationStatus === 'failed'/,
+  );
+  assert.match(summaryTabBlock, /云端摘要暂时生成失败，会议转录已保存。/);
+});
+
+test('Meeting detailed summary types include the cloud summary generation status', () => {
+  const generationStatusType = /generationStatus\?:\s*'success'\s*\|\s*'failed'/;
+
+  assert.match(source, generationStatusType);
+  assert.match(databaseSource, generationStatusType);
 });

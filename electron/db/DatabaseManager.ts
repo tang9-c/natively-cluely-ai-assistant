@@ -35,6 +35,7 @@ export interface Meeting {
         overview?: string;
         actionItems: string[];
         keyPoints: string[];
+        generationStatus?: 'success' | 'failed';
         actionItemsTitle?: string;
         keyPointsTitle?: string;
         sections?: Array<{ title: string; bullets: string[] }>;
