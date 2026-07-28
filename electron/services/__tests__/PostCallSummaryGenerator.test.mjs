@@ -247,6 +247,10 @@ test('generateFullTranscriptSummary sends exactly 50,000 cleaned characters in o
 
   assert.equal(calls.length, 1);
   assert.match(calls[0][1], /完整会议转录：/);
+  assert.match(
+    calls[0][1],
+    /--- 会议转录结束 ---\n只返回合法 JSON，不要 markdown。\n\{\n  "overview": "1-2 句话描述完整会议",\n  "keyPoints": \["具体话题或观点"\],\n  "actionItems": \["明确可执行的后续事项"\],\n  "decisions": \["明确决策"\],\n  "openQuestions": \["待确认事项或开放问题"\]\n\}$/,
+  );
   assert.deepEqual(calls[0][3], { maxOutputTokens: 4096 });
   assert.equal(summary.generationStatus, 'success');
 });

@@ -1,3 +1,5 @@
+import { QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS } from '../../llm/QCloudLlmConstants';
+
 export interface PostCallTranscriptSegment {
   speaker?: string;
   text: string;
@@ -383,4 +385,3 @@ export async function generateFullTranscriptSummary(params: GenerateFullTranscri
     return successfulSummary(mergePartialsLocally(partials, params.modeNoteSections));
   }
 }
-import { QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS } from '../../llm/QCloudLlmConstants';
