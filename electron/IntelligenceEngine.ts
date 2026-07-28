@@ -392,7 +392,7 @@ export class IntelligenceEngine extends EventEmitter {
             const raw = await this.llmHelper.generateContentStructured(prompt, {
                 taskLabel: 'intent-classification',
                 maxOutputTokens: 96,
-                perProviderTimeoutMs: 2500,
+                perProviderTimeoutMs: 6000,
                 maxRotations: 1,
             });
             const jsonText = raw.match(/\{[\s\S]*\}/)?.[0];
@@ -437,7 +437,7 @@ export class IntelligenceEngine extends EventEmitter {
             raw = await this.llmHelper.generateContentStructured(prompt, {
                 taskLabel: 'dynamic-action-semantic-gate',
                 maxOutputTokens: 256,
-                perProviderTimeoutMs: 2500,
+                perProviderTimeoutMs: 6000,
                 maxRotations: 1,
                 requireCloudProvider: true,
             });

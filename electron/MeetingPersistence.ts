@@ -6,10 +6,7 @@ import { SessionTracker, TranscriptSegment } from './SessionTracker';
 import { LLMHelper } from './LLMHelper';
 import { DatabaseManager, Meeting } from './db/DatabaseManager';
 import { GROQ_TITLE_PROMPT, GROQ_SUMMARY_JSON_PROMPT } from './llm';
-import {
-    QCLOUD_MEETING_SUMMARY_ENHANCEMENT_OUTPUT_TOKENS,
-    QCLOUD_MEETING_TITLE_OUTPUT_TOKENS,
-} from './llm/QCloudLlmConstants';
+import { QCLOUD_MEETING_TITLE_OUTPUT_TOKENS } from './llm/QCloudLlmConstants';
 import { buildPostCallEnhancements } from './services/post-call/PostCallWorkflow';
 import { generateFullTranscriptSummary, type PostCallSummaryData } from './services/post-call/PostCallSummaryGenerator';
 import { generatePostCallLlmEnhancements } from './services/post-call/PostCallLlmEnhancements';
@@ -363,14 +360,7 @@ export class MeetingPersistence {
             });
             const llmEnhancements = hasSummarizableTranscript
                 ? await generatePostCallLlmEnhancements({
-                    llmHelper: {
-                        generateMeetingSummary: (systemPrompt, context, groqSystemPrompt) => this.llmHelper.generateMeetingSummary(
-                            systemPrompt,
-                            context,
-                            groqSystemPrompt,
-                            { maxOutputTokens: QCLOUD_MEETING_SUMMARY_ENHANCEMENT_OUTPUT_TOKENS },
-                        ),
-                    },
+                    llmHelper: this.llmHelper,
                     transcript: data.transcript,
                     modeTemplateType: modeSnapshot?.templateType,
                     summaryData,

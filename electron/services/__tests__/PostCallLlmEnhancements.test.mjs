@@ -18,8 +18,11 @@ const emptyDeterministicEnhancements = {
 };
 
 test('generatePostCallLlmEnhancements returns Chinese insights with evidence and follow-up draft', async () => {
+  const calls = [];
   const llmHelper = {
-    generateMeetingSummary: async () => JSON.stringify({
+    generateMeetingSummary: async (...args) => {
+      calls.push(args);
+      return JSON.stringify({
       coachingInsights: [
         {
           type: 'fde_validation_gap',
@@ -30,7 +33,8 @@ test('generatePostCallLlmEnhancements returns Chinese insights with evidence and
         },
       ],
       followUpDraft: '您好，我们会根据今天确认的只读接入范围准备验证材料。',
-    }),
+      });
+    },
   };
 
   const result = await generatePostCallLlmEnhancements({
@@ -51,6 +55,7 @@ test('generatePostCallLlmEnhancements returns Chinese insights with evidence and
   assert.equal(result.coachingInsights[0].title, '验证材料需要明确');
   assert.equal(result.coachingInsights[0].evidence, '客户下周提供测试数据');
   assert.match(result.followUpDraft, /只读接入范围/);
+  assert.deepEqual(calls[0][3], { maxOutputTokens: 2048 });
 });
 
 test('generatePostCallLlmEnhancements drops insights without evidence', async () => {

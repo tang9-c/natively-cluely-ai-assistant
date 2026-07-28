@@ -507,6 +507,8 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     const gateCall = helper.structuredCalls.find(call => call.options?.taskLabel === 'dynamic-action-semantic-gate');
     assert.ok(gateCall, 'expected dynamic action semantic gate structured call');
     assert.equal(gateCall.options.requireCloudProvider, true);
+    assert.equal(gateCall.options.perProviderTimeoutMs, 6000);
+    assert.equal(gateCall.options.maxRotations, 1);
     assert.match(gateCall.prompt, /policySummary/);
     assert.match(gateCall.prompt, /case_study_request/);
     assert.match(gateCall.prompt, /pricing_request/);
@@ -580,6 +582,8 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
 
     const intentCall = helper.structuredCalls.find(call => call.options?.taskLabel === 'intent-classification');
     assert.ok(intentCall, 'expected cloud intent classification call');
+    assert.equal(intentCall.options.perProviderTimeoutMs, 6000);
+    assert.equal(intentCall.options.maxRotations, 1);
     const lastPrompt = intentCall.prompt;
     assert.match(lastPrompt, /\[INTERVIEWER: Jordan\]: 下一步需要负责人，明天前确认上线计划。/);
     assert.match(lastPrompt, /\[INTERVIEWER: Priya\]: priya described the security review requirements\./);

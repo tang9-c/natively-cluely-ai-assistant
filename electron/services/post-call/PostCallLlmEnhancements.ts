@@ -1,4 +1,5 @@
 import type { PostCallSummaryData, PostCallTranscriptSegment } from './PostCallSummaryGenerator';
+import { QCLOUD_MEETING_SUMMARY_ENHANCEMENT_OUTPUT_TOKENS } from '../../llm/QCloudLlmConstants';
 
 type Severity = 'info' | 'opportunity' | 'warning';
 
@@ -18,7 +19,12 @@ export interface LlmPostCallEnhancements {
 
 export interface GeneratePostCallLlmEnhancementsParams {
   llmHelper: {
-    generateMeetingSummary: (systemPrompt: string, context: string, groqSystemPrompt?: string) => Promise<string>;
+    generateMeetingSummary: (
+      systemPrompt: string,
+      context: string,
+      groqSystemPrompt?: string,
+      options?: { maxOutputTokens?: number },
+    ) => Promise<string>;
   };
   transcript: PostCallTranscriptSegment[];
   modeTemplateType?: string | null;
@@ -144,6 +150,8 @@ export async function generatePostCallLlmEnhancements(params: GeneratePostCallLl
         deterministicEnhancements: params.deterministicEnhancements,
         evidenceWindow,
       }),
+      undefined,
+      { maxOutputTokens: QCLOUD_MEETING_SUMMARY_ENHANCEMENT_OUTPUT_TOKENS },
     );
     return raw ? parseEnhancements(raw, params.transcript) : EMPTY_ENHANCEMENTS;
   } catch (err) {
