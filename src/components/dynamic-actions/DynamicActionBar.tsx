@@ -291,6 +291,30 @@ export const DynamicActionBar: React.FC<Props> = ({
   }, [staleAfterMs, actions.length, clearAutoTimer]);
 
   const visible = useMemo(() => actions.slice(0, maxVisible), [actions, maxVisible]);
+  const availabilityCopy = availability?.status === 'local_fallback'
+    ? {
+        title: '云端服务繁忙，部分明确提示已切换为受限本地判断',
+        detail: '会议与转录继续正常，服务恢复后将自动重试',
+      }
+    : availability?.status === 'selected_model_unavailable'
+      ? {
+          title: '当前所选模型暂不可用，智能卡片无法判断',
+          detail: '会议与转录继续正常，请检查当前模型后重试',
+        }
+      : availability?.status === 'selected_model_not_configured'
+        ? {
+            title: '请在 AI 提供商中配置并选择可用模型',
+            detail: '会议与转录继续正常，配置完成后将自动重试',
+          }
+        : availability?.status === 'scope_denied'
+          ? {
+              title: '当前所选模型不允许使用转录内容',
+              detail: '请在 AI 提供商的数据范围中允许“转写内容”',
+            }
+          : {
+              title: '云端服务繁忙，智能卡片暂不可用',
+              detail: '会议与转录继续正常，服务恢复后将自动重试',
+            };
 
   if (visible.length === 0 && !availability) return null;
 
@@ -310,12 +334,10 @@ export const DynamicActionBar: React.FC<Props> = ({
           <CloudOff className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-80" />
           <div className="min-w-0 text-[11px] leading-snug">
             <div className="font-semibold">
-              {availability.status === 'local_fallback'
-                ? '云端服务繁忙，部分明确提示已切换为受限本地判断'
-                : '云端服务繁忙，智能卡片暂不可用'}
+              {availabilityCopy.title}
             </div>
             <div className="mt-0.5 opacity-75">
-              会议与转录继续正常，服务恢复后将自动重试
+              {availabilityCopy.detail}
             </div>
           </div>
         </div>

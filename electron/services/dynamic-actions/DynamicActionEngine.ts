@@ -63,6 +63,16 @@ const DETECTOR_ONLY_MODE_TEMPLATE_TYPES = new Set([
     'team_meeting',
 ]);
 
+export function isDetectorOnlyDynamicActionMode(modeTemplateType: string): boolean {
+    return DETECTOR_ONLY_MODE_TEMPLATE_TYPES.has(modeTemplateType);
+}
+
+export type DetectedSignalCandidate = {
+    trigger: ActionTrigger;
+    match: string;
+    index: number;
+};
+
 export class DynamicActionEngine {
     private store: DynamicActionStore;
     private detector: DynamicActionDetector;
@@ -141,6 +151,14 @@ export class DynamicActionEngine {
         return candidateActions;
     }
 
+    detectSignalCandidates(params: {
+        transcript: string;
+        modeTemplateType: string;
+        speaker?: string;
+    }): DetectedSignalCandidate[] {
+        return this.detector.detectTriggers(params);
+    }
+
     async assessSignals(params: {
         transcript: string;
         speaker?: string;
@@ -156,8 +174,10 @@ export class DynamicActionEngine {
         intentResult?: IntentResult;
         recentContextTurns?: ModeEventContextTurn[];
         providerDataScopes?: ProviderDataScopePolicy;
+        selectedModelRunsLocally?: boolean;
         cloudClassifier?: CloudSemanticGateClassifier;
         semanticGateTraceSink?: (trace: SemanticGateTrace) => void;
+        detectedTriggers?: DetectedSignalCandidate[];
         now?: number;
     }): Promise<DynamicAction[]> {
         const { transcript, speaker, modeTemplateType, modeId, sessionId } = params;
@@ -165,7 +185,8 @@ export class DynamicActionEngine {
         const language = params.language || detectLanguage(transcript);
         const keyEntities = extractKeyEntities(transcript, modeTemplateType);
         const candidateActions: DynamicAction[] = [];
-        const matchedTriggers = this.detector.detectTriggers({ transcript, modeTemplateType, speaker });
+        const matchedTriggers = params.detectedTriggers
+            ?? this.detectSignalCandidates({ transcript, modeTemplateType, speaker });
         const triggerCandidates = matchedTriggers.map(({ trigger, match }) => ({
             trigger,
             match,
@@ -173,7 +194,7 @@ export class DynamicActionEngine {
             confirmationSource: this.confirmationSourceFor(params.intentResult),
             confirmedIntent: params.intentResult?.intent,
         }));
-        const synthTrigger = DETECTOR_ONLY_MODE_TEMPLATE_TYPES.has(modeTemplateType)
+        const synthTrigger = isDetectorOnlyDynamicActionMode(modeTemplateType)
             ? null
             : this.synthesizeTrigger(modeTemplateType, params.intentResult);
         const shouldAddSynthTrigger = synthTrigger
@@ -217,6 +238,7 @@ export class DynamicActionEngine {
             activeActionTypes: this.store.getActiveActions(sessionId).map(action => action.type),
             intentResult: params.intentResult,
             providerDataScopes: params.providerDataScopes,
+            selectedModelRunsLocally: params.selectedModelRunsLocally,
             cloudClassifier: params.cloudClassifier,
         });
         const passedGateDecisions = selectPassedGateDecisions(gateDecisions);
@@ -579,6 +601,9 @@ export class DynamicActionEngine {
 
     private confirmationSourceFor(intentResult?: IntentResult): SignalConfirmationSource {
         if (!intentResult) return 'trigger';
+        if (intentResult.source === 'cloud') return 'cloud_intent';
+        if (intentResult.source === 'pattern' || intentResult.source === 'local_slm') return 'local_intent';
+        if (intentResult.source === 'context') return 'heuristic';
         return intentResult.confidence >= 0.5 ? 'cloud_intent' : 'heuristic';
     }
 

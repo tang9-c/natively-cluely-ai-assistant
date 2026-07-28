@@ -629,3 +629,55 @@ test('cloud response parser rejects unknown, duplicate, and omitted action types
     );
   }
 });
+
+test('selected Ollama may assess transcript when cloud transcript scope is disabled', async () => {
+  const { ModeEventClassifier } = await loadClassifier();
+  let calls = 0;
+  const classifier = new ModeEventClassifier({
+    cloudClassifier: async () => {
+      calls += 1;
+      return [{ actionType: 'pricing_objection', decision: 'pass', confidence: 0.93 }];
+    },
+  });
+
+  const decisions = await classifier.assess({
+    transcript: '这个价格太高了',
+    modeTemplateType: 'sales',
+    candidates: [
+      candidate('pricing_objection', '价格太高', 0.9, {
+        allowLocalFallbackOnCloudFailure: false,
+      }),
+    ],
+    providerDataScopes: { transcript: false },
+    selectedModelRunsLocally: true,
+  });
+
+  assert.equal(calls, 1);
+  assert.equal(decisions[0].decision, 'pass');
+  assert.equal(decisions[0].arbitrationStatus, 'cloud_used');
+});
+
+test('selected model failures remain fail-closed with model-specific availability status', async () => {
+  const { CloudSemanticGateError, ModeEventClassifier } = await loadClassifier();
+  for (const reason of ['selected_model_unavailable', 'selected_model_not_configured']) {
+    const classifier = new ModeEventClassifier({
+      cloudClassifier: async () => {
+        throw new CloudSemanticGateError(reason);
+      },
+    });
+    const decisions = await classifier.assess({
+      transcript: '这个价格太高了',
+      modeTemplateType: 'sales',
+      candidates: [
+        candidate('pricing_objection', '价格太高', 0.9, {
+          allowLocalFallbackOnCloudFailure: false,
+        }),
+      ],
+      providerDataScopes: { transcript: true },
+    });
+
+    assert.equal(decisions[0].decision, 'defer');
+    assert.equal(decisions[0].arbitrationStatus, reason);
+    assert.equal(decisions[0].degradedReason, reason);
+  }
+});

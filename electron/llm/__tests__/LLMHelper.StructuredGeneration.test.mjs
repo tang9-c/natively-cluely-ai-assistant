@@ -273,4 +273,264 @@ describe('LLMHelper structured generation', () => {
     }
     assert.doesNotMatch(warnings.join('\n'), new RegExp(sentinel));
   });
+
+  test('selected_model_only executes only the selected QCLOUD model', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    const calls = { qcloud: 0, openai: 0 };
+    helper.setModel('natively');
+    helper.setNativelyKey('test-qcloud-key');
+    helper.openaiClient = {};
+    helper.generateWithNatively = async (_message, _system, _images, options) => {
+      calls.qcloud += 1;
+      assert.equal(options.qcloudModel, 'lite32k');
+      return '{"source":"qcloud"}';
+    };
+    helper.generateWithOpenai = async () => {
+      calls.openai += 1;
+      return '{"source":"openai"}';
+    };
+
+    const result = await helper.generateContentStructured('return json', {
+      providerStrategy: 'selected_model_only',
+      totalTimeoutMs: 6000,
+      perProviderTimeoutMs: 6000,
+      maxOutputTokens: 256,
+      maxRotations: 1,
+      dataScopes: ['transcript'],
+    });
+
+    assert.equal(result, '{"source":"qcloud"}');
+    assert.deepEqual(calls, { qcloud: 1, openai: 0 });
+  });
+
+  test('selected_model_only executes selected Ollama without trying configured cloud providers', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    const calls = { ollama: 0, openai: 0 };
+    helper.setModel('ollama-local-semantic-model');
+    helper.openaiClient = {};
+    helper.callOllama = async () => {
+      calls.ollama += 1;
+      return '{"source":"ollama"}';
+    };
+    helper.generateWithOpenai = async () => {
+      calls.openai += 1;
+      return '{"source":"openai"}';
+    };
+
+    const result = await helper.generateContentStructured('return json', {
+      providerStrategy: 'selected_model_only',
+      totalTimeoutMs: 6000,
+      perProviderTimeoutMs: 6000,
+      maxRotations: 1,
+      dataScopes: ['transcript'],
+    });
+
+    assert.equal(result, '{"source":"ollama"}');
+    assert.deepEqual(calls, { ollama: 1, openai: 0 });
+  });
+
+  test('selected_model_only executes selected custom provider without fallback', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    const calls = { custom: 0, qcloud: 0 };
+    const custom = {
+      id: 'custom-semantic-model',
+      name: 'Custom Semantic Model',
+      curlCommand: 'curl https://example.test',
+    };
+    helper.setModel(custom.id, [custom]);
+    helper.setNativelyKey('test-qcloud-key');
+    helper.executeCustomProvider = async () => {
+      calls.custom += 1;
+      return '{"source":"custom"}';
+    };
+    helper.generateWithNatively = async () => {
+      calls.qcloud += 1;
+      return '{"source":"qcloud"}';
+    };
+
+    const result = await helper.generateContentStructured('return json', {
+      providerStrategy: 'selected_model_only',
+      totalTimeoutMs: 6000,
+      perProviderTimeoutMs: 6000,
+      maxRotations: 1,
+      dataScopes: ['transcript'],
+    });
+
+    assert.equal(result, '{"source":"custom"}');
+    assert.deepEqual(calls, { custom: 1, qcloud: 0 });
+  });
+
+  test('selected_model_only honors each selected standard, Codex, and cURL model', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const cases = [
+      ['gpt-5.4', 'generateWithOpenai', 'openai'],
+      ['claude-sonnet-4-6', 'generateWithClaude', 'claude'],
+      ['gemini-3.1-flash-lite-preview', 'generateStructuredWithSelectedGemini', 'gemini'],
+      ['doubao-seed-2-0-lite-260215', 'generateWithDoubao', 'doubao'],
+      ['llama-3.3-70b-versatile', 'generateWithGroq', 'groq'],
+      ['codex-cli:gpt-5-codex', 'generateWithCodexCli', 'codex'],
+    ];
+
+    for (const [modelId, selectedMethod, expectedSource] of cases) {
+      const helper = new LLMHelper();
+      const calls = [];
+      helper.openaiClient = {};
+      helper.claudeClient = {};
+      helper.client = {};
+      helper.doubaoClient = {};
+      helper.groqClient = {};
+      helper.setCodexCliConfig({ enabled: true, model: 'gpt-5-codex' });
+      helper.setModel(modelId);
+      for (const method of [
+        'generateWithOpenai',
+        'generateWithClaude',
+        'generateStructuredWithSelectedGemini',
+        'generateWithDoubao',
+        'generateWithGroq',
+        'generateWithCodexCli',
+        'generateWithNatively',
+        'callOllama',
+      ]) {
+        helper[method] = async () => {
+          calls.push(method);
+          return JSON.stringify({ source: method });
+        };
+      }
+
+      const result = await helper.generateContentStructured('return json', {
+        providerStrategy: 'selected_model_only',
+        totalTimeoutMs: 6000,
+        dataScopes: ['transcript'],
+      });
+
+      assert.equal(JSON.parse(result).source, selectedMethod, expectedSource);
+      assert.deepEqual(calls, [selectedMethod], modelId);
+    }
+
+    const helper = new LLMHelper();
+    const calls = [];
+    helper.switchToCurl({
+      id: 'curl-selected',
+      name: 'Selected cURL',
+      curlCommand: 'curl https://example.test',
+      responsePath: 'choices.0.message.content',
+    });
+    helper.chatWithCurl = async () => {
+      calls.push('curl');
+      return '{"source":"curl"}';
+    };
+    helper.generateWithNatively = async () => {
+      calls.push('qcloud');
+      return '{"source":"qcloud"}';
+    };
+    const result = await helper.generateContentStructured('return json', {
+      providerStrategy: 'selected_model_only',
+      totalTimeoutMs: 6000,
+      dataScopes: ['transcript'],
+    });
+    assert.equal(result, '{"source":"curl"}');
+    assert.deepEqual(calls, ['curl']);
+  });
+
+  test('selected_model_only fails once without trying another configured provider', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    const calls = { openai: 0, qcloud: 0 };
+    helper.setModel('gpt-5.4');
+    helper.openaiClient = {};
+    helper.setNativelyKey('test-qcloud-key');
+    helper.generateWithOpenai = async () => {
+      calls.openai += 1;
+      throw new Error('provider busy');
+    };
+    helper.generateWithNatively = async () => {
+      calls.qcloud += 1;
+      return '{"source":"qcloud"}';
+    };
+
+    await assert.rejects(
+      helper.generateContentStructured('return json', {
+        providerStrategy: 'selected_model_only',
+        totalTimeoutMs: 6000,
+        dataScopes: ['transcript'],
+      }),
+      error => error.code === 'selected_cloud_model_unavailable',
+    );
+    assert.deepEqual(calls, { openai: 1, qcloud: 0 });
+  });
+
+  test('selected_model_only enforces one total timeout budget', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    const custom = {
+      id: 'slow-custom',
+      name: 'Slow Custom',
+      curlCommand: 'curl https://example.test',
+    };
+    helper.setModel(custom.id, [custom]);
+    helper.executeCustomProvider = async () => new Promise(() => {});
+    const startedAt = Date.now();
+
+    await assert.rejects(
+      helper.generateContentStructured('return json', {
+        providerStrategy: 'selected_model_only',
+        totalTimeoutMs: 40,
+        perProviderTimeoutMs: 6000,
+        dataScopes: ['transcript'],
+      }),
+      error => error.code === 'selected_model_unavailable',
+    );
+    assert.ok(Date.now() - startedAt < 250);
+  });
+
+  test('selected cloud timeout preserves timeout classification without fallback', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    helper.setModel('gpt-5.4');
+    helper.openaiClient = {};
+    helper.generateWithOpenai = async () => new Promise(() => {});
+
+    await assert.rejects(
+      helper.generateContentStructured('return json', {
+        providerStrategy: 'selected_model_only',
+        totalTimeoutMs: 40,
+        dataScopes: ['transcript'],
+      }),
+      error => error.code === 'selected_cloud_model_timeout',
+    );
+  });
+
+  test('transcript scope blocks selected remote models but not selected Ollama', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const remote = new LLMHelper();
+    let remoteCalls = 0;
+    remote.setModel('gpt-5.4');
+    remote.openaiClient = {};
+    remote.getProviderScopePolicy = () => ({ transcript: false });
+    remote.generateWithOpenai = async () => {
+      remoteCalls += 1;
+      return '{"source":"openai"}';
+    };
+    await assert.rejects(
+      remote.generateContentStructured('return json', {
+        providerStrategy: 'selected_model_only',
+        dataScopes: ['transcript'],
+      }),
+      error => error.name === 'ProviderScopeError',
+    );
+    assert.equal(remoteCalls, 0);
+
+    const local = new LLMHelper();
+    local.setModel('ollama-local-semantic-model');
+    local.getProviderScopePolicy = () => ({ transcript: false });
+    local.callOllama = async () => '{"source":"ollama"}';
+    const result = await local.generateContentStructured('return json', {
+      providerStrategy: 'selected_model_only',
+      dataScopes: ['transcript'],
+    });
+    assert.equal(result, '{"source":"ollama"}');
+  });
 });

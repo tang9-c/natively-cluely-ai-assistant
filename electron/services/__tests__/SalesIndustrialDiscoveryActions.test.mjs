@@ -34,6 +34,15 @@ describe('sales industrial discovery dynamic actions', () => {
 
     for (const fixture of SALES_INDUSTRIAL_POSITIVE_FIXTURES) {
       const engine = new DynamicActionEngine();
+      const detectedTypes = engine.detectSignalCandidates({
+        transcript: fixture.utterance,
+        modeTemplateType: 'sales',
+        speaker: 'Customer',
+      }).map(({ trigger }) => trigger.type);
+      assert.ok(
+        detectedTypes.includes(fixture.expectedAction),
+        `${fixture.notes} must produce ${fixture.expectedAction} before semantic gating; got ${detectedTypes.join(', ')}`,
+      );
       const actions = await engine.assessSignals({
         transcript: fixture.utterance,
         speaker: 'Customer',
@@ -63,6 +72,15 @@ describe('sales industrial discovery dynamic actions', () => {
 
     for (const fixture of SALES_INDUSTRIAL_CONFLICT_FIXTURES) {
       const engine = new DynamicActionEngine();
+      const detectedTypes = engine.detectSignalCandidates({
+        transcript: fixture.utterance,
+        modeTemplateType: 'sales',
+        speaker: 'Customer',
+      }).map(({ trigger }) => trigger.type);
+      assert.ok(
+        detectedTypes.includes(fixture.expectedAction),
+        `${fixture.notes} must produce ${fixture.expectedAction} before semantic gating; got ${detectedTypes.join(', ')}`,
+      );
       const actions = await engine.assessSignals({
         transcript: fixture.utterance,
         speaker: 'Customer',
@@ -139,6 +157,17 @@ describe('sales industrial discovery dynamic actions', () => {
 
     for (const fixture of NON_SALES_INDUSTRIAL_ISOLATION_FIXTURES) {
       const engine = new DynamicActionEngine();
+      if (['fde', 'recruiting', 'team-meet'].includes(fixture.modeTemplateType)) {
+        const detectedTypes = engine.detectSignalCandidates({
+          transcript: fixture.utterance,
+          modeTemplateType: fixture.modeTemplateType,
+          speaker: 'Speaker',
+        }).map(({ trigger }) => trigger.type);
+        assert.ok(
+          detectedTypes.includes(fixture.expectedAction),
+          `${fixture.notes} must produce ${fixture.expectedAction} before semantic gating; got ${detectedTypes.join(', ')}`,
+        );
+      }
       const actions = await engine.assessSignals({
         transcript: fixture.utterance,
         speaker: 'Speaker',

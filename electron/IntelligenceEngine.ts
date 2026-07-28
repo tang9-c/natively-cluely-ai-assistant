@@ -21,7 +21,10 @@ import type {
     CloudIntentClassifierResult,
     IntentClassificationOptions,
 } from './llm/IntentClassifier';
-import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEngine';
+import {
+    DynamicActionEngine,
+    isDetectorOnlyDynamicActionMode,
+} from './services/dynamic-actions/DynamicActionEngine';
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
 import type { DynamicActionOutputType } from './services/dynamic-actions/DynamicAction';
 import { DynamicActionContinuationService } from './services/dynamic-actions/DynamicActionContinuationService';
@@ -438,14 +441,35 @@ export class IntelligenceEngine extends EventEmitter {
                 taskLabel: 'dynamic-action-semantic-gate',
                 maxOutputTokens: 256,
                 perProviderTimeoutMs: 6000,
+                totalTimeoutMs: 6000,
                 maxRotations: 1,
-                requireCloudProvider: true,
+                providerStrategy: 'selected_model_only',
+                dataScopes: ['transcript'],
             });
         } catch (error) {
+            const code = error && typeof error === 'object' && 'code' in error
+                ? String((error as { code?: unknown }).code ?? '')
+                : '';
+            if (code === 'selected_model_not_configured') {
+                throw new CloudSemanticGateError('selected_model_not_configured');
+            }
+            if (code === 'selected_model_unavailable') {
+                throw new CloudSemanticGateError('selected_model_unavailable');
+            }
+            if (code === 'selected_cloud_model_timeout') {
+                throw new CloudSemanticGateError('cloud_timeout');
+            }
             throw new CloudSemanticGateError(cloudFailureReasonFromError(error));
         }
 
-        return parseCloudSemanticGateResponse(raw, input.candidates);
+        try {
+            return parseCloudSemanticGateResponse(raw, input.candidates);
+        } catch (error) {
+            if (this.llmHelper.getCurrentModelExecutionKind() !== 'cloud') {
+                throw new CloudSemanticGateError('selected_model_unavailable');
+            }
+            throw error;
+        }
     }
 
     constructor(llmHelper: LLMHelper, session: SessionTracker) {
@@ -926,15 +950,36 @@ export class IntelligenceEngine extends EventEmitter {
         const text = (segment.text || '').trim();
         if (!text) return;
 
+        const detectorOnlyMode = isDetectorOnlyDynamicActionMode(this.currentDynamicActionTemplateType);
+        const detectedTriggers = detectorOnlyMode
+            ? this.dynamicActionEngine.detectSignalCandidates({
+                transcript: text,
+                modeTemplateType: this.currentDynamicActionTemplateType,
+                speaker: segment.speaker,
+            })
+            : undefined;
+        if (detectorOnlyMode && detectedTriggers?.length === 0) {
+            return;
+        }
+
         const contextItems = this.session.getContext(180);
         const transcriptTurns = this.buildTranscriptTurns(contextItems);
         const anchorRole = segment.speaker === 'user' ? 'user' : 'interviewer';
         this.appendSegmentAnchorIfMissing(transcriptTurns, segment, anchorRole);
         const preparedTranscript = prepareTranscriptForWhatToAnswer(transcriptTurns, 12);
-        const intentOptions = {
-            ...this.buildIntentClassificationOptions(),
-            cloudFirst: true,
-        };
+        const baseIntentOptions = this.buildIntentClassificationOptions();
+        const intentOptions = detectorOnlyMode
+            ? {
+                ...baseIntentOptions,
+                cloudIntentClassifier: undefined,
+                cloudFirst: false,
+                localIntentEnhancementEnabled: false,
+                localIntentEnhancementAvailable: false,
+            }
+            : {
+                ...baseIntentOptions,
+                cloudFirst: true,
+            };
         const intentResult = await classifyIntent(
             text,
             preparedTranscript,
@@ -956,8 +1001,10 @@ export class IntelligenceEngine extends EventEmitter {
             emotionScore: segment.emotionScore,
             emotionDegreeScore: segment.emotionDegreeScore,
             intentResult,
+            detectedTriggers,
             recentContextTurns: this.buildDynamicActionContextTurns(transcriptTurns),
             providerDataScopes: intentOptions.providerDataScopes,
+            selectedModelRunsLocally: this.llmHelper.getCurrentModelExecutionKind() === 'local',
             cloudClassifier: (input) => this.classifyDynamicActionWithCloud(input),
             semanticGateTraceSink: (trace: SemanticGateTrace) => {
                 getContextQualityDiagnosticsCollector().recordDynamicActionTrace(trace);

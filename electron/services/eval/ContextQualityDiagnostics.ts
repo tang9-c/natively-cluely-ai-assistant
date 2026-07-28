@@ -130,6 +130,8 @@ const ACTION_DEGRADED_REASON_WHITELIST = new Set([
     'cloud_timeout',
     'cloud_invalid_json',
     'cloud_provider_unavailable',
+    'selected_model_unavailable',
+    'selected_model_not_configured',
     'provider_scope_denied',
     'local_intent_unavailable',
     'semantic_gate_unavailable',
@@ -148,6 +150,8 @@ const ARBITRATION_STATUS_LABELS: Record<SemanticGateArbitrationStatus, string> =
     local_only_by_privacy: '隐私本地',
     local_fallback_cloud_unavailable: '本地兜底',
     cloud_unavailable: '云端不可用',
+    selected_model_unavailable: '当前模型不可用',
+    selected_model_not_configured: '当前模型未配置',
     local_only_not_needed: '本地',
 };
 
@@ -156,6 +160,8 @@ const ARBITRATION_STATUS_MESSAGES: Record<SemanticGateArbitrationStatus, string>
     local_only_by_privacy: '已按隐私设置仅使用本地判断',
     local_fallback_cloud_unavailable: '云端判定不可用，已使用本地兜底',
     cloud_unavailable: '云端判定不可用，已暂缓高风险动作',
+    selected_model_unavailable: '当前所选模型不可用，已暂缓动态动作',
+    selected_model_not_configured: '当前所选模型未配置，已暂缓动态动作',
     local_only_not_needed: '已使用本地判断',
 };
 

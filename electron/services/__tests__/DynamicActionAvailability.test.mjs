@@ -27,7 +27,18 @@ test('maps semantic arbitration to privacy-safe renderer availability events', (
     dynamicActionAvailabilityFromArbitration('cloud_used', 12),
     { status: 'available', reason: 'cloud_recovered', observedAt: 12 },
   );
-  assert.equal(dynamicActionAvailabilityFromArbitration('local_only_by_privacy', 13), null);
+  assert.deepEqual(
+    dynamicActionAvailabilityFromArbitration('selected_model_unavailable', 13),
+    { status: 'selected_model_unavailable', reason: 'selected_model_unavailable', observedAt: 13 },
+  );
+  assert.deepEqual(
+    dynamicActionAvailabilityFromArbitration('selected_model_not_configured', 14),
+    { status: 'selected_model_not_configured', reason: 'selected_model_not_configured', observedAt: 14 },
+  );
+  assert.deepEqual(
+    dynamicActionAvailabilityFromArbitration('local_only_by_privacy', 15),
+    { status: 'scope_denied', reason: 'provider_scope_denied', observedAt: 15 },
+  );
   assert.equal(dynamicActionAvailabilityFromArbitration('local_only_not_needed', 14), null);
 
   assert.deepEqual(
@@ -53,11 +64,11 @@ test('maps semantic arbitration to privacy-safe renderer availability events', (
     ),
     { status: 'available', reason: 'cloud_recovered', observedAt: 22 },
   );
-  assert.equal(
+  assert.deepEqual(
     dynamicActionAvailabilityFromArbitrations(
       ['local_only_by_privacy', 'local_only_not_needed'],
       23,
     ),
-    null,
+    { status: 'scope_denied', reason: 'provider_scope_denied', observedAt: 23 },
   );
 });

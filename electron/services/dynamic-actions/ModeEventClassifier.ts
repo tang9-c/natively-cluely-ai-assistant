@@ -14,11 +14,15 @@ export type SemanticGateArbitrationStatus =
     'local_only_by_privacy' |
     'local_fallback_cloud_unavailable' |
     'cloud_unavailable' |
+    'selected_model_unavailable' |
+    'selected_model_not_configured' |
     'local_only_not_needed';
 export type CloudSemanticGateFailureReason =
     'cloud_timeout' |
     'cloud_invalid_json' |
-    'cloud_provider_unavailable';
+    'cloud_provider_unavailable' |
+    'selected_model_unavailable' |
+    'selected_model_not_configured';
 
 export class CloudSemanticGateError extends Error {
     constructor(readonly reason: CloudSemanticGateFailureReason, message?: string) {
@@ -220,6 +224,7 @@ export interface ModeEventGateInput {
     activeActionTypes?: string[];
     intentResult?: IntentResult;
     providerDataScopes?: ProviderDataScopePolicy;
+    selectedModelRunsLocally?: boolean;
     cloudClassifier?: CloudSemanticGateClassifier;
 }
 
@@ -278,7 +283,13 @@ export function cloudFailureReasonFromError(error: unknown): CloudSemanticGateFa
     if (error instanceof CloudSemanticGateError) return error.reason;
     if (error && typeof error === 'object' && 'reason' in error) {
         const reason = (error as { reason?: unknown }).reason;
-        if (reason === 'cloud_timeout' || reason === 'cloud_invalid_json' || reason === 'cloud_provider_unavailable') {
+        if (
+            reason === 'cloud_timeout' ||
+            reason === 'cloud_invalid_json' ||
+            reason === 'cloud_provider_unavailable' ||
+            reason === 'selected_model_unavailable' ||
+            reason === 'selected_model_not_configured'
+        ) {
             return reason;
         }
     }
@@ -421,6 +432,14 @@ function degradedDecision(
         arbitrationStatus,
         degradedReason,
     };
+}
+
+function arbitrationStatusForFailure(
+    reason: CloudSemanticGateFailureReason,
+): SemanticGateArbitrationStatus {
+    if (reason === 'selected_model_unavailable') return 'selected_model_unavailable';
+    if (reason === 'selected_model_not_configured') return 'selected_model_not_configured';
+    return 'cloud_unavailable';
 }
 
 function localDecisionFor(
@@ -667,7 +686,11 @@ export class ModeEventClassifier {
                 continue;
             }
 
-            if (highRisk && input.providerDataScopes?.transcript === false) {
+            if (
+                highRisk &&
+                input.providerDataScopes?.transcript === false &&
+                !input.selectedModelRunsLocally
+            ) {
                 decisions.set(candidate.actionType, degradedDecision(candidate, 'provider_scope_denied', 'local_only_by_privacy'));
                 continue;
             }
@@ -683,7 +706,7 @@ export class ModeEventClassifier {
 
         const unresolvedCloudCandidates = cloudCandidates.filter(candidate => !decisions.has(candidate.actionType));
         if (unresolvedCloudCandidates.length > 0) {
-            const cloudClassifier = input.providerDataScopes?.transcript === false
+            const cloudClassifier = input.providerDataScopes?.transcript === false && !input.selectedModelRunsLocally
                 ? undefined
                 : input.cloudClassifier ?? this.options.cloudClassifier;
             const validTypes = new Set(unresolvedCloudCandidates.map(candidate => candidate.actionType));
@@ -764,13 +787,17 @@ export class ModeEventClassifier {
                     decisions.set(candidate.actionType, degradedDecision(
                         candidate,
                         'local_zero_shot_intent_not_authoritative',
-                        'cloud_unavailable',
+                        arbitrationStatusForFailure(reason),
                         ['local_zero_shot_intent_not_authoritative', reason],
                     ));
                     continue;
                 }
 
-                decisions.set(candidate.actionType, degradedDecision(candidate, reason, 'cloud_unavailable'));
+                decisions.set(candidate.actionType, degradedDecision(
+                    candidate,
+                    reason,
+                    arbitrationStatusForFailure(reason),
+                ));
             }
         }
 

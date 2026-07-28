@@ -56,12 +56,16 @@ class StubLLMHelper {
     this.structuredCalls = [];
     this.throwStructured = options.throwStructured ?? false;
     this.throwCloudOnly = options.throwCloudOnly ?? false;
+    this.structuredError = options.structuredError;
+    this.executionKind = options.executionKind ?? 'cloud';
   }
   getActiveModel() { return { provider: 'gemini', model: 'gemini-3-flash' }; }
+  getCurrentModelExecutionKind() { return this.executionKind; }
   isStreamingSupported() { return true; }
   setNegotiationCoachingHandler(_fn) { /* no-op for test */ }
   async generateContentStructured(prompt, options) {
     this.structuredCalls.push({ prompt, options });
+    if (this.structuredError) throw this.structuredError;
     if (this.throwCloudOnly && options?.requireCloudProvider) throw new Error('No cloud reasoning model available');
     if (this.throwStructured) throw new Error('cloud down');
     const configured = this.structuredResponses.shift();
@@ -157,9 +161,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
   test('repeated high-confidence Chinese dynamic action emits auto card without direct What Should I Say run', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: [
-        '{"intent":"sales_pricing_objection","confidence":0.92}',
         '{"actions":[{"actionType":"pricing_objection","decision":"pass","confidence":0.92,"reasons":["cloud_confirmed_pricing_objection"],"rejectedCandidates":[]}]}',
-        '{"intent":"sales_pricing_objection","confidence":0.94}',
         '{"actions":[{"actionType":"pricing_objection","decision":"pass","confidence":0.94,"reasons":["cloud_confirmed_pricing_objection"],"rejectedCandidates":[]}]}',
       ],
     });
@@ -213,9 +215,9 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
   test('same high-confidence dynamic action evidence does not direct-run main answer repeatedly', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: [
-        '{"intent":"sales_pricing_objection","confidence":0.92}',
-        '{"intent":"sales_pricing_objection","confidence":0.94}',
-        '{"intent":"sales_pricing_objection","confidence":0.94}',
+        '{"actions":[{"actionType":"pricing_objection","decision":"pass","confidence":0.92,"reasons":["cloud_confirmed_pricing_objection"],"rejectedCandidates":[]}]}',
+        '{"actions":[{"actionType":"pricing_objection","decision":"pass","confidence":0.94,"reasons":["cloud_confirmed_pricing_objection"],"rejectedCandidates":[]}]}',
+        '{"actions":[{"actionType":"pricing_objection","decision":"pass","confidence":0.94,"reasons":["cloud_confirmed_pricing_objection"],"rejectedCandidates":[]}]}',
       ],
     });
     const { engine } = await makeEngine(helper);
@@ -328,7 +330,6 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
   test('active dynamic action suppresses duplicate suggestion-trigger answer for same sales intent', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: [
-        '{"intent":"sales_pricing_objection","confidence":0.92}',
         '{"actions":[{"actionType":"pricing_objection","decision":"pass","confidence":0.92,"reasons":["cloud_confirmed_pricing_objection"],"rejectedCandidates":[]}]}',
         '{"intent":"sales_pricing_objection","confidence":0.92}',
       ],
@@ -369,10 +370,9 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(answerRuns.length, 0, 'planner should not emit a duplicate answer when a matching dynamic action is active');
   });
 
-  test('final Chinese transcript uses cloud-first intent confirmation for dynamic actions', async () => {
+  test('detector-only mode uses local intent metadata and exactly one semantic gate call', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: [
-        '{"intent":"sales_buying_signal","confidence":0.96}',
         '{"actions":[{"actionType":"buying_signal","decision":"pass","confidence":0.96,"semanticIntent":"explicit_next_step_or_contract","reasons":["cloud_confirmed_buying_signal"],"rejectedCandidates":[]}]}',
       ],
     });
@@ -389,11 +389,48 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     }, true);
     await waitForAsyncSignals();
 
-    assert.ok(helper.structuredCalls.length >= 1);
+    assert.equal(helper.structuredCalls.length, 1);
+    assert.equal(helper.structuredCalls[0]?.options?.taskLabel, 'dynamic-action-semantic-gate');
+    assert.equal(helper.structuredCalls[0]?.options?.providerStrategy, 'selected_model_only');
+    assert.equal(helper.structuredCalls[0]?.options?.totalTimeoutMs, 6000);
+    assert.equal(helper.structuredCalls[0]?.options?.requireCloudProvider, undefined);
     const action = emitted.find(a => a.type === 'buying_signal');
     assert.ok(action, `expected buying_signal; got ${emitted.map(a => a.type).join(', ')}`);
     assert.equal(action.confirmedIntent, 'sales_buying_signal');
-    assert.equal(action.confirmationSource, 'cloud_intent');
+    assert.equal(action.confirmationSource, 'local_intent');
+  });
+
+  test('detector-only modes skip all model calls when no local action candidate exists', async () => {
+    const cases = [
+      ['sales', '好的，我已经看到了。'],
+      ['fde', '今天先到这里。'],
+      ['recruiting', '谢谢你的介绍。'],
+      ['team-meet', '大家下午好。'],
+    ];
+
+    for (const [modeTemplateType, text] of cases) {
+      const helper = new StubLLMHelper();
+      const { engine } = await makeEngine(helper);
+      engine.setDynamicActionContext({
+        sessionId: `s-no-candidate-${modeTemplateType}`,
+        modeId: `m-${modeTemplateType}`,
+        modeTemplateType,
+      });
+
+      engine.handleTranscript({
+        speaker: 'interviewer',
+        text,
+        timestamp: Date.now(),
+        final: true,
+      }, true);
+      await waitForAsyncSignals();
+
+      assert.equal(
+        helper.structuredCalls.length,
+        0,
+        `${modeTemplateType} should not call a model without detector candidates`,
+      );
+    }
   });
 
   test('dynamic action assessment receives compact recent context and provider scope', async () => {
@@ -407,6 +444,9 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       providerDataScopes: { transcript: true },
     });
     engine._setDynamicActionEngineForTest({
+      detectSignalCandidates: ({ transcript }) => transcript.includes('Seventh context turn')
+        ? [{ trigger: { type: 'pricing_request' }, match: 'pricing', index: 0 }]
+        : [],
       assessSignals: async input => {
         calls.push(input);
         return [];
@@ -452,6 +492,10 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     engine.setDynamicActionContext({ sessionId: 's-gate-cloud', modeId: 'm-sales', modeTemplateType: 'sales' });
     const gateResults = [];
     engine._setDynamicActionEngineForTest({
+      detectSignalCandidates: () => [
+        { trigger: { type: 'case_study_request' }, match: 'similar customer case', index: 0 },
+        { trigger: { type: 'pricing_request' }, match: 'pricing page', index: 0 },
+      ],
       assessSignals: async input => {
         const result = await input.cloudClassifier({
           transcript: input.transcript,
@@ -524,7 +568,9 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
 
     const gateCall = helper.structuredCalls.find(call => call.options?.taskLabel === 'dynamic-action-semantic-gate');
     assert.ok(gateCall, 'expected dynamic action semantic gate structured call');
-    assert.equal(gateCall.options.requireCloudProvider, true);
+    assert.equal(gateCall.options.requireCloudProvider, undefined);
+    assert.equal(gateCall.options.providerStrategy, 'selected_model_only');
+    assert.equal(gateCall.options.totalTimeoutMs, 6000);
     assert.equal(gateCall.options.perProviderTimeoutMs, 6000);
     assert.equal(gateCall.options.maxRotations, 1);
     assert.match(gateCall.prompt, /policySummary/);
@@ -539,10 +585,9 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     ]);
   });
 
-  test('recruiting semantic gate cannot create candidate_concern from local-only structured generation', async () => {
+  test('recruiting semantic gate fails closed when the selected model is unavailable', async () => {
     const helper = new StubLLMHelper({
-      throwCloudOnly: true,
-      structuredResponses: ['{"intent":"recruiting_policy_question","confidence":0.97}'],
+      throwStructured: true,
     });
     const { engine } = await makeEngine(helper);
     const emitted = [];
@@ -559,14 +604,48 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
 
     const gateCall = helper.structuredCalls.find(call => call.options?.taskLabel === 'dynamic-action-semantic-gate');
     assert.ok(gateCall, 'expected recruiting semantic gate call');
-    assert.equal(gateCall.options.requireCloudProvider, true);
+    assert.equal(gateCall.options.providerStrategy, 'selected_model_only');
     assert.equal(emitted.some(action => action.type === 'candidate_concern'), false);
   });
 
-  test('cloud intent prompt keeps triggering turn and speaker-diverse meeting context', async () => {
+  test('selected model failures emit model-specific availability without a card', async () => {
+    for (const [code, expectedStatus] of [
+      ['selected_model_unavailable', 'selected_model_unavailable'],
+      ['selected_model_not_configured', 'selected_model_not_configured'],
+    ]) {
+      const structuredError = Object.assign(new Error(code), { code });
+      const helper = new StubLLMHelper({
+        structuredError,
+        executionKind: 'external',
+      });
+      const { engine } = await makeEngine(helper);
+      const emitted = [];
+      const availability = [];
+      engine.on('dynamic_action_emitted', action => emitted.push(action));
+      engine.on('dynamic_action_gate_availability', statuses => availability.push(...statuses));
+      engine.setDynamicActionContext({
+        sessionId: `s-${code}`,
+        modeId: 'm-sales',
+        modeTemplateType: 'sales',
+      });
+
+      engine.handleTranscript({
+        speaker: 'interviewer',
+        text: '这个价格太高了，我们预算不够',
+        timestamp: Date.now(),
+        final: true,
+      }, true);
+      await waitForAsyncSignals();
+
+      assert.equal(emitted.length, 0);
+      assert.ok(availability.includes(expectedStatus));
+      assert.equal(helper.structuredCalls.length, 1);
+    }
+  });
+
+  test('single semantic gate prompt keeps triggering turn and compact recent context', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: [
-        '{"intent":"fde_next_step","confidence":0.96}',
         '{"actions":[{"actionType":"fde_next_step","decision":"pass","confidence":0.93,"semanticIntent":"fde_next_step","reasons":["cloud_confirmed_fde_next_step"],"rejectedCandidates":[]}]}',
       ],
     });
@@ -598,17 +677,19 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     engine.handleTranscript(segments.at(-1), true);
     await waitForAsyncSignals();
 
-    const intentCall = helper.structuredCalls.find(call => call.options?.taskLabel === 'intent-classification');
-    assert.ok(intentCall, 'expected cloud intent classification call');
-    assert.equal(intentCall.options.perProviderTimeoutMs, 6000);
-    assert.equal(intentCall.options.maxRotations, 1);
-    const lastPrompt = intentCall.prompt;
-    assert.match(lastPrompt, /\[INTERVIEWER: Jordan\]: 下一步需要负责人，明天前确认上线计划。/);
-    assert.match(lastPrompt, /\[INTERVIEWER: Priya\]: priya described the security review requirements\./);
-    assert.match(lastPrompt, /\[INTERVIEWER: Mei\]: mei raised integration ownership and api constraints\./);
-    assert.match(lastPrompt, /\[INTERVIEWER: Sam\]: sam explained support readiness and customer risk\./);
-    assert.match(lastPrompt, /\[ME\]: i can coordinate the rollout plan with product and engineering\./);
-    assert.ok(emitted.some(a => a.type === 'fde_next_step'), 'FDE dynamic action should still emit from confirmed cloud intent');
+    assert.equal(
+      helper.structuredCalls.some(call => call.options?.taskLabel === 'intent-classification'),
+      false,
+    );
+    const gateCall = helper.structuredCalls.find(call => call.options?.taskLabel === 'dynamic-action-semantic-gate');
+    assert.ok(gateCall, 'expected a single semantic gate call');
+    assert.equal(gateCall.options.providerStrategy, 'selected_model_only');
+    assert.equal(gateCall.options.totalTimeoutMs, 6000);
+    assert.match(gateCall.prompt, /下一步需要负责人，明天前确认上线计划。/);
+    assert.match(gateCall.prompt, /Jordan requested a concrete next step for legal and security\./);
+    const contextJson = gateCall.prompt.match(/^recentContextTurns: (.+)$/m)?.[1];
+    assert.equal(JSON.parse(contextJson).length, 6);
+    assert.ok(emitted.some(a => a.type === 'fde_next_step'), 'FDE dynamic action should emit from the semantic gate');
   });
 
   test('transcript scope disabled skips cloud intent confirmation and high-risk emission', async () => {
@@ -712,7 +793,6 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
   test('final Chinese case request emits case_study_request dynamic action', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: [
-        '{"intent":"sales_proof_request","confidence":0.96}',
         '{"actions":[{"actionType":"case_study_request","decision":"pass","confidence":0.92,"semanticIntent":"case_or_proof_request","reasons":["cloud_confirmed_case_request"],"rejectedCandidates":[]}]}',
       ],
     });
@@ -823,8 +903,9 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
 
   test('detect failure inside DynamicActionEngine never breaks transcript path', async () => {
     const { engine } = await makeEngine();
-    // Inject a broken engine that throws on detectActions.
+    // Inject a broken engine that throws during detector preflight.
     engine._setDynamicActionEngineForTest({
+      detectSignalCandidates: () => { throw new Error('boom'); },
       assessSignals: () => { throw new Error('boom'); },
       detectActions: () => { throw new Error('boom'); },
       acceptAction: () => null,

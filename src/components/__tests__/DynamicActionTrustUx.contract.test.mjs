@@ -34,6 +34,9 @@ test('DynamicActionBar clearly surfaces privacy-safe cloud degradation status', 
   assert.match(source, /云端服务繁忙，智能卡片暂不可用/);
   assert.match(source, /会议与转录继续正常，服务恢复后将自动重试/);
   assert.match(source, /云端服务繁忙，部分明确提示已切换为受限本地判断/);
+  assert.match(source, /当前所选模型暂不可用，智能卡片无法判断/);
+  assert.match(source, /请在 AI 提供商中配置并选择可用模型/);
+  assert.match(source, /当前所选模型不允许使用转录内容/);
   assert.match(source, /30_000/);
   assert.match(preload, /intelligence-dynamic-action-availability/);
   assert.match(main, /dynamicActionAvailabilityFromArbitrations/);

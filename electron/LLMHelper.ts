@@ -79,9 +79,12 @@ function isElectronNodeTestRuntime(): boolean {
 interface StructuredGenerationOptions {
   taskLabel?: string;
   perProviderTimeoutMs?: number;
+  totalTimeoutMs?: number;
   maxOutputTokens?: number;
   maxRotations?: number;
   requireCloudProvider?: boolean;
+  providerStrategy?: 'fallback_chain' | 'selected_model_only';
+  dataScopes?: ProviderDataScope[];
 }
 
 interface ProviderRequestOptions {
@@ -95,6 +98,7 @@ interface ProviderRequestOptions {
   idleTimeoutMs?: number;
   totalTimeoutMs?: number;
   abortSignal?: AbortSignal;
+  disableRetries?: boolean;
 }
 
 // Simple prompt for image analysis (not interview copilot - kept separate)
@@ -754,7 +758,12 @@ export class LLMHelper {
     return text;
   }
 
-  private async callOllama(prompt: string, imagePath?: string | string[], systemPrompt?: string): Promise<string> {
+  private async callOllama(
+    prompt: string,
+    imagePath?: string | string[],
+    systemPrompt?: string,
+    options: ProviderRequestOptions = {},
+  ): Promise<string> {
     try {
       let images: string[] | undefined;
       const imagePaths = Array.isArray(imagePath) ? imagePath : imagePath ? [imagePath] : [];
@@ -807,7 +816,7 @@ export class LLMHelper {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ollamaBody),
-        signal: AbortSignal.timeout(120_000),
+        signal: options.abortSignal ?? AbortSignal.timeout(options.timeoutMs ?? 120_000),
       });
 
       if (!response.ok) {
@@ -1885,6 +1894,178 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
   }
 
+  private async generateStructuredWithSelectedGemini(
+    message: string,
+    modelId: string,
+    options: StructuredGenerationOptions,
+  ): Promise<string> {
+    if (!this.client) throw new Error('Selected Gemini model is not configured');
+    this.assertOutboundScopes('gemini', message, undefined, options.dataScopes ?? []);
+    await this.rateLimiters.gemini.acquire();
+    // @ts-ignore
+    const response = await this.client.models.generateContent({
+      model: modelId,
+      contents: [{ role: 'user', parts: [{ text: message }] }],
+      config: {
+        maxOutputTokens: options.maxOutputTokens ?? MAX_OUTPUT_TOKENS,
+        temperature: 0.4,
+      },
+    });
+    const candidate = response.candidates?.[0];
+    if (!candidate) return '';
+    if (response.text) return response.text;
+    const parts = candidate.content?.parts ?? [];
+    return (Array.isArray(parts) ? parts : [parts])
+      .map((part: any) => part?.text ?? '')
+      .join('');
+  }
+
+  private async generateContentStructuredWithSelectedModel(
+    message: string,
+    options: StructuredGenerationOptions,
+  ): Promise<string> {
+    const timeoutMs = options.totalTimeoutMs
+      ?? options.perProviderTimeoutMs
+      ?? STRUCTURED_DEFAULT_TIMEOUT_MS;
+    const requestOptions: ProviderRequestOptions = {
+      maxOutputTokens: options.maxOutputTokens,
+      timeoutMs,
+      dataScopes: options.dataScopes,
+      disableRetries: true,
+    };
+    if (!this.useOllama) {
+      this.assertOutboundScopes(
+        'selected_model',
+        message,
+        undefined,
+        options.dataScopes ?? [],
+      );
+    }
+    let providerName: string;
+    let execute: () => Promise<string>;
+
+    if (this.useOllama) {
+      providerName = `Ollama (${this.ollamaModel})`;
+      execute = () => this.callOllama(message, undefined, undefined, requestOptions);
+    } else if (this.customProvider) {
+      providerName = `Custom Provider (${this.customProvider.name})`;
+      execute = () => this.executeCustomProvider(
+        this.customProvider!.curlCommand,
+        message,
+        '',
+        message,
+        '',
+      );
+    } else if (this.activeCurlProvider) {
+      providerName = `cURL Provider (${this.activeCurlProvider.name})`;
+      execute = () => this.chatWithCurl(message);
+    } else if (this.currentModelId === 'natively') {
+      providerName = 'QCLOUD API (lite32k)';
+      execute = () => this.generateWithNatively(message, undefined, undefined, {
+        ...requestOptions,
+        qcloudModel: QCLOUD_CHAT_MODEL,
+      });
+    } else if (this.isOpenAiModel(this.currentModelId)) {
+      providerName = `OpenAI (${this.currentModelId})`;
+      execute = () => this.generateWithOpenai(
+        message,
+        undefined,
+        undefined,
+        this.currentModelId,
+        requestOptions,
+      );
+    } else if (this.isClaudeModel(this.currentModelId)) {
+      providerName = `Claude (${this.currentModelId})`;
+      execute = () => this.generateWithClaude(
+        message,
+        undefined,
+        undefined,
+        this.currentModelId,
+        requestOptions,
+      );
+    } else if (this.isGeminiModel(this.currentModelId)) {
+      providerName = `Gemini (${this.currentModelId})`;
+      execute = () => this.generateStructuredWithSelectedGemini(
+        message,
+        this.currentModelId,
+        options,
+      );
+    } else if (this.isDoubaoModel(this.currentModelId)) {
+      providerName = `Doubao (${this.currentModelId})`;
+      execute = () => this.generateWithDoubao(
+        message,
+        undefined,
+        undefined,
+        this.currentModelId,
+        requestOptions,
+      );
+    } else if (this.isGroqModel(this.currentModelId)) {
+      providerName = `Groq (${this.currentModelId})`;
+      execute = () => this.generateWithGroq(
+        message,
+        this.currentModelId,
+        undefined,
+        requestOptions,
+      );
+    } else if (this.isCodexCliModel(this.currentModelId)) {
+      providerName = `Codex CLI (${this.getSelectedCodexCliModel()})`;
+      execute = () => {
+        this.assertOutboundScopes('codex', message, undefined, options.dataScopes ?? []);
+        return this.generateWithCodexCli(message);
+      };
+    } else {
+      const error = new Error(`Selected model is not available: ${this.getCurrentModel()}`) as Error & {
+        code?: string;
+      };
+      error.code = 'selected_model_not_configured';
+      throw error;
+    }
+
+    const taskLabel = options.taskLabel ?? 'structured';
+    console.log(`[LLMHelper] Structured generation: using selected model ${providerName}`);
+    const startedAt = Date.now();
+    let result: string;
+    try {
+      result = await this.withTimeout(
+        execute(),
+        timeoutMs,
+        `${providerName} ${taskLabel} structured generation`,
+      );
+    } catch (cause: any) {
+      if (cause?.name === 'ProviderScopeError') throw cause;
+      const message = (cause?.message ?? String(cause)).toString();
+      const notConfigured = /not (?:initialized|configured|set)|disabled|no .* active|missing.*(?:key|config)|authentication|unauthorized|invalid.*key|\b401\b/i.test(message);
+      const cloudTimeout = this.getCurrentModelExecutionKind() === 'cloud'
+        && /timeout|timed out/i.test(message);
+      const error = new Error(
+        notConfigured ? 'Selected model is not configured' : 'Selected model request failed',
+      ) as Error & { code?: string };
+      error.code = notConfigured
+        ? 'selected_model_not_configured'
+        : cloudTimeout
+          ? 'selected_cloud_model_timeout'
+          : this.getCurrentModelExecutionKind() === 'cloud'
+            ? 'selected_cloud_model_unavailable'
+            : 'selected_model_unavailable';
+      throw error;
+    }
+    console.log('[LLMHelper] Structured generation provider duration', {
+      taskLabel,
+      provider: providerName,
+      elapsedMs: Date.now() - startedAt,
+    });
+    if (!result?.trim()) {
+      const error = new Error(`Selected model returned an empty response: ${providerName}`) as Error & {
+        code?: string;
+      };
+      error.code = this.getCurrentModelExecutionKind() === 'cloud'
+        ? 'selected_cloud_model_unavailable'
+        : 'selected_model_unavailable';
+      throw error;
+    }
+    return result;
+  }
+
   /**
    * Generate content using only reasoning-capable models.
    * Priority: OpenAI → Claude → Gemini Pro → Groq (last resort).
@@ -1895,6 +2076,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     message: string,
     options: StructuredGenerationOptions = {},
   ): Promise<string> {
+    if (options.providerStrategy === 'selected_model_only') {
+      return this.generateContentStructuredWithSelectedModel(message, options);
+    }
+
     type ProviderAttempt = { name: string; execute: () => Promise<string> };
     const providers: ProviderAttempt[] = [];
     const perProviderTimeoutMs = options.perProviderTimeoutMs ?? STRUCTURED_DEFAULT_TIMEOUT_MS;
@@ -2145,7 +2330,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       temperature: 0.4,
       max_tokens: options.maxOutputTokens ?? 8192,
       stream: false
-    });
+    }, options.timeoutMs ? { timeout: options.timeoutMs } : undefined);
 
     return response.choices[0]?.message?.content || "";
   }
@@ -2333,13 +2518,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
 
     const cacheKey = this.getOpenAiPromptCacheKey(systemPrompt);
+    const request = () => this.openaiClient!.chat.completions.create({
+      model,
+      messages,
+      max_completion_tokens: this.clampOpenAiCompatMaxCompletionTokens(model, options.maxOutputTokens),
+      ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
+    }, options.timeoutMs ? { timeout: options.timeoutMs } : undefined);
     const response = await this.withTimeout(
-      this.withRetry(() => this.openaiClient!.chat.completions.create({
-        model,
-        messages,
-        max_completion_tokens: this.clampOpenAiCompatMaxCompletionTokens(model, options.maxOutputTokens),
-        ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
-      }, options.timeoutMs ? { timeout: options.timeoutMs } : undefined)),
+      options.disableRetries ? request() : this.withRetry(request),
       options.timeoutMs ?? 60_000,
       `OpenAI (${model})`
     );
@@ -2463,17 +2649,18 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // enough that the dynamic timeout exceeds 10 minutes (formula: 60*60*max_tokens/128000s,
     // tripped at max_tokens > ~21333). max_tokens is per-model (see getClaudeMaxOutput);
     // streaming sidesteps the SDK gate regardless of ceiling.
+    const request = async () => {
+      const stream = this.claudeClient!.messages.stream({
+        model,
+        max_tokens: options.maxOutputTokens ?? this.getClaudeMaxOutput(model),
+        // CACHE BOUNDARY: system blocks are static; dynamic content lives in `messages` only.
+        ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
+        messages: [{ role: "user", content }],
+      });
+      return await stream.finalMessage();
+    };
     const response = await this.withTimeout(
-      this.withRetry(async () => {
-        const stream = this.claudeClient!.messages.stream({
-          model,
-          max_tokens: options.maxOutputTokens ?? this.getClaudeMaxOutput(model),
-          // CACHE BOUNDARY: system blocks are static; dynamic content lives in `messages` only.
-          ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
-          messages: [{ role: "user", content }],
-        });
-        return await stream.finalMessage();
-      }),
+      options.disableRetries ? request() : this.withRetry(request),
       options.timeoutMs ?? 120_000,
       `Claude (${model})`
     );
@@ -4517,6 +4704,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (this.customProvider) return this.customProvider.name;
     if (this.activeCurlProvider) return this.activeCurlProvider.id;
     return this.useOllama ? this.ollamaModel : this.currentModelId;
+  }
+
+  public getCurrentModelExecutionKind(): 'cloud' | 'local' | 'external' {
+    if (this.useOllama) return 'local';
+    if (this.customProvider || this.activeCurlProvider || this.isCodexCliModel(this.currentModelId)) {
+      return 'external';
+    }
+    return 'cloud';
   }
 
   public getPromptTier(): PromptTier {

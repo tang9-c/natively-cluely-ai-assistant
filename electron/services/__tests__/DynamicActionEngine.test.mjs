@@ -61,6 +61,18 @@ test('Pricing objection detected in Sales transcript creates pricing_objection a
   assert.ok(pricingAction.evidenceRefs[0].text.includes('price'));
 });
 
+test('detectSignalCandidates exposes detector-only candidates before semantic assessment', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+  const candidates = engine.detectSignalCandidates({
+    transcript: '这个价格太高了，我们预算不够',
+    modeTemplateType: 'sales',
+    speaker: 'interviewer',
+  });
+
+  assert.deepEqual(candidates.map(({ trigger }) => trigger.type), ['pricing_objection']);
+});
+
 test('recruiting evidence rubric intents cannot create detector-less candidates', async () => {
   const mappings = [
     'recruiting_scorecard_gap',

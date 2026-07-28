@@ -92,7 +92,7 @@ export interface DynamicActionTrustInput {
         usedLocalIntentModel: boolean;
         usedCloudArbitration: boolean;
         semanticProvider: 'local_intent' | 'cloud_llm' | 'rule_fast_path' | 'unavailable';
-        arbitrationStatus: 'cloud_used' | 'local_only_by_privacy' | 'local_fallback_cloud_unavailable' | 'cloud_unavailable' | 'local_only_not_needed';
+        arbitrationStatus: 'cloud_used' | 'local_only_by_privacy' | 'local_fallback_cloud_unavailable' | 'cloud_unavailable' | 'selected_model_unavailable' | 'selected_model_not_configured' | 'local_only_not_needed';
         degradedReason?: string;
         upgradedByRepeatedEvidence: boolean;
     };
