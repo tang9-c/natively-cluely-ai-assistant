@@ -2459,6 +2459,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       model: qcloudModel,
       messages: [{ role: 'user', content: userMessage }],
       max_tokens: this.clampQCloudMaxOutputTokens(_options.maxOutputTokens, qcloudModel),
+      thinking: { type: 'disabled' },
     };
 
     // Send images as a structured array so the server can build proper Gemini inlineData parts.
@@ -3876,6 +3877,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       messages: [{ role: 'user', content: userContent }],
       stream: true,
       max_tokens: this.clampQCloudMaxOutputTokens(options.maxOutputTokens, qcloudModel),
+      thinking: { type: 'disabled' },
     };
     if (systemPrompt) body.system = systemPrompt;
     if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {

@@ -99,6 +99,22 @@ test('LLMHelper passes explicit QCLOUD output budgets for chat and PPTX call sit
   assert.match(helper, /this\.streamWithNatively\(userContent,\s*finalSystemPrompt,\s*imagePaths,\s*\{[\s\S]{0,500}maxOutputTokens:\s*chatPromptOptions\?\.maxOutputTokens,[\s\S]{0,500}totalTimeoutMs:\s*qcloudChatTimeoutMs/);
 });
 
+test('LLMHelper disables QCLOUD thinking for streaming and non-streaming chat completions', () => {
+  const helper = read('electron/LLMHelper.ts');
+  const nonStreamingStart = helper.indexOf('  private async generateWithNatively(');
+  const streamingStart = helper.indexOf('  private async * streamWithNatively(');
+  const nonStreamingBody = helper.slice(nonStreamingStart, streamingStart);
+  const streamingBody = helper.slice(
+    streamingStart,
+    helper.indexOf('  private extractQCloudSseUsage(', streamingStart),
+  );
+
+  assert.ok(nonStreamingStart >= 0, 'generateWithNatively should exist');
+  assert.ok(streamingStart >= 0, 'streamWithNatively should exist');
+  assert.match(nonStreamingBody, /thinking:\s*\{\s*type:\s*['"]disabled['"]\s*\}/);
+  assert.match(streamingBody, /thinking:\s*\{\s*type:\s*['"]disabled['"]\s*\}/);
+});
+
 test('streamChat uses real QCLOUD SSE stream for the selected QCLOUD model', () => {
   const helper = read('electron/LLMHelper.ts');
   const streamChatInner = helper.slice(
