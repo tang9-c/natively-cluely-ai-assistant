@@ -815,6 +815,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         em: ({ node, ...props }: any) => (
           <em className="italic opacity-90 overlay-text-secondary" {...props} />
         ),
+        del: ({ node, ...props }: any) => (
+          <span {...props} />
+        ),
         ul: ({ node, ...props }: any) => (
           <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />
         ),
@@ -846,6 +849,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         ),
         em: ({ node, ...props }: any) => (
           <em className="italic overlay-text-secondary" {...props} />
+        ),
+        del: ({ node, ...props }: any) => (
+          <span {...props} />
         ),
         ul: ({ node, ...props }: any) => (
           <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />
@@ -898,6 +904,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             {...props}
           />
         ),
+        del: ({ node, ...props }: any) => (
+          <span {...props} />
+        ),
         ul: ({ node, ...props }: any) => (
           <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />
         ),
@@ -914,6 +923,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             {...props}
           />
         ),
+        del: ({ node, ...props }: any) => (
+          <span {...props} />
+        ),
         ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2" {...props} />,
         li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
       },
@@ -924,6 +936,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             className={`font-bold ${isLightTheme ? 'text-cyan-800' : 'text-cyan-100'}`}
             {...props}
           />
+        ),
+        del: ({ node, ...props }: any) => (
+          <span {...props} />
         ),
         ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mb-2" {...props} />,
         li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,

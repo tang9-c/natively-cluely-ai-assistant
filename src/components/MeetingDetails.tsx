@@ -496,6 +496,7 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                                             ol: ({ node, ...props }) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
                                             li: ({ node, ...props }) => <li className="text-sm text-text-secondary" {...props} />,
                                             strong: ({ node, ...props }) => <strong className="font-semibold text-text-primary" {...props} />,
+                                            del: ({ node, ...props }) => <span {...props} />,
                                             a: ({ node, ...props }) => <a className="text-blue-500 hover:underline" {...props} />,
                                         }}
                                     >
@@ -783,6 +784,7 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                                                                 ol: ({ node, ...props }) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
                                                                 li: ({ node, ...props }) => <li className="text-[15px] text-text-secondary font-normal" {...props} />,
                                                                 strong: ({ node, ...props }) => <span className="font-normal text-text-secondary" {...props} />,
+                                                                del: ({ node, ...props }) => <span {...props} />,
                                                                 a: ({ node, ...props }: any) => <a className="text-blue-500 hover:underline" {...props} />,
                                                                 pre: ({ children }: any) => <div className="not-prose mb-4">{children}</div>,
                                                                 code: ({ node, inline, className, children, ...props }: any) => {

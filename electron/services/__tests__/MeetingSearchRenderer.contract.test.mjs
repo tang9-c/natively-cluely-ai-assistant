@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const overlay = fs.readFileSync('src/components/MeetingChatOverlay.tsx', 'utf8');
+const meetingDetails = fs.readFileSync('src/components/MeetingDetails.tsx', 'utf8');
+const nativelyInterface = fs.readFileSync('src/components/NativelyInterface.tsx', 'utf8');
 const preload = fs.readFileSync('electron/preload.ts', 'utf8');
 const rendererTypes = fs.readFileSync('src/types/electron.d.ts', 'utf8');
 
@@ -37,4 +39,12 @@ test('preload and renderer use the shared strict meeting search protocol', () =>
   assert.match(preload, /requestId\?:\s*string/);
   assert.match(rendererTypes, /ragQueryMeeting:\s*\(\s*request:\s*MeetingSearchRequest/);
   assert.match(rendererTypes, /requestId\?:\s*string/);
+});
+
+test('AI markdown renderers neutralize GFM deletion syntax from casual double tildes', () => {
+  const plainDelRenderer = /del:\s*\(\{\s*node,\s*\.\.\.props\s*\}[^=]*=>\s*\(?\s*<span\s+\{\.\.\.props\}\s*\/>/;
+
+  assert.match(overlay, plainDelRenderer);
+  assert.match(meetingDetails, plainDelRenderer);
+  assert.match(nativelyInterface, plainDelRenderer);
 });
