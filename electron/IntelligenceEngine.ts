@@ -4,6 +4,7 @@
 
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
+import type { StructuredGenerationTimingEvent } from './LLMHelper';
 import { SessionTracker, TranscriptSegment, SuggestionTrigger, ContextItem } from './SessionTracker';
 import {
     AnswerLLM, AssistLLM, BrainstormLLM, ClarifyLLM, CodeHintLLM, RecapLLM,
@@ -25,6 +26,7 @@ import {
     DynamicActionEngine,
     isDetectorOnlyDynamicActionMode,
 } from './services/dynamic-actions/DynamicActionEngine';
+import type { DetectedSignalCandidate } from './services/dynamic-actions/DynamicActionEngine';
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
 import type { DynamicActionOutputType } from './services/dynamic-actions/DynamicAction';
 import { DynamicActionContinuationService } from './services/dynamic-actions/DynamicActionContinuationService';
@@ -123,6 +125,7 @@ export interface IntelligenceModeEvents {
     'dynamic_action_emitted': (action: DynamicAction) => void;
     'dynamic_action_gate_trace': (trace: SemanticGateTrace) => void;
     'dynamic_action_gate_availability': (statuses: SemanticGateArbitrationStatus[]) => void;
+    'dynamic_action_latency_trace': (trace: DynamicActionLatencyTrace) => void;
     'code_hint_trace': (trace: CodeHintTrace) => void;
     'skill_watcher_suggestion_created': (suggestion: SkillWatcherSuggestion) => void;
 }
@@ -174,6 +177,27 @@ export interface DynamicActionRuntimeEvaluationTrace {
     failureCodes: string[];
     claimGroundingVerdict: ClaimGroundingVerdict['verdict'];
     claimGroundingReasonCode: ClaimGroundingVerdict['reasonCode'];
+}
+
+export type DynamicActionLatencyStage =
+    | StructuredGenerationTimingEvent['stage']
+    | 'complete_json'
+    | 'card_emitted';
+
+export interface DynamicActionLatencyTrace {
+    requestId: string;
+    stage: DynamicActionLatencyStage;
+    elapsedMs: number;
+    provider?: string;
+    durationMs?: number;
+    measurement?: StructuredGenerationTimingEvent['measurement'];
+    candidateCount?: number;
+}
+
+interface DynamicActionLatencyContext {
+    requestId: string;
+    startedAt: number;
+    candidateCount?: number;
 }
 
 const WHAT_TO_ANSWER_FALLBACK = "Could you repeat that? I want to make sure I address your question properly.";
@@ -231,6 +255,12 @@ export class IntelligenceEngine extends EventEmitter {
     private currentDynamicActionModeId: string | null = null;
     private currentDynamicActionTemplateType: string | null = null;
     private intentClassificationOptionsForTest: IntentClassificationOptions | null = null;
+    private dynamicActionLatencySequence = 0;
+    private dynamicActionGateRuns = new Map<string, {
+        fingerprint: string;
+        controller: AbortController;
+        promise: Promise<void>;
+    }>();
 
     private static isNonAnswerSentinel(answer: string): boolean {
         const normalized = answer.trim().toLowerCase().replace(/[.!?。！？\s]+$/g, '');
@@ -432,6 +462,8 @@ export class IntelligenceEngine extends EventEmitter {
 
     private async classifyDynamicActionWithCloud(
         input: CloudSemanticGateInput,
+        abortSignal?: AbortSignal,
+        latencyContext?: DynamicActionLatencyContext,
     ): Promise<CloudSemanticGateResult[] | null> {
         const prompt = buildCloudSemanticGatePrompt(input);
 
@@ -445,7 +477,20 @@ export class IntelligenceEngine extends EventEmitter {
                 maxRotations: 1,
                 providerStrategy: 'selected_model_only',
                 dataScopes: ['transcript'],
+                abortSignal,
+                requestId: latencyContext?.requestId,
+                timingSink: (event) => {
+                    if (!latencyContext || abortSignal?.aborted) return;
+                    this.emitDynamicActionLatency(latencyContext, event.stage, {
+                        provider: event.provider,
+                        durationMs: event.durationMs,
+                        measurement: event.measurement,
+                    });
+                },
             });
+            if (abortSignal?.aborted) {
+                throw abortSignal.reason ?? new Error('dynamic_action_gate_aborted');
+            }
         } catch (error) {
             const code = error && typeof error === 'object' && 'code' in error
                 ? String((error as { code?: unknown }).code ?? '')
@@ -463,13 +508,33 @@ export class IntelligenceEngine extends EventEmitter {
         }
 
         try {
-            return parseCloudSemanticGateResponse(raw, input.candidates);
+            const parsed = parseCloudSemanticGateResponse(raw, input.candidates);
+            if (latencyContext && !abortSignal?.aborted) {
+                this.emitDynamicActionLatency(latencyContext, 'complete_json');
+            }
+            return parsed;
         } catch (error) {
             if (this.llmHelper.getCurrentModelExecutionKind() !== 'cloud') {
                 throw new CloudSemanticGateError('selected_model_unavailable');
             }
             throw error;
         }
+    }
+
+    private emitDynamicActionLatency(
+        context: DynamicActionLatencyContext,
+        stage: DynamicActionLatencyStage,
+        details: Omit<DynamicActionLatencyTrace, 'requestId' | 'stage' | 'elapsedMs'> = {},
+    ): void {
+        const trace: DynamicActionLatencyTrace = {
+            requestId: context.requestId,
+            stage,
+            elapsedMs: Math.max(0, Number((performance.now() - context.startedAt).toFixed(3))),
+            candidateCount: context.candidateCount,
+            ...details,
+        };
+        console.log('[DynamicActionLatency]', trace);
+        this.emit('dynamic_action_latency_trace', trace);
     }
 
     constructor(llmHelper: LLMHelper, session: SessionTracker) {
@@ -614,16 +679,22 @@ export class IntelligenceEngine extends EventEmitter {
             this.speculativeTimer = null;
         }
 
-        // Phase 3: confirm dynamic action triggers on every final segment.
-        // Fire-and-forget by design: intent confirmation is auxiliary and must
-        // never block or break the primary transcript path.
+        // Dynamic action gating gets first access to the selected model. The
+        // transcript path remains fire-and-forget; continuation starts after
+        // the gate settles so the two structured requests do not contend.
         if (segment.final) {
             const providerDataScopes = this.buildIntentClassificationOptions().providerDataScopes;
-            this.observeDynamicActionContinuation(segment, providerDataScopes).catch((error) => {
-                console.warn('[IntelligenceEngine] continuation observation failed', redactForLog([error]));
-            });
-            this.detectConfirmAndEmitDynamicActions(segment).catch((err) => {
+            const latencyContext: DynamicActionLatencyContext = {
+                requestId: `dynamic_gate_${segment.timestamp}_${++this.dynamicActionLatencySequence}`,
+                startedAt: performance.now(),
+            };
+            const dynamicActionGate = this.detectConfirmAndEmitDynamicActions(segment, latencyContext).catch((err) => {
                 console.warn('[IntelligenceEngine] detectConfirmAndEmitDynamicActions failed', (err as Error)?.message);
+            });
+            void dynamicActionGate.then(() =>
+                this.observeDynamicActionContinuation(segment, providerDataScopes)
+            ).catch((error) => {
+                console.warn('[IntelligenceEngine] continuation observation failed', redactForLog([error]));
             });
             this.runSkillWatcher(segment).catch((err) => {
                 console.warn('[IntelligenceEngine] runSkillWatcher failed', (err as Error)?.message);
@@ -662,6 +733,7 @@ export class IntelligenceEngine extends EventEmitter {
         }
         if (contextChanged) {
             this.dynamicActionContinuationService.cancelForContext(previousSessionId ?? undefined);
+            this.cancelDynamicActionGateRuns('dynamic_action_context_changed');
         }
         this.currentSessionId = sessionId;
         this.currentDynamicActionModeId = modeId;
@@ -670,6 +742,7 @@ export class IntelligenceEngine extends EventEmitter {
 
     clearDynamicActionContext(): void {
         this.dynamicActionContinuationService.cancelForContext(this.currentSessionId ?? undefined);
+        this.cancelDynamicActionGateRuns('dynamic_action_context_cleared');
         this.currentSessionId = null;
         this.currentDynamicActionModeId = null;
         this.currentDynamicActionTemplateType = null;
@@ -939,7 +1012,17 @@ export class IntelligenceEngine extends EventEmitter {
         });
     }
 
-    private async detectConfirmAndEmitDynamicActions(segment: TranscriptSegment): Promise<void> {
+    private cancelDynamicActionGateRuns(reason: string): void {
+        for (const run of this.dynamicActionGateRuns.values()) {
+            run.controller.abort(new Error(reason));
+        }
+        this.dynamicActionGateRuns.clear();
+    }
+
+    private async detectConfirmAndEmitDynamicActions(
+        segment: TranscriptSegment,
+        latencyContext?: DynamicActionLatencyContext,
+    ): Promise<void> {
         if (!this.dynamicActionEngine || !this.currentSessionId
             || !this.currentDynamicActionModeId || !this.currentDynamicActionTemplateType) {
             return;
@@ -961,7 +1044,62 @@ export class IntelligenceEngine extends EventEmitter {
         if (detectorOnlyMode && detectedTriggers?.length === 0) {
             return;
         }
+        if (latencyContext) {
+            latencyContext.candidateCount = detectedTriggers?.length;
+        }
 
+        if (!detectorOnlyMode || !detectedTriggers) {
+            return this.runDynamicActionGate(
+                segment,
+                text,
+                detectorOnlyMode,
+                detectedTriggers,
+                undefined,
+                latencyContext,
+            );
+        }
+
+        const candidateTypes = [...new Set(detectedTriggers.map(candidate => candidate.trigger.type))].sort();
+        const gateKey = [
+            this.currentSessionId,
+            this.currentDynamicActionModeId,
+            this.currentDynamicActionTemplateType,
+            candidateTypes.join(','),
+        ].join('|');
+        const fingerprint = text.replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+        const existingRun = this.dynamicActionGateRuns.get(gateKey);
+        if (existingRun?.fingerprint === fingerprint) {
+            return existingRun.promise;
+        }
+        if (existingRun) {
+            existingRun.controller.abort(new Error('dynamic_action_gate_superseded'));
+        }
+
+        const controller = new AbortController();
+        const promise = this.runDynamicActionGate(
+            segment,
+            text,
+            detectorOnlyMode,
+            detectedTriggers,
+            controller.signal,
+            latencyContext,
+        ).finally(() => {
+            if (this.dynamicActionGateRuns.get(gateKey)?.controller === controller) {
+                this.dynamicActionGateRuns.delete(gateKey);
+            }
+        });
+        this.dynamicActionGateRuns.set(gateKey, { fingerprint, controller, promise });
+        return promise;
+    }
+
+    private async runDynamicActionGate(
+        segment: TranscriptSegment,
+        text: string,
+        detectorOnlyMode: boolean,
+        detectedTriggers?: DetectedSignalCandidate[],
+        abortSignal?: AbortSignal,
+        latencyContext?: DynamicActionLatencyContext,
+    ): Promise<void> {
         const contextItems = this.session.getContext(180);
         const transcriptTurns = this.buildTranscriptTurns(contextItems);
         const anchorRole = segment.speaker === 'user' ? 'user' : 'interviewer';
@@ -987,6 +1125,7 @@ export class IntelligenceEngine extends EventEmitter {
             this.currentDynamicActionTemplateType,
             intentOptions,
         );
+        if (abortSignal?.aborted) return;
 
         const gateArbitrationStatuses: SemanticGateArbitrationStatus[] = [];
         const newActions = await this.dynamicActionEngine.assessSignals({
@@ -1005,13 +1144,16 @@ export class IntelligenceEngine extends EventEmitter {
             recentContextTurns: this.buildDynamicActionContextTurns(transcriptTurns),
             providerDataScopes: intentOptions.providerDataScopes,
             selectedModelRunsLocally: this.llmHelper.getCurrentModelExecutionKind() === 'local',
-            cloudClassifier: (input) => this.classifyDynamicActionWithCloud(input),
+            cloudClassifier: (input) =>
+                this.classifyDynamicActionWithCloud(input, abortSignal, latencyContext),
             semanticGateTraceSink: (trace: SemanticGateTrace) => {
+                if (abortSignal?.aborted) return;
                 getContextQualityDiagnosticsCollector().recordDynamicActionTrace(trace);
                 gateArbitrationStatuses.push(trace.arbitrationStatus);
                 this.emit('dynamic_action_gate_trace', trace);
             },
         });
+        if (abortSignal?.aborted) return;
         if (gateArbitrationStatuses.length > 0) {
             this.emit('dynamic_action_gate_availability', gateArbitrationStatuses);
         }
@@ -1020,6 +1162,9 @@ export class IntelligenceEngine extends EventEmitter {
         // is a *new* candidate — safe to forward to renderer for rendering.
         for (const action of newActions) {
             this.emit('dynamic_action_emitted', action);
+            if (latencyContext) {
+                this.emitDynamicActionLatency(latencyContext, 'card_emitted');
+            }
         }
     }
 
@@ -2043,6 +2188,7 @@ export class IntelligenceEngine extends EventEmitter {
         this.speculativeText = null;
         this.speculativeTextExpiry = Infinity;
         this.speculativeAnswerState = null;
+        this.cancelDynamicActionGateRuns('intelligence_engine_reset');
         SkillActivationManager.getInstance().clearMeetingActivations();
         SkillWatcherService.getInstance().clearSessionState();
     }

@@ -64,6 +64,7 @@ export class IntelligenceManager extends EventEmitter {
             'dynamic_action_emitted',
             'dynamic_action_gate_trace',
             'dynamic_action_gate_availability',
+            'dynamic_action_latency_trace',
             'code_hint_trace',
             'skill_watcher_suggestion_created',
         ];

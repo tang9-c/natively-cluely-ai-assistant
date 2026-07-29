@@ -284,6 +284,7 @@ describe('LLMHelper structured generation', () => {
     helper.generateWithNatively = async (_message, _system, _images, options) => {
       calls.qcloud += 1;
       assert.equal(options.qcloudModel, 'lite32k');
+      assert.ok(options.abortSignal instanceof AbortSignal);
       return '{"source":"qcloud"}';
     };
     helper.generateWithOpenai = async () => {
@@ -310,8 +311,9 @@ describe('LLMHelper structured generation', () => {
     const calls = { ollama: 0, openai: 0 };
     helper.setModel('ollama-local-semantic-model');
     helper.openaiClient = {};
-    helper.callOllama = async () => {
+    helper.callOllama = async (_message, _system, _images, options) => {
       calls.ollama += 1;
+      assert.ok(options.abortSignal instanceof AbortSignal);
       return '{"source":"ollama"}';
     };
     helper.generateWithOpenai = async () => {
@@ -342,8 +344,9 @@ describe('LLMHelper structured generation', () => {
     };
     helper.setModel(custom.id, [custom]);
     helper.setNativelyKey('test-qcloud-key');
-    helper.executeCustomProvider = async () => {
+    helper.executeCustomProvider = async (...args) => {
       calls.custom += 1;
+      assert.ok(args[6]?.abortSignal instanceof AbortSignal);
       return '{"source":"custom"}';
     };
     helper.generateWithNatively = async () => {
@@ -384,6 +387,7 @@ describe('LLMHelper structured generation', () => {
       helper.groqClient = {};
       helper.setCodexCliConfig({ enabled: true, model: 'gpt-5-codex' });
       helper.setModel(modelId);
+      let selectedSignal;
       for (const method of [
         'generateWithOpenai',
         'generateWithClaude',
@@ -394,8 +398,15 @@ describe('LLMHelper structured generation', () => {
         'generateWithNatively',
         'callOllama',
       ]) {
-        helper[method] = async () => {
+        helper[method] = async (...args) => {
           calls.push(method);
+          selectedSignal = method === 'generateStructuredWithSelectedGemini'
+            ? args[2]?.abortSignal
+            : method === 'generateWithCodexCli'
+              ? args[3]
+              : method === 'generateWithGroq'
+                ? args[3]?.abortSignal
+                : args[4]?.abortSignal;
           return JSON.stringify({ source: method });
         };
       }
@@ -408,6 +419,7 @@ describe('LLMHelper structured generation', () => {
 
       assert.equal(JSON.parse(result).source, selectedMethod, expectedSource);
       assert.deepEqual(calls, [selectedMethod], modelId);
+      assert.ok(selectedSignal instanceof AbortSignal, `${modelId} should receive an AbortSignal`);
     }
 
     const helper = new LLMHelper();
@@ -418,8 +430,10 @@ describe('LLMHelper structured generation', () => {
       curlCommand: 'curl https://example.test',
       responsePath: 'choices.0.message.content',
     });
-    helper.chatWithCurl = async () => {
+    let curlSignal;
+    helper.chatWithCurl = async (...args) => {
       calls.push('curl');
+      curlSignal = args[3]?.abortSignal;
       return '{"source":"curl"}';
     };
     helper.generateWithNatively = async () => {
@@ -433,6 +447,7 @@ describe('LLMHelper structured generation', () => {
     });
     assert.equal(result, '{"source":"curl"}');
     assert.deepEqual(calls, ['curl']);
+    assert.ok(curlSignal instanceof AbortSignal);
   });
 
   test('selected_model_only fails once without trying another configured provider', async () => {
@@ -484,6 +499,102 @@ describe('LLMHelper structured generation', () => {
       error => error.code === 'selected_model_unavailable',
     );
     assert.ok(Date.now() - startedAt < 250);
+  });
+
+  test('selected_model_only forwards the caller abort signal to the selected provider', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    const controller = new AbortController();
+    let providerSignal;
+    helper.setModel('natively');
+    helper.setNativelyKey('test-qcloud-key');
+    helper.generateWithNatively = async (_message, _system, _images, options) => {
+      providerSignal = options.abortSignal;
+      return new Promise((resolve, reject) => {
+        providerSignal.addEventListener('abort', () => {
+          reject(providerSignal.reason ?? new Error('aborted'));
+        }, { once: true });
+      });
+    };
+
+    const request = helper.generateContentStructured('return json', {
+      providerStrategy: 'selected_model_only',
+      totalTimeoutMs: 6000,
+      dataScopes: ['transcript'],
+      abortSignal: controller.signal,
+    });
+    await Promise.resolve();
+    controller.abort(new Error('caller cancelled'));
+
+    await assert.rejects(request, error => error.code === 'selected_cloud_model_unavailable');
+    assert.ok(providerSignal instanceof AbortSignal);
+    assert.equal(providerSignal.aborted, true);
+    assert.equal(providerSignal.reason?.message, 'caller cancelled');
+  });
+
+  test('selected_model_only timeout aborts a queued provider limiter wait', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    let limiterSignal;
+    helper.setModel('natively');
+    helper.setNativelyKey('test-qcloud-key');
+    helper.rateLimiters.qcloud.acquire = signal => {
+      limiterSignal = signal;
+      return new Promise((resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    };
+
+    await assert.rejects(
+      helper.generateContentStructured('return json', {
+        providerStrategy: 'selected_model_only',
+        totalTimeoutMs: 40,
+        dataScopes: ['transcript'],
+      }),
+      error => error.code === 'selected_cloud_model_timeout',
+    );
+
+    assert.ok(limiterSignal instanceof AbortSignal);
+    assert.equal(limiterSignal.aborted, true);
+  });
+
+  test('selected QCLOUD reports limiter queue, network first byte, and response completion timings', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    const originalFetch = globalThis.fetch;
+    const timingEvents = [];
+    helper.setModel('natively');
+    helper.setNativelyKey('test-qcloud-key');
+    helper.rateLimiters.qcloud.acquire = async () => {
+      await new Promise(resolve => setTimeout(resolve, 12));
+    };
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      choices: [{ message: { content: '{"actions":[]}' } }],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+
+    try {
+      const result = await helper.generateContentStructured('return json', {
+        providerStrategy: 'selected_model_only',
+        totalTimeoutMs: 1000,
+        dataScopes: ['transcript'],
+        requestId: 'latency-qcloud-test',
+        timingSink: event => timingEvents.push(event),
+      });
+
+      assert.equal(result, '{"actions":[]}');
+      assert.deepEqual(
+        timingEvents.map(event => event.stage),
+        ['provider_queue_complete', 'provider_first_byte', 'provider_response_complete'],
+      );
+      assert.ok(timingEvents[0].durationMs >= 8);
+      assert.equal(timingEvents[1].measurement, 'network_body_chunk');
+      assert.ok(timingEvents.every(event => event.requestId === 'latency-qcloud-test'));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   test('selected cloud timeout preserves timeout classification without fallback', async () => {

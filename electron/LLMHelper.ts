@@ -85,6 +85,22 @@ interface StructuredGenerationOptions {
   requireCloudProvider?: boolean;
   providerStrategy?: 'fallback_chain' | 'selected_model_only';
   dataScopes?: ProviderDataScope[];
+  abortSignal?: AbortSignal;
+  requestId?: string;
+  timingSink?: (event: StructuredGenerationTimingEvent) => void;
+}
+
+export type StructuredGenerationTimingStage =
+  | 'provider_queue_complete'
+  | 'provider_first_byte'
+  | 'provider_response_complete';
+
+export interface StructuredGenerationTimingEvent {
+  requestId?: string;
+  stage: StructuredGenerationTimingStage;
+  provider: string;
+  durationMs: number;
+  measurement?: 'network_body_chunk' | 'buffered_response';
 }
 
 interface ProviderRequestOptions {
@@ -99,6 +115,7 @@ interface ProviderRequestOptions {
   totalTimeoutMs?: number;
   abortSignal?: AbortSignal;
   disableRetries?: boolean;
+  timingSink?: (event: StructuredGenerationTimingEvent) => void;
 }
 
 // Simple prompt for image analysis (not interview copilot - kept separate)
@@ -602,7 +619,7 @@ export class LLMHelper {
     if (!this.doubaoClient) throw new Error("Doubao client not initialized");
     this.assertOutboundScopes('doubao', userMessage, imagePaths);
 
-    await this.rateLimiters.openai.acquire(); // Reuse OpenAI rate limiter
+    await this.rateLimiters.openai.acquire(options.abortSignal); // Reuse OpenAI rate limiter
 
     const model = modelId || (this.isDoubaoModel(this.currentModelId) ? this.currentModelId : DOUBAO_MODEL);
 
@@ -629,7 +646,10 @@ export class LLMHelper {
       model,
       messages,
       max_completion_tokens: this.clampOpenAiCompatMaxCompletionTokens(model, options.maxOutputTokens),
-    }, options.timeoutMs ? { timeout: options.timeoutMs } : undefined);
+    }, options.timeoutMs || options.abortSignal ? {
+      ...(options.timeoutMs ? { timeout: options.timeoutMs } : {}),
+      ...(options.abortSignal ? { signal: options.abortSignal } : {}),
+    } : undefined);
 
     return response.choices[0]?.message?.content ?? "";
   }
@@ -1901,7 +1921,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   ): Promise<string> {
     if (!this.client) throw new Error('Selected Gemini model is not configured');
     this.assertOutboundScopes('gemini', message, undefined, options.dataScopes ?? []);
-    await this.rateLimiters.gemini.acquire();
+    await this.rateLimiters.gemini.acquire(options.abortSignal);
     // @ts-ignore
     const response = await this.client.models.generateContent({
       model: modelId,
@@ -1909,6 +1929,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       config: {
         maxOutputTokens: options.maxOutputTokens ?? MAX_OUTPUT_TOKENS,
         temperature: 0.4,
+        abortSignal: options.abortSignal,
       },
     });
     const candidate = response.candidates?.[0];
@@ -1927,11 +1948,18 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const timeoutMs = options.totalTimeoutMs
       ?? options.perProviderTimeoutMs
       ?? STRUCTURED_DEFAULT_TIMEOUT_MS;
+    const requestController = new AbortController();
+    const abortFromCaller = () => {
+      requestController.abort(options.abortSignal?.reason ?? new Error('Structured generation aborted'));
+    };
     const requestOptions: ProviderRequestOptions = {
       maxOutputTokens: options.maxOutputTokens,
       timeoutMs,
       dataScopes: options.dataScopes,
       disableRetries: true,
+      abortSignal: requestController.signal,
+      requestId: options.requestId,
+      timingSink: options.timingSink,
     };
     if (!this.useOllama) {
       this.assertOutboundScopes(
@@ -1955,10 +1983,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         '',
         message,
         '',
+        undefined,
+        requestOptions,
       );
     } else if (this.activeCurlProvider) {
       providerName = `cURL Provider (${this.activeCurlProvider.name})`;
-      execute = () => this.chatWithCurl(message);
+      execute = () => this.chatWithCurl(message, undefined, undefined, requestOptions);
     } else if (this.currentModelId === 'natively') {
       providerName = 'QCLOUD API (lite32k)';
       execute = () => this.generateWithNatively(message, undefined, undefined, {
@@ -1988,7 +2018,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       execute = () => this.generateStructuredWithSelectedGemini(
         message,
         this.currentModelId,
-        options,
+        {
+          ...options,
+          abortSignal: requestController.signal,
+        },
       );
     } else if (this.isDoubaoModel(this.currentModelId)) {
       providerName = `Doubao (${this.currentModelId})`;
@@ -2011,7 +2044,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       providerName = `Codex CLI (${this.getSelectedCodexCliModel()})`;
       execute = () => {
         this.assertOutboundScopes('codex', message, undefined, options.dataScopes ?? []);
-        return this.generateWithCodexCli(message);
+        return this.generateWithCodexCli(message, undefined, undefined, requestController.signal);
       };
     } else {
       const error = new Error(`Selected model is not available: ${this.getCurrentModel()}`) as Error & {
@@ -2021,6 +2054,17 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       throw error;
     }
 
+    if (options.abortSignal?.aborted) {
+      abortFromCaller();
+    } else {
+      options.abortSignal?.addEventListener('abort', abortFromCaller, { once: true });
+    }
+    const requestTimeout = setTimeout(
+      () => requestController.abort(
+        new Error(`Selected model structured generation timed out after ${timeoutMs}ms`),
+      ),
+      timeoutMs,
+    );
     const taskLabel = options.taskLabel ?? 'structured';
     console.log(`[LLMHelper] Structured generation: using selected model ${providerName}`);
     const startedAt = Date.now();
@@ -2048,6 +2092,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             ? 'selected_cloud_model_unavailable'
             : 'selected_model_unavailable';
       throw error;
+    } finally {
+      clearTimeout(requestTimeout);
+      options.abortSignal?.removeEventListener('abort', abortFromCaller);
     }
     console.log('[LLMHelper] Structured generation provider duration', {
       taskLabel,
@@ -2315,7 +2362,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (!this.groqClient) throw new Error("Groq client not initialized");
     this.assertOutboundScopes('groq', userMessage);
 
-    await this.rateLimiters.groq.acquire();
+    await this.rateLimiters.groq.acquire(options.abortSignal);
 
     const messages: any[] = [];
     if (systemPrompt) {
@@ -2330,7 +2377,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       temperature: 0.4,
       max_tokens: options.maxOutputTokens ?? 8192,
       stream: false
-    }, options.timeoutMs ? { timeout: options.timeoutMs } : undefined);
+    }, options.timeoutMs || options.abortSignal ? {
+      ...(options.timeoutMs ? { timeout: options.timeoutMs } : {}),
+      ...(options.abortSignal ? { signal: options.abortSignal } : {}),
+    } : undefined);
 
     return response.choices[0]?.message?.content || "";
   }
@@ -2449,13 +2499,30 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     const timeoutMs = _options.timeoutMs ?? 8000;
     const qcloudAbortController = new AbortController();
+    const abortFromCaller = () => {
+      qcloudAbortController.abort(
+        _options.abortSignal?.reason ?? new Error('QCLOUD API request aborted'),
+      );
+    };
+    if (_options.abortSignal?.aborted) {
+      abortFromCaller();
+    } else {
+      _options.abortSignal?.addEventListener('abort', abortFromCaller, { once: true });
+    }
     const qcloudTimeout = setTimeout(
       () => qcloudAbortController.abort(new Error(`QCLOUD API request timed out after ${timeoutMs}ms`)),
       timeoutMs,
     );
 
     try {
-      await this.rateLimiters.qcloud.acquire();
+      const queueStartedAt = performance.now();
+      await this.rateLimiters.qcloud.acquire(qcloudAbortController.signal);
+      const providerStartedAt = performance.now();
+      this.reportStructuredGenerationTiming(_options, {
+        stage: 'provider_queue_complete',
+        provider: 'qcloud',
+        durationMs: providerStartedAt - queueStartedAt,
+      });
       if (qcloudAbortController.signal.aborted) {
         throw qcloudAbortController.signal.reason || new Error(`QCLOUD API request timed out after ${timeoutMs}ms`);
       }
@@ -2466,16 +2533,77 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         body: JSON.stringify(body),
         signal: qcloudAbortController.signal,
       });
+      let firstByteAt = performance.now();
+      let firstByteReported = false;
+      let responseText = '';
+      if (response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!firstByteReported && value.byteLength > 0) {
+            firstByteAt = performance.now();
+            firstByteReported = true;
+            this.reportStructuredGenerationTiming(_options, {
+              stage: 'provider_first_byte',
+              provider: 'qcloud',
+              durationMs: firstByteAt - providerStartedAt,
+              measurement: 'network_body_chunk',
+            });
+          }
+          responseText += decoder.decode(value, { stream: true });
+        }
+        responseText += decoder.decode();
+      } else {
+        responseText = await response.text();
+      }
+      const responseCompleteAt = performance.now();
+      if (!firstByteReported) {
+        firstByteAt = responseCompleteAt;
+        this.reportStructuredGenerationTiming(_options, {
+          stage: 'provider_first_byte',
+          provider: 'qcloud',
+          durationMs: firstByteAt - providerStartedAt,
+          measurement: 'buffered_response',
+        });
+      }
+      this.reportStructuredGenerationTiming(_options, {
+        stage: 'provider_response_complete',
+        provider: 'qcloud',
+        durationMs: responseCompleteAt - firstByteAt,
+      });
 
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
+        let errData: unknown = {};
+        try {
+          errData = JSON.parse(responseText);
+        } catch {
+          // Keep the existing generic HTTP error when the provider body is not JSON.
+        }
         throw new Error(this.formatQCloudError(response.status, errData));
       }
 
-      const data = await response.json();
+      const data = JSON.parse(responseText);
       return data.choices?.[0]?.message?.content || data.content || '';
     } finally {
       clearTimeout(qcloudTimeout);
+      _options.abortSignal?.removeEventListener('abort', abortFromCaller);
+    }
+  }
+
+  private reportStructuredGenerationTiming(
+    options: ProviderRequestOptions,
+    event: Omit<StructuredGenerationTimingEvent, 'requestId'>,
+  ): void {
+    try {
+      options.timingSink?.({
+        requestId: options.requestId,
+        ...event,
+        durationMs: Math.max(0, Number(event.durationMs.toFixed(3))),
+      });
+    } catch {
+      // Performance diagnostics must never affect provider execution.
     }
   }
 
@@ -2494,7 +2622,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (!this.openaiClient) throw new Error("OpenAI client not initialized");
     this.assertOutboundScopes('openai', userMessage, imagePaths);
 
-    await this.rateLimiters.openai.acquire();
+    await this.rateLimiters.openai.acquire(options.abortSignal);
 
     // Use explicit override, then current model if it's OpenAI, else baseline constant
     const model = modelId || (this.isOpenAiModel(this.currentModelId) ? this.currentModelId : OPENAI_MODEL);
@@ -2523,7 +2651,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       messages,
       max_completion_tokens: this.clampOpenAiCompatMaxCompletionTokens(model, options.maxOutputTokens),
       ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
-    }, options.timeoutMs ? { timeout: options.timeoutMs } : undefined);
+    }, options.timeoutMs || options.abortSignal ? {
+      ...(options.timeoutMs ? { timeout: options.timeoutMs } : {}),
+      ...(options.abortSignal ? { signal: options.abortSignal } : {}),
+    } : undefined);
     const response = await this.withTimeout(
       options.disableRetries ? request() : this.withRetry(request),
       options.timeoutMs ?? 60_000,
@@ -2534,7 +2665,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   }
 
   // The handler for cURL requests
-  public async chatWithCurl(userMessage: string, systemPrompt?: string, imagePath?: string): Promise<string> {
+  public async chatWithCurl(
+    userMessage: string,
+    systemPrompt?: string,
+    imagePath?: string,
+    options: ProviderRequestOptions = {},
+  ): Promise<string> {
     if (!this.activeCurlProvider) throw new Error("No cURL provider active");
     this.assertOutboundScopes('custom_curl', userMessage, imagePath ? [imagePath] : undefined);
 
@@ -2590,7 +2726,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         method: curlConfig.method || 'POST',
         url: url,
         headers: headers,
-        data: data
+        data: data,
+        signal: options.abortSignal,
+        ...(options.timeoutMs ? { timeout: options.timeoutMs } : {}),
       });
 
       // 6. Extract Answer
@@ -2604,6 +2742,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     } catch (error: any) {
       console.error("[LLMHelper] cURL Execution Error:", error.message);
+      if (options.abortSignal?.aborted) {
+        throw options.abortSignal.reason ?? error;
+      }
       return `Error: ${error.message}`;
     }
   }
@@ -2621,7 +2762,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.claudeClient) throw new Error("Claude client not initialized");
 
-    await this.rateLimiters.claude.acquire();
+    await this.rateLimiters.claude.acquire(options.abortSignal);
 
     // Use explicit override, then current model if it's Claude, else stable fallback
     const model = modelId || (this.isClaudeModel(this.currentModelId) ? this.currentModelId : CLAUDE_MODEL);
@@ -2656,7 +2797,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         // CACHE BOUNDARY: system blocks are static; dynamic content lives in `messages` only.
         ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
         messages: [{ role: "user", content }],
-      });
+      }, options.abortSignal ? { signal: options.abortSignal } : undefined);
       return await stream.finalMessage();
     };
     const response = await this.withTimeout(
@@ -2693,7 +2834,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     systemPrompt: string,
     rawUserMessage: string,
     context: string,
-    imagePath?: string
+    imagePath?: string,
+    options: ProviderRequestOptions = {},
   ): Promise<string> {
     this.assertOutboundScopes('custom_provider', combinedMessage, imagePath ? [imagePath] : undefined);
 
@@ -2734,9 +2876,20 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       body = injectImageIntoMessages(body, base64Image, imagePath);
     }
 
-    // 5. Execute Fetch (30s timeout — same as RestSTT uploads)
+    // 5. Execute Fetch (30s default timeout — same as RestSTT uploads)
     const customAbort = new AbortController();
-    const customTimeout = setTimeout(() => customAbort.abort(), 30_000);
+    const abortFromCaller = () => {
+      customAbort.abort(options.abortSignal?.reason ?? new Error('Custom Provider request aborted'));
+    };
+    if (options.abortSignal?.aborted) {
+      abortFromCaller();
+    } else {
+      options.abortSignal?.addEventListener('abort', abortFromCaller, { once: true });
+    }
+    const customTimeout = setTimeout(
+      () => customAbort.abort(new Error('Custom Provider request timed out')),
+      options.timeoutMs ?? 30_000,
+    );
     try {
       const response = await fetch(url, {
         method: requestConfig.method || 'POST',
@@ -2744,8 +2897,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         body: JSON.stringify(body),
         signal: customAbort.signal,
       });
-      clearTimeout(customTimeout);
-
       const data = await response.json();
       console.log(`[LLMHelper] Custom Provider response received`, { status: response.status, ok: response.ok });
 
@@ -2758,9 +2909,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       console.log(`[LLMHelper] Custom Provider extracted text length: ${extracted.length}`);
       return extracted;
     } catch (error) {
-      clearTimeout(customTimeout);
       console.error("Custom Provider Error:", error);
       throw error;
+    } finally {
+      clearTimeout(customTimeout);
+      options.abortSignal?.removeEventListener('abort', abortFromCaller);
     }
   }
 

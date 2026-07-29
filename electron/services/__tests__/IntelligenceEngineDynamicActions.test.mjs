@@ -400,6 +400,235 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(action.confirmationSource, 'local_intent');
   });
 
+  test('dynamic action semantic gate completes before continuation observation starts', async () => {
+    const helper = new StubLLMHelper();
+    const events = [];
+    let resolveGate;
+    const gateResponse = new Promise(resolve => {
+      resolveGate = resolve;
+    });
+    helper.generateContentStructured = async (prompt, options) => {
+      helper.structuredCalls.push({ prompt, options });
+      events.push('gate_started');
+      return gateResponse;
+    };
+    const { engine } = await makeEngine(helper);
+    engine._setDynamicActionContinuationServiceForTest({
+      registerCompletedAction: () => null,
+      cancelForContext: () => undefined,
+      observeFinalCustomerTurn: async () => {
+        events.push('continuation_started');
+        return { kind: 'none' };
+      },
+    });
+    engine.setDynamicActionContext({
+      sessionId: 's-priority',
+      modeId: 'm-sales',
+      modeTemplateType: 'sales',
+    });
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: '这个价格太高了，我们预算不够',
+      timestamp: Date.now(),
+      final: true,
+    }, true);
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    assert.deepEqual(events, ['gate_started']);
+
+    resolveGate('{"actions":[{"actionType":"pricing_objection","decision":"pass","confidence":0.92,"reasons":["confirmed"],"rejectedCandidates":[]}]}');
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.deepEqual(events, ['gate_started', 'continuation_started']);
+  });
+
+  test('dynamic action latency trace correlates provider queue through JSON parse and card emit', async () => {
+    const helper = new StubLLMHelper();
+    helper.generateContentStructured = async (prompt, options) => {
+      helper.structuredCalls.push({ prompt, options });
+      options.timingSink?.({
+        requestId: options.requestId,
+        stage: 'provider_queue_complete',
+        provider: 'qcloud',
+        durationMs: 11,
+      });
+      options.timingSink?.({
+        requestId: options.requestId,
+        stage: 'provider_first_byte',
+        provider: 'qcloud',
+        durationMs: 420,
+        measurement: 'network_body_chunk',
+      });
+      options.timingSink?.({
+        requestId: options.requestId,
+        stage: 'provider_response_complete',
+        provider: 'qcloud',
+        durationMs: 610,
+      });
+      return '{"actions":[{"actionType":"pricing_objection","decision":"pass","confidence":0.92,"reasons":["confirmed"],"rejectedCandidates":[]}]}';
+    };
+    const { engine } = await makeEngine(helper);
+    const traces = [];
+    engine.on('dynamic_action_latency_trace', trace => traces.push(trace));
+    engine.setDynamicActionContext({
+      sessionId: 's-latency',
+      modeId: 'm-sales',
+      modeTemplateType: 'sales',
+    });
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: '这个价格太高了，我们预算不够',
+      timestamp: Date.now(),
+      final: true,
+    }, true);
+    await new Promise(resolve => setTimeout(resolve, 30));
+
+    assert.deepEqual(
+      traces.map(trace => trace.stage),
+      [
+        'provider_queue_complete',
+        'provider_first_byte',
+        'provider_response_complete',
+        'complete_json',
+        'card_emitted',
+      ],
+    );
+    assert.equal(new Set(traces.map(trace => trace.requestId)).size, 1);
+    assert.equal(traces[1].measurement, 'network_body_chunk');
+    assert.ok(traces.every(trace => Number.isFinite(trace.elapsedMs) && trace.elapsedMs >= 0));
+  });
+
+  test('identical in-flight dynamic action gates are merged', async () => {
+    const helper = new StubLLMHelper();
+    const pending = [];
+    helper.generateContentStructured = (prompt, options) => {
+      helper.structuredCalls.push({ prompt, options });
+      return new Promise(resolve => pending.push(resolve));
+    };
+    const { engine } = await makeEngine(helper);
+    engine.setDynamicActionContext({
+      sessionId: 's-merge',
+      modeId: 'm-sales',
+      modeTemplateType: 'sales',
+    });
+    const segment = {
+      speaker: 'interviewer',
+      text: '这个价格太高了，我们预算不够',
+      timestamp: Date.now(),
+      final: true,
+    };
+
+    try {
+      engine.handleTranscript(segment, true);
+      engine.handleTranscript({ ...segment, timestamp: segment.timestamp + 1 }, true);
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      assert.equal(helper.structuredCalls.length, 1);
+    } finally {
+      for (const resolve of pending) {
+        resolve('{"actions":[{"actionType":"pricing_objection","decision":"reject","confidence":0.9,"reasons":[],"rejectedCandidates":["pricing_objection"]}]}');
+      }
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  });
+
+  test('new text for the same candidate set aborts the stale gate without surfacing an outage', async () => {
+    const helper = new StubLLMHelper();
+    const calls = [];
+    const pending = [];
+    helper.generateContentStructured = (prompt, options) => {
+      helper.structuredCalls.push({ prompt, options });
+      calls.push(options);
+      return new Promise(resolve => {
+        pending.push(resolve);
+      });
+    };
+    const { engine } = await makeEngine(helper);
+    const availability = [];
+    const emitted = [];
+    engine.on('dynamic_action_gate_availability', statuses => availability.push(...statuses));
+    engine.on('dynamic_action_emitted', action => emitted.push(action));
+    engine.setDynamicActionContext({
+      sessionId: 's-latest',
+      modeId: 'm-sales',
+      modeTemplateType: 'sales',
+    });
+
+    try {
+      engine.handleTranscript({
+        speaker: 'interviewer',
+        text: '这个价格太高了，我们预算不够',
+        timestamp: Date.now(),
+        final: true,
+      }, true);
+      await new Promise(resolve => setTimeout(resolve, 10));
+      engine.handleTranscript({
+        speaker: 'interviewer',
+        text: '报价太高，我们目前预算不足',
+        timestamp: Date.now() + 1,
+        final: true,
+      }, true);
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      assert.equal(calls.length, 2);
+      assert.equal(calls[0].abortSignal?.aborted, true);
+      assert.equal(calls[1].abortSignal?.aborted, false);
+      assert.deepEqual(availability, []);
+
+      pending[0]('{"actions":[{"actionType":"pricing_objection","decision":"pass","confidence":0.99,"reasons":["stale"],"rejectedCandidates":[]}]}');
+      await new Promise(resolve => setTimeout(resolve, 20));
+      assert.deepEqual(emitted, [], 'a provider that ignores abort must not store or emit its stale result');
+    } finally {
+      for (const resolve of pending) {
+        resolve('{"actions":[{"actionType":"pricing_objection","decision":"reject","confidence":0.9,"reasons":[],"rejectedCandidates":["pricing_objection"]}]}');
+      }
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  });
+
+  test('different candidate sets keep independent in-flight dynamic action gates', async () => {
+    const helper = new StubLLMHelper();
+    const calls = [];
+    const pending = [];
+    helper.generateContentStructured = (prompt, options) => {
+      helper.structuredCalls.push({ prompt, options });
+      calls.push(options);
+      return new Promise(resolve => pending.push(resolve));
+    };
+    const { engine } = await makeEngine(helper);
+    engine.setDynamicActionContext({
+      sessionId: 's-independent',
+      modeId: 'm-sales',
+      modeTemplateType: 'sales',
+    });
+
+    try {
+      engine.handleTranscript({
+        speaker: 'interviewer',
+        text: '这个价格太高了，我们预算不够',
+        timestamp: Date.now(),
+        final: true,
+      }, true);
+      engine.handleTranscript({
+        speaker: 'interviewer',
+        text: '请给我一个同类客户案例',
+        timestamp: Date.now() + 1,
+        final: true,
+      }, true);
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      assert.equal(calls.length, 2);
+      assert.equal(calls[0].abortSignal?.aborted, false);
+      assert.equal(calls[1].abortSignal?.aborted, false);
+    } finally {
+      for (const resolve of pending) {
+        resolve('{"actions":[]}');
+      }
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  });
+
   test('detector-only modes skip all model calls when no local action candidate exists', async () => {
     const cases = [
       ['sales', '好的，我已经看到了。'],
