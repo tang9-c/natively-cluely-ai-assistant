@@ -146,10 +146,12 @@ export interface CloudSemanticGateResult {
 export function buildCloudSemanticGatePrompt(input: CloudSemanticGateInput): string {
     return [
         '你是会议实时助手的动态动作语义门控，只返回 JSON，不生成回答建议。',
+        '硬性输出规则：只输出一个合法 JSON object；不要 markdown；不要 ```json；不要解释；不要补充任何 JSON 之外的文本。',
         '根据当前 final transcript、最近几轮上下文、当前 mode、说话人、已有 intentResult 和候选动作，判断每个候选动作是否应该通过。',
         'regex 只是候选来源；必须理解整体语义后再决定 pass、reject 或 defer。',
         '中性提及、被否定、先放一边、只是页面/列表/数据名词，不应触发高风险动作。',
         '只能返回 candidates 中存在的 actionType。confidence 必须是 0 到 1 的数字。',
+        'actions 必须覆盖每一个 candidate，且不得包含额外、重复或未知 actionType。',
         '',
         `modeTemplateType: ${input.modeTemplateType}`,
         `speaker: ${input.speaker ?? ''}`,
@@ -160,7 +162,7 @@ export function buildCloudSemanticGatePrompt(input: CloudSemanticGateInput): str
         'If cloud semantic arbitration is unavailable, the current local zero-shot intent model is not an allowed fallback. Fallback is controlled only by action policy and deterministic local_rule evidence.',
         `candidates: ${JSON.stringify(input.candidates)}`,
         '',
-        '返回格式: {"actions":[{"actionType":"...","decision":"pass|reject|defer","confidence":0.0,"semanticIntent":"...","reasons":["..."],"rejectedCandidates":["..."]}]}',
+        '返回格式严格等于: {"actions":[{"actionType":"...","decision":"pass|reject|defer","confidence":0.0,"semanticIntent":"...","reasons":["..."],"rejectedCandidates":["..."]}]}',
     ].join('\n');
 }
 
@@ -350,6 +352,43 @@ function normalizeCloudResults(
         results,
         failureReason: hasInvalidResult ? 'cloud_invalid_json' : undefined,
     };
+}
+
+async function classifyWithOneInvalidJsonRetry(params: {
+    cloudClassifier: CloudSemanticGateClassifier;
+    input: CloudSemanticGateInput;
+    validTypes: Set<string>;
+    requireAtomicResult: boolean;
+}): Promise<{
+    results: CloudSemanticGateResult[];
+    failureReason?: CloudSemanticGateFailureReason;
+}> {
+    const tryOnce = async () => {
+        const rawCloudResults = await params.cloudClassifier(params.input);
+        const normalized = normalizeCloudResults(
+            rawCloudResults,
+            params.validTypes,
+            params.requireAtomicResult,
+        );
+        return {
+            results: params.requireAtomicResult && normalized.failureReason
+                ? []
+                : normalized.results,
+            failureReason: normalized.failureReason,
+        };
+    };
+
+    try {
+        const first = await tryOnce();
+        if (first.failureReason !== 'cloud_invalid_json') return first;
+        return await tryOnce();
+    } catch (error) {
+        const reason = cloudFailureReasonFromError(error);
+        if (reason !== 'cloud_invalid_json') {
+            throw error;
+        }
+        return await tryOnce();
+    }
 }
 
 function isEnglishOrMixed(text: string): boolean {
@@ -715,7 +754,7 @@ export class ModeEventClassifier {
 
             if (cloudClassifier) {
                 try {
-                    const rawCloudResults = await cloudClassifier({
+                    const cloudInput: CloudSemanticGateInput = {
                         transcript: input.transcript,
                         recentContextTurns: input.recentContextTurns ?? [],
                         modeTemplateType: input.modeTemplateType,
@@ -733,12 +772,15 @@ export class ModeEventClassifier {
                                 allowLocalFallbackOnCloudFailure: candidate.allowLocalFallbackOnCloudFailure,
                             })),
                         },
-                    });
+                    };
                     const requireAtomicResult = ATOMIC_CLOUD_GATE_MODES.has(input.modeTemplateType);
-                    const normalized = normalizeCloudResults(rawCloudResults, validTypes, requireAtomicResult);
-                    cloudResults = requireAtomicResult && normalized.failureReason
-                        ? []
-                        : normalized.results;
+                    const normalized = await classifyWithOneInvalidJsonRetry({
+                        cloudClassifier,
+                        input: cloudInput,
+                        validTypes,
+                        requireAtomicResult,
+                    });
+                    cloudResults = normalized.results;
                     cloudFailureReason = normalized.failureReason;
                 } catch (error) {
                     cloudFailureReason = cloudFailureReasonFromError(error);
@@ -771,7 +813,7 @@ export class ModeEventClassifier {
                 const reason = cloudFailureReason ?? 'cloud_provider_unavailable';
                 const fallbackDecision = localDecisionFor(input, candidate, {
                     allowIntentResult: false,
-                    allowLocalRule: candidate.allowLocalFallbackOnCloudFailure === true,
+                    allowLocalRule: reason !== 'cloud_invalid_json' && candidate.allowLocalFallbackOnCloudFailure === true,
                     cloudFailureReason: reason,
                 });
                 if (fallbackDecision && (fallbackDecision.decision === 'pass' || fallbackDecision.decision === 'reject')) {

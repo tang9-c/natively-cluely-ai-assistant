@@ -145,6 +145,55 @@ describe('ModeEventClassifier', () => {
     assert.equal(decisions[0].degradedReason, 'cloud_provider_unavailable');
   });
 
+  test('retries once when cloud semantic gate returns invalid JSON structure', async () => {
+    const { ModeEventClassifier } = await loadClassifier();
+    let calls = 0;
+    const classifier = new ModeEventClassifier({
+      cloudClassifier: async () => {
+        calls += 1;
+        if (calls === 1) {
+          return [{ actionType: 'pricing_request', decision: 'approve', confidence: 0.9 }];
+        }
+        return [{ actionType: 'pricing_request', decision: 'pass', confidence: 0.91, reasons: ['retry_valid_json'] }];
+      },
+    });
+
+    const decisions = await classifier.assess({
+      transcript: '把商务条款和报价单发我邮箱。',
+      modeTemplateType: 'sales',
+      candidates: [candidate('pricing_request', '报价单')],
+      providerDataScopes: { transcript: true },
+    });
+
+    assert.equal(calls, 2);
+    assert.equal(decisions[0].decision, 'pass');
+    assert.equal(decisions[0].semanticProvider, 'cloud_llm');
+    assert.ok(decisions[0].reasons.includes('retry_valid_json'));
+  });
+
+  test('fails closed when cloud semantic gate retry also returns invalid JSON structure', async () => {
+    const { ModeEventClassifier } = await loadClassifier();
+    let calls = 0;
+    const classifier = new ModeEventClassifier({
+      cloudClassifier: async () => {
+        calls += 1;
+        return [{ actionType: 'pricing_request', decision: 'approve', confidence: 0.9 }];
+      },
+    });
+
+    const decisions = await classifier.assess({
+      transcript: '把商务条款和报价单发我邮箱。',
+      modeTemplateType: 'sales',
+      candidates: [candidate('pricing_request', '报价单')],
+      providerDataScopes: { transcript: true },
+    });
+
+    assert.equal(calls, 2);
+    assert.equal(decisions[0].decision, 'defer');
+    assert.equal(decisions[0].semanticProvider, 'unavailable');
+    assert.equal(decisions[0].degradedReason, 'cloud_invalid_json');
+  });
+
   test('explicit pricing request can pass as local_rule when cloud is unavailable', async () => {
     const { ModeEventClassifier } = await loadClassifier();
     const classifier = new ModeEventClassifier({ cloudClassifier: async () => null });
@@ -400,7 +449,7 @@ describe('ModeEventClassifier', () => {
     assert.equal(caseDecision?.usedLocalIntentModel, false);
   });
 
-  test('maps cloud timeout and invalid JSON to degraded reasons while falling back locally', async () => {
+  test('maps cloud timeout to local fallback but keeps invalid JSON fail-closed', async () => {
     const { CloudSemanticGateError, ModeEventClassifier } = await loadClassifier();
     const timeoutClassifier = new ModeEventClassifier({
       cloudClassifier: async () => {
@@ -444,7 +493,8 @@ describe('ModeEventClassifier', () => {
 
     const invalidPricing = invalidJsonDecisions.find(d => d.candidate.actionType === 'pricing_objection');
     const invalidCase = invalidJsonDecisions.find(d => d.candidate.actionType === 'case_study_request');
-    assert.equal(invalidPricing?.arbitrationStatus, 'local_fallback_cloud_unavailable');
+    assert.equal(invalidPricing?.decision, 'defer');
+    assert.equal(invalidPricing?.arbitrationStatus, 'cloud_unavailable');
     assert.ok(invalidPricing?.reasons.includes('cloud_invalid_json'));
     assert.equal(invalidCase?.decision, 'defer');
     assert.equal(invalidCase?.degradedReason, 'cloud_invalid_json');

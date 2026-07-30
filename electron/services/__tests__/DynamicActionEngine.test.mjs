@@ -1302,6 +1302,104 @@ test('assessSignals emits explicit Chinese pricing request actions', async () =>
   }
 });
 
+test('sales customer-intent triggers do not depend on speaker labels', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const fixtures = [
+    {
+      transcript: 'SOC2 是哪种报告?数据驻留要国内,安全合规要求确认一下。',
+      expectedAction: 'technical_requirements',
+      semanticIntent: 'sales_technical_requirements',
+      recentContextTurns: [],
+    },
+    {
+      transcript: '流程打通这块也说说?',
+      expectedAction: 'discovery_question',
+      semanticIntent: 'sales_process_integration',
+      recentContextTurns: [
+        { role: 'speaker', speaker: 'speaker-1', text: '生产环境的部署要求说一下,SSO 对接是 SAML 还是 OAuth?API 走 REST?', timestamp: 1 },
+        { role: 'speaker', speaker: 'speaker-2', text: 'SAML/OAuth 都支持,API 是 REST,生产环境默认多可用区部署。', timestamp: 2 },
+      ],
+    },
+    {
+      transcript: '三天?具体怎么做到的?',
+      expectedAction: 'discovery_question',
+      semanticIntent: 'sales_contextual_proof_discovery',
+      recentContextTurns: [
+        { role: 'speaker', speaker: 'speaker-1', text: '现在变更影响分析太慢,一个周期拖三周,审计压力大,良率也受影响。', timestamp: 1 },
+        { role: 'speaker', speaker: 'speaker-2', text: '价值锚定这块,我们的客户平均把变更影响分析周期从三周降到三天。', timestamp: 2 },
+      ],
+    },
+    {
+      transcript: '案例收到,我们也想要报价。',
+      expectedAction: 'pricing_request',
+      semanticIntent: 'sales_quote_request',
+      recentContextTurns: [
+        { role: 'speaker', speaker: 'speaker-1', text: '先给我看两个客户案例,我想看落地的 ROI。', timestamp: 1 },
+        { role: 'speaker', speaker: 'speaker-2', text: '好,我把案例脱敏版本发您邮箱。', timestamp: 2 },
+      ],
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    for (const speaker of ['user', 'interviewer', 'speaker-1']) {
+      const engine = new DynamicActionEngine();
+      const actions = await engine.assessSignals({
+        transcript: fixture.transcript,
+        speaker,
+        modeTemplateType: 'sales',
+        modeId: 'mode_sales',
+        sessionId: `session_sales_speaker_invariant_${speaker}_${fixture.expectedAction}`,
+        recentContextTurns: fixture.recentContextTurns,
+        cloudClassifier: async input => input.candidates.map(candidate => ({
+          actionType: candidate.actionType,
+          decision: candidate.actionType === fixture.expectedAction ? 'pass' : 'reject',
+          confidence: candidate.actionType === fixture.expectedAction ? 0.92 : 0.8,
+          semanticIntent: candidate.actionType === fixture.expectedAction ? fixture.semanticIntent : candidate.actionType,
+          reasons: candidate.actionType === fixture.expectedAction ? ['cloud_confirmed_customer_intent'] : ['cloud_rejected_candidate'],
+          rejectedCandidates: candidate.actionType === fixture.expectedAction ? [] : [candidate.actionType],
+        })),
+        now: 20_000,
+      });
+
+      assert.ok(
+        actions.some(action => action.type === fixture.expectedAction),
+        `${fixture.transcript} should emit ${fixture.expectedAction} for speaker=${speaker}; got ${actions.map(action => action.type).join(', ')}`,
+      );
+    }
+  }
+});
+
+test('sales seller-response semantics suppress customer-intent cards regardless of speaker label', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const sellerResponses = [
+    '我们有 SOC2 Type II,数据驻留可选国内/海外区域。',
+    '我把案例脱敏后发您。',
+    '报价单稍后发,商务条款我们电话沟通。',
+    'SAML/OAuth 都支持,API 是 REST。',
+  ];
+
+  for (const transcript of sellerResponses) {
+    for (const speaker of ['user', 'interviewer', 'speaker-1']) {
+      const engine = new DynamicActionEngine();
+      const actions = await engine.assessSignals({
+        transcript,
+        speaker,
+        modeTemplateType: 'sales',
+        modeId: 'mode_sales',
+        sessionId: `session_sales_seller_response_${speaker}_${transcript.length}`,
+        cloudClassifier: cloudSelect('pricing_request'),
+        now: 20_000,
+      });
+
+      assert.equal(
+        actions.some(action => ['pricing_request', 'case_study_request', 'technical_requirements', 'discovery_question'].includes(action.type)),
+        false,
+        `seller response should not emit a Sales customer-intent card for speaker=${speaker}: ${transcript}; got ${actions.map(action => action.type).join(', ')}`,
+      );
+    }
+  }
+});
+
 test('assessSignals does not emit sales cards for broad internal cost, proof, or kickoff mentions', async () => {
   const { DynamicActionEngine } = await loadModules();
   const falsePositiveCases = [

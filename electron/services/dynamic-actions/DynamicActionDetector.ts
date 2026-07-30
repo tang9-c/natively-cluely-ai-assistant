@@ -124,7 +124,7 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         type: 'pricing_request',
         patterns: [
             /\b(send me pricing|pricing page|quote|proposal|commercials|what does it cost)\b/i,
-            zh('发我报价', '发.{0,6}报价', '给.{0,6}报价', '报(?:个|一下|下)价(?:格)?', '给(?:我)?(?:个|一下|下)价(?:格)?', '报价单', '价格页', '方案报价', '商务条款', '(模块|维护费|全部|整体|搞下来|系统).{0,8}多少钱'),
+            zh('发我报价', '发.{0,6}报价', '给.{0,6}报价', '报(?:个|一下|下)价(?:格)?', '给(?:我)?(?:个|一下|下)价(?:格)?', '想要报价', '要报价', '需要报价', '报价怎么给', '报价单', '价格页', '方案报价', '商务条款', '(模块|维护费|全部|整体|搞下来|系统).{0,8}多少钱'),
         ],
         priority: 0.86,
         label: 'Draft quote email',
@@ -149,6 +149,10 @@ const SALES_TRIGGERS: ActionTrigger[] = [
                 '力学仿真.{0,30}(功能|适合|模块)',
                 'AI Agent.{0,40}(变更影响|PLM|QMS|只读|人工确认|案例)',
                 '(变更影响分析|重复录入物料|旧工艺|软件合规审计|设计仿真|人工查变更影响).{0,50}(太慢|浪费时间|返工|停线|周期|分散|效率)',
+                '流程打通.{0,12}(说说|怎么|如何)',
+                '(怎么|如何).{0,12}形成闭环',
+                '(三天|三周|周期|ROI|投资回报).{0,20}(怎么做到|具体怎么做到|如何做到)',
+                '(怎么做到|具体怎么做到|如何做到).{0,20}(三天|周期|ROI|投资回报)',
                 '(支持|追踪).{0,60}(工单|工艺路线|设备参数|需求|测试|缺陷|发布版本|追踪矩阵)',
                 '(工单|工艺路线|设备参数|需求|测试|缺陷|发布版本).{0,60}(支持|追踪|追踪矩阵)',
                 '(汽车软件|制造|医疗器械)客户.{0,80}(需求|测试|缺陷|追踪矩阵).{0,30}案例'
@@ -190,7 +194,14 @@ const SALES_TRIGGERS: ActionTrigger[] = [
                 '对接方式',
                 '架构要求',
                 'SSO 对接',
-                '(API|SSO|生产部署).{0,24}(怎么做|如何做|怎么实现|如何实现)'
+                'SOC2',
+                'Type II',
+                '数据驻留',
+                '国内区域',
+                '安全合规',
+                '合规要求',
+                '审计报告',
+                '(API|SSO|SAML|OAuth|REST|生产部署|生产环境|SOC2|数据驻留|安全合规).{0,24}(怎么做|如何做|怎么实现|如何实现|要求|确认)'
             ),
         ],
         priority: 0.88,
@@ -559,12 +570,8 @@ export const MODE_TRIGGERS: Record<string, ActionTrigger[]> = {
 
 function shouldSuppressSalesTrigger(trigger: ActionTrigger, transcript: string, speaker?: string): boolean {
     const text = transcript.replace(/\s+/g, ' ').trim();
-    if (
-        /^(internal|internal teammate|teammate|me|host)$/i.test((speaker ?? '').trim()) &&
-        ['pricing_objection', 'pricing_request', 'case_study_request', 'technical_requirements', 'buying_signal', 'discovery_question'].includes(trigger.type)
-    ) {
-        return true;
-    }
+    const customerIntentTypes = ['pricing_request', 'case_study_request', 'technical_requirements', 'discovery_question'];
+    if (customerIntentTypes.includes(trigger.type) && isSalesSellerResponse(text)) return true;
     if (trigger.type === 'case_study_request') {
         return /内部复盘|不是客户要材料|file name is outdated|our drive|材料还没上传|先别引用/i.test(text);
     }
@@ -578,6 +585,20 @@ function shouldSuppressSalesTrigger(trigger: ActionTrigger, transcript: string, 
         return /(文件名|会议标题|PPT 标题|PPT标题|议程|还没开始|稍后再聊|内部路线图代号|只是标题|just a title|agenda item)/i.test(text);
     }
     return false;
+}
+
+function isSalesSellerResponse(text: string): boolean {
+    if (!text) return true;
+    if (isSalesCustomerQuestionOrRequest(text)) return false;
+    return /(?:我|我们).{0,12}(?:有|支持|默认|可选|可以单独配置|能单独配置|提供|配置灵活|单独配置|确认后|脱敏后|稍后发|后续发|电话沟通)/i.test(text) ||
+        /(?:报价单|案例|材料|功能清单|商务条款).{0,12}(?:稍后发|后续发|发您|发你|发到|电话沟通|沟通)/i.test(text) ||
+        /(?:SAML|OAuth|REST|API|SOC2|Type II|数据驻留).{0,24}(?:都支持|支持|可选|默认|有|是|走|部署)/i.test(text) ||
+        /(?:会自动|人工审核后|默认只读|后面可以单独配置|发您邮箱|发你邮箱|发您|发你)/i.test(text);
+}
+
+function isSalesCustomerQuestionOrRequest(text: string): boolean {
+    return /[?？]/.test(text) ||
+        /(能不能|会不会|可不可以|是不是|哪种|多少|多少钱|怎么|如何|为什么|说说|确认一下|要求确认|想看|更想看|要看|需要看|想要|需要|发我|给我|发.*邮箱|给.*报价|报价怎么给)/i.test(text);
 }
 
 function shouldSuppressFdeTrigger(trigger: ActionTrigger, transcript: string): boolean {
