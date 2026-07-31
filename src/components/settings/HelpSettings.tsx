@@ -22,7 +22,7 @@ const MOCK_BUTTONS = [
     { icon: MessageSquare, label: '澄清', kbd: `${CMD_SYMBOL}2`, color: 'indigo' },
     { icon: RefreshCw, label: '回顾', kbd: `${CMD_SYMBOL}7`, color: 'amber' },
     { icon: HelpCircle, label: '跟进问题', kbd: `${CMD_SYMBOL}4`, color: 'teal' },
-    { icon: Zap, label: '回答', kbd: `${CMD_SYMBOL}5`, color: 'emerald' },
+    { icon: Zap, label: '问 AI', kbd: `${CMD_SYMBOL}5`, color: 'emerald' },
 ] as const;
 
 const colorMap: Record<string, string> = {
@@ -1212,9 +1212,9 @@ export const HelpSettings: React.FC = () => {
                                 { Icon: Pencil, color: 'blue', title: '怎么回答？', badge: null, bc: '', shortcutKey: 'whatToAnswer' as const, desc: '读取当前转录内容和屏幕，然后流式生成精确的朗读回答。' },
                                 { Icon: Lightbulb, color: 'violet', title: '头脑风暴', badge: '面试开启', bc: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', shortcutKey: 'brainstorm' as const, desc: '当面试模式开启时，回顾变为头脑风暴——深度多步策略。' },
                                 { Icon: HelpCircle, color: 'teal', title: '跟进问题', badge: null, bc: '', shortcutKey: 'followUp' as const, desc: '建议下一个逻辑问题，让对话顺畅进行。' },
-                                { Icon: Zap, color: 'emerald', title: '立即回答', badge: null, bc: '', shortcutKey: 'answer' as const, desc: '录制麦克风和屏幕内容，立即触发 AI 查询。' },
+                                { Icon: Zap, color: 'emerald', title: '问 AI', badge: null, bc: '', shortcutKey: 'answer' as const, desc: '录制你的语音问题，立即触发 AI 查询；已附带截图时会一起发送。' },
                                 { Icon: MessageSquare, color: 'indigo', title: '澄清', badge: null, bc: '', shortcutKey: 'clarify' as const, desc: '当话题不清楚时，从潜在音频中生成尖锐的探查问题。' },
-                                { Icon: RefreshCw, color: 'amber', title: '回顾', badge: '面试关闭', bc: 'bg-red-500/10 text-red-400 border-red-500/30', shortcutKey: 'recap' as const, desc: '当你跟不上时，将过去 5 分钟的内容浓缩为要点。' },
+                                { Icon: RefreshCw, color: 'amber', title: '回顾', badge: '面试关闭', bc: 'bg-red-500/10 text-red-400 border-red-500/30', shortcutKey: 'recap' as const, desc: '当你跟不上时，将最近一段对话浓缩为要点。' },
                                 { Icon: Sparkles, color: 'sky', title: '代码提示', badge: null, bc: '', shortcutKey: 'codeHint' as const, desc: '读取你的屏幕，引导你走向正确的代码实现。' },
                                 { Icon: Monitor, color: 'rose', title: '截图提问', badge: null, bc: '', shortcutKey: 'takeScreenshot' as const, desc: '强制全屏截图并立即通过大语言模型处理。' },
                                 { Icon: EyeOff, color: 'slate', title: '隐形执行', badge: null, bc: '', shortcutKey: 'processScreenshots' as const, desc: '在后台处理内容，从不显示界面。' },

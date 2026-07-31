@@ -86,3 +86,42 @@ test('NativelyInterface renders stable realtime answer failure status instead of
   assert.match(source, /result\.statusCode\s*!==\s*'ok'/);
   assert.match(source, /role:\s*'system'/);
 });
+
+test('manual voice question prompt is mode-aware instead of interview-only', () => {
+  const source = read('src/components/NativelyInterface.tsx');
+
+  assert.match(source, /buildManualVoiceQuestionPrompt/);
+  assert.match(source, /activeMode\?\.templateType/);
+  assert.match(source, /Sales|FDE|Recruiting|Team Meet|Lecture|Technical Interview/);
+  assert.doesNotMatch(source, /You are a real-time interview assistant/);
+});
+
+test('quick action status chips explain status without pretending to be commands', () => {
+  const source = read('src/components/NativelyInterface.tsx');
+
+  assert.match(source, /状态：正在等待第一段麦克风转写/);
+  assert.match(source, /状态：当前没有附带截图/);
+  assert.match(source, /云端：\$\{llmProviderLabel\}/);
+  assert.doesNotMatch(source, /<span>\{llmPrivacyLabel\}<\/span>/);
+});
+
+test('clarify no-transcript fallback is mode-aware instead of interview-only', () => {
+  const source = read('electron/IntelligenceEngine.ts');
+
+  assert.match(source, /buildClarifyNoTranscriptFallbackContext/);
+  assert.match(source, /this\.currentDynamicActionTemplateType/);
+  assert.match(source, /Sales|FDE|Recruiting|Team Meet|Lecture|Technical Interview/);
+  assert.doesNotMatch(source, /candidate just joined the interview/);
+});
+
+test('clarify no-transcript fallback prefers active mode over dynamic action context', () => {
+  const source = read('electron/IntelligenceEngine.ts');
+
+  assert.match(source, /getActiveClarifyModeTemplateType/);
+  assert.match(source, /ModesManager\.getInstance\(\)\.getActiveMode\(\)\?\.templateType/);
+  assert.match(source, /this\.getActiveClarifyModeTemplateType\(\)/);
+  assert.doesNotMatch(
+    source,
+    /buildClarifyNoTranscriptFallbackContext\(this\.currentDynamicActionTemplateType\)/,
+  );
+});

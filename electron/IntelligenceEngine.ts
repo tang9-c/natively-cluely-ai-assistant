@@ -97,6 +97,22 @@ function detectRefinementIntent(userText: string): { isRefinement: boolean; inte
     return { isRefinement: false, intent: '' };
 }
 
+const CLARIFY_NO_TRANSCRIPT_FALLBACK_BY_MODE: Record<string, string> = {
+    general: 'General: The meeting has no transcript yet. Generate one concise clarifying question about the user’s goal, constraints, or desired output.',
+    sales: 'Sales: The meeting has no transcript yet. Generate one concise clarifying question about customer goals, pain, budget, decision process, timing, technical boundary, or next step.',
+    fde: 'FDE: The meeting has no transcript yet. Generate one concise clarifying question about deployment context, system boundaries, data flow, permissions, integration, rollout risk, or validation.',
+    recruiting: 'Recruiting: The meeting has no transcript yet. Generate one concise, fair clarifying question about candidate evidence, role requirements, policy constraints, or risk to verify.',
+    'team-meet': 'Team Meet: The meeting has no transcript yet. Generate one concise clarifying question about owner, deadline, decision, dependency, blocker, or next action.',
+    'looking-for-work': 'Looking for work: The meeting has no transcript yet. Generate one concise clarifying question about the interviewer’s focus, role expectations, or answer constraints.',
+    'technical-interview': 'Technical Interview: The meeting has no transcript yet. Generate one concise clarifying question about input size, constraints, edge cases, complexity, or expected approach.',
+    lecture: 'Lecture: The meeting has no transcript yet. Generate one concise clarifying question about the topic, definition, example, or key takeaway.',
+};
+
+function buildClarifyNoTranscriptFallbackContext(modeTemplateType?: string | null): string {
+    return CLARIFY_NO_TRANSCRIPT_FALLBACK_BY_MODE[modeTemplateType || 'general']
+        || CLARIFY_NO_TRANSCRIPT_FALLBACK_BY_MODE.general;
+}
+
 // Events emitted by IntelligenceEngine
 export interface IntelligenceModeEvents {
     'assist_update': (insight: string) => void;
@@ -267,6 +283,16 @@ export class IntelligenceEngine extends EventEmitter {
         return normalized === 'nothing actionable right now'
             || normalized === 'nothing to capture right now'
             || normalized === WHAT_TO_ANSWER_FALLBACK.toLowerCase().replace(/[.!?。！？\s]+$/g, '');
+    }
+
+    private getActiveClarifyModeTemplateType(): string | null {
+        try {
+            return ModesManager.getInstance().getActiveMode()?.templateType
+                || this.currentDynamicActionTemplateType
+                || null;
+        } catch {
+            return this.currentDynamicActionTemplateType || null;
+        }
     }
 
     private static isPotentialNonAnswerSentinelPrefix(answer: string): boolean {
@@ -1872,8 +1898,8 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             const rawContext = this.session.getFormattedContext(180);
-            // If no transcript yet, use a generic prompt — the LLM will ask a scoping question
-            const context = rawContext || '[No transcript available yet. The candidate just joined the interview. Generate an opening clarifying question to understand the scope and constraints of the upcoming problem.]';
+            // If no transcript exists yet, ask a mode-aware scoping question.
+            const context = rawContext || buildClarifyNoTranscriptFallbackContext(this.getActiveClarifyModeTemplateType());
 
             const generationId = ++this.currentGenerationId;
             let fullClarification = "";

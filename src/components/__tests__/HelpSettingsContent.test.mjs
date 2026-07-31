@@ -131,6 +131,16 @@ test('HelpSettings quick-actions show a "未设置" placeholder when a shortcut 
   assert.match(source, /未设置/);
 });
 
+test('HelpSettings quick-action descriptions match actual manual voice and recap behavior', () => {
+  const source = read('src/components/settings/HelpSettings.tsx');
+
+  assert.match(source, /录制你的语音问题/);
+  assert.match(source, /已附带截图时会一起发送/);
+  assert.match(source, /最近一段对话/);
+  assert.doesNotMatch(source, /录制麦克风和屏幕内容/);
+  assert.doesNotMatch(source, /过去 5 分钟/);
+});
+
 test('HelpSettings advertises 8 expert modes and is section-number neutral', () => {
   const source = read('src/components/settings/HelpSettings.tsx');
 

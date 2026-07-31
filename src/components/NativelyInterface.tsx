@@ -258,6 +258,41 @@ const formatProviderLabel = (provider?: string | null): string => {
     .join(' ');
 };
 
+const MANUAL_VOICE_PROMPT_BY_MODE: Record<string, string> = {
+  general: 'General: Answer the user’s spoken question directly and concisely for the current conversation.',
+  sales: 'Sales: Help the user respond in a sales conversation. Stay grounded, avoid inventing pricing/case details, and suggest a concise next step when useful.',
+  fde: 'FDE: Help the user clarify deployment, integration, permissions, data flow, rollout risk, and validation steps.',
+  recruiting: 'Recruiting: Help the user ask or answer as a recruiting interviewer. Prefer evidence-based, fair, policy-safe wording.',
+  'team-meet': 'Team Meet: Help the user turn discussion into decisions, owners, deadlines, blockers, or a concise meeting response.',
+  'looking-for-work': 'Looking for work: Help the user answer as the candidate using credible first-person wording without inventing personal facts.',
+  'technical-interview': 'Technical Interview: Help the user explain approach, constraints, complexity, edge cases, and tradeoffs.',
+  lecture: 'Lecture: Help the user answer or ask about the lecture topic, definitions, examples, or key takeaways.',
+};
+
+const buildManualVoiceQuestionPrompt = (
+  modeTemplateType?: string | null,
+  hasAttachedScreenshots = false,
+): string => {
+  const modeInstruction =
+    MANUAL_VOICE_PROMPT_BY_MODE[modeTemplateType || 'general'] ||
+    MANUAL_VOICE_PROMPT_BY_MODE.general;
+  const screenInstruction = hasAttachedScreenshots
+    ? 'The user has attached screenshot context. Use it only when it is relevant to the spoken question.'
+    : 'No screenshot is attached. Do not claim to see the screen.';
+
+  return `${modeInstruction}
+${screenInstruction}
+
+Instructions:
+1. Treat the user’s spoken text as an explicit question or command to the AI assistant.
+2. Use the active mode above to choose the right role and level of detail.
+3. Use available meeting context when helpful, but do not invent facts, numbers, policies, or commitments.
+4. Provide a direct, concise answer the user can act on or say out loud.
+5. Do not include phrases like "The question is..." - just answer directly.
+
+Provide only the answer, nothing else.`;
+};
+
 const getSttSummary = (
   userStatus: 'connected' | 'reconnecting' | 'failed',
   userProvider: string,
@@ -302,7 +337,7 @@ const getSttSummary = (
     return {
       label: '语音转写启动中',
       tone: 'warn',
-      detail,
+      detail: `状态：正在等待第一段麦克风转写；${detail}。如果长时间停留，请检查麦克风权限或 STT 配置。`,
     };
   }
   if (userStatus === 'failed') {
@@ -668,6 +703,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const activeModeDisplayLabel = activeMode
     ? getModeDisplayName(activeMode)
     : activeModeLabel;
+  const llmRouteDisplayLabel =
+    llmPrivacyLabel === '云端 LLM 路由'
+      ? `云端：${llmProviderLabel}`
+      : llmPrivacyLabel === '本地/私有路由'
+        ? `本地/私有：${llmProviderLabel}`
+        : llmPrivacyLabel === '自定义端点路由'
+          ? `自定义端点：${llmProviderLabel}`
+          : llmPrivacyLabel;
 
   useEffect(() => {
     // Load initial active mode name + mode list
@@ -2778,35 +2821,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setIsProcessing(true);
 
       try {
-        let prompt = '';
+        let prompt = buildManualVoiceQuestionPrompt(
+          activeMode?.templateType,
+          currentAttachments.length > 0,
+        );
 
-        if (currentAttachments.length > 0) {
-          // Image + Voice Context
-          prompt = `You are a helper. The user has provided a screenshot and a spoken question/command.
-User said: "${question}"
-
-Instructions:
-1. Analyze the screenshot in the context of what the user said.
-2. Provide a direct, helpful answer.
-3. Be concise.`;
-        } else {
+        if (currentAttachments.length === 0) {
           // JIT RAG pre-flight: try to use indexed meeting context first
           const ragResult = await window.electronAPI.ragQueryLive?.(question);
           if (ragResult?.success) {
             // JIT RAG handled it — response streamed via rag:stream-chunk events
             return;
           }
-
-          // Voice Only (Smart Extract) — fallback
-          prompt = `You are a real-time interview assistant. The user just repeated or paraphrased a question from their interviewer.
-Instructions:
-1. Extract the core question being asked
-2. Provide a clear, concise, and professional answer that the user can say out loud
-3. Keep the answer conversational but informative (2-4 sentences ideal)
-4. Do NOT include phrases like "The question is..." - just give the answer directly
-5. Format for speaking out loud, not for reading
-
-Provide only the answer, nothing else.`;
         }
 
         // Call Streaming API: message = question, context = instructions
@@ -4104,7 +4130,7 @@ Provide only the answer, nothing else.`;
                             ? failureTitle
                             : visionSucceeded
                               ? providerTitle
-                              : '当前没有附带屏幕上下文'
+                              : '状态：当前没有附带截图；点击截图快捷键后，本轮回答才会使用屏幕内容。'
                       }
                     >
                       <Monitor className="h-3 w-3 opacity-70" />
@@ -4122,10 +4148,10 @@ Provide only the answer, nothing else.`;
                 })()}
                 <div
                   className={`${statusPillBaseClass} overlay-text-primary`}
-                  title={`${llmPrivacyLabel}: ${llmProviderLabel}`}
+                  title={`状态：${llmPrivacyLabel}: ${llmProviderLabel}`}
                 >
                   <ShieldCheck className="h-3 w-3 opacity-70" />
-                  <span>{llmPrivacyLabel}</span>
+                  <span>{llmRouteDisplayLabel}</span>
                 </div>
               </div>
 
@@ -4522,7 +4548,7 @@ Provide only the answer, nothing else.`;
                     </>
                   ) : (
                     <>
-                      <Zap className="w-3 h-3 opacity-70" /> 回答
+                      <Zap className="w-3 h-3 opacity-70" /> 问 AI
                     </>
                   )}
                 </button>

@@ -112,7 +112,7 @@ const MockupNativelyInterface = ({ opacity }: { opacity: number }) => {
                                 <HelpCircle className="w-3 h-3 opacity-70" /> 跟进问题
                             </div>
                             <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium min-w-[74px] shrink-0 border overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <Zap className="w-3 h-3 opacity-70" /> 回答
+                                <Zap className="w-3 h-3 opacity-70" /> 问 AI
                             </div>
                         </div>
 
@@ -2324,7 +2324,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                     { id: 'whatToAnswer', label: '该说什么', icon: <Sparkles size={14} /> },
                                                     { id: 'clarify', label: '澄清', icon: <MessageSquare size={14} /> },
                                                     { id: 'dynamicAction4', label: '复盘 / 头脑风暴', icon: <RefreshCw size={14} /> },
-                                                    { id: 'answer', label: '回答 / 记录', icon: <Mic size={14} /> },
+                                                    { id: 'answer', label: '问 AI / 记录', icon: <Mic size={14} /> },
                                                     { id: 'codeHint', label: '获取代码提示', icon: <Zap size={14} /> },
                                                     { id: 'brainstorm', label: '头脑风暴方案', icon: <Zap size={14} /> },
                                                     { id: 'scrollUp', label: '向上滚动', icon: <ArrowUp size={14} /> },
