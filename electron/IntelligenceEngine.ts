@@ -1045,12 +1045,19 @@ export class IntelligenceEngine extends EventEmitter {
         this.dynamicActionGateRuns.clear();
     }
 
+    private shouldSkipDynamicActionForSpeaker(segment: TranscriptSegment): boolean {
+        return segment.speakerVerification?.isMe === true;
+    }
+
     private async detectConfirmAndEmitDynamicActions(
         segment: TranscriptSegment,
         latencyContext?: DynamicActionLatencyContext,
     ): Promise<void> {
         if (!this.dynamicActionEngine || !this.currentSessionId
             || !this.currentDynamicActionModeId || !this.currentDynamicActionTemplateType) {
+            return;
+        }
+        if (this.shouldSkipDynamicActionForSpeaker(segment)) {
             return;
         }
         if (segment.speaker !== 'interviewer' && segment.speaker !== 'user') {

@@ -158,6 +158,93 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.ok(pricing.evidenceRefs[0].text.includes('价格'));
   });
 
+  test('speaker verification marked as ME skips dynamic action assessment', async () => {
+    const { engine } = await makeEngine();
+    const calls = [];
+    engine.setDynamicActionContext({
+      sessionId: 'sess-speaker-me',
+      modeId: 'mode-sales',
+      modeTemplateType: 'sales',
+    });
+    engine._setDynamicActionEngineForTest({
+      detectSignalCandidates: () => [
+        { trigger: { type: 'pricing_objection' }, match: '价格太高', index: 0 },
+      ],
+      assessSignals: async input => {
+        calls.push(input);
+        return [];
+      },
+      detectActions: () => [],
+      acceptAction: () => null,
+      dismissAction: () => {},
+      getTopActions: () => [],
+    });
+
+    engine.handleTranscript({
+      speaker: 'user',
+      text: '这个价格太高了，我们预算不够',
+      timestamp: Date.now(),
+      final: true,
+      speakerVerification: {
+        provider: 'local-speaker-verification',
+        profileId: 'me',
+        isMe: true,
+        confidence: 0.91,
+        threshold: 0.8,
+      },
+    }, true);
+    await waitForAsyncSignals();
+
+    assert.equal(calls.length, 0);
+  });
+
+  test('non-ME and missing speaker verification continue dynamic action assessment', async () => {
+    const { engine } = await makeEngine();
+    const calls = [];
+    engine.setDynamicActionContext({
+      sessionId: 'sess-speaker-not-me',
+      modeId: 'mode-sales',
+      modeTemplateType: 'sales',
+    });
+    engine._setDynamicActionEngineForTest({
+      detectSignalCandidates: () => [
+        { trigger: { type: 'pricing_objection' }, match: '价格太高', index: 0 },
+      ],
+      assessSignals: async input => {
+        calls.push(input);
+        return [];
+      },
+      detectActions: () => [],
+      acceptAction: () => null,
+      dismissAction: () => {},
+      getTopActions: () => [],
+    });
+
+    engine.handleTranscript({
+      speaker: 'user',
+      text: '这个价格太高了，我们预算不够',
+      timestamp: Date.now(),
+      final: true,
+      speakerVerification: {
+        provider: 'local-speaker-verification',
+        profileId: 'me',
+        isMe: false,
+        confidence: 0.41,
+        threshold: 0.8,
+      },
+    }, true);
+    await waitForAsyncSignals();
+    engine.handleTranscript({
+      speaker: 'user',
+      text: '老板也觉得价格偏高，需要重新评估',
+      timestamp: Date.now() + 1,
+      final: true,
+    }, true);
+    await waitForAsyncSignals();
+
+    assert.equal(calls.length, 2);
+  });
+
   test('repeated high-confidence Chinese dynamic action emits auto card without direct What Should I Say run', async () => {
     const helper = new StubLLMHelper({
       structuredResponses: [
