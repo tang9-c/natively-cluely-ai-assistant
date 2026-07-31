@@ -28,6 +28,10 @@ export interface MacSystemAudioPermissionHealth extends MacPermissionHealth {
   services: string[];
 }
 
+export interface MacScreenPermissionHealthOptions {
+  probeScreenSources?: boolean;
+}
+
 export interface TccRepairResult {
   success: boolean;
   bundleId: string | null;
@@ -55,7 +59,10 @@ async function probeMacScreenSources(context: string): Promise<{ capturable: boo
   }
 }
 
-export async function resolveMacScreenPermissionHealth(context: string): Promise<MacPermissionHealth> {
+export async function resolveMacScreenPermissionHealth(
+  context: string,
+  options: MacScreenPermissionHealthOptions = {},
+): Promise<MacPermissionHealth> {
   if (process.platform !== 'darwin' || !app.isPackaged) {
     return {
       status: 'granted',
@@ -93,6 +100,17 @@ export async function resolveMacScreenPermissionHealth(context: string): Promise
       effectiveGranted: false,
       staleGrantSuspected: false,
       recommendedFix: 'restart-app',
+      sourceCount: 0,
+    };
+  }
+
+  if (options.probeScreenSources === false) {
+    return {
+      status,
+      capturable: status === 'granted',
+      effectiveGranted: status === 'granted',
+      staleGrantSuspected: false,
+      recommendedFix: status === 'granted' ? 'none' : 'open-settings',
       sourceCount: 0,
     };
   }
@@ -184,8 +202,9 @@ export function resolveMacMicrophonePermissionHealth(): MacPermissionHealth {
 export async function resolveMacSystemAudioPermissionHealth(
   context: string,
   backend: MacSystemAudioBackend = 'unknown',
+  options: MacScreenPermissionHealthOptions = {},
 ): Promise<MacSystemAudioPermissionHealth> {
-  const screenHealth = await resolveMacScreenPermissionHealth(context);
+  const screenHealth = await resolveMacScreenPermissionHealth(context, options);
   return {
     ...screenHealth,
     backend,

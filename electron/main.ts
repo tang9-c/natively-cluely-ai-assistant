@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer } from "electron"
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen } from "electron"
 import * as crypto from "crypto"
 import path from "path"
 import fs from "fs"
@@ -4592,20 +4592,13 @@ async function initializeApp() {
   // Pre-create settings window in background for faster first open
   appState.settingsWindowHelper.preloadWindow()
 
-  // One-time macOS screen recording permission prompt.
+  // macOS Screen Recording status check.
   //
-  // We must fire this AFTER createWindow() so that:
-  //   1. The Natively launcher window is visible and focused when the TCC dialog
-  //      appears — macOS anchors the dialog to the frontmost app window on Ventura+.
-  //      Without a visible window the dialog can appear behind other apps (Sequoia).
-  //   2. The window is still visible — the dialog still has a surface to attach to.
-  //
-  // The 800ms delay lets the launcher's ready-to-show animation complete so the
-  // window is fully composited before the system sheet appears above it.
-  //
-  // TCC caches the decision permanently after the first response — this block
-  // runs exactly ONCE on the first launch of each unique packaged binary.
-  // On every subsequent launch the status is 'granted' or 'denied', and we skip.
+  // Do not call desktopCapturer.getSources() here. That protected API triggers
+  // the system Screen Recording TCC dialog, which makes every cold launch feel
+  // like the app is forcing the user into Privacy & Security. Screen capture
+  // permission should be requested lazily when the user starts a meeting, takes
+  // a screenshot, or explicitly opens the permission/repair flow.
   if (process.platform === 'darwin') {
     setTimeout(async () => {
       try {
@@ -4618,39 +4611,18 @@ async function initializeApp() {
         }
 
         if (screenStatus === 'not-determined') {
-          // First launch: trigger the one-time TCC dialog by making a minimal
-          // desktopCapturer call. macOS will show the permission sheet anchored
-          // to our window. The user's response is stored permanently in the TCC
-          // database — we do NOT check status immediately after because the dialog
-          // is still open; the status will be read correctly next time `startMeeting`
-          // is called (which is the correct gate for system audio access).
-          console.log('[初始化] 屏幕录制权限未确定 — 显示一次性 TCC 对话框...');
-          try {
-            await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } });
-          } catch (e) {
-            // On some Electron builds getSources throws when permission is pending —
-            // that's fine; the TCC dialog has still been triggered.
-            console.log('[Init] getSources threw (expected during TCC pending state):', (e as Error).message);
-          }
-          // NOTE: Do NOT read afterStatus here — TCC response is async (dialog still open).
-          // startMeeting() reads the status when the user actually tries to use audio.
-
+          console.log('[Init] Screen recording permission is not determined; deferring prompt until first screen/system-audio use.');
         } else if (screenStatus === 'denied') {
-          const screenCapability = await resolveMacScreenCaptureCapability('startup permission check');
-          if (screenCapability.effectiveDenied) {
-            // Returning user who previously denied — show the banner immediately at startup
-            // so they know system audio won't work before they even start a meeting.
-            console.warn('[Init] Screen recording was previously denied — notifying UI banner.');
-            const { BrowserWindow } = require('electron');
-            BrowserWindow.getAllWindows().forEach((win: Electron.BrowserWindow) => {
-              if (!win.isDestroyed()) {
-                win.webContents.send(
-                  'system-audio-permission-denied',
-                  formatPermissionMessage('screen-recording-denied')
-                );
-              }
-            });
-          }
+          console.warn('[Init] Screen recording was previously denied — notifying UI banner without probing screen sources.');
+          const { BrowserWindow } = require('electron');
+          BrowserWindow.getAllWindows().forEach((win: Electron.BrowserWindow) => {
+            if (!win.isDestroyed()) {
+              win.webContents.send(
+                'system-audio-permission-denied',
+                formatPermissionMessage('screen-recording-denied')
+              );
+            }
+          });
         } else {
           // 'granted' or 'restricted' — nothing to do.
           console.log(`[Init] Screen recording permission already resolved: ${screenStatus}`);

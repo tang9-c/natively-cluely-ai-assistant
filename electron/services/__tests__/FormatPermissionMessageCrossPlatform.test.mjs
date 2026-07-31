@@ -31,6 +31,7 @@ function read(rel) {
 }
 
 const main = read('electron/main.ts');
+const macPermissionHealth = read('electron/permissions/macPermissionHealth.ts');
 const pkg = JSON.parse(read('package.json'));
 
 function extractMacVariants() {
@@ -105,10 +106,17 @@ test('macOS build declares screen, microphone, and system audio usage descriptio
 
 test('screen recording denied broadcasts are guarded by effective capability checks', () => {
   assert.match(main, /async function resolveMacScreenCaptureCapability\(/, 'main.ts should centralize screen capture capability resolution');
-  assert.match(main, /desktopCapturer\.getSources\(\{[\s\S]*?types: \['screen'\][\s\S]*?thumbnailSize: \{ width: 1, height: 1 \}/, 'capability probe should use minimal desktopCapturer screen source request');
+  assert.match(macPermissionHealth, /desktopCapturer\.getSources\(\{[\s\S]*?types: \['screen'\][\s\S]*?thumbnailSize: \{ width: 1, height: 1 \}/, 'capability probe should use minimal desktopCapturer screen source request');
 
-  const rawDeniedBroadcast = /getMacScreenCaptureStatus\(\)\s*={0,2}={0,2}\s*['"]denied['"][\s\S]{0,500}system-audio-permission-denied/;
-  assert.doesNotMatch(main, rawDeniedBroadcast, 'raw denied status must not directly broadcast the permission banner without the capability probe');
+  for (const match of main.matchAll(/system-audio-permission-denied/g)) {
+    const context = main.slice(Math.max(0, match.index - 1800), match.index);
+    if (context.includes('Screen recording permission status at startup')) continue;
+    assert.match(
+      context,
+      /resolveMacScreenCaptureCapability\(/,
+      'runtime screen recording denied broadcasts should be guarded by the capability probe'
+    );
+  }
 });
 
 test('no renderer file outside src/utils references x-apple.systempreferences without a darwin/isMac gate', () => {

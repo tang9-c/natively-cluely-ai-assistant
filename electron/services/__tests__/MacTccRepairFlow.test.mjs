@@ -110,3 +110,37 @@ test('startup permissions toaster is skipped when effective permissions are alre
     'missing localStorage marker must not unconditionally show the permissions toaster',
   );
 });
+
+test('startup does not trigger the macOS Screen Recording TCC prompt', () => {
+  const main = read('electron/main.ts');
+  const startupBlock = main.match(/\/\/ macOS Screen Recording status check\.[\s\S]*?\/\/ Recover unprocessed meetings/);
+
+  assert.ok(startupBlock, 'startup permission block should be present');
+  assert.doesNotMatch(
+    startupBlock[0],
+    /desktopCapturer\.getSources\(\{[\s\S]*?types: \['screen'\]/,
+    'startup must not call desktopCapturer.getSources because it triggers the Screen Recording TCC dialog',
+  );
+  assert.doesNotMatch(
+    startupBlock[0],
+    /resolveMacScreenCaptureCapability\('startup permission check'\)/,
+    'startup denied-status notification must not run a screen source capability probe',
+  );
+});
+
+test('permissions check reports screen status without probing screen sources', () => {
+  const ipcHandlers = read('electron/ipcHandlers.ts');
+  const permissionsCheck = ipcHandlers.match(/safeHandle\('permissions:check'[\s\S]*?\n\s*\}\);/);
+
+  assert.ok(permissionsCheck, 'permissions:check handler should be present');
+  assert.match(
+    permissionsCheck[0],
+    /resolveMacScreenPermissionHealth\('permissions ipc check',\s*\{ probeScreenSources: false \}\)/,
+    'permissions:check should use status-only screen health to avoid triggering Screen Recording TCC at startup',
+  );
+  assert.match(
+    permissionsCheck[0],
+    /resolveMacSystemAudioPermissionHealth\('permissions ipc check',\s*'unknown',\s*\{ probeScreenSources: false \}\)/,
+    'system audio health in permissions:check should also avoid screen source probing',
+  );
+});

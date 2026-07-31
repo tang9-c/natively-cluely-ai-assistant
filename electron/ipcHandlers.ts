@@ -4893,8 +4893,8 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (process.platform === 'darwin') {
       const mic = systemPreferences.getMediaAccessStatus('microphone');
       const screen = systemPreferences.getMediaAccessStatus('screen');
-      const screenHealth = await resolveMacScreenPermissionHealth('permissions ipc check');
-      const systemAudioHealth = await resolveMacSystemAudioPermissionHealth('permissions ipc check');
+      const screenHealth = await resolveMacScreenPermissionHealth('permissions ipc check', { probeScreenSources: false });
+      const systemAudioHealth = await resolveMacSystemAudioPermissionHealth('permissions ipc check', 'unknown', { probeScreenSources: false });
       const microphoneHealth = resolveMacMicrophonePermissionHealth();
       return { microphone: mic, screen, platform: 'darwin', screenHealth, systemAudioHealth, microphoneHealth };
     }
@@ -4903,8 +4903,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       microphone: 'granted',
       screen: 'granted',
       platform: process.platform,
-      screenHealth: await resolveMacScreenPermissionHealth('permissions ipc check'),
-      systemAudioHealth: await resolveMacSystemAudioPermissionHealth('permissions ipc check'),
+      screenHealth: await resolveMacScreenPermissionHealth('permissions ipc check', { probeScreenSources: false }),
+      systemAudioHealth: await resolveMacSystemAudioPermissionHealth('permissions ipc check', 'unknown', { probeScreenSources: false }),
       microphoneHealth: resolveMacMicrophonePermissionHealth(),
     };
   });
