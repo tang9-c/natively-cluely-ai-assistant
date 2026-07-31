@@ -1041,9 +1041,6 @@ export class IntelligenceEngine extends EventEmitter {
                 speaker: segment.speaker,
             })
             : undefined;
-        if (detectorOnlyMode && detectedTriggers?.length === 0) {
-            return;
-        }
         if (latencyContext) {
             latencyContext.candidateCount = detectedTriggers?.length;
         }
@@ -1060,13 +1057,16 @@ export class IntelligenceEngine extends EventEmitter {
         }
 
         const candidateTypes = [...new Set(detectedTriggers.map(candidate => candidate.trigger.type))].sort();
+        const fingerprint = text.replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+        const candidateKey = candidateTypes.length > 0
+            ? candidateTypes.join(',')
+            : `detectorless:${fingerprint}`;
         const gateKey = [
             this.currentSessionId,
             this.currentDynamicActionModeId,
             this.currentDynamicActionTemplateType,
-            candidateTypes.join(','),
+            candidateKey,
         ].join('|');
-        const fingerprint = text.replace(/\s+/g, ' ').trim().toLocaleLowerCase();
         const existingRun = this.dynamicActionGateRuns.get(gateKey);
         if (existingRun?.fingerprint === fingerprint) {
             return existingRun.promise;

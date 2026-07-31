@@ -73,7 +73,7 @@ test('detectSignalCandidates exposes detector-only candidates before semantic as
   assert.deepEqual(candidates.map(({ trigger }) => trigger.type), ['pricing_objection']);
 });
 
-test('recruiting evidence rubric intents cannot create detector-less candidates', async () => {
+test('recruiting evidence rubric intents can create detector-less gated candidates', async () => {
   const mappings = [
     'recruiting_scorecard_gap',
     'recruiting_bei_evidence_gap',
@@ -90,6 +90,7 @@ test('recruiting evidence rubric intents cannot create detector-less candidates'
       modeId: `mode-${intent}`,
       sessionId: `session-${intent}`,
       intentResult: { intent, confidence: 0.94, answerShape: '', source: 'cloud' },
+      detectedTriggers: [],
       cloudClassifier: async ({ candidates }) => candidates.map((candidate) => ({
         actionType: candidate.actionType,
         decision: 'pass',
@@ -98,7 +99,10 @@ test('recruiting evidence rubric intents cannot create detector-less candidates'
         rejectedCandidates: [],
       })),
     });
-    assert.deepEqual(actions, []);
+    assert.ok(
+      actions.some(action => action.type === 'candidate_experience_probe'),
+      `${intent} should synthesize candidate_experience_probe; got ${actions.map(action => action.type).join(', ')}`,
+    );
   }
 });
 
@@ -363,7 +367,7 @@ test('FDE quality object names alone remain discovery candidates instead of risk
   assert.deepEqual(matches.map(({ trigger }) => trigger.type), ['fde_discovery_probe']);
 });
 
-test('FDE intent result cannot synthesize action when detector has no candidate', async () => {
+test('FDE intent result can synthesize gated action when detector has no candidate', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
   let cloudCalls = 0;
@@ -380,6 +384,7 @@ test('FDE intent result cannot synthesize action when detector has no candidate'
       answerShape: 'Name blocker and next unblock step.',
       source: 'cloud',
     },
+    detectedTriggers: [],
     cloudClassifier: async input => {
       cloudCalls += 1;
       return input.candidates.map(candidate => ({
@@ -392,11 +397,11 @@ test('FDE intent result cannot synthesize action when detector has no candidate'
     now: 1_000,
   });
 
-  assert.deepEqual(actions, []);
-  assert.equal(cloudCalls, 0);
+  assert.equal(cloudCalls, 1);
+  assert.ok(actions.some(action => action.type === 'fde_risk_blocker'));
 });
 
-test('FDE agent intent cannot synthesize action when detector has no candidate', async () => {
+test('FDE agent intent can synthesize action when detector has no candidate', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
 
@@ -412,6 +417,7 @@ test('FDE agent intent cannot synthesize action when detector has no candidate',
       answerShape: 'Explain the AI Agent boundary as a checklist.',
       source: 'cloud',
     },
+    detectedTriggers: [],
     cloudClassifier: async input => input.candidates.map(candidate => ({
       actionType: candidate.actionType,
       decision: candidate.actionType === 'fde_agent_feasibility' ? 'pass' : 'reject',
@@ -421,7 +427,7 @@ test('FDE agent intent cannot synthesize action when detector has no candidate',
     now: 2_000,
   });
 
-  assert.deepEqual(actions, []);
+  assert.ok(actions.some(action => action.type === 'fde_agent_feasibility'));
 });
 
 test('dynamic action retrievalQuery uses active-mode entity extraction', async () => {
@@ -1015,9 +1021,10 @@ test('FDE high-risk candidate defers without cloud semantic confirmation', async
   );
 });
 
-test('sales intent cannot synthesize a suppressed buying signal', async () => {
+test('sales intent-only input enters semantic gate but cloud reject prevents card', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
+  let cloudCalls = 0;
 
   const actions = await engine.assessSignals({
     transcript: 'Legal review is a later internal topic, no customer ask right now.',
@@ -1026,21 +1033,28 @@ test('sales intent cannot synthesize a suppressed buying signal', async () => {
     modeId: 'mode_sales',
     sessionId: 'session_synth',
     intentResult: { intent: 'sales_buying_signal', confidence: 0.91, answerShape: '下一步', source: 'cloud' },
-    cloudClassifier: async input => input.candidates.map(candidate => ({
-      actionType: candidate.actionType,
-      decision: 'pass',
-      confidence: 0.92,
-      reasons: ['cloud_confirmed_buying_signal'],
-    })),
+    detectedTriggers: [],
+    cloudClassifier: async input => {
+      cloudCalls += 1;
+      return input.candidates.map(candidate => ({
+        actionType: candidate.actionType,
+        decision: 'reject',
+        confidence: 0.82,
+        reasons: ['cloud_rejected_internal_topic'],
+        rejectedCandidates: [candidate.actionType],
+      }));
+    },
     now: 10_000,
   });
 
+  assert.equal(cloudCalls, 1);
   assert.deepEqual(actions, []);
 });
 
-test('team intent cannot synthesize a suppressed blocker', async () => {
+test('team intent-only input enters semantic gate but cloud reject prevents card', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();
+  let cloudCalls = 0;
 
   const actions = await engine.assessSignals({
     transcript: '依赖这个词出现在包管理器日志里，不是项目阻塞。',
@@ -1049,15 +1063,21 @@ test('team intent cannot synthesize a suppressed blocker', async () => {
     modeId: 'mode_team',
     sessionId: 'session_team_suppressed',
     intentResult: { intent: 'capture_risk', confidence: 0.91, answerShape: '阻塞', source: 'cloud' },
-    cloudClassifier: async input => input.candidates.map(candidate => ({
-      actionType: candidate.actionType,
-      decision: 'pass',
-      confidence: 0.92,
-      reasons: ['cloud_confirmed_blocker'],
-    })),
+    detectedTriggers: [],
+    cloudClassifier: async input => {
+      cloudCalls += 1;
+      return input.candidates.map(candidate => ({
+        actionType: candidate.actionType,
+        decision: 'reject',
+        confidence: 0.82,
+        reasons: ['cloud_rejected_log_reference'],
+        rejectedCandidates: [candidate.actionType],
+      }));
+    },
     now: 10_000,
   });
 
+  assert.equal(cloudCalls, 1);
   assert.deepEqual(actions, []);
 });
 
@@ -1589,12 +1609,12 @@ test('all FDE policies keep local fallback disabled', async () => {
   }
 });
 
-test('sales intent-only input does not call the semantic gate', async () => {
+test('sales intent-only input calls semantic gate but defer prevents card', async () => {
   const { DynamicActionEngine } = await loadModules();
   const calls = [];
   const engine = new DynamicActionEngine();
 
-  await engine.assessSignals({
+  const actions = await engine.assessSignals({
     transcript: '这个说法本身没有案例关键词',
     speaker: 'Customer',
     modeTemplateType: 'sales',
@@ -1606,13 +1626,119 @@ test('sales intent-only input does not call the semantic gate', async () => {
       answerShape: 'test',
       source: 'cloud',
     },
+    detectedTriggers: [],
     cloudClassifier: async input => {
       calls.push(input);
       return [{ actionType: 'case_study_request', decision: 'defer', confidence: 0.7 }];
     },
   });
 
-  assert.equal(calls.length, 0);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(actions, []);
+});
+
+test('safe intent synthesis creates gated candidates across detector-only modes', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const cases = [
+    {
+      modeTemplateType: 'sales',
+      intentResult: { intent: 'sales_quote_request', confidence: 0.93, answerShape: 'quote', source: 'cloud' },
+      expectedAction: 'pricing_request',
+    },
+    {
+      modeTemplateType: 'fde',
+      intentResult: { intent: 'fde_integration', confidence: 0.93, answerShape: 'integration', source: 'cloud' },
+      expectedAction: 'fde_integration_check',
+    },
+    {
+      modeTemplateType: 'recruiting',
+      intentResult: { intent: 'recruiting_risk_verification', confidence: 0.93, answerShape: 'probe', source: 'cloud' },
+      expectedAction: 'candidate_experience_probe',
+    },
+    {
+      modeTemplateType: 'team-meet',
+      intentResult: { intent: 'capture_action', confidence: 0.93, answerShape: 'action', source: 'pattern' },
+      expectedAction: 'action_item',
+    },
+  ];
+
+  for (const item of cases) {
+    let cloudCalls = 0;
+    const engine = new DynamicActionEngine();
+    const actions = await engine.assessSignals({
+      transcript: `intent-only candidate for ${item.expectedAction}`,
+      speaker: 'speaker',
+      modeTemplateType: item.modeTemplateType,
+      modeId: `mode_${item.expectedAction}`,
+      sessionId: `session_${item.expectedAction}`,
+      intentResult: item.intentResult,
+      detectedTriggers: [],
+      cloudClassifier: async input => {
+        cloudCalls += 1;
+        return input.candidates.map(candidate => ({
+          actionType: candidate.actionType,
+          decision: candidate.actionType === item.expectedAction ? 'pass' : 'reject',
+          confidence: candidate.actionType === item.expectedAction ? 0.92 : 0.8,
+          reasons: candidate.actionType === item.expectedAction ? ['safe_intent_synth_pass'] : ['cloud_rejected_candidate'],
+          rejectedCandidates: candidate.actionType === item.expectedAction ? [] : [candidate.actionType],
+        }));
+      },
+      now: 20_000,
+    });
+
+    assert.equal(cloudCalls, 1, item.expectedAction);
+    assert.ok(
+      actions.some(action => action.type === item.expectedAction),
+      `${item.expectedAction} should be emitted; got ${actions.map(action => action.type).join(', ')}`,
+    );
+  }
+});
+
+test('safe intent synthesis refuses local SLM, low confidence, and cross-mode intents', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const cases = [
+    {
+      name: 'local_slm_high_risk',
+      modeTemplateType: 'sales',
+      intentResult: { intent: 'sales_quote_request', confidence: 0.96, answerShape: 'quote', source: 'local_slm' },
+    },
+    {
+      name: 'low_confidence',
+      modeTemplateType: 'fde',
+      intentResult: { intent: 'fde_integration', confidence: 0.84, answerShape: 'integration', source: 'cloud' },
+    },
+    {
+      name: 'cross_mode_intent',
+      modeTemplateType: 'team-meet',
+      intentResult: { intent: 'sales_quote_request', confidence: 0.96, answerShape: 'quote', source: 'cloud' },
+    },
+  ];
+
+  for (const item of cases) {
+    const calls = [];
+    const engine = new DynamicActionEngine();
+    const actions = await engine.assessSignals({
+      transcript: `intent-only synthetic guard ${item.name}`,
+      speaker: 'speaker',
+      modeTemplateType: item.modeTemplateType,
+      modeId: `mode_${item.name}`,
+      sessionId: `session_${item.name}`,
+      intentResult: item.intentResult,
+      detectedTriggers: [],
+      cloudClassifier: async input => {
+        calls.push(input);
+        return input.candidates.map(candidate => ({
+          actionType: candidate.actionType,
+          decision: 'pass',
+          confidence: 0.92,
+          reasons: ['should_not_be_called_for_unsafe_intent'],
+        }));
+      },
+    });
+
+    assert.deepEqual(actions, [], item.name);
+    assert.equal(calls.length, 0, item.name);
+  }
 });
 
 describe('DynamicActionEngine real meeting semantic gate fixtures', () => {

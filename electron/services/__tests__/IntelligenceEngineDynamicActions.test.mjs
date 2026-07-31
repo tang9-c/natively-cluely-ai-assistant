@@ -629,6 +629,80 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     }
   });
 
+  test('detectorless intent-only gates for different turns do not abort each other', async () => {
+    const helper = new StubLLMHelper();
+    const calls = [];
+    const pending = [];
+    helper.generateContentStructured = (prompt, options) => {
+      helper.structuredCalls.push({ prompt, options });
+      calls.push(options);
+      return new Promise(resolve => pending.push(resolve));
+    };
+    const { engine } = await makeEngine(helper);
+    engine.setDynamicActionContext({
+      sessionId: 's-detectorless-independent',
+      modeId: 'm-sales',
+      modeTemplateType: 'sales',
+    });
+    engine._setDynamicActionEngineForTest({
+      detectSignalCandidates: () => [],
+      assessSignals: async input => {
+        await input.cloudClassifier({
+          transcript: input.transcript,
+          recentContextTurns: input.recentContextTurns,
+          modeTemplateType: input.modeTemplateType,
+          speaker: input.speaker,
+          candidates: [{
+            actionType: 'pricing_request',
+            label: '生成报价邮件',
+            match: 'intent-only',
+            confidence: 0.86,
+            highRisk: true,
+            riskLevel: 'high',
+            gateStrategy: 'required',
+            allowLocalFallbackOnCloudFailure: false,
+            requiredEvidence: ['customer_request'],
+            localFallbackEvidence: [],
+            fastPathEligible: false,
+          }],
+          providerDataScopes: input.providerDataScopes,
+          selectedModelRunsLocally: input.selectedModelRunsLocally,
+          intentResult: input.intentResult,
+        });
+        return [];
+      },
+      detectActions: () => [],
+      acceptAction: () => null,
+      dismissAction: () => {},
+      getTopActions: () => [],
+    });
+
+    try {
+      engine.handleTranscript({
+        speaker: 'interviewer',
+        text: '报价单发我邮箱。',
+        timestamp: Date.now(),
+        final: true,
+      }, true);
+      engine.handleTranscript({
+        speaker: 'interviewer',
+        text: '商务条款也发我邮箱。',
+        timestamp: Date.now() + 1,
+        final: true,
+      }, true);
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      assert.equal(calls.length, 2);
+      assert.equal(calls[0].abortSignal?.aborted, false);
+      assert.equal(calls[1].abortSignal?.aborted, false);
+    } finally {
+      for (const resolve of pending) {
+        resolve('{"actions":[]}');
+      }
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  });
+
   test('detector-only modes skip all model calls when no local action candidate exists', async () => {
     const cases = [
       ['sales', '好的，我已经看到了。'],
@@ -660,6 +734,41 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
         `${modeTemplateType} should not call a model without detector candidates`,
       );
     }
+  });
+
+  test('detector-only mode still sends detector-less turns to intent assessment', async () => {
+    const helper = new StubLLMHelper();
+    const { engine } = await makeEngine(helper);
+    const calls = [];
+    engine.setDynamicActionContext({
+      sessionId: 's-detectorless-intent',
+      modeId: 'm-sales',
+      modeTemplateType: 'sales',
+    });
+    engine._setDynamicActionEngineForTest({
+      detectSignalCandidates: () => [],
+      assessSignals: async input => {
+        calls.push(input);
+        return [];
+      },
+      detectActions: () => [],
+      acceptAction: () => null,
+      dismissAction: () => {},
+      getTopActions: () => [],
+    });
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: '把商务条款和报价单发我邮箱，500 个席位年付多少钱？',
+      timestamp: Date.now(),
+      final: true,
+    }, true);
+    await waitForAsyncSignals();
+
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].detectedTriggers, []);
+    assert.ok(calls[0].intentResult, 'expected intent classifier result to reach dynamic action engine');
+    assert.equal(helper.structuredCalls.length, 0, 'detector-only intent assessment should not call cloud intent classifier');
   });
 
   test('dynamic action assessment receives compact recent context and provider scope', async () => {
@@ -702,7 +811,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     }
     await waitForAsyncSignals();
 
-    const lastCall = calls.at(-1);
+    const lastCall = calls.find(call => call.transcript.includes('Seventh context turn'));
     assert.ok(lastCall, 'expected dynamic action engine to be called');
     assert.equal(lastCall.providerDataScopes.transcript, true);
     assert.equal(lastCall.recentContextTurns.length, 6);

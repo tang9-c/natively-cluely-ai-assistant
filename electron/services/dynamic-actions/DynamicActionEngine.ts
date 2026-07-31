@@ -194,11 +194,14 @@ export class DynamicActionEngine {
             confirmationSource: this.confirmationSourceFor(params.intentResult),
             confirmedIntent: params.intentResult?.intent,
         }));
-        const synthTrigger = isDetectorOnlyDynamicActionMode(modeTemplateType)
-            ? null
-            : this.synthesizeTrigger(modeTemplateType, params.intentResult);
+        const synthTrigger = this.synthesizeTrigger(modeTemplateType, params.intentResult);
         const shouldAddSynthTrigger = synthTrigger
-            ? !matchedTriggers.some(({ trigger }) => trigger.type === synthTrigger.type)
+            ? this.canSynthesizeIntentCandidate({
+                modeTemplateType,
+                intentResult: params.intentResult,
+                actionType: synthTrigger.type,
+                matchedTriggers,
+            })
             : false;
 
         if (synthTrigger && shouldAddSynthTrigger) {
@@ -644,6 +647,26 @@ export class DynamicActionEngine {
         return this.syntheticTriggerFor(type, modeTemplateType);
     }
 
+    private canSynthesizeIntentCandidate(params: {
+        modeTemplateType: string;
+        intentResult?: IntentResult;
+        actionType: string;
+        matchedTriggers: DetectedSignalCandidate[];
+    }): boolean {
+        const { modeTemplateType, intentResult, actionType, matchedTriggers } = params;
+        if (!intentResult || intentResult.confidence < 0.85) return false;
+        if (matchedTriggers.some(({ trigger }) => trigger.type === actionType)) return false;
+
+        const mappedActionType = this.mapIntentToActionType(modeTemplateType, intentResult.intent);
+        if (mappedActionType !== actionType) return false;
+
+        if (intentResult.source === 'local_slm') return false;
+        const source = intentResult.source ?? 'pattern';
+        if (!['cloud', 'pattern', 'context'].includes(source)) return false;
+
+        return true;
+    }
+
     private mapIntentToActionType(modeOrCurrentType: string, intent: string): string | null {
         const byMode: Record<string, Record<string, string>> = {
             general: {
@@ -695,6 +718,12 @@ export class DynamicActionEngine {
                 example_request: 'candidate_experience_probe',
             },
             'team-meet': {
+                capture_action: 'action_item',
+                capture_decision: 'decision_point',
+                capture_risk: 'blocker_check',
+                status_update: 'owner_deadline_check',
+            },
+            team_meeting: {
                 capture_action: 'action_item',
                 capture_decision: 'decision_point',
                 capture_risk: 'blocker_check',
