@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, Check, Download, Loader2, Plus, Save, Trash2 } from 'lucide-react';
+import { AlertCircle, Check, Download, Loader2, Plus, Save, Trash2, X } from 'lucide-react';
 
 interface SenseVoiceModelInfo {
     id: string;
@@ -34,6 +34,7 @@ export function LocalSenseVoiceModelPanel() {
     const [terms, setTerms] = useState<SenseVoiceTermEntry[]>([]);
     const [correctionEnabled, setCorrectionEnabled] = useState(true);
     const [termStatus, setTermStatus] = useState<string | null>(null);
+    const [termCorrectionDialogOpen, setTermCorrectionDialogOpen] = useState(false);
 
     const refresh = useCallback(async () => {
         const result = await electronAPI?.localSenseVoiceGetModels?.();
@@ -98,7 +99,7 @@ export function LocalSenseVoiceModelPanel() {
         setTermStatus(null);
     };
 
-    const handleSaveTerms = async () => {
+    const handleSaveTerms = async (): Promise<boolean> => {
         setError(null);
         const result = await electronAPI?.localSenseVoiceSetTerms?.({
             terms,
@@ -106,12 +107,13 @@ export function LocalSenseVoiceModelPanel() {
         });
         if (!result?.success) {
             setError(result?.error ?? 'Failed to save SenseVoice term corrections');
-            return;
+            return false;
         }
         setTermStatus('已保存，下次转写会话生效。');
         const refreshed = await electronAPI?.localSenseVoiceGetTerms?.();
         setTerms(refreshed?.terms ?? []);
         setCorrectionEnabled(refreshed?.correctionEnabled !== false);
+        return true;
     };
 
     return (
@@ -161,102 +163,153 @@ export function LocalSenseVoiceModelPanel() {
                 </div>
             </div>
             <div className="mt-4 border-t border-border-subtle pt-4">
-                <div className="flex items-start justify-between gap-3">
-                    <div>
+                <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
                         <h5 className="text-sm font-semibold text-text-primary">专名错词纠正</h5>
-                        <p className="mt-1 text-xs text-text-secondary">
-                            用于修正常见、稳定的 Local SenseVoice 误识别。请为每个正确专名填写它经常被识别成的错词；只填写正确词不会提高模型识别概率。
+                        <p className="mt-1 truncate text-xs text-text-secondary">
+                            {correctionEnabled ? `已启用 · ${terms.length} 条词条` : `已关闭 · ${terms.length} 条词条`} · 例如 PDC → PTC
                         </p>
                     </div>
-                    <label className="flex shrink-0 items-center gap-2 text-xs text-text-secondary">
-                        <input
-                            type="checkbox"
-                            checked={correctionEnabled}
-                            onChange={(event) => {
-                                setCorrectionEnabled(event.target.checked);
-                                setTermStatus(null);
-                            }}
-                            className="h-4 w-4"
-                        />
-                        启用 final 文本纠错
-                    </label>
-                </div>
-                <div className="mt-3 space-y-3">
-                    {terms.map((term) => (
-                        <div key={term.id} className="grid gap-2 rounded-md border border-border-subtle p-3 md:grid-cols-[1fr_1.4fr_auto]">
-                            <label className="text-xs text-text-secondary">
-                                正确专名
-                                <input
-                                    value={term.canonical}
-                                    onChange={(event) => updateTerm(term.id, { canonical: event.target.value })}
-                                    className="mt-1 h-8 w-full rounded-md border border-border-subtle bg-bg-item-surface px-2 text-xs text-text-primary outline-none focus:border-accent-primary"
-                                    placeholder="CueUp"
-                                />
-                                {term.variants.length === 0 && (
-                                    <span className="mt-1 block text-[11px] text-amber-500">
-                                        未填写常见误识别，不会生效。
-                                    </span>
-                                )}
-                            </label>
-                            <label className="text-xs text-text-secondary">
-                                常见误识别（一行一个）
-                                <textarea
-                                    value={term.variants.join('\n')}
-                                    onChange={(event) => updateTerm(term.id, {
-                                        variants: event.target.value.split('\n').map((value) => value.trim()).filter(Boolean),
-                                    })}
-                                    className="mt-1 min-h-16 w-full resize-y rounded-md border border-border-subtle bg-bg-item-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-accent-primary"
-                                    placeholder={'丘普\n秋普'}
-                                />
-                            </label>
-                            <div className="flex items-center justify-end gap-2">
-                                <label className="flex items-center gap-1 text-xs text-text-secondary">
-                                    <input
-                                        type="checkbox"
-                                        checked={term.enabled}
-                                        onChange={(event) => updateTerm(term.id, { enabled: event.target.checked })}
-                                        className="h-4 w-4"
-                                    />
-                                    启用
-                                </label>
-                                <button
-                                    type="button"
-                                    onClick={() => setTerms((current) => current.filter((item) => item.id !== term.id))}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border-subtle text-text-secondary hover:bg-bg-item-surface"
-                                    title="删除"
-                                >
-                                    <Trash2 size={14} />
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs text-text-tertiary">保存后下次转写会话生效。</p>
-                    <div className="flex items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setTerms((current) => [...current, createTerm()]);
-                                setTermStatus(null);
-                            }}
-                            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-subtle px-3 text-xs text-text-primary hover:bg-bg-item-surface"
-                        >
-                            <Plus size={14} />
-                            添加专名
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleSaveTerms}
-                            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-subtle px-3 text-xs text-text-primary hover:bg-bg-item-surface"
-                        >
-                            <Save size={14} />
-                            保存
-                        </button>
-                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setTermCorrectionDialogOpen(true)}
+                        className="inline-flex h-8 shrink-0 items-center rounded-md border border-border-subtle px-3 text-xs text-text-primary hover:bg-bg-item-surface"
+                    >
+                        管理词表
+                    </button>
                 </div>
                 {termStatus && <p className="mt-2 text-xs text-emerald-500">{termStatus}</p>}
             </div>
+            {termCorrectionDialogOpen && (
+                <div
+                    className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="sensevoice-term-correction-title"
+                >
+                    <div className="flex max-h-[82vh] w-full max-w-3xl flex-col rounded-xl border border-border-subtle bg-bg-elevated shadow-2xl">
+                        <div className="flex items-start justify-between gap-4 border-b border-border-subtle p-4">
+                            <div>
+                                <h5 id="sensevoice-term-correction-title" className="text-sm font-semibold text-text-primary">
+                                    专名错词纠正
+                                </h5>
+                                <p className="mt-1 text-xs text-text-secondary">
+                                    用于修正常见、稳定的 Local SenseVoice 误识别。请为每个正确专名填写它经常被识别成的错词；只填写正确词不会提高模型识别概率。
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setTermCorrectionDialogOpen(false)}
+                                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border-subtle text-text-secondary hover:bg-bg-item-surface"
+                                aria-label="关闭专名错词纠正管理"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4">
+                            <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-border-subtle bg-bg-item-surface/60 px-3 py-2">
+                                <div>
+                                    <p className="text-xs font-medium text-text-primary">
+                                        {correctionEnabled ? `已启用 · ${terms.length} 条词条` : `已关闭 · ${terms.length} 条词条`}
+                                    </p>
+                                    <p className="mt-0.5 text-[11px] text-text-tertiary">保存后下次转写会话生效。</p>
+                                </div>
+                                <label className="flex shrink-0 items-center gap-2 text-xs text-text-secondary">
+                                    <input
+                                        type="checkbox"
+                                        checked={correctionEnabled}
+                                        onChange={(event) => {
+                                            setCorrectionEnabled(event.target.checked);
+                                            setTermStatus(null);
+                                        }}
+                                        className="h-4 w-4"
+                                    />
+                                    启用 final 文本纠错
+                                </label>
+                            </div>
+                            <div className="space-y-3">
+                                {terms.map((term) => (
+                                    <div key={term.id} className="grid gap-2 rounded-md border border-border-subtle p-3 md:grid-cols-[1fr_1.4fr_auto]">
+                                        <label className="text-xs text-text-secondary">
+                                            正确专名
+                                            <input
+                                                value={term.canonical}
+                                                onChange={(event) => updateTerm(term.id, { canonical: event.target.value })}
+                                                className="mt-1 h-8 w-full rounded-md border border-border-subtle bg-bg-item-surface px-2 text-xs text-text-primary outline-none focus:border-accent-primary"
+                                                placeholder="CueUp"
+                                            />
+                                            {term.variants.length === 0 && (
+                                                <span className="mt-1 block text-[11px] text-amber-500">
+                                                    未填写常见误识别，不会生效。
+                                                </span>
+                                            )}
+                                        </label>
+                                        <label className="text-xs text-text-secondary">
+                                            常见误识别（一行一个）
+                                            <textarea
+                                                value={term.variants.join('\n')}
+                                                onChange={(event) => updateTerm(term.id, {
+                                                    variants: event.target.value.split('\n').map((value) => value.trim()).filter(Boolean),
+                                                })}
+                                                className="mt-1 min-h-16 w-full resize-y rounded-md border border-border-subtle bg-bg-item-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-accent-primary"
+                                                placeholder={'丘普\n秋普'}
+                                            />
+                                        </label>
+                                        <div className="flex items-center justify-end gap-2">
+                                            <label className="flex items-center gap-1 text-xs text-text-secondary">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={term.enabled}
+                                                    onChange={(event) => updateTerm(term.id, { enabled: event.target.checked })}
+                                                    className="h-4 w-4"
+                                                />
+                                                启用
+                                            </label>
+                                            <button
+                                                type="button"
+                                                onClick={() => setTerms((current) => current.filter((item) => item.id !== term.id))}
+                                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border-subtle text-text-secondary hover:bg-bg-item-surface"
+                                                title="删除"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-subtle p-4">
+                            <p className="text-xs text-text-tertiary">保存后下次转写会话生效。</p>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setTerms((current) => [...current, createTerm()]);
+                                        setTermStatus(null);
+                                    }}
+                                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-subtle px-3 text-xs text-text-primary hover:bg-bg-item-surface"
+                                >
+                                    <Plus size={14} />
+                                    添加专名
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        const saved = await handleSaveTerms();
+                                        if (saved) {
+                                            setTermCorrectionDialogOpen(false);
+                                        }
+                                    }}
+                                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-subtle px-3 text-xs text-text-primary hover:bg-bg-item-surface"
+                                >
+                                    <Save size={14} />
+                                    保存
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
