@@ -216,6 +216,9 @@ describe('LLMHelper basic surface and setters (PR3.1)', () => {
     helper.setModel('doubao-1-5-pro-32k-250115');
     assert.equal(helper.getCurrentProvider(), 'doubao');
 
+    helper.setModel('natively');
+    assert.equal(helper.getCurrentProvider(), 'natively');
+
     helper.setModel('claude');
     assert.equal(helper.getCurrentProvider(), 'gemini', 'claude alias -> gemini fallback provider');
 

@@ -2225,7 +2225,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                     <div className="flex items-start justify-between">
                                         <div>
                                             <h3 className="text-lg font-bold text-text-primary mb-1">键盘快捷键</h3>
-                                            <p className="text-xs text-text-secondary">使用这些快捷键控制 CueUp 的常用操作。</p>
+                                            <p className="text-xs text-text-secondary">使用这些快捷键控制 CueUp 的常用操作。聊天类快捷键在会议悬浮窗模式下全局生效。</p>
                                         </div>
                                         <button
                                             onClick={resetShortcuts}

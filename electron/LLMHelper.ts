@@ -4855,9 +4855,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
   }
 
-  public getCurrentProvider(): "ollama" | "gemini" | "custom" | "codex-cli" | "doubao" {
+  public getCurrentProvider(): "ollama" | "gemini" | "custom" | "codex-cli" | "doubao" | "natively" {
     if (this.customProvider) return "custom";
     if (this.isCodexCliModel(this.currentModelId)) return "codex-cli";
+    if (this.currentModelId === "natively") return "natively";
     if (this.isDoubaoModel(this.currentModelId)) return "doubao";
     return this.useOllama ? "ollama" : "gemini";
   }

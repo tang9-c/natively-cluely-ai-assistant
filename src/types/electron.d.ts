@@ -488,7 +488,7 @@ export interface ElectronAPI {
 
   // LLM Model Management
   // @ipc-channel get-current-llm-config
-  getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini" | "custom" | "codex-cli" | "doubao"; model: string; isOllama: boolean }>
+  getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini" | "custom" | "codex-cli" | "doubao" | "natively"; model: string; isOllama: boolean }>
   // @ipc-channel get-available-ollama-models
   getAvailableOllamaModels: () => Promise<string[]>
   // @ipc-channel switch-to-ollama

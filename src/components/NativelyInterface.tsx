@@ -791,6 +791,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   // Dynamic Action Button Mode (Recap vs Brainstorm)
   const [actionButtonMode, setActionButtonMode] = useState<'recap' | 'brainstorm'>('recap');
+  const actionButtonModeRef = useRef(actionButtonMode);
+
+  useEffect(() => {
+    actionButtonModeRef.current = actionButtonMode;
+  }, [actionButtonMode]);
 
   useEffect(() => {
     // Load persisted mode
@@ -3417,7 +3422,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         handleClarify();
       } else if (isShortcutPressed(e, 'dynamicAction4')) {
         e.preventDefault();
-        if (actionButtonMode === 'brainstorm') {
+        if (actionButtonModeRef.current === 'brainstorm') {
           handleBrainstorm();
         } else {
           handleRecap();
@@ -3779,7 +3784,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (action === 'whatToAnswer') handlers.handleWhatToSay();
       else if (action === 'recap') handlers.handleRecap();
       else if (action === 'dynamicAction4') {
-        if (actionButtonMode === 'brainstorm') handlers.handleBrainstorm();
+        if (actionButtonModeRef.current === 'brainstorm') handlers.handleBrainstorm();
         else handlers.handleRecap();
       } else if (action === 'answer') handlers.handleAnswerNow();
       else if (action === 'clarify') handlers.handleClarify();
@@ -3789,6 +3794,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       else if (action === 'scrollDown') inertialScrollRef.current?.kick('vert', 1);
       else if (action === 'scrollLeft') inertialScrollRef.current?.kick('horiz', -1);
       else if (action === 'scrollRight') inertialScrollRef.current?.kick('horiz', 1);
+      else if (action === 'focusInput') {
+        setIsExpanded(true);
+        requestAnimationFrame(() => textInputRef.current?.focus());
+      }
       else if (action === 'processScreenshots') generalHandlers.processScreenshots();
       else if (action === 'resetCancel') generalHandlers.resetCancel();
       else if (action === 'takeScreenshot') generalHandlers.takeScreenshot();

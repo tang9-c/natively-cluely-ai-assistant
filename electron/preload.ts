@@ -115,7 +115,7 @@ interface ElectronAPI {
 
   // LLM Model Management
   getCurrentLlmConfig: () => Promise<{
-    provider: 'ollama' | 'gemini' | 'doubao';
+    provider: 'ollama' | 'gemini' | 'custom' | 'codex-cli' | 'doubao' | 'natively';
     model: string;
     isOllama: boolean;
   }>;
