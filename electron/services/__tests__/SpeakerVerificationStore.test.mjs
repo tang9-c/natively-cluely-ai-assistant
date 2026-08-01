@@ -61,9 +61,9 @@ test('DatabaseManager migration creates speaker profile tables at version 28', (
   assert.match(db, /user_version = 28/);
 });
 
-test('DatabaseManager migration adds independent enrollment quality columns at version 32', () => {
+test('DatabaseManager migration adds enrollment quality and runtime health stats at version 32', () => {
   const db = read('electron/db/DatabaseManager.ts');
-  assert.match(db, /Version 31 -> 32: Add speaker enrollment quality calibration/);
+  assert.match(db, /Version 31 -> 32: Add speaker enrollment calibration and runtime health stats/);
   assert.match(db, /addColumnIfMissing\('speaker_profiles', 'quality_score', 'REAL'\)/);
   assert.match(db, /addColumnIfMissing\('speaker_profiles', 'quality_band', 'TEXT'\)/);
   assert.match(db, /addColumnIfMissing\('speaker_profiles', 'min_self_similarity', 'REAL'\)/);
@@ -72,24 +72,12 @@ test('DatabaseManager migration adds independent enrollment quality columns at v
   assert.match(db, /addColumnIfMissing\('speaker_profiles', 'calibrated_threshold', 'REAL'\)/);
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'last_quality_score', 'REAL'\)/);
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'last_quality_band', 'TEXT'\)/);
-  assert.match(db, /user_version = 32/);
-});
-
-test('DatabaseManager migration adds runtime speaker verification health counters at version 33', () => {
-  const db = read('electron/db/DatabaseManager.ts');
-  assert.match(db, /Version 32 -> 33: Persist privacy-safe speaker verification failure counters/);
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'low_quality_skips', 'INTEGER NOT NULL DEFAULT 0'\)/);
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'low_confidence_rejections', 'INTEGER NOT NULL DEFAULT 0'\)/);
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'error_count', 'INTEGER NOT NULL DEFAULT 0'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'timeout_count', 'INTEGER NOT NULL DEFAULT 0'\)/);
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'last_failure_at', 'INTEGER'\)/);
-  assert.match(db, /user_version = 33/);
-});
-
-test('DatabaseManager migration adds a separate speaker verification timeout counter at version 34', () => {
-  const db = read('electron/db/DatabaseManager.ts');
-  assert.match(db, /Version 33 -> 34: Track speaker verification timeouts independently from errors/);
-  assert.match(db, /ADD COLUMN timeout_count INTEGER NOT NULL DEFAULT 0/);
-  assert.match(db, /user_version = 34/);
+  assert.match(db, /user_version = 32/);
 });
 
 test('SettingsManager exposes local speaker verification mode', () => {

@@ -1579,9 +1579,9 @@ export class DatabaseManager {
             })();
         }
 
-        // Version 31 -> 32: Add speaker enrollment quality calibration.
+        // Version 31 -> 32: Add speaker enrollment calibration and runtime health stats.
         if (version < 32) {
-            console.log('[DatabaseManager] Applying migration v31 -> v32: Add speaker enrollment quality calibration');
+            console.log('[DatabaseManager] Applying migration v31 -> v32: Add speaker enrollment calibration and runtime health stats');
             this.db.exec(`
                 CREATE TABLE IF NOT EXISTS speaker_profile_stats (
                     profile_id TEXT PRIMARY KEY,
@@ -1606,33 +1606,12 @@ export class DatabaseManager {
             addColumnIfMissing('speaker_profiles', 'calibrated_threshold', 'REAL');
             addColumnIfMissing('speaker_profile_stats', 'last_quality_score', 'REAL');
             addColumnIfMissing('speaker_profile_stats', 'last_quality_band', 'TEXT');
-            this.db.pragma('user_version = 32');
-        }
-
-        // Version 32 -> 33: Persist privacy-safe speaker verification failure counters.
-        if (version < 33) {
-            console.log('[DatabaseManager] Applying migration v32 -> v33: Add speaker verification runtime health stats');
-            const addColumnIfMissing = (table: string, column: string, definition: string) => {
-                const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
-                if (!columns.some((existing) => existing.name === column)) {
-                    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-                }
-            };
             addColumnIfMissing('speaker_profile_stats', 'low_quality_skips', 'INTEGER NOT NULL DEFAULT 0');
             addColumnIfMissing('speaker_profile_stats', 'low_confidence_rejections', 'INTEGER NOT NULL DEFAULT 0');
             addColumnIfMissing('speaker_profile_stats', 'error_count', 'INTEGER NOT NULL DEFAULT 0');
+            addColumnIfMissing('speaker_profile_stats', 'timeout_count', 'INTEGER NOT NULL DEFAULT 0');
             addColumnIfMissing('speaker_profile_stats', 'last_failure_at', 'INTEGER');
-            this.db.pragma('user_version = 33');
-        }
-
-        // Version 33 -> 34: Track speaker verification timeouts independently from errors.
-        if (version < 34) {
-            console.log('[DatabaseManager] Applying migration v33 -> v34: Add speaker verification timeout counter');
-            const columns = this.db.prepare('PRAGMA table_info(speaker_profile_stats)').all() as Array<{ name: string }>;
-            if (!columns.some((existing) => existing.name === 'timeout_count')) {
-                this.db.exec('ALTER TABLE speaker_profile_stats ADD COLUMN timeout_count INTEGER NOT NULL DEFAULT 0');
-            }
-            this.db.pragma('user_version = 34');
+            this.db.pragma('user_version = 32');
         }
 
         console.log('[DatabaseManager] Migrations completed.');
