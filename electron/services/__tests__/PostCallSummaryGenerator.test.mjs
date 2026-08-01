@@ -121,6 +121,86 @@ test('generateFullTranscriptSummary keeps user-derived content out of system pro
   assert.ok(calls.some(call => call.context.includes('局部摘要包含客户要降低追溯成本')));
 });
 
+test('generateFullTranscriptSummary mode section prompt declares actionItems only once', async () => {
+  const calls = [];
+  await generateFullTranscriptSummary({
+    llmHelper: {
+      generateMeetingSummary: async (...args) => {
+        calls.push(args);
+        return JSON.stringify({
+          overview: 'FDE 会议摘要',
+          sections: { 客户目标: ['客户要降低追溯成本'] },
+          actionItems: [],
+          decisions: [],
+          openQuestions: [],
+        });
+      },
+    },
+    transcript: [],
+    context: '客户希望降低追溯成本。',
+    modeTemplateType: 'fde',
+    modeNoteSections: [{ title: '客户目标', description: '客户希望达到的业务结果' }],
+    modeContextBlock: '',
+    baseRules: '规则：只基于会议内容。',
+    groqSummaryPrompt: 'fallback',
+  });
+
+  assert.equal(calls.length, 1);
+  const [systemPrompt] = calls[0];
+  assert.equal((systemPrompt.match(/"actionItems":/g) || []).length, 1);
+});
+
+test('generateFullTranscriptSummary prompts use labeled enterprise secretary role without markdown role headers', async () => {
+  const calls = [];
+  await generateFullTranscriptSummary({
+    llmHelper: {
+      generateMeetingSummary: async (...args) => {
+        calls.push(args);
+        if (args[0].includes('归并')) {
+          return JSON.stringify({
+            overview: '完整摘要',
+            keyPoints: ['完整要点'],
+            actionItems: [],
+            decisions: [],
+            openQuestions: [],
+          });
+        }
+        return JSON.stringify({
+          overview: '局部摘要',
+          keyPoints: ['局部要点'],
+          actionItems: [],
+          decisions: [],
+          openQuestions: [],
+        });
+      },
+    },
+    transcript: [],
+    context: '头部会议内容。\n' + '中间内容。'.repeat(500) + '\n尾部会议内容。',
+    modeTemplateType: 'general',
+    modeNoteSections: [],
+    modeContextBlock: '',
+    baseRules: '规则：只基于会议内容。',
+    groqSummaryPrompt: 'fallback',
+    maxChunkChars: 1000,
+  });
+
+  assert.ok(calls.length > 1, 'expected chunk prompts plus merge prompt');
+  for (const [systemPrompt] of calls) {
+    assert.ok(
+      systemPrompt.includes('角色：你是一位专业、严谨的企业级 AI 会议秘书与知识管理助手。'),
+      `missing labeled enterprise meeting secretary role in prompt: ${systemPrompt}`,
+    );
+    if (systemPrompt.includes('归并')) {
+      assert.ok(systemPrompt.includes('任务：将下面这些局部会议摘要归并为一份完整会议摘要。'));
+    } else {
+      assert.ok(systemPrompt.includes('任务：阅读、理解并深度提炼由 ASR 生成的会议转写文本。'));
+      assert.ok(systemPrompt.includes('范围：下面是完整会议的第 '));
+    }
+    assert.ok(!systemPrompt.includes('# Role'));
+    assert.ok(!systemPrompt.includes('世界顶尖'));
+  }
+});
+
 test('generateFullTranscriptSummary locally merges partials when final merge fails', async () => {
   const llmHelper = {
     generateMeetingSummary: async (prompt, context) => {

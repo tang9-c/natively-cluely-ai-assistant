@@ -27,6 +27,27 @@ test('MeetingPersistence summary uses buildSummarySafeModeContextBlock with scop
   assert.match(src, /includeReferenceSnippets: referenceSnippetsAllowed/);
 });
 
+test('MeetingPersistence summary base rules use the enhanced enterprise recap contract', () => {
+  const src = read('electron/MeetingPersistence.ts');
+
+  const requiredRules = [
+    '只基于会议中实际出现的信息总结，不编造未提到的事实、数字、结论、责任人或上下文。',
+    '对 ASR 转写中的口误、重复话术、语气词、停顿词和明显错别字，应结合上下文自动完成语义纠错和信息降噪。',
+    '对明显同音误识别、拼写错误和常见中英文术语识别错误可做语义纠正；金额、日期、比例、数量、公司名、人名、系统名、合同条款等高风险信息必须保持谨慎，只有上下文高度明确时才可规范化。',
+    '将同一主题下分散在不同时间点、不同发言中的信息进行语义合并，避免按时间顺序机械复述。',
+    '当观点、承诺、异议、决策或行动项依赖具体发言人时，应保留发言人、角色或可识别称谓；如果发言人不明确，不要猜测。',
+    '优先保留金额、比例、数量、日期、周期、截止时间、版本、系统名称、客户名称等硬性指标；不得自行补全缺失数值。',
+    '行动项必须体现后续要完成的具体动作或交付物；单纯的问题、观点、背景同步或泛泛意向不得写入 actionItems，应放入 openQuestions、keyPoints 或对应分区。',
+    '决策项必须是会议中已确认、已同意、已选定、已否定或已批准的事项；讨论中的建议、假设、倾向和待评估方案不得写成决策。',
+    '对仅用于同步背景、项目状态、行业信息或通知的内容，归入 keyPoints 或对应分区；不要强行生成行动项。',
+    '专业、严谨、客观、商业化，便于快速浏览。',
+  ];
+
+  for (const rule of requiredRules) {
+    assert.ok(src.includes(rule), `Missing summary base rule: ${rule}`);
+  }
+});
+
 test('Groq summary prompt matches current post-call JSON schema', () => {
   const src = read('electron/llm/prompts.ts');
 

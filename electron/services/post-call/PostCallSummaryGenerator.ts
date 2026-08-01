@@ -38,6 +38,18 @@ export interface GenerateFullTranscriptSummaryParams {
 const DEFAULT_MAX_CHUNK_CHARS = 24000;
 const DEFAULT_ONE_SHOT_MAX_CHARS = 50000;
 const CHUNK_OVERLAP_CHARS = 1200;
+const ENTERPRISE_MEETING_SECRETARY_ROLE = '你是一位专业、严谨的企业级 AI 会议秘书与知识管理助手。';
+
+function buildChunkRoleHeader(chunkIndex: number, totalChunks: number): string {
+  return `角色：${ENTERPRISE_MEETING_SECRETARY_ROLE}
+任务：阅读、理解并深度提炼由 ASR 生成的会议转写文本。
+范围：下面是完整会议的第 ${chunkIndex + 1}/${totalChunks} 个片段，请只总结本片段中实际出现的信息。`;
+}
+
+function buildMergeRoleHeader(): string {
+  return `角色：${ENTERPRISE_MEETING_SECRETARY_ROLE}
+任务：将下面这些局部会议摘要归并为一份完整会议摘要。`;
+}
 
 export function chunkTranscriptForSummary(context: string, maxChunkChars = DEFAULT_MAX_CHUNK_CHARS): string[] {
   const cleaned = String(context || '').trim();
@@ -243,7 +255,7 @@ function mergePartialsLocally(
 
 function buildChunkPrompt(params: GenerateFullTranscriptSummaryParams, chunkIndex: number, totalChunks: number): string {
   if (params.modeNoteSections.length > 0) {
-    return `你是一位静默的会议记录员。下面是完整会议的第 ${chunkIndex + 1}/${totalChunks} 个片段，请只总结本片段中实际出现的信息。
+    return `${buildChunkRoleHeader(chunkIndex, totalChunks)}
 ${params.baseRules}
 
 需要填充的分区：
@@ -263,7 +275,7 @@ ${buildSectionKeys(params.modeNoteSections)}
 }`;
   }
 
-  return `你是一位静默的会议总结员。下面是完整会议的第 ${chunkIndex + 1}/${totalChunks} 个片段，请只总结本片段中实际出现的信息。
+  return `${buildChunkRoleHeader(chunkIndex, totalChunks)}
 
 ${params.baseRules}
 
@@ -279,7 +291,7 @@ ${params.baseRules}
 
 function buildMergePrompt(params: GenerateFullTranscriptSummaryParams, chunkSummaries: PostCallSummaryData[]): string {
   if (params.modeNoteSections.length > 0) {
-    return `你是一位资深产品经理。请将下面这些局部会议摘要归并为一份完整会议摘要。
+    return `${buildMergeRoleHeader()}
 ${params.baseRules}
 
 归并规则：
@@ -303,7 +315,7 @@ ${buildSectionKeys(params.modeNoteSections)}
 }`;
   }
 
-  return `你是一位资深产品经理。请将下面这些局部会议摘要归并为一份完整会议摘要。
+  return `${buildMergeRoleHeader()}
 
 ${params.baseRules}
 
