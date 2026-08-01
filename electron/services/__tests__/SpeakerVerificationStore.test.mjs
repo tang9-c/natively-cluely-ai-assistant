@@ -27,13 +27,16 @@ function createDb() {
       enrolled_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       device_fingerprint TEXT,
-      sample_count INTEGER NOT NULL DEFAULT 0
+      sample_count INTEGER NOT NULL DEFAULT 0,
+      enrollment_quality_json TEXT
     );
     CREATE TABLE speaker_profile_stats (
       profile_id TEXT PRIMARY KEY,
       total_verifications INTEGER NOT NULL DEFAULT 0,
       positive_verifications INTEGER NOT NULL DEFAULT 0,
-      last_verified_at INTEGER
+      last_verified_at INTEGER,
+      last_quality_score REAL,
+      last_quality_band TEXT
     );
   `);
   return { db, dir };
@@ -45,6 +48,15 @@ test('DatabaseManager migration creates speaker profile tables at version 28', (
   assert.match(db, /CREATE TABLE IF NOT EXISTS speaker_profiles/);
   assert.match(db, /CREATE TABLE IF NOT EXISTS speaker_profile_stats/);
   assert.match(db, /user_version = 28/);
+});
+
+test('DatabaseManager migration adds enrollment quality and aggregate stats columns at version 32', () => {
+  const db = read('electron/db/DatabaseManager.ts');
+  assert.match(db, /Version 31 -> 32: Add speaker enrollment quality calibration/);
+  assert.match(db, /ALTER TABLE speaker_profiles ADD COLUMN enrollment_quality_json TEXT/);
+  assert.match(db, /ALTER TABLE speaker_profile_stats ADD COLUMN last_quality_score REAL/);
+  assert.match(db, /ALTER TABLE speaker_profile_stats ADD COLUMN last_quality_band TEXT/);
+  assert.match(db, /user_version = 32/);
 });
 
 test('SettingsManager exposes local speaker verification mode', () => {
@@ -69,6 +81,14 @@ test('SpeakerProfileStore saves, loads, and hard-deletes only the ME profile', a
       threshold: 0.72,
       deviceFingerprint: 'Built-in Microphone',
       sampleCount: 3,
+      quality: {
+        minSelfSimilarity: 0.93,
+        meanSelfSimilarity: 0.96,
+        similarityStddev: 0.02,
+        calibratedThreshold: 0.86,
+        qualityScore: 0.94,
+        qualityBand: 'stable',
+      },
       nowMs: 1700000000000,
     });
 
@@ -78,6 +98,8 @@ test('SpeakerProfileStore saves, loads, and hard-deletes only the ME profile', a
     assert.deepEqual(Array.from(profile.embedding), Array.from(embedding));
     assert.equal(profile.threshold, 0.72);
     assert.equal(profile.sampleCount, 3);
+    assert.equal(profile.quality?.qualityBand, 'stable');
+    assert.equal(profile.quality?.qualityScore, 0.94);
 
     db.prepare(`
       INSERT INTO speaker_profile_stats

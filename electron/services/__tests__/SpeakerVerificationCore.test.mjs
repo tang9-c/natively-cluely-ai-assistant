@@ -27,6 +27,7 @@ class MemoryStore {
       updatedAt: input.nowMs ?? 1,
       deviceFingerprint: input.deviceFingerprint,
       sampleCount: input.sampleCount,
+      quality: input.quality,
     };
   }
   getStatus(mode = 'off') {
@@ -48,6 +49,14 @@ class FakeExtractor {
     return energy > 1
       ? new Float32Array(this.privateVector)
       : new Float32Array([0, 1, 0, 0]);
+  }
+}
+
+class SplitEmbeddingExtractor extends FakeExtractor {
+  calls = 0;
+  async extract() {
+    this.calls += 1;
+    return new Float32Array(this.calls % 2 ? [1, 0, 0, 0] : [0, 1, 0, 0]);
   }
 }
 
@@ -73,7 +82,28 @@ test('enrollment stores one normalized ME profile and discards raw audio', async
   assert.equal(store.profile.embeddingDim, 4);
   assert.equal(store.profile.sampleCount, 3);
   assert.equal(store.profile.deviceFingerprint, 'mic-a');
+  assert.equal(store.profile.quality.qualityBand, 'stable');
+  assert.ok(store.profile.threshold >= 0.72);
   assert.equal(Object.hasOwn(store.profile, 'samples'), false);
+});
+
+test('enrollment rejects split embeddings without writing an unstable profile', async () => {
+  const { SpeakerEnrollmentService } = await import('../../../dist-electron/electron/services/speaker/SpeakerEnrollmentService.js');
+  const store = new MemoryStore();
+  const service = new SpeakerEnrollmentService({
+    store,
+    extractor: new SplitEmbeddingExtractor(),
+  });
+
+  await assert.rejects(
+    service.enroll([
+      { samples: loudSamples(3), sampleRate: 16000 },
+      { samples: loudSamples(3), sampleRate: 16000 },
+      { samples: loudSamples(3), sampleRate: 16000 },
+    ]),
+    /speaker_enrollment_unstable_profile/,
+  );
+  assert.equal(store.profile, null);
 });
 
 test('verification skips when no profile exists', async () => {

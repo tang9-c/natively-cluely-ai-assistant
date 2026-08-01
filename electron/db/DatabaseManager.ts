@@ -1579,6 +1579,30 @@ export class DatabaseManager {
             })();
         }
 
+        // Version 31 -> 32: Add speaker enrollment quality calibration.
+        if (version < 32) {
+            console.log('[DatabaseManager] Applying migration v31 -> v32: Add speaker enrollment quality calibration');
+            const columnsToAdd = [
+                'ALTER TABLE speaker_profiles ADD COLUMN enrollment_quality_json TEXT',
+                'ALTER TABLE speaker_profile_stats ADD COLUMN last_quality_score REAL',
+                'ALTER TABLE speaker_profile_stats ADD COLUMN last_quality_band TEXT',
+            ];
+            for (const sql of columnsToAdd) {
+                try { this.db.exec(sql); } catch (_) { /* Column already exists */ }
+            }
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS speaker_profile_stats (
+                    profile_id TEXT PRIMARY KEY,
+                    total_verifications INTEGER NOT NULL DEFAULT 0,
+                    positive_verifications INTEGER NOT NULL DEFAULT 0,
+                    last_verified_at INTEGER,
+                    last_quality_score REAL,
+                    last_quality_band TEXT
+                );
+            `);
+            this.db.pragma('user_version = 32');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 

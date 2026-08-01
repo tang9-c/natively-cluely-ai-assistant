@@ -18,6 +18,17 @@ export interface SpeakerVerificationStatus {
   mode: SpeakerVerificationMode;
 }
 
+export type SpeakerVerificationQualityBand = 'stable' | 'weak_boundary' | 'needs_rerecord';
+
+export interface SpeakerEnrollmentQualitySummary {
+  minSelfSimilarity: number;
+  meanSelfSimilarity: number;
+  similarityStddev: number;
+  calibratedThreshold: number;
+  qualityScore: number;
+  qualityBand: SpeakerVerificationQualityBand;
+}
+
 export interface SpeakerProfileRecord {
   id: typeof SPEAKER_PROFILE_ME_ID;
   label: typeof SPEAKER_PROFILE_ME_LABEL;
@@ -30,6 +41,7 @@ export interface SpeakerProfileRecord {
   updatedAt: number;
   deviceFingerprint?: string;
   sampleCount: number;
+  quality?: SpeakerEnrollmentQualitySummary;
 }
 
 export interface SaveSpeakerProfileInput {
@@ -40,6 +52,7 @@ export interface SaveSpeakerProfileInput {
   threshold: number;
   deviceFingerprint?: string;
   sampleCount: number;
+  quality?: SpeakerEnrollmentQualitySummary;
   nowMs?: number;
 }
 

@@ -1,4 +1,5 @@
 import {
+  cosineSimilarity,
   meanEmbedding,
   measureAudioQuality,
   resampleFloat32To16k,
@@ -6,6 +7,7 @@ import {
 } from './speakerAudioUtils';
 import type {
   EnrollmentAudioSample,
+  SpeakerEnrollmentQualitySummary,
   SpeakerEmbeddingExtractorLike,
   SpeakerVerificationStatus,
 } from './speakerVerificationTypes';
@@ -18,12 +20,44 @@ export interface SpeakerEnrollmentServiceOptions {
   now?: () => number;
 }
 
+export const DEFAULT_SPEAKER_THRESHOLD = 0.72;
+export const MIN_ENROLLMENT_SELF_SIMILARITY = 0.78;
+export const MAX_ENROLLMENT_SIMILARITY_STDDEV = 0.12;
+
+function calculateQuality(embeddings: Float32Array[], embedding: Float32Array): SpeakerEnrollmentQualitySummary {
+  const similarities = embeddings.map(candidate => cosineSimilarity(candidate, embedding));
+  const minSelfSimilarity = Math.min(...similarities);
+  const meanSelfSimilarity = similarities.reduce((sum, similarity) => sum + similarity, 0) / similarities.length;
+  const similarityStddev = Math.sqrt(
+    similarities.reduce((sum, similarity) => sum + (similarity - meanSelfSimilarity) ** 2, 0) / similarities.length,
+  );
+  const calibratedThreshold = Math.max(
+    DEFAULT_SPEAKER_THRESHOLD,
+    Math.min(0.86, minSelfSimilarity - 0.04),
+  );
+  const qualityScore = Math.max(0, Math.min(100, Math.round((meanSelfSimilarity - similarityStddev) * 100))) / 100;
+  const qualityBand = minSelfSimilarity < calibratedThreshold
+    ? 'needs_rerecord'
+    : similarityStddev > 0.08
+      ? 'weak_boundary'
+      : 'stable';
+
+  return {
+    minSelfSimilarity,
+    meanSelfSimilarity,
+    similarityStddev,
+    calibratedThreshold,
+    qualityScore,
+    qualityBand,
+  };
+}
+
 export class SpeakerEnrollmentService {
   private readonly threshold: number;
   private readonly now: () => number;
 
   constructor(private readonly options: SpeakerEnrollmentServiceOptions) {
-    this.threshold = options.threshold ?? 0.72;
+    this.threshold = options.threshold ?? DEFAULT_SPEAKER_THRESHOLD;
     this.now = options.now ?? Date.now;
   }
 
@@ -54,14 +88,24 @@ export class SpeakerEnrollmentService {
     }
 
     const embedding = meanEmbedding(embeddings);
+    const quality = calculateQuality(embeddings, embedding);
+    if (
+      quality.minSelfSimilarity < MIN_ENROLLMENT_SELF_SIMILARITY
+      || quality.minSelfSimilarity < quality.calibratedThreshold
+      || quality.similarityStddev > MAX_ENROLLMENT_SIMILARITY_STDDEV
+    ) {
+      throw new Error('speaker_enrollment_unstable_profile');
+    }
+
     this.options.store.saveMeProfile({
       embedding,
       embeddingDim: this.options.extractor.dim,
       extractorModel: this.options.extractor.modelId,
       extractorVersion: this.options.extractor.version,
-      threshold: this.threshold,
+      threshold: Math.max(this.threshold, quality.calibratedThreshold),
       deviceFingerprint,
       sampleCount: samples.length,
+      quality,
       nowMs: this.now(),
     });
 
