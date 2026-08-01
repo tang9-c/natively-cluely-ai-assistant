@@ -110,7 +110,6 @@ export interface NormalizedProfileVisualizerData {
     email?: string;
     summary?: string;
     experienceCount: number;
-    projectCount: number;
     nodeCount: number;
     skills: string[];
     skillCount: number;

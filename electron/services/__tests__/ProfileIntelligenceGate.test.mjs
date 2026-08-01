@@ -58,6 +58,18 @@ describe('Profile Intelligence IPC: all features unconditionally available', () 
     const slice = sliceSafeHandleBlock(source, 'profile:get-status').slice(0, 1500);
     assert.ok(slice.includes('hasProfile: false'), 'profile:get-status must default to hasProfile=false when orchestrator missing');
   });
+
+  test('profile:select-file uses a generic profile document dialog label', () => {
+    const slice = sliceSafeHandleBlock(source, 'profile:select-file').slice(0, 1200);
+    assert.match(slice, /name:\s*'档案资料'/);
+    assert.doesNotMatch(slice, /name:\s*'简历文件'/);
+  });
+
+  test('profile:update-master-profile normalizes UI strings before persisting', () => {
+    const slice = sliceSafeHandleBlock(source, 'profile:update-master-profile').slice(0, 3000);
+    assert.match(slice, /normalizeMasterProfileForPersistence/);
+    assert.doesNotMatch(slice, /Array\.isArray\(profile\?\.skills\)\s*\?\s*profile\.skills\s*:\s*\[\]/);
+  });
 });
 
 describe('Profile Intelligence: current schema tables exist in the schema', () => {

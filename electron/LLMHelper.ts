@@ -1611,17 +1611,18 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           // depth scorer above stays unconditional so it keeps getting signal.
           // When the gate blocks, fall through entirely so the call proceeds
           // as a normal LLM request with no premium-flavored injection.
-          if (knowledgeResult && this.isPremiumKnowledgeInterceptAllowed()) {
+          if (knowledgeResult) {
+            const allowShortCircuit = this.isPremiumKnowledgeInterceptAllowed();
             // Live negotiation coaching short-circuit — bypass second LLM call.
             // Coaching payload travels on the dedicated handler channel, NOT
             // through the chat() return value. We return an empty string so
             // the caller emits no normal answer.
-            if (knowledgeResult.liveNegotiationResponse) {
+            if (allowShortCircuit && knowledgeResult.liveNegotiationResponse) {
               this.negotiationCoachingHandler?.(knowledgeResult.liveNegotiationResponse);
               return '';
             }
             // Intro question shortcut — return generated response directly
-            if (knowledgeResult.isIntroQuestion && knowledgeResult.introResponse) {
+            if (allowShortCircuit && knowledgeResult.isIntroQuestion && knowledgeResult.introResponse) {
               console.log('[LLMHelper] Knowledge mode: returning generated intro response');
               return knowledgeResult.introResponse;
             }
@@ -3568,16 +3569,17 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         // above stays unconditional so it keeps getting signal. When the gate
         // blocks, fall through entirely so the stream proceeds as a normal LLM
         // call with no premium-flavored injection.
-        if (knowledgeResult && this.isPremiumKnowledgeInterceptAllowed()) {
+        if (knowledgeResult) {
+          const allowShortCircuit = this.isPremiumKnowledgeInterceptAllowed();
           // Live negotiation coaching short-circuit — bypass second LLM call.
           // Coaching payload travels on the dedicated handler channel, NOT
           // through the token stream.
-          if (knowledgeResult.liveNegotiationResponse) {
+          if (allowShortCircuit && knowledgeResult.liveNegotiationResponse) {
             this.negotiationCoachingHandler?.(knowledgeResult.liveNegotiationResponse);
             return;
           }
           // Intro question shortcut — yield generated response directly
-          if (knowledgeResult.isIntroQuestion && knowledgeResult.introResponse) {
+          if (allowShortCircuit && knowledgeResult.isIntroQuestion && knowledgeResult.introResponse) {
             console.log('[LLMHelper] Knowledge mode (stream): returning generated intro response');
             yield knowledgeResult.introResponse;
             return;

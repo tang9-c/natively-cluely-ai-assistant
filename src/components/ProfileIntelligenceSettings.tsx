@@ -399,9 +399,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
     const [companyResearching, setCompanyResearching] = useState(false);
     const [companyDossier, setCompanyDossier] = useState<any>(null);
     const [companySearchQuotaExhausted, setCompanySearchQuotaExhausted] = useState(false);
-    const [negotiationScript, setNegotiationScript] = useState<any>(null);
-    const [negotiationGenerating, setNegotiationGenerating] = useState(false);
-    const [negotiationError, setNegotiationError] = useState('');
     const [customNotes, setCustomNotes] = useState('');
     const [customNotesSaved, setCustomNotesSaved] = useState(false);
     const customNotesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -414,7 +411,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
         window.electronAPI?.profileGetStatus?.().then(setProfileStatus).catch(() => { });
         window.electronAPI?.profileGetProfile?.().then((data: any) => {
             setProfileData(data);
-            if (data?.negotiationScript) setNegotiationScript(data.negotiationScript);
         }).catch(() => { });
         window.electronAPI?.profileGetNotes?.().then((res: any) => {
             if (res?.success) setCustomNotes(res.content ?? '');
@@ -545,16 +541,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         <div className="flex items-center gap-1.5">
                                                             <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
                                                             <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-widest">经验</span>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="h-8 w-px bg-border-subtle/60" />
-
-                                                    <div className="flex flex-col items-center justify-center flex-1">
-                                                        <span className="text-[20px] font-bold text-text-primary tracking-tight leading-none mb-1">{profileData?.projectCount || 0}</span>
-                                                        <div className="flex items-center gap-1.5">
-                                                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.4)]" />
-                                                            <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-widest">项目</span>
                                                         </div>
                                                     </div>
 
@@ -937,7 +923,7 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             setCompanyResearching(true);
                                                             setCompanySearchQuotaExhausted(false);
                                                             try {
-                                                                const result = await window.electronAPI?.profileResearchCompany?.(profileData.activeJD.company);
+                                                                const result = await window.electronAPI?.profileResearchCompany?.(profileData.activeJD.company, { forceRefresh: Boolean(companyDossier) });
                                                                 if (result?.success && result.dossier) {
                                                                     setCompanyDossier(result.dossier);
                                                                 }
@@ -1191,207 +1177,13 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                         ))}
                                                         className="text-xs text-accent-primary hover:underline inline-flex items-center gap-1"
                                                     >
-                                                        在新面板中调研此公司 →
+                                                        在新面板中打开此公司 →
                                                     </button>
                                                 </div>
                                             </div>
                                         </BezelCard>
                                     )}
 
-                                        <BezelCard delay={0.6}>
-
-                                                <div className="p-5">
-                                                    {/* Header row */}
-                                                    <div className="flex items-center justify-between mb-5">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="relative">
-                                                                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(6,182,212,0.1) 100%)', border: '1px solid rgba(16,185,129,0.25)' }}>
-                                                                    <Briefcase size={15} className="text-emerald-400" />
-                                                                </div>
-                                                                {negotiationScript && (
-                                                                    <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-500 border-2 border-bg-item-surface" />
-                                                                )}
-                                                            </div>
-                                                            <div>
-                                                                <h3 className="text-[13px] font-bold text-text-primary tracking-tight">谈判脚本</h3>
-                                                                <p className="text-[10px] text-text-tertiary mt-0.5 tracking-wide uppercase">
-                                                                    {negotiationScript ? `为 ${profileData?.activeJD?.company || '该职位'} 定制` : 'AI 薪资谈判指导'}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            {negotiationScript && (
-                                                                <button
-                                                                    onClick={async () => {
-                                                                        setNegotiationGenerating(true);
-                                                                        setNegotiationError('');
-                                                                        try {
-                                                                            const result = await window.electronAPI?.profileGenerateNegotiation?.(true);
-                                                                            if (result?.success && result.script) {
-                                                                                setNegotiationScript(result.script);
-                                                                            } else {
-                                                                                setNegotiationError(result?.error || '重新生成失败');
-                                                                            }
-                                                                        } catch { setNegotiationError('生成失败'); }
-                                                                        finally { setNegotiationGenerating(false); }
-                                                                    }}
-                                                                    disabled={negotiationGenerating}
-                                                                    title="重新生成脚本"
-                                                                    className="w-7 h-7 rounded-lg flex items-center justify-center text-text-tertiary hover:text-text-primary hover:bg-bg-input transition-all border border-border-subtle"
-                                                                >
-                                                                    <RefreshCw size={12} className={negotiationGenerating ? 'animate-spin' : ''} />
-                                                                </button>
-                                                            )}
-                                                            {!negotiationScript && (
-                                                                <MagneticButton
-                                                                    onClick={async () => {
-                                                                        setNegotiationGenerating(true);
-                                                                        setNegotiationError('');
-                                                                        try {
-                                                                            const result = await window.electronAPI?.profileGenerateNegotiation?.(false);
-                                                                            if (result?.success && result.script) {
-                                                                                setNegotiationScript(result.script);
-                                                                            } else {
-                                                                                setNegotiationError(result?.error || '生成失败');
-                                                                            }
-                                                                        } catch { setNegotiationError('生成失败'); }
-                                                                        finally { setNegotiationGenerating(false); }
-                                                                    }}
-                                                                    disabled={negotiationGenerating}
-                                                                    primary={true}
-                                                                    style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(6,182,212,0.15) 100%)', border: '1px solid rgba(16,185,129,0.3)', color: '#34d399' }}
-                                                                >
-                                                                    {negotiationGenerating ? <RefreshCw size={11} className="animate-spin" /> : <Sparkles size={11} />}
-                                                                    {negotiationGenerating ? '生成中…' : '生成脚本'}
-                                                                </MagneticButton>
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    {negotiationError && (
-                                                        <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
-                                                            <AlertCircle size={12} className="text-red-400 shrink-0" />
-                                                            <p className="text-[11px] text-red-400">{negotiationError}</p>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Empty state */}
-                                                    {!negotiationScript && !negotiationGenerating && !negotiationError && (
-                                                        <div className="flex flex-col items-center justify-center py-8 gap-3">
-                                                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(6,182,212,0.06) 100%)', border: '1px solid rgba(16,185,129,0.15)' }}>
-                                                                <Briefcase size={20} className="text-emerald-500/50" />
-                                                            </div>
-                                                            <div className="text-center">
-                                                                <p className="text-[12px] font-medium text-text-secondary">尚无脚本</p>
-                                                                <p className="text-[10px] text-text-tertiary mt-0.5">Generate a personalized opening, justification &amp; counter-offer</p>
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                    {/* First-time generation skeleton — only when no prior script exists */}
-                                                    {negotiationGenerating && !negotiationScript && (
-                                                        <div className="space-y-3 py-2">
-                                                            {[40, 70, 55].map((w, i) => (
-                                                                <div key={i} className="h-3 rounded-full bg-bg-input animate-pulse" style={{ width: `${w}%`, animationDelay: `${i * 150}ms` }} />
-                                                            ))}
-                                                            <div className="h-12 rounded-lg bg-bg-input animate-pulse mt-2" style={{ animationDelay: '450ms' }} />
-                                                        </div>
-                                                    )}
-
-                                                    {/* Existing script stays visible during regeneration to avoid a layout
-                                                        collapse → re-expand jump (which Framer's layout animation amplifies).
-                                                        We just dim it and let the spinner in the refresh button signal work. */}
-                                                    {negotiationScript && (
-                                                        <div
-                                                            className="space-y-3 transition-opacity duration-300"
-                                                            style={{
-                                                                opacity: negotiationGenerating ? 0.45 : 1,
-                                                                pointerEvents: negotiationGenerating ? 'none' : 'auto',
-                                                            }}>
-                                                            {/* Salary Range Hero */}
-                                                            {negotiationScript.salary_range && (
-                                                                <div className="rounded-xl p-4 flex items-center justify-between" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(6,182,212,0.06) 100%)', border: '1px solid rgba(16,185,129,0.18)' }}>
-                                                                    <div>
-                                                                        <div className="text-[9px] font-bold uppercase tracking-widest text-emerald-500/70 mb-1">目标薪酬</div>
-                                                                        <div className="text-xl font-bold tracking-tight" style={{ color: '#34d399' }}>
-                                                                            {negotiationScript.salary_range.currency} {negotiationScript.salary_range.min.toLocaleString()}
-                                                                            <span className="text-text-tertiary font-normal mx-2">–</span>
-                                                                            {negotiationScript.salary_range.max.toLocaleString()}
-                                                                        </div>
-                                                                        {negotiationScript.sources?.length > 0 && (
-                                                                            <div className="text-[9px] text-text-tertiary mt-1">{negotiationScript.sources.length} 个市场来源</div>
-                                                                        )}
-                                                                    </div>
-                                                                    <span className={`text-[9px] font-bold px-2 py-1 rounded-full tracking-wide ${
-                                                                        negotiationScript.salary_range.confidence === 'high' ? 'text-emerald-400 bg-emerald-500/15 border border-emerald-500/25' :
-                                                                        negotiationScript.salary_range.confidence === 'medium' ? 'text-yellow-400 bg-yellow-500/15 border border-yellow-500/25' :
-                                                                        'text-text-tertiary bg-bg-input border border-border-subtle'
-                                                                    }`}>
-                                                                        {(negotiationScript.salary_range.confidence || 'low').toUpperCase()}
-                                                                    </span>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Step cards */}
-                                                            {[
-                                                                {
-                                                                    step: '01',
-                                                                    label: '开场',
-                                                                    sublabel: '当被问及薪资期望时',
-                                                                    content: negotiationScript.opening_line,
-                                                                    accent: '#10b981',
-                                                                    accentBg: 'rgba(16,185,129,0.07)',
-                                                                    accentBorder: 'rgba(16,185,129,0.2)',
-                                                                    quote: true,
-                                                                },
-                                                                {
-                                                                    step: '02',
-                                                                    label: '论证你的要价',
-                                                                    sublabel: '将你的业绩与数字关联',
-                                                                    content: negotiationScript.justification,
-                                                                    accent: '#60a5fa',
-                                                                    accentBg: 'rgba(96,165,250,0.07)',
-                                                                    accentBorder: 'rgba(96,165,250,0.2)',
-                                                                    quote: false,
-                                                                },
-                                                                {
-                                                                    step: '03',
-                                                                    label: '反击与坚持',
-                                                                    sublabel: '如果对方报价更低',
-                                                                    content: negotiationScript.counter_offer_fallback,
-                                                                    accent: '#fb923c',
-                                                                    accentBg: 'rgba(251,146,60,0.07)',
-                                                                    accentBorder: 'rgba(251,146,60,0.2)',
-                                                                    quote: true,
-                                                                },
-                                                            ].filter(s => s.content).map((s) => ({ ...s, content: s.content.replace(/^["'"']+|["'"']+$/g, '').trim() })).map((s) => (
-                                                                <div key={s.step} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${s.accentBorder}`, background: s.accentBg }}>
-                                                                    <div className="flex items-center justify-between px-3.5 pt-3 pb-2">
-                                                                        <div className="flex items-center gap-2">
-                                                                            <span className="text-[10px] font-black tracking-widest" style={{ color: s.accent, opacity: 0.6 }}>步骤 {s.step}</span>
-                                                                            <span className="text-[11px] font-bold text-text-primary">{s.label}</span>
-                                                                        </div>
-                                                                        <button
-                                                                            onClick={() => navigator.clipboard?.writeText(s.content)}
-                                                                            title="复制到剪贴板"
-                                                                            className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-medium transition-all hover:bg-bg-input text-text-tertiary hover:text-text-secondary"
-                                                                        >
-                                                                            <Check size={9} />
-                                                                            复制
-                                                                        </button>
-                                                                    </div>
-                                                                    <p className="text-[10px] text-text-tertiary px-3.5 pb-2 -mt-1 tracking-wide">{s.sublabel}</p>
-                                                                    <div className="mx-3.5 mb-3.5">
-                                                                        <p className={`text-[12px] leading-relaxed text-text-primary ${s.quote ? 'pl-3 italic' : ''}`}>
-                                                                            {s.content}
-                                                                        </p>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                        </BezelCard>
                                             </div>
                                         </details>
                                     )}

@@ -47,7 +47,6 @@ export function normalizeProfileVisualizerData(
         email: profileData?.identity?.email?.trim() || undefined,
         summary: profileData?.summary?.trim() || undefined,
         experienceCount: Math.max(0, profileData?.experienceCount ?? 0),
-        projectCount: Math.max(0, profileData?.projectCount ?? 0),
         nodeCount: Math.max(0, profileData?.nodeCount ?? 0),
         skills,
         skillCount: skills.length,
@@ -111,14 +110,10 @@ export const ProfileVisualizer: React.FC<ProfileVisualizerProps> = ({ profileDat
                 </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-md border border-border-subtle bg-bg-input/45 px-3 py-2">
                     <p className="text-[10px] font-semibold text-text-tertiary">经验</p>
                     <p className="mt-1 text-base font-bold text-text-primary">{normalized.experienceCount}</p>
-                </div>
-                <div className="rounded-md border border-border-subtle bg-bg-input/45 px-3 py-2">
-                    <p className="text-[10px] font-semibold text-text-tertiary">项目</p>
-                    <p className="mt-1 text-base font-bold text-text-primary">{normalized.projectCount}</p>
                 </div>
                 <div className="rounded-md border border-border-subtle bg-bg-input/45 px-3 py-2">
                     <p className="text-[10px] font-semibold text-text-tertiary">技能</p>

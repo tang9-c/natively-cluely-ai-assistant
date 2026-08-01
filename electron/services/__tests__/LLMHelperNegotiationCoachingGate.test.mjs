@@ -296,11 +296,10 @@ test('chatWithGemini: handler is NOT invoked when active mode is technical-inter
 });
 
 // ---------------------------------------------------------------------------
-// Broader gate coverage (issue #272 follow-up). The gate now suppresses the
-// ENTIRE premium knowledge intercept — not just coaching — for templates where
-// it is contextually wrong. This covers the two sibling vectors of the same
-// bug class that the code-reviewer flagged: intro-question shortcut and
-// premium prompt/context injection.
+// Broader gate coverage (issue #272 follow-up). The gate suppresses the
+// short-circuit behaviors (coaching / canned intro) for templates where they
+// are contextually wrong, but request-scoped profile/scenario context should
+// still be allowed so Profile Intelligence materials can ground normal answers.
 // ---------------------------------------------------------------------------
 
 function buildIntroOrchestratorStub() {
@@ -417,7 +416,7 @@ test('streamChat: premium context block REACHES dispatch in looking-for-work (po
   );
 });
 
-test('streamChat: premium context block is SUPPRESSED at dispatch in technical-interview (issue #272)', async () => {
+test('streamChat: profile/scenario context block still reaches dispatch in technical-interview', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildInjectionOrchestratorStub());
   const calls = attachDispatchSpy(helper);
@@ -427,16 +426,13 @@ test('streamChat: premium context block is SUPPRESSED at dispatch in technical-i
 
   const dispatched = calls.find(c => c.via === 'streamWithCustom');
   assert.ok(dispatched, 'streamWithCustom must be reached after fall-through');
-  // The gate must block the contextBlock injection — no sentinel can reach
-  // the provider. This is the falsifiable assertion: removing the gate would
-  // flip both substrings to true.
   assert.ok(
-    !dispatched.context.includes('PREMIUM_CONTEXT_SENTINEL'),
-    `technical-interview must NOT inject premium context at dispatch (issue #272); saw context=${JSON.stringify(dispatched.context).slice(0, 200)}`,
+    dispatched.context.includes('PREMIUM_CONTEXT_SENTINEL'),
+    `technical-interview must still inject request-scoped profile/scenario context; saw context=${JSON.stringify(dispatched.context).slice(0, 200)}`,
   );
   assert.ok(
-    !dispatched.systemPrompt.includes('PREMIUM_PROMPT_SENTINEL'),
-    `technical-interview must NOT inject premium system prompt at dispatch; saw systemPrompt=${JSON.stringify(dispatched.systemPrompt).slice(0, 200)}`,
+    dispatched.systemPrompt.includes('PREMIUM_PROMPT_SENTINEL'),
+    `technical-interview must still inject request-scoped scenario system prompt; saw systemPrompt=${JSON.stringify(dispatched.systemPrompt).slice(0, 200)}`,
   );
 });
 
@@ -453,7 +449,7 @@ async function callChatWithSystem(helper, message) {
   }
 }
 
-test('chatWithGemini: premium context block is SUPPRESSED at dispatch in team-meet (issue #272)', async () => {
+test('chatWithGemini: profile/scenario context block reaches dispatch in team-meet', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildInjectionOrchestratorStub());
   const calls = attachDispatchSpy(helper);
@@ -464,12 +460,12 @@ test('chatWithGemini: premium context block is SUPPRESSED at dispatch in team-me
   const dispatched = calls.find(c => c.via === 'executeCustomProvider');
   assert.ok(dispatched, 'executeCustomProvider must be reached after fall-through');
   assert.ok(
-    !dispatched.context.includes('PREMIUM_CONTEXT_SENTINEL'),
-    'team-meet must NOT inject premium context at dispatch (issue #272 sibling)',
+    dispatched.context.includes('PREMIUM_CONTEXT_SENTINEL'),
+    'team-meet must still inject request-scoped profile/scenario context',
   );
   assert.ok(
-    !dispatched.combinedMessage.includes('PREMIUM_PROMPT_SENTINEL'),
-    'team-meet must NOT inject premium system prompt into the combined message',
+    dispatched.combinedMessage.includes('PREMIUM_PROMPT_SENTINEL'),
+    'team-meet must still inject request-scoped scenario system prompt into the combined message',
   );
   // Sanity: the spy actually returned something rather than the function
   // erroring out before reaching dispatch.

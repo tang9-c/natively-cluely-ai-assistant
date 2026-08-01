@@ -4385,6 +4385,73 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Profile Engine IPC Handlers
   // ==========================================
 
+  function safeJsonParseProfileField(value: unknown, fallback: any): any {
+    if (typeof value !== 'string' || !value.trim()) return fallback;
+    try {
+      const parsed = JSON.parse(value);
+      return parsed ?? fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function normalizeProfileListInput(value: unknown): string[] {
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => String(item ?? '').trim())
+        .filter(Boolean)
+        .slice(0, 100);
+    }
+    if (typeof value !== 'string') return [];
+    return value
+      .split(/[\n,，;；]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 100);
+  }
+
+  function normalizeMasterProfileForUi(row: any): any {
+    if (!row) return null;
+    const skills = safeJsonParseProfileField(row.skills_json, row.skills ?? []);
+    return {
+      ...row,
+      displayName: row.display_name ?? row.displayName ?? '',
+      headline: row.headline ?? '',
+      summary: row.summary ?? '',
+      contactInfo: safeJsonParseProfileField(row.contact_info_json, row.contactInfo ?? {}),
+      experience: safeJsonParseProfileField(row.experience_json, row.experience ?? []),
+      skills: Array.isArray(skills) ? skills.join('\n') : String(skills ?? ''),
+    };
+  }
+
+  function normalizeMasterProfileForPersistence(profile: any): {
+    displayName: string | null;
+    headline: string | null;
+    summary: string;
+    contactInfoJson: string;
+    experienceJson: string;
+    skillsJson: string;
+  } {
+    return {
+      displayName: typeof profile?.displayName === 'string' && profile.displayName.trim()
+        ? profile.displayName.trim()
+        : null,
+      headline: typeof profile?.headline === 'string' && profile.headline.trim()
+        ? profile.headline.trim()
+        : null,
+      summary: typeof profile?.summary === 'string' ? profile.summary.slice(0, 4000) : '',
+      contactInfoJson: JSON.stringify(
+        typeof profile?.contactInfo === 'string'
+          ? { note: profile.contactInfo.slice(0, 4000) }
+          : (profile?.contactInfo ?? {}),
+      ),
+      experienceJson: JSON.stringify(
+        Array.isArray(profile?.experience) ? profile.experience : [],
+      ),
+      skillsJson: JSON.stringify(normalizeProfileListInput(profile?.skills)),
+    };
+  }
+
   safeHandle('profile:upload-resume', async (_, filePath: string) => {
     try {
       console.log(`[IPC] profile:upload-resume called with: ${filePath}`);
@@ -4469,7 +4536,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
-        filters: [{ name: '简历文件', extensions: ['pdf', 'docx', 'txt', 'md', 'markdown'] }],
+        filters: [{ name: '档案资料', extensions: ['pdf', 'docx', 'txt', 'md', 'markdown'] }],
       });
 
       if (result.canceled || result.filePaths.length === 0) {
@@ -4633,7 +4700,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:get-master-profile', async () => {
     try {
-      return { success: true, profile: DatabaseManager.getInstance().getProfileMaster() };
+      return { success: true, profile: normalizeMasterProfileForUi(DatabaseManager.getInstance().getProfileMaster()) };
     } catch (error: any) {
       console.error('[IPC] profile:get-master-profile error:', redactForLog([error]));
       return { success: false, profile: null, error: error.message };
@@ -4642,14 +4709,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:update-master-profile', async (_, profile: any) => {
     try {
-      DatabaseManager.getInstance().updateProfileMaster({
-        displayName: profile?.displayName ?? null,
-        headline: profile?.headline ?? null,
-        summary: typeof profile?.summary === 'string' ? profile.summary.slice(0, 4000) : '',
-        contactInfoJson: JSON.stringify(profile?.contactInfo ?? {}),
-        experienceJson: JSON.stringify(Array.isArray(profile?.experience) ? profile.experience : []),
-        skillsJson: JSON.stringify(Array.isArray(profile?.skills) ? profile.skills : []),
-      });
+      DatabaseManager.getInstance().updateProfileMaster(normalizeMasterProfileForPersistence(profile));
       return { success: true };
     } catch (error: any) {
       console.error('[IPC] profile:update-master-profile error:', redactForLog([error]));
