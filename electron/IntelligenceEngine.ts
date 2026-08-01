@@ -1046,7 +1046,18 @@ export class IntelligenceEngine extends EventEmitter {
     }
 
     private shouldSkipDynamicActionForSpeaker(segment: TranscriptSegment): boolean {
-        return segment.speakerVerification?.isMe === true;
+        const verification = segment.speakerVerification;
+        if (!verification
+            || verification.provider !== 'local-speaker-verification'
+            || verification.profileId !== 'me'
+            || verification.isMe !== true) {
+            return false;
+        }
+
+        const { confidence, threshold } = verification;
+        return Number.isFinite(confidence)
+            && Number.isFinite(threshold)
+            && confidence >= threshold;
     }
 
     private async detectConfirmAndEmitDynamicActions(

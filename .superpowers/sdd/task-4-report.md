@@ -10,7 +10,7 @@ DONE
 
 ## Typecheck result
 
-`npm run typecheck:electron` — 0 error（clean pass, no output beyond the tsc command echo）。
+`npm run typecheck:electron` — 0 error（clean pass, no output beyond the npm script echo）。
 
 ## Exploration findings
 
@@ -45,7 +45,7 @@ I followed the brief's spec exactly: `safeHandle('inject-transcript-turn', ...)`
 ### Deviations from the brief
 
 1. **Removed the `import type { IntentClassifier } from '../llm/IntentClassifier';` line from `injectTranscriptTurnForTest.ts`.**
-   The runtime body uses `(globalThis as any).__intentClassifier as { ... }` — the `IntentClassifier` type is never referenced. Per the task instructions ("if the linter may flag it — if so, remove the import type line"), this avoids an unused-import typecheck warning. The helper file's top-of-file comment block and the function JSDoc are preserved.
+   The runtime body uses `(globalThis as any).__intentClassifier as { ... }` — the `IntentClassifier` type is never referenced. Per the task instructions ("if the linter may flag it — if so, remove the import type line"), this avoids an unused-import typecheck warning.
 2. **Placement in `ipcHandlers.ts`.**
    The brief says "在 `safeHandle` 注册块底部追加". I placed the `if (process.env.NODE_ENV === 'test') { safeHandle(...) }` block immediately after the existing `safeHandle('test-get-mode-context', ...)` handler and before the `// Service Account Selection` comment. This keeps all test-mode handlers grouped together.
 3. **Placement in `preload.ts`.**
@@ -84,3 +84,23 @@ DONE
   - after:  `23` (last byte `0x0A '\n'`)
 - `git show --stat HEAD` → `1 file changed, 1 insertion(+), 1 deletion(-)` (only the trailing newline).
 - `npm run typecheck:electron` → 0 errors (clean `tsc -p electron/tsconfig.json --noEmit`, no output beyond the npm script header).
+
+## Task 4 Dynamic Action Speaker Verification
+
+### Status
+
+DONE
+
+### Implementation
+
+`shouldSkipDynamicActionForSpeaker(segment)` now skips only when the local speaker verification provider identifies profile `me`, `isMe === true`, both confidence values are finite, and `confidence >= threshold`. The dynamic action speaker channel判定 remains unchanged.
+
+### Verification
+
+- `rtk proxy npm run build:electron` — passed.
+- `rtk proxy node --test electron/services/__tests__/IntelligenceEngineDynamicActions.test.mjs` — passed, 38/38.
+- Added coverage for low-confidence ME, missing threshold, and mismatched provider continuing assessment.
+
+### Concerns
+
+The test output includes existing stub initialization logs (`Intent settings unavailable`, `runSkillWatcher failed`); they do not affect assertions.

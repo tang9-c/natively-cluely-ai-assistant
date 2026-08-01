@@ -198,6 +198,96 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(calls.length, 0);
   });
 
+  test('low-confidence ME speaker verification continues dynamic action assessment', async () => {
+    const { engine } = await makeEngine();
+    const calls = [];
+    engine.setDynamicActionContext({
+      sessionId: 'sess-speaker-low-confidence',
+      modeId: 'mode-sales',
+      modeTemplateType: 'sales',
+    });
+    engine._setDynamicActionEngineForTest({
+      detectSignalCandidates: () => [
+        { trigger: { type: 'pricing_objection' }, match: '价格太高', index: 0 },
+      ],
+      assessSignals: async input => {
+        calls.push(input);
+        return [];
+      },
+      detectActions: () => [],
+      acceptAction: () => null,
+      dismissAction: () => {},
+      getTopActions: () => [],
+    });
+
+    engine.handleTranscript({
+      speaker: 'user',
+      text: '这个价格太高了，我们预算不够',
+      timestamp: Date.now(),
+      final: true,
+      speakerVerification: {
+        provider: 'local-speaker-verification',
+        profileId: 'me',
+        isMe: true,
+        confidence: 0.41,
+        threshold: 0.8,
+      },
+    }, true);
+    await waitForAsyncSignals();
+
+    assert.equal(calls.length, 1);
+  });
+
+  test('malformed or mismatched speaker verification continues dynamic action assessment', async () => {
+    for (const [label, speakerVerification] of [
+      ['missing threshold', {
+        provider: 'local-speaker-verification',
+        profileId: 'me',
+        isMe: true,
+        confidence: 0.91,
+      }],
+      ['mismatched provider', {
+        provider: 'doubao-auc',
+        profileId: 'me',
+        isMe: true,
+        confidence: 0.91,
+        threshold: 0.8,
+      }],
+    ]) {
+      const { engine } = await makeEngine();
+      const calls = [];
+      engine.setDynamicActionContext({
+        sessionId: `sess-speaker-${label.replaceAll(' ', '-')}`,
+        modeId: 'mode-sales',
+        modeTemplateType: 'sales',
+      });
+      engine._setDynamicActionEngineForTest({
+        detectSignalCandidates: () => [
+          { trigger: { type: 'pricing_objection' }, match: '价格太高', index: 0 },
+        ],
+        assessSignals: async input => {
+          calls.push(input);
+          return [];
+        },
+        detectActions: () => [],
+        acceptAction: () => null,
+        dismissAction: () => {},
+        getTopActions: () => [],
+      });
+
+      engine.handleTranscript({
+        speaker: 'user',
+        text: '这个价格太高了，我们预算不够',
+        timestamp: Date.now(),
+        final: true,
+        speakerVerification,
+      }, true);
+      await waitForAsyncSignals();
+
+      assert.equal(calls.length, 1, `${label} metadata must not skip assessment`);
+    }
+  });
+
   test('non-ME and missing speaker verification continue dynamic action assessment', async () => {
     const { engine } = await makeEngine();
     const calls = [];
