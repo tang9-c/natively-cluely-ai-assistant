@@ -1714,9 +1714,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const qcloudChatModel = chatPromptOptions?.qcloudModel
         ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_MODEL : undefined);
       const qcloudThinking = chatPromptOptions?.activeSkill ? { type: 'enabled' as const } : chatPromptOptions?.qcloudThinking;
-      const qcloudChatTimeoutMs = chatPromptOptions?.activeSkill
-        ? QCLOUD_SKILL_CHAT_TIMEOUT_MS
-        : chatPromptOptions?.totalTimeoutMs;
+      const qcloudChatTimeoutMs = chatPromptOptions?.totalTimeoutMs
+        ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_TIMEOUT_MS : undefined);
 
       if (ollamaAvailable) {
         return await this.callOllama(combinedMessages.gemini, imagePaths, undefined);
@@ -3695,9 +3694,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const qcloudChatModel = chatPromptOptions?.qcloudModel
       ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_MODEL : undefined);
     const qcloudThinking = chatPromptOptions?.activeSkill ? { type: 'enabled' as const } : chatPromptOptions?.qcloudThinking;
-    const qcloudChatTimeoutMs = chatPromptOptions?.activeSkill
-      ? QCLOUD_SKILL_CHAT_TIMEOUT_MS
-      : chatPromptOptions?.totalTimeoutMs;
+    const qcloudChatTimeoutMs = chatPromptOptions?.totalTimeoutMs
+      ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_TIMEOUT_MS : undefined);
     // Profile context is already merged into `context` above; cloud and local
     // providers now receive the same combined context.
     const combinedContext = context;

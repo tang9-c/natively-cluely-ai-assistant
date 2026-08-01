@@ -77,7 +77,7 @@ test('LLMHelper uses turbo with thinking for QCLOUD skill requests and keeps lit
   assert.match(helper, /QCLOUD_MEETING_SUMMARY_MODEL/);
   assert.match(helper, /QCLOUD_MEETING_SUMMARY_TIMEOUT_MS/);
   assert.match(helper, /chatPromptOptions\?\.activeSkill\s*\?\s*QCLOUD_SKILL_CHAT_MODEL\s*:\s*undefined/);
-  assert.match(helper, /chatPromptOptions\?\.activeSkill\s*\?\s*QCLOUD_SKILL_CHAT_TIMEOUT_MS\s*:\s*chatPromptOptions\?\.totalTimeoutMs/);
+  assert.match(helper, /chatPromptOptions\?\.totalTimeoutMs\s*\?\?\s*\(\s*chatPromptOptions\?\.activeSkill\s*\?\s*QCLOUD_SKILL_CHAT_TIMEOUT_MS\s*:\s*undefined\s*\)/);
   assert.match(helper, /chatPromptOptions\?\.activeSkill\s*\?\s*\{\s*type:\s*['"]enabled['"]\s+as\s+const\s*\}\s*:\s*chatPromptOptions\?\.qcloudThinking/);
   assert.match(helper, /qcloudModel:\s*qcloudChatModel/);
   assert.match(helper, /qcloudThinking:\s*qcloudThinking/);

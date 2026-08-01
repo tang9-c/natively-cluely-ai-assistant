@@ -48,7 +48,7 @@ test('non-streaming chat propagates the resolved QCLOUD timeout to Natively prov
   assert.equal(timeoutForwardingCalls.length, 2);
   assert.match(
     chatBlock,
-    /chatPromptOptions\?\.activeSkill\s*\?\s*QCLOUD_SKILL_CHAT_TIMEOUT_MS\s*:\s*chatPromptOptions\?\.totalTimeoutMs/,
+    /chatPromptOptions\?\.totalTimeoutMs\s*\?\?\s*\(\s*chatPromptOptions\?\.activeSkill\s*\?\s*QCLOUD_SKILL_CHAT_TIMEOUT_MS\s*:\s*undefined\s*\)/,
   );
 });
 
@@ -77,5 +77,5 @@ test('QCLOUD has a provider limiter so realtime classifiers cannot stampede summ
   const llm = read('electron/LLMHelper.ts');
 
   assert.match(rateLimiter, /qcloud: new RateLimiter\(/);
-  assert.match(llm, /await this\.rateLimiters\.qcloud\.acquire\(\)/);
+  assert.match(llm, /await this\.rateLimiters\.qcloud\.acquire\([^)]*\)/);
 });
