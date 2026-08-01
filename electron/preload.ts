@@ -192,8 +192,9 @@ interface ElectronAPI {
   setSpeakerSeparationMode: (mode: 'auto' | 'off') => Promise<{ success: boolean; error?: string }>;
   getSpeakerVerificationMode: () => Promise<'off' | 'local'>;
   setSpeakerVerificationMode: (mode: 'off' | 'local') => Promise<{ success: boolean; error?: string }>;
-  speakerVerificationGetStatus: () => Promise<{ enrolled: boolean; enrolledAt?: number; model?: string; mode: 'off' | 'local' }>;
-  speakerVerificationEnroll: (samples: Array<{ samples: number[]; sampleRate: number; deviceFingerprint?: string }>) => Promise<{ success: boolean; status?: { enrolled: boolean; enrolledAt?: number; model?: string; mode: 'off' | 'local' }; error?: string }>;
+  speakerVerificationGetStatus: () => Promise<import('../src/types/electron').SpeakerVerificationStatus>;
+  speakerVerificationGetHealth: () => Promise<import('../src/types/electron').SpeakerVerificationHealth>;
+  speakerVerificationEnroll: (samples: Array<{ samples: number[]; sampleRate: number; deviceFingerprint?: string }>) => Promise<{ success: boolean; status?: import('../src/types/electron').SpeakerVerificationStatus; error?: string }>;
   speakerVerificationDeleteProfile: () => Promise<{ success: boolean; error?: string }>;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
   localWhisperSetModel: (modelId: string) => Promise<{ success: boolean }>;
@@ -1236,6 +1237,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setSpeakerVerificationMode: (mode: 'off' | 'local') =>
     ipcRenderer.invoke('set-speaker-verification-mode', mode),
   speakerVerificationGetStatus: () => ipcRenderer.invoke('speaker-verification:get-status'),
+  speakerVerificationGetHealth: () => ipcRenderer.invoke('speaker-verification:get-health'),
   speakerVerificationEnroll: (samples: Array<{ samples: number[]; sampleRate: number; deviceFingerprint?: string }>) =>
     ipcRenderer.invoke('speaker-verification:enroll', samples),
   speakerVerificationDeleteProfile: () => ipcRenderer.invoke('speaker-verification:delete-profile'),

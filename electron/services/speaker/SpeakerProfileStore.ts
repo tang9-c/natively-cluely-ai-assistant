@@ -5,8 +5,10 @@ import {
   type SaveSpeakerProfileInput,
   type SpeakerEnrollmentQualitySummary,
   type SpeakerProfileRecord,
+  type SpeakerVerificationHealth,
   type SpeakerVerificationMode,
   type SpeakerVerificationStatus,
+  type SpeakerVerificationStats,
 } from './speakerVerificationTypes';
 
 interface DbProvider {
@@ -41,15 +43,95 @@ function qualityFromRow(row: Record<string, unknown>): SpeakerEnrollmentQualityS
 export class SpeakerProfileStore {
   constructor(private readonly dbProvider: DbProvider) {}
 
-  getStatus(mode: SpeakerVerificationMode = 'off'): SpeakerVerificationStatus {
+  getStatus(mode: SpeakerVerificationMode = 'off', health?: SpeakerVerificationHealth): SpeakerVerificationStatus {
     const profile = this.getMeProfile();
-    if (!profile) return { enrolled: false, mode };
+    const stats = this.getVerificationStats();
+    if (!profile) return {
+      enrolled: false,
+      enabled: false,
+      mode,
+      health: { state: 'not_enrolled' },
+      stats,
+    };
+    const resolvedHealth = health ?? { state: 'ready' as const };
+    const recentFailure = stats.lastFailureAt !== undefined && Date.now() - stats.lastFailureAt < 24 * 60 * 60 * 1000;
+    const isDegraded = (profile.quality?.qualityBand !== undefined
+      && profile.quality.qualityBand !== 'stable') || recentFailure;
+    const state = mode === 'off'
+      ? 'paused'
+      : resolvedHealth.state === 'ready' && isDegraded
+        ? 'degraded'
+        : resolvedHealth.state;
     return {
       enrolled: true,
+      enabled: state === 'ready' || state === 'degraded',
       enrolledAt: profile.enrolledAt,
       model: profile.extractorModel,
       mode,
+      health: state === resolvedHealth.state ? resolvedHealth : { state },
+      stats,
     };
+  }
+
+  getVerificationStats(): SpeakerVerificationStats {
+    const db = this.dbProvider.getDb();
+    const empty: SpeakerVerificationStats = {
+      totalVerifications: 0,
+      positiveVerifications: 0,
+      lowQualitySkips: 0,
+      lowConfidenceRejections: 0,
+      errorCount: 0,
+    };
+    if (!db) return empty;
+    try {
+      const row = db.prepare(`
+        SELECT total_verifications, positive_verifications, low_quality_skips,
+               low_confidence_rejections, error_count, last_verified_at, last_failure_at
+        FROM speaker_profile_stats WHERE profile_id = ?
+      `).get(SPEAKER_PROFILE_ME_ID) as Record<string, unknown> | undefined;
+      if (!row) return empty;
+      return {
+        totalVerifications: Number(row.total_verifications) || 0,
+        positiveVerifications: Number(row.positive_verifications) || 0,
+        lowQualitySkips: Number(row.low_quality_skips) || 0,
+        lowConfidenceRejections: Number(row.low_confidence_rejections) || 0,
+        errorCount: Number(row.error_count) || 0,
+        lastVerifiedAt: typeof row.last_verified_at === 'number' ? row.last_verified_at : undefined,
+        lastFailureAt: typeof row.last_failure_at === 'number' ? row.last_failure_at : undefined,
+      };
+    } catch {
+      return empty;
+    }
+  }
+
+  recordVerification(result: 'verified' | 'low_quality' | 'error', isMe?: boolean): void {
+    const db = this.dbProvider.getDb();
+    if (!db) return;
+    const now = Date.now();
+    try {
+      const total = result === 'verified' ? 1 : 0;
+      const positive = result === 'verified' && isMe ? 1 : 0;
+      const lowQuality = result === 'low_quality' ? 1 : 0;
+      const rejected = result === 'verified' && !isMe ? 1 : 0;
+      const errors = result === 'error' ? 1 : 0;
+      const failureAt = result === 'verified' && isMe ? null : now;
+      db.prepare(`
+        INSERT INTO speaker_profile_stats (
+          profile_id, total_verifications, positive_verifications, low_quality_skips,
+          low_confidence_rejections, error_count, last_verified_at, last_failure_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(profile_id) DO UPDATE SET
+          total_verifications = total_verifications + excluded.total_verifications,
+          positive_verifications = positive_verifications + excluded.positive_verifications,
+          low_quality_skips = low_quality_skips + excluded.low_quality_skips,
+          low_confidence_rejections = low_confidence_rejections + excluded.low_confidence_rejections,
+          error_count = error_count + excluded.error_count,
+          last_verified_at = COALESCE(excluded.last_verified_at, last_verified_at),
+          last_failure_at = COALESCE(excluded.last_failure_at, last_failure_at)
+      `).run(SPEAKER_PROFILE_ME_ID, total, positive, lowQuality, rejected, errors, result === 'verified' ? now : null, failureAt);
+    } catch {
+      // Runtime telemetry must never interrupt transcription.
+    }
   }
 
   getMeProfile(): SpeakerProfileRecord | null {

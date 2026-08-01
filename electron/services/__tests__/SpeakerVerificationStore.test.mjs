@@ -41,7 +41,11 @@ function createDb() {
       positive_verifications INTEGER NOT NULL DEFAULT 0,
       last_verified_at INTEGER,
       last_quality_score REAL,
-      last_quality_band TEXT
+      last_quality_band TEXT,
+      low_quality_skips INTEGER NOT NULL DEFAULT 0,
+      low_confidence_rejections INTEGER NOT NULL DEFAULT 0,
+      error_count INTEGER NOT NULL DEFAULT 0,
+      last_failure_at INTEGER
     );
   `);
   return { db, dir };
@@ -67,6 +71,16 @@ test('DatabaseManager migration adds independent enrollment quality columns at v
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'last_quality_score', 'REAL'\)/);
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'last_quality_band', 'TEXT'\)/);
   assert.match(db, /user_version = 32/);
+});
+
+test('DatabaseManager migration adds runtime speaker verification health counters at version 33', () => {
+  const db = read('electron/db/DatabaseManager.ts');
+  assert.match(db, /Version 32 -> 33: Persist privacy-safe speaker verification failure counters/);
+  assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'low_quality_skips', 'INTEGER NOT NULL DEFAULT 0'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'low_confidence_rejections', 'INTEGER NOT NULL DEFAULT 0'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'error_count', 'INTEGER NOT NULL DEFAULT 0'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'last_failure_at', 'INTEGER'\)/);
+  assert.match(db, /user_version = 33/);
 });
 
 test('SettingsManager exposes local speaker verification mode', () => {
@@ -163,6 +177,43 @@ test('SpeakerProfileStore reads legacy profiles without quality columns', async 
     const profile = new SpeakerProfileStore({ getDb: () => db }).getMeProfile();
     assert.equal(profile?.id, 'me');
     assert.equal(profile?.quality, undefined);
+  } finally {
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('SpeakerProfileStore exposes health state and privacy-safe failure counters', async () => {
+  const { SpeakerProfileStore } = await import('../../../dist-electron/electron/services/speaker/SpeakerProfileStore.js');
+  const { db, dir } = createDb();
+  try {
+    const store = new SpeakerProfileStore({ getDb: () => db });
+    store.saveMeProfile({
+      embedding: new Float32Array([0.5, 0.5]),
+      embeddingDim: 2,
+      extractorModel: 'test-model.onnx',
+      extractorVersion: 'test-version',
+      threshold: 0.72,
+      sampleCount: 3,
+    });
+
+    assert.equal(store.getStatus('off', { state: 'ready' }).health.state, 'paused');
+    assert.equal(store.getStatus('local', { state: 'model_missing' }).enabled, false);
+    store.recordVerification('low_quality');
+    store.recordVerification('verified', false);
+    store.recordVerification('error');
+
+    const status = store.getStatus('local', { state: 'ready' });
+    assert.equal(status.health.state, 'degraded');
+    assert.deepEqual(status.stats, {
+      totalVerifications: 1,
+      positiveVerifications: 0,
+      lowQualitySkips: 1,
+      lowConfidenceRejections: 1,
+      errorCount: 1,
+      lastVerifiedAt: status.stats.lastVerifiedAt,
+      lastFailureAt: status.stats.lastFailureAt,
+    });
   } finally {
     db.close();
     fs.rmSync(dir, { recursive: true, force: true });

@@ -13,9 +13,35 @@ export interface SpeakerVerificationMetadata {
 
 export interface SpeakerVerificationStatus {
   enrolled: boolean;
+  enabled: boolean;
   enrolledAt?: number;
   model?: string;
   mode: SpeakerVerificationMode;
+  health: SpeakerVerificationHealth;
+  stats: SpeakerVerificationStats;
+}
+
+export type SpeakerVerificationHealthState =
+  | 'not_enrolled'
+  | 'paused'
+  | 'ready'
+  | 'model_missing'
+  | 'model_error'
+  | 'degraded';
+
+export interface SpeakerVerificationHealth {
+  state: SpeakerVerificationHealthState;
+  message?: string;
+}
+
+export interface SpeakerVerificationStats {
+  totalVerifications: number;
+  positiveVerifications: number;
+  lowQualitySkips: number;
+  lowConfidenceRejections: number;
+  errorCount: number;
+  lastVerifiedAt?: number;
+  lastFailureAt?: number;
 }
 
 export type SpeakerVerificationQualityBand = 'stable' | 'weak_boundary' | 'needs_rerecord';

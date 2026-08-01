@@ -6,7 +6,7 @@ import type {
 import type { SpeakerProfileStore } from './SpeakerProfileStore';
 
 export interface SpeakerVerificationServiceOptions {
-  store: Pick<SpeakerProfileStore, 'getMeProfile'>;
+  store: Pick<SpeakerProfileStore, 'getMeProfile'> & Partial<Pick<SpeakerProfileStore, 'recordVerification'>>;
   extractor: SpeakerEmbeddingExtractorLike;
 }
 
@@ -19,26 +19,30 @@ export class SpeakerVerificationService {
 
     const quality = measureAudioQuality(samples16k);
     if (!quality.ok) {
+      this.options.store.recordVerification?.('low_quality');
       return { status: 'low_quality', reason: quality.reason };
     }
 
     try {
       const embedding = normalizeL2(await this.options.extractor.extract(samples16k));
       const confidence = cosineSimilarity(embedding, profile.embedding);
+      const isMe = confidence >= profile.threshold;
+      this.options.store.recordVerification?.('verified', isMe);
       return {
         status: 'verified',
         speakerVerification: {
           provider: 'local-speaker-verification',
           profileId: 'me',
-          isMe: confidence >= profile.threshold,
+          isMe,
           confidence,
           threshold: profile.threshold,
         },
       };
     } catch (error: any) {
+      this.options.store.recordVerification?.('error');
       return {
         status: 'error',
-        reason: error?.message ?? String(error),
+        reason: 'speaker_verification_failed',
       };
     }
   }

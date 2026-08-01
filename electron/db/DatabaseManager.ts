@@ -1609,6 +1609,22 @@ export class DatabaseManager {
             this.db.pragma('user_version = 32');
         }
 
+        // Version 32 -> 33: Persist privacy-safe speaker verification failure counters.
+        if (version < 33) {
+            console.log('[DatabaseManager] Applying migration v32 -> v33: Add speaker verification runtime health stats');
+            const addColumnIfMissing = (table: string, column: string, definition: string) => {
+                const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+                if (!columns.some((existing) => existing.name === column)) {
+                    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+                }
+            };
+            addColumnIfMissing('speaker_profile_stats', 'low_quality_skips', 'INTEGER NOT NULL DEFAULT 0');
+            addColumnIfMissing('speaker_profile_stats', 'low_confidence_rejections', 'INTEGER NOT NULL DEFAULT 0');
+            addColumnIfMissing('speaker_profile_stats', 'error_count', 'INTEGER NOT NULL DEFAULT 0');
+            addColumnIfMissing('speaker_profile_stats', 'last_failure_at', 'INTEGER');
+            this.db.pragma('user_version = 33');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 

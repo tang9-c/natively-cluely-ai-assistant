@@ -1,5 +1,7 @@
 import path from 'path';
+import fs from 'fs';
 import type { SpeakerEmbeddingExtractorLike } from './speakerVerificationTypes';
+import type { SpeakerVerificationHealth } from './speakerVerificationTypes';
 
 export interface SherpaSpeakerEmbeddingExtractorOptions {
   modelFile?: string;
@@ -23,6 +25,21 @@ export function getDefaultSpeakerEmbeddingModelFile(): string {
     throw new Error('speaker_embedding_model_not_installed');
   }
   return modelFile;
+}
+
+export function getSpeakerEmbeddingModelHealth(): SpeakerVerificationHealth {
+  try {
+    const modelFile = getDefaultSpeakerEmbeddingModelFile();
+    if (!fs.existsSync(modelFile)) {
+      return { state: 'model_missing', message: '本地声纹模型缺失，请重新安装模型。' };
+    }
+    return { state: 'ready' };
+  } catch (error: any) {
+    if (error?.message === 'speaker_embedding_model_not_installed') {
+      return { state: 'model_missing', message: '本地声纹模型缺失，请重新安装模型。' };
+    }
+    return { state: 'model_error', message: '本地声纹模型加载失败。' };
+  }
 }
 
 export class SherpaSpeakerEmbeddingExtractor implements SpeakerEmbeddingExtractorLike {

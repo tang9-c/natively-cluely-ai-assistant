@@ -4,6 +4,22 @@ import type { SpeakerEnrollmentSample, SpeakerVerificationStatus } from '../../t
 
 const SPEAKER_MODEL_ID = 'csukuangfj/speaker-embedding-models';
 
+function speakerVerificationHealthMessage(status: SpeakerVerificationStatus | null): string {
+  switch (status?.health.state) {
+    case 'paused': return '已注册，当前暂停。开启后才会在会议中识别 ME。';
+    case 'ready': return '已注册并启用。会议中会尝试识别你的发言为 ME。';
+    case 'model_missing': return '已注册，但本地声纹模型缺失，请重新安装模型。';
+    case 'model_error': return '已注册，但声纹模型加载失败。';
+    case 'degraded': return '已注册，但最近识别质量不稳定。';
+    case 'not_enrolled':
+    default: return '未注册。注册后可在会议中识别你的发言为 ME。';
+  }
+}
+
+function sanitizedSpeakerVerificationError(_error: unknown, fallback: string): string {
+  return fallback;
+}
+
 const PROMPTS = [
   '今天的会议我们将讨论产品路线图、技术实现和时间表。',
   '接下来请介绍一下客户那边的最新反馈。',
@@ -188,7 +204,7 @@ export function SpeakerVerificationSettings() {
     const offError = window.electronAPI?.onLocalModelsDownloadError?.((payload: { modelId: string; error: string }) => {
       if (payload.modelId === SPEAKER_MODEL_ID) {
         setDownloadProgress(null);
-        setError(payload.error);
+        setError('声纹模型安装失败');
       }
     });
     return () => {
@@ -208,7 +224,7 @@ export function SpeakerVerificationSettings() {
     try {
       const result = await window.electronAPI?.localModelsStartDownload?.(SPEAKER_MODEL_ID);
       if (!result?.success) {
-        setError(result?.error ?? '声纹模型安装失败');
+        setError(sanitizedSpeakerVerificationError(result?.error, '声纹模型安装失败'));
       }
       await refresh();
     } finally {
@@ -227,7 +243,7 @@ export function SpeakerVerificationSettings() {
       mediaRef.current = await startActiveRecording(setRecordingMetrics);
       setRecordingIndex(shouldRestart ? 0 : samples.length);
     } catch (err: any) {
-      setError(err?.message ?? '无法启动麦克风录音');
+      setError(sanitizedSpeakerVerificationError(err, '无法启动麦克风录音'));
     }
   };
 
@@ -254,14 +270,14 @@ export function SpeakerVerificationSettings() {
         }));
         const result = await window.electronAPI?.speakerVerificationEnroll?.(payload);
         if (!result?.success) {
-          setError(result?.error ?? '声音注册失败');
+        setError(sanitizedSpeakerVerificationError(result?.error, '声音注册失败'));
         } else if (result.status) {
           setStatus(result.status);
           setSamples([]);
         }
       }
     } catch (err: any) {
-      setError(err?.message ?? '麦克风录音失败');
+      setError(sanitizedSpeakerVerificationError(err, '麦克风录音失败'));
     } finally {
       setBusy(false);
       setRecordingIndex(null);
@@ -283,7 +299,7 @@ export function SpeakerVerificationSettings() {
     try {
       const result = await window.electronAPI?.speakerVerificationDeleteProfile?.();
       if (!result?.success) {
-        setError(result?.error ?? '无法删除声音注册');
+        setError(sanitizedSpeakerVerificationError(result?.error, '无法删除声音注册'));
       }
       setConfirmDelete(false);
       setSamples([]);
@@ -305,10 +321,11 @@ export function SpeakerVerificationSettings() {
         <div>
           <label className="text-xs font-medium text-text-secondary block">我的声音</label>
           <p className="text-[11px] mt-1 text-text-tertiary">
-            {enrolled
-              ? '已注册。CueUp 会在会议中把你的发言识别为 ME。'
-              : '注册后，CueUp 只会在会议中识别你的发言为 ME。'}
+            {speakerVerificationHealthMessage(status)}
           </p>
+          {status?.enrolled && !status.enabled && status.health.state !== 'paused' && (
+            <p className="text-[11px] mt-1 text-red-300">当前不可用</p>
+          )}
           {status?.enrolledAt && (
             <p className="text-[11px] mt-1 text-text-tertiary">
               注册时间：{new Date(status.enrolledAt).toLocaleString()}
@@ -394,7 +411,7 @@ export function SpeakerVerificationSettings() {
           隐私说明
         </div>
         <ul className="mt-2 space-y-1 text-[11px] text-text-tertiary">
-          <li>声音注册只用于会议中识别你的发言为 ME。</li>
+          <li>声音注册只会在会议中识别你的发言为 ME。</li>
           <li>声纹数据仅保存在本机，不会保存注册录音。</li>
           <li>不会用于登录、认证、安全审核、广告或跨设备身份。</li>
           <li>删除后会硬删除本地声纹向量和统计信息，不会默认改写历史会议。</li>

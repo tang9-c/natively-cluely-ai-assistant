@@ -1268,8 +1268,17 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('speaker-verification:get-status', async () => {
     const { SpeakerProfileStore } = require('./services/speaker/SpeakerProfileStore');
+    const { getSpeakerEmbeddingModelHealth } = require('./services/speaker/SpeakerEmbeddingExtractor');
     const store = new SpeakerProfileStore(DatabaseManager.getInstance());
-    return store.getStatus(SettingsManager.getInstance().getSpeakerVerificationMode());
+    return store.getStatus(
+      SettingsManager.getInstance().getSpeakerVerificationMode(),
+      getSpeakerEmbeddingModelHealth(),
+    );
+  });
+
+  safeHandle('speaker-verification:get-health', async () => {
+    const { getSpeakerEmbeddingModelHealth } = require('./services/speaker/SpeakerEmbeddingExtractor');
+    return getSpeakerEmbeddingModelHealth();
   });
 
   safeHandle('speaker-verification:enroll', async (_, samples: any[]) => {
@@ -1284,13 +1293,16 @@ export function initializeIpcHandlers(appState: AppState): void {
         sampleRate: Number(sample.sampleRate) || 16000,
         deviceFingerprint: typeof sample.deviceFingerprint === 'string' ? sample.deviceFingerprint : undefined,
       }));
-      const { enrollment } = makeSpeakerServices();
-      const status = await enrollment.enroll(normalized);
+      const { store, enrollment } = makeSpeakerServices();
+      await enrollment.enroll(normalized);
       SettingsManager.getInstance().setSpeakerVerificationMode('local');
       broadcast('speaker-verification-mode-changed', 'local');
+      const { getSpeakerEmbeddingModelHealth } = require('./services/speaker/SpeakerEmbeddingExtractor');
+      const status = store.getStatus('local', getSpeakerEmbeddingModelHealth());
       return { success: true, status };
     } catch (error: any) {
-      return { success: false, error: error?.message ?? String(error) };
+      console.warn('[IPC] speaker verification enrollment failed', redactForLog([error]));
+      return { success: false, error: '声音注册失败，请检查本地声纹模型后重试。' };
     }
   });
 
@@ -1302,7 +1314,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       broadcast('speaker-verification-mode-changed', 'off');
       return { success: true };
     } catch (error: any) {
-      return { success: false, error: error?.message ?? String(error) };
+      console.warn('[IPC] speaker verification profile deletion failed', redactForLog([error]));
+      return { success: false, error: '无法删除声音注册，请重试。' };
     }
   });
   safeHandle('get-technical-interview-direct-vision', async () =>

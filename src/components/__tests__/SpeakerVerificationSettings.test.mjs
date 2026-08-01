@@ -111,3 +111,14 @@ test('invalid recording samples are rejected before enrollment', () => {
   assert.ok(appendIndex > 0, 'sample append should exist');
   assert.ok(qualityCheckIndex < appendIndex, 'invalid samples must be rejected before being appended');
 });
+
+test('UI renders all speaker verification runtime health states', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+  assert.match(source, /未注册。注册后可在会议中识别你的发言为 ME。/);
+  assert.match(source, /已注册，当前暂停。开启后才会在会议中识别 ME。/);
+  assert.match(source, /已注册并启用。会议中会尝试识别你的发言为 ME。/);
+  assert.match(source, /已注册，但本地声纹模型缺失，请重新安装模型。/);
+  assert.match(source, /已注册，但声纹模型加载失败。/);
+  assert.match(source, /已注册，但最近识别质量不稳定。/);
+  assert.match(source, /当前不可用/);
+});

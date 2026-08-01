@@ -14,6 +14,7 @@ function read(relativePath) {
 test('speaker verification IPC handlers are exposed with safeHandle', () => {
   const ipc = read('electron/ipcHandlers.ts');
   assert.match(ipc, /safeHandle\('speaker-verification:get-status'/);
+  assert.match(ipc, /safeHandle\('speaker-verification:get-health'/);
   assert.match(ipc, /safeHandle\('speaker-verification:enroll'/);
   assert.match(ipc, /safeHandle\('speaker-verification:delete-profile'/);
   assert.match(ipc, /getSpeakerVerificationMode/);
@@ -25,6 +26,7 @@ test('preload and renderer types expose speaker verification APIs', () => {
   const types = read('src/types/electron.d.ts');
   for (const api of [
     'speakerVerificationGetStatus',
+    'speakerVerificationGetHealth',
     'speakerVerificationEnroll',
     'speakerVerificationDeleteProfile',
     'getSpeakerVerificationMode',
@@ -33,6 +35,16 @@ test('preload and renderer types expose speaker verification APIs', () => {
     assert.match(preload, new RegExp(api));
     assert.match(types, new RegExp(`${api}:`));
   }
+});
+
+test('runtime status composes model health and verification statistics', () => {
+  const store = read('electron/services/speaker/SpeakerProfileStore.ts');
+  const service = read('electron/services/speaker/SpeakerVerificationService.ts');
+  const extractor = read('electron/services/speaker/SpeakerEmbeddingExtractor.ts');
+  assert.match(store, /getStatus\(mode: SpeakerVerificationMode = 'off', health\?: SpeakerVerificationHealth\)/);
+  assert.match(store, /getVerificationStats/);
+  assert.match(service, /recordVerification/);
+  assert.match(extractor, /getSpeakerEmbeddingModelHealth/);
 });
 
 test('delete profile API calls hard delete rather than disabling a row', () => {

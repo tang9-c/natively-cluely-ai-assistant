@@ -349,9 +349,29 @@ export type SpeakerVerificationMode = 'off' | 'local'
 
 export interface SpeakerVerificationStatus {
   enrolled: boolean
+  enabled: boolean
   enrolledAt?: number
   model?: string
   mode: SpeakerVerificationMode
+  health: SpeakerVerificationHealth
+  stats: SpeakerVerificationStats
+}
+
+export type SpeakerVerificationHealthState = 'not_enrolled' | 'paused' | 'ready' | 'model_missing' | 'model_error' | 'degraded'
+
+export interface SpeakerVerificationHealth {
+  state: SpeakerVerificationHealthState
+  message?: string
+}
+
+export interface SpeakerVerificationStats {
+  totalVerifications: number
+  positiveVerifications: number
+  lowQualitySkips: number
+  lowConfidenceRejections: number
+  errorCount: number
+  lastVerifiedAt?: number
+  lastFailureAt?: number
 }
 
 export interface SpeakerEnrollmentSample {
@@ -571,6 +591,8 @@ export interface ElectronAPI {
   setSpeakerVerificationMode: (mode: SpeakerVerificationMode) => Promise<{ success: boolean; error?: string }>
   // @ipc-channel speaker-verification:get-status
   speakerVerificationGetStatus: () => Promise<SpeakerVerificationStatus>
+  // @ipc-channel speaker-verification:get-health
+  speakerVerificationGetHealth: () => Promise<SpeakerVerificationHealth>
   // @ipc-channel speaker-verification:enroll
   speakerVerificationEnroll: (samples: SpeakerEnrollmentSample[]) => Promise<{ success: boolean; status?: SpeakerVerificationStatus; error?: string }>
   // @ipc-channel speaker-verification:delete-profile

@@ -316,3 +316,28 @@ Output:
 ```
 
 - 4 pass, 0 fail — matches the expected baseline.
+
+## Speaker Verification Runtime Health and Failure Visibility
+
+### Status
+
+- Completed in `codex-speaker-verification-reliability`.
+
+### Implementation
+
+- Added health states for unregistered, paused, ready, model missing, model error, and degraded verification.
+- Added a read-only local model path/file health check and `speaker-verification:get-health` IPC handler.
+- Enhanced `speaker-verification:get-status` with mode, model health, and privacy-safe verification statistics.
+- Added migration v33 for low-quality skips, low-confidence rejections, errors, and recent failure time.
+- Added the required Simplified Chinese status messages and sanitized fixed error display only.
+
+### Verification
+
+- `rtk proxy npm run build:electron` passed.
+- `rtk proxy node --test electron/services/__tests__/SpeakerVerificationIpcSettings.test.mjs` passed.
+- `rtk proxy node --test src/components/__tests__/SpeakerVerificationSettings.test.mjs` passed.
+- `rtk proxy env ELECTRON_RUN_AS_NODE=1 /Users/tang-codeing/code/natively-cluely-ai-assistant/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron --test electron/services/__tests__/SpeakerVerificationStore.test.mjs` passed (Electron Node was required because `better-sqlite3` targets Electron ABI 146 while system Node targets ABI 137).
+
+### Concerns
+
+- None.
