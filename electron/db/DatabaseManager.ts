@@ -1582,14 +1582,6 @@ export class DatabaseManager {
         // Version 31 -> 32: Add speaker enrollment quality calibration.
         if (version < 32) {
             console.log('[DatabaseManager] Applying migration v31 -> v32: Add speaker enrollment quality calibration');
-            const columnsToAdd = [
-                'ALTER TABLE speaker_profiles ADD COLUMN enrollment_quality_json TEXT',
-                'ALTER TABLE speaker_profile_stats ADD COLUMN last_quality_score REAL',
-                'ALTER TABLE speaker_profile_stats ADD COLUMN last_quality_band TEXT',
-            ];
-            for (const sql of columnsToAdd) {
-                try { this.db.exec(sql); } catch (_) { /* Column already exists */ }
-            }
             this.db.exec(`
                 CREATE TABLE IF NOT EXISTS speaker_profile_stats (
                     profile_id TEXT PRIMARY KEY,
@@ -1600,6 +1592,20 @@ export class DatabaseManager {
                     last_quality_band TEXT
                 );
             `);
+            const addColumnIfMissing = (table: string, column: string, definition: string) => {
+                const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+                if (!columns.some((existing) => existing.name === column)) {
+                    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+                }
+            };
+            addColumnIfMissing('speaker_profiles', 'quality_score', 'REAL');
+            addColumnIfMissing('speaker_profiles', 'quality_band', 'TEXT');
+            addColumnIfMissing('speaker_profiles', 'min_self_similarity', 'REAL');
+            addColumnIfMissing('speaker_profiles', 'mean_self_similarity', 'REAL');
+            addColumnIfMissing('speaker_profiles', 'similarity_stddev', 'REAL');
+            addColumnIfMissing('speaker_profiles', 'calibrated_threshold', 'REAL');
+            addColumnIfMissing('speaker_profile_stats', 'last_quality_score', 'REAL');
+            addColumnIfMissing('speaker_profile_stats', 'last_quality_band', 'TEXT');
             this.db.pragma('user_version = 32');
         }
 

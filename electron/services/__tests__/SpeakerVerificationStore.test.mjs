@@ -28,7 +28,12 @@ function createDb() {
       updated_at INTEGER NOT NULL,
       device_fingerprint TEXT,
       sample_count INTEGER NOT NULL DEFAULT 0,
-      enrollment_quality_json TEXT
+      quality_score REAL,
+      quality_band TEXT,
+      min_self_similarity REAL,
+      mean_self_similarity REAL,
+      similarity_stddev REAL,
+      calibrated_threshold REAL
     );
     CREATE TABLE speaker_profile_stats (
       profile_id TEXT PRIMARY KEY,
@@ -50,12 +55,17 @@ test('DatabaseManager migration creates speaker profile tables at version 28', (
   assert.match(db, /user_version = 28/);
 });
 
-test('DatabaseManager migration adds enrollment quality and aggregate stats columns at version 32', () => {
+test('DatabaseManager migration adds independent enrollment quality columns at version 32', () => {
   const db = read('electron/db/DatabaseManager.ts');
   assert.match(db, /Version 31 -> 32: Add speaker enrollment quality calibration/);
-  assert.match(db, /ALTER TABLE speaker_profiles ADD COLUMN enrollment_quality_json TEXT/);
-  assert.match(db, /ALTER TABLE speaker_profile_stats ADD COLUMN last_quality_score REAL/);
-  assert.match(db, /ALTER TABLE speaker_profile_stats ADD COLUMN last_quality_band TEXT/);
+  assert.match(db, /addColumnIfMissing\('speaker_profiles', 'quality_score', 'REAL'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profiles', 'quality_band', 'TEXT'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profiles', 'min_self_similarity', 'REAL'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profiles', 'mean_self_similarity', 'REAL'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profiles', 'similarity_stddev', 'REAL'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profiles', 'calibrated_threshold', 'REAL'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'last_quality_score', 'REAL'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'last_quality_band', 'TEXT'\)/);
   assert.match(db, /user_version = 32/);
 });
 
@@ -100,6 +110,21 @@ test('SpeakerProfileStore saves, loads, and hard-deletes only the ME profile', a
     assert.equal(profile.sampleCount, 3);
     assert.equal(profile.quality?.qualityBand, 'stable');
     assert.equal(profile.quality?.qualityScore, 0.94);
+    assert.deepEqual(
+      db.prepare(`
+        SELECT quality_score, quality_band, min_self_similarity, mean_self_similarity,
+               similarity_stddev, calibrated_threshold
+        FROM speaker_profiles WHERE id = 'me'
+      `).get(),
+      {
+        quality_score: 0.94,
+        quality_band: 'stable',
+        min_self_similarity: 0.93,
+        mean_self_similarity: 0.96,
+        similarity_stddev: 0.02,
+        calibrated_threshold: 0.86,
+      },
+    );
 
     db.prepare(`
       INSERT INTO speaker_profile_stats
@@ -112,6 +137,32 @@ test('SpeakerProfileStore saves, loads, and hard-deletes only the ME profile', a
     assert.equal(store.getMeProfile(), null);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM speaker_profiles WHERE id = 'me'").get().n, 0);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM speaker_profile_stats WHERE profile_id = 'me'").get().n, 0);
+  } finally {
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('SpeakerProfileStore reads legacy profiles without quality columns', async () => {
+  const { SpeakerProfileStore } = await import('../../../dist-electron/electron/services/speaker/SpeakerProfileStore.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-speaker-store-legacy-'));
+  const db = new Database(path.join(dir, 'test.db'));
+  try {
+    db.exec(`
+      CREATE TABLE speaker_profiles (
+        id TEXT PRIMARY KEY, label TEXT NOT NULL, embedding BLOB NOT NULL, embedding_dim INTEGER NOT NULL,
+        extractor_model TEXT NOT NULL, extractor_version TEXT NOT NULL, threshold REAL NOT NULL,
+        enrolled_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, device_fingerprint TEXT,
+        sample_count INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+    db.prepare(`
+      INSERT INTO speaker_profiles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('me', 'ME', Buffer.from(new Float32Array([0.5, 0.5]).buffer), 2, 'test-model', 'v1', 0.72, 1, 1, null, 3);
+
+    const profile = new SpeakerProfileStore({ getDb: () => db }).getMeProfile();
+    assert.equal(profile?.id, 'me');
+    assert.equal(profile?.quality, undefined);
   } finally {
     db.close();
     fs.rmSync(dir, { recursive: true, force: true });

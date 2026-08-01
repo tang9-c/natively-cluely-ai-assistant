@@ -22,22 +22,20 @@ function blobToEmbedding(blob: Buffer, dim: number): Float32Array {
   return new Float32Array(copy.buffer, copy.byteOffset, dim).slice();
 }
 
-function parseQuality(value: unknown): SpeakerEnrollmentQualitySummary | undefined {
-  if (typeof value !== 'string') return undefined;
-  try {
-    const quality = JSON.parse(value) as Partial<SpeakerEnrollmentQualitySummary>;
-    if (
-      typeof quality.minSelfSimilarity !== 'number'
-      || typeof quality.meanSelfSimilarity !== 'number'
-      || typeof quality.similarityStddev !== 'number'
-      || typeof quality.calibratedThreshold !== 'number'
-      || typeof quality.qualityScore !== 'number'
-      || !['stable', 'weak_boundary', 'needs_rerecord'].includes(quality.qualityBand ?? '')
-    ) return undefined;
-    return quality as SpeakerEnrollmentQualitySummary;
-  } catch {
-    return undefined;
-  }
+function qualityFromRow(row: Record<string, unknown>): SpeakerEnrollmentQualitySummary | undefined {
+  const quality = {
+    minSelfSimilarity: row.min_self_similarity,
+    meanSelfSimilarity: row.mean_self_similarity,
+    similarityStddev: row.similarity_stddev,
+    calibratedThreshold: row.calibrated_threshold,
+    qualityScore: row.quality_score,
+    qualityBand: row.quality_band,
+  };
+  if (
+    !Object.values(quality).slice(0, 5).every((value) => typeof value === 'number' && Number.isFinite(value))
+    || !['stable', 'weak_boundary', 'needs_rerecord'].includes(quality.qualityBand as string)
+  ) return undefined;
+  return quality as SpeakerEnrollmentQualitySummary;
 }
 
 export class SpeakerProfileStore {
@@ -59,7 +57,9 @@ export class SpeakerProfileStore {
     if (!db) return null;
     const selectProfile = `
       SELECT id, label, embedding, embedding_dim, extractor_model, extractor_version,
-             threshold, enrolled_at, updated_at, device_fingerprint, sample_count, enrollment_quality_json
+             threshold, enrolled_at, updated_at, device_fingerprint, sample_count,
+             quality_score, quality_band, min_self_similarity, mean_self_similarity,
+             similarity_stddev, calibrated_threshold
       FROM speaker_profiles
       WHERE id = ?
     `;
@@ -88,7 +88,7 @@ export class SpeakerProfileStore {
       updatedAt: row.updated_at,
       deviceFingerprint: row.device_fingerprint || undefined,
       sampleCount: row.sample_count,
-      quality: parseQuality(row.enrollment_quality_json),
+      quality: qualityFromRow(row),
     };
   }
 
@@ -99,9 +99,11 @@ export class SpeakerProfileStore {
     db.prepare(`
       INSERT INTO speaker_profiles (
         id, label, embedding, embedding_dim, extractor_model, extractor_version,
-        threshold, enrolled_at, updated_at, device_fingerprint, sample_count, enrollment_quality_json
+        threshold, enrolled_at, updated_at, device_fingerprint, sample_count,
+        quality_score, quality_band, min_self_similarity, mean_self_similarity,
+        similarity_stddev, calibrated_threshold
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         label = excluded.label,
         embedding = excluded.embedding,
@@ -112,7 +114,12 @@ export class SpeakerProfileStore {
         updated_at = excluded.updated_at,
         device_fingerprint = excluded.device_fingerprint,
         sample_count = excluded.sample_count,
-        enrollment_quality_json = excluded.enrollment_quality_json
+        quality_score = excluded.quality_score,
+        quality_band = excluded.quality_band,
+        min_self_similarity = excluded.min_self_similarity,
+        mean_self_similarity = excluded.mean_self_similarity,
+        similarity_stddev = excluded.similarity_stddev,
+        calibrated_threshold = excluded.calibrated_threshold
     `).run(
       SPEAKER_PROFILE_ME_ID,
       SPEAKER_PROFILE_ME_LABEL,
@@ -125,7 +132,12 @@ export class SpeakerProfileStore {
       nowMs,
       input.deviceFingerprint ?? null,
       input.sampleCount,
-      input.quality ? JSON.stringify(input.quality) : null,
+      input.quality?.qualityScore ?? null,
+      input.quality?.qualityBand ?? null,
+      input.quality?.minSelfSimilarity ?? null,
+      input.quality?.meanSelfSimilarity ?? null,
+      input.quality?.similarityStddev ?? null,
+      input.quality?.calibratedThreshold ?? null,
     );
   }
 
