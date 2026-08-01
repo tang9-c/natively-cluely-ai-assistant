@@ -167,7 +167,7 @@ export function LocalModelsPanel() {
           </div>
           {isOptionalIntentEnhancement && (
             <p className="mt-2 text-xs text-text-secondary">
-              未开启时不会影响默认中文意图识别；开启后仅在规则和云端判断不足时使用已安装模型。
+              默认不随安装包提供；仅离线/隐私优先场景建议下载并开启。未开启时不会影响默认中文意图识别；开启后仅在规则和云端判断不足时使用已安装模型。
             </p>
           )}
 

@@ -77,11 +77,20 @@ test('bundled resources do not include legacy mobilebert model cache', () => {
   assert.equal(bundledModels.includes('mobilebert-uncased-mnli'), false);
 });
 
+test('bundled resources do not include optional multilingual intent classifier cache', () => {
+  const bundledModelsDir = path.join(repoRoot, 'resources/models/Xenova');
+  const bundledModels = fs.readdirSync(bundledModelsDir);
+
+  assert.equal(bundledModels.includes('mdeberta-v3-base-xnli-multilingual-nli-2mil7'), false);
+});
+
 test('LocalModelsPanel labels optional intent model separately from base models', () => {
   const src = read('src/components/LocalModelsPanel.tsx');
 
   assert.match(src, /基础本地模型/);
   assert.match(src, /可选增强包/);
+  assert.match(src, /默认不随安装包提供/);
+  assert.match(src, /仅离线\/隐私优先场景建议下载并开启/);
   assert.match(src, /未开启时不会影响默认中文意图识别/);
   assert.match(src, /getLocalIntentEnhancementEnabled/);
   assert.match(src, /setLocalIntentEnhancementEnabled/);
