@@ -107,6 +107,7 @@ interface ProviderRequestOptions {
   maxOutputTokens?: number;
   timeoutMs?: number;
   qcloudModel?: string;
+  qcloudThinking?: { type: 'enabled' | 'disabled' };
   dataScopes?: ProviderDataScope[];
   requestId?: string;
   requestSource?: 'automatic' | 'manual' | 'dynamic_action' | 'other';
@@ -1712,6 +1713,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(buildProviderSystemPrompt(CLAUDE_SYSTEM_PROMPT));
       const qcloudChatModel = chatPromptOptions?.qcloudModel
         ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_MODEL : undefined);
+      const qcloudThinking = chatPromptOptions?.activeSkill ? { type: 'enabled' as const } : chatPromptOptions?.qcloudThinking;
       const qcloudChatTimeoutMs = chatPromptOptions?.activeSkill
         ? QCLOUD_SKILL_CHAT_TIMEOUT_MS
         : chatPromptOptions?.totalTimeoutMs;
@@ -1753,6 +1755,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
               maxOutputTokens: chatPromptOptions?.maxOutputTokens,
               timeoutMs: qcloudChatTimeoutMs,
               qcloudModel: qcloudChatModel,
+              qcloudThinking: qcloudThinking,
             });
           } catch (err: any) {
             console.warn('[LLMHelper] QCLOUD API failed in chatWithGemini, falling back to Gemini:', err.message);
@@ -1833,6 +1836,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
                 maxOutputTokens: chatPromptOptions?.maxOutputTokens,
                 timeoutMs: qcloudChatTimeoutMs,
                 qcloudModel: qcloudChatModel,
+                qcloudThinking: qcloudThinking,
               }),
             });
             break;
@@ -2459,7 +2463,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       model: qcloudModel,
       messages: [{ role: 'user', content: userMessage }],
       max_tokens: this.clampQCloudMaxOutputTokens(_options.maxOutputTokens, qcloudModel),
-      thinking: { type: 'disabled' },
+      thinking: _options.qcloudThinking ?? { type: 'disabled' },
     };
 
     // Send images as a structured array so the server can build proper Gemini inlineData parts.
@@ -3690,6 +3694,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const finalSystemPrompt = this.injectLanguageInstruction(baseSystemPrompt);
     const qcloudChatModel = chatPromptOptions?.qcloudModel
       ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_MODEL : undefined);
+    const qcloudThinking = chatPromptOptions?.activeSkill ? { type: 'enabled' as const } : chatPromptOptions?.qcloudThinking;
     const qcloudChatTimeoutMs = chatPromptOptions?.activeSkill
       ? QCLOUD_SKILL_CHAT_TIMEOUT_MS
       : chatPromptOptions?.totalTimeoutMs;
@@ -3793,6 +3798,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, {
         maxOutputTokens: chatPromptOptions?.maxOutputTokens,
         qcloudModel: qcloudChatModel,
+        qcloudThinking: qcloudThinking,
         dataScopes: ['transcript', ...this.inferContextScopes(cloudCombinedContext)],
         requestId: chatPromptOptions?.requestId,
         requestSource: chatPromptOptions?.requestSource,
@@ -3826,6 +3832,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, {
           maxOutputTokens: chatPromptOptions?.maxOutputTokens,
           qcloudModel: qcloudChatModel,
+          qcloudThinking: qcloudThinking,
           totalTimeoutMs: qcloudChatTimeoutMs,
         });
         return;
@@ -3877,7 +3884,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       messages: [{ role: 'user', content: userContent }],
       stream: true,
       max_tokens: this.clampQCloudMaxOutputTokens(options.maxOutputTokens, qcloudModel),
-      thinking: { type: 'disabled' },
+      thinking: options.qcloudThinking ?? { type: 'disabled' },
     };
     if (systemPrompt) body.system = systemPrompt;
     if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {

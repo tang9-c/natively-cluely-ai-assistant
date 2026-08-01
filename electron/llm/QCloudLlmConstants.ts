@@ -1,6 +1,6 @@
 export const QCLOUD_LLM_BASE_URL = "https://obzbovrjewzd.sealosbja.site";
 export const QCLOUD_CHAT_MODEL = "lite32k";
-export const QCLOUD_SKILL_CHAT_MODEL = "lite32k";
+export const QCLOUD_SKILL_CHAT_MODEL = "turbo";
 export const QCLOUD_MEETING_SUMMARY_MODEL = "lite32k";
 export const QCLOUD_SKILL_CHAT_TIMEOUT_MS = 60_000;
 export const QCLOUD_MEETING_SUMMARY_TIMEOUT_MS = 60_000;

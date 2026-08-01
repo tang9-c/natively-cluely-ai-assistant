@@ -13,7 +13,7 @@ test('Electron exposes centralized QCloud LLM constants', () => {
 
   assert.match(constants, /export const QCLOUD_LLM_BASE_URL = "https:\/\/obzbovrjewzd\.sealosbja\.site"/);
   assert.match(constants, /export const QCLOUD_CHAT_MODEL = "lite32k"/);
-  assert.match(constants, /export const QCLOUD_SKILL_CHAT_MODEL = "lite32k"/);
+  assert.match(constants, /export const QCLOUD_SKILL_CHAT_MODEL = "turbo"/);
   assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_MODEL = "lite32k"/);
   assert.match(constants, /export const QCLOUD_SKILL_CHAT_TIMEOUT_MS = 60_000/);
   assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_TIMEOUT_MS = 60_000/);
@@ -69,7 +69,7 @@ test('LLMHelper routes QCLOUD chat calls through centralized endpoint and model'
   assert.doesNotMatch(helper, /fetch\(QCLOUD_CHAT_ENDPOINT/);
 });
 
-test('LLMHelper uses lite32k with a 60 second timeout for QCLOUD skill and meeting summary requests', () => {
+test('LLMHelper uses turbo with thinking for QCLOUD skill requests and keeps lite32k for meeting summaries', () => {
   const helper = read('electron/LLMHelper.ts');
 
   assert.match(helper, /QCLOUD_SKILL_CHAT_MODEL/);
@@ -78,7 +78,9 @@ test('LLMHelper uses lite32k with a 60 second timeout for QCLOUD skill and meeti
   assert.match(helper, /QCLOUD_MEETING_SUMMARY_TIMEOUT_MS/);
   assert.match(helper, /chatPromptOptions\?\.activeSkill\s*\?\s*QCLOUD_SKILL_CHAT_MODEL\s*:\s*undefined/);
   assert.match(helper, /chatPromptOptions\?\.activeSkill\s*\?\s*QCLOUD_SKILL_CHAT_TIMEOUT_MS\s*:\s*chatPromptOptions\?\.totalTimeoutMs/);
+  assert.match(helper, /chatPromptOptions\?\.activeSkill\s*\?\s*\{\s*type:\s*['"]enabled['"]\s+as\s+const\s*\}\s*:\s*chatPromptOptions\?\.qcloudThinking/);
   assert.match(helper, /qcloudModel:\s*qcloudChatModel/);
+  assert.match(helper, /qcloudThinking:\s*qcloudThinking/);
   assert.match(helper, /timeoutMs:\s*qcloudChatTimeoutMs/);
   assert.match(helper, /totalTimeoutMs:\s*qcloudChatTimeoutMs/);
   assert.match(helper, /qcloudModel:\s*QCLOUD_MEETING_SUMMARY_MODEL/);
@@ -99,7 +101,7 @@ test('LLMHelper passes explicit QCLOUD output budgets for chat and PPTX call sit
   assert.match(helper, /this\.streamWithNatively\(userContent,\s*finalSystemPrompt,\s*imagePaths,\s*\{[\s\S]{0,500}maxOutputTokens:\s*chatPromptOptions\?\.maxOutputTokens,[\s\S]{0,500}totalTimeoutMs:\s*qcloudChatTimeoutMs/);
 });
 
-test('LLMHelper disables QCLOUD thinking for streaming and non-streaming chat completions', () => {
+test('LLMHelper defaults QCLOUD thinking off unless explicitly enabled by request options', () => {
   const helper = read('electron/LLMHelper.ts');
   const nonStreamingStart = helper.indexOf('  private async generateWithNatively(');
   const streamingStart = helper.indexOf('  private async * streamWithNatively(');
@@ -111,8 +113,8 @@ test('LLMHelper disables QCLOUD thinking for streaming and non-streaming chat co
 
   assert.ok(nonStreamingStart >= 0, 'generateWithNatively should exist');
   assert.ok(streamingStart >= 0, 'streamWithNatively should exist');
-  assert.match(nonStreamingBody, /thinking:\s*\{\s*type:\s*['"]disabled['"]\s*\}/);
-  assert.match(streamingBody, /thinking:\s*\{\s*type:\s*['"]disabled['"]\s*\}/);
+  assert.match(nonStreamingBody, /thinking:\s*_options\.qcloudThinking\s*\?\?\s*\{\s*type:\s*['"]disabled['"]\s*\}/);
+  assert.match(streamingBody, /thinking:\s*options\.qcloudThinking\s*\?\?\s*\{\s*type:\s*['"]disabled['"]\s*\}/);
 });
 
 test('streamChat uses real QCLOUD SSE stream for the selected QCLOUD model', () => {

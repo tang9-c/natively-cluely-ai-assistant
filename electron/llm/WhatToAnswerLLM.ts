@@ -491,6 +491,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 ? {
                     ...(requestOptions ?? {}),
                     qcloudModel: QCLOUD_SKILL_CHAT_MODEL,
+                    qcloudThinking: { type: 'enabled' as const },
                     totalTimeoutMs: QCLOUD_SKILL_CHAT_TIMEOUT_MS,
                 }
                 : requestOptions;
