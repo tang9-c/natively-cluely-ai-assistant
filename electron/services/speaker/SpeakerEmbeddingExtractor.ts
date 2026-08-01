@@ -8,6 +8,8 @@ export interface SherpaSpeakerEmbeddingExtractorOptions {
   numThreads?: number;
 }
 
+let latestExtractorInitializationFailed = false;
+
 export function getDefaultSpeakerEmbeddingModelFile(): string {
   if (process.env.SPEAKER_EMBEDDING_MODEL_FILE) {
     return process.env.SPEAKER_EMBEDDING_MODEL_FILE;
@@ -33,6 +35,9 @@ export function getSpeakerEmbeddingModelHealth(): SpeakerVerificationHealth {
     if (!fs.existsSync(modelFile)) {
       return { state: 'model_missing', message: '本地声纹模型缺失，请重新安装模型。' };
     }
+    if (latestExtractorInitializationFailed) {
+      return { state: 'model_error', message: '本地声纹模型加载失败。' };
+    }
     return { state: 'ready' };
   } catch (error: any) {
     if (error?.message === 'speaker_embedding_model_not_installed') {
@@ -49,16 +54,22 @@ export class SherpaSpeakerEmbeddingExtractor implements SpeakerEmbeddingExtracto
   private readonly extractor: any;
 
   constructor(options: SherpaSpeakerEmbeddingExtractorOptions = {}) {
-    const modelFile = options.modelFile ?? getDefaultSpeakerEmbeddingModelFile();
-    const sherpa = require('sherpa-onnx-node');
-    this.extractor = new sherpa.SpeakerEmbeddingExtractor({
-      model: modelFile,
-      numThreads: options.numThreads ?? 1,
-      provider: 'cpu',
-      debug: 0,
-    });
-    this.modelId = path.basename(modelFile);
-    this.dim = this.extractor.dim;
+    try {
+      const modelFile = options.modelFile ?? getDefaultSpeakerEmbeddingModelFile();
+      const sherpa = require('sherpa-onnx-node');
+      this.extractor = new sherpa.SpeakerEmbeddingExtractor({
+        model: modelFile,
+        numThreads: options.numThreads ?? 1,
+        provider: 'cpu',
+        debug: 0,
+      });
+      this.modelId = path.basename(modelFile);
+      this.dim = this.extractor.dim;
+      latestExtractorInitializationFailed = false;
+    } catch (error) {
+      latestExtractorInitializationFailed = true;
+      throw error;
+    }
   }
 
   async extract(samples16k: Float32Array): Promise<Float32Array> {

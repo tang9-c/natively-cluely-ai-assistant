@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import Module from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -216,6 +217,64 @@ test('SpeakerProfileStore exposes health state and privacy-safe failure counters
     });
   } finally {
     db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('SpeakerVerificationAnnotator records low-quality skips through the verification service', async () => {
+  const { SpeakerProfileStore } = await import('../../../dist-electron/electron/services/speaker/SpeakerProfileStore.js');
+  const { SpeakerVerificationService } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationService.js');
+  const { SpeakerVerificationAnnotator } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js');
+  const { db, dir } = createDb();
+  try {
+    const store = new SpeakerProfileStore({ getDb: () => db });
+    store.saveMeProfile({
+      embedding: new Float32Array([0.5, 0.5]),
+      embeddingDim: 2,
+      extractorModel: 'test-model.onnx',
+      extractorVersion: 'test-version',
+      threshold: 0.72,
+      sampleCount: 3,
+    });
+    const service = new SpeakerVerificationService({
+      store,
+      extractor: {
+        dim: 2,
+        modelId: 'test-model.onnx',
+        version: 'test-version',
+        extract: async () => { throw new Error('extract_should_not_run_for_low_quality_audio'); },
+      },
+    });
+    const annotator = new SpeakerVerificationAnnotator({ getMode: () => 'local', service });
+
+    assert.equal(await annotator.annotate(new Float32Array()), undefined);
+    assert.equal(store.getStatus('local', { state: 'ready' }).stats.lowQualitySkips, 1);
+  } finally {
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('extractor initialization failure is surfaced as a model error without extracting audio', async () => {
+  const { SherpaSpeakerEmbeddingExtractor, getSpeakerEmbeddingModelHealth } = await import('../../../dist-electron/electron/services/speaker/SpeakerEmbeddingExtractor.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-speaker-extractor-'));
+  const modelFile = path.join(dir, 'model.onnx');
+  const originalModelFile = process.env.SPEAKER_EMBEDDING_MODEL_FILE;
+  const originalLoad = Module._load;
+  fs.writeFileSync(modelFile, 'model path only; extractor module load is intentionally unavailable');
+  process.env.SPEAKER_EMBEDDING_MODEL_FILE = modelFile;
+  try {
+    assert.equal(getSpeakerEmbeddingModelHealth().state, 'ready');
+    Module._load = function(request, parent, isMain) {
+      if (request === 'sherpa-onnx-node') throw new Error('sherpa_unavailable_for_test');
+      return originalLoad.call(this, request, parent, isMain);
+    };
+    assert.throws(() => new SherpaSpeakerEmbeddingExtractor());
+    assert.equal(getSpeakerEmbeddingModelHealth().state, 'model_error');
+  } finally {
+    Module._load = originalLoad;
+    if (originalModelFile === undefined) delete process.env.SPEAKER_EMBEDDING_MODEL_FILE;
+    else process.env.SPEAKER_EMBEDDING_MODEL_FILE = originalModelFile;
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
