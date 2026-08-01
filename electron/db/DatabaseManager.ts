@@ -1579,6 +1579,22 @@ export class DatabaseManager {
             })();
         }
 
+        const addColumnIfMissing = (table: string, column: string, definition: string) => {
+            const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+            if (!columns.some((existing) => existing.name === column)) {
+                this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+            }
+        };
+        const ensureSpeakerProfileStatsColumns = () => {
+            addColumnIfMissing('speaker_profile_stats', 'last_quality_score', 'REAL');
+            addColumnIfMissing('speaker_profile_stats', 'last_quality_band', 'TEXT');
+            addColumnIfMissing('speaker_profile_stats', 'low_quality_skips', 'INTEGER NOT NULL DEFAULT 0');
+            addColumnIfMissing('speaker_profile_stats', 'low_confidence_rejections', 'INTEGER NOT NULL DEFAULT 0');
+            addColumnIfMissing('speaker_profile_stats', 'error_count', 'INTEGER NOT NULL DEFAULT 0');
+            addColumnIfMissing('speaker_profile_stats', 'timeout_count', 'INTEGER NOT NULL DEFAULT 0');
+            addColumnIfMissing('speaker_profile_stats', 'last_failure_at', 'INTEGER');
+        };
+
         // Version 31 -> 32: Add speaker enrollment calibration and runtime health stats.
         if (version < 32) {
             console.log('[DatabaseManager] Applying migration v31 -> v32: Add speaker enrollment calibration and runtime health stats');
@@ -1592,26 +1608,21 @@ export class DatabaseManager {
                     last_quality_band TEXT
                 );
             `);
-            const addColumnIfMissing = (table: string, column: string, definition: string) => {
-                const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
-                if (!columns.some((existing) => existing.name === column)) {
-                    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-                }
-            };
             addColumnIfMissing('speaker_profiles', 'quality_score', 'REAL');
             addColumnIfMissing('speaker_profiles', 'quality_band', 'TEXT');
             addColumnIfMissing('speaker_profiles', 'min_self_similarity', 'REAL');
             addColumnIfMissing('speaker_profiles', 'mean_self_similarity', 'REAL');
             addColumnIfMissing('speaker_profiles', 'similarity_stddev', 'REAL');
             addColumnIfMissing('speaker_profiles', 'calibrated_threshold', 'REAL');
-            addColumnIfMissing('speaker_profile_stats', 'last_quality_score', 'REAL');
-            addColumnIfMissing('speaker_profile_stats', 'last_quality_band', 'TEXT');
-            addColumnIfMissing('speaker_profile_stats', 'low_quality_skips', 'INTEGER NOT NULL DEFAULT 0');
-            addColumnIfMissing('speaker_profile_stats', 'low_confidence_rejections', 'INTEGER NOT NULL DEFAULT 0');
-            addColumnIfMissing('speaker_profile_stats', 'error_count', 'INTEGER NOT NULL DEFAULT 0');
-            addColumnIfMissing('speaker_profile_stats', 'timeout_count', 'INTEGER NOT NULL DEFAULT 0');
-            addColumnIfMissing('speaker_profile_stats', 'last_failure_at', 'INTEGER');
+            ensureSpeakerProfileStatsColumns();
             this.db.pragma('user_version = 32');
+        }
+
+        // A short-lived branch schema set user_version to 33 before timeout_count
+        // was merged into v32. Backfill its missing stats columns without advancing
+        // the schema version again.
+        if (version >= 32) {
+            ensureSpeakerProfileStatsColumns();
         }
 
         console.log('[DatabaseManager] Migrations completed.');

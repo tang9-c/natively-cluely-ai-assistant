@@ -7,6 +7,8 @@ import { test } from 'node:test';
 import Database from 'better-sqlite3';
 
 const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../..');
+const databaseModuleUrl = new URL('../../../dist-electron/electron/db/DatabaseManager.js', import.meta.url);
+const { DatabaseManager } = await import(databaseModuleUrl.href);
 
 function read(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
@@ -78,6 +80,42 @@ test('DatabaseManager migration adds enrollment quality and runtime health stats
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'timeout_count', 'INTEGER NOT NULL DEFAULT 0'\)/);
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'last_failure_at', 'INTEGER'\)/);
   assert.match(db, /user_version = 32/);
+  assert.doesNotMatch(db, /user_version\s*=\s*(?:33|34)/);
+});
+
+test('DatabaseManager backfills missing timeout stats for the branch v33 intermediate schema without advancing its version', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-speaker-store-v33-'));
+  const db = new Database(path.join(dir, 'test.db'));
+  try {
+    db.exec(`
+      CREATE TABLE speaker_profile_stats (
+        profile_id TEXT PRIMARY KEY,
+        total_verifications INTEGER NOT NULL DEFAULT 0,
+        positive_verifications INTEGER NOT NULL DEFAULT 0,
+        last_verified_at INTEGER,
+        last_quality_score REAL,
+        last_quality_band TEXT,
+        low_quality_skips INTEGER NOT NULL DEFAULT 0,
+        low_confidence_rejections INTEGER NOT NULL DEFAULT 0,
+        error_count INTEGER NOT NULL DEFAULT 0,
+        last_failure_at INTEGER
+      );
+    `);
+    db.pragma('user_version = 33');
+
+    const manager = Object.create(DatabaseManager.prototype);
+    manager.db = db;
+    manager.runMigrations();
+
+    const columns = db.prepare('PRAGMA table_info(speaker_profile_stats)').all().map(({ name }) => name);
+    for (const column of ['low_quality_skips', 'low_confidence_rejections', 'error_count', 'timeout_count', 'last_failure_at']) {
+      assert.ok(columns.includes(column), `speaker_profile_stats must include ${column}`);
+    }
+    assert.equal(db.pragma('user_version', { simple: true }), 33);
+  } finally {
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('SettingsManager exposes local speaker verification mode', () => {
