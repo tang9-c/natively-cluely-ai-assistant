@@ -184,9 +184,11 @@ test('packaged builtin skills are included as electron-builder resources', () =>
   const extraResources = pkg.build?.extraResources ?? [];
   const expectedSkillIds = [
     'customer-recap',
+    'fde-qc-review',
     'humanize-text',
     'interview-evaluation',
     'meeting-accountability',
+    'sales-qc-review',
   ];
 
   assert.ok(
@@ -199,6 +201,74 @@ test('packaged builtin skills are included as electron-builder resources', () =>
     assert.ok(fs.existsSync(skillPath), `${skillId} SKILL.md must live in packaged skill resources`);
     const content = fs.readFileSync(skillPath, 'utf8');
     assert.match(content, new RegExp(`^---\\nname:\\s*${skillId === 'humanize-text' ? 'humanize-ai-text' : skillId}\\n`, 'm'));
+  }
+});
+
+test('fde-qc-review captures common implementation meeting complaint signals', () => {
+  const content = read('resources/skills/fde-qc-review/SKILL.md');
+
+  for (const requiredSignal of [
+    '会议准备',
+    '会议材料',
+    '会议议程',
+    '调研大纲',
+    '多方案对比',
+    '案例支撑',
+    '技术证据',
+    '团队内部交接',
+    '多次阐述',
+    '会议礼仪',
+    '强行打断',
+    '情绪激动',
+  ]) {
+    assert.ok(content.includes(requiredSignal), `fde-qc-review must cover ${requiredSignal}`);
+  }
+});
+
+test('fde-qc-review requires evidence before attributing remarks to customer or consultant', () => {
+  const content = read('resources/skills/fde-qc-review/SKILL.md');
+
+  for (const requiredSignal of [
+    '客户发言',
+    '顾问发言',
+    '显式身份',
+    '说话人身份',
+    '低置信度推断',
+    '某位参会人',
+    '不能确认',
+    '不要强行归因',
+    '只有能确认是顾问行为时',
+  ]) {
+    assert.ok(content.includes(requiredSignal), `fde-qc-review must cover role attribution rule: ${requiredSignal}`);
+  }
+});
+
+test('fde-qc-review covers broader PLM QMS ERP MES CRM implementation objects', () => {
+  const content = read('resources/skills/fde-qc-review/SKILL.md');
+
+  for (const requiredSignal of [
+    '配方',
+    '工艺路线',
+    '工单',
+    '批次',
+    '库存',
+    '采购订单',
+    '销售订单',
+    '供应商',
+    '客户主数据',
+    '设备',
+    '工位',
+    '检验计划',
+    '不合格品',
+    '投诉',
+    '商机',
+    '线索',
+    '合同',
+    '服务工单',
+    '流程实例',
+    '对象生命周期',
+  ]) {
+    assert.ok(content.includes(requiredSignal), `fde-qc-review must cover implementation object: ${requiredSignal}`);
   }
 });
 
@@ -386,9 +456,11 @@ test('SkillsManager seeds packaged resource skills as builtin skills', () => {
   const tmpResources = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-skill-resources-test-'));
   const packagedSkills = [
     ['customer-recap', 'customer-recap', '从客户谈判录音转写中整理客户需求清单。'],
+    ['fde-qc-review', 'fde-qc-review', '从 PLM/QMS 等软件系统实施顾问会议转写中对 FDE 的交付顾问表现进行严格质检。'],
     ['humanize-text', 'humanize-ai-text', '去除文本中的 AI 写作痕迹。'],
     ['interview-evaluation', 'interview-evaluation', '从招聘面试录音转写中整理候选人的客观评估单。'],
     ['meeting-accountability', 'meeting-accountability', '从周例会录音转写中整理责任地图。'],
+    ['sales-qc-review', 'sales-qc-review', '从 ToB 大客户销售沟通录音转写中对销售谈单表现进行严格质检。'],
   ];
 
   for (const [dirName, frontmatterName, description] of packagedSkills) {
