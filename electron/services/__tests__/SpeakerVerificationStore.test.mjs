@@ -46,6 +46,7 @@ function createDb() {
       low_quality_skips INTEGER NOT NULL DEFAULT 0,
       low_confidence_rejections INTEGER NOT NULL DEFAULT 0,
       error_count INTEGER NOT NULL DEFAULT 0,
+      timeout_count INTEGER NOT NULL DEFAULT 0,
       last_failure_at INTEGER
     );
   `);
@@ -82,6 +83,13 @@ test('DatabaseManager migration adds runtime speaker verification health counter
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'error_count', 'INTEGER NOT NULL DEFAULT 0'\)/);
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'last_failure_at', 'INTEGER'\)/);
   assert.match(db, /user_version = 33/);
+});
+
+test('DatabaseManager migration adds a separate speaker verification timeout counter at version 34', () => {
+  const db = read('electron/db/DatabaseManager.ts');
+  assert.match(db, /Version 33 -> 34: Track speaker verification timeouts independently from errors/);
+  assert.match(db, /ADD COLUMN timeout_count INTEGER NOT NULL DEFAULT 0/);
+  assert.match(db, /user_version = 34/);
 });
 
 test('SettingsManager exposes local speaker verification mode', () => {
@@ -203,6 +211,7 @@ test('SpeakerProfileStore exposes health state and privacy-safe failure counters
     store.recordVerification('low_quality');
     store.recordVerification('verified', false);
     store.recordVerification('error');
+    store.recordVerification('timeout');
 
     const status = store.getStatus('local', { state: 'ready' });
     assert.equal(status.health.state, 'degraded');
@@ -212,6 +221,7 @@ test('SpeakerProfileStore exposes health state and privacy-safe failure counters
       lowQualitySkips: 1,
       lowConfidenceRejections: 1,
       errorCount: 1,
+      timeoutCount: 1,
       lastVerifiedAt: status.stats.lastVerifiedAt,
       lastFailureAt: status.stats.lastFailureAt,
     });

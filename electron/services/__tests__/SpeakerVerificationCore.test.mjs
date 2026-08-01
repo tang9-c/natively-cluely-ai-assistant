@@ -137,13 +137,41 @@ test('verification returns ME metadata when similarity meets threshold', async (
   assert.ok(result.speakerVerification.confidence >= 0.99);
 });
 
-test('annotator skips when disabled or low quality', async () => {
+test('annotator skips when disabled or service reports low quality', async () => {
   const { SpeakerVerificationAnnotator } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js');
-  const service = { verify: async () => ({ status: 'verified', speakerVerification: { provider: 'local-speaker-verification', profileId: 'me', isMe: true, confidence: 1, threshold: 0.72 } }) };
+  const service = { verify: async (samples) => samples.length < 1000
+    ? { status: 'low_quality' }
+    : { status: 'verified', speakerVerification: { provider: 'local-speaker-verification', profileId: 'me', isMe: true, confidence: 1, threshold: 0.72 } } };
 
   const disabled = new SpeakerVerificationAnnotator({ getMode: () => 'off', service });
   assert.equal(await disabled.annotate(loudSamples(2)), undefined);
 
   const enabled = new SpeakerVerificationAnnotator({ getMode: () => 'local', service });
   assert.equal(await enabled.annotate(new Float32Array(100)), undefined);
+});
+
+test('annotator times out hanging verification without blocking metadata fallback', async () => {
+  const { SpeakerVerificationAnnotator } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js');
+  let timeoutCount = 0;
+  let onTimeoutCount = 0;
+  const annotator = new SpeakerVerificationAnnotator({
+    getMode: () => 'local',
+    timeoutMs: 200,
+    onTimeout: () => { onTimeoutCount += 1; },
+    service: {
+      verify: () => new Promise(() => {}),
+      recordTimeout: () => { timeoutCount += 1; },
+    },
+  });
+
+  const startedAt = Date.now();
+  const result = await Promise.race([
+    annotator.annotate(loudSamples(2)),
+    new Promise(resolve => setTimeout(() => resolve('test_timeout'), 500)),
+  ]);
+
+  assert.equal(result, undefined);
+  assert.ok(Date.now() - startedAt >= 175);
+  assert.equal(timeoutCount, 1);
+  assert.equal(onTimeoutCount, 1);
 });

@@ -46,4 +46,8 @@ export class SpeakerVerificationService {
       };
     }
   }
+
+  recordTimeout(): void {
+    this.options.store.recordVerification?.('timeout');
+  }
 }

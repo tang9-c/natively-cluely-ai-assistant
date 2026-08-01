@@ -1625,6 +1625,16 @@ export class DatabaseManager {
             this.db.pragma('user_version = 33');
         }
 
+        // Version 33 -> 34: Track speaker verification timeouts independently from errors.
+        if (version < 34) {
+            console.log('[DatabaseManager] Applying migration v33 -> v34: Add speaker verification timeout counter');
+            const columns = this.db.prepare('PRAGMA table_info(speaker_profile_stats)').all() as Array<{ name: string }>;
+            if (!columns.some((existing) => existing.name === 'timeout_count')) {
+                this.db.exec('ALTER TABLE speaker_profile_stats ADD COLUMN timeout_count INTEGER NOT NULL DEFAULT 0');
+            }
+            this.db.pragma('user_version = 34');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 

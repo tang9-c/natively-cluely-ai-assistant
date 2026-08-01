@@ -40,6 +40,7 @@ export interface SpeakerVerificationStats {
   lowQualitySkips: number;
   lowConfidenceRejections: number;
   errorCount: number;
+  timeoutCount: number;
   lastVerifiedAt?: number;
   lastFailureAt?: number;
 }

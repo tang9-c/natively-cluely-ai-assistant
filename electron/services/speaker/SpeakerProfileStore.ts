@@ -81,12 +81,13 @@ export class SpeakerProfileStore {
       lowQualitySkips: 0,
       lowConfidenceRejections: 0,
       errorCount: 0,
+      timeoutCount: 0,
     };
     if (!db) return empty;
     try {
       const row = db.prepare(`
         SELECT total_verifications, positive_verifications, low_quality_skips,
-               low_confidence_rejections, error_count, last_verified_at, last_failure_at
+               low_confidence_rejections, error_count, timeout_count, last_verified_at, last_failure_at
         FROM speaker_profile_stats WHERE profile_id = ?
       `).get(SPEAKER_PROFILE_ME_ID) as Record<string, unknown> | undefined;
       if (!row) return empty;
@@ -96,6 +97,7 @@ export class SpeakerProfileStore {
         lowQualitySkips: Number(row.low_quality_skips) || 0,
         lowConfidenceRejections: Number(row.low_confidence_rejections) || 0,
         errorCount: Number(row.error_count) || 0,
+        timeoutCount: Number(row.timeout_count) || 0,
         lastVerifiedAt: typeof row.last_verified_at === 'number' ? row.last_verified_at : undefined,
         lastFailureAt: typeof row.last_failure_at === 'number' ? row.last_failure_at : undefined,
       };
@@ -104,7 +106,7 @@ export class SpeakerProfileStore {
     }
   }
 
-  recordVerification(result: 'verified' | 'low_quality' | 'error', isMe?: boolean): void {
+  recordVerification(result: 'verified' | 'low_quality' | 'error' | 'timeout', isMe?: boolean): void {
     const db = this.dbProvider.getDb();
     if (!db) return;
     const now = Date.now();
@@ -114,21 +116,23 @@ export class SpeakerProfileStore {
       const lowQuality = result === 'low_quality' ? 1 : 0;
       const rejected = result === 'verified' && !isMe ? 1 : 0;
       const errors = result === 'error' ? 1 : 0;
+      const timeouts = result === 'timeout' ? 1 : 0;
       const failureAt = result === 'verified' && isMe ? null : now;
       db.prepare(`
         INSERT INTO speaker_profile_stats (
           profile_id, total_verifications, positive_verifications, low_quality_skips,
-          low_confidence_rejections, error_count, last_verified_at, last_failure_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          low_confidence_rejections, error_count, timeout_count, last_verified_at, last_failure_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(profile_id) DO UPDATE SET
           total_verifications = total_verifications + excluded.total_verifications,
           positive_verifications = positive_verifications + excluded.positive_verifications,
           low_quality_skips = low_quality_skips + excluded.low_quality_skips,
           low_confidence_rejections = low_confidence_rejections + excluded.low_confidence_rejections,
           error_count = error_count + excluded.error_count,
+          timeout_count = timeout_count + excluded.timeout_count,
           last_verified_at = COALESCE(excluded.last_verified_at, last_verified_at),
           last_failure_at = COALESCE(excluded.last_failure_at, last_failure_at)
-      `).run(SPEAKER_PROFILE_ME_ID, total, positive, lowQuality, rejected, errors, result === 'verified' ? now : null, failureAt);
+      `).run(SPEAKER_PROFILE_ME_ID, total, positive, lowQuality, rejected, errors, timeouts, result === 'verified' ? now : null, failureAt);
     } catch {
       // Runtime telemetry must never interrupt transcription.
     }

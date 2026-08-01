@@ -262,6 +262,27 @@ describe('RestSTT — flushAndUpload early-return paths', () => {
 });
 
 describe('RestSTT — quality diagnostics', () => {
+  test('emits transcript when speaker verification service hangs', async () => {
+    const { RestSTT } = await loadRestSTT();
+    const { SpeakerVerificationAnnotator } = await import(pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js')).href);
+    const stt = new RestSTT('groq', 'k');
+    const transcripts = [];
+    stt.setSpeakerVerificationAnnotator(new SpeakerVerificationAnnotator({
+      getMode: () => 'local',
+      timeoutMs: 20,
+      service: { verify: () => new Promise(() => {}) },
+    }));
+    stt.on('transcript', event => transcripts.push(event));
+    stt.uploadAudio = async () => 'fallback transcript';
+    stt.start();
+    stt.write(loudPcm16le(32000));
+
+    await stt.flushAndUpload('speech-ended');
+    stt.stop();
+
+    assert.deepEqual(transcripts, [{ text: 'fallback transcript', isFinal: true, confidence: 1 }]);
+  });
+
   test('emits privacy-safe upload diagnostics without transcript text', async () => {
     const { RestSTT } = await loadRestSTT();
     const stt = new RestSTT('groq', 'k');
