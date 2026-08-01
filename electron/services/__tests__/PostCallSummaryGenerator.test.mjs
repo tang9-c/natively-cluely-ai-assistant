@@ -201,6 +201,37 @@ test('generateFullTranscriptSummary prompts use labeled enterprise secretary rol
   }
 });
 
+test('generateFullTranscriptSummary prompts forbid app-name and mode-context leakage into meeting facts', async () => {
+  const calls = [];
+  await generateFullTranscriptSummary({
+    llmHelper: {
+      generateMeetingSummary: async (...args) => {
+        calls.push(args);
+        return JSON.stringify({
+          overview: '只总结客户报价安排',
+          keyPoints: ['客户要求会后发报价'],
+          actionItems: ['会议结束后发送报价'],
+          decisions: [],
+          openQuestions: [],
+        });
+      },
+    },
+    transcript: [],
+    context: '会议结束就发一版报价给你。',
+    modeTemplateType: 'sales',
+    modeNoteSections: [],
+    modeContextBlock: '产品：Natively 专用会议模式。资料缺失时请上传资料。',
+    baseRules: '规则：只基于会议内容。',
+    groqSummaryPrompt: 'fallback',
+  });
+
+  assert.equal(calls.length, 1);
+  const [systemPrompt, userContext] = calls[0];
+  assert.match(systemPrompt, /模式上下文、参考资料、资料缺失提示、产品运行信息、系统状态和应用名称只可作为理解辅助，不得写成会议事实/);
+  assert.match(systemPrompt, /除非会议转录中明确提到，否则不要输出 Natively、CueUp/);
+  assert.match(userContext, /辅助上下文（不是会议事实）/);
+});
+
 test('generateFullTranscriptSummary locally merges partials when final merge fails', async () => {
   const llmHelper = {
     generateMeetingSummary: async (prompt, context) => {

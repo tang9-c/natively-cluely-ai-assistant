@@ -96,6 +96,23 @@ interface MeetingDetailsProps {
     onOpenSettings: () => void;
 }
 
+const LEGACY_ENGLISH_FOLLOW_UP_PATTERN = /\b(?:Hi,|Hi team,|Thanks for the conversation today\.|Next steps:|Decisions:|Blockers:|Best,|I will follow up if anything else is needed\.)\b/i;
+const LEGACY_ENGLISH_COACHING_PATTERN = /\b(?:Objection may need|conversation included|Next step was not explicit|Consider ending|captured|follow-up|needs follow-up|Confirm|Review these moments)\b/i;
+
+const getVisibleCoachingInsights = (summary?: Meeting['detailedSummary']) => {
+    return (summary?.coachingInsights || []).filter(insight => {
+        const text = `${insight.title || ''}\n${insight.detail || ''}`.trim();
+        if (!text) return false;
+        return !LEGACY_ENGLISH_COACHING_PATTERN.test(text);
+    });
+};
+
+const getVisibleFollowUpDraft = (summary?: Meeting['detailedSummary']) => {
+    const draft = summary?.followUpDraft?.trim() || '';
+    if (!draft) return '';
+    return LEGACY_ENGLISH_FOLLOW_UP_PATTERN.test(draft) ? '' : draft;
+};
+
 const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting }) => {
     const isLight = useResolvedTheme() === 'light';
     // We need local state for the meeting object to reflect optimistic updates
@@ -113,6 +130,8 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [skillExportStatus, setSkillExportStatus] = useState<{ message: string; filePath?: string; error?: boolean } | null>(null);
     const transcriptMarkdown = formatTranscriptForSkill(meeting.transcript);
     const canRunTranscriptSkill = activeTab === 'transcript' && transcriptMarkdown.trim().length > 0;
+    const visibleCoachingInsights = getVisibleCoachingInsights(meeting.detailedSummary);
+    const visibleFollowUpDraft = getVisibleFollowUpDraft(meeting.detailedSummary);
 
     const loadTranscriptSkills = async () => {
         if (typeof window.electronAPI?.skillsRefresh !== 'function') {
@@ -168,8 +187,8 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
                     .map(section => `${section.title}：\n${formatList(section.bullets)}`)
                     .join('\n\n')
                 : '';
-            const coachingText = meeting.detailedSummary.coachingInsights && meeting.detailedSummary.coachingInsights.length > 0
-                ? meeting.detailedSummary.coachingInsights
+            const coachingText = visibleCoachingInsights.length > 0
+                ? visibleCoachingInsights
                     .map(insight => `- ${insight.title}：${insight.detail}${insight.evidence ? `\n  证据：${insight.evidence}` : ''}`)
                     .join('\n')
                 : '';
@@ -192,7 +211,7 @@ ${formatList(meeting.detailedSummary.decisions)}
 待确认事项：
 ${formatList(meeting.detailedSummary.openQuestions)}
 
-${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `辅导：\n${coachingText}\n\n` : ''}${meeting.detailedSummary.followUpDraft ? `跟进草稿：\n${meeting.detailedSummary.followUpDraft}` : ''}
+${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `辅导：\n${coachingText}\n\n` : ''}${visibleFollowUpDraft ? `跟进草稿：\n${visibleFollowUpDraft}` : ''}
             `.trim();
         } else if (activeTab === 'transcript' && meeting.transcript) {
             textToCopy = meeting.transcript.map(t => `[${formatTime(t.timestamp)}] ${t.speaker === 'user' ? '我' : '对方'}: ${t.text}`).join('\n');
@@ -651,11 +670,11 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                                 )}
 
                                 {/* Phase 7 — Coaching insights (mode-specific opportunities). */}
-                                {meeting.detailedSummary?.coachingInsights && meeting.detailedSummary.coachingInsights.length > 0 && (
+                                {visibleCoachingInsights.length > 0 && (
                                     <section className="mb-8">
                                         <h2 className="text-lg font-semibold text-text-primary mb-4">辅导</h2>
                                         <ul className="space-y-3">
-                                            {meeting.detailedSummary.coachingInsights.map(insight => {
+                                            {visibleCoachingInsights.map(insight => {
                                                 const tone = insight.severity === 'warning'
                                                     ? 'border-amber-400/40 bg-amber-500/5'
                                                     : insight.severity === 'opportunity'
@@ -676,21 +695,21 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                                 )}
 
                                 {/* Phase 7 — Follow-up email draft. Selectable + copy-friendly. */}
-                                {meeting.detailedSummary?.followUpDraft && meeting.detailedSummary.followUpDraft.trim() && (
+                                {visibleFollowUpDraft && (
                                     <section className="mb-8">
                                         <div className="flex items-center justify-between mb-3">
                                             <h2 className="text-lg font-semibold text-text-primary">跟进草稿</h2>
                                             <button
                                                 type="button"
                                                 onClick={() => {
-                                                    navigator.clipboard?.writeText(meeting.detailedSummary?.followUpDraft || '').catch(() => { /* swallow */ });
+                                                    navigator.clipboard?.writeText(visibleFollowUpDraft).catch(() => { /* swallow */ });
                                                 }}
                                                 className="text-[11px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-text-secondary border border-white/10 transition-colors"
                                             >
                                                 复制
                                             </button>
                                         </div>
-                                        <pre className="text-[12.5px] text-text-secondary leading-relaxed whitespace-pre-wrap font-sans select-text cursor-text p-3 rounded-[10px] border border-white/10 bg-white/[0.02]">{meeting.detailedSummary.followUpDraft}</pre>
+                                        <pre className="text-[12.5px] text-text-secondary leading-relaxed whitespace-pre-wrap font-sans select-text cursor-text p-3 rounded-[10px] border border-white/10 bg-white/[0.02]">{visibleFollowUpDraft}</pre>
                                     </section>
                                 )}
 

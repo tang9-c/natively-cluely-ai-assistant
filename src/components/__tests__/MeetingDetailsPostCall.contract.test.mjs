@@ -16,8 +16,8 @@ test('MeetingDetails renders FDE decisions and open questions separately', () =>
 });
 
 test('MeetingDetails keeps empty coaching and follow-up sections hidden', () => {
-  assert.match(source, /coachingInsights && meeting\.detailedSummary\.coachingInsights\.length > 0/);
-  assert.match(source, /followUpDraft && meeting\.detailedSummary\.followUpDraft\.trim\(\)/);
+  assert.match(source, /visibleCoachingInsights\.length > 0/);
+  assert.match(source, /visibleFollowUpDraft/);
 });
 
 test('MeetingDetails copy full summary includes post-call enhanced fields', () => {
@@ -26,7 +26,17 @@ test('MeetingDetails copy full summary includes post-call enhanced fields', () =
   assert.match(copyBlock, /detailedSummary\.decisions/);
   assert.match(copyBlock, /detailedSummary\.openQuestions/);
   assert.match(copyBlock, /detailedSummary\.sections/);
-  assert.match(copyBlock, /detailedSummary\.followUpDraft/);
+  assert.match(copyBlock, /visibleCoachingInsights/);
+  assert.match(copyBlock, /visibleFollowUpDraft/);
+});
+
+test('MeetingDetails filters legacy English post-call enhancements from saved summaries', () => {
+  assert.match(source, /LEGACY_ENGLISH_FOLLOW_UP_PATTERN/);
+  assert.match(source, /LEGACY_ENGLISH_COACHING_PATTERN/);
+  assert.match(source, /getVisibleCoachingInsights/);
+  assert.match(source, /getVisibleFollowUpDraft/);
+  assert.doesNotMatch(source, /meeting\.detailedSummary\.coachingInsights\.map\(insight/);
+  assert.doesNotMatch(source, /<pre[\s\S]*meeting\.detailedSummary\.followUpDraft/);
 });
 
 test('MeetingDetails shows the exact failed cloud summary notice only in the summary tab', () => {

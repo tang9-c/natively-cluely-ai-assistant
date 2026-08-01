@@ -39,6 +39,10 @@ const DEFAULT_MAX_CHUNK_CHARS = 24000;
 const DEFAULT_ONE_SHOT_MAX_CHARS = 50000;
 const CHUNK_OVERLAP_CHARS = 1200;
 const ENTERPRISE_MEETING_SECRETARY_ROLE = '你是一位专业、严谨的企业级 AI 会议秘书与知识管理助手。';
+const SOURCE_BOUNDARY_RULES = `来源边界：
+- 会议转录是唯一事实来源。
+- 模式上下文、参考资料、资料缺失提示、产品运行信息、系统状态和应用名称只可作为理解辅助，不得写成会议事实、行动项、决策项或待确认事项。
+- 除非会议转录中明确提到，否则不要输出 Natively、CueUp、专用会议模式、上传资料、知识源缺失或类似产品内部信息。`;
 
 function buildChunkRoleHeader(chunkIndex: number, totalChunks: number): string {
   return `角色：${ENTERPRISE_MEETING_SECRETARY_ROLE}
@@ -197,21 +201,21 @@ function appendUserJsonContract(
 
 function buildChunkContext(params: GenerateFullTranscriptSummaryParams, chunk: string): string {
   return appendUserJsonContract(joinContextParts([
-    params.modeContextBlock ? `模式上下文：\n${params.modeContextBlock}` : '',
+    params.modeContextBlock ? `辅助上下文（不是会议事实）：\n${params.modeContextBlock}` : '',
     `会议片段：\n${chunk}`,
   ]), '会议转录', params, '本片段 1 句话概括');
 }
 
 function buildMergeContext(params: GenerateFullTranscriptSummaryParams, chunkSummaries: PostCallSummaryData[]): string {
   return appendUserJsonContract(joinContextParts([
-    params.modeContextBlock ? `模式上下文：\n${params.modeContextBlock}` : '',
+    params.modeContextBlock ? `辅助上下文（不是会议事实）：\n${params.modeContextBlock}` : '',
     `局部摘要 JSON：\n${JSON.stringify(chunkSummaries)}`,
   ]), '局部摘要', params, '1-2 句话描述完整会议');
 }
 
 function buildFullTranscriptContext(params: GenerateFullTranscriptSummaryParams, context: string): string {
   return appendUserJsonContract(joinContextParts([
-    params.modeContextBlock ? `模式上下文：\n${params.modeContextBlock}` : '',
+    params.modeContextBlock ? `辅助上下文（不是会议事实）：\n${params.modeContextBlock}` : '',
     `完整会议转录：\n${context}`,
   ]), '会议转录', params, '1-2 句话描述完整会议');
 }
@@ -257,6 +261,7 @@ function buildChunkPrompt(params: GenerateFullTranscriptSummaryParams, chunkInde
   if (params.modeNoteSections.length > 0) {
     return `${buildChunkRoleHeader(chunkIndex, totalChunks)}
 ${params.baseRules}
+${SOURCE_BOUNDARY_RULES}
 
 需要填充的分区：
 ${buildSectionList(params.modeNoteSections)}
@@ -278,6 +283,7 @@ ${buildSectionKeys(params.modeNoteSections)}
   return `${buildChunkRoleHeader(chunkIndex, totalChunks)}
 
 ${params.baseRules}
+${SOURCE_BOUNDARY_RULES}
 
 只返回合法 JSON，不要 markdown 代码块：
 {
@@ -293,6 +299,7 @@ function buildMergePrompt(params: GenerateFullTranscriptSummaryParams, chunkSumm
   if (params.modeNoteSections.length > 0) {
     return `${buildMergeRoleHeader()}
 ${params.baseRules}
+${SOURCE_BOUNDARY_RULES}
 
 归并规则：
 - 覆盖所有局部摘要中的重要信息，不要只保留前半段。
@@ -318,6 +325,7 @@ ${buildSectionKeys(params.modeNoteSections)}
   return `${buildMergeRoleHeader()}
 
 ${params.baseRules}
+${SOURCE_BOUNDARY_RULES}
 
 归并规则：
 - 覆盖所有局部摘要中的重要信息，不要只保留前半段。
