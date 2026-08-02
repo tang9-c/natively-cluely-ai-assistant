@@ -61,6 +61,11 @@ export class SpeakerVerificationService {
     this.recordStat('timeout');
   }
 
+  recordLowQuality(): void {
+    if (!this.options.store.getMeProfile()) return;
+    this.recordStat('low_quality');
+  }
+
   private recordStat(
     outcome: SpeakerVerificationOutcome,
     startedAt?: number,

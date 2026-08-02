@@ -104,7 +104,7 @@ export function measureAudioQuality(
   const durationMs = Math.round((samples16k.length / TARGET_SAMPLE_RATE) * 1000);
   const voiceRatio = voiced / samples16k.length;
 
-  if (durationMs < policy.minDurationMs) return { ok: false, durationMs, rms, voiceRatio, reason: 'too_short' };
+  if (durationMs < policy.minVerificationDurationMs) return { ok: false, durationMs, rms, voiceRatio, reason: 'too_short' };
   if (rms < policy.minRms) return { ok: false, durationMs, rms, voiceRatio, reason: 'too_quiet' };
   if (voiceRatio < policy.minVoiceRatio) return { ok: false, durationMs, rms, voiceRatio, reason: 'not_enough_voice' };
   return { ok: true, durationMs, rms, voiceRatio };

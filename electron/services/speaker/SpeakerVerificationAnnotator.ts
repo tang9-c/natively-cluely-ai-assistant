@@ -1,3 +1,4 @@
+import { measureAudioQuality } from './speakerAudioUtils';
 import type {
   SpeakerVerificationMetadata,
   SpeakerVerificationMode,
@@ -8,6 +9,7 @@ export interface SpeakerVerificationAnnotatorOptions {
   getMode: () => SpeakerVerificationMode;
   service: {
     verify(samples16k: Float32Array, options?: { signal?: AbortSignal }): Promise<SpeakerVerificationResult>;
+    recordLowQuality?(): void;
     recordTimeout?(): void;
   };
   timeoutMs?: number;
@@ -19,6 +21,14 @@ export class SpeakerVerificationAnnotator {
 
   async annotate(samples16k: Float32Array): Promise<SpeakerVerificationMetadata | undefined> {
     if (this.options.getMode() !== 'local') return undefined;
+    if (!measureAudioQuality(samples16k).ok) {
+      try {
+        this.options.service.recordLowQuality?.();
+      } catch {
+        // Verification telemetry must never interrupt transcription.
+      }
+      return undefined;
+    }
     const timeoutMs = this.options.timeoutMs ?? 200;
     const abortController = new AbortController();
     let timeout: NodeJS.Timeout | undefined;

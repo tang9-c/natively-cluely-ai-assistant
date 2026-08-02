@@ -184,23 +184,27 @@ test('verification records low-quality, extractor errors, and timeouts as reliab
   assert.equal(store.verificationStats[1].error, 'speaker_verification_failed');
 });
 
-test('annotator skips when disabled or service reports low quality', async () => {
+test('annotator skips short verification segments and preserves qualified metadata', async () => {
   const { SpeakerVerificationAnnotator } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js');
   let verifyCalls = 0;
-  const service = { verify: async (samples) => {
+  let lowQualityCalls = 0;
+  const service = { verify: async () => {
     verifyCalls += 1;
-    return samples.length < 1000
-    ? { status: 'low_quality' }
-    : { status: 'verified', speakerVerification: { provider: 'local-speaker-verification', profileId: 'me', isMe: true, confidence: 1, threshold: 0.72 } };
-  } };
+    return { status: 'verified', speakerVerification: { provider: 'local-speaker-verification', profileId: 'me', isMe: true, confidence: 1, threshold: 0.72 } };
+  }, recordLowQuality: () => { lowQualityCalls += 1; } };
 
   const disabled = new SpeakerVerificationAnnotator({ getMode: () => 'off', service });
   assert.equal(await disabled.annotate(loudSamples(2)), undefined);
   assert.equal(verifyCalls, 0, 'mode off must not emit speakerVerification or invoke verification');
 
   const enabled = new SpeakerVerificationAnnotator({ getMode: () => 'local', service });
-  assert.equal(await enabled.annotate(new Float32Array(100)), undefined);
+  assert.equal(await enabled.annotate(loudSamples(0.5)), undefined);
+  assert.equal(verifyCalls, 0, 'short audio must not invoke verification');
+  assert.equal(lowQualityCalls, 1, 'short audio must record one low-quality skip');
+
+  const metadata = await enabled.annotate(loudSamples(2));
   assert.equal(verifyCalls, 1);
+  assert.equal(metadata?.isMe, true);
 });
 
 test('annotator times out hanging verification without blocking metadata fallback', async () => {
