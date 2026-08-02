@@ -115,6 +115,15 @@ interface Message {
   };
 }
 
+interface SpeakerCorrectionTranscript {
+  key: string;
+  speaker: 'interviewer' | 'user';
+  speakerLabel: string;
+  text: string;
+  timestamp: number;
+  overrideAction?: 'force_me' | 'force_not_me';
+}
+
 interface NativelyInterfaceProps {
   onEndMeeting?: () => void;
   overlayOpacity?: number;
@@ -292,6 +301,12 @@ Instructions:
 
 Provide only the answer, nothing else.`;
 };
+
+const buildSpeakerCorrectionSegmentKey = (transcript: {
+  speaker: string;
+  timestamp: number;
+  text: string;
+}): string => `${transcript.speaker}:${transcript.timestamp}:${transcript.text.slice(0, 32)}`;
 
 const getSttSummary = (
   userStatus: 'connected' | 'reconnecting' | 'failed',
@@ -538,6 +553,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [sttInterviewerProvider, setSttInterviewerProvider] = useState<string>('');
   const [hasInterviewerTranscript, setHasInterviewerTranscript] = useState(false);
   const [systemAudioIssue, setSystemAudioIssue] = useState<string | null>(null);
+  const [speakerCorrectionTranscripts, setSpeakerCorrectionTranscripts] = useState<SpeakerCorrectionTranscript[]>([]);
   const [meetingStartStatus, setMeetingStartStatus] = useState<{
     phase: 'starting' | 'ready' | 'failed';
     message?: string;
@@ -639,6 +655,25 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       emotionClearTimerRef.current = null;
     }, 4000);
   }, []);
+
+  const handleSpeakerVerificationSessionOverride = useCallback(
+    async (segment: SpeakerCorrectionTranscript, action: 'force_me' | 'force_not_me') => {
+      const result = await window.electronAPI.speakerVerificationSetSessionOverride({
+        speaker: segment.speaker,
+        timestamp: segment.timestamp,
+        text: segment.text,
+        action,
+      });
+      if (!result?.success) {
+        console.warn('[NativelyInterface] speaker verification session override failed', result?.error);
+        return;
+      }
+      setSpeakerCorrectionTranscripts((prev) =>
+        prev.map((item) => (item.key === segment.key ? { ...item, overrideAction: action } : item)),
+      );
+    },
+    [],
+  );
   // Stability gate for code-visibility transitions. Scroll fires at ~60Hz;
   // without this, fast scrolls cancel and restart the 0.7s tween repeatedly,
   // producing stutter (and sometimes a snap when start≈target). The pending
@@ -1124,6 +1159,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         setSystemAudioWarning(null);
         setSystemAudioIssue(null);
         setRollingTranscript('');
+        setSpeakerCorrectionTranscripts([]);
         setIsInterviewerSpeaking(false);
         micCaptureFailureRef.current = false;
       })
@@ -1132,12 +1168,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const unsub = window.electronAPI.onMeetingStateChanged(({ isActive }) => {
       if (!isActive) {
         setMeetingStartStatus(null);
+        setSpeakerCorrectionTranscripts([]);
         return;
       }
       setSystemAudioWarning(null);
       setSystemAudioIssue(null);
       setMeetingStartStatus(null);
       setRollingTranscript('');
+      setSpeakerCorrectionTranscripts([]);
       setIsInterviewerSpeaking(false);
       micCaptureFailureRef.current = false;
     });
@@ -1881,6 +1919,25 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
         const speakerLabel = transcript.speaker === 'user' ? 'Me' : 'Interviewer';
         const displaySpeakerLabel = transcript.speakerLabel || speakerLabel;
+        if (transcript.final
+          && Number.isFinite(transcript.timestamp)
+          && (transcript.speaker === 'interviewer' || transcript.speaker === 'user')) {
+          const correctionTranscript: SpeakerCorrectionTranscript = {
+            key: buildSpeakerCorrectionSegmentKey({
+              speaker: transcript.speaker,
+              timestamp: transcript.timestamp as number,
+              text: transcript.text,
+            }),
+            speaker: transcript.speaker,
+            speakerLabel: displaySpeakerLabel,
+            text: transcript.text,
+            timestamp: transcript.timestamp as number,
+          };
+          setSpeakerCorrectionTranscripts((prev) => [
+            ...prev.filter((item) => item.key !== correctionTranscript.key),
+            correctionTranscript,
+          ].slice(-3));
+        }
 
         // Route to rolling transcript bar - accumulate text continuously
         setIsInterviewerSpeaking(!transcript.final);
@@ -4376,6 +4433,51 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
                   onCopyDiagnostics={copyDiagnostics}
                 />
               ) : null}
+
+              {speakerCorrectionTranscripts.length > 0 && (
+                <div className="w-[90%] mx-auto -mt-1 mb-1 flex flex-col gap-1 no-drag">
+                  {speakerCorrectionTranscripts.map((segment) => (
+                    <div
+                      key={segment.key}
+                      className="flex min-h-8 items-center justify-between gap-2 rounded-md border border-white/10 bg-black/5 px-2 py-1.5 text-[11px] dark:bg-white/5"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-[var(--overlay-text-muted)]">
+                        {segment.speakerLabel}: {segment.text}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          title="这是我"
+                          aria-label="这是我"
+                          onClick={() => handleSpeakerVerificationSessionOverride(segment, 'force_me')}
+                          className={`inline-flex h-6 items-center gap-1 rounded-md border px-2 text-[11px] transition ${
+                            segment.overrideAction === 'force_me'
+                              ? 'border-emerald-400/50 bg-emerald-400/15 text-emerald-600 dark:text-emerald-200'
+                              : 'border-white/10 text-[var(--overlay-text-muted)] hover:bg-white/10'
+                          }`}
+                        >
+                          <Check className="h-3 w-3" />
+                          这是我
+                        </button>
+                        <button
+                          type="button"
+                          title="这不是我"
+                          aria-label="这不是我"
+                          onClick={() => handleSpeakerVerificationSessionOverride(segment, 'force_not_me')}
+                          className={`inline-flex h-6 items-center gap-1 rounded-md border px-2 text-[11px] transition ${
+                            segment.overrideAction === 'force_not_me'
+                              ? 'border-rose-400/50 bg-rose-400/15 text-rose-600 dark:text-rose-200'
+                              : 'border-white/10 text-[var(--overlay-text-muted)] hover:bg-white/10'
+                          }`}
+                        >
+                          <X className="h-3 w-3" />
+                          这不是我
+                        </button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Chat History - Only show if there are messages OR active states */}
               {(messages.length > 0 || isManualRecording || isProcessing) && (

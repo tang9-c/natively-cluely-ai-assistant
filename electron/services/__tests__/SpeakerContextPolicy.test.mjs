@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
+import fs from 'node:fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -14,6 +15,11 @@ async function loadSpeakerContextPolicy() {
 async function loadTranscriptCleaner() {
   const cleanerPath = path.resolve(__dirname, '../../../dist-electron/electron/llm/transcriptCleaner.js');
   return import(pathToFileURL(cleanerPath).href);
+}
+
+async function loadSessionTracker() {
+  const trackerPath = path.resolve(__dirname, '../../../dist-electron/electron/SessionTracker.js');
+  return import(pathToFileURL(trackerPath).href);
 }
 
 const turn = (timestamp, role, text, extra = {}) => ({ role, text, timestamp, ...extra });
@@ -147,5 +153,159 @@ describe('SpeakerContextPolicy', () => {
 
     assert.equal(result.turns.length, 500);
     assert.ok(elapsedMs < 10, `expected policy under 10ms, got ${elapsedMs}ms`);
+  });
+
+  test('session override can remove and force ME only for current session', async () => {
+    const { SessionTracker } = await loadSessionTracker();
+    const { prepareTranscriptForWhatToAnswer } = await loadTranscriptCleaner();
+    const session = new SessionTracker();
+    const verifiedSegment = {
+      speaker: 'interviewer',
+      text: 'I will send the pricing follow up.',
+      timestamp: Date.now(),
+      final: true,
+      speakerLabel: 'Candidate',
+      speakerVerification: {
+        provider: 'local-speaker-verification',
+        profileId: 'me',
+        isMe: true,
+        confidence: 0.92,
+        threshold: 0.72,
+      },
+    };
+    const unverifiedSegment = {
+      speaker: 'interviewer',
+      text: 'I own the legal review.',
+      timestamp: verifiedSegment.timestamp + 1,
+      final: true,
+      speakerLabel: 'Candidate',
+    };
+
+    session.addTranscript(verifiedSegment);
+    assert.equal(session.setSpeakerVerificationOverride({
+      speaker: verifiedSegment.speaker,
+      timestamp: verifiedSegment.timestamp,
+      text: verifiedSegment.text,
+      action: 'force_not_me',
+    }), true);
+    let prompt = prepareTranscriptForWhatToAnswer(session.getContext(180), 12);
+    assert.doesNotMatch(prompt, /\[ME\]: i will send the pricing follow up\./);
+    assert.equal(session.getFullTranscript()[0].speakerVerification.isMe, true);
+    assert.equal(session.getEffectiveFullTranscript()[0].speakerVerification, undefined);
+
+    session.addTranscript(unverifiedSegment);
+    assert.equal(session.setSpeakerVerificationOverride({
+      speaker: unverifiedSegment.speaker,
+      timestamp: unverifiedSegment.timestamp,
+      text: unverifiedSegment.text,
+      action: 'force_me',
+    }), true);
+    prompt = prepareTranscriptForWhatToAnswer(session.getContext(180), 12);
+    assert.match(prompt, /\[ME\]: i own the legal review\./);
+    assert.match(session.getFullSessionContext(), /\[ME\]: I own the legal review\./);
+    assert.notEqual(session.getLastInterviewerTurn(), unverifiedSegment.text);
+    assert.equal(session.getFullTranscript()[1].speaker, 'interviewer');
+    assert.equal(session.getEffectiveFullTranscript()[1].speaker, 'user');
+
+    session.reset();
+    assert.equal(session.getContext(180).length, 0);
+    assert.equal(session.setSpeakerVerificationOverride({
+      speaker: unverifiedSegment.speaker,
+      timestamp: unverifiedSegment.timestamp,
+      text: unverifiedSegment.text,
+      action: 'force_me',
+    }), false);
+  });
+
+  test('force_not_me removes ME label even when the original segment came from user mic', async () => {
+    const { SessionTracker } = await loadSessionTracker();
+    const { prepareTranscriptForWhatToAnswer } = await loadTranscriptCleaner();
+    const session = new SessionTracker();
+    const userSegment = {
+      speaker: 'user',
+      text: 'This phrase was captured on the wrong microphone.',
+      timestamp: Date.now(),
+      final: true,
+    };
+
+    session.addTranscript(userSegment);
+    assert.equal(session.setSpeakerVerificationOverride({
+      speaker: userSegment.speaker,
+      timestamp: userSegment.timestamp,
+      text: userSegment.text,
+      action: 'force_not_me',
+    }), true);
+
+    const prompt = prepareTranscriptForWhatToAnswer(session.getContext(180), 12);
+    assert.doesNotMatch(prompt, /\[ME\]/);
+    assert.match(prompt, /\[INTERVIEWER\]: this phrase was captured on the wrong microphone\./);
+    assert.doesNotMatch(session.getFullSessionContext(), /\[ME\]/);
+    assert.match(session.getFullSessionContext(), /\[INTERVIEWER\]: This phrase was captured on the wrong microphone\./);
+  });
+
+  test('session override can target a transcript after it was merged with the previous final segment', async () => {
+    const { SessionTracker } = await loadSessionTracker();
+    const { prepareTranscriptForWhatToAnswer } = await loadTranscriptCleaner();
+    const session = new SessionTracker();
+    const now = Date.now();
+    const firstSegment = {
+      speaker: 'interviewer',
+      text: 'I will send',
+      timestamp: now,
+      endTimestampMs: now + 200,
+      final: true,
+      speakerVerification: {
+        provider: 'local-speaker-verification',
+        profileId: 'me',
+        isMe: true,
+        confidence: 0.94,
+        threshold: 0.72,
+      },
+    };
+    const secondSegment = {
+      speaker: 'interviewer',
+      text: 'the pricing follow up',
+      timestamp: now + 500,
+      endTimestampMs: now + 900,
+      final: true,
+      speakerVerification: firstSegment.speakerVerification,
+    };
+
+    session.addTranscript(firstSegment);
+    session.addTranscript(secondSegment);
+    assert.equal(session.getFullTranscript().length, 1);
+    assert.equal(session.setSpeakerVerificationOverride({
+      speaker: secondSegment.speaker,
+      timestamp: secondSegment.timestamp,
+      text: secondSegment.text,
+      action: 'force_not_me',
+    }), true);
+
+    const prompt = prepareTranscriptForWhatToAnswer(session.getContext(180), 12);
+    assert.doesNotMatch(prompt, /\[ME\]/);
+    assert.match(prompt, /\[INTERVIEWER\]: i will send the pricing follow up/);
+  });
+
+  test('dynamic action path uses the session-overridden segment for speaker skip checks', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, '../../../electron/IntelligenceEngine.ts'), 'utf8');
+    assert.match(source, /const effectiveSegment = this\.session\.applySpeakerVerificationOverride\(segment\)/);
+    assert.match(source, /detectConfirmAndEmitDynamicActions\(effectiveSegment, latencyContext\)/);
+    assert.match(source, /observeDynamicActionContinuation\(effectiveSegment, providerDataScopes\)/);
+    assert.match(source, /getEffectiveFullTranscript\(\)\.slice\(-12\)/);
+    assert.match(source, /handleSpeakerVerificationSessionOverride/);
+    assert.match(source, /detectConfirmAndEmitDynamicActions\(segment, latencyContext\)/);
+    assert.match(source, /status: 'dismissed'/);
+  });
+
+  test('meeting persistence keeps raw transcript and stopMeeting clears overrides after save', () => {
+    const trackerSource = fs.readFileSync(path.resolve(__dirname, '../../../electron/SessionTracker.ts'), 'utf8');
+    const managerSource = fs.readFileSync(path.resolve(__dirname, '../../../electron/IntelligenceManager.ts'), 'utf8');
+    const persistenceSource = fs.readFileSync(path.resolve(__dirname, '../../../electron/MeetingPersistence.ts'), 'utf8');
+
+    assert.match(trackerSource, /getFullSessionContext\(\): string \{\s*const recentTranscript = this\.getEffectiveFullTranscript\(\)\.map/);
+    assert.match(trackerSource, /getFullTranscript\(\): TranscriptSegment\[\] \{\s*return this\.fullTranscript;/);
+    assert.match(trackerSource, /getEffectiveFullTranscript\(\): TranscriptSegment\[\]/);
+    assert.match(persistenceSource, /transcript: \[\.\.\.this\.session\.getFullTranscript\(\)\]/);
+    assert.match(managerSource, /finally \{\s*this\.session\.clearSpeakerVerificationOverrides\(\);/);
   });
 });

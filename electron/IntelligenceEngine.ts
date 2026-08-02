@@ -5,7 +5,7 @@
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
 import type { StructuredGenerationTimingEvent } from './LLMHelper';
-import { SessionTracker, TranscriptSegment, SuggestionTrigger, ContextItem } from './SessionTracker';
+import { SessionTracker, TranscriptSegment, SuggestionTrigger, ContextItem, type SpeakerVerificationSessionOverrideAction } from './SessionTracker';
 import {
     AnswerLLM, AssistLLM, BrainstormLLM, ClarifyLLM, CodeHintLLM, RecapLLM,
     WhatToAnswerLLM,
@@ -709,25 +709,62 @@ export class IntelligenceEngine extends EventEmitter {
         // transcript path remains fire-and-forget; continuation starts after
         // the gate settles so the two structured requests do not contend.
         if (segment.final) {
+            const effectiveSegment = this.session.applySpeakerVerificationOverride(segment);
             const providerDataScopes = this.buildIntentClassificationOptions().providerDataScopes;
             const latencyContext: DynamicActionLatencyContext = {
                 requestId: `dynamic_gate_${segment.timestamp}_${++this.dynamicActionLatencySequence}`,
                 startedAt: performance.now(),
             };
-            const dynamicActionGate = this.detectConfirmAndEmitDynamicActions(segment, latencyContext).catch((err) => {
+            const dynamicActionGate = this.detectConfirmAndEmitDynamicActions(effectiveSegment, latencyContext).catch((err) => {
                 console.warn('[IntelligenceEngine] detectConfirmAndEmitDynamicActions failed', (err as Error)?.message);
             });
             void dynamicActionGate.then(() =>
-                this.observeDynamicActionContinuation(segment, providerDataScopes)
+                this.observeDynamicActionContinuation(effectiveSegment, providerDataScopes)
             ).catch((error) => {
                 console.warn('[IntelligenceEngine] continuation observation failed', redactForLog([error]));
             });
-            this.runSkillWatcher(segment).catch((err) => {
+            this.runSkillWatcher(effectiveSegment).catch((err) => {
                 console.warn('[IntelligenceEngine] runSkillWatcher failed', (err as Error)?.message);
             });
         }
 
         return result;
+    }
+
+    handleSpeakerVerificationSessionOverride(
+        segment: TranscriptSegment,
+        action: SpeakerVerificationSessionOverrideAction,
+    ): void {
+        if (!segment.final) return;
+
+        if (action === 'force_not_me') {
+            const latencyContext: DynamicActionLatencyContext = {
+                requestId: `dynamic_override_${segment.timestamp}_${++this.dynamicActionLatencySequence}`,
+                startedAt: performance.now(),
+            };
+            this.detectConfirmAndEmitDynamicActions(segment, latencyContext).catch((err) => {
+                console.warn('[IntelligenceEngine] speaker override dynamic action retry failed', (err as Error)?.message);
+            });
+            return;
+        }
+
+        if (action !== 'force_me' || !this.dynamicActionEngine || !this.currentSessionId) {
+            return;
+        }
+
+        const normalizedText = (segment.text || '').replace(/\s+/g, ' ').trim();
+        if (!normalizedText) return;
+        for (const activeAction of this.getActiveDynamicActions()) {
+            const hasMatchingEvidence = activeAction.evidenceRefs.some((evidence) => {
+                const evidenceText = (evidence.text || '').replace(/\s+/g, ' ').trim();
+                return evidenceText === normalizedText
+                    || evidenceText.includes(normalizedText)
+                    || normalizedText.includes(evidenceText);
+            });
+            if (!hasMatchingEvidence) continue;
+            this.dynamicActionEngine.dismissAction(activeAction.id);
+            this.emit('dynamic_action_emitted', { ...activeAction, status: 'dismissed' });
+        }
     }
 
     // Phase 3 dynamic actions — public API ===========================================================
@@ -1227,7 +1264,7 @@ export class IntelligenceEngine extends EventEmitter {
             description: skill.description,
             source: skill.source,
         }));
-        const transcriptWindow = this.session.getFullTranscript().slice(-12).map((item) => ({
+        const transcriptWindow = this.session.getEffectiveFullTranscript().slice(-12).map((item) => ({
             speaker: item.speaker,
             text: item.text,
             timestamp: item.timestamp,

@@ -52,3 +52,13 @@ test('DynamicActionBar clearly surfaces privacy-safe cloud degradation status', 
     /intelligence-dynamic-action-availability'[\s\S]{0,300}(?:transcript|regexCandidates|providerError)/,
   );
 });
+
+test('DynamicActionBar removes actions dismissed by backend speaker correction', () => {
+  const source = read('src/components/dynamic-actions/DynamicActionBar.tsx');
+  const engine = read('electron/IntelligenceEngine.ts');
+
+  assert.match(source, /action\.status === 'dismissed'/);
+  assert.match(source, /setActions\(\(prev\) => prev\.filter\(\(item\) => item\.id !== action\.id\)\)/);
+  assert.match(engine, /handleSpeakerVerificationSessionOverride/);
+  assert.match(engine, /this\.emit\('dynamic_action_emitted', \{ \.\.\.activeAction, status: 'dismissed' \}\)/);
+});

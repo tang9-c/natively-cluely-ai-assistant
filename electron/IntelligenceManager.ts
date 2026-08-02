@@ -141,6 +141,20 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.handleTranscript(segment);
     }
 
+    setSpeakerVerificationSessionOverride(input: import('./SessionTracker').SpeakerVerificationSessionOverride): boolean {
+        const applied = this.session.setSpeakerVerificationOverride(input);
+        if (!applied) return false;
+        const segment = this.session.findEffectiveSpeakerVerificationSegment(input);
+        if (segment) {
+            this.engine.handleSpeakerVerificationSessionOverride(segment, input.action);
+        }
+        return true;
+    }
+
+    resetSpeakerVerificationSessionOverrides(): void {
+        this.session.clearSpeakerVerificationOverrides();
+    }
+
     async handleSuggestionTrigger(trigger: import('./SessionTracker').SuggestionTrigger): Promise<void> {
         return this.engine.handleSuggestionTrigger(trigger);
     }
@@ -211,7 +225,11 @@ export class IntelligenceManager extends EventEmitter {
     // ============================================
 
     async stopMeeting(): Promise<string | null> {
-        return this.persistence.stopMeeting();
+        try {
+            return await this.persistence.stopMeeting();
+        } finally {
+            this.session.clearSpeakerVerificationOverrides();
+        }
     }
 
     async recoverUnprocessedMeetings(): Promise<void> {

@@ -1316,11 +1316,38 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { store } = makeSpeakerServices();
       store.deleteMeProfile();
       SettingsManager.getInstance().setSpeakerVerificationMode('off');
+      appState.getIntelligenceManager().resetSpeakerVerificationSessionOverrides();
       broadcast('speaker-verification-mode-changed', 'off');
       return { success: true };
     } catch (error: any) {
       console.warn('[IPC] speaker verification profile deletion failed', redactForLog([error]));
       return { success: false, error: '无法删除声音注册，请重试。' };
+    }
+  });
+
+  safeHandle('speaker-verification:set-session-override', async (_, input: any) => {
+    try {
+      const action = input?.action;
+      if (action !== 'force_me' && action !== 'force_not_me' && action !== 'clear') {
+        return { success: false, error: 'invalid_action' };
+      }
+      const timestamp = Number(input?.timestamp);
+      if (typeof input?.speaker !== 'string'
+        || !Number.isFinite(timestamp)
+        || typeof input?.text !== 'string'
+        || input.text.trim().length === 0) {
+        return { success: false, error: 'invalid_segment' };
+      }
+      const applied = appState.getIntelligenceManager().setSpeakerVerificationSessionOverride({
+        speaker: input.speaker,
+        timestamp,
+        text: input.text,
+        action,
+      });
+      return applied ? { success: true } : { success: false, error: 'segment_not_found' };
+    } catch (error: any) {
+      console.warn('[IPC] speaker verification session override failed', redactForLog([error]));
+      return { success: false, error: 'speaker_verification_override_failed' };
     }
   });
   safeHandle('get-technical-interview-direct-vision', async () =>

@@ -146,6 +146,13 @@ export const DynamicActionBar: React.FC<Props> = ({
 
   const handleIncoming = useCallback(
     (action: DynamicActionPayload) => {
+      if (action.status === 'dismissed') {
+        clearAutoTimer(action.id);
+        triggeringIdsRef.current.delete(action.id);
+        clearDismissRemovalTimer(action.id);
+        setActions((prev) => prev.filter((item) => item.id !== action.id));
+        return;
+      }
       const isAuto = isSemiAutoAction(action);
       const actionView: DynamicActionView = isAuto
         ? {

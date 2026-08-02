@@ -345,6 +345,15 @@ export interface SpeakerVerificationMetadata {
   threshold: number
 }
 
+export type SpeakerVerificationSessionOverrideAction = 'force_me' | 'force_not_me' | 'clear'
+
+export interface SpeakerVerificationSessionOverride {
+  speaker: string
+  timestamp: number
+  text: string
+  action: SpeakerVerificationSessionOverrideAction
+}
+
 export type SpeakerVerificationMode = 'off' | 'local'
 
 export interface SpeakerVerificationStatus {
@@ -607,6 +616,8 @@ export interface ElectronAPI {
   speakerVerificationEnroll: (samples: SpeakerEnrollmentSample[]) => Promise<{ success: boolean; status?: SpeakerVerificationStatus; error?: string }>
   // @ipc-channel speaker-verification:delete-profile
   speakerVerificationDeleteProfile: () => Promise<{ success: boolean; error?: string }>
+  // @ipc-channel speaker-verification:set-session-override
+  speakerVerificationSetSessionOverride: (input: SpeakerVerificationSessionOverride) => Promise<{ success: boolean; error?: string }>
   // @ipc-channel local-sensevoice-get-models
   localSenseVoiceGetModels: () => Promise<{ models: any[]; activeModelId: string }>
   // @ipc-channel local-sensevoice-get-terms

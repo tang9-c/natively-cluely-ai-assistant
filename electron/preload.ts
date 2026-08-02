@@ -196,6 +196,12 @@ interface ElectronAPI {
   speakerVerificationGetHealth: () => Promise<import('../src/types/electron').SpeakerVerificationHealth>;
   speakerVerificationEnroll: (samples: Array<{ samples: number[]; sampleRate: number; deviceFingerprint?: string }>) => Promise<{ success: boolean; status?: import('../src/types/electron').SpeakerVerificationStatus; error?: string }>;
   speakerVerificationDeleteProfile: () => Promise<{ success: boolean; error?: string }>;
+  speakerVerificationSetSessionOverride: (input: {
+    speaker: string;
+    timestamp: number;
+    text: string;
+    action: 'force_me' | 'force_not_me' | 'clear';
+  }) => Promise<{ success: boolean; error?: string }>;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
   localWhisperSetModel: (modelId: string) => Promise<{ success: boolean }>;
   localWhisperDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
@@ -298,13 +304,22 @@ interface ElectronAPI {
   onNativeAudioTranscript: (
     callback: (transcript: {
       speaker: string;
+      speakerId?: string;
+      speakerLabel?: string;
+      providerSpeakerId?: string;
+      diarizationProvider?: 'doubao-auc';
       text: string;
+      timestamp?: number;
       final: boolean;
+      confidence?: number;
+      startTimestampMs?: number;
+      endTimestampMs?: number;
       emotion?: TranscriptEmotion;
       emotionSource?: TranscriptEmotionSource;
       emotionDegree?: TranscriptEmotionDegree;
       emotionScore?: number;
       emotionDegreeScore?: number;
+      speakerVerification?: import('../src/types/electron').SpeakerVerificationMetadata;
       coalescedFromCount?: number;
       coalescedProvider?: 'post_stt' | 'local_vad';
       rawSegmentIds?: string[];
@@ -1242,6 +1257,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   speakerVerificationEnroll: (samples: Array<{ samples: number[]; sampleRate: number; deviceFingerprint?: string }>) =>
     ipcRenderer.invoke('speaker-verification:enroll', samples),
   speakerVerificationDeleteProfile: () => ipcRenderer.invoke('speaker-verification:delete-profile'),
+  speakerVerificationSetSessionOverride: (input: {
+    speaker: string;
+    timestamp: number;
+    text: string;
+    action: 'force_me' | 'force_not_me' | 'clear';
+  }) => ipcRenderer.invoke('speaker-verification:set-session-override', input),
   setGroqSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-groq-stt-api-key', apiKey),
   setOpenAiSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-openai-stt-api-key', apiKey),
   setOpenAiSttBaseUrl: (url: string) => ipcRenderer.invoke('set-openai-stt-base-url', url),
