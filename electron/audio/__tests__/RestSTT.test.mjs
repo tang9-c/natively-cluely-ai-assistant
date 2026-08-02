@@ -17,6 +17,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { Worker } from 'node:worker_threads';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const modulePath = path.resolve(__dirname, '../../../dist-electron/electron/audio/RestSTT.js');
@@ -90,6 +91,22 @@ function silentPcm16le(samples = 4000) {
   return Buffer.alloc(samples * 2);
 }
 
+function blockInWorker(ms) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(`
+      const { parentPort, workerData } = require('worker_threads');
+      const deadline = Date.now() + workerData.ms;
+      while (Date.now() < deadline) {}
+      parentPort.postMessage('done');
+    `, { eval: true, workerData: { ms } });
+    worker.once('message', () => {
+      resolve();
+      void worker.terminate();
+    });
+    worker.once('error', reject);
+  });
+}
+
 describe('RestSTT — construction', () => {
   test('builds a working instance for the groq provider with a default model', async () => {
     const { RestSTT } = await loadRestSTT();
@@ -117,34 +134,64 @@ describe('RestSTT — construction', () => {
   });
 });
 
-test('RestSTT emits before a synchronous speaker verification calculation starts', async () => {
+test('RestSTT emits after annotator timeout while worker-backed speaker verification keeps computing', async () => {
   const { RestSTT } = await loadRestSTT();
   const { SpeakerVerificationAnnotator } = await import(pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js')).href);
   const stt = new RestSTT('groq', 'k');
-  let verificationStarted = false;
+  let verificationFinished = false;
   const transcripts = [];
   stt.setSpeakerVerificationAnnotator(new SpeakerVerificationAnnotator({
     getMode: () => 'local',
+    timeoutMs: 20,
     service: {
-      verify: () => {
-        verificationStarted = true;
-        const deadline = Date.now() + 120;
-        while (Date.now() < deadline) {
-          // Simulates synchronous sherpa.compute work on the main thread.
-        }
-        return Promise.resolve({ status: 'verified' });
+      verify: async () => {
+        await blockInWorker(120);
+        verificationFinished = true;
+        return { status: 'verified' };
       },
     },
   }));
   stt.on('transcript', event => transcripts.push(event));
 
+  const startedAt = Date.now();
   await stt.emitUploadResult('同步验证不应延迟转写。', loudPcm16le(16000 * 2));
 
   assert.equal(transcripts.length, 1);
   assert.equal(transcripts[0].text, '同步验证不应延迟转写。');
-  assert.equal(verificationStarted, false);
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(verificationStarted, true);
+  assert.ok(Date.now() - startedAt < 100);
+  assert.equal(verificationFinished, false);
+  await new Promise(resolve => setTimeout(resolve, 150));
+  assert.equal(verificationFinished, true);
+});
+
+test('RestSTT preserves speaker verification metadata when local verification returns within the timeout', async () => {
+  const { RestSTT } = await loadRestSTT();
+  const { SpeakerVerificationAnnotator } = await import(pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js')).href);
+  const stt = new RestSTT('groq', 'k');
+  const transcripts = [];
+  stt.setSpeakerVerificationAnnotator(new SpeakerVerificationAnnotator({
+    getMode: () => 'local',
+    timeoutMs: 200,
+    service: {
+      verify: async () => ({
+        status: 'verified',
+        speakerVerification: {
+          provider: 'local-speaker-verification',
+          profileId: 'me',
+          isMe: true,
+          confidence: 0.96,
+          threshold: 0.72,
+        },
+      }),
+    },
+  }));
+  stt.on('transcript', event => transcripts.push(event));
+
+  await stt.emitUploadResult('这是我的发言。', loudPcm16le(16000 * 2));
+
+  assert.equal(transcripts.length, 1);
+  assert.equal(transcripts[0].speakerVerification?.isMe, true);
+  assert.equal(transcripts[0].speakerVerification?.confidence, 0.96);
 });
 
 describe('RestSTT — configuration setters', () => {

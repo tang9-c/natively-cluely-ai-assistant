@@ -274,13 +274,14 @@ export class LocalSenseVoiceSTT extends BaseSTT {
           this.flushPendingAudio();
           return;
         }
+        const speakerVerification = await this.annotateSpeaker(message.taskId);
         const segment = {
           text,
           isFinal: true,
           confidence: 0.9,
+          ...(speakerVerification ? { speakerVerification } : {}),
           ...(parsed.emotion ? { emotion: parsed.emotion, emotionSource: 'sensevoice' as const } : {}),
         };
-        void this.annotateSpeakerInBackground(message.taskId);
         this.emit('transcript', segment);
       } else {
         this.pendingAudioByTaskId.delete(message.taskId);
@@ -362,11 +363,11 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     }
   }
 
-  private annotateSpeakerInBackground(taskId: string): void {
+  private async annotateSpeaker(taskId: string) {
     const samples = this.pendingAudioByTaskId.get(taskId);
     this.pendingAudioByTaskId.delete(taskId);
-    if (!samples) return;
-    void this.speakerVerificationAnnotator?.annotateInBackground(samples);
+    if (!samples) return undefined;
+    return this.speakerVerificationAnnotator?.annotate(samples);
   }
 
   private resetGapFlushTimer(): void {

@@ -27,3 +27,15 @@ Completed. This fix set addresses C1 and I1-I7 only.
 ## Concern
 
 The accepted non-blocking C1 strategy intentionally does not attach a late background verification result to an already-emitted STT segment. A future worker-thread implementation could retain real-time `[ME]` annotation without reintroducing STT latency.
+
+## Controller Follow-Up
+
+- Replaced the background-drop strategy with worker-thread embedding extraction, so STT can still await bounded speaker metadata without blocking the Electron main thread on synchronous sherpa compute.
+- RestSTT and LocalSenseVoiceSTT again attach `speakerVerification` when verification completes within the annotator timeout.
+- Added RestSTT behavior coverage for worker-backed slow verification timeout and fast high-confidence metadata preservation.
+- PASS: `rtk proxy npm run typecheck:electron`
+- PASS: `rtk proxy npm run build`
+- PASS: `rtk proxy npm run build:electron`
+- PASS: related Node matrix (174/174)
+- PASS: Electron Node Store matrix (14/14)
+- PASS: `rtk proxy git diff --check`
