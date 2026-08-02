@@ -87,8 +87,32 @@ test('enrollment stores one normalized ME profile and discards raw audio', async
   assert.equal(store.profile.sampleCount, 3);
   assert.equal(store.profile.deviceFingerprint, 'mic-a');
   assert.equal(store.profile.quality.qualityBand, 'stable');
-  assert.ok(store.profile.threshold >= 0.72);
+  assert.equal(store.profile.threshold, store.profile.quality.calibratedThreshold);
   assert.equal(Object.hasOwn(store.profile, 'samples'), false);
+});
+
+test('verification rejects confidence below the calibrated enrollment threshold', async () => {
+  const { SpeakerEnrollmentService } = await import('../../../dist-electron/electron/services/speaker/SpeakerEnrollmentService.js');
+  const { SpeakerVerificationService } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationService.js');
+  const store = new MemoryStore();
+  await new SpeakerEnrollmentService({
+    store,
+    extractor: new FakeExtractor(),
+    threshold: 0.9,
+  }).enroll([
+    { samples: loudSamples(3), sampleRate: 16000 },
+    { samples: loudSamples(3), sampleRate: 16000 },
+    { samples: loudSamples(3), sampleRate: 16000 },
+  ]);
+
+  const result = await new SpeakerVerificationService({
+    store,
+    extractor: new FakeExtractor([0.8, 0.6, 0, 0]),
+  }).verify(loudSamples(2));
+
+  assert.equal(store.profile.threshold, store.profile.quality.calibratedThreshold);
+  assert.ok(result.speakerVerification.confidence < store.profile.quality.calibratedThreshold);
+  assert.equal(result.speakerVerification.isMe, false);
 });
 
 test('enrollment rejects split embeddings without writing an unstable profile', async () => {

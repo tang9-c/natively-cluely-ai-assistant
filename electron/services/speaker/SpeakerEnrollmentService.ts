@@ -102,7 +102,7 @@ export class SpeakerEnrollmentService {
       embeddingDim: this.options.extractor.dim,
       extractorModel: this.options.extractor.modelId,
       extractorVersion: this.options.extractor.version,
-      threshold: Math.max(this.threshold, quality.calibratedThreshold),
+      threshold: quality.calibratedThreshold,
       deviceFingerprint,
       sampleCount: samples.length,
       quality,

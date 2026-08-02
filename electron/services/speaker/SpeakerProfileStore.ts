@@ -17,6 +17,8 @@ interface DbProvider {
   getDb(): Database.Database | null;
 }
 
+const DEFAULT_SPEAKER_THRESHOLD = 0.72;
+
 function embeddingToBlob(embedding: Float32Array): Buffer {
   return Buffer.from(embedding.buffer, embedding.byteOffset, embedding.byteLength);
 }
@@ -44,6 +46,12 @@ function qualityFromRow(row: Record<string, unknown>): SpeakerEnrollmentQualityS
 
 function toFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function resolveProfileThreshold(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1
+    ? value
+    : DEFAULT_SPEAKER_THRESHOLD;
 }
 
 const SPEAKER_VERIFICATION_ERROR_CODES = new Set([
@@ -245,7 +253,7 @@ export class SpeakerProfileStore {
       embeddingDim: row.embedding_dim,
       extractorModel: row.extractor_model,
       extractorVersion: row.extractor_version,
-      threshold: row.threshold,
+      threshold: resolveProfileThreshold(row.threshold),
       enrolledAt: row.enrolled_at,
       updatedAt: row.updated_at,
       deviceFingerprint: row.device_fingerprint || undefined,

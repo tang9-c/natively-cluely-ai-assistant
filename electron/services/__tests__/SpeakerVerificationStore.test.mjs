@@ -233,6 +233,33 @@ test('SpeakerProfileStore reads legacy profiles without quality columns', async 
   }
 });
 
+test('SpeakerProfileStore falls back to the default threshold for invalid legacy values', async () => {
+  const { SpeakerProfileStore } = await import('../../../dist-electron/electron/services/speaker/SpeakerProfileStore.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-speaker-store-invalid-threshold-'));
+  const db = new Database(path.join(dir, 'test.db'));
+  try {
+    db.exec(`
+      CREATE TABLE speaker_profiles (
+        id TEXT PRIMARY KEY, label TEXT NOT NULL, embedding BLOB NOT NULL, embedding_dim INTEGER NOT NULL,
+        extractor_model TEXT NOT NULL, extractor_version TEXT NOT NULL, threshold REAL,
+        enrolled_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, device_fingerprint TEXT,
+        sample_count INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+    const store = new SpeakerProfileStore({ getDb: () => db });
+    for (const threshold of [null, NaN, Infinity, -Infinity]) {
+      db.prepare('DELETE FROM speaker_profiles').run();
+      db.prepare('INSERT INTO speaker_profiles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run('me', 'ME', Buffer.from(new Float32Array([1, 0]).buffer), 2, 'test-model', 'v1', threshold, 1, 1, null, 3);
+
+      assert.equal(store.getMeProfile()?.threshold, 0.72, `invalid threshold ${threshold} must use fallback`);
+    }
+  } finally {
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('SpeakerProfileStore exposes health state and privacy-safe failure counters', async () => {
   const { SpeakerProfileStore } = await import('../../../dist-electron/electron/services/speaker/SpeakerProfileStore.js');
   const { db, dir } = createDb();
