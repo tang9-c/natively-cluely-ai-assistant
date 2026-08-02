@@ -22,9 +22,97 @@ async function loadSessionTracker() {
   return import(pathToFileURL(trackerPath).href);
 }
 
+async function loadSpeakerEnrollmentService() {
+  const servicePath = path.resolve(__dirname, '../../../dist-electron/electron/services/speaker/SpeakerEnrollmentService.js');
+  return import(pathToFileURL(servicePath).href);
+}
+
+async function loadSpeakerVerificationService() {
+  const servicePath = path.resolve(__dirname, '../../../dist-electron/electron/services/speaker/SpeakerVerificationService.js');
+  return import(pathToFileURL(servicePath).href);
+}
+
 const turn = (timestamp, role, text, extra = {}) => ({ role, text, timestamp, ...extra });
 
+function loudSamples(seconds = 2, sampleRate = 16000, frequency = 220) {
+  const samples = new Float32Array(seconds * sampleRate);
+  for (let i = 0; i < samples.length; i += 1) {
+    samples[i] = Math.sin((i / sampleRate) * frequency * Math.PI * 2) * 0.2;
+  }
+  return samples;
+}
+
+class MemorySpeakerStore {
+  profile = null;
+  verificationStats = [];
+  getMeProfile() {
+    return this.profile;
+  }
+  saveMeProfile(input) {
+    this.profile = {
+      id: 'me',
+      label: 'ME',
+      embedding: input.embedding,
+      embeddingDim: input.embeddingDim,
+      extractorModel: input.extractorModel,
+      extractorVersion: input.extractorVersion,
+      threshold: input.threshold,
+      enrolledAt: input.nowMs ?? 1,
+      updatedAt: input.nowMs ?? 1,
+      sampleCount: input.sampleCount,
+      quality: input.quality,
+    };
+  }
+  getStatus(mode = 'off') {
+    return this.profile
+      ? { enrolled: true, enrolledAt: this.profile.enrolledAt, model: this.profile.extractorModel, mode }
+      : { enrolled: false, mode };
+  }
+  recordVerificationStat(input) {
+    this.verificationStats.push(input);
+  }
+}
+
+class FakeSpeakerExtractor {
+  dim = 4;
+  modelId = 'fake-speaker-model';
+  version = 'fake-version';
+  constructor(vector = [1, 0, 0, 0]) {
+    this.vector = vector;
+  }
+  async extract() {
+    return new Float32Array(this.vector);
+  }
+}
+
 describe('SpeakerContextPolicy', () => {
+  test('stable enrollment verifies ME and reaches transcript cleaner as [ME]', async () => {
+    const { SpeakerEnrollmentService } = await loadSpeakerEnrollmentService();
+    const { SpeakerVerificationService } = await loadSpeakerVerificationService();
+    const { evaluateSpeakerContextForAnswer } = await loadSpeakerContextPolicy();
+    const { prepareTranscriptForWhatToAnswer } = await loadTranscriptCleaner();
+    const store = new MemorySpeakerStore();
+    const extractor = new FakeSpeakerExtractor([1, 0, 0, 0]);
+
+    await new SpeakerEnrollmentService({ store, extractor }).enroll([
+      { samples: loudSamples(3), sampleRate: 16000 },
+      { samples: loudSamples(3), sampleRate: 16000 },
+      { samples: loudSamples(3), sampleRate: 16000 },
+    ]);
+    const verification = await new SpeakerVerificationService({ store, extractor }).verify(loudSamples(2));
+    const result = evaluateSpeakerContextForAnswer([
+      turn(1, 'interviewer', 'I will send the implementation plan.', {
+        speakerVerification: verification.speakerVerification,
+      }),
+    ]);
+    const prompt = prepareTranscriptForWhatToAnswer(result.turns, 12);
+
+    assert.equal(verification.status, 'verified');
+    assert.equal(verification.speakerVerification.isMe, true);
+    assert.match(prompt, /\[ME\]: i will send the implementation plan\./);
+    assert.deepEqual(store.verificationStats.map(({ outcome }) => outcome), ['positive']);
+  });
+
   test('keeps high-confidence local verification as ME and records confidence trace', async () => {
     const { evaluateSpeakerContextForAnswer } = await loadSpeakerContextPolicy();
     const { prepareTranscriptForWhatToAnswer } = await loadTranscriptCleaner();
