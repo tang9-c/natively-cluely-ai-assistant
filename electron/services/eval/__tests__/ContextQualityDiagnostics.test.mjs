@@ -374,7 +374,8 @@ test('dynamic action cloud adapter preserves typed failure reasons for productio
   );
 
   assert.match(methodSource, /throw new CloudSemanticGateError\(cloudFailureReasonFromError\(error\)\)/);
-  assert.match(methodSource, /return parseCloudSemanticGateResponse\(raw,\s*input\.candidates\)/);
+  assert.match(methodSource, /parseCloudSemanticGateResponse\(raw,\s*input\.candidates\)/);
+  assert.match(methodSource, /return parsed/);
   assert.match(classifierSource, /throw new CloudSemanticGateError\('cloud_invalid_json'\)/);
   assert.doesNotMatch(methodSource, /catch\s*\([^)]*\)\s*\{[\s\S]{0,220}return null;/);
 });

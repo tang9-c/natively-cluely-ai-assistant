@@ -35,7 +35,7 @@ describe('Fixture integrity — every declared sentinel exists in at least one f
   // The `custom/` directory is a meta-folder containing per-custom-mode
   // subfolders; it is exercised by CustomModes.test.mjs and is not itself a
   // mode folder. Skip it here.
-  const isCoreMode = (name) => name !== 'custom';
+  const isCoreMode = (name) => name !== 'custom' && fs.statSync(path.join(FIX_ROOT, name)).isDirectory();
 
   test('every mode folder has 5 reference files', () => {
     for (const modeDir of fs.readdirSync(FIX_ROOT)) {

@@ -1605,6 +1605,20 @@ export class DatabaseManager {
         if (version < 32) {
             console.log('[DatabaseManager] Applying migration v31 -> v32: Add speaker enrollment calibration and runtime health stats');
             this.db.exec(`
+                CREATE TABLE IF NOT EXISTS speaker_profiles (
+                    id TEXT PRIMARY KEY,
+                    label TEXT NOT NULL,
+                    embedding BLOB NOT NULL,
+                    embedding_dim INTEGER NOT NULL,
+                    extractor_model TEXT NOT NULL,
+                    extractor_version TEXT NOT NULL,
+                    threshold REAL NOT NULL,
+                    enrolled_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    device_fingerprint TEXT,
+                    sample_count INTEGER NOT NULL DEFAULT 0
+                );
+
                 CREATE TABLE IF NOT EXISTS speaker_profile_stats (
                     profile_id TEXT PRIMARY KEY,
                     total_verifications INTEGER NOT NULL DEFAULT 0,

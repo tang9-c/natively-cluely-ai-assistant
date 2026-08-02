@@ -598,7 +598,8 @@ function isSalesSellerResponse(text: string): boolean {
 
 function isSalesCustomerQuestionOrRequest(text: string): boolean {
     return /[?？]/.test(text) ||
-        /(能不能|会不会|可不可以|是不是|哪种|多少|多少钱|怎么|如何|为什么|说说|确认一下|要求确认|想看|更想看|要看|需要看|想要|需要|发我|给我|发.*邮箱|给.*报价|报价怎么给)/i.test(text);
+        /(能不能|会不会|可不可以|是不是|哪种|多少|多少钱|怎么|如何|为什么|说说|确认一下|要求确认|想看|更想看|要看|需要看|想要|需要|发我|给我|发.*邮箱|给.*报价|报价怎么给)/i.test(text) ||
+        /(?:有|存在).{0,24}(?:需求|要求)/i.test(text);
 }
 
 function shouldSuppressFdeTrigger(trigger: ActionTrigger, transcript: string): boolean {

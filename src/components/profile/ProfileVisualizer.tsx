@@ -47,6 +47,7 @@ export function normalizeProfileVisualizerData(
         email: profileData?.identity?.email?.trim() || undefined,
         summary: profileData?.summary?.trim() || undefined,
         experienceCount: Math.max(0, profileData?.experienceCount ?? 0),
+        projectCount: Math.max(0, profileData?.projectCount ?? 0),
         nodeCount: Math.max(0, profileData?.nodeCount ?? 0),
         skills,
         skillCount: skills.length,
