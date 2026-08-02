@@ -646,12 +646,11 @@ export class RestSTT extends BaseSTT {
         if (typeof transcript === 'string') {
             if (transcript && transcript.trim().length > 0) {
                 console.log(`[RestSTT] Transcript received`, { length: transcript.trim().length });
-                const speakerVerification = await this.speakerVerificationAnnotator?.annotate(buffer16ToFloat32(pcm16k));
+                void this.speakerVerificationAnnotator?.annotateInBackground(buffer16ToFloat32(pcm16k));
                 this.emit('transcript', {
                     text: transcript.trim(),
                     isFinal: true,
                     confidence: 1.0,
-                    ...(speakerVerification ? { speakerVerification } : {}),
                 });
             }
             return;
@@ -666,7 +665,7 @@ export class RestSTT extends BaseSTT {
         for (const utterance of aligned) {
             if (!utterance.text.trim()) continue;
             const utteranceSamples = this.slicePcm16kByTime(pcm16k, utterance.startMs, utterance.endMs);
-            const speakerVerification = await this.speakerVerificationAnnotator?.annotate(utteranceSamples);
+            void this.speakerVerificationAnnotator?.annotateInBackground(utteranceSamples);
             const emotionMetadata = utterance.emotion && utterance.emotion !== 'neutral'
                 ? {
                     emotion: utterance.emotion,
@@ -687,7 +686,6 @@ export class RestSTT extends BaseSTT {
                 startTimestampMs: utterance.startMs,
                 endTimestampMs: utterance.endMs,
                 ...emotionMetadata,
-                ...(speakerVerification ? { speakerVerification } : {}),
             });
         }
     }

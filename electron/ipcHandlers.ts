@@ -28,6 +28,7 @@ import {
   type UploadedMaterialContextContribution,
 } from './services/knowledge/UploadedMaterialContextContributionService';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
+import { normalizeSpeakerEnrollmentSample } from './services/speaker/speakerEnrollmentPcm';
 import { buildBusinessSystemFixedReplyTraceInput } from './services/business-system/BusinessSystemFixedReplyTrace';
 import { businessSystemDegradedReasonForStatus } from './services/business-system/BusinessSystemContextService';
 import { SkillActivationManager, type ActivateSkillInput, type SkillActivationScope } from './services/SkillActivationManager';
@@ -1286,27 +1287,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     return SPEAKER_RECORDING_QUALITY_POLICY;
   });
 
-  const decodeSpeakerEnrollmentPcm16 = (pcm16: ArrayBuffer | ArrayBufferView): Float32Array => {
-    const view = ArrayBuffer.isView(pcm16)
-      ? new DataView(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength)
-      : new DataView(pcm16);
-    const samples = new Float32Array(Math.floor(view.byteLength / 2));
-    for (let i = 0; i < samples.length; i += 1) {
-      samples[i] = view.getInt16(i * 2, true) / 32768;
-    }
-    return samples;
-  };
-
-  const normalizeSpeakerEnrollmentSample = (sample: any) => ({
-    samples: sample?.pcm16
-      ? decodeSpeakerEnrollmentPcm16(sample.pcm16)
-      : Array.isArray(sample?.samples)
-        ? new Float32Array(sample.samples)
-        : new Float32Array(Array.from(sample?.samples ?? [])),
-    sampleRate: Number(sample?.sampleRate) || 16000,
-    deviceFingerprint: typeof sample?.deviceFingerprint === 'string' ? sample.deviceFingerprint : undefined,
-  });
-
   safeHandle('speaker-verification:enroll', async (_, samples: any[]) => {
     try {
       if (!Array.isArray(samples) || samples.length < 3) {
@@ -1322,13 +1302,17 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true, status };
     } catch (error: any) {
       console.warn('[IPC] speaker verification enrollment failed', redactForLog([error]));
+      if (error?.message === 'speaker_enrollment_unstable_profile') {
+        return { success: false, error: 'speaker_enrollment_unstable_profile' };
+      }
       return { success: false, error: '声音注册失败，请检查本地声纹模型后重试。' };
     }
   });
 
   safeHandle('speaker-verification:delete-profile', async () => {
     try {
-      const { store } = makeSpeakerServices();
+      const { SpeakerProfileStore } = require('./services/speaker/SpeakerProfileStore');
+      const store = new SpeakerProfileStore(DatabaseManager.getInstance());
       store.deleteMeProfile();
       SettingsManager.getInstance().setSpeakerVerificationMode('off');
       appState.getIntelligenceManager().resetSpeakerVerificationSessionOverrides();

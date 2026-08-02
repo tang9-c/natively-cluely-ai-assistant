@@ -66,6 +66,13 @@ test('delete profile API calls hard delete rather than disabling a row', () => {
   assert.doesNotMatch(ipc, /is_active\s*=\s*0/);
 });
 
+test('delete profile constructs only the store and enrollment surfaces a stable rerecord error code', () => {
+  const ipc = read('electron/ipcHandlers.ts');
+  assert.match(ipc, /speaker-verification:delete-profile[\s\S]*?new SpeakerProfileStore\(DatabaseManager\.getInstance\(\)\)/);
+  assert.doesNotMatch(ipc, /speaker-verification:delete-profile[\s\S]*?makeSpeakerServices\(\)/);
+  assert.match(ipc, /speaker_enrollment_unstable_profile/);
+});
+
 test('mode IPC rejects invalid values and enrollment restores local verification', () => {
   const ipc = read('electron/ipcHandlers.ts');
   assert.match(ipc, /set-speaker-verification-mode[\s\S]*?!\['off', 'local'\]\.includes\(mode\)[\s\S]*?error: 'invalid_mode'/);

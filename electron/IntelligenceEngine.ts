@@ -1239,6 +1239,10 @@ export class IntelligenceEngine extends EventEmitter {
             this.emit('dynamic_action_gate_availability', gateArbitrationStatuses);
         }
 
+        const effectiveSegment = this.session.findEffectiveSpeakerVerificationSegment(segment)
+            ?? this.session.applySpeakerVerificationOverride(segment);
+        if (this.shouldSkipDynamicActionForSpeaker(effectiveSegment)) return;
+
         // The store dedupes within the per-session store, so each emitted action
         // is a *new* candidate — safe to forward to renderer for rendering.
         for (const action of newActions) {

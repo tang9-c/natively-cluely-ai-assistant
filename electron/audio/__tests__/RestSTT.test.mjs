@@ -117,6 +117,36 @@ describe('RestSTT — construction', () => {
   });
 });
 
+test('RestSTT emits before a synchronous speaker verification calculation starts', async () => {
+  const { RestSTT } = await loadRestSTT();
+  const { SpeakerVerificationAnnotator } = await import(pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js')).href);
+  const stt = new RestSTT('groq', 'k');
+  let verificationStarted = false;
+  const transcripts = [];
+  stt.setSpeakerVerificationAnnotator(new SpeakerVerificationAnnotator({
+    getMode: () => 'local',
+    service: {
+      verify: () => {
+        verificationStarted = true;
+        const deadline = Date.now() + 120;
+        while (Date.now() < deadline) {
+          // Simulates synchronous sherpa.compute work on the main thread.
+        }
+        return Promise.resolve({ status: 'verified' });
+      },
+    },
+  }));
+  stt.on('transcript', event => transcripts.push(event));
+
+  await stt.emitUploadResult('同步验证不应延迟转写。', loudPcm16le(16000 * 2));
+
+  assert.equal(transcripts.length, 1);
+  assert.equal(transcripts[0].text, '同步验证不应延迟转写。');
+  assert.equal(verificationStarted, false);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(verificationStarted, true);
+});
+
 describe('RestSTT — configuration setters', () => {
   test('setApiKey rebuilds the provider config', async () => {
     const { RestSTT } = await loadRestSTT();

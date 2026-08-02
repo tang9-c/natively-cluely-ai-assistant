@@ -91,6 +91,20 @@ test('enrollment stores one normalized ME profile and discards raw audio', async
   assert.equal(Object.hasOwn(store.profile, 'samples'), false);
 });
 
+test('PCM16 enrollment payload normalizes little-endian samples without raw array expansion', async () => {
+  const { normalizeSpeakerEnrollmentSample } = await import('../../../dist-electron/electron/services/speaker/speakerEnrollmentPcm.js');
+  const pcm16 = new Int16Array([-32768, 0, 32767]);
+  const sample = normalizeSpeakerEnrollmentSample({
+    pcm16: pcm16.buffer,
+    sampleRate: 48000,
+    deviceFingerprint: 'Built-in Microphone',
+  });
+
+  assert.deepEqual(Array.from(sample.samples), [-1, 0, 32767 / 32768]);
+  assert.equal(sample.sampleRate, 48000);
+  assert.equal(sample.deviceFingerprint, 'Built-in Microphone');
+});
+
 test('verification rejects confidence below the calibrated enrollment threshold', async () => {
   const { SpeakerEnrollmentService } = await import('../../../dist-electron/electron/services/speaker/SpeakerEnrollmentService.js');
   const { SpeakerVerificationService } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationService.js');
@@ -291,6 +305,33 @@ test('annotator times out hanging verification without blocking metadata fallbac
   assert.ok(Date.now() - startedAt >= 175);
   assert.equal(timeoutCount, 1);
   assert.equal(onTimeoutCount, 1);
+});
+
+test('annotator schedules synchronously blocking verification after the transcript path returns', async () => {
+  const { SpeakerVerificationAnnotator } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js');
+  let verifyCalls = 0;
+  const annotator = new SpeakerVerificationAnnotator({
+    getMode: () => 'local',
+    service: {
+      verify: () => {
+        verifyCalls += 1;
+        const deadline = Date.now() + 120;
+        while (Date.now() < deadline) {
+          // Simulates sherpa.compute(): a synchronous native CPU call.
+        }
+        return Promise.resolve({ status: 'verified' });
+      },
+    },
+  });
+
+  const startedAt = Date.now();
+  const result = await annotator.annotateInBackground(loudSamples(2));
+
+  assert.equal(result, undefined);
+  assert.ok(Date.now() - startedAt < 50, 'STT path must return before synchronous verification begins');
+  assert.equal(verifyCalls, 0);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(verifyCalls, 1);
 });
 
 test('annotator drops metadata when verification service reports model failure', async () => {

@@ -175,7 +175,14 @@ export class SpeakerProfileStore {
       const errors = input.outcome === 'error' ? 1 : 0;
       const timeouts = input.outcome === 'timeout' ? 1 : 0;
       const verifiedAt = ['positive', 'low_confidence', 'near_threshold_non_me'].includes(input.outcome) ? now : null;
-      const failureAt = input.outcome === 'positive' ? null : now;
+      const isReliabilityFailure = input.outcome === 'low_quality'
+        || input.outcome === 'near_threshold_non_me'
+        || input.outcome === 'error'
+        || input.outcome === 'timeout';
+      const failureAt = isReliabilityFailure ? now : null;
+      const profileExists = db.prepare('SELECT 1 FROM speaker_profiles WHERE id = ?')
+        .get(SPEAKER_PROFILE_ME_ID);
+      if (!profileExists) return;
       db.prepare(`
         INSERT INTO speaker_profile_stats (
           profile_id, total_verifications, positive_verifications, low_quality_skips,

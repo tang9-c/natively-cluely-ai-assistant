@@ -34,10 +34,12 @@ test('RestSTT annotates final transcripts using the uploaded 16k PCM buffer', ()
   assert.match(rest, /slicePcm16kByTime/);
 });
 
-test('LocalSenseVoiceSTT annotates final VAD samples before emitting transcript', () => {
+test('LocalSenseVoiceSTT schedules final VAD speaker verification without delaying transcript emission', () => {
   const sense = read('electron/audio/sensevoice/LocalSenseVoiceSTT.ts');
   assert.match(sense, /pendingAudioByTaskId/);
-  assert.match(sense, /speakerVerification: await this\.annotateSpeaker/);
+  assert.match(sense, /void this\.annotateSpeakerInBackground\(message\.taskId\)/);
+  assert.match(sense, /annotateInBackground\(samples\)/);
+  assert.doesNotMatch(sense, /speakerVerification: await/);
 });
 
 test('DatabaseManager persists speaker verification json with transcripts', () => {

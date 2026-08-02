@@ -30,7 +30,10 @@ function speakerVerificationHealthMessage(status: SpeakerVerificationStatus | nu
   }
 }
 
-function sanitizedSpeakerVerificationError(_error: unknown, fallback: string): string {
+function sanitizedSpeakerVerificationError(error: unknown, fallback: string): string {
+  if (error === 'speaker_enrollment_unstable_profile') {
+    return '声音样本不稳定，请在安静环境重新录制三段语音。';
+  }
   return fallback;
 }
 

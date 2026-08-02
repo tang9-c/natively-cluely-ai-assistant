@@ -314,6 +314,10 @@ test('SpeakerProfileStore records reliability outcomes and a cumulative latency 
   const { db, dir } = createDb();
   try {
     const store = new SpeakerProfileStore({ getDb: () => db });
+    store.saveMeProfile({
+      embedding: new Float32Array([0.5, 0.5]), embeddingDim: 2,
+      extractorModel: 'test-model', extractorVersion: 'v1', threshold: 0.72, sampleCount: 3,
+    });
     store.recordVerificationStat({ outcome: 'positive', latencyMs: 10, nowMs: 100 });
     store.recordVerificationStat({ outcome: 'low_confidence', latencyMs: 20, nowMs: 200 });
     store.recordVerificationStat({ outcome: 'near_threshold_non_me', latencyMs: 30, nowMs: 300 });
@@ -344,11 +348,67 @@ test('SpeakerProfileStore records reliability outcomes and a cumulative latency 
   }
 });
 
+test('normal low-confidence rejection does not degrade speaker verification health', async () => {
+  const { SpeakerProfileStore } = await import('../../../dist-electron/electron/services/speaker/SpeakerProfileStore.js');
+  const { db, dir } = createDb();
+  try {
+    const store = new SpeakerProfileStore({ getDb: () => db });
+    store.saveMeProfile({
+      embedding: new Float32Array([0.5, 0.5]), embeddingDim: 2,
+      extractorModel: 'test-model', extractorVersion: 'v1', threshold: 0.72, sampleCount: 3,
+    });
+    store.recordVerificationStat({ outcome: 'low_confidence', nowMs: Date.now() });
+
+    const status = store.getStatus('local', { state: 'ready' });
+    assert.equal(status.health.state, 'ready');
+    assert.equal(status.stats.lastFailureAt, undefined);
+  } finally {
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('late verification cannot recreate stats after its profile is deleted', async () => {
+  const { SpeakerProfileStore } = await import('../../../dist-electron/electron/services/speaker/SpeakerProfileStore.js');
+  const { SpeakerVerificationService } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationService.js');
+  const { db, dir } = createDb();
+  try {
+    const store = new SpeakerProfileStore({ getDb: () => db });
+    store.saveMeProfile({
+      embedding: new Float32Array([1, 0]), embeddingDim: 2,
+      extractorModel: 'test-model', extractorVersion: 'v1', threshold: 0.72, sampleCount: 3,
+    });
+    let resolveEmbedding;
+    const service = new SpeakerVerificationService({
+      store,
+      extractor: {
+        dim: 2, modelId: 'test-model', version: 'v1',
+        extract: () => new Promise(resolve => { resolveEmbedding = resolve; }),
+      },
+    });
+
+    const verification = service.verify(new Float32Array(16000 * 2).fill(0.2));
+    store.deleteMeProfile();
+    resolveEmbedding(new Float32Array([1, 0]));
+    await verification;
+
+    assert.equal(store.getMeProfile(), null);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM speaker_profile_stats WHERE profile_id = 'me'").get().n, 0);
+  } finally {
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('SpeakerProfileStore maps unknown error codes to a fixed safe code', async () => {
   const { SpeakerProfileStore } = await import('../../../dist-electron/electron/services/speaker/SpeakerProfileStore.js');
   const { db, dir } = createDb();
   try {
     const store = new SpeakerProfileStore({ getDb: () => db });
+    store.saveMeProfile({
+      embedding: new Float32Array([0.5, 0.5]), embeddingDim: 2,
+      extractorModel: 'test-model', extractorVersion: 'v1', threshold: 0.72, sampleCount: 3,
+    });
     store.recordVerificationStat({ outcome: 'error', error: 'unknown_speaker_error', nowMs: 100 });
 
     assert.equal(store.getStats().lastError, 'speaker_verification_failed');

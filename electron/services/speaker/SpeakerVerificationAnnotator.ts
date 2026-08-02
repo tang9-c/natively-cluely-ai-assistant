@@ -19,6 +19,15 @@ export interface SpeakerVerificationAnnotatorOptions {
 export class SpeakerVerificationAnnotator {
   constructor(private readonly options: SpeakerVerificationAnnotatorOptions) {}
 
+  async annotateInBackground(samples16k: Float32Array): Promise<undefined> {
+    setImmediate(() => {
+      void this.annotate(samples16k).catch(() => {
+        // Verification must never surface an asynchronous error to STT.
+      });
+    });
+    return undefined;
+  }
+
   async annotate(samples16k: Float32Array): Promise<SpeakerVerificationMetadata | undefined> {
     if (this.options.getMode() !== 'local') return undefined;
     if (!measureAudioQuality(samples16k, undefined, { durationKind: 'verification' }).ok) {

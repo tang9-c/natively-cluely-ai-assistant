@@ -198,6 +198,45 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(calls.length, 0);
   });
 
+  test('force_me suppresses an in-flight dynamic action gate before it emits', async () => {
+    const { engine, session } = await makeEngine();
+    const emitted = [];
+    let releaseAssessment;
+    let assessmentStarted;
+    const assessmentStartedPromise = new Promise(resolve => { assessmentStarted = resolve; });
+    engine.on('dynamic_action_emitted', action => emitted.push(action));
+    engine.setDynamicActionContext({
+      sessionId: 'sess-speaker-force-me-race',
+      modeId: 'mode-sales',
+      modeTemplateType: 'sales',
+    });
+    engine._setDynamicActionEngineForTest({
+      detectSignalCandidates: () => [
+        { trigger: { type: 'pricing_objection' }, match: '价格太高', index: 0 },
+      ],
+      assessSignals: async () => {
+        assessmentStarted();
+        await new Promise(resolve => { releaseAssessment = resolve; });
+        return [buildStoredDiscoveryAction()];
+      },
+      detectActions: () => [],
+      acceptAction: () => null,
+      dismissAction: () => {},
+      getTopActions: () => [],
+    });
+    const segment = {
+      speaker: 'interviewer', text: '这个价格太高了，我们预算不够', timestamp: Date.now(), final: true,
+    };
+    engine.handleTranscript(segment, true);
+    await assessmentStartedPromise;
+    assert.equal(session.setSpeakerVerificationOverride({ ...segment, action: 'force_me' }), true);
+    engine.handleSpeakerVerificationSessionOverride(session.findEffectiveSpeakerVerificationSegment(segment), 'force_me');
+    releaseAssessment();
+    await waitForAsyncSignals();
+
+    assert.equal(emitted.length, 0);
+  });
+
   test('speaker verification integration skips only high-confidence ME, not low-confidence malformed or override non-ME', async () => {
     const cases = [
       {

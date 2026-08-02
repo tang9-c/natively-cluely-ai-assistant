@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import Module from 'node:module';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { transformSync } from 'esbuild';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -10,6 +14,31 @@ const repoRoot = path.resolve(__dirname, '../../..');
 function read(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 }
+
+function loadSpeakerVerificationSettings() {
+  const componentPath = path.join(repoRoot, 'src/components/settings/SpeakerVerificationSettings.tsx');
+  const compiled = transformSync(fs.readFileSync(componentPath, 'utf8'), {
+    loader: 'tsx',
+    format: 'cjs',
+    target: 'es2020',
+  });
+  const componentModule = new Module(componentPath);
+  componentModule.filename = componentPath;
+  componentModule.paths = Module._nodeModulePaths(path.dirname(componentPath));
+  componentModule._compile(compiled.code, componentPath);
+  return componentModule.exports;
+}
+
+test('SpeakerVerificationSettings renders its primary Chinese status and controls', () => {
+  const { SpeakerVerificationSettings } = loadSpeakerVerificationSettings();
+  const html = renderToStaticMarkup(React.createElement(SpeakerVerificationSettings));
+
+  assert.match(html, /我的声音/);
+  assert.match(html, /未注册。注册后可在会议中识别你的发言为 ME。/);
+  assert.match(html, /安装声纹模型/);
+  assert.match(html, /模型健康/);
+  assert.match(html, /检查模型/);
+});
 
 test('SpeakerVerificationSettings exposes register, re-record, and delete states', () => {
   const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
@@ -138,6 +167,12 @@ test('UI renders all speaker verification runtime health states', () => {
   assert.match(source, /已注册，但声纹模型加载失败。/);
   assert.match(source, /已注册，但最近识别质量不稳定。/);
   assert.match(source, /当前不可用/);
+});
+
+test('unstable enrollment preserves a safe rerecord message instead of blaming the model', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+  assert.match(source, /speaker_enrollment_unstable_profile/);
+  assert.match(source, /声音样本不稳定，请在安静环境重新录制三段语音。/);
 });
 
 test('UI exposes speaker model health check states and latency', () => {

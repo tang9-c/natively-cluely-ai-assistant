@@ -265,6 +265,7 @@ test('get-screen-understanding-mode IPC channel is wired through main, preload, 
 
 test('speaker-verification:enroll IPC channel is wired through main, preload, and renderer types', () => {
   const ipc = read('electron/ipcHandlers.ts');
+  const pcm = read('electron/services/speaker/speakerEnrollmentPcm.ts');
   const preload = read('electron/preload.ts');
   const types = read('src/types/electron.d.ts');
 
@@ -307,13 +308,18 @@ test('speaker-verification:enroll IPC channel is wired through main, preload, an
   );
   assert.match(
     ipc,
-    /decodeSpeakerEnrollmentPcm16/,
-    'ipcHandlers.ts must decode pcm16 enrollment samples',
+    /normalizeSpeakerEnrollmentSample/,
+    'ipcHandlers.ts must normalize enrollment samples before enrollment',
   );
   assert.match(
-    ipc,
+    pcm,
+    /decodeSpeakerEnrollmentPcm16/,
+    'speaker PCM helper must decode little-endian PCM16 enrollment samples',
+  );
+  assert.match(
+    pcm,
     /Array\.isArray\(sample\?\.samples\)[\s\S]*?new Float32Array\(sample\.samples\)/,
-    'ipcHandlers.ts must keep legacy number[] enrollment compatibility',
+    'speaker PCM helper must keep legacy number[] enrollment compatibility',
   );
 });
 
