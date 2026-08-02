@@ -6,10 +6,11 @@ Completed.
 
 ## Changes
 
-- `measureAudioQuality` now applies `minVerificationDurationMs` for short verification-segment detection.
+- `measureAudioQuality` accepts an explicit duration purpose. Enrollment uses `minDurationMs`; verification uses `minVerificationDurationMs`.
+- `SpeakerEnrollmentService` applies the enrollment duration rule to both submitted samples and its 2-second embedding windows.
 - `SpeakerVerificationAnnotator` checks audio quality before invoking `service.verify` and returns no metadata for rejected audio.
 - Preflight low-quality skips are recorded once through `SpeakerVerificationService.recordLowQuality`; the service retains its own quality check for direct callers.
-- Added core coverage for 0.5-second loud audio skipping verification and 2-second loud audio returning verification metadata.
+- Added core coverage for differing duration thresholds: a 2-second sample is rejected for enrollment at 2.5 seconds but accepted for verification at 1 second.
 
 ## Verification
 

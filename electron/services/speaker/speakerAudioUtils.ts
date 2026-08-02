@@ -2,6 +2,8 @@ import type { AudioQualityResult, SpeakerRecordingQualityPolicy } from './speake
 
 const TARGET_SAMPLE_RATE = 16_000;
 
+export type AudioQualityDurationKind = 'enrollment' | 'verification';
+
 export const SPEAKER_RECORDING_QUALITY_POLICY: SpeakerRecordingQualityPolicy = {
   minDurationMs: 1500,
   minRms: 0.005,
@@ -88,6 +90,7 @@ export function slidingWindows(samples16k: Float32Array, windowMs = 2000, hopMs 
 export function measureAudioQuality(
   samples16k: Float32Array,
   policy = SPEAKER_RECORDING_QUALITY_POLICY,
+  options: { durationKind?: AudioQualityDurationKind } = {},
 ): AudioQualityResult {
   if (samples16k.length === 0) {
     return { ok: false, durationMs: 0, rms: 0, voiceRatio: 0, reason: 'empty' };
@@ -104,7 +107,10 @@ export function measureAudioQuality(
   const durationMs = Math.round((samples16k.length / TARGET_SAMPLE_RATE) * 1000);
   const voiceRatio = voiced / samples16k.length;
 
-  if (durationMs < policy.minVerificationDurationMs) return { ok: false, durationMs, rms, voiceRatio, reason: 'too_short' };
+  const minDurationMs = options.durationKind === 'verification'
+    ? policy.minVerificationDurationMs
+    : policy.minDurationMs;
+  if (durationMs < minDurationMs) return { ok: false, durationMs, rms, voiceRatio, reason: 'too_short' };
   if (rms < policy.minRms) return { ok: false, durationMs, rms, voiceRatio, reason: 'too_quiet' };
   if (voiceRatio < policy.minVoiceRatio) return { ok: false, durationMs, rms, voiceRatio, reason: 'not_enough_voice' };
   return { ok: true, durationMs, rms, voiceRatio };

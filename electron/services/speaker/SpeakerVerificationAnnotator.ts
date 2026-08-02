@@ -21,7 +21,7 @@ export class SpeakerVerificationAnnotator {
 
   async annotate(samples16k: Float32Array): Promise<SpeakerVerificationMetadata | undefined> {
     if (this.options.getMode() !== 'local') return undefined;
-    if (!measureAudioQuality(samples16k).ok) {
+    if (!measureAudioQuality(samples16k, undefined, { durationKind: 'verification' }).ok) {
       try {
         this.options.service.recordLowQuality?.();
       } catch {

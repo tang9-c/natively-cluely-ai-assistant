@@ -27,7 +27,7 @@ export class SpeakerVerificationService {
     if (!profile) return { status: 'not_enrolled' };
     const startedAt = Date.now();
 
-    const quality = measureAudioQuality(samples16k);
+    const quality = measureAudioQuality(samples16k, undefined, { durationKind: 'verification' });
     if (!quality.ok) {
       this.recordStat('low_quality', startedAt, undefined, requestOptions.signal);
       return { status: 'low_quality', reason: quality.reason };

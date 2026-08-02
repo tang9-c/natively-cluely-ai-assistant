@@ -110,6 +110,20 @@ test('enrollment rejects split embeddings without writing an unstable profile', 
   assert.equal(store.profile, null);
 });
 
+test('audio quality uses distinct enrollment and verification duration thresholds', async () => {
+  const { measureAudioQuality } = await import('../../../dist-electron/electron/services/speaker/speakerAudioUtils.js');
+  const policy = {
+    minDurationMs: 2500,
+    minVerificationDurationMs: 1000,
+    minRms: 0.005,
+    minVoiceRatio: 0.12,
+    voiceSampleThreshold: 0.01,
+  };
+
+  assert.equal(measureAudioQuality(loudSamples(2), policy, { durationKind: 'enrollment' }).reason, 'too_short');
+  assert.equal(measureAudioQuality(loudSamples(2), policy, { durationKind: 'verification' }).ok, true);
+});
+
 test('verification skips when no profile exists', async () => {
   const { SpeakerVerificationService } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationService.js');
   const service = new SpeakerVerificationService({

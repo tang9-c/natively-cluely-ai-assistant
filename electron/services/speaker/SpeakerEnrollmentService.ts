@@ -71,13 +71,13 @@ export class SpeakerEnrollmentService {
 
     for (const sample of samples) {
       const samples16k = resampleFloat32To16k(sample.samples, sample.sampleRate);
-      const quality = measureAudioQuality(samples16k);
+      const quality = measureAudioQuality(samples16k, undefined, { durationKind: 'enrollment' });
       if (!quality.ok) {
         throw new Error(`speaker_enrollment_quality_${quality.reason}`);
       }
 
       for (const window of slidingWindows(samples16k, 2000, 1000)) {
-        const windowQuality = measureAudioQuality(window);
+        const windowQuality = measureAudioQuality(window, undefined, { durationKind: 'enrollment' });
         if (!windowQuality.ok) continue;
         embeddings.push(await this.options.extractor.extract(window));
       }
