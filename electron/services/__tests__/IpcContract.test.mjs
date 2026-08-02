@@ -281,6 +281,11 @@ test('speaker-verification:enroll IPC channel is wired through main, preload, an
     /speakerVerificationEnroll:\s*\(\s*samples:\s*[^)]*\)\s*=>\s*ipcRenderer\.invoke\(\s*['"]speaker-verification:enroll['"]\s*,\s*samples\s*\)\s*,/,
     'preload.ts must expose speakerVerificationEnroll invoking namespaced channel',
   );
+  assert.match(
+    preload,
+    /pcm16\?:\s*ArrayBuffer/,
+    'preload.ts must allow pcm16 ArrayBuffer enrollment samples',
+  );
 
   // 3. types: channel name traceability (RED: absent today)
   assert.match(
@@ -294,6 +299,21 @@ test('speaker-verification:enroll IPC channel is wired through main, preload, an
     types,
     /speakerVerificationEnroll:[\s\S]*?Promise<\s*\{[\s\S]*?success:\s*boolean[\s\S]*?error\?:\s*string[\s\S]*?\}\s*>\s*;/,
     'src/types/electron.d.ts must declare speakerVerificationEnroll returning Promise with success+error fields',
+  );
+  assert.match(
+    types,
+    /pcm16\?:\s*ArrayBuffer/,
+    'src/types/electron.d.ts must allow pcm16 ArrayBuffer enrollment samples',
+  );
+  assert.match(
+    ipc,
+    /decodeSpeakerEnrollmentPcm16/,
+    'ipcHandlers.ts must decode pcm16 enrollment samples',
+  );
+  assert.match(
+    ipc,
+    /Array\.isArray\(sample\?\.samples\)[\s\S]*?new Float32Array\(sample\.samples\)/,
+    'ipcHandlers.ts must keep legacy number[] enrollment compatibility',
   );
 });
 

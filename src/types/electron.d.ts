@@ -411,7 +411,8 @@ export interface SpeakerRecordingQualityPolicy {
 }
 
 export interface SpeakerEnrollmentSample {
-  samples: number[]
+  samples?: number[]
+  pcm16?: ArrayBuffer
   sampleRate: number
   deviceFingerprint?: string
 }

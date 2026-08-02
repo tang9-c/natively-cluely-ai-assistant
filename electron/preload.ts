@@ -194,7 +194,7 @@ interface ElectronAPI {
   setSpeakerVerificationMode: (mode: 'off' | 'local') => Promise<{ success: boolean; error?: string }>;
   speakerVerificationGetStatus: () => Promise<import('../src/types/electron').SpeakerVerificationStatus>;
   speakerVerificationGetHealth: () => Promise<import('../src/types/electron').SpeakerVerificationHealth>;
-  speakerVerificationEnroll: (samples: Array<{ samples: number[]; sampleRate: number; deviceFingerprint?: string }>) => Promise<{ success: boolean; status?: import('../src/types/electron').SpeakerVerificationStatus; error?: string }>;
+  speakerVerificationEnroll: (samples: Array<{ samples?: number[]; pcm16?: ArrayBuffer; sampleRate: number; deviceFingerprint?: string }>) => Promise<{ success: boolean; status?: import('../src/types/electron').SpeakerVerificationStatus; error?: string }>;
   speakerVerificationDeleteProfile: () => Promise<{ success: boolean; error?: string }>;
   speakerVerificationSetSessionOverride: (input: {
     speaker: string;
@@ -1254,7 +1254,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   speakerVerificationGetStatus: () => ipcRenderer.invoke('speaker-verification:get-status'),
   speakerVerificationGetHealth: () => ipcRenderer.invoke('speaker-verification:get-health'),
   speakerVerificationGetQualityPolicy: () => ipcRenderer.invoke('speaker-verification:get-quality-policy'),
-  speakerVerificationEnroll: (samples: Array<{ samples: number[]; sampleRate: number; deviceFingerprint?: string }>) =>
+  speakerVerificationEnroll: (samples: Array<{ samples?: number[]; pcm16?: ArrayBuffer; sampleRate: number; deviceFingerprint?: string }>) =>
     ipcRenderer.invoke('speaker-verification:enroll', samples),
   speakerVerificationDeleteProfile: () => ipcRenderer.invoke('speaker-verification:delete-profile'),
   speakerVerificationSetSessionOverride: (input: {

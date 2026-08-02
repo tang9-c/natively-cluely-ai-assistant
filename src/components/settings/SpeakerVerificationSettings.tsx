@@ -137,6 +137,16 @@ function evaluateRecordingQuality(
   return qualityFromMetrics(durationMs, rms, voiceRatio, policy);
 }
 
+function float32ToPcm16Buffer(samples: Float32Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(samples.length * 2);
+  const view = new DataView(buffer);
+  for (let i = 0; i < samples.length; i += 1) {
+    const value = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(i * 2, value < 0 ? value * 0x8000 : value * 0x7fff, true);
+  }
+  return buffer;
+}
+
 function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
@@ -362,7 +372,7 @@ export function SpeakerVerificationSettings() {
       setSamples(next);
       if (next.length === PROMPTS.length) {
         const payload: SpeakerEnrollmentSample[] = next.map(item => ({
-          samples: Array.from(item.samples),
+          pcm16: float32ToPcm16Buffer(item.samples),
           sampleRate: item.sampleRate,
           deviceFingerprint: item.deviceFingerprint,
         }));

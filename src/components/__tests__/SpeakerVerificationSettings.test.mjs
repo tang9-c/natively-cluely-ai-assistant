@@ -19,7 +19,6 @@ test('SpeakerVerificationSettings exposes register, re-record, and delete states
   assert.match(source, /删除声音注册/);
   assert.match(source, /speakerVerificationDeleteProfile/);
   assert.match(source, /speakerVerificationEnroll/);
-  assert.match(source, /Array\.from\(item\.samples\)/);
   assert.match(source, /localModelsGetList/);
   assert.match(source, /localModelsStartDownload/);
   assert.match(source, /onLocalModelsDownloadProgress/);
@@ -202,4 +201,13 @@ test('speaker model install diagnostics show model details, progress, sanitized 
   assert.match(source, /setDownloadError\(sanitizedModelDownloadError\(result\?\.error\)\)/);
   assert.match(source, /parsed\.search = ''/);
   assert.doesNotMatch(source, /setError\('声纹模型安装失败'\)/);
+});
+
+test('speaker enrollment sends PCM16 ArrayBuffer instead of expanding Float32 samples to number arrays', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+  assert.match(source, /function float32ToPcm16Buffer\(samples: Float32Array\): ArrayBuffer/);
+  assert.match(source, /new ArrayBuffer\(samples\.length \* 2\)/);
+  assert.match(source, /view\.setInt16\(i \* 2,[\s\S]*true\)/);
+  assert.match(source, /pcm16: float32ToPcm16Buffer\(item\.samples\)/);
+  assert.doesNotMatch(source, /Array\.from\(item\.samples\)/);
 });
