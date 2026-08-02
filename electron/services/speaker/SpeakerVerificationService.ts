@@ -36,7 +36,7 @@ export class SpeakerVerificationService {
     }
 
     try {
-      const embedding = normalizeL2(await this.options.extractor.extract(samples16k));
+      const embedding = normalizeL2(await this.options.extractor.extract(samples16k, { signal: requestOptions.signal }));
       const confidence = cosineSimilarity(embedding, profile.embedding);
       const isMe = confidence >= profile.threshold;
       const outcome = isMe

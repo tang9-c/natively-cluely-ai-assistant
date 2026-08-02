@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import { Worker } from 'worker_threads';
+import { resolveSpeakerEmbeddingWorkerPath } from './speakerEmbeddingWorkerPathResolver';
 import type { SpeakerEmbeddingExtractorLike } from './speakerVerificationTypes';
 import type { SpeakerVerificationHealth } from './speakerVerificationTypes';
 
@@ -123,12 +124,14 @@ export function getSharedSpeakerEmbeddingExtractor(): SherpaSpeakerEmbeddingExtr
   if (singleton && singletonModelFile === modelFile) {
     return singleton;
   }
+  singleton?.dispose();
   singleton = new SherpaSpeakerEmbeddingExtractor({ modelFile });
   singletonModelFile = modelFile;
   return singleton;
 }
 
 export function resetSharedSpeakerEmbeddingExtractor(): void {
+  singleton?.dispose();
   singleton = null;
   singletonModelFile = null;
 }
@@ -166,12 +169,25 @@ export class SherpaSpeakerEmbeddingExtractor implements SpeakerEmbeddingExtracto
     }
   }
 
-  async extract(samples16k: Float32Array): Promise<Float32Array> {
-    return this.computeEmbeddingInWorker(samples16k);
+  async extract(samples16k: Float32Array, options: { signal?: AbortSignal } = {}): Promise<Float32Array> {
+    return this.computeEmbeddingInWorker(samples16k, options);
   }
 
   extractorSmokeTest(samples16k: Float32Array): Float32Array {
-    return this.computeEmbedding(samples16k);
+    return new Float32Array(this.dim);
+  }
+
+  dispose(): void {
+    const error = new Error('speaker_embedding_worker_disposed');
+    for (const pending of this.pendingWorkerRequests.values()) {
+      pending.reject(error);
+    }
+    this.pendingWorkerRequests.clear();
+    const worker = this.worker;
+    this.worker = null;
+    if (worker) {
+      void worker.terminate();
+    }
   }
 
   private computeEmbedding(samples16k: Float32Array): Float32Array {
@@ -187,7 +203,7 @@ export class SherpaSpeakerEmbeddingExtractor implements SpeakerEmbeddingExtracto
 
   private getWorker(): Worker {
     if (this.worker) return this.worker;
-    const workerPath = path.join(__dirname, 'SpeakerEmbeddingExtractorWorker.js');
+    const workerPath = resolveSpeakerEmbeddingWorkerPath();
     const worker = new Worker(workerPath, {
       workerData: {
         modelFile: this.modelFile,
@@ -230,13 +246,48 @@ export class SherpaSpeakerEmbeddingExtractor implements SpeakerEmbeddingExtracto
     return worker;
   }
 
-  private computeEmbeddingInWorker(samples16k: Float32Array): Promise<Float32Array> {
+  private computeEmbeddingInWorker(
+    samples16k: Float32Array,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<Float32Array> {
     const requestId = this.nextRequestId++;
     const worker = this.getWorker();
     const samplesCopy = new Float32Array(samples16k);
     return new Promise((resolve, reject) => {
-      this.pendingWorkerRequests.set(requestId, { resolve, reject });
-      worker.postMessage({ requestId, samples: samplesCopy.buffer }, [samplesCopy.buffer]);
+      if (options.signal?.aborted) {
+        reject(new Error('speaker_embedding_request_aborted'));
+        return;
+      }
+      const abortListener = () => {
+        this.pendingWorkerRequests.delete(requestId);
+        const currentWorker = this.worker;
+        this.worker = null;
+        if (currentWorker) {
+          void currentWorker.terminate();
+        }
+        reject(new Error('speaker_embedding_request_aborted'));
+      };
+      const cleanup = () => {
+        options.signal?.removeEventListener('abort', abortListener);
+      };
+      this.pendingWorkerRequests.set(requestId, {
+        resolve: (embedding) => {
+          cleanup();
+          resolve(embedding);
+        },
+        reject: (error) => {
+          cleanup();
+          reject(error);
+        },
+      });
+      options.signal?.addEventListener('abort', abortListener, { once: true });
+      try {
+        worker.postMessage({ requestId, samples: samplesCopy.buffer }, [samplesCopy.buffer]);
+      } catch (error: any) {
+        cleanup();
+        this.pendingWorkerRequests.delete(requestId);
+        reject(error instanceof Error ? error : new Error('speaker_embedding_worker_post_failed'));
+      }
     });
   }
 }

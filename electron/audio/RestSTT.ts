@@ -663,10 +663,15 @@ export class RestSTT extends BaseSTT {
             emitAfterMs: 0,
         });
 
-        for (const utterance of aligned) {
-            if (!utterance.text.trim()) continue;
-            const utteranceSamples = this.slicePcm16kByTime(pcm16k, utterance.startMs, utterance.endMs);
-            const speakerVerification = await this.speakerVerificationAnnotator?.annotate(utteranceSamples);
+        const annotatedUtterances = await Promise.all(aligned
+            .filter(utterance => utterance.text.trim())
+            .map(async (utterance) => {
+                const utteranceSamples = this.slicePcm16kByTime(pcm16k, utterance.startMs, utterance.endMs);
+                const speakerVerification = await this.speakerVerificationAnnotator?.annotate(utteranceSamples);
+                return { utterance, speakerVerification };
+            }));
+
+        for (const { utterance, speakerVerification } of annotatedUtterances) {
             const emotionMetadata = utterance.emotion && utterance.emotion !== 'neutral'
                 ? {
                     emotion: utterance.emotion,

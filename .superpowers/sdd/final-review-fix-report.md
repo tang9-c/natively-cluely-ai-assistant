@@ -39,3 +39,17 @@ The accepted non-blocking C1 strategy intentionally does not attach a late backg
 - PASS: related Node matrix (174/174)
 - PASS: Electron Node Store matrix (14/14)
 - PASS: `rtk proxy git diff --check`
+
+## Controller Second Follow-Up
+
+- Added a bundled/unbundled worker path resolver so the Electron main bundle can find `services/speaker/SpeakerEmbeddingExtractorWorker.js`.
+- Tracked bounded SenseVoice speaker annotation in `drainFinals()` so save snapshots cannot run before the final transcript emits.
+- Passed the annotator abort signal into extractor requests and terminate the worker on timeout/dispose to avoid stuck pending requests.
+- Changed structured RestSTT utterance annotation to run concurrently, preventing per-utterance timeout multiplication.
+- Added tests for bundled worker path resolution, SenseVoice drain waiting for annotation, and structured utterance concurrent timeout behavior.
+- PASS: `rtk proxy npm run typecheck:electron`
+- PASS: `rtk proxy npm run build`
+- PASS: `rtk proxy npm run build:electron`
+- PASS: related Node matrix (177/177)
+- PASS: Electron Node Store matrix (14/14)
+- PASS: `rtk proxy git diff --check`

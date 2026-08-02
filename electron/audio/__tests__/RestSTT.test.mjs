@@ -194,6 +194,33 @@ test('RestSTT preserves speaker verification metadata when local verification re
   assert.equal(transcripts[0].speakerVerification?.confidence, 0.96);
 });
 
+test('RestSTT annotates structured utterances concurrently so timeout does not multiply by speaker turn count', async () => {
+  const { RestSTT } = await loadRestSTT();
+  const { SpeakerVerificationAnnotator } = await import(pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js')).href);
+  const stt = new RestSTT('doubao-auc', 'k');
+  const transcripts = [];
+  stt.setSpeakerVerificationAnnotator(new SpeakerVerificationAnnotator({
+    getMode: () => 'local',
+    timeoutMs: 30,
+    service: { verify: () => new Promise(() => {}) },
+  }));
+  stt.on('transcript', event => transcripts.push(event));
+
+  const startedAt = Date.now();
+  await stt.emitUploadResult({
+    text: '第一段 第二段 第三段',
+    utterances: [
+      { text: '第一段', startMs: 0, endMs: 2000, providerSpeakerId: '1' },
+      { text: '第二段', startMs: 2000, endMs: 4000, providerSpeakerId: '2' },
+      { text: '第三段', startMs: 4000, endMs: 6000, providerSpeakerId: '3' },
+    ],
+  }, loudPcm16le(16000 * 6));
+  const elapsedMs = Date.now() - startedAt;
+
+  assert.equal(transcripts.length, 3);
+  assert.ok(elapsedMs < 80, `structured utterance annotation should be concurrent, took ${elapsedMs}ms`);
+});
+
 describe('RestSTT — configuration setters', () => {
   test('setApiKey rebuilds the provider config', async () => {
     const { RestSTT } = await loadRestSTT();

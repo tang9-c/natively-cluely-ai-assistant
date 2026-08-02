@@ -92,6 +92,46 @@ test('LocalSenseVoiceSTT drainFinals waits for in-flight recognition', async () 
   assert.equal(transcripts[0]?.text, '最终中文转写。');
 });
 
+test('LocalSenseVoiceSTT drainFinals waits for bounded speaker annotation before transcript emission', async () => {
+  const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+  const { SpeakerVerificationAnnotator } = await import(pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js')).href);
+  const worker = new FakeSenseVoiceWorker({ text: '这是我的发言。' });
+  const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+  const transcripts = [];
+  stt.setSpeakerVerificationAnnotator(new SpeakerVerificationAnnotator({
+    getMode: () => 'local',
+    timeoutMs: 200,
+    service: {
+      verify: async () => {
+        await sleep(120);
+        return {
+          status: 'verified',
+          speakerVerification: {
+            provider: 'local-speaker-verification',
+            profileId: 'me',
+            isMe: true,
+            confidence: 0.93,
+            threshold: 0.72,
+          },
+        };
+      },
+    },
+  }));
+  stt.on('transcript', event => transcripts.push(event));
+
+  stt.start();
+  stt.write(loudPcm(16000 * 2 * 2));
+  stt.notifySpeechEnded();
+  const startedAt = Date.now();
+  await stt.drainFinals(1000);
+  const elapsedMs = Date.now() - startedAt;
+  stt.stop();
+
+  assert.ok(elapsedMs >= 110);
+  assert.equal(transcripts.length, 1);
+  assert.equal(transcripts[0].speakerVerification?.isMe, true);
+});
+
 test('LocalSenseVoiceSTT emits transcript when speaker verification service hangs', async () => {
   const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
   const { SpeakerVerificationAnnotator } = await import(pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js')).href);

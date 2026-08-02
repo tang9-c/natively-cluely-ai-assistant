@@ -68,6 +68,16 @@ test('SpeakerEmbeddingExtractor resolves its default ONNX file through LocalMode
   assert.doesNotMatch(source, /speakerModelDownloader/);
 });
 
+test('speaker embedding worker resolver supports bundled Electron main layout', async () => {
+  const resolverPath = path.resolve('dist-electron/electron/services/speaker/speakerEmbeddingWorkerPathResolver.js');
+  const { resolveSpeakerEmbeddingWorkerPath } = await import(`${pathToFileURL(resolverPath).href}?worker-path-${Date.now()}`);
+  const baseDir = path.join(os.tmpdir(), 'dist-electron', 'electron');
+  const bundledWorker = path.join(baseDir, 'services', 'speaker', 'SpeakerEmbeddingExtractorWorker.js');
+  const resolved = resolveSpeakerEmbeddingWorkerPath(baseDir, candidate => candidate === bundledWorker);
+
+  assert.equal(resolved, bundledWorker);
+});
+
 test('speaker embedding model health supports lightweight checks and smoke-test diagnostics', () => {
   const source = read('electron/services/speaker/SpeakerEmbeddingExtractor.ts');
   const types = read('electron/services/speaker/speakerVerificationTypes.ts');
@@ -154,7 +164,7 @@ test('speaker embedding model health smoke test reports ready with fake extracto
   }
 });
 
-test('speaker embedding model health preserves smoke-test failures for later lightweight checks', async () => {
+test('speaker embedding model health preserves initialization failures for later lightweight checks', async () => {
   const extractorPath = path.resolve('dist-electron/electron/services/speaker/SpeakerEmbeddingExtractor.js');
   const moduleUrl = `${pathToFileURL(extractorPath).href}?health-failure-${Date.now()}`;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-speaker-health-fail-'));
@@ -168,18 +178,8 @@ test('speaker embedding model health preserves smoke-test failures for later lig
     if (request === 'sherpa-onnx-node') {
       return {
         SpeakerEmbeddingExtractor: class {
-          dim = 256;
-          createStream() {
-            return {
-              acceptWaveform() {},
-              inputFinished() {},
-            };
-          }
-          isReady() {
-            return false;
-          }
-          compute() {
-            return new Float32Array(256);
+          constructor() {
+            throw new Error('test init failure');
           }
         },
       };

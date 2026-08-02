@@ -131,7 +131,7 @@ export interface SpeakerEmbeddingExtractorLike {
   readonly dim: number;
   readonly modelId: string;
   readonly version: string;
-  extract(samples16k: Float32Array): Promise<Float32Array>;
+  extract(samples16k: Float32Array, options?: { signal?: AbortSignal }): Promise<Float32Array>;
 }
 
 export interface SpeakerVerificationResult {

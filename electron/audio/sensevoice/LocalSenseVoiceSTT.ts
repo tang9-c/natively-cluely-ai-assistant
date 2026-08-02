@@ -53,6 +53,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
   private pendingAudio: Float32Array[] = [];
   private pendingAudioByTaskId = new Map<string, Float32Array>();
   private inFlightTasks = 0;
+  private inFlightAnnotations = 0;
   private gapFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private speechEndedFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly GAP_FLUSH_MS = 1800;
@@ -96,6 +97,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     this.workerReady = false;
     this.pendingAudio = [];
     this.inFlightTasks = 0;
+    this.inFlightAnnotations = 0;
     this.vad = new VadProcessor(this.resolveVadOptions());
     this.spawnWorker();
   }
@@ -161,12 +163,12 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       inFlightTasks: this.inFlightTasks,
     });
 
-    if (this.pendingAudio.length === 0 && this.inFlightTasks === 0) return;
+    if (this.pendingAudio.length === 0 && this.inFlightTasks === 0 && this.inFlightAnnotations === 0) return;
 
     await new Promise<void>((resolve) => {
       const started = Date.now();
       const timer = setInterval(() => {
-        const drained = this.pendingAudio.length === 0 && this.inFlightTasks === 0;
+        const drained = this.pendingAudio.length === 0 && this.inFlightTasks === 0 && this.inFlightAnnotations === 0;
         const timedOut = Date.now() - started >= timeoutMs;
         if (drained || timedOut) {
           clearInterval(timer);
@@ -177,6 +179,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
             timedOut,
             pendingAudio: this.pendingAudio.length,
             inFlightTasks: this.inFlightTasks,
+            inFlightAnnotations: this.inFlightAnnotations,
           });
           resolve();
         }
@@ -215,8 +218,9 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     worker.on('error', (error) => {
       debugLog('worker-error', { message: error.message });
       this.emit('error', error);
-      this.pendingAudio = [];
-      this.inFlightTasks = 0;
+    this.pendingAudio = [];
+    this.inFlightTasks = 0;
+    this.inFlightAnnotations = 0;
     });
     worker.on('exit', (code) => {
       debugLog('worker-exit', { code, active: this._isActive });
@@ -274,15 +278,20 @@ export class LocalSenseVoiceSTT extends BaseSTT {
           this.flushPendingAudio();
           return;
         }
-        const speakerVerification = await this.annotateSpeaker(message.taskId);
-        const segment = {
-          text,
-          isFinal: true,
-          confidence: 0.9,
-          ...(speakerVerification ? { speakerVerification } : {}),
-          ...(parsed.emotion ? { emotion: parsed.emotion, emotionSource: 'sensevoice' as const } : {}),
-        };
-        this.emit('transcript', segment);
+        this.inFlightAnnotations += 1;
+        try {
+          const speakerVerification = await this.annotateSpeaker(message.taskId);
+          const segment = {
+            text,
+            isFinal: true,
+            confidence: 0.9,
+            ...(speakerVerification ? { speakerVerification } : {}),
+            ...(parsed.emotion ? { emotion: parsed.emotion, emotionSource: 'sensevoice' as const } : {}),
+          };
+          this.emit('transcript', segment);
+        } finally {
+          this.inFlightAnnotations = Math.max(0, this.inFlightAnnotations - 1);
+        }
       } else {
         this.pendingAudioByTaskId.delete(message.taskId);
       }
