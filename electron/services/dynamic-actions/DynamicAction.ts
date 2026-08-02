@@ -16,10 +16,17 @@ export type DynamicActionAcceptTriggerSource = 'manual' | 'auto_countdown';
 export type SignalStatus = 'candidate' | 'confirmed' | 'cooling_down' | 'expired';
 export type SignalConfirmationSource =
     | 'trigger'
+    | 'business_query'
     | 'cloud_intent'
     | 'local_intent'
     | 'heuristic'
     | 'continuation_planner';
+
+export type DynamicActionCandidateSource =
+    | 'business_query'
+    | 'mode_keyword'
+    | 'detector'
+    | 'intent_fallback';
 
 export type DynamicActionOutputType =
     | 'spoken_response'
@@ -93,6 +100,8 @@ export interface DynamicAction {
     confirmationSource?: SignalConfirmationSource;
     confirmedIntent?: string;
     semanticGate?: SemanticGateTrace;
+    candidateSource?: DynamicActionCandidateSource;
+    matchedKeyword?: string;
     answerStyle?: {
         maxWords: number;
         format: 'bullets' | 'short_script' | 'code' | 'checklist' | 'summary' | 'email';

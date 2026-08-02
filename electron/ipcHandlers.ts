@@ -1660,7 +1660,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const source = {
         id,
         name: String(input?.name || '').trim(),
-        kind: ['plm', 'qms', 'business_system'].includes(input?.kind) ? input.kind : 'business_system',
+        kind: ['plm', 'qms', 'erp', 'mes', 'crm', 'business_system'].includes(input?.kind) ? input.kind : 'business_system',
         url: String(input?.url || '').trim(),
         authType: input?.authType === 'username_password' ? 'username_password' : 'api_key',
         enabled: input?.enabled !== false,
@@ -3374,6 +3374,59 @@ export function initializeIpcHandlers(appState: AppState): void {
             screenContextStatus,
             error: contextPreparation.invalidRequest.error,
             statusCode: contextPreparation.invalidRequest.statusCode,
+          };
+        }
+
+        if (sanitizedModeEvent?.actionType === 'business_system_query' && businessSystemResult.kind === 'context') {
+          const sourceStatus: AnswerSourceStatus = {
+            ragAttempted: false,
+            ragReady,
+            embeddingReady,
+            uploadedMaterialHitCount: 0,
+            citationCount: 0,
+            screenContextStatus,
+            businessSystemStatus: 'available',
+            businessSystemSourceName: businessSystemResult.sourceName,
+          };
+          const contextTrace = DatabaseManager.getInstance().saveAnswerContextTrace({
+            answerId,
+            answerType: 'what_to_say',
+            surface: requestOptions.source ?? 'overlay',
+            provider: null,
+            model: null,
+            latencyMs: Date.now() - startedAt,
+            contextUsed: {
+              currentTranscript: Boolean(question?.trim() || sanitizedModeEvent?.latestTurn?.trim()),
+              shortTermHistory: false,
+              uploadedDocumentRag: false,
+              historicalMeetings: false,
+              longTermMemory: false,
+              enterpriseKnowledge: false,
+              businessSystemContext: true,
+              screenContext: screenContextStatus === 'available',
+            },
+            sourceStatus,
+            citations: [],
+            degradedReason: null,
+            status: 'generated',
+            traceId: answerId,
+            observability: {
+              retrievalTimingMs: { business_system: contextPreparation.retrievalTimingMs.business_system },
+              businessSystemStatus: 'available',
+              businessSystemSourceName: businessSystemResult.sourceName,
+              llmBypassed: true,
+            },
+          });
+          return {
+            answerId,
+            answer: businessSystemResult.answer,
+            question: question || sanitizedModeEvent?.latestTurn || 'inferred from context',
+            statusCode: 'ok',
+            contextTrace,
+            citations: [],
+            screenContextStatus,
+            imageCount: validatedImagePaths?.length || 0,
+            usedImageInput: Boolean(validatedImagePaths?.length),
           };
         }
 

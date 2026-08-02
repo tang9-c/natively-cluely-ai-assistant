@@ -67,7 +67,7 @@ export function evaluateDynamicActionAcceptedOutput(
   }
 
   if (input.actionType === 'capability_fit_answer') {
-    const usedGrounding = hasUsedGrounding(['material', 'pptx', 'business_context']);
+    const usedGrounding = hasUsedGrounding(['material', 'pptx']);
     const statesInsufficiency = /资料不足|不能确认|不能承诺|not enough|cannot confirm|cannot promise/i.test(answer);
     const proposesValidation = /PoC|样本|能力矩阵|补充.*资料|验证|pilot|capability matrix|validation/i.test(answer);
     const hasPositiveClaim = containsPositiveCapabilityClaim(answer);
@@ -83,7 +83,7 @@ export function evaluateDynamicActionAcceptedOutput(
   }
 
   if (input.actionType === 'fde_grounded_answer') {
-    const usedGrounding = hasUsedGrounding(['material', 'pptx', 'business_context']);
+    const usedGrounding = hasUsedGrounding(['material', 'pptx']);
     const statesInsufficiency = /资料不足|信息不足|不能确认|不能承诺|not enough|insufficient|cannot confirm|cannot promise/i.test(answer);
     const proposesValidation = /PoC|样本流程|样本|测试数据|验证|pilot|sample process|test data|validation|acceptance/i.test(answer);
     const hasPositiveClaim = containsPositiveCapabilityClaim(answer) ||

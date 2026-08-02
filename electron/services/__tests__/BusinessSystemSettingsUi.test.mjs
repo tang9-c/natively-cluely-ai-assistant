@@ -120,6 +120,15 @@ test('business system settings mirrors Tavily-style save and test feedback', () 
   assert.match(source, /尚未添加业务系统知识源。添加 Windchill 知识源后，可在会议中按需查询只读业务信息。/);
 });
 
+test('business system settings exposes supported PLM QMS ERP MES CRM source kinds', () => {
+  const source = read('src/components/settings/BusinessSystemKnowledgeSourcesSettings.tsx');
+
+  for (const kind of ['plm', 'qms', 'erp', 'mes', 'crm', 'business_system']) {
+    assert.match(source, new RegExp(`<option value="${kind}">`), kind);
+  }
+  assert.match(source, /连接 PLM、QMS、ERP、MES、CRM 或其它受控业务系统。/);
+});
+
 test('business system settings disables save and test until required fields are present', () => {
   const source = read('src/components/settings/BusinessSystemKnowledgeSourcesSettings.tsx');
 

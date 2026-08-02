@@ -63,6 +63,32 @@ test('detects explicit business-object lookup without naming PLM or QMS', async 
   }
 });
 
+test('detects PLM QMS ERP MES and CRM readonly lookup with precise source hints', async () => {
+  const { detectBusinessSystemTrigger } = await loadDetector();
+  const cases = [
+    ['查一下 PLM 里 golf car 的 BOM 发布了没有', 'plm'],
+    ['帮我看一下 QMS 里的 CAPA-1001 关闭了吗', 'qms'],
+    ['查询 ERP 里物料 A123 的库存状态', 'erp'],
+    ['确认一下 MES 里工单 WO-7788 的进度', 'mes'],
+    ['去 CRM 里看一下客户 Acme 的合同状态', 'crm'],
+  ];
+
+  for (const [question, sourceHint] of cases) {
+    const result = detectBusinessSystemTrigger(question);
+    assert.equal(result.shouldQuery, true, question);
+    assert.equal(result.sourceHint, sourceHint, question);
+    assert.equal(result.query, question);
+  }
+});
+
+test('rejects write operations as unsupported business system operations', async () => {
+  const { detectBusinessSystemTrigger } = await loadDetector();
+  const result = detectBusinessSystemTrigger('帮我把 PLM 里的 BOM 审批通过');
+
+  assert.equal(result.shouldQuery, false);
+  assert.equal(result.failureReason, 'unsupported_operation');
+});
+
 test('does not trigger on business words without explicit system request', async () => {
   const { detectBusinessSystemTrigger } = await loadDetector();
 
@@ -71,6 +97,10 @@ test('does not trigger on business words without explicit system request', async
     'BOM 会影响哪些东西',
     'CAPA 关了吗',
     '这个版本对吗',
+    'PLM 里 BOM 流程比较复杂',
+    'QMS 到 MES 的数据方向怎么设计',
+    'Agent 查 PLM、QMS 和知识库时，权限和工具调用边界怎么打通？',
+    '下一步需要负责人，明天前确认上线计划。',
   ]) {
     const result = detectBusinessSystemTrigger(question);
     assert.equal(result.shouldQuery, false, question);

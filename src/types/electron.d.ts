@@ -926,7 +926,7 @@ export interface ElectronAPI {
   getBusinessSystemKnowledgeSources: () => Promise<Array<{
     id: string
     name: string
-    kind: 'plm' | 'qms' | 'business_system'
+    kind: 'plm' | 'qms' | 'erp' | 'mes' | 'crm' | 'business_system'
     url: string
     authType: 'api_key' | 'username_password'
     enabled: boolean

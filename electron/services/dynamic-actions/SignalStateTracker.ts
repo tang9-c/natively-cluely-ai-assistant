@@ -3,6 +3,7 @@ import type { EvidenceRef } from './DynamicAction';
 export type SignalStatus = 'candidate' | 'confirmed' | 'cooling_down' | 'expired';
 export type SignalConfirmationSource =
     | 'trigger'
+    | 'business_query'
     | 'cloud_intent'
     | 'local_intent'
     | 'heuristic'
@@ -42,6 +43,7 @@ export interface SignalAssessmentInput {
     emotion?: string;
     confirmationSource: SignalConfirmationSource;
     confirmedIntent?: string;
+    confirmedBySemanticGate?: boolean;
     now?: number;
 }
 
@@ -107,7 +109,7 @@ export class SignalStateTracker {
         const confidence = previous && isRepeat
             ? clampConfidence(previous.confidence * 0.6 + rawConfidence * 0.4 + 0.1)
             : rawConfidence;
-        const status: SignalStatus = confidence >= SIGNAL_THRESHOLDS.CARD_MIN ? 'confirmed' : 'candidate';
+        const status: SignalStatus = input.confirmedBySemanticGate || confidence >= SIGNAL_THRESHOLDS.CARD_MIN ? 'confirmed' : 'candidate';
         const evidenceRefs = previous && isRepeat
             ? [...previous.evidenceRefs, input.evidenceRef].slice(-5)
             : [input.evidenceRef];

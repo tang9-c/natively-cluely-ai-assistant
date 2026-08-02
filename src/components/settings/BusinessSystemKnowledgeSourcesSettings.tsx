@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertCircle, Check, CheckCircle, Database, Loader2, Save, Trash2, X, XCircle } from 'lucide-react';
 
-type SourceKind = 'plm' | 'qms' | 'business_system';
+type SourceKind = 'plm' | 'qms' | 'erp' | 'mes' | 'crm' | 'business_system';
 type AuthType = 'api_key' | 'username_password';
 
 interface BusinessSource {
@@ -37,6 +37,9 @@ const emptySource: BusinessSource = {
 function labelForSourceKind(kind: SourceKind): string {
   if (kind === 'plm') return 'Windchill 知识源';
   if (kind === 'qms') return 'QMS 知识源';
+  if (kind === 'erp') return 'ERP 知识源';
+  if (kind === 'mes') return 'MES 知识源';
+  if (kind === 'crm') return 'CRM 知识源';
   return '业务系统知识源';
 }
 
@@ -165,7 +168,7 @@ export function BusinessSystemKnowledgeSourcesSettings() {
         <div>
           <h4 className="text-sm font-semibold text-text-primary">业务系统知识源</h4>
           <p className="text-[11px] text-text-tertiary">
-            连接 Windchill 知识源、QMS 知识源或其它受控业务系统。
+            连接 PLM、QMS、ERP、MES、CRM 或其它受控业务系统。
           </p>
         </div>
       </div>
@@ -181,6 +184,9 @@ export function BusinessSystemKnowledgeSourcesSettings() {
             <select className="w-full bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary/50 transition-all" value={draft.kind} onChange={(event) => updateDraft({ ...draft, kind: event.target.value as SourceKind, name: labelForSourceKind(event.target.value as SourceKind) })}>
               <option value="plm">Windchill 知识源</option>
               <option value="qms">QMS 知识源</option>
+              <option value="erp">ERP 知识源</option>
+              <option value="mes">MES 知识源</option>
+              <option value="crm">CRM 知识源</option>
               <option value="business_system">业务系统知识源</option>
             </select>
           </label>

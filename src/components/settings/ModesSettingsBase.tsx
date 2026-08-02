@@ -540,6 +540,9 @@ export const ModesSettingsBase: React.FC<ModesSettingsBaseProps> = ({
                       <p className="text-[10px] text-text-tertiary mt-0.5">
                         多个词用英文逗号分隔；关键词不能包含逗号；每组最多 2000 字符
                       </p>
+                      <p className="text-[10px] text-text-tertiary mt-1">
+                        命中后只生成智能卡片候选，是否展示仍由语义判断、去重和冷却规则决定。
+                      </p>
                     </div>
                     <button
                       onClick={handleResetIntentKeywords}

@@ -110,7 +110,7 @@
     },
     "claimVerifierResult": { "verdict": "supported", "reasonCode": "claims_supported" },
     "generatedAnswer": "可以确认 Windchill 只读物料查询路径；SSO rollout 需要再用客户 IdP 做 PoC，不承诺自动写回。",
-    "expected": { "plannerCalls": 1, "derivedActionEmitted": true, "visibleAnswerKind": "generated", "postCallCarryover": true }
+    "expected": { "plannerCalls": 1, "derivedActionEmitted": true, "visibleAnswerKind": "safe_fallback", "postCallCarryover": true }
   },
   {
     "id": "sales-continuation-capability-fit-mixed-002",

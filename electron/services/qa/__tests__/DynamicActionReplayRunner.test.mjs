@@ -141,7 +141,7 @@ test('sales audio replay runs through STT output and dynamic action detection', 
   assert.equal(byId.get('sales-replay-case-proof-mixed-001')?.continuation?.derivedActionEmitted, true);
   assert.equal(byId.get('sales-replay-capability-fit-mixed-001')?.status, 'passed');
   assert.equal(byId.get('sales-replay-capability-fit-mixed-001')?.actionType, 'case_study_request');
-  assert.equal(byId.get('sales-replay-capability-fit-mixed-001')?.continuation?.visibleAnswerKind, 'generated');
+  assert.equal(byId.get('sales-replay-capability-fit-mixed-001')?.continuation?.visibleAnswerKind, 'safe_fallback');
   assert.equal(byId.get('sales-replay-internal-price-identity-001')?.status, 'passed');
   assert.equal(byId.get('sales-replay-internal-price-identity-001')?.emitted, false);
   assert.ok(fs.existsSync(path.join(outputDir, 'replay-report.json')));

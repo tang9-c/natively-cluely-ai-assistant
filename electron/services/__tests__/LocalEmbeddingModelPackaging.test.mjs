@@ -33,7 +33,8 @@ test('LocalModelManager treats bundled resources models as installed', () => {
 
   assert.match(src, /process\.resourcesPath/);
   assert.match(src, /path\.join\(app\.getAppPath\(\), 'resources'\)/);
-  assert.match(src, /\.\.\.getModelStatus\(def\)/);
+  assert.match(src, /const status\s*=\s*getModelStatus\(def\)/);
+  assert.match(src, /\.\.\.status/);
 });
 
 test('LocalModelManager requires the intent classifier int8 artifact, not fp32 model.onnx', () => {

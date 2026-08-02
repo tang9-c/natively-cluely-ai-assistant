@@ -64,6 +64,14 @@ test('settings IPC does not return plaintext credentials', () => {
   assert.doesNotMatch(handler, /getBusinessSystemCredentials/);
 });
 
+test('settings IPC preserves all supported business system source kinds', () => {
+  const source = read('electron/ipcHandlers.ts');
+  const rendererTypes = read('src/types/electron.d.ts');
+
+  assert.match(source, /\['plm', 'qms', 'erp', 'mes', 'crm', 'business_system'\]/);
+  assert.match(rendererTypes, /'plm' \| 'qms' \| 'erp' \| 'mes' \| 'crm' \| 'business_system'/);
+});
+
 test('settings test-source uses Windchill MCP handshake for PLM sources', () => {
   const source = read('electron/ipcHandlers.ts');
   const start = source.indexOf("safeHandle('business-system:test-source'");

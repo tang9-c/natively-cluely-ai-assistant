@@ -55,6 +55,75 @@ test('normalizes structured ok result', async () => {
   assert.match(normalized.summary, /a12345/);
 });
 
+test('normalizes evidence and items with fixed safety limits', async () => {
+  const { normalizeBusinessMcpToolResult } = await loadClient();
+  const normalized = normalizeBusinessMcpToolResult({
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        status: 'ok',
+        sourceName: 'A'.repeat(120),
+        evidence: {
+          source: 'mcp',
+          recordCount: 1,
+          records: [{
+            title: 'T'.repeat(200),
+            fields: Array.from({ length: 20 }, (_, index) => ({
+              name: `字段 ${index}`,
+              value: `值 ${index} ${'x'.repeat(400)}`,
+            })),
+          }],
+        },
+        items: [{
+          title: 'ignored because evidence exists',
+          nested: { bad: true },
+          list: [1, 2],
+          ok: true,
+        }],
+      }),
+    }],
+  }, 'Fallback Source');
+
+  assert.equal(normalized.status, 'ok');
+  assert.equal(normalized.sourceName.length, 80);
+  assert.equal(normalized.evidence.records.length, 1);
+  assert.equal(normalized.evidence.records[0].title.length, 120);
+  assert.equal(normalized.evidence.records[0].fields.length, 16);
+  assert.ok(normalized.evidence.records[0].fields.every(field => field.name.length <= 80));
+  assert.ok(normalized.evidence.records[0].fields.every(field => field.value.length <= 300));
+  assert.ok(normalized.evidence.omittedFieldCount > 0);
+});
+
+test('normalizes safe scalar items into evidence records and ignores nested values', async () => {
+  const { normalizeBusinessMcpToolResult } = await loadClient();
+  const normalized = normalizeBusinessMcpToolResult({
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        status: 'ok',
+        sourceName: 'MES 源',
+        items: [{
+          title: 'WO-7788',
+          状态: '进行中',
+          数量: 12,
+          可用: true,
+          nested: { bad: true },
+          array: ['bad'],
+          nan: Number.NaN,
+        }],
+      }),
+    }],
+  }, 'Fallback Source');
+
+  assert.equal(normalized.status, 'ok');
+  assert.equal(normalized.evidence.records.length, 1);
+  assert.equal(normalized.evidence.records[0].title, 'WO-7788');
+  assert.deepEqual(
+    normalized.evidence.records[0].fields.map(field => field.name),
+    ['状态', '数量', '可用'],
+  );
+});
+
 test('normalizes invalid endpoint URL instead of throwing', async () => {
   const { BusinessMcpClient } = await loadClient();
   const client = new BusinessMcpClient();

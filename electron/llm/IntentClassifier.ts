@@ -79,7 +79,7 @@ export type ConversationIntent =
     // ===== Fallback =====
     | 'general';           // Default fallback
 
-export type IntentResultSource = 'pattern' | 'cloud' | 'local_slm' | 'context';
+export type IntentResultSource = 'pattern' | 'mode_keyword' | 'cloud' | 'local_slm' | 'context';
 
 export interface RawIntentResult {
     intent: ConversationIntent;
@@ -89,6 +89,7 @@ export interface RawIntentResult {
 
 export interface IntentResult extends RawIntentResult {
     source: IntentResultSource;
+    matchedKeyword?: string;
 }
 
 export interface CloudIntentClassifierInput {
@@ -489,9 +490,9 @@ export function detectIntentByPattern(
     const text = lastInterviewerTurn.toLowerCase().trim();
     const mode = modeTemplateType ?? 'general';
     if (customIntentKeywords) {
-        const intent = matchIntentKeywords(text, mode, customIntentKeywords);
-        return intent
-            ? { intent, confidence: confidenceForKeywordIntent(intent), answerShape: getAnswerShapeForMode(mode, intent) }
+        const match = matchIntentKeywords(text, mode, customIntentKeywords);
+        return match
+            ? { intent: match.intent, confidence: confidenceForKeywordIntent(match.intent), answerShape: getAnswerShapeForMode(mode, match.intent) }
             : null;
     }
 
@@ -926,8 +927,8 @@ function extractLightweightEntities(text: string): string[] {
     return Array.from(entities);
 }
 
-function withIntentSource(result: RawIntentResult, source: IntentResultSource): IntentResult {
-    return Object.assign({}, result, { source });
+function withIntentSource(result: RawIntentResult, source: IntentResultSource, matchedKeyword?: string): IntentResult {
+    return Object.assign({}, result, matchedKeyword ? { source, matchedKeyword } : { source });
 }
 
 async function classifyWithCloudFallback(
@@ -995,6 +996,17 @@ export async function classifyIntent(
 ): Promise<IntentResult> {
     // Tier 1: Try regex-based first (high confidence, instant)
     if (lastInterviewerTurn) {
+        if (options.customIntentKeywords) {
+            const keywordMatch = matchIntentKeywords(lastInterviewerTurn, modeTemplateType, options.customIntentKeywords);
+            if (keywordMatch) {
+                return withIntentSource({
+                    intent: keywordMatch.intent,
+                    confidence: confidenceForKeywordIntent(keywordMatch.intent),
+                    answerShape: getAnswerShapeForMode(modeTemplateType, keywordMatch.intent),
+                }, 'mode_keyword', keywordMatch.matchedKeyword);
+            }
+        }
+
         if (options.cloudFirst === true) {
             const cloudFirstResult = await classifyWithCloudFallback(lastInterviewerTurn, recentTranscript, modeTemplateType, options);
             if (cloudFirstResult) {
@@ -1002,7 +1014,7 @@ export async function classifyIntent(
             }
         }
 
-        const patternResult = detectIntentByPattern(lastInterviewerTurn, modeTemplateType, options.customIntentKeywords);
+        const patternResult = detectIntentByPattern(lastInterviewerTurn, modeTemplateType);
         if (patternResult) {
             return withIntentSource(patternResult, 'pattern');
         }

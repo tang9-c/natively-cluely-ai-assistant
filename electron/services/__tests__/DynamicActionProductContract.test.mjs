@@ -201,7 +201,7 @@ test('dynamic action contracts carry context need decisions for material, busine
   }));
   assert.equal(discovery.outputPromise, '生成 1-3 个可直接问客户的发现问题');
   assert.equal(discovery.contextNeedDecision.material, 'use_if_ready');
-  assert.equal(discovery.contextNeedDecision.business, 'use_if_ready');
+  assert.equal(discovery.contextNeedDecision.business, 'not_needed');
   assert.equal(discovery.contextNeedDecision.screen, 'not_needed');
   assert.match(discovery.contextNeedDecision.reason, /ready context only|不等待|must not wait/i);
 
@@ -211,7 +211,7 @@ test('dynamic action contracts carry context need decisions for material, busine
     modeTemplateType: 'fde',
     evidenceRefs: [{ source: 'transcript', text: 'Can you check the Windchill BOM for ECN-123 before we commit?' }],
   }));
-  assert.equal(windchill.contextNeedDecision.business, 'required');
+  assert.equal(windchill.contextNeedDecision.business, 'not_needed');
   assert.equal(windchill.contextNeedDecision.material, 'use_if_ready');
 
   const unknown = buildDynamicActionProductContract(baseInput({

@@ -82,10 +82,8 @@ test('toBusinessSystemFixedReply: unsupported_operation copy names the supported
   const { toBusinessSystemFixedReply } = await loadService();
   const reply = toBusinessSystemFixedReply({ status: 'unsupported_operation' });
   assert.equal(reply.status, 'unsupported_operation');
-  // The Windchill-specific copy makes it clear that *query* is the only
-  // supported operation and that create/modify/approve/submit are NOT.
-  assert.match(reply.answer, /只支持查询 Windchill 数据/);
-  assert.match(reply.answer, /暂不支持创建、修改、审批或提交/);
+  assert.match(reply.answer, /只支持只读查询/);
+  assert.match(reply.answer, /暂不支持创建、修改、审批、提交、删除或写回操作/);
 });
 
 test('toBusinessSystemFixedReply: timeout / unavailable / auth_failed use the right templates', async () => {
@@ -98,7 +96,7 @@ test('toBusinessSystemFixedReply: timeout / unavailable / auth_failed use the ri
   }
 });
 
-test('resolve() with status=ok but empty summary and no evidence returns the error fixed reply', async () => {
+test('resolve() with status=ok but empty summary and no evidence returns the no_result fixed reply', async () => {
   const { BusinessSystemContextService } = await loadService();
   const service = new BusinessSystemContextService({
     credentialsManager: credentialsManagerStub([source()]),
@@ -108,11 +106,8 @@ test('resolve() with status=ok but empty summary and no evidence returns the err
   });
 
   const result = await service.resolve({ question: '根据 PLM 查一下物料 a12345' });
-  // hasBusinessSystemContent() returns false → service degrades to error
-  // fixed reply (the "ok status but no payload" case is treated as a
-  // service-side error, not a successful context).
   assert.equal(result.kind, 'fixed_reply');
-  assert.equal(result.status, 'error');
+  assert.equal(result.status, 'no_result');
 });
 
 test('resolve() with status=ok and non-empty summary returns the context candidate (summary branch)', async () => {
@@ -155,7 +150,7 @@ test('resolve() prefers the isDefault source over the first enabled source', asy
   assert.equal(result.kind, 'context');
 });
 
-test('resolve() falls back to the first enabled source when no default is set', async () => {
+test('resolve() returns ambiguous when explicit source kind has multiple enabled sources and no default', async () => {
   const { BusinessSystemContextService } = await loadService();
   let queriedSourceId = null;
   const service = new BusinessSystemContextService({
@@ -172,8 +167,9 @@ test('resolve() falls back to the first enabled source when no default is set', 
   });
 
   const result = await service.resolve({ question: '根据 PLM 查一下物料 a12345' });
-  assert.equal(queriedSourceId, 'src-a', 'first enabled source should be used as fallback');
-  assert.equal(result.kind, 'context');
+  assert.equal(queriedSourceId, null, 'ambiguous source selection should not call MCP');
+  assert.equal(result.kind, 'fixed_reply');
+  assert.equal(result.status, 'ambiguous');
 });
 
 test('resolve() filters sources by kind when the trigger sourceHint is non-default', async () => {

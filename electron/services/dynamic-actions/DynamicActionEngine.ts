@@ -1,5 +1,5 @@
 import * as crypto from 'crypto';
-import { DynamicAction, DynamicActionAcceptTriggerSource, EvidenceRef } from './DynamicAction';
+import { DynamicAction, DynamicActionAcceptTriggerSource, DynamicActionCandidateSource, EvidenceRef } from './DynamicAction';
 import { buildDynamicActionProductContract } from './DynamicActionProductContract';
 import { DynamicActionStore } from './DynamicActionStore';
 import { ActionTrigger, DynamicActionDetector, MODE_TRIGGERS } from './DynamicActionDetector';
@@ -18,6 +18,7 @@ import { SignalStateTracker, SignalConfirmationSource } from './SignalStateTrack
 import type { IntentResult } from '../../llm/IntentClassifier';
 import type { ProviderDataScopePolicy } from '../../llm/ProviderRouter';
 import type { TranscriptEmotionDegree, TranscriptEmotionSource } from '../../../shared/senseVoiceEmotion';
+import { detectBusinessSystemTrigger } from '../business-system/BusinessSystemTriggerDetector';
 
 const SALES_PROMPT_INSTRUCTIONS: Record<string, string> = {
     pricing_objection:
@@ -187,20 +188,44 @@ export class DynamicActionEngine {
         const candidateActions: DynamicAction[] = [];
         const matchedTriggers = params.detectedTriggers
             ?? this.detectSignalCandidates({ transcript, modeTemplateType, speaker });
-        const triggerCandidates = matchedTriggers.map(({ trigger, match }) => ({
-            trigger,
-            match,
-            confidence: this.scoreTrigger(trigger, modeTemplateType, params.intentResult),
-            confirmationSource: this.confirmationSourceFor(params.intentResult),
-            confirmedIntent: params.intentResult?.intent,
-        }));
-        const synthTrigger = this.synthesizeTrigger(modeTemplateType, params.intentResult);
+        const businessTriggerResult = detectBusinessSystemTrigger(transcript);
+        const businessTrigger = businessTriggerResult.shouldQuery
+            ? this.syntheticTriggerFor('business_system_query', modeTemplateType)
+            : null;
+        const triggerCandidates: Array<{
+            trigger: ActionTrigger;
+            match: string;
+            confidence: number;
+            confirmationSource: SignalConfirmationSource;
+            confirmedIntent: string | null;
+            candidateSource: DynamicActionCandidateSource;
+            matchedKeyword?: string;
+        }> = businessTrigger
+            ? [{
+                trigger: businessTrigger,
+                match: transcript,
+                confidence: 0.86,
+                confirmationSource: 'business_query' as SignalConfirmationSource,
+                confirmedIntent: 'business_system_query',
+                candidateSource: 'business_query' as DynamicActionCandidateSource,
+            }]
+            : matchedTriggers.map(({ trigger, match }) => ({
+                trigger,
+                match,
+                confidence: this.scoreTrigger(trigger, modeTemplateType, params.intentResult),
+                confirmationSource: this.confirmationSourceFor(params.intentResult),
+                confirmedIntent: params.intentResult?.intent,
+                candidateSource: 'detector' as DynamicActionCandidateSource,
+                matchedKeyword: params.intentResult?.matchedKeyword,
+            }));
+        const synthTrigger = businessTrigger ? null : this.synthesizeTrigger(modeTemplateType, params.intentResult, transcript);
         const shouldAddSynthTrigger = synthTrigger
             ? this.canSynthesizeIntentCandidate({
                 modeTemplateType,
                 intentResult: params.intentResult,
                 actionType: synthTrigger.type,
                 matchedTriggers,
+                latestTurn: transcript,
             })
             : false;
 
@@ -211,6 +236,8 @@ export class DynamicActionEngine {
                 confidence: params.intentResult?.confidence ?? synthTrigger.priority,
                 confirmationSource: this.confirmationSourceFor(params.intentResult),
                 confirmedIntent: params.intentResult?.intent,
+                candidateSource: params.intentResult?.source === 'mode_keyword' ? 'mode_keyword' as const : 'intent_fallback' as const,
+                matchedKeyword: params.intentResult?.matchedKeyword,
             });
         }
 
@@ -306,6 +333,10 @@ export class DynamicActionEngine {
                 emotion: params.emotion,
                 confirmationSource: candidate.confirmationSource,
                 confirmedIntent: candidate.confirmedIntent,
+                confirmedBySemanticGate: (
+                    (candidate.candidateSource === 'mode_keyword' || candidate.candidateSource === 'business_query') &&
+                    ['pass', 'fast_path'].includes(gateDecision.decision)
+                ),
                 now,
             });
             if (!signal.shouldStoreAction) continue;
@@ -330,6 +361,8 @@ export class DynamicActionEngine {
                 autoSurfaceEligible: signal.autoSurfaceEligible || this.isStrongAutoSignal(candidate.trigger.type, signal.state.confidence),
                 confirmationSource: candidate.confirmationSource,
                 confirmedIntent: candidate.confirmedIntent,
+                candidateSource: candidate.candidateSource,
+                matchedKeyword: candidate.matchedKeyword,
                 signalStatus: signal.state.status,
                 evidenceRefs: signal.state.evidenceRefs,
                 semanticGate: this.buildSemanticGateTrace(gateDecision, allRegexCandidates, signal.state.evidenceRefs.length > 1),
@@ -367,13 +400,17 @@ export class DynamicActionEngine {
                 speaker: params.speaker,
             });
         const signalTypes = new Set(matchedTriggers.map(({ trigger }) => trigger.type));
-        const synthTrigger = this.synthesizeTrigger(params.modeTemplateType, params.intentResult);
+        const businessTriggerResult = detectBusinessSystemTrigger(params.transcript);
+        const synthTrigger = businessTriggerResult.shouldQuery
+            ? this.syntheticTriggerFor('business_system_query', params.modeTemplateType)
+            : this.synthesizeTrigger(params.modeTemplateType, params.intentResult, params.transcript);
         const shouldAddSynthTrigger = synthTrigger
             ? this.canSynthesizeIntentCandidate({
                 modeTemplateType: params.modeTemplateType,
                 intentResult: params.intentResult,
                 actionType: synthTrigger.type,
                 matchedTriggers,
+                latestTurn: params.transcript,
             })
             : false;
         if (synthTrigger && shouldAddSynthTrigger) {
@@ -558,6 +595,8 @@ export class DynamicActionEngine {
         semanticGate?: SemanticGateTrace;
         signalStatus?: DynamicAction['signalStatus'];
         evidenceRefs?: EvidenceRef[];
+        candidateSource?: DynamicActionCandidateSource;
+        matchedKeyword?: string;
     }): DynamicAction {
         const evidenceRefs = params.evidenceRefs ?? [{
             source: 'transcript' as const,
@@ -619,6 +658,8 @@ export class DynamicActionEngine {
             confirmationSource: params.confirmationSource,
             confirmedIntent: params.confirmedIntent,
             semanticGate: params.semanticGate,
+            candidateSource: params.candidateSource,
+            matchedKeyword: params.matchedKeyword,
             answerStyle: params.trigger.answerStyle,
         };
     }
@@ -656,6 +697,7 @@ export class DynamicActionEngine {
 
     private confirmationSourceFor(intentResult?: IntentResult): SignalConfirmationSource {
         if (!intentResult) return 'trigger';
+        if (intentResult.source === 'mode_keyword') return 'local_intent';
         if (intentResult.source === 'cloud') return 'cloud_intent';
         if (intentResult.source === 'pattern' || intentResult.source === 'local_slm') return 'local_intent';
         if (intentResult.source === 'context') return 'heuristic';
@@ -690,9 +732,9 @@ export class DynamicActionEngine {
         return confidence >= 0.9 && ['buying_signal', 'final_offer', 'coding_problem', 'fde_next_step', 'fde_security_review'].includes(type);
     }
 
-    private synthesizeTrigger(modeTemplateType: string, intentResult?: IntentResult): ActionTrigger | null {
+    private synthesizeTrigger(modeTemplateType: string, intentResult?: IntentResult, latestTurn = ''): ActionTrigger | null {
         if (!intentResult || intentResult.confidence < 0.75) return null;
-        const type = this.mapIntentToActionType(modeTemplateType, intentResult.intent);
+        const type = this.resolveActionTypeForIntent(modeTemplateType, intentResult, latestTurn);
         if (!type) return null;
         const trigger = this.detector.getTriggerForType(type);
         if (trigger) return trigger;
@@ -704,17 +746,19 @@ export class DynamicActionEngine {
         intentResult?: IntentResult;
         actionType: string;
         matchedTriggers: DetectedSignalCandidate[];
+        latestTurn?: string;
     }): boolean {
         const { modeTemplateType, intentResult, actionType, matchedTriggers } = params;
-        if (!intentResult || intentResult.confidence < 0.85) return false;
+        if (!intentResult) return false;
+        if (intentResult.source !== 'mode_keyword' && intentResult.confidence < 0.85) return false;
         if (matchedTriggers.some(({ trigger }) => trigger.type === actionType)) return false;
 
-        const mappedActionType = this.mapIntentToActionType(modeTemplateType, intentResult.intent);
+        const mappedActionType = this.resolveActionTypeForIntent(modeTemplateType, intentResult, params.latestTurn);
         if (mappedActionType !== actionType) return false;
 
         if (intentResult.source === 'local_slm') return false;
         const source = intentResult.source ?? 'pattern';
-        if (!['cloud', 'pattern', 'context'].includes(source)) return false;
+        if (!['cloud', 'pattern', 'context', 'mode_keyword'].includes(source)) return false;
 
         return true;
     }
@@ -801,12 +845,34 @@ export class DynamicActionEngine {
         return byMode[modeOrCurrentType]?.[intent] ?? null;
     }
 
+    private resolveActionTypeForIntent(modeTemplateType: string, intentResult?: IntentResult, latestTurn = ''): string | null {
+        if (!intentResult) return null;
+        if (modeTemplateType === 'sales') {
+            if (intentResult.intent === 'sales_capability_fit') {
+                return this.isExplicitCapabilityQuestion(latestTurn) ? 'capability_fit_answer' : 'discovery_question';
+            }
+            if (intentResult.intent === 'sales_contextual_proof_discovery') {
+                return this.isExplicitCaseProofRequest(latestTurn) ? 'case_study_request' : 'discovery_question';
+            }
+        }
+        return this.mapIntentToActionType(modeTemplateType, intentResult.intent);
+    }
+
+    private isExplicitCapabilityQuestion(text: string): boolean {
+        return /(支持|能不能|是否|有没有|可不可以|可以吗|有.*功能吗|does it support|can it|do you support|is it able to)/i.test(text);
+    }
+
+    private isExplicitCaseProofRequest(text: string): boolean {
+        return /(案例|客户案例|成功案例|收益|ROI|投资回报|证明|proof|case stud|customer story|reference customer|return on investment)/i.test(text);
+    }
+
     private syntheticTriggerFor(type: string, modeTemplateType: string): ActionTrigger | null {
         const labels: Record<string, string> = {
             pricing_objection: '处理价格异议',
             pricing_request: '生成报价邮件',
             case_study_request: '引用案例证明',
             discovery_question: '提出发现问题',
+            capability_fit_answer: '生成能力匹配回答',
             technical_requirements: '澄清技术需求',
             buying_signal: '推进下一步',
             action_item: '捕捉行动项',
@@ -817,6 +883,7 @@ export class DynamicActionEngine {
             general_assistance_request: '建议回应',
             general_summarize: '总结讨论',
             general_explain: '解释清楚',
+            business_system_query: '查询业务系统状态',
             fde_discovery_probe: '澄清部署上下文',
             fde_integration_check: '澄清集成方案',
             fde_security_review: '澄清安全评审',

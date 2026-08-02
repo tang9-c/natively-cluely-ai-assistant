@@ -415,6 +415,17 @@ function getBusinessCacheKey(question?: string, recentContext?: string): string 
     return hashKey(`${compact(question).toLowerCase()}\n${compact(recentContext).toLowerCase()}`);
 }
 
+export function resolveBusinessQueryText(input: {
+    question?: string;
+    source?: WhatToSaySource;
+    modeEvent?: WhatToSayModeEventContext;
+}): string | undefined {
+    if (input.source === 'dynamic_action' && input.modeEvent?.actionType === 'business_system_query') {
+        return compact(input.modeEvent.latestTurn) || compact(input.question) || undefined;
+    }
+    return compact(input.question) || undefined;
+}
+
 function getScreenCacheKey(paths: string[]): string {
     return hashKey(paths.join('\n'));
 }
@@ -557,7 +568,8 @@ async function prepareBusinessContext(input: {
 }): Promise<BusinessSystemServiceResult> {
     if (input.decision.business === 'not_needed') return { kind: 'skipped' };
     const recentContext = buildBusinessSystemRecentContextSummary(input.request.modeEvent?.latestTurn);
-    const cacheKey = getBusinessCacheKey(input.request.question, recentContext);
+    const businessQuery = resolveBusinessQueryText(input.request);
+    const cacheKey = getBusinessCacheKey(businessQuery, recentContext);
     const cached = input.service.readBusinessResult(cacheKey, input.now());
     if (cached) {
         if (cached.kind === 'context') input.contextCandidates.push(cached.candidate);
@@ -574,7 +586,7 @@ async function prepareBusinessContext(input: {
         const service = input.request.businessSystemServiceFactory?.() || getDefaultBusinessSystemService(input.service);
         input.timings.serviceInitMs += measure(input.now, serviceInitStartedAt);
         const result = await service.resolve({
-            question: input.request.question,
+            question: businessQuery,
             recentContext,
         });
         input.timings.businessMs = measure(input.now, startedAt);

@@ -430,6 +430,75 @@ test('FDE agent intent can synthesize action when detector has no candidate', as
   assert.ok(actions.some(action => action.type === 'fde_agent_feasibility'));
 });
 
+test('mode keyword sales capability question passes gate as capability answer without CARD_MIN drop', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = await engine.assessSignals({
+    transcript: '你们的 QMS 有 IQC 检验功能吗？',
+    speaker: 'Customer',
+    modeTemplateType: 'sales',
+    modeId: 'mode-sales-keyword',
+    sessionId: 'session-sales-keyword',
+    intentResult: {
+      intent: 'sales_capability_fit',
+      confidence: 0.75,
+      answerShape: '',
+      source: 'mode_keyword',
+      matchedKeyword: 'IQC',
+    },
+    detectedTriggers: [],
+    cloudClassifier: async ({ candidates }) => candidates.map(candidate => ({
+      actionType: candidate.actionType,
+      decision: 'pass',
+      confidence: 0.72,
+      reasons: ['semantic_gate_passed_keyword_candidate'],
+      rejectedCandidates: [],
+    })),
+    now: 3_000,
+  });
+
+  assert.deepEqual(actions.map(action => action.type), ['capability_fit_answer']);
+  assert.equal(actions[0].candidateSource, 'mode_keyword');
+  assert.equal(actions[0].matchedKeyword, 'IQC');
+  assert.equal(actions[0].signalStatus, 'confirmed');
+  assert.equal(actions[0].autoTriggerEligible, false);
+});
+
+test('explicit business lookup is exclusive and becomes business_system_query', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+
+  const actions = await engine.assessSignals({
+    transcript: '查一下 PLM 里 golf car 的 BOM 发布了没有？',
+    speaker: 'Customer',
+    modeTemplateType: 'fde',
+    modeId: 'mode-fde-business-query',
+    sessionId: 'session-fde-business-query',
+    intentResult: {
+      intent: 'fde_integration',
+      confidence: 0.95,
+      answerShape: '',
+      source: 'mode_keyword',
+      matchedKeyword: 'BOM',
+    },
+    detectedTriggers: [],
+    cloudClassifier: async ({ candidates }) => candidates.map(candidate => ({
+      actionType: candidate.actionType,
+      decision: 'pass',
+      confidence: 0.78,
+      reasons: ['explicit_readonly_business_query'],
+      rejectedCandidates: [],
+    })),
+    now: 4_000,
+  });
+
+  assert.deepEqual(actions.map(action => action.type), ['business_system_query']);
+  assert.equal(actions[0].candidateSource, 'business_query');
+  assert.equal(actions[0].productContract.contextNeedDecision.business, 'required');
+  assert.equal(actions[0].productContract.contextNeedDecision.material, 'not_needed');
+});
+
 test('dynamic action retrievalQuery uses active-mode entity extraction', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();

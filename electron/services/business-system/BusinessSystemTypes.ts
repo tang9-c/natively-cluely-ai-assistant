@@ -1,4 +1,4 @@
-export type BusinessSystemSourceKind = 'plm' | 'qms' | 'business_system';
+export type BusinessSystemSourceKind = 'plm' | 'qms' | 'erp' | 'mes' | 'crm' | 'business_system';
 
 export type BusinessSystemAuthType = 'api_key' | 'username_password';
 
@@ -74,7 +74,8 @@ export interface BusinessSystemQueryResult {
 
 export type BusinessSystemTriggerFailureReason =
     | 'not_explicitly_requested'
-    | 'missing_query_anchor';
+    | 'missing_query_anchor'
+    | 'unsupported_operation';
 
 export interface BusinessSystemTriggerResult {
     shouldQuery: boolean;

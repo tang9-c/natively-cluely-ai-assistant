@@ -40,10 +40,25 @@ const SOURCES = new Set<ContextNeedDecisionSource>([
 
 export const MATERIAL_ACTION_TYPES = new Set([
     'case_study_request',
+    'capability_fit_answer',
+    'candidate_concern',
+    'fde_grounded_answer',
 ]);
 
 export const READY_ONLY_CONTEXT_ACTION_TYPES = new Set([
     'discovery_question',
+    'fde_integration_check',
+    'fde_security_review',
+    'technical_requirements',
+]);
+
+export const TRANSCRIPT_ONLY_ACTION_TYPES = new Set([
+    'action_item',
+    'decision_point',
+    'blocker_check',
+    'owner_deadline_check',
+    'candidate_experience_probe',
+    'candidate_evidence_summary',
 ]);
 
 export const KNOWN_CONTEXT_DECISION_ACTION_TYPES = new Set(
@@ -51,9 +66,6 @@ export const KNOWN_CONTEXT_DECISION_ACTION_TYPES = new Set(
         .flat()
         .map((trigger) => trigger.type),
 );
-
-const MATERIAL_SIGNAL_PATTERN = /\b(case study|customer case|roi|proof|reference|deck|pptx|pdf|uploaded|material|document)\b|案例|客户案例|证明|佐证|资料|材料|文档|知识库|PPT|PDF/i;
-const BUSINESS_SIGNAL_PATTERN = /\b(PLM|Windchill|QMS|BOM|ECO|ECN|CAPA|NCR|part|material|change order|workflow)\b|业务系统|物料|图纸|变更|质量记录|审批|工单/i;
 
 function clampConfidence(value: unknown): number {
     if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
@@ -64,14 +76,6 @@ function clampConfidence(value: unknown): number {
 
 function compact(value: unknown): string {
     return String(value || '').replace(/\s+/g, ' ').trim();
-}
-
-function summarizeEvidence(evidenceRefs?: EvidenceRef[]): string {
-    return (evidenceRefs || [])
-        .map((ref) => compact(ref.text))
-        .filter(Boolean)
-        .slice(0, 4)
-        .join(' ');
 }
 
 function normalizeLevel(value: unknown): ContextNeedLevel {
@@ -108,6 +112,16 @@ export function buildDynamicActionContextNeedDecision(input: {
     evidenceRefs?: EvidenceRef[];
 }): ContextNeedDecision {
     const type = compact(input.type);
+    if (type === 'business_system_query') {
+        return {
+            material: 'not_needed',
+            business: 'required',
+            screen: 'not_needed',
+            confidence: 1,
+            reason: 'Business-system query actions must use real readonly business-system results and must not use material RAG.',
+            decidedBy: 'dynamic_action_contract',
+        };
+    }
     if (type === 'candidate_concern') {
         return {
             material: 'required',
@@ -138,17 +152,25 @@ export function buildDynamicActionContextNeedDecision(input: {
             decidedBy: 'dynamic_action_contract',
         };
     }
-    const text = [
-        type,
-        input.label,
-        input.modeTemplateType,
-        summarizeEvidence(input.evidenceRefs),
-    ].join(' ');
+    if (type === 'fde_grounded_answer') {
+        return {
+            material: 'required',
+            business: 'use_if_ready',
+            screen: 'not_needed',
+            confidence: 1,
+            reason: 'FDE grounded answers require trusted material and may use already-ready readonly business context.',
+            decidedBy: 'dynamic_action_contract',
+        };
+    }
     const evidenceHasScreen = (input.evidenceRefs || []).some((ref) => ref.source === 'screen');
-    const materialRequired = MATERIAL_ACTION_TYPES.has(type) || MATERIAL_SIGNAL_PATTERN.test(text);
-    const businessRequired = BUSINESS_SIGNAL_PATTERN.test(text);
+    const materialRequired = MATERIAL_ACTION_TYPES.has(type);
+    const businessRequired = false;
     const readyOnlyContext = READY_ONLY_CONTEXT_ACTION_TYPES.has(type);
-    const knownAction = KNOWN_CONTEXT_DECISION_ACTION_TYPES.has(type) || MATERIAL_ACTION_TYPES.has(type) || readyOnlyContext;
+    const transcriptOnly = TRANSCRIPT_ONLY_ACTION_TYPES.has(type);
+    const knownAction = KNOWN_CONTEXT_DECISION_ACTION_TYPES.has(type)
+        || MATERIAL_ACTION_TYPES.has(type)
+        || readyOnlyContext
+        || transcriptOnly;
 
     if (!knownAction && !materialRequired && !businessRequired && !evidenceHasScreen) {
         return {
@@ -161,7 +183,7 @@ export function buildDynamicActionContextNeedDecision(input: {
     if (readyOnlyContext) {
         return {
             material: 'use_if_ready',
-            business: 'use_if_ready',
+            business: 'not_needed',
             screen: 'not_needed',
             confidence: clampConfidence(input.confidence || 0.8),
             reason: 'Discovery questions should use ready context only and must not wait for external retrieval.',
@@ -169,12 +191,21 @@ export function buildDynamicActionContextNeedDecision(input: {
         };
     }
 
+    if (transcriptOnly) {
+        return {
+            material: 'not_needed',
+            business: 'not_needed',
+            screen: 'not_needed',
+            confidence: clampConfidence(input.confidence || 0.8),
+            reason: 'This action type is grounded by transcript evidence and does not require external context.',
+            decidedBy: 'dynamic_action_contract',
+        };
+    }
+
     return {
         material: materialRequired
             ? 'required'
-            : businessRequired
-                ? 'use_if_ready'
-                : 'not_needed',
+            : 'not_needed',
         business: businessRequired ? 'required' : 'not_needed',
         screen: evidenceHasScreen ? 'required' : 'not_needed',
         confidence: clampConfidence(input.confidence || 0.8),

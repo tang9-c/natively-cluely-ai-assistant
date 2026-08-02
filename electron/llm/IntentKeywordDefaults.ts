@@ -9,6 +9,11 @@ export type IntentKeywordMap = Partial<Record<ConversationIntent, string[]>>;
 
 export const MAX_INTENT_KEYWORDS_CSV_LENGTH = 2000;
 
+export interface IntentKeywordMatch {
+    intent: ConversationIntent;
+    matchedKeyword: string;
+}
+
 const INTERVIEW_KEYWORDS: IntentKeywordConfig[] = [
     { intent: 'clarification', keywordsCsv: 'can you explain,what do you mean,clarify,could you elaborate on that specific,能解释,什么意思,怎么讲,具体说,澄清,说明下,解释一下,怎么理解' },
     { intent: 'follow_up', keywordsCsv: 'what happened,then what,and after that,what.s next,how did that go,后来呢,后来怎样,然后呢,接下来,后来如何,然后怎样,之后呢,结果呢,接下来呢,后来怎么了' },
@@ -122,7 +127,7 @@ export function matchIntentKeywords(
     text: string,
     modeTemplateType: string | null | undefined,
     keywordMap: IntentKeywordMap,
-): ConversationIntent | null {
+): IntentKeywordMatch | null {
     const normalizedText = text.toLocaleLowerCase();
     const order = INTENT_MATCH_ORDER_BY_TEMPLATE[modeTemplateType ?? 'general']
         ?? INTENT_MATCH_ORDER_BY_TEMPLATE.general;
@@ -130,7 +135,7 @@ export function matchIntentKeywords(
         const keywords = keywordMap[intent] ?? [];
         for (const keyword of keywords) {
             if (normalizedText.includes(keyword.toLocaleLowerCase())) {
-                return intent;
+                return { intent, matchedKeyword: keyword };
             }
         }
     }

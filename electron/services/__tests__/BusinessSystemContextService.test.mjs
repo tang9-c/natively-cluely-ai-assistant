@@ -83,6 +83,98 @@ test('maps ok MCP result to a business_system context candidate', async () => {
   assert.match(result.candidate.text, /根据 PLM 知识源/);
 });
 
+test('ERP lookup only routes to ERP source and does not fall back to PLM default', async () => {
+  const { BusinessSystemContextService } = await loadService();
+  const calls = [];
+  const service = new BusinessSystemContextService({
+    credentialsManager: credentialsManagerStub([
+      source({ id: 'plm-default', name: 'PLM 默认源', kind: 'plm', isDefault: true }),
+      source({ id: 'erp-source', name: 'ERP 源', kind: 'erp', isDefault: false }),
+    ]),
+    mcpClient: {
+      query: async (selectedSource, _credentials, input) => {
+        calls.push({ selectedSource, input });
+        return { status: 'ok', sourceName: selectedSource.name, summary: 'ERP 物料 A123 当前可用。' };
+      },
+    },
+  });
+
+  const result = await service.resolve({ question: '查询 ERP 里物料 A123 的库存状态' });
+
+  assert.equal(result.kind, 'context');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].selectedSource.id, 'erp-source');
+  assert.equal(calls[0].input.sourceHint, 'erp');
+});
+
+test('business query without system hint is ambiguous when multiple enabled sources have no unique default', async () => {
+  const { BusinessSystemContextService } = await loadService();
+  let called = false;
+  const service = new BusinessSystemContextService({
+    credentialsManager: credentialsManagerStub([
+      source({ id: 'plm-source', name: 'PLM 源', kind: 'plm', isDefault: false }),
+      source({ id: 'qms-source', name: 'QMS 源', kind: 'qms', isDefault: false }),
+    ]),
+    mcpClient: {
+      query: async () => {
+        called = true;
+        return { status: 'ok', sourceName: 'bad', summary: 'bad' };
+      },
+    },
+  });
+
+  const result = await service.resolve({ question: '查一下物料 A123 是什么状态' });
+
+  assert.equal(result.kind, 'fixed_reply');
+  assert.equal(result.status, 'ambiguous');
+  assert.equal(called, false);
+});
+
+test('business system context service exposes deterministic answer for successful structured result', async () => {
+  const { BusinessSystemContextService } = await loadService();
+  const service = new BusinessSystemContextService({
+    credentialsManager: credentialsManagerStub([source({ name: 'PLM 源' })]),
+    mcpClient: {
+      query: async () => ({
+        status: 'ok',
+        sourceName: 'PLM 源',
+        evidence: {
+          source: 'mcp',
+          recordCount: 1,
+          records: [{
+            title: 'golf car BOM',
+            fields: [
+              { name: '状态', value: '已发布' },
+              { name: '版本', value: 'B' },
+            ],
+          }],
+        },
+      }),
+    },
+  });
+
+  const result = await service.resolve({ question: '查一下 PLM 里 golf car 的 BOM 发布了没有' });
+
+  assert.equal(result.kind, 'context');
+  assert.match(result.answer, /已从 PLM 源 查询到以下结果/);
+  assert.match(result.answer, /记录 1：golf car BOM/);
+  assert.match(result.answer, /状态: 已发布/);
+  assert.doesNotMatch(result.answer, /建议|推断/);
+});
+
+test('status ok without summary or evidence is returned as no_result', async () => {
+  const { BusinessSystemContextService } = await loadService();
+  const service = new BusinessSystemContextService({
+    credentialsManager: credentialsManagerStub([source()]),
+    mcpClient: { query: async () => ({ status: 'ok', sourceName: 'PLM 源' }) },
+  });
+
+  const result = await service.resolve({ question: '根据 PLM 查一下物料 a12345 是什么状态' });
+
+  assert.equal(result.kind, 'fixed_reply');
+  assert.equal(result.status, 'no_result');
+});
+
 test('maps evidence-only MCP result to an LLM-ready business_system context candidate', async () => {
   const { BusinessSystemContextService } = await loadService();
   const service = new BusinessSystemContextService({
@@ -200,7 +292,7 @@ test('maps every non-ok business system status to fixed reply copy and legal deg
     ['auth_failed', /认证失败/, 'business_system_auth_failed'],
     ['timeout', /查询超时/, 'business_system_timeout'],
     ['unavailable', /当前不可用/, 'business_system_unavailable'],
-    ['unsupported_operation', /当前只支持查询 Windchill 数据，暂不支持创建、修改、审批或提交操作/, 'business_system_unsupported_operation'],
+    ['unsupported_operation', /当前只支持只读查询，暂不支持创建、修改、审批、提交、删除或写回操作/, 'business_system_unsupported_operation'],
     ['error', /查询PLM 知识源时失败/, 'business_system_error'],
   ];
 

@@ -39,6 +39,21 @@ test('generate-what-to-say short-circuits fixed business system failures without
   );
 });
 
+test('generate-what-to-say short-circuits successful business system query without LLM', () => {
+  const source = read('electron/ipcHandlers.ts');
+  const handler = sliceSafeHandleBlock(source, 'generate-what-to-say');
+  const successBranchIndex = handler.indexOf("sanitizedModeEvent?.actionType === 'business_system_query' && businessSystemResult.kind === 'context'");
+
+  assert.ok(successBranchIndex >= 0, 'business_system_query context success branch should exist');
+  assert.ok(
+    successBranchIndex < handler.indexOf('runWhatShouldISay'),
+    'successful business system query must return before LLM generation'
+  );
+  assert.match(handler, /answer:\s*businessSystemResult\.answer/);
+  assert.match(handler, /llmBypassed:\s*true/);
+  assert.match(handler, /statusCode:\s*'ok'/);
+});
+
 test('generate-what-to-say uses canonical business system degraded reason helper for fixed replies', () => {
   const source = read('electron/ipcHandlers.ts');
   const handler = sliceSafeHandleBlock(source, 'generate-what-to-say');

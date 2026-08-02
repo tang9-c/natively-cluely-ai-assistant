@@ -122,6 +122,26 @@ describe('IntentClassifier.isPrimarilyChinese (language detection)', () => {
 });
 
 describe('IntentClassifier.classifyIntent public API', () => {
+  test('active mode intent keyword match is returned as mode_keyword before cloudFirst fallback', async () => {
+    const { classifyIntent } = loadModule();
+    let cloudCalls = 0;
+    const r = await classifyIntent('你们的 QMS 有 IQC 检验功能吗', '[INTERVIEWER]: 你们的 QMS 有 IQC 检验功能吗', 0, 'sales', {
+      cloudFirst: true,
+      customIntentKeywords: {
+        sales_capability_fit: ['IQC'],
+      },
+      cloudIntentClassifier: async () => {
+        cloudCalls += 1;
+        return { intent: 'general', confidence: 0.99 };
+      },
+    });
+
+    assert.equal(r.intent, 'sales_capability_fit');
+    assert.equal(r.source, 'mode_keyword');
+    assert.equal(r.matchedKeyword, 'IQC');
+    assert.equal(cloudCalls, 0);
+  });
+
   test('returns regex fast-path result without needing SLM fallback', async () => {
     const { classifyIntent } = loadModule();
     let cloudCalls = 0;

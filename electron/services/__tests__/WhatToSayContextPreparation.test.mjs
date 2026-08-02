@@ -247,3 +247,37 @@ test('context preparation failures are logged with redaction', async () => {
     console.warn = originalWarn;
   }
 });
+
+test('dynamic business action resolves original query from latestTurn instead of prompt instruction or retrievalQuery', async () => {
+  const { prepareWhatToSayContext, WhatToSayContextPreparationService } = await loadHelper();
+  WhatToSayContextPreparationService.getInstance()._resetCachesForTest();
+  const calls = [];
+  const { input } = baseInput({
+    question: undefined,
+    source: 'dynamic_action',
+    modeEvent: {
+      actionType: 'business_system_query',
+      latestTurn: '查一下 PLM 里 golf car 的 BOM 发布了没有',
+      retrievalQuery: 'fde business entities golf car BOM',
+      productContract: {
+        outputType: 'spoken_response',
+        contextNeedDecision: decision({ business: 'required' }),
+      },
+    },
+    promptInstruction: '帮我回答客户这个问题',
+    businessSystemServiceFactory: () => ({
+      async resolve(request) {
+        calls.push(request);
+        return { kind: 'fixed_reply', status: 'no_result', answer: '未查到匹配结果' };
+      },
+    }),
+  });
+
+  await prepareWhatToSayContext(input);
+  await prepareWhatToSayContext(input);
+
+  assert.equal(calls.length, 1, 'same resolved business query should use the same cache key');
+  assert.equal(calls[0].question, '查一下 PLM 里 golf car 的 BOM 发布了没有');
+  assert.notEqual(calls[0].question, input.promptInstruction);
+  assert.notEqual(calls[0].question, input.modeEvent.retrievalQuery);
+});

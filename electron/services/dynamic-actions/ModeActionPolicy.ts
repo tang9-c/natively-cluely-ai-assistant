@@ -129,6 +129,24 @@ const POLICIES: Record<string, Record<string, ActionGatePolicy>> = {
 };
 
 export function getActionGatePolicy(modeTemplateType: string, actionType: string): ActionGatePolicy {
+    if (actionType === 'business_system_query') {
+        return policy(
+            'business_system_query',
+            'medium',
+            'preferred',
+            true,
+            [{
+                includeAny: ['查一下', '查询', '确认一下', '看一下', '去系统里看一下', 'PLM', 'QMS', 'ERP', 'MES', 'CRM', 'BOM', 'CAPA', '合同'],
+                rejectAny: ['创建', '修改', '审批通过', '提交', '删除', '写回'],
+                requireAllAny: [
+                    ['查', '查询', '确认', '看'],
+                    ['PLM', 'Windchill', 'QMS', 'ERP', 'MES', 'CRM', 'BOM', 'ECO', 'ECN', 'CAPA', '物料', '工单', '合同', '客户档案'],
+                ],
+            }],
+            ['readonly_business_query', 'system_or_object_anchor'],
+            false,
+        );
+    }
     const mode = normalizeModeTemplateType(modeTemplateType);
     return POLICIES[mode]?.[actionType] ?? policy(actionType, 'medium', 'preferred', false);
 }

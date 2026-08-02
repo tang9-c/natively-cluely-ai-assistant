@@ -51,7 +51,7 @@ test('marks only context candidates actually injected into the prompt as used', 
   assert.doesNotMatch(JSON.stringify(grounding.groundedSources), /material-2|omitted\.pdf/);
 });
 
-test('FDE grounded answers reuse injected material and business context grounding', async () => {
+test('FDE grounded answers use uploaded material and do not treat business context as capability grounding', async () => {
   const { buildDynamicActionRuntimeGrounding } = await loadGrounding();
   const grounding = buildDynamicActionRuntimeGrounding({
     actionType: 'fde_grounded_answer',
@@ -86,10 +86,43 @@ test('FDE grounded answers reuse injected material and business context groundin
     degradedReasons: [],
     businessSystemResult: { kind: 'context', status: 'ok', sourceName: 'Windchill' },
   });
-  assert.equal(grounding.injectedEvidence.length, 2);
+  assert.equal(grounding.injectedEvidence.length, 1);
   assert.ok(grounding.groundedSources.some((source) => source.type === 'material' && source.status === 'used'));
-  assert.ok(grounding.groundedSources.some((source) => source.type === 'business_context' && source.status === 'used'));
+  assert.equal(grounding.groundedSources.some((source) => source.type === 'business_context'), false);
   assert.doesNotMatch(JSON.stringify(grounding.groundedSources), /ECO 流程|Windchill 只读/);
+});
+
+test('case study runtime policy uses only uploaded material and never business system context', async () => {
+  const { buildDynamicActionRuntimeGrounding } = await loadGrounding();
+  const { getDynamicActionRuntimeValidationPolicy, buildDynamicActionRuntimeSafeFallback } = await import(pathToFileURL(path.join(
+    process.cwd(),
+    'dist-electron/electron/services/dynamic-actions/DynamicActionRuntimeValidationPolicy.js',
+  )).href);
+  const grounding = buildDynamicActionRuntimeGrounding({
+    actionType: 'case_study_request',
+    realtimeContextPlan: {
+      injected: [
+        { source: 'uploaded_material', sourceId: 'case-study.md', chunkId: 'roi', text: '跨境电商客户通过分阶段上线验证 ROI。', tokenCount: 12 },
+        { source: 'business_system', sourceId: 'crm-live', chunkId: 'customer', text: 'CRM 客户状态查询结果。', tokenCount: 8 },
+      ],
+      omitted: [],
+      sourceStatus: {},
+      degradedReasons: [],
+      contextFingerprint: 'case',
+      retrievalTimingMs: {},
+    },
+    citations: [{ citationId: 'c-case', sourceType: 'uploaded_material', sourceId: 'case-study.md', chunkId: 'roi', title: 'case-study.md' }],
+    materialRagAttempted: true,
+    uploadedMaterialHitCount: 1,
+    degradedReasons: [],
+    businessSystemResult: { kind: 'context', status: 'ok', sourceName: 'CRM' },
+  });
+
+  assert.equal(getDynamicActionRuntimeValidationPolicy('case_study_request')?.evidenceKind, 'external_capability');
+  assert.equal(grounding.injectedEvidence.length, 1);
+  assert.equal(grounding.injectedEvidence[0].sourceId, 'case-study.md');
+  assert.equal(grounding.groundedSources.some((source) => source.type === 'business_context'), false);
+  assert.match(buildDynamicActionRuntimeSafeFallback('case_study_request', 'zh'), /没有找到可引用的匹配案例/);
 });
 
 test('recruiting runtime policy separates external policy and transcript evidence', async () => {

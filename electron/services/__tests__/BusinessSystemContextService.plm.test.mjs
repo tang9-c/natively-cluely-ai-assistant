@@ -149,7 +149,7 @@ test('BusinessSystemContextService: unsupported Windchill write returns fixed re
 
   assert.equal(result.kind, 'fixed_reply');
   assert.equal(result.status, 'unsupported_operation');
-  assert.match(result.answer, /暂不支持创建、修改、审批或提交操作/);
+  assert.match(result.answer, /暂不支持创建、修改、审批、提交、删除或写回操作/);
 });
 
 test('BusinessSystemContextService: Windchill adapter gets a multi-call query budget', async () => {

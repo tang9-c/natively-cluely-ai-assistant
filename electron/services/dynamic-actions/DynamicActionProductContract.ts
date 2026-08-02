@@ -93,6 +93,12 @@ export function explainDynamicActionForUser(input: Pick<DynamicAction, 'type' | 
             severity: 'info',
         };
     }
+    if (input.type === 'business_system_query') {
+        return {
+            whyNow: '对方正在要求查询业务系统中的对象状态，必须读取真实业务系统结果，不能凭经验猜测。',
+            severity: 'info',
+        };
+    }
     if (input.type === 'fde_grounded_answer') {
         return {
             whyNow: '客户已补充流程、角色、质量对象或 AI 边界信息，可以基于可信资料回应。',
@@ -170,6 +176,7 @@ function resolveRiskState(input: { autoSurfacePolicy?: AutoSurfacePolicy; confid
 }
 
 function buildUserAction(input: ContractInput, outputType: DynamicActionOutputType): string {
+    if (input.type === 'business_system_query') return '查询业务系统状态';
     if (input.type === 'capability_fit_answer') return '生成能力匹配回答';
     if (input.type === 'fde_grounded_answer') return '生成 FDE 流程验证回应';
     if (input.type === 'pricing_request') return '生成报价邮件';
@@ -196,6 +203,7 @@ function buildUserAction(input: ContractInput, outputType: DynamicActionOutputTy
 }
 
 function outputPromiseFor(actionType: string, outputType: DynamicActionOutputType): string {
+    if (actionType === 'business_system_query') return '从已配置业务系统读取真实结果，并用固定格式展示查询结果或失败状态';
     if (actionType === 'capability_fit_answer') return '生成一段可直接说出口、带证据边界的能力匹配回答';
     if (actionType === 'fde_grounded_answer') return '生成一段可直接说出口、带证据边界的流程或 AI 支持回应';
     if (actionType === 'candidate_concern') return '生成一段基于可信招聘政策材料的回应，或明确需要招聘方确认';

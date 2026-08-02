@@ -33,9 +33,7 @@ export function buildDynamicActionRuntimeGrounding(input: {
     }
 
     const injectedEvidence = input.realtimeContextPlan.injected
-        .filter((candidate) =>
-            candidate.source === 'uploaded_material' ||
-            (policy.evidenceKind === 'external_capability' && candidate.source === 'business_system'))
+        .filter((candidate) => candidate.source === 'uploaded_material')
         .map((candidate) => {
             const citation = input.citations.find((item) =>
                 item.sourceId === candidate.sourceId &&
@@ -62,7 +60,7 @@ export function buildDynamicActionRuntimeGrounding(input: {
         status: 'used',
     }));
 
-    appendNonUsedSourceStatuses(groundedSources, input, policy.evidenceKind === 'external_capability');
+    appendNonUsedSourceStatuses(groundedSources, input, false);
     return { groundedSources, injectedEvidence };
 }
 
