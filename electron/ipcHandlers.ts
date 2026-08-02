@@ -1256,10 +1256,10 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   const makeSpeakerServices = () => {
     const { SpeakerProfileStore } = require('./services/speaker/SpeakerProfileStore');
-    const { SherpaSpeakerEmbeddingExtractor } = require('./services/speaker/SpeakerEmbeddingExtractor');
+    const { getSharedSpeakerEmbeddingExtractor } = require('./services/speaker/SpeakerEmbeddingExtractor');
     const { SpeakerEnrollmentService } = require('./services/speaker/SpeakerEnrollmentService');
     const store = new SpeakerProfileStore(DatabaseManager.getInstance());
-    const extractor = new SherpaSpeakerEmbeddingExtractor();
+    const extractor = getSharedSpeakerEmbeddingExtractor();
     return {
       store,
       enrollment: new SpeakerEnrollmentService({ store, extractor }),

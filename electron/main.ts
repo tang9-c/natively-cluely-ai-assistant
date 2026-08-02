@@ -1296,13 +1296,13 @@ export class AppState {
     try {
       const { SettingsManager } = require('./services/SettingsManager');
       const { SpeakerProfileStore } = require('./services/speaker/SpeakerProfileStore');
-      const { SherpaSpeakerEmbeddingExtractor } = require('./services/speaker/SpeakerEmbeddingExtractor');
+      const { getSharedSpeakerEmbeddingExtractor } = require('./services/speaker/SpeakerEmbeddingExtractor');
       const { SpeakerVerificationService } = require('./services/speaker/SpeakerVerificationService');
       const { SpeakerVerificationAnnotator } = require('./services/speaker/SpeakerVerificationAnnotator');
       const store = new SpeakerProfileStore(DatabaseManager.getInstance());
       const profile = store.getMeProfile();
       if (profile && SettingsManager.getInstance().getSpeakerVerificationMode() === 'local') {
-        const extractor = new SherpaSpeakerEmbeddingExtractor();
+        const extractor = getSharedSpeakerEmbeddingExtractor();
         const service = new SpeakerVerificationService({ store, extractor });
         stt.setSpeakerVerificationAnnotator(new SpeakerVerificationAnnotator({
           getMode: () => SettingsManager.getInstance().getSpeakerVerificationMode(),

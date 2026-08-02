@@ -9,6 +9,8 @@ export interface SherpaSpeakerEmbeddingExtractorOptions {
 }
 
 let latestExtractorInitializationFailed = false;
+let singleton: SherpaSpeakerEmbeddingExtractor | null = null;
+let singletonModelFile: string | null = null;
 
 export function getDefaultSpeakerEmbeddingModelFile(): string {
   if (process.env.SPEAKER_EMBEDDING_MODEL_FILE) {
@@ -33,18 +35,36 @@ export function getSpeakerEmbeddingModelHealth(): SpeakerVerificationHealth {
   try {
     const modelFile = getDefaultSpeakerEmbeddingModelFile();
     if (!fs.existsSync(modelFile)) {
+      resetSharedSpeakerEmbeddingExtractor();
       return { state: 'model_missing', message: '本地声纹模型缺失，请重新安装模型。' };
     }
     if (latestExtractorInitializationFailed) {
+      resetSharedSpeakerEmbeddingExtractor();
       return { state: 'model_error', message: '本地声纹模型加载失败。' };
     }
     return { state: 'ready' };
   } catch (error: any) {
+    resetSharedSpeakerEmbeddingExtractor();
     if (error?.message === 'speaker_embedding_model_not_installed') {
       return { state: 'model_missing', message: '本地声纹模型缺失，请重新安装模型。' };
     }
     return { state: 'model_error', message: '本地声纹模型加载失败。' };
   }
+}
+
+export function getSharedSpeakerEmbeddingExtractor(): SherpaSpeakerEmbeddingExtractor {
+  const modelFile = getDefaultSpeakerEmbeddingModelFile();
+  if (singleton && singletonModelFile === modelFile) {
+    return singleton;
+  }
+  singleton = new SherpaSpeakerEmbeddingExtractor({ modelFile });
+  singletonModelFile = modelFile;
+  return singleton;
+}
+
+export function resetSharedSpeakerEmbeddingExtractor(): void {
+  singleton = null;
+  singletonModelFile = null;
 }
 
 export class SherpaSpeakerEmbeddingExtractor implements SpeakerEmbeddingExtractorLike {

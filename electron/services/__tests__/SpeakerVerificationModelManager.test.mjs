@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fs from 'node:fs';
+import Module from 'node:module';
+import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 function read(relativePath) {
   return fs.readFileSync(path.resolve(relativePath), 'utf8');
@@ -57,4 +60,71 @@ test('SpeakerEmbeddingExtractor disables sherpa external buffers for Electron en
   assert.match(source, /this\.extractor\.compute\(stream,\s*false\)/);
   assert.match(source, /return new Float32Array\(embedding\)/);
   assert.doesNotMatch(source, /return this\.extractor\.compute\(stream\)/);
+});
+
+test('shared speaker embedding extractor reuses the same model instance until model path changes', async () => {
+  const extractorPath = path.resolve('dist-electron/electron/services/speaker/SpeakerEmbeddingExtractor.js');
+  const moduleUrl = `${pathToFileURL(extractorPath).href}?shared-${Date.now()}`;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-speaker-shared-'));
+  const modelA = path.join(dir, 'model-a.onnx');
+  const modelB = path.join(dir, 'model-b.onnx');
+  const originalModelFile = process.env.SPEAKER_EMBEDDING_MODEL_FILE;
+  const originalLoad = Module._load;
+  let constructorCalls = 0;
+
+  fs.writeFileSync(modelA, 'a');
+  fs.writeFileSync(modelB, 'b');
+  process.env.SPEAKER_EMBEDDING_MODEL_FILE = modelA;
+  Module._load = function(request, parent, isMain) {
+    if (request === 'sherpa-onnx-node') {
+      return {
+        SpeakerEmbeddingExtractor: class {
+          dim = 256;
+          constructor() {
+            constructorCalls += 1;
+          }
+          createStream() {
+            return {
+              acceptWaveform() {},
+              inputFinished() {},
+            };
+          }
+          isReady() {
+            return true;
+          }
+          compute() {
+            return new Float32Array(256);
+          }
+        },
+      };
+    }
+    return originalLoad.call(this, request, parent, isMain);
+  };
+
+  try {
+    const {
+      getSharedSpeakerEmbeddingExtractor,
+      resetSharedSpeakerEmbeddingExtractor,
+    } = await import(moduleUrl);
+
+    const first = getSharedSpeakerEmbeddingExtractor();
+    const second = getSharedSpeakerEmbeddingExtractor();
+    assert.equal(first, second);
+    assert.equal(constructorCalls, 1);
+
+    process.env.SPEAKER_EMBEDDING_MODEL_FILE = modelB;
+    const third = getSharedSpeakerEmbeddingExtractor();
+    assert.notEqual(third, first);
+    assert.equal(constructorCalls, 2);
+
+    resetSharedSpeakerEmbeddingExtractor();
+    const fourth = getSharedSpeakerEmbeddingExtractor();
+    assert.notEqual(fourth, third);
+    assert.equal(constructorCalls, 3);
+  } finally {
+    Module._load = originalLoad;
+    if (originalModelFile === undefined) delete process.env.SPEAKER_EMBEDDING_MODEL_FILE;
+    else process.env.SPEAKER_EMBEDDING_MODEL_FILE = originalModelFile;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
