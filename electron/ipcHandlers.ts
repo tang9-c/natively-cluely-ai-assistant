@@ -1281,6 +1281,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     return getSpeakerEmbeddingModelHealth();
   });
 
+  safeHandle('speaker-verification:get-quality-policy', async () => {
+    const { SPEAKER_RECORDING_QUALITY_POLICY } = require('./services/speaker/speakerAudioUtils');
+    return SPEAKER_RECORDING_QUALITY_POLICY;
+  });
+
   safeHandle('speaker-verification:enroll', async (_, samples: any[]) => {
     try {
       if (!Array.isArray(samples) || samples.length < 3) {

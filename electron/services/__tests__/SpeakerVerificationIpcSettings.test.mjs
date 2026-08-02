@@ -15,6 +15,7 @@ test('speaker verification IPC handlers are exposed with safeHandle', () => {
   const ipc = read('electron/ipcHandlers.ts');
   assert.match(ipc, /safeHandle\('speaker-verification:get-status'/);
   assert.match(ipc, /safeHandle\('speaker-verification:get-health'/);
+  assert.match(ipc, /safeHandle\('speaker-verification:get-quality-policy'/);
   assert.match(ipc, /safeHandle\('speaker-verification:enroll'/);
   assert.match(ipc, /safeHandle\('speaker-verification:delete-profile'/);
   assert.match(ipc, /getSpeakerVerificationMode/);
@@ -27,6 +28,7 @@ test('preload and renderer types expose speaker verification APIs', () => {
   for (const api of [
     'speakerVerificationGetStatus',
     'speakerVerificationGetHealth',
+    'speakerVerificationGetQualityPolicy',
     'speakerVerificationEnroll',
     'speakerVerificationDeleteProfile',
     'getSpeakerVerificationMode',

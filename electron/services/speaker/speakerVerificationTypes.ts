@@ -97,6 +97,14 @@ export interface AudioQualityResult {
   reason?: 'too_short' | 'too_quiet' | 'not_enough_voice' | 'empty';
 }
 
+export interface SpeakerRecordingQualityPolicy {
+  minDurationMs: number;
+  minRms: number;
+  minVoiceRatio: number;
+  voiceSampleThreshold: number;
+  minVerificationDurationMs: number;
+}
+
 export interface SpeakerEmbeddingExtractorLike {
   readonly dim: number;
   readonly modelId: string;

@@ -374,6 +374,14 @@ export interface SpeakerVerificationStats {
   lastFailureAt?: number
 }
 
+export interface SpeakerRecordingQualityPolicy {
+  minDurationMs: number
+  minRms: number
+  minVoiceRatio: number
+  voiceSampleThreshold: number
+  minVerificationDurationMs: number
+}
+
 export interface SpeakerEnrollmentSample {
   samples: number[]
   sampleRate: number
@@ -593,6 +601,8 @@ export interface ElectronAPI {
   speakerVerificationGetStatus: () => Promise<SpeakerVerificationStatus>
   // @ipc-channel speaker-verification:get-health
   speakerVerificationGetHealth: () => Promise<SpeakerVerificationHealth>
+  // @ipc-channel speaker-verification:get-quality-policy
+  speakerVerificationGetQualityPolicy: () => Promise<SpeakerRecordingQualityPolicy>
   // @ipc-channel speaker-verification:enroll
   speakerVerificationEnroll: (samples: SpeakerEnrollmentSample[]) => Promise<{ success: boolean; status?: SpeakerVerificationStatus; error?: string }>
   // @ipc-channel speaker-verification:delete-profile

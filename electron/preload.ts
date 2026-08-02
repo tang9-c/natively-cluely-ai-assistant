@@ -1238,6 +1238,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('set-speaker-verification-mode', mode),
   speakerVerificationGetStatus: () => ipcRenderer.invoke('speaker-verification:get-status'),
   speakerVerificationGetHealth: () => ipcRenderer.invoke('speaker-verification:get-health'),
+  speakerVerificationGetQualityPolicy: () => ipcRenderer.invoke('speaker-verification:get-quality-policy'),
   speakerVerificationEnroll: (samples: Array<{ samples: number[]; sampleRate: number; deviceFingerprint?: string }>) =>
     ipcRenderer.invoke('speaker-verification:enroll', samples),
   speakerVerificationDeleteProfile: () => ipcRenderer.invoke('speaker-verification:delete-profile'),

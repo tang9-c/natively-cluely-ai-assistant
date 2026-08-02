@@ -98,6 +98,14 @@ test('recording UI exposes live quality state and next action guidance', () => {
   assert.match(source, /可以停止本段录音/);
 });
 
+test('recording quality policy is loaded from IPC with an internal default fallback', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+  assert.match(source, /speakerVerificationGetQualityPolicy/);
+  assert.match(source, /INTERNAL_DEFAULT_RECORDING_QUALITY_POLICY/);
+  assert.match(source, /录音质量标准暂时使用内部默认设置/);
+  assert.doesNotMatch(source, /Keep these thresholds aligned/);
+});
+
 test('invalid recording samples are rejected before enrollment', () => {
   const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
   assert.match(source, /evaluateRecordingQuality/);

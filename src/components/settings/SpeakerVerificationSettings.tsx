@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Circle, Download, Mic, RotateCcw, ShieldCheck, Square, Trash2 } from 'lucide-react';
-import type { SpeakerEnrollmentSample, SpeakerVerificationStatus } from '../../types/electron';
+import type {
+  SpeakerEnrollmentSample,
+  SpeakerRecordingQualityPolicy,
+  SpeakerVerificationStatus,
+} from '../../types/electron';
 
 const SPEAKER_MODEL_ID = 'csukuangfj/speaker-embedding-models';
 
@@ -26,11 +30,13 @@ const PROMPTS = [
   '请用你平时说话的方式自由讲一小段最近正在处理的事情。',
 ] as const;
 
-// Keep these thresholds aligned with electron/services/speaker/speakerAudioUtils.measureAudioQuality.
-const MIN_RECORDING_DURATION_MS = 1500;
-const MIN_RECORDING_RMS = 0.005;
-const MIN_RECORDING_VOICE_RATIO = 0.12;
-const VOICE_SAMPLE_THRESHOLD = 0.01;
+const INTERNAL_DEFAULT_RECORDING_QUALITY_POLICY: SpeakerRecordingQualityPolicy = {
+  minDurationMs: 1500,
+  minRms: 0.005,
+  minVoiceRatio: 0.12,
+  voiceSampleThreshold: 0.01,
+  minVerificationDurationMs: 1500,
+};
 
 type RecordingQualityState = 'listening' | 'too_short' | 'too_quiet' | 'not_enough_voice' | 'ready';
 
@@ -64,20 +70,29 @@ const EMPTY_RECORDING_METRICS: RecordingMetrics = {
   state: 'listening',
 };
 
-function qualityFromMetrics(durationMs: number, rms: number, voiceRatio: number): RecordingMetrics {
-  if (durationMs < MIN_RECORDING_DURATION_MS) {
+function qualityFromMetrics(
+  durationMs: number,
+  rms: number,
+  voiceRatio: number,
+  policy: SpeakerRecordingQualityPolicy,
+): RecordingMetrics {
+  if (durationMs < policy.minDurationMs) {
     return { durationMs, rms, voiceRatio, state: 'too_short' };
   }
-  if (rms < MIN_RECORDING_RMS) {
+  if (rms < policy.minRms) {
     return { durationMs, rms, voiceRatio, state: 'too_quiet' };
   }
-  if (voiceRatio < MIN_RECORDING_VOICE_RATIO) {
+  if (voiceRatio < policy.minVoiceRatio) {
     return { durationMs, rms, voiceRatio, state: 'not_enough_voice' };
   }
   return { durationMs, rms, voiceRatio, state: 'ready' };
 }
 
-function evaluateRecordingQuality(samples: Float32Array, sampleRate: number): RecordingMetrics {
+function evaluateRecordingQuality(
+  samples: Float32Array,
+  sampleRate: number,
+  policy: SpeakerRecordingQualityPolicy,
+): RecordingMetrics {
   if (samples.length === 0 || !Number.isFinite(sampleRate) || sampleRate <= 0) {
     return { ...EMPTY_RECORDING_METRICS, state: 'too_short' };
   }
@@ -86,24 +101,24 @@ function evaluateRecordingQuality(samples: Float32Array, sampleRate: number): Re
   let voiced = 0;
   for (const value of samples) {
     sumSquares += value * value;
-    if (Math.abs(value) >= VOICE_SAMPLE_THRESHOLD) voiced += 1;
+    if (Math.abs(value) >= policy.voiceSampleThreshold) voiced += 1;
   }
 
   const durationMs = Math.round((samples.length / sampleRate) * 1000);
   const rms = Math.sqrt(sumSquares / samples.length);
   const voiceRatio = voiced / samples.length;
 
-  return qualityFromMetrics(durationMs, rms, voiceRatio);
+  return qualityFromMetrics(durationMs, rms, voiceRatio, policy);
 }
 
 function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-function recordingQualityMessage(metrics: RecordingMetrics): string {
+function recordingQualityMessage(metrics: RecordingMetrics, policy: SpeakerRecordingQualityPolicy): string {
   switch (metrics.state) {
     case 'too_short':
-      return `继续说话，还需要至少 ${formatDuration(Math.max(0, MIN_RECORDING_DURATION_MS - metrics.durationMs))}`;
+      return `继续说话，还需要至少 ${formatDuration(Math.max(0, policy.minDurationMs - metrics.durationMs))}`;
     case 'too_quiet':
       return '声音偏小，靠近麦克风或提高音量';
     case 'not_enough_voice':
@@ -116,7 +131,10 @@ function recordingQualityMessage(metrics: RecordingMetrics): string {
   }
 }
 
-async function startActiveRecording(onMetrics?: (metrics: RecordingMetrics) => void): Promise<ActiveRecording> {
+async function startActiveRecording(
+  policy: SpeakerRecordingQualityPolicy,
+  onMetrics?: (metrics: RecordingMetrics) => void,
+): Promise<ActiveRecording> {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   const audioContext = new AudioContext();
   const source = audioContext.createMediaStreamSource(stream);
@@ -133,12 +151,12 @@ async function startActiveRecording(onMetrics?: (metrics: RecordingMetrics) => v
     totalSamples += chunk.length;
     for (const value of chunk) {
       sumSquares += value * value;
-      if (Math.abs(value) >= VOICE_SAMPLE_THRESHOLD) voicedSamples += 1;
+      if (Math.abs(value) >= policy.voiceSampleThreshold) voicedSamples += 1;
     }
     const durationMs = Math.round((totalSamples / audioContext.sampleRate) * 1000);
     const rms = Math.sqrt(sumSquares / totalSamples);
     const voiceRatio = voicedSamples / totalSamples;
-    onMetrics?.(qualityFromMetrics(durationMs, rms, voiceRatio));
+    onMetrics?.(qualityFromMetrics(durationMs, rms, voiceRatio, policy));
   };
   return {
     tracks: stream.getTracks(),
@@ -180,6 +198,8 @@ export function SpeakerVerificationSettings() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recordingMetrics, setRecordingMetrics] = useState<RecordingMetrics>(EMPTY_RECORDING_METRICS);
+  const [qualityPolicy, setQualityPolicy] = useState<SpeakerRecordingQualityPolicy>(INTERNAL_DEFAULT_RECORDING_QUALITY_POLICY);
+  const [usingInternalQualityPolicy, setUsingInternalQualityPolicy] = useState(false);
   const mediaRef = useRef<ActiveRecording | null>(null);
 
   const refresh = async () => {
@@ -192,6 +212,17 @@ export function SpeakerVerificationSettings() {
 
   useEffect(() => {
     void refresh();
+    void (async () => {
+      try {
+        const policy = await window.electronAPI?.speakerVerificationGetQualityPolicy?.();
+        if (!policy) throw new Error('speaker_recording_quality_policy_unavailable');
+        setQualityPolicy(policy);
+        setUsingInternalQualityPolicy(false);
+      } catch {
+        setQualityPolicy(INTERNAL_DEFAULT_RECORDING_QUALITY_POLICY);
+        setUsingInternalQualityPolicy(true);
+      }
+    })();
     const offProgress = window.electronAPI?.onLocalModelsDownloadProgress?.((payload: { modelId: string; progress: number }) => {
       if (payload.modelId === SPEAKER_MODEL_ID) setDownloadProgress(payload.progress);
     });
@@ -240,7 +271,7 @@ export function SpeakerVerificationSettings() {
         setSamples([]);
       }
       setRecordingMetrics(EMPTY_RECORDING_METRICS);
-      mediaRef.current = await startActiveRecording(setRecordingMetrics);
+      mediaRef.current = await startActiveRecording(qualityPolicy, setRecordingMetrics);
       setRecordingIndex(shouldRestart ? 0 : samples.length);
     } catch (err: any) {
       setError(sanitizedSpeakerVerificationError(err, '无法启动麦克风录音'));
@@ -254,10 +285,10 @@ export function SpeakerVerificationSettings() {
       const sample = await stopActiveRecording(mediaRef.current);
       mediaRef.current = null;
       setRecordingIndex(null);
-      const quality = evaluateRecordingQuality(sample.samples, sample.sampleRate);
+      const quality = evaluateRecordingQuality(sample.samples, sample.sampleRate, qualityPolicy);
       setRecordingMetrics(quality);
       if (quality.state !== 'ready') {
-        setError(`本段录音未达标，请重录。${recordingQualityMessage(quality)}`);
+        setError(`本段录音未达标，请重录。${recordingQualityMessage(quality, qualityPolicy)}`);
         return;
       }
       const next = [...samples, sample];
@@ -312,7 +343,7 @@ export function SpeakerVerificationSettings() {
   const enrolled = status?.enrolled === true;
   const hasCompleteSampleSet = samples.length >= PROMPTS.length;
   const currentPrompt = PROMPTS[recordingIndex ?? samples.length] ?? PROMPTS[0];
-  const recordingQuality = recordingQualityMessage(recordingMetrics);
+  const recordingQuality = recordingQualityMessage(recordingMetrics, qualityPolicy);
   const recordingButtonTitle = recordingMetrics.state === 'ready' ? '可以停止本段录音' : recordingQuality;
 
   return (
@@ -332,6 +363,9 @@ export function SpeakerVerificationSettings() {
             </p>
           )}
           {error && <p className="text-[11px] mt-2 text-red-400">{error}</p>}
+          {usingInternalQualityPolicy && (
+            <p className="text-[11px] mt-2 text-amber-300">录音质量标准暂时使用内部默认设置。</p>
+          )}
           {!modelAvailable && (
             <p className="text-[11px] mt-2 text-amber-300">
               需要先安装本地声纹模型，安装后才能注册声音。
