@@ -46,9 +46,16 @@ function toFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+const SPEAKER_VERIFICATION_ERROR_CODES = new Set([
+  'speaker_verification_failed',
+  'speaker_verification_error',
+]);
+
 function safeErrorCode(error?: string): string | undefined {
   if (!error) return undefined;
-  return /^[a-z0-9_:-]{1,120}$/i.test(error) ? error : 'speaker_verification_failed';
+  return SPEAKER_VERIFICATION_ERROR_CODES.has(error)
+    ? error
+    : 'speaker_verification_failed';
 }
 
 export class SpeakerProfileStore {

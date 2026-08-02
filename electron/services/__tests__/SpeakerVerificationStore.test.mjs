@@ -311,6 +311,20 @@ test('SpeakerProfileStore records reliability outcomes and a cumulative latency 
   }
 });
 
+test('SpeakerProfileStore maps unknown error codes to a fixed safe code', async () => {
+  const { SpeakerProfileStore } = await import('../../../dist-electron/electron/services/speaker/SpeakerProfileStore.js');
+  const { db, dir } = createDb();
+  try {
+    const store = new SpeakerProfileStore({ getDb: () => db });
+    store.recordVerificationStat({ outcome: 'error', error: 'unknown_speaker_error', nowMs: 100 });
+
+    assert.equal(store.getStats().lastError, 'speaker_verification_failed');
+  } finally {
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('SpeakerVerificationAnnotator records low-quality skips through the verification service', async () => {
   const { SpeakerProfileStore } = await import('../../../dist-electron/electron/services/speaker/SpeakerProfileStore.js');
   const { SpeakerVerificationService } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationService.js');

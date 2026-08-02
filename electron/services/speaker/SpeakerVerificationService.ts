@@ -12,17 +12,24 @@ export interface SpeakerVerificationServiceOptions {
   extractor: SpeakerEmbeddingExtractorLike;
 }
 
+export interface SpeakerVerificationRequestOptions {
+  signal?: AbortSignal;
+}
+
 export class SpeakerVerificationService {
   constructor(private readonly options: SpeakerVerificationServiceOptions) {}
 
-  async verify(samples16k: Float32Array): Promise<SpeakerVerificationResult> {
+  async verify(
+    samples16k: Float32Array,
+    requestOptions: SpeakerVerificationRequestOptions = {},
+  ): Promise<SpeakerVerificationResult> {
     const profile = this.options.store.getMeProfile();
     if (!profile) return { status: 'not_enrolled' };
     const startedAt = Date.now();
 
     const quality = measureAudioQuality(samples16k);
     if (!quality.ok) {
-      this.recordStat('low_quality', startedAt);
+      this.recordStat('low_quality', startedAt, undefined, requestOptions.signal);
       return { status: 'low_quality', reason: quality.reason };
     }
 
@@ -30,7 +37,7 @@ export class SpeakerVerificationService {
       const embedding = normalizeL2(await this.options.extractor.extract(samples16k));
       const confidence = cosineSimilarity(embedding, profile.embedding);
       const isMe = confidence >= profile.threshold;
-      this.recordStat(isMe ? 'positive' : 'low_confidence', startedAt);
+      this.recordStat(isMe ? 'positive' : 'low_confidence', startedAt, undefined, requestOptions.signal);
       return {
         status: 'verified',
         speakerVerification: {
@@ -42,7 +49,7 @@ export class SpeakerVerificationService {
         },
       };
     } catch (error: any) {
-      this.recordStat('error', startedAt, 'speaker_verification_failed');
+      this.recordStat('error', startedAt, 'speaker_verification_failed', requestOptions.signal);
       return {
         status: 'error',
         reason: 'speaker_verification_failed',
@@ -54,7 +61,13 @@ export class SpeakerVerificationService {
     this.recordStat('timeout');
   }
 
-  private recordStat(outcome: SpeakerVerificationOutcome, startedAt?: number, error?: string): void {
+  private recordStat(
+    outcome: SpeakerVerificationOutcome,
+    startedAt?: number,
+    error?: string,
+    signal?: AbortSignal,
+  ): void {
+    if (signal?.aborted) return;
     const latencyMs = startedAt === undefined ? undefined : Math.max(0, Date.now() - startedAt);
     if (this.options.store.recordVerificationStat) {
       this.options.store.recordVerificationStat({ outcome, latencyMs, error });

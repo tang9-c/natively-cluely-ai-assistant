@@ -7,7 +7,7 @@ import type {
 export interface SpeakerVerificationAnnotatorOptions {
   getMode: () => SpeakerVerificationMode;
   service: {
-    verify(samples16k: Float32Array): Promise<SpeakerVerificationResult>;
+    verify(samples16k: Float32Array, options?: { signal?: AbortSignal }): Promise<SpeakerVerificationResult>;
     recordTimeout?(): void;
   };
   timeoutMs?: number;
@@ -20,14 +20,18 @@ export class SpeakerVerificationAnnotator {
   async annotate(samples16k: Float32Array): Promise<SpeakerVerificationMetadata | undefined> {
     if (this.options.getMode() !== 'local') return undefined;
     const timeoutMs = this.options.timeoutMs ?? 200;
+    const abortController = new AbortController();
     let timeout: NodeJS.Timeout | undefined;
     const timeoutResult = new Promise<undefined>((resolve) => {
-      timeout = setTimeout(() => resolve(undefined), timeoutMs);
+      timeout = setTimeout(() => {
+        abortController.abort();
+        resolve(undefined);
+      }, timeoutMs);
     });
     let result: SpeakerVerificationResult | undefined;
     try {
       result = await Promise.race([
-        this.options.service.verify(samples16k),
+        this.options.service.verify(samples16k, { signal: abortController.signal }),
         timeoutResult,
       ]);
     } catch {

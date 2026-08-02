@@ -144,6 +144,24 @@ test('verification returns ME metadata when similarity meets threshold', async (
   assert.ok(store.verificationStats[0].latencyMs >= 0);
 });
 
+test('verification records low confidence when a real verification is not ME', async () => {
+  const { SpeakerVerificationService } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationService.js');
+  const store = new MemoryStore();
+  store.profile = {
+    id: 'me', label: 'ME', embedding: new Float32Array([1, 0, 0, 0]), embeddingDim: 4,
+    extractorModel: 'fake', extractorVersion: 'v1', threshold: 0.72, enrolledAt: 1, updatedAt: 1, sampleCount: 3,
+  };
+
+  const result = await new SpeakerVerificationService({
+    store,
+    extractor: new FakeExtractor([0, 1, 0, 0]),
+  }).verify(loudSamples(2));
+
+  assert.equal(result.status, 'verified');
+  assert.equal(result.speakerVerification.isMe, false);
+  assert.deepEqual(store.verificationStats.map(({ outcome }) => outcome), ['low_confidence']);
+});
+
 test('verification records low-quality, extractor errors, and timeouts as reliability outcomes', async () => {
   const { SpeakerVerificationService } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationService.js');
   const store = new MemoryStore();
@@ -209,4 +227,32 @@ test('annotator times out hanging verification without blocking metadata fallbac
   assert.ok(Date.now() - startedAt >= 175);
   assert.equal(timeoutCount, 1);
   assert.equal(onTimeoutCount, 1);
+});
+
+test('annotator timeout prevents a late verification from recording another outcome', async () => {
+  const { SpeakerVerificationAnnotator } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js');
+  const { SpeakerVerificationService } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationService.js');
+  const store = new MemoryStore();
+  store.profile = {
+    id: 'me', label: 'ME', embedding: new Float32Array([1, 0, 0, 0]), embeddingDim: 4,
+    extractorModel: 'fake', extractorVersion: 'v1', threshold: 0.72, enrolledAt: 1, updatedAt: 1, sampleCount: 3,
+  };
+  const service = new SpeakerVerificationService({
+    store,
+    extractor: {
+      dim: 4,
+      modelId: 'fake',
+      version: 'v1',
+      extract: async () => {
+        await new Promise(resolve => setTimeout(resolve, 60));
+        return new Float32Array([1, 0, 0, 0]);
+      },
+    },
+  });
+  const annotator = new SpeakerVerificationAnnotator({ getMode: () => 'local', service, timeoutMs: 20 });
+
+  assert.equal(await annotator.annotate(loudSamples(2)), undefined);
+  assert.deepEqual(store.verificationStats.map(({ outcome }) => outcome), ['timeout']);
+  await new Promise(resolve => setTimeout(resolve, 80));
+  assert.deepEqual(store.verificationStats.map(({ outcome }) => outcome), ['timeout']);
 });
