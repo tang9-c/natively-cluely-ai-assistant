@@ -16,6 +16,8 @@ export interface SpeakerVerificationRequestOptions {
   signal?: AbortSignal;
 }
 
+export const NEAR_THRESHOLD_MARGIN = 0.04;
+
 export class SpeakerVerificationService {
   constructor(private readonly options: SpeakerVerificationServiceOptions) {}
 
@@ -37,7 +39,12 @@ export class SpeakerVerificationService {
       const embedding = normalizeL2(await this.options.extractor.extract(samples16k));
       const confidence = cosineSimilarity(embedding, profile.embedding);
       const isMe = confidence >= profile.threshold;
-      this.recordStat(isMe ? 'positive' : 'low_confidence', startedAt, undefined, requestOptions.signal);
+      const outcome = isMe
+        ? 'positive'
+        : confidence >= profile.threshold - NEAR_THRESHOLD_MARGIN
+          ? 'near_threshold_non_me'
+          : 'low_confidence';
+      this.recordStat(outcome, startedAt, undefined, requestOptions.signal);
       return {
         status: 'verified',
         speakerVerification: {

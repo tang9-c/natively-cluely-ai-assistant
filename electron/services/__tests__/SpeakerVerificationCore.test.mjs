@@ -200,6 +200,28 @@ test('verification records low confidence when a real verification is not ME', a
   assert.deepEqual(store.verificationStats.map(({ outcome }) => outcome), ['low_confidence']);
 });
 
+test('verification records near-threshold non-ME separately from lower confidence rejects', async () => {
+  const { SpeakerVerificationService } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationService.js');
+  const store = new MemoryStore();
+  store.profile = {
+    id: 'me', label: 'ME', embedding: new Float32Array([1, 0, 0, 0]), embeddingDim: 4,
+    extractorModel: 'fake', extractorVersion: 'v1', threshold: 0.72, enrolledAt: 1, updatedAt: 1, sampleCount: 3,
+  };
+
+  const nearThreshold = await new SpeakerVerificationService({
+    store,
+    extractor: new FakeExtractor([0.7, Math.sqrt(1 - 0.7 ** 2), 0, 0]),
+  }).verify(loudSamples(2));
+  const lowConfidence = await new SpeakerVerificationService({
+    store,
+    extractor: new FakeExtractor([0.62, Math.sqrt(1 - 0.62 ** 2), 0, 0]),
+  }).verify(loudSamples(2));
+
+  assert.equal(nearThreshold.speakerVerification.isMe, false);
+  assert.equal(lowConfidence.speakerVerification.isMe, false);
+  assert.deepEqual(store.verificationStats.map(({ outcome }) => outcome), ['near_threshold_non_me', 'low_confidence']);
+});
+
 test('verification records low-quality, extractor errors, and timeouts as reliability outcomes', async () => {
   const { SpeakerVerificationService } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationService.js');
   const store = new MemoryStore();

@@ -443,6 +443,8 @@ export function SpeakerVerificationSettings() {
   const lowConfidenceRejections = formatCount(verificationStats?.lowConfidenceRejections);
   const lowQualitySkips = formatCount(verificationStats?.lowQualitySkips);
   const errorOrTimeoutCount = formatCount(verificationStats?.errorCount) + formatCount(verificationStats?.timeoutCount);
+  const nearThresholdNonMeCount = formatCount(verificationStats?.nearThresholdNonMeCount);
+  const shouldSuggestRerecord = nearThresholdNonMeCount >= 3;
 
   return (
     <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
@@ -603,6 +605,11 @@ export function SpeakerVerificationSettings() {
                 {errorOrTimeoutCount}
               </div>
             </div>
+          )}
+          {shouldSuggestRerecord && (
+            <p className="mt-3 text-[11px] text-amber-300">
+              最近有多次非 ME 片段接近阈值，建议重录声音。
+            </p>
           )}
         </div>
       )}

@@ -174,6 +174,8 @@ test('registered profiles render recent verification reliability stats', () => {
   assert.match(source, /lowQualitySkips/);
   assert.match(source, /错误\/超时/);
   assert.match(source, /errorOrTimeoutCount/);
+  assert.match(source, /nearThresholdNonMeCount >= 3/);
+  assert.match(source, /最近有多次非 ME 片段接近阈值，建议重录声音。/);
   assert.doesNotMatch(source, /lowConfidenceCount/);
   assert.doesNotMatch(source, /lowQualityCount/);
 });
