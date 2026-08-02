@@ -361,6 +361,13 @@ export function SpeakerVerificationSettings() {
     try {
       const health = await window.electronAPI?.speakerVerificationGetHealth?.({ smokeTest: true });
       if (health) setModelHealth(health);
+    } catch {
+      setModelHealth({
+        state: 'model_error',
+        message: '模型加载失败',
+        modelInstalled: modelAvailable,
+        error: 'speaker_embedding_model_health_ipc_failed',
+      });
     } finally {
       setHealthBusy(false);
     }

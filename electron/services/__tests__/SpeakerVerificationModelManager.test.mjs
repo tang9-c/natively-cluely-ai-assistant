@@ -154,6 +154,53 @@ test('speaker embedding model health smoke test reports ready with fake extracto
   }
 });
 
+test('speaker embedding model health preserves smoke-test failures for later lightweight checks', async () => {
+  const extractorPath = path.resolve('dist-electron/electron/services/speaker/SpeakerEmbeddingExtractor.js');
+  const moduleUrl = `${pathToFileURL(extractorPath).href}?health-failure-${Date.now()}`;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-speaker-health-fail-'));
+  const modelFile = path.join(dir, 'model.onnx');
+  const originalModelFile = process.env.SPEAKER_EMBEDDING_MODEL_FILE;
+  const originalLoad = Module._load;
+
+  fs.writeFileSync(modelFile, 'model');
+  process.env.SPEAKER_EMBEDDING_MODEL_FILE = modelFile;
+  Module._load = function(request, parent, isMain) {
+    if (request === 'sherpa-onnx-node') {
+      return {
+        SpeakerEmbeddingExtractor: class {
+          dim = 256;
+          createStream() {
+            return {
+              acceptWaveform() {},
+              inputFinished() {},
+            };
+          }
+          isReady() {
+            return false;
+          }
+          compute() {
+            return new Float32Array(256);
+          }
+        },
+      };
+    }
+    return originalLoad.call(this, request, parent, isMain);
+  };
+
+  try {
+    const { getSpeakerEmbeddingModelHealth } = await import(moduleUrl);
+    const smokeHealth = getSpeakerEmbeddingModelHealth({ smokeTest: true });
+    const lightweightHealth = getSpeakerEmbeddingModelHealth();
+    assert.equal(smokeHealth.state, 'model_error');
+    assert.equal(lightweightHealth.state, 'model_error');
+  } finally {
+    Module._load = originalLoad;
+    if (originalModelFile === undefined) delete process.env.SPEAKER_EMBEDDING_MODEL_FILE;
+    else process.env.SPEAKER_EMBEDDING_MODEL_FILE = originalModelFile;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('SpeakerEmbeddingExtractor disables sherpa external buffers for Electron enrollment', () => {
   const source = read('electron/services/speaker/SpeakerEmbeddingExtractor.ts');
   assert.match(source, /this\.extractor\.compute\(stream,\s*false\)/);

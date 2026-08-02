@@ -97,7 +97,9 @@ export function getSpeakerEmbeddingModelHealth(
     };
   } catch (error: any) {
     resetSharedSpeakerEmbeddingExtractor();
+    latestExtractorInitializationFailed = true;
     if (error?.message === 'speaker_embedding_model_not_installed') {
+      latestExtractorInitializationFailed = false;
       return {
         state: 'model_missing',
         message: '模型缺失',

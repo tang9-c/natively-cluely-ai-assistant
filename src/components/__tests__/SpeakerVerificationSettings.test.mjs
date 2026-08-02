@@ -150,6 +150,7 @@ test('UI exposes speaker model health check states and latency', () => {
   assert.match(source, /检查耗时 \{Math\.round\(displayedModelHealth\.loadLatencyMs\)\} ms/);
   assert.match(source, /检查模型/);
   assert.match(source, /speakerVerificationGetHealth\?\.\(\{ smokeTest: true \}\)/);
+  assert.match(source, /speaker_embedding_model_health_ipc_failed/);
 });
 
 test('enrolled profiles can be paused without deleting their local voiceprint', () => {
