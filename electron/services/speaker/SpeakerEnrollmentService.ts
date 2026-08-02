@@ -21,7 +21,6 @@ export interface SpeakerEnrollmentServiceOptions {
 }
 
 export const DEFAULT_SPEAKER_THRESHOLD = 0.72;
-export const MIN_ENROLLMENT_SELF_SIMILARITY = 0.78;
 export const MAX_ENROLLMENT_SIMILARITY_STDDEV = 0.12;
 
 function calculateQuality(embeddings: Float32Array[], embedding: Float32Array): SpeakerEnrollmentQualitySummary {
@@ -90,8 +89,7 @@ export class SpeakerEnrollmentService {
     const embedding = meanEmbedding(embeddings);
     const quality = calculateQuality(embeddings, embedding);
     if (
-      quality.minSelfSimilarity < MIN_ENROLLMENT_SELF_SIMILARITY
-      || quality.minSelfSimilarity < quality.calibratedThreshold
+      quality.minSelfSimilarity < quality.calibratedThreshold
       || quality.similarityStddev > MAX_ENROLLMENT_SIMILARITY_STDDEV
     ) {
       throw new Error('speaker_enrollment_unstable_profile');

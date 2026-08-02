@@ -64,6 +64,19 @@ class SplitEmbeddingExtractor extends FakeExtractor {
   }
 }
 
+class BorderlineEmbeddingExtractor extends FakeExtractor {
+  calls = 0;
+  async extract() {
+    this.calls += 1;
+    const vectors = [
+      [1, 0, 0, 0],
+      [1, 0, 0, 0],
+      [0.5, 0.8660254, 0, 0],
+    ];
+    return new Float32Array(vectors[(this.calls - 1) % vectors.length]);
+  }
+}
+
 test('enrollment stores one normalized ME profile and discards raw audio', async () => {
   const { SpeakerEnrollmentService } = await import('../../../dist-electron/electron/services/speaker/SpeakerEnrollmentService.js');
   const store = new MemoryStore();
@@ -146,6 +159,26 @@ test('enrollment rejects split embeddings without writing an unstable profile', 
     /speaker_enrollment_unstable_profile/,
   );
   assert.equal(store.profile, null);
+});
+
+test('enrollment accepts borderline but calibrated samples as a weak boundary profile', async () => {
+  const { SpeakerEnrollmentService } = await import('../../../dist-electron/electron/services/speaker/SpeakerEnrollmentService.js');
+  const store = new MemoryStore();
+  const service = new SpeakerEnrollmentService({
+    store,
+    extractor: new BorderlineEmbeddingExtractor(),
+  });
+
+  const status = await service.enroll([
+    { samples: loudSamples(2), sampleRate: 16000 },
+    { samples: loudSamples(2), sampleRate: 16000 },
+    { samples: loudSamples(2), sampleRate: 16000 },
+  ]);
+
+  assert.equal(status.enrolled, true);
+  assert.equal(store.profile.quality.qualityBand, 'weak_boundary');
+  assert.ok(store.profile.quality.minSelfSimilarity < 0.78);
+  assert.ok(store.profile.quality.minSelfSimilarity >= store.profile.quality.calibratedThreshold);
 });
 
 test('audio quality uses distinct enrollment and verification duration thresholds', async () => {
