@@ -8,6 +8,15 @@ import type {
 
 const SPEAKER_MODEL_ID = 'csukuangfj/speaker-embedding-models';
 
+interface LocalSpeakerModelInfo {
+  id: string;
+  name?: string;
+  description?: string;
+  sizeMb?: number;
+  status?: 'available' | 'missing' | 'downloading' | 'error';
+  errorMessage?: string | null;
+}
+
 function speakerVerificationHealthMessage(status: SpeakerVerificationStatus | null): string {
   switch (status?.health.state) {
     case 'paused': return '已注册，当前暂停。开启后才会在会议中识别 ME。';
@@ -22,6 +31,23 @@ function speakerVerificationHealthMessage(status: SpeakerVerificationStatus | nu
 
 function sanitizedSpeakerVerificationError(_error: unknown, fallback: string): string {
   return fallback;
+}
+
+function sanitizedModelDownloadError(error: unknown): string {
+  const value = typeof error === 'string' ? error : '';
+  const sanitized = value
+    .replace(/https?:\/\/[^\s|)]+/g, (url) => {
+      try {
+        const parsed = new URL(url);
+        parsed.search = '';
+        return parsed.toString();
+      } catch {
+        return url.split('?')[0] || url;
+      }
+    })
+    .replace(/[?&][A-Za-z0-9_.~%+-]+=[A-Za-z0-9_.~%+-]+/g, '')
+    .trim();
+  return sanitized || '声纹模型安装失败，请检查网络后重试。';
 }
 
 const PROMPTS = [
@@ -217,7 +243,9 @@ async function stopActiveRecording(active: ActiveRecording): Promise<RecordedSam
 export function SpeakerVerificationSettings() {
   const [status, setStatus] = useState<SpeakerVerificationStatus | null>(null);
   const [modelAvailable, setModelAvailable] = useState(false);
+  const [speakerModelInfo, setSpeakerModelInfo] = useState<LocalSpeakerModelInfo | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [recordingIndex, setRecordingIndex] = useState<number | null>(null);
   const [samples, setSamples] = useState<RecordedSample[]>([]);
   const [busy, setBusy] = useState(false);
@@ -232,8 +260,10 @@ export function SpeakerVerificationSettings() {
     const next = await window.electronAPI?.speakerVerificationGetStatus?.();
     if (next) setStatus(next);
     const models = await window.electronAPI?.localModelsGetList?.();
-    const speakerModel = models?.models?.find((model: any) => model.id === SPEAKER_MODEL_ID);
+    const speakerModel = models?.models?.find((model: any) => model.id === SPEAKER_MODEL_ID) as LocalSpeakerModelInfo | undefined;
+    setSpeakerModelInfo(speakerModel ?? null);
     setModelAvailable(speakerModel?.status === 'available');
+    setDownloadError(speakerModel?.status === 'error' ? sanitizedModelDownloadError(speakerModel.errorMessage) : null);
   };
 
   useEffect(() => {
@@ -250,18 +280,23 @@ export function SpeakerVerificationSettings() {
       }
     })();
     const offProgress = window.electronAPI?.onLocalModelsDownloadProgress?.((payload: { modelId: string; progress: number }) => {
-      if (payload.modelId === SPEAKER_MODEL_ID) setDownloadProgress(payload.progress);
+      if (payload.modelId === SPEAKER_MODEL_ID) {
+        setDownloadError(null);
+        setDownloadProgress(payload.progress);
+      }
     });
     const offComplete = window.electronAPI?.onLocalModelsDownloadComplete?.((payload: { modelId: string }) => {
       if (payload.modelId === SPEAKER_MODEL_ID) {
         setDownloadProgress(null);
+        setDownloadError(null);
         void refresh();
       }
     });
     const offError = window.electronAPI?.onLocalModelsDownloadError?.((payload: { modelId: string; error: string }) => {
       if (payload.modelId === SPEAKER_MODEL_ID) {
         setDownloadProgress(null);
-        setError('声纹模型安装失败');
+        setDownloadError(sanitizedModelDownloadError(payload.error));
+        void refresh();
       }
     });
     return () => {
@@ -278,10 +313,16 @@ export function SpeakerVerificationSettings() {
   const downloadModel = async () => {
     setBusy(true);
     setError(null);
+    setDownloadError(null);
+    setDownloadProgress(0);
     try {
       const result = await window.electronAPI?.localModelsStartDownload?.(SPEAKER_MODEL_ID);
       if (!result?.success) {
-        setError(sanitizedSpeakerVerificationError(result?.error, '声纹模型安装失败'));
+        if (result?.error === 'already-downloading') {
+          setDownloadProgress(null);
+          return;
+        }
+        setDownloadError(sanitizedModelDownloadError(result?.error));
       }
       await refresh();
     } finally {
@@ -441,6 +482,48 @@ export function SpeakerVerificationSettings() {
         </div>
       </div>
 
+      {!modelAvailable && (
+        <div className="rounded-lg border border-border-subtle bg-bg-input p-3 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-text-secondary">
+                {speakerModelInfo?.name ?? '本地声纹模型'}
+              </p>
+              <p className="mt-1 text-[11px] text-text-tertiary">
+                {speakerModelInfo?.description ?? '用于在会议中识别你的发言为 ME'}
+              </p>
+            </div>
+            <span className="shrink-0 text-[11px] text-text-tertiary">
+              约 {speakerModelInfo?.sizeMb ?? 28} MB
+            </span>
+          </div>
+          {downloadProgress !== null && (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px] text-text-tertiary">
+                <span>正在安装</span>
+                <span>{Math.round(downloadProgress)}%</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-bg-card">
+                <div className="h-full bg-accent-primary transition-all" style={{ width: `${downloadProgress}%` }} />
+              </div>
+            </div>
+          )}
+          {downloadError && (
+            <div className="space-y-2">
+              <p className="text-[11px] text-red-300">{downloadError}</p>
+              <button
+                type="button"
+                onClick={downloadModel}
+                disabled={busy}
+                className="rounded-md px-3 py-1.5 text-xs text-white bg-accent-primary disabled:opacity-50"
+              >
+                重试安装
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {enrolled && (
         <div className="rounded-lg border border-border-subtle bg-bg-input p-3 space-y-3">
           <div className="flex items-center justify-between gap-4">
@@ -511,12 +594,6 @@ export function SpeakerVerificationSettings() {
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {downloadProgress !== null && (
-        <div className="h-1.5 overflow-hidden rounded-full bg-bg-input">
-          <div className="h-full bg-accent-primary transition-all" style={{ width: `${downloadProgress}%` }} />
         </div>
       )}
 

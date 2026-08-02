@@ -46,6 +46,19 @@ test('speaker embedding download supports mirror fallback sources', () => {
   );
 });
 
+test('LocalModelManager keeps sanitized speaker model download errors for diagnostics', () => {
+  const source = read('electron/services/LocalModelManager.ts');
+  assert.match(source, /errorMessage\?: string/);
+  assert.match(source, /const downloadErrors = new Map<string, string>\(\)/);
+  assert.match(source, /function sanitizeDownloadErrorMessage\(message: string\): string/);
+  assert.match(source, /url\.search = ''/);
+  assert.match(source, /downloadErrors\.set\(modelId, msg\)/);
+  assert.match(source, /onError\?\.\(modelId, msg\)/);
+  assert.match(source, /status:\s*'error' as const,\s*errorMessage/);
+  assert.doesNotMatch(source, /onError\?\(modelId, e\?\.message/);
+  assert.doesNotMatch(source, /return \{ success: false, error: e\?\.message/);
+});
+
 test('SpeakerEmbeddingExtractor resolves its default ONNX file through LocalModelManager', () => {
   const source = read('electron/services/speaker/SpeakerEmbeddingExtractor.ts');
   assert.match(source, /resolveLocalModelFile/);

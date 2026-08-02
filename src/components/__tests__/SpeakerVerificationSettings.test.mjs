@@ -187,3 +187,19 @@ test('registered profiles without verification stats show no data copy and no ra
   assert.doesNotMatch(source, /speakerText/);
   assert.doesNotMatch(source, /audioPath/);
 });
+
+test('speaker model install diagnostics show model details, progress, sanitized failures, and retry', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+  assert.match(source, /interface LocalSpeakerModelInfo/);
+  assert.match(source, /setSpeakerModelInfo\(speakerModel \?\? null\)/);
+  assert.match(source, /本地声纹模型/);
+  assert.match(source, /用于在会议中识别你的发言为 ME/);
+  assert.match(source, /约 \{speakerModelInfo\?\.sizeMb \?\? 28\} MB/);
+  assert.match(source, /正在安装/);
+  assert.match(source, /\{Math\.round\(downloadProgress\)\}%/);
+  assert.match(source, /重试安装/);
+  assert.match(source, /setDownloadError\(sanitizedModelDownloadError\(payload\.error\)\)/);
+  assert.match(source, /setDownloadError\(sanitizedModelDownloadError\(result\?\.error\)\)/);
+  assert.match(source, /parsed\.search = ''/);
+  assert.doesNotMatch(source, /setError\('声纹模型安装失败'\)/);
+});

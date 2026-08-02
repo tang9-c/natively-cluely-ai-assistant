@@ -111,16 +111,21 @@ function getModelStatus(def: ModelDefinition): Pick<LocalModelInfo, 'status' | '
 }
 
 export function getLocalModels(): LocalModelInfo[] {
-  return MODEL_DEFINITIONS.map((def) => ({
-    id: def.id,
-    name: def.name,
-    description: def.description,
-    sizeMb: def.sizeMb,
-    task: def.task,
-    category: def.category ?? 'base',
-    requiresExplicitEnable: def.requiresExplicitEnable,
-    ...getModelStatus(def),
-  }));
+  return MODEL_DEFINITIONS.map((def) => {
+    const status = getModelStatus(def);
+    const errorMessage = downloadErrors.get(def.id);
+    return {
+      id: def.id,
+      name: def.name,
+      description: def.description,
+      sizeMb: def.sizeMb,
+      task: def.task,
+      category: def.category ?? 'base',
+      requiresExplicitEnable: def.requiresExplicitEnable,
+      ...status,
+      ...(status.status === 'missing' && errorMessage ? { status: 'error' as const, errorMessage } : {}),
+    };
+  });
 }
 
 export function isLocalIntentClassifierAvailable(): boolean {
@@ -161,6 +166,7 @@ export function deleteLocalModel(modelId: string): { success: boolean; error?: s
 
 // In-memory download tracking (single-process, sufficient for Electron main)
 const downloadStates = new Map<string, 'downloading' | 'error'>();
+const downloadErrors = new Map<string, string>();
 
 export type DownloadProgressCallback = (modelId: string, progress: number) => void;
 export type DownloadCompleteCallback = (modelId: string) => void;
@@ -188,6 +194,13 @@ function safeUrlForError(rawUrl: string): string {
   } catch {
     return rawUrl.split('?')[0] || rawUrl;
   }
+}
+
+function sanitizeDownloadErrorMessage(message: string): string {
+  return message
+    .replace(/https?:\/\/[^\s|)]+/g, (url) => safeUrlForError(url))
+    .replace(/[?&][A-Za-z0-9_.~%+-]+=[A-Za-z0-9_.~%+-]+/g, '')
+    .slice(0, 500);
 }
 
 function normalizeDownloadBaseUrl(value: string): string {
@@ -307,6 +320,7 @@ export async function startLocalModelDownload(modelId: string): Promise<{ succes
   }
 
   downloadStates.set(modelId, 'downloading');
+  downloadErrors.delete(modelId);
 
   try {
     if (modelId === SPEAKER_EMBEDDING_MODEL_ID) {
@@ -316,6 +330,7 @@ export async function startLocalModelDownload(modelId: string): Promise<{ succes
         speakerEmbeddingDownloadUrls(),
       );
       downloadStates.delete(modelId);
+      downloadErrors.delete(modelId);
       onProgress?.(modelId, 100);
       onComplete?.(modelId);
       return { success: true };
@@ -375,11 +390,13 @@ export async function startLocalModelDownload(modelId: string): Promise<{ succes
     }
 
     downloadStates.delete(modelId);
+    downloadErrors.delete(modelId);
     onComplete?.(modelId);
     return { success: true };
   } catch (e: any) {
     downloadStates.delete(modelId);
-    const msg = e?.message || String(e);
+    const msg = sanitizeDownloadErrorMessage(e?.message || String(e));
+    downloadErrors.set(modelId, msg);
     onError?.(modelId, msg);
     return { success: false, error: msg };
   }
