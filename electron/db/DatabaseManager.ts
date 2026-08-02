@@ -1593,6 +1593,12 @@ export class DatabaseManager {
             addColumnIfMissing('speaker_profile_stats', 'error_count', 'INTEGER NOT NULL DEFAULT 0');
             addColumnIfMissing('speaker_profile_stats', 'timeout_count', 'INTEGER NOT NULL DEFAULT 0');
             addColumnIfMissing('speaker_profile_stats', 'last_failure_at', 'INTEGER');
+            addColumnIfMissing('speaker_profile_stats', 'near_threshold_non_me_count', 'INTEGER NOT NULL DEFAULT 0');
+            addColumnIfMissing('speaker_profile_stats', 'avg_latency_ms', 'REAL');
+            addColumnIfMissing('speaker_profile_stats', 'latency_sample_count', 'INTEGER NOT NULL DEFAULT 0');
+            addColumnIfMissing('speaker_profile_stats', 'last_outcome', 'TEXT');
+            addColumnIfMissing('speaker_profile_stats', 'last_error', 'TEXT');
+            addColumnIfMissing('speaker_profile_stats', 'last_recorded_at', 'INTEGER');
         };
 
         // Version 31 -> 32: Add speaker enrollment calibration and runtime health stats.
@@ -1605,7 +1611,18 @@ export class DatabaseManager {
                     positive_verifications INTEGER NOT NULL DEFAULT 0,
                     last_verified_at INTEGER,
                     last_quality_score REAL,
-                    last_quality_band TEXT
+                    last_quality_band TEXT,
+                    low_quality_skips INTEGER NOT NULL DEFAULT 0,
+                    low_confidence_rejections INTEGER NOT NULL DEFAULT 0,
+                    error_count INTEGER NOT NULL DEFAULT 0,
+                    timeout_count INTEGER NOT NULL DEFAULT 0,
+                    last_failure_at INTEGER,
+                    near_threshold_non_me_count INTEGER NOT NULL DEFAULT 0,
+                    avg_latency_ms REAL,
+                    latency_sample_count INTEGER NOT NULL DEFAULT 0,
+                    last_outcome TEXT,
+                    last_error TEXT,
+                    last_recorded_at INTEGER
                 );
             `);
             addColumnIfMissing('speaker_profiles', 'quality_score', 'REAL');

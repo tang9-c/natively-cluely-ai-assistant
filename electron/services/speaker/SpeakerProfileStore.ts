@@ -7,6 +7,8 @@ import {
   type SpeakerProfileRecord,
   type SpeakerVerificationHealth,
   type SpeakerVerificationMode,
+  type SpeakerVerificationOutcome,
+  type SpeakerVerificationRuntimeStats,
   type SpeakerVerificationStatus,
   type SpeakerVerificationStats,
 } from './speakerVerificationTypes';
@@ -40,12 +42,21 @@ function qualityFromRow(row: Record<string, unknown>): SpeakerEnrollmentQualityS
   return quality as SpeakerEnrollmentQualitySummary;
 }
 
+function toFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function safeErrorCode(error?: string): string | undefined {
+  if (!error) return undefined;
+  return /^[a-z0-9_:-]{1,120}$/i.test(error) ? error : 'speaker_verification_failed';
+}
+
 export class SpeakerProfileStore {
   constructor(private readonly dbProvider: DbProvider) {}
 
   getStatus(mode: SpeakerVerificationMode = 'off', health?: SpeakerVerificationHealth): SpeakerVerificationStatus {
     const profile = this.getMeProfile();
-    const stats = this.getVerificationStats();
+    const stats = this.getStats();
     if (!profile) return {
       enrolled: false,
       enabled: false,
@@ -73,66 +84,124 @@ export class SpeakerProfileStore {
     };
   }
 
-  getVerificationStats(): SpeakerVerificationStats {
+  getStats(): SpeakerVerificationRuntimeStats {
     const db = this.dbProvider.getDb();
-    const empty: SpeakerVerificationStats = {
+    const empty: SpeakerVerificationRuntimeStats = {
       totalVerifications: 0,
       positiveVerifications: 0,
       lowQualitySkips: 0,
       lowConfidenceRejections: 0,
+      nearThresholdNonMeCount: 0,
       errorCount: 0,
       timeoutCount: 0,
+      latencySampleCount: 0,
     };
     if (!db) return empty;
     try {
-      const row = db.prepare(`
-        SELECT total_verifications, positive_verifications, low_quality_skips,
-               low_confidence_rejections, error_count, timeout_count, last_verified_at, last_failure_at
-        FROM speaker_profile_stats WHERE profile_id = ?
-      `).get(SPEAKER_PROFILE_ME_ID) as Record<string, unknown> | undefined;
+      const row = db.prepare('SELECT * FROM speaker_profile_stats WHERE profile_id = ?')
+        .get(SPEAKER_PROFILE_ME_ID) as Record<string, unknown> | undefined;
       if (!row) return empty;
+      const avgLatencyMs = toFiniteNumber(row.avg_latency_ms);
+      const lastVerifiedAt = toFiniteNumber(row.last_verified_at);
+      const lastFailureAt = toFiniteNumber(row.last_failure_at);
+      const lastRecordedAt = toFiniteNumber(row.last_recorded_at);
       return {
         totalVerifications: Number(row.total_verifications) || 0,
         positiveVerifications: Number(row.positive_verifications) || 0,
         lowQualitySkips: Number(row.low_quality_skips) || 0,
         lowConfidenceRejections: Number(row.low_confidence_rejections) || 0,
+        nearThresholdNonMeCount: Number(row.near_threshold_non_me_count) || 0,
         errorCount: Number(row.error_count) || 0,
         timeoutCount: Number(row.timeout_count) || 0,
-        lastVerifiedAt: typeof row.last_verified_at === 'number' ? row.last_verified_at : undefined,
-        lastFailureAt: typeof row.last_failure_at === 'number' ? row.last_failure_at : undefined,
+        latencySampleCount: Number(row.latency_sample_count) || 0,
+        ...(avgLatencyMs !== undefined ? { avgLatencyMs } : {}),
+        ...(lastVerifiedAt !== undefined ? { lastVerifiedAt } : {}),
+        ...(lastFailureAt !== undefined ? { lastFailureAt } : {}),
+        ...(typeof row.last_outcome === 'string'
+          ? { lastOutcome: row.last_outcome as SpeakerVerificationOutcome }
+          : {}),
+        ...(typeof row.last_error === 'string' ? { lastError: row.last_error } : {}),
+        ...(lastRecordedAt !== undefined ? { lastRecordedAt } : {}),
       };
     } catch {
       return empty;
     }
   }
 
+  getVerificationStats(): SpeakerVerificationStats {
+    return this.getStats();
+  }
+
   recordVerification(result: 'verified' | 'low_quality' | 'error' | 'timeout', isMe?: boolean): void {
+    const outcome: SpeakerVerificationOutcome = result === 'verified'
+      ? (isMe ? 'positive' : 'low_confidence')
+      : result;
+    this.recordVerificationStat({ outcome });
+  }
+
+  recordVerificationStat(input: {
+    outcome: SpeakerVerificationOutcome;
+    latencyMs?: number;
+    error?: string;
+    nowMs?: number;
+  }): void {
     const db = this.dbProvider.getDb();
     if (!db) return;
-    const now = Date.now();
+    const now = input.nowMs ?? Date.now();
+    const latencyMs = toFiniteNumber(input.latencyMs);
+    const latency = latencyMs !== undefined && latencyMs >= 0 ? latencyMs : null;
+    const error = safeErrorCode(input.error);
     try {
-      const total = result === 'verified' ? 1 : 0;
-      const positive = result === 'verified' && isMe ? 1 : 0;
-      const lowQuality = result === 'low_quality' ? 1 : 0;
-      const rejected = result === 'verified' && !isMe ? 1 : 0;
-      const errors = result === 'error' ? 1 : 0;
-      const timeouts = result === 'timeout' ? 1 : 0;
-      const failureAt = result === 'verified' && isMe ? null : now;
+      const positive = input.outcome === 'positive' ? 1 : 0;
+      const lowQuality = input.outcome === 'low_quality' ? 1 : 0;
+      const rejected = input.outcome === 'low_confidence' ? 1 : 0;
+      const nearThreshold = input.outcome === 'near_threshold_non_me' ? 1 : 0;
+      const errors = input.outcome === 'error' ? 1 : 0;
+      const timeouts = input.outcome === 'timeout' ? 1 : 0;
+      const verifiedAt = ['positive', 'low_confidence', 'near_threshold_non_me'].includes(input.outcome) ? now : null;
+      const failureAt = input.outcome === 'positive' ? null : now;
       db.prepare(`
         INSERT INTO speaker_profile_stats (
           profile_id, total_verifications, positive_verifications, low_quality_skips,
-          low_confidence_rejections, error_count, timeout_count, last_verified_at, last_failure_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          low_confidence_rejections, near_threshold_non_me_count, error_count, timeout_count,
+          last_verified_at, last_failure_at, avg_latency_ms, latency_sample_count,
+          last_outcome, last_error, last_recorded_at
+        ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(profile_id) DO UPDATE SET
-          total_verifications = total_verifications + excluded.total_verifications,
+          total_verifications = total_verifications + 1,
           positive_verifications = positive_verifications + excluded.positive_verifications,
           low_quality_skips = low_quality_skips + excluded.low_quality_skips,
           low_confidence_rejections = low_confidence_rejections + excluded.low_confidence_rejections,
+          near_threshold_non_me_count = near_threshold_non_me_count + excluded.near_threshold_non_me_count,
           error_count = error_count + excluded.error_count,
           timeout_count = timeout_count + excluded.timeout_count,
           last_verified_at = COALESCE(excluded.last_verified_at, last_verified_at),
-          last_failure_at = COALESCE(excluded.last_failure_at, last_failure_at)
-      `).run(SPEAKER_PROFILE_ME_ID, total, positive, lowQuality, rejected, errors, timeouts, result === 'verified' ? now : null, failureAt);
+          last_failure_at = COALESCE(excluded.last_failure_at, last_failure_at),
+          avg_latency_ms = CASE
+            WHEN excluded.latency_sample_count = 0 THEN avg_latency_ms
+            WHEN latency_sample_count = 0 OR avg_latency_ms IS NULL THEN excluded.avg_latency_ms
+            ELSE (avg_latency_ms * latency_sample_count + excluded.avg_latency_ms) / (latency_sample_count + 1)
+          END,
+          latency_sample_count = latency_sample_count + excluded.latency_sample_count,
+          last_outcome = excluded.last_outcome,
+          last_error = COALESCE(excluded.last_error, last_error),
+          last_recorded_at = excluded.last_recorded_at
+      `).run(
+        SPEAKER_PROFILE_ME_ID,
+        positive,
+        lowQuality,
+        rejected,
+        nearThreshold,
+        errors,
+        timeouts,
+        verifiedAt,
+        failureAt,
+        latency,
+        latency === null ? 0 : 1,
+        input.outcome,
+        error ?? null,
+        now,
+      );
     } catch {
       // Runtime telemetry must never interrupt transcription.
     }

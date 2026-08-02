@@ -49,7 +49,13 @@ function createDb() {
       low_confidence_rejections INTEGER NOT NULL DEFAULT 0,
       error_count INTEGER NOT NULL DEFAULT 0,
       timeout_count INTEGER NOT NULL DEFAULT 0,
-      last_failure_at INTEGER
+      last_failure_at INTEGER,
+      near_threshold_non_me_count INTEGER NOT NULL DEFAULT 0,
+      avg_latency_ms REAL,
+      latency_sample_count INTEGER NOT NULL DEFAULT 0,
+      last_outcome TEXT,
+      last_error TEXT,
+      last_recorded_at INTEGER
     );
   `);
   return { db, dir };
@@ -79,6 +85,12 @@ test('DatabaseManager migration adds enrollment quality and runtime health stats
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'error_count', 'INTEGER NOT NULL DEFAULT 0'\)/);
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'timeout_count', 'INTEGER NOT NULL DEFAULT 0'\)/);
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'last_failure_at', 'INTEGER'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'near_threshold_non_me_count', 'INTEGER NOT NULL DEFAULT 0'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'avg_latency_ms', 'REAL'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'latency_sample_count', 'INTEGER NOT NULL DEFAULT 0'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'last_outcome', 'TEXT'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'last_error', 'TEXT'\)/);
+  assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'last_recorded_at', 'INTEGER'\)/);
   assert.match(db, /user_version = 32/);
   assert.doesNotMatch(db, /user_version\s*=\s*(?:33|34)/);
 });
@@ -108,7 +120,10 @@ test('DatabaseManager backfills missing timeout stats for the branch v33 interme
     manager.runMigrations();
 
     const columns = db.prepare('PRAGMA table_info(speaker_profile_stats)').all().map(({ name }) => name);
-    for (const column of ['low_quality_skips', 'low_confidence_rejections', 'error_count', 'timeout_count', 'last_failure_at']) {
+    for (const column of [
+      'low_quality_skips', 'low_confidence_rejections', 'error_count', 'timeout_count', 'last_failure_at',
+      'near_threshold_non_me_count', 'avg_latency_ms', 'latency_sample_count', 'last_outcome', 'last_error', 'last_recorded_at',
+    ]) {
       assert.ok(columns.includes(column), `speaker_profile_stats must include ${column}`);
     }
     assert.equal(db.pragma('user_version', { simple: true }), 33);
@@ -242,15 +257,54 @@ test('SpeakerProfileStore exposes health state and privacy-safe failure counters
     const status = store.getStatus('local', { state: 'ready' });
     assert.equal(status.health.state, 'degraded');
     assert.deepEqual(status.stats, {
-      totalVerifications: 1,
+      totalVerifications: 4,
       positiveVerifications: 0,
       lowQualitySkips: 1,
       lowConfidenceRejections: 1,
+      nearThresholdNonMeCount: 0,
       errorCount: 1,
       timeoutCount: 1,
+      latencySampleCount: 0,
       lastVerifiedAt: status.stats.lastVerifiedAt,
       lastFailureAt: status.stats.lastFailureAt,
+      lastOutcome: 'timeout',
+      lastRecordedAt: status.stats.lastRecordedAt,
     });
+  } finally {
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('SpeakerProfileStore records reliability outcomes and a cumulative latency average', async () => {
+  const { SpeakerProfileStore } = await import('../../../dist-electron/electron/services/speaker/SpeakerProfileStore.js');
+  const { db, dir } = createDb();
+  try {
+    const store = new SpeakerProfileStore({ getDb: () => db });
+    store.recordVerificationStat({ outcome: 'positive', latencyMs: 10, nowMs: 100 });
+    store.recordVerificationStat({ outcome: 'low_confidence', latencyMs: 20, nowMs: 200 });
+    store.recordVerificationStat({ outcome: 'near_threshold_non_me', latencyMs: 30, nowMs: 300 });
+    store.recordVerificationStat({ outcome: 'low_quality', latencyMs: 40, nowMs: 400 });
+    store.recordVerificationStat({ outcome: 'error', latencyMs: 50, error: 'speaker_verification_failed', nowMs: 500 });
+    store.recordVerificationStat({ outcome: 'timeout', nowMs: 600 });
+
+    assert.deepEqual(store.getStats(), {
+      totalVerifications: 6,
+      positiveVerifications: 1,
+      lowQualitySkips: 1,
+      lowConfidenceRejections: 1,
+      nearThresholdNonMeCount: 1,
+      errorCount: 1,
+      timeoutCount: 1,
+      avgLatencyMs: 30,
+      latencySampleCount: 5,
+      lastVerifiedAt: 300,
+      lastFailureAt: 600,
+      lastOutcome: 'timeout',
+      lastError: 'speaker_verification_failed',
+      lastRecordedAt: 600,
+    });
+    assert.deepEqual(store.getStatus('off').stats, store.getStats());
   } finally {
     db.close();
     fs.rmSync(dir, { recursive: true, force: true });

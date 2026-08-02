@@ -18,7 +18,7 @@ export interface SpeakerVerificationStatus {
   model?: string;
   mode: SpeakerVerificationMode;
   health: SpeakerVerificationHealth;
-  stats: SpeakerVerificationStats;
+  stats: SpeakerVerificationRuntimeStats;
 }
 
 export type SpeakerVerificationHealthState =
@@ -34,16 +34,32 @@ export interface SpeakerVerificationHealth {
   message?: string;
 }
 
-export interface SpeakerVerificationStats {
+export type SpeakerVerificationOutcome =
+  | 'positive'
+  | 'low_confidence'
+  | 'near_threshold_non_me'
+  | 'low_quality'
+  | 'error'
+  | 'timeout';
+
+export interface SpeakerVerificationRuntimeStats {
   totalVerifications: number;
   positiveVerifications: number;
   lowQualitySkips: number;
   lowConfidenceRejections: number;
+  nearThresholdNonMeCount: number;
   errorCount: number;
   timeoutCount: number;
+  avgLatencyMs?: number;
+  latencySampleCount: number;
   lastVerifiedAt?: number;
   lastFailureAt?: number;
+  lastOutcome?: SpeakerVerificationOutcome;
+  lastError?: string;
+  lastRecordedAt?: number;
 }
+
+export type SpeakerVerificationStats = SpeakerVerificationRuntimeStats;
 
 export type SpeakerVerificationQualityBand = 'stable' | 'weak_boundary' | 'needs_rerecord';
 

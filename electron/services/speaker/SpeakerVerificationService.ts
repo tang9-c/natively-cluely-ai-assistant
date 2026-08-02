@@ -1,12 +1,14 @@
 import { cosineSimilarity, measureAudioQuality, normalizeL2 } from './speakerAudioUtils';
 import type {
   SpeakerEmbeddingExtractorLike,
+  SpeakerVerificationOutcome,
   SpeakerVerificationResult,
 } from './speakerVerificationTypes';
 import type { SpeakerProfileStore } from './SpeakerProfileStore';
 
 export interface SpeakerVerificationServiceOptions {
-  store: Pick<SpeakerProfileStore, 'getMeProfile'> & Partial<Pick<SpeakerProfileStore, 'recordVerification'>>;
+  store: Pick<SpeakerProfileStore, 'getMeProfile'>
+    & Partial<Pick<SpeakerProfileStore, 'recordVerificationStat' | 'recordVerification'>>;
   extractor: SpeakerEmbeddingExtractorLike;
 }
 
@@ -16,10 +18,11 @@ export class SpeakerVerificationService {
   async verify(samples16k: Float32Array): Promise<SpeakerVerificationResult> {
     const profile = this.options.store.getMeProfile();
     if (!profile) return { status: 'not_enrolled' };
+    const startedAt = Date.now();
 
     const quality = measureAudioQuality(samples16k);
     if (!quality.ok) {
-      this.options.store.recordVerification?.('low_quality');
+      this.recordStat('low_quality', startedAt);
       return { status: 'low_quality', reason: quality.reason };
     }
 
@@ -27,7 +30,7 @@ export class SpeakerVerificationService {
       const embedding = normalizeL2(await this.options.extractor.extract(samples16k));
       const confidence = cosineSimilarity(embedding, profile.embedding);
       const isMe = confidence >= profile.threshold;
-      this.options.store.recordVerification?.('verified', isMe);
+      this.recordStat(isMe ? 'positive' : 'low_confidence', startedAt);
       return {
         status: 'verified',
         speakerVerification: {
@@ -39,7 +42,7 @@ export class SpeakerVerificationService {
         },
       };
     } catch (error: any) {
-      this.options.store.recordVerification?.('error');
+      this.recordStat('error', startedAt, 'speaker_verification_failed');
       return {
         status: 'error',
         reason: 'speaker_verification_failed',
@@ -48,6 +51,17 @@ export class SpeakerVerificationService {
   }
 
   recordTimeout(): void {
-    this.options.store.recordVerification?.('timeout');
+    this.recordStat('timeout');
+  }
+
+  private recordStat(outcome: SpeakerVerificationOutcome, startedAt?: number, error?: string): void {
+    const latencyMs = startedAt === undefined ? undefined : Math.max(0, Date.now() - startedAt);
+    if (this.options.store.recordVerificationStat) {
+      this.options.store.recordVerificationStat({ outcome, latencyMs, error });
+      return;
+    }
+    if (outcome === 'positive') this.options.store.recordVerification?.('verified', true);
+    else if (outcome === 'low_confidence' || outcome === 'near_threshold_non_me') this.options.store.recordVerification?.('verified', false);
+    else this.options.store.recordVerification?.(outcome);
   }
 }

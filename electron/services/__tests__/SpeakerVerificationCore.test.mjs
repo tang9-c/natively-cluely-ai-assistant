@@ -11,6 +11,7 @@ function loudSamples(seconds = 2, sampleRate = 16000, frequency = 220) {
 
 class MemoryStore {
   profile = null;
+  verificationStats = [];
   getMeProfile() {
     return this.profile;
   }
@@ -34,6 +35,9 @@ class MemoryStore {
     return this.profile
       ? { enrolled: true, enrolledAt: this.profile.enrolledAt, model: this.profile.extractorModel, mode }
       : { enrolled: false, mode };
+  }
+  recordVerificationStat(input) {
+    this.verificationStats.push(input);
   }
 }
 
@@ -135,6 +139,31 @@ test('verification returns ME metadata when similarity meets threshold', async (
   assert.equal(result.speakerVerification.profileId, 'me');
   assert.equal(result.speakerVerification.isMe, true);
   assert.ok(result.speakerVerification.confidence >= 0.99);
+  assert.equal(store.verificationStats.length, 1);
+  assert.equal(store.verificationStats[0].outcome, 'positive');
+  assert.ok(store.verificationStats[0].latencyMs >= 0);
+});
+
+test('verification records low-quality, extractor errors, and timeouts as reliability outcomes', async () => {
+  const { SpeakerVerificationService } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationService.js');
+  const store = new MemoryStore();
+  store.profile = {
+    id: 'me', label: 'ME', embedding: new Float32Array([1, 0, 0, 0]), embeddingDim: 4,
+    extractorModel: 'fake', extractorVersion: 'v1', threshold: 0.72, enrolledAt: 1, updatedAt: 1, sampleCount: 3,
+  };
+  const lowQuality = await new SpeakerVerificationService({ store, extractor: new FakeExtractor() }).verify(new Float32Array());
+  const failedService = new SpeakerVerificationService({
+    store,
+    extractor: { dim: 4, modelId: 'fake', version: 'v1', extract: async () => { throw new Error('test failure'); } },
+  });
+  const failed = await failedService.verify(loudSamples(2));
+  failedService.recordTimeout();
+
+  assert.equal(lowQuality.status, 'low_quality');
+  assert.equal(failed.status, 'error');
+  assert.deepEqual(store.verificationStats.map(({ outcome }) => outcome), ['low_quality', 'error', 'timeout']);
+  assert.ok(store.verificationStats.slice(0, 2).every(({ latencyMs }) => latencyMs >= 0));
+  assert.equal(store.verificationStats[1].error, 'speaker_verification_failed');
 });
 
 test('annotator skips when disabled or service reports low quality', async () => {
