@@ -211,6 +211,7 @@ test('generateStream() substitutes activeSkill promptBlock for the mode suffix a
   const chatPromptOptions = helper.calls[0][7];
   assert.equal(chatPromptOptions.qcloudModel, 'turbo');
   assert.deepEqual(chatPromptOptions.qcloudThinking, { type: 'enabled' });
+  assert.equal(chatPromptOptions.qcloudReasoningEffort, 'medium');
   assert.equal(chatPromptOptions.totalTimeoutMs, 60_000);
   assert.match(systemPrompt, /CUSTOM_SKILL_BLOCK_HERE/);
   assert.doesNotMatch(systemPrompt, /## ACTIVE MODE\nMODE_SUFFIX/);

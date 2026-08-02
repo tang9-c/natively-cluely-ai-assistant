@@ -424,6 +424,7 @@ test('WhatToAnswerLLM activeSkill injects skill and suppresses active mode suffi
   assert.equal(skipModeInjection, true);
   assert.equal(chatPromptOptions.qcloudModel, 'turbo');
   assert.deepEqual(chatPromptOptions.qcloudThinking, { type: 'enabled' });
+  assert.equal(chatPromptOptions.qcloudReasoningEffort, 'medium');
   assert.equal(chatPromptOptions.totalTimeoutMs, 60_000);
   assert.match(systemPromptOverride, /## ACTIVE SKILL/);
   assert.match(systemPromptOverride, /SKILL_SENTINEL/);

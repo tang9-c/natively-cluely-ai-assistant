@@ -15,6 +15,7 @@ export interface ChatPromptOptions {
   activeSkill?: ActiveSkillForPrompt | null;
   qcloudModel?: string;
   qcloudThinking?: { type: 'enabled' | 'disabled' };
+  qcloudReasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
   maxOutputTokens?: number;
   requestId?: string;
   requestSource?: 'automatic' | 'manual' | 'dynamic_action' | 'other';

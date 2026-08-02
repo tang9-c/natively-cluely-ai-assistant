@@ -79,8 +79,10 @@ test('LLMHelper uses turbo with thinking for QCLOUD skill requests and keeps lit
   assert.match(helper, /chatPromptOptions\?\.activeSkill\s*\?\s*QCLOUD_SKILL_CHAT_MODEL\s*:\s*undefined/);
   assert.match(helper, /chatPromptOptions\?\.totalTimeoutMs\s*\?\?\s*\(\s*chatPromptOptions\?\.activeSkill\s*\?\s*QCLOUD_SKILL_CHAT_TIMEOUT_MS\s*:\s*undefined\s*\)/);
   assert.match(helper, /chatPromptOptions\?\.activeSkill\s*\?\s*\{\s*type:\s*['"]enabled['"]\s+as\s+const\s*\}\s*:\s*chatPromptOptions\?\.qcloudThinking/);
+  assert.match(helper, /chatPromptOptions\?\.activeSkill\s*\?\s*['"]medium['"]\s+as\s+const\s*:\s*chatPromptOptions\?\.qcloudReasoningEffort/);
   assert.match(helper, /qcloudModel:\s*qcloudChatModel/);
   assert.match(helper, /qcloudThinking:\s*qcloudThinking/);
+  assert.match(helper, /qcloudReasoningEffort:\s*qcloudReasoningEffort/);
   assert.match(helper, /timeoutMs:\s*qcloudChatTimeoutMs/);
   assert.match(helper, /totalTimeoutMs:\s*qcloudChatTimeoutMs/);
   assert.match(helper, /qcloudModel:\s*QCLOUD_MEETING_SUMMARY_MODEL/);
@@ -114,7 +116,29 @@ test('LLMHelper defaults QCLOUD thinking off unless explicitly enabled by reques
   assert.ok(nonStreamingStart >= 0, 'generateWithNatively should exist');
   assert.ok(streamingStart >= 0, 'streamWithNatively should exist');
   assert.match(nonStreamingBody, /thinking:\s*_options\.qcloudThinking\s*\?\?\s*\{\s*type:\s*['"]disabled['"]\s*\}/);
+  assert.match(nonStreamingBody, /if\s*\(_options\.qcloudReasoningEffort\)\s*body\.reasoning_effort\s*=\s*_options\.qcloudReasoningEffort/);
   assert.match(streamingBody, /thinking:\s*options\.qcloudThinking\s*\?\?\s*\{\s*type:\s*['"]disabled['"]\s*\}/);
+  assert.match(streamingBody, /if\s*\(options\.qcloudReasoningEffort\)\s*body\.reasoning_effort\s*=\s*options\.qcloudReasoningEffort/);
+});
+
+test('non-streaming QCLOUD sends system prompt as a chat message while streaming stays unchanged', () => {
+  const helper = read('electron/LLMHelper.ts');
+  const nonStreamingStart = helper.indexOf('  private async generateWithNatively(');
+  const streamingStart = helper.indexOf('  private async * streamWithNatively(');
+  const nonStreamingBody = helper.slice(nonStreamingStart, streamingStart);
+  const streamingBody = helper.slice(
+    streamingStart,
+    helper.indexOf('  private extractQCloudSseUsage(', streamingStart),
+  );
+
+  assert.match(nonStreamingBody, /const messages:\s*Array<\{\s*role:\s*['"]system['"]\s*\|\s*['"]user['"]/);
+  assert.match(nonStreamingBody, /messages\.push\(\{\s*role:\s*['"]system['"],\s*content:\s*systemPrompt\s*\}\)/);
+  assert.match(nonStreamingBody, /messages\.push\(\{\s*role:\s*['"]user['"],\s*content:\s*userMessage\s*\}\)/);
+  assert.match(nonStreamingBody, /messages,\s*\n\s*max_tokens:/);
+  assert.doesNotMatch(nonStreamingBody, /body\.system\s*=\s*systemPrompt/);
+
+  assert.match(streamingBody, /messages:\s*\[\{\s*role:\s*['"]user['"],\s*content:\s*userContent\s*\}\]/);
+  assert.match(streamingBody, /body\.system\s*=\s*systemPrompt/);
 });
 
 test('streamChat uses real QCLOUD SSE stream for the selected QCLOUD model', () => {

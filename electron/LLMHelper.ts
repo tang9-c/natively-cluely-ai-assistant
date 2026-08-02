@@ -108,6 +108,7 @@ interface ProviderRequestOptions {
   timeoutMs?: number;
   qcloudModel?: string;
   qcloudThinking?: { type: 'enabled' | 'disabled' };
+  qcloudReasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
   dataScopes?: ProviderDataScope[];
   requestId?: string;
   requestSource?: 'automatic' | 'manual' | 'dynamic_action' | 'other';
@@ -1715,6 +1716,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const qcloudChatModel = chatPromptOptions?.qcloudModel
         ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_MODEL : undefined);
       const qcloudThinking = chatPromptOptions?.activeSkill ? { type: 'enabled' as const } : chatPromptOptions?.qcloudThinking;
+      const qcloudReasoningEffort = chatPromptOptions?.activeSkill ? 'medium' as const : chatPromptOptions?.qcloudReasoningEffort;
       const qcloudChatTimeoutMs = chatPromptOptions?.totalTimeoutMs
         ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_TIMEOUT_MS : undefined);
 
@@ -1757,6 +1759,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
               abortSignal: chatPromptOptions?.abortSignal,
               qcloudModel: qcloudChatModel,
               qcloudThinking: qcloudThinking,
+              qcloudReasoningEffort: qcloudReasoningEffort,
             });
           } catch (err: any) {
             console.warn('[LLMHelper] QCLOUD API failed in chatWithGemini:', err.message);
@@ -1842,6 +1845,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
                 abortSignal: chatPromptOptions?.abortSignal,
                 qcloudModel: qcloudChatModel,
                 qcloudThinking: qcloudThinking,
+                qcloudReasoningEffort: qcloudReasoningEffort,
               }),
             });
             break;
@@ -2464,12 +2468,19 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const headers: any = { 'Content-Type': 'application/json', Authorization: `Bearer ${nativelyKey}` };
 
     const qcloudModel = this.resolveQCloudRequestModel(_options);
+    const messages: Array<{ role: 'system' | 'user'; content: string }> = [];
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt });
+    }
+    messages.push({ role: 'user', content: userMessage });
+
     const body: any = {
       model: qcloudModel,
-      messages: [{ role: 'user', content: userMessage }],
+      messages,
       max_tokens: this.clampQCloudMaxOutputTokens(_options.maxOutputTokens, qcloudModel),
       thinking: _options.qcloudThinking ?? { type: 'disabled' },
     };
+    if (_options.qcloudReasoningEffort) body.reasoning_effort = _options.qcloudReasoningEffort;
 
     // Send images as a structured array so the server can build proper Gemini inlineData parts.
     // Embedding base64 in the text content would be truncated at 4000 chars and treated as text.
@@ -2502,7 +2513,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       }
       if (images.length) body.images = images;
     }
-    if (systemPrompt) body.system = systemPrompt;
     if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {
       body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it
     }
@@ -3701,6 +3711,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const qcloudChatModel = chatPromptOptions?.qcloudModel
       ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_MODEL : undefined);
     const qcloudThinking = chatPromptOptions?.activeSkill ? { type: 'enabled' as const } : chatPromptOptions?.qcloudThinking;
+    const qcloudReasoningEffort = chatPromptOptions?.activeSkill ? 'medium' as const : chatPromptOptions?.qcloudReasoningEffort;
     const qcloudChatTimeoutMs = chatPromptOptions?.totalTimeoutMs
       ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_TIMEOUT_MS : undefined);
     // Profile context is already merged into `context` above; cloud and local
@@ -3804,6 +3815,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         maxOutputTokens: chatPromptOptions?.maxOutputTokens,
         qcloudModel: qcloudChatModel,
         qcloudThinking: qcloudThinking,
+        qcloudReasoningEffort: qcloudReasoningEffort,
         dataScopes: ['transcript', ...this.inferContextScopes(cloudCombinedContext)],
         requestId: chatPromptOptions?.requestId,
         requestSource: chatPromptOptions?.requestSource,
@@ -3838,6 +3850,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           maxOutputTokens: chatPromptOptions?.maxOutputTokens,
           qcloudModel: qcloudChatModel,
           qcloudThinking: qcloudThinking,
+          qcloudReasoningEffort: qcloudReasoningEffort,
           totalTimeoutMs: qcloudChatTimeoutMs,
         });
         return;
@@ -3891,6 +3904,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       max_tokens: this.clampQCloudMaxOutputTokens(options.maxOutputTokens, qcloudModel),
       thinking: options.qcloudThinking ?? { type: 'disabled' },
     };
+    if (options.qcloudReasoningEffort) body.reasoning_effort = options.qcloudReasoningEffort;
     if (systemPrompt) body.system = systemPrompt;
     if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {
       body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it
