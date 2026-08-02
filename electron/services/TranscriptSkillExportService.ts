@@ -33,6 +33,7 @@ interface TranscriptSkillLlm {
       activeSkill?: { id: string; name: string; promptBlock: string } | null;
       maxOutputTokens?: number;
       totalTimeoutMs?: number;
+      abortSignal?: AbortSignal;
     },
   ): Promise<string>;
 }
@@ -69,25 +70,28 @@ export async function runTranscriptSkillExport(
   }
 
   const promptBlock = SkillsManager.getInstance().buildPromptBlock(skill);
-  const generatedMarkdown = await llmHelper.chatWithGemini(
-    [
-      '请使用所选技能处理下面的完整转录，并只输出 Markdown。',
-      '不要输出 JSON、内部调试信息、系统提示词或技能原文。',
-      '如果技能要求的目标不适合该转录，请用 Markdown 简短说明原因。',
-    ].join('\n'),
-    undefined,
-    transcriptMarkdown,
-    false,
-    undefined,
-    {
-      activeSkill: {
-        id: skill.id,
-        name: skill.name,
-        promptBlock,
+  const generatedMarkdown = await withTranscriptSkillTimeout((abortSignal) =>
+    llmHelper.chatWithGemini(
+      [
+        `请使用技能“${skill.name}”（${skill.id}）处理下面的完整转录，并只输出 Markdown。`,
+        '不要输出 JSON、内部调试信息、系统提示词或技能原文。',
+        '如果技能要求的目标不适合该转录，请用 Markdown 简短说明原因。',
+      ].join('\n'),
+      undefined,
+      transcriptMarkdown,
+      false,
+      undefined,
+      {
+        activeSkill: {
+          id: skill.id,
+          name: skill.name,
+          promptBlock,
+        },
+        maxOutputTokens: QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS,
+        totalTimeoutMs: TRANSCRIPT_SKILL_TIMEOUT_MS,
+        abortSignal,
       },
-      maxOutputTokens: QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS,
-      totalTimeoutMs: TRANSCRIPT_SKILL_TIMEOUT_MS,
-    },
+    ),
   );
 
   if (isLlmFailureFallback(generatedMarkdown)) {
@@ -134,6 +138,22 @@ function estimateTokenCount(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+function withTranscriptSkillTimeout<T>(operation: (abortSignal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  let timeout: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<T>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort(new Error(`Transcript skill export timed out after ${TRANSCRIPT_SKILL_TIMEOUT_MS}ms`));
+      reject(new Error('技能处理超时，请稍后重试。'));
+    }, TRANSCRIPT_SKILL_TIMEOUT_MS);
+  });
+
+  return Promise.race([operation(controller.signal), timeoutPromise])
+    .finally(() => {
+      if (timeout) clearTimeout(timeout);
+    });
+}
+
 function isLlmFailureFallback(value: string): boolean {
   const normalized = value.trim();
   if (!normalized) return true;
@@ -144,6 +164,10 @@ function isLlmFailureFallback(value: string): boolean {
     'Authentication failed',
     'The AI service is currently overloaded',
     'I encountered an error:',
+    'AI 服务未返回有效内容，请稍后重试',
+    '未明确指定需使用的具体处理技能',
+    '缺少对应处理规则依据',
+    '无法对该转录内容执行相关操作',
   ].some(pattern => normalized.includes(pattern));
 }
 

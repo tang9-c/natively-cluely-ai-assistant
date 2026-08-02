@@ -1754,11 +1754,15 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             return await this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudImagePaths, {
               maxOutputTokens: chatPromptOptions?.maxOutputTokens,
               timeoutMs: qcloudChatTimeoutMs,
+              abortSignal: chatPromptOptions?.abortSignal,
               qcloudModel: qcloudChatModel,
               qcloudThinking: qcloudThinking,
             });
           } catch (err: any) {
-            console.warn('[LLMHelper] QCLOUD API failed in chatWithGemini, falling back to Gemini:', err.message);
+            console.warn('[LLMHelper] QCLOUD API failed in chatWithGemini:', err.message);
+            if (chatPromptOptions?.activeSkill) {
+              return "AI 服务未返回有效内容，请稍后重试。";
+            }
             // Fall through to smart dynamic fallback below
           }
         }
@@ -1803,7 +1807,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         capability: 'chat',
         multimodal: cloudIsMultimodal,
         availability: {
-          hasNatively: this.hasNatively(),
+          hasNatively: chatPromptOptions?.activeSkill ? false : this.hasNatively(),
           hasGroq: Boolean(this.groqClient),
           groqDisabled: this._groqLocalDisabled,
           hasCodex: this.codexCliConfig.enabled,
@@ -1835,6 +1839,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
               execute: () => this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined, {
                 maxOutputTokens: chatPromptOptions?.maxOutputTokens,
                 timeoutMs: qcloudChatTimeoutMs,
+                abortSignal: chatPromptOptions?.abortSignal,
                 qcloudModel: qcloudChatModel,
                 qcloudThinking: qcloudThinking,
               }),

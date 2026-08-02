@@ -52,6 +52,27 @@ test('non-streaming chat propagates the resolved QCLOUD timeout to Natively prov
   );
 });
 
+test('active skill chat does not retry QCLOUD through generic non-streaming fallback', () => {
+  const llm = read('electron/LLMHelper.ts');
+  const chatStart = llm.indexOf('public async chatWithGemini(');
+  const chatBlock = llm.slice(
+    chatStart,
+    llm.indexOf('async chatWithGeminiStream(', chatStart),
+  );
+  const directRoutingBlock = chatBlock.slice(
+    chatBlock.indexOf("// --- Direct Routing based on Selected Model ---"),
+    chatBlock.indexOf("if (this.isOpenAiModel", chatBlock.indexOf("// --- Direct Routing based on Selected Model ---")),
+  );
+  const providerQueueBlock = chatBlock.slice(
+    chatBlock.indexOf('const routedProviders = routeWithScopeFallback'),
+    chatBlock.indexOf('if (providers.length === 0)', chatBlock.indexOf('const routedProviders = routeWithScopeFallback')),
+  );
+
+  assert.match(directRoutingBlock, /if\s*\(chatPromptOptions\?\.activeSkill\)\s*\{/);
+  assert.match(directRoutingBlock, /return "AI 服务未返回有效内容，请稍后重试。";/);
+  assert.match(providerQueueBlock, /hasNatively:\s*chatPromptOptions\?\.activeSkill\s*\?\s*false\s*:\s*this\.hasNatively\(\)/);
+});
+
 test('meeting summary gives QCLOUD a summary-sized timeout budget', () => {
   const llm = read('electron/LLMHelper.ts');
   const constants = read('electron/llm/QCloudLlmConstants.ts');
