@@ -163,3 +163,27 @@ test('legacy registered voice profiles show missing quality copy without fake sc
   assert.doesNotMatch(source, /qualityScore\s*\?\?/);
   assert.doesNotMatch(source, /minSelfSimilarity\s*\?\?/);
 });
+
+test('registered profiles render recent verification reliability stats', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+  assert.match(source, /最近会议识别/);
+  assert.match(source, /ME 命中/);
+  assert.match(source, /positiveVerifications\} \/ \{totalVerifications/);
+  assert.match(source, /低置信拒绝/);
+  assert.match(source, /lowConfidenceRejections/);
+  assert.match(source, /低质量跳过/);
+  assert.match(source, /lowQualitySkips/);
+  assert.match(source, /错误\/超时/);
+  assert.match(source, /errorOrTimeoutCount/);
+  assert.doesNotMatch(source, /lowConfidenceCount/);
+  assert.doesNotMatch(source, /lowQualityCount/);
+});
+
+test('registered profiles without verification stats show no data copy and no raw evidence fields', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+  assert.match(source, /totalVerifications === 0/);
+  assert.match(source, /暂无会议识别数据/);
+  assert.doesNotMatch(source, /rawTranscript/);
+  assert.doesNotMatch(source, /speakerText/);
+  assert.doesNotMatch(source, /audioPath/);
+});

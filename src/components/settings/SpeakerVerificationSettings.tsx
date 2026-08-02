@@ -119,6 +119,10 @@ function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
+function formatCount(value: number | undefined): number {
+  return Number.isFinite(value) ? Number(value) : 0;
+}
+
 function enrollmentQualityText(band: NonNullable<SpeakerVerificationStatus['quality']>['qualityBand']): string {
   switch (band) {
     case 'stable': return '稳定';
@@ -382,6 +386,12 @@ export function SpeakerVerificationSettings() {
   const currentPrompt = PROMPTS[recordingIndex ?? samples.length] ?? PROMPTS[0];
   const recordingQuality = recordingQualityMessage(recordingMetrics, qualityPolicy);
   const recordingButtonTitle = recordingMetrics.state === 'ready' ? '可以停止本段录音' : recordingQuality;
+  const verificationStats = status?.stats;
+  const totalVerifications = formatCount(verificationStats?.totalVerifications);
+  const positiveVerifications = formatCount(verificationStats?.positiveVerifications);
+  const lowConfidenceRejections = formatCount(verificationStats?.lowConfidenceRejections);
+  const lowQualitySkips = formatCount(verificationStats?.lowQualitySkips);
+  const errorOrTimeoutCount = formatCount(verificationStats?.errorCount) + formatCount(verificationStats?.timeoutCount);
 
   return (
     <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
@@ -472,6 +482,34 @@ export function SpeakerVerificationSettings() {
             </div>
           ) : (
             <p className="text-[11px] text-text-tertiary">注册质量：旧版本注册，暂无评分</p>
+          )}
+        </div>
+      )}
+
+      {enrolled && (
+        <div className="rounded-lg border border-border-subtle bg-bg-input p-3">
+          <p className="text-xs font-medium text-text-secondary">最近会议识别</p>
+          {totalVerifications === 0 ? (
+            <p className="mt-2 text-[11px] text-text-tertiary">暂无会议识别数据</p>
+          ) : (
+            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-text-tertiary">
+              <div>
+                <span className="block text-text-secondary">ME 命中</span>
+                {positiveVerifications} / {totalVerifications}
+              </div>
+              <div>
+                <span className="block text-text-secondary">低置信拒绝</span>
+                {lowConfidenceRejections}
+              </div>
+              <div>
+                <span className="block text-text-secondary">低质量跳过</span>
+                {lowQualitySkips}
+              </div>
+              <div>
+                <span className="block text-text-secondary">错误/超时</span>
+                {errorOrTimeoutCount}
+              </div>
+            </div>
           )}
         </div>
       )}
