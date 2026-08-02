@@ -383,6 +383,11 @@ export type SpeakerVerificationHealthState = 'not_enrolled' | 'paused' | 'ready'
 export interface SpeakerVerificationHealth {
   state: SpeakerVerificationHealthState
   message?: string
+  modelInstalled?: boolean
+  modelFile?: string
+  modelDim?: number
+  loadLatencyMs?: number
+  error?: string
 }
 
 export interface SpeakerVerificationStats {
@@ -629,7 +634,7 @@ export interface ElectronAPI {
   // @ipc-channel speaker-verification:get-status
   speakerVerificationGetStatus: () => Promise<SpeakerVerificationStatus>
   // @ipc-channel speaker-verification:get-health
-  speakerVerificationGetHealth: () => Promise<SpeakerVerificationHealth>
+  speakerVerificationGetHealth: (options?: { smokeTest?: boolean }) => Promise<SpeakerVerificationHealth>
   // @ipc-channel speaker-verification:get-quality-policy
   speakerVerificationGetQualityPolicy: () => Promise<SpeakerRecordingQualityPolicy>
   // @ipc-channel speaker-verification:enroll

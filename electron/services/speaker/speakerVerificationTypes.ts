@@ -33,6 +33,11 @@ export type SpeakerVerificationHealthState =
 export interface SpeakerVerificationHealth {
   state: SpeakerVerificationHealthState;
   message?: string;
+  modelInstalled?: boolean;
+  modelFile?: string;
+  modelDim?: number;
+  loadLatencyMs?: number;
+  error?: string;
 }
 
 export type SpeakerVerificationOutcome =

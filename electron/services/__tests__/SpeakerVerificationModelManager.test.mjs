@@ -68,6 +68,92 @@ test('SpeakerEmbeddingExtractor resolves its default ONNX file through LocalMode
   assert.doesNotMatch(source, /speakerModelDownloader/);
 });
 
+test('speaker embedding model health supports lightweight checks and smoke-test diagnostics', () => {
+  const source = read('electron/services/speaker/SpeakerEmbeddingExtractor.ts');
+  const types = read('electron/services/speaker/speakerVerificationTypes.ts');
+  assert.match(source, /getSpeakerEmbeddingModelHealth\(\s*options: SpeakerEmbeddingModelHealthOptions = \{\}/);
+  assert.match(source, /smokeTest\?: boolean/);
+  assert.match(source, /if \(!options\.smokeTest\)/);
+  assert.match(source, /getSharedSpeakerEmbeddingExtractor\(\)/);
+  assert.match(source, /extractorSmokeTest\(speakerEmbeddingSmokeSamples\(\)\)/);
+  assert.match(source, /modelDim: extractor\.dim/);
+  assert.match(source, /loadLatencyMs: Math\.max\(0, Date\.now\(\) - startedAt\)/);
+  assert.match(source, /message: '模型正常'/);
+  assert.match(source, /message: '模型缺失'/);
+  assert.match(source, /message: '模型加载失败'/);
+  assert.match(types, /modelInstalled\?: boolean/);
+  assert.match(types, /modelFile\?: string/);
+  assert.match(types, /modelDim\?: number/);
+  assert.match(types, /loadLatencyMs\?: number/);
+  assert.match(types, /error\?: string/);
+});
+
+test('speaker embedding model health reports a missing configured model file', async () => {
+  const extractorPath = path.resolve('dist-electron/electron/services/speaker/SpeakerEmbeddingExtractor.js');
+  const moduleUrl = `${pathToFileURL(extractorPath).href}?health-missing-${Date.now()}`;
+  const originalModelFile = process.env.SPEAKER_EMBEDDING_MODEL_FILE;
+  process.env.SPEAKER_EMBEDDING_MODEL_FILE = path.join(os.tmpdir(), `missing-speaker-${Date.now()}.onnx`);
+
+  try {
+    const { getSpeakerEmbeddingModelHealth } = await import(moduleUrl);
+    const health = getSpeakerEmbeddingModelHealth();
+    assert.equal(health.state, 'model_missing');
+    assert.equal(health.modelInstalled, false);
+    assert.equal(typeof health.loadLatencyMs, 'number');
+  } finally {
+    if (originalModelFile === undefined) delete process.env.SPEAKER_EMBEDDING_MODEL_FILE;
+    else process.env.SPEAKER_EMBEDDING_MODEL_FILE = originalModelFile;
+  }
+});
+
+test('speaker embedding model health smoke test reports ready with fake extractor dim', async () => {
+  const extractorPath = path.resolve('dist-electron/electron/services/speaker/SpeakerEmbeddingExtractor.js');
+  const moduleUrl = `${pathToFileURL(extractorPath).href}?health-ready-${Date.now()}`;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-speaker-health-'));
+  const modelFile = path.join(dir, 'model.onnx');
+  const originalModelFile = process.env.SPEAKER_EMBEDDING_MODEL_FILE;
+  const originalLoad = Module._load;
+
+  fs.writeFileSync(modelFile, 'model');
+  process.env.SPEAKER_EMBEDDING_MODEL_FILE = modelFile;
+  Module._load = function(request, parent, isMain) {
+    if (request === 'sherpa-onnx-node') {
+      return {
+        SpeakerEmbeddingExtractor: class {
+          dim = 256;
+          createStream() {
+            return {
+              acceptWaveform() {},
+              inputFinished() {},
+            };
+          }
+          isReady() {
+            return true;
+          }
+          compute() {
+            return new Float32Array(256);
+          }
+        },
+      };
+    }
+    return originalLoad.call(this, request, parent, isMain);
+  };
+
+  try {
+    const { getSpeakerEmbeddingModelHealth } = await import(moduleUrl);
+    const health = getSpeakerEmbeddingModelHealth({ smokeTest: true });
+    assert.equal(health.state, 'ready');
+    assert.equal(health.modelInstalled, true);
+    assert.equal(health.modelDim, 256);
+    assert.equal(typeof health.loadLatencyMs, 'number');
+  } finally {
+    Module._load = originalLoad;
+    if (originalModelFile === undefined) delete process.env.SPEAKER_EMBEDDING_MODEL_FILE;
+    else process.env.SPEAKER_EMBEDDING_MODEL_FILE = originalModelFile;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('SpeakerEmbeddingExtractor disables sherpa external buffers for Electron enrollment', () => {
   const source = read('electron/services/speaker/SpeakerEmbeddingExtractor.ts');
   assert.match(source, /this\.extractor\.compute\(stream,\s*false\)/);

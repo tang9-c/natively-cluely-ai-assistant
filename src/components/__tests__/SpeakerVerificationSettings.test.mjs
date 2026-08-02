@@ -140,6 +140,18 @@ test('UI renders all speaker verification runtime health states', () => {
   assert.match(source, /当前不可用/);
 });
 
+test('UI exposes speaker model health check states and latency', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+  assert.match(source, /modelHealthText/);
+  assert.match(source, /模型健康/);
+  assert.match(source, /模型正常/);
+  assert.match(source, /模型缺失/);
+  assert.match(source, /模型加载失败/);
+  assert.match(source, /检查耗时 \{Math\.round\(displayedModelHealth\.loadLatencyMs\)\} ms/);
+  assert.match(source, /检查模型/);
+  assert.match(source, /speakerVerificationGetHealth\?\.\(\{ smokeTest: true \}\)/);
+});
+
 test('enrolled profiles can be paused without deleting their local voiceprint', () => {
   const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
   assert.match(source, /status\?\.mode === 'local'/);

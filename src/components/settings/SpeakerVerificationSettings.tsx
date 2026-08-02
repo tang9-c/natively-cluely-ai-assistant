@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Circle, Download, Mic, RotateCcw, ShieldCheck, Square, Trash2 } from 'lucide-react';
 import type {
   SpeakerEnrollmentSample,
+  SpeakerVerificationHealth,
   SpeakerRecordingQualityPolicy,
   SpeakerVerificationStatus,
 } from '../../types/electron';
@@ -48,6 +49,15 @@ function sanitizedModelDownloadError(error: unknown): string {
     .replace(/[?&][A-Za-z0-9_.~%+-]+=[A-Za-z0-9_.~%+-]+/g, '')
     .trim();
   return sanitized || '声纹模型安装失败，请检查网络后重试。';
+}
+
+function modelHealthText(health: SpeakerVerificationHealth | null | undefined): string {
+  switch (health?.state) {
+    case 'ready': return '模型正常';
+    case 'model_missing': return '模型缺失';
+    case 'model_error': return '模型加载失败';
+    default: return '模型状态待检查';
+  }
 }
 
 const PROMPTS = [
@@ -256,6 +266,8 @@ export function SpeakerVerificationSettings() {
   const [speakerModelInfo, setSpeakerModelInfo] = useState<LocalSpeakerModelInfo | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [modelHealth, setModelHealth] = useState<SpeakerVerificationHealth | null>(null);
+  const [healthBusy, setHealthBusy] = useState(false);
   const [recordingIndex, setRecordingIndex] = useState<number | null>(null);
   const [samples, setSamples] = useState<RecordedSample[]>([]);
   const [busy, setBusy] = useState(false);
@@ -268,7 +280,10 @@ export function SpeakerVerificationSettings() {
 
   const refresh = async () => {
     const next = await window.electronAPI?.speakerVerificationGetStatus?.();
-    if (next) setStatus(next);
+    if (next) {
+      setStatus(next);
+      setModelHealth(next.health);
+    }
     const models = await window.electronAPI?.localModelsGetList?.();
     const speakerModel = models?.models?.find((model: any) => model.id === SPEAKER_MODEL_ID) as LocalSpeakerModelInfo | undefined;
     setSpeakerModelInfo(speakerModel ?? null);
@@ -337,6 +352,17 @@ export function SpeakerVerificationSettings() {
       await refresh();
     } finally {
       setBusy(false);
+    }
+  };
+
+  const checkModelHealth = async () => {
+    setHealthBusy(true);
+    setError(null);
+    try {
+      const health = await window.electronAPI?.speakerVerificationGetHealth?.({ smokeTest: true });
+      if (health) setModelHealth(health);
+    } finally {
+      setHealthBusy(false);
     }
   };
 
@@ -445,6 +471,7 @@ export function SpeakerVerificationSettings() {
   const errorOrTimeoutCount = formatCount(verificationStats?.errorCount) + formatCount(verificationStats?.timeoutCount);
   const nearThresholdNonMeCount = formatCount(verificationStats?.nearThresholdNonMeCount);
   const shouldSuggestRerecord = nearThresholdNonMeCount >= 3;
+  const displayedModelHealth = modelHealth ?? status?.health ?? null;
 
   return (
     <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
@@ -535,6 +562,29 @@ export function SpeakerVerificationSettings() {
           )}
         </div>
       )}
+
+      <div className="rounded-lg border border-border-subtle bg-bg-input p-3 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium text-text-secondary">模型健康</p>
+            <p className="mt-1 text-[11px] text-text-tertiary">{modelHealthText(displayedModelHealth)}</p>
+            {displayedModelHealth?.loadLatencyMs !== undefined && (
+              <p className="mt-1 text-[11px] text-text-tertiary">
+                检查耗时 {Math.round(displayedModelHealth.loadLatencyMs)} ms
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={checkModelHealth}
+            disabled={healthBusy}
+            className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs text-text-secondary bg-bg-card hover:text-text-primary disabled:opacity-50"
+          >
+            <ShieldCheck size={12} />
+            检查模型
+          </button>
+        </div>
+      </div>
 
       {enrolled && (
         <div className="rounded-lg border border-border-subtle bg-bg-input p-3 space-y-3">

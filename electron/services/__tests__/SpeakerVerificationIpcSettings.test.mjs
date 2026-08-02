@@ -37,9 +37,15 @@ test('preload and renderer types expose speaker verification APIs', () => {
     assert.match(preload, new RegExp(api));
     assert.match(types, new RegExp(`${api}:`));
   }
+  assert.match(preload, /speakerVerificationGetHealth:\s*\(options\?: \{ smokeTest\?: boolean \}\)/);
+  assert.match(preload, /ipcRenderer\.invoke\('speaker-verification:get-health', options\)/);
+  assert.match(types, /speakerVerificationGetHealth:\s*\(options\?: \{ smokeTest\?: boolean \}\) => Promise<SpeakerVerificationHealth>/);
+  assert.match(types, /modelDim\?: number/);
+  assert.match(types, /loadLatencyMs\?: number/);
 });
 
 test('runtime status composes model health and verification statistics', () => {
+  const ipc = read('electron/ipcHandlers.ts');
   const store = read('electron/services/speaker/SpeakerProfileStore.ts');
   const service = read('electron/services/speaker/SpeakerVerificationService.ts');
   const extractor = read('electron/services/speaker/SpeakerEmbeddingExtractor.ts');
@@ -47,6 +53,7 @@ test('runtime status composes model health and verification statistics', () => {
   assert.match(store, /getVerificationStats/);
   assert.match(service, /recordVerification/);
   assert.match(extractor, /getSpeakerEmbeddingModelHealth/);
+  assert.match(ipc, /getSpeakerEmbeddingModelHealth\(\{ smokeTest: options\?\.smokeTest === true \}\)/);
 });
 
 test('delete profile API calls hard delete rather than disabling a row', () => {

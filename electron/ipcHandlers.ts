@@ -1276,9 +1276,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     );
   });
 
-  safeHandle('speaker-verification:get-health', async () => {
+  safeHandle('speaker-verification:get-health', async (_, options?: { smokeTest?: boolean }) => {
     const { getSpeakerEmbeddingModelHealth } = require('./services/speaker/SpeakerEmbeddingExtractor');
-    return getSpeakerEmbeddingModelHealth();
+    return getSpeakerEmbeddingModelHealth({ smokeTest: options?.smokeTest === true });
   });
 
   safeHandle('speaker-verification:get-quality-policy', async () => {
