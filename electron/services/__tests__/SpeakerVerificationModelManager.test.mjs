@@ -85,8 +85,9 @@ test('speaker embedding model health supports lightweight checks and smoke-test 
   assert.match(source, /smokeTest\?: boolean/);
   assert.match(source, /if \(!options\.smokeTest\)/);
   assert.match(source, /getSharedSpeakerEmbeddingExtractor\(\)/);
-  assert.match(source, /extractorSmokeTest\(speakerEmbeddingSmokeSamples\(\)\)/);
+  assert.match(source, /await extractor\.extract\(speakerEmbeddingSmokeSamples\(\)\)/);
   assert.match(source, /modelDim: extractor\.dim/);
+  assert.doesNotMatch(source, /SPEAKER_EMBEDDING_MODEL_DIM = 256/);
   assert.match(source, /loadLatencyMs: Math\.max\(0, Date\.now\(\) - startedAt\)/);
   assert.match(source, /message: '模型正常'/);
   assert.match(source, /message: '模型缺失'/);
@@ -121,45 +122,106 @@ test('speaker embedding model health smoke test reports ready with fake extracto
   const moduleUrl = `${pathToFileURL(extractorPath).href}?health-ready-${Date.now()}`;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-speaker-health-'));
   const modelFile = path.join(dir, 'model.onnx');
+  const workerFile = path.join(dir, 'fake-speaker-worker.cjs');
   const originalModelFile = process.env.SPEAKER_EMBEDDING_MODEL_FILE;
+  const originalWorkerFile = process.env.SPEAKER_EMBEDDING_WORKER_FILE;
   const originalLoad = Module._load;
 
   fs.writeFileSync(modelFile, 'model');
+  fs.writeFileSync(workerFile, `
+    process.on('message', (message) => {
+      process.send({ requestId: message.requestId, embedding: Array.from({ length: 192 }, () => 0) });
+    });
+  `);
   process.env.SPEAKER_EMBEDDING_MODEL_FILE = modelFile;
+  process.env.SPEAKER_EMBEDDING_WORKER_FILE = workerFile;
   Module._load = function(request, parent, isMain) {
     if (request === 'sherpa-onnx-node') {
-      return {
-        SpeakerEmbeddingExtractor: class {
-          dim = 256;
-          createStream() {
-            return {
-              acceptWaveform() {},
-              inputFinished() {},
-            };
-          }
-          isReady() {
-            return true;
-          }
-          compute() {
-            return new Float32Array(256);
-          }
-        },
-      };
+      throw new Error('parent process must not load sherpa for speaker health smoke');
     }
     return originalLoad.call(this, request, parent, isMain);
   };
 
   try {
     const { getSpeakerEmbeddingModelHealth } = await import(moduleUrl);
-    const health = getSpeakerEmbeddingModelHealth({ smokeTest: true });
+    const health = await getSpeakerEmbeddingModelHealth({ smokeTest: true });
     assert.equal(health.state, 'ready');
     assert.equal(health.modelInstalled, true);
-    assert.equal(health.modelDim, 256);
+    assert.equal(health.modelDim, 192);
     assert.equal(typeof health.loadLatencyMs, 'number');
   } finally {
     Module._load = originalLoad;
     if (originalModelFile === undefined) delete process.env.SPEAKER_EMBEDDING_MODEL_FILE;
     else process.env.SPEAKER_EMBEDDING_MODEL_FILE = originalModelFile;
+    if (originalWorkerFile === undefined) delete process.env.SPEAKER_EMBEDDING_WORKER_FILE;
+    else process.env.SPEAKER_EMBEDDING_WORKER_FILE = originalWorkerFile;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('speaker embedding model health smoke test fails fast when the worker exits cleanly without replying', async () => {
+  const extractorPath = path.resolve('dist-electron/electron/services/speaker/SpeakerEmbeddingExtractor.js');
+  const moduleUrl = `${pathToFileURL(extractorPath).href}?health-clean-exit-${Date.now()}`;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-speaker-health-clean-exit-'));
+  const modelFile = path.join(dir, 'model.onnx');
+  const workerFile = path.join(dir, 'fake-speaker-worker-clean-exit.cjs');
+  const originalModelFile = process.env.SPEAKER_EMBEDDING_MODEL_FILE;
+  const originalWorkerFile = process.env.SPEAKER_EMBEDDING_WORKER_FILE;
+
+  fs.writeFileSync(modelFile, 'model');
+  fs.writeFileSync(workerFile, `
+    process.on('message', () => {
+      process.exit(0);
+    });
+  `);
+  process.env.SPEAKER_EMBEDDING_MODEL_FILE = modelFile;
+  process.env.SPEAKER_EMBEDDING_WORKER_FILE = workerFile;
+
+  try {
+    const { getSpeakerEmbeddingModelHealth } = await import(moduleUrl);
+    const result = await Promise.race([
+      getSpeakerEmbeddingModelHealth({ smokeTest: true }),
+      new Promise(resolve => setTimeout(() => resolve('timeout'), 500)),
+    ]);
+    assert.notEqual(result, 'timeout');
+    assert.equal(result.state, 'model_error');
+  } finally {
+    if (originalModelFile === undefined) delete process.env.SPEAKER_EMBEDDING_MODEL_FILE;
+    else process.env.SPEAKER_EMBEDDING_MODEL_FILE = originalModelFile;
+    if (originalWorkerFile === undefined) delete process.env.SPEAKER_EMBEDDING_WORKER_FILE;
+    else process.env.SPEAKER_EMBEDDING_WORKER_FILE = originalWorkerFile;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('speaker embedding model health rejects empty worker embeddings', async () => {
+  const extractorPath = path.resolve('dist-electron/electron/services/speaker/SpeakerEmbeddingExtractor.js');
+  const moduleUrl = `${pathToFileURL(extractorPath).href}?health-empty-embedding-${Date.now()}`;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-speaker-health-empty-'));
+  const modelFile = path.join(dir, 'model.onnx');
+  const workerFile = path.join(dir, 'fake-speaker-worker-empty.cjs');
+  const originalModelFile = process.env.SPEAKER_EMBEDDING_MODEL_FILE;
+  const originalWorkerFile = process.env.SPEAKER_EMBEDDING_WORKER_FILE;
+
+  fs.writeFileSync(modelFile, 'model');
+  fs.writeFileSync(workerFile, `
+    process.on('message', (message) => {
+      process.send({ requestId: message.requestId, embedding: [] });
+    });
+  `);
+  process.env.SPEAKER_EMBEDDING_MODEL_FILE = modelFile;
+  process.env.SPEAKER_EMBEDDING_WORKER_FILE = workerFile;
+
+  try {
+    const { getSpeakerEmbeddingModelHealth } = await import(moduleUrl);
+    const health = await getSpeakerEmbeddingModelHealth({ smokeTest: true });
+    assert.equal(health.state, 'model_error');
+    assert.equal('modelDim' in health, false);
+  } finally {
+    if (originalModelFile === undefined) delete process.env.SPEAKER_EMBEDDING_MODEL_FILE;
+    else process.env.SPEAKER_EMBEDDING_MODEL_FILE = originalModelFile;
+    if (originalWorkerFile === undefined) delete process.env.SPEAKER_EMBEDDING_WORKER_FILE;
+    else process.env.SPEAKER_EMBEDDING_WORKER_FILE = originalWorkerFile;
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -169,43 +231,38 @@ test('speaker embedding model health preserves initialization failures for later
   const moduleUrl = `${pathToFileURL(extractorPath).href}?health-failure-${Date.now()}`;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-speaker-health-fail-'));
   const modelFile = path.join(dir, 'model.onnx');
+  const workerFile = path.join(dir, 'fake-speaker-worker-fail.cjs');
   const originalModelFile = process.env.SPEAKER_EMBEDDING_MODEL_FILE;
-  const originalLoad = Module._load;
+  const originalWorkerFile = process.env.SPEAKER_EMBEDDING_WORKER_FILE;
 
   fs.writeFileSync(modelFile, 'model');
+  fs.writeFileSync(workerFile, `
+    process.on('message', (message) => {
+      process.send({ requestId: message.requestId, error: 'speaker_embedding_worker_failed' });
+    });
+  `);
   process.env.SPEAKER_EMBEDDING_MODEL_FILE = modelFile;
-  Module._load = function(request, parent, isMain) {
-    if (request === 'sherpa-onnx-node') {
-      return {
-        SpeakerEmbeddingExtractor: class {
-          constructor() {
-            throw new Error('test init failure');
-          }
-        },
-      };
-    }
-    return originalLoad.call(this, request, parent, isMain);
-  };
+  process.env.SPEAKER_EMBEDDING_WORKER_FILE = workerFile;
 
   try {
     const { getSpeakerEmbeddingModelHealth } = await import(moduleUrl);
-    const smokeHealth = getSpeakerEmbeddingModelHealth({ smokeTest: true });
+    const smokeHealth = await getSpeakerEmbeddingModelHealth({ smokeTest: true });
     const lightweightHealth = getSpeakerEmbeddingModelHealth();
     assert.equal(smokeHealth.state, 'model_error');
     assert.equal(lightweightHealth.state, 'model_error');
   } finally {
-    Module._load = originalLoad;
     if (originalModelFile === undefined) delete process.env.SPEAKER_EMBEDDING_MODEL_FILE;
     else process.env.SPEAKER_EMBEDDING_MODEL_FILE = originalModelFile;
+    if (originalWorkerFile === undefined) delete process.env.SPEAKER_EMBEDDING_WORKER_FILE;
+    else process.env.SPEAKER_EMBEDDING_WORKER_FILE = originalWorkerFile;
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
 test('SpeakerEmbeddingExtractor disables sherpa external buffers for Electron enrollment', () => {
-  const source = read('electron/services/speaker/SpeakerEmbeddingExtractor.ts');
-  assert.match(source, /this\.extractor\.compute\(stream,\s*false\)/);
-  assert.match(source, /return new Float32Array\(embedding\)/);
-  assert.doesNotMatch(source, /return this\.extractor\.compute\(stream\)/);
+  const source = read('electron/services/speaker/SpeakerEmbeddingExtractorWorker.ts');
+  assert.match(source, /return new Float32Array\(speakerExtractor\.compute\(stream,\s*false\)\)/);
+  assert.doesNotMatch(source, /return speakerExtractor\.compute\(stream\)/);
 });
 
 test('shared speaker embedding extractor reuses the same model instance until model path changes', async () => {
@@ -215,37 +272,10 @@ test('shared speaker embedding extractor reuses the same model instance until mo
   const modelA = path.join(dir, 'model-a.onnx');
   const modelB = path.join(dir, 'model-b.onnx');
   const originalModelFile = process.env.SPEAKER_EMBEDDING_MODEL_FILE;
-  const originalLoad = Module._load;
-  let constructorCalls = 0;
 
   fs.writeFileSync(modelA, 'a');
   fs.writeFileSync(modelB, 'b');
   process.env.SPEAKER_EMBEDDING_MODEL_FILE = modelA;
-  Module._load = function(request, parent, isMain) {
-    if (request === 'sherpa-onnx-node') {
-      return {
-        SpeakerEmbeddingExtractor: class {
-          dim = 256;
-          constructor() {
-            constructorCalls += 1;
-          }
-          createStream() {
-            return {
-              acceptWaveform() {},
-              inputFinished() {},
-            };
-          }
-          isReady() {
-            return true;
-          }
-          compute() {
-            return new Float32Array(256);
-          }
-        },
-      };
-    }
-    return originalLoad.call(this, request, parent, isMain);
-  };
 
   try {
     const {
@@ -256,19 +286,19 @@ test('shared speaker embedding extractor reuses the same model instance until mo
     const first = getSharedSpeakerEmbeddingExtractor();
     const second = getSharedSpeakerEmbeddingExtractor();
     assert.equal(first, second);
-    assert.equal(constructorCalls, 1);
+    assert.equal(first.modelId, 'model-a.onnx');
+    assert.equal(first.dim, 0);
 
     process.env.SPEAKER_EMBEDDING_MODEL_FILE = modelB;
     const third = getSharedSpeakerEmbeddingExtractor();
     assert.notEqual(third, first);
-    assert.equal(constructorCalls, 2);
+    assert.equal(third.modelId, 'model-b.onnx');
 
     resetSharedSpeakerEmbeddingExtractor();
     const fourth = getSharedSpeakerEmbeddingExtractor();
     assert.notEqual(fourth, third);
-    assert.equal(constructorCalls, 3);
+    assert.equal(fourth.modelId, 'model-b.onnx');
   } finally {
-    Module._load = originalLoad;
     if (originalModelFile === undefined) delete process.env.SPEAKER_EMBEDDING_MODEL_FILE;
     else process.env.SPEAKER_EMBEDDING_MODEL_FILE = originalModelFile;
     fs.rmSync(dir, { recursive: true, force: true });

@@ -345,6 +345,50 @@ export class DynamicActionEngine {
         return candidateActions;
     }
 
+    discardSignalsForAssessment(params: {
+        transcript: string;
+        speaker?: string;
+        modeTemplateType: string;
+        sessionId: string;
+        intentResult?: IntentResult;
+        detectedTriggers?: DetectedSignalCandidate[];
+        now?: number;
+    }): void {
+        const evidenceRef: EvidenceRef = {
+            source: 'transcript',
+            text: params.transcript,
+            timestamp: params.now ?? Date.now(),
+            speaker: params.speaker,
+        };
+        const matchedTriggers = params.detectedTriggers
+            ?? this.detectSignalCandidates({
+                transcript: params.transcript,
+                modeTemplateType: params.modeTemplateType,
+                speaker: params.speaker,
+            });
+        const signalTypes = new Set(matchedTriggers.map(({ trigger }) => trigger.type));
+        const synthTrigger = this.synthesizeTrigger(params.modeTemplateType, params.intentResult);
+        const shouldAddSynthTrigger = synthTrigger
+            ? this.canSynthesizeIntentCandidate({
+                modeTemplateType: params.modeTemplateType,
+                intentResult: params.intentResult,
+                actionType: synthTrigger.type,
+                matchedTriggers,
+            })
+            : false;
+        if (synthTrigger && shouldAddSynthTrigger) {
+            signalTypes.add(synthTrigger.type);
+        }
+        for (const signalType of signalTypes) {
+            this.signalTracker.rollbackLatestAssessmentIfEvidenceMatches(
+                params.sessionId,
+                params.modeTemplateType,
+                signalType,
+                evidenceRef,
+            );
+        }
+    }
+
     getTopActions(sessionId: string, maxAgeMs: number = 60000): DynamicAction[] {
         return this.getTopActionsWithExpired(sessionId, maxAgeMs).actions;
     }
@@ -453,6 +497,14 @@ export class DynamicActionEngine {
             this.signalTracker.dismiss(action.sessionId, action.modeTemplateType, action.type, options?.now);
         }
         this.store.updateStatus(actionId, 'dismissed');
+    }
+
+    discardAction(actionId: string, options?: { clearSignalState?: boolean }): void {
+        const action = this.store.getAction(actionId);
+        if (action && options?.clearSignalState !== false) {
+            this.signalTracker.clear(action.sessionId, action.modeTemplateType, action.type);
+        }
+        this.store.removeAction(actionId);
     }
 
     completeAction(actionId: string): void {

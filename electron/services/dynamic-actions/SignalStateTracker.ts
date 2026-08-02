@@ -51,6 +51,11 @@ export interface SignalAssessmentResult {
     autoSurfaceEligible: boolean;
 }
 
+interface RollbackSnapshot {
+    evidenceSignature: string;
+    previous?: ConversationSignalState;
+}
+
 function clampConfidence(value: number): number {
     if (!Number.isFinite(value)) return 0;
     return Math.max(0, Math.min(1, value));
@@ -60,8 +65,18 @@ function keyFor(sessionId: string, modeTemplateType: string, signalType: string)
     return `${sessionId}|${modeTemplateType}|${signalType}`;
 }
 
+function evidenceSignature(evidenceRef: EvidenceRef): string {
+    return JSON.stringify({
+        source: evidenceRef.source,
+        text: evidenceRef.text,
+        timestamp: evidenceRef.timestamp,
+        speaker: evidenceRef.speaker,
+    });
+}
+
 export class SignalStateTracker {
     private states = new Map<string, ConversationSignalState>();
+    private rollbackSnapshots = new Map<string, RollbackSnapshot>();
 
     assess(input: SignalAssessmentInput): SignalAssessmentResult {
         const now = input.now ?? Date.now();
@@ -81,6 +96,10 @@ export class SignalStateTracker {
                 evidenceRefs: [...previous.evidenceRefs, input.evidenceRef].slice(-5),
             };
             this.states.set(key, coolingState);
+            this.rollbackSnapshots.set(key, {
+                evidenceSignature: evidenceSignature(input.evidenceRef),
+                previous,
+            });
             return { state: coolingState, shouldStoreAction: false, autoSurfaceEligible: false };
         }
 
@@ -107,6 +126,10 @@ export class SignalStateTracker {
             evidenceRefs,
         };
         this.states.set(key, state);
+        this.rollbackSnapshots.set(key, {
+            evidenceSignature: evidenceSignature(input.evidenceRef),
+            previous: previous && isRepeat ? previous : undefined,
+        });
 
         return {
             state,
@@ -126,6 +149,7 @@ export class SignalStateTracker {
                 cooldownUntil,
                 lastSeenAt: now,
             });
+            this.rollbackSnapshots.delete(key);
             return;
         }
         this.states.set(key, {
@@ -140,6 +164,32 @@ export class SignalStateTracker {
             confirmationSource: 'heuristic',
             evidenceRefs: [],
         });
+        this.rollbackSnapshots.delete(key);
+    }
+
+    clear(sessionId: string, modeTemplateType: string, signalType: string): void {
+        const key = keyFor(sessionId, modeTemplateType, signalType);
+        this.states.delete(key);
+        this.rollbackSnapshots.delete(key);
+    }
+
+    rollbackLatestAssessmentIfEvidenceMatches(
+        sessionId: string,
+        modeTemplateType: string,
+        signalType: string,
+        evidenceRef: EvidenceRef,
+    ): void {
+        const key = keyFor(sessionId, modeTemplateType, signalType);
+        const snapshot = this.rollbackSnapshots.get(key);
+        if (snapshot?.evidenceSignature !== evidenceSignature(evidenceRef)) {
+            return;
+        }
+        if (snapshot.previous) {
+            this.states.set(key, snapshot.previous);
+        } else {
+            this.states.delete(key);
+        }
+        this.rollbackSnapshots.delete(key);
     }
 
     expire(now: number = Date.now()): void {

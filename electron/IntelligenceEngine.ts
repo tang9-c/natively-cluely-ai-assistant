@@ -1209,6 +1209,7 @@ export class IntelligenceEngine extends EventEmitter {
         if (abortSignal?.aborted) return;
 
         const gateArbitrationStatuses: SemanticGateArbitrationStatus[] = [];
+        const dynamicActionAssessmentNow = Date.now();
         const newActions = await this.dynamicActionEngine.assessSignals({
             transcript: text,
             speaker: segment.speaker,
@@ -1233,6 +1234,7 @@ export class IntelligenceEngine extends EventEmitter {
                 gateArbitrationStatuses.push(trace.arbitrationStatus);
                 this.emit('dynamic_action_gate_trace', trace);
             },
+            now: dynamicActionAssessmentNow,
         });
         if (abortSignal?.aborted) return;
         if (gateArbitrationStatuses.length > 0) {
@@ -1241,7 +1243,21 @@ export class IntelligenceEngine extends EventEmitter {
 
         const effectiveSegment = this.session.findEffectiveSpeakerVerificationSegment(segment)
             ?? this.session.applySpeakerVerificationOverride(segment);
-        if (this.shouldSkipDynamicActionForSpeaker(effectiveSegment)) return;
+        if (this.shouldSkipDynamicActionForSpeaker(effectiveSegment)) {
+            this.dynamicActionEngine.discardSignalsForAssessment({
+                transcript: text,
+                speaker: segment.speaker,
+                modeTemplateType: this.currentDynamicActionTemplateType,
+                sessionId: this.currentSessionId,
+                intentResult,
+                detectedTriggers,
+                now: dynamicActionAssessmentNow,
+            });
+            for (const action of newActions) {
+                this.dynamicActionEngine.discardAction(action.id, { clearSignalState: false });
+            }
+            return;
+        }
 
         // The store dedupes within the per-session store, so each emitted action
         // is a *new* candidate — safe to forward to renderer for rendering.

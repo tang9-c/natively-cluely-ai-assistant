@@ -14,6 +14,10 @@ export class DynamicActionStore {
         }
     }
 
+    removeAction(id: string): void {
+        this.actions.delete(id);
+    }
+
     getActiveActions(sessionId: string, now: number = Date.now()): DynamicAction[] {
         return Array.from(this.actions.values()).filter(
             (action) =>

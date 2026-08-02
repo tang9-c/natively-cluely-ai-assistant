@@ -1,19 +1,16 @@
-import { parentPort, workerData } from 'worker_threads';
-
-interface SpeakerEmbeddingWorkerData {
-  modelFile: string;
-}
-
 interface SpeakerEmbeddingWorkerRequest {
   requestId: number;
-  samples: ArrayBuffer;
+  samples: number[];
 }
 
-const { modelFile } = workerData as SpeakerEmbeddingWorkerData;
+const modelFile = process.env.SPEAKER_EMBEDDING_WORKER_MODEL_FILE;
 let extractor: any;
 
 function getExtractor(): any {
   if (extractor) return extractor;
+  if (!modelFile) {
+    throw new Error('speaker_embedding_worker_missing_model_file');
+  }
   const sherpa = require('sherpa-onnx-node');
   extractor = new sherpa.SpeakerEmbeddingExtractor({
     model: modelFile,
@@ -35,20 +32,16 @@ function computeEmbedding(samples16k: Float32Array): Float32Array {
   return new Float32Array(speakerExtractor.compute(stream, false));
 }
 
-if (!parentPort) {
-  throw new Error('SpeakerEmbeddingExtractorWorker must run as a worker_threads Worker');
+if (!process.send) {
+  throw new Error('SpeakerEmbeddingExtractorWorker must run as a forked child process');
 }
 
-parentPort.on('message', (message: SpeakerEmbeddingWorkerRequest) => {
+process.on('message', (message: SpeakerEmbeddingWorkerRequest) => {
   try {
-    const embedding = computeEmbedding(new Float32Array(message.samples));
-    const embeddingBuffer = embedding.buffer as ArrayBuffer;
-    parentPort!.postMessage(
-      { requestId: message.requestId, embedding: embeddingBuffer },
-      [embeddingBuffer],
-    );
+    const embedding = computeEmbedding(Float32Array.from(message.samples));
+    process.send!({ requestId: message.requestId, embedding: Array.from(embedding) });
   } catch {
-    parentPort!.postMessage({
+    process.send!({
       requestId: message.requestId,
       error: 'speaker_embedding_worker_failed',
     });

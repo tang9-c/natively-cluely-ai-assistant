@@ -32,6 +32,11 @@ async function loadDynamicActionEngine() {
   return import(pathToFileURL(enginePath).href);
 }
 
+async function loadSignalStateTracker() {
+  const trackerPath = path.resolve(__dirname, '../../../dist-electron/electron/services/dynamic-actions/SignalStateTracker.js');
+  return import(pathToFileURL(trackerPath).href);
+}
+
 async function loadMeetingPersistence() {
   const persistencePath = path.resolve(__dirname, '../../../dist-electron/electron/MeetingPersistence.js');
   return import(pathToFileURL(persistencePath).href);
@@ -201,6 +206,8 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
   test('force_me suppresses an in-flight dynamic action gate before it emits', async () => {
     const { engine, session } = await makeEngine();
     const emitted = [];
+    const discarded = [];
+    const discardedSignals = [];
     let releaseAssessment;
     let assessmentStarted;
     const assessmentStartedPromise = new Promise(resolve => { assessmentStarted = resolve; });
@@ -221,7 +228,8 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       },
       detectActions: () => [],
       acceptAction: () => null,
-      dismissAction: () => {},
+      discardSignalsForAssessment: params => { discardedSignals.push(params.sessionId); },
+      discardAction: id => { discarded.push(id); },
       getTopActions: () => [],
     });
     const segment = {
@@ -235,6 +243,301 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     await waitForAsyncSignals();
 
     assert.equal(emitted.length, 0);
+    assert.deepEqual(discardedSignals, ['sess-speaker-force-me-race']);
+    assert.deepEqual(discarded, ['parent']);
+  });
+
+  test('force_me removes a late in-flight action from the real dynamic action store', async () => {
+    const { engine, session } = await makeEngine();
+    const { DynamicActionEngine } = await loadDynamicActionEngine();
+    const dynamicActionEngine = new DynamicActionEngine();
+    let releaseAssessment;
+    let assessmentStarted;
+    const assessmentStartedPromise = new Promise(resolve => { assessmentStarted = resolve; });
+    engine._setDynamicActionEngineForTest(dynamicActionEngine);
+    engine.setDynamicActionContext({
+      sessionId: 'sess-speaker-force-me-real-store',
+      modeId: 'mode-sales',
+      modeTemplateType: 'sales',
+    });
+    dynamicActionEngine.detectSignalCandidates = () => [
+      { trigger: { type: 'pricing_objection' }, match: '价格太高', index: 0 },
+    ];
+    dynamicActionEngine.assessSignals = async () => {
+      assessmentStarted();
+      await new Promise(resolve => { releaseAssessment = resolve; });
+      const action = buildStoredDiscoveryAction({
+        id: 'late-force-me-action',
+        sessionId: 'sess-speaker-force-me-real-store',
+        modeId: 'mode-sales',
+        modeTemplateType: 'sales',
+        type: 'pricing_request',
+      });
+      dynamicActionEngine.getStore().addAction(action);
+      return [action];
+    };
+
+    const segment = {
+      speaker: 'interviewer', text: '这个价格太高了，我们预算不够', timestamp: Date.now(), final: true,
+    };
+    engine.handleTranscript(segment, true);
+    await assessmentStartedPromise;
+    assert.equal(session.setSpeakerVerificationOverride({ ...segment, action: 'force_me' }), true);
+    engine.handleSpeakerVerificationSessionOverride(session.findEffectiveSpeakerVerificationSegment(segment), 'force_me');
+    releaseAssessment();
+    await waitForAsyncSignals();
+
+    assert.deepEqual(dynamicActionEngine.getStore().getAllActions('sess-speaker-force-me-real-store'), []);
+  });
+
+  test('discardAction clears signal state without applying dismiss cooldown or inherited evidence', async () => {
+    const { DynamicActionEngine } = await loadDynamicActionEngine();
+    const { SignalStateTracker } = await loadSignalStateTracker();
+    const signalTracker = new SignalStateTracker();
+    const dynamicActionEngine = new DynamicActionEngine(undefined, undefined, signalTracker);
+    const action = buildStoredDiscoveryAction({
+      id: 'discard-signal-action',
+      sessionId: 'sess-discard-signal',
+      modeId: 'mode-sales',
+      modeTemplateType: 'sales',
+      type: 'pricing_request',
+    });
+    signalTracker.assess({
+      sessionId: action.sessionId,
+      modeTemplateType: action.modeTemplateType,
+      signalType: action.type,
+      confidence: 0.9,
+      evidenceRef: { source: 'transcript', text: 'ME 误触发', timestamp: 1000, speaker: 'interviewer' },
+      confirmationSource: 'trigger',
+      now: 1000,
+    });
+    dynamicActionEngine.getStore().addAction(action);
+
+    dynamicActionEngine.discardAction(action.id);
+    const nextSignal = signalTracker.assess({
+      sessionId: action.sessionId,
+      modeTemplateType: action.modeTemplateType,
+      signalType: action.type,
+      confidence: 0.9,
+      evidenceRef: { source: 'transcript', text: '真实客户信号', timestamp: 1100, speaker: 'interviewer' },
+      confirmationSource: 'trigger',
+      now: 1100,
+    });
+
+    assert.deepEqual(dynamicActionEngine.getStore().getAllActions(action.sessionId), []);
+    assert.equal(nextSignal.state.confidence, 0.9);
+    assert.equal(nextSignal.state.evidenceRefs.length, 1);
+    assert.equal(nextSignal.autoSurfaceEligible, false);
+  });
+
+  test('discardSignalsForAssessment clears low-confidence ME signal state even when no action was stored', async () => {
+    const { DynamicActionEngine } = await loadDynamicActionEngine();
+    const { SignalStateTracker } = await loadSignalStateTracker();
+    const signalTracker = new SignalStateTracker();
+    const dynamicActionEngine = new DynamicActionEngine(undefined, undefined, signalTracker);
+    const sessionId = 'sess-discard-signal-without-action';
+    const modeTemplateType = 'sales';
+    const signalType = 'pricing_request';
+
+    const meSignal = signalTracker.assess({
+      sessionId,
+      modeTemplateType,
+      signalType,
+      confidence: 0.74,
+      evidenceRef: { source: 'transcript', text: 'ME 低置信误触发', timestamp: 1000, speaker: 'interviewer' },
+      latestTurn: 'ME 低置信误触发',
+      confirmationSource: 'trigger',
+      now: 1000,
+    });
+    assert.equal(meSignal.shouldStoreAction, false);
+
+    dynamicActionEngine.discardSignalsForAssessment({
+      transcript: 'ME 低置信误触发',
+      speaker: 'interviewer',
+      modeTemplateType,
+      sessionId,
+      detectedTriggers: [{ trigger: { type: signalType }, match: '低置信误触发', index: 0 }],
+      now: 1000,
+    });
+    const nextSignal = signalTracker.assess({
+      sessionId,
+      modeTemplateType,
+      signalType,
+      confidence: 0.9,
+      evidenceRef: { source: 'transcript', text: '真实客户信号', timestamp: 1100, speaker: 'interviewer' },
+      confirmationSource: 'trigger',
+      now: 1100,
+    });
+
+    assert.equal(nextSignal.state.confidence, 0.9);
+    assert.equal(nextSignal.state.evidenceRefs.length, 1);
+    assert.equal(nextSignal.autoSurfaceEligible, false);
+  });
+
+  test('discardSignalsForAssessment preserves prior signal state when the current turn was gate-rejected', async () => {
+    const { DynamicActionEngine } = await loadDynamicActionEngine();
+    const { SignalStateTracker } = await loadSignalStateTracker();
+    const signalTracker = new SignalStateTracker();
+    const dynamicActionEngine = new DynamicActionEngine(undefined, undefined, signalTracker);
+    const sessionId = 'sess-preserve-prior-signal';
+    const modeTemplateType = 'sales';
+    const signalType = 'pricing_request';
+
+    signalTracker.assess({
+      sessionId,
+      modeTemplateType,
+      signalType,
+      confidence: 0.74,
+      evidenceRef: { source: 'transcript', text: '客户第一次价格信号', timestamp: 1000, speaker: 'interviewer' },
+      latestTurn: '客户第一次价格信号',
+      confirmationSource: 'trigger',
+      now: 1000,
+    });
+    dynamicActionEngine.discardSignalsForAssessment({
+      transcript: 'ME 说了一个被 gate 拒绝的价格词',
+      speaker: 'user',
+      modeTemplateType,
+      sessionId,
+      detectedTriggers: [{ trigger: { type: signalType }, match: '价格词', index: 0 }],
+      now: 1050,
+    });
+    const nextSignal = signalTracker.assess({
+      sessionId,
+      modeTemplateType,
+      signalType,
+      confidence: 0.74,
+      evidenceRef: { source: 'transcript', text: '客户第二次价格信号', timestamp: 1100, speaker: 'interviewer' },
+      latestTurn: '客户第二次价格信号',
+      confirmationSource: 'trigger',
+      now: 1100,
+    });
+
+    assert.equal(nextSignal.state.confidence, 0.84);
+    assert.equal(nextSignal.shouldStoreAction, true);
+    assert.equal(nextSignal.state.evidenceRefs.length, 2);
+  });
+
+  test('discardSignalsForAssessment rolls back only the current same-text ME assessment', async () => {
+    const { DynamicActionEngine } = await loadDynamicActionEngine();
+    const { SignalStateTracker } = await loadSignalStateTracker();
+    const signalTracker = new SignalStateTracker();
+    const dynamicActionEngine = new DynamicActionEngine(undefined, undefined, signalTracker);
+    const sessionId = 'sess-preserve-same-text-prior-signal';
+    const modeTemplateType = 'sales';
+    const signalType = 'pricing_request';
+    const repeatedText = '这个价格太高了';
+
+    signalTracker.assess({
+      sessionId,
+      modeTemplateType,
+      signalType,
+      confidence: 0.74,
+      evidenceRef: { source: 'transcript', text: repeatedText, timestamp: 1000, speaker: 'interviewer' },
+      latestTurn: repeatedText,
+      confirmationSource: 'trigger',
+      now: 1000,
+    });
+    signalTracker.assess({
+      sessionId,
+      modeTemplateType,
+      signalType,
+      confidence: 0.74,
+      evidenceRef: { source: 'transcript', text: repeatedText, timestamp: 1100, speaker: 'user' },
+      latestTurn: repeatedText,
+      confirmationSource: 'trigger',
+      now: 1100,
+    });
+    dynamicActionEngine.discardSignalsForAssessment({
+      transcript: repeatedText,
+      speaker: 'user',
+      modeTemplateType,
+      sessionId,
+      detectedTriggers: [{ trigger: { type: signalType }, match: repeatedText, index: 0 }],
+      now: 1100,
+    });
+    const nextSignal = signalTracker.assess({
+      sessionId,
+      modeTemplateType,
+      signalType,
+      confidence: 0.74,
+      evidenceRef: { source: 'transcript', text: '客户再次确认价格问题', timestamp: 1200, speaker: 'interviewer' },
+      latestTurn: '客户再次确认价格问题',
+      confirmationSource: 'trigger',
+      now: 1200,
+    });
+
+    assert.equal(nextSignal.state.confidence, 0.84);
+    assert.equal(nextSignal.shouldStoreAction, true);
+    assert.equal(nextSignal.state.evidenceRefs.length, 2);
+    assert.deepEqual(nextSignal.state.evidenceRefs.map((evidence) => evidence.speaker), ['interviewer', 'interviewer']);
+  });
+
+  test('late force_me action discard preserves rollback-restored same-text prior signal', async () => {
+    const { DynamicActionEngine } = await loadDynamicActionEngine();
+    const { SignalStateTracker } = await loadSignalStateTracker();
+    const signalTracker = new SignalStateTracker();
+    const dynamicActionEngine = new DynamicActionEngine(undefined, undefined, signalTracker);
+    const sessionId = 'sess-preserve-prior-after-action-discard';
+    const modeId = 'mode-sales';
+    const modeTemplateType = 'sales';
+    const signalType = 'pricing_request';
+    const repeatedText = '这个价格太高了';
+
+    signalTracker.assess({
+      sessionId,
+      modeTemplateType,
+      signalType,
+      confidence: 0.74,
+      evidenceRef: { source: 'transcript', text: repeatedText, timestamp: 1000, speaker: 'interviewer' },
+      latestTurn: repeatedText,
+      confirmationSource: 'trigger',
+      now: 1000,
+    });
+    const meSignal = signalTracker.assess({
+      sessionId,
+      modeTemplateType,
+      signalType,
+      confidence: 0.74,
+      evidenceRef: { source: 'transcript', text: repeatedText, timestamp: 1100, speaker: 'user' },
+      latestTurn: repeatedText,
+      confirmationSource: 'trigger',
+      now: 1100,
+    });
+    assert.equal(meSignal.shouldStoreAction, true);
+
+    const action = buildStoredDiscoveryAction({
+      id: 'same-text-late-force-me-action',
+      sessionId,
+      modeId,
+      modeTemplateType,
+      type: signalType,
+    });
+    dynamicActionEngine.getStore().addAction(action);
+    dynamicActionEngine.discardSignalsForAssessment({
+      transcript: repeatedText,
+      speaker: 'user',
+      modeTemplateType,
+      sessionId,
+      detectedTriggers: [{ trigger: { type: signalType }, match: repeatedText, index: 0 }],
+      now: 1100,
+    });
+    dynamicActionEngine.discardAction(action.id, { clearSignalState: false });
+    const nextSignal = signalTracker.assess({
+      sessionId,
+      modeTemplateType,
+      signalType,
+      confidence: 0.74,
+      evidenceRef: { source: 'transcript', text: '客户再次确认价格问题', timestamp: 1200, speaker: 'interviewer' },
+      latestTurn: '客户再次确认价格问题',
+      confirmationSource: 'trigger',
+      now: 1200,
+    });
+
+    assert.deepEqual(dynamicActionEngine.getStore().getAllActions(sessionId), []);
+    assert.equal(nextSignal.state.confidence, 0.84);
+    assert.equal(nextSignal.shouldStoreAction, true);
+    assert.equal(nextSignal.state.evidenceRefs.length, 2);
+    assert.deepEqual(nextSignal.state.evidenceRefs.map((evidence) => evidence.speaker), ['interviewer', 'interviewer']);
   });
 
   test('speaker verification integration skips only high-confidence ME, not low-confidence malformed or override non-ME', async () => {

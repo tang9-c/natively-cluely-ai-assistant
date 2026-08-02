@@ -1,6 +1,6 @@
 import path from 'path';
 import fs from 'fs';
-import { Worker } from 'worker_threads';
+import { fork, type ChildProcess } from 'child_process';
 import { resolveSpeakerEmbeddingWorkerPath } from './speakerEmbeddingWorkerPathResolver';
 import type { SpeakerEmbeddingExtractorLike } from './speakerVerificationTypes';
 import type { SpeakerVerificationHealth } from './speakerVerificationTypes';
@@ -48,7 +48,7 @@ function speakerEmbeddingSmokeSamples(): Float32Array {
 
 export function getSpeakerEmbeddingModelHealth(
   options: SpeakerEmbeddingModelHealthOptions = {},
-): SpeakerVerificationHealth {
+): SpeakerVerificationHealth | Promise<SpeakerVerificationHealth> {
   const startedAt = Date.now();
   try {
     const modelFile = getDefaultSpeakerEmbeddingModelFile();
@@ -84,19 +84,7 @@ export function getSpeakerEmbeddingModelHealth(
       };
     }
 
-    const extractor = getSharedSpeakerEmbeddingExtractor();
-    const embedding = extractor.extractorSmokeTest(speakerEmbeddingSmokeSamples());
-    if (embedding.length !== extractor.dim) {
-      throw new Error('speaker_embedding_smoke_test_dim_mismatch');
-    }
-    return {
-      state: 'ready',
-      message: '模型正常',
-      modelInstalled: true,
-      modelFile,
-      modelDim: extractor.dim,
-      loadLatencyMs: Math.max(0, Date.now() - startedAt),
-    };
+    return getSpeakerEmbeddingModelSmokeHealth(modelFile, startedAt);
   } catch (error: any) {
     resetSharedSpeakerEmbeddingExtractor();
     latestExtractorInitializationFailed = true;
@@ -109,6 +97,35 @@ export function getSpeakerEmbeddingModelHealth(
         loadLatencyMs: Math.max(0, Date.now() - startedAt),
       };
     }
+    return {
+      state: 'model_error',
+      message: '模型加载失败',
+      modelInstalled: true,
+      loadLatencyMs: Math.max(0, Date.now() - startedAt),
+      error: 'speaker_embedding_model_health_check_failed',
+    };
+  }
+}
+
+async function getSpeakerEmbeddingModelSmokeHealth(
+  modelFile: string,
+  startedAt: number,
+): Promise<SpeakerVerificationHealth> {
+  try {
+    const extractor = getSharedSpeakerEmbeddingExtractor();
+    const embedding = await extractor.extract(speakerEmbeddingSmokeSamples());
+    latestExtractorInitializationFailed = false;
+    return {
+      state: 'ready',
+      message: '模型正常',
+      modelInstalled: true,
+      modelFile,
+      modelDim: extractor.dim,
+      loadLatencyMs: Math.max(0, Date.now() - startedAt),
+    };
+  } catch {
+    resetSharedSpeakerEmbeddingExtractor();
+    latestExtractorInitializationFailed = true;
     return {
       state: 'model_error',
       message: '模型加载失败',
@@ -139,79 +156,56 @@ export function resetSharedSpeakerEmbeddingExtractor(): void {
 export class SherpaSpeakerEmbeddingExtractor implements SpeakerEmbeddingExtractorLike {
   readonly modelId: string;
   readonly version = 'sherpa-onnx-node';
-  readonly dim: number;
+  dim: number;
   private readonly modelFile: string;
-  private readonly extractor: any;
-  private worker: Worker | null = null;
+  private worker: ChildProcess | null = null;
   private nextRequestId = 1;
+  private disposed = false;
   private readonly pendingWorkerRequests = new Map<number, {
     resolve: (embedding: Float32Array) => void;
     reject: (error: Error) => void;
   }>();
 
   constructor(options: SherpaSpeakerEmbeddingExtractorOptions = {}) {
-    try {
-      const modelFile = options.modelFile ?? getDefaultSpeakerEmbeddingModelFile();
-      this.modelFile = modelFile;
-      const sherpa = require('sherpa-onnx-node');
-      this.extractor = new sherpa.SpeakerEmbeddingExtractor({
-        model: modelFile,
-        numThreads: options.numThreads ?? 1,
-        provider: 'cpu',
-        debug: 0,
-      });
-      this.modelId = path.basename(modelFile);
-      this.dim = this.extractor.dim;
-      latestExtractorInitializationFailed = false;
-    } catch (error) {
-      latestExtractorInitializationFailed = true;
-      throw error;
-    }
+    const modelFile = options.modelFile ?? getDefaultSpeakerEmbeddingModelFile();
+    this.modelFile = modelFile;
+    this.modelId = path.basename(modelFile);
+    this.dim = 0;
   }
 
   async extract(samples16k: Float32Array, options: { signal?: AbortSignal } = {}): Promise<Float32Array> {
+    if (this.disposed) {
+      throw new Error('speaker_embedding_extractor_disposed');
+    }
     return this.computeEmbeddingInWorker(samples16k, options);
   }
 
-  extractorSmokeTest(samples16k: Float32Array): Float32Array {
-    return new Float32Array(this.dim);
-  }
-
   dispose(): void {
-    const error = new Error('speaker_embedding_worker_disposed');
-    for (const pending of this.pendingWorkerRequests.values()) {
-      pending.reject(error);
-    }
-    this.pendingWorkerRequests.clear();
+    this.disposed = true;
+    this.rejectPendingWorkerRequests(new Error('speaker_embedding_worker_disposed'));
     const worker = this.worker;
     this.worker = null;
     if (worker) {
-      void worker.terminate();
+      worker.kill();
     }
   }
 
-  private computeEmbedding(samples16k: Float32Array): Float32Array {
-    const stream = this.extractor.createStream();
-    stream.acceptWaveform({ samples: samples16k, sampleRate: 16000 });
-    stream.inputFinished();
-    if (!this.extractor.isReady(stream)) {
-      throw new Error('speaker_embedding_stream_not_ready');
+  private getWorker(): ChildProcess {
+    if (this.disposed) {
+      throw new Error('speaker_embedding_extractor_disposed');
     }
-    const embedding = this.extractor.compute(stream, false);
-    return new Float32Array(embedding);
-  }
-
-  private getWorker(): Worker {
     if (this.worker) return this.worker;
     const workerPath = resolveSpeakerEmbeddingWorkerPath();
-    const worker = new Worker(workerPath, {
-      workerData: {
-        modelFile: this.modelFile,
+    const worker = fork(workerPath, [], {
+      env: {
+        ...process.env,
+        SPEAKER_EMBEDDING_WORKER_MODEL_FILE: this.modelFile,
       },
+      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
     });
     worker.on('message', (message: {
       requestId?: number;
-      embedding?: ArrayBuffer;
+      embedding?: number[];
       error?: string;
     }) => {
       if (typeof message.requestId !== 'number') return;
@@ -226,19 +220,36 @@ export class SherpaSpeakerEmbeddingExtractor implements SpeakerEmbeddingExtracto
         pending.reject(new Error('speaker_embedding_worker_missing_embedding'));
         return;
       }
-      pending.resolve(new Float32Array(message.embedding));
-    });
-    const rejectAll = (error: Error) => {
-      for (const pending of this.pendingWorkerRequests.values()) {
-        pending.reject(error);
+      if (
+        message.embedding.length === 0
+        || !message.embedding.every(value => typeof value === 'number' && Number.isFinite(value))
+      ) {
+        pending.reject(new Error('speaker_embedding_worker_invalid_embedding'));
+        return;
       }
-      this.pendingWorkerRequests.clear();
+      const embedding = Float32Array.from(message.embedding);
+      if (this.dim > 0 && embedding.length !== this.dim) {
+        pending.reject(new Error('speaker_embedding_worker_dim_mismatch'));
+        return;
+      }
+      this.dim = embedding.length;
+      pending.resolve(embedding);
+    });
+    const rejectAll = (error: Error, sourceWorker: ChildProcess) => {
+      if (this.worker !== sourceWorker) {
+        return;
+      }
+      this.rejectPendingWorkerRequests(error);
       this.worker = null;
     };
-    worker.on('error', rejectAll);
-    worker.on('exit', (code) => {
-      if (code !== 0) {
-        rejectAll(new Error('speaker_embedding_worker_exited'));
+    worker.on('error', (error) => rejectAll(error, worker));
+    worker.on('exit', (code, signal) => {
+      if (this.worker !== worker) {
+        return;
+      }
+      if (this.pendingWorkerRequests.size > 0 || code !== 0 || signal) {
+        rejectAll(new Error(signal ? 'speaker_embedding_worker_signaled' : 'speaker_embedding_worker_exited'), worker);
+        return;
       }
       this.worker = null;
     });
@@ -260,10 +271,10 @@ export class SherpaSpeakerEmbeddingExtractor implements SpeakerEmbeddingExtracto
       }
       const abortListener = () => {
         this.pendingWorkerRequests.delete(requestId);
-        const currentWorker = this.worker;
-        this.worker = null;
-        if (currentWorker) {
-          void currentWorker.terminate();
+        if (this.worker === worker) {
+          this.rejectPendingWorkerRequests(new Error('speaker_embedding_worker_aborted'));
+          this.worker = null;
+          worker.kill();
         }
         reject(new Error('speaker_embedding_request_aborted'));
       };
@@ -282,12 +293,19 @@ export class SherpaSpeakerEmbeddingExtractor implements SpeakerEmbeddingExtracto
       });
       options.signal?.addEventListener('abort', abortListener, { once: true });
       try {
-        worker.postMessage({ requestId, samples: samplesCopy.buffer }, [samplesCopy.buffer]);
+        worker.send?.({ requestId, samples: Array.from(samplesCopy) });
       } catch (error: any) {
         cleanup();
         this.pendingWorkerRequests.delete(requestId);
         reject(error instanceof Error ? error : new Error('speaker_embedding_worker_post_failed'));
       }
     });
+  }
+
+  private rejectPendingWorkerRequests(error: Error): void {
+    for (const pending of this.pendingWorkerRequests.values()) {
+      pending.reject(error);
+    }
+    this.pendingWorkerRequests.clear();
   }
 }

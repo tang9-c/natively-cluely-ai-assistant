@@ -12,6 +12,9 @@ export function resolveSpeakerEmbeddingWorkerPath(
   baseDir: string = __dirname,
   exists: (candidate: string) => boolean = fs.existsSync,
 ): string {
+  if (process.env.SPEAKER_EMBEDDING_WORKER_FILE) {
+    return process.env.SPEAKER_EMBEDDING_WORKER_FILE;
+  }
   return findFirstExistingPath([
     path.join(baseDir, 'SpeakerEmbeddingExtractorWorker.js'),
     path.join(baseDir, 'services', 'speaker', 'SpeakerEmbeddingExtractorWorker.js'),
