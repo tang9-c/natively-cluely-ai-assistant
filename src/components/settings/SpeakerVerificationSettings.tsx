@@ -660,6 +660,8 @@ export function SpeakerVerificationSettings() {
         </div>
         <ul className="mt-2 space-y-1 text-[11px] text-text-tertiary">
           <li>声音注册只会在会议中识别你的发言为 ME。</li>
+          <li>ME 标签会影响实时回答看到的说话人上下文。</li>
+          <li>高置信识别为 ME 的发言不会触发面向对方发言的动态动作。</li>
           <li>声纹数据仅保存在本机，不会保存注册录音。</li>
           <li>不会用于登录、认证、安全审核、广告或跨设备身份。</li>
           <li>删除后会硬删除本地声纹向量和统计信息，不会默认改写历史会议。</li>

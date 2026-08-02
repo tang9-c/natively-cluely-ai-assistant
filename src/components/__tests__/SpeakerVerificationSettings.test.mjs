@@ -61,6 +61,16 @@ test('UI copy states the only purpose and deletion behavior', () => {
   assert.doesNotMatch(source, /login/i);
 });
 
+test('UI explains ME label effects without weakening privacy boundaries', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+  assert.match(source, /ME 标签会影响实时回答看到的说话人上下文。/);
+  assert.match(source, /高置信识别为 ME 的发言不会触发面向对方发言的动态动作。/);
+  assert.match(source, /声纹数据仅保存在本机/);
+  assert.match(source, /不会保存注册录音/);
+  assert.match(source, /不会用于登录、认证、安全审核、广告或跨设备身份/);
+  assert.match(source, /不会默认改写历史会议/);
+});
+
 test('UI contains a separate privacy notice and does not hide it in a tooltip', () => {
   const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
   assert.match(source, /隐私说明/);
