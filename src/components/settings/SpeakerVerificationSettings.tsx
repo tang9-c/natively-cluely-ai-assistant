@@ -340,7 +340,22 @@ export function SpeakerVerificationSettings() {
     }
   };
 
+  const setVerificationMode = async (mode: 'off' | 'local') => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await window.electronAPI?.setSpeakerVerificationMode?.(mode);
+      if (!result?.success) {
+        setError(sanitizedSpeakerVerificationError(result?.error, '无法更新本机识别状态'));
+      }
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const enrolled = status?.enrolled === true;
+  const verificationEnabled = status?.mode === 'local';
   const hasCompleteSampleSet = samples.length >= PROMPTS.length;
   const currentPrompt = PROMPTS[recordingIndex ?? samples.length] ?? PROMPTS[0];
   const recordingQuality = recordingQualityMessage(recordingMetrics, qualityPolicy);
@@ -393,6 +408,25 @@ export function SpeakerVerificationSettings() {
           )}
         </div>
       </div>
+
+      {enrolled && (
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-border-subtle bg-bg-input p-3">
+          <p className="text-xs text-text-secondary">
+            {verificationEnabled ? '本机识别已开启' : '本机识别已暂停，声纹仍保存在本机'}
+          </p>
+          <button
+            type="button"
+            onClick={() => void setVerificationMode(verificationEnabled ? 'off' : 'local')}
+            disabled={busy}
+            className={`w-11 h-6 rounded-full relative transition-colors shrink-0 disabled:opacity-50 ${verificationEnabled ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+            role="switch"
+            aria-checked={verificationEnabled}
+            aria-label="本机识别"
+          >
+            <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${verificationEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+          </button>
+        </div>
+      )}
 
       {downloadProgress !== null && (
         <div className="h-1.5 overflow-hidden rounded-full bg-bg-input">

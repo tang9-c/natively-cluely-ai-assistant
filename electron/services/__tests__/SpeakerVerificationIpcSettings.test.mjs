@@ -51,6 +51,16 @@ test('runtime status composes model health and verification statistics', () => {
 
 test('delete profile API calls hard delete rather than disabling a row', () => {
   const ipc = read('electron/ipcHandlers.ts');
+  const store = read('electron/services/speaker/SpeakerProfileStore.ts');
   assert.match(ipc, /deleteMeProfile\(\)/);
+  assert.match(ipc, /speaker-verification:delete-profile[\s\S]*?setSpeakerVerificationMode\('off'\)/);
+  assert.match(store, /DELETE FROM speaker_profile_stats WHERE profile_id = \?/);
+  assert.match(store, /DELETE FROM speaker_profiles WHERE id = \?/);
   assert.doesNotMatch(ipc, /is_active\s*=\s*0/);
+});
+
+test('mode IPC rejects invalid values and enrollment restores local verification', () => {
+  const ipc = read('electron/ipcHandlers.ts');
+  assert.match(ipc, /set-speaker-verification-mode[\s\S]*?!\['off', 'local'\]\.includes\(mode\)[\s\S]*?error: 'invalid_mode'/);
+  assert.match(ipc, /speaker-verification:enroll[\s\S]*?setSpeakerVerificationMode\('local'\)/);
 });

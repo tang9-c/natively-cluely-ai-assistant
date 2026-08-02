@@ -385,3 +385,25 @@ node --test tests/utils/__tests__/sales-transcript-fixture-validator.test.mjs
 #### 4. `git diff --check`
 
 无输出，0 whitespace 警告。
+
+## Speaker Verification Pause Toggle
+
+### Status
+
+DONE
+
+### Changes
+
+- 已注册 profile 显示二态本机识别开关：开启设置 `local`，暂停设置 `off`，暂停不会删除 profile。
+- 开关状态文案为“本机识别已开启”和“本机识别已暂停，声纹仍保存在本机”。
+- 回归测试覆盖注册后自动设为 `local`，删除时设为 `off`，并硬删除 profile 与统计信息。
+- Annotator 行为测试证明 `mode: off` 时不会调用验证服务，因而不会产生 `speakerVerification` metadata。
+
+### Verification
+
+- `rtk proxy npm run build:electron`
+- `rtk proxy node --test src/components/__tests__/SpeakerVerificationSettings.test.mjs`
+- `rtk proxy node --test electron/services/__tests__/SpeakerVerificationIpcSettings.test.mjs`
+- `rtk proxy node --test electron/services/__tests__/SpeakerVerificationCore.test.mjs`
+
+全部通过。Electron 构建仍报告既有的可选警告：生产环境缺少 `pdf.worker.mjs` 时 PDF 解析可能失败。

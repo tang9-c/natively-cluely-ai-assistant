@@ -130,3 +130,13 @@ test('UI renders all speaker verification runtime health states', () => {
   assert.match(source, /已注册，但最近识别质量不稳定。/);
   assert.match(source, /当前不可用/);
 });
+
+test('enrolled profiles can be paused without deleting their local voiceprint', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+  assert.match(source, /status\?\.mode === 'local'/);
+  assert.match(source, /本机识别已开启/);
+  assert.match(source, /本机识别已暂停，声纹仍保存在本机/);
+  assert.match(source, /setSpeakerVerificationMode\?\.\(mode\)/);
+  assert.match(source, /verificationEnabled \? 'off' : 'local'/);
+  assert.match(source, /role="switch"/);
+});

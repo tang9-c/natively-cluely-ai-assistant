@@ -139,15 +139,21 @@ test('verification returns ME metadata when similarity meets threshold', async (
 
 test('annotator skips when disabled or service reports low quality', async () => {
   const { SpeakerVerificationAnnotator } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js');
-  const service = { verify: async (samples) => samples.length < 1000
+  let verifyCalls = 0;
+  const service = { verify: async (samples) => {
+    verifyCalls += 1;
+    return samples.length < 1000
     ? { status: 'low_quality' }
-    : { status: 'verified', speakerVerification: { provider: 'local-speaker-verification', profileId: 'me', isMe: true, confidence: 1, threshold: 0.72 } } };
+    : { status: 'verified', speakerVerification: { provider: 'local-speaker-verification', profileId: 'me', isMe: true, confidence: 1, threshold: 0.72 } };
+  } };
 
   const disabled = new SpeakerVerificationAnnotator({ getMode: () => 'off', service });
   assert.equal(await disabled.annotate(loudSamples(2)), undefined);
+  assert.equal(verifyCalls, 0, 'mode off must not emit speakerVerification or invoke verification');
 
   const enabled = new SpeakerVerificationAnnotator({ getMode: () => 'local', service });
   assert.equal(await enabled.annotate(new Float32Array(100)), undefined);
+  assert.equal(verifyCalls, 1);
 });
 
 test('annotator times out hanging verification without blocking metadata fallback', async () => {
