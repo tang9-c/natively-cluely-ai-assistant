@@ -140,3 +140,26 @@ test('enrolled profiles can be paused without deleting their local voiceprint', 
   assert.match(source, /verificationEnabled \? 'off' : 'local'/);
   assert.match(source, /role="switch"/);
 });
+
+test('registered voice profiles render enrollment quality summary', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+  assert.match(source, /enrollmentQualityText/);
+  assert.match(source, /stable['"]:\s*return '稳定'/);
+  assert.match(source, /weak_boundary['"]:\s*return '边界偏弱，建议在安静环境重录'/);
+  assert.match(source, /needs_rerecord['"]:\s*return '建议重录'/);
+  assert.match(source, /注册质量：/);
+  assert.match(source, /最低相似度/);
+  assert.match(source, /平均相似度/);
+  assert.match(source, /当前阈值/);
+  assert.match(source, /formatPercent\(status\.quality\.minSelfSimilarity\)/);
+  assert.match(source, /formatPercent\(status\.quality\.meanSelfSimilarity\)/);
+  assert.match(source, /formatPercent\(status\.quality\.calibratedThreshold\)/);
+});
+
+test('legacy registered voice profiles show missing quality copy without fake scores', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+  assert.match(source, /status\?\.quality \?/);
+  assert.match(source, /注册质量：旧版本注册，暂无评分/);
+  assert.doesNotMatch(source, /qualityScore\s*\?\?/);
+  assert.doesNotMatch(source, /minSelfSimilarity\s*\?\?/);
+});

@@ -190,6 +190,12 @@ test('SpeakerProfileStore saves, loads, and hard-deletes only the ME profile', a
       },
     );
 
+    const status = store.getStatus('local', { state: 'ready' });
+    assert.equal(status.quality?.qualityBand, 'stable');
+    assert.equal(status.quality?.minSelfSimilarity, 0.93);
+    assert.equal(status.quality?.meanSelfSimilarity, 0.96);
+    assert.equal(status.quality?.calibratedThreshold, 0.86);
+
     db.prepare(`
       INSERT INTO speaker_profile_stats
         (profile_id, total_verifications, positive_verifications, last_verified_at)

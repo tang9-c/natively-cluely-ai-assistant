@@ -19,6 +19,7 @@ export interface SpeakerVerificationStatus {
   mode: SpeakerVerificationMode;
   health: SpeakerVerificationHealth;
   stats: SpeakerVerificationRuntimeStats;
+  quality?: SpeakerEnrollmentQualitySummary;
 }
 
 export type SpeakerVerificationHealthState =

@@ -96,6 +96,7 @@ export class SpeakerProfileStore {
       mode,
       health: state === resolvedHealth.state ? resolvedHealth : { state },
       stats,
+      quality: profile.quality,
     };
   }
 

@@ -115,6 +115,28 @@ function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function enrollmentQualityText(band: NonNullable<SpeakerVerificationStatus['quality']>['qualityBand']): string {
+  switch (band) {
+    case 'stable': return '稳定';
+    case 'weak_boundary': return '边界偏弱，建议在安静环境重录';
+    case 'needs_rerecord': return '建议重录';
+    default: return '旧版本注册，暂无评分';
+  }
+}
+
+function enrollmentQualityClassName(band: NonNullable<SpeakerVerificationStatus['quality']>['qualityBand']): string {
+  switch (band) {
+    case 'stable': return 'text-emerald-300';
+    case 'weak_boundary': return 'text-amber-300';
+    case 'needs_rerecord': return 'text-red-300';
+    default: return 'text-text-tertiary';
+  }
+}
+
 function recordingQualityMessage(metrics: RecordingMetrics, policy: SpeakerRecordingQualityPolicy): string {
   switch (metrics.state) {
     case 'too_short':
@@ -410,21 +432,47 @@ export function SpeakerVerificationSettings() {
       </div>
 
       {enrolled && (
-        <div className="flex items-center justify-between gap-4 rounded-lg border border-border-subtle bg-bg-input p-3">
-          <p className="text-xs text-text-secondary">
-            {verificationEnabled ? '本机识别已开启' : '本机识别已暂停，声纹仍保存在本机'}
-          </p>
-          <button
-            type="button"
-            onClick={() => void setVerificationMode(verificationEnabled ? 'off' : 'local')}
-            disabled={busy}
-            className={`w-11 h-6 rounded-full relative transition-colors shrink-0 disabled:opacity-50 ${verificationEnabled ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
-            role="switch"
-            aria-checked={verificationEnabled}
-            aria-label="本机识别"
-          >
-            <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${verificationEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-          </button>
+        <div className="rounded-lg border border-border-subtle bg-bg-input p-3 space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-xs text-text-secondary">
+              {verificationEnabled ? '本机识别已开启' : '本机识别已暂停，声纹仍保存在本机'}
+            </p>
+            <button
+              type="button"
+              onClick={() => void setVerificationMode(verificationEnabled ? 'off' : 'local')}
+              disabled={busy}
+              className={`w-11 h-6 rounded-full relative transition-colors shrink-0 disabled:opacity-50 ${verificationEnabled ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'}`}
+              role="switch"
+              aria-checked={verificationEnabled}
+              aria-label="本机识别"
+            >
+              <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${verificationEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+          {status?.quality ? (
+            <div className="grid grid-cols-2 gap-2 text-[11px] text-text-tertiary">
+              <div className="col-span-2">
+                <span className="text-text-secondary">注册质量：</span>
+                <span className={enrollmentQualityClassName(status.quality.qualityBand)}>
+                  {enrollmentQualityText(status.quality.qualityBand)}
+                </span>
+              </div>
+              <div>
+                <span className="block text-text-secondary">最低相似度</span>
+                {formatPercent(status.quality.minSelfSimilarity)}
+              </div>
+              <div>
+                <span className="block text-text-secondary">平均相似度</span>
+                {formatPercent(status.quality.meanSelfSimilarity)}
+              </div>
+              <div>
+                <span className="block text-text-secondary">当前阈值</span>
+                {formatPercent(status.quality.calibratedThreshold)}
+              </div>
+            </div>
+          ) : (
+            <p className="text-[11px] text-text-tertiary">注册质量：旧版本注册，暂无评分</p>
+          )}
         </div>
       )}
 

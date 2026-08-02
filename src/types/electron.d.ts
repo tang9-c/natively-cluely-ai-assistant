@@ -356,6 +356,17 @@ export interface SpeakerVerificationSessionOverride {
 
 export type SpeakerVerificationMode = 'off' | 'local'
 
+export type SpeakerVerificationQualityBand = 'stable' | 'weak_boundary' | 'needs_rerecord'
+
+export interface SpeakerEnrollmentQualitySummary {
+  minSelfSimilarity: number
+  meanSelfSimilarity: number
+  similarityStddev: number
+  calibratedThreshold: number
+  qualityScore: number
+  qualityBand: SpeakerVerificationQualityBand
+}
+
 export interface SpeakerVerificationStatus {
   enrolled: boolean
   enabled: boolean
@@ -364,6 +375,7 @@ export interface SpeakerVerificationStatus {
   mode: SpeakerVerificationMode
   health: SpeakerVerificationHealth
   stats: SpeakerVerificationStats
+  quality?: SpeakerEnrollmentQualitySummary
 }
 
 export type SpeakerVerificationHealthState = 'not_enrolled' | 'paused' | 'ready' | 'model_missing' | 'model_error' | 'degraded'
@@ -378,9 +390,16 @@ export interface SpeakerVerificationStats {
   positiveVerifications: number
   lowQualitySkips: number
   lowConfidenceRejections: number
+  nearThresholdNonMeCount: number
   errorCount: number
+  timeoutCount: number
+  avgLatencyMs?: number
+  latencySampleCount: number
   lastVerifiedAt?: number
   lastFailureAt?: number
+  lastOutcome?: 'positive' | 'low_confidence' | 'near_threshold_non_me' | 'low_quality' | 'error' | 'timeout'
+  lastError?: string
+  lastRecordedAt?: number
 }
 
 export interface SpeakerRecordingQualityPolicy {
