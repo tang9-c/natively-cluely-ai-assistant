@@ -293,6 +293,20 @@ test('annotator times out hanging verification without blocking metadata fallbac
   assert.equal(onTimeoutCount, 1);
 });
 
+test('annotator drops metadata when verification service reports model failure', async () => {
+  const { SpeakerVerificationAnnotator } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js');
+  const annotator = new SpeakerVerificationAnnotator({
+    getMode: () => 'local',
+    service: {
+      verify: async () => ({ status: 'error', reason: 'speaker_verification_failed' }),
+      recordLowQuality: () => {},
+      recordTimeout: () => {},
+    },
+  });
+
+  assert.equal(await annotator.annotate(loudSamples(2)), undefined);
+});
+
 test('annotator timeout prevents a late verification from recording another outcome', async () => {
   const { SpeakerVerificationAnnotator } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationAnnotator.js');
   const { SpeakerVerificationService } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationService.js');

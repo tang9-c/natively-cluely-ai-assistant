@@ -113,6 +113,56 @@ describe('SpeakerContextPolicy', () => {
     assert.deepEqual(store.verificationStats.map(({ outcome }) => outcome), ['positive']);
   });
 
+  test('session overrides change only the current transcript context ME label', async () => {
+    const { SessionTracker } = await loadSessionTracker();
+    const { prepareTranscriptForWhatToAnswer } = await loadTranscriptCleaner();
+    const session = new SessionTracker();
+    const now = Date.now();
+
+    const verifiedMe = {
+      speaker: 'interviewer',
+      text: 'I will own pricing.',
+      timestamp: now,
+      final: true,
+      speakerVerification: {
+        provider: 'local-speaker-verification',
+        profileId: 'me',
+        isMe: true,
+        confidence: 0.92,
+        threshold: 0.72,
+      },
+    };
+    const unverified = {
+      speaker: 'interviewer',
+      text: 'I will own security.',
+      timestamp: now + 1000,
+      final: true,
+    };
+
+    session.addTranscript(verifiedMe);
+    session.addTranscript(unverified);
+    assert.equal(session.setSpeakerVerificationOverride({
+      speaker: verifiedMe.speaker,
+      timestamp: verifiedMe.timestamp,
+      text: verifiedMe.text,
+      action: 'force_not_me',
+    }), true);
+    assert.equal(session.setSpeakerVerificationOverride({
+      speaker: unverified.speaker,
+      timestamp: unverified.timestamp,
+      text: unverified.text,
+      action: 'force_me',
+    }), true);
+
+    const prompt = prepareTranscriptForWhatToAnswer(session.getContext(180), 12);
+    assert.doesNotMatch(prompt, /\[ME\]: i will own pricing\./);
+    assert.match(prompt, /\[INTERVIEWER\]: i will own pricing\./);
+    assert.match(prompt, /\[ME\]: i will own security\./);
+    assert.equal(session.getFullTranscript()[0].speakerVerification.isMe, true);
+    assert.equal(session.getEffectiveFullTranscript()[0].speakerVerification, undefined);
+    assert.equal(session.getEffectiveFullTranscript()[1].speaker, 'user');
+  });
+
   test('keeps high-confidence local verification as ME and records confidence trace', async () => {
     const { evaluateSpeakerContextForAnswer } = await loadSpeakerContextPolicy();
     const { prepareTranscriptForWhatToAnswer } = await loadTranscriptCleaner();

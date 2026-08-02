@@ -198,6 +198,122 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(calls.length, 0);
   });
 
+  test('speaker verification integration skips only high-confidence ME, not low-confidence malformed or override non-ME', async () => {
+    const cases = [
+      {
+        label: 'high-confidence-me',
+        speakerVerification: {
+          provider: 'local-speaker-verification',
+          profileId: 'me',
+          isMe: true,
+          confidence: 0.91,
+          threshold: 0.8,
+        },
+        expectedCalls: 0,
+      },
+      {
+        label: 'low-confidence-me',
+        speakerVerification: {
+          provider: 'local-speaker-verification',
+          profileId: 'me',
+          isMe: true,
+          confidence: 0.61,
+          threshold: 0.8,
+        },
+        expectedCalls: 1,
+      },
+      {
+        label: 'malformed-me',
+        speakerVerification: {
+          provider: 'local-speaker-verification',
+          profileId: 'me',
+          isMe: true,
+          confidence: 0.91,
+        },
+        expectedCalls: 1,
+      },
+    ];
+
+    for (const item of cases) {
+      const { engine } = await makeEngine();
+      const calls = [];
+      engine.setDynamicActionContext({
+        sessionId: `sess-speaker-integration-${item.label}`,
+        modeId: 'mode-sales',
+        modeTemplateType: 'sales',
+      });
+      engine._setDynamicActionEngineForTest({
+        detectSignalCandidates: () => [
+          { trigger: { type: 'pricing_objection' }, match: '价格太高', index: 0 },
+        ],
+        assessSignals: async input => {
+          calls.push(input);
+          return [];
+        },
+        detectActions: () => [],
+        acceptAction: () => null,
+        dismissAction: () => {},
+        getTopActions: () => [],
+      });
+
+      engine.handleTranscript({
+        speaker: 'user',
+        text: '这个价格太高了，我们预算不够',
+        timestamp: Date.now(),
+        final: true,
+        speakerVerification: item.speakerVerification,
+      }, true);
+      await waitForAsyncSignals();
+
+      assert.equal(calls.length, item.expectedCalls, item.label);
+    }
+
+    const { engine, session } = await makeEngine();
+    const calls = [];
+    engine.setDynamicActionContext({
+      sessionId: 'sess-speaker-integration-override',
+      modeId: 'mode-sales',
+      modeTemplateType: 'sales',
+    });
+    engine._setDynamicActionEngineForTest({
+      detectSignalCandidates: () => [
+        { trigger: { type: 'pricing_objection' }, match: '价格太高', index: 0 },
+      ],
+      assessSignals: async input => {
+        calls.push(input);
+        return [];
+      },
+      detectActions: () => [],
+      acceptAction: () => null,
+      dismissAction: () => {},
+      getTopActions: () => [],
+    });
+    const verifiedMeSegment = {
+      speaker: 'user',
+      text: '这个价格太高了，我们预算不够',
+      timestamp: Date.now(),
+      final: true,
+      speakerVerification: {
+        provider: 'local-speaker-verification',
+        profileId: 'me',
+        isMe: true,
+        confidence: 0.91,
+        threshold: 0.8,
+      },
+    };
+    session.addTranscript(verifiedMeSegment);
+    assert.equal(session.setSpeakerVerificationOverride({
+      speaker: verifiedMeSegment.speaker,
+      timestamp: verifiedMeSegment.timestamp,
+      text: verifiedMeSegment.text,
+      action: 'force_not_me',
+    }), true);
+    engine.handleTranscript(session.getEffectiveFullTranscript()[0], true);
+    await waitForAsyncSignals();
+
+    assert.equal(calls.length, 1, 'override non-ME must not skip assessment');
+  });
+
   test('low-confidence ME speaker verification continues dynamic action assessment', async () => {
     const { engine } = await makeEngine();
     const calls = [];
