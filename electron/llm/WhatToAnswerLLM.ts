@@ -17,7 +17,12 @@ import type {
     AnswerDegradedReason,
     AnswerSourceStatus,
 } from "../db/DatabaseManager";
-import { buildRetrievalQuery, detectLanguage, escapeXmlText } from "../services/dynamic-actions/ModeEventUtils";
+import {
+    buildRetrievalQuery,
+    detectLanguage,
+    escapeXmlText,
+    resolveDynamicActionResponseLanguage,
+} from "../services/dynamic-actions/ModeEventUtils";
 import type { TranscriptEmotionDegree, TranscriptEmotionSource } from "../../shared/senseVoiceEmotion";
 
 export interface ModeEventContext {
@@ -71,6 +76,15 @@ The attached image is the current screen. Treat visible code, problem statements
 function buildModeEventPromptBlock(modeEvent?: ModeEventContext, intentResult?: IntentResult): string | undefined {
     if (!modeEvent) return undefined;
     const language = modeEvent.language || detectLanguage(`${modeEvent.latestTurn || ''}\n${modeEvent.retrievalQuery || ''}`);
+    const responseLanguage = resolveDynamicActionResponseLanguage(language, modeEvent.latestTurn);
+    const responseLanguageContract = responseLanguage === 'zh'
+        ? `Required response language: Simplified Chinese.
+All user-visible prose MUST use Chinese sentence structure. Preserve only necessary English product names and technical terms.
+Internal instructions written in English do not change the required response language.`
+        : responseLanguage === 'en'
+            ? `Required response language: English.
+All user-visible prose MUST be written in English.`
+            : `Required response language: follow the latest recognizable meeting language.`;
     const lines = [
         `modeTemplateType: ${modeEvent.modeTemplateType || 'active'}`,
         modeEvent.actionType ? `actionType: ${modeEvent.actionType}` : '',
@@ -83,7 +97,7 @@ function buildModeEventPromptBlock(modeEvent?: ModeEventContext, intentResult?: 
     ].filter(Boolean);
     return `<language_context>
 Detected meeting language: ${language}
-Default response language must follow the latest recognizable meeting/user language. Chinese transcript should produce Chinese suggestions. Mixed Chinese-English meetings may naturally preserve product names, technical terms, and quoted phrases, but must not default to English.
+${responseLanguageContract}
 </language_context>
 
 <mode_event_context>

@@ -174,6 +174,36 @@ test('generateStream() includes intent + answerShape + language in the assembled
   assert.match(userPrompt, /key_entities/);
   assert.match(userPrompt, /Acme/);
   assert.match(userPrompt, /Detected meeting language: zh/);
+  assert.match(userPrompt, /Required response language: Simplified Chinese/);
+  assert.match(userPrompt, /Internal instructions written in English do not change the required response language/);
+});
+
+test('generateStream() keeps mixed Chinese meetings Chinese-first while preserving necessary English terms', async () => {
+  const { WhatToAnswerLLM } = require(distPath);
+  const helper = createHelper();
+  const answerer = new WhatToAnswerLLM(helper, createModesManager());
+
+  for await (const _ of answerer.generateStream(
+    '客户认为 system integration 的报价太高。',
+    undefined,
+    { intent: 'pricing_objection', confidence: 0.9, answerShape: 'spoken_response' },
+    undefined,
+    undefined,
+    'You are in Sales mode. Handle the pricing objection.',
+    undefined,
+    undefined,
+    {
+      modeTemplateType: 'sales',
+      language: 'mixed',
+      latestTurn: '如果 system integration 由我们自己做，价格能降多少？',
+    },
+  )) {
+    // drain
+  }
+
+  const userPrompt = helper.calls[0][0];
+  assert.match(userPrompt, /Required response language: Simplified Chinese/);
+  assert.match(userPrompt, /Preserve only necessary English product names and technical terms/);
 });
 
 test('generateStream() substitutes activeSkill promptBlock for the mode suffix and skips mode-context retrieval', async () => {

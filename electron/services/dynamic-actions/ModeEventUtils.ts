@@ -7,6 +7,36 @@ export function detectLanguage(text: string): string {
     return 'unknown';
 }
 
+export type DynamicActionResponseLanguage = 'zh' | 'en' | 'unknown';
+
+export function resolveDynamicActionResponseLanguage(
+    detectedLanguage: string | undefined,
+    latestTurn: string | undefined,
+): DynamicActionResponseLanguage {
+    if (detectedLanguage === 'zh' || detectedLanguage === 'en') return detectedLanguage;
+    if (detectedLanguage === 'mixed') {
+        return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(latestTurn || '')
+            ? 'zh'
+            : 'en';
+    }
+    const inferred = detectLanguage(latestTurn || '');
+    if (inferred === 'zh' || inferred === 'en') return inferred;
+    if (inferred === 'mixed') return 'zh';
+    return 'unknown';
+}
+
+export function isDynamicActionResponseLanguageCompatible(
+    answer: string,
+    expectedLanguage: DynamicActionResponseLanguage,
+): boolean {
+    if (expectedLanguage === 'unknown') return true;
+    const cjkCount = answer.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu)?.length ?? 0;
+    if (expectedLanguage === 'zh') return cjkCount >= 2;
+    const latinWordCount = answer.match(/[A-Za-z][A-Za-z0-9+#.-]*/g)?.length ?? 0;
+    const latinLetterCount = answer.match(/[A-Za-z]/g)?.length ?? 0;
+    return latinWordCount >= 2 && latinLetterCount >= Math.max(4, cjkCount * 2);
+}
+
 export function escapeXmlText(value: string): string {
     return value
         .replace(/&/g, '&amp;')

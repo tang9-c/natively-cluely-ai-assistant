@@ -52,6 +52,114 @@ async function runtimeEvaluationHarness(chunks) {
   return { engine, session };
 }
 
+async function languageRetryHarness(responses) {
+  const { IntelligenceEngine } = await import(pathToFileURL(enginePath).href);
+  const { SessionTracker } = await import(pathToFileURL(sessionPath).href);
+  const session = new SessionTracker();
+  const engine = new IntelligenceEngine(new StubLLMHelper(), session);
+  let callCount = 0;
+  const promptInstructions = [];
+  engine.whatToAnswerLLM = {
+    async *generateStream(
+      _transcript,
+      _temporalContext,
+      _intentResult,
+      _imagePaths,
+      _screenContext,
+      promptInstruction,
+    ) {
+      promptInstructions.push(promptInstruction);
+      const response = responses[Math.min(callCount, responses.length - 1)];
+      callCount += 1;
+      yield response;
+    },
+  };
+  return { engine, session, promptInstructions, getCallCount: () => callCount };
+}
+
+test('Chinese dynamic action silently retries an English answer and persists only Chinese', async () => {
+  const { engine, session, promptInstructions, getCallCount } = await languageRetryHarness([
+    'That is great news. I will send the revised quote within the next hour.',
+    '好的，我会立即调整方案，并在一小时内发送更新后的报价明细。',
+  ]);
+  const tokens = [];
+  engine.on('suggested_answer_token', (token) => tokens.push(token));
+
+  const answer = await engine.runWhatShouldISay(undefined, 0.9, undefined, {
+    skipCooldown: true,
+    source: 'dynamic_action',
+    promptInstruction: 'You are in Sales mode. Handle the pricing objection.',
+    modeEvent: {
+      actionId: 'pricing-language-1',
+      actionType: 'pricing_objection',
+      modeTemplateType: 'sales',
+      language: 'zh',
+      latestTurn: '如果系统集成由我们自己做，价格能降多少？',
+      productContract: { outputType: 'spoken_response' },
+    },
+  });
+
+  assert.equal(getCallCount(), 2);
+  assert.match(promptInstructions[1], /Simplified Chinese/);
+  assert.equal(answer, '好的，我会立即调整方案，并在一小时内发送更新后的报价明细。');
+  assert.deepEqual(tokens, [answer]);
+  assert.equal(session.getAssistantResponseHistory().length, 1);
+  assert.equal(session.getAssistantResponseHistory()[0].text, answer);
+  assert.doesNotMatch(JSON.stringify(session.getFullUsage()), /That is great news/);
+});
+
+test('Chinese dynamic action rejects repeated English answers without polluting session history', async () => {
+  const { engine, session, getCallCount } = await languageRetryHarness([
+    'That is great news. I will send the revised quote within the next hour.',
+    'Perfect. I will process the adjustment right away.',
+  ]);
+  const tokens = [];
+  engine.on('suggested_answer_token', (token) => tokens.push(token));
+
+  await assert.rejects(
+    engine.runWhatShouldISay(undefined, 0.9, undefined, {
+      skipCooldown: true,
+      source: 'dynamic_action',
+      promptInstruction: 'You are in Sales mode. Handle the pricing objection.',
+      modeEvent: {
+        actionId: 'pricing-language-2',
+        actionType: 'pricing_objection',
+        modeTemplateType: 'sales',
+        language: 'zh',
+        latestTurn: '这个价格还是太高了。',
+        productContract: { outputType: 'spoken_response' },
+      },
+    }),
+    /dynamic_action_language_mismatch/,
+  );
+
+  assert.equal(getCallCount(), 2);
+  assert.deepEqual(tokens, []);
+  assert.equal(session.getAssistantResponseHistory().length, 0);
+  assert.equal(session.getFullUsage().length, 0);
+});
+
+test('English dynamic action accepts English prose containing a Chinese proper name', async () => {
+  const expected = 'For 华为, we can first confirm the required scope and then prepare a revised quote.';
+  const { engine, getCallCount } = await languageRetryHarness([expected]);
+
+  const answer = await engine.runWhatShouldISay(undefined, 0.9, undefined, {
+    skipCooldown: true,
+    source: 'dynamic_action',
+    modeEvent: {
+      actionId: 'english-with-proper-name',
+      actionType: 'pricing_objection',
+      modeTemplateType: 'sales',
+      language: 'en',
+      latestTurn: 'Can you revise the quote for 华为?',
+      productContract: { outputType: 'spoken_response' },
+    },
+  });
+
+  assert.equal(getCallCount(), 1);
+  assert.equal(answer, expected);
+});
+
 test('capability stream stays invisible until claim verifier resolves', async () => {
   const verifier = deferredVerifier();
   const { engine, session } = await runtimeEvaluationHarness(['可以确认支持温升分析，', '边界仍需 PoC。']);
@@ -255,6 +363,42 @@ test('FDE runtime evaluation uses FDE safe fallback when validation fails', asyn
   const usage = session.getFullUsage().at(-1);
   assert.equal(usage.metadata.evaluationResult, 'safe_fallback');
   assert.equal(usage.metadata.actionType, 'fde_grounded_answer');
+});
+
+test('mixed Chinese dynamic action uses a Chinese runtime safe fallback', async () => {
+  const { engine } = await runtimeEvaluationHarness(['我们有一家头部客户取得了很高的 ROI。']);
+  engine._setDynamicActionClaimGroundingVerifierForTest({
+    verify: async () => ({
+      verdict: 'unsupported',
+      evidenceIds: [],
+      reasonCode: 'claim_not_supported',
+      verificationSource: 'continuation_grounding_verifier',
+    }),
+  });
+
+  const answer = await engine.runWhatShouldISay(undefined, 0.9, undefined, {
+    skipCooldown: true,
+    source: 'dynamic_action',
+    modeEvent: {
+      actionId: 'mixed-fde-language',
+      actionType: 'case_study_request',
+      modeTemplateType: 'sales',
+      language: 'mixed',
+      latestTurn: '有 SaaS 行业的 ROI 案例吗？',
+      productContract: { outputType: 'spoken_response' },
+    },
+    dynamicActionValidation: {
+      actionType: 'case_study_request',
+      grounding: { groundedSources: [], injectedEvidence: [] },
+      providerDataScopes: { transcript: true, reference_files: true },
+      deferUserVisibleEmission: true,
+      language: 'mixed',
+      sourceUtterance: '有 SaaS 行业的 ROI 案例吗？',
+    },
+  });
+
+  assert.match(answer, /没有找到可引用的匹配案例/);
+  assert.doesNotMatch(answer, /^I could not find/);
 });
 
 test('candidate policy claim fails without external recruiting evidence', async () => {

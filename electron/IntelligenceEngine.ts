@@ -59,7 +59,11 @@ import {
     type SemanticGateArbitrationStatus,
     type SemanticGateTrace,
 } from './services/dynamic-actions/ModeEventClassifier';
-import { buildRetrievalQuery } from './services/dynamic-actions/ModeEventUtils';
+import {
+    buildRetrievalQuery,
+    isDynamicActionResponseLanguageCompatible,
+    resolveDynamicActionResponseLanguage,
+} from './services/dynamic-actions/ModeEventUtils';
 import { ScreenContext } from './services/screen/types';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
 import { SkillActivationManager } from './services/SkillActivationManager';
@@ -1648,13 +1652,13 @@ export class IntelligenceEngine extends EventEmitter {
             let fullAnswer = "";
             // RC-03 fix: hold a reference to the generator so we can call .return()
             // to properly terminate the network request when a new generation starts.
-            const stream = this.whatToAnswerLLM.generateStream(
+            const createAnswerStream = (promptInstruction?: string) => this.whatToAnswerLLM.generateStream(
                 preparedTranscript,
                 temporalContext,
                 intentResult,
                 imagePaths,
                 screenContext,
-                options?.promptInstruction,
+                promptInstruction,
                 options?.uploadedMaterialContext,
                 resolvedSkill,
                 options?.modeEvent,
@@ -1673,9 +1677,17 @@ export class IntelligenceEngine extends EventEmitter {
                     abortSignal: requestAbortController.signal,
                 },
             );
+            const stream = createAnswerStream(options?.promptInstruction);
             let streamAborted = false;
             let emittedStreamingContent = false;
-            const deferUserVisibleEmission = options?.dynamicActionValidation?.deferUserVisibleEmission === true;
+            const expectedResponseLanguage = resolveDynamicActionResponseLanguage(
+                dynamicActionModeEvent?.language,
+                dynamicActionModeEvent?.latestTurn,
+            );
+            const shouldValidateDynamicActionLanguage = isDynamicActionUsage && expectedResponseLanguage !== 'unknown';
+            const deferUserVisibleEmission =
+                options?.dynamicActionValidation?.deferUserVisibleEmission === true ||
+                shouldValidateDynamicActionLanguage;
 
             for await (const token of stream) {
                 if (this.currentGenerationId !== generationId) {
@@ -1729,6 +1741,42 @@ export class IntelligenceEngine extends EventEmitter {
 
             fullAnswer = IntelligenceEngine.normalizeSuggestedAnswer(fullAnswer);
 
+            if (
+                shouldValidateDynamicActionLanguage &&
+                !isDynamicActionResponseLanguageCompatible(fullAnswer, expectedResponseLanguage)
+            ) {
+                const languageName = expectedResponseLanguage === 'zh' ? 'Simplified Chinese' : 'English';
+                const correctionInstruction = `${options?.promptInstruction?.trim() || ''}\n\n` +
+                    `[OUTPUT LANGUAGE CORRECTION — HIGHEST PRIORITY]\n` +
+                    `The previous answer used the wrong language. Regenerate the complete answer in ${languageName}. ` +
+                    `Do not mention this correction and do not translate or quote the previous answer.\n` +
+                    `[END OUTPUT LANGUAGE CORRECTION]`;
+                const retryStream = createAnswerStream(correctionInstruction);
+                let retryAnswer = '';
+                for await (const token of retryStream) {
+                    if (this.currentGenerationId !== generationId) {
+                        await retryStream.return(undefined);
+                        streamAborted = true;
+                        break;
+                    }
+                    retryAnswer += token;
+                }
+                if (streamAborted) {
+                    if (this.activeWhatToSayAbortController === requestAbortController) {
+                        this.setMode('idle');
+                    }
+                    return null;
+                }
+                retryAnswer = IntelligenceEngine.normalizeSuggestedAnswer(retryAnswer);
+                if (
+                    !retryAnswer ||
+                    !isDynamicActionResponseLanguageCompatible(retryAnswer, expectedResponseLanguage)
+                ) {
+                    throw new Error('dynamic_action_language_mismatch');
+                }
+                fullAnswer = retryAnswer;
+            }
+
             if (IntelligenceEngine.isNonAnswerSentinel(fullAnswer)) {
                 if (isDynamicActionUsage) {
                     throw new Error('dynamic_action_generation_failed');
@@ -1770,7 +1818,7 @@ export class IntelligenceEngine extends EventEmitter {
                 if (!evaluation.passed) {
                     visibleAnswer = buildDynamicActionRuntimeSafeFallback(
                         options.dynamicActionValidation.actionType,
-                        options.dynamicActionValidation.language,
+                        expectedResponseLanguage,
                     ) ?? fullAnswer;
                 }
                 options.dynamicActionEvaluationSink?.({
