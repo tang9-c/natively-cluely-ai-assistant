@@ -159,6 +159,22 @@ test('failed material guidance is honest about replacement upload', async () => 
   assert.equal(complete.primaryActionLabel, '重新索引');
 });
 
+test('interrupted material indexing asks for a new upload instead of staying in progress', async () => {
+  const { explainMaterialStatus } = await loadViewModel();
+  const explanation = explainMaterialStatus({
+    id: 'interrupted-material',
+    title: 'knowledge.md',
+    status: 'failed',
+    errorCode: 'index_interrupted',
+  });
+
+  assert.equal(explanation.label, '索引失败');
+  assert.equal(explanation.message, '上次资料索引因 CueUp 异常退出而中断，请重新上传该文件。');
+  assert.equal(explanation.severity, 'error');
+  assert.equal(explanation.canReindex, false);
+  assert.equal(explanation.primaryActionLabel, '重新上传新文件');
+});
+
 test('dynamic action explanation uses semantic gate metadata when present and conservative copy otherwise', async () => {
   const { explainDynamicAction } = await loadViewModel();
   const gated = explainDynamicAction({
