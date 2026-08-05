@@ -9,6 +9,8 @@ import {
 import { embeddingSpaceKey } from '../embeddingSpace';
 import { telemetryService } from '../../services/telemetry/TelemetryService';
 
+const LOCAL_EMBED_BATCH_SIZE = 1;
+
 export class LocalEmbeddingProvider implements IEmbeddingProvider {
   readonly name = 'local';
   readonly dimensions = 384; // paraphrase-multilingual-MiniLM-L12-v2
@@ -148,14 +150,17 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   }
 
   async embedBatch(texts: string[]): Promise<number[][]> {
+    if (texts.length === 0) return [];
     await this.ensureLoaded();
-    // transformers.js handles batching internally
-    const output = await this.pipe(texts, { pooling: 'mean', normalize: true });
-    // output.data is flat [n * 384], reshape it
-    const batchSize = texts.length;
+
     const result: number[][] = [];
-    for (let i = 0; i < batchSize; i++) {
-      result.push(Array.from(output.data.slice(i * this.dimensions, (i + 1) * this.dimensions)));
+    for (let start = 0; start < texts.length; start += LOCAL_EMBED_BATCH_SIZE) {
+      const batch = texts.slice(start, start + LOCAL_EMBED_BATCH_SIZE);
+      const output = await this.pipe(batch, { pooling: 'mean', normalize: true });
+      for (let index = 0; index < batch.length; index += 1) {
+        const offset = index * this.dimensions;
+        result.push(Array.from(output.data.slice(offset, offset + this.dimensions)));
+      }
     }
     return result;
   }
