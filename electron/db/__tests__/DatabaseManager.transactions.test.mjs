@@ -41,6 +41,7 @@ function createMultiTableSchema(db) {
       start_timestamp_ms INTEGER,
       end_timestamp_ms INTEGER,
       speaker_verification_json TEXT,
+      speaker_identity_correction_json TEXT,
       FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
     );
     CREATE TABLE ai_interactions (

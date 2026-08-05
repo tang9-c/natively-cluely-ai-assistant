@@ -80,6 +80,7 @@ function buildMockSession(opts = {}) {
     flushInterimTranscript() { this._flushedCount += 1; },
     getSessionStartTime() { return startTime; },
     getFullTranscript() { return [...this._transcript]; },
+    getEffectiveFullTranscript() { return [...(opts.effectiveTranscript ?? this._transcript)]; },
     getFullUsage() { return [...this._usage]; },
     getFullSessionContext() { return 'full context'; },
     getMeetingMetadata() { return this._metadata; },

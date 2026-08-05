@@ -10,6 +10,7 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { SkillSummary } from '../types/electron';
+import { resolveEffectiveSpeaker, type SpeakerIdentityCorrection } from '../../shared/speakerIdentity';
 
 const formatTime = (ms: number) => {
     const date = new Date(ms);
@@ -31,7 +32,10 @@ const cleanMarkdown = (content: string) => {
 const formatTranscriptForSkill = (transcript?: Meeting['transcript']) => {
     return (transcript || [])
         .filter(entry => !['system', 'ai', 'assistant', 'model'].includes(entry.speaker?.toLowerCase()))
-        .map(t => `[${formatTime(t.timestamp)}] ${t.speaker === 'user' ? '我' : '对方'}: ${t.text}`)
+        .map(t => {
+            const speaker = resolveEffectiveSpeaker(t);
+            return `[${formatTime(t.timestamp)}] ${speaker === 'user' ? '我' : '对方'}: ${t.text}`;
+        })
         .join('\n');
 };
 
@@ -80,6 +84,7 @@ interface Meeting {
         speaker: string;
         text: string;
         timestamp: number;
+        speakerIdentityCorrection?: SpeakerIdentityCorrection;
     }>;
     usage?: Array<{
         type: 'assist' | 'followup' | 'chat' | 'followup_questions';
@@ -214,7 +219,10 @@ ${formatList(meeting.detailedSummary.openQuestions)}
 ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `辅导：\n${coachingText}\n\n` : ''}${visibleFollowUpDraft ? `跟进草稿：\n${visibleFollowUpDraft}` : ''}
             `.trim();
         } else if (activeTab === 'transcript' && meeting.transcript) {
-            textToCopy = meeting.transcript.map(t => `[${formatTime(t.timestamp)}] ${t.speaker === 'user' ? '我' : '对方'}: ${t.text}`).join('\n');
+            textToCopy = meeting.transcript.map(t => {
+                const speaker = resolveEffectiveSpeaker(t);
+                return `[${formatTime(t.timestamp)}] ${speaker === 'user' ? '我' : '对方'}: ${t.text}`;
+            }).join('\n');
         } else if (activeTab === 'usage' && meeting.usage) {
             textToCopy = meeting.usage.map(u => `问：${u.question || ''}\n答：${u.answer || ''}`).join('\n\n');
         }
@@ -461,7 +469,7 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                                 className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors"
                             >
                                 {isCopied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                                {isCopied ? '已复制' : activeTab === 'summary' ? '复制完整摘要' : activeTab === 'transcript' ? '复制完整转录' : '复制使用量'}
+                                {isCopied ? '已复制' : activeTab === 'summary' ? '复制完整摘要' : activeTab === 'transcript' ? '复制完整转录' : '复制使用记录'}
                             </button>
                         </div>
                     </div>
@@ -758,7 +766,7 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                                             <div key={i} className="group">
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <span className="text-xs font-semibold text-text-secondary">
-                                                        {entry.speaker === 'user' ? '我' : '对方'}
+                                                        {resolveEffectiveSpeaker(entry) === 'user' ? '我' : '对方'}
                                                     </span>
                                                     <span className="text-xs text-text-tertiary font-mono">{entry.timestamp ? formatTime(entry.timestamp) : '0:00'}</span>
                                                 </div>

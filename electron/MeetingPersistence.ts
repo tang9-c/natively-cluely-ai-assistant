@@ -13,6 +13,7 @@ import { generatePostCallLlmEnhancements } from './services/post-call/PostCallLl
 import { buildDynamicActionArtifacts } from './services/dynamic-actions/DynamicActionArtifacts';
 import { telemetryService } from './services/telemetry/TelemetryService';
 import type { ProviderDataScopePolicy } from './llm/ProviderRouter';
+import { resolveEffectiveSpeaker } from '../shared/speakerIdentity';
 const crypto = require('crypto');
 
 const DEFAULT_MEETING_TITLE = '会议纪要';
@@ -117,6 +118,7 @@ export class MeetingPersistence {
 
         const snapshot = {
             transcript: [...this.session.getFullTranscript()],
+            effectiveTranscript: [...this.session.getEffectiveFullTranscript()],
             usage: [...this.session.getFullUsage()],
             startTime: this.session.getSessionStartTime(),
             durationMs: durationMs,
@@ -184,7 +186,14 @@ export class MeetingPersistence {
      * Heavy lifting: LLM Title, Summary, and DB Write
      */
     private async processAndSaveMeeting(
-        data: { transcript: TranscriptSegment[], usage: any[], startTime: number, durationMs: number, context: string },
+        data: {
+            transcript: TranscriptSegment[],
+            effectiveTranscript?: TranscriptSegment[],
+            usage: any[],
+            startTime: number,
+            durationMs: number,
+            context: string,
+        },
         meetingId: string,
         // BUG-04 fix: accept metadata snapshot so calendar info is not lost after session.reset()
         metadata?: { title?: string; calendarEventId?: string; source?: 'manual' | 'calendar' } | null,
@@ -194,7 +203,8 @@ export class MeetingPersistence {
     ): Promise<void> {
         let title = "Untitled Session";
         let summaryData: PostCallSummaryData = { actionItems: [], keyPoints: [], decisions: [], openQuestions: [] };
-        const hasSummarizableTranscript = data.transcript.length > 2;
+        const analysisTranscript = data.effectiveTranscript ?? data.transcript;
+        const hasSummarizableTranscript = analysisTranscript.length > 2;
         // Phase 6 — post_call_summary lifecycle telemetry. Wrapped in try/catch
         // around track calls so a telemetry sink fault never breaks persistence.
         const _postCallStart = Date.now();
@@ -204,7 +214,7 @@ export class MeetingPersistence {
                 modeId: modeSnapshot?.id,
                 properties: {
                     modeTemplateType: modeSnapshot?.templateType,
-                    transcriptSegmentCount: data.transcript.length,
+                    transcriptSegmentCount: analysisTranscript.length,
                     durationMs: data.durationMs,
                 },
             });
@@ -339,7 +349,7 @@ export class MeetingPersistence {
 
                 summaryData = await generateFullTranscriptSummary({
                     llmHelper: this.llmHelper,
-                    transcript: data.transcript,
+                    transcript: analysisTranscript,
                     context: data.context,
                     modeTemplateType: modeSnapshot?.templateType,
                     modeNoteSections,
@@ -357,7 +367,7 @@ export class MeetingPersistence {
             });
 
             const deterministicPostCall = buildPostCallEnhancements({
-                transcript: data.transcript,
+                transcript: analysisTranscript,
                 modeTemplateType: modeSnapshot?.templateType,
                 summaryData,
                 dynamicActionArtifacts,
@@ -365,7 +375,7 @@ export class MeetingPersistence {
             const llmEnhancements = hasSummarizableTranscript
                 ? await generatePostCallLlmEnhancements({
                     llmHelper: this.llmHelper,
-                    transcript: data.transcript,
+                    transcript: analysisTranscript,
                     modeTemplateType: modeSnapshot?.templateType,
                     summaryData,
                     deterministicEnhancements: deterministicPostCall,
@@ -468,7 +478,11 @@ export class MeetingPersistence {
 
                 console.log(`[MeetingPersistence] Recovering meeting ${m.id}...`);
 
-                const context = details.transcript?.map(t => {
+                const effectiveTranscript = details.transcript?.map(t => ({
+                    ...t,
+                    speaker: resolveEffectiveSpeaker(t),
+                })) as TranscriptSegment[] | undefined;
+                const context = effectiveTranscript?.map(t => {
                     const label = t.speaker === 'interviewer' ? 'INTERVIEWER' :
                         t.speaker === 'user' ? 'ME' : 'ASSISTANT';
                     return `[${label}]: ${t.text}`;
@@ -483,6 +497,7 @@ export class MeetingPersistence {
 
                 const snapshot = {
                     transcript: details.transcript as TranscriptSegment[],
+                    effectiveTranscript,
                     usage: details.usage,
                     startTime: startTime,
                     durationMs: durationMs,

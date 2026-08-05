@@ -163,6 +163,49 @@ describe('SpeakerContextPolicy', () => {
     assert.equal(session.getEffectiveFullTranscript()[1].speaker, 'user');
   });
 
+  test('session overrides preserve the raw channel speaker and attach durable user correction metadata', async () => {
+    const { SessionTracker } = await loadSessionTracker();
+    const session = new SessionTracker();
+    const segment = {
+      speaker: 'user',
+      text: 'This customer sentence entered through the microphone.',
+      timestamp: Date.now(),
+      final: true,
+    };
+
+    session.addTranscript(segment);
+    assert.equal(session.setSpeakerVerificationOverride({
+      speaker: segment.speaker,
+      timestamp: segment.timestamp,
+      text: segment.text,
+      action: 'force_not_me',
+    }), true);
+
+    const persisted = session.getFullTranscript()[0];
+    assert.equal(persisted.speaker, 'user', 'raw audio-channel speaker must remain unchanged');
+    assert.equal(persisted.speakerIdentityCorrection?.isMe, false);
+    assert.equal(persisted.speakerIdentityCorrection?.source, 'user');
+    assert.equal(typeof persisted.speakerIdentityCorrection?.correctedAt, 'number');
+    assert.equal(session.getEffectiveFullTranscript()[0].speaker, 'interviewer');
+
+    assert.equal(session.setSpeakerVerificationOverride({
+      speaker: segment.speaker,
+      timestamp: segment.timestamp,
+      text: segment.text,
+      action: 'clear',
+    }), true);
+    assert.equal(session.getFullTranscript()[0].speakerIdentityCorrection, undefined);
+    assert.equal(session.getEffectiveFullTranscript()[0].speaker, 'user');
+
+    assert.equal(session.setSpeakerVerificationOverride({
+      speaker: segment.speaker,
+      timestamp: segment.timestamp,
+      text: segment.text,
+      action: 'force_me',
+    }), true);
+    assert.equal(session.getFullTranscript()[0].speakerIdentityCorrection?.isMe, true);
+  });
+
   test('keeps high-confidence local verification as ME and records confidence trace', async () => {
     const { evaluateSpeakerContextForAnswer } = await loadSpeakerContextPolicy();
     const { prepareTranscriptForWhatToAnswer } = await loadTranscriptCleaner();
@@ -435,7 +478,7 @@ describe('SpeakerContextPolicy', () => {
     assert.match(source, /status: 'dismissed'/);
   });
 
-  test('meeting persistence keeps raw transcript and stopMeeting clears overrides after save', () => {
+  test('meeting persistence keeps raw transcript, analyzes effective transcript, and clears overrides after save', () => {
     const trackerSource = fs.readFileSync(path.resolve(__dirname, '../../../electron/SessionTracker.ts'), 'utf8');
     const managerSource = fs.readFileSync(path.resolve(__dirname, '../../../electron/IntelligenceManager.ts'), 'utf8');
     const persistenceSource = fs.readFileSync(path.resolve(__dirname, '../../../electron/MeetingPersistence.ts'), 'utf8');
@@ -444,6 +487,8 @@ describe('SpeakerContextPolicy', () => {
     assert.match(trackerSource, /getFullTranscript\(\): TranscriptSegment\[\] \{\s*return this\.fullTranscript;/);
     assert.match(trackerSource, /getEffectiveFullTranscript\(\): TranscriptSegment\[\]/);
     assert.match(persistenceSource, /transcript: \[\.\.\.this\.session\.getFullTranscript\(\)\]/);
+    assert.match(persistenceSource, /effectiveTranscript: \[\.\.\.this\.session\.getEffectiveFullTranscript\(\)\]/);
+    assert.match(persistenceSource, /const analysisTranscript = data\.effectiveTranscript \?\? data\.transcript/);
     assert.match(managerSource, /finally \{\s*this\.session\.clearSpeakerVerificationOverrides\(\);/);
   });
 });

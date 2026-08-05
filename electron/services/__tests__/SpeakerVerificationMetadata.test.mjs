@@ -48,3 +48,10 @@ test('DatabaseManager persists speaker verification json with transcripts', () =
   assert.match(db, /JSON\.stringify\(segment\.speakerVerification/);
   assert.match(db, /speakerVerification: row\.speaker_verification_json/);
 });
+
+test('DatabaseManager persists explicit user speaker identity corrections separately from automatic verification', () => {
+  const db = read('electron/db/DatabaseManager.ts');
+  assert.match(db, /speaker_identity_correction_json TEXT/);
+  assert.match(db, /JSON\.stringify\(segment\.speakerIdentityCorrection/);
+  assert.match(db, /speakerIdentityCorrection: row\.speaker_identity_correction_json/);
+});

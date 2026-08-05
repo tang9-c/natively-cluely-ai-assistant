@@ -669,7 +669,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         return;
       }
       setSpeakerCorrectionTranscripts((prev) =>
-        prev.map((item) => (item.key === segment.key ? { ...item, overrideAction: action } : item)),
+        prev.map((item) => (item.key === segment.key
+          ? {
+              ...item,
+              speakerLabel: action === 'force_me' ? '我' : '其他发言人',
+              overrideAction: action,
+            }
+          : item)),
       );
     },
     [],

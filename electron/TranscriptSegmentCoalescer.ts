@@ -24,6 +24,7 @@ export interface CoalescableTranscriptSegment {
     emotionScore?: number;
     emotionDegreeScore?: number;
     speakerVerification?: unknown;
+    speakerIdentityCorrection?: unknown;
     coalescedFromCount?: number;
     coalescedProvider?: 'post_stt' | 'local_vad';
     rawSegmentIds?: string[];

@@ -30,6 +30,17 @@ test('MeetingDetails copy full summary includes post-call enhanced fields', () =
   assert.match(copyBlock, /visibleFollowUpDraft/);
 });
 
+test('MeetingDetails labels the usage-tab copy action as copying usage records', () => {
+  assert.match(source, /复制使用记录/);
+  assert.doesNotMatch(source, /复制使用量/);
+});
+
+test('MeetingDetails resolves persisted manual speaker corrections for display and export', () => {
+  assert.match(source, /resolveEffectiveSpeaker/);
+  assert.match(source, /const speaker = resolveEffectiveSpeaker\(t\)/);
+  assert.match(source, /resolveEffectiveSpeaker\(entry\) === 'user'/);
+});
+
 test('MeetingDetails filters legacy English post-call enhancements from saved summaries', () => {
   assert.match(source, /LEGACY_ENGLISH_FOLLOW_UP_PATTERN/);
   assert.match(source, /LEGACY_ENGLISH_COACHING_PATTERN/);

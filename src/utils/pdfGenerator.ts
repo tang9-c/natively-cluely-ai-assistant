@@ -1,5 +1,6 @@
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { resolveEffectiveSpeaker, type SpeakerIdentityCorrection } from '../../shared/speakerIdentity';
 
 interface Meeting {
     id: string;
@@ -15,6 +16,7 @@ interface Meeting {
         speaker: string;
         text: string;
         timestamp: number;
+        speakerIdentityCorrection?: SpeakerIdentityCorrection;
     }>;
     usage?: Array<{
         type: 'assist' | 'followup' | 'chat' | 'followup_questions';
@@ -132,7 +134,8 @@ const buildBlocks = (meeting: Meeting): HTMLElement[] => {
         addSectionTitle(blocks, '转录');
         meeting.transcript.forEach(entry => {
             const timeStr = formatTimestamp(entry.timestamp);
-            addTextBlock(blocks, `${entry.speaker}${timeStr ? ` [${timeStr}]` : ''}`, 'speaker');
+            const speakerLabel = resolveEffectiveSpeaker(entry) === 'user' ? '我' : '对方';
+            addTextBlock(blocks, `${speakerLabel}${timeStr ? ` [${timeStr}]` : ''}`, 'speaker');
             addTextBlock(blocks, entry.text, 'paragraph transcript-text');
         });
     }

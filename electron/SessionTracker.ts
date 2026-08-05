@@ -7,6 +7,7 @@ import { isVerboseLogging } from './verboseLog';
 import { TranscriptSegmentCoalescer } from './TranscriptSegmentCoalescer';
 import type { SpeakerVerificationMetadata } from './services/speaker/speakerVerificationTypes';
 import type { TranscriptEmotionDegree, TranscriptEmotionSource } from '../shared/senseVoiceEmotion';
+import type { SpeakerIdentityCorrection } from '../shared/speakerIdentity';
 
 export interface TranscriptSegment {
     marker?: string;
@@ -27,6 +28,7 @@ export interface TranscriptSegment {
     emotionScore?: number;
     emotionDegreeScore?: number;
     speakerVerification?: SpeakerVerificationMetadata;
+    speakerIdentityCorrection?: SpeakerIdentityCorrection;
     coalescedFromCount?: number;
     coalescedProvider?: 'post_stt' | 'local_vad';
     rawSegmentIds?: string[];
@@ -48,6 +50,7 @@ export interface ContextItem {
     emotion?: string;
     emotionSource?: TranscriptEmotionSource;
     speakerVerification?: SpeakerVerificationMetadata;
+    speakerIdentityCorrection?: SpeakerIdentityCorrection;
 }
 
 export type SpeakerVerificationSessionOverrideAction = 'force_me' | 'force_not_me' | 'clear';
@@ -287,6 +290,7 @@ export class SessionTracker {
                     lastItem.emotion = mergedSegment.emotion;
                     lastItem.emotionSource = mergedSegment.emotionSource;
                     lastItem.speakerVerification = mergedSegment.speakerVerification;
+                    lastItem.speakerIdentityCorrection = mergedSegment.speakerIdentityCorrection;
                 }
 
                 this.evictOldEntries();
@@ -305,6 +309,7 @@ export class SessionTracker {
                 emotion: segment.emotion,
                 emotionSource: segment.emotionSource,
                 speakerVerification: segment.speakerVerification,
+                speakerIdentityCorrection: segment.speakerIdentityCorrection,
             });
 
             this.evictOldEntries();
@@ -325,6 +330,7 @@ export class SessionTracker {
                 emotion: segment.emotion,
                 emotionSource: segment.emotionSource,
                 speakerVerification: segment.speakerVerification,
+                speakerIdentityCorrection: segment.speakerIdentityCorrection,
             });
             this.evictOldEntries();
         }
@@ -492,11 +498,42 @@ export class SessionTracker {
 
         if (action === 'clear') {
             this.speakerVerificationOverrides.delete(key);
+            this.updateSpeakerIdentityCorrection(key, undefined);
             return true;
         }
 
         this.speakerVerificationOverrides.set(key, action);
+        this.updateSpeakerIdentityCorrection(key, {
+            isMe: action === 'force_me',
+            source: 'user',
+            correctedAt: Date.now(),
+        });
         return true;
+    }
+
+    private updateSpeakerIdentityCorrection(
+        targetKey: string,
+        correction: SpeakerIdentityCorrection | undefined,
+    ): void {
+        const update = <T extends TranscriptSegment | ContextItem>(segment: T): void => {
+            const speaker = 'speaker' in segment ? segment.speaker : segment.role;
+            const segmentKey = this.resolveSpeakerVerificationOverrideKey(SessionTracker.speakerVerificationSegmentKey({
+                speaker,
+                timestamp: segment.timestamp,
+                text: segment.text,
+            }));
+            if (segmentKey !== targetKey) return;
+            if (correction) {
+                segment.speakerIdentityCorrection = correction;
+            } else {
+                delete segment.speakerIdentityCorrection;
+            }
+        };
+
+        this.fullTranscript.forEach(update);
+        this.contextItems.forEach(update);
+        if (this.lastInterimInterviewer) update(this.lastInterimInterviewer);
+        if (this.lastInterimUser) update(this.lastInterimUser);
     }
 
     applySpeakerVerificationOverride<T extends TranscriptSegment | ContextItem>(segment: T): T {
@@ -506,7 +543,10 @@ export class SessionTracker {
             timestamp: segment.timestamp,
             text: segment.text,
         });
-        const override = this.speakerVerificationOverrides.get(this.resolveSpeakerVerificationOverrideKey(key));
+        const override = this.speakerVerificationOverrides.get(this.resolveSpeakerVerificationOverrideKey(key))
+            ?? (segment.speakerIdentityCorrection
+                ? (segment.speakerIdentityCorrection.isMe ? 'force_me' : 'force_not_me')
+                : undefined);
         if (!override) {
             return segment;
         }

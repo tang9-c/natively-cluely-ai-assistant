@@ -44,6 +44,7 @@ function createMeetingSchema(db) {
       start_timestamp_ms INTEGER,
       end_timestamp_ms INTEGER,
       speaker_verification_json TEXT,
+      speaker_identity_correction_json TEXT,
       FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
     );
 
@@ -146,6 +147,35 @@ describe('DatabaseManager — saveMeeting / getMeetingDetails', () => {
     assert.equal(count, 2);
   });
 
+  it('saveMeeting preserves manual speaker identity correction metadata', () => {
+    manager.saveMeeting(
+      {
+        id: 'm-speaker-correction',
+        title: 'speaker correction',
+        date: '2025-01-02T10:00:00Z',
+        transcript: [{
+          speaker: 'user',
+          text: 'Customer sentence from shared microphone.',
+          timestamp: 100,
+          speakerIdentityCorrection: {
+            isMe: false,
+            source: 'user',
+            correctedAt: 200,
+          },
+        }],
+      },
+      1700000000000,
+      120000
+    );
+
+    const details = manager.getMeetingDetails('m-speaker-correction');
+    assert.deepEqual(details.transcript[0].speakerIdentityCorrection, {
+      isMe: false,
+      source: 'user',
+      correctedAt: 200,
+    });
+  });
+
   it('saveMeeting with usage writes ai_interactions rows', () => {
     manager.saveMeeting(
       {
@@ -193,6 +223,25 @@ describe('DatabaseManager — saveMeeting / getMeetingDetails', () => {
   it('getMeetingDetails returns null for an unknown id', () => {
     assert.equal(manager.getMeetingDetails('nope'), null);
   });
+});
+
+describe('DatabaseManager — speaker identity correction migration', () => {
+  for (const startingVersion of [32, 33]) {
+    it(`adds the correction column when upgrading from schema version ${startingVersion}`, () => {
+      const { db, manager } = makeManager();
+      db.exec(`
+        CREATE TABLE transcripts (id INTEGER PRIMARY KEY AUTOINCREMENT);
+        CREATE TABLE speaker_profile_stats (profile_id TEXT PRIMARY KEY);
+      `);
+      db.pragma(`user_version = ${startingVersion}`);
+
+      manager.runMigrations();
+
+      const columns = db.prepare('PRAGMA table_info(transcripts)').all().map(row => row.name);
+      assert.ok(columns.includes('speaker_identity_correction_json'));
+      assert.equal(db.pragma('user_version', { simple: true }), 33);
+    });
+  }
 });
 
 describe('DatabaseManager — updateMeetingTitle / updateMeetingSummary', () => {

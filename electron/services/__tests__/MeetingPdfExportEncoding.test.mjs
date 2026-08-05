@@ -29,3 +29,9 @@ test('meeting list export awaits PDF generation failures instead of dropping asy
   assert.match(source, /await generateMeetingPDF\(fullMeeting\)/);
   assert.match(source, /await generateMeetingPDF\(m\)/);
 });
+
+test('meeting PDF export labels transcript speakers using persisted manual corrections', () => {
+  const source = read('src/utils/pdfGenerator.ts');
+  assert.match(source, /resolveEffectiveSpeaker/);
+  assert.match(source, /resolveEffectiveSpeaker\(entry\) === 'user'/);
+});

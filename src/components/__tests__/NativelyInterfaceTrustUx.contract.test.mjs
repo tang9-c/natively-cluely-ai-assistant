@@ -42,3 +42,8 @@ test('NativelyInterface exposes current-session speaker correction controls', ()
   assert.match(preload, /speaker-verification:set-session-override/);
   assert.match(types, /SpeakerVerificationSessionOverride/);
 });
+
+test('speaker verification correction updates the visible correction-row identity label', () => {
+  const source = read('src/components/NativelyInterface.tsx');
+  assert.match(source, /speakerLabel: action === 'force_me' \? '我' : '其他发言人'/);
+});

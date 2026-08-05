@@ -17,6 +17,7 @@ import {
 } from '../services/ModeDefaultContexts';
 import type { ResumeNode, UserProfileRecord } from '../services/profile/types';
 import type { SpeakerVerificationMetadata } from '../services/speaker/speakerVerificationTypes';
+import type { SpeakerIdentityCorrection } from '../../shared/speakerIdentity';
 
 // Interfaces for our data objects
 export interface CompanyResearchCacheRow {
@@ -55,6 +56,7 @@ export interface Meeting {
         startTimestampMs?: number;
         endTimestampMs?: number;
         speakerVerification?: SpeakerVerificationMetadata;
+        speakerIdentityCorrection?: SpeakerIdentityCorrection;
     }>;
     usage?: Array<{
         type: 'assist' | 'followup' | 'chat' | 'followup_questions';
@@ -558,6 +560,7 @@ export class DatabaseManager {
                     start_timestamp_ms INTEGER,
                     end_timestamp_ms INTEGER,
                     speaker_verification_json TEXT,
+                    speaker_identity_correction_json TEXT,
                     FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
                 );
 
@@ -1658,6 +1661,14 @@ export class DatabaseManager {
         // the schema version again.
         if (version >= 32) {
             ensureSpeakerProfileStatsColumns();
+        }
+
+        // Version 32 -> 33: Preserve explicit user corrections to transcript
+        // speaker identity without overwriting the original channel speaker.
+        addColumnIfMissing('transcripts', 'speaker_identity_correction_json', 'TEXT');
+        if (version < 33) {
+            console.log('[DatabaseManager] Applying migration v32 -> v33: Add speaker identity correction metadata');
+            this.db.pragma('user_version = 33');
         }
 
         console.log('[DatabaseManager] Migrations completed.');
@@ -3042,9 +3053,9 @@ export class DatabaseManager {
             INSERT INTO transcripts (
                 meeting_id, speaker, speaker_id, speaker_label, provider_speaker_id,
                 diarization_provider, content, timestamp_ms, start_timestamp_ms, end_timestamp_ms,
-                speaker_verification_json
+                speaker_verification_json, speaker_identity_correction_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         const insertInteraction = this.db.prepare(`
@@ -3085,7 +3096,8 @@ export class DatabaseManager {
                         segment.timestamp,
                         segment.startTimestampMs ?? null,
                         segment.endTimestampMs ?? null,
-                        segment.speakerVerification ? JSON.stringify(segment.speakerVerification) : null
+                        segment.speakerVerification ? JSON.stringify(segment.speakerVerification) : null,
+                        segment.speakerIdentityCorrection ? JSON.stringify(segment.speakerIdentityCorrection) : null
                     );
                 }
             }
@@ -3252,7 +3264,10 @@ export class DatabaseManager {
             timestamp: row.timestamp_ms,
             startTimestampMs: row.start_timestamp_ms ?? undefined,
             endTimestampMs: row.end_timestamp_ms ?? undefined,
-            speakerVerification: row.speaker_verification_json ? JSON.parse(row.speaker_verification_json) : undefined
+            speakerVerification: row.speaker_verification_json ? JSON.parse(row.speaker_verification_json) : undefined,
+            speakerIdentityCorrection: row.speaker_identity_correction_json
+                ? JSON.parse(row.speaker_identity_correction_json)
+                : undefined
         }));
 
         const usage = usageRows.map(row => {
