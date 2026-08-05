@@ -471,3 +471,80 @@ describe('DatabaseManager — deleteKnowledgeMaterial / getMaterialQueueStatus /
     assert.equal(status.pending, 0);
   });
 });
+
+describe('DatabaseManager — interrupted knowledge material recovery', () => {
+  let db, manager;
+
+  beforeEach(() => {
+    ({ db, manager } = makeManager());
+    createKnowledgeSchema(db);
+  });
+
+  it('keeps committed text usable and fails only unfinished embeddings', () => {
+    manager.upsertKnowledgeMaterial({
+      id: 'with_chunks',
+      fileName: 'large.md',
+      mimeOrExt: '.md',
+      fileHash: 'hash_chunks',
+      status: 'indexing',
+    });
+    const chunkIds = manager.replaceKnowledgeMaterialChunks('with_chunks', [
+      { chunkIndex: 0, cleanedText: 'first', tokenCount: 1 },
+      { chunkIndex: 1, cleanedText: 'second', tokenCount: 1 },
+    ]);
+    manager.setKnowledgeMaterialChunkEmbedding(chunkIds[0], [0.1, 0.2]);
+
+    const result = manager.recoverInterruptedKnowledgeMaterialIndexes();
+
+    assert.deepEqual(result, { lexicalRecovered: 1, failed: 0 });
+    assert.equal(manager.getKnowledgeMaterial('with_chunks').status, 'complete');
+    const queue = db.prepare(`
+      SELECT material_chunk_id, status, error_message
+      FROM material_embedding_queue
+      ORDER BY material_chunk_id
+    `).all();
+    assert.equal(queue[0].status, 'completed');
+    assert.equal(queue[0].error_message, null);
+    assert.equal(queue[1].status, 'failed');
+    assert.equal(queue[1].error_message, 'index_interrupted');
+  });
+
+  it('marks interrupted records without committed text as failed', () => {
+    manager.upsertKnowledgeMaterial({
+      id: 'queued_without_chunks',
+      fileName: 'queued.md',
+      mimeOrExt: '.md',
+      fileHash: 'hash_queued',
+      status: 'queued',
+    });
+    manager.upsertKnowledgeMaterial({
+      id: 'indexing_without_chunks',
+      fileName: 'indexing.md',
+      mimeOrExt: '.md',
+      fileHash: 'hash_indexing',
+      status: 'indexing',
+    });
+
+    const result = manager.recoverInterruptedKnowledgeMaterialIndexes();
+
+    assert.deepEqual(result, { lexicalRecovered: 0, failed: 2 });
+    for (const id of ['queued_without_chunks', 'indexing_without_chunks']) {
+      const material = manager.getKnowledgeMaterial(id);
+      assert.equal(material.status, 'failed');
+      assert.equal(material.error_code, 'index_interrupted');
+      assert.equal(material.error_message, '上次资料索引因 CueUp 异常退出而中断，请重新上传该文件。');
+    }
+  });
+
+  it('does not alter settled records and is idempotent', () => {
+    manager.upsertKnowledgeMaterial({ id: 'complete', fileName: 'a.md', mimeOrExt: '.md', fileHash: 'a', status: 'complete' });
+    manager.upsertKnowledgeMaterial({ id: 'failed', fileName: 'b.md', mimeOrExt: '.md', fileHash: 'b', status: 'failed' });
+    manager.upsertKnowledgeMaterial({ id: 'deleted', fileName: 'c.md', mimeOrExt: '.md', fileHash: 'c', status: 'deleted' });
+
+    assert.deepEqual(manager.recoverInterruptedKnowledgeMaterialIndexes(), { lexicalRecovered: 0, failed: 0 });
+    assert.deepEqual(manager.recoverInterruptedKnowledgeMaterialIndexes(), { lexicalRecovered: 0, failed: 0 });
+    assert.equal(db.prepare(`SELECT status FROM knowledge_materials WHERE id = 'complete'`).get().status, 'complete');
+    assert.equal(db.prepare(`SELECT status FROM knowledge_materials WHERE id = 'failed'`).get().status, 'failed');
+    assert.equal(db.prepare(`SELECT status FROM knowledge_materials WHERE id = 'deleted'`).get().status, 'deleted');
+  });
+});

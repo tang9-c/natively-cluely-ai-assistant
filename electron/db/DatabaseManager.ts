@@ -506,6 +506,10 @@ export class DatabaseManager {
             }
 
             this.runMigrations();
+            const recoveredMaterials = this.recoverInterruptedKnowledgeMaterialIndexes();
+            if (recoveredMaterials.lexicalRecovered > 0 || recoveredMaterials.failed > 0) {
+                console.warn('[DatabaseManager] Recovered interrupted knowledge material indexes', recoveredMaterials);
+            }
         } catch (error) {
             console.error('[DatabaseManager] Failed to initialize database:', error);
             throw error;
@@ -1972,6 +1976,58 @@ export class DatabaseManager {
             SET status = ?, error_code = ?, error_message = ?, updated_at = datetime('now')
             WHERE id = ? AND (status != 'deleted' OR ? = 'deleted')
         `).run(status, error?.code ?? null, error?.message ?? null, id, status);
+    }
+
+    public recoverInterruptedKnowledgeMaterialIndexes(): { lexicalRecovered: number; failed: number } {
+        if (!this.db) return { lexicalRecovered: 0, failed: 0 };
+
+        const recover = this.db.transaction(() => {
+            const rows = this.db!.prepare(`
+                SELECT
+                    m.id,
+                    COUNT(c.id) AS chunk_count
+                FROM knowledge_materials m
+                LEFT JOIN knowledge_material_chunks c ON c.material_id = m.id
+                WHERE m.status IN ('queued', 'indexing')
+                GROUP BY m.id
+            `).all() as Array<{ id: string; chunk_count: number }>;
+
+            const failPendingEmbeddings = this.db!.prepare(`
+                UPDATE material_embedding_queue
+                SET status = 'failed', error_message = 'index_interrupted', processed_at = datetime('now')
+                WHERE status IN ('pending', 'processing')
+                  AND material_chunk_id IN (
+                      SELECT id FROM knowledge_material_chunks WHERE material_id = ?
+                  )
+            `);
+            const recoverLexicalMaterial = this.db!.prepare(`
+                UPDATE knowledge_materials
+                SET status = 'complete', error_code = NULL, error_message = NULL, updated_at = datetime('now')
+                WHERE id = ? AND status IN ('queued', 'indexing')
+            `);
+            const failMaterial = this.db!.prepare(`
+                UPDATE knowledge_materials
+                SET status = 'failed',
+                    error_code = 'index_interrupted',
+                    error_message = '上次资料索引因 CueUp 异常退出而中断，请重新上传该文件。',
+                    updated_at = datetime('now')
+                WHERE id = ? AND status IN ('queued', 'indexing')
+            `);
+
+            let lexicalRecovered = 0;
+            let failed = 0;
+            for (const row of rows) {
+                if (Number(row.chunk_count) > 0) {
+                    failPendingEmbeddings.run(row.id);
+                    lexicalRecovered += recoverLexicalMaterial.run(row.id).changes;
+                } else {
+                    failed += failMaterial.run(row.id).changes;
+                }
+            }
+            return { lexicalRecovered, failed };
+        });
+
+        return recover();
     }
 
     public markKnowledgeMaterialEmbeddingsFailed(materialId: string, message?: string | null): void {
