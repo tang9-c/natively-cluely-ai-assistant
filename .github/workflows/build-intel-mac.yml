@@ -65,6 +65,9 @@ jobs:
       - name: Install sharp macOS dependencies
         run: node scripts/ensure-sharp-mac-deps.js
 
+      - name: Install PDF canvas macOS dependencies
+        run: node scripts/ensure-canvas-mac-deps.js
+
       - name: Validate Intel RAG release assets
         run: node scripts/verify-rag-release-assets.js --platform=darwin --arch=x64
 

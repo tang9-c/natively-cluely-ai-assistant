@@ -135,6 +135,18 @@ test('embedding degradation copy separates config, indexing, and query fallback 
   );
 });
 
+test('material status reports a missing PDF parser component instead of blaming the file', async () => {
+  const { explainMaterialStatus } = await loadViewModel();
+  const explanation = explainMaterialStatus({
+    status: 'failed',
+    errorCode: 'pdf_parser_component_missing',
+  });
+
+  assert.equal(explanation.label, '索引失败');
+  assert.equal(explanation.message, 'PDF 解析组件缺失，请更新或重新安装 CueUp 后重试。');
+  assert.equal(explanation.severity, 'error');
+});
+
 test('failed material guidance is honest about replacement upload', async () => {
   const { explainMaterialStatus } = await loadViewModel();
   const unsupported = explainMaterialStatus({

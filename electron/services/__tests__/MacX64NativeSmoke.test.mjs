@@ -148,6 +148,18 @@ test('mac release workflows build one architecture each and upload size audit re
   }
 });
 
+test('mac release builds install PDF canvas native bindings for both architectures', () => {
+  const pkg = readJson('package.json');
+  const ensureCanvas = read('scripts/ensure-canvas-mac-deps.js');
+  const intelWorkflow = read('.github/workflows/build-intel-mac.yml');
+
+  assert.match(ensureCanvas, /@napi-rs\/canvas-darwin-arm64/);
+  assert.match(ensureCanvas, /@napi-rs\/canvas-darwin-x64/);
+  assert.match(ensureCanvas, /node_modules\/@napi-rs\/canvas/);
+  assert.match(intelWorkflow, /node scripts\/ensure-canvas-mac-deps\.js/);
+  assert.match(pkg.scripts['app:build'], /node scripts\/ensure-canvas-mac-deps\.js/);
+});
+
 test('dev Electron startup preflights the native audio artifact before launching', () => {
   const pkg = readJson('package.json');
   const preflight = read('scripts/ensure-native-artifact.js');

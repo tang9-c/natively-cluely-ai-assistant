@@ -157,6 +157,7 @@ const TRUST_REASON_COPY: Record<string, string> = {
 const MATERIAL_FAILURE_COPY: Record<string, string> = {
     unsupported_file_type: '暂不支持此格式。请导出为 PDF 或 Markdown 后重新上传。',
     binary_text_file: '这个 TXT 文件像是二进制内容。请上传可读的 TXT、PDF、DOCX 或 Markdown 文件。',
+    pdf_parser_component_missing: 'PDF 解析组件缺失，请更新或重新安装 CueUp 后重试。',
     parse_failed: 'CueUp 无法读取这个文件。请重新导出或上传更干净的副本。',
     empty_document: '没有找到可读取文本。请上传包含可选中文本的文档。',
     embedding_failed: '资料文本已索引，但语义检索失败。CueUp 会尝试降级为关键词匹配。',

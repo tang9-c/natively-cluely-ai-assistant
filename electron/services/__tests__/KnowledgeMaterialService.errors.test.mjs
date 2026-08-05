@@ -7,7 +7,11 @@ import { createRequire } from 'node:module';
 import Module from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { KnowledgeMaterialService } = require('../../../dist-electron/electron/services/knowledge/KnowledgeMaterialService.js');
+const {
+  KnowledgeMaterialService,
+  classifyMaterialIndexError,
+  toUserFacingMaterialError,
+} = require('../../../dist-electron/electron/services/knowledge/KnowledgeMaterialService.js');
 
 function createDbStub() {
   const materials = new Map();
@@ -205,6 +209,12 @@ test('indexMaterialFromFile records failed status when extraction throws on non-
   assert.equal(after.status, 'failed');
   assert.ok(after.error_code, 'should set an error code');
   service.deleteMaterial(record.id);
+});
+
+test('PDF native canvas failures are classified as a missing parser component', () => {
+  const error = new Error('Could not parse document. DOMMatrix is not defined');
+  assert.equal(classifyMaterialIndexError(error), 'pdf_parser_component_missing');
+  assert.equal(toUserFacingMaterialError(error), 'PDF 解析组件缺失，请更新或重新安装 CueUp 后重试。');
 });
 
 test('searchWithDiagnostics uses candidateReader when present and reports degradedReason', async () => {

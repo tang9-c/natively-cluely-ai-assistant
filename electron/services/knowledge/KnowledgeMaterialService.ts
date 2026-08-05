@@ -344,7 +344,7 @@ export class KnowledgeMaterialService {
     }
 }
 
-function classifyMaterialIndexError(error: any): string {
+export function classifyMaterialIndexError(error: any): string {
     if (error?.code) return error.code;
     const message = String(error?.message || '').toLowerCase();
     if (message.includes('pptx_too_many_slides')) return 'pptx_too_many_slides';
@@ -359,6 +359,9 @@ function classifyMaterialIndexError(error: any): string {
     if (message.includes('pptx_render_failed')) return 'pptx_render_failed';
     if (message.includes('pptx_markdown_empty')) return 'pptx_markdown_empty';
     if (message.includes('pptx_enhance_')) return 'pptx_enhance_invalid_json';
+    if (message.includes('dommatrix is not defined') || message.includes('@napi-rs/canvas')) {
+        return 'pdf_parser_component_missing';
+    }
     if (message.includes('unsupported file type')) return 'unsupported_file_type';
     if (message.includes('empty')) return 'empty_document';
     if (message.includes('binary')) return 'binary_text_file';
@@ -366,7 +369,7 @@ function classifyMaterialIndexError(error: any): string {
     return 'parse_failed';
 }
 
-function toUserFacingMaterialError(error: any): string {
+export function toUserFacingMaterialError(error: any): string {
     const code = classifyMaterialIndexError(error);
     if (code === 'unsupported_file_type') return '不支持的文件类型。当前支持 PDF、DOCX、PPTX、Markdown 和 TXT。';
     if (code === 'empty_document') return '文档没有可索引的文本。';
@@ -379,6 +382,7 @@ function toUserFacingMaterialError(error: any): string {
     if (code === 'pptx_markdown_empty' || code === 'pptx_enhance_invalid_json' || code === 'pptx_enhance_invalid_questions') {
         return 'PPTX 内容提取失败，请稍后重试。';
     }
+    if (code === 'pdf_parser_component_missing') return 'PDF 解析组件缺失，请更新或重新安装 CueUp 后重试。';
     if (code === 'parse_failed') return '文档解析失败，请确认文件未损坏。';
     return error?.message || '资料索引失败。';
 }
