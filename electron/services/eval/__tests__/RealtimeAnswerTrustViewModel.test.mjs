@@ -170,6 +170,9 @@ test('material status distinguishes PPTX process failures from invalid files', a
     pptx_render_process_crashed: 'PPTX 渲染进程异常退出，请重试上传。',
     pptx_render_child_failed: 'PPTX 渲染失败，请重试上传。',
     pptx_render_failed: 'PPTX 渲染失败，请重试上传。',
+    pptx_input_access_failed: 'CueUp 无法读取所选 PPTX，请重新选择文件后上传。',
+    pptx_render_input_read_failed: 'PPTX 临时副本读取失败，请重试上传。',
+    pptx_renderer_dependency_missing: 'PPTX 渲染组件缺失，请更新或重新安装 CueUp 后重试。',
   };
 
   for (const [errorCode, expectedMessage] of Object.entries(expectedByCode)) {

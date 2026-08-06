@@ -21,21 +21,36 @@ test('PptxSlideRenderer cleanup removes temporary output directory', async () =>
 
 test('PptxSlideRenderer renderToTempImages cleans up temporary output directory when child render fails', async () => {
   const { PptxSlideRenderer } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-render-fail-test-'));
+  const tempDirs = [];
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-render-fail-source-'));
+  const sourcePath = path.join(sourceDir, 'input.pptx');
+  fs.writeFileSync(sourcePath, 'fake');
   const renderer = new PptxSlideRenderer({
-    createTempDir: async () => tempDir,
+    createTempDir: async () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-render-fail-test-'));
+      tempDirs.push(tempDir);
+      return tempDir;
+    },
     runRenderChild: async () => {
       throw new Error('pptx_render_failed');
     },
   });
 
-  await assert.rejects(() => renderer.renderToTempImages('/tmp/fake-input.pptx'), /pptx_render_failed/);
-  assert.equal(fs.existsSync(tempDir), false);
+  try {
+    await assert.rejects(() => renderer.renderToTempImages(sourcePath), /pptx_render_failed/);
+    assert.equal(tempDirs.length, 2);
+    assert.equal(tempDirs.every((tempDir) => !fs.existsSync(tempDir)), true);
+  } finally {
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
 });
 
 test('PptxSlideRenderer retries one transient child failure with a fresh temporary directory', async () => {
   const { PptxSlideRenderer } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
   const tempDirs = [];
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-render-retry-source-'));
+  const sourcePath = path.join(sourceDir, 'input.pptx');
+  fs.writeFileSync(sourcePath, 'fake');
   let attempts = 0;
   const renderer = new PptxSlideRenderer({
     createTempDir: async () => {
@@ -54,16 +69,69 @@ test('PptxSlideRenderer retries one transient child failure with a fresh tempora
     },
   });
 
-  const deck = await renderer.renderToTempImages('/tmp/fake-input.pptx');
-  assert.equal(attempts, 2);
-  assert.equal(tempDirs.length, 2);
-  assert.equal(fs.existsSync(tempDirs[0]), false);
-  assert.equal(deck.tempDir, tempDirs[1]);
-  await deck.cleanup();
+  try {
+    const deck = await renderer.renderToTempImages(sourcePath);
+    assert.equal(attempts, 2);
+    assert.equal(tempDirs.length, 2);
+    assert.equal(fs.existsSync(tempDirs[0]), false);
+    assert.equal(deck.tempDir, tempDirs[1]);
+    await deck.cleanup();
+  } finally {
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+test('PptxSlideRenderer stages the selected PPTX before starting the render child', async () => {
+  const { PptxSlideRenderer } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-selected-source-'));
+  const sourcePath = path.join(sourceDir, 'customer-selected.pptx');
+  fs.writeFileSync(sourcePath, 'selected-pptx-bytes');
+  let childInputPath = null;
+  const renderer = new PptxSlideRenderer({
+    runRenderChild: async (_scriptPath, inputPath, outputDir) => {
+      childInputPath = inputPath;
+      assert.notEqual(inputPath, sourcePath);
+      assert.equal(path.dirname(inputPath), outputDir);
+      assert.equal(fs.readFileSync(inputPath, 'utf8'), 'selected-pptx-bytes');
+      fs.writeFileSync(path.join(outputDir, 'slide-001.jpg'), 'ok');
+    },
+  });
+
+  try {
+    const deck = await renderer.renderToTempImages(sourcePath);
+    assert.ok(childInputPath);
+    await deck.cleanup();
+  } finally {
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+test('PptxSlideRenderer classifies selected-file staging failures before starting a child', async () => {
+  const { PptxSlideRenderer } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
+  let childStarted = false;
+  const renderer = new PptxSlideRenderer({
+    runRenderChild: async () => {
+      childStarted = true;
+    },
+  });
+
+  await assert.rejects(
+    () => renderer.renderToTempImages('/tmp/cueup-definitely-missing-selected.pptx'),
+    (error) => {
+      assert.equal(error.code, 'pptx_input_access_failed');
+      assert.equal(error.stage, 'input_staging');
+      assert.equal(error.retryable, false);
+      return true;
+    },
+  );
+  assert.equal(childStarted, false);
 });
 
 test('PptxSlideRenderer does not retry deterministic invalid-file failures', async () => {
   const { PptxSlideRenderer } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-invalid-source-'));
+  const sourcePath = path.join(sourceDir, 'input.pptx');
+  fs.writeFileSync(sourcePath, 'fake');
   let attempts = 0;
   const renderer = new PptxSlideRenderer({
     runRenderChild: async () => {
@@ -74,21 +142,37 @@ test('PptxSlideRenderer does not retry deterministic invalid-file failures', asy
     },
   });
 
-  await assert.rejects(() => renderer.renderToTempImages('/tmp/fake-input.pptx'), /pptx_invalid_file/);
-  assert.equal(attempts, 1);
+  try {
+    await assert.rejects(() => renderer.renderToTempImages(sourcePath), /pptx_invalid_file/);
+    assert.equal(attempts, 1);
+  } finally {
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
 });
 
 test('PptxSlideRenderer renderToTempImages cleans up temporary output directory when child render hangs', async () => {
   const { PptxSlideRenderer } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-render-timeout-cleanup-test-'));
+  const tempDirs = [];
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-render-timeout-source-'));
+  const sourcePath = path.join(sourceDir, 'input.pptx');
+  fs.writeFileSync(sourcePath, 'fake');
   const renderer = new PptxSlideRenderer({
-    createTempDir: async () => tempDir,
+    createTempDir: async () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-render-timeout-cleanup-test-'));
+      tempDirs.push(tempDir);
+      return tempDir;
+    },
     renderTimeoutMs: 20,
     runRenderChild: async () => new Promise(() => {}),
   });
 
-  await assert.rejects(() => renderer.renderToTempImages('/tmp/fake-input.pptx'), /pptx_render_timeout/);
-  assert.equal(fs.existsSync(tempDir), false);
+  try {
+    await assert.rejects(() => renderer.renderToTempImages(sourcePath), /pptx_render_timeout/);
+    assert.equal(tempDirs.length, 2);
+    assert.equal(tempDirs.every((tempDir) => !fs.existsSync(tempDir)), true);
+  } finally {
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
 });
 
 test('PptxSlideRenderer runRenderChild rejects when child process hangs', async () => {
@@ -142,6 +226,49 @@ test('PptxSlideRenderer runRenderChild classifies signal exits as transient cras
         assert.equal(error.code, 'pptx_render_process_crashed');
         assert.equal(error.stage, 'render_child_exit');
         assert.equal(error.retryable, true);
+        return true;
+      },
+    );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('PptxSlideRenderer runRenderChild classifies input read failures without exposing paths', async () => {
+  const { runRenderChild } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-render-input-read-test-'));
+  const scriptPath = path.join(tempDir, 'input-read-fail-child.mjs');
+  fs.writeFileSync(scriptPath, "console.error(\"EACCES: permission denied, open '/private/customer/secret.pptx'\"); process.exit(1);");
+
+  try {
+    await assert.rejects(
+      () => runRenderChild(scriptPath, '/tmp/staged-input.pptx', tempDir, 1000),
+      (error) => {
+        assert.equal(error.code, 'pptx_render_input_read_failed');
+        assert.equal(error.stage, 'render_child_exit');
+        assert.doesNotMatch(error.message, /private\/customer|secret\.pptx/);
+        return true;
+      },
+    );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('PptxSlideRenderer runRenderChild classifies missing renderer dependencies separately', async () => {
+  const { runRenderChild } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-render-dependency-test-'));
+  const scriptPath = path.join(tempDir, 'dependency-fail-child.mjs');
+  fs.writeFileSync(scriptPath, "console.error(\"ERR_MODULE_NOT_FOUND Cannot find package 'sharp' imported from /private/app/file.mjs\"); process.exit(1);");
+
+  try {
+    await assert.rejects(
+      () => runRenderChild(scriptPath, '/tmp/staged-input.pptx', tempDir, 1000),
+      (error) => {
+        assert.equal(error.code, 'pptx_renderer_dependency_missing');
+        assert.equal(error.stage, 'render_child_start');
+        assert.equal(error.retryable, false);
+        assert.doesNotMatch(error.message, /sharp|private\/app/);
         return true;
       },
     );

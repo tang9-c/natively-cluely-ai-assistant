@@ -24,7 +24,7 @@ const DEFAULT_RENDER_TIMEOUT_MS = 2 * 60 * 1000;
 const MAX_CHILD_ERROR_DETAIL_CHARS = 4000;
 const MAX_RENDER_ATTEMPTS = 2;
 
-type PptxRenderStage = 'render_child_start' | 'render_child_exit' | 'render_child_timeout';
+type PptxRenderStage = 'input_staging' | 'render_child_start' | 'render_child_exit' | 'render_child_timeout';
 
 type PptxRenderError = Error & {
   code: string;
@@ -39,6 +39,7 @@ const RETRYABLE_RENDER_CODES = new Set([
   'pptx_render_process_start_failed',
   'pptx_render_process_crashed',
   'pptx_render_child_failed',
+  'pptx_render_input_read_failed',
   'pptx_render_failed',
 ]);
 
@@ -91,10 +92,16 @@ export class PptxSlideRenderer {
   private async renderOnce(filePath: string): Promise<PptxRenderedDeck> {
     const tempDir = await this.createTempDir();
     const scriptPath = path.join(__dirname, 'pptx-render-child.mjs');
+    const stagedInputPath = path.join(tempDir, 'input.pptx');
 
     try {
+      try {
+        await fs.promises.copyFile(filePath, stagedInputPath);
+      } catch {
+        throw createPptxRenderError('pptx_input_access_failed', 'input_staging', false);
+      }
       await withRenderTimeout(
-        this.runRenderChildImpl(scriptPath, filePath, tempDir, this.renderTimeoutMs),
+        this.runRenderChildImpl(scriptPath, stagedInputPath, tempDir, this.renderTimeoutMs),
         this.renderTimeoutMs,
       );
       const files = (await fs.promises.readdir(tempDir))
@@ -218,6 +225,16 @@ export function runRenderChild(
         return;
       }
 
+      if (isMissingRendererDependencyError(message)) {
+        finish(createPptxRenderError('pptx_renderer_dependency_missing', 'render_child_start', false, { exitCode: code }));
+        return;
+      }
+
+      if (isInputReadError(message)) {
+        finish(createPptxRenderError('pptx_render_input_read_failed', 'render_child_exit', true, { exitCode: code }));
+        return;
+      }
+
       finish(createPptxRenderError('pptx_render_child_failed', 'render_child_exit', true, { exitCode: code }));
     });
   });
@@ -248,4 +265,20 @@ function isRetryableRenderError(error: unknown): boolean {
 function isMissingRendererAssetError(message: string): boolean {
   const normalized = message.toLowerCase();
   return normalized.includes('err_module_not_found') && normalized.includes('createpptxfontmapping.js');
+}
+
+function isMissingRendererDependencyError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes('err_module_not_found')
+    || normalized.includes('cannot find module')
+    || normalized.includes('cannot find package');
+}
+
+function isInputReadError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes('eacces')
+    || normalized.includes('eperm')
+    || normalized.includes('enoent')
+    || normalized.includes('permission denied')
+    || normalized.includes('no such file or directory');
 }

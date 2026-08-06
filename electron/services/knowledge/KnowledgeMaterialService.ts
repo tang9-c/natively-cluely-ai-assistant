@@ -350,7 +350,7 @@ export class KnowledgeMaterialService {
 
 function logPrivacySafePptxFailure(errorCode: string, error: any): void {
     const safeCode = /^[a-z0-9_]{1,80}$/i.test(errorCode) ? errorCode : 'unknown';
-    const allowedStages = new Set(['render_child_start', 'render_child_exit', 'render_child_timeout']);
+    const allowedStages = new Set(['input_staging', 'render_child_start', 'render_child_exit', 'render_child_timeout']);
     const stage = typeof error?.stage === 'string' && allowedStages.has(error.stage)
         ? error.stage
         : 'unknown';
@@ -379,6 +379,9 @@ export function classifyMaterialIndexError(error: any): string {
     if (message.includes('pptx_render_process_start_failed')) return 'pptx_render_process_start_failed';
     if (message.includes('pptx_render_process_crashed')) return 'pptx_render_process_crashed';
     if (message.includes('pptx_render_child_failed')) return 'pptx_render_child_failed';
+    if (message.includes('pptx_input_access_failed')) return 'pptx_input_access_failed';
+    if (message.includes('pptx_render_input_read_failed')) return 'pptx_render_input_read_failed';
+    if (message.includes('pptx_renderer_dependency_missing')) return 'pptx_renderer_dependency_missing';
     if (message.includes('pptx_markdown_empty')) return 'pptx_markdown_empty';
     if (message.includes('pptx_enhance_')) return 'pptx_enhance_invalid_json';
     if (message.includes('dommatrix is not defined') || message.includes('@napi-rs/canvas')) {
@@ -404,6 +407,9 @@ export function toUserFacingMaterialError(error: any): string {
     if (code === 'pptx_render_process_start_failed') return 'PPTX 渲染进程无法启动，请重启 CueUp 后重试。';
     if (code === 'pptx_render_process_crashed') return 'PPTX 渲染进程异常退出，请重试上传。';
     if (code === 'pptx_render_child_failed' || code === 'pptx_render_failed') return 'PPTX 渲染失败，请重试上传。';
+    if (code === 'pptx_input_access_failed') return 'CueUp 无法读取所选 PPTX，请重新选择文件后上传。';
+    if (code === 'pptx_render_input_read_failed') return 'PPTX 临时副本读取失败，请重试上传。';
+    if (code === 'pptx_renderer_dependency_missing') return 'PPTX 渲染组件缺失，请更新或重新安装 CueUp 后重试。';
     if (code === 'pptx_markdown_empty' || code === 'pptx_enhance_invalid_json' || code === 'pptx_enhance_invalid_questions') {
         return 'PPTX 内容提取失败，请稍后重试。';
     }
