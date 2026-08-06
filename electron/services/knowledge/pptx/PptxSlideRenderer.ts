@@ -22,6 +22,25 @@ interface PptxSlideRendererDeps {
 
 const DEFAULT_RENDER_TIMEOUT_MS = 2 * 60 * 1000;
 const MAX_CHILD_ERROR_DETAIL_CHARS = 4000;
+const MAX_RENDER_ATTEMPTS = 2;
+
+type PptxRenderStage = 'render_child_start' | 'render_child_exit' | 'render_child_timeout';
+
+type PptxRenderError = Error & {
+  code: string;
+  stage: PptxRenderStage;
+  retryable: boolean;
+  exitCode?: number | null;
+  signal?: NodeJS.Signals | null;
+};
+
+const RETRYABLE_RENDER_CODES = new Set([
+  'pptx_render_timeout',
+  'pptx_render_process_start_failed',
+  'pptx_render_process_crashed',
+  'pptx_render_child_failed',
+  'pptx_render_failed',
+]);
 
 export function createRenderedDeckForTest(
   tempDir: string,
@@ -55,6 +74,21 @@ export class PptxSlideRenderer {
   }
 
   async renderToTempImages(filePath: string): Promise<PptxRenderedDeck> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= MAX_RENDER_ATTEMPTS; attempt += 1) {
+      try {
+        return await this.renderOnce(filePath);
+      } catch (error) {
+        lastError = error;
+        if (attempt >= MAX_RENDER_ATTEMPTS || !isRetryableRenderError(error)) {
+          throw error;
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  private async renderOnce(filePath: string): Promise<PptxRenderedDeck> {
     const tempDir = await this.createTempDir();
     const scriptPath = path.join(__dirname, 'pptx-render-child.mjs');
 
@@ -68,11 +102,11 @@ export class PptxSlideRenderer {
         .sort();
 
       if (files.length === 0) {
-        throw new Error('pptx_no_slides');
+        throw createPptxRenderError('pptx_no_slides', 'render_child_exit', false);
       }
 
       if (files.length > 200) {
-        throw new Error('pptx_too_many_slides');
+        throw createPptxRenderError('pptx_too_many_slides', 'render_child_exit', false);
       }
 
       return createRenderedDeckForTest(
@@ -92,7 +126,7 @@ export class PptxSlideRenderer {
 function withRenderTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
-      reject(new Error('pptx_render_timeout'));
+      reject(createPptxRenderError('pptx_render_timeout', 'render_child_timeout', true));
     }, timeoutMs);
 
     promise.then(
@@ -142,46 +176,73 @@ export function runRenderChild(
       if (!child.killed) {
         child.kill('SIGKILL');
       }
-      finish(new Error('pptx_render_timeout'));
+      finish(createPptxRenderError('pptx_render_timeout', 'render_child_timeout', true));
     }, timeoutMs);
 
     child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
+      stderr = `${stderr}${chunk.toString()}`.slice(-MAX_CHILD_ERROR_DETAIL_CHARS);
     });
-    child.on('error', (error) => finish(error));
-    child.on('exit', (code) => {
+    child.on('error', () => finish(
+      createPptxRenderError('pptx_render_process_start_failed', 'render_child_start', true),
+    ));
+    child.on('exit', (code, signal) => {
       if (code === 0) {
         finish();
+        return;
+      }
+
+      if (signal) {
+        finish(createPptxRenderError(
+          'pptx_render_process_crashed',
+          'render_child_exit',
+          true,
+          { exitCode: code, signal },
+        ));
         return;
       }
 
       const message = stderr || `pptx_render_child_exit_${code}`;
 
       if (message.includes('pptx_too_many_slides')) {
-        finish(new Error('pptx_too_many_slides'));
+        finish(createPptxRenderError('pptx_too_many_slides', 'render_child_exit', false, { exitCode: code }));
         return;
       }
 
       if (message.includes('invalid zip')) {
-        finish(new Error('pptx_invalid_file'));
+        finish(createPptxRenderError('pptx_invalid_file', 'render_child_exit', false, { exitCode: code }));
         return;
       }
 
       if (isMissingRendererAssetError(message)) {
-        finish(createPptxRenderError('pptx_renderer_asset_missing', message));
+        finish(createPptxRenderError('pptx_renderer_asset_missing', 'render_child_start', false, { exitCode: code }));
         return;
       }
 
-      finish(createPptxRenderError('pptx_render_failed', message));
+      finish(createPptxRenderError('pptx_render_child_failed', 'render_child_exit', true, { exitCode: code }));
     });
   });
 }
 
-function createPptxRenderError(code: string, detail: string): Error & { code?: string } {
-  const normalizedDetail = detail.trim().slice(0, MAX_CHILD_ERROR_DETAIL_CHARS);
-  const error = new Error(normalizedDetail ? `${code}: ${normalizedDetail}` : code) as Error & { code?: string };
+function createPptxRenderError(
+  code: string,
+  stage: PptxRenderStage,
+  retryable: boolean,
+  metadata: { exitCode?: number | null; signal?: NodeJS.Signals | null } = {},
+): PptxRenderError {
+  const error = new Error(code) as PptxRenderError;
   error.code = code;
+  error.stage = stage;
+  error.retryable = retryable;
+  error.exitCode = metadata.exitCode;
+  error.signal = metadata.signal;
   return error;
+}
+
+function isRetryableRenderError(error: unknown): boolean {
+  const candidate = error as Partial<PptxRenderError> | undefined;
+  if (candidate?.retryable === true) return true;
+  const code = candidate?.code || candidate?.message;
+  return typeof code === 'string' && RETRYABLE_RENDER_CODES.has(code);
 }
 
 function isMissingRendererAssetError(message: string): boolean {

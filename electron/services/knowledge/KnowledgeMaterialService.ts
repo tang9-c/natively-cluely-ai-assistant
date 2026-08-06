@@ -268,9 +268,9 @@ export class KnowledgeMaterialService {
     }
 
     private async indexMaterialFromFile(materialId: string, filePath: string): Promise<void> {
+        const ext = path.extname(filePath).toLowerCase();
         try {
             if (!this.isMaterialIndexable(materialId)) return;
-            const ext = path.extname(filePath).toLowerCase();
             if (ext === '.pptx') {
                 const service = this.options.createPptxIngestionService
                     ? this.options.createPptxIngestionService((id, chunks) => this.indexPreparedChunks(id, chunks))
@@ -283,8 +283,12 @@ export class KnowledgeMaterialService {
             await this.indexMaterial(materialId, rawText);
         } catch (error: any) {
             if (!this.isMaterialIndexable(materialId)) return;
+            const errorCode = classifyMaterialIndexError(error);
+            if (ext === '.pptx') {
+                logPrivacySafePptxFailure(errorCode, error);
+            }
             this.db.updateKnowledgeMaterialStatus(materialId, 'failed', {
-                code: classifyMaterialIndexError(error),
+                code: errorCode,
                 message: toUserFacingMaterialError(error),
             });
         }
@@ -344,6 +348,20 @@ export class KnowledgeMaterialService {
     }
 }
 
+function logPrivacySafePptxFailure(errorCode: string, error: any): void {
+    const safeCode = /^[a-z0-9_]{1,80}$/i.test(errorCode) ? errorCode : 'unknown';
+    const allowedStages = new Set(['render_child_start', 'render_child_exit', 'render_child_timeout']);
+    const stage = typeof error?.stage === 'string' && allowedStages.has(error.stage)
+        ? error.stage
+        : 'unknown';
+    console.error('[KnowledgeMaterialService] PPTX indexing failed', {
+        extension: '.pptx',
+        code: safeCode,
+        stage,
+        retryable: error?.retryable === true,
+    });
+}
+
 export function classifyMaterialIndexError(error: any): string {
     if (error?.code) return error.code;
     const message = String(error?.message || '').toLowerCase();
@@ -357,6 +375,10 @@ export function classifyMaterialIndexError(error: any): string {
         )
     ) return 'pptx_renderer_asset_missing';
     if (message.includes('pptx_render_failed')) return 'pptx_render_failed';
+    if (message.includes('pptx_render_timeout')) return 'pptx_render_timeout';
+    if (message.includes('pptx_render_process_start_failed')) return 'pptx_render_process_start_failed';
+    if (message.includes('pptx_render_process_crashed')) return 'pptx_render_process_crashed';
+    if (message.includes('pptx_render_child_failed')) return 'pptx_render_child_failed';
     if (message.includes('pptx_markdown_empty')) return 'pptx_markdown_empty';
     if (message.includes('pptx_enhance_')) return 'pptx_enhance_invalid_json';
     if (message.includes('dommatrix is not defined') || message.includes('@napi-rs/canvas')) {
@@ -378,11 +400,17 @@ export function toUserFacingMaterialError(error: any): string {
     if (code === 'pptx_too_many_slides') return 'PPTX 页数超过 200，请拆分后上传。';
     if (code === 'pptx_invalid_file') return 'PPTX 文件已损坏或不是有效的 PowerPoint 文件。';
     if (code === 'pptx_renderer_asset_missing') return 'PPTX 渲染组件缺失，请重新构建或更新应用后重试。';
-    if (code === 'pptx_render_failed') return 'PPTX 内容提取失败，请另存为标准 .pptx 后重试。';
+    if (code === 'pptx_render_timeout') return 'PPTX 渲染超时，请重试；如果仍失败，请拆分文件后重新上传。';
+    if (code === 'pptx_render_process_start_failed') return 'PPTX 渲染进程无法启动，请重启 CueUp 后重试。';
+    if (code === 'pptx_render_process_crashed') return 'PPTX 渲染进程异常退出，请重试上传。';
+    if (code === 'pptx_render_child_failed' || code === 'pptx_render_failed') return 'PPTX 渲染失败，请重试上传。';
     if (code === 'pptx_markdown_empty' || code === 'pptx_enhance_invalid_json' || code === 'pptx_enhance_invalid_questions') {
         return 'PPTX 内容提取失败，请稍后重试。';
     }
     if (code === 'pdf_parser_component_missing') return 'PDF 解析组件缺失，请更新或重新安装 CueUp 后重试。';
+    if (code === 'pdf_parse_timeout') return 'PDF 解析超时，请重试；如果仍失败，请拆分文件后重新上传。';
+    if (code === 'pdf_worker_failed') return 'PDF 解析进程异常，请重试上传。';
+    if (code === 'pdf_access_failed') return 'CueUp 无法继续读取该 PDF，请重新选择文件后上传。';
     if (code === 'parse_failed') return '文档解析失败，请确认文件未损坏。';
     return error?.message || '资料索引失败。';
 }

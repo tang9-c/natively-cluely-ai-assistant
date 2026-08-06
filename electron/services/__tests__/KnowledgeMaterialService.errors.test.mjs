@@ -217,6 +217,33 @@ test('PDF native canvas failures are classified as a missing parser component', 
   assert.equal(toUserFacingMaterialError(error), 'PDF 解析组件缺失，请更新或重新安装 CueUp 后重试。');
 });
 
+test('PDF runtime failures preserve actionable timeout, worker, and access error codes', () => {
+  const cases = [
+    [{ code: 'pdf_parse_timeout' }, 'PDF 解析超时，请重试；如果仍失败，请拆分文件后重新上传。'],
+    [{ code: 'pdf_worker_failed' }, 'PDF 解析进程异常，请重试上传。'],
+    [{ code: 'pdf_access_failed' }, 'CueUp 无法继续读取该 PDF，请重新选择文件后上传。'],
+  ];
+  for (const [error, expectedMessage] of cases) {
+    assert.equal(classifyMaterialIndexError(error), error.code);
+    assert.equal(toUserFacingMaterialError(error), expectedMessage);
+  }
+});
+
+test('PPTX render stages preserve actionable process error codes without blaming the file', () => {
+  const cases = [
+    [{ code: 'pptx_render_timeout' }, 'PPTX 渲染超时，请重试；如果仍失败，请拆分文件后重新上传。'],
+    [{ code: 'pptx_render_process_start_failed' }, 'PPTX 渲染进程无法启动，请重启 CueUp 后重试。'],
+    [{ code: 'pptx_render_process_crashed' }, 'PPTX 渲染进程异常退出，请重试上传。'],
+    [{ code: 'pptx_render_child_failed' }, 'PPTX 渲染失败，请重试上传。'],
+    [{ code: 'pptx_render_failed' }, 'PPTX 渲染失败，请重试上传。'],
+  ];
+  for (const [error, expectedMessage] of cases) {
+    assert.equal(classifyMaterialIndexError(error), error.code);
+    assert.equal(toUserFacingMaterialError(error), expectedMessage);
+    assert.doesNotMatch(expectedMessage, /另存为标准/);
+  }
+});
+
 test('searchWithDiagnostics uses candidateReader when present and reports degradedReason', async () => {
   const db = createDbStub();
   db.getKnowledgeMaterialCandidateChunks = (query, options) => {

@@ -47,10 +47,14 @@ describe('FIX-009: modes:upload-reference-file hardening', () => {
     assert.ok(/stats\.size\s*>\s*MAX_FILE_BYTES/.test(body), 'Handler must reject when stats.size exceeds the cap');
   });
 
-  test('wraps PDF and DOCX parsers in a timeout to guard against malformed input / zip bombs', () => {
+  test('uses the shared guarded PDF extractor and keeps a timeout around DOCX parsing', () => {
     assert.ok(body.includes('PARSE_TIMEOUT_MS'), 'Parse-timeout constant must be declared');
     assert.ok(body.includes('withTimeout'), 'Handler must define a withTimeout helper');
-    assert.ok(/withTimeout[\s\S]{0,80}parser\.getText\(\)/.test(body), 'PDF parse must be wrapped in withTimeout');
+    assert.ok(
+      /DocumentTextExtractor\.extract\(filePath\)/.test(body),
+      'PDF parsing must use DocumentTextExtractor so timeout, cleanup, and retry stay centralized',
+    );
+    assert.ok(!body.includes("require('pdf-parse')"), 'Handler must not create an unmanaged PDF parser');
     assert.ok(/withTimeout[\s\S]{0,120}mammoth\.extractRawText/.test(body), 'DOCX parse must be wrapped in withTimeout');
   });
 

@@ -409,3 +409,39 @@ test('pptx_renderer_asset_missing error maps to user-facing message', async () =
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('PPTX indexing failure logs only privacy-safe stage diagnostics', async () => {
+  const db = createDbStub();
+  const service = new KnowledgeMaterialService(db, null, {
+    getQCloudAvailability: async () => ({ hasNativelyApiKey: true, activeProvider: 'natively', available: true }),
+    createPptxIngestionService: () => ({
+      ingest: async () => {
+        const error = new Error('sensitive child stderr /private/customer/acme-secret.pptx');
+        error.code = 'pptx_render_child_failed';
+        error.stage = 'render_child_exit';
+        error.retryable = true;
+        throw error;
+      },
+    }),
+  });
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-safe-log-'));
+  const pptxPath = path.join(tmpDir, 'acme-secret.pptx');
+  fs.writeFileSync(pptxPath, 'fake', 'utf8');
+  const logCalls = [];
+  const originalConsoleError = console.error;
+  console.error = (...args) => logCalls.push(args);
+  try {
+    const result = await service.uploadFiles([pptxPath]);
+    const materialId = result.materials[0].id;
+    await waitFor(() => assert.equal(db.getKnowledgeMaterial(materialId).status, 'failed'));
+  } finally {
+    console.error = originalConsoleError;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+
+  const serialized = JSON.stringify(logCalls);
+  assert.match(serialized, /pptx_render_child_failed/);
+  assert.match(serialized, /render_child_exit/);
+  assert.match(serialized, /\.pptx/);
+  assert.doesNotMatch(serialized, /acme-secret|private\/customer|sensitive child stderr/);
+});

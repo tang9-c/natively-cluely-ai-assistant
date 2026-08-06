@@ -5345,11 +5345,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       let content = '';
       try {
         if (ext === '.pdf') {
-          const { PDFParse } = require('pdf-parse');
-          const buffer = fs.readFileSync(filePath);
-          const parser = new PDFParse({ data: buffer });
-          const data: any = await withTimeout<any>(parser.getText(), PARSE_TIMEOUT_MS, 'PDF parse');
-          content = data.text;
+          const { DocumentTextExtractor } = require('./services/profile/DocumentTextExtractor');
+          content = await DocumentTextExtractor.extract(filePath);
         } else if (ext === '.docx' || ext === '.doc') {
           const mammoth = require('mammoth');
           const result2: any = await withTimeout<any>(

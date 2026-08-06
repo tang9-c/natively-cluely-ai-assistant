@@ -147,6 +147,38 @@ test('material status reports a missing PDF parser component instead of blaming 
   assert.equal(explanation.severity, 'error');
 });
 
+test('material status distinguishes PDF runtime failures from damaged input', async () => {
+  const { explainMaterialStatus } = await loadViewModel();
+  const expectedByCode = {
+    pdf_parse_timeout: 'PDF 解析超时，请重试；如果仍失败，请拆分文件后重新上传。',
+    pdf_worker_failed: 'PDF 解析进程异常，请重试上传。',
+    pdf_access_failed: 'CueUp 无法继续读取该 PDF，请重新选择文件后上传。',
+  };
+
+  for (const [errorCode, expectedMessage] of Object.entries(expectedByCode)) {
+    const explanation = explainMaterialStatus({ status: 'failed', errorCode });
+    assert.equal(explanation.message, expectedMessage);
+    assert.doesNotMatch(explanation.message, /更干净的副本|文件损坏/);
+  }
+});
+
+test('material status distinguishes PPTX process failures from invalid files', async () => {
+  const { explainMaterialStatus } = await loadViewModel();
+  const expectedByCode = {
+    pptx_render_timeout: 'PPTX 渲染超时，请重试；如果仍失败，请拆分文件后重新上传。',
+    pptx_render_process_start_failed: 'PPTX 渲染进程无法启动，请重启 CueUp 后重试。',
+    pptx_render_process_crashed: 'PPTX 渲染进程异常退出，请重试上传。',
+    pptx_render_child_failed: 'PPTX 渲染失败，请重试上传。',
+    pptx_render_failed: 'PPTX 渲染失败，请重试上传。',
+  };
+
+  for (const [errorCode, expectedMessage] of Object.entries(expectedByCode)) {
+    const explanation = explainMaterialStatus({ status: 'failed', errorCode });
+    assert.equal(explanation.message, expectedMessage);
+    assert.doesNotMatch(explanation.message, /另存为标准|文件已损坏/);
+  }
+});
+
 test('failed material guidance is honest about replacement upload', async () => {
   const { explainMaterialStatus } = await loadViewModel();
   const unsupported = explainMaterialStatus({
