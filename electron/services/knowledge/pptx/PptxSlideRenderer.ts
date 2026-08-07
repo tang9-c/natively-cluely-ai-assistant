@@ -91,7 +91,7 @@ export class PptxSlideRenderer {
 
   private async renderOnce(filePath: string): Promise<PptxRenderedDeck> {
     const tempDir = await this.createTempDir();
-    const scriptPath = path.join(__dirname, 'pptx-render-child.mjs');
+    const scriptPath = resolvePptxRenderChildPath();
     const stagedInputPath = path.join(tempDir, 'input.pptx');
 
     try {
@@ -128,6 +128,19 @@ export class PptxSlideRenderer {
       throw error;
     }
   }
+}
+
+export function resolvePptxRenderChildPath(baseDir: string = __dirname): string {
+  const colocatedPath = path.join(baseDir, 'pptx-render-child.mjs');
+  if (fs.existsSync(colocatedPath)) return colocatedPath;
+
+  const bundledMainPath = path.join(
+    baseDir,
+    'services/knowledge/pptx/pptx-render-child.mjs',
+  );
+  if (fs.existsSync(bundledMainPath)) return bundledMainPath;
+
+  return colocatedPath;
 }
 
 function withRenderTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -264,7 +277,13 @@ function isRetryableRenderError(error: unknown): boolean {
 
 function isMissingRendererAssetError(message: string): boolean {
   const normalized = message.toLowerCase();
-  return normalized.includes('err_module_not_found') && normalized.includes('createpptxfontmapping.js');
+  const isModuleNotFound = normalized.includes('module_not_found')
+    || normalized.includes('cannot find module');
+  return isModuleNotFound
+    && (
+      normalized.includes('createpptxfontmapping.js')
+      || normalized.includes('pptx-render-child.mjs')
+    );
 }
 
 function isMissingRendererDependencyError(message: string): boolean {

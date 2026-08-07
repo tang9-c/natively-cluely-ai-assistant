@@ -19,6 +19,24 @@ test('PptxSlideRenderer cleanup removes temporary output directory', async () =>
   assert.equal(fs.existsSync(tempDir), false);
 });
 
+test('PptxSlideRenderer resolves its child script from the bundled Electron main directory', () => {
+  const { resolvePptxRenderChildPath } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
+  const bundledMainDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-bundled-main-'));
+  const nestedScriptPath = path.join(
+    bundledMainDir,
+    'services/knowledge/pptx/pptx-render-child.mjs',
+  );
+  fs.mkdirSync(path.dirname(nestedScriptPath), { recursive: true });
+  fs.writeFileSync(nestedScriptPath, '');
+
+  try {
+    assert.equal(typeof resolvePptxRenderChildPath, 'function');
+    assert.equal(resolvePptxRenderChildPath(bundledMainDir), nestedScriptPath);
+  } finally {
+    fs.rmSync(bundledMainDir, { recursive: true, force: true });
+  }
+});
+
 test('PptxSlideRenderer renderToTempImages cleans up temporary output directory when child render fails', async () => {
   const { PptxSlideRenderer } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
   const tempDirs = [];
@@ -269,6 +287,30 @@ test('PptxSlideRenderer runRenderChild classifies missing renderer dependencies 
         assert.equal(error.stage, 'render_child_start');
         assert.equal(error.retryable, false);
         assert.doesNotMatch(error.message, /sharp|private\/app/);
+        return true;
+      },
+    );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('PptxSlideRenderer runRenderChild classifies a missing child entry script as a renderer asset failure', async () => {
+  const { runRenderChild } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-render-entry-test-'));
+
+  try {
+    await assert.rejects(
+      () => runRenderChild(
+        path.join(tempDir, 'pptx-render-child.mjs'),
+        path.join(tempDir, 'input.pptx'),
+        tempDir,
+        1000,
+      ),
+      (error) => {
+        assert.equal(error.code, 'pptx_renderer_asset_missing');
+        assert.equal(error.stage, 'render_child_start');
+        assert.equal(error.retryable, false);
         return true;
       },
     );
