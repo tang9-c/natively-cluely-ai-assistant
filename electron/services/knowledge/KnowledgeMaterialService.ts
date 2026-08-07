@@ -271,6 +271,7 @@ export class KnowledgeMaterialService {
         const ext = path.extname(filePath).toLowerCase();
         try {
             if (!this.isMaterialIndexable(materialId)) return;
+            this.db.updateKnowledgeMaterialStatus(materialId, 'indexing');
             if (ext === '.pptx') {
                 const service = this.options.createPptxIngestionService
                     ? this.options.createPptxIngestionService((id, chunks) => this.indexPreparedChunks(id, chunks))

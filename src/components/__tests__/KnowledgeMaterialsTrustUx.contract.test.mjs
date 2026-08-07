@@ -33,3 +33,11 @@ test('knowledge material settings presents PPTX as content extraction without im
   assert.match(source, /旧版 \.ppt 不支持/);
   assert.doesNotMatch(source, /缩略图|截图|渲染|base64|vision|slide assets/i);
 });
+
+test('knowledge material settings keeps polling long enough for sequential PPTX analysis', () => {
+  const source = read('src/components/settings/KnowledgeMaterialsSettings.tsx');
+
+  assert.match(source, /const MATERIAL_POLL_INTERVAL_MS = 2_000/);
+  assert.match(source, /const MATERIAL_POLL_MAX_ATTEMPTS = 300/);
+  assert.match(source, /attempts >= MATERIAL_POLL_MAX_ATTEMPTS/);
+});

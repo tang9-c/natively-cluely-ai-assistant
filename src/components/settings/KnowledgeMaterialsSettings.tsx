@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw, Trash2, Upload } from 'lucide-react';
 import { explainMaterialStatus } from '../../../shared/realtimeAnswerTrustViewModel';
 
+const MATERIAL_POLL_INTERVAL_MS = 2_000;
+const MATERIAL_POLL_MAX_ATTEMPTS = 300;
+
 function isBatchSettled(materials: any[], ids: string[]) {
   const byId = new Map(materials.map((material) => [material.id, material]));
   return ids.every((id) => {
@@ -84,14 +87,14 @@ export function KnowledgeMaterialsSettings() {
     pollingRef.current = window.setInterval(async () => {
       attempts += 1;
       const latestMaterials = await refreshMaterials();
-      if (isBatchSettled(latestMaterials, materialIds) || attempts >= 30) {
+      if (isBatchSettled(latestMaterials, materialIds) || attempts >= MATERIAL_POLL_MAX_ATTEMPTS) {
         if (pollingRef.current) {
           window.clearInterval(pollingRef.current);
           pollingRef.current = null;
         }
         setBusy(false);
       }
-    }, 1000);
+    }, MATERIAL_POLL_INTERVAL_MS);
   }, [refreshMaterials]);
 
   const uploadMaterials = useCallback(async () => {

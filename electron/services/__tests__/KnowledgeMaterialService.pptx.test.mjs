@@ -255,6 +255,55 @@ test('checkPptxQCloudAvailability via options.getQCloudAvailability: key+provide
   }
 });
 
+test('PPTX background processing is marked indexing before slide analysis completes', async () => {
+  const db = createDbStub();
+  let releaseIngestion;
+  let markIngestionStarted;
+  const ingestionStarted = new Promise((resolve) => {
+    markIngestionStarted = resolve;
+  });
+  const ingestionReleased = new Promise((resolve) => {
+    releaseIngestion = resolve;
+  });
+  const service = new KnowledgeMaterialService(db, null, {
+    getQCloudAvailability: async () => ({ hasNativelyApiKey: true, activeProvider: 'natively', available: true }),
+    createPptxIngestionService: (indexPreparedChunks) => ({
+      ingest: async (materialId) => {
+        markIngestionStarted();
+        await ingestionReleased;
+        await indexPreparedChunks(materialId, [
+          {
+            materialId,
+            chunkIndex: 0,
+            parentChunkIndex: 0,
+            cleanedText: 'Sample slide text',
+            parentText: 'Sample slide text',
+            tokenCount: 3,
+            metadata: { source_format: 'pptx', slide_index: 1 },
+          },
+        ]);
+      },
+    }),
+  });
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-processing-status-'));
+
+  try {
+    const pptxPath = path.join(tmpDir, 'deck.pptx');
+    fs.writeFileSync(pptxPath, 'fake pptx', 'utf8');
+    const result = await service.uploadFiles([pptxPath]);
+    const materialId = result.materials[0].id;
+    await ingestionStarted;
+
+    assert.equal(db.getKnowledgeMaterial(materialId).status, 'indexing');
+
+    releaseIngestion();
+    await waitFor(() => assert.equal(db.getKnowledgeMaterial(materialId).status, 'complete'));
+  } finally {
+    releaseIngestion?.();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test('uploadFiles rejects pptx with localized error from getQCloudAvailability', async () => {
   const db = createDbStub();
   const service = new KnowledgeMaterialService(db, null, {
