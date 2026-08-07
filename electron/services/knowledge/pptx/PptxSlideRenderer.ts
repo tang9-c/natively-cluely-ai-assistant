@@ -16,13 +16,14 @@ export interface PptxRenderedDeck {
 
 interface PptxSlideRendererDeps {
   createTempDir?: () => Promise<string>;
-  runRenderChild?: (scriptPath: string, filePath: string, outputDir: string, timeoutMs: number) => Promise<void>;
+  runRenderChild?: (scriptPath: string, filePath: string, outputDir: string, timeoutMs: number, fontDir: string) => Promise<void>;
   renderTimeoutMs?: number;
 }
 
 const DEFAULT_RENDER_TIMEOUT_MS = 2 * 60 * 1000;
 const MAX_CHILD_ERROR_DETAIL_CHARS = 4000;
 const MAX_RENDER_ATTEMPTS = 2;
+export const PPTX_BUNDLED_FONT_FILE = 'NotoSansCJKsc-Regular.otf';
 
 type PptxRenderStage = 'input_staging' | 'render_child_start' | 'render_child_exit' | 'render_child_timeout';
 
@@ -63,6 +64,7 @@ export class PptxSlideRenderer {
     filePath: string,
     outputDir: string,
     timeoutMs: number,
+    fontDir: string,
   ) => Promise<void>;
   private readonly renderTimeoutMs: number;
 
@@ -92,16 +94,20 @@ export class PptxSlideRenderer {
   private async renderOnce(filePath: string): Promise<PptxRenderedDeck> {
     const tempDir = await this.createTempDir();
     const scriptPath = resolvePptxRenderChildPath();
+    const fontDir = resolvePptxFontDir();
     const stagedInputPath = path.join(tempDir, 'input.pptx');
 
     try {
+      if (!fontDir) {
+        throw createPptxRenderError('pptx_renderer_asset_missing', 'render_child_start', false);
+      }
       try {
         await fs.promises.copyFile(filePath, stagedInputPath);
       } catch {
         throw createPptxRenderError('pptx_input_access_failed', 'input_staging', false);
       }
       await withRenderTimeout(
-        this.runRenderChildImpl(scriptPath, stagedInputPath, tempDir, this.renderTimeoutMs),
+        this.runRenderChildImpl(scriptPath, stagedInputPath, tempDir, this.renderTimeoutMs, fontDir),
         this.renderTimeoutMs,
       );
       const files = (await fs.promises.readdir(tempDir))
@@ -143,6 +149,20 @@ export function resolvePptxRenderChildPath(baseDir: string = __dirname): string 
   return colocatedPath;
 }
 
+export function resolvePptxFontDir(
+  resourcesPath: string | undefined = process.resourcesPath,
+  cwd: string = process.cwd(),
+): string | null {
+  const candidates = [
+    resourcesPath ? path.join(resourcesPath, 'fonts') : null,
+    path.join(cwd, 'resources', 'fonts'),
+  ].filter((candidate): candidate is string => Boolean(candidate));
+
+  return candidates.find((candidate) => (
+    fs.existsSync(path.join(candidate, PPTX_BUNDLED_FONT_FILE))
+  )) ?? null;
+}
+
 function withRenderTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -167,9 +187,10 @@ export function runRenderChild(
   filePath: string,
   outputDir: string,
   timeoutMs: number = DEFAULT_RENDER_TIMEOUT_MS,
+  fontDir: string = resolvePptxFontDir() ?? '',
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [scriptPath, filePath, outputDir], {
+    const child = spawn(process.execPath, [scriptPath, filePath, outputDir, fontDir], {
       env: {
         ...process.env,
         ELECTRON_RUN_AS_NODE: '1',

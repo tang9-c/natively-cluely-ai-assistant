@@ -120,6 +120,11 @@ interface ProviderRequestOptions {
   timingSink?: (event: StructuredGenerationTimingEvent) => void;
 }
 
+type QCloudUserContent = string | Array<
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+>;
+
 // Simple prompt for image analysis (not interview copilot - kept separate)
 const IMAGE_ANALYSIS_PROMPT = `Analyze concisely. Be direct. No markdown formatting. Return plain text only.`
 
@@ -2423,6 +2428,41 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     return this.generateWithNatively(userMessage, systemPrompt, imagePaths, { ...options, dataScopes });
   }
 
+  private async buildQCloudUserContent(
+    text: string,
+    imagePaths?: string[],
+  ): Promise<QCloudUserContent> {
+    if (!imagePaths?.length) return text;
+
+    const content: Exclude<QCloudUserContent, string> = [{ type: 'text', text }];
+    for (const imagePath of imagePaths) {
+      if (!fs.existsSync(imagePath)) continue;
+      try {
+        const compressed = await sharp(imagePath)
+          .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 85 })
+          .toBuffer();
+        content.push({
+          type: 'image_url',
+          image_url: { url: `data:image/jpeg;base64,${compressed.toString('base64')}` },
+        });
+      } catch {
+        console.warn('[LLMHelper] QCLOUD image compression failed; trying raw fallback');
+        const imageData = await fs.promises.readFile(imagePath);
+        if (imageData.length > 500 * 1024) {
+          console.warn('[LLMHelper] QCLOUD raw fallback image is too large; skipping image');
+          continue;
+        }
+        content.push({
+          type: 'image_url',
+          image_url: { url: `data:image/png;base64,${imageData.toString('base64')}` },
+        });
+      }
+    }
+
+    return content.length > 1 ? content : text;
+  }
+
   private extractQCloudStreamContent(chunk: any): string | null {
     const direct = chunk?.choices?.[0]?.delta?.content
       ?? chunk?.choices?.[0]?.message?.content
@@ -2468,11 +2508,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const headers: any = { 'Content-Type': 'application/json', Authorization: `Bearer ${nativelyKey}` };
 
     const qcloudModel = this.resolveQCloudRequestModel(_options);
-    const messages: Array<{ role: 'system' | 'user'; content: string }> = [];
+    const messages: Array<{ role: 'system' | 'user'; content: QCloudUserContent }> = [];
     if (systemPrompt) {
       messages.push({ role: 'system', content: systemPrompt });
     }
-    messages.push({ role: 'user', content: userMessage });
+    messages.push({
+      role: 'user',
+      content: await this.buildQCloudUserContent(userMessage, imagePaths),
+    });
 
     const body: any = {
       model: qcloudModel,
@@ -2482,37 +2525,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     };
     if (_options.qcloudReasoningEffort) body.reasoning_effort = _options.qcloudReasoningEffort;
 
-    // Send images as a structured array so the server can build proper Gemini inlineData parts.
-    // Embedding base64 in the text content would be truncated at 4000 chars and treated as text.
-    //
-    // Compress before sending: retina screenshots are 2-5 MB PNG; the QCLOUD API body limit
-    // is 4 MB. Resize to max 1920px (above the 1470px logical resolution of a MacBook Air, so
-    // no detail is lost) and encode as JPEG 85% — typically 200-250 KB per image.
-    // 4 screenshots × ~278KB base64 = ~1.1 MB, well within the 4 MB server limit.
-    if (imagePaths?.length) {
-      const images: { mime_type: string; data: string }[] = [];
-      for (const p of imagePaths) {
-        if (fs.existsSync(p)) {
-          try {
-            const compressed = await sharp(p)
-              .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
-              .jpeg({ quality: 85 })
-              .toBuffer();
-            images.push({ mime_type: 'image/jpeg', data: compressed.toString('base64') });
-          } catch (compressErr: any) {
-            // Fallback: send raw if sharp fails (e.g. unsupported format)
-            console.warn('[LLMHelper] Image compression failed, sending raw:', compressErr.message);
-            const imageData = await fs.promises.readFile(p);
-            if (imageData.length > 500 * 1024) {
-              console.warn('[LLMHelper] Raw fallback image too large to send, skipping:', p);
-              continue;
-            }
-            images.push({ mime_type: 'image/png', data: imageData.toString('base64') });
-          }
-        }
-      }
-      if (images.length) body.images = images;
-    }
     if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {
       body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it
     }
@@ -3899,7 +3911,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const qcloudModel = this.resolveQCloudRequestModel(options);
     const body: Record<string, unknown> = {
       model: qcloudModel,
-      messages: [{ role: 'user', content: userContent }],
+      messages: [{
+        role: 'user',
+        content: await this.buildQCloudUserContent(userContent, imagePaths),
+      }],
       stream: true,
       max_tokens: this.clampQCloudMaxOutputTokens(options.maxOutputTokens, qcloudModel),
       thinking: options.qcloudThinking ?? { type: 'disabled' },
@@ -3908,35 +3923,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (systemPrompt) body.system = systemPrompt;
     if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {
       body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it
-    }
-
-    // Attach images — compress before sending (same as non-streaming generateWithNatively).
-    // Retina screenshots are 2-5 MB PNG; the QCLOUD API body limit is 4 MB.
-    // Resize to max 1920px and encode as JPEG 85% — typically 200-250 KB per image.
-    // 4 screenshots × ~278KB base64 = ~1.1 MB, well within the 4 MB server limit.
-    if (imagePaths?.length) {
-      const images: { mime_type: string; data: string }[] = [];
-      for (const p of imagePaths) {
-        if (fs.existsSync(p)) {
-          try {
-            const compressed = await sharp(p)
-              .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
-              .jpeg({ quality: 85 })
-              .toBuffer();
-            images.push({ mime_type: 'image/jpeg', data: compressed.toString('base64') });
-          } catch (compressErr: any) {
-            // Fallback: send raw if sharp fails (e.g. unsupported format)
-            console.warn('[LLMHelper] streamWithNatively: image compression failed, sending raw:', compressErr.message);
-            const imageData = await fs.promises.readFile(p);
-            if (imageData.length > 500 * 1024) {
-              console.warn('[LLMHelper] streamWithNatively: raw fallback image too large, skipping:', p);
-              continue;
-            }
-            images.push({ mime_type: 'image/png', data: imageData.toString('base64') });
-          }
-        }
-      }
-      if (images.length) body.images = images;
     }
 
     const streamHeaders: Record<string, string> = {

@@ -4,9 +4,9 @@ import sharp from 'sharp';
 import { convertPptxToPng } from 'pptx-glimpse';
 import { createPptxFontMapping } from './createPptxFontMapping.js';
 
-const [inputPath, outputDir] = process.argv.slice(2);
+const [inputPath, outputDir, fontDir] = process.argv.slice(2);
 
-if (!inputPath || !outputDir) {
+if (!inputPath || !outputDir || !fontDir) {
   console.error('missing_args');
   process.exit(2);
 }
@@ -15,9 +15,11 @@ await fs.mkdir(outputDir, { recursive: true });
 
 const input = await fs.readFile(inputPath);
 const report = await convertPptxToPng(input, {
+  width: 1280,
+  fontDirs: [fontDir],
   fontMapping: createPptxFontMapping(),
   logLevel: 'off',
-  skipSystemFonts: true,
+  skipSystemFonts: false,
 });
 const slides = report.slides || [];
 
@@ -34,7 +36,6 @@ if (slides.length > 200) {
 for (const slide of slides) {
   const source = Buffer.isBuffer(slide.png) ? slide.png : Buffer.from(slide.png);
   const output = await sharp(source)
-    .resize(640, 360, { fit: 'inside', withoutEnlargement: true })
     .jpeg({ quality: 80 })
     .toBuffer();
   await fs.writeFile(

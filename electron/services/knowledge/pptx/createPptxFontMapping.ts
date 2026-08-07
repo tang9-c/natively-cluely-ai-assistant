@@ -1,10 +1,6 @@
 import { createFontMapping } from 'pptx-glimpse';
 
-export const PPTX_UNIFIED_FONT = process.platform === 'darwin'
-  ? 'STHeiti Medium'
-  : process.platform === 'win32'
-    ? 'Microsoft YaHei'
-    : 'Noto Sans CJK SC';
+export const PPTX_UNIFIED_FONT = 'Noto Sans CJK SC';
 
 export const PPTX_FONT_SOURCE_NAMES = [
   'Microsoft YaHei',

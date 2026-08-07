@@ -126,6 +126,10 @@
       {
         "from": "resources/skills",
         "to": "skills"
+      },
+      {
+        "from": "resources/fonts",
+        "to": "fonts"
       }
     ],
     "mac": {

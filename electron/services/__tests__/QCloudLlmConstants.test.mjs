@@ -133,11 +133,11 @@ test('non-streaming QCLOUD sends system prompt as a chat message while streaming
 
   assert.match(nonStreamingBody, /const messages:\s*Array<\{\s*role:\s*['"]system['"]\s*\|\s*['"]user['"]/);
   assert.match(nonStreamingBody, /messages\.push\(\{\s*role:\s*['"]system['"],\s*content:\s*systemPrompt\s*\}\)/);
-  assert.match(nonStreamingBody, /messages\.push\(\{\s*role:\s*['"]user['"],\s*content:\s*userMessage\s*\}\)/);
+  assert.match(nonStreamingBody, /messages\.push\(\{[\s\S]{0,120}role:\s*['"]user['"],[\s\S]{0,120}content:\s*await this\.buildQCloudUserContent\(userMessage,\s*imagePaths\)/);
   assert.match(nonStreamingBody, /messages,\s*\n\s*max_tokens:/);
   assert.doesNotMatch(nonStreamingBody, /body\.system\s*=\s*systemPrompt/);
 
-  assert.match(streamingBody, /messages:\s*\[\{\s*role:\s*['"]user['"],\s*content:\s*userContent\s*\}\]/);
+  assert.match(streamingBody, /messages:\s*\[\{[\s\S]{0,120}role:\s*['"]user['"],[\s\S]{0,120}content:\s*await this\.buildQCloudUserContent\(userContent,\s*imagePaths\)/);
   assert.match(streamingBody, /body\.system\s*=\s*systemPrompt/);
 });
 
