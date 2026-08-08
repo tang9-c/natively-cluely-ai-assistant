@@ -11,7 +11,7 @@ const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
 test('Electron exposes centralized QCloud LLM constants', () => {
   const constants = read('electron/llm/QCloudLlmConstants.ts');
 
-  assert.match(constants, /export const QCLOUD_LLM_BASE_URL = "https:\/\/obzbovrjewzd\.sealosbja\.site"/);
+  assert.match(constants, /export const QCLOUD_LLM_BASE_URL = "https:\/\/aigw\.feigenbaum\.com\.cn"/);
   assert.match(constants, /export const QCLOUD_CHAT_MODEL = "lite32k"/);
   assert.match(constants, /export const QCLOUD_SKILL_CHAT_MODEL = "turbo"/);
   assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_MODEL = "lite32k"/);
