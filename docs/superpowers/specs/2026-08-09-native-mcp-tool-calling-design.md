@@ -20,7 +20,7 @@ The implementation therefore uses MCP as a transport while bypassing dynamic dis
 
 ## Validated Protocol Baseline
 
-On 2026-08-09, the configured development Windchill MCP endpoint was tested with the project MCP SDK and `Windchill_MCP_KEY` from the local `.env` file. The credential value was not printed or persisted in test output.
+On 2026-08-09, the development Windchill MCP endpoint was tested with the project MCP SDK. The one-off test harness received the endpoint explicitly and read `Windchill_MCP_KEY` from the local `.env` file as test-only input. The credential value was not printed or persisted in test output. Neither input is a production runtime configuration source.
 
 - An unauthenticated initialization reached the endpoint and returned `401 Unauthorized` with a Bearer-token requirement.
 - Authenticated initialization negotiated with `windchill-mcp-v2` version `2.0.0`.
@@ -70,6 +70,14 @@ BusinessSystemContextService
 ### McpRpcClient
 
 `McpRpcClient` remains a protocol client. It owns MCP JSON-RPC transport, authentication headers, initialization, tool discovery, tool invocation, timeout propagation, and response parsing. It does not select tools or interpret Windchill business semantics.
+
+#### Runtime source and authentication
+
+Production runtime configuration comes exclusively from the business-system knowledge-source feature. `BusinessSystemContextService` selects a saved `BusinessSystemKnowledgeSource` from `CredentialsManager.getBusinessSystemKnowledgeSources()` and retrieves its credentials with `CredentialsManager.getBusinessSystemCredentials(source.id)`. The saved source supplies the MCP endpoint and `authType`; its separately stored credential record supplies the access key or username/password.
+
+`McpRpcClient` receives that selected source and credential record. For `authType: 'api_key'`, it constructs `Authorization: Bearer <apiKey>` from the selected knowledge source's stored credential. For `authType: 'username_password'`, it uses the existing Basic authentication behavior. Production code does not read `Windchill_MCP_KEY`, an MCP endpoint, or any other business-system credential from `.env`; `Windchill_MCP_KEY` exists only as an opt-in live-test fixture.
+
+#### Tool discovery and cache
 
 Tool discovery caches complete definitions for ten minutes per configured source and credential revision. The client uses the MCP SDK's complete `Tool` type instead of a reduced local copy:
 
@@ -273,7 +281,7 @@ Rollback disables the native-MCP capability gate and reports the business-system
 
 ### Optional live protocol smoke test
 
-An environment-gated test reads the endpoint from the existing business-system source configuration and the Bearer credential from `Windchill_MCP_KEY`. It initializes the real MCP server, confirms that at least one complete tool definition is discovered, and performs a configured non-mutating direct MCP call against a development server/account. The test records the observed count, catalog bytes, timings, result shape, and stable status without asserting a fixed count or printing credentials and business data. It never runs in the default unit-test suite.
+An environment-gated test accepts an explicit development endpoint and reads `Windchill_MCP_KEY` from `.env` as test-only input. It does not modify, override, or act as a fallback for saved knowledge-source configuration. The test initializes the real MCP server, confirms that at least one complete tool definition is discovered, and performs a configured non-mutating direct MCP call against a development server/account. It records the observed count, catalog bytes, timings, result shape, and stable status without asserting a fixed count or printing credentials and business data. It never runs in the default unit-test suite.
 
 ### Environment-gated live agent-loop release test
 
@@ -299,4 +307,5 @@ Any other failure remains a failed test with a stable transport, protocol, model
 - Unsupported model providers fail explicitly rather than using prompt-based JSON emulation.
 - MCP debug traces can reconstruct stages, selected tools, timings, and failures without exposing credentials or complete business data.
 - Existing business-system settings and source credentials continue to work without migration.
+- Production MCP endpoints and credentials are read only from the selected saved knowledge source and its `CredentialsManager` credential record; `.env` values are never a runtime fallback.
 - Rollout and rollback never silently restore the Windchill planner, switch providers, or emulate tool calling with prompt JSON.
