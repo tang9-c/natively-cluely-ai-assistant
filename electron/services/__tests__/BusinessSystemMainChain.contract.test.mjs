@@ -12,6 +12,14 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
 
+function readProductionBusinessSystemSources() {
+  const directory = path.join(root, 'electron/services/business-system');
+  return fs.readdirSync(directory, { recursive: true })
+    .filter((entry) => typeof entry === 'string' && entry.endsWith('.ts') && !entry.includes('__tests__'))
+    .map((entry) => fs.readFileSync(path.join(directory, entry), 'utf8'))
+    .join('\n');
+}
+
 test('generate-what-to-say resolves business system context before realtime context plan', () => {
   const source = read('electron/ipcHandlers.ts');
   const helper = read('electron/services/context/WhatToSayContextPreparation.ts');
@@ -61,4 +69,22 @@ test('generate-what-to-say uses canonical business system degraded reason helper
   assert.match(handler, /businessSystemDegradedReasonForStatus/);
   assert.match(handler, /const businessSystemDegradedReason\s*=/);
   assert.doesNotMatch(handler, /degradedReason:\s*`business_system_\$\{businessSystemResult\.status\}`/);
+});
+
+test('production business-system path contains no legacy planner or fixed MCP tool', () => {
+  const production = readProductionBusinessSystemSources();
+  assert.doesNotMatch(
+    production,
+    /WindchillQueryPlanner|planWindchillQuery|business_context\.query|BUSINESS_CONTEXT_TOOL_NAME/,
+  );
+  assert.match(production, /McpAgentLoop/);
+});
+
+test('real MCP agent test is opt-in and keeps env credentials out of production', () => {
+  const script = read('scripts/test-business-mcp-agent-real.mjs');
+  const production = readProductionBusinessSystemSources();
+  assert.match(script, /Windchill_MCP_KEY/);
+  assert.match(script, /--url/);
+  assert.match(script, /new McpAgentLoop/);
+  assert.doesNotMatch(production, /Windchill_MCP_KEY|process\.env/);
 });

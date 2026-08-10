@@ -29,6 +29,7 @@ function credentialsManagerStub() {
   return {
     getBusinessSystemKnowledgeSources: () => [plmSource],
     getBusinessSystemCredentials: () => ({ apiKey: 'secret-key' }),
+    getBusinessSystemCredentialRevision: () => 3,
   };
 }
 
@@ -37,10 +38,10 @@ test('fixture: meeting PLM request calls the configured PLM source and injects i
   const mcpCalls = [];
   const service = new BusinessSystemContextService({
     credentialsManager: credentialsManagerStub(),
-    mcpClient: {
-      query: async (source, credentials, input) => {
-        mcpCalls.push({ source, credentials, input });
-        return { status: 'ok', sourceName: 'PLM 知识源', summary: '物料 a12345 当前可用。' };
+    agentLoop: {
+      run: async (input) => {
+        mcpCalls.push(input);
+        return { status: 'ok', answer: '物料 a12345 当前可用。', traceId: 'trace-fixture', toolCalls: 1 };
       },
     },
   });
@@ -51,8 +52,8 @@ test('fixture: meeting PLM request calls the configured PLM source and injects i
   assert.equal(mcpCalls[0].source.id, 'plm-default');
   assert.equal(mcpCalls[0].source.kind, 'plm');
   assert.deepEqual(mcpCalls[0].credentials, { apiKey: 'secret-key' });
-  assert.equal(mcpCalls[0].input.sourceHint, 'plm');
-  assert.equal(mcpCalls[0].input.query, '根据 PLM 查一下物料 a12345 是什么状态');
+  assert.equal(mcpCalls[0].credentialRevision, 3);
+  assert.equal(mcpCalls[0].question, '根据 PLM 查一下物料 a12345 是什么状态');
   assert.equal(resolved.kind, 'context');
   assert.equal(resolved.candidate.source, 'business_system');
   assert.equal(resolved.candidate.sourceId, 'plm-default');
@@ -74,8 +75,8 @@ test('fixture: project owner question without PLM wording becomes business syste
   const { BusinessSystemContextService } = await loadModules();
   const service = new BusinessSystemContextService({
     credentialsManager: credentialsManagerStub(),
-    mcpClient: {
-      query: async () => ({ status: 'ok', sourceName: 'PLM 知识源', summary: 'B55 项目当前进度为设计验证，负责人是李四。' }),
+    agentLoop: {
+      run: async () => ({ status: 'ok', answer: 'B55 项目当前进度为设计验证，负责人是李四。', traceId: 'trace-owner', toolCalls: 1 }),
     },
   });
 
@@ -90,8 +91,8 @@ test('fixture: vague explicit request asks for more business anchor', async () =
   let called = false;
   const service = new BusinessSystemContextService({
     credentialsManager: credentialsManagerStub(),
-    mcpClient: {
-      query: async () => { called = true; return { status: 'ok', sourceName: 'PLM 知识源', summary: 'bad' }; },
+    agentLoop: {
+      run: async () => { called = true; return { status: 'ok', answer: 'bad', traceId: 'trace-bad', toolCalls: 0 }; },
     },
   });
 
@@ -106,8 +107,8 @@ test('fixture: auth failure uses fixed reply', async () => {
   const { BusinessSystemContextService } = await loadModules();
   const service = new BusinessSystemContextService({
     credentialsManager: credentialsManagerStub(),
-    mcpClient: {
-      query: async () => ({ status: 'auth_failed', sourceName: 'PLM 知识源' }),
+    agentLoop: {
+      run: async () => ({ status: 'error', errorCode: 'mcp_auth_failed', traceId: 'trace-auth', toolCalls: 0 }),
     },
   });
 
@@ -119,19 +120,19 @@ test('fixture: auth failure uses fixed reply', async () => {
 test('fixture: fixed business system statuses never become context candidates', async () => {
   const { BusinessSystemContextService } = await loadModules();
   const cases = [
-    ['no_result', /没有从PLM 知识源中确认到相关信息/],
-    ['ambiguous', /多个可能结果/],
-    ['auth_failed', /认证失败/],
-    ['timeout', /查询超时/],
-    ['unavailable', /当前不可用/],
-    ['error', /查询PLM 知识源时失败/],
+    ['mcp_auth_failed', 'auth_failed', /认证失败/],
+    ['mcp_timeout', 'timeout', /查询超时/],
+    ['mcp_unavailable', 'unavailable', /当前不可用/],
+    ['mcp_tool_calling_unsupported', 'unavailable', /当前不可用/],
+    ['mcp_protocol_error', 'error', /查询PLM 知识源时失败/],
+    ['mcp_tool_catalog_unsupported', 'error', /查询PLM 知识源时失败/],
   ];
 
-  for (const [status, answerPattern] of cases) {
+  for (const [errorCode, status, answerPattern] of cases) {
     const service = new BusinessSystemContextService({
       credentialsManager: credentialsManagerStub(),
-      mcpClient: {
-        query: async () => ({ status, sourceName: 'PLM 知识源' }),
+      agentLoop: {
+        run: async () => ({ status: 'error', errorCode, traceId: 'trace-error', toolCalls: 0 }),
       },
     });
 
@@ -149,9 +150,10 @@ test('fixture: no configured business system source returns fixed reply without 
     credentialsManager: {
       getBusinessSystemKnowledgeSources: () => [],
       getBusinessSystemCredentials: () => undefined,
+      getBusinessSystemCredentialRevision: () => 0,
     },
-    mcpClient: {
-      query: async () => {
+    agentLoop: {
+      run: async () => {
         throw new Error('should not call MCP without a source');
       },
     },
