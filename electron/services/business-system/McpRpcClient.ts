@@ -35,6 +35,7 @@ export interface McpRpcClientConfig {
     fetchImpl?: typeof fetch;
     clientInfo?: { name: string; version: string };
     sessionFactory?: (config: McpSessionFactoryConfig) => McpSession;
+    now?: () => number;
 }
 
 function buildHeaders(authType: BusinessSystemAuthType, credentials?: BusinessSystemCredentialInput): Record<string, string> {
@@ -99,8 +100,10 @@ class SdkMcpSession implements McpSession {
 
 export class McpRpcClient {
     private readonly session: McpSession;
+    private readonly now: () => number;
 
     constructor(config: McpRpcClientConfig) {
+        this.now = config.now || Date.now;
         const clientInfo = config.clientInfo || { name: 'natively-mcp-rpc', version: '1.0.0' };
         const sessionConfig: McpSessionFactoryConfig = {
             url: config.url,
@@ -122,12 +125,15 @@ export class McpRpcClient {
     }
 
     async listTools(timeoutMs = 2000, signal?: AbortSignal): Promise<McpToolDefinition[]> {
+        const startedAt = this.now();
         const tools: Tool[] = [];
         const seenCursors = new Set<string>();
         let cursor: string | undefined;
 
         do {
-            const page = await this.session.listTools(cursor, timeoutMs, signal);
+            const remainingMs = timeoutMs - (this.now() - startedAt);
+            if (remainingMs <= 0) throw new Error('MCP tools/list timed out before catalog discovery completed');
+            const page = await this.session.listTools(cursor, remainingMs, signal);
             tools.push(...page.tools);
             cursor = page.nextCursor;
             if (cursor) {

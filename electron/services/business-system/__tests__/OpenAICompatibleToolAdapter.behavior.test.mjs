@@ -123,3 +123,29 @@ test('rejects malformed provider arguments and classifies rejected tool catalogs
     (error) => error?.code === 'mcp_tool_catalog_unsupported',
   );
 });
+
+test('distinguishes initial catalog size rejection from tool-result context rejection', async () => {
+  const { OpenAICompatibleToolAdapter } = await loadModule();
+  const reject = (message, status) => new OpenAICompatibleToolAdapter({
+    provider: 'openai', model: 'gpt-test',
+    createCompletion: async () => {
+      const error = new Error(message);
+      error.status = status;
+      throw error;
+    },
+  });
+
+  await assert.rejects(
+    () => reject('request entity too large', 413).runTurn(baseInput()),
+    (error) => error?.code === 'mcp_tool_catalog_unsupported',
+  );
+
+  await assert.rejects(
+    () => reject('context_length_exceeded: tool result message too large', 400).runTurn(baseInput({ messages: [
+      { role: 'user', text: '查零件' },
+      { role: 'assistant', toolCalls: [{ callId: 'c1', name: 'part_get', arguments: { id: 'OR:1' } }] },
+      { role: 'tool', callId: 'c1', name: 'part_get', result: { content: [{ type: 'text', text: 'large result' }] } },
+    ] })),
+    (error) => error?.code === 'mcp_tool_result_unsupported',
+  );
+});

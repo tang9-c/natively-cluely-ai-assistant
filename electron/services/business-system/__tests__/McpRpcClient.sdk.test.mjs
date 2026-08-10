@@ -112,6 +112,32 @@ test('McpRpcClient rejects repeated pagination cursors instead of returning a pa
   await assert.rejects(() => client.listTools(3000), /repeated tools\/list cursor/i);
 });
 
+test('McpRpcClient applies one timeout budget to the complete paginated catalog', async () => {
+  const { McpRpcClient } = await loadModule();
+  let now = 0;
+  const calls = [];
+  const session = {
+    async connect() {},
+    async listTools(cursor, timeoutMs) {
+      calls.push([cursor, timeoutMs]);
+      now += 600;
+      return { tools: [], nextCursor: cursor ? 'page-3' : 'page-2' };
+    },
+    async callTool() {},
+    onToolsChanged() {},
+    async close() {},
+  };
+  const client = new McpRpcClient({
+    url: 'https://example.test/mcp',
+    authType: 'none',
+    now: () => now,
+    sessionFactory: () => session,
+  });
+
+  await assert.rejects(() => client.listTools(1000), /tools\/list timed out/i);
+  assert.deepEqual(calls, [[undefined, 1000], ['page-2', 400]]);
+});
+
 test('McpRpcClient forwards list_changed notifications, tool calls, and close to the SDK session', async () => {
   const { McpRpcClient } = await loadModule();
   const fake = createSession({ first: { tools: [] } });

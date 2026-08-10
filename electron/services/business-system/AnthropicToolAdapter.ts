@@ -2,7 +2,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 import {
     McpToolCallingError,
-    rethrowToolCatalogError,
+    rethrowToolPayloadError,
     type McpAgentMessage,
     type ModelRequestedToolCall,
     type ModelToolCallingAdapter,
@@ -114,7 +114,11 @@ export class AnthropicToolAdapter implements ModelToolCallingAdapter {
                 ...(input.abortSignal ? { signal: input.abortSignal } : {}),
             });
         } catch (error) {
-            rethrowToolCatalogError(error, this.provider);
+            rethrowToolPayloadError(
+                error,
+                this.provider,
+                input.messages.some((message) => message.role === 'tool'),
+            );
         }
         const calls = parseCalls(response?.content);
         if (calls.length > 0) return { type: 'tool_calls', calls };

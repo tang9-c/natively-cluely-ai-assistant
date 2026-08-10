@@ -248,7 +248,7 @@ test('context preparation failures are logged with redaction', async () => {
   }
 });
 
-test('dynamic business action resolves original query from latestTurn instead of prompt instruction or retrievalQuery', async () => {
+test('dynamic business action resolves every request fresh and uses latestTurn instead of prompt metadata', async () => {
   const { prepareWhatToSayContext, WhatToSayContextPreparationService } = await loadHelper();
   WhatToSayContextPreparationService.getInstance()._resetCachesForTest();
   const calls = [];
@@ -276,7 +276,7 @@ test('dynamic business action resolves original query from latestTurn instead of
   await prepareWhatToSayContext(input);
   await prepareWhatToSayContext(input);
 
-  assert.equal(calls.length, 1, 'same resolved business query should use the same cache key');
+  assert.equal(calls.length, 2, 'business requests must not reuse stale results or swallow repeated writes');
   assert.equal(calls[0].question, '查一下 PLM 里 golf car 的 BOM 发布了没有');
   assert.notEqual(calls[0].question, input.promptInstruction);
   assert.notEqual(calls[0].question, input.modeEvent.retrievalQuery);

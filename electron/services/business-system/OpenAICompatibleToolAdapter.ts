@@ -2,6 +2,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 import {
     McpToolCallingError,
+    rethrowToolPayloadError,
     type McpAgentMessage,
     type ModelRequestedToolCall,
     type ModelToolCallingAdapter,
@@ -101,12 +102,6 @@ function parseToolCalls(rawCalls: unknown): ModelRequestedToolCall[] {
     });
 }
 
-function isCatalogRejection(error: any): boolean {
-    const status = Number(error?.status || error?.statusCode || error?.code);
-    const message = String(error?.message || '');
-    return status === 400 && /(tool|function|schema)/i.test(message);
-}
-
 export class OpenAICompatibleToolAdapter implements ModelToolCallingAdapter {
     readonly provider: string;
     readonly model: string;
@@ -131,15 +126,11 @@ export class OpenAICompatibleToolAdapter implements ModelToolCallingAdapter {
                 ...(input.abortSignal ? { signal: input.abortSignal } : {}),
             });
         } catch (error) {
-            if (error instanceof McpToolCallingError) throw error;
-            if (isCatalogRejection(error)) {
-                throw new McpToolCallingError(
-                    'mcp_tool_catalog_unsupported',
-                    `${this.provider} rejected the MCP tool catalog`,
-                    { cause: error },
-                );
-            }
-            throw error;
+            rethrowToolPayloadError(
+                error,
+                this.provider,
+                input.messages.some((message) => message.role === 'tool'),
+            );
         }
 
         const message = response?.choices?.[0]?.message;

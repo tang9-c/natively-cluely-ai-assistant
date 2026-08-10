@@ -2,7 +2,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 import {
     McpToolCallingError,
-    rethrowToolCatalogError,
+    rethrowToolPayloadError,
     type McpAgentMessage,
     type ModelRequestedToolCall,
     type ModelToolCallingAdapter,
@@ -23,7 +23,8 @@ function mapTool(tool: Tool): Record<string, unknown> {
     return {
         name: tool.name,
         ...(tool.description ? { description: tool.description } : {}),
-        parameters: tool.inputSchema,
+        parametersJsonSchema: tool.inputSchema,
+        ...(tool.outputSchema ? { responseJsonSchema: tool.outputSchema } : {}),
     };
 }
 
@@ -124,7 +125,11 @@ export class GeminiToolAdapter implements ModelToolCallingAdapter {
                 ...(input.abortSignal ? { signal: input.abortSignal } : {}),
             });
         } catch (error) {
-            rethrowToolCatalogError(error, this.provider);
+            rethrowToolPayloadError(
+                error,
+                this.provider,
+                input.messages.some((message) => message.role === 'tool'),
+            );
         }
         const parts = response?.candidates?.[0]?.content?.parts;
         const calls = parseCalls(parts);

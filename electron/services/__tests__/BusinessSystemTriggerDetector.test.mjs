@@ -90,6 +90,14 @@ test('passes write operations through for MCP server authorization and validatio
   assert.equal(result.query, '帮我把 PLM 里的 BOM 审批通过');
 });
 
+test('does not treat hypothetical write capability questions as execution requests', async () => {
+  const { detectBusinessSystemTrigger } = await loadDetector();
+  const result = detectBusinessSystemTrigger('PLM 也可以监控库存，然后会不会自动更新一个新的物料推到 ERP？');
+
+  assert.equal(result.shouldQuery, false);
+  assert.equal(result.failureReason, 'not_explicitly_requested');
+});
+
 test('does not trigger on business words without explicit system request', async () => {
   const { detectBusinessSystemTrigger } = await loadDetector();
 

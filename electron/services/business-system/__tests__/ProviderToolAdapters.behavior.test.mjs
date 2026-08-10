@@ -14,7 +14,13 @@ async function load(name) {
 const tools = [{
   name: 'part_get',
   description: 'Get a part',
-  inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  inputSchema: {
+    type: 'object',
+    properties: { id: { type: 'string' } },
+    required: ['id'],
+    additionalProperties: false,
+  },
+  outputSchema: { type: 'object', properties: { state: { type: 'string' } } },
 }];
 
 const input = (messages = [{ role: 'user', text: '查询零件' }]) => ({
@@ -86,7 +92,8 @@ test('Gemini uses functionDeclarations and parses native functionCall parts', as
   const turn = await adapter.runTurn(input());
 
   assert.equal(request.config.tools[0].functionDeclarations.length, tools.length);
-  assert.deepEqual(request.config.tools[0].functionDeclarations[0].parameters, tools[0].inputSchema);
+  assert.deepEqual(request.config.tools[0].functionDeclarations[0].parametersJsonSchema, tools[0].inputSchema);
+  assert.deepEqual(request.config.tools[0].functionDeclarations[0].responseJsonSchema, tools[0].outputSchema);
   assert.deepEqual(turn, {
     type: 'tool_calls',
     calls: [{ callId: 'g1', name: 'part_get', arguments: { id: 'OR:1' } }],
@@ -110,6 +117,42 @@ test('Anthropic and Gemini normalize full-catalog rejection without shrinking th
     await assert.rejects(
       () => adapter.runTurn(input()),
       (error) => error?.code === 'mcp_tool_catalog_unsupported',
+    );
+  }
+});
+
+test('Anthropic and Gemini classify oversized initial catalogs and later tool results by stage', async () => {
+  const { AnthropicToolAdapter } = await load('AnthropicToolAdapter');
+  const { GeminiToolAdapter } = await load('GeminiToolAdapter');
+  const factories = [
+    (reject) => new AnthropicToolAdapter({ provider: 'claude', model: 'claude-test', createMessage: reject }),
+    (reject) => new GeminiToolAdapter({ provider: 'gemini', model: 'gemini-test', generateContent: reject }),
+  ];
+  const toolResultMessages = [
+    { role: 'user', text: '查零件' },
+    { role: 'assistant', toolCalls: [{ callId: 'c1', name: 'part_get', arguments: { id: 'OR:1' } }] },
+    { role: 'tool', callId: 'c1', name: 'part_get', result: { content: [{ type: 'text', text: 'large result' }] } },
+  ];
+
+  for (const makeAdapter of factories) {
+    const rejectCatalog = async () => {
+      const error = new Error('request entity too large');
+      error.status = 413;
+      throw error;
+    };
+    await assert.rejects(
+      () => makeAdapter(rejectCatalog).runTurn(input()),
+      (error) => error?.code === 'mcp_tool_catalog_unsupported',
+    );
+
+    const rejectResult = async () => {
+      const error = new Error('context_length_exceeded: tool result message too large');
+      error.status = 400;
+      throw error;
+    };
+    await assert.rejects(
+      () => makeAdapter(rejectResult).runTurn(input(toolResultMessages)),
+      (error) => error?.code === 'mcp_tool_result_unsupported',
     );
   }
 });

@@ -2,7 +2,8 @@ import type { BusinessSystemSourceKind, BusinessSystemTriggerResult } from './Bu
 
 const STRONG_READONLY_ACTION_PATTERN = /(查(?:一下|下|询)|查询|帮我看(?:一下|下)?|去\s*(?:系统|PLM|Windchill|QMS|ERP|MES|CRM)\s*里看(?:一下|下)?|根据\s*(?:PLM|Windchill|QMS|ERP|MES|CRM)|用\s*(?:PLM|Windchill|QMS|ERP|MES|CRM)\s*确认)/i;
 const WEAK_CONFIRM_ACTION_PATTERN = /确认(?:一下|下)?/i;
-const WRITE_OPERATION_PATTERN = /(创建|新增|修改|更新|审批通过|通过审批|提交|删除|写回|自动写入|改成|close\s+out|approve|submit|delete|write\s*back)/i;
+const EXPLICIT_WRITE_OPERATION_PATTERN = /(?:请|帮我|麻烦|替我|把|将)[^。！？!?]{0,32}(?:创建|新增|修改|更新|审批通过|通过审批|提交|删除|写回|自动写入|改成)|^在[^。！？!?]{0,20}(?:中|里)[^。！？!?]{0,8}(?:创建|新增|修改|更新|审批通过|通过审批|提交|删除|写回|自动写入|改成)|^(?:创建|新增|修改|更新|审批通过|通过审批|提交|删除|写回|自动写入|改成)|^(?:please\s+)?(?:create|update|approve|submit|delete|write\s*back|close\s+out)\b/i;
+const HYPOTHETICAL_WRITE_PATTERN = /(会不会|是否(?:会|能)?|能不能|可不可以|能否|是否支持)[^。！？!?]{0,24}(?:创建|新增|修改|更新|审批|提交|删除|写回|自动写入|改成)/i;
 
 const SYSTEM_HINTS: Array<{ pattern: RegExp; sourceHint: BusinessSystemSourceKind }> = [
     { pattern: /\b(?:PLM|Windchill)\b/i, sourceHint: 'plm' },
@@ -48,8 +49,10 @@ export function detectBusinessSystemTrigger(question: string | undefined, recent
     const cleanedRecentContext = summarizeRecentContext(recentContext);
     const sourceHint = findSourceHint(cleanedQuestion);
 
+    const hasExplicitWriteAction = EXPLICIT_WRITE_OPERATION_PATTERN.test(cleanedQuestion)
+        && !HYPOTHETICAL_WRITE_PATTERN.test(cleanedQuestion);
     const hasReadonlyAction = STRONG_READONLY_ACTION_PATTERN.test(cleanedQuestion)
-        || WRITE_OPERATION_PATTERN.test(cleanedQuestion)
+        || hasExplicitWriteAction
         || (Boolean(sourceHint) && WEAK_CONFIRM_ACTION_PATTERN.test(cleanedQuestion));
     if (!hasReadonlyAction) {
         return { shouldQuery: false, failureReason: 'not_explicitly_requested' };

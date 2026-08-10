@@ -212,7 +212,6 @@ export class WhatToSayContextPreparationService {
     private cachedBusinessSystemLlmHelper: LLMHelper | null = null;
     private cachedMaterialService: UploadedMaterialSearchService | null = null;
     private materialContributionCache = new Map<string, { expiresAt: number; value: UploadedMaterialContextContribution }>();
-    private businessResultCache = new Map<string, { expiresAt: number; value: BusinessSystemServiceResult }>();
     private screenResultCache = new Map<string, { expiresAt: number; value: ScreenUnderstandingResult }>();
 
     private constructor() {}
@@ -229,7 +228,6 @@ export class WhatToSayContextPreparationService {
         this.cachedBusinessSystemLlmHelper = null;
         this.cachedMaterialService = null;
         this.materialContributionCache.clear();
-        this.businessResultCache.clear();
         this.screenResultCache.clear();
     }
 
@@ -274,14 +272,6 @@ export class WhatToSayContextPreparationService {
 
     writeMaterialContribution(cacheKey: string, contribution: UploadedMaterialContextContribution, nowMs: number): void {
         writeCache(this.materialContributionCache, cacheKey, cloneContribution(contribution), nowMs);
-    }
-
-    readBusinessResult(cacheKey: string, nowMs: number): BusinessSystemServiceResult | undefined {
-        return readCache(this.businessResultCache, cacheKey, nowMs);
-    }
-
-    writeBusinessResult(cacheKey: string, result: BusinessSystemServiceResult, nowMs: number): void {
-        writeCache(this.businessResultCache, cacheKey, result, nowMs);
     }
 
     readScreenResult(cacheKey: string, nowMs: number): ScreenUnderstandingResult | undefined {
@@ -431,14 +421,6 @@ function getMaterialCacheKey(input: {
         embeddingReady: input.embeddingReady,
         tokenBudget: CONTEXT_TOKEN_BUDGET,
     }));
-}
-
-function getBusinessCacheKey(question?: string, recentContext?: string, selectedModel?: string): string {
-    return hashKey([
-        compact(question).toLowerCase(),
-        compact(recentContext).toLowerCase(),
-        compact(selectedModel).toLowerCase(),
-    ].join('\n'));
 }
 
 export function resolveBusinessQueryText(input: {
@@ -595,16 +577,6 @@ async function prepareBusinessContext(input: {
     if (input.decision.business === 'not_needed') return { kind: 'skipped' };
     const recentContext = buildBusinessSystemRecentContextSummary(input.request.modeEvent?.latestTurn);
     const businessQuery = resolveBusinessQueryText(input.request);
-    const cacheKey = getBusinessCacheKey(
-        businessQuery,
-        recentContext,
-        input.request.llmHelper?.getCurrentModel(),
-    );
-    const cached = input.service.readBusinessResult(cacheKey, input.now());
-    if (cached) {
-        if (cached.kind === 'context') input.contextCandidates.push(cached.candidate);
-        return cached;
-    }
     if (shouldUseReadyContext(input.decision.business)) {
         addUniqueReason(input.degradedReasons, 'business_system_context_dropped');
         return { kind: 'skipped' };
@@ -623,7 +595,6 @@ async function prepareBusinessContext(input: {
         input.timings.businessMs = measure(input.now, startedAt);
         input.retrievalTimingMs.business_system = input.timings.businessMs;
         if (result.kind === 'context') input.contextCandidates.push(result.candidate);
-        if (result.kind !== 'skipped') input.service.writeBusinessResult(cacheKey, result, input.now());
         if (result.kind === 'fixed_reply') {
             addUniqueReason(input.degradedReasons, businessSystemDegradedReasonForStatus(result.status));
         }

@@ -49,11 +49,33 @@ export class McpToolCallingError extends Error {
     }
 }
 
-export function rethrowToolCatalogError(error: unknown, provider: string): never {
+export function rethrowToolPayloadError(
+    error: unknown,
+    provider: string,
+    hasToolResult: boolean,
+): never {
+    if (error instanceof McpToolCallingError) throw error;
     const candidate = error as { status?: unknown; statusCode?: unknown; code?: unknown; message?: unknown };
     const status = Number(candidate?.status || candidate?.statusCode || candidate?.code);
     const message = String(candidate?.message || '');
-    if (status === 400 && /(tool|function|schema)/i.test(message)) {
+    const isRejectedRequest = status === 400 || status === 413 || status === 422;
+    const isCatalogSpecific = /(tool(?:s| catalog)?|function(?: declaration)?|schema)/i.test(message);
+    const isSizeSpecific = /(context|token|payload|request entity|too large|maximum.{0,16}length|size|limit)/i.test(message);
+    if (isRejectedRequest && hasToolResult && isSizeSpecific) {
+        throw new McpToolCallingError(
+            'mcp_tool_result_unsupported',
+            `${provider} rejected the MCP tool result payload`,
+            { cause: error },
+        );
+    }
+    if (isRejectedRequest && isCatalogSpecific) {
+        throw new McpToolCallingError(
+            'mcp_tool_catalog_unsupported',
+            `${provider} rejected the MCP tool catalog`,
+            { cause: error },
+        );
+    }
+    if (isRejectedRequest && isSizeSpecific) {
         throw new McpToolCallingError(
             'mcp_tool_catalog_unsupported',
             `${provider} rejected the MCP tool catalog`,
