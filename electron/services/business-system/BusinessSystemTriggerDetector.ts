@@ -48,16 +48,8 @@ export function detectBusinessSystemTrigger(question: string | undefined, recent
     const cleanedRecentContext = summarizeRecentContext(recentContext);
     const sourceHint = findSourceHint(cleanedQuestion);
 
-    if (WRITE_OPERATION_PATTERN.test(cleanedQuestion)) {
-        return {
-            shouldQuery: false,
-            sourceHint,
-            failureReason: 'unsupported_operation',
-            userMessage: '当前只支持只读查询，暂不支持创建、修改、审批、提交、删除或写回操作。',
-        };
-    }
-
     const hasReadonlyAction = STRONG_READONLY_ACTION_PATTERN.test(cleanedQuestion)
+        || WRITE_OPERATION_PATTERN.test(cleanedQuestion)
         || (Boolean(sourceHint) && WEAK_CONFIRM_ACTION_PATTERN.test(cleanedQuestion));
     if (!hasReadonlyAction) {
         return { shouldQuery: false, failureReason: 'not_explicitly_requested' };

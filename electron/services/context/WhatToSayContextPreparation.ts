@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import { app } from 'electron';
 import { DatabaseManager, type AnswerCitationRecord, type AnswerDegradedReason } from '../../db/DatabaseManager';
 import type { ModeEventContext } from '../../llm';
+import type { LLMHelper } from '../../LLMHelper';
 import type { ProviderDataScopePolicy } from '../../llm/ProviderRouter';
 import type { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
 import { validateImagePath as defaultValidateImagePath } from '../../utils/curlUtils';
@@ -13,7 +14,9 @@ import {
     toBusinessSystemFixedReply,
     type BusinessSystemServiceResult,
 } from '../business-system/BusinessSystemContextService';
-import { createWindchillBusinessContextAdapter } from '../business-system/WindchillBusinessContextAdapter';
+import { McpAgentLoop } from '../business-system/McpAgentLoop';
+import { McpToolCallingError } from '../business-system/ModelToolCallingAdapter';
+import { createSelectedModelToolAdapter } from '../business-system/SelectedModelToolAdapterFactory';
 import { CredentialsManager } from '../CredentialsManager';
 import { getContextQualityDiagnosticsCollector } from '../eval/ContextQualityDiagnostics';
 import { KnowledgeMaterialService } from '../knowledge/KnowledgeMaterialService';
@@ -78,6 +81,7 @@ export interface WhatToSayContextPreparationInput {
     modeEvent?: WhatToSayModeEventContext;
     providerScopes?: ProviderDataScopePolicy;
     ragManager?: unknown;
+    llmHelper?: LLMHelper;
     materialServiceFactory?: () => UploadedMaterialSearchService;
     businessSystemServiceFactory?: () => BusinessSystemServiceLike;
     screenUnderstandingServiceFactory?: () => ScreenUnderstandingServiceLike;
@@ -205,6 +209,7 @@ export class WhatToSayContextPreparationService {
     private static instance: WhatToSayContextPreparationService | null = null;
 
     private cachedBusinessSystemService: BusinessSystemServiceLike | null = null;
+    private cachedBusinessSystemLlmHelper: LLMHelper | null = null;
     private cachedMaterialService: UploadedMaterialSearchService | null = null;
     private materialContributionCache = new Map<string, { expiresAt: number; value: UploadedMaterialContextContribution }>();
     private businessResultCache = new Map<string, { expiresAt: number; value: BusinessSystemServiceResult }>();
@@ -221,18 +226,32 @@ export class WhatToSayContextPreparationService {
 
     _resetCachesForTest(): void {
         this.cachedBusinessSystemService = null;
+        this.cachedBusinessSystemLlmHelper = null;
         this.cachedMaterialService = null;
         this.materialContributionCache.clear();
         this.businessResultCache.clear();
         this.screenResultCache.clear();
     }
 
-    getDefaultBusinessSystemService(): BusinessSystemServiceLike {
-        if (!this.cachedBusinessSystemService) {
+    getDefaultBusinessSystemService(llmHelper?: LLMHelper): BusinessSystemServiceLike {
+        if (!this.cachedBusinessSystemService || this.cachedBusinessSystemLlmHelper !== llmHelper) {
+            const agentLoop = new McpAgentLoop({
+                adapterFactory: (payload) => {
+                    if (!llmHelper) {
+                        throw new McpToolCallingError(
+                            'mcp_tool_calling_unsupported',
+                            'Selected LLM is unavailable for MCP tool calling',
+                        );
+                    }
+                    return createSelectedModelToolAdapter(llmHelper, payload);
+                },
+            });
             this.cachedBusinessSystemService = new BusinessSystemContextService({
                 credentialsManager: CredentialsManager.getInstance(),
-                plmAdapter: createWindchillBusinessContextAdapter(),
+                settingsManager: SettingsManager.getInstance(),
+                agentLoop,
             });
+            this.cachedBusinessSystemLlmHelper = llmHelper || null;
         }
         return this.cachedBusinessSystemService;
     }
@@ -278,8 +297,11 @@ export class WhatToSayContextPreparationService {
     }
 }
 
-function getDefaultBusinessSystemService(service: WhatToSayContextPreparationService): BusinessSystemServiceLike {
-    return service.getDefaultBusinessSystemService();
+function getDefaultBusinessSystemService(
+    service: WhatToSayContextPreparationService,
+    llmHelper?: LLMHelper,
+): BusinessSystemServiceLike {
+    return service.getDefaultBusinessSystemService(llmHelper);
 }
 
 function getDefaultMaterialService(service: WhatToSayContextPreparationService, ragManager: unknown): UploadedMaterialSearchService {
@@ -411,8 +433,12 @@ function getMaterialCacheKey(input: {
     }));
 }
 
-function getBusinessCacheKey(question?: string, recentContext?: string): string {
-    return hashKey(`${compact(question).toLowerCase()}\n${compact(recentContext).toLowerCase()}`);
+function getBusinessCacheKey(question?: string, recentContext?: string, selectedModel?: string): string {
+    return hashKey([
+        compact(question).toLowerCase(),
+        compact(recentContext).toLowerCase(),
+        compact(selectedModel).toLowerCase(),
+    ].join('\n'));
 }
 
 export function resolveBusinessQueryText(input: {
@@ -569,7 +595,11 @@ async function prepareBusinessContext(input: {
     if (input.decision.business === 'not_needed') return { kind: 'skipped' };
     const recentContext = buildBusinessSystemRecentContextSummary(input.request.modeEvent?.latestTurn);
     const businessQuery = resolveBusinessQueryText(input.request);
-    const cacheKey = getBusinessCacheKey(businessQuery, recentContext);
+    const cacheKey = getBusinessCacheKey(
+        businessQuery,
+        recentContext,
+        input.request.llmHelper?.getCurrentModel(),
+    );
     const cached = input.service.readBusinessResult(cacheKey, input.now());
     if (cached) {
         if (cached.kind === 'context') input.contextCandidates.push(cached.candidate);
@@ -583,7 +613,8 @@ async function prepareBusinessContext(input: {
     const startedAt = input.now();
     try {
         const serviceInitStartedAt = input.now();
-        const service = input.request.businessSystemServiceFactory?.() || getDefaultBusinessSystemService(input.service);
+        const service = input.request.businessSystemServiceFactory?.()
+            || getDefaultBusinessSystemService(input.service, input.request.llmHelper);
         input.timings.serviceInitMs += measure(input.now, serviceInitStartedAt);
         const result = await service.resolve({
             question: businessQuery,

@@ -1,18 +1,14 @@
 import type { AnswerDegradedReason } from '../../db/DatabaseManager';
 import type { CredentialsManager } from '../CredentialsManager';
+import type { SettingsManager } from '../SettingsManager';
 import type { RealtimeContextCandidate } from '../context/RealtimeContextOrchestrator';
-import { BusinessMcpClient } from './BusinessMcpClient';
 import { detectBusinessSystemTrigger } from './BusinessSystemTriggerDetector';
+import type { McpAgentLoop, McpAgentRunResult } from './McpAgentLoop';
 import type {
-    BusinessSystemEvidence,
     BusinessSystemFixedReplyStatus,
     BusinessSystemKnowledgeSource,
-    BusinessSystemQueryResult,
     BusinessSystemSourceKind,
 } from './BusinessSystemTypes';
-import type { WindchillBusinessContextAdapter } from './WindchillBusinessContextAdapter';
-
-const WINDCHILL_QUERY_TIMEOUT_MS = 6000;
 
 export type BusinessSystemServiceResult =
     | { kind: 'skipped' }
@@ -25,9 +21,12 @@ export interface BusinessSystemResolveInput {
 }
 
 interface BusinessSystemContextServiceDeps {
-    credentialsManager: Pick<CredentialsManager, 'getBusinessSystemKnowledgeSources' | 'getBusinessSystemCredentials'>;
-    mcpClient?: Pick<BusinessMcpClient, 'query'>;
-    plmAdapter?: Pick<WindchillBusinessContextAdapter, 'query'>;
+    credentialsManager: Pick<CredentialsManager,
+        'getBusinessSystemKnowledgeSources'
+        | 'getBusinessSystemCredentials'
+        | 'getBusinessSystemCredentialRevision'>;
+    agentLoop: Pick<McpAgentLoop, 'run'>;
+    settingsManager?: Pick<SettingsManager, 'getNativeMcpToolCallingEnabled'>;
 }
 
 function pickSource(sources: BusinessSystemKnowledgeSource[], hint?: BusinessSystemSourceKind): BusinessSystemKnowledgeSource | { status: 'ambiguous' } | undefined {
@@ -125,85 +124,46 @@ export function toBusinessSystemFixedReply(input: {
     return { kind: 'fixed_reply', status: 'error', sourceName, answer: `查询${sourceName}时失败，无法确认该信息。` };
 }
 
-function formatDeterministicBusinessAnswer(sourceName: string, result: BusinessSystemQueryResult): string {
-    const records = result.evidence?.records ?? [];
-    if (records.length > 0) {
-        const lines = [`已从 ${sourceName} 查询到以下结果：`, ''];
-        records.slice(0, 5).forEach((record, index) => {
-            lines.push(`记录 ${index + 1}：${record.title || '未命名记录'}`);
-            for (const field of record.fields.slice(0, 16)) {
-                lines.push(`- ${field.name}: ${field.value}`);
-            }
-            if (index < records.length - 1) lines.push('');
-        });
-        lines.push('');
-        lines.push(`共查询到 ${result.evidence?.recordCount ?? records.length} 条记录。`);
-        return lines.join('\n');
-    }
-    const summary = String(result.summary || '').trim();
-    return `根据 ${sourceName} 的查询结果：\n${summary}`;
-}
-
-function formatEvidenceContext(sourceName: string, evidence: BusinessSystemEvidence): string {
-    const label = evidence.source === 'windchill' ? 'Windchill' : sourceName;
-    const lines = [
-        `${label} 结构化查询结果：`,
-    ];
-    if (evidence.sourceTool) lines.push(`工具：${evidence.sourceTool}`);
-    lines.push(`记录数：${evidence.recordCount}`);
-    evidence.records.slice(0, 5).forEach((record, index) => {
-        lines.push(`记录 ${index + 1}${record.title ? `：${record.title}` : '：'}`);
-        for (const field of record.fields.slice(0, 16)) {
-            lines.push(`- ${field.name}: ${field.value}`);
-        }
-    });
-    if (typeof evidence.omittedFieldCount === 'number' && evidence.omittedFieldCount > 0) {
-        lines.push(`已省略字段数：${evidence.omittedFieldCount}`);
-    }
-    lines.push('请用中文自然汇报，不要输出 JSON，不要编造缺失字段。');
-    return lines.join('\n');
-}
-
-function hasBusinessSystemContent(result: BusinessSystemQueryResult): boolean {
-    return Boolean(
-        result.summary?.trim()
-        || result.evidence?.records?.length
-        || (typeof result.evidence?.recordCount === 'number' && result.evidence.recordCount > 0)
-        || result.items?.length
-    );
-}
-
-function buildContextCandidate(source: BusinessSystemKnowledgeSource, result: BusinessSystemQueryResult): RealtimeContextCandidate {
-    const sourceName = result.sourceName || source.name;
-    const summary = String(result.summary || '').trim();
-    const text = result.evidence
-        ? formatEvidenceContext(sourceName, result.evidence)
-        : `根据 ${sourceName}：${summary}`;
+function buildContextCandidate(
+    source: BusinessSystemKnowledgeSource,
+    answer: string,
+    traceId: string,
+    toolCalls: number,
+): RealtimeContextCandidate {
+    const text = `根据 ${source.name} 的 MCP 查询结果：\n${answer}`;
     return {
         source: 'business_system',
         sourceId: source.id,
         text,
         tokenCount: Math.max(1, Math.ceil(text.length / 4)),
         metadata: {
-            sourceName,
-            status: result.status,
+            sourceName: source.name,
+            status: 'ok',
             kind: source.kind,
-            evidenceSource: result.evidence?.source,
-            sourceTool: result.evidence?.sourceTool,
-            recordCount: result.evidence?.recordCount,
+            traceId,
+            toolCalls,
         },
     };
 }
 
+function mapAgentFailure(result: Extract<McpAgentRunResult, { status: 'error' }>): BusinessSystemFixedReplyStatus {
+    if (result.errorCode === 'mcp_auth_failed') return 'auth_failed';
+    if (result.errorCode === 'mcp_timeout') return 'timeout';
+    if (result.errorCode === 'mcp_unavailable' || result.errorCode === 'mcp_tool_calling_unsupported') {
+        return 'unavailable';
+    }
+    return 'error';
+}
+
 export class BusinessSystemContextService {
     private credentialsManager: BusinessSystemContextServiceDeps['credentialsManager'];
-    private mcpClient: Pick<BusinessMcpClient, 'query'>;
-    private plmAdapter?: Pick<WindchillBusinessContextAdapter, 'query'>;
+    private agentLoop: Pick<McpAgentLoop, 'run'>;
+    private settingsManager?: BusinessSystemContextServiceDeps['settingsManager'];
 
     constructor(deps: BusinessSystemContextServiceDeps) {
         this.credentialsManager = deps.credentialsManager;
-        this.mcpClient = deps.mcpClient || new BusinessMcpClient();
-        this.plmAdapter = deps.plmAdapter;
+        this.agentLoop = deps.agentLoop;
+        this.settingsManager = deps.settingsManager;
     }
 
     async resolve(input: BusinessSystemResolveInput): Promise<BusinessSystemServiceResult> {
@@ -211,12 +171,6 @@ export class BusinessSystemContextService {
         if (!trigger.shouldQuery) {
             if (trigger.failureReason === 'missing_query_anchor') {
                 return toBusinessSystemFixedReply({ status: trigger.failureReason });
-            }
-            if (trigger.failureReason === 'unsupported_operation') {
-                return toBusinessSystemFixedReply({
-                    status: 'unsupported_operation',
-                    sourceName: trigger.sourceHint,
-                });
             }
             return { kind: 'skipped' };
         }
@@ -230,29 +184,19 @@ export class BusinessSystemContextService {
         }
 
         const source = selectedSource;
+        if (this.settingsManager?.getNativeMcpToolCallingEnabled() === false) {
+            return toBusinessSystemFixedReply({ status: 'unavailable', sourceName: source.name });
+        }
         const credentials = this.credentialsManager.getBusinessSystemCredentials(source.id);
-        let result: BusinessSystemQueryResult;
+        let result: McpAgentRunResult;
         try {
-            // PLM 类知识源走专用 adapter(只支持 Windchill);
-            // 其他(QMS、business_system、未识别的 MCP)继续原路调 business_context.query。
-            if (source.kind === 'plm' && this.plmAdapter) {
-                result = await this.plmAdapter.query(
-                    {
-                        query: trigger.query || '',
-                        sourceHint: trigger.sourceHint,
-                        recentContext: trigger.recentContext,
-                        sourceUrl: source.url,
-                    },
-                    credentials,
-                    WINDCHILL_QUERY_TIMEOUT_MS,
-                );
-            } else {
-                result = await this.mcpClient.query(source, credentials, {
-                    query: trigger.query || '',
-                    sourceHint: trigger.sourceHint,
-                    recentContext: trigger.recentContext,
-                });
-            }
+            result = await this.agentLoop.run({
+                source,
+                credentials,
+                credentialRevision: this.credentialsManager.getBusinessSystemCredentialRevision(source.id),
+                question: trigger.query || '',
+                recentContext: trigger.recentContext,
+            });
         } catch {
             return toBusinessSystemFixedReply({
                 status: 'unavailable',
@@ -260,20 +204,19 @@ export class BusinessSystemContextService {
             });
         }
 
-        if (result.status !== 'ok' || !hasBusinessSystemContent(result)) {
-            const failureStatus = result.status === 'ok' ? 'no_result' : result.status;
+        if (result.status !== 'ok') {
             return toBusinessSystemFixedReply({
-                status: failureStatus,
-                sourceName: result.sourceName || source.name,
+                status: mapAgentFailure(result),
+                sourceName: source.name,
             });
         }
 
         return {
             kind: 'context',
             status: 'ok',
-            sourceName: result.sourceName || source.name,
-            candidate: buildContextCandidate(source, result),
-            answer: formatDeterministicBusinessAnswer(result.sourceName || source.name, result),
+            sourceName: source.name,
+            candidate: buildContextCandidate(source, result.answer, result.traceId, result.toolCalls),
+            answer: result.answer,
         };
     }
 }

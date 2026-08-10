@@ -17,6 +17,8 @@ export interface AppSettings {
     codexCliTimeoutMs?: number;
     codexCliSandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
     knowledgeMode?: boolean;
+    // Internal rollout/rollback gate. This is not an MCP authorization policy.
+    nativeMcpToolCallingEnabled?: boolean;
     localWhisperModel?: string;
     // Per-channel model overrides for local Whisper. When
     // localWhisperPerChannelEnabled is true, the two LocalWhisperSTT instances
@@ -127,6 +129,10 @@ export class SettingsManager {
 
     public getTechnicalInterviewVisionFirst(): boolean {
         return this.settings.technicalInterviewVisionFirst !== false;
+    }
+
+    public getNativeMcpToolCallingEnabled(): boolean {
+        return this.settings.nativeMcpToolCallingEnabled !== false;
     }
 
     public getLocalIntentEnhancementEnabled(): boolean {

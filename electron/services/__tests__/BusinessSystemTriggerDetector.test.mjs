@@ -81,12 +81,13 @@ test('detects PLM QMS ERP MES and CRM readonly lookup with precise source hints'
   }
 });
 
-test('rejects write operations as unsupported business system operations', async () => {
+test('passes write operations through for MCP server authorization and validation', async () => {
   const { detectBusinessSystemTrigger } = await loadDetector();
   const result = detectBusinessSystemTrigger('帮我把 PLM 里的 BOM 审批通过');
 
-  assert.equal(result.shouldQuery, false);
-  assert.equal(result.failureReason, 'unsupported_operation');
+  assert.equal(result.shouldQuery, true);
+  assert.equal(result.sourceHint, 'plm');
+  assert.equal(result.query, '帮我把 PLM 里的 BOM 审批通过');
 });
 
 test('does not trigger on business words without explicit system request', async () => {

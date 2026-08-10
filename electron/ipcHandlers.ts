@@ -1715,7 +1715,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     };
 
     try {
-      const { BusinessMcpClient } = require('./services/business-system/BusinessMcpClient');
       const source = input?.source;
       if (!source?.url || !source?.name) {
         return {
@@ -1726,15 +1725,15 @@ export function initializeIpcHandlers(appState: AppState): void {
           message: '请先填写名称、服务地址和凭据。',
         };
       }
-      if (source.kind === 'plm') {
-        const { McpRpcClient } = require('./services/business-system/McpRpcClient');
-        const client = new McpRpcClient({
-          url: String(source.url || '').trim(),
-          authType: source.authType === 'username_password' ? 'username_password' : 'api_key',
-          credentials: input?.credentials,
-          clientInfo: { name: 'natively-windchill-test', version: '1.0.0' },
-        });
-        await client.initialize(6000);
+      const { McpRpcClient } = require('./services/business-system/McpRpcClient');
+      const client = new McpRpcClient({
+        url: String(source.url || '').trim(),
+        authType: source.authType === 'username_password' ? 'username_password' : 'api_key',
+        credentials: input?.credentials,
+        clientInfo: { name: 'natively-mcp-connection-test', version: '1.0.0' },
+      });
+      try {
+        await client.connect(6000);
         const tools = await client.listTools(6000);
         const toolCount = tools.length;
         return {
@@ -1748,21 +1747,9 @@ export function initializeIpcHandlers(appState: AppState): void {
             : '服务可达，但没有返回可用查询能力。',
           error: toolCount > 0 ? undefined : 'no_tools',
         };
+      } finally {
+        await client.close().catch((): undefined => undefined);
       }
-      const result = await new BusinessMcpClient().query(source, input?.credentials, {
-        query: '测试业务系统知识源连接',
-        sourceHint: source.kind,
-      }, 2000);
-      return {
-        success: result.status === 'ok',
-        status: result.status,
-        sourceName: result.sourceName,
-        detailCode: result.errorCode || result.status,
-        message: result.status === 'ok'
-          ? `连接成功：${result.sourceName || source.name}`
-          : undefined,
-        error: result.errorCode,
-      };
     } catch (error: any) {
       console.error('[IPC] business-system:test-source failed:', redactForLog([error]));
       const classified = classifyBusinessSystemTestError(error);
@@ -3334,6 +3321,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           modeEvent: sanitizedModeEvent,
           providerScopes,
           ragManager: appState.getRAGManager(),
+          llmHelper: appState.processingHelper.getLLMHelper(),
         });
         const {
           validatedImagePaths,

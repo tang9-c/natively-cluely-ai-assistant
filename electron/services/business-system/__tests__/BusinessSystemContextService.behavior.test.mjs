@@ -40,6 +40,7 @@ function credentialsManagerStub(sources, credentials = { apiKey: 'secret-key' })
   return {
     getBusinessSystemKnowledgeSources: () => sources,
     getBusinessSystemCredentials: () => credentials,
+    getBusinessSystemCredentialRevision: () => 0,
   };
 }
 
@@ -101,10 +102,10 @@ test('resolve: with anchor and ok MCP → context candidate', async () => {
   const { BusinessSystemContextService } = await loadService();
   const service = new BusinessSystemContextService({
     credentialsManager: credentialsManagerStub([source()]),
-    mcpClient: {
-      query: async (_s, _c, input) => {
-        return { status: 'ok', sourceName: 'PLM', summary: `found ${input.query}` };
-      },
+    agentLoop: {
+      run: async (input) => ({
+        status: 'ok', answer: `found ${input.question}`, traceId: 'trace-ok', toolCalls: 1,
+      }),
     },
   });
   const result = await service.resolve({ question: '根据 PLM 查一下物料 a12345' });
@@ -117,31 +118,18 @@ test('resolve: with anchor and unavailable MCP → fixed_reply unavailable', asy
   const { BusinessSystemContextService } = await loadService();
   const service = new BusinessSystemContextService({
     credentialsManager: credentialsManagerStub([source()]),
-    mcpClient: {
-      query: async () => ({ status: 'unavailable', sourceName: 'PLM' }),
-    },
+    agentLoop: { run: async () => ({ status: 'error', errorCode: 'mcp_unavailable', traceId: 'trace-x', toolCalls: 0 }) },
   });
   const result = await service.resolve({ question: '查一下 PLM 物料 a12345' });
   assert.equal(result.kind, 'fixed_reply');
   assert.equal(result.status, 'unavailable');
 });
 
-test('resolve: with anchor and no_result MCP → fixed_reply no_result', async () => {
-  const { BusinessSystemContextService } = await loadService();
-  const service = new BusinessSystemContextService({
-    credentialsManager: credentialsManagerStub([source()]),
-    mcpClient: { query: async () => ({ status: 'no_result', sourceName: 'PLM' }) },
-  });
-  const result = await service.resolve({ question: '查一下 PLM 物料 a12345' });
-  assert.equal(result.kind, 'fixed_reply');
-  assert.equal(result.status, 'no_result');
-});
-
 test('resolve: with anchor and auth_failed MCP → fixed_reply auth_failed', async () => {
   const { BusinessSystemContextService } = await loadService();
   const service = new BusinessSystemContextService({
     credentialsManager: credentialsManagerStub([source()]),
-    mcpClient: { query: async () => ({ status: 'auth_failed', sourceName: 'PLM' }) },
+    agentLoop: { run: async () => ({ status: 'error', errorCode: 'mcp_auth_failed', traceId: 'trace-auth', toolCalls: 0 }) },
   });
   const result = await service.resolve({ question: '查一下 PLM 物料 a12345' });
   assert.equal(result.kind, 'fixed_reply');

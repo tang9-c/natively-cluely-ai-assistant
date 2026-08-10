@@ -72,21 +72,18 @@ test('settings IPC preserves all supported business system source kinds', () => 
   assert.match(rendererTypes, /'plm' \| 'qms' \| 'erp' \| 'mes' \| 'crm' \| 'business_system'/);
 });
 
-test('settings test-source uses Windchill MCP handshake for PLM sources', () => {
+test('settings test-source uses the generic MCP handshake for every source kind', () => {
   const source = read('electron/ipcHandlers.ts');
   const start = source.indexOf("safeHandle('business-system:test-source'");
   const end = source.indexOf("safeHandle('switch-to-custom-provider'", start);
   const handler = source.slice(start, end);
-  const plmStart = handler.indexOf("if (source.kind === 'plm')");
-  const genericStart = handler.indexOf('const result = await new BusinessMcpClient().query', plmStart);
-  const plmBranch = handler.slice(plmStart, genericStart);
-
   assert.ok(start >= 0, 'business-system:test-source handler should exist');
-  assert.match(handler, /source\.kind\s*===\s*['"]plm['"]/);
-  assert.match(plmBranch, /McpRpcClient/);
-  assert.match(plmBranch, /\.initialize\(/);
-  assert.match(plmBranch, /\.listTools\(/);
-  assert.doesNotMatch(plmBranch, /query:\s*['"]测试业务系统知识源连接['"]/);
+  assert.doesNotMatch(handler, /source\.kind\s*===\s*['"]plm['"]/);
+  assert.match(handler, /McpRpcClient/);
+  assert.match(handler, /\.connect\(/);
+  assert.match(handler, /\.listTools\(/);
+  assert.match(handler, /\.close\(/);
+  assert.doesNotMatch(handler, /BusinessMcpClient|business_context\.query/);
 });
 
 test('settings test-source maps connection failures to stable diagnostics', () => {
