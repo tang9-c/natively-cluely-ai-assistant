@@ -311,6 +311,23 @@ test('saveBusinessSystemKnowledgeSource demotes the previous default to non-defa
   assert.equal(b.isDefault, true);
 });
 
+test('business system source save and delete increment an in-memory credential revision', () => {
+  const CredentialsManager = loadManager();
+  const mgr = CredentialsManager.getInstance();
+  const source = {
+    id: 'src-revision', name: 'Windchill', kind: 'plm', url: 'https://example.test/mcp',
+    authType: 'api_key', enabled: true, isDefault: true,
+  };
+  const before = mgr.getBusinessSystemCredentialRevision(source.id);
+
+  mgr.saveBusinessSystemKnowledgeSource(source, { apiKey: 'first-key' });
+  assert.equal(mgr.getBusinessSystemCredentialRevision(source.id), before + 1);
+  mgr.saveBusinessSystemKnowledgeSource(source, { apiKey: 'second-key' });
+  assert.equal(mgr.getBusinessSystemCredentialRevision(source.id), before + 2);
+  mgr.deleteBusinessSystemKnowledgeSource(source.id);
+  assert.equal(mgr.getBusinessSystemCredentialRevision(source.id), before + 3);
+});
+
 test('trial token save/clear keeps the claimed flag sticky', () => {
   const CredentialsManager = loadManager();
   const mgr = CredentialsManager.getInstance();

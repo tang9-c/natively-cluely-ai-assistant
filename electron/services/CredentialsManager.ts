@@ -81,6 +81,7 @@ export interface NativelyApiKeySaveOptions {
 export class CredentialsManager {
     private static instance: CredentialsManager;
     private credentials: StoredCredentials = {};
+    private readonly businessSystemCredentialRevisions = new Map<string, number>();
 
     private constructor() {
         // Load on construction after app ready
@@ -536,6 +537,10 @@ export class CredentialsManager {
         return credential ? { ...credential } : undefined;
     }
 
+    public getBusinessSystemCredentialRevision(sourceId: string): number {
+        return this.businessSystemCredentialRevisions.get(sourceId) || 0;
+    }
+
     public saveBusinessSystemKnowledgeSource(
         source: BusinessSystemKnowledgeSource,
         credential?: BusinessSystemCredentialInput,
@@ -567,6 +572,7 @@ export class CredentialsManager {
             };
         }
 
+        this.incrementBusinessSystemCredentialRevision(normalized.id);
         this.saveCredentials();
         console.log('[CredentialsManager] Business system knowledge source saved', {
             id: normalized.id,
@@ -582,8 +588,16 @@ export class CredentialsManager {
         if (this.credentials.businessSystemCredentials) {
             delete this.credentials.businessSystemCredentials[sourceId];
         }
+        this.incrementBusinessSystemCredentialRevision(sourceId);
         this.saveCredentials();
         console.log('[CredentialsManager] Business system knowledge source deleted', { id: sourceId });
+    }
+
+    private incrementBusinessSystemCredentialRevision(sourceId: string): void {
+        this.businessSystemCredentialRevisions.set(
+            sourceId,
+            this.getBusinessSystemCredentialRevision(sourceId) + 1,
+        );
     }
 
     public saveCurlProvider(provider: CurlProvider): void {
