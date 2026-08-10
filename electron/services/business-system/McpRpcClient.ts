@@ -11,12 +11,12 @@ import type {
 export type McpToolDefinition = Tool;
 
 export interface McpSession {
-    connect(timeoutMs: number): Promise<unknown>;
-    listTools(cursor: string | undefined, timeoutMs: number): Promise<{
+    connect(timeoutMs: number, signal?: AbortSignal): Promise<unknown>;
+    listTools(cursor: string | undefined, timeoutMs: number, signal?: AbortSignal): Promise<{
         tools: Tool[];
         nextCursor?: string;
     }>;
-    callTool(name: string, args: Record<string, unknown>, timeoutMs: number): Promise<unknown>;
+    callTool(name: string, args: Record<string, unknown>, timeoutMs: number, signal?: AbortSignal): Promise<unknown>;
     onToolsChanged(handler: () => void): void;
     close(): Promise<void>;
 }
@@ -64,8 +64,8 @@ class SdkMcpSession implements McpSession {
         });
     }
 
-    async connect(timeoutMs: number): Promise<unknown> {
-        await this.client.connect(this.transport, { timeout: timeoutMs });
+    async connect(timeoutMs: number, signal?: AbortSignal): Promise<unknown> {
+        await this.client.connect(this.transport, { timeout: timeoutMs, signal });
         return {
             serverInfo: this.client.getServerVersion(),
             capabilities: this.client.getServerCapabilities(),
@@ -73,19 +73,19 @@ class SdkMcpSession implements McpSession {
         };
     }
 
-    async listTools(cursor: string | undefined, timeoutMs: number): Promise<{
+    async listTools(cursor: string | undefined, timeoutMs: number, signal?: AbortSignal): Promise<{
         tools: Tool[];
         nextCursor?: string;
     }> {
-        const result = await this.client.listTools(cursor ? { cursor } : undefined, { timeout: timeoutMs });
+        const result = await this.client.listTools(cursor ? { cursor } : undefined, { timeout: timeoutMs, signal });
         return {
             tools: result.tools,
             ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
         };
     }
 
-    async callTool(name: string, args: Record<string, unknown>, timeoutMs: number): Promise<unknown> {
-        return this.client.callTool({ name, arguments: args }, undefined, { timeout: timeoutMs });
+    async callTool(name: string, args: Record<string, unknown>, timeoutMs: number, signal?: AbortSignal): Promise<unknown> {
+        return this.client.callTool({ name, arguments: args }, undefined, { timeout: timeoutMs, signal });
     }
 
     onToolsChanged(handler: () => void): void {
@@ -113,17 +113,21 @@ export class McpRpcClient {
             : new SdkMcpSession(sessionConfig);
     }
 
-    async initialize(timeoutMs = 2000): Promise<unknown> {
-        return this.session.connect(timeoutMs);
+    async connect(timeoutMs = 2000, signal?: AbortSignal): Promise<unknown> {
+        return this.session.connect(timeoutMs, signal);
     }
 
-    async listTools(timeoutMs = 2000): Promise<McpToolDefinition[]> {
+    async initialize(timeoutMs = 2000, signal?: AbortSignal): Promise<unknown> {
+        return this.connect(timeoutMs, signal);
+    }
+
+    async listTools(timeoutMs = 2000, signal?: AbortSignal): Promise<McpToolDefinition[]> {
         const tools: Tool[] = [];
         const seenCursors = new Set<string>();
         let cursor: string | undefined;
 
         do {
-            const page = await this.session.listTools(cursor, timeoutMs);
+            const page = await this.session.listTools(cursor, timeoutMs, signal);
             tools.push(...page.tools);
             cursor = page.nextCursor;
             if (cursor) {
@@ -137,8 +141,8 @@ export class McpRpcClient {
         return tools;
     }
 
-    async callTool(name: string, args: Record<string, unknown>, timeoutMs = 2000): Promise<unknown> {
-        return this.session.callTool(name, args, timeoutMs);
+    async callTool(name: string, args: Record<string, unknown>, timeoutMs = 2000, signal?: AbortSignal): Promise<unknown> {
+        return this.session.callTool(name, args, timeoutMs, signal);
     }
 
     onToolsChanged(handler: () => void): void {
