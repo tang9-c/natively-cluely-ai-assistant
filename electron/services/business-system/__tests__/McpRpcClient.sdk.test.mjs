@@ -17,16 +17,16 @@ function createSession(pages) {
   return {
     calls,
     session: {
-      async connect(timeoutMs) {
-        calls.push(['connect', timeoutMs]);
+      async connect(timeoutMs, signal) {
+        calls.push(signal ? ['connect', timeoutMs, signal] : ['connect', timeoutMs]);
         return { serverInfo: { name: 'test-mcp', version: '1.0.0' } };
       },
-      async listTools(cursor, timeoutMs) {
-        calls.push(['listTools', cursor, timeoutMs]);
+      async listTools(cursor, timeoutMs, signal) {
+        calls.push(signal ? ['listTools', cursor, timeoutMs, signal] : ['listTools', cursor, timeoutMs]);
         return pages[cursor ?? 'first'];
       },
-      async callTool(name, args, timeoutMs) {
-        calls.push(['callTool', name, args, timeoutMs]);
+      async callTool(name, args, timeoutMs, signal) {
+        calls.push(signal ? ['callTool', name, args, timeoutMs, signal] : ['callTool', name, args, timeoutMs]);
         return { content: [{ type: 'text', text: 'ok' }] };
       },
       onToolsChanged(handler) {
@@ -95,6 +95,27 @@ test('McpRpcClient uses an SDK session and preserves every tool field across all
   assert.deepEqual(tools[0].annotations, { readOnlyHint: true });
   assert.deepEqual(tools[0].execution, { taskSupport: 'forbidden' });
   assert.deepEqual(tools[0]._meta, { vendor: 'windchill' });
+});
+
+test('McpRpcClient forwards the same AbortSignal to every SDK session operation', async () => {
+  const { McpRpcClient } = await loadModule();
+  const fake = createSession({ first: { tools: [] } });
+  const client = new McpRpcClient({
+    url: 'https://example.test/mcp',
+    authType: 'none',
+    sessionFactory: () => fake.session,
+  });
+  const controller = new AbortController();
+
+  await client.initialize(1000, controller.signal);
+  await client.listTools(2000, controller.signal);
+  await client.callTool('server_status', {}, 3000, controller.signal);
+
+  assert.deepEqual(fake.calls, [
+    ['connect', 1000, controller.signal],
+    ['listTools', undefined, 2000, controller.signal],
+    ['callTool', 'server_status', {}, 3000, controller.signal],
+  ]);
 });
 
 test('McpRpcClient rejects repeated pagination cursors instead of returning a partial catalog', async () => {

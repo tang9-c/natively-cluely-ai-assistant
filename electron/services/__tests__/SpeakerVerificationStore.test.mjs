@@ -91,7 +91,9 @@ test('DatabaseManager migration adds enrollment quality and runtime health stats
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'last_error', 'TEXT'\)/);
   assert.match(db, /addColumnIfMissing\('speaker_profile_stats', 'last_recorded_at', 'INTEGER'\)/);
   assert.match(db, /user_version = 32/);
-  assert.doesNotMatch(db, /user_version\s*=\s*(?:33|34)/);
+  const v32Block = db.match(/if\s*\(\s*version\s*<\s*32\s*\)[\s\S]*?user_version\s*=\s*32/);
+  assert.ok(v32Block, 'v32 migration block must exist');
+  assert.doesNotMatch(v32Block[0], /user_version\s*=\s*(?:33|34)/);
 });
 
 test('DatabaseManager backfills missing timeout stats for the branch v33 intermediate schema without advancing its version', () => {
@@ -99,6 +101,9 @@ test('DatabaseManager backfills missing timeout stats for the branch v33 interme
   const db = new Database(path.join(dir, 'test.db'));
   try {
     db.exec(`
+      CREATE TABLE transcripts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT
+      );
       CREATE TABLE speaker_profile_stats (
         profile_id TEXT PRIMARY KEY,
         total_verifications INTEGER NOT NULL DEFAULT 0,

@@ -38,6 +38,11 @@ function runFromVersion(version, customContext) {
     CREATE TABLE meetings (
       id TEXT PRIMARY KEY
     );
+    CREATE TABLE transcripts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      meeting_id TEXT,
+      FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
+    );
   `);
   db.pragma(`user_version = ${version}`);
   db.prepare('INSERT INTO modes (id, name, template_type, custom_context, is_active) VALUES (?, ?, ?, ?, 1)')

@@ -22,7 +22,7 @@ function extractProcessAndSaveMeeting() {
 
 test('processAndSaveMeeting gates all generateMeetingSummary calls behind transcript length', () => {
   const body = extractProcessAndSaveMeeting();
-  const gateIndex = body.indexOf('data.transcript.length > 2');
+  const gateIndex = body.indexOf('analysisTranscript.length > 2');
   const firstLlmIndex = body.indexOf('this.llmHelper.generateMeetingSummary(');
 
   assert.ok(gateIndex >= 0, 'processAndSaveMeeting must check transcript length');
