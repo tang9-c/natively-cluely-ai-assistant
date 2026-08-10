@@ -4874,6 +4874,43 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     return this.useOllama ? this.ollamaModel : this.currentModelId;
   }
 
+  public getSelectedToolCallingBinding():
+    | { kind: 'openai_compatible'; provider: string; model: string; client: unknown }
+    | { kind: 'anthropic'; provider: 'claude'; model: string; client: unknown }
+    | { kind: 'gemini'; provider: 'gemini'; model: string; client: unknown }
+    | { kind: 'unsupported'; provider: string; model: string; client: null } {
+    const model = this.getCurrentModel();
+    if (this.useOllama) return { kind: 'unsupported', provider: 'ollama', model, client: null };
+    if (this.customProvider) return { kind: 'unsupported', provider: 'custom_provider', model, client: null };
+    if (this.activeCurlProvider) return { kind: 'unsupported', provider: 'custom_curl', model, client: null };
+    if (this.isCodexCliModel(this.currentModelId)) {
+      return { kind: 'unsupported', provider: 'codex', model, client: null };
+    }
+    if (this.currentModelId === 'natively') {
+      return { kind: 'openai_compatible', provider: 'natively', model: QCLOUD_CHAT_MODEL, client: this.qcloudClient };
+    }
+    if (this.isOpenAiModel(this.currentModelId)) {
+      return { kind: 'openai_compatible', provider: 'openai', model: this.currentModelId, client: this.openaiClient };
+    }
+    if (this.isClaudeModel(this.currentModelId)) {
+      return { kind: 'anthropic', provider: 'claude', model: this.currentModelId, client: this.claudeClient };
+    }
+    if (this.isGeminiModel(this.currentModelId)) {
+      return { kind: 'gemini', provider: 'gemini', model: this.currentModelId, client: this.client };
+    }
+    if (this.isDoubaoModel(this.currentModelId)) {
+      return { kind: 'openai_compatible', provider: 'doubao', model: this.currentModelId, client: this.doubaoClient };
+    }
+    if (this.isGroqModel(this.currentModelId)) {
+      return { kind: 'openai_compatible', provider: 'groq', model: this.currentModelId, client: this.groqClient };
+    }
+    return { kind: 'unsupported', provider: 'unknown', model, client: null };
+  }
+
+  public assertMcpToolCallingDataScopes(provider: string, text: string): void {
+    this.assertOutboundScopes(provider, text, undefined, ['transcript']);
+  }
+
   public getCurrentModelExecutionKind(): 'cloud' | 'local' | 'external' {
     if (this.useOllama) return 'local';
     if (this.customProvider || this.activeCurlProvider || this.isCodexCliModel(this.currentModelId)) {

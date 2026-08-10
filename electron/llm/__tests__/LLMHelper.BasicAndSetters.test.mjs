@@ -80,6 +80,29 @@ describe('LLMHelper basic surface and setters (PR3.1)', () => {
     assert.equal(helper.client, null, 'client must be cleared on scrub');
   });
 
+  test('getSelectedToolCallingBinding follows the selected model without provider fallback', () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper(
+      'sk-gemini', false, undefined, undefined,
+      'gsk-groq', 'sk-openai', 'sk-anthropic', 'sk-doubao',
+    );
+    helper.setNativelyKey('natively-test');
+
+    helper.setModel('doubao-seed-test');
+    assert.deepEqual(
+      { kind: helper.getSelectedToolCallingBinding().kind, provider: helper.getSelectedToolCallingBinding().provider },
+      { kind: 'openai_compatible', provider: 'doubao' },
+    );
+    helper.setModel('natively');
+    assert.equal(helper.getSelectedToolCallingBinding().provider, 'natively');
+    helper.setModel('claude-sonnet-test');
+    assert.equal(helper.getSelectedToolCallingBinding().kind, 'anthropic');
+    helper.setModel('gemini-test');
+    assert.equal(helper.getSelectedToolCallingBinding().kind, 'gemini');
+    helper.setModel('ollama-local-test');
+    assert.equal(helper.getSelectedToolCallingBinding().kind, 'unsupported');
+  });
+
   test('setGroqApiKey / setOpenaiApiKey / setClaudeApiKey / setDoubaoApiKey / setNativelyKey all wire clients', () => {
     const { LLMHelper } = cjsRequire(helperPath);
     const helper = new LLMHelper();

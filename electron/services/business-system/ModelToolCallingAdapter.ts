@@ -7,7 +7,8 @@ export interface ModelRequestedToolCall {
 }
 
 export type McpAgentMessage =
-    | { role: 'system' | 'user'; text: string }
+    | { role: 'system'; text: string }
+    | { role: 'user'; text: string }
     | { role: 'assistant'; text?: string; toolCalls?: ModelRequestedToolCall[] }
     | { role: 'tool'; callId: string; name: string; result: CallToolResult };
 
@@ -46,4 +47,18 @@ export class McpToolCallingError extends Error {
         this.name = 'McpToolCallingError';
         this.code = code;
     }
+}
+
+export function rethrowToolCatalogError(error: unknown, provider: string): never {
+    const candidate = error as { status?: unknown; statusCode?: unknown; code?: unknown; message?: unknown };
+    const status = Number(candidate?.status || candidate?.statusCode || candidate?.code);
+    const message = String(candidate?.message || '');
+    if (status === 400 && /(tool|function|schema)/i.test(message)) {
+        throw new McpToolCallingError(
+            'mcp_tool_catalog_unsupported',
+            `${provider} rejected the MCP tool catalog`,
+            { cause: error },
+        );
+    }
+    throw error;
 }
