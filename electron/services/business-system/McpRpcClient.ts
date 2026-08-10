@@ -1,16 +1,31 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+
 import type {
     BusinessSystemAuthType,
     BusinessSystemCredentialInput,
 } from './BusinessSystemTypes';
 
-export interface McpToolDefinition {
-    name: string;
-    description?: string;
-    inputSchema?: {
-        type?: string;
-        properties?: Record<string, unknown>;
-        required?: string[];
-    };
+export type McpToolDefinition = Tool;
+
+export interface McpSession {
+    connect(timeoutMs: number): Promise<unknown>;
+    listTools(cursor: string | undefined, timeoutMs: number): Promise<{
+        tools: Tool[];
+        nextCursor?: string;
+    }>;
+    callTool(name: string, args: Record<string, unknown>, timeoutMs: number): Promise<unknown>;
+    onToolsChanged(handler: () => void): void;
+    close(): Promise<void>;
+}
+
+interface McpSessionFactoryConfig {
+    url: string;
+    headers: Record<string, string>;
+    fetchImpl?: typeof fetch;
+    clientInfo: { name: string; version: string };
 }
 
 export interface McpRpcClientConfig {
@@ -19,111 +34,118 @@ export interface McpRpcClientConfig {
     credentials?: BusinessSystemCredentialInput;
     fetchImpl?: typeof fetch;
     clientInfo?: { name: string; version: string };
-}
-
-interface JsonRpcEnvelope {
-    jsonrpc?: string;
-    id?: number;
-    result?: any;
-    error?: { code?: number | string; message?: string };
+    sessionFactory?: (config: McpSessionFactoryConfig) => McpSession;
 }
 
 function buildHeaders(authType: BusinessSystemAuthType, credentials?: BusinessSystemCredentialInput): Record<string, string> {
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        Accept: 'application/json, text/event-stream',
-    };
     if (authType === 'api_key' && credentials?.apiKey) {
-        headers.Authorization = `Bearer ${credentials.apiKey}`;
+        return { Authorization: `Bearer ${credentials.apiKey}` };
     }
     if (authType === 'username_password' && credentials?.username && credentials?.password) {
         const token = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
-        headers.Authorization = `Basic ${token}`;
+        return { Authorization: `Basic ${token}` };
     }
-    return headers;
+    return {};
 }
 
-export function parseMcpHttpResponseText(text: string): unknown {
-    const trimmed = String(text || '').trim();
-    if (!trimmed) return null;
-    if (trimmed.startsWith('data:') || trimmed.startsWith('event:') || trimmed.includes('\ndata:')) {
-        const payloads: string[] = [];
-        for (const line of trimmed.split(/\r?\n/)) {
-            if (line.startsWith('data:')) payloads.push(line.slice(5).trim());
-        }
-        const lastPayload = payloads.filter(Boolean).at(-1);
-        return lastPayload ? JSON.parse(lastPayload) : null;
+class SdkMcpSession implements McpSession {
+    private readonly client: Client;
+    private readonly transport: StreamableHTTPClientTransport;
+    private readonly toolsChangedHandlers = new Set<() => void>();
+
+    constructor(config: McpSessionFactoryConfig) {
+        this.client = new Client(config.clientInfo);
+        this.transport = new StreamableHTTPClientTransport(new URL(config.url), {
+            requestInit: { headers: config.headers },
+            ...(config.fetchImpl ? { fetch: config.fetchImpl as any } : {}),
+        });
+        this.client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
+            for (const handler of this.toolsChangedHandlers) handler();
+        });
     }
-    return JSON.parse(trimmed);
+
+    async connect(timeoutMs: number): Promise<unknown> {
+        await this.client.connect(this.transport, { timeout: timeoutMs });
+        return {
+            serverInfo: this.client.getServerVersion(),
+            capabilities: this.client.getServerCapabilities(),
+            instructions: this.client.getInstructions(),
+        };
+    }
+
+    async listTools(cursor: string | undefined, timeoutMs: number): Promise<{
+        tools: Tool[];
+        nextCursor?: string;
+    }> {
+        const result = await this.client.listTools(cursor ? { cursor } : undefined, { timeout: timeoutMs });
+        return {
+            tools: result.tools,
+            ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
+        };
+    }
+
+    async callTool(name: string, args: Record<string, unknown>, timeoutMs: number): Promise<unknown> {
+        return this.client.callTool({ name, arguments: args }, undefined, { timeout: timeoutMs });
+    }
+
+    onToolsChanged(handler: () => void): void {
+        this.toolsChangedHandlers.add(handler);
+    }
+
+    async close(): Promise<void> {
+        await this.client.close();
+    }
 }
 
 export class McpRpcClient {
-    private url: string;
-    private authType: BusinessSystemAuthType;
-    private credentials?: BusinessSystemCredentialInput;
-    private fetchImpl: typeof fetch;
-    private nextId = 1;
-    private clientInfo: { name: string; version: string };
+    private readonly session: McpSession;
 
     constructor(config: McpRpcClientConfig) {
-        this.url = config.url;
-        this.authType = config.authType;
-        this.credentials = config.credentials;
-        const fetchImpl = config.fetchImpl || (typeof fetch === 'function' ? fetch.bind(globalThis) : undefined);
-        if (!fetchImpl) {
-            throw new Error('MCP fetch implementation unavailable');
-        }
-        this.fetchImpl = fetchImpl;
-        this.clientInfo = config.clientInfo || { name: 'natively-mcp-rpc', version: '1.0.0' };
+        const clientInfo = config.clientInfo || { name: 'natively-mcp-rpc', version: '1.0.0' };
+        const sessionConfig: McpSessionFactoryConfig = {
+            url: config.url,
+            headers: buildHeaders(config.authType, config.credentials),
+            fetchImpl: config.fetchImpl,
+            clientInfo,
+        };
+        this.session = config.sessionFactory
+            ? config.sessionFactory(sessionConfig)
+            : new SdkMcpSession(sessionConfig);
     }
 
     async initialize(timeoutMs = 2000): Promise<unknown> {
-        const envelope = await this.request('initialize', {
-            protocolVersion: '2024-11-05',
-            capabilities: {},
-            clientInfo: this.clientInfo,
-        }, timeoutMs);
-        return envelope.result;
+        return this.session.connect(timeoutMs);
     }
 
     async listTools(timeoutMs = 2000): Promise<McpToolDefinition[]> {
-        const envelope = await this.request('tools/list', {}, timeoutMs);
-        return Array.isArray(envelope.result?.tools) ? envelope.result.tools : [];
+        const tools: Tool[] = [];
+        const seenCursors = new Set<string>();
+        let cursor: string | undefined;
+
+        do {
+            const page = await this.session.listTools(cursor, timeoutMs);
+            tools.push(...page.tools);
+            cursor = page.nextCursor;
+            if (cursor) {
+                if (seenCursors.has(cursor)) {
+                    throw new Error(`MCP protocol error: repeated tools/list cursor ${cursor}`);
+                }
+                seenCursors.add(cursor);
+            }
+        } while (cursor);
+
+        return tools;
     }
 
-    async callTool(name: string, args: Record<string, unknown>, timeoutMs = 2000): Promise<any> {
-        const envelope = await this.request('tools/call', {
-            name,
-            arguments: args,
-        }, timeoutMs);
-        return envelope.result;
+    async callTool(name: string, args: Record<string, unknown>, timeoutMs = 2000): Promise<unknown> {
+        return this.session.callTool(name, args, timeoutMs);
     }
 
-    private async request(method: string, params: unknown, timeoutMs: number): Promise<JsonRpcEnvelope> {
-        const controller = new AbortController();
-        const timeoutHandle = setTimeout(() => controller.abort(), Math.max(50, timeoutMs));
-        const id = this.nextId++;
-        try {
-            const res = await this.fetchImpl(this.url, {
-                method: 'POST',
-                headers: buildHeaders(this.authType, this.credentials),
-                body: JSON.stringify({ jsonrpc: '2.0', id, method, params: params || {} }),
-                signal: controller.signal,
-            });
-            const text = await res.text().catch(() => '');
-            if (!res.ok) {
-                throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
-            }
-            const parsed = parseMcpHttpResponseText(text) as JsonRpcEnvelope | null;
-            if (!parsed || typeof parsed !== 'object') {
-                throw new Error(`Invalid MCP response for ${method}`);
-            }
-            if (parsed.error) {
-                throw new Error(parsed.error.message || `MCP error ${parsed.error.code || 'unknown'}`);
-            }
-            return parsed;
-        } finally {
-            clearTimeout(timeoutHandle);
-        }
+    onToolsChanged(handler: () => void): void {
+        this.session.onToolsChanged(handler);
+    }
+
+    async close(): Promise<void> {
+        await this.session.close();
     }
 }
