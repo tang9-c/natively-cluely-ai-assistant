@@ -29,7 +29,12 @@ test('QCLOUD model specs declare explicit token windows for supported models', (
   assert.match(constants, /export const QCLOUD_MEETING_TITLE_OUTPUT_TOKENS = 64/);
   assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS = 4_096/);
   assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_ENHANCEMENT_OUTPUT_TOKENS = 2_048/);
-  assert.match(constants, /export const QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS = 16_000/);
+  assert.match(constants, /export const QCLOUD_TRANSCRIPT_SKILL_DIRECT_INPUT_TOKENS = 48_000/);
+  assert.match(constants, /export const QCLOUD_TRANSCRIPT_SKILL_CHUNK_INPUT_TOKENS = 24_000/);
+  assert.match(constants, /export const QCLOUD_TRANSCRIPT_SKILL_MAP_OUTPUT_TOKENS = 800/);
+  assert.match(constants, /export const QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS = 6_144/);
+  assert.match(constants, /export const QCLOUD_TRANSCRIPT_SKILL_MAP_CONCURRENCY = 2/);
+  assert.match(constants, /export const QCLOUD_TRANSCRIPT_SKILL_TIMEOUT_MS = 120_000/);
   for (const model of ['pro32k', 'lite32k', 'turbo']) {
     assert.match(constants, new RegExp(`${model}[\\s\\S]*maxInputTokens:\\s*224_000`));
     assert.match(constants, new RegExp(`${model}[\\s\\S]*maxOutputTokens:\\s*128_000`));
@@ -78,8 +83,14 @@ test('LLMHelper uses turbo with thinking for QCLOUD skill requests and keeps lit
   assert.match(helper, /QCLOUD_MEETING_SUMMARY_TIMEOUT_MS/);
   assert.match(helper, /chatPromptOptions\?\.activeSkill\s*\?\s*QCLOUD_SKILL_CHAT_MODEL\s*:\s*undefined/);
   assert.match(helper, /chatPromptOptions\?\.totalTimeoutMs\s*\?\?\s*\(\s*chatPromptOptions\?\.activeSkill\s*\?\s*QCLOUD_SKILL_CHAT_TIMEOUT_MS\s*:\s*undefined\s*\)/);
-  assert.match(helper, /chatPromptOptions\?\.activeSkill\s*\?\s*\{\s*type:\s*['"]enabled['"]\s+as\s+const\s*\}\s*:\s*chatPromptOptions\?\.qcloudThinking/);
-  assert.match(helper, /chatPromptOptions\?\.activeSkill\s*\?\s*['"]medium['"]\s+as\s+const\s*:\s*chatPromptOptions\?\.qcloudReasoningEffort/);
+  const thinkingPrecedence = helper.match(
+    /chatPromptOptions\?\.qcloudThinking\s*\?\?\s*\(chatPromptOptions\?\.activeSkill\s*\?\s*\{\s*type:\s*['"]enabled['"]\s+as\s+const\s*\}\s*:\s*undefined\)/g,
+  ) ?? [];
+  const reasoningPrecedence = helper.match(
+    /chatPromptOptions\?\.qcloudReasoningEffort\s*\?\?\s*\(chatPromptOptions\?\.activeSkill\s*\?\s*['"]medium['"]\s+as\s+const\s*:\s*undefined\)/g,
+  ) ?? [];
+  assert.equal(thinkingPrecedence.length, 2, 'non-streaming and streaming chat should honor explicit thinking');
+  assert.equal(reasoningPrecedence.length, 2, 'non-streaming and streaming chat should honor explicit reasoning effort');
   assert.match(helper, /qcloudModel:\s*qcloudChatModel/);
   assert.match(helper, /qcloudThinking:\s*qcloudThinking/);
   assert.match(helper, /qcloudReasoningEffort:\s*qcloudReasoningEffort/);

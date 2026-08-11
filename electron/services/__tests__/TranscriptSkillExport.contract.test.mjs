@@ -48,22 +48,33 @@ test('transcript skill export IPC and preload bridge are wired', () => {
   assert.match(types, /openPath:\s*\(targetPath:\s*string\)\s*=>\s*Promise<\{\s*success:\s*boolean;\s*error\?:\s*string\s*\}>/);
 });
 
-test('transcript skill export service enforces one-shot markdown export boundaries', () => {
+test('transcript skill export service enforces bounded direct and map-reduce boundaries', () => {
   const source = read('electron/services/TranscriptSkillExportService.ts');
 
   assert.match(source, /SkillsManager\.getInstance\(\)\.getSkill\(input\.skillId\)/);
   assert.match(source, /buildPromptBlock\(skill/);
   assert.match(source, /getDeniedDataScopes\(\['transcript'\]/);
+  assert.match(source, /QCLOUD_TRANSCRIPT_SKILL_DIRECT_INPUT_TOKENS/);
+  assert.match(source, /QCLOUD_TRANSCRIPT_SKILL_CHUNK_INPUT_TOKENS/);
+  assert.match(source, /QCLOUD_TRANSCRIPT_SKILL_MAP_OUTPUT_TOKENS/);
   assert.match(source, /QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS/);
-  assert.match(source, /TRANSCRIPT_SKILL_TIMEOUT_MS\s*=\s*120_000/);
-  assert.match(source, /getEffectiveInputBudget/);
+  assert.match(source, /QCLOUD_TRANSCRIPT_SKILL_MAP_CONCURRENCY/);
+  assert.match(source, /QCLOUD_TRANSCRIPT_SKILL_TIMEOUT_MS/);
+  assert.match(source, /estimateTranscriptSkillTokens/);
+  assert.match(source, /splitTranscriptForSkill/);
+  assert.match(source, /generateTranscriptSkillContent/);
+  assert.match(source, /mapWithConcurrency/);
   assert.match(source, /maxOutputTokens:\s*QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS/);
-  assert.match(source, /totalTimeoutMs:\s*TRANSCRIPT_SKILL_TIMEOUT_MS/);
+  assert.match(source, /maxOutputTokens:\s*QCLOUD_TRANSCRIPT_SKILL_MAP_OUTPUT_TOKENS/);
+  assert.match(source, /totalTimeoutMs:\s*QCLOUD_TRANSCRIPT_SKILL_TIMEOUT_MS/);
+  assert.match(source, /qcloudThinking:\s*\{\s*type:\s*['"]disabled['"]\s*\}/);
+  assert.match(source, /qcloudReasoningEffort:\s*['"]minimal['"]/);
   assert.match(source, /当前 AI 提供商不允许使用转录内容/);
-  assert.match(source, /转录过长，当前版本暂不支持用技能处理完整内容/);
+  assert.doesNotMatch(source, /转录过长，当前版本暂不支持用技能处理完整内容/);
   assert.match(source, /isLlmFailureFallback\(generatedMarkdown\)/);
   assert.match(source, /AI 服务未返回有效内容，请稍后重试/);
   assert.match(source, /withTranscriptSkillTimeout/);
+  assert.match(source, /new AbortController\(\)/);
   assert.match(source, /I apologize, but I couldn't generate a response\. Please try again\./);
   assert.match(source, /No AI providers configured/);
   assert.match(source, /Authentication failed/);
@@ -78,6 +89,7 @@ test('transcript skill export service enforces one-shot markdown export boundari
   assert.match(source, /\.md/);
   assert.doesNotMatch(source, /activateSkill\(/);
   assert.doesNotMatch(source, /MAX_TRANSCRIPT_SKILL_INPUT_TOKENS\s*=\s*24_000/);
+  assert.doesNotMatch(source, /Promise\.all\(chunks\.map/);
 });
 
 test('transcript skill export handler delegates to service and openPath is downloads-scoped', () => {

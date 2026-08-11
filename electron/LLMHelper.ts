@@ -1720,8 +1720,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(buildProviderSystemPrompt(CLAUDE_SYSTEM_PROMPT));
       const qcloudChatModel = chatPromptOptions?.qcloudModel
         ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_MODEL : undefined);
-      const qcloudThinking = chatPromptOptions?.activeSkill ? { type: 'enabled' as const } : chatPromptOptions?.qcloudThinking;
-      const qcloudReasoningEffort = chatPromptOptions?.activeSkill ? 'medium' as const : chatPromptOptions?.qcloudReasoningEffort;
+      const qcloudThinking = chatPromptOptions?.qcloudThinking
+        ?? (chatPromptOptions?.activeSkill ? { type: 'enabled' as const } : undefined);
+      const qcloudReasoningEffort = chatPromptOptions?.qcloudReasoningEffort
+        ?? (chatPromptOptions?.activeSkill ? 'medium' as const : undefined);
       const qcloudChatTimeoutMs = chatPromptOptions?.totalTimeoutMs
         ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_TIMEOUT_MS : undefined);
 
@@ -3722,8 +3724,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const finalSystemPrompt = this.injectLanguageInstruction(baseSystemPrompt);
     const qcloudChatModel = chatPromptOptions?.qcloudModel
       ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_MODEL : undefined);
-    const qcloudThinking = chatPromptOptions?.activeSkill ? { type: 'enabled' as const } : chatPromptOptions?.qcloudThinking;
-    const qcloudReasoningEffort = chatPromptOptions?.activeSkill ? 'medium' as const : chatPromptOptions?.qcloudReasoningEffort;
+    const qcloudThinking = chatPromptOptions?.qcloudThinking
+      ?? (chatPromptOptions?.activeSkill ? { type: 'enabled' as const } : undefined);
+    const qcloudReasoningEffort = chatPromptOptions?.qcloudReasoningEffort
+      ?? (chatPromptOptions?.activeSkill ? 'medium' as const : undefined);
     const qcloudChatTimeoutMs = chatPromptOptions?.totalTimeoutMs
       ?? (chatPromptOptions?.activeSkill ? QCLOUD_SKILL_CHAT_TIMEOUT_MS : undefined);
     // Profile context is already merged into `context` above; cloud and local
