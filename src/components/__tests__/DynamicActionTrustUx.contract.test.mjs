@@ -62,3 +62,20 @@ test('DynamicActionBar removes actions dismissed by backend speaker correction',
   assert.match(engine, /handleSpeakerVerificationSessionOverride/);
   assert.match(engine, /this\.emit\('dynamic_action_emitted', \{ \.\.\.activeAction, status: 'dismissed' \}\)/);
 });
+
+test('speaker-uncertain dynamic actions require bidirectional confirmation before execution', () => {
+  const bar = read('src/components/dynamic-actions/DynamicActionBar.tsx');
+  const card = read('src/components/dynamic-actions/DynamicActionCard.tsx');
+
+  assert.match(bar, /speakerConfirmation/);
+  assert.match(bar, /speakerVerificationSetSessionOverride/);
+  assert.match(bar, /if \(action\.speakerConfirmation\) return/);
+  assert.match(bar, /!action\.speakerConfirmation/);
+  assert.match(bar, /filter\(\(action\) => !action\.speakerConfirmation\)/);
+  assert.match(card, /可能是对方说的/);
+  assert.match(card, /可能是你说的/);
+  assert.match(card, /确认/);
+  assert.match(card, /这是我/);
+  assert.match(card, /这不是我/);
+  assert.match(card, /onConfirmSpeaker/);
+});

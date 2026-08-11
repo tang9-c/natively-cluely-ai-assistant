@@ -118,6 +118,25 @@ test('latest answer explanation distinguishes material miss from retrieval failu
   assert.equal(explanation.reasonCodes.includes('no_relevant_uploaded_material'), true);
 });
 
+test('latest answer explanation uses transient chat source status when no answer trace exists', async () => {
+  const { buildLatestAnswerTrustExplanation } = await loadViewModel();
+  const explanation = buildLatestAnswerTrustExplanation({
+    trace: null,
+    sourceStatusFallback: {
+      ragReady: true,
+      ragAttempted: true,
+      embeddingReady: true,
+      uploadedMaterialHitCount: 1,
+      citationCount: 1,
+    },
+    citations: [],
+  });
+
+  assert.equal(explanation.usedUploadedMaterial, true);
+  assert.equal(explanation.materialHitCount, 1);
+  assert.ok(explanation.sourceLabels.includes('上传资料'));
+});
+
 test('embedding degradation copy separates config, indexing, and query fallback states', async () => {
   const { mapTrustReasonToCopy } = await loadViewModel();
 

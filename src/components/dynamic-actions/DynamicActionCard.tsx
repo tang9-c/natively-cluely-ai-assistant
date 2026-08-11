@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { X, Zap } from 'lucide-react'
 import type { DynamicActionPayload } from '@/types/electron'
 
-export type DynamicActionCardStatus = 'candidate' | 'countdown' | 'generating' | 'cancelled' | 'expired' | 'failed'
+export type DynamicActionCardStatus = 'candidate' | 'speaker_confirmation' | 'countdown' | 'generating' | 'cancelled' | 'expired' | 'failed'
 
 interface Props {
   action: DynamicActionPayload
@@ -12,10 +12,12 @@ interface Props {
   countdownSeconds?: number
   onAccept: (action: DynamicActionPayload) => void | Promise<void>
   onDismiss: (actionId: string) => void
+  onConfirmSpeaker: (action: DynamicActionPayload, decision: 'confirm' | 'correct') => void | Promise<void>
 }
 
 const STATUS_LABELS: Record<DynamicActionCardStatus, string> = {
   candidate: '建议动作',
+  speaker_confirmation: '说话人待确认',
   countdown: '秒后自动生成',
   generating: '正在生成',
   cancelled: '已取消',
@@ -43,18 +45,26 @@ export const DynamicActionCard: React.FC<Props> = ({
   countdownSeconds,
   onAccept,
   onDismiss,
+  onConfirmSpeaker,
 }) => {
   const [busy, setBusy] = useState(false)
   const productContract = action.productContract
   const isGenerating = busy || status === 'generating'
   const isCountdown = status === 'countdown'
+  const speakerConfirmation = action.speakerConfirmation
   const statusText = isCountdown
     ? `${Math.max(1, countdownSeconds ?? 5)} 秒后自动生成`
     : STATUS_LABELS[status]
   const buttonLabel = isGenerating ? '正在生成' : ctaLabelForOutputType(productContract.outputType)
+  const speakerPrompt = speakerConfirmation?.speaker === 'interviewer'
+    ? '可能是对方说的'
+    : '可能是你说的'
+  const speakerCorrectionLabel = speakerConfirmation?.speaker === 'interviewer'
+    ? '这是我'
+    : '这不是我'
 
   const accept = async () => {
-    if (isGenerating || status === 'cancelled' || status === 'expired') return
+    if (speakerConfirmation || isGenerating || status === 'cancelled' || status === 'expired') return
     setBusy(true)
     try {
       await onAccept(action)
@@ -76,7 +86,7 @@ export const DynamicActionCard: React.FC<Props> = ({
         isPrimary
           ? 'border-sky-300/65 bg-slate-950/78 hover:bg-slate-950/84'
           : 'border-white/24 bg-slate-950/68 hover:bg-slate-950/76',
-        'transition-colors duration-150 cursor-pointer',
+        `transition-colors duration-150 ${speakerConfirmation ? 'cursor-default' : 'cursor-pointer'}`,
       ].join(' ')}
       onClick={() => {
         void accept()
@@ -95,7 +105,14 @@ export const DynamicActionCard: React.FC<Props> = ({
             <span className="text-[10px] tabular-nums text-white/72 shrink-0">{action.evidenceCount}条证据</span>
           )}
         </div>
-        <span className="text-[12px] font-semibold overlay-text-primary truncate">{productContract.userAction}</span>
+        {speakerConfirmation ? (
+          <>
+            <span className="text-[12px] font-semibold overlay-text-primary truncate">{speakerPrompt}</span>
+            <span className="text-[10.5px] text-white/78 truncate">“{speakerConfirmation.text}”</span>
+          </>
+        ) : (
+          <span className="text-[12px] font-semibold overlay-text-primary truncate">{productContract.userAction}</span>
+        )}
         <span className="text-[10.5px] text-white/78 truncate">{productContract.whyNow}</span>
         {productContract.evidenceSummary && (
           <span className="text-[10.5px] text-white/74 truncate">"{productContract.evidenceSummary}"</span>
@@ -104,6 +121,33 @@ export const DynamicActionCard: React.FC<Props> = ({
       </div>
 
       <div className="flex items-center gap-1.5 shrink-0">
+        {speakerConfirmation ? (
+          <>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                void onConfirmSpeaker(action, 'confirm')
+              }}
+              className="inline-flex h-7 items-center justify-center rounded-md border border-sky-200/45 bg-sky-500 px-2.5 text-[11px] font-semibold text-white transition-colors hover:bg-sky-400"
+              aria-label={`确认说话人：${speakerPrompt}`}
+            >
+              确认
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                void onConfirmSpeaker(action, 'correct')
+              }}
+              className="inline-flex h-7 items-center justify-center rounded-md border border-white/24 bg-white/14 px-2 text-[11px] font-medium text-white/86 transition-colors hover:bg-white/22"
+              aria-label={speakerCorrectionLabel}
+            >
+              {speakerCorrectionLabel}
+            </button>
+          </>
+        ) : (
+          <>
         {isPrimary && (
           <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold text-white/88 bg-white/14 border border-white/24">
             Tab 生成
@@ -134,6 +178,8 @@ export const DynamicActionCard: React.FC<Props> = ({
           <X className="w-3 h-3" />
           <span>{isCountdown ? '取消' : '忽略'}</span>
         </button>
+          </>
+        )}
       </div>
     </motion.div>
   )

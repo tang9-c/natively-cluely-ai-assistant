@@ -29,6 +29,7 @@ import {
 import type { DetectedSignalCandidate } from './services/dynamic-actions/DynamicActionEngine';
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
 import type { DynamicActionOutputType } from './services/dynamic-actions/DynamicAction';
+import { buildDynamicActionSpeakerConfirmation } from '../shared/speakerConfirmation';
 import { DynamicActionContinuationService } from './services/dynamic-actions/DynamicActionContinuationService';
 import {
     buildFdeContinuationDerivedActionContext,
@@ -742,6 +743,7 @@ export class IntelligenceEngine extends EventEmitter {
         if (!segment.final) return;
 
         if (action === 'force_not_me') {
+            this.retractDynamicActionsForSpeakerCorrection(segment, true);
             const latencyContext: DynamicActionLatencyContext = {
                 requestId: `dynamic_override_${segment.timestamp}_${++this.dynamicActionLatencySequence}`,
                 startedAt: performance.now(),
@@ -756,6 +758,15 @@ export class IntelligenceEngine extends EventEmitter {
             return;
         }
 
+        this.retractDynamicActionsForSpeakerCorrection(segment, false);
+    }
+
+    private retractDynamicActionsForSpeakerCorrection(
+        segment: TranscriptSegment,
+        discardWithoutCooldown: boolean,
+    ): void {
+        if (!this.dynamicActionEngine || !this.currentSessionId) return;
+
         const normalizedText = (segment.text || '').replace(/\s+/g, ' ').trim();
         if (!normalizedText) return;
         for (const activeAction of this.getActiveDynamicActions()) {
@@ -766,7 +777,11 @@ export class IntelligenceEngine extends EventEmitter {
                     || normalizedText.includes(evidenceText);
             });
             if (!hasMatchingEvidence) continue;
-            this.dynamicActionEngine.dismissAction(activeAction.id);
+            if (discardWithoutCooldown) {
+                this.dynamicActionEngine.discardAction(activeAction.id);
+            } else {
+                this.dynamicActionEngine.dismissAction(activeAction.id);
+            }
             this.emit('dynamic_action_emitted', { ...activeAction, status: 'dismissed' });
         }
     }
@@ -1263,9 +1278,15 @@ export class IntelligenceEngine extends EventEmitter {
             return;
         }
 
+        const speakerConfirmation = buildDynamicActionSpeakerConfirmation({
+            segment: effectiveSegment,
+            hasConsequentialAction: newActions.length > 0,
+        });
+
         // The store dedupes within the per-session store, so each emitted action
         // is a *new* candidate — safe to forward to renderer for rendering.
         for (const action of newActions) {
+            if (speakerConfirmation) action.speakerConfirmation = speakerConfirmation;
             this.emit('dynamic_action_emitted', action);
             if (latencyContext) {
                 this.emitDynamicActionLatency(latencyContext, 'card_emitted');

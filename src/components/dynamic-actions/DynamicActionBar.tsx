@@ -27,6 +27,7 @@ type DynamicActionView = DynamicActionPayload & {
 };
 
 const isSemiAutoAction = (action: DynamicActionPayload): boolean =>
+  !action.speakerConfirmation &&
   action.autoTriggerEligible === true &&
   action.autoSurfacePolicy === 'auto' &&
   action.confidence >= AUTO_TRIGGER_MIN_CONFIDENCE;
@@ -101,6 +102,7 @@ export const DynamicActionBar: React.FC<Props> = ({
 
   const accept = useCallback(
     async (action: DynamicActionPayload, triggerSource: 'manual' | 'auto_countdown' = 'manual') => {
+      if (action.speakerConfirmation) return;
       if (triggeringIdsRef.current.has(action.id)) return;
       triggeringIdsRef.current.add(action.id);
       clearAutoTimer(action.id);
@@ -154,7 +156,12 @@ export const DynamicActionBar: React.FC<Props> = ({
         return;
       }
       const isAuto = isSemiAutoAction(action);
-      const actionView: DynamicActionView = isAuto
+      const actionView: DynamicActionView = action.speakerConfirmation
+        ? {
+            ...action,
+            uiStatus: 'speaker_confirmation',
+          }
+        : isAuto
         ? {
             ...action,
             uiStatus: 'countdown',
@@ -195,6 +202,38 @@ export const DynamicActionBar: React.FC<Props> = ({
       /* swallow */
     });
   }, [clearAutoTimer, clearDismissRemovalTimer]);
+
+  const confirmSpeaker = useCallback(async (
+    action: DynamicActionPayload,
+    decision: 'confirm' | 'correct',
+  ) => {
+    const confirmation = action.speakerConfirmation;
+    if (!confirmation) return;
+
+    if (decision === 'confirm') {
+      setActions((prev) => prev.map((item) => {
+        if (item.id !== action.id) return item;
+        const { speakerConfirmation: _confirmation, ...confirmedAction } = item;
+        return { ...confirmedAction, uiStatus: 'candidate', autoTriggerAt: undefined };
+      }));
+      return;
+    }
+
+    const correctionAction = confirmation.speaker === 'interviewer'
+      ? 'force_me'
+      : 'force_not_me';
+    const result = await window.electronAPI?.speakerVerificationSetSessionOverride?.({
+      speaker: confirmation.speaker,
+      timestamp: confirmation.timestamp,
+      text: confirmation.text,
+      action: correctionAction,
+    });
+    if (!result?.success) return;
+
+    clearAutoTimer(action.id);
+    triggeringIdsRef.current.delete(action.id);
+    setActions((prev) => prev.filter((item) => item.id !== action.id));
+  }, [clearAutoTimer]);
 
   // Subscribe to push from main process
   useEffect(() => {
@@ -251,7 +290,9 @@ export const DynamicActionBar: React.FC<Props> = ({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Tab' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
-      const visible = actionsRef.current.slice(0, maxVisible);
+      const visible = actionsRef.current
+        .filter((action) => !action.speakerConfirmation)
+        .slice(0, maxVisible);
       if (visible.length === 0) return;
       // Don't hijack Tab if focus is in an editable element — the user is typing.
       const target = e.target as HTMLElement | null;
@@ -361,6 +402,7 @@ export const DynamicActionBar: React.FC<Props> = ({
             }
             onAccept={accept}
             onDismiss={dismiss}
+            onConfirmSpeaker={confirmSpeaker}
           />
         ))}
       </AnimatePresence>

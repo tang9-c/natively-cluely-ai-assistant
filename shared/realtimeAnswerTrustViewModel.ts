@@ -40,6 +40,7 @@ export interface AnswerTraceLike {
 
 export interface LatestAnswerTrustInput {
     trace?: AnswerTraceLike | null;
+    sourceStatusFallback?: AnswerSourceStatusLike | null;
     citations?: AnswerCitationLike[];
     citationStatus?: CitationStatus;
     citationPreviewMessage?: string | null;
@@ -186,7 +187,7 @@ function unique(values: string[]): string[] {
 
 export function buildLatestAnswerTrustExplanation(input: LatestAnswerTrustInput): LatestAnswerTrustExplanation {
     const trace = input.trace ?? {};
-    const sourceStatus = trace.sourceStatus ?? {};
+    const sourceStatus = trace.sourceStatus ?? input.sourceStatusFallback ?? {};
     const citations = input.citations ?? trace.citations ?? [];
     const citationStatus = input.citationStatus ?? (citations.length > 0 ? 'candidate' : 'none');
     const materialCitationCount = citations.filter((citation) => citation.sourceType === 'uploaded_material').length;

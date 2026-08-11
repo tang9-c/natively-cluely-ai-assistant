@@ -247,6 +247,54 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.deepEqual(discarded, ['parent']);
   });
 
+  test('force_not_me removes the old user-attributed action before corrected re-evaluation', async () => {
+    const { engine } = await makeEngine();
+    const discarded = [];
+    const emitted = [];
+    const assessments = [];
+    const text = '这个价格太高了，我们预算不够';
+    engine.on('dynamic_action_emitted', action => emitted.push(action));
+    engine.setDynamicActionContext({
+      sessionId: 'sess-speaker-force-not-me',
+      modeId: 'mode-sales',
+      modeTemplateType: 'sales',
+    });
+    const oldAction = buildStoredDiscoveryAction({
+      id: 'wrong-user-action',
+      sessionId: 'sess-speaker-force-not-me',
+      modeId: 'mode-sales',
+      type: 'pricing_objection',
+      evidenceRefs: [{ source: 'transcript', text, speaker: 'user' }],
+    });
+    engine._setDynamicActionEngineForTest({
+      detectSignalCandidates: () => [
+        { trigger: { type: 'pricing_objection' }, match: '价格太高', index: 0 },
+      ],
+      assessSignals: async input => {
+        assessments.push(input);
+        return [];
+      },
+      detectActions: () => [],
+      acceptAction: () => null,
+      dismissAction: () => {},
+      discardAction: id => discarded.push(id),
+      getTopActions: () => [oldAction],
+    });
+
+    engine.handleSpeakerVerificationSessionOverride({
+      speaker: 'interviewer',
+      text,
+      timestamp: Date.now(),
+      final: true,
+    }, 'force_not_me');
+    await waitForAsyncSignals();
+
+    assert.deepEqual(discarded, ['wrong-user-action']);
+    assert.equal(emitted[0]?.status, 'dismissed');
+    assert.equal(assessments.length, 1);
+    assert.equal(assessments[0].speaker, 'interviewer');
+  });
+
   test('force_me removes a late in-flight action from the real dynamic action store', async () => {
     const { engine, session } = await makeEngine();
     const { DynamicActionEngine } = await loadDynamicActionEngine();
@@ -694,6 +742,99 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     await waitForAsyncSignals();
 
     assert.equal(calls.length, 1);
+  });
+
+  test('near-threshold consequential action requires speaker confirmation', async () => {
+    const { engine } = await makeEngine();
+    const emitted = [];
+    const timestamp = Date.now();
+    engine.on('dynamic_action_emitted', action => emitted.push(action));
+    engine.setDynamicActionContext({
+      sessionId: 'sess-speaker-confirmation',
+      modeId: 'mode-sales',
+      modeTemplateType: 'sales',
+    });
+    engine._setDynamicActionEngineForTest({
+      detectSignalCandidates: () => [
+        { trigger: { type: 'pricing_objection' }, match: '价格太高', index: 0 },
+      ],
+      assessSignals: async () => [buildStoredDiscoveryAction({
+        id: 'speaker-confirmation-action',
+        sessionId: 'sess-speaker-confirmation',
+        modeId: 'mode-sales',
+        type: 'pricing_objection',
+      })],
+      detectActions: () => [],
+      acceptAction: () => null,
+      dismissAction: () => {},
+      getTopActions: () => [],
+    });
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: '这个价格太高了，我们预算不够',
+      timestamp,
+      final: true,
+      speakerVerification: {
+        provider: 'local-speaker-verification',
+        profileId: 'me',
+        isMe: false,
+        confidence: 0.7,
+        threshold: 0.72,
+      },
+    }, true);
+    await waitForAsyncSignals();
+
+    assert.equal(emitted.length, 1);
+    assert.deepEqual(emitted[0].speakerConfirmation, {
+      speaker: 'interviewer',
+      timestamp,
+      text: '这个价格太高了，我们预算不够',
+    });
+  });
+
+  test('confident speaker agreement does not gate a consequential action', async () => {
+    const { engine } = await makeEngine();
+    const emitted = [];
+    engine.on('dynamic_action_emitted', action => emitted.push(action));
+    engine.setDynamicActionContext({
+      sessionId: 'sess-speaker-confirmed',
+      modeId: 'mode-sales',
+      modeTemplateType: 'sales',
+    });
+    engine._setDynamicActionEngineForTest({
+      detectSignalCandidates: () => [
+        { trigger: { type: 'pricing_objection' }, match: '价格太高', index: 0 },
+      ],
+      assessSignals: async () => [buildStoredDiscoveryAction({
+        id: 'speaker-confirmed-action',
+        sessionId: 'sess-speaker-confirmed',
+        modeId: 'mode-sales',
+        type: 'pricing_objection',
+      })],
+      detectActions: () => [],
+      acceptAction: () => null,
+      dismissAction: () => {},
+      getTopActions: () => [],
+    });
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: '这个价格太高了，我们预算不够',
+      timestamp: Date.now(),
+      final: true,
+      speakerVerification: {
+        provider: 'local-speaker-verification',
+        profileId: 'me',
+        isMe: false,
+        confidence: 0.3,
+        threshold: 0.72,
+      },
+    }, true);
+    await waitForAsyncSignals();
+
+    assert.equal(emitted.length, 1);
+    assert.equal(emitted[0].speakerConfirmation, undefined);
   });
 
   test('malformed or mismatched speaker verification continues dynamic action assessment', async () => {

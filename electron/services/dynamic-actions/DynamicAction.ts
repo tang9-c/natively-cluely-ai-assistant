@@ -1,6 +1,7 @@
 import type { SemanticGateTrace } from './ModeEventClassifier';
 import type { TranscriptEmotionDegree, TranscriptEmotionSource } from '../../../shared/senseVoiceEmotion';
 import type { ContextNeedDecision } from '../context/ContextNeedDecision';
+import type { DynamicActionSpeakerConfirmation } from '../../../shared/speakerConfirmation';
 
 export type ActionStatus =
     | 'candidate'
@@ -77,6 +78,7 @@ export interface DynamicAction {
     createdAt: number;
     expiresAt?: number;
     promptInstruction: string;
+    speakerConfirmation?: DynamicActionSpeakerConfirmation;
     /**
      * Mode-aware event metadata used by the main answer flow. The intent label
      * directs the answer shape, but the LLM receives this richer packet instead

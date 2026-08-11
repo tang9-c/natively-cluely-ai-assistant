@@ -24,7 +24,6 @@ import { sanitizeContextNeedDecision, type ContextNeedDecision } from './service
 import { prepareWhatToSayContext } from './services/context/WhatToSayContextPreparation';
 import {
   buildUploadedMaterialContextContribution,
-  shouldRequireUploadedMaterialContext,
   type UploadedMaterialContextContribution,
 } from './services/knowledge/UploadedMaterialContextContributionService';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
@@ -302,31 +301,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   };
 
-  const CHAT_MATERIAL_CONTEXT_TIMEOUT_MS = 180;
-
-  const buildDroppedUploadedMaterialContribution = (
-    existingContext: string | undefined,
-    ragReady: boolean,
-    embeddingReady: boolean,
-  ): UploadedMaterialContextContribution => ({
-    context: existingContext,
-    contextCandidates: [],
-    degradedReasons: ['uploaded_material_context_dropped'],
-    sourceStatus: {
-      ragAttempted: true,
-      ragReady,
-      embeddingReady,
-      uploadedMaterialHitCount: 0,
-      citationCount: 0,
-      screenContextStatus: 'not_available',
-    },
-    citations: [],
-    retrievalTimingMs: {},
-    usedMaterialContext: false,
-    uploadedMaterialHitCount: 0,
-    truncated: false,
-  });
-
   const publishChatContextStatus = (
     sender: Electron.WebContents,
     contribution: UploadedMaterialContextContribution,
@@ -343,7 +317,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     sender: Electron.WebContents,
     message: string,
     existingContext?: string,
-    options: { allowTimeout?: boolean } = {},
   ): Promise<UploadedMaterialContextContribution> => {
     const ragManagerForHealth = appState.getRAGManager();
     const { ragReady, embeddingReady } = await getRagReadiness(ragManagerForHealth);
@@ -352,7 +325,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       DatabaseManager.getInstance(),
       ragManagerForHealth?.getEmbeddingPipeline?.(),
     );
-    const contributionPromise = buildUploadedMaterialContextContribution({
+    const contribution = await buildUploadedMaterialContextContribution({
       query: message,
       existingContext,
       scopePolicy: SettingsManager.getInstance().get('providerDataScopes') || {},
@@ -362,26 +335,6 @@ export function initializeIpcHandlers(appState: AppState): void {
       tokenBudget: 1800,
       surface: 'overlay-chat',
     });
-
-    let contribution: UploadedMaterialContextContribution;
-    if (options.allowTimeout && !shouldRequireUploadedMaterialContext(message)) {
-      contribution = await Promise.race([
-        contributionPromise,
-        new Promise<UploadedMaterialContextContribution>((resolve) => {
-          setTimeout(
-            () => resolve(buildDroppedUploadedMaterialContribution(existingContext, ragReady, embeddingReady)),
-            CHAT_MATERIAL_CONTEXT_TIMEOUT_MS,
-          );
-        }),
-      ]);
-      if (contribution.degradedReasons.includes('uploaded_material_context_dropped')) {
-        contributionPromise.catch((error: any) => {
-          console.warn('[IPC] late chat material RAG failed', { errorClass: error?.name || 'Error' });
-        });
-      }
-    } else {
-      contribution = await contributionPromise;
-    }
     publishChatContextStatus(sender, contribution);
     return contribution;
   };
@@ -833,7 +786,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             `[IPC] Auto-injected 100s context for gemini-chat-stream (${context.length} chars)`,
           );
         }
-        const chatContext = await resolveUploadedMaterialChatContext(event.sender, message, context, { allowTimeout: true });
+        const chatContext = await resolveUploadedMaterialChatContext(event.sender, message, context);
         context = chatContext.context;
 
         // Use CHAT_MODE_PROMPT for general chat — bypasses the interview-copilot

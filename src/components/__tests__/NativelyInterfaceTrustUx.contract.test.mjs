@@ -21,29 +21,27 @@ test('NativelyInterface renders latest answer trust explanation from view model'
   assert.match(source, /baseConfidenceHealthItems/);
   assert.match(source, /latestAnswerTrustExplanation\.primaryMessages/);
   assert.match(source, /latestAnswerTrustExplanation\.degradedMessages/);
+  assert.match(source, /sourceStatusFallback:\s*latestChatSourceStatus/);
   assert.match(source, /result\?\.status as CitationStatus/);
   assert.doesNotMatch(source, /latestSourceStatus\?\.uploadedMaterialHitCount && latestSourceStatus\.uploadedMaterialHitCount > 0[\s\S]{0,80}\? `资料命中/);
 });
 
-test('NativelyInterface exposes current-session speaker correction controls', () => {
+test('NativelyInterface does not expose an always-on recent transcript correction list', () => {
   const source = read('src/components/NativelyInterface.tsx');
   const preload = read('electron/preload.ts');
   const types = read('src/types/electron.d.ts');
 
-  assert.match(source, /SpeakerCorrectionTranscript/);
-  assert.match(source, /speakerCorrectionTranscripts/);
-  assert.match(source, /buildSpeakerCorrectionSegmentKey/);
-  assert.match(source, /speakerVerificationSetSessionOverride/);
-  assert.match(source, /这是我/);
-  assert.match(source, /这不是我/);
-  assert.match(source, /handleSpeakerVerificationSessionOverride\(segment,\s*'force_me'\)/);
-  assert.match(source, /handleSpeakerVerificationSessionOverride\(segment,\s*'force_not_me'\)/);
+  assert.doesNotMatch(source, /SpeakerCorrectionTranscript/);
+  assert.doesNotMatch(source, /speakerCorrectionTranscripts/);
+  assert.doesNotMatch(source, /buildSpeakerCorrectionSegmentKey/);
+  assert.doesNotMatch(source, /handleSpeakerVerificationSessionOverride/);
   assert.match(preload, /speakerVerificationSetSessionOverride/);
   assert.match(preload, /speaker-verification:set-session-override/);
   assert.match(types, /SpeakerVerificationSessionOverride/);
 });
 
-test('speaker verification correction updates the visible correction-row identity label', () => {
+test('speaker verification correction UI lives with dynamic actions instead of raw transcripts', () => {
   const source = read('src/components/NativelyInterface.tsx');
-  assert.match(source, /speakerLabel: action === 'force_me' \? '我' : '其他发言人'/);
+  assert.match(source, /<DynamicActionBar/);
+  assert.doesNotMatch(source, /这是我|这不是我/);
 });

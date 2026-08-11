@@ -2,6 +2,8 @@ import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSourc
 import type { DynamicActionAvailabilityEvent } from '../../shared/dynamicActionAvailability'
 export type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
 import type { ContextNeedDecision } from '../../shared/contextNeedDecision'
+import type { DynamicActionSpeakerConfirmation } from '../../shared/speakerConfirmation'
+export type { DynamicActionSpeakerConfirmation } from '../../shared/speakerConfirmation'
 import type {
   MeetingSearchChunkEvent,
   MeetingSearchCompleteEvent,
@@ -81,6 +83,7 @@ export interface DynamicActionPayload {
   createdAt: number
   expiresAt?: number
   promptInstruction: string
+  speakerConfirmation?: DynamicActionSpeakerConfirmation
   sourceIntent?: string
   latestTurn?: string
   language?: string

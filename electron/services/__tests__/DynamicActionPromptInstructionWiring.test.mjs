@@ -122,6 +122,8 @@ test('dynamic action bar owns semi-auto countdown and dedupes generation', () =>
   assert.match(source, /clearTimeout/);
   assert.match(source, /triggeringIdsRef/);
   assert.match(source, /dismissDynamicAction/);
+  assert.match(source, /!action\.speakerConfirmation/);
+  assert.match(source, /filter\(\(action\) => !action\.speakerConfirmation\)/);
 });
 
 test('dynamic action accept path is result-aware and records completion or failure', () => {
