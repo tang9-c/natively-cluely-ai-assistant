@@ -116,6 +116,61 @@ describe('DocumentTextExtractor', () => {
     assert.equal(destroyCalls, 1);
   });
 
+  it('preserves extracted PDF text when parser cleanup fails', async () => {
+    let parserInstances = 0;
+    let destroyCalls = 0;
+    const warnings = [];
+    const originalWarn = console.warn;
+    class PDFParseStub {
+      static setWorker() {}
+      constructor() { parserInstances += 1; }
+      async getText() { return { text: '正文已成功提取' }; }
+      async destroy() {
+        destroyCalls += 1;
+        throw new Error('Worker was destroyed during cleanup');
+      }
+    }
+
+    console.warn = (...args) => warnings.push(args);
+    try {
+      const text = await extractPdfTextWithParser(Buffer.from('fixture'), PDFParseStub);
+      assert.equal(text, '正文已成功提取');
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    assert.equal(parserInstances, 1);
+    assert.equal(destroyCalls, 1);
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0][0], '[DocumentTextExtractor] PDF parser cleanup failed');
+    assert.deepEqual(warnings[0][1], {
+      code: 'pdf_cleanup_failed',
+      stage: 'cleanup',
+      platform: process.platform,
+      arch: process.arch,
+    });
+    assert.doesNotMatch(JSON.stringify(warnings), /Worker was destroyed during cleanup/);
+  });
+
+  it('preserves the original PDF parse error when cleanup also fails', async () => {
+    const originalWarn = console.warn;
+    class PDFParseStub {
+      static setWorker() {}
+      async getText() { throw new Error('Invalid PDF structure'); }
+      async destroy() { throw new Error('Worker was destroyed during cleanup'); }
+    }
+
+    console.warn = () => {};
+    try {
+      await assert.rejects(
+        () => extractPdfTextWithParser(Buffer.from('fixture'), PDFParseStub),
+        /Invalid PDF structure/,
+      );
+    } finally {
+      console.warn = originalWarn;
+    }
+  });
+
   it('retries one transient PDF worker failure with a fresh parser', async () => {
     const filePath = path.join(tmpDir, 'retry-worker.pdf');
     fs.writeFileSync(filePath, '%PDF-1.4\nfixture');

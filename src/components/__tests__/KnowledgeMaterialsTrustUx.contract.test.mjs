@@ -41,3 +41,18 @@ test('knowledge material settings keeps polling long enough for sequential PPTX 
   assert.match(source, /const MATERIAL_POLL_MAX_ATTEMPTS = 300/);
   assert.match(source, /attempts >= MATERIAL_POLL_MAX_ATTEMPTS/);
 });
+
+test('background material polling does not keep foreground upload controls busy', () => {
+  const source = read('src/components/settings/KnowledgeMaterialsSettings.tsx');
+  const pollingStart = source.indexOf('  const startUploadPolling');
+  const uploadStart = source.indexOf('  const uploadMaterials', pollingStart);
+  const deleteStart = source.indexOf('  const deleteMaterial', uploadStart);
+  const pollingBlock = source.slice(pollingStart, uploadStart);
+  const uploadBlock = source.slice(uploadStart, deleteStart);
+
+  assert.ok(pollingStart >= 0 && uploadStart > pollingStart && deleteStart > uploadStart);
+  assert.doesNotMatch(pollingBlock, /setBusy\(/);
+  assert.match(uploadBlock, /finally\s*\{\s*setBusy\(false\);\s*\}/);
+  assert.doesNotMatch(uploadBlock, /if\s*\(!pollingRef\.current\)/);
+  assert.match(source, /onClick=\{uploadMaterials\}[\s\S]{0,120}disabled=\{busy\}/);
+});

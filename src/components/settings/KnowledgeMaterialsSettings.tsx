@@ -92,7 +92,6 @@ export function KnowledgeMaterialsSettings() {
           window.clearInterval(pollingRef.current);
           pollingRef.current = null;
         }
-        setBusy(false);
       }
     }, MATERIAL_POLL_INTERVAL_MS);
   }, [refreshMaterials]);
@@ -125,11 +124,8 @@ export function KnowledgeMaterialsSettings() {
       startUploadPolling(materialIds);
     } catch (error: any) {
       setStatus(error?.message || '资料上传失败');
-      setBusy(false);
     } finally {
-      if (!pollingRef.current) {
-        setBusy(false);
-      }
+      setBusy(false);
     }
   }, [refreshContextHealth, refreshMaterials, startUploadPolling]);
 

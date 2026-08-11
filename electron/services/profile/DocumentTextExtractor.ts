@@ -40,20 +40,25 @@ function isTransientPdfRuntimeError(error: unknown): boolean {
 
 async function parsePdfOnce(buffer: Buffer, PDFParse: any): Promise<string> {
   const parser = new PDFParse({ data: buffer });
-  let parseFailed = false;
   try {
     const data: any = await withTimeout(parser.getText(), PARSE_TIMEOUT_MS, 'PDF parse');
     return data?.text ?? '';
-  } catch (error) {
-    parseFailed = true;
-    throw error;
   } finally {
     try {
       await parser.destroy();
-    } catch (destroyError) {
-      if (!parseFailed) throw destroyError;
+    } catch {
+      logPdfCleanupFailure();
     }
   }
+}
+
+function logPdfCleanupFailure(): void {
+  console.warn('[DocumentTextExtractor] PDF parser cleanup failed', {
+    code: 'pdf_cleanup_failed',
+    stage: 'cleanup',
+    platform: process.platform,
+    arch: process.arch,
+  });
 }
 
 export async function extractPdfTextWithParser(buffer: Buffer, PDFParse: any): Promise<string> {
