@@ -6,6 +6,7 @@ import { AnimatePresence } from 'framer-motion';
 import { CloudOff } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DynamicActionAvailabilityEvent } from '../../../shared/dynamicActionAvailability';
+import { sameSpeakerConfirmationSegment } from '../../../shared/speakerConfirmation';
 import { DynamicActionCard, type DynamicActionCardStatus } from './DynamicActionCard';
 
 const AUTO_TRIGGER_DELAY_MS = 5000;
@@ -174,7 +175,12 @@ export const DynamicActionBar: React.FC<Props> = ({
       setActions((prev) => {
         // Dedupe by id (engine has already deduped at backend, but renderer
         // may receive late-arriving duplicates after a window restore).
-        if (prev.some((a) => a.id === action.id)) return prev;
+        const existingIndex = prev.findIndex((a) => a.id === action.id);
+        if (existingIndex >= 0) {
+          const next = [...prev];
+          next[existingIndex] = { ...prev[existingIndex], ...actionView };
+          return next;
+        }
         // Sort by priority desc, then createdAt desc (newer first when tied).
         const next = [...prev, actionView]
           .filter((a) => Date.now() - a.createdAt < staleAfterMs)
@@ -211,8 +217,11 @@ export const DynamicActionBar: React.FC<Props> = ({
     if (!confirmation) return;
 
     if (decision === 'confirm') {
+      const result = await window.electronAPI?.confirmDynamicActionSpeaker?.(confirmation);
+      if (!result?.success) return;
       setActions((prev) => prev.map((item) => {
-        if (item.id !== action.id) return item;
+        if (!item.speakerConfirmation
+          || !sameSpeakerConfirmationSegment(item.speakerConfirmation, confirmation)) return item;
         const { speakerConfirmation: _confirmation, ...confirmedAction } = item;
         return { ...confirmedAction, uiStatus: 'candidate', autoTriggerAt: undefined };
       }));

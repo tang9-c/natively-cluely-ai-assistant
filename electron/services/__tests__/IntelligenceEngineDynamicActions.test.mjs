@@ -295,6 +295,47 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(assessments[0].speaker, 'interviewer');
   });
 
+  test('speaker correction retracts only the action for the confirmed transcript segment', async () => {
+    const { engine } = await makeEngine();
+    const discarded = [];
+    const targetText = '我觉得预算不够';
+    engine.setDynamicActionContext({
+      sessionId: 'sess-speaker-segment-match',
+      modeId: 'mode-sales',
+      modeTemplateType: 'sales',
+    });
+    const earlierAction = buildStoredDiscoveryAction({
+      id: 'earlier-valid-action',
+      sessionId: 'sess-speaker-segment-match',
+      evidenceRefs: [{ source: 'transcript', text: '预算不够', timestamp: 1_000, speaker: 'interviewer' }],
+    });
+    const correctedAction = buildStoredDiscoveryAction({
+      id: 'corrected-action',
+      sessionId: 'sess-speaker-segment-match',
+      evidenceRefs: [{ source: 'transcript', text: targetText, timestamp: 2_000, speaker: 'user' }],
+      speakerConfirmation: { speaker: 'user', timestamp: 2_000, text: targetText },
+    });
+    engine._setDynamicActionEngineForTest({
+      detectSignalCandidates: () => [],
+      assessSignals: async () => [],
+      detectActions: () => [],
+      acceptAction: () => null,
+      dismissAction: () => {},
+      discardAction: id => discarded.push(id),
+      getTopActions: () => [earlierAction, correctedAction],
+    });
+
+    engine.handleSpeakerVerificationSessionOverride({
+      speaker: 'interviewer',
+      text: targetText,
+      timestamp: 2_000,
+      final: true,
+    }, 'force_not_me');
+    await waitForAsyncSignals();
+
+    assert.deepEqual(discarded, ['corrected-action']);
+  });
+
   test('force_me removes a late in-flight action from the real dynamic action store', async () => {
     const { engine, session } = await makeEngine();
     const { DynamicActionEngine } = await loadDynamicActionEngine();
@@ -2062,6 +2103,51 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
 
     // dismiss is a no-op for unknown id and must not throw.
     assert.doesNotThrow(() => engine.dismissDynamicAction('does-not-exist'));
+  });
+
+  test('confirming a speaker segment clears the gate for every matching stored action only', async () => {
+    const { engine } = await makeEngine();
+    const { DynamicActionEngine } = await loadDynamicActionEngine();
+    const dynamicActionEngine = new DynamicActionEngine();
+    const confirmation = { speaker: 'interviewer', timestamp: 4_200, text: '这个价格太高了' };
+    engine.setDynamicActionContext({ sessionId: 'sess-confirm-all', modeId: 'mode-sales', modeTemplateType: 'sales' });
+    engine._setDynamicActionEngineForTest(dynamicActionEngine);
+    for (const action of [
+      buildStoredDiscoveryAction({ id: 'matching-1', sessionId: 'sess-confirm-all', speakerConfirmation: confirmation }),
+      buildStoredDiscoveryAction({ id: 'matching-2', sessionId: 'sess-confirm-all', speakerConfirmation: confirmation }),
+      buildStoredDiscoveryAction({
+        id: 'unrelated',
+        sessionId: 'sess-confirm-all',
+        speakerConfirmation: { ...confirmation, timestamp: 4_300 },
+      }),
+      buildStoredDiscoveryAction({ id: 'matching-3', sessionId: 'sess-confirm-all', speakerConfirmation: confirmation }),
+    ]) {
+      dynamicActionEngine.getStore().addAction(action);
+    }
+
+    const updated = engine.confirmDynamicActionSpeaker(confirmation);
+
+    assert.deepEqual(updated.map((action) => action.id).sort(), ['matching-1', 'matching-2', 'matching-3']);
+    assert.equal(dynamicActionEngine.getStore().getAction('matching-1')?.speakerConfirmation, undefined);
+    assert.equal(dynamicActionEngine.getStore().getAction('matching-2')?.speakerConfirmation, undefined);
+    assert.equal(dynamicActionEngine.getStore().getAction('matching-3')?.speakerConfirmation, undefined);
+    assert.ok(dynamicActionEngine.getStore().getAction('unrelated')?.speakerConfirmation);
+  });
+
+  test('backend refuses to accept a dynamic action while speaker confirmation is pending', async () => {
+    const { engine } = await makeEngine();
+    const { DynamicActionEngine } = await loadDynamicActionEngine();
+    const dynamicActionEngine = new DynamicActionEngine();
+    engine.setDynamicActionContext({ sessionId: 'sess-pending-accept', modeId: 'mode-sales', modeTemplateType: 'sales' });
+    engine._setDynamicActionEngineForTest(dynamicActionEngine);
+    dynamicActionEngine.getStore().addAction(buildStoredDiscoveryAction({
+      id: 'pending-action',
+      sessionId: 'sess-pending-accept',
+      speakerConfirmation: { speaker: 'interviewer', timestamp: 5_000, text: '需要确认' },
+    }));
+
+    assert.equal(engine.acceptDynamicAction('pending-action'), null);
+    assert.equal(dynamicActionEngine.getStore().getAction('pending-action')?.status, 'candidate');
   });
 
   test('acceptDynamicAction returns null when no engine bound', async () => {

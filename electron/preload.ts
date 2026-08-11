@@ -202,6 +202,7 @@ interface ElectronAPI {
     text: string;
     action: 'force_me' | 'force_not_me' | 'clear';
   }) => Promise<{ success: boolean; error?: string }>;
+  confirmDynamicActionSpeaker: (input: import('../src/types/electron').DynamicActionSpeakerConfirmation) => Promise<{ success: boolean; actionIds?: string[]; error?: string }>;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
   localWhisperSetModel: (modelId: string) => Promise<{ success: boolean }>;
   localWhisperDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
@@ -1263,6 +1264,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     text: string;
     action: 'force_me' | 'force_not_me' | 'clear';
   }) => ipcRenderer.invoke('speaker-verification:set-session-override', input),
+  confirmDynamicActionSpeaker: (input: import('../src/types/electron').DynamicActionSpeakerConfirmation) =>
+    ipcRenderer.invoke('speaker-confirmation:confirm-dynamic-actions', input),
   setGroqSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-groq-stt-api-key', apiKey),
   setOpenAiSttApiKey: (apiKey: string) => ipcRenderer.invoke('set-openai-stt-api-key', apiKey),
   setOpenAiSttBaseUrl: (url: string) => ipcRenderer.invoke('set-openai-stt-base-url', url),

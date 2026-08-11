@@ -29,6 +29,19 @@ export interface DynamicActionSpeakerConfirmationInput {
 const NEAR_THRESHOLD_MARGIN = 0.04;
 const MIN_MEANINGFUL_CHARACTERS = 2;
 
+function normalizeSegmentText(text: string): string {
+    return text.replace(/\s+/g, ' ').trim();
+}
+
+export function sameSpeakerConfirmationSegment(
+    left: DynamicActionSpeakerConfirmation,
+    right: DynamicActionSpeakerConfirmation,
+): boolean {
+    return left.speaker === right.speaker
+        && left.timestamp === right.timestamp
+        && normalizeSegmentText(left.text) === normalizeSegmentText(right.text);
+}
+
 function meaningfulCharacterCount(text: string): number {
     return [...text.replace(/[\s\p{P}\p{S}]/gu, '')].length;
 }
@@ -42,7 +55,7 @@ export function buildDynamicActionSpeakerConfirmation(
     if (segment.speaker !== 'user' && segment.speaker !== 'interviewer') return undefined;
     if (!Number.isFinite(segment.timestamp)) return undefined;
 
-    const text = String(segment.text || '').trim();
+    const text = normalizeSegmentText(String(segment.text || ''));
     if (meaningfulCharacterCount(text) < MIN_MEANINGFUL_CHARACTERS) return undefined;
 
     const verification = segment.speakerVerification;

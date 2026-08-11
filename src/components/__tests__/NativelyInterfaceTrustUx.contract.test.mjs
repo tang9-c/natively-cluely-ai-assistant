@@ -45,3 +45,20 @@ test('speaker verification correction UI lives with dynamic actions instead of r
   assert.match(source, /<DynamicActionBar/);
   assert.doesNotMatch(source, /这是我|这不是我/);
 });
+
+test('each chat turn clears prior answer diagnostics before JIT RAG can return early', () => {
+  const source = read('src/components/NativelyInterface.tsx');
+  const answerNow = source.slice(
+    source.indexOf('const handleAnswerNow = async'),
+    source.indexOf('const handleManualSubmit = async'),
+  );
+  const manualSubmit = source.slice(
+    source.indexOf('const handleManualSubmit = async'),
+    source.indexOf('handleManualSubmitRef.current = handleManualSubmit'),
+  );
+
+  for (const block of [answerNow, manualSubmit]) {
+    assert.ok(block.indexOf('setLatestChatSourceStatus(null)') >= 0);
+    assert.ok(block.indexOf('setLatestChatSourceStatus(null)') < block.indexOf('ragQueryLive?.'));
+  }
+});

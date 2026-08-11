@@ -79,3 +79,18 @@ test('speaker-uncertain dynamic actions require bidirectional confirmation befor
   assert.match(card, /这不是我/);
   assert.match(card, /onConfirmSpeaker/);
 });
+
+test('speaker confirmation is persisted through main and replaces matching cards in every renderer', () => {
+  const bar = read('src/components/dynamic-actions/DynamicActionBar.tsx');
+  const preload = read('electron/preload.ts');
+  const ipc = read('electron/ipcHandlers.ts');
+  const engine = read('electron/IntelligenceEngine.ts');
+
+  assert.match(bar, /confirmDynamicActionSpeaker/);
+  assert.match(bar, /sameSpeakerConfirmationSegment/);
+  assert.match(bar, /const existingIndex = prev\.findIndex/);
+  assert.match(preload, /speaker-confirmation:confirm-dynamic-actions/);
+  assert.match(ipc, /speaker-confirmation:confirm-dynamic-actions/);
+  assert.match(ipc, /intelligence-dynamic-action/);
+  assert.match(engine, /confirmDynamicActionSpeaker/);
+});

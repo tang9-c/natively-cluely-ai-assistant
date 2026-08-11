@@ -24,6 +24,7 @@ import { sanitizeContextNeedDecision, type ContextNeedDecision } from './service
 import { prepareWhatToSayContext } from './services/context/WhatToSayContextPreparation';
 import {
   buildUploadedMaterialContextContribution,
+  shouldRequireUploadedMaterialContext,
   type UploadedMaterialContextContribution,
 } from './services/knowledge/UploadedMaterialContextContributionService';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
@@ -301,6 +302,8 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   };
 
+  const CHAT_MATERIAL_HYBRID_BUDGET_MS = 1_500;
+
   const publishChatContextStatus = (
     sender: Electron.WebContents,
     contribution: UploadedMaterialContextContribution,
@@ -333,6 +336,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       ragReady,
       embeddingReady,
       tokenBudget: 1800,
+      hybridTimeoutMs: shouldRequireUploadedMaterialContext(message)
+        ? undefined
+        : CHAT_MATERIAL_HYBRID_BUDGET_MS,
       surface: 'overlay-chat',
     });
     publishChatContextStatus(sender, contribution);
@@ -1301,6 +1307,25 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.warn('[IPC] speaker verification session override failed', redactForLog([error]));
       return { success: false, error: 'speaker_verification_override_failed' };
     }
+  });
+  safeHandle('speaker-confirmation:confirm-dynamic-actions', async (_, input: any) => {
+    const timestamp = Number(input?.timestamp);
+    if ((input?.speaker !== 'user' && input?.speaker !== 'interviewer')
+      || !Number.isFinite(timestamp)
+      || typeof input?.text !== 'string'
+      || input.text.trim().length === 0) {
+      return { success: false, error: 'invalid_segment' };
+    }
+    const actions = appState.getIntelligenceManager().confirmDynamicActionSpeaker({
+      speaker: input.speaker,
+      timestamp,
+      text: input.text,
+    });
+    if (actions.length === 0) return { success: false, error: 'segment_not_found' };
+    for (const action of actions) {
+      broadcast('intelligence-dynamic-action', { action });
+    }
+    return { success: true, actionIds: actions.map((action) => action.id) };
   });
   safeHandle('get-technical-interview-direct-vision', async () =>
     SettingsManager.getInstance().getTechnicalInterviewVisionFirst(),

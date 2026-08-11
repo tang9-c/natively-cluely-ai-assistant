@@ -29,7 +29,11 @@ import {
 import type { DetectedSignalCandidate } from './services/dynamic-actions/DynamicActionEngine';
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
 import type { DynamicActionOutputType } from './services/dynamic-actions/DynamicAction';
-import { buildDynamicActionSpeakerConfirmation } from '../shared/speakerConfirmation';
+import {
+    buildDynamicActionSpeakerConfirmation,
+    sameSpeakerConfirmationSegment,
+    type DynamicActionSpeakerConfirmation,
+} from '../shared/speakerConfirmation';
 import { DynamicActionContinuationService } from './services/dynamic-actions/DynamicActionContinuationService';
 import {
     buildFdeContinuationDerivedActionContext,
@@ -770,13 +774,14 @@ export class IntelligenceEngine extends EventEmitter {
         const normalizedText = (segment.text || '').replace(/\s+/g, ' ').trim();
         if (!normalizedText) return;
         for (const activeAction of this.getActiveDynamicActions()) {
-            const hasMatchingEvidence = activeAction.evidenceRefs.some((evidence) => {
-                const evidenceText = (evidence.text || '').replace(/\s+/g, ' ').trim();
-                return evidenceText === normalizedText
-                    || evidenceText.includes(normalizedText)
-                    || normalizedText.includes(evidenceText);
-            });
-            if (!hasMatchingEvidence) continue;
+            const confirmation = activeAction.speakerConfirmation;
+            const matchesTargetSegment = confirmation
+                ? confirmation.timestamp === segment.timestamp
+                    && confirmation.text.replace(/\s+/g, ' ').trim() === normalizedText
+                : activeAction.evidenceRefs.some((evidence) =>
+                    (evidence.text || '').replace(/\s+/g, ' ').trim() === normalizedText
+                );
+            if (!matchesTargetSegment) continue;
             if (discardWithoutCooldown) {
                 this.dynamicActionEngine.discardAction(activeAction.id);
             } else {
@@ -842,6 +847,20 @@ export class IntelligenceEngine extends EventEmitter {
             );
         }
         return action;
+    }
+
+    confirmDynamicActionSpeaker(confirmation: DynamicActionSpeakerConfirmation): DynamicAction[] {
+        if (!this.dynamicActionEngine || !this.currentSessionId) return [];
+        return this.dynamicActionEngine.getStore().getActiveActions(this.currentSessionId).filter((action) => {
+            if (!action.speakerConfirmation
+                || !sameSpeakerConfirmationSegment(action.speakerConfirmation, confirmation)) {
+                return false;
+            }
+            delete action.speakerConfirmation;
+            action.autoTriggerEligible = false;
+            action.autoTriggerReason = 'speaker_confirmed_manual_only';
+            return true;
+        });
     }
 
     markDynamicActionShown(actionId: string): DynamicAction | null {

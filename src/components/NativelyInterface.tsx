@@ -2824,6 +2824,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       ]);
 
       setIsProcessing(true);
+      setLatestAnswerTrace(null);
+      setLatestAnswerCitations([]);
+      setLatestCitationStatus('none');
+      setCitationPreviewMessage(null);
+      setLatestDegradedReason(undefined);
+      setLatestChatSourceStatus(null);
 
       try {
         let prompt = buildManualVoiceQuestionPrompt(
@@ -2841,12 +2847,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         }
 
         // Call Streaming API: message = question, context = instructions
-        setLatestAnswerTrace(null);
-        setLatestAnswerCitations([]);
-        setLatestCitationStatus('none');
-        setCitationPreviewMessage(null);
-        setLatestDegradedReason(undefined);
-        setLatestChatSourceStatus(null);
         requestStartTimeRef.current = Date.now();
         await window.electronAPI.streamGeminiChat(
           question,
@@ -2955,6 +2955,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     setIsExpanded(true);
     setIsProcessing(true);
+    setLatestAnswerTrace(null);
+    setLatestAnswerCitations([]);
+    setLatestCitationStatus('none');
+    setCitationPreviewMessage(null);
+    setLatestDegradedReason(undefined);
+    setLatestChatSourceStatus(null);
 
     try {
       // JIT RAG pre-flight: try to use indexed meeting context first
@@ -2967,12 +2973,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }
 
       // Pass imagePath if attached, AND conversation context
-      setLatestAnswerTrace(null);
-      setLatestAnswerCitations([]);
-      setLatestCitationStatus('none');
-      setCitationPreviewMessage(null);
-      setLatestDegradedReason(undefined);
-      setLatestChatSourceStatus(null);
       requestStartTimeRef.current = Date.now();
       await window.electronAPI.streamGeminiChat(
         userText || 'Analyze this screenshot',

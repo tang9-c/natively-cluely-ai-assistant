@@ -108,6 +108,23 @@ interface Candidate {
     vectorScore: number;
 }
 
+function withHybridRetrievalBudget<T>(promise: Promise<T>, timeoutMs?: number): Promise<T> {
+    if (!Number.isFinite(timeoutMs) || (timeoutMs as number) <= 0) return promise;
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('hybrid_retrieval_timeout')), timeoutMs);
+        promise.then(
+            (value) => {
+                clearTimeout(timer);
+                resolve(value);
+            },
+            (error) => {
+                clearTimeout(timer);
+                reject(error);
+            },
+        );
+    });
+}
+
 export class MaterialRagRetriever {
     private static fallbackTelemetryLastEmittedAt = new Map<string, number>();
 
@@ -122,6 +139,7 @@ export class MaterialRagRetriever {
         hasTranscript?: boolean;
         format?: 'mode_xml' | 'material_xml' | 'none';
         weightedTerms?: WeightedMaterialQueryTerm[];
+        hybridTimeoutMs?: number;
     }): Promise<MaterialRagContext> {
         const queryText = params.query.trim();
         const queryWords = new Set(wordsOf(queryText));
@@ -146,7 +164,10 @@ export class MaterialRagRetriever {
         let degradedReason: MaterialRagContext['degradedReason'];
         if (this.embeddingPipeline?.isReady()) {
             try {
-                scored = await this.scoreHybrid(candidates, queryWords, queryText, relevanceThreshold, hasCjkQuery, params.weightedTerms);
+                scored = await withHybridRetrievalBudget(
+                    this.scoreHybrid(candidates, queryWords, queryText, relevanceThreshold, hasCjkQuery, params.weightedTerms),
+                    params.hybridTimeoutMs,
+                );
             } catch (error) {
                 usedFallback = true;
                 degradedReason = 'hybrid_threw';

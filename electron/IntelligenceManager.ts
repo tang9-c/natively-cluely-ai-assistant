@@ -270,6 +270,12 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.acceptDynamicAction(actionId, options);
     }
 
+    confirmDynamicActionSpeaker(
+        confirmation: import('../shared/speakerConfirmation').DynamicActionSpeakerConfirmation,
+    ): import('./services/dynamic-actions/DynamicAction').DynamicAction[] {
+        return this.engine.confirmDynamicActionSpeaker(confirmation);
+    }
+
     markDynamicActionShown(actionId: string): import('./services/dynamic-actions/DynamicAction').DynamicAction | null {
         return this.engine.markDynamicActionShown(actionId);
     }

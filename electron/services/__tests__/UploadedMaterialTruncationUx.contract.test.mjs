@@ -58,6 +58,8 @@ test('manual overlay chat injects uploaded material context before calling the L
   assert.doesNotMatch(source, /CHAT_MATERIAL_CONTEXT_TIMEOUT_MS/);
   assert.doesNotMatch(source, /buildDroppedUploadedMaterialContribution/);
   assert.doesNotMatch(source, /allowTimeout/);
+  assert.match(source, /CHAT_MATERIAL_HYBRID_BUDGET_MS\s*=\s*1_500/);
+  assert.match(source, /hybridTimeoutMs:\s*shouldRequireUploadedMaterialContext\(message\)\s*\?\s*undefined\s*:\s*CHAT_MATERIAL_HYBRID_BUDGET_MS/);
   assert.doesNotMatch(chatHandler, /providerScopes\.reference_files\s*===\s*false/);
   assert.doesNotMatch(streamHandler, /providerScopes\.reference_files\s*===\s*false/);
   assert.match(helper, /getDeniedDataScopes/);

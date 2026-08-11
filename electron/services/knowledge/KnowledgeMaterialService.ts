@@ -29,6 +29,7 @@ export interface KnowledgeMaterialSearchResponse {
 interface KnowledgeMaterialSearchOptions {
     limit?: number;
     candidateLimit?: number;
+    hybridTimeoutMs?: number;
 }
 
 interface PptxQCloudAvailability {
@@ -201,6 +202,7 @@ export class KnowledgeMaterialService {
             topK: limit,
             format: 'none',
             weightedTerms: queryAnalysis.weightedTerms,
+            hybridTimeoutMs: options.hybridTimeoutMs,
         });
 
         return {

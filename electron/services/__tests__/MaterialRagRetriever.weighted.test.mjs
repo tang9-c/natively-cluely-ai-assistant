@@ -43,3 +43,36 @@ latestTurn:我们今天先不谈价格，先搞清楚力学仿真模块的功能
 
   assert.equal(result.chunks[0].sourceId, 'force-simulation');
 });
+
+test('hybrid retrieval budget falls back to lexical scoring before a slow embedding finishes', async () => {
+  const embeddingPipeline = {
+    isReady: () => true,
+    getEmbeddingForQuery: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return [1, 0];
+    },
+  };
+  const retriever = new MaterialRagRetriever(embeddingPipeline);
+  const startedAt = Date.now();
+
+  const result = await retriever.retrieve({
+    query: '预算价格',
+    sources: [{
+      id: 'pricing',
+      scope: 'global',
+      title: '价格说明',
+      text: '预算价格和报价说明',
+      parentText: '预算价格和报价说明',
+      sourcePriority: 1,
+      embedding: [1, 0],
+    }],
+    topK: 1,
+    format: 'none',
+    hybridTimeoutMs: 10,
+  });
+
+  assert.ok(Date.now() - startedAt < 80);
+  assert.equal(result.usedFallback, true);
+  assert.equal(result.degradedReason, 'hybrid_threw');
+  assert.equal(result.chunks[0]?.sourceId, 'pricing');
+});

@@ -113,3 +113,21 @@ test('speaker confirmation is omitted when verification confidently agrees with 
     hasConsequentialAction: true,
   }), undefined);
 });
+
+test('speaker confirmation segment identity requires speaker, timestamp, and normalized full text', async () => {
+  const { sameSpeakerConfirmationSegment } = await loadPolicy();
+  const target = { speaker: 'interviewer', timestamp: 1_000, text: '价格  太高' };
+
+  assert.equal(sameSpeakerConfirmationSegment(target, {
+    speaker: 'interviewer', timestamp: 1_000, text: '价格 太高',
+  }), true);
+  assert.equal(sameSpeakerConfirmationSegment(target, {
+    speaker: 'interviewer', timestamp: 1_001, text: '价格 太高',
+  }), false);
+  assert.equal(sameSpeakerConfirmationSegment(target, {
+    speaker: 'user', timestamp: 1_000, text: '价格 太高',
+  }), false);
+  assert.equal(sameSpeakerConfirmationSegment(target, {
+    speaker: 'interviewer', timestamp: 1_000, text: '太高',
+  }), false);
+});

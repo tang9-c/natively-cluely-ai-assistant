@@ -646,6 +646,8 @@ export interface ElectronAPI {
   speakerVerificationDeleteProfile: () => Promise<{ success: boolean; error?: string }>
   // @ipc-channel speaker-verification:set-session-override
   speakerVerificationSetSessionOverride: (input: SpeakerVerificationSessionOverride) => Promise<{ success: boolean; error?: string }>
+  // @ipc-channel speaker-confirmation:confirm-dynamic-actions
+  confirmDynamicActionSpeaker: (input: DynamicActionSpeakerConfirmation) => Promise<{ success: boolean; actionIds?: string[]; error?: string }>
   // @ipc-channel local-sensevoice-get-models
   localSenseVoiceGetModels: () => Promise<{ models: any[]; activeModelId: string }>
   // @ipc-channel local-sensevoice-get-terms

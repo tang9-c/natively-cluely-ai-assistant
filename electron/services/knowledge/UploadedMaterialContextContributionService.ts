@@ -31,7 +31,7 @@ export interface UploadedMaterialSearchResponse {
 export interface UploadedMaterialSearchService {
     searchWithDiagnostics(
         query: string,
-        options?: { limit?: number; candidateLimit?: number },
+        options?: { limit?: number; candidateLimit?: number; hybridTimeoutMs?: number },
     ): Promise<UploadedMaterialSearchResponse>;
 }
 
@@ -46,6 +46,7 @@ export interface UploadedMaterialContextContributionInput {
     tokenBudget?: number;
     limit?: number;
     candidateLimit?: number;
+    hybridTimeoutMs?: number;
     surface?: string;
 }
 
@@ -116,6 +117,7 @@ export async function buildUploadedMaterialContextContribution(
         const materialSearch = await input.materialService.searchWithDiagnostics(query, {
             limit: input.limit ?? DEFAULT_LIMIT,
             candidateLimit: input.candidateLimit ?? DEFAULT_CANDIDATE_LIMIT,
+            hybridTimeoutMs: input.hybridTimeoutMs,
         });
         const hits = materialSearch.hits;
         const retrievalTimingMs = { uploaded_material: Date.now() - startedAt };

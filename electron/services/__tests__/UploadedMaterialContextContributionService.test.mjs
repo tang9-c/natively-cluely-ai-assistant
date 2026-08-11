@@ -102,6 +102,21 @@ test('uploaded material chat contribution handles no-hit and retrieval failure e
   assert.equal(failed.context, undefined);
 });
 
+test('uploaded material contribution passes the chat hybrid retrieval budget to search', async () => {
+  const { buildUploadedMaterialContextContribution } = await loadService();
+  const calls = [];
+
+  await buildUploadedMaterialContextContribution({
+    query: '普通会议问题',
+    materialService: makeMaterialService({ hits: [] }, calls),
+    ragReady: true,
+    embeddingReady: true,
+    hybridTimeoutMs: 1_500,
+  });
+
+  assert.equal(calls[0]?.options?.hybridTimeoutMs, 1_500);
+});
+
 test('uploaded material chat contribution avoids duplicate injection and empty queries', async () => {
   const { buildUploadedMaterialContextContribution } = await loadService();
   const calls = [];
