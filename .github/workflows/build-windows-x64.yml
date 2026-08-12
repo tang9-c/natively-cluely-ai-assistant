@@ -43,7 +43,7 @@ jobs:
         shell: bash
         run: |
           npm run build
-          npm run build:electron
+          npm run build:electron:package
           npm run build:native
 
       - name: Validate Windows RAG release assets
@@ -83,7 +83,7 @@ jobs:
 
       - name: Audit release size
         shell: bash
-        run: node scripts/audit-release-size.js > release/size-report.txt
+        run: node scripts/audit-release-size.js --path release/win-unpacked --json --max-bytes 891289600 > release/size-report.json
 
       - name: Upload distributable artifacts
         uses: actions/upload-artifact@v5
@@ -93,6 +93,6 @@ jobs:
             release/*.exe
             release/*.blockmap
             release/latest.yml
-            release/size-report.txt
+            release/size-report.json
           if-no-files-found: error
           retention-days: 14

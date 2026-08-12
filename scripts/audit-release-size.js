@@ -7,6 +7,21 @@ const rootDir = path.resolve(__dirname, '..');
 const releaseDir = path.join(rootDir, 'release');
 const topLimit = Number.parseInt(process.env.NATIVELY_SIZE_AUDIT_LIMIT || '30', 10);
 
+function readOption(name) {
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : undefined;
+}
+
+const auditPath = path.resolve(readOption('--path') || releaseDir);
+const jsonOutput = process.argv.includes('--json');
+const maxBytesOption = readOption('--max-bytes');
+const maxBytes = maxBytesOption == null ? null : Number.parseInt(maxBytesOption, 10);
+
+if (maxBytes != null && (!Number.isFinite(maxBytes) || maxBytes < 0)) {
+  console.error(`[size-audit] Invalid --max-bytes value: ${maxBytesOption}`);
+  process.exit(1);
+}
+
 function formatBytes(bytes) {
   const units = ['B', 'KB', 'MB', 'GB'];
   let value = bytes;
@@ -63,35 +78,87 @@ function printSection(title, rows) {
   }
 }
 
-if (!fs.existsSync(releaseDir)) {
-  console.error(`[size-audit] Missing release directory: ${releaseDir}`);
+function classifyPackagedFile(relativePath) {
+  const normalized = relativePath.split(path.sep).join('/');
+  if (/(^|\/)Contents\/Frameworks\//.test(normalized)) return 'framework';
+  if (/(^|\/)Contents\/Resources\/app\.asar\.unpacked\//.test(normalized)) return 'unpackedNative';
+  if (/(^|\/)Contents\/Resources\/app\.asar$/.test(normalized)) return 'asar';
+  if (/(^|\/)Contents\/Resources\/models\//.test(normalized)) return 'models';
+  if (/(^|\/)Contents\/Resources\/assets\//.test(normalized)) return 'assets';
+  if (/(^|\/)Contents\/Resources\/fonts\//.test(normalized)) return 'fonts';
+  return 'other';
+}
+
+if (!fs.existsSync(auditPath)) {
+  console.error(`[size-audit] Missing audit path: ${auditPath}`);
   process.exit(1);
 }
 
 const entries = [];
-const total = walk(releaseDir, entries);
+const total = walk(auditPath, entries);
+const categories = {
+  framework: 0,
+  asar: 0,
+  unpackedNative: 0,
+  models: 0,
+  assets: 0,
+  fonts: 0,
+  other: 0,
+};
+for (const entry of entries) {
+  if (entry.type !== 'file') continue;
+  categories[classifyPackagedFile(path.relative(auditPath, entry.path))] += entry.size;
+}
 const sorted = entries
-  .filter((entry) => entry.path !== releaseDir)
+  .filter((entry) => entry.path !== auditPath)
   .sort((a, b) => b.size - a.size)
   .slice(0, topLimit);
 
-console.log('Natively release size audit');
-console.log(`Generated at: ${new Date().toISOString()}`);
-console.log(`Release directory: ${releaseDir}`);
-console.log(`Total release footprint: ${formatBytes(total)}`);
+const rootArtifacts = fs.lstatSync(auditPath).isDirectory()
+  ? fs.readdirSync(auditPath).map((name) => {
+      const artifactPath = path.join(auditPath, name);
+      const stat = fs.lstatSync(artifactPath);
+      return {
+        path: artifactPath,
+        size: stat.isDirectory()
+          ? entries.find((entry) => entry.path === artifactPath)?.size || 0
+          : stat.size,
+        type: stat.isDirectory() ? 'dir' : 'file',
+      };
+    }).sort((a, b) => b.size - a.size)
+  : [];
 
-printSection('Release root artifacts', fs.readdirSync(releaseDir)
-  .map((name) => {
-    const artifactPath = path.join(releaseDir, name);
-    const stat = fs.lstatSync(artifactPath);
-    return {
-      path: artifactPath,
-      size: stat.isDirectory()
-        ? entries.find((entry) => entry.path === artifactPath)?.size || 0
-        : stat.size,
-      type: stat.isDirectory() ? 'dir' : 'file',
-    };
-  })
-  .sort((a, b) => b.size - a.size));
+if (jsonOutput) {
+  console.log(JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    auditPath,
+    totalBytes: total,
+    maxBytes,
+    withinBudget: maxBytes == null || total <= maxBytes,
+    categories,
+    rootArtifacts: rootArtifacts.map(entry => ({
+      path: path.relative(auditPath, entry.path),
+      size: entry.size,
+      type: entry.type,
+    })),
+    largestPaths: sorted.map(entry => ({
+      path: path.relative(auditPath, entry.path),
+      size: entry.size,
+      type: entry.type,
+    })),
+  }, null, 2));
+} else {
+  console.log('Natively release size audit');
+  console.log(`Generated at: ${new Date().toISOString()}`);
+  console.log(`Audit path: ${auditPath}`);
+  console.log(`Total footprint: ${formatBytes(total)}`);
+  console.log(`Categories: ${Object.entries(categories).map(([name, bytes]) => `${name}=${formatBytes(bytes)}`).join(', ')}`);
 
-printSection(`Largest ${topLimit} packaged paths`, sorted);
+  printSection('Root artifacts', rootArtifacts);
+  printSection(`Largest ${topLimit} packaged paths`, sorted);
+}
+
+if (maxBytes != null && total > maxBytes) {
+  console.error(`[size-audit] Footprint ${total} exceeds budget ${maxBytes}`);
+  process.exit(2);
+}

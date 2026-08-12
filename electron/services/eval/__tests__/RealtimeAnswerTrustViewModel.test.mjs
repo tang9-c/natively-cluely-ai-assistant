@@ -13,10 +13,10 @@ async function loadViewModel() {
 }
 
 test('electron build emits shared trust view model sources', () => {
-  const root = path.resolve(import.meta.dirname, '../../../..');
-  const buildScript = fs.readFileSync(path.join(root, 'scripts/build-electron.js'), 'utf8');
-  assert.match(buildScript, /const sharedDir = path\.resolve\(rootDir, 'shared'\)/);
-  assert.match(buildScript, /entryPoints\.push\(\.\.\.findTs\(sharedDir\)/);
+  assert.ok(
+    fs.existsSync(modulePath),
+    `expected Electron build output at ${modulePath}`,
+  );
 });
 
 test('latest answer explanation uses single-answer trace and strips sensitive fixture content', async () => {

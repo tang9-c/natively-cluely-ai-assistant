@@ -8,35 +8,14 @@
 const { build } = require('esbuild');
 const path = require('path');
 const fs = require('fs');
+const { getElectronEntryPoints, prepareElectronOutDir } = require('./electron-build-entrypoints');
 
 const rootDir = path.resolve(__dirname, '..');
 const outDir = path.resolve(rootDir, 'dist-electron');
 
-const entryPoints = [];
-
-// Function to recursively find all .ts files in a directory
-const findTs = (dir) => {
-  const results = [];
-  for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, f.name);
-    if (f.isDirectory()) {
-      if (f.name === '__tests__' || f.name === 'test') continue;
-      results.push(...findTs(full));
-    }
-    else if (f.name.endsWith('.ts') && !f.name.endsWith('.d.ts')) results.push(full);
-  }
-  return results;
-};
-
-const electronDir = path.resolve(rootDir, 'electron');
-if (fs.existsSync(electronDir)) {
-  entryPoints.push(...findTs(electronDir).map(f => path.relative(rootDir, f)));
-}
-
-const sharedDir = path.resolve(rootDir, 'shared');
-if (fs.existsSync(sharedDir)) {
-  entryPoints.push(...findTs(sharedDir).map(f => path.relative(rootDir, f)));
-}
+const buildMode = process.env.NATIVELY_ELECTRON_BUILD_MODE || 'development';
+const entryPoints = getElectronEntryPoints(rootDir, buildMode);
+prepareElectronOutDir(outDir, buildMode);
 
 const start = Date.now();
 
@@ -90,7 +69,7 @@ build({
     console.log('[build-electron] Copied pptx-render-child.mjs');
   }
 
-  console.log(`[build-electron] Done in ${Date.now() - start}ms`);
+  console.log(`[build-electron] Done in ${Date.now() - start}ms (${buildMode}, ${entryPoints.length} entries)`);
 }).catch((err) => {
   console.error('[build-electron] Build failed:', err.message);
   process.exit(1);

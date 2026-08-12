@@ -58,7 +58,7 @@ jobs:
           NATIVELY_NATIVE_TARGETS: "x86_64-apple-darwin"
         run: |
           npm run build
-          npm run build:electron
+          npm run build:electron:package
           npm run build:native
           rm -f native-module/index.darwin-arm64.node
 
@@ -97,7 +97,7 @@ jobs:
           test -e release/*.zip
 
       - name: Audit release size
-        run: node scripts/audit-release-size.js > release/size-report.txt
+        run: node scripts/audit-release-size.js --path release/mac/CueUp.app --json --max-bytes 891289600 > release/size-report.json
 
       - name: Upload distributable artifacts
         uses: actions/upload-artifact@v5
@@ -110,6 +110,6 @@ jobs:
             release/latest-mac.yml
             release/OPEN-UNSIGNED-CUEUP-MAC.sh
             release/INSTALL-UNSIGNED-MACOS.txt
-            release/size-report.txt
+            release/size-report.json
           if-no-files-found: error
           retention-days: 14

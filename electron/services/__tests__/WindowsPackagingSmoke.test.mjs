@@ -23,7 +23,13 @@ test('windows package config ships x64 native dependencies outside asar', () => 
   assert.ok(arches.has('x64'), 'Windows release must include x64');
   assert.equal(arches.has('ia32'), false, 'Windows ia32 must stay disabled until native ia32 artifacts are built');
   assert.ok(pkg.build.files.includes('native-module'), 'native-module must be packaged');
-  assert.ok(pkg.build.files.includes('node_modules'), 'node_modules must be packaged for native deps');
+  assert.equal(
+    pkg.build.files.includes('node_modules'),
+    false,
+    'electron-builder must resolve production dependencies instead of copying every installed package',
+  );
+  assert.equal(pkg.dependencies['better-sqlite3'], '12.11.1');
+  assert.equal(pkg.dependencies['sherpa-onnx-node'], '^1.13.2');
   assert.ok(pkg.build.files.includes('!**/*.map'), 'source maps must be excluded from Windows release packages');
   assert.ok(pkg.build.files.includes('!dist-electron/electron/test/**'), 'compiled Electron test fixtures must not be packaged');
   assert.ok(pkg.build.files.includes('!node_modules/electron/**'), 'Electron runtime package must not be bundled in app resources');
@@ -42,7 +48,7 @@ test('windows package dependencies do not include stale aliases that electron-bu
   const pkg = readJson('package.json');
   const lock = readJson('package-lock.json');
 
-  assert.equal(pkg.dependencies['@tanstack/react-query'], '^5.100.10');
+  assert.equal(pkg.devDependencies['@tanstack/react-query'], '^5.100.10');
   assert.equal(pkg.dependencies['react-query'], undefined);
   assert.equal(lock.packages['@tanstack/react-query@^5.100.10'], undefined);
   assert.equal(lock.packages[''].dependencies['react-query'], undefined);
@@ -100,6 +106,6 @@ test('windows CI workflow makes toolchain and shell assumptions explicit', () =>
   assert.match(workflow, /Validate Windows x64 artifact set/);
   assert.match(workflow, /Unexpected macOS artifact in Windows workflow/);
   assert.match(workflow, /Unexpected non-x64 Windows artifact/);
-  assert.match(workflow, /node scripts\/audit-release-size\.js > release\/size-report\.txt/);
-  assert.match(workflow, /release\/size-report\.txt/);
+  assert.match(workflow, /node scripts\/audit-release-size\.js --path release\/win-unpacked --json --max-bytes 891289600 > release\/size-report\.json/);
+  assert.match(workflow, /release\/size-report\.json/);
 });

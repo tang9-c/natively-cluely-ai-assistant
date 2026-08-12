@@ -52,7 +52,13 @@ test('electron-builder mac release targets are architecture-neutral so workflows
   }
 
   assert.ok(pkg.build.files.includes('native-module'), 'native-module must be packaged');
-  assert.ok(pkg.build.files.includes('node_modules'), 'native dependencies must be packaged');
+  assert.equal(
+    pkg.build.files.includes('node_modules'),
+    false,
+    'electron-builder must resolve production dependencies instead of copying every installed package',
+  );
+  assert.equal(pkg.dependencies['better-sqlite3'], '12.11.1');
+  assert.equal(pkg.dependencies['sherpa-onnx-node'], '^1.13.2');
   assert.ok(pkg.build.files.includes('!**/*.map'), 'source maps must be excluded from release packages');
   assert.ok(pkg.build.files.includes('!dist-electron/electron/test/**'), 'compiled Electron test fixtures must not be packaged');
   assert.ok(pkg.build.files.includes('!node_modules/electron/**'), 'Electron runtime package must not be bundled in app resources');
@@ -124,8 +130,8 @@ test('mac release workflows build one architecture each and upload size audit re
   assert.match(intelWorkflow, /rm -rf release/);
   assert.match(intelWorkflow, /Validate Intel artifact set/);
   assert.match(intelWorkflow, /Unexpected arm64 artifact in Intel workflow/);
-  assert.match(intelWorkflow, /node scripts\/audit-release-size\.js > release\/size-report\.txt/);
-  assert.match(intelWorkflow, /release\/size-report\.txt/);
+  assert.match(intelWorkflow, /node scripts\/audit-release-size\.js --path release\/mac\/CueUp\.app --json --max-bytes 891289600 > release\/size-report\.json/);
+  assert.match(intelWorkflow, /release\/size-report\.json/);
 
   assert.match(armWorkflow, /^name:\s*Build ARM64 Mac$/m);
   assert.match(armWorkflow, /runs-on:\s*macos-latest/);
@@ -134,7 +140,7 @@ test('mac release workflows build one architecture each and upload size audit re
   assert.match(armWorkflow, /rm -rf release/);
   assert.match(armWorkflow, /Validate ARM64 artifact set/);
   assert.match(armWorkflow, /Unexpected non-arm64 artifact in ARM64 workflow/);
-  assert.match(armWorkflow, /node scripts\/audit-release-size\.js > release\/size-report\.txt/);
+  assert.match(armWorkflow, /node scripts\/audit-release-size\.js --path release\/mac-arm64\/CueUp\.app --json --max-bytes 891289600 > release\/size-report\.json/);
   assert.match(armWorkflow, /cueup-arm64-mac-/);
   assert.match(intelWorkflow, /cueup-intel-mac-/);
   assert.match(intelWorkflow, /release\/OPEN-UNSIGNED-CUEUP-MAC\.sh/);
