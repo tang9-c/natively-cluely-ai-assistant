@@ -9,20 +9,37 @@
  *      If a warm worker exists it is handed off (no startup delay).
  *      If not, LocalWhisperSTT falls back to spawning its own worker normally.
  *
- * Only one warm worker is kept alive at a time. The second audio channel
- * (interviewer vs user) will spawn a fresh worker, which is acceptable because
- * the ONNX model weights file is already in the OS disk-cache after the first
- * worker loaded it, making the cold-start much faster than the first load.
+ * Only one warm lease is kept alive at a time. Recording channels acquire
+ * leases from the same keyed pool, so matching mic/system configurations reuse
+ * the already-loaded model session instead of spawning a second worker.
  */
 
-import { Worker } from 'worker_threads';
 import { buildWorkerInitMessage } from './inferenceConfig';
 import { resolveWhisperWorkerPath } from './workerPathResolver';
+import {
+    localSttWorkerPool,
+    type LocalSttWorkerConfig,
+    type LocalSttWorkerLease,
+} from '../LocalSttWorkerPool';
+
+export function createWhisperWorkerConfig(modelId: string): LocalSttWorkerConfig {
+    const initMessage = buildWorkerInitMessage(modelId);
+    return {
+        provider: 'whisper',
+        modelId,
+        executionProviders: initMessage.executionProviders,
+        dtype: initMessage.dtype,
+        sessionConfig: { cacheDir: initMessage.cacheDir },
+        workerPath: resolveWhisperWorkerPath(),
+        initMessage,
+        audioField: 'audio',
+    };
+}
 
 class ModelPreloader {
-    private warmWorker: Worker | null = null;
+    private warmWorker: LocalSttWorkerLease | null = null;
     private warmModelId: string | null = null;
-    private loadingWorker: Worker | null = null;
+    private loadingWorker: LocalSttWorkerLease | null = null;
     private pendingModelId: string | null = null;
     private loading = false;
 
@@ -52,8 +69,7 @@ class ModelPreloader {
 
         console.log(`[ModelPreloader] Warming worker for ${modelId}...`);
 
-        const workerPath = resolveWhisperWorkerPath();
-        const w = new Worker(workerPath);
+        const w = localSttWorkerPool.acquire(createWhisperWorkerConfig(modelId), 'mic');
         this.loadingWorker = w;
 
         w.on('message', (msg: any) => {
@@ -75,23 +91,25 @@ class ModelPreloader {
 
         w.on('error', (err) => {
             console.warn('[ModelPreloader] Worker error:', err.message);
+            w.terminate();
             this.loadingWorker = null;
             this.pendingModelId = null;
             this.loading = false;
         });
 
-        w.postMessage(buildWorkerInitMessage(modelId));
     }
 
     /**
      * Hand off the warm worker to a caller and clear the cache.
      * Returns null if no warm worker is available for that model ID.
      */
-    takeWarmWorker(modelId: string): Worker | null {
+    takeWarmWorker(modelId: string): LocalSttWorkerLease | null {
         if (this.warmModelId === modelId && this.warmWorker) {
             const w = this.warmWorker;
             this.warmWorker = null;
             this.warmModelId = null;
+            w.removeAllListeners('message');
+            w.removeAllListeners('error');
             console.log(`[ModelPreloader] Handing off warm worker for ${modelId}`);
             return w;
         }

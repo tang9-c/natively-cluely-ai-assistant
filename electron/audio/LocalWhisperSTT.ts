@@ -31,14 +31,12 @@
  *     - Reset session state for the next segment
  */
 
-import { Worker } from 'worker_threads';
 import { resampleToF32 } from './whisper/audioResampler';
 import { VadProcessor, VadProcessorOptions } from './whisper/vadProcessor';
 import { filterHallucination } from './whisper/hallucinationFilter';
 import { configureTransformersCache } from './whisper/modelManager';
-import { modelPreloader } from './whisper/modelPreloader';
-import { buildWorkerInitMessage } from './whisper/inferenceConfig';
-import { resolveWhisperWorkerPath } from './whisper/workerPathResolver';
+import { createWhisperWorkerConfig, modelPreloader } from './whisper/modelPreloader';
+import { localSttWorkerPool, type LocalSttWorkerLease } from './LocalSttWorkerPool';
 import type { WorkerOutMessage } from './whisper/types';
 import { BaseSTT } from './BaseSTT';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
@@ -81,7 +79,7 @@ export class LocalWhisperSTT extends BaseSTT {
     // Optional channel label ('mic' / 'system') — disambiguates log lines
     // when both LocalWhisperSTT instances run the same model.
     private channelLabel = '';
-    private worker: Worker | null = null;
+    private worker: LocalSttWorkerLease | null = null;
     private vad: VadProcessor | null = null;
     private taskCounter = 0;
     private workerReady = false;
@@ -613,10 +611,11 @@ export class LocalWhisperSTT extends BaseSTT {
             this.flushPending();
         } else {
             console.log(`[LocalWhisperSTT] Cold-starting worker for ${this.modelId}`);
-            const workerPath = resolveWhisperWorkerPath();
-            this.worker = new Worker(workerPath);
+            this.worker = localSttWorkerPool.acquire(
+                createWhisperWorkerConfig(this.modelId),
+                this.channelLabel === 'system' ? 'system' : 'mic',
+            );
             this.attachWorkerListeners();
-            this.worker.postMessage(buildWorkerInitMessage(this.modelId));
         }
     }
 
@@ -719,7 +718,7 @@ export class LocalWhisperSTT extends BaseSTT {
         }
     }
 
-    private beginWorkerTermination(w: Worker): void {
+    private beginWorkerTermination(w: LocalSttWorkerLease): void {
         this.worker = null;
         this.workerReady = false;
         this.isDrainingFinals = false;

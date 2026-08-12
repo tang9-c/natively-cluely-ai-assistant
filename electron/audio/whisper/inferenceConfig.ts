@@ -45,10 +45,9 @@ const WHISPER_SAFE_DTYPE: Record<string, string> = {
 
 /**
  * Construct the worker `init` message for a given model. Single source of
- * truth — three callers (LocalWhisperSTT.spawnWorker, modelPreloader.preload,
- * local-whisper-start-download IPC) all use this so the message shape stays
- * consistent. The cacheDir lookup is lazy (avoids importing electron from
- * this leaf module).
+ * truth for pooled runtime workers and model download validation, so the
+ * message shape stays consistent. The cacheDir lookup is lazy (avoids
+ * importing electron from this leaf module).
  */
 export function buildWorkerInitMessage(modelId: string): {
     type: 'init';

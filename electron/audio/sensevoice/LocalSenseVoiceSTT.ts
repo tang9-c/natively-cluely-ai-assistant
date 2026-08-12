@@ -1,5 +1,5 @@
-import { Worker } from 'worker_threads';
 import { BaseSTT } from '../BaseSTT';
+import { LocalSttWorkerPool, localSttWorkerPool, type LocalSttWorkerLease } from '../LocalSttWorkerPool';
 import { resampleToF32 } from '../whisper/audioResampler';
 import { VadProcessor, VadProcessorOptions } from '../whisper/vadProcessor';
 import {
@@ -43,11 +43,12 @@ export class LocalSenseVoiceSTT extends BaseSTT {
   private readonly vadOptions?: VadProcessorOptions;
   private readonly termCorrection?: SenseVoiceTermCorrectionConfig;
   private readonly numThreads: number;
+  private readonly workerPool: LocalSttWorkerPool;
 
   private inputSampleRate = 16000;
   private channelLabel = '';
   private vad: VadProcessor | null = null;
-  private worker: SenseVoiceWorkerLike | null = null;
+  private worker: LocalSttWorkerLease | null = null;
   private workerReady = false;
   private taskCounter = 0;
   private pendingAudio: Float32Array[] = [];
@@ -67,6 +68,9 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     this.vadOptions = options.vadOptions;
     this.termCorrection = options.termCorrection;
     this.numThreads = options.numThreads ?? Math.max(1, Math.min(4, require('os').cpus()?.length ?? 2));
+    this.workerPool = this.workerFactory
+      ? new LocalSttWorkerPool({ workerFactory: () => this.workerFactory!() as any })
+      : localSttWorkerPool;
   }
 
   setSampleRate(rate: number): void {
@@ -204,7 +208,31 @@ export class LocalSenseVoiceSTT extends BaseSTT {
   }
 
   private spawnWorker(): void {
-    const worker = this.workerFactory ? this.workerFactory() : new Worker(resolveSenseVoiceWorkerPath());
+    const files = this.modelFiles ?? (this.workerFactory
+      ? { modelDir: '', modelFile: '', tokensFile: '' }
+      : resolveSenseVoiceModelFiles(this.modelId));
+    const worker = this.workerPool.acquire({
+      provider: 'sensevoice',
+      modelId: this.modelId,
+      executionProviders: ['cpu'],
+      dtype: 'fp32',
+      sessionConfig: {
+        modelDir: files.modelDir,
+        modelFile: files.modelFile,
+        tokensFile: files.tokensFile,
+        numThreads: this.numThreads,
+      },
+      workerPath: resolveSenseVoiceWorkerPath(),
+      initMessage: {
+        type: 'init',
+        modelDir: files.modelDir,
+        modelFile: files.modelFile,
+        tokensFile: files.tokensFile,
+        numThreads: this.numThreads,
+        verboseLogging: isVerboseLogging(),
+      },
+      audioField: 'samples',
+    }, this.channelLabel === 'system' ? 'system' : 'mic');
     this.worker = worker;
     debugLog('worker-spawn', {
       modelId: this.modelId,
@@ -229,22 +257,11 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       }
     });
 
-    const files = this.modelFiles ?? (this.workerFactory
-      ? { modelDir: '', modelFile: '', tokensFile: '' }
-      : resolveSenseVoiceModelFiles(this.modelId));
     debugLog('worker-init', {
       modelId: this.modelId,
       modelFileConfigured: !!files.modelFile,
       tokensFileConfigured: !!files.tokensFile,
       numThreads: this.numThreads,
-    });
-    worker.postMessage({
-      type: 'init',
-      modelDir: files.modelDir,
-      modelFile: files.modelFile,
-      tokensFile: files.tokensFile,
-      numThreads: this.numThreads,
-      verboseLogging: isVerboseLogging(),
     });
   }
 
