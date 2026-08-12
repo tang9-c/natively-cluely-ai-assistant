@@ -50,7 +50,7 @@ class FakeSenseVoiceWorker extends EventEmitter {
   }
 }
 
-test('LocalSenseVoiceSTT exposes requested, actual, and fallback provider diagnostics', async () => {
+test('LocalSenseVoiceSTT keeps producing meeting transcripts after GPU initialization falls back to CPU', async () => {
   const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
   const worker = new FakeSenseVoiceWorker({
     readyMessage: {
@@ -62,6 +62,8 @@ test('LocalSenseVoiceSTT exposes requested, actual, and fallback provider diagno
     },
   });
   const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+  const transcripts = [];
+  stt.on('transcript', event => transcripts.push(event));
   stt.start();
   await sleep(0);
   assert.deepEqual(stt.getHardwareDiagnostics(), {
@@ -70,7 +72,11 @@ test('LocalSenseVoiceSTT exposes requested, actual, and fallback provider diagno
     fallbackReason: 'candidate_initialization_failed',
     initializationMs: 456,
   });
+  stt.write(loudPcm());
+  stt.notifySpeechEnded();
+  await stt.drainFinals(1000);
   stt.stop();
+  assert.equal(transcripts[0]?.text, '你好，欢迎参加会议。');
 });
 
 test('LocalSenseVoiceSTT emits a final transcript from a completed segment', async () => {

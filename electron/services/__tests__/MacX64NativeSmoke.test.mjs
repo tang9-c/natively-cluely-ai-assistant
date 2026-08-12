@@ -130,7 +130,7 @@ test('mac release workflows build one architecture each and upload size audit re
   assert.match(intelWorkflow, /rm -rf release/);
   assert.match(intelWorkflow, /Validate Intel artifact set/);
   assert.match(intelWorkflow, /Unexpected arm64 artifact in Intel workflow/);
-  assert.match(intelWorkflow, /node scripts\/audit-release-size\.js --path release\/mac\/CueUp\.app --json --max-bytes 891289600 > release\/size-report\.json/);
+  assert.match(intelWorkflow, /node scripts\/audit-release-size\.js --path release\/mac\/CueUp\.app --json --min-bytes 734003200 --max-bytes 891289600 > release\/size-report\.json/);
   assert.match(intelWorkflow, /release\/size-report\.json/);
 
   assert.match(armWorkflow, /^name:\s*Build ARM64 Mac$/m);
@@ -140,7 +140,7 @@ test('mac release workflows build one architecture each and upload size audit re
   assert.match(armWorkflow, /rm -rf release/);
   assert.match(armWorkflow, /Validate ARM64 artifact set/);
   assert.match(armWorkflow, /Unexpected non-arm64 artifact in ARM64 workflow/);
-  assert.match(armWorkflow, /node scripts\/audit-release-size\.js --path release\/mac-arm64\/CueUp\.app --json --max-bytes 891289600 > release\/size-report\.json/);
+  assert.match(armWorkflow, /node scripts\/audit-release-size\.js --path release\/mac-arm64\/CueUp\.app --json --min-bytes 734003200 --max-bytes 891289600 > release\/size-report\.json/);
   assert.match(armWorkflow, /cueup-arm64-mac-/);
   assert.match(intelWorkflow, /cueup-intel-mac-/);
   assert.match(intelWorkflow, /release\/OPEN-UNSIGNED-CUEUP-MAC\.sh/);

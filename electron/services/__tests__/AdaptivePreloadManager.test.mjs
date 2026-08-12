@@ -46,7 +46,6 @@ function harness({ heavy = false } = {}) {
     isHeavyWorkActive: () => heavy,
     setTimeout: clock.setTimeout,
     clearTimeout: clock.clearTimeout,
-    idlePreloadDelayMs: 100,
     heavyWorkRetryMs: 50,
     idleReleaseDelayMs: 300,
   });
@@ -59,13 +58,11 @@ const senseVoice = {
   modelDownloaded: true,
 };
 
-test('idle startup preloads a downloaded local SenseVoice model', async () => {
+test('idle startup records a downloaded local SenseVoice model without loading it', async () => {
   const h = harness();
   h.manager.scheduleLocalSttPreload(senseVoice);
-  await h.clock.advance(99);
+  await h.clock.advance(200);
   assert.deepEqual(h.events, []);
-  await h.clock.advance(1);
-  assert.deepEqual(h.events, ['preload:local-sensevoice:sensevoice-small']);
 });
 
 test('cloud STT and missing local models are not preloaded', async () => {
@@ -80,6 +77,8 @@ test('cloud STT and missing local models are not preloaded', async () => {
 test('heavy indexing defers preload until the system becomes idle', async () => {
   const h = harness({ heavy: true });
   h.manager.scheduleLocalSttPreload(senseVoice);
+  h.manager.notifyMeetingStarted();
+  h.manager.notifyMeetingStopped();
   await h.clock.advance(150);
   assert.deepEqual(h.events, []);
   h.setHeavy(false);
@@ -90,8 +89,8 @@ test('heavy indexing defers preload until the system becomes idle', async () => 
 test('meeting start cancels delayed release so a short restart reuses the warm model', async () => {
   const h = harness();
   h.manager.scheduleLocalSttPreload(senseVoice);
-  await h.clock.advance(100);
   h.manager.notifyMeetingStopped();
+  await h.clock.advance(0);
   await h.clock.advance(299);
   h.manager.notifyMeetingStarted();
   await h.clock.advance(1);
@@ -101,9 +100,9 @@ test('meeting start cancels delayed release so a short restart reuses the warm m
 test('meeting stop keeps the model warm and releases it after the idle timeout', async () => {
   const h = harness();
   h.manager.scheduleLocalSttPreload(senseVoice);
-  await h.clock.advance(100);
   h.manager.notifyMeetingStarted();
   h.manager.notifyMeetingStopped();
+  await h.clock.advance(0);
   await h.clock.advance(299);
   assert.equal(h.events.includes('release'), false);
   await h.clock.advance(1);
@@ -113,8 +112,8 @@ test('meeting stop keeps the model warm and releases it after the idle timeout',
 test('application disposal immediately releases warm resources and cancels timers', async () => {
   const h = harness();
   h.manager.scheduleLocalSttPreload(senseVoice);
-  await h.clock.advance(100);
   h.manager.notifyMeetingStopped();
+  await h.clock.advance(0);
   await h.manager.disposeIdleResources();
   await h.clock.advance(500);
   assert.deepEqual(h.events, ['preload:local-sensevoice:sensevoice-small', 'release']);
@@ -134,9 +133,9 @@ test('application disposal releases a model whose preload is still in flight', a
     release: async () => events.push('release'),
     setTimeout: clock.setTimeout,
     clearTimeout: clock.clearTimeout,
-    idlePreloadDelayMs: 0,
   });
   manager.scheduleLocalSttPreload(senseVoice);
+  manager.notifyMeetingStopped();
   await clock.advance(0);
   const disposing = manager.disposeIdleResources();
   finishPreload();
@@ -147,7 +146,8 @@ test('application disposal releases a model whose preload is still in flight', a
 test('crashed warm resource is invalidated and retried while idle', async () => {
   const h = harness();
   h.manager.scheduleLocalSttPreload(senseVoice);
-  await h.clock.advance(100);
+  h.manager.notifyMeetingStopped();
+  await h.clock.advance(0);
   h.manager.notifyPreloadedResourceInvalidated();
   await h.clock.advance(49);
   assert.equal(h.events.length, 1);

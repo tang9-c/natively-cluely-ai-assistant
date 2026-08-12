@@ -58,6 +58,18 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
+      - name: Verify packaged Windows runtime and native architecture
+        shell: bash
+        run: node scripts/verify-packaged-release.mjs --path release/win-unpacked --platform win32 --arch x64 | tee release/native-architecture-report.json
+
+      - name: Smoke test final Windows packaged runtime
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/sensevoice"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/sensevoice/model.int8.onnx" https://feigenbaum.cdn.bcebos.com/onnx/model.int8.onnx
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/sensevoice/tokens.txt" https://feigenbaum.cdn.bcebos.com/onnx/tokens.txt
+          node scripts/smoke-packaged-runtime.mjs --app release/win-unpacked --sensevoice-model-dir "$RUNNER_TEMP/sensevoice" --audio tests/fixtures/dynamic-actions/replay/audio/sales-pricing-objection-zh-001.wav | tee release/runtime-smoke-report.json
+
       - name: Validate Windows x64 artifact set
         shell: bash
         run: |
@@ -83,7 +95,7 @@ jobs:
 
       - name: Audit release size
         shell: bash
-        run: node scripts/audit-release-size.js --path release/win-unpacked --json --max-bytes 891289600 > release/size-report.json
+        run: node scripts/audit-release-size.js --path release/win-unpacked --json --min-bytes 734003200 --max-bytes 891289600 > release/size-report.json
 
       - name: Upload distributable artifacts
         uses: actions/upload-artifact@v5
@@ -94,5 +106,7 @@ jobs:
             release/*.blockmap
             release/latest.yml
             release/size-report.json
+            release/native-architecture-report.json
+            release/runtime-smoke-report.json
           if-no-files-found: error
           retention-days: 14

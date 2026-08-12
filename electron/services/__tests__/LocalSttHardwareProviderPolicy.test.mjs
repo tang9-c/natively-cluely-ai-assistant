@@ -121,6 +121,7 @@ test('provider initialization falls back once and never treats an unverified can
   assert.deepEqual(fallbackCalls, ['coreml', 'cpu']);
   assert.equal(fallback.providerActual, 'cpu');
   assert.equal(fallback.fallbackReason, 'candidate_initialization_failed');
+  assert.equal(fallback.value.provider, 'cpu');
 
   const failedCalls = [];
   assert.throws(() => initializeLocalSttProvider({

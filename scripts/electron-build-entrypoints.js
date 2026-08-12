@@ -7,6 +7,7 @@ const PACKAGE_ENTRY_POINTS = [
   'electron/audio/whisper/whisperWorker.ts',
   'electron/audio/sensevoice/senseVoiceWorker.ts',
   'electron/services/speaker/SpeakerEmbeddingExtractorWorker.ts',
+  'electron/services/knowledge/pptx/createPptxFontMapping.ts',
   'electron/llm/intentClassifierWorkerProcess.ts',
   'electron/rag/vectorSearchWorker.ts',
 ];

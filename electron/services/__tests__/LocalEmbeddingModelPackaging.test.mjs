@@ -112,3 +112,11 @@ test('local intent enhancement setting is exposed through SettingsManager, IPC, 
   assert.match(types, /getLocalIntentEnhancementEnabled/);
   assert.match(types, /setLocalIntentEnhancementEnabled/);
 });
+
+test('optional intent classifier is loaded on first classification instead of app startup', () => {
+  const main = read('electron/main.ts');
+  const classifier = read('electron/llm/IntentClassifier.ts');
+
+  assert.doesNotMatch(main, /warmupIntentClassifier/);
+  assert.match(classifier, /getIntentClassifierProcessHost\(\)\.classify/);
+});

@@ -14,9 +14,15 @@ function readOption(name) {
 
 const auditPath = path.resolve(readOption('--path') || releaseDir);
 const jsonOutput = process.argv.includes('--json');
+const minBytesOption = readOption('--min-bytes');
 const maxBytesOption = readOption('--max-bytes');
+const minBytes = minBytesOption == null ? null : Number.parseInt(minBytesOption, 10);
 const maxBytes = maxBytesOption == null ? null : Number.parseInt(maxBytesOption, 10);
 
+if (minBytes != null && (!Number.isFinite(minBytes) || minBytes < 0)) {
+  console.error(`[size-audit] Invalid --min-bytes value: ${minBytesOption}`);
+  process.exit(1);
+}
 if (maxBytes != null && (!Number.isFinite(maxBytes) || maxBytes < 0)) {
   console.error(`[size-audit] Invalid --max-bytes value: ${maxBytesOption}`);
   process.exit(1);
@@ -133,8 +139,9 @@ if (jsonOutput) {
     generatedAt: new Date().toISOString(),
     auditPath,
     totalBytes: total,
+    minBytes,
     maxBytes,
-    withinBudget: maxBytes == null || total <= maxBytes,
+    withinBudget: (minBytes == null || total >= minBytes) && (maxBytes == null || total <= maxBytes),
     categories,
     rootArtifacts: rootArtifacts.map(entry => ({
       path: path.relative(auditPath, entry.path),
@@ -158,6 +165,10 @@ if (jsonOutput) {
   printSection(`Largest ${topLimit} packaged paths`, sorted);
 }
 
+if (minBytes != null && total < minBytes) {
+  console.error(`[size-audit] Footprint ${total} is below budget ${minBytes}`);
+  process.exit(2);
+}
 if (maxBytes != null && total > maxBytes) {
   console.error(`[size-audit] Footprint ${total} exceeds budget ${maxBytes}`);
   process.exit(2);

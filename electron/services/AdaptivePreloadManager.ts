@@ -12,12 +12,10 @@ interface AdaptivePreloadManagerOptions {
   isHeavyWorkActive?: () => boolean;
   setTimeout?: (callback: () => void, delayMs: number) => any;
   clearTimeout?: (handle: any) => void;
-  idlePreloadDelayMs?: number;
   heavyWorkRetryMs?: number;
   idleReleaseDelayMs?: number;
 }
 
-const DEFAULT_IDLE_PRELOAD_DELAY_MS = 1_500;
 const DEFAULT_HEAVY_WORK_RETRY_MS = 5_000;
 export const DEFAULT_IDLE_RELEASE_DELAY_MS = 5 * 60 * 1_000;
 
@@ -40,7 +38,6 @@ export class AdaptivePreloadManager {
   private readonly isHeavyWorkActive: () => boolean;
   private readonly scheduleTimer: (callback: () => void, delayMs: number) => any;
   private readonly cancelTimer: (handle: any) => void;
-  private readonly idlePreloadDelayMs: number;
   private readonly heavyWorkRetryMs: number;
   private readonly idleReleaseDelayMs: number;
 
@@ -58,7 +55,6 @@ export class AdaptivePreloadManager {
     this.isHeavyWorkActive = options.isHeavyWorkActive ?? (() => false);
     this.scheduleTimer = options.setTimeout ?? ((callback, delayMs) => setTimeout(callback, delayMs));
     this.cancelTimer = options.clearTimeout ?? (handle => clearTimeout(handle));
-    this.idlePreloadDelayMs = options.idlePreloadDelayMs ?? DEFAULT_IDLE_PRELOAD_DELAY_MS;
     this.heavyWorkRetryMs = options.heavyWorkRetryMs ?? DEFAULT_HEAVY_WORK_RETRY_MS;
     this.idleReleaseDelayMs = options.idleReleaseDelayMs ?? DEFAULT_IDLE_RELEASE_DELAY_MS;
   }
@@ -71,8 +67,9 @@ export class AdaptivePreloadManager {
       if (this.warmSelectionKey) void this.releaseResources();
       return;
     }
-    if (this.warmSelectionKey === selectionKey(this.selection) || this.meetingActive) return;
-    this.schedulePreload(this.idlePreloadDelayMs);
+    if (this.warmSelectionKey && this.warmSelectionKey !== selectionKey(this.selection)) {
+      void this.releaseResources();
+    }
   }
 
   notifyMeetingStarted(): void {
@@ -86,7 +83,8 @@ export class AdaptivePreloadManager {
     if (this.disposed) return;
     this.meetingActive = false;
     if (isPreloadable(this.selection) && this.warmSelectionKey !== selectionKey(this.selection)) {
-      void this.ensurePreloaded(this.selection).catch(() => {});
+      this.cancelPreloadTimer();
+      this.schedulePreload(0);
     }
     this.cancelReleaseTimer();
     this.releaseTimer = this.scheduleTimer(() => {

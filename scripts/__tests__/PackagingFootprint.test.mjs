@@ -147,6 +147,7 @@ test('production electron build only emits runtime process entrypoints', () => {
     'electron/main.ts',
     'electron/preload.ts',
     'electron/rag/vectorSearchWorker.ts',
+    'electron/services/knowledge/pptx/createPptxFontMapping.ts',
     'electron/services/speaker/SpeakerEmbeddingExtractorWorker.ts',
   ]);
 
@@ -196,6 +197,7 @@ test('release size audit emits JSON and enforces a byte budget', () => {
     assert.equal(report.status, 0, report.stderr);
     const parsed = JSON.parse(report.stdout);
     assert.equal(parsed.totalBytes, 28);
+    assert.equal(parsed.withinBudget, true);
     assert.deepEqual(parsed.categories, {
       framework: 1,
       asar: 2,
@@ -213,6 +215,14 @@ test('release size audit emits JSON and enforces a byte budget', () => {
     );
     assert.equal(overBudget.status, 2);
     assert.match(overBudget.stderr, /exceeds budget/i);
+
+    const underBudget = spawnSync(
+      process.execPath,
+      [script, '--path', tempDir, '--json', '--min-bytes', '29'],
+      { encoding: 'utf8' },
+    );
+    assert.equal(underBudget.status, 2);
+    assert.match(underBudget.stderr, /below budget/i);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
