@@ -68,8 +68,12 @@ export class RAGManager {
         this.embeddingPipeline = new EmbeddingPipeline(config.db, this.vectorStore);
         this.retriever = new RAGRetriever(this.vectorStore, this.embeddingPipeline);
         this.liveIndexer = new LiveRAGIndexer(this.vectorStore, this.embeddingPipeline);
+        this.embeddingPipeline.onInitialized(() => {
+            this._backfillEmbeddingProviderMetadata();
+            this.scheduleAutoReindex();
+        });
 
-        this.embeddingPipeline.initialize({
+        this.embeddingPipeline.configure({
             qcloudKey: config.qcloudKey,
             openaiKey: config.openaiKey,
             geminiKey: config.geminiKey,
@@ -77,14 +81,7 @@ export class RAGManager {
             doubaoEmbeddingModel: config.doubaoEmbeddingModel,
             ollamaUrl: config.ollamaUrl,
             providerDataScopes: config.providerDataScopes
-        }).then(() => {
-            // Backfill provider metadata for meetings that were embedded before the
-            // embedding_provider column was written (or where the write failed silently).
-            this._backfillEmbeddingProviderMetadata();
-            // Auto-reindex meetings left in an incompatible embedding space (e.g. after
-            // a Gemini embedding-model bump). No-op when everything already matches.
-            this.scheduleAutoReindex();
-        }).catch(() => { /* non-critical, suppress */ });
+        });
     }
 
     /**
@@ -99,20 +96,7 @@ export class RAGManager {
     }
 
     initializeEmbeddings(keys: { qcloudKey?: string, openaiKey?: string, geminiKey?: string, doubaoKey?: string, doubaoEmbeddingModel?: string, ollamaUrl?: string, providerDataScopes?: ProviderDataScopePolicy }): void {
-        const initPromise = this.embeddingPipeline.initialize(keys);
-        // After init, backfill embedding_provider on meetings that have embedded chunks
-        // but a NULL metadata column (common for meetings embedded before this metadata
-        // write was introduced, or where the write silently failed).
-        if (initPromise && typeof initPromise.then === 'function') {
-            initPromise.then(() => {
-                this._backfillEmbeddingProviderMetadata();
-                this.scheduleAutoReindex();
-            }).catch(() => { /* silent — backfill is non-critical */ });
-        } else {
-            // Synchronous path (shouldn't happen but be safe)
-            this._backfillEmbeddingProviderMetadata();
-            this.scheduleAutoReindex();
-        }
+        this.embeddingPipeline.configure(keys);
     }
 
     private _backfillEmbeddingProviderMetadata(): void {
@@ -130,7 +114,7 @@ export class RAGManager {
      * Check if RAG is ready for queries
      */
     isReady(): boolean {
-        return this.embeddingPipeline.isReady() && this.llmHelper !== null;
+        return (this.embeddingPipeline.isReady() || this.embeddingPipeline.isConfigured()) && this.llmHelper !== null;
     }
 
     private async ensureMeetingIndex(
@@ -478,11 +462,8 @@ export class RAGManager {
      * Start JIT indexing for a live meeting.
      * Call when a meeting session begins.
      */
-    startLiveIndexing(meetingId: string): void {
-        if (!this.embeddingPipeline.isReady()) {
-            console.log('[RAGManager] Embedding pipeline not ready, skipping live indexing');
-            return;
-        }
+    async startLiveIndexing(meetingId: string): Promise<void> {
+        await this.embeddingPipeline.ensureInitialized();
         
         // Ensure meeting row exists in DB to satisfy foreign key constraints for chunks
         try {

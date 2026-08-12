@@ -104,14 +104,6 @@ export class ProcessingHelper {
       console.log("[ProcessingHelper] Initializing RAGManager embeddings with available keys");
       ragManager.initializeEmbeddings(buildEmbeddingRuntimeConfig());
 
-      // CRITICAL: Retry pending embeddings now that we have a key
-      // This ensures any meetings that failed or were queued during startup get processed
-      console.log("[ProcessingHelper] Retrying pending embeddings...");
-      ragManager.retryPendingEmbeddings().catch(console.error);
-
-      // CRITICAL: Ensure demo meeting has chunks
-      ragManager.ensureDemoMeetingProcessed().catch(console.error);
-
       // CRITICAL: Cleanup stale queue items to prevent "Chunk not found" errors
       ragManager.cleanupStaleQueueItems();
     }

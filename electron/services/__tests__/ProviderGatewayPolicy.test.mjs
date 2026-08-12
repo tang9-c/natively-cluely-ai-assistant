@@ -110,7 +110,7 @@ test('runtime embedding reinitialization preserves Doubao endpoint configuration
   assert.match(runtime, /process\.env\.DOUBAO_EMBEDDING_MODEL/);
   assert.match(runtime, /ollamaUrl: process\.env\.OLLAMA_URL \|\| 'http:\/\/localhost:11434'/);
   assert.match(ipc, /initializeEmbeddings\(buildEmbeddingRuntimeConfig\(\)\)/);
-  assert.match(pipeline, /hasNew\(prev\.doubaoEmbeddingModel, next\.doubaoEmbeddingModel\)/);
+  assert.match(pipeline, /prev\.doubaoEmbeddingModel !== next\.doubaoEmbeddingModel/);
 });
 
 test('embedding runtime config includes the saved QCLOUD key and every fallback credential', () => {

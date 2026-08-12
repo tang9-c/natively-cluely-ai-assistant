@@ -249,16 +249,20 @@ test('getHealth returns zero materialCount when no complete materials', () => {
   assert.equal(health.queue.failed, 1);
 });
 
-test('embedding pipeline that isReady=false skips embedding step', async () => {
+test('first material indexing uses the embedding pipeline even before it reports ready', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'material-no-embed-'));
   try {
     const faqPath = path.join(tmpDir, 'faq.md');
     fs.writeFileSync(faqPath, 'CueUp Enterprise includes SSO.', 'utf8');
     const db = createDbStub();
+    let embeddingCalls = 0;
     const embeddingPipeline = {
       isReady: () => false,
       getEmbeddingForQuery: async () => [1, 0, 0],
-      getEmbeddings: async () => [[0.1, 0.2, 0.3]],
+      getEmbeddings: async () => {
+        embeddingCalls += 1;
+        return [[0.1, 0.2, 0.3]];
+      },
     };
     const service = new KnowledgeMaterialService(db, embeddingPipeline);
 
@@ -266,13 +270,13 @@ test('embedding pipeline that isReady=false skips embedding step', async () => {
     const materialId = result.materials[0].id;
     await waitFor(() => assert.equal(db.getKnowledgeMaterial(materialId).status, 'complete'));
 
-    // Chunks should be present but no embeddings set
+    // A real indexing request is responsible for triggering lazy initialization.
     const chunks = [...db.chunks.values()].filter((c) => c.material_id === materialId);
     assert.equal(chunks.length > 0, true);
+    assert.equal(embeddingCalls, 1);
     for (const chunk of chunks) {
-      assert.equal(chunk.embedding, null);
+      assert.ok(Buffer.isBuffer(chunk.embedding));
     }
-    // No embedding failure recorded since we never attempted
     assert.equal(db.embeddingFailures.has(materialId), false);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });

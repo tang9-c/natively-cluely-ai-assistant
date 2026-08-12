@@ -394,6 +394,11 @@ import { SettingsManager } from "./services/SettingsManager"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
+import {
+  AdaptivePreloadManager,
+  type LocalSttPreloadSelection,
+} from './services/AdaptivePreloadManager'
+import type { LocalSttWorkerLease } from './audio/LocalSttWorkerPool'
 
 type MeetingAudioSpeaker = 'interviewer' | 'user';
 
@@ -468,6 +473,9 @@ export class AppState {
   };
   private sttQualityDiagnosticsCollector: SttQualityDiagnosticsCollector | null = null;
   private _ollamaBootstrapPromise: Promise<void> | null = null;
+  private readonly adaptivePreloadManager: AdaptivePreloadManager;
+  private adaptiveSenseVoiceLease: LocalSttWorkerLease | null = null;
+  private adaptiveSenseVoiceErrorHandler: ((error: Error) => void) | null = null;
   private screenshotCaptureInProgress: boolean = false;
 
 
@@ -496,6 +504,11 @@ export class AppState {
     setVerboseLoggingFlag(this._verboseLogging);
     console.log(`[AppState] Initialized with verboseLogging=${this._verboseLogging}`);
     this.sttQualityDiagnosticsCollector = new SttQualityDiagnosticsCollector(sttQualityAcceptanceContext);
+    this.adaptivePreloadManager = new AdaptivePreloadManager({
+      preload: selection => this.preloadSelectedLocalStt(selection),
+      release: () => this.releasePreloadedLocalStt(),
+      isHeavyWorkActive: () => this.isHeavyIndexingActive(),
+    });
 
     // 2. Initialize Helpers with loaded state
     this.windowHelper = new WindowHelper(this)
@@ -506,33 +519,6 @@ export class AppState {
     // 3. Initialize other helpers
     this.screenshotHelper = new ScreenshotHelper(this.view)
     this.processingHelper = new ProcessingHelper(this)
-
-    if (process.platform === 'win32' || process.platform === 'darwin') {
-      this.cropperWindowHelper.preload();
-    }
-
-    // Warm the local Whisper worker in the background so the first recording
-    // session starts instantly instead of waiting for model load from disk.
-    // Only fires if local-whisper is selected AND a model is already cached.
-    setImmediate(() => {
-      try {
-        const { CredentialsManager } = require('./services/CredentialsManager');
-        if (CredentialsManager.getInstance().getSttProvider() === 'local-whisper') {
-          const { isModelCached } = require('./audio/whisper/modelManager');
-          const { modelPreloader } = require('./audio/whisper/modelPreloader');
-          const { resolveInferenceConfig } = require('./audio/whisper/inferenceConfig');
-          const modelId = settingsManager.get('localWhisperModel') ?? 'Xenova/whisper-base';
-          const { dtype } = resolveInferenceConfig();
-          if (isModelCached(modelId, dtype)) {
-            console.log(`[AppState] Preloading local Whisper model: ${modelId}`);
-            modelPreloader.preload(modelId);
-          }
-        }
-      } catch (e) {
-        // Non-fatal — recording still works, just with a cold-start delay
-        console.warn('[AppState] Local Whisper preload skipped:', e);
-      }
-    });
 
     // Initialize KeybindManager
     const keybindManager = KeybindManager.getInstance();
@@ -2161,6 +2147,126 @@ export class AppState {
     }
   }
 
+  public scheduleAdaptiveLocalSttPreload(): void {
+    try {
+      const provider = CredentialsManager.getInstance().getSttProvider();
+      if (provider === 'local-sensevoice') {
+        const { SENSEVOICE_DEFAULT_MODEL_ID } = require('./audio/sensevoice/types');
+        const { isSenseVoiceModelCached } = require('./audio/sensevoice/modelManager');
+        this.adaptivePreloadManager.scheduleLocalSttPreload({
+          provider,
+          modelId: SENSEVOICE_DEFAULT_MODEL_ID,
+          modelDownloaded: isSenseVoiceModelCached(SENSEVOICE_DEFAULT_MODEL_ID),
+        });
+        return;
+      }
+      if (provider === 'local-whisper') {
+        const modelId = SettingsManager.getInstance().get('localWhisperModel') ?? 'Xenova/whisper-base';
+        const { isModelCached } = require('./audio/whisper/modelManager');
+        const { resolveInferenceConfig } = require('./audio/whisper/inferenceConfig');
+        this.adaptivePreloadManager.scheduleLocalSttPreload({
+          provider,
+          modelId,
+          modelDownloaded: isModelCached(modelId, resolveInferenceConfig().dtype),
+        });
+        return;
+      }
+      this.adaptivePreloadManager.scheduleLocalSttPreload({ provider, modelDownloaded: false });
+    } catch (error) {
+      console.warn('[AppState] Adaptive local STT preload skipped:', error);
+    }
+  }
+
+  public async disposeIdleResources(): Promise<void> {
+    await this.adaptivePreloadManager.disposeIdleResources();
+  }
+
+  private async preloadSelectedLocalStt(selection: LocalSttPreloadSelection): Promise<void> {
+    if (selection.provider === 'local-whisper') {
+      const { modelPreloader } = require('./audio/whisper/modelPreloader');
+      modelPreloader.preload(selection.modelId);
+      return;
+    }
+    if (selection.provider !== 'local-sensevoice') return;
+
+    const { localSttWorkerPool } = require('./audio/LocalSttWorkerPool');
+    const { createSenseVoiceWorkerConfig } = require('./audio/sensevoice/LocalSenseVoiceSTT');
+    const lease = localSttWorkerPool.acquire(
+      createSenseVoiceWorkerConfig({ modelId: selection.modelId }),
+      'mic',
+    ) as LocalSttWorkerLease;
+    this.adaptiveSenseVoiceLease = lease;
+    const retainCrashListener = () => {
+      const onCrash = () => {
+        if (this.adaptiveSenseVoiceLease !== lease) return;
+        lease.off('error', onCrash);
+        this.adaptiveSenseVoiceLease = null;
+        this.adaptiveSenseVoiceErrorHandler = null;
+        void lease.release().catch(() => {});
+        this.adaptivePreloadManager.notifyPreloadedResourceInvalidated();
+      };
+      this.adaptiveSenseVoiceErrorHandler = onCrash;
+      lease.on('error', onCrash);
+    };
+    if (lease.isReady) {
+      retainCrashListener();
+      return;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error('SenseVoice adaptive preload timed out'));
+      }, 60_000);
+      const cleanup = () => {
+        clearTimeout(timeout);
+        lease.off('message', onMessage);
+        lease.off('error', onError);
+      };
+      const onMessage = (message: { type?: string }) => {
+        if (message.type !== 'ready') return;
+        cleanup();
+        resolve();
+      };
+      const onError = (error: Error) => {
+        cleanup();
+        reject(error);
+      };
+      lease.on('message', onMessage);
+      lease.on('error', onError);
+    }).then(retainCrashListener).catch(async error => {
+      if (this.adaptiveSenseVoiceLease === lease) this.adaptiveSenseVoiceLease = null;
+      await lease.release();
+      throw error;
+    });
+  }
+
+  private async releasePreloadedLocalStt(): Promise<void> {
+    const lease = this.adaptiveSenseVoiceLease;
+    this.adaptiveSenseVoiceLease = null;
+    if (lease && this.adaptiveSenseVoiceErrorHandler) {
+      lease.off('error', this.adaptiveSenseVoiceErrorHandler);
+    }
+    this.adaptiveSenseVoiceErrorHandler = null;
+    if (lease) await lease.release();
+    try {
+      const { modelPreloader } = require('./audio/whisper/modelPreloader');
+      modelPreloader.terminate();
+    } catch {
+      // Whisper compatibility preloader may not have been loaded.
+    }
+  }
+
+  private isHeavyIndexingActive(): boolean {
+    try {
+      const ragQueue = this.ragManager?.getQueueStatus();
+      const materialQueue = DatabaseManager.getInstance().getMaterialQueueStatus();
+      return Boolean((ragQueue?.processing ?? 0) > 0 || materialQueue.processing > 0);
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Restart system + mic captures after a macOS sleep/wake cycle.
    *
@@ -2790,6 +2896,7 @@ export class AppState {
     const { CredentialsManager: CM } = require('./services/CredentialsManager');
     const newProvider = CM.getInstance().getSttProvider();
     this.broadcast('stt-config-changed', { configured: newProvider !== 'none', provider: newProvider });
+    this.scheduleAdaptiveLocalSttPreload();
   }
 
   /**
@@ -3280,7 +3387,6 @@ export class AppState {
       }
       this._pendingTeardown = null;
     }
-
     // PR #173: Reset audio recovery state for fresh session
     this._systemAudioRecoveryInProgress = false;
     this._systemAudioRecoveryAttempts = 0;
@@ -3346,6 +3452,7 @@ export class AppState {
     this.windowHelper.setWindowMode('overlay');
 
     this.isMeetingActive = true;
+    this.adaptivePreloadManager.notifyMeetingStarted();
     this.broadcastMeetingState()
     this.broadcast('meeting-start-status', { phase: 'ready' });
     if (metadata) {
@@ -3428,7 +3535,9 @@ export class AppState {
 
         // Start JIT RAG live indexing
         if (this.ragManager) {
-          this.ragManager.startLiveIndexing('live-meeting-current');
+          void this.ragManager.startLiveIndexing('live-meeting-current').catch(error => {
+            console.warn('[Main] Live RAG indexing startup failed (non-fatal):', error);
+          });
         }
 
         // Watch for default-output route changes so the CoreAudio Tap follows
@@ -3451,6 +3560,19 @@ export class AppState {
         console.error('[Main] Error initializing audio pipeline:', err);
         // Notify UI so user knows microphone/audio failed to start
         const message = (err as Error).message || 'Audio pipeline failed to start';
+        this.isMeetingActive = false;
+        this.adaptivePreloadManager.notifyMeetingStopped();
+        this.broadcastMeetingState();
+        this.windowHelper.setWindowMode('launcher');
+        try {
+          this.systemAudioCapture?.stop();
+          this.microphoneCapture?.stop();
+          this.googleSTT?.stop();
+          this.googleSTT_User?.stop();
+          this.stopDefaultOutputWatcher();
+        } catch (cleanupError) {
+          console.warn('[Main] Partial audio startup cleanup failed:', cleanupError);
+        }
         this.broadcast('meeting-audio-error', message);
         this.broadcast('meeting-start-status', { phase: 'failed', message });
       }
@@ -3581,11 +3703,14 @@ export class AppState {
         //    on Intel CPUs because the final pass runs in a worker.
         await this.drainSttFinalsForMeetingStop();
 
-        // 2. Tear down STT sockets now that finals have arrived.
+        // 2. Retain one matching local-model lease before the channel leases stop.
+        this.adaptivePreloadManager.notifyMeetingStopped();
+
+        // 3. Tear down STT sockets now that finals have arrived.
         this.googleSTT?.stop();
         this.googleSTT_User?.stop();
 
-        // 3. Snapshot transcript + persist placeholder + queue title/summary LLM.
+        // 4. Snapshot transcript + persist placeholder + queue title/summary LLM.
         //    intelligenceManager.stopMeeting itself runs LLM in background.
         const meetingId = await this.intelligenceManager.stopMeeting();
 
@@ -4562,6 +4687,7 @@ async function initializeApp() {
   // non-blocking — failures are logged and retried at meeting start.
   try {
     appState.prewarmSttProviders();
+    appState.scheduleAdaptiveLocalSttPreload();
   } catch (err) {
     console.warn('[Init] STT pre-warm threw (non-fatal):', err);
   }
@@ -4594,9 +4720,6 @@ async function initializeApp() {
   } catch (err) {
     console.warn('[Main] powerMonitor unavailable — sleep/wake recovery disabled:', err);
   }
-
-  // Pre-create settings window in background for faster first open
-  appState.settingsWindowHelper.preloadWindow()
 
   // macOS Screen Recording status check.
   //
@@ -4677,6 +4800,7 @@ async function initializeApp() {
   app.on("before-quit", (event) => {
     console.log("App is quitting, cleaning up resources...");
     appState.setQuitting(true);
+    void appState.disposeIdleResources();
 
     // ROUND 2 FIX (#9): synchronously stop the CGEventTap worker thread
     // BEFORE V8 starts tearing down. The tap callback holds an

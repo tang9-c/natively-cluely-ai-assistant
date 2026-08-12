@@ -19,11 +19,11 @@ test('main uses shared platform accelerator helpers', () => {
   assert.doesNotMatch(main, /accelerator: 'Command\+Q'/);
 });
 
-test('cropper preload is called only once during AppState initialization', () => {
+test('cropper window is not preloaded during AppState initialization', () => {
   const main = read('electron/main.ts');
   const preloadCalls = [...main.matchAll(/this\.cropperWindowHelper\.preload\(\);/g)];
 
-  assert.equal(preloadCalls.length, 1, 'cropperWindowHelper.preload should not be duplicated');
+  assert.equal(preloadCalls.length, 0, 'cropper window should be created on first use');
 });
 
 test('accelerator helper maps CommandOrControl by platform', () => {

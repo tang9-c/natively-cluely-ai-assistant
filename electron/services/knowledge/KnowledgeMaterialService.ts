@@ -241,7 +241,7 @@ export class KnowledgeMaterialService {
             }
             if (!this.isMaterialIndexable(materialId)) return;
             const chunkIds = this.db.replaceKnowledgeMaterialChunks(materialId, chunks);
-            if (this.embeddingPipeline?.isReady() && chunkIds.length > 0) {
+            if (this.embeddingPipeline && chunkIds.length > 0) {
                 try {
                     const embeddings = await this.embeddingPipeline.getEmbeddings(chunks.map((chunk) => chunk.cleanedText));
                     if (!this.isMaterialIndexable(materialId)) return;

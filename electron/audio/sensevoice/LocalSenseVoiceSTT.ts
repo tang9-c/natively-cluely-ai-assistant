@@ -1,5 +1,10 @@
 import { BaseSTT } from '../BaseSTT';
-import { LocalSttWorkerPool, localSttWorkerPool, type LocalSttWorkerLease } from '../LocalSttWorkerPool';
+import {
+  LocalSttWorkerPool,
+  localSttWorkerPool,
+  type LocalSttWorkerConfig,
+  type LocalSttWorkerLease,
+} from '../LocalSttWorkerPool';
 import { resampleToF32 } from '../whisper/audioResampler';
 import { VadProcessor, VadProcessorOptions } from '../whisper/vadProcessor';
 import {
@@ -36,6 +41,42 @@ export interface LocalSenseVoiceSTTOptions {
   numThreads?: number;
 }
 
+export function getDefaultSenseVoiceNumThreads(): number {
+  return Math.max(1, Math.min(4, require('os').cpus()?.length ?? 2));
+}
+
+export function createSenseVoiceWorkerConfig(options: {
+  modelId?: SenseVoiceModelId;
+  modelFiles?: { modelDir: string; modelFile: string; tokensFile: string };
+  numThreads?: number;
+} = {}): LocalSttWorkerConfig {
+  const modelId = options.modelId ?? SENSEVOICE_DEFAULT_MODEL_ID;
+  const files = options.modelFiles ?? resolveSenseVoiceModelFiles(modelId);
+  const numThreads = options.numThreads ?? getDefaultSenseVoiceNumThreads();
+  return {
+    provider: 'sensevoice',
+    modelId,
+    executionProviders: ['cpu'],
+    dtype: 'fp32',
+    sessionConfig: {
+      modelDir: files.modelDir,
+      modelFile: files.modelFile,
+      tokensFile: files.tokensFile,
+      numThreads,
+    },
+    workerPath: resolveSenseVoiceWorkerPath(),
+    initMessage: {
+      type: 'init',
+      modelDir: files.modelDir,
+      modelFile: files.modelFile,
+      tokensFile: files.tokensFile,
+      numThreads,
+      verboseLogging: isVerboseLogging(),
+    },
+    audioField: 'samples',
+  };
+}
+
 export class LocalSenseVoiceSTT extends BaseSTT {
   private readonly modelId: SenseVoiceModelId;
   private readonly workerFactory?: () => SenseVoiceWorkerLike;
@@ -67,7 +108,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     this.modelFiles = options.modelFiles;
     this.vadOptions = options.vadOptions;
     this.termCorrection = options.termCorrection;
-    this.numThreads = options.numThreads ?? Math.max(1, Math.min(4, require('os').cpus()?.length ?? 2));
+    this.numThreads = options.numThreads ?? getDefaultSenseVoiceNumThreads();
     this.workerPool = this.workerFactory
       ? new LocalSttWorkerPool({ workerFactory: () => this.workerFactory!() as any })
       : localSttWorkerPool;
@@ -211,28 +252,11 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     const files = this.modelFiles ?? (this.workerFactory
       ? { modelDir: '', modelFile: '', tokensFile: '' }
       : resolveSenseVoiceModelFiles(this.modelId));
-    const worker = this.workerPool.acquire({
-      provider: 'sensevoice',
+    const worker = this.workerPool.acquire(createSenseVoiceWorkerConfig({
       modelId: this.modelId,
-      executionProviders: ['cpu'],
-      dtype: 'fp32',
-      sessionConfig: {
-        modelDir: files.modelDir,
-        modelFile: files.modelFile,
-        tokensFile: files.tokensFile,
-        numThreads: this.numThreads,
-      },
-      workerPath: resolveSenseVoiceWorkerPath(),
-      initMessage: {
-        type: 'init',
-        modelDir: files.modelDir,
-        modelFile: files.modelFile,
-        tokensFile: files.tokensFile,
-        numThreads: this.numThreads,
-        verboseLogging: isVerboseLogging(),
-      },
-      audioField: 'samples',
-    }, this.channelLabel === 'system' ? 'system' : 'mic');
+      modelFiles: files,
+      numThreads: this.numThreads,
+    }), this.channelLabel === 'system' ? 'system' : 'mic');
     this.worker = worker;
     debugLog('worker-spawn', {
       modelId: this.modelId,

@@ -37,12 +37,43 @@ export class EmbeddingPipeline {
     private vectorStore: VectorStore;
     private isProcessing = false;
     private initPromise: Promise<void> | null = null;
+    private pendingConfig: AppAPIConfig | null = null;
+    private readonly initializedCallbacks = new Set<() => void>();
     /** Tracks the config used in the most recent successful initialize() call to enable idempotency. */
     private _lastConfig: AppAPIConfig | null = null;
 
     constructor(db: Database.Database, vectorStore: VectorStore) {
         this.db = db;
         this.vectorStore = vectorStore;
+    }
+
+    /** Store provider configuration without loading any model or opening a network connection. */
+    configure(config: AppAPIConfig): Promise<void> | null {
+        this.pendingConfig = { ...config };
+        if (this.provider && (!this._lastConfig || this._hasConfigChanged(this._lastConfig, config))) {
+            return this.initialize(config);
+        }
+        return null;
+    }
+
+    onInitialized(callback: () => void): void {
+        this.initializedCallbacks.add(callback);
+    }
+
+    isConfigured(): boolean {
+        return this.pendingConfig !== null;
+    }
+
+    isInitializing(): boolean {
+        return this.initPromise !== null && this.provider === null;
+    }
+
+    /** Initialize on first real embedding consumer; concurrent consumers share initPromise. */
+    async ensureInitialized(): Promise<void> {
+        if (this.provider) return;
+        if (this.initPromise) return this.initPromise;
+        if (!this.pendingConfig) throw new Error('Embedding pipeline has not been configured');
+        await this.initialize(this.pendingConfig);
     }
 
     /**
@@ -52,47 +83,59 @@ export class EmbeddingPipeline {
      * If the config is unchanged or strictly worse, the existing initPromise is returned.
      */
     async initialize(config: AppAPIConfig): Promise<void> {
-        // Skip if config is identical or has no new information
-        if (this._lastConfig && !this._isConfigImprovement(this._lastConfig, config)) {
+        this.pendingConfig = { ...config };
+        if (this.initPromise) return this.initPromise;
+        if (this._lastConfig && !this._hasConfigChanged(this._lastConfig, config)) {
             console.log('[EmbeddingPipeline] Config unchanged or no new keys — skipping re-initialization');
-            return this.initPromise ?? Promise.resolve();
+            return;
         }
-        this._lastConfig = { ...config };
-        // Log only the SHAPE (which keys are present), never the secret values — the
-        // config carries API keys and this line would otherwise leak them to logs/crash reports.
-        console.log('[EmbeddingPipeline] Initializing with config:', {
-            qcloudKey: !!config.qcloudKey,
-            openaiKey: !!config.openaiKey,
-            geminiKey: !!config.geminiKey,
-            doubaoKey: !!config.doubaoKey,
-            ollamaUrl: config.ollamaUrl || null,
-            geminiEmbeddingModel: config.geminiEmbeddingModel || null,
-            geminiEmbeddingDims: config.geminiEmbeddingDims || null,
-        });
-        this.initPromise = this._doInitialize(config);
-        return this.initPromise;
+        const initializeLatestConfig = async () => {
+            while (this.pendingConfig) {
+                const currentConfig = { ...this.pendingConfig };
+                // Log only the SHAPE (which keys are present), never the secret values.
+                console.log('[EmbeddingPipeline] Initializing with config:', {
+                    qcloudKey: !!currentConfig.qcloudKey,
+                    openaiKey: !!currentConfig.openaiKey,
+                    geminiKey: !!currentConfig.geminiKey,
+                    doubaoKey: !!currentConfig.doubaoKey,
+                    ollamaUrl: currentConfig.ollamaUrl || null,
+                    geminiEmbeddingModel: currentConfig.geminiEmbeddingModel || null,
+                    geminiEmbeddingDims: currentConfig.geminiEmbeddingDims || null,
+                });
+                await this._doInitialize(currentConfig);
+                this._lastConfig = currentConfig;
+                if (!this._hasConfigChanged(currentConfig, this.pendingConfig)) return;
+            }
+        };
+        const initialization = initializeLatestConfig();
+        this.initPromise = initialization;
+        try {
+            await initialization;
+        } finally {
+            if (this.initPromise === initialization) this.initPromise = null;
+        }
     }
 
     /**
      * Returns true when provider selection may change. QCLOUD rotation/removal and
      * embedding scope changes must replace the active provider immediately.
      */
-    private _isConfigImprovement(prev: AppAPIConfig, next: AppAPIConfig): boolean {
-        if (prev.qcloudKey !== next.qcloudKey) return true;
-        if (prev.providerDataScopes?.embeddings !== next.providerDataScopes?.embeddings) return true;
-        const hasNew = (prevVal: string | undefined, nextVal: string | undefined) =>
-            !prevVal && !!nextVal;
+    private _hasConfigChanged(prev: AppAPIConfig, next: AppAPIConfig): boolean {
         return (
-            hasNew(prev.openaiKey, next.openaiKey) ||
-            hasNew(prev.geminiKey, next.geminiKey) ||
-            hasNew(prev.doubaoKey, next.doubaoKey) ||
-            hasNew(prev.doubaoEmbeddingModel, next.doubaoEmbeddingModel) ||
-            hasNew(prev.ollamaUrl, next.ollamaUrl)
+            prev.qcloudKey !== next.qcloudKey ||
+            prev.openaiKey !== next.openaiKey ||
+            prev.geminiKey !== next.geminiKey ||
+            prev.geminiEmbeddingModel !== next.geminiEmbeddingModel ||
+            prev.geminiEmbeddingDims !== next.geminiEmbeddingDims ||
+            prev.doubaoKey !== next.doubaoKey ||
+            prev.doubaoEmbeddingModel !== next.doubaoEmbeddingModel ||
+            prev.ollamaUrl !== next.ollamaUrl ||
+            prev.providerDataScopes?.embeddings !== next.providerDataScopes?.embeddings
         );
     }
 
     private async _doInitialize(config: AppAPIConfig): Promise<void> {
-        // ── Step 1: Eagerly init the local fallback FIRST, independently of the primary.
+        // ── Step 1: Initialize the local fallback FIRST on the first real embedding request.
         // This guarantees fallbackProvider is set even if the primary throws,
         // so activateMeetingFallback() is always safe to call.
         try {
@@ -163,6 +206,13 @@ export class EmbeddingPipeline {
                 console.warn('[EmbeddingPipeline] Post-init queue flush failed (non-fatal):', err.message);
             });
         }, 0);
+        for (const callback of this.initializedCallbacks) {
+            try {
+                callback();
+            } catch (error) {
+                console.warn('[EmbeddingPipeline] Post-initialization callback failed:', error);
+            }
+        }
     }
 
     /**
@@ -179,10 +229,11 @@ export class EmbeddingPipeline {
      */
     async waitForReady(timeoutMs: number = 15000): Promise<void> {
         if (this.provider) return; // already ready
-        if (this.initPromise) {
+        const initialization = this.initPromise ?? (this.pendingConfig ? this.ensureInitialized() : null);
+        if (initialization) {
             // Race against a timeout so we don't hang forever
             await Promise.race([
-                this.initPromise,
+                initialization,
                 new Promise<void>((_, reject) =>
                     setTimeout(() => reject(new Error(`Embedding pipeline initialization timed out after ${timeoutMs}ms`)), timeoutMs)
                 )
@@ -311,24 +362,19 @@ export class EmbeddingPipeline {
             return;
         }
 
-        if (!this.provider) {
-            console.log('[EmbeddingPipeline] No provider, skipping queue processing');
-            return;
-        }
-
-        // Recover items stuck in 'processing' from a previous app crash.
-        // These were marked 'processing' before the embed call but never completed.
-        // Reset them to 'pending' so this run can pick them up.
-        const stuckCount = this.db.prepare(
-            `UPDATE embedding_queue SET status = 'pending' WHERE status = 'processing'`
-        ).run().changes;
-        if (stuckCount > 0) {
-            console.warn(`[EmbeddingPipeline] Recovered ${stuckCount} stuck 'processing' items from prior crash.`);
-        }
-
         this.isProcessing = true;
 
         try {
+            await this.ensureInitialized();
+
+            // Recover items stuck in 'processing' from a previous app crash.
+            const stuckCount = this.db.prepare(
+                `UPDATE embedding_queue SET status = 'pending' WHERE status = 'processing'`
+            ).run().changes;
+            if (stuckCount > 0) {
+                console.warn(`[EmbeddingPipeline] Recovered ${stuckCount} stuck 'processing' items from prior crash.`);
+            }
+
             while (true) {
                 // Fetch next pending item. Items marked for local fallback (retry_count = -1)
                 // are also eligible, so we use a broad filter.
@@ -477,9 +523,7 @@ export class EmbeddingPipeline {
      * Routes through embedWithTimeout() so a frozen API cannot stall the live indexer.
      */
     async getEmbedding(text: string): Promise<number[]> {
-        if (!this.provider) {
-            throw new Error('Embedding provider not initialized');
-        }
+        await this.ensureInitialized();
         return this.embedWithTimeout(this.provider, text, 'live-chunk');
     }
 
@@ -495,10 +539,8 @@ export class EmbeddingPipeline {
      * as getEmbedding().
      */
     async getEmbeddings(texts: string[]): Promise<number[][]> {
-        if (!this.provider) {
-            throw new Error('Embedding provider not initialized');
-        }
         if (texts.length === 0) return [];
+        await this.ensureInitialized();
         const provider = this.provider;
         return new Promise<number[][]>((resolve, reject) => {
             const timer = setTimeout(() => {
@@ -518,9 +560,7 @@ export class EmbeddingPipeline {
      * Routes through embedWithTimeout() so a frozen API cannot stall the query path.
      */
     async getEmbeddingForQuery(text: string): Promise<number[]> {
-        if (!this.provider) {
-            throw new Error('Embedding provider not initialized');
-        }
+        await this.ensureInitialized();
         // embedQuery() uses a query-specific prefix for asymmetric models (e.g. Nomic).
         // Wrap with a manual timeout since embedQuery is not covered by embedWithTimeout directly.
         return new Promise<number[]>((resolve, reject) => {
@@ -566,6 +606,7 @@ export class EmbeddingPipeline {
     }
 
     async getEmbeddingForQueryLocalOnly(text: string): Promise<number[] | null> {
+        await this.ensureInitialized().catch(() => {});
         const local = this.fallbackProvider;
         if (!local) return null;
         try {

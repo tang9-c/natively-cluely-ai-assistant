@@ -86,6 +86,7 @@ const EMBEDDING_READY_STATUS_WAIT_MS = 2_500;
 async function waitForEmbeddingReadiness(ragManager: any): Promise<void> {
   const embeddingPipeline = ragManager?.getEmbeddingPipeline?.();
   if (!embeddingPipeline || embeddingPipeline.isReady?.()) return;
+  if (!embeddingPipeline.isInitializing?.()) return;
   if (typeof embeddingPipeline.waitForReady !== 'function') return;
 
   try {
@@ -323,6 +324,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     existingContext?: string,
   ): Promise<UploadedMaterialContextContribution> => {
     const ragManagerForHealth = appState.getRAGManager();
+    const embeddingPipeline = ragManagerForHealth?.getEmbeddingPipeline?.();
+    if (!embeddingPipeline?.isReady?.()) {
+      embeddingPipeline?.ensureInitialized?.().catch(() => {});
+    }
     const { ragReady, embeddingReady } = await getRagReadiness(ragManagerForHealth);
     const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
     const materialService = new KnowledgeMaterialService(
@@ -2810,6 +2815,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { deleteSenseVoiceModel } = require('./audio/sensevoice/modelManager');
       deleteSenseVoiceModel(modelId);
+      appState.scheduleAdaptiveLocalSttPreload();
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e.message };
@@ -2831,6 +2837,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       })
         .then(() => {
           activeSenseVoiceDownloads.delete(modelId);
+          appState.scheduleAdaptiveLocalSttPreload();
           if (!sender.isDestroyed()) {
             sender.send('local-sensevoice-download-complete', { modelId });
           }
@@ -2857,6 +2864,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!isSenseVoiceModelCached(modelId)) {
         return { success: false, reason: 'model-not-cached' };
       }
+      appState.scheduleAdaptiveLocalSttPreload();
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e.message };
