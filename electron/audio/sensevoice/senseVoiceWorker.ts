@@ -1,6 +1,7 @@
 import { parentPort } from 'worker_threads';
 import type { SenseVoiceWorkerInMessage } from './types';
 import { isVerboseLogging } from '../../verboseLog';
+import { initializeLocalSttProvider } from '../hardwareProviderPolicy';
 
 if (!parentPort) throw new Error('senseVoiceWorker must be run as a Worker thread');
 
@@ -12,7 +13,7 @@ function debugLog(event: string, metadata: Record<string, unknown> = {}): void {
   console.log(`[SenseVoiceWorker] ${event}`, metadata);
 }
 
-function createRecognizer(msg: Extract<SenseVoiceWorkerInMessage, { type: 'init' }>): any {
+function createRecognizer(msg: Extract<SenseVoiceWorkerInMessage, { type: 'init' }>, provider: string): any {
   const sherpa = require('sherpa-onnx-node');
   debugLog('create-recognizer', {
     modelFileConfigured: !!msg.modelFile,
@@ -31,7 +32,7 @@ function createRecognizer(msg: Extract<SenseVoiceWorkerInMessage, { type: 'init'
       },
       tokens: msg.tokensFile,
       numThreads: msg.numThreads,
-      provider: 'cpu',
+      provider,
       debug: 0,
     },
   });
@@ -61,9 +62,26 @@ parentPort.on('message', (msg: SenseVoiceWorkerInMessage) => {
   if (msg.type === 'init') {
     try {
       const startedAt = Date.now();
-      recognizer = createRecognizer(msg);
-      debugLog('ready', { durationMs: Date.now() - startedAt });
-      parentPort!.postMessage({ type: 'ready' });
+      const initialized = initializeLocalSttProvider({
+        requestedProviders: msg.requestedProviders,
+        fallbackProvider: msg.fallbackProvider,
+        create: provider => createRecognizer(msg, provider),
+      });
+      recognizer = initialized.value;
+      const initializationMs = Date.now() - startedAt;
+      debugLog('ready', {
+        providerRequested: initialized.providerRequested,
+        providerActual: initialized.providerActual,
+        fallbackReason: initialized.fallbackReason,
+        initializationMs,
+      });
+      parentPort!.postMessage({
+        type: 'ready',
+        providerRequested: initialized.providerRequested,
+        providerActual: initialized.providerActual,
+        fallbackReason: initialized.fallbackReason,
+        initializationMs,
+      });
     } catch (error: any) {
       debugLog('init-error', { message: error?.message ?? String(error) });
       parentPort!.postMessage({

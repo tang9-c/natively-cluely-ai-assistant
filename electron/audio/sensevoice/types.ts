@@ -32,6 +32,8 @@ export interface SenseVoiceWorkerInitMessage {
   modelFile: string;
   tokensFile: string;
   numThreads: number;
+  requestedProviders?: string[];
+  fallbackProvider?: string | null;
   verboseLogging?: boolean;
 }
 
@@ -48,6 +50,10 @@ export type SenseVoiceWorkerInMessage =
 
 export interface SenseVoiceWorkerReadyResponse {
   type: 'ready';
+  providerRequested?: string;
+  providerActual?: string;
+  fallbackReason?: string | null;
+  initializationMs?: number;
 }
 
 export interface SenseVoiceWorkerResultResponse {

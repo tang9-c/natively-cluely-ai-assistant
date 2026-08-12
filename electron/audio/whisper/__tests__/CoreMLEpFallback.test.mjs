@@ -105,13 +105,13 @@ describe('LocalWhisperSTT CoreML-aware error hint', () => {
 });
 
 describe('inferenceConfig Apple Silicon decision', () => {
-  test('keeps CoreML as the requested provider on Apple Silicon so the worker fallback path is exercised', () => {
-    // Sanity check: if someone changes resolveInferenceConfig to skip
-    // CoreML entirely, this fallback becomes dead code. Guard the wiring.
+  test('delegates the Apple Silicon provider order to the unified local STT policy', () => {
     const source = read('electron/audio/whisper/inferenceConfig.ts');
 
     const appleSiliconMatch = source.match(/platform\s*===\s*['"]darwin['"]\s*&&\s*arch\s*===\s*['"]arm64['"][\s\S]*?return\s*\{[^}]*\}/);
     assert.ok(appleSiliconMatch, 'Apple Silicon branch should exist');
-    assert.match(appleSiliconMatch[0], /coreml/);
+    assert.match(source, /resolveLocalSttProvider\(platform, arch, 'whisper'\)/);
+    assert.match(appleSiliconMatch[0], /providerPlan\.requestedProviders/);
+    assert.match(appleSiliconMatch[0], /providerPlan\.fallbackProvider/);
   });
 });

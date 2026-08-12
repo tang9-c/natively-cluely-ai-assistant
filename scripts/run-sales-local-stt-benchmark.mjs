@@ -28,6 +28,7 @@ const DEFAULT_CER_THRESHOLD = 0.35;
 const DEFAULT_KEYWORD_RECALL_THRESHOLD = 0.75;
 const PROVIDERS = new Set(['qcloud-auc', 'direct-doubao-auc', 'local-sensevoice']);
 const SEGMENTATION_MODES = new Set(['full', 'chunks', 'overlap']);
+const HARDWARE_PROVIDERS = new Set(['auto', 'cpu', 'coreml', 'directml']);
 const QLOUD_PARAMETER_GROUPS = new Set([
   'qcloud-current',
   'qcloud-current-plus-punc',
@@ -133,6 +134,8 @@ Options:
   --poll-interval-ms <n>               Poll interval, default 2000
   --max-attempts <n>                   Max query attempts, default 60
   --local-drain-timeout-ms <n>         Local SenseVoice drain timeout, default 60000
+  --hardware-provider <name>           auto | cpu | coreml | directml, default auto
+  --hardware-runs <n>                  First run is cold; remaining runs are warm, default 1
   --alignment-search-sec <n>           Search reference transcript offset range, default 30
   --alignment-search-step-sec <n>      Search step, default 5
   --cer-threshold <n>                  Passing CER threshold, default ${DEFAULT_CER_THRESHOLD}
@@ -175,6 +178,8 @@ function parseArgs(argv) {
     pollIntervalMs: 2000,
     maxAttempts: 60,
     localDrainTimeoutMs: 60000,
+    hardwareProvider: 'auto',
+    hardwareRuns: 1,
     alignmentSearchSec: 30,
     alignmentSearchStepSec: 5,
     cerThreshold: DEFAULT_CER_THRESHOLD,
@@ -291,6 +296,14 @@ function parseArgs(argv) {
       opts.localDrainTimeoutMs = Number(argv[++index]);
       continue;
     }
+    if (arg === '--hardware-provider') {
+      opts.hardwareProvider = String(argv[++index] ?? '');
+      continue;
+    }
+    if (arg === '--hardware-runs') {
+      opts.hardwareRuns = Number(argv[++index]);
+      continue;
+    }
     if (arg === '--alignment-search-sec') {
       opts.alignmentSearchSec = Number(argv[++index]);
       continue;
@@ -372,6 +385,15 @@ function parseArgs(argv) {
   }
   if (!Number.isFinite(opts.localDrainTimeoutMs) || opts.localDrainTimeoutMs <= 0) {
     throw new Error('--local-drain-timeout-ms must be a positive number');
+  }
+  if (!HARDWARE_PROVIDERS.has(opts.hardwareProvider)) {
+    throw new Error('--hardware-provider must be auto, cpu, coreml, or directml');
+  }
+  if (!Number.isInteger(opts.hardwareRuns) || opts.hardwareRuns < 1 || opts.hardwareRuns > 10) {
+    throw new Error('--hardware-runs must be an integer between 1 and 10');
+  }
+  if (!['auto', 'cpu'].includes(opts.hardwareProvider) && opts.hardwareRuns < 4) {
+    throw new Error('candidate hardware benchmarks require --hardware-runs 4 or greater');
   }
   if (!Number.isFinite(opts.alignmentSearchSec) || opts.alignmentSearchSec < 0 || opts.alignmentSearchSec > 300) {
     throw new Error('--alignment-search-sec must be a number between 0 and 300');
@@ -1085,6 +1107,8 @@ function buildConfigurationFingerprint(opts, correctionConfig) {
     localChannelProfile: opts.localChannelProfile,
     preprocessingProfile: opts.preprocessingProfile,
     normalizationFrameMs: opts.normalizationFrameMs,
+    hardwareProvider: opts.hardwareProvider,
+    hardwareRuns: opts.hardwareRuns,
   };
   return createHash('sha256').update(stableJson(canonical)).digest('hex');
 }
@@ -1102,6 +1126,8 @@ function buildBenchmarkConfiguration(opts, correctionConfig) {
     localChannelProfile: opts.localChannelProfile,
     preprocessingProfile: opts.preprocessingProfile,
     normalizationFrameMs: opts.normalizationFrameMs,
+    hardwareProvider: opts.hardwareProvider,
+    hardwareRuns: opts.hardwareRuns,
     configurationFingerprint: buildConfigurationFingerprint(opts, correctionConfig),
   };
 }
@@ -1110,50 +1136,100 @@ export function buildBenchmarkConfigurationForProvider(opts, correctionConfig = 
   return buildBenchmarkConfiguration(opts, correctionConfig ?? { enabled: false, terms: [] });
 }
 
-async function transcribeLocalSenseVoiceOnce({ LocalSenseVoiceSTT, modelFiles, clipPath, opts, termCorrection }) {
+async function transcribeLocalSenseVoiceRuns({
+  LocalSenseVoiceSTT,
+  modelFiles,
+  clipPath,
+  opts,
+  termCorrection,
+  runCount,
+}) {
   const pcmPath = buildRawPcmFromWav(clipPath, opts);
-  const transcriptParts = [];
-  const errors = [];
+  let peakRssBytes = process.memoryUsage().rss;
+  const rssSampler = setInterval(() => {
+    peakRssBytes = Math.max(peakRssBytes, process.memoryUsage().rss);
+  }, 10);
   const channelProfiles = {
     mic: { channel: 'mic', vadOptions: { hangoverFrames: 30, minSpeechFrames: 4 } },
     system: { channel: 'system', vadOptions: { rmsThreshold: 0.004, hangoverFrames: 30, minSpeechFrames: 4 } },
   };
   const channelProfile = channelProfiles[opts.localChannelProfile] ?? channelProfiles.system;
+  const stt = new LocalSenseVoiceSTT({
+    modelFiles,
+    termCorrection,
+    vadOptions: channelProfile.vadOptions,
+    ...(opts.hardwareProvider !== 'auto' ? {
+      providerPlan: {
+        requestedProviders: [opts.hardwareProvider],
+        fallbackProvider: opts.hardwareProvider === 'cpu' ? null : 'cpu',
+        cacheConfig: { enabled: false },
+        diagnosticLabel: `benchmark-${opts.hardwareProvider}`,
+        benchmarkRequired: opts.hardwareProvider !== 'cpu',
+      },
+    } : {}),
+  });
+  let activeRun = null;
   try {
-    const stt = new LocalSenseVoiceSTT({
-      modelFiles,
-      termCorrection,
-      vadOptions: channelProfile.vadOptions,
-    });
     stt.setSampleRate(16000);
     stt.setAudioChannelCount(1);
     stt.setRecognitionLanguage('chinese');
     stt.setChannel(channelProfile.channel);
     stt.on('transcript', (segment) => {
-      if (segment?.text) transcriptParts.push(segment.text);
+      if (segment?.text && activeRun) {
+        if (activeRun.firstTranscriptMs === null) {
+          activeRun.firstTranscriptMs = performance.now() - activeRun.startedAt;
+        }
+        activeRun.transcriptParts.push(segment.text);
+      }
     });
     stt.on('error', (error) => {
-      errors.push(error?.message ?? String(error));
+      if (activeRun) activeRun.errors.push('inference_error');
     });
     stt.start();
 
     const raw = fs.readFileSync(pcmPath);
     const chunkBytes = 32000;
-    for (let offset = 0; offset < raw.length; offset += chunkBytes) {
-      stt.write(raw.subarray(offset, Math.min(raw.length, offset + chunkBytes)));
-    }
-    stt.notifySpeechEnded();
-    stt.finalize();
-    await stt.drainFinals(opts.localDrainTimeoutMs);
-    stt.stop();
+    const audioDurationSec = readAudioDurationSec(clipPath) ?? opts.durationSec;
+    const runs = [];
+    for (let runIndex = 0; runIndex < runCount; runIndex += 1) {
+      activeRun = {
+        startedAt: performance.now(),
+        firstTranscriptMs: null,
+        transcriptParts: [],
+        errors: [],
+      };
+      for (let offset = 0; offset < raw.length; offset += chunkBytes) {
+        stt.write(raw.subarray(offset, Math.min(raw.length, offset + chunkBytes)));
+        await new Promise(resolve => setImmediate(resolve));
+      }
+      stt.notifySpeechEnded();
+      stt.finalize();
+      await stt.drainFinals(opts.localDrainTimeoutMs);
 
-    if (errors.length > 0 && transcriptParts.length === 0) {
-      const err = new Error(errors[0]);
-      err.providerErrorType = 'local_sensevoice_error';
-      throw err;
+      if (activeRun.errors.length > 0 && activeRun.transcriptParts.length === 0) {
+        const err = new Error('Local SenseVoice inference failed');
+        err.providerErrorType = 'local_sensevoice_error';
+        throw err;
+      }
+      const elapsedMs = performance.now() - activeRun.startedAt;
+      const hardware = stt.getHardwareDiagnostics();
+      runs.push({
+        text: activeRun.transcriptParts.join(' '),
+        providerRequested: hardware.providerRequested ?? opts.hardwareProvider,
+        providerActual: hardware.providerActual ?? null,
+        fallbackReason: hardware.fallbackReason ?? null,
+        initializationMs: runIndex === 0 ? hardware.initializationMs ?? null : null,
+        firstTranscriptMs: activeRun.firstTranscriptMs,
+        peakRssBytes,
+        rtf: audioDurationSec > 0 ? Number((elapsedMs / 1000 / audioDurationSec).toFixed(4)) : null,
+        error: activeRun.errors[0] ?? null,
+      });
     }
-    return transcriptParts.join(' ');
+    return runs;
   } finally {
+    activeRun = null;
+    stt.stop();
+    clearInterval(rssSampler);
     fs.rmSync(pcmPath, { force: true });
   }
 }
@@ -1161,7 +1237,8 @@ async function transcribeLocalSenseVoiceOnce({ LocalSenseVoiceSTT, modelFiles, c
 async function transcribeClipWithLocalSenseVoice({ clipPath, opts }) {
   const sttPath = path.join(root, 'dist-electron/electron/audio/sensevoice/LocalSenseVoiceSTT.js');
   const modelManagerPath = path.join(root, 'dist-electron/electron/audio/sensevoice/modelManager.js');
-  if (!fs.existsSync(sttPath) || !fs.existsSync(modelManagerPath)) {
+  const providerPolicyPath = path.join(root, 'dist-electron/electron/audio/hardwareProviderPolicy.js');
+  if (!fs.existsSync(sttPath) || !fs.existsSync(modelManagerPath) || !fs.existsSync(providerPolicyPath)) {
     throw new Error('Missing dist-electron Local SenseVoice files. Run npm run build:electron first.');
   }
 
@@ -1171,7 +1248,7 @@ async function transcribeClipWithLocalSenseVoice({ clipPath, opts }) {
     return {
       blocked: true,
       environmentStatus: 'blocked_missing_local_sensevoice_model',
-      reason: `Local SenseVoice model is not available under ${modelsDir}`,
+      reason: 'Local SenseVoice model is not available',
       localModelStatus: 'missing',
       providerConfig: {
         termCorrectionEnabled: opts.sensevoiceTermCorrection !== 'off' || opts.sensevoiceTerms.length > 0,
@@ -1181,36 +1258,121 @@ async function transcribeClipWithLocalSenseVoice({ clipPath, opts }) {
         preprocessingProfile: opts.preprocessingProfile,
         normalizationFrameMs: opts.normalizationFrameMs,
         benchmarkConfiguration: buildBenchmarkConfigurationForProvider(opts),
-        modelsDir,
+        modelsDirConfigured: true,
       },
     };
   }
 
   const { LocalSenseVoiceSTT } = await import(pathToFileURL(sttPath).href);
+  const { evaluateLocalSttHardwareBenchmark } = await import(pathToFileURL(providerPolicyPath).href);
   const modelFiles = modelManager.resolveSenseVoiceModelFiles(undefined, modelsDir);
   const correctionConfig = buildSenseVoiceTermCorrection(opts);
   const needsRawComparison = correctionConfig.enabled && correctionConfig.terms.length > 0;
-  const rawText = needsRawComparison
-    ? await transcribeLocalSenseVoiceOnce({
+  const rawRun = needsRawComparison
+    ? (await transcribeLocalSenseVoiceRuns({
       LocalSenseVoiceSTT,
       modelFiles,
       clipPath,
       opts,
       termCorrection: { enabled: false, terms: [] },
+      runCount: 1,
+    }))[0]
+    : null;
+  const isCandidateBenchmark = !['auto', 'cpu'].includes(opts.hardwareProvider);
+  const cpuRuns = isCandidateBenchmark
+    ? await transcribeLocalSenseVoiceRuns({
+      LocalSenseVoiceSTT,
+      modelFiles,
+      clipPath,
+      opts: { ...opts, hardwareProvider: 'cpu' },
+      termCorrection: correctionConfig,
+      runCount: opts.hardwareRuns,
     })
     : null;
-  const correctedText = await transcribeLocalSenseVoiceOnce({
+  const hardwareRuns = await transcribeLocalSenseVoiceRuns({
     LocalSenseVoiceSTT,
     modelFiles,
     clipPath,
     opts,
     termCorrection: correctionConfig,
+    runCount: opts.hardwareRuns,
   });
+  const correctedRun = hardwareRuns[hardwareRuns.length - 1];
+  const rawText = rawRun?.text ?? null;
+  const correctedText = correctedRun.text;
+  const cpuComparison = cpuRuns
+    ? compareTranscripts({
+      referenceText: opts.__referenceTextForCorrectionDiagnostics || '',
+      hypothesisText: cpuRuns[cpuRuns.length - 1].text,
+    })
+    : null;
+  const candidateComparison = isCandidateBenchmark
+    ? compareTranscripts({
+      referenceText: opts.__referenceTextForCorrectionDiagnostics || '',
+      hypothesisText: correctedText,
+    })
+    : null;
+  const hardwareDecision = cpuRuns && cpuComparison && candidateComparison
+    ? evaluateLocalSttHardwareBenchmark({
+      cpuRuns: cpuRuns.slice(1).map((run) => ({ rtf: run.rtf, error: run.error })),
+      candidateRuns: hardwareRuns.slice(1).map((run) => ({
+        rtf: run.rtf,
+        error: run.error
+          ?? (run.providerActual === opts.hardwareProvider ? null : 'provider_unverified_or_fallback'),
+      })),
+      cpuQuality: {
+        characterErrorRate: cpuComparison.characterErrorRate,
+        keywordRecall: cpuComparison.keywordRecall,
+      },
+      candidateQuality: {
+        characterErrorRate: candidateComparison.characterErrorRate,
+        keywordRecall: candidateComparison.keywordRecall,
+      },
+    })
+    : null;
 
   return {
     text: correctedText,
     rawTextForCorrectionDiagnostics: rawText,
     correctedTextForCorrectionDiagnostics: correctedText,
+    hardwareBenchmark: {
+      providerRequested: correctedRun.providerRequested,
+      providerActual: correctedRun.providerActual,
+      fallbackReason: correctedRun.fallbackReason,
+      initializationMs: hardwareRuns[0].initializationMs,
+      firstTranscriptMs: correctedRun.firstTranscriptMs,
+      peakRssBytes: Math.max(...hardwareRuns.map((run) => run.peakRssBytes)),
+      rtf: correctedRun.rtf,
+      runs: hardwareRuns.map((run, index) => ({
+        phase: index === 0 ? 'cold' : 'warm',
+        providerActual: run.providerActual,
+        initializationMs: run.initializationMs,
+        firstTranscriptMs: run.firstTranscriptMs,
+        peakRssBytes: run.peakRssBytes,
+        rtf: run.rtf,
+        error: run.error,
+      })),
+      cpuBaseline: cpuRuns ? {
+        providerActual: cpuRuns[cpuRuns.length - 1].providerActual,
+        initializationMs: cpuRuns[0].initializationMs,
+        peakRssBytes: Math.max(...cpuRuns.map((run) => run.peakRssBytes)),
+        quality: {
+          characterErrorRate: cpuComparison.characterErrorRate,
+          keywordRecall: cpuComparison.keywordRecall,
+        },
+        runs: cpuRuns.map((run, index) => ({
+          phase: index === 0 ? 'cold' : 'warm',
+          firstTranscriptMs: run.firstTranscriptMs,
+          rtf: run.rtf,
+          error: run.error,
+        })),
+      } : null,
+      quality: candidateComparison ? {
+        characterErrorRate: candidateComparison.characterErrorRate,
+        keywordRecall: candidateComparison.keywordRecall,
+      } : null,
+      decision: hardwareDecision,
+    },
     termCorrectionDiagnostics: needsRawComparison
       ? summarizeSenseVoiceCorrectionDiagnostics({
         correctionConfig,
@@ -1228,7 +1390,7 @@ async function transcribeClipWithLocalSenseVoice({ clipPath, opts }) {
       preprocessingProfile: opts.preprocessingProfile,
       normalizationFrameMs: opts.normalizationFrameMs,
       benchmarkConfiguration: buildBenchmarkConfigurationForProvider(opts, correctionConfig),
-      modelsDir,
+      modelsDirConfigured: true,
       modelFile: path.basename(modelFiles.modelFile),
     },
   };
@@ -1352,6 +1514,7 @@ async function transcribeWindowSet({ audioPath, entry, opts, referenceWindow }) 
         rawTextForCorrectionDiagnostics: providerResult.rawTextForCorrectionDiagnostics,
         correctedTextForCorrectionDiagnostics: providerResult.correctedTextForCorrectionDiagnostics,
         termCorrectionDiagnostics: providerResult.termCorrectionDiagnostics,
+        hardwareBenchmark: providerResult.hardwareBenchmark,
       });
     } catch {
       const transcribeLatencyMs = Date.now() - startedAt;
@@ -1387,6 +1550,7 @@ async function transcribeWindowSet({ audioPath, entry, opts, referenceWindow }) 
   const text = opts.segmentationMode === 'full' ? rawText : dedupedText;
   const firstConfig = results.find((segment) => segment.providerConfig)?.providerConfig ?? {};
   const localModelStatus = results.find((segment) => segment.localModelStatus)?.localModelStatus;
+  const hardwareBenchmark = results.find((segment) => segment.hardwareBenchmark)?.hardwareBenchmark ?? null;
   const correctionParts = results.filter((segment) => segment.termCorrectionDiagnostics);
   const termCorrectionDiagnostics = correctionParts.length > 0
     ? summarizeSenseVoiceCorrectionDiagnostics({
@@ -1477,6 +1641,7 @@ async function transcribeWindowSet({ audioPath, entry, opts, referenceWindow }) 
     providerConfig: firstConfig,
     localModelStatus,
     termCorrectionDiagnostics,
+    hardwareBenchmark,
     transcribeLatencyMs: results.reduce((sum, segment) => sum + segment.transcribeLatencyMs, 0),
     segmentation,
   };
@@ -1489,6 +1654,14 @@ function buildStatus(comparison, opts, referenceWindow) {
     && referenceWindow.status === 'aligned'
     ? 'passed'
     : 'failed';
+}
+
+export function sanitizeSegmentationForReport(segmentation) {
+  if (!segmentation) return null;
+  const { diagnostics, ...rest } = segmentation;
+  if (!diagnostics) return rest;
+  const { rawText: _rawText, dedupedText: _dedupedText, ...safeDiagnostics } = diagnostics;
+  return { ...rest, diagnostics: safeDiagnostics };
 }
 
 function buildReportPayload({
@@ -1536,6 +1709,7 @@ function buildReportPayload({
     },
     audioDurationSec,
     transcribeLatencyMs: transcribeResult.transcribeLatencyMs,
+    hardwareBenchmark: transcribeResult.hardwareBenchmark ?? null,
     referenceAlignmentStatus: referenceWindow.status,
     referenceSegmentCount: referenceWindow.segmentCount,
     thresholds: {
@@ -1559,7 +1733,7 @@ function buildReportPayload({
     },
     ...(transcribeResult.segmentation ? {
       segmentation: {
-        ...transcribeResult.segmentation,
+        ...sanitizeSegmentationForReport(transcribeResult.segmentation),
         wholeWindowBaselineComparison: comparison,
       },
     } : {}),
@@ -1627,7 +1801,7 @@ function writeAndPrintReport(report, opts) {
   fs.writeFileSync(outputPath, JSON.stringify(report, null, 2));
   console.log(JSON.stringify({
     ...report,
-    privateReportPath: outputPath,
+    privateReportPath: path.relative(root, outputPath),
   }, null, 2));
 }
 
@@ -1823,7 +1997,7 @@ async function main() {
       localModelStatus: null,
       clipStartSec: opts.startSec,
       clipDurationSec: opts.durationSec,
-      reason: err.message,
+      reason: err.providerErrorType ?? 'benchmark_error',
     };
     writeAndPrintReport(report, opts);
     process.exit(1);

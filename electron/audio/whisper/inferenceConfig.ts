@@ -71,18 +71,20 @@ export function buildWorkerInitMessage(modelId: string): {
 
 export function resolveInferenceConfig(): InferenceConfig {
     const { platform, arch } = process;
+    const { resolveLocalSttProvider } = require('../hardwareProviderPolicy');
+    const providerPlan = resolveLocalSttProvider(platform, arch, 'whisper');
 
     if (platform === 'darwin' && arch === 'arm64') {
         // Apple Silicon — CoreML uses Metal GPU + ANE. Feed it fp32 ONNX
         // and let CoreML re-quantize internally; it's tuned for this path.
-        return { executionProviders: ['coreml', 'cpu'], dtype: 'fp32' };
+        return { executionProviders: [...providerPlan.requestedProviders, providerPlan.fallbackProvider].filter(Boolean), dtype: 'fp32' };
     }
 
     if (platform === 'win32') {
         // Windows — DirectML over NVIDIA / AMD / Intel GPUs. Per-module dtype
         // gives best accuracy/speed tradeoff for the larger Whisper/Distil
         // checkpoints; DirectML handles mixed precision via session options.
-        return { executionProviders: ['dml', 'cpu'], dtype: WHISPER_SAFE_DTYPE };
+        return { executionProviders: [...providerPlan.requestedProviders, providerPlan.fallbackProvider].filter(Boolean), dtype: WHISPER_SAFE_DTYPE };
     }
 
     // Intel Mac, Linux, unknown — CPU. Per-module gives a real speedup on

@@ -50,6 +50,7 @@ interface PoolEntry {
   config: LocalSttWorkerConfig;
   worker: WorkerLike;
   ready: boolean;
+  readyMessage: Record<string, unknown> | null;
   readyError: Error | null;
   queue: QueueTask[];
   activeTask: QueueTask | null;
@@ -186,7 +187,7 @@ export class LocalSttWorkerPool {
     }
     const lease = new LocalSttWorkerLease(this, entry, channelId);
     entry.leases.add(lease);
-    if (entry.ready) queueMicrotask(() => lease.emit('message', { type: 'ready' }));
+    if (entry.ready) queueMicrotask(() => lease.emit('message', entry!.readyMessage ?? { type: 'ready' }));
     return lease;
   }
 
@@ -223,6 +224,7 @@ export class LocalSttWorkerPool {
       config,
       worker,
       ready: false,
+      readyMessage: null,
       readyError: null,
       queue: [],
       activeTask: null,
@@ -244,7 +246,8 @@ export class LocalSttWorkerPool {
   private handleMessage(entry: PoolEntry, message: Record<string, unknown>): void {
     if (message.type === 'ready') {
       entry.ready = true;
-      for (const lease of entry.leases) lease.emit('message', { type: 'ready' });
+      entry.readyMessage = message;
+      for (const lease of entry.leases) lease.emit('message', message);
       this.pump(entry);
       return;
     }

@@ -57,8 +57,40 @@ test('local sales STT benchmark script is wired for ignored private assets', () 
   assert.match(script, /alignmentSearch/);
   assert.match(script, /bestReferenceOffsetSec/);
   assert.match(script, /includePrivateText/);
+  assert.match(script, /providerRequested/);
+  assert.match(script, /providerActual/);
+  assert.match(script, /fallbackReason/);
+  assert.match(script, /initializationMs/);
+  assert.match(script, /firstTranscriptMs/);
+  assert.match(script, /peakRssBytes/);
+  assert.match(script, /\brtf\b/);
+  assert.match(script, /--hardware-provider <name>/);
+  assert.match(script, /--hardware-runs <n>/);
+  assert.match(script, /cpuBaseline/);
+  assert.match(script, /evaluateLocalSttHardwareBenchmark/);
+  assert.match(script, /candidate hardware benchmarks require --hardware-runs 4 or greater/);
+  assert.match(script, /sanitizeSegmentationForReport/);
   assert.doesNotMatch(script, /replay-manifest\.json/);
   assert.doesNotMatch(script, /广州酒家|禾望电气|德康威尔|康瑞电子|稳健医疗/);
+});
+
+test('STT benchmark report strips transcript text from segmentation diagnostics by default', async () => {
+  const benchmark = await import('../run-sales-local-stt-benchmark.mjs');
+  assert.deepEqual(benchmark.sanitizeSegmentationForReport({
+    mode: 'full',
+    diagnostics: {
+      rawText: 'private raw transcript',
+      dedupedText: 'private deduped transcript',
+      rawChars: 22,
+      warnings: [],
+    },
+  }), {
+    mode: 'full',
+    diagnostics: {
+      rawChars: 22,
+      warnings: [],
+    },
+  });
 });
 
 test('STT provider matrix scripts are wired and aggregate blocked/failed states', () => {

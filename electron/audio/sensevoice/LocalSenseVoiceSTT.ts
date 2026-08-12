@@ -13,6 +13,7 @@ import {
   type SenseVoiceTermCorrectionConfig,
   type SenseVoiceWorkerOutMessage,
 } from './types';
+import { resolveLocalSttProvider, type LocalSttProviderPlan } from '../hardwareProviderPolicy';
 import { resolveSenseVoiceModelFiles } from './modelManager';
 import { resolveSenseVoiceWorkerPath } from './workerPathResolver';
 import { parseSenseVoiceOutput, shouldDropSenseVoiceHallucination } from './textCleaner';
@@ -39,6 +40,7 @@ export interface LocalSenseVoiceSTTOptions {
   vadOptions?: VadProcessorOptions;
   termCorrection?: SenseVoiceTermCorrectionConfig;
   numThreads?: number;
+  providerPlan?: LocalSttProviderPlan;
 }
 
 export function getDefaultSenseVoiceNumThreads(): number {
@@ -49,14 +51,19 @@ export function createSenseVoiceWorkerConfig(options: {
   modelId?: SenseVoiceModelId;
   modelFiles?: { modelDir: string; modelFile: string; tokensFile: string };
   numThreads?: number;
+  providerPlan?: LocalSttProviderPlan;
 } = {}): LocalSttWorkerConfig {
   const modelId = options.modelId ?? SENSEVOICE_DEFAULT_MODEL_ID;
   const files = options.modelFiles ?? resolveSenseVoiceModelFiles(modelId);
   const numThreads = options.numThreads ?? getDefaultSenseVoiceNumThreads();
+  const providerPlan = options.providerPlan
+    ?? resolveLocalSttProvider(process.platform, process.arch, 'sensevoice');
+  const executionProviders: string[] = [...providerPlan.requestedProviders];
+  if (providerPlan.fallbackProvider) executionProviders.push(providerPlan.fallbackProvider);
   return {
     provider: 'sensevoice',
     modelId,
-    executionProviders: ['cpu'],
+    executionProviders,
     dtype: 'fp32',
     sessionConfig: {
       modelDir: files.modelDir,
@@ -71,6 +78,8 @@ export function createSenseVoiceWorkerConfig(options: {
       modelFile: files.modelFile,
       tokensFile: files.tokensFile,
       numThreads,
+      requestedProviders: providerPlan.requestedProviders,
+      fallbackProvider: providerPlan.fallbackProvider,
       verboseLogging: isVerboseLogging(),
     },
     audioField: 'samples',
@@ -84,6 +93,13 @@ export class LocalSenseVoiceSTT extends BaseSTT {
   private readonly vadOptions?: VadProcessorOptions;
   private readonly termCorrection?: SenseVoiceTermCorrectionConfig;
   private readonly numThreads: number;
+  private readonly providerPlan?: LocalSttProviderPlan;
+  private hardwareDiagnostics: {
+    providerRequested?: string;
+    providerActual?: string;
+    fallbackReason?: string | null;
+    initializationMs?: number;
+  } = {};
   private readonly workerPool: LocalSttWorkerPool;
 
   private inputSampleRate = 16000;
@@ -109,9 +125,14 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     this.vadOptions = options.vadOptions;
     this.termCorrection = options.termCorrection;
     this.numThreads = options.numThreads ?? getDefaultSenseVoiceNumThreads();
+    this.providerPlan = options.providerPlan;
     this.workerPool = this.workerFactory
       ? new LocalSttWorkerPool({ workerFactory: () => this.workerFactory!() as any })
       : localSttWorkerPool;
+  }
+
+  getHardwareDiagnostics(): Readonly<typeof this.hardwareDiagnostics> {
+    return { ...this.hardwareDiagnostics };
   }
 
   setSampleRate(rate: number): void {
@@ -137,8 +158,10 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       channel: this.channelLabel || '(unset)',
       inputSampleRate: this.inputSampleRate,
       numThreads: this.numThreads,
+      providerPlan: this.providerPlan,
     });
     this._isActive = true;
+    this.hardwareDiagnostics = {};
     this.workerReady = false;
     this.pendingAudio = [];
     this.inFlightTasks = 0;
@@ -256,6 +279,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       modelId: this.modelId,
       modelFiles: files,
       numThreads: this.numThreads,
+      providerPlan: this.providerPlan,
     }), this.channelLabel === 'system' ? 'system' : 'mic');
     this.worker = worker;
     debugLog('worker-spawn', {
@@ -270,9 +294,9 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     worker.on('error', (error) => {
       debugLog('worker-error', { message: error.message });
       this.emit('error', error);
-    this.pendingAudio = [];
-    this.inFlightTasks = 0;
-    this.inFlightAnnotations = 0;
+      this.pendingAudio = [];
+      this.inFlightTasks = 0;
+      this.inFlightAnnotations = 0;
     });
     worker.on('exit', (code) => {
       debugLog('worker-exit', { code, active: this._isActive });
@@ -291,6 +315,12 @@ export class LocalSenseVoiceSTT extends BaseSTT {
 
   private async handleWorkerMessage(message: SenseVoiceWorkerOutMessage): Promise<void> {
     if (message.type === 'ready') {
+      this.hardwareDiagnostics = {
+        providerRequested: message.providerRequested,
+        providerActual: message.providerActual,
+        fallbackReason: message.fallbackReason,
+        initializationMs: message.initializationMs,
+      };
       this.workerReady = true;
       debugLog('worker-ready', { pendingAudio: this.pendingAudio.length });
       this.flushPendingAudio();

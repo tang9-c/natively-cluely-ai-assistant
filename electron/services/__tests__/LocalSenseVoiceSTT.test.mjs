@@ -24,12 +24,12 @@ function sleep(ms) {
 }
 
 class FakeSenseVoiceWorker extends EventEmitter {
-  constructor({ text = '你好，欢迎参加会议。', delayMs = 0 } = {}) {
+  constructor({ text = '你好，欢迎参加会议。', delayMs = 0, readyMessage = { type: 'ready' } } = {}) {
     super();
     this.text = text;
     this.delayMs = delayMs;
     this.messages = [];
-    queueMicrotask(() => this.emit('message', { type: 'ready' }));
+    queueMicrotask(() => this.emit('message', readyMessage));
   }
 
   postMessage(message) {
@@ -49,6 +49,29 @@ class FakeSenseVoiceWorker extends EventEmitter {
     return Promise.resolve(0);
   }
 }
+
+test('LocalSenseVoiceSTT exposes requested, actual, and fallback provider diagnostics', async () => {
+  const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+  const worker = new FakeSenseVoiceWorker({
+    readyMessage: {
+      type: 'ready',
+      providerRequested: 'coreml',
+      providerActual: 'cpu',
+      fallbackReason: 'candidate_initialization_failed',
+      initializationMs: 456,
+    },
+  });
+  const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+  stt.start();
+  await sleep(0);
+  assert.deepEqual(stt.getHardwareDiagnostics(), {
+    providerRequested: 'coreml',
+    providerActual: 'cpu',
+    fallbackReason: 'candidate_initialization_failed',
+    initializationMs: 456,
+  });
+  stt.stop();
+});
 
 test('LocalSenseVoiceSTT emits a final transcript from a completed segment', async () => {
   const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();

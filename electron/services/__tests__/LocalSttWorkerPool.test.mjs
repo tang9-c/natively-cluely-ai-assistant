@@ -58,6 +58,35 @@ test('same complete worker key shares one worker across mic and system channels'
   assert.equal(workers[0].terminated, 1);
 });
 
+test('late shared leases receive the original hardware provider diagnostics', async () => {
+  const worker = new FakeWorker();
+  worker.postMessage = function postMessage(message) {
+    this.messages.push(message);
+    if (message.type === 'init') {
+      queueMicrotask(() => this.emit('message', {
+        type: 'ready',
+        providerRequested: 'coreml',
+        providerActual: 'cpu',
+        fallbackReason: 'candidate_initialization_failed',
+        initializationMs: 321,
+      }));
+    }
+  };
+  const pool = new LocalSttWorkerPool({ workerFactory: () => worker });
+  const mic = pool.acquire(config(), 'mic');
+  await tick();
+  const system = pool.acquire(config(), 'system');
+  const ready = await new Promise(resolve => system.once('message', resolve));
+  assert.deepEqual(ready, {
+    type: 'ready',
+    providerRequested: 'coreml',
+    providerActual: 'cpu',
+    fallbackReason: 'candidate_initialization_failed',
+    initializationMs: 321,
+  });
+  await Promise.all([mic.release(), system.release()]);
+});
+
 test('different model or inference configuration creates separate workers', async () => {
   const workers = [];
   const pool = new LocalSttWorkerPool({ workerFactory: () => workers.push(new FakeWorker()) && workers.at(-1) });
