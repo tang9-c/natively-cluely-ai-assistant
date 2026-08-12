@@ -432,6 +432,36 @@ export interface LocalSenseVoiceTermEntry {
   enabled: boolean
 }
 
+export type DownloadedModelKind = 'whisper' | 'sensevoice'
+
+export interface StorageUsageItem {
+  id: string
+  label: string
+  bytes: number
+  removable: boolean
+  reason?: 'bundled' | 'cache' | 'managed_elsewhere' | 'model_in_use' | 'migration_incomplete' | 'unsafe_symbolic_link'
+}
+
+export interface StorageUsageCategory {
+  bytes: number
+  items: StorageUsageItem[]
+}
+
+export interface StorageUsageSummary {
+  appModels: StorageUsageCategory
+  downloadedModels: StorageUsageCategory
+  caches: StorageUsageCategory
+  legacyData: StorageUsageCategory
+  totalBytes: number
+  reclaimableBytes: number
+}
+
+export interface StorageMutationResult {
+  success: boolean
+  freedBytes?: number
+  error?: string
+}
+
 export interface LauncherAd {
   id: string
   imageUrl: string
@@ -650,6 +680,9 @@ export interface ElectronAPI {
   confirmDynamicActionSpeaker: (input: DynamicActionSpeakerConfirmation) => Promise<{ success: boolean; actionIds?: string[]; error?: string }>
   // @ipc-channel local-sensevoice-get-models
   localSenseVoiceGetModels: () => Promise<{ models: any[]; activeModelId: string }>
+  getStorageUsage: () => Promise<StorageUsageSummary>
+  deleteDownloadedModel: (kind: DownloadedModelKind, modelId: string) => Promise<StorageMutationResult>
+  deleteLegacyData: (candidateId: string) => Promise<StorageMutationResult>
   // @ipc-channel local-sensevoice-get-terms
   localSenseVoiceGetTerms: () => Promise<{ terms: LocalSenseVoiceTermEntry[]; correctionEnabled: boolean }>
   // @ipc-channel local-sensevoice-set-terms

@@ -3,6 +3,11 @@ import type { ModeEventContext } from './llm';
 import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../shared/senseVoiceEmotion';
 import type { DynamicActionAvailabilityEvent } from '../shared/dynamicActionAvailability';
 import type {
+  DownloadedModelKind,
+  StorageMutationResult,
+  StorageUsageSummary,
+} from './services/StorageUsageService';
+import type {
   MeetingSearchChunkEvent,
   MeetingSearchCompleteEvent,
   MeetingSearchErrorEvent,
@@ -204,6 +209,9 @@ interface ElectronAPI {
   }) => Promise<{ success: boolean; error?: string }>;
   confirmDynamicActionSpeaker: (input: import('../src/types/electron').DynamicActionSpeakerConfirmation) => Promise<{ success: boolean; actionIds?: string[]; error?: string }>;
   localWhisperGetModels: () => Promise<{ models: any[]; activeModelId: string }>;
+  getStorageUsage: () => Promise<StorageUsageSummary>;
+  deleteDownloadedModel: (kind: DownloadedModelKind, modelId: string) => Promise<StorageMutationResult>;
+  deleteLegacyData: (candidateId: string) => Promise<StorageMutationResult>;
   localWhisperSetModel: (modelId: string) => Promise<{ success: boolean }>;
   localWhisperDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   localWhisperStartDownload: (modelId: string) => Promise<{ success: boolean; error?: string }>;
@@ -1288,6 +1296,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     region?: string,
   ) => ipcRenderer.invoke('test-saved-stt-connection', provider, region),
   localWhisperGetModels: () => ipcRenderer.invoke('local-whisper-get-models'),
+  getStorageUsage: () => ipcRenderer.invoke('storage:get-usage'),
+  deleteDownloadedModel: (kind: DownloadedModelKind, modelId: string) =>
+    ipcRenderer.invoke('storage:delete-downloaded-model', kind, modelId),
+  deleteLegacyData: (candidateId: string) =>
+    ipcRenderer.invoke('storage:delete-legacy-data', candidateId),
   localWhisperSetModel: (modelId: string) => ipcRenderer.invoke('local-whisper-set-model', modelId),
   localWhisperDeleteModel: (modelId: string) =>
     ipcRenderer.invoke('local-whisper-delete-model', modelId),

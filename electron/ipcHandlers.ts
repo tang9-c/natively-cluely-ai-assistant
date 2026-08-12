@@ -28,6 +28,7 @@ import {
   type UploadedMaterialContextContribution,
 } from './services/knowledge/UploadedMaterialContextContributionService';
 import { SettingsManager, type AppSettings } from './services/SettingsManager';
+import { StorageUsageService, type DownloadedModelKind } from './services/StorageUsageService';
 import { normalizeSpeakerEnrollmentSample } from './services/speaker/speakerEnrollmentPcm';
 import { buildBusinessSystemFixedReplyTraceInput } from './services/business-system/BusinessSystemFixedReplyTrace';
 import { businessSystemDegradedReasonForStatus } from './services/business-system/BusinessSystemContextService';
@@ -2566,6 +2567,37 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ==========================================
 
   const activeWhisperDownloads = new Set<string>();
+  const activeSenseVoiceDownloads = new Set<string>();
+  const storageUsageService = new StorageUsageService({
+    isModelInUse: (kind: DownloadedModelKind, modelId: string) => {
+      if (kind === 'whisper' && activeWhisperDownloads.has(modelId)) return true;
+      if (kind === 'sensevoice' && activeSenseVoiceDownloads.has(modelId)) return true;
+      if (!appState.getIsMeetingActive()) return false;
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const provider = CredentialsManager.getInstance().getSttProvider();
+      if (kind === 'sensevoice') return provider === 'local-sensevoice';
+      if (provider !== 'local-whisper') return false;
+      const settings = SettingsManager.getInstance();
+      const selectedIds = [
+        settings.get('localWhisperModel'),
+        settings.get('localWhisperModelMic'),
+        settings.get('localWhisperModelSystem'),
+      ];
+      return selectedIds.includes(modelId);
+    },
+  });
+
+  safeHandle('storage:get-usage', () => storageUsageService.getStorageUsage());
+  safeHandle(
+    'storage:delete-downloaded-model',
+    (_event, kind: DownloadedModelKind, modelId: string) => (
+      storageUsageService.deleteDownloadedModel(kind, modelId)
+    ),
+  );
+  safeHandle(
+    'storage:delete-legacy-data',
+    (_event, candidateId: string) => storageUsageService.deleteLegacyData(candidateId),
+  );
 
   safeHandle('local-whisper-get-models', async () => {
     try {
@@ -2738,8 +2770,6 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ==========================================
   // Local SenseVoice STT Handlers
   // ==========================================
-
-  const activeSenseVoiceDownloads = new Set<string>();
 
   safeHandle('local-sensevoice-get-models', async () => {
     try {

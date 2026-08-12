@@ -42,6 +42,7 @@ const originalLog = console.log;
 const originalWarn = console.warn;
 const originalError = console.error;
 const LEGACY_USER_DATA_DIR_NAME = 'Natively';
+const LEGACY_USER_DATA_MIGRATION_MARKER = '.legacy-natively-migration-complete.json';
 let sttQualityAcceptanceContext: SttQualityAcceptanceContext = { enabled: false, reason: 'not_configured' };
 
 function hasCueUpUserData(userDataPath: string): boolean {
@@ -113,6 +114,11 @@ function migrateLegacyUserDataForCueUpBranding(): void {
       force: false,
       errorOnExist: false,
     });
+    fs.writeFileSync(
+      path.join(cueUpUserDataPath, LEGACY_USER_DATA_MIGRATION_MARKER),
+      JSON.stringify({ source: LEGACY_USER_DATA_DIR_NAME, completedAt: new Date().toISOString() }),
+      { encoding: 'utf8', flag: 'wx' },
+    );
     console.log('[Main] Migrated legacy Natively userData into CueUp userData path');
   } catch (err) {
     console.warn('[Main] Failed to migrate legacy userData for CueUp branding:', err);

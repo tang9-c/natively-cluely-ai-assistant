@@ -17,6 +17,7 @@ import { NativelyApiSettings } from './settings/NativelyApiSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
 import { ResearchTabBody } from './settings/ResearchTabBody';
 import { SpeakerVerificationSettings } from './settings/SpeakerVerificationSettings';
+import { StorageManagement } from './settings/StorageManagement';
 import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
 import { LocalSenseVoiceModelPanel } from './LocalSenseVoiceModelPanel';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -2198,6 +2199,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         控制会议中覆盖层的可见性。{' '}
                                                         <span className="text-text-secondary">按住滑块可预览效果。</span>
                                                     </p>
+                                                </div>
+
+                                                <div className="mt-4">
+                                                    <StorageManagement />
                                                 </div>
 
                                         </div>
