@@ -236,6 +236,10 @@ async function runInternal({ appPath, modelDir, audioPath }) {
         requestedProviders: ['cueup-invalid-gpu'], fallbackProvider: 'cpu', verboseLogging: false,
       });
       const ready = await waitForWorker(worker, message => message?.type === 'ready');
+      if (ready.providerActual !== 'cpu') throw new Error(`Expected CPU fallback, got ${ready.providerActual}`);
+      if (ready.fallbackReason !== 'candidate_initialization_failed') {
+        throw new Error(`Expected candidate initialization fallback, got ${ready.fallbackReason}`);
+      }
       worker.postMessage({ type: 'transcribe', taskId: 'packaged-smoke', samples }, [samples.buffer]);
       const transcript = await waitForWorker(worker, message => message?.type === 'result' && message.taskId === 'packaged-smoke');
       if (!String(transcript.text || '').trim()) throw new Error('Packaged SenseVoice returned an empty transcript');

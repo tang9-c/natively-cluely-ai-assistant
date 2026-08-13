@@ -91,6 +91,8 @@ test('SenseVoice worker uses the tested one-shot fallback helper and reports dia
   const fs = require('node:fs');
   const source = fs.readFileSync(path.join(root, 'electron/audio/sensevoice/senseVoiceWorker.ts'), 'utf8');
   assert.match(source, /initializeLocalSttProvider/);
+  assert.match(source, /SUPPORTED_SENSEVOICE_PROVIDERS/);
+  assert.match(source, /Unsupported SenseVoice provider/);
   assert.match(source, /fallbackProvider/);
   assert.match(source, /providerActual/);
   assert.match(source, /fallbackReason/);

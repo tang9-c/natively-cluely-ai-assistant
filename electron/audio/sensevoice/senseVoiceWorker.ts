@@ -16,6 +16,7 @@ const onMessage = (listener: (message: SenseVoiceWorkerInMessage) => void): void
 
 let recognizer: any = null;
 let workerVerboseLogging = false;
+const SUPPORTED_SENSEVOICE_PROVIDERS = new Set(['cpu', 'coreml', 'cuda', 'directml']);
 
 function debugLog(event: string, metadata: Record<string, unknown> = {}): void {
   if (!workerVerboseLogging && !isVerboseLogging()) return;
@@ -23,6 +24,9 @@ function debugLog(event: string, metadata: Record<string, unknown> = {}): void {
 }
 
 function createRecognizer(msg: Extract<SenseVoiceWorkerInMessage, { type: 'init' }>, provider: string): any {
+  if (!SUPPORTED_SENSEVOICE_PROVIDERS.has(provider)) {
+    throw new Error(`Unsupported SenseVoice provider: ${provider}`);
+  }
   const sherpa = require('sherpa-onnx-node');
   debugLog('create-recognizer', {
     modelFileConfigured: !!msg.modelFile,

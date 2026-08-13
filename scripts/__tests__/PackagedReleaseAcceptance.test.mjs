@@ -188,6 +188,8 @@ test('packaged runtime smoke covers every required functional subsystem', () => 
   assert.match(source, /requestedProviders: \['cueup-invalid-gpu'\]/);
   assert.match(source, /fallbackProvider: 'cpu'/);
   assert.match(source, /fallbackVerified/);
+  assert.match(source, /ready\.providerActual !== 'cpu'/);
+  assert.match(source, /ready\.fallbackReason !== 'candidate_initialization_failed'/);
   const embeddingAt = source.indexOf("pipeline('feature-extraction'");
   const isolatedSenseVoiceAt = source.indexOf('createSenseVoiceWorker(path.join', embeddingAt);
   assert.match(source, /fork\(workerPath/);
