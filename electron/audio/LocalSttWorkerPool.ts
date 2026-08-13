@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import { fork } from 'child_process';
 import { Worker } from 'worker_threads';
 
 export type LocalSttChannelId = 'mic' | 'system';
@@ -89,6 +90,21 @@ function workerKey(config: LocalSttWorkerConfig): string {
   }));
 }
 
+function createDefaultWorker(config: LocalSttWorkerConfig): WorkerLike {
+  if (process.platform === 'win32' && config.provider === 'sensevoice') {
+    const child = fork(config.workerPath, [], {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      serialization: 'advanced',
+      stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+    });
+    const isolatedWorker = child as unknown as WorkerLike;
+    isolatedWorker.postMessage = message => { child.send(message as any); };
+    isolatedWorker.terminate = () => child.kill() ? 0 : 1;
+    return isolatedWorker;
+  }
+  return new Worker(config.workerPath) as WorkerLike;
+}
+
 export class LocalSttWorkerLease extends EventEmitter {
   private released = false;
   private pendingTasks = 0;
@@ -175,7 +191,7 @@ export class LocalSttWorkerPool {
   private requestCounter = 0;
 
   constructor(options: PoolOptions = {}) {
-    this.workerFactory = options.workerFactory ?? (config => new Worker(config.workerPath) as WorkerLike);
+    this.workerFactory = options.workerFactory ?? createDefaultWorker;
   }
 
   acquire(config: LocalSttWorkerConfig, channelId: LocalSttChannelId): LocalSttWorkerLease {

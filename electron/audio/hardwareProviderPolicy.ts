@@ -31,20 +31,6 @@ export interface LocalSttProviderInitialization<T> {
   fallbackReason: string | null;
 }
 
-export function preloadWindowsSenseVoiceRuntime(
-  platform: NodeJS.Platform | string = process.platform,
-  load: () => unknown = () => require('sherpa-onnx-node'),
-): boolean {
-  if (platform !== 'win32') return false;
-  try {
-    load();
-    return true;
-  } catch {
-    console.warn('[SenseVoiceRuntime] Windows runtime preload failed; local STT will use its normal fallback path');
-    return false;
-  }
-}
-
 export function initializeLocalSttProvider<T>(input: {
   requestedProviders?: string[];
   fallbackProvider?: string | null;

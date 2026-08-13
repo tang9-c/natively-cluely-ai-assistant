@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { fork, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { Worker } from 'node:worker_threads';
@@ -140,6 +140,18 @@ function waitForWorker(worker, predicate, timeoutMs = 30_000) {
   });
 }
 
+function createSenseVoiceWorker(workerPath) {
+  if (process.platform !== 'win32') return new Worker(workerPath);
+  const child = fork(workerPath, [], {
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    serialization: 'advanced',
+    stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+  });
+  child.postMessage = message => child.send(message);
+  child.terminate = async () => child.kill();
+  return child;
+}
+
 async function runInternal({ appPath, modelDir, audioPath }) {
   const resources = resourcesPath(appPath);
   const asarPath = path.join(resources, 'app.asar');
@@ -176,8 +188,6 @@ async function runInternal({ appPath, modelDir, audioPath }) {
     const renderedSlides = fs.readdirSync(pptxOutput).filter(name => name.endsWith('.jpg'));
     if (renderedSlides.length !== 1) throw new Error(`Expected one rendered PPTX slide, got ${renderedSlides.length}`);
     results.pptx = { ok: true, slideCount: renderedSlides.length };
-
-    if (process.platform === 'win32') packageRequire('sherpa-onnx-node');
 
     const transformersPath = path.join(asarPath, 'node_modules/@huggingface/transformers/dist/transformers.node.mjs');
     const { pipeline, env } = await import(pathToFileURL(transformersPath).href);
@@ -219,7 +229,7 @@ async function runInternal({ appPath, modelDir, audioPath }) {
     }
     const { samples, sampleRate } = readPcm16Wav(audioPath);
     if (sampleRate !== 16000) throw new Error(`SenseVoice smoke fixture sample rate must be 16000, got ${sampleRate}`);
-    const worker = new Worker(path.join(asarPath, 'dist-electron/electron/audio/sensevoice/senseVoiceWorker.js'));
+    const worker = createSenseVoiceWorker(path.join(asarPath, 'dist-electron/electron/audio/sensevoice/senseVoiceWorker.js'));
     try {
       worker.postMessage({
         type: 'init', modelDir, modelFile, tokensFile, numThreads: 4,

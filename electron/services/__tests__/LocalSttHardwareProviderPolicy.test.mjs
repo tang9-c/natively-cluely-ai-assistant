@@ -135,22 +135,16 @@ test('provider initialization falls back once and never treats an unverified can
   assert.deepEqual(failedCalls, ['coreml', 'cpu']);
 });
 
-test('Windows preloads the SenseVoice runtime before another ONNX Runtime can win DLL resolution', () => {
-  const { preloadWindowsSenseVoiceRuntime } = require(policyPath);
-  assert.equal(typeof preloadWindowsSenseVoiceRuntime, 'function');
-  let loads = 0;
-  assert.equal(preloadWindowsSenseVoiceRuntime('win32', () => { loads += 1; }), true);
-  assert.equal(loads, 1);
-  assert.equal(preloadWindowsSenseVoiceRuntime('darwin', () => { loads += 1; }), false);
-  assert.equal(loads, 1);
-  assert.equal(preloadWindowsSenseVoiceRuntime('win32', () => { throw new Error('missing'); }), false);
-});
-
-test('AppState preloads the Windows SenseVoice runtime before constructing RAG embeddings', () => {
+test('Windows isolates SenseVoice from the Embedding ONNX Runtime process', () => {
   const fs = require('node:fs');
-  const source = fs.readFileSync(path.join(root, 'electron/main.ts'), 'utf8');
-  const preloadAt = source.indexOf('preloadWindowsSenseVoiceRuntime()');
-  const ragAt = source.indexOf('this.initializeRAGManager()');
-  assert.ok(preloadAt >= 0);
-  assert.ok(ragAt > preloadAt);
+  const pool = fs.readFileSync(path.join(root, 'electron/audio/LocalSttWorkerPool.ts'), 'utf8');
+  const worker = fs.readFileSync(path.join(root, 'electron/audio/sensevoice/senseVoiceWorker.ts'), 'utf8');
+  const main = fs.readFileSync(path.join(root, 'electron/main.ts'), 'utf8');
+  assert.match(pool, /config\.provider === 'sensevoice'/);
+  assert.match(pool, /process\.platform === 'win32'/);
+  assert.match(pool, /fork\(config\.workerPath/);
+  assert.match(pool, /ELECTRON_RUN_AS_NODE:\s*'1'/);
+  assert.match(worker, /process\.on\('message'/);
+  assert.match(worker, /process\.send/);
+  assert.doesNotMatch(main, /preloadWindowsSenseVoiceRuntime/);
 });

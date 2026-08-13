@@ -3,7 +3,16 @@ import type { SenseVoiceWorkerInMessage } from './types';
 import { isVerboseLogging } from '../../verboseLog';
 import { initializeLocalSttProvider } from '../hardwareProviderPolicy';
 
-if (!parentPort) throw new Error('senseVoiceWorker must be run as a Worker thread');
+const sendMessage = (message: Record<string, unknown>): void => {
+  if (parentPort) parentPort.postMessage(message);
+  else if (process.send) process.send(message);
+};
+
+const onMessage = (listener: (message: SenseVoiceWorkerInMessage) => void): void => {
+  if (parentPort) parentPort.on('message', listener);
+  else if (process.send) process.on('message', message => listener(message as SenseVoiceWorkerInMessage));
+  else throw new Error('senseVoiceWorker requires worker_threads or child_process IPC');
+};
 
 let recognizer: any = null;
 let workerVerboseLogging = false;
@@ -54,7 +63,7 @@ function transcribe(samples: Float32Array): string {
   return text;
 }
 
-parentPort.on('message', (msg: SenseVoiceWorkerInMessage) => {
+onMessage((msg: SenseVoiceWorkerInMessage) => {
   if (typeof msg.verboseLogging === 'boolean') {
     workerVerboseLogging = msg.verboseLogging;
   }
@@ -75,7 +84,7 @@ parentPort.on('message', (msg: SenseVoiceWorkerInMessage) => {
         fallbackReason: initialized.fallbackReason,
         initializationMs,
       });
-      parentPort!.postMessage({
+      sendMessage({
         type: 'ready',
         providerRequested: initialized.providerRequested,
         providerActual: initialized.providerActual,
@@ -84,7 +93,7 @@ parentPort.on('message', (msg: SenseVoiceWorkerInMessage) => {
       });
     } catch (error: any) {
       debugLog('init-error', { message: error?.message ?? String(error) });
-      parentPort!.postMessage({
+      sendMessage({
         type: 'error',
         message: `Failed to load SenseVoice model: ${error?.message ?? String(error)}`,
       });
@@ -98,7 +107,7 @@ parentPort.on('message', (msg: SenseVoiceWorkerInMessage) => {
         taskId: msg.taskId,
         sampleCount: msg.samples.length,
       });
-      parentPort!.postMessage({
+      sendMessage({
         type: 'result',
         taskId: msg.taskId,
         text: transcribe(msg.samples),
@@ -108,7 +117,7 @@ parentPort.on('message', (msg: SenseVoiceWorkerInMessage) => {
         taskId: msg.taskId,
         message: error?.message ?? String(error),
       });
-      parentPort!.postMessage({
+      sendMessage({
         type: 'error',
         taskId: msg.taskId,
         message: error?.message ?? String(error),
