@@ -160,11 +160,21 @@ test('all release workflows execute the final packaged runtime smoke suite', () 
   ];
   for (const [relativePath, appPath] of expectations) {
     const workflow = fs.readFileSync(path.join(root, relativePath), 'utf8');
+    const pipefailCount = workflow.match(/set -o pipefail/g)?.length ?? 0;
+    assert.ok(pipefailCount >= 2, `${relativePath} must preserve verifier and smoke exit codes through tee`);
     assert.match(workflow, /smoke-packaged-runtime\.mjs/);
     assert.match(workflow, new RegExp(`--app ${appPath.replaceAll('.', '\\.')}`));
     assert.match(workflow, /--sensevoice-model-dir/);
     assert.match(workflow, /--audio tests\/fixtures\/dynamic-actions\/replay\/audio\/sales-pricing-objection-zh-001\.wav/);
   }
+});
+
+test('packaged PPTX smoke keeps a bounded timeout suitable for Intel Rosetta cold start', () => {
+  const source = fs.readFileSync(
+    path.resolve(import.meta.dirname, '../smoke-packaged-runtime.mjs'),
+    'utf8',
+  );
+  assert.match(source, /pptx-render-child\.mjs[\s\S]{0,500}timeout:\s*180_000/);
 });
 
 test('packaged runtime smoke covers every required functional subsystem', () => {

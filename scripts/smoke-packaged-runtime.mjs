@@ -169,7 +169,7 @@ async function runInternal({ appPath, modelDir, audioPath }) {
     ], {
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
       encoding: 'utf8',
-      timeout: 60_000,
+      timeout: 180_000,
       maxBuffer: 4 * 1024 * 1024,
     });
     if (child.status !== 0) throw new Error(`Packaged PPTX renderer failed (${child.status}): ${child.stderr.trim()}`);
@@ -262,7 +262,7 @@ if (!process.argv.includes('--internal-run')) {
   ], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     encoding: 'utf8',
-    timeout: 180_000,
+    timeout: 360_000,
     maxBuffer: 8 * 1024 * 1024,
   });
   process.stdout.write(child.stdout || '');

@@ -52,10 +52,13 @@ jobs:
         run: node scripts/prepare-unsigned-macos-release.js
 
       - name: Verify packaged ARM64 runtime and native architecture
-        run: node scripts/verify-packaged-release.mjs --path release/mac-arm64/CueUp.app --platform darwin --arch arm64 | tee release/native-architecture-report.json
+        run: |
+          set -o pipefail
+          node scripts/verify-packaged-release.mjs --path release/mac-arm64/CueUp.app --platform darwin --arch arm64 | tee release/native-architecture-report.json
 
       - name: Smoke test final ARM64 packaged runtime
         run: |
+          set -o pipefail
           mkdir -p "$RUNNER_TEMP/sensevoice"
           curl --fail --location --retry 3 --output "$RUNNER_TEMP/sensevoice/model.int8.onnx" https://feigenbaum.cdn.bcebos.com/onnx/model.int8.onnx
           curl --fail --location --retry 3 --output "$RUNNER_TEMP/sensevoice/tokens.txt" https://feigenbaum.cdn.bcebos.com/onnx/tokens.txt

@@ -60,11 +60,14 @@ jobs:
 
       - name: Verify packaged Windows runtime and native architecture
         shell: bash
-        run: node scripts/verify-packaged-release.mjs --path release/win-unpacked --platform win32 --arch x64 | tee release/native-architecture-report.json
+        run: |
+          set -o pipefail
+          node scripts/verify-packaged-release.mjs --path release/win-unpacked --platform win32 --arch x64 | tee release/native-architecture-report.json
 
       - name: Smoke test final Windows packaged runtime
         shell: bash
         run: |
+          set -o pipefail
           mkdir -p "$RUNNER_TEMP/sensevoice"
           curl --fail --location --retry 3 --output "$RUNNER_TEMP/sensevoice/model.int8.onnx" https://feigenbaum.cdn.bcebos.com/onnx/model.int8.onnx
           curl --fail --location --retry 3 --output "$RUNNER_TEMP/sensevoice/tokens.txt" https://feigenbaum.cdn.bcebos.com/onnx/tokens.txt
