@@ -8,6 +8,11 @@ import { spawnSync } from 'node:child_process';
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, '../..');
 
+test('packaging keeps only supported English and Simplified Chinese Electron locales', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  assert.deepEqual(pkg.build.electronLanguages, ['en', 'en-US', 'zh_CN', 'zh-CN']);
+});
+
 test('arm64 packaging selects target native payloads through static macro filters', async () => {
   const beforePackPath = path.join(root, 'scripts/before-pack.js');
   const beforePack = require(beforePackPath);

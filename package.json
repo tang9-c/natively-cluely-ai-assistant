@@ -71,6 +71,12 @@
     "beforePack": "./scripts/before-pack.js",
     "afterPack": "./scripts/ad-hoc-sign.js",
     "productName": "CueUp",
+    "electronLanguages": [
+      "en",
+      "en-US",
+      "zh_CN",
+      "zh-CN"
+    ],
     "files": [
       "dist",
       "dist-electron",
