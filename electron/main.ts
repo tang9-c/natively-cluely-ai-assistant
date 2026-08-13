@@ -324,6 +324,7 @@ import { loadNativeModule } from "./audio/nativeModuleLoader"
 import { BaseSTT, type TranscriptSegment } from "./audio/BaseSTT"
 import { createSTTProvider } from "./audio/sttRegistry"
 import { measureSystemAudioPcm16Level, preprocessCurrentChineseSystemAudio } from "./audio/SystemAudioPreprocessing"
+import { preloadWindowsSenseVoiceRuntime } from "./audio/hardwareProviderPolicy"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { buildEmbeddingRuntimeConfig } from "./rag/EmbeddingRuntimeConfig"
@@ -684,6 +685,10 @@ export class AppState {
         }
       } catch (_) {}
     }
+
+    // Windows resolves ONNX Runtime DLLs process-wide. SenseVoice requires the
+    // newer runtime, which remains backward compatible with local embeddings.
+    preloadWindowsSenseVoiceRuntime()
 
     // Initialize RAGManager (requires database to be ready)
     this.initializeRAGManager()

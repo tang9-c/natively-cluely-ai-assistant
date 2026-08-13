@@ -188,6 +188,10 @@ test('packaged runtime smoke covers every required functional subsystem', () => 
   assert.match(source, /requestedProviders: \['cueup-invalid-gpu'\]/);
   assert.match(source, /fallbackProvider: 'cpu'/);
   assert.match(source, /fallbackVerified/);
+  const runtimePreloadAt = source.indexOf("packageRequire('sherpa-onnx-node')");
+  const embeddingAt = source.indexOf("pipeline('feature-extraction'");
+  assert.ok(runtimePreloadAt >= 0, 'Windows smoke must preload the SenseVoice runtime');
+  assert.ok(embeddingAt > runtimePreloadAt, 'SenseVoice runtime must win Windows DLL resolution before Embedding');
 });
 
 test('packaged release verifier requires the PPTX child dependency', () => {

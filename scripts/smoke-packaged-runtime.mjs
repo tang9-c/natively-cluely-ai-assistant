@@ -177,6 +177,8 @@ async function runInternal({ appPath, modelDir, audioPath }) {
     if (renderedSlides.length !== 1) throw new Error(`Expected one rendered PPTX slide, got ${renderedSlides.length}`);
     results.pptx = { ok: true, slideCount: renderedSlides.length };
 
+    if (process.platform === 'win32') packageRequire('sherpa-onnx-node');
+
     const transformersPath = path.join(asarPath, 'node_modules/@huggingface/transformers/dist/transformers.node.mjs');
     const { pipeline, env } = await import(pathToFileURL(transformersPath).href);
     env.cacheDir = path.join(resources, 'models');
