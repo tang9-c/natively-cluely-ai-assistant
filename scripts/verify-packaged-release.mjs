@@ -45,7 +45,13 @@ export function inspectNativeBinary(buffer) {
     const peOffset = buffer.readUInt32LE(0x3c);
     if (peOffset + 6 <= buffer.length && buffer.subarray(peOffset, peOffset + 4).toString('binary') === 'PE\0\0') {
       const machine = buffer.readUInt16LE(peOffset + 4);
-      const arch = machine === 0x8664 ? 'x64' : machine === 0xaa64 ? 'arm64' : `machine-0x${machine.toString(16)}`;
+      const arch = machine === 0x8664
+        ? 'x64'
+        : machine === 0xaa64
+          ? 'arm64'
+          : machine === 0x014c
+            ? 'x86'
+            : `machine-0x${machine.toString(16)}`;
       return { format: 'pe', arches: [arch] };
     }
   }
@@ -89,6 +95,19 @@ function resourceRoot(appPath, platform) {
   return platform === 'darwin'
     ? path.join(appPath, 'Contents', 'Resources')
     : path.join(appPath, 'resources');
+}
+
+export function normalizeAsarEntry(entry) {
+  const normalized = String(entry).replaceAll('\\', '/');
+  return normalized.startsWith('/') ? normalized : `/${normalized}`;
+}
+
+export function isAllowedCompatibilityBinary({ appPath, filePath, platform, inspection }) {
+  if (platform !== 'win32' || inspection.format !== 'pe' || inspection.arches.join(',') !== 'x86') {
+    return false;
+  }
+  const relativePath = path.relative(appPath, filePath).replaceAll('\\', '/').toLowerCase();
+  return relativePath === 'resources/elevate.exe';
 }
 
 export function validatePackagedRelease({ appPath, platform, arch }) {
@@ -135,7 +154,7 @@ export function validatePackagedRelease({ appPath, platform, arch }) {
 
   if (fs.existsSync(asarPath)) {
     try {
-      const entries = new Set(listPackage(asarPath));
+      const entries = new Set(listPackage(asarPath).map(normalizeAsarEntry));
       for (const entry of [
         '/dist-electron/electron/main.js',
         '/dist-electron/electron/preload.js',
@@ -165,7 +184,10 @@ export function validatePackagedRelease({ appPath, platform, arch }) {
     }
     const isExpectedNativeFormat = inspection.format === expectedFormat;
     if (!isExpectedNativeFormat && !nativeExtensions.test(filePath)) continue;
-    if (!isExpectedNativeFormat || inspection.arches.length === 0 || inspection.arches.some(item => item !== arch)) {
+    const wrongPlatformOrArch = !isExpectedNativeFormat
+      || inspection.arches.length === 0
+      || inspection.arches.some(item => item !== arch);
+    if (wrongPlatformOrArch && !isAllowedCompatibilityBinary({ appPath, filePath, platform, inspection })) {
       errors.push(`Wrong native platform/architecture: ${filePath} is ${inspection.format}/${inspection.arches.join(',') || 'unknown'}`);
     }
   }

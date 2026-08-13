@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import * as releaseVerifier from '../verify-packaged-release.mjs';
 import {
   inspectNativeBinary,
   validatePackagedRelease,
@@ -39,10 +40,52 @@ test('native binary inspection distinguishes macOS arm64/x64 and Windows x64', (
   assert.deepEqual(inspectNativeBinary(macho(0x0100000c)), { format: 'macho', arches: ['arm64'] });
   assert.deepEqual(inspectNativeBinary(macho(0x01000007)), { format: 'macho', arches: ['x64'] });
   assert.deepEqual(inspectNativeBinary(pe()), { format: 'pe', arches: ['x64'] });
+  assert.deepEqual(inspectNativeBinary(pe(0x014c)), { format: 'pe', arches: ['x86'] });
   assert.deepEqual(inspectNativeBinary(littleEndianFatMacho([0x0100000c, 0x01000007])), {
     format: 'macho',
     arches: ['arm64', 'x64'],
   });
+});
+
+test('packaged release verifier normalizes Windows ASAR entry separators', () => {
+  assert.equal(typeof releaseVerifier.normalizeAsarEntry, 'function');
+  assert.equal(
+    releaseVerifier.normalizeAsarEntry('\\dist-electron\\electron\\main.js'),
+    '/dist-electron/electron/main.js',
+  );
+});
+
+test('Windows x64 validation permits only the electron-builder x86 elevate helper', () => {
+  assert.equal(typeof releaseVerifier.isAllowedCompatibilityBinary, 'function');
+  const appPath = path.join('C:', 'release', 'win-unpacked');
+  const x86Pe = { format: 'pe', arches: ['x86'] };
+  assert.equal(
+    releaseVerifier.isAllowedCompatibilityBinary({
+      appPath,
+      filePath: path.join(appPath, 'resources', 'elevate.exe'),
+      platform: 'win32',
+      inspection: x86Pe,
+    }),
+    true,
+  );
+  assert.equal(
+    releaseVerifier.isAllowedCompatibilityBinary({
+      appPath,
+      filePath: path.join(appPath, 'resources', 'other.exe'),
+      platform: 'win32',
+      inspection: x86Pe,
+    }),
+    false,
+  );
+  assert.equal(
+    releaseVerifier.isAllowedCompatibilityBinary({
+      appPath,
+      filePath: path.join(appPath, 'resources', 'app.asar.unpacked', 'native-module', 'wrong.node'),
+      platform: 'win32',
+      inspection: x86Pe,
+    }),
+    false,
+  );
 });
 
 test('packaged release validation rejects a missing Rust audio module and wrong-arch native library', () => {
