@@ -1,4 +1,4 @@
-import { BaseSTT } from '../BaseSTT';
+import { BaseSTT, type TranscriptSegment } from '../BaseSTT';
 import {
   LocalSttWorkerPool,
   localSttWorkerPool,
@@ -26,6 +26,11 @@ type SenseVoiceWorkerLike = {
   on(event: 'exit', listener: (code: number) => void): SenseVoiceWorkerLike;
   postMessage(message: any, transferList?: any[]): void;
   terminate(): Promise<number> | void;
+};
+
+type PendingAudioSegment = {
+  samples: Float32Array;
+  sourceSegmentCount: number;
 };
 
 function debugLog(event: string, metadata: Record<string, unknown> = {}): void {
@@ -108,12 +113,17 @@ export class LocalSenseVoiceSTT extends BaseSTT {
   private worker: LocalSttWorkerLease | null = null;
   private workerReady = false;
   private taskCounter = 0;
-  private pendingAudio: Float32Array[] = [];
-  private pendingAudioByTaskId = new Map<string, Float32Array>();
+  private pendingAudio: PendingAudioSegment[] = [];
+  private pendingAudioByTaskId = new Map<string, PendingAudioSegment>();
+  private completedTranscripts = new Map<number, TranscriptSegment | null>();
+  private nextTranscriptTaskNumber = 1;
   private inFlightTasks = 0;
   private inFlightAnnotations = 0;
   private gapFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private speechEndedFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly MAX_PENDING_AUDIO_SEGMENTS = 8;
+  private static readonly MAX_IN_FLIGHT_TASKS = 1;
+  private static readonly MAX_CONCURRENT_RESULT_TASKS = 2;
   private static readonly GAP_FLUSH_MS = 1800;
   private static readonly SPEECH_ENDED_FLUSH_DEBOUNCE_MS = 800;
 
@@ -164,6 +174,9 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     this.hardwareDiagnostics = {};
     this.workerReady = false;
     this.pendingAudio = [];
+    this.pendingAudioByTaskId.clear();
+    this.completedTranscripts.clear();
+    this.nextTranscriptTaskNumber = this.taskCounter + 1;
     this.inFlightTasks = 0;
     this.inFlightAnnotations = 0;
     this.vad = new VadProcessor(this.resolveVadOptions());
@@ -231,18 +244,28 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       inFlightTasks: this.inFlightTasks,
     });
 
-    if (this.pendingAudio.length === 0 && this.inFlightTasks === 0 && this.inFlightAnnotations === 0) return;
+    if (
+      this.pendingAudio.length === 0
+      && this.inFlightTasks === 0
+      && this.inFlightAnnotations === 0
+      && this.completedTranscripts.size === 0
+    ) return;
 
     await new Promise<void>((resolve) => {
       const started = Date.now();
+      let warned = false;
       const timer = setInterval(() => {
-        const drained = this.pendingAudio.length === 0 && this.inFlightTasks === 0 && this.inFlightAnnotations === 0;
+        const drained = this.pendingAudio.length === 0
+          && this.inFlightTasks === 0
+          && this.inFlightAnnotations === 0
+          && this.completedTranscripts.size === 0;
         const timedOut = Date.now() - started >= timeoutMs;
-        if (drained || timedOut) {
+        if (timedOut && !warned && !drained) {
+          warned = true;
+          console.warn('[LocalSenseVoiceSTT] Final transcript drain exceeded warning threshold; continuing until all finals are delivered');
+        }
+        if (drained) {
           clearInterval(timer);
-          if (timedOut && !drained) {
-            console.warn('[LocalSenseVoiceSTT] Timed out draining final transcripts before meeting save');
-          }
           debugLog('drain-complete', {
             timedOut,
             pendingAudio: this.pendingAudio.length,
@@ -328,6 +351,11 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     }
 
     if (message.type === 'result') {
+      const pendingTask = this.pendingAudioByTaskId.get(message.taskId);
+      if (!pendingTask) {
+        debugLog('duplicate-or-stale-result', { taskId: message.taskId });
+        return;
+      }
       this.inFlightTasks = Math.max(0, this.inFlightTasks - 1);
       const parsed = parseSenseVoiceOutput(message.text);
       const text = this.applyTermCorrection(parsed.text);
@@ -346,27 +374,38 @@ export class LocalSenseVoiceSTT extends BaseSTT {
             textLength: text.length,
           });
           this.pendingAudioByTaskId.delete(message.taskId);
+          this.completeTranscriptTask(message.taskId, null);
           this.flushPendingAudio();
           return;
         }
         this.inFlightAnnotations += 1;
+        this.flushPendingAudio();
+        let segment: TranscriptSegment | null = null;
         try {
           const speakerVerification = await this.annotateSpeaker(message.taskId);
-          const segment = {
+          segment = {
             text,
             isFinal: true,
             confidence: 0.9,
             ...(speakerVerification ? { speakerVerification } : {}),
             ...(parsed.emotion ? { emotion: parsed.emotion, emotionSource: 'sensevoice' as const } : {}),
+            ...(pendingTask.sourceSegmentCount > 1 ? {
+              coalescedFromCount: pendingTask.sourceSegmentCount,
+              coalescedProvider: 'local_vad' as const,
+            } : {}),
           };
-          this.emit('transcript', segment);
+        } catch (error) {
+          this.emit('error', error instanceof Error ? error : new Error(String(error)));
         } finally {
           this.inFlightAnnotations = Math.max(0, this.inFlightAnnotations - 1);
+          this.completeTranscriptTask(message.taskId, segment);
+          this.flushPendingAudio();
         }
       } else {
         this.pendingAudioByTaskId.delete(message.taskId);
+        this.completeTranscriptTask(message.taskId, null);
+        this.flushPendingAudio();
       }
-      this.flushPendingAudio();
       return;
     }
 
@@ -374,6 +413,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       if (message.taskId) {
         this.inFlightTasks = Math.max(0, this.inFlightTasks - 1);
         this.pendingAudioByTaskId.delete(message.taskId);
+        this.completeTranscriptTask(message.taskId, null);
       } else {
         this.pendingAudio = [];
         this.pendingAudioByTaskId.clear();
@@ -387,6 +427,18 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       });
       this.emit('error', new Error(message.message));
       this.flushPendingAudio();
+    }
+  }
+
+  private completeTranscriptTask(taskId: string, segment: TranscriptSegment | null): void {
+    const taskNumber = Number(taskId.slice('sensevoice-'.length));
+    if (!Number.isInteger(taskNumber) || taskNumber < this.nextTranscriptTaskNumber) return;
+    this.completedTranscripts.set(taskNumber, segment);
+    while (this.completedTranscripts.has(this.nextTranscriptTaskNumber)) {
+      const completed = this.completedTranscripts.get(this.nextTranscriptTaskNumber);
+      this.completedTranscripts.delete(this.nextTranscriptTaskNumber);
+      this.nextTranscriptTaskNumber += 1;
+      if (completed) this.emit('transcript', completed);
     }
   }
 
@@ -413,18 +465,39 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       pendingBefore: this.pendingAudio.length,
       workerReady: this.workerReady,
     });
-    this.pendingAudio.push(samples.slice());
+    const copiedSamples = samples.slice();
+    if (this.pendingAudio.length >= LocalSenseVoiceSTT.MAX_PENDING_AUDIO_SEGMENTS) {
+      const tailIndex = this.pendingAudio.length - 1;
+      const tail = this.pendingAudio[tailIndex];
+      const merged = new Float32Array(tail.samples.length + copiedSamples.length);
+      merged.set(tail.samples);
+      merged.set(copiedSamples, tail.samples.length);
+      this.pendingAudio[tailIndex] = {
+        samples: merged,
+        sourceSegmentCount: tail.sourceSegmentCount + 1,
+      };
+    } else {
+      this.pendingAudio.push({ samples: copiedSamples, sourceSegmentCount: 1 });
+    }
     this.flushPendingAudio();
   }
 
   private flushPendingAudio(): void {
     if (!this.worker || !this.workerReady) return;
-    while (this.pendingAudio.length > 0) {
-      const samples = this.pendingAudio.shift();
-      if (!samples) continue;
+    while (
+      this.pendingAudio.length > 0
+      && this.inFlightTasks < LocalSenseVoiceSTT.MAX_IN_FLIGHT_TASKS
+      && this.inFlightTasks + this.inFlightAnnotations < LocalSenseVoiceSTT.MAX_CONCURRENT_RESULT_TASKS
+    ) {
+      const pendingSegment = this.pendingAudio.shift();
+      if (!pendingSegment) continue;
+      const { samples } = pendingSegment;
       const taskId = `sensevoice-${++this.taskCounter}`;
       this.inFlightTasks++;
-      this.pendingAudioByTaskId.set(taskId, samples.slice());
+      this.pendingAudioByTaskId.set(taskId, {
+        samples: samples.slice(),
+        sourceSegmentCount: pendingSegment.sourceSegmentCount,
+      });
       debugLog('dispatch-final', {
         taskId,
         sampleCount: samples.length,
@@ -444,9 +517,10 @@ export class LocalSenseVoiceSTT extends BaseSTT {
   }
 
   private async annotateSpeaker(taskId: string) {
-    const samples = this.pendingAudioByTaskId.get(taskId);
+    const pendingSegment = this.pendingAudioByTaskId.get(taskId);
     this.pendingAudioByTaskId.delete(taskId);
-    if (!samples) return undefined;
+    if (!pendingSegment) return undefined;
+    const { samples } = pendingSegment;
     return this.speakerVerificationAnnotator?.annotate(samples);
   }
 

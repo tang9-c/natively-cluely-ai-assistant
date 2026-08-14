@@ -50,6 +50,188 @@ class FakeSenseVoiceWorker extends EventEmitter {
   }
 }
 
+class ControlledSenseVoiceWorker extends EventEmitter {
+  constructor() {
+    super();
+    this.pending = [];
+    this.transcribedSampleCounts = [];
+    queueMicrotask(() => this.emit('message', { type: 'ready' }));
+  }
+
+  postMessage(message) {
+    if (message.type !== 'transcribe') return;
+    this.pending.push(message);
+    this.transcribedSampleCounts.push(message.samples.length);
+  }
+
+  completeNext(text = '最终转录。') {
+    const message = this.pending.shift();
+    assert.ok(message, 'expected a pending SenseVoice inference');
+    this.emit('message', { type: 'result', taskId: message.taskId, text });
+  }
+
+  terminate() {
+    this.emit('exit', 0);
+    return Promise.resolve(0);
+  }
+}
+
+test('LocalSenseVoiceSTT bounds queued inference without dropping final audio', async () => {
+  const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+  const worker = new ControlledSenseVoiceWorker();
+  const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+  const segmentCount = 20;
+  const samplesPerSegment = 1600;
+  const expectedSamples = segmentCount * samplesPerSegment;
+  const transcripts = [];
+  stt.on('transcript', event => transcripts.push(event));
+
+  stt.start();
+  await sleep(0);
+  for (let index = 0; index < segmentCount; index += 1) {
+    stt.dispatchFinal(new Float32Array(samplesPerSegment).fill((index + 1) / 100));
+  }
+
+  assert.equal(stt.inFlightTasks, 1, 'only one recognition may be submitted at a time');
+  assert.ok(stt.pendingAudio.length <= 8, 'pending segment count must remain bounded');
+
+  while (worker.transcribedSampleCounts.reduce((sum, count) => sum + count, 0) < expectedSamples) {
+    worker.completeNext();
+    await sleep(0);
+  }
+  worker.completeNext();
+  await stt.drainFinals(1000);
+
+  assert.equal(
+    worker.transcribedSampleCounts.reduce((sum, count) => sum + count, 0),
+    expectedSamples,
+    'all final audio samples must reach recognition',
+  );
+  assert.equal(stt.pendingAudio.length, 0);
+  assert.equal(stt.inFlightTasks, 0);
+  assert.ok(transcripts.length < segmentCount, 'queue pressure should coalesce transcript events');
+  assert.equal(
+    transcripts.reduce((sum, transcript) => sum + (transcript.coalescedFromCount ?? 1), 0),
+    segmentCount,
+    'coalescing metadata must account for every final VAD segment',
+  );
+  stt.stop();
+});
+
+test('LocalSenseVoiceSTT preserves final transcript order while speaker annotation runs asynchronously', async () => {
+  const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+  const worker = new ControlledSenseVoiceWorker();
+  const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+  const transcripts = [];
+  stt.setSpeakerVerificationAnnotator({
+    annotate: async (samples) => {
+      if (samples[0] < 0.15) await sleep(80);
+      return undefined;
+    },
+  });
+  stt.on('transcript', event => transcripts.push(event.text));
+
+  stt.start();
+  await sleep(0);
+  stt.dispatchFinal(new Float32Array(1600).fill(0.1));
+  stt.dispatchFinal(new Float32Array(1600).fill(0.2));
+  worker.completeNext('第一句。');
+  await sleep(0);
+  worker.completeNext('第二句。');
+  await stt.drainFinals(1000);
+
+  assert.deepEqual(transcripts, ['第一句。', '第二句。']);
+  stt.stop();
+});
+
+test('LocalSenseVoiceSTT bounds asynchronous speaker annotation backlog', async () => {
+  const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+  const worker = new ControlledSenseVoiceWorker();
+  const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+  const annotationReleases = [];
+  let activeAnnotations = 0;
+  let maxActiveAnnotations = 0;
+  stt.setSpeakerVerificationAnnotator({
+    annotate: () => new Promise((resolve) => {
+      activeAnnotations += 1;
+      maxActiveAnnotations = Math.max(maxActiveAnnotations, activeAnnotations);
+      annotationReleases.push(() => {
+        activeAnnotations -= 1;
+        resolve(undefined);
+      });
+    }),
+  });
+
+  stt.start();
+  await sleep(0);
+  for (let index = 0; index < 6; index += 1) {
+    stt.dispatchFinal(new Float32Array(1600).fill((index + 1) / 100));
+  }
+  while (worker.pending.length > 0) {
+    worker.completeNext();
+    await sleep(0);
+  }
+
+  assert.ok(maxActiveAnnotations <= 2, 'speaker annotation backlog must remain bounded');
+  assert.equal(
+    worker.transcribedSampleCounts.length,
+    2,
+    'recognition should continue while the first speaker annotation is pending',
+  );
+  for (let guard = 0; guard < 20 && (stt.pendingAudio.length > 0 || stt.inFlightTasks > 0 || stt.inFlightAnnotations > 0); guard += 1) {
+    annotationReleases.splice(0).forEach(release => release());
+    await sleep(0);
+    while (worker.pending.length > 0) {
+      worker.completeNext();
+      await sleep(0);
+    }
+  }
+  await stt.drainFinals(1000);
+  stt.stop();
+});
+
+test('LocalSenseVoiceSTT ignores duplicate worker finals without losing the next final', async () => {
+  const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+  const worker = new ControlledSenseVoiceWorker();
+  const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+  const transcripts = [];
+  stt.on('transcript', event => transcripts.push(event.text));
+
+  stt.start();
+  await sleep(0);
+  stt.dispatchFinal(new Float32Array(1600).fill(0.1));
+  stt.dispatchFinal(new Float32Array(1600).fill(0.2));
+  worker.completeNext('第一句。');
+  await sleep(0);
+  await stt.handleWorkerMessage({ type: 'result', taskId: 'sensevoice-1', text: '第一句。' });
+  worker.completeNext('第二句。');
+  await stt.drainFinals(1000);
+
+  assert.deepEqual(transcripts, ['第一句。', '第二句。']);
+  stt.stop();
+});
+
+test('LocalSenseVoiceSTT drain timeout warns but never abandons a pending final', async () => {
+  const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+  const worker = new ControlledSenseVoiceWorker();
+  const stt = new LocalSenseVoiceSTT({ workerFactory: () => worker });
+  const transcripts = [];
+  stt.on('transcript', event => transcripts.push(event.text));
+
+  stt.start();
+  await sleep(0);
+  stt.dispatchFinal(new Float32Array(1600).fill(0.1));
+  let drained = false;
+  const draining = stt.drainFinals(10).then(() => { drained = true; });
+  await sleep(70);
+
+  assert.equal(drained, false, 'timeout must not abandon an accepted final segment');
+  worker.completeNext('不能丢失的最终结果。');
+  await draining;
+  assert.deepEqual(transcripts, ['不能丢失的最终结果。']);
+  stt.stop();
+});
+
 test('LocalSenseVoiceSTT keeps producing meeting transcripts after GPU initialization falls back to CPU', async () => {
   const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
   const worker = new FakeSenseVoiceWorker({
