@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Telescope, X } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
 import icon from "./icon.png";
@@ -89,6 +89,11 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const [isGlobalChatOpen, setIsGlobalChatOpen] = useState(false);
     const [submittedGlobalQuery, setSubmittedGlobalQuery] = useState('');
     const [submittedGlobalQueryNonce, setSubmittedGlobalQueryNonce] = useState(0);
+    const searchGlobalMeetings = useCallback(
+        (query: string) => window.electronAPI?.ragSearchGlobalMeetings(query, 5)
+            ?? Promise.resolve({ success: false as const, hits: [], degradedReason: 'rag_unavailable' as const }),
+        [],
+    );
 
     const [showModesOnboarding, setShowModesOnboarding] = useState(false);
     const [showProfileOnboarding, setShowProfileOnboarding] = useState(false);
@@ -299,17 +304,17 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         }
     }, [selectedMeeting, isGlobalChatOpen, onPageChange]);
 
-    const handleOpenMeeting = async (meeting: Meeting) => {
+    const handleOpenMeeting = async (meeting: Meeting | string) => {
+        const meetingId = typeof meeting === 'string' ? meeting : meeting.id;
         setForwardMeeting(null); // Clear forward history on new navigation
-        console.log("[Launcher] Opening meeting:", meeting.id);
+        console.log("[Launcher] Opening meeting:", meetingId);
         analytics.trackCommandExecuted('open_meeting_details');
 
         // Fetch full meeting details including transcript and usage
         if (window.electronAPI && window.electronAPI.getMeetingDetails) {
             try {
                 console.log("[Launcher] Fetching full meeting details...");
-                const fullMeeting = await window.electronAPI.getMeetingDetails(meeting.id);
-                console.log("[Launcher] Got meeting details:", fullMeeting);
+                const fullMeeting = await window.electronAPI.getMeetingDetails(meetingId);
                 console.log("[Launcher] Transcript count:", fullMeeting?.transcript?.length);
                 console.log("[Launcher] Usage count:", fullMeeting?.usage?.length);
                 if (fullMeeting) {
@@ -323,7 +328,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
             console.warn("[Launcher] getMeetingDetails not available on electronAPI");
         }
         // Fallback to list-view data if fetch fails
-        setSelectedMeeting(meeting);
+        if (typeof meeting !== 'string') setSelectedMeeting(meeting);
     };
 
     const handleBack = () => {
@@ -407,20 +412,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                         setSubmittedGlobalQueryNonce((prev) => prev + 1);
                         setIsGlobalChatOpen(true);
                     }}
-                    onLiteralSearch={(query) => {
-                        // For now, also use AI query for literal search
-                        // Could be enhanced to do fuzzy filtering in the UI
-                        analytics.trackCommandExecuted('literal_search');
-                        setSubmittedGlobalQuery(query);
-                        setSubmittedGlobalQueryNonce((prev) => prev + 1);
-                        setIsGlobalChatOpen(true);
-                    }}
+                    searchGlobalMeetings={searchGlobalMeetings}
                     onOpenMeeting={(meetingId) => {
-                        const meeting = meetings.find(m => m.id === meetingId);
-                        if (meeting) {
-                            handleOpenMeeting(meeting);
-                            analytics.trackCommandExecuted('open_meeting_from_search');
-                        }
+                        handleOpenMeeting(meetingId);
+                        analytics.trackCommandExecuted('open_meeting_from_search');
                     }}
                 />
 

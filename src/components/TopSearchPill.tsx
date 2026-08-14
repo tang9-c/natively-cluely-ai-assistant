@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, Sparkles, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import type { GlobalMeetingSearchResponse } from '../../shared/globalMeetingSearch';
 
 // ============================================
 // Types
@@ -23,15 +24,19 @@ interface SearchResult {
     title: string;
     subtitle?: string;
     meetingId: string;
+    snippet?: string;
 }
 
 interface TopSearchPillProps {
     meetings: Meeting[];
     onAIQuery: (query: string) => void;
-    onLiteralSearch: (query: string) => void;
+    searchGlobalMeetings: (query: string) => Promise<GlobalMeetingSearchResponse>;
     onOpenMeeting: (meetingId: string) => void;
     onExpansionChange?: (isExpanded: boolean) => void;
 }
+
+const TOP_SEARCH_DEBOUNCE_MS = 250;
+const TOP_SEARCH_MIN_QUERY_LENGTH = 2;
 
 // ============================================
 // Fuzzy Search Helper
@@ -90,7 +95,7 @@ function searchMeetings(meetings: Meeting[], query: string): SearchResult[] {
 const TopSearchPill: React.FC<TopSearchPillProps> = ({
     meetings,
     onAIQuery,
-    onLiteralSearch,
+    searchGlobalMeetings,
     onOpenMeeting,
     onExpansionChange
 }) => {
@@ -98,38 +103,86 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
     const [state, setState] = useState<PillState>('idle');
     const [query, setQuery] = useState('');
     const [selectedIndex, setSelectedIndex] = useState(-1);
+    const [sessionResults, setSessionResults] = useState<SearchResult[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
 
     const inputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const requestSequenceRef = useRef(0);
+    const closeTimerRef = useRef<number | null>(null);
 
     // Notify parent of expansion changes
     useEffect(() => {
         onExpansionChange?.(state !== 'idle');
     }, [state, onExpansionChange]);
 
-    // Compute results
-    const sessionResults = useMemo(() => {
-        if (state !== 'results' || !query.trim()) return [];
-        return searchMeetings(meetings, query);
-    }, [meetings, query, state]);
+    useEffect(() => {
+        const normalizedQuery = query.trim();
+        const requestSequence = ++requestSequenceRef.current;
+        if (state !== 'results' || [...normalizedQuery].length < TOP_SEARCH_MIN_QUERY_LENGTH) {
+            setSessionResults([]);
+            setIsSearching(false);
+            return;
+        }
 
-    // Total selectable items: 2 (Explore section) + sessions
-    const totalItems = 2 + sessionResults.length;
+        setSessionResults([]);
+        setIsSearching(true);
+        const timer = window.setTimeout(async () => {
+            try {
+                const response = await searchGlobalMeetings(normalizedQuery);
+                if (requestSequence !== requestSequenceRef.current) return;
+                if (!response.success) {
+                    setSessionResults(searchMeetings(meetings, normalizedQuery));
+                    return;
+                }
+                setSessionResults(response.hits.slice(0, 5).map((hit) => ({
+                    id: hit.meetingId,
+                    type: 'meeting' as const,
+                    title: hit.title,
+                    subtitle: hit.startTimeMs
+                        ? new Date(hit.startTimeMs).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                        : undefined,
+                    meetingId: hit.meetingId,
+                    snippet: hit.snippet,
+                })));
+            } catch {
+                if (requestSequence === requestSequenceRef.current) {
+                    setSessionResults(searchMeetings(meetings, normalizedQuery));
+                }
+            } finally {
+                if (requestSequence === requestSequenceRef.current) setIsSearching(false);
+            }
+        }, TOP_SEARCH_DEBOUNCE_MS);
+        return () => window.clearTimeout(timer);
+    }, [meetings, query, searchGlobalMeetings, state]);
+
+    // One AI action plus structured meeting results.
+    const totalItems = 1 + sessionResults.length;
 
     // State transitions
     const open = useCallback(() => {
+        if (closeTimerRef.current !== null) {
+            window.clearTimeout(closeTimerRef.current);
+            closeTimerRef.current = null;
+        }
         setState('focused');
         setTimeout(() => inputRef.current?.focus(), 50);
     }, []);
 
     const close = useCallback(() => {
+        requestSequenceRef.current += 1;
         setState('idle');
         // Delay clearing query to allow exit animation to complete
-        setTimeout(() => {
+        closeTimerRef.current = window.setTimeout(() => {
             setQuery('');
             setSelectedIndex(-1);
+            closeTimerRef.current = null;
         }, 150);
         inputRef.current?.blur();
+    }, []);
+
+    useEffect(() => () => {
+        if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
     }, []);
 
     const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -149,20 +202,16 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
             // AI Query
             onAIQuery(query);
             close();
-        } else if (index === 1) {
-            // Literal search
-            onLiteralSearch(query);
-            close();
         } else {
             // Session result
-            const sessionIndex = index - 2;
+            const sessionIndex = index - 1;
             const result = sessionResults[sessionIndex];
             if (result) {
                 onOpenMeeting(result.meetingId);
                 close();
             }
         }
-    }, [query, sessionResults, onAIQuery, onLiteralSearch, onOpenMeeting, close]);
+    }, [query, sessionResults, onAIQuery, onOpenMeeting, close]);
 
     // Keyboard handling
     useEffect(() => {
@@ -197,7 +246,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                     setSelectedIndex(prev => Math.max(prev - 1, -1));
                 } else if (e.key === 'Enter') {
                     e.preventDefault();
-                    handleSelect(selectedIndex);
+                    handleSelect(selectedIndex < 0 ? 0 : selectedIndex);
                 }
             }
         };
@@ -347,34 +396,24 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                 <Sparkles size={12} className="text-white" />
                                                             </div>
                                                             <span className="text-[13px] text-text-primary truncate">
-                                                                {query}
-                                                            </span>
-                                                        </motion.button>
-
-                                                        {/* Literal Search Option */}
-                                                        <motion.button
-                                                            initial={{ opacity: 0, scale: 0.95 }}
-                                                            animate={{ opacity: 1, scale: 1 }}
-                                                            transition={{ duration: 0.2 }}
-                                                            className={`
-                                                            w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left
-                                                            transition-colors duration-100
-                                                            ${selectedIndex === 1
-                                                                    ? 'bg-bg-item-active'
-                                                                    : 'hover:bg-bg-item-hover'
-                                                                }
-                                                        `}
-                                                            onClick={() => handleSelect(1)}
-                                                            onMouseEnter={() => setSelectedIndex(1)}
-                                                        >
-                                                            <div className="w-6 h-6 rounded-md bg-bg-item-surface flex items-center justify-center shrink-0">
-                                                                <Search size={12} className="text-text-secondary" />
-                                                            </div>
-                                                            <span className="text-[13px] text-text-secondary">
-                                                                Search for <span className="text-text-primary">"{query}"</span>
+                                                                询问所有会议：“{query}”
                                                             </span>
                                                         </motion.button>
                                                     </div>
+
+                                                    {isSearching && (
+                                                        <div className="px-5 py-3 text-[12px] text-text-tertiary">
+                                                            正在搜索会议正文…
+                                                        </div>
+                                                    )}
+
+                                                    {!isSearching
+                                                        && [...query.trim()].length >= TOP_SEARCH_MIN_QUERY_LENGTH
+                                                        && sessionResults.length === 0 && (
+                                                        <div className="px-5 py-3 text-[12px] text-text-tertiary">
+                                                            没有找到匹配的会议
+                                                        </div>
+                                                    )}
 
                                                     {/* Sessions Section */}
                                                     {sessionResults.length > 0 && (
@@ -395,13 +434,13 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                         className={`
                                                                         w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left
                                                                         transition-colors duration-100
-                                                                        ${selectedIndex === index + 2
+                                                                        ${selectedIndex === index + 1
                                                                                 ? 'bg-bg-item-active'
                                                                                 : 'hover:bg-bg-item-hover'
                                                                             }
                                                                     `}
-                                                                        onClick={() => handleSelect(index + 2)}
-                                                                        onMouseEnter={() => setSelectedIndex(index + 2)}
+                                                                        onClick={() => handleSelect(index + 1)}
+                                                                        onMouseEnter={() => setSelectedIndex(index + 1)}
                                                                     >
                                                                         <div className="w-6 h-6 rounded-md bg-bg-item-surface flex items-center justify-center shrink-0">
                                                                             <FileText size={12} className="text-text-secondary" />
@@ -413,6 +452,11 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                             {result.subtitle && (
                                                                                 <div className="text-[11px] text-text-tertiary">
                                                                                     {result.subtitle}
+                                                                                </div>
+                                                                            )}
+                                                                            {result.snippet && (
+                                                                                <div className="text-[11px] text-text-tertiary truncate">
+                                                                                    {result.snippet}
                                                                                 </div>
                                                                             )}
                                                                         </div>

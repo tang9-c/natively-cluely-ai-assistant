@@ -40,3 +40,38 @@ test('top global search can submit the same query more than once', () => {
   assert.match(overlay, /\[isOpen, initialQuery, queryNonce\]/);
   assert.match(overlay, /\[initialQuery, queryNonce\]/);
 });
+
+test('top search uses debounced structured global meeting search without a duplicate literal action', () => {
+  const component = read('src/components/TopSearchPill.tsx');
+  const launcher = read('src/components/Launcher.tsx');
+  const handlers = read('electron/ipcHandlers.ts');
+  const preload = read('electron/preload.ts');
+  const types = read('src/types/electron.d.ts');
+
+  assert.match(handlers, /safeHandle\('rag:search-global-meetings'/);
+  assert.match(preload, /ragSearchGlobalMeetings:/);
+  assert.match(types, /ragSearchGlobalMeetings:/);
+  assert.match(component, /TOP_SEARCH_DEBOUNCE_MS\s*=\s*250/);
+  assert.match(component, /TOP_SEARCH_MIN_QUERY_LENGTH\s*=\s*2/);
+  assert.match(component, /requestSequenceRef/);
+  assert.match(component, /closeTimerRef/);
+  assert.match(component, /window\.clearTimeout\(closeTimerRef\.current\)/);
+  assert.match(component, /isSearching/);
+  assert.match(component, /没有找到匹配的会议/);
+  assert.match(launcher, /ragSearchGlobalMeetings/);
+  assert.doesNotMatch(component, /onLiteralSearch/);
+  assert.doesNotMatch(launcher, /onLiteralSearch=/);
+  assert.match(handlers, /Number\.isFinite\(requestedLimit\)/);
+});
+
+test('global meeting hits open by id even when they are outside the recent meeting cache', () => {
+  const launcher = read('src/components/Launcher.tsx');
+  const callbackStart = launcher.indexOf('onOpenMeeting={(meetingId) =>');
+  assert.notEqual(callbackStart, -1);
+  const callback = launcher.slice(callbackStart, launcher.indexOf('}}', callbackStart) + 2);
+
+  assert.match(launcher, /handleOpenMeeting\s*=\s*async\s*\(meeting:\s*Meeting\s*\|\s*string\)/);
+  assert.match(callback, /handleOpenMeeting\(meetingId\)/);
+  assert.doesNotMatch(callback, /meetings\.find/);
+  assert.doesNotMatch(launcher, /Got meeting details/);
+});

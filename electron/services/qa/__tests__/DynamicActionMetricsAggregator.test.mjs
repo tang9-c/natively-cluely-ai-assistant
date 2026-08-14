@@ -61,6 +61,24 @@ test('aggregates recruiting lifecycle counts under modeQuality.recruiting', asyn
   });
 });
 
+test('falls back to modeTemplateType for lifecycle events with custom mode ids', async () => {
+  const { aggregateDynamicActionQaMetrics } = await load();
+  const summary = aggregateDynamicActionQaMetrics({
+    telemetryRecords: [
+      {
+        name: 'dynamic_action_shown',
+        timestamp: '2026-08-14T03:00:37.644Z',
+        modeId: 'mode_186d93c0-46bc-43d0-b8a8-c88d7f1182b7',
+        properties: { actionType: 'case_study_request', modeTemplateType: 'sales' },
+      },
+    ],
+    fixtureResults: [],
+    answerQualityMetrics: null,
+  });
+
+  assert.equal(summary.modeQuality.sales.shown, 1);
+});
+
 test('keeps legacy status compatibility without changing the new lifecycle names', async () => {
   const { aggregateDynamicActionQaMetrics } = await load();
   const summary = aggregateDynamicActionQaMetrics({

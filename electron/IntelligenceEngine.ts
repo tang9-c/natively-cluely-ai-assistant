@@ -868,6 +868,11 @@ export class IntelligenceEngine extends EventEmitter {
         return this.dynamicActionEngine.markShown(actionId);
     }
 
+    getDynamicActionById(actionId: string): DynamicAction | null {
+        if (!this.dynamicActionEngine) return null;
+        return this.dynamicActionEngine.getStore().getAction(actionId) ?? null;
+    }
+
     completeDynamicAction(actionId: string): DynamicAction | null {
         if (!this.dynamicActionEngine) return null;
         this.dynamicActionEngine.completeAction(actionId);

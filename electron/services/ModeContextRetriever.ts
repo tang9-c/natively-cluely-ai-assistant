@@ -10,6 +10,7 @@ import {
 import { VectorStore } from '../rag/VectorStore';
 import { EmbeddingPipeline } from '../rag/EmbeddingPipeline';
 import { DatabaseManager } from '../db/DatabaseManager';
+import { chunkReferenceText } from './knowledge/ReferenceTextChunker';
 
 export interface ModeKnowledgeSource {
     id: string;
@@ -42,8 +43,12 @@ interface RetrieveOptions {
 const DEFAULT_TOKEN_BUDGET = 1800;
 const DEFAULT_TOP_K = 6;
 const MIN_RELEVANCE_SCORE = 0.18;
-const CHUNK_WORDS = 140;
-const CHUNK_OVERLAP = 30;
+const EXPLICIT_QUERY_MAX_RELEVANCE_SCORE = 0.12;
+const MODE_QUERY_STOP_WORDS = new Set([
+    'a', 'an', 'and', 'are', 'about', 'for', 'how', 'i', 'in', 'is', 'it',
+    'me', 'my', 'of', 'on', 'our', 'should', 'the', 'to', 'what', 'when',
+    'with', 'you', 'your',
+]);
 
 function encodePayload(value: unknown): string {
     return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
@@ -54,30 +59,24 @@ function estimateTokens(text: string): number {
 }
 
 function chunkText(content: string): string[] {
-    const words = content.trim().split(/\s+/).filter(Boolean);
-    if (words.length === 0) return [];
-    if (words.length <= CHUNK_WORDS) return [words.join(' ')];
-
-    const chunks: string[] = [];
-    for (let i = 0; i < words.length; i += CHUNK_WORDS - CHUNK_OVERLAP) {
-        const chunk = words.slice(i, i + CHUNK_WORDS).join(' ');
-        if (chunk.trim()) chunks.push(chunk);
-        if (i + CHUNK_WORDS >= words.length) break;
-    }
-    return chunks;
+    return chunkReferenceText(content);
 }
 
 export class ModeContextRetriever {
     retrieve(mode: Mode, files: ModeReferenceFile[], options: RetrieveOptions): ModeRetrievedContext {
-        const queryText = `${options.query}\n${options.transcript ?? ''}`.trim();
+        const queryText = options.query.trim() || (options.transcript ?? '').trim();
         const queryWords = new Set(wordsOf(queryText));
+        const hasCjkQuery = hasCjkText(queryText);
+        const lexicalQueryWords = hasCjkQuery
+            ? queryWords
+            : new Set([...queryWords].filter(word => !MODE_QUERY_STOP_WORDS.has(word)));
 
         // Zero-token query (all words ≤2 chars after possessive/contraction
         // stripping, or punctuation-only input). The adaptive threshold would
         // otherwise collapse to 0 and the `score < 0` filter would admit
         // every chunk with score 0, drowning the prompt in noise. Short-
         // circuit to the fallback path explicitly.
-        if (queryWords.size === 0) {
+        if (lexicalQueryWords.size === 0) {
             return { snippets: [], formattedContext: '', usedFallback: true };
         }
 
@@ -113,24 +112,23 @@ export class ModeContextRetriever {
         // ONLY when no transcript is provided; production mid-session calls
         // (transcript present) are unaffected. See FINDING-001 in
         // docs/testing/MODES_PROFILE_INTELLIGENCE_BUGFIX_LOG.md.
-        const hasTranscript = !!options.transcript && options.transcript.trim().length > 0;
-        const adaptiveThreshold = hasTranscript
-            ? MIN_RELEVANCE_SCORE
-            : MIN_RELEVANCE_SCORE * Math.min(1, queryWords.size / 5);
-        const hasCjkQuery = hasCjkText(queryText);
+        const hasExplicitQuery = options.query.trim().length > 0;
+        const adaptiveThreshold = hasExplicitQuery
+            ? EXPLICIT_QUERY_MAX_RELEVANCE_SCORE * Math.min(1, lexicalQueryWords.size / 5)
+            : MIN_RELEVANCE_SCORE;
         const relevanceThreshold = hasCjkQuery ? adaptiveThreshold * CJK_RELEVANCE_THRESHOLD_MULTIPLIER : adaptiveThreshold;
 
         const candidates: ModeRetrievedSnippet[] = [];
         for (const source of sources) {
             for (const chunk of chunkText(source.content)) {
-                const score = computeLexicalScore(chunk, queryWords, hasCjkQuery);
-                if (score < relevanceThreshold) continue;
+                const queryScore = computeLexicalScore(chunk, lexicalQueryWords, hasCjkQuery);
+                if (queryScore < relevanceThreshold) continue;
                 candidates.push({
                     sourceId: source.id,
                     sourceType: source.type,
                     fileName: source.fileName,
                     text: chunk,
-                    score,
+                    score: queryScore,
                 });
             }
         }
@@ -199,8 +197,10 @@ export class ModeContextRetriever {
             this._materialRagRetriever = new MaterialRagRetriever(embeddingPipeline);
         }
 
-        const queryText = `${options.query}\n${options.transcript ?? ''}`.trim();
-        const hasTranscript = !!options.transcript && options.transcript.trim().length > 0;
+        const queryText = options.query.trim() || (options.transcript ?? '').trim();
+        const semanticQuery = `${options.query}\n${options.transcript ?? ''}`.trim();
+        const usesTranscriptAsLexicalFallback = !options.query.trim()
+            && !!options.transcript?.trim();
 
         const sources: MaterialRagSource[] = files
             .filter((file) => file.content.trim())
@@ -216,6 +216,7 @@ export class ModeContextRetriever {
             }));
         const result = await this._materialRagRetriever!.retrieve({
             query: queryText,
+            semanticQuery,
             sources,
             filters: {
                 scopes: ['mode'],
@@ -224,7 +225,7 @@ export class ModeContextRetriever {
             },
             tokenBudget: options.tokenBudget,
             topK: options.topK,
-            hasTranscript,
+            hasTranscript: usesTranscriptAsLexicalFallback,
             format: 'mode_xml',
         });
 

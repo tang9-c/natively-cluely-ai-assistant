@@ -11,7 +11,8 @@ test('global RAG search falls back to lexical meeting title/summary/transcript m
   const retriever = read('electron/rag/RAGRetriever.ts');
   const vectorStore = read('electron/rag/VectorStore.ts');
 
-  assert.match(retriever, /searchLexicalMeetings\(retrievalQuery/);
+  assert.match(retriever, /searchLexicalMeetings\(query/);
+  assert.doesNotMatch(retriever, /searchLexicalMeetings\(retrievalQuery/);
   assert.match(retriever, /mergeHybridCandidates\(chunkResults,\s*meetingFallbackResults/);
   assert.doesNotMatch(retriever, /chunkResults\.length\s*===\s*0[\s\S]{0,120}searchLexicalMeetings/);
 

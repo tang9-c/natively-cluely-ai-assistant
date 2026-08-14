@@ -6,6 +6,7 @@ import { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
 import { DocumentTextExtractor } from '../profile/DocumentTextExtractor';
 import { MaterialRagRetriever, type MaterialRagSource } from './MaterialRagRetriever';
 import { analyzeMaterialQuery, termsForCandidateFiltering } from './MaterialQueryAnalysis';
+import { chunkReferenceText } from './ReferenceTextChunker';
 
 type MaterialStatus = 'queued' | 'indexing' | 'complete' | 'failed' | 'deleted';
 
@@ -439,21 +440,10 @@ function blobToVector(blob: Buffer): number[] {
 }
 
 function buildParentChildChunks(materialId: string, text: string): KnowledgeMaterialChunkInput[] {
-    const paragraphs = text
-        .split(/\n{2,}/)
-        .map((paragraph) => paragraph.replace(/\s+/g, ' ').trim())
-        .filter(Boolean);
-    const childTexts: string[] = [];
-    let current = '';
-    for (const paragraph of paragraphs.length ? paragraphs : [text]) {
-        if ((current + '\n' + paragraph).length > CHILD_TARGET_CHARS && current.trim()) {
-            childTexts.push(current.trim());
-            current = paragraph;
-        } else {
-            current = current ? `${current}\n${paragraph}` : paragraph;
-        }
-    }
-    if (current.trim()) childTexts.push(current.trim());
+    const childTexts = chunkReferenceText(text, {
+        targetChars: CHILD_TARGET_CHARS,
+        overlapChars: 120,
+    });
 
     return childTexts.map((child, index) => {
         const parentParts = childTexts.slice(Math.max(0, index - PARENT_WINDOW), index + PARENT_WINDOW + 1);

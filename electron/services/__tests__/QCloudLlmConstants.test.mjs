@@ -29,8 +29,8 @@ test('QCLOUD model specs declare explicit token windows for supported models', (
   assert.match(constants, /export const QCLOUD_MEETING_TITLE_OUTPUT_TOKENS = 64/);
   assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS = 4_096/);
   assert.match(constants, /export const QCLOUD_MEETING_SUMMARY_ENHANCEMENT_OUTPUT_TOKENS = 2_048/);
-  assert.match(constants, /export const QCLOUD_TRANSCRIPT_SKILL_DIRECT_INPUT_TOKENS = 48_000/);
-  assert.match(constants, /export const QCLOUD_TRANSCRIPT_SKILL_CHUNK_INPUT_TOKENS = 24_000/);
+  assert.match(constants, /export const QCLOUD_TRANSCRIPT_SKILL_DIRECT_INPUT_TOKENS = 12_000/);
+  assert.match(constants, /export const QCLOUD_TRANSCRIPT_SKILL_CHUNK_INPUT_TOKENS = 12_000/);
   assert.match(constants, /export const QCLOUD_TRANSCRIPT_SKILL_MAP_OUTPUT_TOKENS = 800/);
   assert.match(constants, /export const QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS = 6_144/);
   assert.match(constants, /export const QCLOUD_TRANSCRIPT_SKILL_MAP_CONCURRENCY = 2/);

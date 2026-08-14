@@ -148,20 +148,22 @@ test('dynamic action accept path is result-aware and records completion or failu
   assert.match(ipc, /dynamic-action:generation-failed/);
 });
 
-test('main records dynamic action shown once before forwarding to multiple windows', () => {
+test('main forwards candidate actions and renderer acknowledgement records shown once', () => {
   const source = read('electron/main.ts');
+  const ipc = read('electron/ipcHandlers.ts');
   const blockStart = source.indexOf('intelligence-dynamic-action');
   const block = source.slice(Math.max(0, blockStart - 900), blockStart + 900);
 
-  assert.match(block, /markDynamicActionShown\(action\.id\)/);
-  assert.match(block, /recordDynamicActionLifecycleEvent/);
-  assert.match(block, /helper\.getLauncherWindow\(\)\?\.webContents\.send\('intelligence-dynamic-action'/);
-  assert.match(block, /helper\.getOverlayWindow\(\)\?\.webContents\.send\('intelligence-dynamic-action'/);
+  assert.doesNotMatch(block, /markDynamicActionShown\(action\.id\)/);
+  assert.match(source, /deliver\('launcher', helper\.getLauncherWindow\(\)\)/);
+  assert.match(source, /deliver\('overlay', helper\.getOverlayWindow\(\)\)/);
+  assert.match(ipc, /safeHandle\('dynamic-action:ui-stage'/);
+  assert.match(ipc, /action\.status !== 'candidate'/);
+  assert.match(ipc, /recordDynamicActionLifecycle\('shown', shownAction\)/);
 });
 
 test('dynamic action complete and auto generation lifecycle events are recorded', () => {
   const ipc = read('electron/ipcHandlers.ts');
-  const main = read('electron/main.ts');
   const lifecycle = read('electron/services/dynamic-actions/DynamicActionLifecycle.ts');
 
   assert.match(lifecycle, /dynamic_action_auto_generated/);
@@ -173,7 +175,7 @@ test('dynamic action complete and auto generation lifecycle events are recorded'
   assert.match(ipc, /recordDynamicActionLifecycle\('generated_failed'/);
   assert.match(ipc, /recordDynamicActionLifecycle\('expired'/);
   assert.match(ipc, /triggerSource:\s*triggerSource/);
-  assert.match(main, /lifecycleEventToTelemetryName\('shown'\)/);
+  assert.match(ipc, /recordDynamicActionLifecycle\('shown'/);
 });
 
 test('generate-what-to-say IPC forwards promptInstruction option to IntelligenceManager', () => {

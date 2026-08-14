@@ -6,12 +6,20 @@ import { AnimatePresence } from 'framer-motion';
 import { CloudOff } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DynamicActionAvailabilityEvent } from '../../../shared/dynamicActionAvailability';
+import type {
+  DynamicActionUiDropReason,
+  DynamicActionUiStageReport,
+  DynamicActionUiSurface,
+} from '../../../shared/dynamicActionUiStage';
 import { sameSpeakerConfirmationSegment } from '../../../shared/speakerConfirmation';
 import { DynamicActionCard, type DynamicActionCardStatus } from './DynamicActionCard';
 
 const AUTO_TRIGGER_DELAY_MS = 5000;
 const AUTO_TRIGGER_MIN_CONFIDENCE = 0.9;
 const AVAILABILITY_STATUS_TTL_MS = 30_000;
+
+const getDynamicActionSurface = (): DynamicActionUiSurface =>
+  new URLSearchParams(window.location.search).get('window') === 'overlay' ? 'overlay' : 'launcher';
 
 type DynamicActionGenerationOptions = {
   source: 'dynamic_action';
@@ -83,7 +91,30 @@ export const DynamicActionBar: React.FC<Props> = ({
   const dismissRemovalTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const availabilityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggeringIdsRef = useRef<Set<string>>(new Set());
+  const reportedRenderedIdsRef = useRef<Set<string>>(new Set());
+  const reportedDroppedIdsRef = useRef<Set<string>>(new Set());
+  const pendingQueuedAgeRef = useRef<Map<string, number | undefined>>(new Map());
+  const [visibilityRevision, setVisibilityRevision] = useState(0);
+  const surface = useMemo(getDynamicActionSurface, []);
   actionsRef.current = actions;
+
+  const reportUiStage = useCallback((report: Omit<DynamicActionUiStageReport, 'surface'>) => {
+    window.electronAPI?.reportDynamicActionUiStage?.({ ...report, surface }).catch(() => {
+      /* reporting must not affect card behavior */
+    });
+  }, [surface]);
+
+  const reportDroppedOnce = useCallback((
+    actionId: string,
+    reason: DynamicActionUiDropReason,
+    ageMs?: number,
+    visibleCount?: number,
+  ) => {
+    const key = `${actionId}:${reason}`;
+    if (reportedDroppedIdsRef.current.has(key)) return;
+    reportedDroppedIdsRef.current.add(key);
+    reportUiStage({ actionId, stage: 'dropped', reason, ageMs, visibleCount });
+  }, [reportUiStage]);
 
   const clearAutoTimer = useCallback((id: string) => {
     const timer = autoTimersRef.current.get(id);
@@ -149,12 +180,34 @@ export const DynamicActionBar: React.FC<Props> = ({
 
   const handleIncoming = useCallback(
     (action: DynamicActionPayload) => {
+      if (!action || typeof action.id !== 'string' || !action.id) return;
+      const ageMs = typeof action.createdAt === 'number'
+        ? Math.max(0, Date.now() - action.createdAt)
+        : undefined;
+      reportUiStage({
+        actionId: action.id,
+        stage: 'received',
+        ageMs,
+        visibleCount: Math.min(actionsRef.current.length, maxVisible),
+      });
+      if (typeof action.createdAt !== 'number' || !action.productContract) {
+        reportDroppedOnce(action.id, 'invalid_payload', ageMs, actionsRef.current.length);
+        return;
+      }
       if (action.status === 'dismissed') {
         clearAutoTimer(action.id);
         triggeringIdsRef.current.delete(action.id);
         clearDismissRemovalTimer(action.id);
         setActions((prev) => prev.filter((item) => item.id !== action.id));
         return;
+      }
+      if (ageMs !== undefined && ageMs >= staleAfterMs) {
+        reportDroppedOnce(action.id, 'expired', ageMs, actionsRef.current.length);
+        return;
+      }
+      const existing = actionsRef.current.some((item) => item.id === action.id);
+      if (existing) {
+        reportDroppedOnce(action.id, 'duplicate', ageMs, actionsRef.current.length);
       }
       const isAuto = isSemiAutoAction(action);
       const actionView: DynamicActionView = action.speakerConfirmation
@@ -172,6 +225,16 @@ export const DynamicActionBar: React.FC<Props> = ({
             ...action,
             uiStatus: 'candidate',
           };
+      const projected = [...actionsRef.current.filter((item) => item.id !== action.id), actionView]
+        .filter((item) => Date.now() - item.createdAt < staleAfterMs)
+        .sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt)
+        .slice(0, maxVisible * 2);
+      const overBufferLimit = !existing && !projected.some((item) => item.id === action.id);
+      if (overBufferLimit) {
+        reportDroppedOnce(action.id, 'over_buffer_limit', ageMs, Math.min(projected.length, maxVisible));
+      } else if (!existing) {
+        pendingQueuedAgeRef.current.set(action.id, ageMs);
+      }
       setActions((prev) => {
         // Dedupe by id (engine has already deduped at backend, but renderer
         // may receive late-arriving duplicates after a window restore).
@@ -189,7 +252,15 @@ export const DynamicActionBar: React.FC<Props> = ({
       });
       if (isAuto) scheduleAutoTrigger(actionView);
     },
-    [staleAfterMs, maxVisible, scheduleAutoTrigger],
+    [
+      clearAutoTimer,
+      clearDismissRemovalTimer,
+      maxVisible,
+      reportDroppedOnce,
+      reportUiStage,
+      scheduleAutoTrigger,
+      staleAfterMs,
+    ],
   );
 
   const dismiss = useCallback((id: string) => {
@@ -292,7 +363,30 @@ export const DynamicActionBar: React.FC<Props> = ({
       if (availabilityTimerRef.current) clearTimeout(availabilityTimerRef.current);
       availabilityTimerRef.current = null;
       triggeringIdsRef.current.clear();
+      reportedRenderedIdsRef.current.clear();
+      reportedDroppedIdsRef.current.clear();
+      pendingQueuedAgeRef.current.clear();
     };
+  }, []);
+
+  useEffect(() => {
+    actions.forEach((action) => {
+      if (!pendingQueuedAgeRef.current.has(action.id)) return;
+      const ageMs = pendingQueuedAgeRef.current.get(action.id);
+      pendingQueuedAgeRef.current.delete(action.id);
+      reportUiStage({
+        actionId: action.id,
+        stage: 'queued',
+        ageMs,
+        visibleCount: Math.min(actions.length, maxVisible),
+      });
+    });
+  }, [actions, maxVisible, reportUiStage]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => setVisibilityRevision((revision) => revision + 1);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
   // Keyboard: Tab accepts primary
@@ -339,15 +433,40 @@ export const DynamicActionBar: React.FC<Props> = ({
         const fresh = prev.filter((a) => Date.now() - a.createdAt < staleAfterMs);
         const freshIds = new Set(fresh.map((a) => a.id));
         prev.forEach((a) => {
-          if (!freshIds.has(a.id)) clearAutoTimer(a.id);
+          if (!freshIds.has(a.id)) {
+            clearAutoTimer(a.id);
+            reportDroppedOnce(a.id, 'expired', Math.max(0, Date.now() - a.createdAt), fresh.length);
+          }
         });
         return fresh;
       });
     }, 5_000);
     return () => clearInterval(t);
-  }, [staleAfterMs, actions.length, clearAutoTimer]);
+  }, [staleAfterMs, actions.length, clearAutoTimer, reportDroppedOnce]);
 
   const visible = useMemo(() => actions.slice(0, maxVisible), [actions, maxVisible]);
+
+  useEffect(() => {
+    if (visible.length === 0 || document.visibilityState !== 'visible') return;
+    const frame = requestAnimationFrame(() => {
+      const renderedNodes = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-dynamic-action-id]'),
+      );
+      visible.forEach((action) => {
+        if (reportedRenderedIdsRef.current.has(action.id)) return;
+        const rendered = renderedNodes.some((node) => node.dataset.dynamicActionId === action.id);
+        if (!rendered) return;
+        reportedRenderedIdsRef.current.add(action.id);
+        reportUiStage({
+          actionId: action.id,
+          stage: 'rendered',
+          ageMs: Math.max(0, Date.now() - action.createdAt),
+          visibleCount: visible.length,
+        });
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [reportUiStage, visibilityRevision, visible]);
   const availabilityCopy = availability?.status === 'local_fallback'
     ? {
         title: '云端服务繁忙，部分明确提示已切换为受限本地判断',

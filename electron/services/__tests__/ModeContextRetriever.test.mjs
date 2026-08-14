@@ -120,6 +120,87 @@ test('ModeContextRetriever lexical fallback retrieves Chinese sales case-study s
   assert.match(result.formattedContext, /降低成本 20%/);
 });
 
+test('ModeContextRetriever keeps a short Chinese question relevant despite a long unrelated transcript', async () => {
+  const { ModeContextRetriever } = await loadRetriever();
+  const retriever = new ModeContextRetriever();
+  const mode = {
+    id: 'mode-chinese-query',
+    name: '中文检索',
+    templateType: 'general',
+    customContext: '',
+  };
+  const files = [{
+    id: 'robotics-file',
+    modeId: mode.id,
+    fileName: '机器人.txt',
+    content: '手术机器人包含约 15000 个零件，并需要复杂的供应链管理。',
+  }];
+  const unrelatedTranscript = Array.from({ length: 80 }, (_, index) =>
+    `第${index}轮讨论数字化交付流程预算审批客户实施项目风险以及其他无关事项`
+  ).join('。');
+
+  const result = retriever.retrieve(mode, files, {
+    query: '手术机器人',
+    transcript: unrelatedTranscript,
+  });
+
+  assert.match(result.formattedContext, /手术机器人/);
+});
+
+test('ModeContextRetriever does not retrieve transcript-only material when the user question is non-empty', async () => {
+  const { ModeContextRetriever } = await loadRetriever();
+  const retriever = new ModeContextRetriever();
+  const result = retriever.retrieve(mode, [
+    {
+      id: 'robotics-file',
+      modeId: mode.id,
+      fileName: '机器人.txt',
+      content: '手术机器人包含约 15000 个零件，并需要复杂的供应链管理。',
+    },
+    {
+      id: 'handover-file',
+      modeId: mode.id,
+      fileName: '移交.txt',
+      content: '数字化移交数字化移交数字化移交，需要完成预算审批和验收。',
+    },
+  ], {
+    query: '手术机器人',
+    transcript: '会议正在反复讨论数字化移交数字化移交数字化移交和预算审批',
+  });
+
+  assert.match(result.formattedContext, /手术机器人/);
+  assert.doesNotMatch(result.formattedContext, /需要完成预算审批和验收/);
+});
+
+test('ModeContextRetriever hybrid path separates the raw question from transcript-enhanced semanticQuery', async () => {
+  const { ModeContextRetriever } = await loadRetriever();
+  const retriever = new ModeContextRetriever();
+  let received;
+  retriever._hybridRetriever = {};
+  retriever._materialRagRetriever = {
+    async retrieve(params) {
+      received = params;
+      return { chunks: [], formattedContext: '', usedFallback: true, usedHybrid: false };
+    },
+  };
+  const mode = {
+    id: 'mode-query-separation',
+    name: '检索分离',
+    templateType: 'general',
+    customContext: '',
+  };
+
+  await retriever.retrieveHybrid(mode, [], {
+    query: '手术机器人',
+    transcript: '会议正在讨论数字化移交和预算审批',
+  });
+
+  assert.equal(received.query, '手术机器人');
+  assert.equal(received.semanticQuery, '手术机器人\n会议正在讨论数字化移交和预算审批');
+  assert.equal(received.lexicalContextQuery, undefined);
+  assert.equal(received.hasTranscript, false);
+});
+
 test('ModeContextRetriever retrieves sales proof material for case-study question', async () => {
   const { ModeContextRetriever } = await loadRetriever();
   const retriever = new ModeContextRetriever();

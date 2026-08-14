@@ -102,6 +102,7 @@ test.describe('Cluely-parity gap E2E evidence', () => {
         onMeetingRetentionChanged: typeof api.onMeetingRetentionChanged,
         generateWhatToSay: typeof api.generateWhatToSay,
         acceptDynamicAction: typeof api.acceptDynamicAction,
+        reportDynamicActionUiStage: typeof api.reportDynamicActionUiStage,
       };
     });
 

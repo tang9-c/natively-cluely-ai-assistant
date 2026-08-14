@@ -324,12 +324,11 @@ test('customContext is trimmed before becoming a source', async () => {
   assert.match(result.formattedContext, /Pricing objection handling/);
 });
 
-test('transcript words boost scoring for the on-topic chunk', async () => {
+test('transcript words do not enter lexical scoring when the user query is non-empty', async () => {
   const { ModeContextRetriever } = await loadRetriever();
   const retriever = new ModeContextRetriever();
-  // Two files, one about procurement timing, one about lizards. The query
-  // alone wouldn't catch the procurement file (zero overlap), so the
-  // transcript has to contribute the relevant terms.
+  // Neither file contains the explicit query. Transcript context may enrich
+  // semantic retrieval, but must not alter this synchronous lexical path.
   const result = retriever.retrieve(baseMode, [
     makeFile({
       id: 'file_procurement',
@@ -348,10 +347,8 @@ test('transcript words boost scoring for the on-topic chunk', async () => {
     tokenBudget: 5000,
   });
 
-  // The transcript mentions "procurement timing", so the procurement file
-  // should be retrieved. The lizards file should be filtered out.
   const hasProcurement = result.snippets.some(s => s.sourceId === 'file_procurement');
   const hasLizards = result.snippets.some(s => s.sourceId === 'file_lizards');
-  assert.equal(hasProcurement, true, 'transcript terms must contribute to scoring');
+  assert.equal(hasProcurement, false, 'transcript terms must not contribute to lexical scoring');
   assert.equal(hasLizards, false, 'unrelated file must not appear in snippets');
 });

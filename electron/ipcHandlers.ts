@@ -76,6 +76,10 @@ import {
 } from './rag/LiveRagQueryGuard';
 import { buildRealtimeDiagnosticsSummary } from '../shared/realtimeAnswerTrustViewModel';
 import type { MeetingSearchRequest, MeetingSearchResult } from '../shared/meetingSearch';
+import {
+  sanitizeDynamicActionUiStageReport,
+  type DynamicActionUiStageReport,
+} from '../shared/dynamicActionUiStage';
 import { executeMeetingSearch } from './rag/MeetingSearchFlow';
 import { MeetingSearchRequestRegistry } from './rag/MeetingSearchRequestRegistry';
 import { buildEmbeddingRuntimeConfig } from './rag/EmbeddingRuntimeConfig';
@@ -3924,6 +3928,106 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   };
 
+  safeHandle('dynamic-action:ui-stage', async (_, input: DynamicActionUiStageReport) => {
+    const report = sanitizeDynamicActionUiStageReport(input);
+    if (!report) return { success: false, error: 'invalid_ui_stage_report' };
+
+    const intelligenceManager = appState.getIntelligenceManager();
+    const action = intelligenceManager.getDynamicActionById(report.actionId);
+    const eventName = {
+      received: 'dynamic_action_renderer_received',
+      queued: 'dynamic_action_renderer_queued',
+      rendered: 'dynamic_action_renderer_rendered',
+      dropped: 'dynamic_action_renderer_dropped',
+    }[report.stage];
+
+    try {
+      telemetryService.track({
+        name: eventName,
+        sessionId: action?.sessionId,
+        modeId: action?.modeId,
+        status: action?.status,
+        properties: {
+          actionId: report.actionId,
+          stage: report.stage,
+          surface: report.surface,
+          ...(report.reason ? { reason: report.reason } : {}),
+          ...(report.ageMs !== undefined ? { ageMs: report.ageMs } : {}),
+          ...(report.visibleCount !== undefined ? { visibleCount: report.visibleCount } : {}),
+          ...(action ? {
+            actionType: action.type,
+            modeTemplateType: action.modeTemplateType,
+          } : {}),
+        },
+      });
+    } catch {
+      /* telemetry must not affect UI acknowledgement */
+    }
+
+    if (!action) {
+      if (appState.getVerboseLogging()) {
+        console.log('[DynamicActionUI] stage', {
+          actionId: report.actionId,
+          stage: report.stage,
+          surface: report.surface,
+          reason: report.reason,
+          result: 'not_found',
+        });
+      }
+      return { success: false, error: 'not_found' };
+    }
+
+    if (report.stage === 'rendered') {
+      if (action.status !== 'candidate') {
+        if (appState.getVerboseLogging()) {
+          console.log('[DynamicActionUI] stage', {
+            actionId: report.actionId,
+            actionType: action.type,
+            modeTemplateType: action.modeTemplateType,
+            stage: report.stage,
+            surface: report.surface,
+            ageMs: report.ageMs,
+            visibleCount: report.visibleCount,
+            result: 'duplicate',
+          });
+        }
+        return { success: true, acknowledged: false, duplicate: true };
+      }
+
+      const shownAction = intelligenceManager.markDynamicActionShown(action.id);
+      if (!shownAction) return { success: false, error: 'not_found' };
+      recordDynamicActionLifecycle('shown', shownAction);
+      if (appState.getVerboseLogging()) {
+        console.log('[DynamicActionUI] stage', {
+          actionId: report.actionId,
+          actionType: shownAction.type,
+          modeTemplateType: shownAction.modeTemplateType,
+          stage: report.stage,
+          surface: report.surface,
+          ageMs: report.ageMs,
+          visibleCount: report.visibleCount,
+          result: 'first_confirmation',
+        });
+      }
+      return { success: true, acknowledged: true, duplicate: false };
+    }
+
+    if (appState.getVerboseLogging()) {
+      console.log('[DynamicActionUI] stage', {
+        actionId: report.actionId,
+        actionType: action.type,
+        modeTemplateType: action.modeTemplateType,
+        stage: report.stage,
+        surface: report.surface,
+        reason: report.reason,
+        ageMs: report.ageMs,
+        visibleCount: report.visibleCount,
+        result: 'recorded',
+      });
+    }
+    return { success: true, acknowledged: false };
+  });
+
   safeHandle('dynamic-action:accept', async (_, actionId: string, options?: { triggerSource?: 'manual' | 'auto_countdown' }) => {
     try {
       if (typeof actionId !== 'string' || !actionId) {
@@ -4215,6 +4319,34 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Query global (cross-meeting search)
+  safeHandle('rag:search-global-meetings', async (_event, input: { query?: string; limit?: number }) => {
+    const query = String(input?.query || '').trim();
+    if ([...query].length < 2) return { success: true, hits: [] };
+    const requestedLimit = Number(input?.limit);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.max(1, Math.min(20, Math.floor(requestedLimit)))
+      : 5;
+    const ragManager = appState.getRAGManager();
+    if (!ragManager) {
+      return { success: false, hits: [], degradedReason: 'rag_unavailable' };
+    }
+    const startedAt = Date.now();
+    try {
+      const hits = await ragManager.searchGlobalMeetings(query, limit);
+      console.log('[RAG] Structured global meeting search complete', {
+        durationMs: Date.now() - startedAt,
+        resultCount: hits.length,
+      });
+      return { success: true, hits };
+    } catch {
+      console.warn('[RAG] Structured global meeting search unavailable', {
+        durationMs: Date.now() - startedAt,
+        errorType: 'search_failed',
+      });
+      return { success: false, hits: [], degradedReason: 'search_failed' };
+    }
+  });
+
   safeHandle('rag:query-global', async (event, { query }: { query: string }) => {
     const ragManager = appState.getRAGManager();
 

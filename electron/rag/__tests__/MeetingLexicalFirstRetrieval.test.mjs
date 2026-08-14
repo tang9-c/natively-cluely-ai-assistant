@@ -31,6 +31,7 @@ function createHarness({
   const calls = {
     lexical: [],
     vector: [],
+    embeddingQueries: [],
     embedding: 0,
   };
   const vectorStore = {
@@ -47,8 +48,9 @@ function createHarness({
     isReady() {
       return embeddingReady;
     },
-    async getEmbeddingForQuery() {
+    async getEmbeddingForQuery(query) {
       calls.embedding += 1;
+      calls.embeddingQueries.push(query);
       if (embeddingError) throw embeddingError;
       return [0.1, 0.2, 0.3];
     },
@@ -86,6 +88,60 @@ test('meeting retrieval preserves lexical results when query embedding fails', a
   assert.deepEqual(result.chunks.map((item) => item.meetingId), ['meeting-a']);
   assert.equal(calls.embedding, 1);
   assert.equal(calls.lexical.length, 1);
+});
+
+test('meeting retrieval keeps the raw query lexical and uses semanticQuery only for embeddings', async () => {
+  const { retriever, calls } = createHarness({ embeddingReady: true });
+
+  await retriever.retrieve('手术机器人', {
+    meetingId: 'meeting-a',
+    semanticQuery: '手术机器人\nintent:open_question\n机器人行业方案',
+  });
+
+  assert.equal(calls.lexical[0].query, '手术机器人');
+  assert.deepEqual(calls.embeddingQueries, ['手术机器人\nintent:open_question\n机器人行业方案']);
+});
+
+test('meeting retrieval prioritizes an old exact Chinese phrase over recent semantic candidates', async () => {
+  const now = Date.now();
+  const vector = Array.from({ length: 8 }, (_, index) => ({
+    ...chunk(index + 10, 'meeting-a', `近期语义候选 ${index}`, 0.5),
+    absoluteStartMs: now,
+  }));
+  const exact = {
+    ...chunk(100, 'meeting-a', '康乐斯团的手术机器人有 15000 个零件', 1),
+    absoluteStartMs: Date.UTC(2024, 0, 1),
+    lexicalScore: 1,
+    vectorScore: 0,
+  };
+  const { retriever } = createHarness({
+    embeddingReady: true,
+    lexical: [exact],
+    vector,
+  });
+
+  const result = await retriever.retrieve('手术机器人', {
+    meetingId: 'meeting-a',
+    topK: 8,
+  });
+
+  assert.ok(result.chunks.some((item) => item.id === exact.id));
+});
+
+test('meeting retrieval skips an oversized candidate and keeps later exact evidence', async () => {
+  const lexical = Array.from({ length: 6 }, (_, index) => ({
+    ...chunk(200 + index, 'meeting-a', `数字化移交证据 ${index}`, 1 - (index * 0.05)),
+    tokenCount: index === 4 ? 100 : 10,
+  }));
+  const { retriever } = createHarness({ embeddingReady: false, lexical });
+
+  const result = await retriever.retrieve('数字化移交', {
+    meetingId: 'meeting-a',
+    topK: 8,
+    maxTokens: 100,
+  });
+
+  assert.ok(result.chunks.some((item) => item.id === lexical[5].id));
 });
 
 test('meeting retrieval removes candidates that do not match the requested meeting', async () => {

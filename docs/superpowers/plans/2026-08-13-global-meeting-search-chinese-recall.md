@@ -59,6 +59,11 @@ test('still removes one-character CJK noise and short English text', () => {
   assert.equal(preprocessTranscript(segment('啊')).length, 0);
   assert.equal(preprocessTranscript(segment('go now')).length, 0);
 });
+
+test('keeps meaningful mixed-language text with one CJK character', () => {
+  assert.equal(preprocessTranscript(segment('AI 在 production is unavailable')).length, 1);
+  assert.equal(preprocessTranscript(segment('啊 hello')).length, 0);
+});
 ```
 
 - [ ] **Step 2: Verify RED**
@@ -77,7 +82,7 @@ Expected: the meaningful-Chinese test fails because whitespace counting reports 
 ```ts
 function hasMeaningfulContent(text: string): boolean {
     const cjkCount = (text.match(/[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/g) ?? []).length;
-    if (cjkCount > 0) return cjkCount >= 2;
+    if (cjkCount >= 2) return true;
     return text.split(/\s+/).filter(Boolean).length >= 3;
 }
 ```
@@ -186,10 +191,10 @@ Run Step 2. Expected: query separation and degradation tests pass with no raw er
 - [ ] **Step 1: Add the failing ranking test**
 
 ```js
-test('old exact Chinese phrase survives Top-K against recent weak semantic matches', async () => {
+test('old exact Chinese phrase survives Top-K against recent semantic matches', async () => {
   const now = Date.now();
   const recentWeak = Array.from({ length: 8 }, (_, index) => ({
-    ...chunk(index + 1, `recent-${index}`, `近期无关候选 ${index}`, 0.25),
+    ...chunk(index + 1, `recent-${index}`, `近期无关候选 ${index}`, 0.5),
     absoluteStartMs: now,
   }));
   const exactOld = {
@@ -210,7 +215,7 @@ test('old exact Chinese phrase survives Top-K against recent weak semantic match
 
 - [ ] **Step 2: Verify RED**
 
-Run the Task 2 test command. Expected: eight recent weak chunks displace the old exact chunk.
+Run the Task 2 test command. Expected: eight recent medium-similarity chunks displace the old exact chunk.
 
 - [ ] **Step 3: Implement exact-first ordering**
 
@@ -227,6 +232,7 @@ const orderedCandidates = [
 ```
 
 Iterate over `orderedCandidates` in the existing token-budget loop. Do not bypass `maxTokens` or change `topK`.
+When a candidate does not fit, `continue` scanning instead of terminating the loop so a later smaller exact candidate can still be selected.
 
 - [ ] **Step 4: Rebuild and verify GREEN**
 
@@ -248,14 +254,18 @@ Run the Task 2 command. Expected: all tests in the file pass.
 Create tables `meetings(id, title, summary_json, start_time, created_at)` and `transcripts(id, meeting_id, content, timestamp_ms)`, then add:
 
 ```js
-test('raw transcript fallback finds every reported Chinese phrase without chunks', async () => {
+test('global retrieval finds every reported Chinese phrase from raw transcripts without chunks', async () => {
   const db = createSearchDatabase();
   const store = Object.create(VectorStore.prototype);
   store.db = db;
+  const retriever = createRetriever({
+    embeddingReady: false,
+    meetingFallback: (query, options) => store.searchLexicalMeetings(query, options),
+  });
 
   for (const phrase of ['数字化移交', '手术机器人', '机器人']) {
-    const results = await store.searchLexicalMeetings(phrase, { limit: 8 });
-    assert.ok(results.some((item) => item.text.includes(phrase)), phrase);
+    const result = await retriever.retrieveGlobal(phrase);
+    assert.match(result.formattedContext, new RegExp(phrase), phrase);
   }
 
   db.close();
@@ -324,4 +334,3 @@ Expected: modified nodes and new tests appear.
 - [ ] **Step 5: Report without committing production changes**
 
 Report exact test counts and workspace state. Do not commit production changes unless separately requested.
-

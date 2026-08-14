@@ -99,9 +99,8 @@ function makeWindowHelper(ipcRenderer) {
 
 function bindMainDynamicActionForwarding(intelligenceManager, windowHelper) {
   intelligenceManager.on('dynamic_action_emitted', (action) => {
-    const shownAction = intelligenceManager.markDynamicActionShown(action.id) ?? action;
-    windowHelper.getLauncherWindow()?.webContents.send('intelligence-dynamic-action', { action: shownAction });
-    windowHelper.getOverlayWindow()?.webContents.send('intelligence-dynamic-action', { action: shownAction });
+    windowHelper.getLauncherWindow()?.webContents.send('intelligence-dynamic-action', { action });
+    windowHelper.getOverlayWindow()?.webContents.send('intelligence-dynamic-action', { action });
   });
 }
 
@@ -146,7 +145,7 @@ test('sales discovery transcript reaches main forwarding and renderer dynamic ac
 
   const action = rendererActions[0];
   assert.equal(action.type, 'discovery_question');
-  assert.equal(action.status, 'shown');
+  assert.equal(action.status, 'candidate');
   assert.equal(action.sourceIntent, 'sales_pain_discovery');
   assert.equal(action.modeTemplateType, 'sales');
   assert.equal(action.latestTurn, '我们 PLM 发布 BOM 之后,靠邮件通知下游,经常不同步,设计变更下去了采购还在用旧版本。');
@@ -162,4 +161,49 @@ test('DynamicActionBar is wired to the preload dynamic action subscription and r
   assert.match(source, /handleIncoming\(data\.action\)/);
   assert.match(source, /<DynamicActionCard/);
   assert.match(source, /data-testid="dynamic-action-bar"/);
+});
+
+test('main keeps emitted actions as candidates until renderer confirms a visible render', () => {
+  const main = fs.readFileSync(path.join(root, 'electron/main.ts'), 'utf8');
+  const emittedBlock = main.match(/this\.intelligenceManager\.on\('dynamic_action_emitted'[\s\S]*?this\.intelligenceManager\.on\('suggested_answer'/)?.[0] ?? '';
+
+  assert.ok(emittedBlock, 'expected the dynamic action forwarding block');
+  assert.doesNotMatch(emittedBlock, /markDynamicActionShown/);
+  assert.doesNotMatch(emittedBlock, /lifecycleEventToTelemetryName\('shown'\)/);
+  assert.match(emittedBlock, /dynamic_action_delivery_attempted/);
+  assert.match(emittedBlock, /intelligence-dynamic-action/);
+});
+
+test('renderer reports received queued rendered and dropped stages without user content', () => {
+  const component = fs.readFileSync(path.join(root, 'src/components/dynamic-actions/DynamicActionBar.tsx'), 'utf8');
+  const card = fs.readFileSync(path.join(root, 'src/components/dynamic-actions/DynamicActionCard.tsx'), 'utf8');
+  const sharedPath = path.join(root, 'shared/dynamicActionUiStage.ts');
+
+  assert.equal(fs.existsSync(sharedPath), true, 'expected a shared UI stage contract');
+  const shared = fs.readFileSync(sharedPath, 'utf8');
+  assert.match(component, /reportDynamicActionUiStage/);
+  for (const stage of ['received', 'queued', 'rendered', 'dropped']) {
+    assert.match(component, new RegExp(`stage:\\s*['"]${stage}['"]`));
+  }
+  assert.match(component, /document\.visibilityState/);
+  assert.match(component, /requestAnimationFrame/);
+  assert.match(card, /data-dynamic-action-id/);
+  assert.doesNotMatch(shared, /transcript|evidence|prompt|answer|content|message/i);
+});
+
+test('preload and IPC expose an idempotent renderer stage acknowledgement', () => {
+  const preload = fs.readFileSync(path.join(root, 'electron/preload.ts'), 'utf8');
+  const types = fs.readFileSync(path.join(root, 'src/types/electron.d.ts'), 'utf8');
+  const ipc = fs.readFileSync(path.join(root, 'electron/ipcHandlers.ts'), 'utf8');
+  const manager = fs.readFileSync(path.join(root, 'electron/IntelligenceManager.ts'), 'utf8');
+
+  assert.match(preload, /reportDynamicActionUiStage/);
+  assert.match(preload, /dynamic-action:ui-stage/);
+  assert.match(types, /reportDynamicActionUiStage/);
+  assert.match(ipc, /safeHandle\('dynamic-action:ui-stage'/);
+  assert.match(ipc, /getDynamicActionById\(report\.actionId\)/);
+  assert.match(manager, /getDynamicActionById\(actionId/);
+  assert.match(ipc, /report\.stage === 'rendered'/);
+  assert.match(ipc, /action\.status !== 'candidate'/);
+  assert.match(ipc, /recordDynamicActionLifecycle\('shown'/);
 });

@@ -280,6 +280,10 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.markDynamicActionShown(actionId);
     }
 
+    getDynamicActionById(actionId: string): import('./services/dynamic-actions/DynamicAction').DynamicAction | null {
+        return this.engine.getDynamicActionById(actionId);
+    }
+
     completeDynamicAction(actionId: string): import('./services/dynamic-actions/DynamicAction').DynamicAction | null {
         return this.engine.completeDynamicAction(actionId);
     }

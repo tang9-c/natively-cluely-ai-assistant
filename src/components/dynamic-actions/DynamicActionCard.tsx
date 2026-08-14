@@ -75,6 +75,7 @@ export const DynamicActionCard: React.FC<Props> = ({
 
   return (
     <motion.div
+      data-dynamic-action-id={action.id}
       layout
       initial={{ opacity: 0, y: -8, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}

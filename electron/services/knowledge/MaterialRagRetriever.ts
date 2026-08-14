@@ -8,6 +8,7 @@ import {
     wordsOf,
 } from './LexicalScoring';
 import type { WeightedMaterialQueryTerm } from './MaterialQueryAnalysis';
+import { chunkReferenceText } from './ReferenceTextChunker';
 
 export type MaterialRagScope = 'global' | 'mode' | 'scenario' | 'meeting';
 
@@ -71,8 +72,6 @@ export interface MaterialRagContext {
 
 const DEFAULT_TOKEN_BUDGET = 1800;
 const DEFAULT_TOP_K = 6;
-const CHUNK_WORDS = 140;
-const CHUNK_OVERLAP = 30;
 const MIN_COMBINED_SCORE = 0.15;
 const FTS_WEIGHT = 0.4;
 const FALLBACK_TELEMETRY_THROTTLE_MS = 60_000;
@@ -140,8 +139,10 @@ export class MaterialRagRetriever {
         format?: 'mode_xml' | 'material_xml' | 'none';
         weightedTerms?: WeightedMaterialQueryTerm[];
         hybridTimeoutMs?: number;
+        semanticQuery?: string;
     }): Promise<MaterialRagContext> {
         const queryText = params.query.trim();
+        const semanticQueryText = params.semanticQuery?.trim() || queryText;
         const queryWords = new Set(wordsOf(queryText));
         if (queryWords.size === 0) {
             return { chunks: [], formattedContext: '', usedFallback: true, usedHybrid: false };
@@ -165,7 +166,14 @@ export class MaterialRagRetriever {
         if (this.embeddingPipeline?.isReady()) {
             try {
                 scored = await withHybridRetrievalBudget(
-                    this.scoreHybrid(candidates, queryWords, queryText, relevanceThreshold, hasCjkQuery, params.weightedTerms),
+                    this.scoreHybrid(
+                        candidates,
+                        queryWords,
+                        semanticQueryText,
+                        relevanceThreshold,
+                        hasCjkQuery,
+                        params.weightedTerms,
+                    ),
                     params.hybridTimeoutMs,
                 );
             } catch (error) {
@@ -178,7 +186,13 @@ export class MaterialRagRetriever {
                     modeId: params.filters?.modeId,
                     errorClass: error instanceof Error ? error.constructor.name : typeof error,
                 });
-                scored = this.scoreLexical(candidates, queryWords, relevanceThreshold, hasCjkQuery, params.weightedTerms);
+                scored = this.scoreLexical(
+                    candidates,
+                    queryWords,
+                    relevanceThreshold,
+                    hasCjkQuery,
+                    params.weightedTerms,
+                );
             }
         } else {
             usedFallback = true;
@@ -189,7 +203,13 @@ export class MaterialRagRetriever {
                 queryTokenCount: queryWords.size,
                 modeId: params.filters?.modeId,
             });
-            scored = this.scoreLexical(candidates, queryWords, relevanceThreshold, hasCjkQuery, params.weightedTerms);
+            scored = this.scoreLexical(
+                candidates,
+                queryWords,
+                relevanceThreshold,
+                hasCjkQuery,
+                params.weightedTerms,
+            );
         }
 
         scored.sort((a, b) => this.rankingScore(b) - this.rankingScore(a));
@@ -308,7 +328,12 @@ export class MaterialRagRetriever {
         return candidates
             .map((candidate, index) => ({
                 ...candidate,
-                ftsScore: this.computeCandidateLexicalScore(candidate.text, queryWords, hasCjkQuery, weightedTerms),
+                ftsScore: this.computeCandidateLexicalScore(
+                    candidate.text,
+                    queryWords,
+                    hasCjkQuery,
+                    weightedTerms,
+                ),
                 vectorScore: chunkEmbeddings[index] ? cosine(queryEmbedding, chunkEmbeddings[index]) : 0,
             }))
             .filter((candidate) => this.finalScore(candidate) >= minScore);
@@ -324,7 +349,12 @@ export class MaterialRagRetriever {
         return candidates
             .map((candidate) => ({
                 ...candidate,
-                ftsScore: this.computeCandidateLexicalScore(candidate.text, queryWords, hasCjkQuery, weightedTerms),
+                ftsScore: this.computeCandidateLexicalScore(
+                    candidate.text,
+                    queryWords,
+                    hasCjkQuery,
+                    weightedTerms,
+                ),
                 vectorScore: 0,
             }))
             .filter((candidate) => candidate.ftsScore >= minScore);
@@ -428,14 +458,5 @@ export class MaterialRagRetriever {
 }
 
 function chunkText(content: string): string[] {
-    const words = content.trim().split(/\s+/).filter(Boolean);
-    if (words.length === 0) return [];
-    if (words.length <= CHUNK_WORDS) return [words.join(' ')];
-    const chunks: string[] = [];
-    for (let i = 0; i < words.length; i += CHUNK_WORDS - CHUNK_OVERLAP) {
-        const chunk = words.slice(i, i + CHUNK_WORDS).join(' ');
-        if (chunk.trim()) chunks.push(chunk);
-        if (i + CHUNK_WORDS >= words.length) break;
-    }
-    return chunks;
+    return chunkReferenceText(content);
 }

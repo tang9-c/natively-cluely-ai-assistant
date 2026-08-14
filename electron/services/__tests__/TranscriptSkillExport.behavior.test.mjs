@@ -49,7 +49,7 @@ test('transcript chunks preserve content and only hard-split oversized lines', (
 test('short transcript uses one direct request with the complete transcript', async () => {
   const { generateTranscriptSkillContent } = loadService();
   const calls = [];
-  const transcriptMarkdown = '中'.repeat(48_000);
+  const transcriptMarkdown = '中'.repeat(12_000);
   const llmHelper = {
     async chatWithGemini(...args) {
       calls.push(args);
@@ -71,7 +71,7 @@ test('short transcript uses one direct request with the complete transcript', as
 
 test('long transcript maps with concurrency two and reduces ordered intermediate output', async () => {
   const { generateTranscriptSkillContent } = loadService();
-  const transcriptMarkdown = '中'.repeat(48_001);
+  const transcriptMarkdown = '中'.repeat(12_001);
   const calls = [];
   let activeMaps = 0;
   let maxActiveMaps = 0;
@@ -98,7 +98,7 @@ test('long transcript maps with concurrency two and reduces ordered intermediate
   const reduceCalls = calls.filter(call => call.args[5].qcloudReasoningEffort === 'minimal');
 
   assert.equal(result, '# 最终结果');
-  assert.equal(mapCalls.length, 3);
+  assert.equal(mapCalls.length, 2);
   assert.equal(reduceCalls.length, 1);
   assert.equal(maxActiveMaps, 2);
   assert.equal(mapCalls.map(call => call.args[2]).join(''), transcriptMarkdown);
@@ -110,7 +110,6 @@ test('long transcript maps with concurrency two and reduces ordered intermediate
 
   const reduceContext = reduceCalls[0].args[2];
   assert.ok(reduceContext.indexOf('summary-0') < reduceContext.indexOf('summary-1'));
-  assert.ok(reduceContext.indexOf('summary-1') < reduceContext.indexOf('summary-2'));
   assert.equal(reduceContext.includes(transcriptMarkdown), false);
   assert.equal(reduceCalls[0].args[5].maxOutputTokens, 6_144);
   assert.deepEqual(reduceCalls[0].args[5].qcloudThinking, { type: 'enabled' });
@@ -132,7 +131,7 @@ test('long transcript does not reduce when a map request fails', async () => {
 
   await assert.rejects(
     generateTranscriptSkillContent({
-      transcriptMarkdown: '中'.repeat(48_001),
+      transcriptMarkdown: '中'.repeat(12_001),
       activeSkill,
       llmHelper,
     }),
@@ -154,7 +153,7 @@ test('long transcript does not reduce an LLM failure fallback from a map request
 
   await assert.rejects(
     generateTranscriptSkillContent({
-      transcriptMarkdown: '中'.repeat(48_001),
+      transcriptMarkdown: '中'.repeat(12_001),
       activeSkill,
       llmHelper,
     }),

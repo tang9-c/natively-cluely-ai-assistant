@@ -25,6 +25,7 @@ export interface RetrievalOptions {
     intent?: QueryIntent;         // Override detected intent
     recentTranscriptTurns?: string[];
     modeIntent?: string;
+    semanticQuery?: string;       // Optional expanded query used only for embeddings
 }
 
 export interface RetrievedContext {
@@ -80,7 +81,7 @@ export class RAGRetriever {
 
         // Detect query intent (can be overridden)
         const intent = overrideIntent || this.detectIntent(query);
-        const retrievalQuery = this.buildRetrievalQuery(query, {
+        const retrievalQuery = options.semanticQuery?.trim() || this.buildRetrievalQuery(query, {
             recentTranscriptTurns: options.recentTranscriptTurns,
             modeIntent: options.modeIntent ?? intent,
         });
@@ -88,7 +89,7 @@ export class RAGRetriever {
         // Text retrieval is the baseline for meeting search. Semantic retrieval
         // is an optional recall enhancement and must not make lexical search
         // unavailable when the embedding provider fails.
-        const lexicalCandidates = await this.vectorStore.searchLexical(retrievalQuery, {
+        const lexicalCandidates = await this.vectorStore.searchLexical(query, {
             meetingId,
             limit: topK * 2,
         });
@@ -112,7 +113,7 @@ export class RAGRetriever {
             }
         }
 
-        let candidates = this.mergeHybridCandidates(vectorCandidates, lexicalCandidates, retrievalQuery);
+        let candidates = this.mergeHybridCandidates(vectorCandidates, lexicalCandidates, query);
         if (meetingId) {
             candidates = candidates.filter(chunk => chunk.meetingId === meetingId);
         }
@@ -138,6 +139,7 @@ export class RAGRetriever {
         }));
 
         candidates.sort((a, b) => (b.finalScore || 0) - (a.finalScore || 0));
+        candidates = this.prioritizeExactMatches(candidates, query);
 
         // 4. Select top-K within token budget
         const selected: ScoredChunk[] = [];
@@ -145,8 +147,6 @@ export class RAGRetriever {
 
         for (const chunk of candidates) {
             if (totalTokens + chunk.tokenCount > maxTokens) {
-                // Skip if we already have minimum content
-                if (selected.length >= topK / 2) break;
                 continue;
             }
 
@@ -183,80 +183,15 @@ export class RAGRetriever {
         query: string,
         options: RetrievalOptions = {}
     ): Promise<RetrievedContext> {
-        const {
-            maxTokens = 1500,
-            topK = 8,
-            recencyWeight = 0.3,
-            intent: overrideIntent
-        } = options;
-
-        // Detect query intent
-        const intent = overrideIntent || this.detectIntent(query);
-        const retrievalQuery = this.buildRetrievalQuery(query, {
-            recentTranscriptTurns: options.recentTranscriptTurns,
-            modeIntent: options.modeIntent ?? intent,
-        });
-
-        // Embed query
-        let queryEmbedding: number[];
-        try {
-            queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(retrievalQuery);
-        } catch (error) {
-            console.error('[RAGRetriever] Failed to embed query:', error);
-            return {
-                chunks: [],
-                formattedContext: '',
-                totalTokens: 0,
-                meetingIds: [],
-                intent,
-                retrievalQuery,
-                citations: []
-            };
-        }
-
-        // Search both chunks and summaries
-        const spaceKey = this.embeddingPipeline.getActiveSpaceKey();
-        const vectorChunkResults = await this.vectorStore.searchSimilar(queryEmbedding, {
-            limit: topK * 2,
-            minSimilarity: 0.25,
-            spaceKey
-        });
-        const lexicalChunkResults = await this.vectorStore.searchLexical(retrievalQuery, {
-            limit: topK * 2,
-        });
-        const chunkResults = this.mergeHybridCandidates(vectorChunkResults, lexicalChunkResults, retrievalQuery);
-        const meetingFallbackResults = await this.vectorStore.searchLexicalMeetings(retrievalQuery, { limit: topK });
-        const globalCandidates = this.mergeHybridCandidates(chunkResults, meetingFallbackResults, retrievalQuery);
-
-        const summaryResults = await this.vectorStore.searchSummaries(queryEmbedding, 5, spaceKey);
-
-        // Get meeting IDs from top summaries
-        const relevantMeetingIds = new Set(summaryResults.map(s => s.meetingId));
-
-        // Boost chunks from meetings with matching summaries
-        const boostedChunks = globalCandidates.map(chunk => ({
-            ...chunk,
-            similarity: relevantMeetingIds.has(chunk.meetingId)
-                ? chunk.similarity * 1.2  // 20% boost
-                : chunk.similarity
-        }));
-
-        // Re-rank
-        const now = Date.now();
-        const ranked = boostedChunks.map(chunk => ({
-            ...chunk,
-            finalScore: this.computeFinalScore(chunk, now, recencyWeight)
-        }));
-
-        ranked.sort((a, b) => (b.finalScore || 0) - (a.finalScore || 0));
+        const { maxTokens = 1500, topK = 8 } = options;
+        const { orderedCandidates, intent, retrievalQuery } = await this.collectGlobalCandidates(query, options);
 
         // Select within budget
         const selected: ScoredChunk[] = [];
         let totalTokens = 0;
 
-        for (const chunk of ranked) {
+        for (const chunk of orderedCandidates) {
             if (totalTokens + chunk.tokenCount > maxTokens) {
-                if (selected.length >= topK / 2) break;
                 continue;
             }
 
@@ -293,6 +228,111 @@ export class RAGRetriever {
             retrievalQuery,
             citations: this.buildCitations(selected, 'historical_meeting')
         };
+    }
+
+    async searchGlobalMeetings(
+        query: string,
+        options: RetrievalOptions & { limit?: number } = {}
+    ): Promise<ScoredChunk[]> {
+        const limit = Math.max(1, options.limit ?? 5);
+        const { orderedCandidates } = await this.collectGlobalCandidates(query, {
+            ...options,
+            topK: Math.max(options.topK ?? 0, limit * 4),
+        });
+        const selected: ScoredChunk[] = [];
+        const seenMeetingIds = new Set<string>();
+        for (const candidate of orderedCandidates) {
+            if (seenMeetingIds.has(candidate.meetingId)) continue;
+            seenMeetingIds.add(candidate.meetingId);
+            selected.push(candidate);
+            if (selected.length >= limit) break;
+        }
+        return selected;
+    }
+
+    private async collectGlobalCandidates(
+        query: string,
+        options: RetrievalOptions = {}
+    ): Promise<{ orderedCandidates: ScoredChunk[]; intent: QueryIntent; retrievalQuery: string }> {
+        const topK = options.topK ?? 8;
+        const recencyWeight = options.recencyWeight ?? 0.3;
+        const intent = options.intent || this.detectIntent(query);
+        const retrievalQuery = options.semanticQuery?.trim() || this.buildRetrievalQuery(query, {
+            recentTranscriptTurns: options.recentTranscriptTurns,
+            modeIntent: options.modeIntent ?? intent,
+        });
+
+        let queryEmbedding: number[] | null = null;
+        if (this.embeddingPipeline.isReady()) {
+            try {
+                queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(retrievalQuery);
+            } catch {
+                console.warn('[RAGRetriever] Semantic global retrieval unavailable', {
+                    errorType: 'embedding_query_failed',
+                });
+            }
+        }
+
+        const spaceKey = this.embeddingPipeline.getActiveSpaceKey();
+        let vectorChunkResults: ScoredChunk[] = [];
+        if (queryEmbedding) {
+            try {
+                vectorChunkResults = await this.vectorStore.searchSimilar(queryEmbedding, {
+                    limit: topK * 2,
+                    minSimilarity: 0.25,
+                    spaceKey,
+                });
+            } catch {
+                console.warn('[RAGRetriever] Semantic global retrieval unavailable', {
+                    errorType: 'vector_search_failed',
+                });
+            }
+        }
+        const lexicalChunkResults = await this.vectorStore.searchLexical(query, { limit: topK * 2 });
+        const chunkResults = this.mergeHybridCandidates(vectorChunkResults, lexicalChunkResults, query);
+        const meetingFallbackResults = await this.vectorStore.searchLexicalMeetings(query, { limit: topK });
+        const globalCandidates = this.mergeHybridCandidates(chunkResults, meetingFallbackResults, query);
+        const relevantMeetingIds = new Set<string>();
+        if (queryEmbedding) {
+            try {
+                const summaryResults = await this.vectorStore.searchSummaries(queryEmbedding, 5, spaceKey);
+                summaryResults.forEach(summary => relevantMeetingIds.add(summary.meetingId));
+            } catch {
+                console.warn('[RAGRetriever] Semantic global retrieval unavailable', {
+                    errorType: 'summary_search_failed',
+                });
+            }
+        }
+        const now = Date.now();
+        const ranked = globalCandidates.map(chunk => {
+            const similarity = relevantMeetingIds.has(chunk.meetingId)
+                ? chunk.similarity * 1.2
+                : chunk.similarity;
+            return {
+                ...chunk,
+                similarity,
+                finalScore: this.computeFinalScore({ ...chunk, similarity }, now, recencyWeight),
+            };
+        });
+        ranked.sort((a, b) => (b.finalScore || 0) - (a.finalScore || 0));
+        return {
+            orderedCandidates: this.prioritizeExactMatches(ranked, query),
+            intent,
+            retrievalQuery,
+        };
+    }
+
+    private prioritizeExactMatches(candidates: ScoredChunk[], query: string): ScoredChunk[] {
+        const normalizedQuery = query.trim().toLocaleLowerCase();
+        if (!normalizedQuery) return candidates;
+        const exactCandidates = candidates.filter(candidate =>
+            candidate.text.toLocaleLowerCase().includes(normalizedQuery)
+        );
+        const exactIds = new Set(exactCandidates.map(candidate => candidate.id));
+        return [
+            ...exactCandidates,
+            ...candidates.filter(candidate => !exactIds.has(candidate.id)),
+        ];
     }
 
     buildRetrievalQuery(

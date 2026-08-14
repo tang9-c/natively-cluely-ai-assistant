@@ -3844,56 +3844,74 @@ export class AppState {
     // (launcher + overlay) so whichever surface the user has up shows the card.
     this.intelligenceManager.on('dynamic_action_emitted', (action: any) => {
       const helper = this.getWindowHelper();
-      const shownAction = this.intelligenceManager.markDynamicActionShown(action.id) ?? action;
-      try {
-        const { getContextQualityDiagnosticsCollector } = require('./services/eval/ContextQualityDiagnostics');
-        getContextQualityDiagnosticsCollector().recordDynamicActionLifecycleEvent({
-          event: 'shown',
-          actionId: shownAction.id,
-          parentActionId: shownAction.parentActionId,
-          actionType: shownAction.type,
-          modeId: shownAction.modeId,
-          modeTemplateType: shownAction.modeTemplateType,
-          outputType: shownAction.productContract.outputType,
-          riskState: shownAction.productContract.riskState,
-          status: shownAction.status,
-        });
-      } catch { /* diagnostics must not affect window forwarding */ }
-      helper.getLauncherWindow()?.webContents.send('intelligence-dynamic-action', { action: shownAction });
-      helper.getOverlayWindow()?.webContents.send('intelligence-dynamic-action', { action: shownAction });
       // Phase 6 — telemetry: log detection (sanitized: NO transcript text, NO
       // evidence body — only ids, type, mode, confidence). The TelemetryService
       // sanitizer also strips transcript-shaped fields defensively.
       try {
         const { telemetryService } = require('./services/telemetry/TelemetryService');
-        const { lifecycleEventToTelemetryName } = require('./services/dynamic-actions/DynamicActionLifecycle');
-        telemetryService.track({
-          name: lifecycleEventToTelemetryName('shown'),
-          sessionId: shownAction?.sessionId,
-          modeId: shownAction?.modeId,
-          status: shownAction?.status,
-          properties: {
-            actionId: shownAction?.id,
-            ...(shownAction?.parentActionId ? { parentActionId: shownAction.parentActionId } : {}),
-            actionType: shownAction?.type,
-            modeTemplateType: shownAction?.modeTemplateType,
-            outputType: shownAction?.productContract?.outputType,
-            riskState: shownAction?.productContract?.riskState,
-          },
-        });
         telemetryService.track({
           name: 'dynamic_action_detected',
-          sessionId: shownAction?.sessionId,
-          modeId: shownAction?.modeId,
+          sessionId: action?.sessionId,
+          modeId: action?.modeId,
           properties: {
-            actionId: shownAction?.id,
-            actionType: shownAction?.type,
-            modeTemplateType: shownAction?.modeTemplateType,
-            confidence: shownAction?.confidence,
-            priority: shownAction?.priority,
+            actionId: action?.id,
+            actionType: action?.type,
+            modeTemplateType: action?.modeTemplateType,
+            confidence: action?.confidence,
+            priority: action?.priority,
           },
         });
       } catch { /* non-fatal */ }
+
+      const deliver = (surface: 'launcher' | 'overlay', win: BrowserWindow | null | undefined) => {
+        let deliveryState: 'missing' | 'loading' | 'ready_visible' | 'ready_hidden' | 'destroyed' | 'send_failed';
+        if (!win) {
+          deliveryState = 'missing';
+        } else if (win.isDestroyed() || win.webContents.isDestroyed()) {
+          deliveryState = 'destroyed';
+        } else if (win.webContents.isLoading()) {
+          deliveryState = 'loading';
+        } else {
+          deliveryState = win.isVisible() ? 'ready_visible' : 'ready_hidden';
+        }
+        if (win && deliveryState !== 'destroyed') {
+          try {
+            win.webContents.send('intelligence-dynamic-action', { action });
+          } catch {
+            deliveryState = 'send_failed';
+          }
+        }
+
+        try {
+          const { telemetryService } = require('./services/telemetry/TelemetryService');
+          telemetryService.track({
+            name: 'dynamic_action_delivery_attempted',
+            sessionId: action?.sessionId,
+            modeId: action?.modeId,
+            status: action?.status,
+            properties: {
+              actionId: action?.id,
+              actionType: action?.type,
+              modeTemplateType: action?.modeTemplateType,
+              surface,
+              deliveryState,
+            },
+          });
+        } catch { /* telemetry must not affect forwarding */ }
+
+        if (this._verboseLogging) {
+          console.log('[DynamicActionUI] delivery', {
+            actionId: action?.id,
+            actionType: action?.type,
+            modeTemplateType: action?.modeTemplateType,
+            surface,
+            deliveryState,
+          });
+        }
+      };
+
+      deliver('launcher', helper.getLauncherWindow());
+      deliver('overlay', helper.getOverlayWindow());
     })
 
     this.intelligenceManager.on('suggested_answer', (answer: string, question: string, confidence: number, requestId?: string) => {

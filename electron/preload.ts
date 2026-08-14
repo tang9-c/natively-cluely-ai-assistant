@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { ModeEventContext } from './llm';
 import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../shared/senseVoiceEmotion';
 import type { DynamicActionAvailabilityEvent } from '../shared/dynamicActionAvailability';
+import type { DynamicActionUiStageReport } from '../shared/dynamicActionUiStage';
 import type {
   DownloadedModelKind,
   StorageMutationResult,
@@ -14,6 +15,7 @@ import type {
   MeetingSearchRequest,
   MeetingSearchResult,
 } from '../shared/meetingSearch';
+import type { GlobalMeetingSearchResponse } from '../shared/globalMeetingSearch';
 
 type RAGStreamChunkPayload =
   | MeetingSearchChunkEvent
@@ -444,6 +446,13 @@ interface ElectronAPI {
     error?: string;
   }>;
   resetIntelligence: () => Promise<{ success: boolean; error?: string }>;
+
+  reportDynamicActionUiStage: (report: DynamicActionUiStageReport) => Promise<{
+    success: boolean;
+    acknowledged?: boolean;
+    duplicate?: boolean;
+    error?: string;
+  }>;
 
   // Meeting Lifecycle
   startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string }>;
@@ -1649,6 +1658,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   acceptDynamicAction: (actionId: string, options?: { triggerSource?: 'manual' | 'auto_countdown' }) =>
     ipcRenderer.invoke('dynamic-action:accept', actionId, options),
+  reportDynamicActionUiStage: (report: DynamicActionUiStageReport) =>
+    ipcRenderer.invoke('dynamic-action:ui-stage', report),
   completeDynamicAction: (actionId: string) =>
     ipcRenderer.invoke('dynamic-action:complete', actionId),
   failDynamicActionGeneration: (actionId: string) =>
@@ -1968,6 +1979,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('rag:query-meeting', request),
   ragQueryLive: (query: string) => ipcRenderer.invoke('rag:query-live', { query }),
   ragQueryGlobal: (query: string) => ipcRenderer.invoke('rag:query-global', { query }),
+  ragSearchGlobalMeetings: (query: string, limit = 5): Promise<GlobalMeetingSearchResponse> =>
+    ipcRenderer.invoke('rag:search-global-meetings', { query, limit }),
   ragCancelQuery: (options: { meetingId?: string; requestId?: string; global?: boolean }) =>
     ipcRenderer.invoke('rag:cancel-query', options),
   ragIsMeetingProcessed: (meetingId: string) =>

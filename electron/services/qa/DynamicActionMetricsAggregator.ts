@@ -166,7 +166,8 @@ export function aggregateDynamicActionQaMetrics(input: DynamicActionMetricsInput
   };
 
   for (const record of input.telemetryRecords) {
-    const mode = normalizeMode(record.modeId);
+    const mode = normalizeMode(record.modeId)
+      ?? normalizeMode(stringProp(record.properties, 'modeTemplateType'));
     const actionType = stringProp(record.properties, 'actionType');
 
     if (mode && isLifecycleEvent(record.name, record.status)) {

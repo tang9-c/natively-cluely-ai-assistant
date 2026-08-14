@@ -152,6 +152,12 @@ function mergeConsecutiveSpeakerSegments(
     return merged;
 }
 
+function hasMeaningfulContent(text: string): boolean {
+    const cjkCount = (text.match(/[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/g) ?? []).length;
+    if (cjkCount >= 2) return true;
+    return text.split(/\s+/).filter(Boolean).length >= 3;
+}
+
 /**
  * Main preprocessing pipeline
  * Takes raw transcript segments and returns cleaned, annotated segments
@@ -168,9 +174,7 @@ export function preprocessTranscript(segments: RawSegment[]): CleanedSegment[] {
     for (const seg of merged) {
         const text = cleanText(seg.text);
 
-        // Skip if too short after cleaning (less than 3 words)
-        const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
-        if (wordCount < 3) continue;
+        if (!hasMeaningfulContent(text)) continue;
 
         cleaned.push({
             speaker: normalizeSpeaker(seg.speaker),

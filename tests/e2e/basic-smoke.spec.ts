@@ -70,6 +70,23 @@ test.describe('FINDING-006: Natively E2E smoke', () => {
     ]));
   });
 
+  test('top search uses the structured global meeting IPC', async ({ page }) => {
+    await page.waitForLoadState('networkidle');
+
+    const shortQueryResponse = await page.evaluate(async () => {
+      const api = (window as any).electronAPI;
+      return api?.ragSearchGlobalMeetings?.('机', 5);
+    });
+    expect(shortQueryResponse).toEqual({ success: true, hits: [] });
+
+    const search = page.getByPlaceholder('搜索或询问任何问题...');
+    await search.click();
+    await search.fill('机器人');
+
+    await expect(page.getByText('询问所有会议：“机器人”')).toHaveCount(1);
+    await expect(page.getByText(/正在搜索会议正文|没有找到匹配的会议/)).toBeVisible();
+  });
+
   test('settings panel opens and closes', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 

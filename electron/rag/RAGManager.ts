@@ -13,6 +13,7 @@ import { LiveRAGIndexer } from './LiveRAGIndexer';
 import { buildRAGPrompt, NO_CONTEXT_FALLBACK, NO_GLOBAL_CONTEXT_FALLBACK } from './prompts';
 import type { ProviderDataScopePolicy } from '../llm/ProviderRouter';
 import type { MeetingSearchResult } from '../../shared/meetingSearch';
+import type { GlobalMeetingSearchHit } from '../../shared/globalMeetingSearch';
 import { fingerprintTranscript, type FingerprintTranscriptRow } from './MeetingTranscriptFingerprint';
 import {
     assembleMeetingEvidence,
@@ -230,10 +231,11 @@ export class RAGManager {
         const retrievalQuery = expandMeetingRetrievalQuery(query, intent, summary);
         let retrieved;
         try {
-            retrieved = await this.retriever.retrieve(retrievalQuery, {
+            retrieved = await this.retriever.retrieve(query, {
                 meetingId,
                 intent,
                 maxTokens: 1500,
+                semanticQuery: retrievalQuery,
             });
         } catch {
             return {
@@ -416,6 +418,31 @@ export class RAGManager {
             if (abortSignal?.aborted) break;
             yield chunk;
         }
+    }
+
+    async searchGlobalMeetings(query: string, limit = 5): Promise<GlobalMeetingSearchHit[]> {
+        const normalizedLimit = Math.max(1, Math.min(20, Math.floor(limit)));
+        const candidates = await this.retriever.searchGlobalMeetings(query, { limit: normalizedLimit });
+        const readMeeting = this.db.prepare(`
+            SELECT id, title, start_time
+            FROM meetings
+            WHERE id = ?
+        `);
+        return candidates.flatMap((candidate) => {
+            const meeting = readMeeting.get(candidate.meetingId) as {
+                id: string;
+                title: string | null;
+                start_time: number | null;
+            } | undefined;
+            if (!meeting) return [];
+            return [{
+                meetingId: candidate.meetingId,
+                title: meeting.title?.trim() || '未命名会议',
+                startTimeMs: typeof meeting.start_time === 'number' ? meeting.start_time : null,
+                snippet: candidate.text.trim().slice(0, 280),
+                score: candidate.finalScore ?? candidate.similarity ?? 0,
+            }];
+        });
     }
 
     /**
