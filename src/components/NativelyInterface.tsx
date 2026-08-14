@@ -1094,7 +1094,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // and the Open Settings button handed Windows shell a URI scheme it
   // couldn't resolve (Microsoft Store popup).
   type SystemAudioWarning = {
-    kind: 'screen-recording-permission' | 'audio-capture-failure' | 'microphone-capture-failure';
+    kind:
+      | 'screen-recording-permission'
+      | 'screenshot-capture-failure'
+      | 'audio-capture-failure'
+      | 'microphone-capture-failure';
     message: string;
     backend?: string;
     code?: string;
@@ -1209,6 +1213,31 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }
     });
     return () => unsub?.();
+  }, []);
+
+  const handleScreenshotFailure = useCallback(async (error: unknown) => {
+    console.error('Error triggering screenshot:', error);
+    try {
+      const permissions = await window.electronAPI.checkPermissions();
+      if (permissions.platform === 'darwin' && !permissions.screenHealth.effectiveGranted) {
+        setSystemAudioWarning({
+          kind: 'screen-recording-permission',
+          message: 'CueUp 无法读取屏幕。请在系统设置中允许屏幕录制，或修复权限后重启应用。',
+          recommendedFix: permissions.screenHealth.recommendedFix,
+          staleGrantSuspected: permissions.screenHealth.staleGrantSuspected,
+        });
+        setIsExpanded(true);
+        return;
+      }
+    } catch (permissionError) {
+      console.error('Failed to check screenshot permission:', permissionError);
+    }
+
+    setSystemAudioWarning({
+      kind: 'screenshot-capture-failure',
+      message: '截图失败，请重试。若问题持续存在，请检查系统屏幕录制权限。',
+    });
+    setIsExpanded(true);
   }, []);
 
   const handleRepairTccPermission = useCallback(async () => {
@@ -3518,7 +3547,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           handleScreenshotAttach(data as { path: string; preview: string });
         }
       } catch (err) {
-        console.error('Error triggering screenshot:', err);
+        await handleScreenshotFailure(err);
       }
     },
     selectiveScreenshot: async () => {
@@ -3528,7 +3557,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           handleScreenshotAttach(data as { path: string; preview: string });
         }
       } catch (err) {
-        console.error('Error triggering selective screenshot:', err);
+        await handleScreenshotFailure(err);
       }
     },
   });
@@ -3559,7 +3588,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           handleScreenshotAttach(data as { path: string; preview: string });
         }
       } catch (err) {
-        console.error('Error triggering screenshot:', err);
+        await handleScreenshotFailure(err);
       }
     },
     selectiveScreenshot: async () => {
@@ -3569,7 +3598,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           handleScreenshotAttach(data as { path: string; preview: string });
         }
       } catch (err) {
-        console.error('Error triggering selective screenshot:', err);
+        await handleScreenshotFailure(err);
       }
     },
   };
@@ -4211,11 +4240,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
                       <span>
                         {systemAudioWarning.kind === 'screen-recording-permission'
                           ? '屏幕录制权限被拒绝'
-                          : systemAudioWarning.kind === 'microphone-capture-failure'
-                            ? '麦克风未录到声音'
-                          : systemAudioWarning.code === 'CORE_AUDIO_TCC_RESET_REQUIRED'
-                            ? '系统音频录制权限需要修复'
-                          : '音频采集异常'}
+                          : systemAudioWarning.kind === 'screenshot-capture-failure'
+                            ? '截图失败'
+                            : systemAudioWarning.kind === 'microphone-capture-failure'
+                              ? '麦克风未录到声音'
+                              : systemAudioWarning.code === 'CORE_AUDIO_TCC_RESET_REQUIRED'
+                                ? '系统音频录制权限需要修复'
+                                : '音频采集异常'}
                       </span>
                     </div>
                     <p className="text-[11px] text-yellow-600/70 dark:text-yellow-400/60 leading-snug pl-[26px]">
@@ -4229,24 +4260,31 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {systemAudioWarning.kind === 'screen-recording-permission' ? (
-                      <button
-                        // Defense-in-depth: kind === 'screen-recording-permission'
-                        // is only ever set from a darwin-gated broadcast site
-                        // in main.ts (and the IPC allowlist rejects x-apple
-                        // URLs on non-darwin), but we still guard at call time
-                        // so a future regression in the broadcast layer can't
-                        // produce a no-op or worse on Windows.
-                        onClick={() => {
-                          if (isMac)
-                            window.electronAPI.openExternal(
-                              'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
-                            );
-                        }}
-                        className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm"
-                      >
-                        打开设置
-                      </button>
-                    ) : systemAudioWarning.recommendedFix === 'reset-tcc' || systemAudioWarning.staleGrantSuspected ? (
+                      <>
+                        <button
+                          // Defense-in-depth: kind === 'screen-recording-permission'
+                          // is only ever set from a darwin-gated source or a
+                          // structured darwin permission check in this renderer.
+                          onClick={() => {
+                            if (isMac)
+                              window.electronAPI.openExternal(
+                                'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+                              );
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm"
+                        >
+                          打开设置
+                        </button>
+                        <button
+                          onClick={handleRepairTccPermission}
+                          data-action={systemAudioRepairAction}
+                          disabled={isRepairingTcc}
+                          className="px-3 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-700 dark:text-yellow-500 text-[11px] font-semibold transition-all active:scale-95 border border-yellow-500/20 shadow-sm disabled:opacity-60"
+                        >
+                          {isRepairingTcc ? '修复中...' : '修复权限并重启'}
+                        </button>
+                      </>
+                    ) : systemAudioWarning.kind === 'screenshot-capture-failure' ? null : systemAudioWarning.recommendedFix === 'reset-tcc' || systemAudioWarning.staleGrantSuspected ? (
                       <button
                         onClick={handleRepairTccPermission}
                         data-action={systemAudioRepairAction}
