@@ -18,6 +18,7 @@ export interface PostCallSummaryData {
 
 export interface GenerateFullTranscriptSummaryParams {
   llmHelper: {
+    getQCloudMeetingSummaryChunkChars?: () => number | undefined;
     generateMeetingSummary: (
       systemPrompt: string,
       context: string,
@@ -346,8 +347,12 @@ export async function generateFullTranscriptSummary(params: GenerateFullTranscri
   const cleanedContext = String(params.context || '').trim();
   if (!cleanedContext) return emptySummary(params.modeNoteSections);
 
-  const chunkSize = params.maxChunkChars ?? DEFAULT_MAX_CHUNK_CHARS;
-  const oneShotThreshold = params.maxChunkChars ?? DEFAULT_ONE_SHOT_MAX_CHARS;
+  const qcloudChunkSize = params.llmHelper.getQCloudMeetingSummaryChunkChars?.();
+  const providerChunkSize = Number.isInteger(qcloudChunkSize) && Number(qcloudChunkSize) > 0
+    ? Number(qcloudChunkSize)
+    : undefined;
+  const chunkSize = params.maxChunkChars ?? providerChunkSize ?? DEFAULT_MAX_CHUNK_CHARS;
+  const oneShotThreshold = params.maxChunkChars ?? providerChunkSize ?? DEFAULT_ONE_SHOT_MAX_CHARS;
 
   if (cleanedContext.length <= oneShotThreshold) {
     try {

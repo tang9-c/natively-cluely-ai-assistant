@@ -232,6 +232,7 @@ export class WhatToAnswerLLM {
             requestId: string;
             requestSource: 'automatic' | 'manual' | 'dynamic_action' | 'other';
             abortSignal?: AbortSignal;
+            qcloudRequestClass?: 'realtime_answer' | 'dynamic_action' | 'meeting_summary' | 'post_call';
         },
     ): AsyncGenerator<string> {
         const MEASURE = process.env.MEASURE_LATENCY === 'true';
@@ -509,7 +510,10 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     qcloudReasoningEffort: 'medium' as const,
                     totalTimeoutMs: QCLOUD_SKILL_CHAT_TIMEOUT_MS,
                 }
-                : requestOptions;
+                : {
+                    ...(requestOptions ?? {}),
+                    qcloudRequestClass: requestOptions?.qcloudRequestClass ?? 'realtime_answer',
+                };
             for await (const token of this.llmHelper.streamChat(
                 packet.userMessage,
                 imagePaths,

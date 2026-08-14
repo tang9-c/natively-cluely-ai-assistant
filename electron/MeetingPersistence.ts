@@ -202,6 +202,7 @@ export class MeetingPersistence {
         modeSnapshot?: { id: string; name: string; templateType: string } | null
     ): Promise<void> {
         let title = "Untitled Session";
+        let titleGeneration: Promise<string> | null = null;
         let summaryData: PostCallSummaryData = { actionItems: [], keyPoints: [], decisions: [], openQuestions: [] };
         const analysisTranscript = data.effectiveTranscript ?? data.transcript;
         const hasSummarizableTranscript = analysisTranscript.length > 2;
@@ -236,19 +237,19 @@ export class MeetingPersistence {
                 const titlePrompt = `为这次会议生成一个简洁的中文标题，长度为 3 到 8 个中文词。只输出标题文本，不要解释，不要引号，不要 markdown，不要包含任何中英文标点符号。`;
                 const groqTitlePrompt = GROQ_TITLE_PROMPT;
 
-                try {
-                    const generatedTitle = await this.llmHelper.generateMeetingSummary(
+                titleGeneration = this.llmHelper.generateMeetingSummary(
                         titlePrompt,
                         data.context.substring(0, 5000),
                         groqTitlePrompt,
                         { maxOutputTokens: QCLOUD_MEETING_TITLE_OUTPUT_TOKENS },
-                    );
-                    title = sanitizeGeneratedMeetingTitle(generatedTitle, data.context);
-                } catch (error) {
-                    console.warn('[MeetingPersistence] Title generation failed; continuing with fallback title', {
-                        errorName: error instanceof Error ? error.name : 'UnknownError',
+                    )
+                    .then((generatedTitle) => sanitizeGeneratedMeetingTitle(generatedTitle, data.context))
+                    .catch((error) => {
+                        console.warn('[MeetingPersistence] Title generation failed; continuing with fallback title', {
+                            errorName: error instanceof Error ? error.name : 'UnknownError',
+                        });
+                        return title;
                     });
-                }
             }
 
             // Load template note sections for the mode that was active when meeting stopped.
@@ -387,8 +388,10 @@ export class MeetingPersistence {
                 ...deterministicPostCall,
                 ...llmEnhancements,
             };
+            if (titleGeneration) title = await titleGeneration;
         } catch (e) {
             console.error("Error generating meeting metadata", e);
+            if (titleGeneration) title = await titleGeneration;
         }
 
         try {

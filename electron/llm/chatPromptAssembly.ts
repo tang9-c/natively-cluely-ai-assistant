@@ -23,6 +23,7 @@ export interface ChatPromptOptions {
   idleTimeoutMs?: number;
   totalTimeoutMs?: number;
   abortSignal?: AbortSignal;
+  qcloudRequestClass?: 'realtime_answer' | 'dynamic_action' | 'meeting_summary' | 'post_call';
 }
 
 export function buildChatSystemPrompt(input: ChatPromptAssemblyInput): string {

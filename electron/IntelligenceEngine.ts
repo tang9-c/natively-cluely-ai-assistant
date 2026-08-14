@@ -514,6 +514,7 @@ export class IntelligenceEngine extends EventEmitter {
                 dataScopes: ['transcript'],
                 abortSignal,
                 requestId: latencyContext?.requestId,
+                qcloudRequestClass: 'dynamic_action',
                 timingSink: (event) => {
                     if (!latencyContext || abortSignal?.aborted) return;
                     this.emitDynamicActionLatency(latencyContext, event.stage, {

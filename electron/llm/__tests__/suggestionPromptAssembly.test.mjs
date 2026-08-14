@@ -33,7 +33,7 @@ test('generateSuggestion prepends mode context before transcript context', () =>
 });
 
 test('generateSuggestion routes all providers through streamChat', () => {
-  assert.match(generateSuggestionSource, /for await \(const chunk of this\.streamChat\(promptMessage, undefined, undefined, basePrompt, true\)\)/);
+  assert.match(generateSuggestionSource, /for await \(const chunk of this\.streamChat\([\s\S]*?promptMessage,[\s\S]*?basePrompt,[\s\S]*?true,[\s\S]*?true,[\s\S]*?\['transcript'\],[\s\S]*?qcloudRequestClass:\s*'realtime_answer'[\s\S]*?\)\)/);
   assert.doesNotMatch(generateSuggestionSource, /callOllama\(/);
   assert.doesNotMatch(generateSuggestionSource, /generateWithCodexCli\(/);
 });

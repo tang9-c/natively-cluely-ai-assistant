@@ -44,10 +44,14 @@ test('QCLOUD meeting summary defaults to the core budget and honors a call-scope
     assert.equal(await helper.generateMeetingSummary('title prompt', 'meeting context', undefined, { maxOutputTokens: 64 }), '会议摘要');
 
     assert.deepEqual(
-      requests.map(({ model, max_tokens }) => ({ model, max_tokens })),
+      requests.map(({ model, max_tokens, prompt_cache_key }) => ({
+        model,
+        max_tokens,
+        hasCacheKey: /^[a-f0-9]{32}$/.test(prompt_cache_key),
+      })),
       [
-        { model: 'lite32k', max_tokens: 4096 },
-        { model: 'lite32k', max_tokens: 64 },
+        { model: 'lite32k', max_tokens: 4096, hasCacheKey: true },
+        { model: 'lite32k', max_tokens: 64, hasCacheKey: true },
       ],
     );
   } finally {
@@ -126,6 +130,68 @@ test('selected QCLOUD streaming acquires the provider limiter before fetch', asy
 
     assert.equal(await drainStream(helper.streamChat('hello', undefined, undefined, undefined, true)), 'hello');
     assert.deepEqual(order, ['limiter', 'fetch']);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('selected QCLOUD applies the realtime input budget at the provider boundary', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody;
+  globalThis.fetch = async (_url, init) => {
+    requestBody = JSON.parse(init.body);
+    return sseResponse([
+      'data: {"delta":"ok","usage":{"prompt_tokens":100,"completion_tokens":1,"total_tokens":101}}\n',
+      'data: [DONE]\n',
+    ]);
+  };
+
+  try {
+    const { LLMHelper } = await import(pathToFileURL(helperPath).href);
+    const helper = new LLMHelper();
+    helper.setNativelyKey('test-qcloud-key');
+    helper.setModel('natively');
+    const latest = 'USER QUESTION:\n必须保留的最新问题';
+    const context = `${'<mode>稳定模式提示</mode>'}\n${'旧内容'.repeat(20_000)}\n${latest}`;
+
+    assert.equal(await drainStream(helper.streamChat(
+      '直接回答', undefined, context, undefined, true, true, ['transcript'],
+      { qcloudRequestClass: 'realtime_answer' },
+    )), 'ok');
+
+    const sent = requestBody.messages[0].content;
+    assert.ok(sent.length <= 12_000);
+    assert.match(sent, /^CONTEXT:\n<mode>稳定模式提示<\/mode>/);
+    assert.match(sent, /USER QUESTION:\n直接回答$/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('QCLOUD derives a stable provider cache key only from the system prompt', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (_url, init) => {
+    requests.push(JSON.parse(init.body));
+    return sseResponse(['data: {"delta":"ok"}\n', 'data: [DONE]\n']);
+  };
+
+  try {
+    const { LLMHelper } = await import(pathToFileURL(helperPath).href);
+    const helper = new LLMHelper();
+    helper.setNativelyKey('test-qcloud-key');
+    helper.setModel('natively');
+
+    await drainStream(helper.streamChat('动态用户内容一', undefined, undefined, '稳定系统提示', true));
+    await drainStream(helper.streamChat('完全不同的动态用户内容二', undefined, undefined, '稳定系统提示', true));
+    await drainStream(helper.streamChat('无系统提示', undefined, undefined, undefined, true));
+
+    assert.match(requests[0].prompt_cache_key, /^[a-f0-9]{32}$/);
+    assert.deepEqual(requests[0].stream_options, { include_usage: true });
+    assert.equal(requests[1].prompt_cache_key, requests[0].prompt_cache_key);
+    assert.doesNotMatch(requests[0].prompt_cache_key, /动态用户内容/);
+    assert.match(requests[2].prompt_cache_key, /^[a-f0-9]{32}$/);
+    assert.notEqual(requests[2].prompt_cache_key, requests[0].prompt_cache_key);
   } finally {
     globalThis.fetch = originalFetch;
   }

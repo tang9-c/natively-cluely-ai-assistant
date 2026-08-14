@@ -387,9 +387,9 @@ test('generateStream() does not override provider output token budgets', async (
     return capturedOptions;
   }
 
-  assert.equal(await captureBudget(['how should we answer?']), undefined);
-  assert.equal(await captureBudget(['answer the objection', undefined, undefined, undefined, undefined, 'draft a short sales card']), undefined);
-  assert.equal(await captureBudget([
+  assert.deepEqual(await captureBudget(['how should we answer?']), { qcloudRequestClass: 'realtime_answer' });
+  assert.deepEqual(await captureBudget(['answer the objection', undefined, undefined, undefined, undefined, 'draft a short sales card']), { qcloudRequestClass: 'realtime_answer' });
+  assert.deepEqual(await captureBudget([
     'how should we answer the PLM risk?',
     undefined,
     undefined,
@@ -399,13 +399,13 @@ test('generateStream() does not override provider output token budgets', async (
     undefined,
     undefined,
     { modeTemplateType: 'fde', intent: 'integration_risk' },
-  ]), undefined);
-  assert.equal(await captureBudget([
+  ]), { qcloudRequestClass: 'realtime_answer' });
+  assert.deepEqual(await captureBudget([
     'what should I say about this error?',
     undefined,
     undefined,
     ['/tmp/screen.png'],
-  ]), undefined);
+  ]), { qcloudRequestClass: 'realtime_answer' });
 });
 
 test('generateStream() trace metadata reports uploadedDocumentRag when uploadedMaterialContext is non-empty', async () => {

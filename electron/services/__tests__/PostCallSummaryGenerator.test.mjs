@@ -74,6 +74,48 @@ test('generateFullTranscriptSummary summarizes every chunk before final merge', 
   assert.deepEqual(summary.decisions, ['第一阶段先确认集成边界']);
 });
 
+test('generateFullTranscriptSummary honors the QCLOUD-safe chunk size before sending Chinese transcript content', async () => {
+  const calls = [];
+  const llmHelper = {
+    getQCloudMeetingSummaryChunkChars: () => 10_000,
+    generateMeetingSummary: async (...args) => {
+      calls.push(args);
+      if (args[0].includes('归并')) {
+        return JSON.stringify({
+          overview: '完整摘要',
+          keyPoints: ['头部事实', '中部事实', '尾部事实'],
+          actionItems: [],
+        });
+      }
+      return JSON.stringify({
+        overview: '局部摘要',
+        keyPoints: ['局部事实'],
+        actionItems: [],
+      });
+    },
+  };
+  const context = `头部事实\n${'甲'.repeat(12_000)}\n中部事实\n${'乙'.repeat(12_000)}\n尾部事实`;
+
+  const summary = await generateFullTranscriptSummary({
+    llmHelper,
+    transcript: [],
+    context,
+    modeTemplateType: 'general',
+    modeNoteSections: [],
+    modeContextBlock: '',
+    baseRules: '规则：只基于会议内容。',
+    groqSummaryPrompt: 'fallback',
+  });
+
+  const chunkCalls = calls.filter(([prompt]) => !prompt.includes('归并'));
+  assert.ok(chunkCalls.length >= 3, 'QCLOUD-safe budget should split the transcript before provider truncation');
+  assert.ok(chunkCalls.every(([, userContext]) => !userContext.includes('完整会议转录：')));
+  assert.ok(chunkCalls.some(([, userContext]) => userContext.includes('头部事实')));
+  assert.ok(chunkCalls.some(([, userContext]) => userContext.includes('中部事实')));
+  assert.ok(chunkCalls.some(([, userContext]) => userContext.includes('尾部事实')));
+  assert.equal(summary.generationStatus, 'success');
+});
+
 test('generateFullTranscriptSummary keeps user-derived content out of system prompts', async () => {
   const calls = [];
   const llmHelper = {

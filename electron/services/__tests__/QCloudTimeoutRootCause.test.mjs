@@ -15,7 +15,7 @@ test('QCLOUD requests use task-specific timeout instead of a fixed 8s abort', ()
   const llm = read('electron/LLMHelper.ts');
   const method = llm.match(/private async generateWithNatively\([\s\S]*?\n  \}/)?.[0] ?? '';
 
-  assert.match(method, /const timeoutMs = _options\.timeoutMs \?\? 8000;/);
+  assert.match(method, /const timeoutMs = _options\.timeoutMs \?\? requestTimeoutPolicy\?\.totalMs \?\? 8000;/);
   assert.match(method, /const qcloudTimeout = setTimeout\(/);
   assert.match(method, /qcloudAbortController\.abort\(new Error\(`QCLOUD API request timed out after \$\{timeoutMs\}ms`\)\)/);
   assert.match(method, /signal: qcloudAbortController\.signal/);
@@ -31,7 +31,7 @@ test('structured QCLOUD classification propagates its short timeout to fetch', (
 
   assert.match(
     structuredBlock,
-    /generateWithNatively\(message,\s*undefined,\s*undefined,\s*\{\s*maxOutputTokens,\s*timeoutMs: perProviderTimeoutMs\s*\}\)/,
+    /generateWithNatively\(message,\s*undefined,\s*undefined,\s*\{[\s\S]*?maxOutputTokens,[\s\S]*?timeoutMs: perProviderTimeoutMs,[\s\S]*?qcloudRequestClass: options\.qcloudRequestClass,[\s\S]*?\}\)/,
   );
 });
 

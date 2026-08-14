@@ -21,6 +21,8 @@ import {
   TINY_PROMPTS_SET
 } from "./llm/tinyPrompts"
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
+import { applyQCloudInputBudget, QCLOUD_MEETING_SUMMARY_SAFE_CHUNK_CHARS, QCLOUD_TIMEOUT_POLICIES, readQCloudUsage, type QCloudRequestClass, type QCloudUsageMetrics } from "./llm/QCloudRequestPolicy"
+import { qcloudBackgroundScheduler } from "./llm/QCloudBackgroundScheduler"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { DOUBAO_PRO_MODEL, DOUBAO_PRO_PROVIDER_LABEL } from "./llm/DoubaoModelConstants"
 import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
@@ -88,6 +90,7 @@ interface StructuredGenerationOptions {
   abortSignal?: AbortSignal;
   requestId?: string;
   timingSink?: (event: StructuredGenerationTimingEvent) => void;
+  qcloudRequestClass?: QCloudRequestClass;
 }
 
 export type StructuredGenerationTimingStage =
@@ -118,6 +121,7 @@ interface ProviderRequestOptions {
   abortSignal?: AbortSignal;
   disableRetries?: boolean;
   timingSink?: (event: StructuredGenerationTimingEvent) => void;
+  qcloudRequestClass?: QCloudRequestClass;
 }
 
 type QCloudUserContent = string | Array<
@@ -1278,6 +1282,11 @@ CRITICAL RULES:
     return createHash('sha256').update(systemPrompt).digest('hex').slice(0, 32);
   }
 
+  private getQCloudPromptCacheKey(systemPrompt?: string): string | undefined {
+    if (!systemPrompt?.trim()) return undefined;
+    return createHash('sha256').update(`qcloud:${systemPrompt}`).digest('hex').slice(0, 32);
+  }
+
   public async analyzeImageFiles(imagePaths: string[]) {
     try {
       const prompt = `Describe the content of ${imagePaths.length > 1 ? 'these images' : 'this image'} in a short, concise answer. If it contains code or a problem, solve it.`;
@@ -1342,7 +1351,16 @@ RULES:
 
     try {
       let fullResponse = '';
-      for await (const chunk of this.streamChat(promptMessage, undefined, undefined, basePrompt, true)) {
+      for await (const chunk of this.streamChat(
+        promptMessage,
+        undefined,
+        undefined,
+        basePrompt,
+        true,
+        true,
+        ['transcript'],
+        { requestSource: 'automatic', qcloudRequestClass: 'realtime_answer' },
+      )) {
         fullResponse += chunk;
       }
       return this.processResponse(fullResponse);
@@ -1980,6 +1998,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       abortSignal: requestController.signal,
       requestId: options.requestId,
       timingSink: options.timingSink,
+      qcloudRequestClass: options.qcloudRequestClass,
     };
     if (!this.useOllama) {
       this.assertOutboundScopes(
@@ -2295,7 +2314,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (nativelyKeyForStructured) {
       providers.push({
         name: 'QCLOUD API',
-        execute: () => this.generateWithNatively(message, undefined, undefined, { maxOutputTokens, timeoutMs: perProviderTimeoutMs })
+        execute: () => this.generateWithNatively(message, undefined, undefined, {
+          maxOutputTokens,
+          timeoutMs: perProviderTimeoutMs,
+          requestId: options.requestId,
+          abortSignal: options.abortSignal,
+          dataScopes: options.dataScopes,
+          qcloudRequestClass: options.qcloudRequestClass,
+        })
       });
     }
 
@@ -2497,6 +2523,32 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     _options: ProviderRequestOptions = {},
   ): Promise<string> {
     this.assertOutboundScopes('natively', userMessage, imagePaths, _options.dataScopes ?? []);
+    const inputBudget = applyQCloudInputBudget(userMessage, _options.qcloudRequestClass);
+    const requestStartedAt = Date.now();
+    let limiterWaitMs = 0;
+    const trackQCloudTiming = (name: string, status: string, durationMs: number, properties: Record<string, unknown> = {}) => {
+      try {
+        const { telemetryService } = require('./services/telemetry/TelemetryService');
+        telemetryService.track({
+          name,
+          provider: 'natively',
+          durationMs,
+          status,
+          properties: {
+            requestId: _options.requestId,
+            requestClass: _options.qcloudRequestClass,
+            limiterWaitMs,
+            inputChars: inputBudget.text.length,
+            inputEstimatedTokens: inputBudget.estimatedTokens,
+            originalInputEstimatedTokens: inputBudget.originalEstimatedTokens,
+            inputTruncated: inputBudget.truncated,
+            retryCount: 0,
+            ...properties,
+          },
+        });
+      } catch { /* telemetry must never affect generation */ }
+    };
+    trackQCloudTiming('llm_request_started', 'started', 0);
     // Prefer the in-memory field; fall back to CredentialsManager for the direct-routing path
     // where currentModelId === 'natively' but setNativelyKey() wasn't called yet.
     let nativelyKey = this.nativelyKey;
@@ -2516,14 +2568,16 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
     messages.push({
       role: 'user',
-      content: await this.buildQCloudUserContent(userMessage, imagePaths),
+      content: await this.buildQCloudUserContent(inputBudget.text, imagePaths),
     });
 
+    const qcloudPromptCacheKey = this.getQCloudPromptCacheKey(systemPrompt);
     const body: any = {
       model: qcloudModel,
       messages,
       max_tokens: this.clampQCloudMaxOutputTokens(_options.maxOutputTokens, qcloudModel),
       thinking: _options.qcloudThinking ?? { type: 'disabled' },
+      ...(qcloudPromptCacheKey ? { prompt_cache_key: qcloudPromptCacheKey } : {}),
     };
     if (_options.qcloudReasoningEffort) body.reasoning_effort = _options.qcloudReasoningEffort;
 
@@ -2531,7 +2585,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it
     }
 
-    const timeoutMs = _options.timeoutMs ?? 8000;
+    const requestTimeoutPolicy = _options.qcloudRequestClass
+      ? QCLOUD_TIMEOUT_POLICIES[_options.qcloudRequestClass]
+      : undefined;
+    const timeoutMs = _options.timeoutMs ?? requestTimeoutPolicy?.totalMs ?? 8000;
     const qcloudAbortController = new AbortController();
     const abortFromCaller = () => {
       qcloudAbortController.abort(
@@ -2552,6 +2609,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const queueStartedAt = performance.now();
       await this.rateLimiters.qcloud.acquire(qcloudAbortController.signal);
       const providerStartedAt = performance.now();
+      limiterWaitMs = Math.max(0, providerStartedAt - queueStartedAt);
       this.reportStructuredGenerationTiming(_options, {
         stage: 'provider_queue_complete',
         provider: 'qcloud',
@@ -2585,6 +2643,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
               durationMs: firstByteAt - providerStartedAt,
               measurement: 'network_body_chunk',
             });
+            trackQCloudTiming('llm_first_byte_latency', 'receiving', Date.now() - requestStartedAt, {
+              measurement: 'network_body_chunk',
+            });
           }
           responseText += decoder.decode(value, { stream: true });
         }
@@ -2599,6 +2660,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           stage: 'provider_first_byte',
           provider: 'qcloud',
           durationMs: firstByteAt - providerStartedAt,
+          measurement: 'buffered_response',
+        });
+        trackQCloudTiming('llm_first_byte_latency', 'received', Date.now() - requestStartedAt, {
           measurement: 'buffered_response',
         });
       }
@@ -2619,7 +2683,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       }
 
       const data = JSON.parse(responseText);
+      trackQCloudTiming('llm_completed', 'completed', Date.now() - requestStartedAt, {
+        completionMs: Date.now() - requestStartedAt,
+        ...readQCloudUsage(data),
+      });
       return data.choices?.[0]?.message?.content || data.content || '';
+    } catch (error) {
+      trackQCloudTiming('provider_error', 'failed', Date.now() - requestStartedAt);
+      throw error;
     } finally {
       clearTimeout(qcloudTimeout);
       _options.abortSignal?.removeEventListener('abort', abortFromCaller);
@@ -3839,6 +3910,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         idleTimeoutMs: chatPromptOptions?.idleTimeoutMs,
         totalTimeoutMs: qcloudChatTimeoutMs,
         abortSignal: chatPromptOptions?.abortSignal,
+        qcloudRequestClass: chatPromptOptions?.qcloudRequestClass,
       });
       return;
     }
@@ -3868,6 +3940,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           qcloudThinking: qcloudThinking,
           qcloudReasoningEffort: qcloudReasoningEffort,
           totalTimeoutMs: qcloudChatTimeoutMs,
+          requestId: chatPromptOptions?.requestId,
+          requestSource: chatPromptOptions?.requestSource,
+          abortSignal: chatPromptOptions?.abortSignal,
+          qcloudRequestClass: chatPromptOptions?.qcloudRequestClass,
         });
         return;
       } catch (e: any) {
@@ -3884,6 +3960,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
   private async * streamWithNatively(userContent: string, systemPrompt?: string, imagePaths?: string[], options: ProviderRequestOptions = {}): AsyncGenerator<string, void, unknown> {
     this.assertOutboundScopes('natively', userContent, imagePaths, options.dataScopes ?? []);
+    const inputBudget = applyQCloudInputBudget(userContent, options.qcloudRequestClass);
     const requestStartedAt = Date.now();
     let limiterWaitMs = 0;
     let firstTokenRecorded = false;
@@ -3899,6 +3976,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             requestId: options.requestId,
             source: options.requestSource ?? 'other',
             limiterWaitMs,
+            requestClass: options.qcloudRequestClass,
+            inputChars: inputBudget.text.length,
+            inputEstimatedTokens: inputBudget.estimatedTokens,
+            originalInputEstimatedTokens: inputBudget.originalEstimatedTokens,
+            inputTruncated: inputBudget.truncated,
+            retryCount: 0,
             ...properties,
           },
         });
@@ -3913,15 +3996,18 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (!nativelyKey) throw new Error('QCLOUD API key not set');
 
     const qcloudModel = this.resolveQCloudRequestModel(options);
+    const qcloudPromptCacheKey = this.getQCloudPromptCacheKey(systemPrompt);
     const body: Record<string, unknown> = {
       model: qcloudModel,
       messages: [{
         role: 'user',
-        content: await this.buildQCloudUserContent(userContent, imagePaths),
+        content: await this.buildQCloudUserContent(inputBudget.text, imagePaths),
       }],
       stream: true,
+      stream_options: { include_usage: true },
       max_tokens: this.clampQCloudMaxOutputTokens(options.maxOutputTokens, qcloudModel),
       thinking: options.qcloudThinking ?? { type: 'disabled' },
+      ...(qcloudPromptCacheKey ? { prompt_cache_key: qcloudPromptCacheKey } : {}),
     };
     if (options.qcloudReasoningEffort) body.reasoning_effort = options.qcloudReasoningEffort;
     if (systemPrompt) body.system = systemPrompt;
@@ -3937,9 +4023,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     const controller = new AbortController();
     const externalAbortSignal = options.abortSignal;
-    const firstTokenTimeoutMs = options.firstTokenTimeoutMs ?? 12_000;
-    const idleTimeoutMs = options.idleTimeoutMs ?? 5_000;
-    const totalTimeoutMs = options.totalTimeoutMs ?? 30_000;
+    const requestTimeoutPolicy = options.qcloudRequestClass
+      ? QCLOUD_TIMEOUT_POLICIES[options.qcloudRequestClass]
+      : undefined;
+    const firstTokenTimeoutMs = options.firstTokenTimeoutMs ?? requestTimeoutPolicy?.firstTokenMs ?? 12_000;
+    const idleTimeoutMs = options.idleTimeoutMs ?? requestTimeoutPolicy?.idleMs ?? 5_000;
+    const totalTimeoutMs = options.totalTimeoutMs ?? requestTimeoutPolicy?.totalMs ?? 30_000;
     let connectTimer: ReturnType<typeof setTimeout> | null = null;
     let firstTokenTimer: ReturnType<typeof setTimeout> | null = null;
     let idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -3947,6 +4036,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     let yieldedContent = false;
     let streamCompleted = false;
+    let usageMetrics: QCloudUsageMetrics | undefined;
 
     const abortWith = (message: string) => {
       if (!controller.signal.aborted) controller.abort(new Error(message));
@@ -3991,6 +4081,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       const contentType = response.headers.get('content-type') || '';
       if (!contentType.includes('text/event-stream') && !contentType.includes('stream')) {
         const data = await response.json().catch((): null => null);
+        usageMetrics = readQCloudUsage(data);
         const content = this.extractQCloudStreamContent(data);
         if (content) {
           yieldedContent = true;
@@ -4028,6 +4119,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           let chunk: any;
           try { chunk = JSON.parse(payload); } catch { continue; }
 
+          usageMetrics = readQCloudUsage(chunk) ?? usageMetrics;
+
           if (chunk.error) throw new Error(`Server error: ${chunk.error}`);
           const content = this.extractQCloudStreamContent(chunk);
           if (content) {
@@ -4052,7 +4145,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         const payload = buf.trim().slice(5).trim();
         if (payload && payload !== '[DONE]') {
           try {
-            const content = this.extractQCloudStreamContent(JSON.parse(payload));
+            const trailingChunk = JSON.parse(payload);
+            usageMetrics = readQCloudUsage(trailingChunk) ?? usageMetrics;
+            const content = this.extractQCloudStreamContent(trailingChunk);
             if (content) {
               if (!yieldedContent) {
                 clearTimer(firstTokenTimer);
@@ -4093,6 +4188,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       if (streamCompleted) {
         trackQCloudTiming('llm_completed', 'completed', Date.now() - requestStartedAt, {
           completionMs: Date.now() - requestStartedAt,
+          ...usageMetrics,
         });
       }
     }
@@ -5188,7 +5284,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     systemPrompt: string,
     context: string,
     groqSystemPrompt?: string,
-    options?: { maxOutputTokens?: number },
+    options?: { maxOutputTokens?: number; qcloudRequestClass?: QCloudRequestClass },
   ): Promise<string> {
     console.log(`[LLMHelper] generateMeetingSummary called. Context length: ${context.length}`);
     const summaryDeniedScopes = getDeniedDataScopes(['post_call_summary'], this.getProviderScopePolicy());
@@ -5238,11 +5334,14 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         console.log(`[LLMHelper] Attempting QCLOUD API for summary...`);
         const qcloudSummaryTimeoutMs = QCLOUD_MEETING_SUMMARY_TIMEOUT_MS;
         const text = await this.withTimeout(
-          this.generateWithNatively(`Context:\n${context}`, systemPrompt, undefined, {
-            maxOutputTokens: options?.maxOutputTokens ?? QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS,
-            timeoutMs: qcloudSummaryTimeoutMs,
-            qcloudModel: QCLOUD_MEETING_SUMMARY_MODEL,
-          }),
+          qcloudBackgroundScheduler.run(
+            () => this.generateWithNatively(`Context:\n${context}`, systemPrompt, undefined, {
+              maxOutputTokens: options?.maxOutputTokens ?? QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS,
+              timeoutMs: qcloudSummaryTimeoutMs,
+              qcloudModel: QCLOUD_MEETING_SUMMARY_MODEL,
+              qcloudRequestClass: options?.qcloudRequestClass ?? 'meeting_summary',
+            }),
+          ),
           qcloudSummaryTimeoutMs + 5000,
           'QCLOUD API Summary'
         );
@@ -5391,6 +5490,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
 
     throw new Error("Failed to generate summary after all fallback attempts.");
+  }
+
+  public getQCloudMeetingSummaryChunkChars(): number | undefined {
+    return this.hasNatively() ? QCLOUD_MEETING_SUMMARY_SAFE_CHUNK_CHARS : undefined;
   }
 
   public async switchToOllama(model?: string, url?: string): Promise<void> {

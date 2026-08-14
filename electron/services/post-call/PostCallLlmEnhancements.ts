@@ -23,7 +23,7 @@ export interface GeneratePostCallLlmEnhancementsParams {
       systemPrompt: string,
       context: string,
       groqSystemPrompt?: string,
-      options?: { maxOutputTokens?: number },
+      options?: { maxOutputTokens?: number; qcloudRequestClass?: 'post_call' },
     ) => Promise<string>;
   };
   transcript: PostCallTranscriptSegment[];
@@ -151,7 +151,10 @@ export async function generatePostCallLlmEnhancements(params: GeneratePostCallLl
         evidenceWindow,
       }),
       undefined,
-      { maxOutputTokens: QCLOUD_MEETING_SUMMARY_ENHANCEMENT_OUTPUT_TOKENS },
+      {
+        maxOutputTokens: QCLOUD_MEETING_SUMMARY_ENHANCEMENT_OUTPUT_TOKENS,
+        qcloudRequestClass: 'post_call',
+      },
     );
     return raw ? parseEnhancements(raw, params.transcript) : EMPTY_ENHANCEMENTS;
   } catch (err) {

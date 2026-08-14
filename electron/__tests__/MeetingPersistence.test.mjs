@@ -396,7 +396,35 @@ describe('MeetingPersistence.processAndSaveMeeting (background path)', () => {
     assert.deepEqual(summaryCall[3], { maxOutputTokens: 4096 }, 'core summary should use its explicit task budget');
     const enhancementCall = calls.find(([prompt]) => prompt.includes('摘要页增强模块'));
     assert.ok(enhancementCall, 'post-call enhancement should still run after the core summary');
-    assert.deepEqual(enhancementCall[3], { maxOutputTokens: 2048 });
+    assert.deepEqual(enhancementCall[3], {
+      maxOutputTokens: 2048,
+      qcloudRequestClass: 'post_call',
+    });
+  });
+
+  test('starts independent title and summary generation concurrently', async () => {
+    const session = buildMockSession();
+    let resolveTitle;
+    const titleResult = new Promise((resolve) => { resolveTitle = resolve; });
+    const calls = [];
+    const llm = {
+      generateMeetingSummary: async (...args) => {
+        calls.push(args);
+        if (calls.length === 1) return titleResult;
+        if (calls.length === 2) {
+          return JSON.stringify({ overview: '并行摘要', keyPoints: [], actionItems: [] });
+        }
+        return JSON.stringify({ coachingInsights: [], followUpDraft: '' });
+      },
+    };
+    const mp = new MeetingPersistence(session, llm);
+
+    const processing = mp.processAndSaveMeeting(buildSnapshot(), 'm-parallel-title-summary');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.ok(calls.length >= 2, 'summary should start while title generation is still pending');
+    resolveTitle('并行标题');
+    await processing;
   });
 
   test('title generation failure keeps fallback title and still generates summary', async () => {

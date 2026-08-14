@@ -55,7 +55,10 @@ test('generatePostCallLlmEnhancements returns Chinese insights with evidence and
   assert.equal(result.coachingInsights[0].title, '验证材料需要明确');
   assert.equal(result.coachingInsights[0].evidence, '客户下周提供测试数据');
   assert.match(result.followUpDraft, /只读接入范围/);
-  assert.deepEqual(calls[0][3], { maxOutputTokens: 2048 });
+  assert.deepEqual(calls[0][3], {
+    maxOutputTokens: 2048,
+    qcloudRequestClass: 'post_call',
+  });
 });
 
 test('generatePostCallLlmEnhancements drops insights without evidence', async () => {

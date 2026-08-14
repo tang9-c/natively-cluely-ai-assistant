@@ -98,9 +98,10 @@ test('LLMHelper uses turbo with thinking for QCLOUD skill requests and keeps lit
   assert.match(helper, /totalTimeoutMs:\s*qcloudChatTimeoutMs/);
   assert.match(helper, /qcloudModel:\s*QCLOUD_MEETING_SUMMARY_MODEL/);
   assert.match(helper, /const qcloudSummaryTimeoutMs = QCLOUD_MEETING_SUMMARY_TIMEOUT_MS/);
-  assert.match(helper, /generateMeetingSummary\(\s*systemPrompt:\s*string,\s*context:\s*string,\s*groqSystemPrompt\?:\s*string,\s*options\?:\s*\{\s*maxOutputTokens\?:\s*number\s*\},?\s*\)/);
+  assert.match(helper, /generateMeetingSummary\(\s*systemPrompt:\s*string,\s*context:\s*string,\s*groqSystemPrompt\?:\s*string,\s*options\?:\s*\{\s*maxOutputTokens\?:\s*number;\s*qcloudRequestClass\?:\s*QCloudRequestClass\s*\},?\s*\)/);
   assert.match(helper, /maxOutputTokens:\s*options\?\.maxOutputTokens\s*\?\?\s*QCLOUD_MEETING_SUMMARY_OUTPUT_TOKENS/);
-  assert.match(helper, /this\.generateWithNatively\(`Context:\\n\$\{context\}`,\s*systemPrompt,\s*undefined,\s*\{[\s\S]{0,220}qcloudModel:\s*QCLOUD_MEETING_SUMMARY_MODEL/);
+  assert.match(helper, /qcloudBackgroundScheduler\.run\([\s\S]{0,180}this\.generateWithNatively\(`Context:\\n\$\{context\}`,\s*systemPrompt,\s*undefined,\s*\{[\s\S]{0,320}qcloudModel:\s*QCLOUD_MEETING_SUMMARY_MODEL/);
+  assert.match(helper, /qcloudRequestClass:\s*options\?\.qcloudRequestClass\s*\?\?\s*'meeting_summary'/);
 });
 
 test('LLMHelper passes explicit QCLOUD output budgets for chat and PPTX call sites', () => {
@@ -144,11 +145,11 @@ test('non-streaming QCLOUD sends system prompt as a chat message while streaming
 
   assert.match(nonStreamingBody, /const messages:\s*Array<\{\s*role:\s*['"]system['"]\s*\|\s*['"]user['"]/);
   assert.match(nonStreamingBody, /messages\.push\(\{\s*role:\s*['"]system['"],\s*content:\s*systemPrompt\s*\}\)/);
-  assert.match(nonStreamingBody, /messages\.push\(\{[\s\S]{0,120}role:\s*['"]user['"],[\s\S]{0,120}content:\s*await this\.buildQCloudUserContent\(userMessage,\s*imagePaths\)/);
+  assert.match(nonStreamingBody, /messages\.push\(\{[\s\S]{0,120}role:\s*['"]user['"],[\s\S]{0,120}content:\s*await this\.buildQCloudUserContent\(inputBudget\.text,\s*imagePaths\)/);
   assert.match(nonStreamingBody, /messages,\s*\n\s*max_tokens:/);
   assert.doesNotMatch(nonStreamingBody, /body\.system\s*=\s*systemPrompt/);
 
-  assert.match(streamingBody, /messages:\s*\[\{[\s\S]{0,120}role:\s*['"]user['"],[\s\S]{0,120}content:\s*await this\.buildQCloudUserContent\(userContent,\s*imagePaths\)/);
+  assert.match(streamingBody, /messages:\s*\[\{[\s\S]{0,120}role:\s*['"]user['"],[\s\S]{0,120}content:\s*await this\.buildQCloudUserContent\(inputBudget\.text,\s*imagePaths\)/);
   assert.match(streamingBody, /body\.system\s*=\s*systemPrompt/);
 });
 
