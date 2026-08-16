@@ -29,6 +29,7 @@ export interface MaterialRagSource {
     fileHash?: string;
     materialUpdatedAt?: string;
     embedding?: number[];
+    embeddingSpace?: string;
 }
 
 export interface MaterialRagFilters {
@@ -105,6 +106,7 @@ interface Candidate {
     chunkIndex: number;
     ftsScore: number;
     vectorScore: number;
+    usesVector: boolean;
 }
 
 function withHybridRetrievalBudget<T>(promise: Promise<T>, timeoutMs?: number): Promise<T> {
@@ -140,6 +142,7 @@ export class MaterialRagRetriever {
         weightedTerms?: WeightedMaterialQueryTerm[];
         hybridTimeoutMs?: number;
         semanticQuery?: string;
+        activeEmbeddingSpace?: string;
     }): Promise<MaterialRagContext> {
         const queryText = params.query.trim();
         const semanticQueryText = params.semanticQuery?.trim() || queryText;
@@ -173,6 +176,7 @@ export class MaterialRagRetriever {
                         relevanceThreshold,
                         hasCjkQuery,
                         params.weightedTerms,
+                        params.activeEmbeddingSpace,
                     ),
                     params.hybridTimeoutMs,
                 );
@@ -292,6 +296,7 @@ export class MaterialRagRetriever {
                     chunkIndex: index,
                     ftsScore: 0,
                     vectorScore: 0,
+                    usesVector: false,
                 });
             });
         }
@@ -305,13 +310,20 @@ export class MaterialRagRetriever {
         minScore: number,
         hasCjkQuery: boolean,
         weightedTerms?: WeightedMaterialQueryTerm[],
+        activeEmbeddingSpace?: string,
     ): Promise<Candidate[]> {
         const queryEmbedding = await this.embeddingPipeline!.getEmbeddingForQuery(queryText);
-        let chunkEmbeddings: number[][] = candidates.map((candidate) => candidate.source.embedding ?? []);
+        const canUseStoredEmbedding = (candidate: Candidate): boolean => Boolean(
+            candidate.source.embedding
+            && (!activeEmbeddingSpace || candidate.source.embeddingSpace === activeEmbeddingSpace)
+        );
+        let chunkEmbeddings: number[][] = candidates.map((candidate) => (
+            canUseStoredEmbedding(candidate) ? candidate.source.embedding! : []
+        ));
         try {
             const missing = candidates
                 .map((candidate, index) => ({ candidate, index }))
-                .filter(({ candidate }) => !candidate.source.embedding);
+                .filter(({ candidate }) => !candidate.source.embedding && !activeEmbeddingSpace);
             if (missing.length > 0) {
                 const texts = missing.map(({ candidate }) => candidate.text);
                 const getEmbeddings = (this.embeddingPipeline as any).getEmbeddings;
@@ -335,6 +347,7 @@ export class MaterialRagRetriever {
                     weightedTerms,
                 ),
                 vectorScore: chunkEmbeddings[index] ? cosine(queryEmbedding, chunkEmbeddings[index]) : 0,
+                usesVector: chunkEmbeddings[index]?.length > 0,
             }))
             .filter((candidate) => this.finalScore(candidate) >= minScore);
     }
@@ -356,6 +369,7 @@ export class MaterialRagRetriever {
                     weightedTerms,
                 ),
                 vectorScore: 0,
+                usesVector: false,
             }))
             .filter((candidate) => candidate.ftsScore >= minScore);
     }
@@ -373,6 +387,7 @@ export class MaterialRagRetriever {
     }
 
     private finalScore(candidate: Candidate): number {
+        if (!candidate.usesVector) return candidate.ftsScore;
         return (FTS_WEIGHT * candidate.ftsScore) + ((1 - FTS_WEIGHT) * candidate.vectorScore);
     }
 

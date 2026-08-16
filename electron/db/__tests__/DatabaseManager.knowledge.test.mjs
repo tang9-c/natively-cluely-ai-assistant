@@ -25,6 +25,9 @@ function createKnowledgeSchema(db) {
       status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued', 'indexing', 'complete', 'failed', 'deleted')),
       error_code TEXT,
       error_message TEXT,
+      embedding_provider TEXT,
+      embedding_dimensions INTEGER,
+      embedding_space TEXT,
       source_type TEXT NOT NULL DEFAULT 'upload',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -159,6 +162,26 @@ describe('DatabaseManager — upsertKnowledgeMaterial / list / get / update stat
     const rows = manager.listKnowledgeMaterials();
     assert.equal(rows.length, 1);
     assert.equal(rows[0].id, 'b');
+  });
+
+  it('stores and clears the material embedding-space identity', () => {
+    manager.upsertKnowledgeMaterial({ id: 'space', fileName: 'space.md', mimeOrExt: 'text/markdown', fileHash: 'hs' });
+
+    manager.setKnowledgeMaterialEmbeddingSpace('space', {
+      provider: 'local',
+      dimensions: 384,
+      space: 'local:model-a:384',
+    });
+    let row = manager.getKnowledgeMaterial('space');
+    assert.equal(row.embedding_provider, 'local');
+    assert.equal(row.embedding_dimensions, 384);
+    assert.equal(row.embedding_space, 'local:model-a:384');
+
+    manager.setKnowledgeMaterialEmbeddingSpace('space', null);
+    row = manager.getKnowledgeMaterial('space');
+    assert.equal(row.embedding_provider, null);
+    assert.equal(row.embedding_dimensions, null);
+    assert.equal(row.embedding_space, null);
   });
 });
 
@@ -546,5 +569,19 @@ describe('DatabaseManager — interrupted knowledge material recovery', () => {
     assert.equal(db.prepare(`SELECT status FROM knowledge_materials WHERE id = 'complete'`).get().status, 'complete');
     assert.equal(db.prepare(`SELECT status FROM knowledge_materials WHERE id = 'failed'`).get().status, 'failed');
     assert.equal(db.prepare(`SELECT status FROM knowledge_materials WHERE id = 'deleted'`).get().status, 'deleted');
+  });
+});
+
+describe('DatabaseManager — knowledge material embedding-space migration', () => {
+  it('adds material embedding identity columns and advances schema to v34', () => {
+    const { db, manager } = makeManager();
+
+    manager.runMigrations();
+
+    const columns = new Set(db.prepare('PRAGMA table_info(knowledge_materials)').all().map((row) => row.name));
+    assert.equal(columns.has('embedding_provider'), true);
+    assert.equal(columns.has('embedding_dimensions'), true);
+    assert.equal(columns.has('embedding_space'), true);
+    assert.equal(db.pragma('user_version', { simple: true }), 34);
   });
 });

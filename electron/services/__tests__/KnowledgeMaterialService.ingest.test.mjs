@@ -56,6 +56,13 @@ function createDbStub() {
     markKnowledgeMaterialEmbeddingsFailed(materialId, message) {
       embeddingFailures.set(materialId, message || 'embedding_failed');
     },
+    setKnowledgeMaterialEmbeddingSpace(materialId, identity) {
+      const material = materials.get(materialId);
+      if (!material) return;
+      material.embedding_provider = identity?.provider ?? null;
+      material.embedding_dimensions = identity?.dimensions ?? null;
+      material.embedding_space = identity?.space ?? null;
+    },
     replaceKnowledgeMaterialChunks(materialId, inputChunks) {
       for (const [id, chunk] of chunks) {
         if (chunk.material_id === materialId) chunks.delete(id);
@@ -152,6 +159,9 @@ test('upload with embedding pipeline that succeeds sets chunk embeddings', async
       isReady: () => true,
       getEmbeddingForQuery: async () => [0.1, 0.2, 0.3],
       getEmbeddings: async (texts) => texts.map((_, i) => [i * 0.1, 0.2, 0.3]),
+      getActiveProviderName: () => 'local',
+      getActiveDimensions: () => 3,
+      getActiveSpaceKey: () => 'local:test-model:3',
     };
     const service = new KnowledgeMaterialService(db, embeddingPipeline);
     const result = await service.uploadFiles([mdPath]);
@@ -163,6 +173,62 @@ test('upload with embedding pipeline that succeeds sets chunk embeddings', async
     for (const chunk of chunks) {
       assert.ok(chunk.embedding instanceof Buffer, 'chunk should have embedding buffer');
     }
+    const material = db.getKnowledgeMaterial(materialId);
+    assert.equal(material.embedding_provider, 'local');
+    assert.equal(material.embedding_dimensions, 3);
+    assert.equal(material.embedding_space, 'local:test-model:3');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('partial batch embedding response stores no vectors and keeps lexical index complete', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kms-embed-partial-'));
+  try {
+    const mdPath = path.join(tmpDir, 'partial.md');
+    fs.writeFileSync(mdPath, Array.from({ length: 80 }, (_, i) => `第${i}段知识源资料用于制造多个索引分块。`).join('\n\n'), 'utf8');
+    const db = createDbStub();
+    const embeddingPipeline = {
+      isReady: () => true,
+      getEmbeddings: async () => [[0.1, 0.2, 0.3]],
+      getActiveProviderName: () => 'local',
+      getActiveDimensions: () => 3,
+      getActiveSpaceKey: () => 'local:test-model:3',
+    };
+    const service = new KnowledgeMaterialService(db, embeddingPipeline);
+
+    const result = await service.uploadFiles([mdPath]);
+    const materialId = result.materials[0].id;
+    await waitFor(() => assert.equal(db.getKnowledgeMaterial(materialId).status, 'complete'));
+
+    const chunks = [...db.chunks.values()].filter((chunk) => chunk.material_id === materialId);
+    assert.ok(chunks.length > 1);
+    assert.ok(chunks.every((chunk) => chunk.embedding === null));
+    assert.match(db.embeddingFailures.get(materialId), /embedding_batch_incomplete/);
+    assert.equal(db.getKnowledgeMaterial(materialId).embedding_space, null);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('successful background indexing notifies material-context cache invalidation', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kms-index-notify-'));
+  try {
+    const mdPath = path.join(tmpDir, 'notify.md');
+    fs.writeFileSync(mdPath, '后台索引完成后应使资料查询缓存失效。', 'utf8');
+    const db = createDbStub();
+    let notifications = 0;
+    const service = new KnowledgeMaterialService(db, null, {
+      onMaterialIndexChanged: () => {
+        notifications += 1;
+      },
+    });
+
+    const result = await service.uploadFiles([mdPath]);
+    const materialId = result.materials[0].id;
+    await waitFor(() => assert.equal(db.getKnowledgeMaterial(materialId).status, 'complete'));
+
+    assert.equal(notifications, 1);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

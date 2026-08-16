@@ -108,6 +108,60 @@ test('material retrieval uses semanticQuery for embeddings while lexical scoring
   assert.equal(result.chunks[0]?.sourceId, 'robotics');
 });
 
+test('hybrid retrieval ignores a same-dimensional vector from a different embedding space', async () => {
+  const embeddingPipeline = {
+    isReady: () => true,
+    getEmbeddingForQuery: async () => [1, 0],
+  };
+  const retriever = new MaterialRagRetriever(embeddingPipeline);
+
+  const result = await retriever.retrieve({
+    query: '手术机器人',
+    activeEmbeddingSpace: 'local:model-new:2',
+    sources: [{
+      id: 'robotics',
+      scope: 'global',
+      title: '机器人资料',
+      text: '手术机器人包含约 15000 个零件',
+      parentText: '手术机器人包含约 15000 个零件',
+      embedding: [-1, 0],
+      embeddingSpace: 'local:model-old:2',
+    }],
+    topK: 1,
+    format: 'none',
+  });
+
+  assert.equal(result.chunks[0]?.sourceId, 'robotics');
+  assert.equal(result.chunks[0]?.vectorScore, 0);
+});
+
+test('hybrid retrieval uses a vector from the active embedding space', async () => {
+  const embeddingPipeline = {
+    isReady: () => true,
+    getEmbeddingForQuery: async () => [1, 0],
+  };
+  const retriever = new MaterialRagRetriever(embeddingPipeline);
+
+  const result = await retriever.retrieve({
+    query: '机器人',
+    activeEmbeddingSpace: 'local:model-new:2',
+    sources: [{
+      id: 'robotics',
+      scope: 'global',
+      title: '机器人资料',
+      text: '机器人系统说明',
+      parentText: '机器人系统说明',
+      embedding: [1, 0],
+      embeddingSpace: 'local:model-new:2',
+    }],
+    topK: 1,
+    format: 'none',
+  });
+
+  assert.equal(result.chunks[0]?.sourceId, 'robotics');
+  assert.equal(result.chunks[0]?.vectorScore, 1);
+});
+
 test('mode reference retrieval splits long Chinese text without spaces into bounded overlapping chunks', async () => {
   const retriever = new MaterialRagRetriever(null);
   const longChinese = `${'中'.repeat(895)}数字化移交${'文'.repeat(1000)}`;
@@ -130,4 +184,24 @@ test('mode reference retrieval splits long Chinese text without spaces into boun
   assert.ok(chunks.every((item) => item.length <= 900));
   assert.ok(chunks.some((item) => item.includes('数字化移交')));
   assert.ok(result.chunks.some((item) => item.text.includes('数字化移交')));
+});
+
+test('lexical retrieval accepts two-character alphanumeric abbreviations but ignores one character noise', async () => {
+  const retriever = new MaterialRagRetriever(null);
+  const sources = [{
+    id: 'quality-system',
+    scope: 'global',
+    title: '质量系统',
+    text: 'AI 会辅助 8D 经验回流。',
+    parentText: 'AI 会辅助 8D 经验回流。',
+    sourcePriority: 1,
+  }];
+
+  const ai = await retriever.retrieve({ query: 'AI', sources, topK: 1, format: 'none' });
+  const eightD = await retriever.retrieve({ query: '8D', sources, topK: 1, format: 'none' });
+  const single = await retriever.retrieve({ query: 'A', sources, topK: 1, format: 'none' });
+
+  assert.equal(ai.chunks[0]?.sourceId, 'quality-system');
+  assert.equal(eightD.chunks[0]?.sourceId, 'quality-system');
+  assert.deepEqual(single.chunks, []);
 });

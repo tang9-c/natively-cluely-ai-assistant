@@ -159,6 +159,36 @@ test('prepareWhatToSayContext required material path searches and preserves cita
   assert.equal(calls.businessResolve, 0);
 });
 
+test('deferred material planning removes citations for omitted candidates', async () => {
+  const { prepareWhatToSayContext, WhatToSayContextPreparationService } = await loadHelper();
+  WhatToSayContextPreparationService.getInstance()._resetCachesForTest();
+  const longText = '资料中的具体事实和实施说明。'.repeat(500);
+  const { input } = baseInput({
+    question: '根据资料说明实施方法',
+    modeEvent: {
+      productContract: {
+        outputType: 'spoken_response',
+        contextNeedDecision: decision({ material: 'required' }),
+      },
+    },
+    materialServiceFactory: () => ({
+      async searchWithDiagnostics() {
+        return {
+          hits: [
+            { sourceType: 'uploaded_material', sourceId: 'mat-1', chunkId: 1, score: 0.9, title: '第一份', text: longText, parentText: longText },
+            { sourceType: 'uploaded_material', sourceId: 'mat-2', chunkId: 2, score: 0.8, title: '第二份', text: longText, parentText: longText },
+          ],
+        };
+      },
+    }),
+  });
+
+  const result = await prepareWhatToSayContext(input);
+
+  assert.deepEqual(result.realtimeContextPlan.injected.map((candidate) => candidate.sourceId), ['mat-1']);
+  assert.deepEqual(result.citations.map((citation) => citation.sourceId), ['mat-1']);
+});
+
 test('_resetCachesForTest clears cached material contributions between runs', async () => {
   const { prepareWhatToSayContext, WhatToSayContextPreparationService } = await loadHelper();
   const service = WhatToSayContextPreparationService.getInstance();
@@ -180,6 +210,29 @@ test('_resetCachesForTest clears cached material contributions between runs', as
   service._resetCachesForTest();
   await prepareWhatToSayContext(input);
   assert.equal(calls.materialSearch, 2, 'resetForTest should clear cached material lookup');
+});
+
+test('invalidateMaterialCache clears only cached material contributions between runs', async () => {
+  const { prepareWhatToSayContext, WhatToSayContextPreparationService } = await loadHelper();
+  const service = WhatToSayContextPreparationService.getInstance();
+  service._resetCachesForTest();
+  const { input, calls } = baseInput({
+    question: 'Share the ROI proof',
+    modeEvent: {
+      productContract: {
+        outputType: 'spoken_response',
+        contextNeedDecision: decision({ material: 'required' }),
+      },
+    },
+  });
+
+  await prepareWhatToSayContext(input);
+  await prepareWhatToSayContext(input);
+  assert.equal(calls.materialSearch, 1);
+
+  service.invalidateMaterialCache();
+  await prepareWhatToSayContext(input);
+  assert.equal(calls.materialSearch, 2);
 });
 
 test('material cache is scoped by dynamic action identity', async () => {

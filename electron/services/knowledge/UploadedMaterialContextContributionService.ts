@@ -176,6 +176,7 @@ export async function buildUploadedMaterialContextContribution(
         });
         const injectedKeys = new Set(plan.injected.map((candidate) => `${candidate.sourceId}:${candidate.chunkId ?? ''}`));
         const selectedHits = hits.filter((hit) => injectedKeys.has(`${hit.sourceId}:${hit.chunkId}`));
+        const selectedCitations = selectedHits.map((hit) => buildUploadedMaterialCitation(hit));
         const formatted = formatUploadedMaterialContext(selectedHits);
         const allReasons = [...plan.degradedReasons];
         if (formatted.truncated && !allReasons.includes('uploaded_material_context_truncated')) {
@@ -187,8 +188,8 @@ export async function buildUploadedMaterialContextContribution(
             context: input.existingContext ? `${input.existingContext}\n\n${materialContext}` : materialContext,
             contextCandidates: plan.injected,
             degradedReasons: allReasons,
-            sourceStatus: plan.sourceStatus,
-            citations,
+            sourceStatus: { ...plan.sourceStatus, citationCount: selectedCitations.length },
+            citations: selectedCitations,
             retrievalTimingMs,
             usedMaterialContext: selectedHits.length > 0,
             uploadedMaterialHitCount: hits.length,

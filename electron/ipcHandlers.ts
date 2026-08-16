@@ -21,7 +21,7 @@ import { CodexCliService } from './services/CodexCliService';
 import { resolveAnswerCitation } from './services/context/AnswerCitationResolver';
 import { sanitizeGenerateWhatToSayOptions } from './services/context/RealtimeAnswerRequest';
 import { sanitizeContextNeedDecision, type ContextNeedDecision } from './services/context/ContextNeedDecision';
-import { prepareWhatToSayContext } from './services/context/WhatToSayContextPreparation';
+import { prepareWhatToSayContext, WhatToSayContextPreparationService } from './services/context/WhatToSayContextPreparation';
 import {
   buildUploadedMaterialContextContribution,
   shouldRequireUploadedMaterialContext,
@@ -4594,8 +4594,16 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       const ragManager = appState.getRAGManager();
       const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
-      const service = new KnowledgeMaterialService(DatabaseManager.getInstance(), ragManager?.getEmbeddingPipeline?.());
+      const invalidateMaterialCache = () => WhatToSayContextPreparationService.getInstance().invalidateMaterialCache();
+      const service = new KnowledgeMaterialService(
+        DatabaseManager.getInstance(),
+        ragManager?.getEmbeddingPipeline?.(),
+        { onMaterialIndexChanged: invalidateMaterialCache },
+      );
       const result = await service.uploadFiles(filePaths);
+      if (result.materials.length > 0) {
+        invalidateMaterialCache();
+      }
       return { success: result.materials.length > 0, ...result };
     } catch (error: any) {
       return { success: false, materials: [], errors: [{ filePath: '', error: error.message || 'unknown_error' }] };
@@ -4617,6 +4625,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
       const service = new KnowledgeMaterialService(DatabaseManager.getInstance(), appState.getRAGManager()?.getEmbeddingPipeline?.());
       service.deleteMaterial(id);
+      WhatToSayContextPreparationService.getInstance().invalidateMaterialCache();
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -4628,6 +4637,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
       const service = new KnowledgeMaterialService(DatabaseManager.getInstance(), appState.getRAGManager()?.getEmbeddingPipeline?.());
       const material = await service.reindexMaterial(id);
+      WhatToSayContextPreparationService.getInstance().invalidateMaterialCache();
       return { success: true, material };
     } catch (error: any) {
       return { success: false, error: error.message };

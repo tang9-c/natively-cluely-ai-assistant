@@ -173,6 +173,79 @@ test('reindexMaterial rebuilds material from previously indexed chunks', async (
   }
 });
 
+test('reindexMaterial is idempotent for overlapping multi-chunk Chinese text', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'material-reindex-idempotent-'));
+  try {
+    const filePath = path.join(tmpDir, 'long.md');
+    const content = Array.from(
+      { length: 80 },
+      (_, index) => `第${index}段介绍知识源索引的唯一业务事实${String(index).padStart(3, '0')}，用于验证连续重建不会复制重叠文本。`,
+    ).join('\n\n');
+    fs.writeFileSync(filePath, content, 'utf8');
+    const db = createDbStub();
+    const service = new KnowledgeMaterialService(db, null);
+
+    const result = await service.uploadFiles([filePath]);
+    const materialId = result.materials[0].id;
+    await waitFor(() => assert.equal(db.getKnowledgeMaterial(materialId).status, 'complete'));
+
+    const snapshot = () => [...db.chunks.values()]
+      .filter((chunk) => chunk.material_id === materialId)
+      .sort((a, b) => a.chunk_index - b.chunk_index)
+      .map((chunk) => chunk.cleaned_text);
+    const initial = snapshot();
+    assert.ok(initial.length > 1);
+
+    await service.reindexMaterial(materialId);
+    const afterFirst = snapshot();
+    await service.reindexMaterial(materialId);
+    const afterSecond = snapshot();
+
+    assert.deepEqual(afterFirst, initial);
+    assert.deepEqual(afterSecond, initial);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('reindexMaterial does not collapse a short coincidental boundary match', async () => {
+  const db = createDbStub();
+  db.materials.set('mat-boundary', {
+    id: 'mat-boundary',
+    file_name: 'boundary.md',
+    title: 'boundary.md',
+    mime_or_ext: '.md',
+    file_hash: 'boundary-hash',
+    status: 'complete',
+    created_at: '2026-08-16T00:00:00Z',
+    updated_at: '2026-08-16T00:00:00Z',
+  });
+  db.chunks.set(1, {
+    id: 1,
+    material_id: 'mat-boundary',
+    chunk_index: 0,
+    cleaned_text: '第一部分以共同',
+    parent_text: '第一部分以共同',
+    token_count: 4,
+    embedding: null,
+  });
+  db.chunks.set(2, {
+    id: 2,
+    material_id: 'mat-boundary',
+    chunk_index: 1,
+    cleaned_text: '共同开始第二部分',
+    parent_text: '共同开始第二部分',
+    token_count: 4,
+    embedding: null,
+  });
+  const service = new KnowledgeMaterialService(db, null);
+
+  await service.reindexMaterial('mat-boundary');
+
+  const rebuilt = [...db.chunks.values()].find((chunk) => chunk.material_id === 'mat-boundary');
+  assert.equal(rebuilt.cleaned_text, '第一部分以共同\n\n共同开始第二部分');
+});
+
 test('searchWithDiagnostics falls back to full chunk scan when candidateReader is missing', async () => {
   const db = createDbStub();
   // pre-existing chunks: include some non-matching and one matching

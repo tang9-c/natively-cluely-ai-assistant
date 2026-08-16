@@ -40,6 +40,7 @@ interface PptxQCloudAvailability {
 }
 
 interface KnowledgeMaterialServiceOptions {
+    onMaterialIndexChanged?: () => void;
     getQCloudAvailability?: () => Promise<PptxQCloudAvailability>;
     createPptxIngestionService?: (
         indexPreparedChunks: (materialId: string, chunks: KnowledgeMaterialChunkInput[]) => Promise<void>,
@@ -50,6 +51,8 @@ interface KnowledgeMaterialServiceOptions {
 
 const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.docx', '.txt', '.md', '.markdown', '.pptx']);
 const CHILD_TARGET_CHARS = 900;
+const CHILD_OVERLAP_CHARS = 120;
+const MIN_REINDEX_OVERLAP_CHARS = 16;
 const PARENT_WINDOW = 1;
 const PPTX_RENDERER_FONT_MAPPING_MODULE = 'createPptxFontMapping.js';
 
@@ -154,7 +157,7 @@ export class KnowledgeMaterialService {
         // reconstructs from parent/child chunk text. Upload again for a pristine parse.
         const chunks = this.db.getKnowledgeMaterialChunks({ withEmbeddingsOnly: false })
             .filter((chunk: any) => chunk.material_id === materialId);
-        const text = chunks.map((chunk: any) => chunk.cleaned_text).join('\n\n').trim();
+        const text = reconstructOverlappingChunks(chunks.map((chunk: any) => chunk.cleaned_text));
         if (!text) throw new Error('material_has_no_indexable_text');
         await this.indexMaterial(materialId, text);
         return this.db.getKnowledgeMaterial(materialId);
@@ -195,6 +198,7 @@ export class KnowledgeMaterialService {
             fileHash: row.file_hash,
             materialUpdatedAt: row.material_updated_at,
             embedding: row.embedding ? blobToVector(row.embedding) : undefined,
+            embeddingSpace: row.embedding_space || undefined,
         }));
         const result = await this.materialRagRetriever.retrieve({
             query,
@@ -204,6 +208,7 @@ export class KnowledgeMaterialService {
             format: 'none',
             weightedTerms: queryAnalysis.weightedTerms,
             hybridTimeoutMs: options.hybridTimeoutMs,
+            activeEmbeddingSpace: this.embeddingPipeline?.getActiveSpaceKey?.(),
         });
 
         return {
@@ -242,13 +247,32 @@ export class KnowledgeMaterialService {
             }
             if (!this.isMaterialIndexable(materialId)) return;
             const chunkIds = this.db.replaceKnowledgeMaterialChunks(materialId, chunks);
+            this.db.setKnowledgeMaterialEmbeddingSpace?.(materialId, null);
             if (this.embeddingPipeline && chunkIds.length > 0) {
                 try {
                     const embeddings = await this.embeddingPipeline.getEmbeddings(chunks.map((chunk) => chunk.cleanedText));
                     if (!this.isMaterialIndexable(materialId)) return;
+                    const expectedDimensions = this.embeddingPipeline.getActiveDimensions?.() ?? embeddings[0]?.length;
+                    const completeBatch = embeddings.length === chunks.length
+                        && Number.isInteger(expectedDimensions)
+                        && Number(expectedDimensions) > 0
+                        && embeddings.every((embedding) => (
+                            Array.isArray(embedding)
+                            && embedding.length === expectedDimensions
+                            && embedding.every(Number.isFinite)
+                        ));
+                    if (!completeBatch) {
+                        throw new Error('embedding_batch_incomplete');
+                    }
                     embeddings.forEach((embedding, index) => {
                         this.db.setKnowledgeMaterialChunkEmbedding(chunkIds[index], embedding);
                     });
+                    const provider = this.embeddingPipeline.getActiveProviderName?.();
+                    const dimensions = this.embeddingPipeline.getActiveDimensions?.();
+                    const space = this.embeddingPipeline.getActiveSpaceKey?.();
+                    if (provider && dimensions && space) {
+                        this.db.setKnowledgeMaterialEmbeddingSpace?.(materialId, { provider, dimensions, space });
+                    }
                 } catch (embeddingError: any) {
                     this.db.markKnowledgeMaterialEmbeddingsFailed?.(materialId, embeddingError?.message || 'embedding_failed');
                     // Keep the text index usable. MaterialRagRetriever will report
@@ -258,6 +282,11 @@ export class KnowledgeMaterialService {
             const status: MaterialStatus = 'complete';
             if (!this.isMaterialIndexable(materialId)) return;
             this.db.updateKnowledgeMaterialStatus(materialId, status);
+            try {
+                this.options.onMaterialIndexChanged?.();
+            } catch {
+                // Cache invalidation must not change a successfully committed index.
+            }
         } catch (error: any) {
             if (!this.isMaterialIndexable(materialId)) return;
             const classifiedCode = classifyMaterialIndexError(error);
@@ -442,7 +471,7 @@ function blobToVector(blob: Buffer): number[] {
 function buildParentChildChunks(materialId: string, text: string): KnowledgeMaterialChunkInput[] {
     const childTexts = chunkReferenceText(text, {
         targetChars: CHILD_TARGET_CHARS,
-        overlapChars: 120,
+        overlapChars: CHILD_OVERLAP_CHARS,
     });
 
     return childTexts.map((child, index) => {
@@ -457,4 +486,22 @@ function buildParentChildChunks(materialId: string, text: string): KnowledgeMate
             metadata: { parentWindow: PARENT_WINDOW },
         };
     });
+}
+
+function reconstructOverlappingChunks(chunks: string[]): string {
+    const normalized = chunks.map((chunk) => String(chunk || '').trim()).filter(Boolean);
+    if (normalized.length === 0) return '';
+    let reconstructed = normalized[0];
+    for (const chunk of normalized.slice(1)) {
+        const maxOverlap = Math.min(CHILD_OVERLAP_CHARS, reconstructed.length, chunk.length);
+        let overlap = 0;
+        for (let length = maxOverlap; length >= MIN_REINDEX_OVERLAP_CHARS; length--) {
+            if (reconstructed.endsWith(chunk.slice(0, length))) {
+                overlap = length;
+                break;
+            }
+        }
+        reconstructed += overlap > 0 ? chunk.slice(overlap) : `\n\n${chunk}`;
+    }
+    return reconstructed.trim();
 }

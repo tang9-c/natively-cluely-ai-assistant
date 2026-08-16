@@ -27,7 +27,7 @@ export function wordsOf(text: string): string[] {
     const tokens = new Set<string>();
 
     for (const word of normalized.match(/[a-z0-9][a-z0-9-]{1,}/g) ?? []) {
-        if (word.length > 2) tokens.add(word);
+        if (word.length >= 2) tokens.add(word);
     }
 
     for (const sequence of text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu) ?? []) {

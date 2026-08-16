@@ -75,6 +75,39 @@ test('uploaded material chat contribution reports truncation and source status',
   assert.equal(result.contextCandidates[0].source, 'uploaded_material');
 });
 
+test('uploaded material contribution returns citations only for injected hits', async () => {
+  const { buildUploadedMaterialContextContribution } = await loadService();
+  const calls = [];
+  const makeHit = (sourceId, chunkId, text) => ({
+    sourceType: 'uploaded_material',
+    sourceId,
+    chunkId,
+    score: 0.9,
+    title: sourceId,
+    text,
+    parentText: text,
+    fileHash: `hash-${sourceId}`,
+    materialUpdatedAt: '2026-08-16T00:00:00Z',
+  });
+
+  const result = await buildUploadedMaterialContextContribution({
+    query: '根据资料回答',
+    materialService: makeMaterialService({
+      hits: [
+        makeHit('mat-1', 1, '第一份资料内容足够回答问题。'.repeat(20)),
+        makeHit('mat-2', 2, '第二份资料会因为预算不足被省略。'.repeat(20)),
+      ],
+    }, calls),
+    ragReady: true,
+    embeddingReady: true,
+    tokenBudget: 100,
+  });
+
+  assert.deepEqual(result.contextCandidates.map((candidate) => candidate.sourceId), ['mat-1']);
+  assert.deepEqual(result.citations.map((citation) => citation.sourceId), ['mat-1']);
+  assert.equal(result.sourceStatus.citationCount, 1);
+});
+
 test('uploaded material chat contribution handles no-hit and retrieval failure explicitly', async () => {
   const { buildUploadedMaterialContextContribution } = await loadService();
   const noHitCalls = [];

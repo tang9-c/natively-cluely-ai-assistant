@@ -239,7 +239,7 @@ describe('DatabaseManager — speaker identity correction migration', () => {
 
       const columns = db.prepare('PRAGMA table_info(transcripts)').all().map(row => row.name);
       assert.ok(columns.includes('speaker_identity_correction_json'));
-      assert.equal(db.pragma('user_version', { simple: true }), 33);
+      assert.equal(db.pragma('user_version', { simple: true }), 34);
     });
   }
 });

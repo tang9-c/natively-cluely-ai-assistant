@@ -96,6 +96,9 @@ function createKnowledgeSchema(db) {
       status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued', 'indexing', 'complete', 'failed', 'deleted')),
       error_code TEXT,
       error_message TEXT,
+      embedding_provider TEXT,
+      embedding_dimensions INTEGER,
+      embedding_space TEXT,
       source_type TEXT NOT NULL DEFAULT 'upload',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

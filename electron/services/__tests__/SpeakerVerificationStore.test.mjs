@@ -96,7 +96,7 @@ test('DatabaseManager migration adds enrollment quality and runtime health stats
   assert.doesNotMatch(v32Block[0], /user_version\s*=\s*(?:33|34)/);
 });
 
-test('DatabaseManager backfills missing timeout stats for the branch v33 intermediate schema without advancing its version', () => {
+test('DatabaseManager backfills missing timeout stats for the branch v33 intermediate schema and advances to current schema', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-speaker-store-v33-'));
   const db = new Database(path.join(dir, 'test.db'));
   try {
@@ -130,7 +130,7 @@ test('DatabaseManager backfills missing timeout stats for the branch v33 interme
     ]) {
       assert.ok(columns.includes(column), `speaker_profile_stats must include ${column}`);
     }
-    assert.equal(db.pragma('user_version', { simple: true }), 33);
+    assert.equal(db.pragma('user_version', { simple: true }), 34);
   } finally {
     db.close();
     fs.rmSync(dir, { recursive: true, force: true });

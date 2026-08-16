@@ -1671,6 +1671,22 @@ export class DatabaseManager {
             this.db.pragma('user_version = 33');
         }
 
+        // Version 33 -> 34: Bind uploaded-material vectors to the exact
+        // provider/model/dimension space that produced them. Legacy rows stay
+        // NULL and therefore remain lexical-only until explicitly reindexed.
+        if (version < 34) {
+            console.log('[DatabaseManager] Applying migration v33 -> v34: Add knowledge material embedding space');
+            const knowledgeMaterialsExists = Boolean(this.db.prepare(`
+                SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'knowledge_materials'
+            `).get());
+            if (knowledgeMaterialsExists) {
+                addColumnIfMissing('knowledge_materials', 'embedding_provider', 'TEXT');
+                addColumnIfMissing('knowledge_materials', 'embedding_dimensions', 'INTEGER');
+                addColumnIfMissing('knowledge_materials', 'embedding_space', 'TEXT');
+            }
+            this.db.pragma('user_version = 34');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -2052,6 +2068,23 @@ export class DatabaseManager {
         `).run(message ?? 'embedding_failed', materialId);
     }
 
+    public setKnowledgeMaterialEmbeddingSpace(
+        materialId: string,
+        identity: { provider: string; dimensions: number; space: string } | null,
+    ): void {
+        if (!this.db) return;
+        this.db.prepare(`
+            UPDATE knowledge_materials
+            SET embedding_provider = ?, embedding_dimensions = ?, embedding_space = ?
+            WHERE id = ? AND status != 'deleted'
+        `).run(
+            identity?.provider ?? null,
+            identity?.dimensions ?? null,
+            identity?.space ?? null,
+            materialId,
+        );
+    }
+
     public replaceKnowledgeMaterialChunks(materialId: string, chunks: KnowledgeMaterialChunkInput[]): number[] {
         if (!this.db) return [];
         const ids: number[] = [];
@@ -2135,6 +2168,9 @@ export class DatabaseManager {
                 m.file_name,
                 m.title,
                 m.file_hash,
+                m.embedding_provider,
+                m.embedding_dimensions,
+                m.embedding_space,
                 m.created_at AS material_created_at,
                 m.updated_at AS material_updated_at
             FROM knowledge_material_chunks c
@@ -2164,6 +2200,9 @@ export class DatabaseManager {
                 m.file_name,
                 m.title,
                 m.file_hash,
+                m.embedding_provider,
+                m.embedding_dimensions,
+                m.embedding_space,
                 m.created_at AS material_created_at,
                 m.updated_at AS material_updated_at
             FROM knowledge_material_chunks c

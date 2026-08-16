@@ -274,6 +274,10 @@ export class WhatToSayContextPreparationService {
         writeCache(this.materialContributionCache, cacheKey, cloneContribution(contribution), nowMs);
     }
 
+    invalidateMaterialCache(): void {
+        this.materialContributionCache.clear();
+    }
+
     readScreenResult(cacheKey: string, nowMs: number): ScreenUnderstandingResult | undefined {
         return readCache(this.screenResultCache, cacheKey, nowMs);
     }
@@ -812,6 +816,15 @@ async function prepareWhatToSayContextWithService(
     });
 
     const uploadedMaterialContext = formatInjectedContext(realtimeContextPlan) || undefined;
+    const injectedMaterialKeys = new Set(
+        realtimeContextPlan.injected
+            .filter((candidate) => candidate.source === 'uploaded_material')
+            .map((candidate) => `${candidate.sourceId}:${candidate.chunkId ?? ''}`),
+    );
+    const selectedCitations = citations.filter((citation) => (
+        citation.sourceType !== 'uploaded_material'
+        || injectedMaterialKeys.has(`${citation.sourceId}:${citation.chunkId ?? ''}`)
+    ));
     const fastEligibleDecision = [
         contextNeedDecision.material,
         contextNeedDecision.business,
@@ -826,7 +839,7 @@ async function prepareWhatToSayContextWithService(
         validatedImagePaths,
         ...screenResult,
         uploadedMaterialContext,
-        citations,
+        citations: selectedCitations,
         degradedReasons,
         contextBudgetDegradedReasons,
         materialRagAttempted: materialResult.materialRagAttempted,
