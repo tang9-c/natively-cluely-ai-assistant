@@ -15,10 +15,9 @@
 //   - Sharp is already a project dep (used elsewhere for OCR preprocessing and
 //     Natively-API image compression). We centralize provider-ready optimization
 //     here so the vision pipeline has a single source of truth for sizes/quality.
-//   - We do NOT delete optimized files immediately — VisionProviderFallbackChain
-//     may retry the same payload across providers in one request. Callers should
-//     invoke `cleanup()` after the request completes, or rely on `cleanupAll()`
-//     at meeting end.
+//   - Callers that keep a returned path across an async operation must request
+//     a lease (`retain: true`) and release it afterwards. Cache eviction waits
+//     for active leases before deleting an owned temp file.
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -47,6 +46,7 @@ export interface OptimizeOptions {
   quality?: number;                       // override profile default (jpeg/webp)
   maxBytes?: number;                      // hard cap; default 3.5 MB
   cacheKey?: string;                      // typically the perceptual hash
+  retain?: boolean;                       // keep an owned temp path alive until release()
 }
 
 export interface OptimizedImage {
@@ -119,6 +119,10 @@ export class ImageOptimizer {
   private cache = new Map<string, OptimizedImage>();
   // Files we own and may need to clean up. Keyed by cacheKey so we don't double-write.
   private ownedFiles = new Map<string, string>();
+  private allOwnedFiles = new Set<string>();
+  private activeLeases = new Map<string, number>();
+  private pendingDeletion = new Set<string>();
+  private leasePaths = new WeakMap<OptimizedImage, string>();
   private readonly maxCacheEntries: number;
 
   constructor(tempDirOverride?: string, maxCacheEntries = 16) {
@@ -140,8 +144,43 @@ export class ImageOptimizer {
       this.cache.delete(oldestKey);
       this.ownedFiles.delete(oldestKey);
       if (ownedPath) {
-        await fs.unlink(ownedPath).catch((): void => undefined);
+        await this.deleteOwnedFileWhenSafe(ownedPath);
       }
+    }
+  }
+
+  private retain(result: OptimizedImage): void {
+    if (!result.ownsFile) return;
+    const activeCount = this.activeLeases.get(result.path) ?? 0;
+    this.activeLeases.set(result.path, activeCount + 1);
+    this.leasePaths.set(result, result.path);
+  }
+
+  private async deleteOwnedFileWhenSafe(filePath: string): Promise<void> {
+    if ((this.activeLeases.get(filePath) ?? 0) > 0) {
+      this.pendingDeletion.add(filePath);
+      return;
+    }
+
+    await fs.unlink(filePath).catch((): void => undefined);
+    this.pendingDeletion.delete(filePath);
+    this.allOwnedFiles.delete(filePath);
+  }
+
+  async release(optimized: OptimizedImage): Promise<void> {
+    const leasedPath = this.leasePaths.get(optimized);
+    if (!leasedPath) return;
+
+    this.leasePaths.delete(optimized);
+    const remaining = Math.max(0, (this.activeLeases.get(leasedPath) ?? 1) - 1);
+    if (remaining > 0) {
+      this.activeLeases.set(leasedPath, remaining);
+      return;
+    }
+
+    this.activeLeases.delete(leasedPath);
+    if (this.pendingDeletion.has(leasedPath)) {
+      await this.deleteOwnedFileWhenSafe(leasedPath);
     }
   }
 
@@ -173,7 +212,9 @@ export class ImageOptimizer {
 
     if (cacheKey && this.cache.has(cacheKey)) {
       const cached = this.cache.get(cacheKey)!;
-      return { ...cached, cacheHit: true };
+      const result = { ...cached, cacheHit: true };
+      if (opts.retain) this.retain(result);
+      return result;
     }
 
     await this.ensureTempDir();
@@ -270,6 +311,7 @@ export class ImageOptimizer {
     const ext = format === 'jpeg' ? 'jpg' : format;
     const outPath = path.join(this.tempDir, `${uuidv4()}.${ext}`);
     await fs.writeFile(outPath, buffer);
+    this.allOwnedFiles.add(outPath);
 
     const result: OptimizedImage = {
       path: outPath,
@@ -287,6 +329,7 @@ export class ImageOptimizer {
       ownsFile: true,
     };
 
+    if (opts.retain) this.retain(result);
     if (cacheKey) {
       await this.remember(cacheKey, result);
     }
@@ -324,11 +367,7 @@ export class ImageOptimizer {
    */
   async cleanup(optimized: OptimizedImage): Promise<void> {
     if (optimized.ownsFile !== false) {
-      try {
-        await fs.unlink(optimized.path);
-      } catch {
-        // best-effort
-      }
+      await this.deleteOwnedFileWhenSafe(optimized.path);
     }
     for (const [key, p] of this.ownedFiles.entries()) {
       if (p === optimized.path) {
@@ -348,11 +387,14 @@ export class ImageOptimizer {
    */
   async cleanupAll(): Promise<void> {
     const tasks: Promise<void>[] = [];
-    for (const [, p] of this.ownedFiles.entries()) {
+    for (const p of this.allOwnedFiles) {
       tasks.push(fs.unlink(p).catch((): void => undefined));
     }
     await Promise.all(tasks);
     this.ownedFiles.clear();
+    this.allOwnedFiles.clear();
+    this.activeLeases.clear();
+    this.pendingDeletion.clear();
     this.cache.clear();
   }
 
@@ -362,7 +404,7 @@ export class ImageOptimizer {
   getCacheStats(): { entries: number; ownedFiles: number; tempDir: string } {
     return {
       entries: this.cache.size,
-      ownedFiles: this.ownedFiles.size,
+      ownedFiles: this.allOwnedFiles.size,
       tempDir: this.tempDir,
     };
   }

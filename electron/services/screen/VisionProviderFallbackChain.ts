@@ -253,6 +253,7 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
         profile: params.optimizationProfile || 'balanced',
         provider: provider.hint,
         cacheKey: params.cacheKey,
+        retain: true,
       });
     } catch (err: any) {
       attempts.push({
@@ -332,6 +333,9 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
         const next = params.providers[i + 1];
         params.telemetry?.({ type: 'vision_fallback', from: provider.id, to: next.id });
       }
+    } finally {
+      clearTimeout(timer);
+      await optimizer.release(optimized);
     }
   }
 

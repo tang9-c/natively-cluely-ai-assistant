@@ -133,3 +133,60 @@ test('a successful periodic tick releases its processed transcript prefix', asyn
   assert.equal(indexer.allSegments.length, 0);
   await indexer.stop();
 });
+
+test('starting a new meeting waits for the active meeting tick and stop lifecycle', async () => {
+  const embeddingGate = deferred();
+  const vectorStore = createVectorStore();
+  const indexer = new LiveRAGIndexer(
+    vectorStore,
+    createEmbeddingPipeline(() => embeddingGate.promise),
+  );
+  await indexer.start('meeting-old');
+  indexer.feedSegments(segments(3, 'old meeting'));
+  const tickPromise = indexer.tick();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  let restarted = false;
+  const restartPromise = Promise.resolve(indexer.start('meeting-new')).then(() => {
+    restarted = true;
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const restartedBeforeOldEmbedding = restarted;
+
+  embeddingGate.resolve(new Array(384).fill(0));
+  await Promise.all([tickPromise, restartPromise]);
+  assert.equal(restartedBeforeOldEmbedding, false, 'new start must wait for the old tick');
+  assert.equal(indexer.getActiveMeetingId(), 'meeting-new');
+  assert.equal(indexer.isRunning(), true);
+  await indexer.stop();
+});
+
+test('stop keeps force-flushing final segments that arrive during the final tick', async () => {
+  const embeddingGate = deferred();
+  let embeddingCalls = 0;
+  const vectorStore = createVectorStore();
+  const indexer = new LiveRAGIndexer(
+    vectorStore,
+    createEmbeddingPipeline(async () => {
+      embeddingCalls += 1;
+      if (embeddingCalls === 1) return embeddingGate.promise;
+      return new Array(384).fill(0);
+    }),
+  );
+  await indexer.start('meeting-final-feed');
+  indexer.feedSegments(segments(1, 'first final'));
+
+  const stopping = indexer.stop();
+  await new Promise((resolve) => setImmediate(resolve));
+  indexer.feedSegments([{
+    speaker: 'interviewer',
+    text: 'late final segment must survive',
+    timestamp: 90_000,
+  }]);
+  embeddingGate.resolve(new Array(384).fill(0));
+  await stopping;
+
+  assert.ok(
+    vectorStore.savedChunks.some((chunk) => chunk.text.includes('late final segment must survive')),
+  );
+});

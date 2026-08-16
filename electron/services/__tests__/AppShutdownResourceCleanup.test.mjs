@@ -17,5 +17,13 @@ test('before-quit releases shared screenshot, image, and RAG resources', () => {
   assert.match(shutdownSource, /getImageOptimizer\(\)\.cleanupAll\(\)/);
   assert.match(shutdownSource, /appState\.getRAGManager\(\)/);
   assert.match(shutdownSource, /ragManager\.dispose\(\)/);
+  assert.match(shutdownSource, /event\.preventDefault\(\)/);
+  assert.match(shutdownSource, /if \(quitCleanupComplete\) return/);
+  assert.match(shutdownSource, /await Promise\.allSettled\(cleanupTasks\)/);
+  assert.ok(
+    shutdownSource.indexOf('quitCleanupComplete = true')
+      < shutdownSource.lastIndexOf('app.quit()'),
+    'second app.quit should happen only after cleanup is marked complete',
+  );
   assert.doesNotMatch(shutdownSource, /new ScreenshotHelper\(\)/);
 });

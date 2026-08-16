@@ -502,7 +502,7 @@ export class RAGManager {
             console.warn('[RAGManager] Failed to create transient meeting row for live indexing', e);
         }
 
-        this.liveIndexer.start(meetingId);
+        await this.liveIndexer.start(meetingId);
     }
 
     /**

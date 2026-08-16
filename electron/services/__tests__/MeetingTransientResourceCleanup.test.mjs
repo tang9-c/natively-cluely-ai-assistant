@@ -20,10 +20,23 @@ test('meeting teardown clears transient resources only after persistence snapsho
     'this.intelligenceManager.clearDynamicActionContext()',
     snapshotIndex,
   );
+  const processingDrainIndex = endMeetingSource.indexOf(
+    'await this.processingHelper.cancelAndDrain()',
+    snapshotIndex,
+  );
   const screenshotQueueIndex = endMeetingSource.indexOf('this.clearQueues()', snapshotIndex);
 
   assert.ok(snapshotIndex >= 0, 'meeting snapshot must be awaited');
   assert.ok(resetIndex > snapshotIndex, 'in-flight intelligence requests clear after snapshot');
   assert.ok(dynamicContextIndex > snapshotIndex, 'dynamic action context clears after snapshot');
-  assert.ok(screenshotQueueIndex > snapshotIndex, 'screenshot queues clear after snapshot');
+  assert.ok(processingDrainIndex > snapshotIndex, 'screenshot processing drains after snapshot');
+  assert.ok(screenshotQueueIndex > processingDrainIndex, 'screenshot queues clear only after consumers drain');
+});
+
+test('ProcessingHelper tracks screenshot tasks and drains them with allSettled', () => {
+  const processingSource = fs.readFileSync(path.join(root, 'electron/ProcessingHelper.ts'), 'utf8');
+
+  assert.match(processingSource, /activeScreenshotTasks\s*=\s*new Set<Promise<void>>\(\)/);
+  assert.match(processingSource, /this\.activeScreenshotTasks\.add\(task\)/);
+  assert.match(processingSource, /await Promise\.allSettled\(\[\.\.\.this\.activeScreenshotTasks\]\)/);
 });

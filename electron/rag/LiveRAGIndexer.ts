@@ -23,7 +23,8 @@ export class LiveRAGIndexer {
     private allSegments: RawSegment[] = [];
     private chunkCounter = 0;         // Running chunk index
     private indexedChunkCount = 0;    // Total chunks with embeddings
-    private processingPromise: Promise<void> | null = null;
+    private processingPromise: Promise<boolean> | null = null;
+    private stoppingPromise: Promise<void> | null = null;
     private isActive = false;
 
     constructor(vectorStore: VectorStore, embeddingPipeline: EmbeddingPipeline) {
@@ -35,9 +36,9 @@ export class LiveRAGIndexer {
      * Start live indexing for a meeting.
      * Begins a background timer that periodically chunks & embeds new transcript.
      */
-    start(meetingId: string): void {
-        if (this.isActive) {
-            this.stop();
+    async start(meetingId: string): Promise<void> {
+        if (this.isActive || this.stoppingPromise) {
+            await this.stop();
         }
 
         this.meetingId = meetingId;
@@ -77,8 +78,8 @@ export class LiveRAGIndexer {
      * 5. Embed each chunk via Gemini API
      * 6. Release the successfully processed prefix
      */
-    private async tick(force = false): Promise<void> {
-        if (!this.isActive || !this.meetingId) return;
+    private async tick(force = false): Promise<boolean> {
+        if (!this.isActive || !this.meetingId) return false;
         if (this.processingPromise) {
             return this.processingPromise;
         }
@@ -86,7 +87,7 @@ export class LiveRAGIndexer {
         const processingPromise = this.processTick(force);
         this.processingPromise = processingPromise;
         try {
-            await processingPromise;
+            return await processingPromise;
         } finally {
             if (this.processingPromise === processingPromise) {
                 this.processingPromise = null;
@@ -94,11 +95,11 @@ export class LiveRAGIndexer {
         }
     }
 
-    private async processTick(force: boolean): Promise<void> {
-        if (!this.isActive || !this.meetingId) return;
+    private async processTick(force: boolean): Promise<boolean> {
+        if (!this.isActive || !this.meetingId) return false;
 
         const batchEnd = this.allSegments.length;
-        if (batchEnd === 0 || (!force && batchEnd < MIN_NEW_SEGMENTS)) return;
+        if (batchEnd === 0 || (!force && batchEnd < MIN_NEW_SEGMENTS)) return false;
 
         const meetingId = this.meetingId;
         let batchProcessed = false;
@@ -112,14 +113,14 @@ export class LiveRAGIndexer {
             const cleaned = preprocessTranscript(newSegments);
             if (cleaned.length === 0) {
                 batchProcessed = true;
-                return;
+                return true;
             }
 
             // 3. Chunk with offset index
             const chunks = chunkTranscript(meetingId, cleaned);
             if (chunks.length === 0) {
                 batchProcessed = true;
-                return;
+                return true;
             }
 
             // Re-index chunks to continue from where we left off
@@ -166,8 +167,10 @@ export class LiveRAGIndexer {
                 console.log('[LiveRAGIndexer] Embedding pipeline not ready, chunks saved without embeddings');
             }
 
+            return true;
         } catch (err) {
             console.error('[LiveRAGIndexer] Processing error:', err);
+            return false;
         } finally {
             if (batchProcessed) {
                 this.allSegments.splice(0, batchEnd);
@@ -179,6 +182,23 @@ export class LiveRAGIndexer {
      * Stop live indexing. Flushes any remaining segments.
      */
     async stop(): Promise<void> {
+        if (this.stoppingPromise) {
+            return this.stoppingPromise;
+        }
+        if (!this.isActive) return;
+
+        const stoppingPromise = this.performStop();
+        this.stoppingPromise = stoppingPromise;
+        try {
+            await stoppingPromise;
+        } finally {
+            if (this.stoppingPromise === stoppingPromise) {
+                this.stoppingPromise = null;
+            }
+        }
+    }
+
+    private async performStop(): Promise<void> {
         if (!this.isActive) return;
 
         console.log(`[LiveRAGIndexer] Stopping for meeting ${this.meetingId}`);
@@ -197,7 +217,13 @@ export class LiveRAGIndexer {
                 this.processingPromise = null;
             }
         }
-        await this.tick(true);
+        while (this.allSegments.length > 0) {
+            const madeProgress = await this.tick(true);
+            if (!madeProgress) {
+                console.warn('[LiveRAGIndexer] Final flush made no progress; deferring to post-meeting indexing.');
+                break;
+            }
+        }
 
         const meetingId = this.meetingId;
         this.isActive = false;
@@ -205,6 +231,7 @@ export class LiveRAGIndexer {
         this.allSegments = [];
         this.chunkCounter = 0;
         this.indexedChunkCount = 0;
+        this.processingPromise = null;
 
         console.log(`[LiveRAGIndexer] Stopped for meeting ${meetingId}`);
     }

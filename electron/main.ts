@@ -3709,6 +3709,7 @@ export class AppState {
         // action, and screenshot state can now be released safely.
         this.intelligenceManager.resetEngine();
         this.intelligenceManager.clearDynamicActionContext();
+        await this.processingHelper.cancelAndDrain();
         this.clearQueues();
 
         // 5. RAG cleanup — same logic as before, just inside the BG IIFE.
@@ -4811,11 +4812,20 @@ async function initializeApp() {
     }
   })
 
+  let quitCleanupPromise: Promise<void> | null = null;
+  let quitCleanupComplete = false;
+
   // Scrub API keys from memory on quit to minimize exposure window
   app.on("before-quit", (event) => {
+    if (quitCleanupComplete) return;
+
+    event.preventDefault();
+    if (quitCleanupPromise) return;
+
     console.log("App is quitting, cleaning up resources...");
     appState.setQuitting(true);
-    void appState.disposeIdleResources();
+    const cleanupTasks: Promise<unknown>[] = [appState.disposeIdleResources()];
+    const cleanupTaskNames = ['idle-resources'];
 
     // ROUND 2 FIX (#9): synchronously stop the CGEventTap worker thread
     // BEFORE V8 starts tearing down. The tap callback holds an
@@ -4852,17 +4862,31 @@ async function initializeApp() {
       console.error('[Main] Failed to clear screenshot queues on quit:', e);
     }
 
-    const { getImageOptimizer } = require('./services/screen/ImageOptimizer');
-    void getImageOptimizer().cleanupAll().catch((e: unknown) => {
-      console.error('[Main] Failed to clear optimized images on quit:', e);
-    });
+    try {
+      const { getImageOptimizer } = require('./services/screen/ImageOptimizer');
+      cleanupTasks.push(getImageOptimizer().cleanupAll());
+      cleanupTaskNames.push('optimized-images');
+    } catch {
+      console.error('[Main] Failed to start optimized image cleanup on quit');
+    }
 
     const ragManager = appState.getRAGManager();
     if (ragManager) {
-      void ragManager.dispose().catch((e: unknown) => {
-        console.error('[Main] Failed to dispose RAG resources on quit:', e);
-      });
+      cleanupTasks.push(ragManager.dispose());
+      cleanupTaskNames.push('rag-resources');
     }
+
+    quitCleanupPromise = (async () => {
+      const results = await Promise.allSettled(cleanupTasks);
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.error('[Main] Async quit cleanup failed', { task: cleanupTaskNames[index] });
+        }
+      });
+      quitCleanupComplete = true;
+      app.quit();
+    })();
+    void quitCleanupPromise;
   })
 
 

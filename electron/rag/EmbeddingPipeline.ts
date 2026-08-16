@@ -440,13 +440,20 @@ export class EmbeddingPipeline {
                     if (!useFallback && newRetryCount >= MAX_RETRIES && this.fallbackProvider) {
                         // Primary provider exhausted. Downgrade the meeting to local fallback.
                         await this.activateMeetingFallback(pending.meeting_id);
+                    } else if (newRetryCount >= MAX_RETRIES) {
+                        this.db.prepare(`
+                            UPDATE embedding_queue
+                            SET status = 'failed', retry_count = ?, error_message = ?
+                            WHERE id = ?
+                        `).run(newRetryCount, error.message, pending.id);
+                        this.releaseMeetingFallbackIfSettled(pending.meeting_id);
                     } else {
                         // Still have retries remaining — back-off and retry.
                         this.db.prepare(`
                             UPDATE embedding_queue 
-                            SET status = 'pending', retry_count = retry_count + 1, error_message = ?
+                            SET status = 'pending', retry_count = ?, error_message = ?
                             WHERE id = ?
-                        `).run(error.message, pending.id);
+                        `).run(newRetryCount, error.message, pending.id);
 
                         // Exponential backoff (skip for fallback items already reset)
                         if (!useFallback) {

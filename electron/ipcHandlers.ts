@@ -3683,16 +3683,23 @@ export function initializeIpcHandlers(appState: AppState): void {
     paths: string[],
     handlerLabel: string,
     profile: 'fast' | 'balanced' | 'technical' | 'best' = 'technical',
-  ): Promise<string[]> {
-    if (paths.length === 0) return paths;
+  ): Promise<{ paths: string[]; release: () => Promise<void> }> {
+    if (paths.length === 0) return { paths, release: async () => {} };
     try {
       const { getImageOptimizer } = require('./services/screen/ImageOptimizer');
       const optimizer = getImageOptimizer();
       const optimized: string[] = [];
+      const leases: any[] = [];
       for (const p of paths) {
         try {
-          const out = await optimizer.optimize(p, { profile, provider: 'openai', cacheKey: p });
+          const out = await optimizer.optimize(p, {
+            profile,
+            provider: 'openai',
+            cacheKey: p,
+            retain: true,
+          });
           optimized.push(out.path);
+          if (out.ownsFile) leases.push(out);
         } catch (err: any) {
           console.warn(
             `[IPC] ${handlerLabel}: image optimization failed for ${p}, using original`,
@@ -3701,9 +3708,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           optimized.push(p);
         }
       }
-      return optimized;
+      return {
+        paths: optimized,
+        release: async () => {
+          await Promise.all(leases.map((lease) => optimizer.release(lease)));
+        },
+      };
     } catch {
-      return paths;
+      return { paths, release: async () => {} };
     }
   }
 
@@ -3750,18 +3762,22 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       // VISION-FIRST: optimize the screenshot(s) with Sharp before they reach the LLM,
       // using the 'technical' profile so code text stays sharp at 1536px.
-      const optimizedPaths = await optimizeImagesForVision(
+      const optimizedImages = await optimizeImagesForVision(
         resolvedImagePaths,
         'generate-code-hint',
         'technical',
       );
 
-      const intelligenceManager = appState.getIntelligenceManager();
-      const hint = await intelligenceManager.runCodeHint(
-        optimizedPaths.length > 0 ? optimizedPaths : undefined,
-        problemStatement,
-      );
-      return { hint };
+      try {
+        const intelligenceManager = appState.getIntelligenceManager();
+        const hint = await intelligenceManager.runCodeHint(
+          optimizedImages.paths.length > 0 ? optimizedImages.paths : undefined,
+          problemStatement,
+        );
+        return { hint };
+      } finally {
+        await optimizedImages.release();
+      }
     } catch (error: any) {
       throw error;
     }
@@ -3797,18 +3813,22 @@ export function initializeIpcHandlers(appState: AppState): void {
       );
 
       // VISION-FIRST: balanced profile (1280px) — brainstorm doesn't need code-sharp text.
-      const optimizedPaths = await optimizeImagesForVision(
+      const optimizedImages = await optimizeImagesForVision(
         resolvedImagePaths,
         'generate-brainstorm',
         'balanced',
       );
 
-      const intelligenceManager = appState.getIntelligenceManager();
-      const script = await intelligenceManager.runBrainstorm(
-        optimizedPaths.length > 0 ? optimizedPaths : undefined,
-        problemStatement,
-      );
-      return { script };
+      try {
+        const intelligenceManager = appState.getIntelligenceManager();
+        const script = await intelligenceManager.runBrainstorm(
+          optimizedImages.paths.length > 0 ? optimizedImages.paths : undefined,
+          problemStatement,
+        );
+        return { script };
+      } finally {
+        await optimizedImages.release();
+      }
     } catch (error: any) {
       throw error;
     }

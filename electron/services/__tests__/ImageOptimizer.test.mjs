@@ -311,6 +311,33 @@ test('bounded cache evicts and deletes the oldest owned optimized file', async (
   await optimizer.cleanupAll();
 });
 
+test('cache eviction defers deleting an optimized file while it has an active lease', async () => {
+  const Optimizer = await loadOptimizer();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'image-opt-leased-'));
+  const optimizer = new Optimizer(tempDir, 1);
+  const src = await ensureBigPng();
+
+  const leased = await optimizer.optimize(src, {
+    profile: 'balanced',
+    provider: 'openai',
+    cacheKey: 'leased-oldest',
+    retain: true,
+  });
+  await optimizer.optimize(src, {
+    profile: 'technical',
+    provider: 'openai',
+    cacheKey: 'replacement',
+  });
+
+  await fs.access(leased.path);
+  await optimizer.release(leased);
+  await assert.rejects(
+    () => fs.access(leased.path),
+    'evicted file should be deleted as soon as its final lease is released',
+  );
+  await optimizer.cleanupAll();
+});
+
 test('getCacheStats starts empty and tracks entries + owned files', async () => {
   const Optimizer = await loadOptimizer();
   const optimizer = new Optimizer();

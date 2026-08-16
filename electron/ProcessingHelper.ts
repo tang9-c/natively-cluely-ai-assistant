@@ -20,6 +20,8 @@ export class ProcessingHelper {
   private llmHelper: LLMHelper
   private currentProcessingAbortController: AbortController | null = null
   private currentExtraProcessingAbortController: AbortController | null = null
+  private activeScreenshotTasks = new Set<Promise<void>>()
+  private isDrainingScreenshotTasks = false
 
   constructor(appState: AppState) {
     this.appState = appState
@@ -131,7 +133,18 @@ export class ProcessingHelper {
     }
   }
 
-  public async processScreenshots(): Promise<void> {
+  public processScreenshots(): Promise<void> {
+    if (this.isDrainingScreenshotTasks) return Promise.resolve()
+
+    const task = this.processScreenshotsInternal()
+    this.activeScreenshotTasks.add(task)
+    void task.finally(() => {
+      this.activeScreenshotTasks.delete(task)
+    }).catch(() => {})
+    return task
+  }
+
+  private async processScreenshotsInternal(): Promise<void> {
     const mainWindow = this.appState.getMainWindow()
     if (!mainWindow) return
 
@@ -246,6 +259,18 @@ export class ProcessingHelper {
     }
 
     this.appState.setHasDebugged(false)
+  }
+
+  public async cancelAndDrain(): Promise<void> {
+    this.isDrainingScreenshotTasks = true
+    this.cancelOngoingRequests()
+    try {
+      while (this.activeScreenshotTasks.size > 0) {
+        await Promise.allSettled([...this.activeScreenshotTasks])
+      }
+    } finally {
+      this.isDrainingScreenshotTasks = false
+    }
   }
 
 
