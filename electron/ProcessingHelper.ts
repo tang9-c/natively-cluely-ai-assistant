@@ -14,6 +14,7 @@ if (!app.isPackaged) {
 const isDev = process.env.NODE_ENV === "development"
 const isDevTest = process.env.IS_DEV_TEST === "true"
 const MOCK_API_WAIT_TIME = Number(process.env.MOCK_API_WAIT_TIME) || 500
+const SCREENSHOT_DRAIN_TIMEOUT_MS = 5_000
 
 export class ProcessingHelper {
   private appState: AppState
@@ -22,6 +23,7 @@ export class ProcessingHelper {
   private currentExtraProcessingAbortController: AbortController | null = null
   private activeScreenshotTasks = new Set<Promise<void>>()
   private isDrainingScreenshotTasks = false
+  private cancelledScreenshotTasksCompletion: Promise<void> = Promise.resolve()
 
   constructor(appState: AppState) {
     this.appState = appState
@@ -261,16 +263,32 @@ export class ProcessingHelper {
     this.appState.setHasDebugged(false)
   }
 
-  public async cancelAndDrain(): Promise<void> {
+  public async cancelAndDrain(timeoutMs = SCREENSHOT_DRAIN_TIMEOUT_MS): Promise<boolean> {
     this.isDrainingScreenshotTasks = true
     this.cancelOngoingRequests()
+    const cancelledTasks = [...this.activeScreenshotTasks]
+    const completion = Promise.allSettled(cancelledTasks).then((): void => {})
+    this.cancelledScreenshotTasksCompletion = completion
+    let timeout: ReturnType<typeof setTimeout> | null = null
     try {
-      while (this.activeScreenshotTasks.size > 0) {
-        await Promise.allSettled([...this.activeScreenshotTasks])
+      const drained = await Promise.race([
+        completion.then(() => true),
+        new Promise<boolean>((resolve) => {
+          timeout = setTimeout(() => resolve(false), Math.max(0, timeoutMs))
+        }),
+      ])
+      if (!drained) {
+        console.warn('[ProcessingHelper] Screenshot task drain timed out; cleanup deferred')
       }
+      return drained
     } finally {
+      if (timeout) clearTimeout(timeout)
       this.isDrainingScreenshotTasks = false
     }
+  }
+
+  public waitForCancelledScreenshotTasks(): Promise<void> {
+    return this.cancelledScreenshotTasksCompletion
   }
 
 

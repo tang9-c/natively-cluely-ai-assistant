@@ -59,6 +59,8 @@ export class RAGManager {
     private retriever: RAGRetriever;
     private llmHelper: LLMHelper | null = null;
     private liveIndexer: LiveRAGIndexer;
+    private liveRagStartPromise: Promise<void> | null = null;
+    private pendingLiveSegments: RawSegment[] = [];
     private ensureMeetingIndexInFlight = new Map<string, Promise<void>>();
     /** Guards against concurrent reprocessMeeting() calls for the same meeting ID. */
     private _reprocessInFlight = new Set<string>();
@@ -489,7 +491,30 @@ export class RAGManager {
      * Start JIT indexing for a live meeting.
      * Call when a meeting session begins.
      */
-    async startLiveIndexing(meetingId: string): Promise<void> {
+    startLiveIndexing(meetingId: string): Promise<void> {
+        if (this.liveRagStartPromise) {
+            return this.liveRagStartPromise;
+        }
+
+        const starting = this.startLiveIndexingInternal(meetingId);
+        this.liveRagStartPromise = starting;
+        void starting.then(
+            () => {
+                if (this.liveRagStartPromise === starting) {
+                    this.liveRagStartPromise = null;
+                }
+            },
+            () => {
+                if (this.liveRagStartPromise === starting) {
+                    this.liveRagStartPromise = null;
+                    this.pendingLiveSegments = [];
+                }
+            }
+        );
+        return starting;
+    }
+
+    private async startLiveIndexingInternal(meetingId: string): Promise<void> {
         await this.embeddingPipeline.ensureInitialized();
         
         // Ensure meeting row exists in DB to satisfy foreign key constraints for chunks
@@ -503,6 +528,11 @@ export class RAGManager {
         }
 
         await this.liveIndexer.start(meetingId);
+        if (this.pendingLiveSegments.length > 0) {
+            const pendingSegments = this.pendingLiveSegments;
+            this.pendingLiveSegments = [];
+            this.liveIndexer.feedSegments(pendingSegments);
+        }
     }
 
     /**
@@ -510,6 +540,10 @@ export class RAGManager {
      * Call whenever new transcript arrives during the meeting.
      */
     feedLiveTranscript(segments: RawSegment[]): void {
+        if (this.liveRagStartPromise) {
+            this.pendingLiveSegments.push(...segments);
+            return;
+        }
         this.liveIndexer.feedSegments(segments);
     }
 
@@ -520,7 +554,16 @@ export class RAGManager {
      * with the complete, properly indexed version.
      */
     async stopLiveIndexing(): Promise<void> {
+        const starting = this.liveRagStartPromise;
+        if (starting) {
+            try {
+                await starting;
+            } catch {
+                // A failed start has no live resources, but stop still clears pending input.
+            }
+        }
         await this.liveIndexer.stop();
+        this.pendingLiveSegments = [];
     }
 
     /**

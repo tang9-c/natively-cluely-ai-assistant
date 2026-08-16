@@ -274,15 +274,26 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
     const providerStarted = Date.now();
     const controller = new AbortController();
     const timeoutMs = provider.timeoutMs ?? perProviderTimeoutMs;
-    const timer = setTimeout(() => controller.abort(new Error('per-provider-timeout')), timeoutMs);
+    let timedOut = false;
+    let rejectTimeout: ((reason?: unknown) => void) | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      rejectTimeout = reject;
+    });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      const error = new Error('per-provider-timeout');
+      controller.abort(error);
+      rejectTimeout?.(error);
+    }, timeoutMs);
+    const invocationPromise = Promise.resolve().then(() => provider.invoke({
+      optimized,
+      systemPrompt: params.systemPrompt,
+      userPrompt: params.userPrompt,
+      signal: controller.signal,
+    }));
 
     try {
-      const output = await provider.invoke({
-        optimized,
-        systemPrompt: params.systemPrompt,
-        userPrompt: params.userPrompt,
-        signal: controller.signal,
-      });
+      const output = await Promise.race([invocationPromise, timeoutPromise]);
       clearTimeout(timer);
       const durationMs = Date.now() - providerStarted;
 
@@ -336,7 +347,17 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
     } finally {
       clearTimeout(timer);
       if (typeof optimizer.release === 'function') {
-        await optimizer.release(optimized);
+        if (timedOut) {
+          // Some provider adapters cannot cancel an in-flight request. Keep the
+          // leased temp image alive until that invocation settles, while the
+          // fallback chain continues immediately.
+          void invocationPromise.then(
+            () => optimizer.release!(optimized),
+            () => optimizer.release!(optimized)
+          ).catch(() => {});
+        } else {
+          await optimizer.release(optimized);
+        }
       }
     }
   }

@@ -3709,8 +3709,17 @@ export class AppState {
         // action, and screenshot state can now be released safely.
         this.intelligenceManager.resetEngine();
         this.intelligenceManager.clearDynamicActionContext();
-        await this.processingHelper.cancelAndDrain();
-        this.clearQueues();
+        const screenshotTasksDrained = await this.processingHelper.cancelAndDrain();
+        if (screenshotTasksDrained) {
+          this.clearQueues();
+        } else {
+          const detachedScreenshotPaths = this.screenshotHelper.detachQueues();
+          this.problemInfo = null;
+          this.setView("queue");
+          void this.processingHelper.waitForCancelledScreenshotTasks()
+            .then(() => this.screenshotHelper.deleteDetachedFiles(detachedScreenshotPaths))
+            .catch(() => {});
+        }
 
         // 5. RAG cleanup — same logic as before, just inside the BG IIFE.
         if (meetingId) {

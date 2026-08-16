@@ -747,29 +747,26 @@ export class ScreenshotHelper {
     return this.extraScreenshotQueue
   }
 
-  public clearQueues(): void {
-    // Clear screenshotQueue
-    this.screenshotQueue.forEach((screenshotPath) => {
-      fs.unlink(screenshotPath, (err) => {
-        if (err) {
-          // console.error(`Error deleting screenshot at ${screenshotPath}:`, err)
-        }
-      })
-    })
+  public detachQueues(): string[] {
+    const detached = [...new Set([...this.screenshotQueue, ...this.extraScreenshotQueue])]
     this.screenshotQueue = []
-
-    // Clear extraScreenshotQueue
-    this.extraScreenshotQueue.forEach((screenshotPath) => {
-      fs.unlink(screenshotPath, (err) => {
-        if (err) {
-          // console.error(
-          //   `Error deleting extra screenshot at ${screenshotPath}:`,
-          //   err
-          // )
-        }
-      })
-    })
     this.extraScreenshotQueue = []
+    return detached
+  }
+
+  public async deleteDetachedFiles(paths: string[]): Promise<void> {
+    await Promise.all(paths.map(async (screenshotPath) => {
+      try {
+        await fs.promises.unlink(screenshotPath)
+      } catch {
+        // A capture may already have been removed by queue eviction or shutdown.
+      }
+    }))
+  }
+
+  public clearQueues(): void {
+    const detached = this.detachQueues()
+    void this.deleteDetachedFiles(detached)
   }
 
   public async getImagePreview(filepath: string): Promise<string> {

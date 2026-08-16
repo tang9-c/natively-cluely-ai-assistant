@@ -823,6 +823,97 @@ test('provider.timeoutMs undefined falls back to perProviderTimeoutMs global', a
   await optimizer.cleanupAll();
 });
 
+test('hard timeout falls back when provider ignores abort and retains image until invocation settles', async () => {
+  const runVisionFallback = await loadChain();
+  const img = await ensureFixture();
+  let releaseCount = 0;
+  const optimizer = {
+    async optimize() {
+      return {
+        path: img,
+        mimeType: 'image/png',
+        width: 1,
+        height: 1,
+        byteSize: 1,
+        originalWidth: 1,
+        originalHeight: 1,
+        originalByteSize: 1,
+        durationMs: 0,
+        profile: 'fast',
+        provider: 'generic',
+        cacheHit: false,
+      };
+    },
+    async release() {
+      releaseCount += 1;
+    },
+  };
+
+  let slowProviderSettled = false;
+  const result = await runVisionFallback({
+    imagePath: img,
+    mode: 'vision_first',
+    perProviderTimeoutMs: 15,
+    providers: [
+      makeFakeProvider({
+        id: 'ignores-abort',
+        invoke: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          slowProviderSettled = true;
+          return 'too late';
+        },
+      }),
+      makeFakeProvider({ id: 'fast', invoke: async () => 'recovered' }),
+    ],
+    systemPrompt: 'sys',
+    userPrompt: 'user',
+    optimizer,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.providerUsed, 'fast');
+  assert.equal(result.attempts[0].errorClass, 'timeout');
+  assert.equal(slowProviderSettled, false, 'fallback must not await an abort-ignoring provider');
+  assert.equal(releaseCount, 1, 'only the completed fallback attempt releases immediately');
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(releaseCount, 2, 'timed-out attempt releases after its invocation settles');
+});
+
+test('injected optimizer without release remains supported', async () => {
+  const runVisionFallback = await loadChain();
+  const img = await ensureFixture();
+  const optimizer = {
+    async optimize() {
+      return {
+        path: img,
+        mimeType: 'image/png',
+        width: 1,
+        height: 1,
+        byteSize: 1,
+        originalWidth: 1,
+        originalHeight: 1,
+        originalByteSize: 1,
+        durationMs: 0,
+        profile: 'fast',
+        provider: 'generic',
+        cacheHit: false,
+      };
+    },
+  };
+
+  const result = await runVisionFallback({
+    imagePath: img,
+    mode: 'vision_first',
+    providers: [makeFakeProvider({ id: 'fast', invoke: async () => 'ok' })],
+    systemPrompt: 'sys',
+    userPrompt: 'user',
+    optimizer,
+  });
+
+  assert.equal(result.ok, true);
+});
+
 test('telemetry does not leak provider invoke arguments (systemPrompt / userPrompt / image path)', async () => {
   const runVisionFallback = await loadChain();
   const Optimizer = await loadOptimizer();
