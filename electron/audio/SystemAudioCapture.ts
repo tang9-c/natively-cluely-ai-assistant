@@ -1,4 +1,6 @@
 import { EventEmitter } from 'events';
+import { isVerboseLogging } from '../verboseLog';
+import { AudioBufferDiagnosticsMonitor, type AudioBufferSnapshot } from './AudioBufferDiagnosticsMonitor';
 import { loadNativeModule } from './nativeModuleLoader';
 
 // RustAudioCapture is the native Rust class (napi-rs) that captures system audio.
@@ -24,6 +26,16 @@ export class SystemAudioCapture extends EventEmitter {
     // Tap / SCK / WASAPI handle has been released before the caller
     // constructs a new instance or restarts capture.
     private _teardownPromise: Promise<void> | null = null;
+    private readonly audioDiagnostics = new AudioBufferDiagnosticsMonitor({
+        channel: 'system',
+        getNativeDiagnostics: () => this.getBufferDiagnostics(),
+        getContext: () => ({
+            backend: this.getBackendName(),
+            nativeSampleRate: this.getNativeSampleRate(),
+            emittedSampleRate: this.getSampleRate(),
+        }),
+        isVerbose: isVerboseLogging,
+    });
 
     constructor(deviceId?: string | null) {
         super();
@@ -93,6 +105,16 @@ export class SystemAudioCapture extends EventEmitter {
         return 'unknown';
     }
 
+    private getBufferDiagnostics(): AudioBufferSnapshot {
+        if (typeof this.monitor?.getBufferDiagnostics === 'function') {
+            return this.monitor.getBufferDiagnostics();
+        }
+        if (typeof this.monitor?.get_buffer_diagnostics === 'function') {
+            return this.monitor.get_buffer_diagnostics();
+        }
+        return { droppedSamples: 0, dropEvents: 0 };
+    }
+
     /**
      * Start capturing audio
      */
@@ -130,6 +152,7 @@ export class SystemAudioCapture extends EventEmitter {
                 if (err) {
                     console.error('[SystemAudioCapture] Callback error:', err);
                     this.isRecording = false; // Allow recovery via restart
+                    this.audioDiagnostics.stop();
                     this.emit('error', err);
                     return;
                 }
@@ -140,6 +163,7 @@ export class SystemAudioCapture extends EventEmitter {
                     // the JS boundary so STT.finalize() can see "end of audio" and
                     // emit trailing finals deterministically.
                     if (!this.isRecording) return;
+                    this.audioDiagnostics.recordChunk(chunk.length);
                     this.chunkCount++;
                     if (this.chunkCount <= 3 || this.chunkCount % 500 === 0) {
                         console.log(`[SystemAudioCapture] Chunk #${this.chunkCount}: ${chunk.length} bytes from Rust`);
@@ -160,6 +184,7 @@ export class SystemAudioCapture extends EventEmitter {
                 this.emit('speech_ended');
             });
 
+            this.audioDiagnostics.start();
             // getSampleRate MUST be called AFTER start() — background init updates
             // the atomic once SCK/CoreAudio initialises (~5-7s). Reading before start()
             // always returns the constructor default (48000), not the real hardware rate.
@@ -187,6 +212,7 @@ export class SystemAudioCapture extends EventEmitter {
         } catch (error) {
             console.error('[SystemAudioCapture] Failed to start:', error);
             this.isRecording = false;
+            this.audioDiagnostics.stop();
             // ORPHAN-HANDLE FIX: monitor.start() can throw AFTER the Rust
             // constructor has allocated CoreAudio Tap / aggregate-device /
             // SCK resources and possibly spun up its DSP thread. The
@@ -250,6 +276,7 @@ export class SystemAudioCapture extends EventEmitter {
 
         console.log('[SystemAudioCapture] Stopping capture (deferred native teardown)...');
         this.isRecording = false;
+        this.audioDiagnostics.stop();
         const monitor = this.monitor;
         // Null the field synchronously so the next start() takes the lazy-init
         // branch and constructs a fresh Rust monitor. The Rust monitor.stop()
@@ -294,6 +321,7 @@ export class SystemAudioCapture extends EventEmitter {
         // Await teardown BEFORE removing listeners so in-flight Rust callbacks
         // (data / speech_ended) cannot fire on a wrapper the caller considers
         // dead. See MicrophoneCapture.destroy() for the parallel rationale.
+        this.audioDiagnostics.stop();
         await this.stop();
         this.removeAllListeners();
         this.monitor = null;

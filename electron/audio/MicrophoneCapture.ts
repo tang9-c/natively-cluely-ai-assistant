@@ -1,4 +1,6 @@
 import { EventEmitter } from 'events';
+import { isVerboseLogging } from '../verboseLog';
+import { AudioBufferDiagnosticsMonitor, type AudioBufferSnapshot } from './AudioBufferDiagnosticsMonitor';
 import { loadNativeModule } from './nativeModuleLoader';
 
 // RustMicCapture is the native Rust class (napi-rs) that captures microphone input.
@@ -35,6 +37,16 @@ export class MicrophoneCapture extends EventEmitter {
     // Default true: the common case (Stop → next meeting on the same device)
     // benefits from pre-warm avoiding the ~50ms cpal cold-start cost.
     private preWarmEnabled: boolean = true;
+    private readonly audioDiagnostics = new AudioBufferDiagnosticsMonitor({
+        channel: 'mic',
+        getNativeDiagnostics: () => this.getBufferDiagnostics(),
+        getContext: () => ({
+            backend: 'cpal',
+            nativeSampleRate: this.getNativeSampleRate(),
+            emittedSampleRate: this.getSampleRate(),
+        }),
+        isVerbose: isVerboseLogging,
+    });
 
     constructor(deviceId?: string | null) {
         super();
@@ -89,6 +101,16 @@ export class MicrophoneCapture extends EventEmitter {
         return 0;
     }
 
+    private getBufferDiagnostics(): AudioBufferSnapshot {
+        if (typeof this.monitor?.getBufferDiagnostics === 'function') {
+            return this.monitor.getBufferDiagnostics();
+        }
+        if (typeof this.monitor?.get_buffer_diagnostics === 'function') {
+            return this.monitor.get_buffer_diagnostics();
+        }
+        return { droppedSamples: 0, dropEvents: 0 };
+    }
+
     /**
      * Start capturing microphone audio
      */
@@ -126,6 +148,7 @@ export class MicrophoneCapture extends EventEmitter {
                 if (err) {
                     console.error('[MicrophoneCapture] Callback error:', err);
                     this.isRecording = false; // Allow recovery via restart
+                    this.audioDiagnostics.stop();
                     this.emit('error', err);
                     return;
                 }
@@ -134,6 +157,7 @@ export class MicrophoneCapture extends EventEmitter {
                     // deferred native stop() means late chunks may arrive on the JS
                     // side; drop them so STT.finalize() sees a clean audio-end.
                     if (!this.isRecording) return;
+                    this.audioDiagnostics.recordChunk(chunk.length);
                     // Debug: log occasionally
                     if (Math.random() < 0.05) {
                         console.log(`[MicrophoneCapture] Emitting chunk: ${chunk.length} bytes to JS`);
@@ -152,10 +176,12 @@ export class MicrophoneCapture extends EventEmitter {
                 this.emit('speech_ended');
             });
 
+            this.audioDiagnostics.start();
             this.emit('start');
         } catch (error) {
             console.error('[MicrophoneCapture] Failed to start:', error);
             this.isRecording = false;
+            this.audioDiagnostics.stop();
             this.emit('error', error);
         }
     }
@@ -182,6 +208,7 @@ export class MicrophoneCapture extends EventEmitter {
 
         console.log('[MicrophoneCapture] Stopping capture (deferred native teardown)...');
         this.isRecording = false;
+        this.audioDiagnostics.stop();
         const monitor = this.monitor;
         // Null the field so any caller that wins the race against the setImmediate
         // below sees a clean slate. The setImmediate callback will eagerly
@@ -277,6 +304,7 @@ export class MicrophoneCapture extends EventEmitter {
         // every destroy, and a small window where this.monitor briefly
         // points at a handle the caller considers dead.
         this.preWarmEnabled = false;
+        this.audioDiagnostics.stop();
         await this.stop();
         this.removeAllListeners();
         this.monitor = null;
