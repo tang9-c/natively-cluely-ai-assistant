@@ -2,6 +2,9 @@ use super::core_audio;
 use super::sck;
 use anyhow::Result;
 use ringbuf::HeapCons;
+use std::sync::Arc;
+
+use crate::audio_drop_stats::AudioDropStats;
 
 pub use super::sck::list_output_devices;
 
@@ -15,13 +18,13 @@ enum BackendInput {
 }
 
 impl SpeakerInput {
-    pub fn new(device_id: Option<String>) -> Result<Self> {
+    pub fn new(device_id: Option<String>, drop_stats: Arc<AudioDropStats>) -> Result<Self> {
         let force_sck = device_id.as_deref() == Some("sck");
 
         if !force_sck {
             // Try CoreAudio Tap first (Default)
             println!("[SpeakerInput] Initializing CoreAudio Tap backend...");
-            match core_audio::SpeakerInput::new(device_id.clone()) {
+            match core_audio::SpeakerInput::new(device_id.clone(), drop_stats.clone()) {
                 Ok(input) => {
                     println!("[SpeakerInput] CoreAudio Tap backend initialized.");
                     return Ok(Self {
@@ -37,7 +40,7 @@ impl SpeakerInput {
         }
 
         // Fallback to ScreenCaptureKit
-        let input = sck::SpeakerInput::new(device_id)?;
+        let input = sck::SpeakerInput::new(device_id, drop_stats)?;
         Ok(Self {
             backend: BackendInput::Sck(input),
         })

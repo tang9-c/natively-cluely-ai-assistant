@@ -17,6 +17,7 @@ use std::sync::Arc;
 use std::sync::{Condvar, Mutex};
 
 use crate::audio_config::RING_BUFFER_SAMPLES;
+use crate::audio_drop_stats::AudioDropStats;
 
 /// List available input devices
 pub fn list_input_devices() -> Result<Vec<(String, String)>> {
@@ -213,7 +214,7 @@ fn pick_supported_config(device: &cpal::Device) -> Result<cpal::SupportedStreamC
 }
 
 impl MicrophoneStream {
-    pub fn new(device_id: Option<String>) -> Result<Self> {
+    pub fn new(device_id: Option<String>, drop_stats: Arc<AudioDropStats>) -> Result<Self> {
         let host = cpal::default_host();
         let device = resolve_input_device(&host, device_id.as_deref())?;
 
@@ -253,6 +254,7 @@ impl MicrophoneStream {
             is_running_clone,
             data_ready_clone,
             err_signal_clone,
+            drop_stats,
         )?;
 
         Ok(Self {
@@ -328,6 +330,7 @@ fn build_input_stream(
     is_running: Arc<AtomicBool>,
     data_ready: Arc<(Mutex<bool>, Condvar)>,
     err_signal: Arc<Mutex<Option<String>>>,
+    drop_stats: Arc<AudioDropStats>,
 ) -> Result<Stream> {
     let err_fn = move |err: cpal::StreamError| {
         let msg = format!("{}", err);
@@ -353,10 +356,12 @@ fn build_input_stream(
                     // REAL-TIME SAFE: Only lock-free push
                     if channels > 1 {
                         for chunk in data.chunks(channels) {
-                            let _ = producer.try_push(chunk[0]);
+                            let written = usize::from(producer.try_push(chunk[0]).is_ok());
+                            drop_stats.record_write(1, written);
                         }
                     } else {
-                        let _ = producer.push_slice(data);
+                        let written = producer.push_slice(data);
+                        drop_stats.record_write(data.len(), written);
                     }
                     // Signal DSP thread
                     let (lock, cvar) = &*data_ready_f32;
@@ -371,6 +376,7 @@ fn build_input_stream(
         }
         SampleFormat::I16 => {
             let data_ready_i16 = data_ready.clone();
+            let drop_stats = drop_stats.clone();
             device.build_input_stream(
                 &config.clone().into(),
                 move |data: &[i16], _: &cpal::InputCallbackInfo| {
@@ -381,11 +387,15 @@ fn build_input_stream(
                     if channels > 1 {
                         for chunk in data.chunks(channels) {
                             let sample = chunk[0] as f32 / 32768.0;
-                            let _ = producer.try_push(sample);
+                            let written = usize::from(producer.try_push(sample).is_ok());
+                            drop_stats.record_write(1, written);
                         }
                     } else {
                         for &sample in data {
-                            let _ = producer.try_push(sample as f32 / 32768.0);
+                            let written = usize::from(
+                                producer.try_push(sample as f32 / 32768.0).is_ok(),
+                            );
+                            drop_stats.record_write(1, written);
                         }
                     }
                     // Signal DSP thread
@@ -401,6 +411,7 @@ fn build_input_stream(
         }
         SampleFormat::I32 => {
             let data_ready_i32 = data_ready;
+            let drop_stats = drop_stats.clone();
             device.build_input_stream(
                 &config.clone().into(),
                 move |data: &[i32], _: &cpal::InputCallbackInfo| {
@@ -411,11 +422,15 @@ fn build_input_stream(
                     if channels > 1 {
                         for chunk in data.chunks(channels) {
                             let sample = chunk[0] as f32 / 2147483648.0;
-                            let _ = producer.try_push(sample);
+                            let written = usize::from(producer.try_push(sample).is_ok());
+                            drop_stats.record_write(1, written);
                         }
                     } else {
                         for &sample in data {
-                            let _ = producer.try_push(sample as f32 / 2147483648.0);
+                            let written = usize::from(
+                                producer.try_push(sample as f32 / 2147483648.0).is_ok(),
+                            );
+                            drop_stats.record_write(1, written);
                         }
                     }
                     // Signal DSP thread

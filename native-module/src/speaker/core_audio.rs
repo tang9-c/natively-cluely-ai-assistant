@@ -8,11 +8,14 @@ use ringbuf::{
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
+use crate::audio_drop_stats::AudioDropStats;
+
 struct Ctx {
     format: arc::R<av::AudioFormat>,
     producer: HeapProd<f32>,
     channels: u32,
     current_sample_rate: Arc<AtomicU32>,
+    drop_stats: Arc<AudioDropStats>,
 }
 
 pub struct SpeakerInput {
@@ -24,7 +27,7 @@ pub struct SpeakerInput {
 }
 
 impl SpeakerInput {
-    pub fn new(device_id: Option<String>) -> Result<Self> {
+    pub fn new(device_id: Option<String>, drop_stats: Arc<AudioDropStats>) -> Result<Self> {
         // 0. Gate on macOS 14.4+. -[CATapDescription initExcludingProcesses:andDeviceUID:withStream:]
         // was introduced in macOS 14.4 (Sonoma). The class itself exists from 14.2, so
         // [CATapDescription alloc] succeeds on 14.2/14.3 but invoking this initializer there
@@ -138,6 +141,7 @@ impl SpeakerInput {
             producer,
             channels,
             current_sample_rate: current_sample_rate.clone(),
+            drop_stats,
         });
 
         let agg_device = ca::AggregateDevice::with_desc(&agg_desc)?;
@@ -217,7 +221,8 @@ extern "C" fn proc(
 #[inline(always)]
 fn push_audio(ctx: &mut Ctx, data: &[f32], channels: u32) {
     if channels <= 1 {
-        let _pushed = ctx.producer.push_slice(data);
+        let written = ctx.producer.push_slice(data);
+        ctx.drop_stats.record_write(data.len(), written);
     } else {
         let ch = channels as usize;
         let frame_count = data.len() / ch;
@@ -228,7 +233,8 @@ fn push_audio(ctx: &mut Ctx, data: &[f32], channels: u32) {
                 sum += data[base + c];
             }
             let mono = sum / channels as f32;
-            let _ = ctx.producer.try_push(mono);
+            let written = usize::from(ctx.producer.try_push(mono).is_ok());
+            ctx.drop_stats.record_write(1, written);
         }
     }
 }

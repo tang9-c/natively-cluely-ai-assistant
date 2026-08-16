@@ -1,13 +1,13 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct AudioDropSnapshot {
+pub(crate) struct AudioDropSnapshot {
     pub dropped_samples: u64,
     pub drop_events: u64,
 }
 
 #[derive(Debug, Default)]
-pub struct AudioDropStats {
+pub(crate) struct AudioDropStats {
     dropped_samples: AtomicU64,
     drop_events: AtomicU64,
 }

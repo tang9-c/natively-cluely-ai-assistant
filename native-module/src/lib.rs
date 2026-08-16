@@ -27,6 +27,7 @@ pub mod stealth_window;
 pub mod keyboard_tap;
 
 use crate::audio_config::{CHUNK_BATCH_COUNT, CHUNK_BATCH_TIMEOUT_MS, DSP_POLL_MS};
+use crate::audio_drop_stats::AudioDropStats;
 use crate::resampler::Resampler;
 use crate::silence_suppression::{FrameAction, SilenceSuppressionConfig, SilenceSuppressor};
 use std::time::Instant;
@@ -37,6 +38,12 @@ use std::time::Instant;
 /// STT best practices recommend capturing at >=16kHz; speech energy is sub-8kHz
 /// so 16kHz (8kHz Nyquist) is the correct universal floor for streaming STT.
 const CANONICAL_STT_RATE: u32 = 16000;
+
+#[napi(object)]
+pub struct AudioBufferDiagnostics {
+    pub dropped_samples: f64,
+    pub drop_events: f64,
+}
 
 // ============================================================================
 // HELPERS — i16 slice → zero-copy LE bytes
@@ -226,6 +233,7 @@ pub struct SystemAudioCapture {
     /// Best-effort backend label ("coreaudio", "sck", "wasapi") so the JS
     /// diagnostics can report which native path actually initialized.
     backend_name: Arc<std::sync::Mutex<String>>,
+    buffer_drop_stats: Arc<AudioDropStats>,
     device_id: Option<String>,
 }
 
@@ -244,6 +252,7 @@ impl SystemAudioCapture {
             // background thread reports the real hardware rate.
             native_sample_rate: Arc::new(AtomicU32::new(48000)),
             backend_name: Arc::new(std::sync::Mutex::new(String::from("uninitialized"))),
+            buffer_drop_stats: Arc::new(AudioDropStats::default()),
             device_id,
         })
     }
@@ -271,6 +280,15 @@ impl SystemAudioCapture {
     }
 
     #[napi]
+    pub fn get_buffer_diagnostics(&self) -> AudioBufferDiagnostics {
+        let snapshot = self.buffer_drop_stats.snapshot();
+        AudioBufferDiagnostics {
+            dropped_samples: snapshot.dropped_samples as f64,
+            drop_events: snapshot.drop_events as f64,
+        }
+    }
+
+    #[napi]
     pub fn start(
         &mut self,
         callback: ThreadsafeFunction<Buffer>,
@@ -285,21 +303,26 @@ impl SystemAudioCapture {
         let speech_ended_tsfn = on_speech_ended;
 
         self.stop_signal.store(false, Ordering::SeqCst);
+        self.buffer_drop_stats.reset();
         let stop_signal = self.stop_signal.clone();
         let sample_rate_shared = self.sample_rate.clone();
         let native_rate_shared = self.native_sample_rate.clone();
         let backend_name_shared = self.backend_name.clone();
         let device_id = self.device_id.clone();
+        let buffer_drop_stats = self.buffer_drop_stats.clone();
 
         // ALL init + DSP runs in background thread — start() returns INSTANTLY
         self.capture_thread = Some(thread::spawn(move || {
             // 1. SpeakerInput Init (takes 5-7 seconds — runs OFF main thread)
             println!("[SystemAudioCapture] Background init starting...");
-            let input = match speaker::SpeakerInput::new(device_id.clone()) {
+            let input = match speaker::SpeakerInput::new(
+                device_id.clone(),
+                buffer_drop_stats.clone(),
+            ) {
                 Ok(i) => i,
                 Err(e) => {
                     println!("[SystemAudioCapture] Init failed: {}. Trying default...", e);
-                    match speaker::SpeakerInput::new(None) {
+                    match speaker::SpeakerInput::new(None, buffer_drop_stats.clone()) {
                         Ok(i) => i,
                         Err(e2) => {
                             let msg = format!(
@@ -536,15 +559,20 @@ pub struct MicrophoneCapture {
     device_id: Option<String>,
     /// Holds the live CPAL stream. Recreated on each start().
     input: Option<microphone::MicrophoneStream>,
+    buffer_drop_stats: Arc<AudioDropStats>,
 }
 
 #[napi]
 impl MicrophoneCapture {
     #[napi(constructor)]
     pub fn new(device_id: Option<String>) -> napi::Result<Self> {
+        let buffer_drop_stats = Arc::new(AudioDropStats::default());
         // Eagerly create the stream to detect device errors early and read the
         // native sample rate.
-        let input = match microphone::MicrophoneStream::new(device_id.clone()) {
+        let input = match microphone::MicrophoneStream::new(
+            device_id.clone(),
+            buffer_drop_stats.clone(),
+        ) {
             Ok(i) => i,
             Err(e) => return Err(napi::Error::from_reason(format!("Failed: {}", e))),
         };
@@ -569,6 +597,7 @@ impl MicrophoneCapture {
             native_sample_rate: Arc::new(AtomicU32::new(native_rate)),
             device_id,
             input: Some(input),
+            buffer_drop_stats,
         })
     }
 
@@ -587,6 +616,15 @@ impl MicrophoneCapture {
     }
 
     #[napi]
+    pub fn get_buffer_diagnostics(&self) -> AudioBufferDiagnostics {
+        let snapshot = self.buffer_drop_stats.snapshot();
+        AudioBufferDiagnostics {
+            dropped_samples: snapshot.dropped_samples as f64,
+            drop_events: snapshot.drop_events as f64,
+        }
+    }
+
+    #[napi]
     pub fn start(
         &mut self,
         callback: ThreadsafeFunction<Buffer>,
@@ -596,13 +634,17 @@ impl MicrophoneCapture {
         let speech_ended_tsfn = on_speech_ended;
 
         self.stop_signal.store(false, Ordering::SeqCst);
+        self.buffer_drop_stats.reset();
         let stop_signal = self.stop_signal.clone();
 
         // If the stream was consumed by a previous start() cycle, recreate it.
         // This is the fix for the one-shot take_consumer() bug.
         if self.input.is_none() {
             println!("[MicrophoneCapture] Recreating CPAL stream for restart...");
-            match microphone::MicrophoneStream::new(self.device_id.clone()) {
+            match microphone::MicrophoneStream::new(
+                self.device_id.clone(),
+                self.buffer_drop_stats.clone(),
+            ) {
                 Ok(i) => {
                     let rate = i.sample_rate();
                     self.native_sample_rate.store(rate, Ordering::Release);

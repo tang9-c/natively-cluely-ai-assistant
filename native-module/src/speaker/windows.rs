@@ -12,12 +12,15 @@ use std::time::Duration;
 use tracing::error;
 use wasapi::{get_default_device, DeviceCollection, Direction, SampleType, ShareMode, WaveFormat};
 
+use crate::audio_drop_stats::AudioDropStats;
+
 struct WakerState {
     shutdown: bool,
 }
 
 pub struct SpeakerInput {
     device_id: Option<String>,
+    drop_stats: Arc<AudioDropStats>,
 }
 
 pub struct SpeakerStream {
@@ -114,9 +117,9 @@ pub fn default_output_device_uid() -> String {
 }
 
 impl SpeakerInput {
-    pub fn new(device_id: Option<String>) -> Result<Self> {
+    pub fn new(device_id: Option<String>, drop_stats: Arc<AudioDropStats>) -> Result<Self> {
         let device_id = device_id.filter(|id| !id.is_empty() && id != "default");
-        Ok(Self { device_id })
+        Ok(Self { device_id, drop_stats })
     }
 
     /// Spawn the WASAPI capture thread and wait for it to report its real
@@ -134,6 +137,7 @@ impl SpeakerInput {
         let waker_clone = waker_state.clone();
         let data_ready_clone = data_ready.clone();
         let device_id = self.device_id;
+        let drop_stats = self.drop_stats;
 
         let capture_thread = thread::spawn(move || {
             if let Err(e) = Self::capture_audio_loop(
@@ -142,6 +146,7 @@ impl SpeakerInput {
                 data_ready_clone,
                 init_tx,
                 device_id,
+                drop_stats,
             ) {
                 error!("Audio capture loop failed: {}", e);
             }
@@ -185,6 +190,7 @@ impl SpeakerInput {
         data_ready: Arc<(Mutex<bool>, Condvar)>,
         init_tx: mpsc::Sender<Result<u32>>,
         device_id: Option<String>,
+        drop_stats: Arc<AudioDropStats>,
     ) -> Result<()> {
         let init_result = (|| -> Result<_> {
             // Resolve target render device. If the saved device_id is stale
@@ -290,7 +296,8 @@ impl SpeakerInput {
                     }
 
                     if !samples.is_empty() {
-                        let _ = producer.push_slice(&samples);
+                        let written = producer.push_slice(&samples);
+                        drop_stats.record_write(samples.len(), written);
 
                         // Signal data ready
                         let (lock, cvar) = &*data_ready;

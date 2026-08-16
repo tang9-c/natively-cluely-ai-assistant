@@ -36,10 +36,12 @@ pub mod fallback {
     // See issue #219.
     use anyhow::Result;
     use ringbuf::HeapCons;
+    use std::sync::Arc;
+    use crate::audio_drop_stats::AudioDropStats;
     pub struct SpeakerInput;
     pub struct SpeakerStream;
     impl SpeakerInput {
-        pub fn new(_device_id: Option<String>) -> Result<Self> {
+        pub fn new(_device_id: Option<String>, _drop_stats: Arc<AudioDropStats>) -> Result<Self> {
             Err(anyhow::anyhow!("Unsupported platform: system audio capture is implemented for macOS and Windows only"))
         }
         pub fn stream(self) -> Result<SpeakerStream> {

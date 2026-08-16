@@ -8,6 +8,9 @@ use ringbuf::{
     traits::{Producer, Split},
     HeapCons, HeapProd, HeapRb,
 };
+use std::sync::Arc;
+
+use crate::audio_drop_stats::AudioDropStats;
 
 // keep for compatibility
 use cidre::core_audio as ca;
@@ -43,6 +46,7 @@ pub fn default_output_device_uid() -> String {
 
 pub struct AudioHandlerInner {
     producer: HeapProd<f32>,
+    drop_stats: Arc<AudioDropStats>,
 }
 
 define_obj_type!(
@@ -88,7 +92,8 @@ impl sc::stream::OutputImpl for AudioHandler {
                         unsafe {
                             let slice = std::slice::from_raw_parts(data_ptr, float_count);
                             // Push audio to ring buffer
-                            let _pushed = inner.producer.push_slice(slice);
+                            let written = inner.producer.push_slice(slice);
+                            inner.drop_stats.record_write(slice.len(), written);
                         }
                     }
                 }
@@ -103,10 +108,11 @@ impl sc::stream::OutputImpl for AudioHandler {
 pub struct SpeakerInput {
     cfg: arc::R<sc::StreamCfg>,
     filter: arc::R<sc::ContentFilter>,
+    drop_stats: Arc<AudioDropStats>,
 }
 
 impl SpeakerInput {
-    pub fn new(device_id: Option<String>) -> Result<Self> {
+    pub fn new(device_id: Option<String>, drop_stats: Arc<AudioDropStats>) -> Result<Self> {
         // Gate on macOS 13.0+. sc::StreamCfg.set_captures_audio (and the rest of the
         // ScreenCaptureKit audio surface) was introduced in 13.0; on macOS 12 the
         // selector dispatch would abort the process the same way #249 did for
@@ -214,7 +220,7 @@ impl SpeakerInput {
 
         println!("[SpeakerInput] Config: 48kHz mono, queue_depth=8");
 
-        Ok(Self { cfg, filter })
+        Ok(Self { cfg, filter, drop_stats })
     }
 
     #[allow(dead_code)]
@@ -230,7 +236,10 @@ impl SpeakerInput {
         let stream = sc::Stream::new(&self.filter, &self.cfg);
 
         // Initialize handler
-        let inner = AudioHandlerInner { producer };
+        let inner = AudioHandlerInner {
+            producer,
+            drop_stats: self.drop_stats,
+        };
         let handler = AudioHandler::with(inner);
 
         let queue = dispatch::Queue::serial_with_ar_pool();
