@@ -21,10 +21,9 @@ export class LiveRAGIndexer {
     private meetingId: string | null = null;
     private timer: ReturnType<typeof setInterval> | null = null;
     private allSegments: RawSegment[] = [];
-    private indexedSegmentCount = 0;  // High-water mark: segments already chunked
     private chunkCounter = 0;         // Running chunk index
     private indexedChunkCount = 0;    // Total chunks with embeddings
-    private isProcessing = false;     // Guard against concurrent ticks
+    private processingPromise: Promise<void> | null = null;
     private isActive = false;
 
     constructor(vectorStore: VectorStore, embeddingPipeline: EmbeddingPipeline) {
@@ -43,10 +42,9 @@ export class LiveRAGIndexer {
 
         this.meetingId = meetingId;
         this.allSegments = [];
-        this.indexedSegmentCount = 0;
         this.chunkCounter = 0;
         this.indexedChunkCount = 0;
-        this.isProcessing = false;
+        this.processingPromise = null;
         this.isActive = true;
 
         console.log(`[LiveRAGIndexer] Started for meeting ${meetingId}`);
@@ -72,38 +70,55 @@ export class LiveRAGIndexer {
      * Core indexing tick — processes only NEW segments since last tick.
      * 
      * Flow:
-     * 1. Slice segments from high-water mark
+     * 1. Snapshot the pending segment prefix
      * 2. Preprocess (clean, merge speakers)
      * 3. Chunk (semantic boundaries, 200-400 tokens)
      * 4. Save chunks to VectorStore
      * 5. Embed each chunk via Gemini API
-     * 6. Advance high-water mark
+     * 6. Release the successfully processed prefix
      */
-    private async tick(): Promise<void> {
+    private async tick(force = false): Promise<void> {
         if (!this.isActive || !this.meetingId) return;
-        if (this.isProcessing) return;  // Skip if previous tick still running
+        if (this.processingPromise) {
+            return this.processingPromise;
+        }
 
-        const newSegmentCount = this.allSegments.length - this.indexedSegmentCount;
-        if (newSegmentCount < MIN_NEW_SEGMENTS) return;  // Not enough new content
+        const processingPromise = this.processTick(force);
+        this.processingPromise = processingPromise;
+        try {
+            await processingPromise;
+        } finally {
+            if (this.processingPromise === processingPromise) {
+                this.processingPromise = null;
+            }
+        }
+    }
 
-        this.isProcessing = true;
+    private async processTick(force: boolean): Promise<void> {
+        if (!this.isActive || !this.meetingId) return;
+
+        const batchEnd = this.allSegments.length;
+        if (batchEnd === 0 || (!force && batchEnd < MIN_NEW_SEGMENTS)) return;
+
         const meetingId = this.meetingId;
+        let batchProcessed = false;
 
         try {
-            // 1. Get only new segments
-            const newSegments = this.allSegments.slice(this.indexedSegmentCount);
+            // 1. Snapshot the current prefix. Segments appended while awaiting
+            // embeddings stay beyond batchEnd and are handled by the next tick.
+            const newSegments = this.allSegments.slice(0, batchEnd);
 
             // 2. Preprocess
             const cleaned = preprocessTranscript(newSegments);
             if (cleaned.length === 0) {
-                this.indexedSegmentCount = this.allSegments.length;
+                batchProcessed = true;
                 return;
             }
 
             // 3. Chunk with offset index
             const chunks = chunkTranscript(meetingId, cleaned);
             if (chunks.length === 0) {
-                this.indexedSegmentCount = this.allSegments.length;
+                batchProcessed = true;
                 return;
             }
 
@@ -116,6 +131,7 @@ export class LiveRAGIndexer {
             // 4. Save chunks to DB (without embeddings initially)
             const chunkIds = this.vectorStore.saveChunks(indexedChunks);
             this.chunkCounter += indexedChunks.length;
+            batchProcessed = true;
 
             console.log(`[LiveRAGIndexer] Saved ${indexedChunks.length} chunks (${this.chunkCounter} total) for meeting ${meetingId}`);
 
@@ -150,13 +166,12 @@ export class LiveRAGIndexer {
                 console.log('[LiveRAGIndexer] Embedding pipeline not ready, chunks saved without embeddings');
             }
 
-            // 6. Advance high-water mark
-            this.indexedSegmentCount = this.allSegments.length;
-
         } catch (err) {
             console.error('[LiveRAGIndexer] Processing error:', err);
         } finally {
-            this.isProcessing = false;
+            if (batchProcessed) {
+                this.allSegments.splice(0, batchEnd);
+            }
         }
     }
 
@@ -173,14 +188,21 @@ export class LiveRAGIndexer {
             this.timer = null;
         }
 
-        // Final flush — process any remaining segments
-        await this.tick();
+        // Wait for the current batch, then force-flush any tail that arrived
+        // during it even when it is below the periodic threshold.
+        const inFlight = this.processingPromise;
+        if (inFlight) {
+            await inFlight;
+            if (this.processingPromise === inFlight) {
+                this.processingPromise = null;
+            }
+        }
+        await this.tick(true);
 
         const meetingId = this.meetingId;
         this.isActive = false;
         this.meetingId = null;
         this.allSegments = [];
-        this.indexedSegmentCount = 0;
         this.chunkCounter = 0;
         this.indexedChunkCount = 0;
 
