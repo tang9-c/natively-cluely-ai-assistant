@@ -43,8 +43,8 @@ export function ResearchInput({ onSubmit, disabled, initialValue = '' }: Props) 
       <button
         type="submit"
         disabled={!canSubmit}
-        className="px-4 py-2.5 rounded-lg border border-transparent bg-accent-primary text-white text-sm font-medium
-                   enabled:hover:bg-accent-secondary transition-colors
+        className="px-4 py-2.5 rounded-lg border border-transparent bg-button-primary-bg text-white text-sm font-medium
+                   enabled:hover:bg-button-primary-hover transition-colors
                    disabled:bg-button-primary-disabled-bg disabled:border-button-primary-disabled-border
                    disabled:text-button-primary-disabled-text disabled:opacity-100
                    disabled:cursor-not-allowed inline-flex items-center gap-2 shrink-0"
