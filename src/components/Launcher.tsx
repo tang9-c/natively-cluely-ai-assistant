@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Telescope, X } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Telescope, X, Play } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
-import icon from "./icon.png";
 import mainui from "../UI_comp/mainui.png";
 import MeetingDetails from './MeetingDetails';
 import TopSearchPill from './TopSearchPill';
@@ -805,7 +804,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                             transition={{ duration: 0.22, ease: 'easeOut' }}
                                                             className="flex items-center gap-3"
                                                         >
-                                                            <img src={icon} alt="Logo" className="w-[18px] h-[18px] object-contain drop-shadow-[0_1px_2px_rgba(0,0,0,0.1)] opacity-90" />
+                                                            <Play className="w-[18px] h-[18px] fill-white/20" aria-hidden="true" />
                                                             <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">启动 CueUp</span>
                                                         </motion.div>
                                                     )}

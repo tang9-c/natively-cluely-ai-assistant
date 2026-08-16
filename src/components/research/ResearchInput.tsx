@@ -36,15 +36,17 @@ export function ResearchInput({ onSubmit, disabled, initialValue = '' }: Props) 
         maxLength={100}
         className="flex-1 min-w-0 bg-bg-input border border-border-subtle rounded-lg px-3 py-2.5
                    text-sm text-text-primary placeholder:text-text-tertiary
-                   outline-none transition-colors focus:border-accent-primary focus:ring-2
-                   focus:ring-accent-primary/20 disabled:opacity-50"
+                   outline-none transition-colors focus:border-accent-primary focus:ring-0 focus-visible:!outline-none
+                   disabled:opacity-50"
         aria-label="公司名称"
       />
       <button
         type="submit"
         disabled={!canSubmit}
-        className="px-4 py-2.5 rounded-lg bg-accent-primary text-white text-sm font-medium
-                   hover:bg-accent-secondary transition-colors disabled:opacity-50
+        className="px-4 py-2.5 rounded-lg border border-transparent bg-accent-primary text-white text-sm font-medium
+                   enabled:hover:bg-accent-secondary transition-colors
+                   disabled:bg-button-primary-disabled-bg disabled:border-button-primary-disabled-border
+                   disabled:text-button-primary-disabled-text disabled:opacity-100
                    disabled:cursor-not-allowed inline-flex items-center gap-2 shrink-0"
       >
         <Search className="w-4 h-4" />
