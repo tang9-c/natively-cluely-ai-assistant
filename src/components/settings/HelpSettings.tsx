@@ -797,7 +797,7 @@ const SetupGuide = () => {
         <div className="mb-10">
             <div className="mb-7">
                 <h3 className="text-[20px] font-bold text-text-primary tracking-tight leading-tight">快速开始</h3>
-                <p className="text-[13px] text-text-tertiary mt-0.5">四个步骤即可上手 CueUp。</p>
+                <p className="text-[13px] text-text-tertiary mt-0.5">四个步骤即可上手 CueUp；其它设置可在对应设置页随时调整。</p>
             </div>
 
             <div>
@@ -938,8 +938,16 @@ export const HelpSettings: React.FC = () => {
                                     <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
                                         <Monitor className="w-4 h-4 text-accent-primary" /> 屏幕录制
                                     </h4>
-                                    <p className="text-xs opacity-90 mb-2">让 CueUp 在捕获上下文时临时读取你的屏幕。</p>
+                                    <p className="text-xs opacity-90 mb-2">让 CueUp 在捕获上下文或执行截图提问时读取你的屏幕。</p>
                                     <p className="text-[11px] text-text-tertiary">系统设置 &gt; 隐私与安全性 &gt; 屏幕录制</p>
+                                </div>
+
+                                <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
+                                    <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
+                                        <HelpCircle className="w-4 h-4 text-amber-500" /> 截图权限异常
+                                    </h4>
+                                    <p className="text-xs opacity-90 mb-2">如果系统阻止了屏幕或系统音频捕获，音频页会显示权限错误。点击“修复并重启”清理 macOS 权限缓存，然后按系统提示重新授权；如果修复失败，请在系统设置中手动重新授予权限。</p>
+                                    <p className="text-[11px] text-text-tertiary">麦克风转写仍可继续，但恢复屏幕录制权限前可能无法捕获系统音频或截图。</p>
                                 </div>
 
                                 <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
@@ -1025,7 +1033,7 @@ export const HelpSettings: React.FC = () => {
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary">Local Whisper · 麦克风与系统音频</h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    Local Whisper 支持分别为麦克风通道和系统音频通道选择模型，例如把更大、更准的模型留给系统回环，麦克风通道保留更轻量的模型。选择语言后，CueUp 会自动判断所选模型是否兼容，必要时给出“将自动调整”的明确提示并落到实际支持的模型上，避免静默切换。
+                                    Local Whisper 是保留的兼容路径，不是当前默认的本地语音主力。已有 Whisper 配置时，仍可分别为麦克风通道和系统音频通道选择模型；选择语言后，CueUp 会自动判断模型是否兼容，必要时给出“将自动调整”的明确提示并落到实际支持的模型上，避免静默切换。新配置优先使用 Local SenseVoice。
                                 </p>
                             </div>
 
@@ -1042,7 +1050,7 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="3. AI 提供商与提示词引擎" icon={<Key className="w-4 h-4" />}>
                     <div className="space-y-4">
-                        <p className="text-sm">CueUp 使用大语言模型（LLM）来理解屏幕、转录、模式、参考资料和个人上下文。默认聊天模型是 Doubao Seed 2.0 Lite；你也可以切换到 QCLOUD API、OpenAI、Claude、Gemini、Groq、本地 Ollama 或自定义端点。</p>
+                        <p className="text-sm">CueUp 使用大语言模型（LLM）来理解屏幕、转录、模式、参考资料和个人上下文。默认聊天模型是 Doubao Seed 2.0 Lite；你也可以在“设置 → AI 提供商”中切换到 QCLOUD API、OpenAI、Claude、Gemini、Groq、本地 Ollama 或自定义端点。QCLOUD API 的密钥和连通性测试位于独立的“设置 → QCLOUD API”页。</p>
 
                         <div className="space-y-3 pt-2">
                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">1. 标准云端提供商</h4>
@@ -1323,7 +1331,7 @@ export const HelpSettings: React.FC = () => {
                                     <FileText className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" /> 摘要生成
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    会议一结束，CueUp 就会触发本地后台任务，把整段原始音频转录压缩成干净的格式化 markdown，包含结构化的概览和明确的行动项。
+                                    会议一结束，CueUp 就会触发本地后台任务，把会议转录整理成格式化 Markdown，包含结构化概览和行动项。即使会后云端摘要失败，已保存的会议转录仍可在会议详情中查看。
                                 </p>
                             </div>
 
@@ -1419,7 +1427,7 @@ export const HelpSettings: React.FC = () => {
                                     <Briefcase className="w-4 h-4 text-sky-500 group-hover:scale-110 transition-transform" /> 即时会议跳转
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    输入任何文本即可在所有历史会议标题、摘要和内部文件中进行即时模糊匹配。按回车键即可直接进入该主题的智能查看器。
+                                    输入至少两个字符即可在所有历史会议的标题、摘要和正文转录中进行全文检索；结果会按会议去重，并展示最相关的正文片段。点击结果可直接打开会议。
                                 </p>
                             </div>
 
@@ -1428,7 +1436,7 @@ export const HelpSettings: React.FC = () => {
                                     <Sparkles className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" /> 对话式兜底
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
-                                    如果你的查询没有匹配的文档，调色板会直接跳转开启一次标准 LLM 对话，并把你的输入意图原样传入。
+                                    未选中具体会议时按回车，会进入“询问所有会议”的全局 AI 问答；输入过程中只做结构化全文检索，不会调用 LLM。检索服务不可用时会退回标题和摘要的本地匹配。
                                 </p>
                             </div>
                         </div>
@@ -1759,8 +1767,15 @@ export const HelpSettings: React.FC = () => {
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="10. 窗口控制" icon={<Monitor className="w-4 h-4" />}>
+                <AccordionSection title="10. 窗口与通用设置" icon={<Monitor className="w-4 h-4" />}>
                     <div className="space-y-4">
+                        <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                            <h4 className="font-semibold text-sm mb-2 text-text-primary">通用开关</h4>
+                            <p className="text-[11px] text-text-secondary leading-relaxed">
+                                通用设置还包括登录时打开 CueUp、不保存会议、显示面试官转录文本、自动滚动、主题、会议界面风格和 AI 响应语言。开启“不保存会议”后，会议结束时会丢弃转录、摘要和历史记录；主题与界面风格只影响外观，AI 响应语言控制建议和笔记的输出语言。应用版本区域可检查并安装更新。
+                            </p>
+                        </div>
+
                         <div className="grid gap-3">
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                 <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
@@ -1783,6 +1798,18 @@ export const HelpSettings: React.FC = () => {
                                         <strong>⚠️ Warning:</strong> 这将使 CueUp 覆盖层完全不可点击。你必须记住全局热键（例如 <strong>{isMac ? 'Cmd' : 'Ctrl'}+Shift+Arrows</strong> 来移动， <strong>{isMac ? 'Cmd' : 'Ctrl'}+B</strong> 来隐藏， <strong>{isMac ? 'Cmd' : 'Ctrl'}+1-7</strong> 来执行操作）以在此激活后控制应用。
                                     </p>
                                 </div>
+                            </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Database className="w-4 h-4 text-text-secondary" /> 存储空间与调试支持
+                                </h4>
+                                <p className="text-[11px] text-text-secondary mb-2">
+                                    通用设置中的“存储空间”会显示内置模型、已下载模型、应用缓存和旧版数据的占用，并列出经过安全检查后可释放的项目。删除已下载模型后，需要使用时可以重新下载；正在使用的模型或尚未完成迁移验证的数据不会被清理。
+                                </p>
+                                <p className="text-[11px] text-text-secondary">
+                                    “详细调试日志”用于输出音频、语音转写和管线诊断信息；“导出质量报告”会生成最近 7 天的质量统计、遥测和调试日志支持包。排查问题时可先开启详细日志，完成后再关闭。
+                                </p>
                             </div>
                         </div>
                     </div>
