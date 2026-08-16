@@ -106,7 +106,7 @@ export const NativelyApiSettings: React.FC = () => {
             QCLOUD API
           </h3>
           <p className="text-[12px] text-text-tertiary mt-0.5 leading-snug">
-            配置 QCLOUD key 后，可将默认聊天模型切换到 QCLOUD；语音提供商下拉可选择 QCLOUD API 转录（中文优先，支持说话人分离）。Embedding 保持本地优先，仅在本地不可用时使用云端回退。
+            配置 QCLOUD key 后，可用于聊天和语音转录；Embedding 默认本地，必要时云端回退。
           </p>
         </div>
         {!isLoading && isSaved && (

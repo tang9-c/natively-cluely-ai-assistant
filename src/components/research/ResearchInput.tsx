@@ -34,17 +34,18 @@ export function ResearchInput({ onSubmit, disabled, initialValue = '' }: Props) 
         disabled={disabled}
         placeholder="输入公司名称（英文或中文）"
         maxLength={100}
-        className="flex-1 px-3 py-2 rounded border border-border bg-bg-secondary
-                   text-text-primary placeholder:text-text-muted
-                   disabled:opacity-50"
+        className="flex-1 min-w-0 bg-bg-input border border-border-subtle rounded-lg px-3 py-2.5
+                   text-sm text-text-primary placeholder:text-text-tertiary
+                   outline-none transition-colors focus:border-accent-primary focus:ring-2
+                   focus:ring-accent-primary/20 disabled:opacity-50"
         aria-label="公司名称"
       />
       <button
         type="submit"
         disabled={!canSubmit}
-        className="px-4 py-2 rounded bg-accent-primary text-white font-medium
-                   hover:bg-accent-primary/90 disabled:opacity-50
-                   disabled:cursor-not-allowed inline-flex items-center gap-2"
+        className="px-4 py-2.5 rounded-lg bg-accent-primary text-white text-sm font-medium
+                   hover:bg-accent-secondary transition-colors disabled:opacity-50
+                   disabled:cursor-not-allowed inline-flex items-center gap-2 shrink-0"
       >
         <Search className="w-4 h-4" />
         {disabled ? '调研中...' : '立即调研'}

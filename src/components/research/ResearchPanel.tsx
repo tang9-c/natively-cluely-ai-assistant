@@ -55,16 +55,16 @@ export function ResearchPanel({ isOpen, initialCompanyName = '', onClose }: Prop
           data-testid="research-panel"
         >
           <div
-            className="bg-bg-primary rounded-xl shadow-2xl w-full max-w-3xl
+            className="bg-bg-elevated rounded-2xl border border-border-subtle shadow-2xl w-full max-w-3xl
                        max-h-[85vh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <header className="px-6 py-4 border-b border-border flex items-center">
-              <h2 className="text-lg font-semibold flex-1">Research · 公司情报调研</h2>
+            <header className="px-6 py-4 border-b border-border-subtle flex items-center">
+              <h2 className="text-lg font-semibold text-text-primary flex-1">Research · 公司情报调研</h2>
               <button
                 onClick={onClose}
                 aria-label="关闭"
-                className="text-text-muted hover:text-text-primary p-1"
+                className="p-2 rounded-lg text-text-tertiary hover:bg-bg-input hover:text-text-primary transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -118,8 +118,8 @@ export function ResearchPanel({ isOpen, initialCompanyName = '', onClose }: Prop
                   <div className="pt-4 flex justify-end">
                     <button
                       onClick={handleForceRefresh}
-                      className="px-4 py-2 rounded border border-border
-                                 hover:bg-bg-secondary text-sm inline-flex items-center gap-2"
+                      className="px-4 py-2 rounded-lg border border-border-subtle
+                                 bg-bg-input hover:bg-bg-elevated text-text-primary text-sm inline-flex items-center gap-2 transition-colors"
                     >
                       <RefreshCw className="w-4 h-4" />
                       强制刷新
