@@ -53,9 +53,9 @@
 
 ### 3. 会议结束释放会话资源
 
-`endMeeting()` 在 `intelligenceManager.stopMeeting()` 完成快照后清除动态动作上下文。此时 usage 已进入持久化快照，清除 action store 不会丢失会议记录。
+`endMeeting()` 在 `intelligenceManager.stopMeeting()` 完成快照后重置 Engine，并清除动态动作上下文。此时 usage 已进入持久化快照，取消旧会议请求和清除 action store 不会丢失会议记录。
 
-截图队列在会议停止的同步阶段重置，避免后台 teardown 与下一场会议的新截图竞争。文件删除继续采用 best-effort，不阻塞停止按钮。
+截图队列在同一个后台 teardown 中、快照和 Engine 重置之后清理。`startMeeting()` 已等待 `_pendingTeardown`，因此新会议不会在清理完成前写入新截图；文件删除继续采用 best-effort，不阻塞停止按钮。
 
 图片优化器不在会议结束时直接执行 `cleanupAll()`，因为并发视觉请求可能仍在使用已优化文件。改为给缓存增加固定容量上限和最旧项淘汰：新增缓存项超过上限时，从 Map 头部移除最旧项，并 best-effort 删除其 owned file。这样即使用户长期使用截图功能，内存索引和临时文件也不会无限增长。
 
