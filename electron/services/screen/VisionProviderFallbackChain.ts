@@ -335,7 +335,9 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
       }
     } finally {
       clearTimeout(timer);
-      await optimizer.release(optimized);
+      if (typeof optimizer.release === 'function') {
+        await optimizer.release(optimized);
+      }
     }
   }
 
