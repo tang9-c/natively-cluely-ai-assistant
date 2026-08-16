@@ -4842,15 +4842,26 @@ async function initializeApp() {
       console.error('[Main] Failed to scrub credentials on quit:', e);
     }
 
-    // Clean up screenshot queues to prevent residual PNG files on disk
+    // Clean up screenshot queues to prevent residual PNG files on disk.
+    // Use the live AppState helper; constructing a new ScreenshotHelper would
+    // only clear a new empty queue.
     try {
-      const { ScreenshotHelper } = require('./ScreenshotHelper');
-      // Clear screenshot queues - this deletes all queued screenshot files
-      const screenshotHelper = new ScreenshotHelper();
-      screenshotHelper.clearQueues();
+      appState.clearQueues();
       console.log('[Main] Screenshot queues cleared on quit');
     } catch (e) {
       console.error('[Main] Failed to clear screenshot queues on quit:', e);
+    }
+
+    const { getImageOptimizer } = require('./services/screen/ImageOptimizer');
+    void getImageOptimizer().cleanupAll().catch((e: unknown) => {
+      console.error('[Main] Failed to clear optimized images on quit:', e);
+    });
+
+    const ragManager = appState.getRAGManager();
+    if (ragManager) {
+      void ragManager.dispose().catch((e: unknown) => {
+        console.error('[Main] Failed to dispose RAG resources on quit:', e);
+      });
     }
   })
 

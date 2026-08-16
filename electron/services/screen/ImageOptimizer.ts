@@ -119,9 +119,30 @@ export class ImageOptimizer {
   private cache = new Map<string, OptimizedImage>();
   // Files we own and may need to clean up. Keyed by cacheKey so we don't double-write.
   private ownedFiles = new Map<string, string>();
+  private readonly maxCacheEntries: number;
 
-  constructor(tempDirOverride?: string) {
+  constructor(tempDirOverride?: string, maxCacheEntries = 16) {
     this.tempDir = tempDirOverride || path.join(os.tmpdir(), 'natively-vision-optimized');
+    this.maxCacheEntries = Math.max(0, Math.floor(maxCacheEntries));
+  }
+
+  private async remember(cacheKey: string, result: OptimizedImage): Promise<void> {
+    this.cache.set(cacheKey, result);
+    if (result.ownsFile) {
+      this.ownedFiles.set(cacheKey, result.path);
+    }
+
+    while (this.cache.size > this.maxCacheEntries) {
+      const oldestKey = this.cache.keys().next().value as string | undefined;
+      if (!oldestKey) break;
+
+      const ownedPath = this.ownedFiles.get(oldestKey);
+      this.cache.delete(oldestKey);
+      this.ownedFiles.delete(oldestKey);
+      if (ownedPath) {
+        await fs.unlink(ownedPath).catch((): void => undefined);
+      }
+    }
   }
 
   async ensureTempDir(): Promise<void> {
@@ -239,7 +260,7 @@ export class ImageOptimizer {
       };
 
       if (cacheKey) {
-        this.cache.set(cacheKey, result);
+        await this.remember(cacheKey, result);
       }
 
       return result;
@@ -267,8 +288,7 @@ export class ImageOptimizer {
     };
 
     if (cacheKey) {
-      this.cache.set(cacheKey, result);
-      this.ownedFiles.set(cacheKey, outPath);
+      await this.remember(cacheKey, result);
     }
 
     return result;

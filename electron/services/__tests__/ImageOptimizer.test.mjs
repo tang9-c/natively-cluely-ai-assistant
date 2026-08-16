@@ -278,6 +278,39 @@ test('cleanup() on a stale entry is a no-op (does not throw)', async () => {
   await assert.doesNotReject(() => optimizer.cleanup(fakeOptimized));
 });
 
+test('bounded cache evicts and deletes the oldest owned optimized file', async () => {
+  const Optimizer = await loadOptimizer();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'image-opt-bounded-'));
+  const optimizer = new Optimizer(tempDir, 2);
+  const src = await ensureBigPng();
+
+  const first = await optimizer.optimize(src, {
+    profile: 'balanced',
+    provider: 'openai',
+    cacheKey: 'oldest',
+  });
+  const second = await optimizer.optimize(src, {
+    profile: 'technical',
+    provider: 'openai',
+    cacheKey: 'middle',
+  });
+  const third = await optimizer.optimize(src, {
+    profile: 'fast',
+    provider: 'openai',
+    cacheKey: 'newest',
+  });
+
+  assert.deepEqual(optimizer.getCacheStats(), {
+    entries: 2,
+    ownedFiles: 2,
+    tempDir,
+  });
+  await assert.rejects(() => fs.access(first.path), 'oldest owned file should be deleted');
+  await fs.access(second.path);
+  await fs.access(third.path);
+  await optimizer.cleanupAll();
+});
+
 test('getCacheStats starts empty and tracks entries + owned files', async () => {
   const Optimizer = await loadOptimizer();
   const optimizer = new Optimizer();
