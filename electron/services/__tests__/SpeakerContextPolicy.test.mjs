@@ -472,7 +472,7 @@ describe('SpeakerContextPolicy', () => {
     assert.match(source, /const effectiveSegment = this\.session\.applySpeakerVerificationOverride\(segment\)/);
     assert.match(source, /detectConfirmAndEmitDynamicActions\(effectiveSegment, latencyContext\)/);
     assert.match(source, /observeDynamicActionContinuation\(effectiveSegment, providerDataScopes\)/);
-    assert.match(source, /getEffectiveFullTranscript\(\)\.slice\(-12\)/);
+    assert.match(source, /getEffectiveTranscriptTail\(12\)/);
     assert.match(source, /handleSpeakerVerificationSessionOverride/);
     assert.match(source, /detectConfirmAndEmitDynamicActions\(segment, latencyContext\)/);
     assert.match(source, /status: 'dismissed'/);

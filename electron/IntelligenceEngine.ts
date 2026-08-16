@@ -1334,7 +1334,7 @@ export class IntelligenceEngine extends EventEmitter {
             description: skill.description,
             source: skill.source,
         }));
-        const transcriptWindow = this.session.getEffectiveFullTranscript().slice(-12).map((item) => ({
+        const transcriptWindow = this.session.getEffectiveTranscriptTail(12).map((item) => ({
             speaker: item.speaker,
             text: item.text,
             timestamp: item.timestamp,
