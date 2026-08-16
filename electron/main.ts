@@ -3705,6 +3705,12 @@ export class AppState {
         //    intelligenceManager.stopMeeting itself runs LLM in background.
         const meetingId = await this.intelligenceManager.stopMeeting();
 
+        // The persistence snapshot is complete, so meeting-scoped request,
+        // action, and screenshot state can now be released safely.
+        this.intelligenceManager.resetEngine();
+        this.intelligenceManager.clearDynamicActionContext();
+        this.clearQueues();
+
         // 5. RAG cleanup — same logic as before, just inside the BG IIFE.
         if (meetingId) {
           if (ragManager) {
