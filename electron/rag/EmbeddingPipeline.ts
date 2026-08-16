@@ -427,6 +427,7 @@ export class EmbeddingPipeline {
                         SET status = 'completed', processed_at = ?
                         WHERE id = ?
                     `).run(new Date().toISOString(), pending.id);
+                    this.releaseMeetingFallbackIfSettled(pending.meeting_id);
 
                 } catch (error: any) {
                     const newRetryCount = (pending.retry_count === -1 ? 0 : pending.retry_count) + 1;
@@ -457,6 +458,25 @@ export class EmbeddingPipeline {
             }
         } finally {
             this.isProcessing = false;
+        }
+    }
+
+    private releaseMeetingFallbackIfSettled(meetingId: string): void {
+        if (!this.fallbackMeetings.has(meetingId)) return;
+
+        try {
+            const row = this.db.prepare(`
+                SELECT COUNT(*) AS count
+                FROM embedding_queue
+                WHERE meeting_id = ?
+                  AND status IN ('pending', 'processing')
+            `).get(meetingId) as { count: number } | undefined;
+
+            if ((row?.count ?? 0) === 0) {
+                this.fallbackMeetings.delete(meetingId);
+            }
+        } catch (error) {
+            console.warn('[EmbeddingPipeline] Failed to release settled fallback state:', error);
         }
     }
 
