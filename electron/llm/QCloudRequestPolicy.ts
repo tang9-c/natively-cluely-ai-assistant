@@ -40,6 +40,16 @@ export interface QCloudUsageMetrics {
   cachedInputTokens?: number;
 }
 
+export type QCloudThinking = { type: 'enabled' | 'disabled' };
+export type QCloudReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+
+export function resolveQCloudReasoningEffort(
+  thinking: QCloudThinking,
+  reasoningEffort?: QCloudReasoningEffort,
+): QCloudReasoningEffort | undefined {
+  return thinking.type === 'enabled' ? reasoningEffort : undefined;
+}
+
 const TRUNCATION_MARKER = '\n[...older context truncated...]\n';
 
 export function estimateQCloudInputTokens(text: string): number {

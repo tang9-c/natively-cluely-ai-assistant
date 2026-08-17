@@ -21,7 +21,7 @@ import {
   TINY_PROMPTS_SET
 } from "./llm/tinyPrompts"
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
-import { applyQCloudInputBudget, QCLOUD_MEETING_SUMMARY_SAFE_CHUNK_CHARS, QCLOUD_TIMEOUT_POLICIES, readQCloudUsage, type QCloudRequestClass, type QCloudUsageMetrics } from "./llm/QCloudRequestPolicy"
+import { applyQCloudInputBudget, QCLOUD_MEETING_SUMMARY_SAFE_CHUNK_CHARS, QCLOUD_TIMEOUT_POLICIES, readQCloudUsage, resolveQCloudReasoningEffort, type QCloudRequestClass, type QCloudUsageMetrics } from "./llm/QCloudRequestPolicy"
 import { qcloudBackgroundScheduler } from "./llm/QCloudBackgroundScheduler"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { DOUBAO_PRO_MODEL, DOUBAO_PRO_PROVIDER_LABEL } from "./llm/DoubaoModelConstants"
@@ -2572,14 +2572,16 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     });
 
     const qcloudPromptCacheKey = this.getQCloudPromptCacheKey(systemPrompt);
+    const qcloudThinking = _options.qcloudThinking ?? { type: 'disabled' as const };
+    const qcloudReasoningEffort = resolveQCloudReasoningEffort(qcloudThinking, _options.qcloudReasoningEffort);
     const body: any = {
       model: qcloudModel,
       messages,
       max_tokens: this.clampQCloudMaxOutputTokens(_options.maxOutputTokens, qcloudModel),
-      thinking: _options.qcloudThinking ?? { type: 'disabled' },
+      thinking: qcloudThinking,
       ...(qcloudPromptCacheKey ? { prompt_cache_key: qcloudPromptCacheKey } : {}),
     };
-    if (_options.qcloudReasoningEffort) body.reasoning_effort = _options.qcloudReasoningEffort;
+    if (qcloudReasoningEffort) body.reasoning_effort = qcloudReasoningEffort;
 
     if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {
       body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it
@@ -3997,6 +3999,8 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     const qcloudModel = this.resolveQCloudRequestModel(options);
     const qcloudPromptCacheKey = this.getQCloudPromptCacheKey(systemPrompt);
+    const qcloudThinking = options.qcloudThinking ?? { type: 'disabled' as const };
+    const qcloudReasoningEffort = resolveQCloudReasoningEffort(qcloudThinking, options.qcloudReasoningEffort);
     const body: Record<string, unknown> = {
       model: qcloudModel,
       messages: [{
@@ -4006,10 +4010,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       stream: true,
       stream_options: { include_usage: true },
       max_tokens: this.clampQCloudMaxOutputTokens(options.maxOutputTokens, qcloudModel),
-      thinking: options.qcloudThinking ?? { type: 'disabled' },
+      thinking: qcloudThinking,
       ...(qcloudPromptCacheKey ? { prompt_cache_key: qcloudPromptCacheKey } : {}),
     };
-    if (options.qcloudReasoningEffort) body.reasoning_effort = options.qcloudReasoningEffort;
+    if (qcloudReasoningEffort) body.reasoning_effort = qcloudReasoningEffort;
     if (systemPrompt) body.system = systemPrompt;
     if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {
       body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it

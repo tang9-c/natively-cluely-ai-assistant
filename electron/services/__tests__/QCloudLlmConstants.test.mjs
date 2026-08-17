@@ -127,10 +127,26 @@ test('LLMHelper defaults QCLOUD thinking off unless explicitly enabled by reques
 
   assert.ok(nonStreamingStart >= 0, 'generateWithNatively should exist');
   assert.ok(streamingStart >= 0, 'streamWithNatively should exist');
-  assert.match(nonStreamingBody, /thinking:\s*_options\.qcloudThinking\s*\?\?\s*\{\s*type:\s*['"]disabled['"]\s*\}/);
-  assert.match(nonStreamingBody, /if\s*\(_options\.qcloudReasoningEffort\)\s*body\.reasoning_effort\s*=\s*_options\.qcloudReasoningEffort/);
-  assert.match(streamingBody, /thinking:\s*options\.qcloudThinking\s*\?\?\s*\{\s*type:\s*['"]disabled['"]\s*\}/);
-  assert.match(streamingBody, /if\s*\(options\.qcloudReasoningEffort\)\s*body\.reasoning_effort\s*=\s*options\.qcloudReasoningEffort/);
+  assert.match(nonStreamingBody, /const qcloudThinking\s*=\s*_options\.qcloudThinking\s*\?\?\s*\{\s*type:\s*['"]disabled['"]\s+as const\s*\}/);
+  assert.match(nonStreamingBody, /thinking:\s*qcloudThinking/);
+  assert.match(nonStreamingBody, /if\s*\(qcloudReasoningEffort\)\s*body\.reasoning_effort\s*=\s*qcloudReasoningEffort/);
+  assert.match(streamingBody, /const qcloudThinking\s*=\s*options\.qcloudThinking\s*\?\?\s*\{\s*type:\s*['"]disabled['"]\s+as const\s*\}/);
+  assert.match(streamingBody, /thinking:\s*qcloudThinking/);
+  assert.match(streamingBody, /if\s*\(qcloudReasoningEffort\)\s*body\.reasoning_effort\s*=\s*qcloudReasoningEffort/);
+});
+
+test('LLMHelper validates reasoning effort against the effective thinking mode', () => {
+  const helper = read('electron/LLMHelper.ts');
+  const nonStreamingStart = helper.indexOf('  private async generateWithNatively(');
+  const streamingStart = helper.indexOf('  private async * streamWithNatively(');
+  const nonStreamingBody = helper.slice(nonStreamingStart, streamingStart);
+  const streamingBody = helper.slice(
+    streamingStart,
+    helper.indexOf('  private extractQCloudSseUsage(', streamingStart),
+  );
+
+  assert.match(nonStreamingBody, /resolveQCloudReasoningEffort\(qcloudThinking,\s*_options\.qcloudReasoningEffort\)/);
+  assert.match(streamingBody, /resolveQCloudReasoningEffort\(qcloudThinking,\s*options\.qcloudReasoningEffort\)/);
 });
 
 test('non-streaming QCLOUD sends system prompt as a chat message while streaming stays unchanged', () => {
