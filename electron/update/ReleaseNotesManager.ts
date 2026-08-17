@@ -12,6 +12,29 @@ export interface ParsedReleaseNotes {
     sections: ReleaseNoteSection[];
     fullBody: string; // Fallback
     url: string;
+    assets: ReleaseAsset[];
+}
+
+export interface ReleaseAsset {
+    name: string;
+    downloadUrl: string;
+    size: number;
+}
+
+export function extractReleaseSemver(tag: string): string | null {
+    const match = String(tag).match(/(?:^|v)(\d+\.\d+\.\d+)(?:$|[-+])/);
+    return match?.[1] ?? null;
+}
+
+export function selectMacDmgAsset(assets: ReleaseAsset[], arch: string): ReleaseAsset | undefined {
+    const dmgAssets = assets.filter(asset => asset.name.toLowerCase().endsWith('.dmg'));
+    if (arch === 'arm64') {
+        return dmgAssets.find(asset => /-arm64\.dmg$/i.test(asset.name));
+    }
+    if (arch === 'x64') {
+        return dmgAssets.find(asset => !/-arm64\.dmg$/i.test(asset.name));
+    }
+    return undefined;
 }
 
 export class ReleaseNotesManager {
@@ -74,8 +97,19 @@ export class ReleaseNotesManager {
             const body = data.body || "";
             const htmlUrl = data.html_url || "";
             const tagName = data.tag_name || version; // Use tag_name from API if available
+            const assets: ReleaseAsset[] = Array.isArray(data.assets)
+                ? data.assets.flatMap((asset: any) => {
+                    const name = typeof asset?.name === 'string' ? asset.name : '';
+                    const downloadUrl = typeof asset?.browser_download_url === 'string'
+                        ? asset.browser_download_url
+                        : '';
+                    const validUrlPrefix = `https://github.com/${this.repoOwner}/${this.repoName}/releases/download/`;
+                    if (!name || !downloadUrl.startsWith(validUrlPrefix)) return [];
+                    return [{ name, downloadUrl, size: Number(asset?.size) || 0 }];
+                })
+                : [];
 
-            const parsed = this.parseReleaseNotes(body, tagName, htmlUrl);
+            const parsed = this.parseReleaseNotes(body, tagName, htmlUrl, assets);
             this.cachedNotes = parsed;
             this.cachedAt = Date.now();
             return parsed;
@@ -86,7 +120,7 @@ export class ReleaseNotesManager {
         }
     }
 
-    private parseReleaseNotes(body: string, version: string, url: string): ParsedReleaseNotes {
+    private parseReleaseNotes(body: string, version: string, url: string, assets: ReleaseAsset[]): ParsedReleaseNotes {
         console.log(`[ReleaseNotesManager] Parsing body for ${version}. Length: ${body.length}`);
         const allowedHeaders = ['Summary', "What's New", "Improvements", "Fixes", "Technical"];
         const bulletSections = ["What's New", "Improvements", "Fixes", "Technical"];
@@ -143,7 +177,8 @@ export class ReleaseNotesManager {
             summary,
             sections,
             fullBody: body, // Keep raw body for reference/logging
-            url
+            url,
+            assets,
         };
     }
 

@@ -74,6 +74,11 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
     };
 
     const displayVersion = formatVersion(updateInfo?.version);
+    const productVersion = displayVersion.replace(/^v/, '');
+    const fallbackDmgName = instructionsArch === 'arm64'
+        ? `CueUp-${productVersion}-arm64.dmg`
+        : `CueUp-${productVersion}.dmg`;
+    const manualDownloadName = updateInfo?.manualDownloadName || fallbackDmgName;
 
     const showFallback = !parsedNotes || (!parsedNotes.summary && (!parsedNotes.sections || parsedNotes.sections.length === 0));
 
@@ -194,7 +199,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                         <>
                                             <div className="space-y-1 w-full">
                                                 <p className="text-[12px] font-medium text-white/80">1. 清除下载文件的隔离属性：</p>
-                                                <CopyBlock command={`xattr -cr ~/Downloads/CueUp-${displayVersion.replace('v', '')}-${instructionsArch || 'arm64'}.dmg`} />
+                                                <CopyBlock command={`xattr -cr "$HOME/Downloads/${manualDownloadName}"`} />
                                             </div>
                                             <div className="space-y-1 mt-1 pl-0.5">
                                                 <p className="text-[12px] font-medium text-white/80">2. 打开文件并安装 CueUp。</p>

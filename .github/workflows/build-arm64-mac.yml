@@ -26,6 +26,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Read package version
+        id: package-version
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+
       - name: Build renderer, main, and native module
         env:
           NATIVELY_NATIVE_TARGETS: "aarch64-apple-darwin"
@@ -78,6 +82,9 @@ jobs:
           done
           test -e release/*arm64*.dmg
           test -e release/*arm64*.zip
+
+      - name: Validate ARM64 manual update assets
+        run: node scripts/verify-packaged-release.mjs --mac-update-dir release --version ${{ steps.package-version.outputs.version }} --arch arm64
 
       - name: Audit release size
         run: node scripts/audit-release-size.js --path release/mac-arm64/CueUp.app --json --min-bytes 734003200 --max-bytes 891289600 > release/size-report.json

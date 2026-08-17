@@ -150,6 +150,29 @@ test('Windows update feed rejects a stale installer hash', () => {
   }
 });
 
+test('macOS release artifacts expose the exact DMG name used by each architecture', () => {
+  assert.equal(typeof releaseVerifier.validateMacUpdateArtifacts, 'function');
+  const releaseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cueup-mac-update-'));
+  fs.writeFileSync(path.join(releaseDir, 'CueUp-2.7.1-arm64.dmg'), 'arm64-dmg');
+  fs.writeFileSync(path.join(releaseDir, 'CueUp-2.7.1-arm64-mac.zip'), 'arm64-zip');
+
+  try {
+    assert.deepEqual(
+      releaseVerifier.validateMacUpdateArtifacts({ releaseDir, expectedVersion: '2.7.1', arch: 'arm64' }),
+      {
+        ok: true,
+        version: '2.7.1',
+        arch: 'arm64',
+        dmg: 'CueUp-2.7.1-arm64.dmg',
+        zip: 'CueUp-2.7.1-arm64-mac.zip',
+        errors: [],
+      },
+    );
+  } finally {
+    fs.rmSync(releaseDir, { recursive: true, force: true });
+  }
+});
+
 test('packaged release validation rejects a missing Rust audio module and wrong-arch native library', () => {
   const appPath = fs.mkdtempSync(path.join(os.tmpdir(), 'cueup-release-acceptance-'));
   const resources = path.join(appPath, 'Contents/Resources');
@@ -220,6 +243,15 @@ test('Windows workflow validates updater metadata before uploading installers', 
     workflow,
     /verify-packaged-release\.mjs --windows-update-dir release --version \$\{\{ steps\.package-version\.outputs\.version \}\}/,
   );
+});
+
+test('both macOS workflows validate architecture-specific manual update assets', () => {
+  const root = path.resolve(import.meta.dirname, '../..');
+  const intel = fs.readFileSync(path.join(root, '.github/workflows/build-intel-mac.yml'), 'utf8');
+  const arm = fs.readFileSync(path.join(root, '.github/workflows/build-arm64-mac.yml'), 'utf8');
+
+  assert.match(intel, /verify-packaged-release\.mjs --mac-update-dir release --version \$\{\{ steps\.package-version\.outputs\.version \}\} --arch x64/);
+  assert.match(arm, /verify-packaged-release\.mjs --mac-update-dir release --version \$\{\{ steps\.package-version\.outputs\.version \}\} --arch arm64/);
 });
 
 test('all release workflows execute the final packaged runtime smoke suite', () => {

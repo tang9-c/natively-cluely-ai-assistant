@@ -2103,6 +2103,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({ isOpen, onClose, init
                                                         onClick={async () => {
                                                             if (updateStatus === 'available') {
                                                                 try {
+                                                                    if (window.electronAPI.platform === 'darwin') {
+                                                                        onClose();
+                                                                        return;
+                                                                    }
                                                                     // @ts-ignore
                                                                     await window.electronAPI.downloadUpdate();
                                                                     onClose(); // Close settings to show the banner

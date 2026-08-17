@@ -50,6 +50,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Read package version
+        id: package-version
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+
       # The fixture validator runs as a PR gate in sales-transcript-fixture.yml:
       # node tests/utils/sales-transcript-fixture-validator.mjs tests/fixtures/demo/03_master_transcript/sales/sales_full_lifecycle_meeting.json
 
@@ -108,6 +112,9 @@ jobs:
           done
           test -e release/*.dmg
           test -e release/*.zip
+
+      - name: Validate Intel manual update assets
+        run: node scripts/verify-packaged-release.mjs --mac-update-dir release --version ${{ steps.package-version.outputs.version }} --arch x64
 
       - name: Audit release size
         run: node scripts/audit-release-size.js --path release/mac/CueUp.app --json --min-bytes 734003200 --max-bytes 891289600 > release/size-report.json

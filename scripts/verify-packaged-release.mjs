@@ -262,6 +262,25 @@ export function validateWindowsUpdateArtifacts({ releaseDir, expectedVersion }) 
   return { ok: errors.length === 0, version: version ?? expectedVersion, installer: installer ?? expectedInstaller, size, errors };
 }
 
+export function validateMacUpdateArtifacts({ releaseDir, expectedVersion, arch }) {
+  const errors = [];
+  if (!['arm64', 'x64'].includes(arch)) {
+    return { ok: false, version: expectedVersion, arch, dmg: '', zip: '', errors: [`Unsupported macOS architecture: ${arch}`] };
+  }
+  const suffix = arch === 'arm64' ? '-arm64' : '';
+  const dmg = `CueUp-${expectedVersion}${suffix}.dmg`;
+  const zip = `CueUp-${expectedVersion}${suffix}-mac.zip`;
+  for (const artifact of [dmg, zip]) {
+    const artifactPath = path.join(releaseDir, artifact);
+    if (!fs.existsSync(artifactPath)) {
+      errors.push(`Missing macOS ${arch} update artifact: ${artifact}`);
+    } else if (fs.statSync(artifactPath).size === 0) {
+      errors.push(`Empty macOS ${arch} update artifact: ${artifact}`);
+    }
+  }
+  return { ok: errors.length === 0, version: expectedVersion, arch, dmg, zip, errors };
+}
+
 function readOption(name) {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 ? process.argv[index + 1] : undefined;
@@ -269,6 +288,19 @@ function readOption(name) {
 
 const invokedAsScript = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 if (invokedAsScript) {
+  const macUpdateDir = readOption('mac-update-dir');
+  if (macUpdateDir) {
+    const expectedVersion = readOption('version');
+    const arch = readOption('arch');
+    if (!expectedVersion || !arch) {
+      console.error('Usage: node scripts/verify-packaged-release.mjs --mac-update-dir <release> --version <version> --arch <arm64|x64>');
+      process.exit(2);
+    }
+    const result = validateMacUpdateArtifacts({ releaseDir: path.resolve(macUpdateDir), expectedVersion, arch });
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.ok) process.exit(1);
+    process.exit(0);
+  }
   const windowsUpdateDir = readOption('windows-update-dir');
   const expectedVersion = readOption('version');
   if (windowsUpdateDir) {

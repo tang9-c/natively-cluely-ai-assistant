@@ -89,16 +89,14 @@ const UpdateBanner: React.FC = () => {
                 const isArm = arch === 'arm64';
                 const dmgSuffix = isArm ? 'arm64' : 'x64';
                 setInstructionsArch(dmgSuffix);
-                const version = updateInfo?.version ? updateInfo.version.replace('v', '') : '2.0.8';
-                const url = `https://github.com/tang9-c/natively-cluely-ai-assistant/releases/download/v${version}/CueUp-${version}-${dmgSuffix}.dmg`;
-                window.electronAPI.openExternal(url);
+                const url = updateInfo?.manualDownloadUrl || parsedNotes?.url;
+                if (!url) throw new Error('No macOS update download is available');
+                await window.electronAPI.openExternal(url);
                 setStatus('instructions');
             } catch (err) {
-                console.error("Failed to get arch", err);
-                setStatus('downloading');
-                await window.electronAPI.downloadUpdate().catch(downloadError => {
-                    console.error('[UpdateBanner] Failed to start update download:', downloadError);
-                });
+                console.error('[UpdateBanner] Failed to open macOS update download:', err);
+                setErrorMessage('无法打开 macOS 更新下载，请稍后重试。');
+                setStatus('error');
             }
         } else {
             setStatus('downloading');

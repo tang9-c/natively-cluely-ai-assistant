@@ -390,7 +390,7 @@ try {
 import { CredentialsManager } from "./services/CredentialsManager"
 import { SettingsManager } from "./services/SettingsManager"
 import { setVerboseLoggingFlag } from "./verboseLog"
-import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
+import { extractReleaseSemver, ReleaseNotesManager, selectMacDmgAsset } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
 import {
   AdaptivePreloadManager,
@@ -878,6 +878,10 @@ export class AppState {
     setTimeout(() => {
       if (!app.isPackaged) {
         console.log("[AutoUpdater] Development mode: Skipping auto check (use manual button)");
+      } else if (process.platform === 'darwin') {
+        this.checkForUpdates().catch(err => {
+          console.error("[AutoUpdater] Failed to check for macOS updates:", err);
+        });
       } else {
         autoUpdater.checkForUpdatesAndNotify().catch(err => {
           console.error("[AutoUpdater] Failed to check for updates:", err);
@@ -896,13 +900,22 @@ export class AppState {
       if (notes) {
         const currentVersion = app.getVersion();
         const latestVersionTag = notes.version; // e.g., "v1.2.0" or "1.2.0"
-        const latestVersion = latestVersionTag.replace(/^v/, '');
+        const latestVersion = extractReleaseSemver(latestVersionTag);
+        if (!latestVersion) {
+          throw new Error('Latest release tag does not contain a semantic version');
+        }
 
         console.log(`[AutoUpdater] Manual Check: Current=${currentVersion}, Latest=${latestVersion}`);
 
         if (this.isVersionNewer(currentVersion, latestVersion)) {
           console.log('[AutoUpdater] Manual Check: New version found!');
           this.updateAvailable = true;
+          const macAsset = process.platform === 'darwin'
+            ? selectMacDmgAsset(notes.assets, process.arch)
+            : undefined;
+          if (process.platform === 'darwin' && !macAsset) {
+            throw new Error(`No compatible macOS update asset for ${process.arch}`);
+          }
 
           // Mock an info object compatible with electron-updater
           const info = {
@@ -911,7 +924,9 @@ export class AppState {
             path: '',
             sha512: '',
             releaseName: notes.summary,
-            releaseNotes: notes.fullBody
+            releaseNotes: notes.fullBody,
+            manualDownloadUrl: macAsset?.downloadUrl,
+            manualDownloadName: macAsset?.name,
           };
 
           // Notify renderer
@@ -923,6 +938,8 @@ export class AppState {
           console.log('[AutoUpdater] Manual Check: App is up to date.');
           this.broadcast("update-not-available", { version: currentVersion });
         }
+      } else {
+        throw new Error('Unable to load the latest GitHub release');
       }
     } catch (err: any) {
       console.error('[AutoUpdater] Manual update check failed:', err);
@@ -1041,7 +1058,7 @@ export class AppState {
     console.log('[AutoUpdater] Manual check for updates requested')
     try {
       // In development mode, use manual GitHub API check (electron-updater skips in dev)
-      if (!app.isPackaged) {
+      if (!app.isPackaged || process.platform === 'darwin') {
         await this.checkForUpdatesManual()
       } else {
         await autoUpdater.checkForUpdatesAndNotify()

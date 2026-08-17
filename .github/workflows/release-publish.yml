@@ -276,14 +276,12 @@ jobs:
             artifacts/Build-Intel-Mac/cueup-intel-mac-*/*.zip
             artifacts/Build-Intel-Mac/cueup-intel-mac-*/*.dmg
             artifacts/Build-Intel-Mac/cueup-intel-mac-*/*.blockmap
-            artifacts/Build-Intel-Mac/cueup-intel-mac-*/latest-mac.yml
             artifacts/Build-Intel-Mac/cueup-intel-mac-*/OPEN-UNSIGNED-CUEUP-MAC.sh
             artifacts/Build-Intel-Mac/cueup-intel-mac-*/INSTALL-UNSIGNED-MACOS.txt
             artifacts/Build-Intel-Mac/cueup-intel-mac-*/size-report.txt
             artifacts/Build-ARM64-Mac/cueup-arm64-mac-*/*arm64*.zip
             artifacts/Build-ARM64-Mac/cueup-arm64-mac-*/*arm64*.dmg
             artifacts/Build-ARM64-Mac/cueup-arm64-mac-*/*arm64*.blockmap
-            artifacts/Build-ARM64-Mac/cueup-arm64-mac-*/latest-mac.yml
             artifacts/Build-ARM64-Mac/cueup-arm64-mac-*/OPEN-UNSIGNED-CUEUP-MAC.sh
             artifacts/Build-ARM64-Mac/cueup-arm64-mac-*/INSTALL-UNSIGNED-MACOS.txt
             artifacts/Build-ARM64-Mac/cueup-arm64-mac-*/size-report.txt
