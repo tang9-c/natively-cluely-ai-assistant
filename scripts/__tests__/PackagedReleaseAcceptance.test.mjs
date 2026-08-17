@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -88,6 +89,67 @@ test('Windows x64 validation permits only the electron-builder x86 elevate helpe
   );
 });
 
+test('Windows update feed references the signed NSIS installer with matching size and SHA-512', () => {
+  assert.equal(typeof releaseVerifier.validateWindowsUpdateArtifacts, 'function');
+  const releaseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cueup-windows-update-'));
+  const version = '2.7.1';
+  const installerName = `CueUp-Setup-${version}.exe`;
+  const installer = pe();
+  const sha512 = crypto.createHash('sha512').update(installer).digest('base64');
+  fs.writeFileSync(path.join(releaseDir, installerName), installer);
+  fs.writeFileSync(path.join(releaseDir, 'latest.yml'), [
+    `version: ${version}`,
+    'files:',
+    `  - url: ${installerName}`,
+    `    sha512: ${sha512}`,
+    `    size: ${installer.length}`,
+    `path: ${installerName}`,
+    `sha512: ${sha512}`,
+    "releaseDate: '2026-08-16T16:01:53.132Z'",
+    '',
+  ].join('\n'));
+
+  try {
+    const result = releaseVerifier.validateWindowsUpdateArtifacts({ releaseDir, expectedVersion: version });
+    assert.deepEqual(result, {
+      ok: true,
+      version,
+      installer: installerName,
+      size: installer.length,
+      errors: [],
+    });
+  } finally {
+    fs.rmSync(releaseDir, { recursive: true, force: true });
+  }
+});
+
+test('Windows update feed rejects a stale installer hash', () => {
+  assert.equal(typeof releaseVerifier.validateWindowsUpdateArtifacts, 'function');
+  const releaseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cueup-windows-update-'));
+  const version = '2.7.1';
+  const installerName = `CueUp-Setup-${version}.exe`;
+  const installer = pe();
+  fs.writeFileSync(path.join(releaseDir, installerName), installer);
+  fs.writeFileSync(path.join(releaseDir, 'latest.yml'), [
+    `version: ${version}`,
+    'files:',
+    `  - url: ${installerName}`,
+    '    sha512: stale-hash',
+    `    size: ${installer.length}`,
+    `path: ${installerName}`,
+    'sha512: stale-hash',
+    '',
+  ].join('\n'));
+
+  try {
+    const result = releaseVerifier.validateWindowsUpdateArtifacts({ releaseDir, expectedVersion: version });
+    assert.equal(result.ok, false);
+    assert.ok(result.errors.some(error => error.includes('SHA-512')));
+  } finally {
+    fs.rmSync(releaseDir, { recursive: true, force: true });
+  }
+});
+
 test('packaged release validation rejects a missing Rust audio module and wrong-arch native library', () => {
   const appPath = fs.mkdtempSync(path.join(os.tmpdir(), 'cueup-release-acceptance-'));
   const resources = path.join(appPath, 'Contents/Resources');
@@ -149,6 +211,15 @@ test('all release workflows run packaged release acceptance before upload', () =
     const workflow = fs.readFileSync(path.join(root, relativePath), 'utf8');
     assert.match(workflow, new RegExp(`verify-packaged-release\\.mjs --path ${args}`));
   }
+});
+
+test('Windows workflow validates updater metadata before uploading installers', () => {
+  const root = path.resolve(import.meta.dirname, '../..');
+  const workflow = fs.readFileSync(path.join(root, '.github/workflows/build-windows-x64.yml'), 'utf8');
+  assert.match(
+    workflow,
+    /verify-packaged-release\.mjs --windows-update-dir release --version \$\{\{ steps\.package-version\.outputs\.version \}\}/,
+  );
 });
 
 test('all release workflows execute the final packaged runtime smoke suite', () => {

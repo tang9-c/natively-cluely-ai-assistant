@@ -364,7 +364,11 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                     {/* Primary Action - Right Aligned, System Blue */}
                                     {status === 'ready' ? (
                                         <button
-                                            onClick={() => window.electronAPI.restartAndInstall()}
+                                            onClick={() => {
+                                                void window.electronAPI.restartAndInstall().catch(err => {
+                                                    console.error('[UpdateModal] Failed to restart and install update:', err);
+                                                });
+                                            }}
                                             className="px-5 py-[6px] bg-[#007AFF] hover:bg-[#0062CC] text-white text-[13px] font-medium rounded-lg shadow-sm transition-colors"
                                         >
                                             Restart & Install

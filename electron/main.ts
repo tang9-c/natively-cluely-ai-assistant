@@ -1024,15 +1024,17 @@ export class AppState {
       }
     }
 
-    // Fallback to standard quitAndInstall (works on Windows/Linux or if signed)
-    setImmediate(() => {
-      try {
-        autoUpdater.quitAndInstall(false, true)
-      } catch (err) {
-        console.error('[AutoUpdater] quitAndInstall failed:', err)
-        app.exit(0)
-      }
-    })
+    // Standard installer path for Windows/Linux (or signed macOS builds).
+    // Keep this synchronous so a launch failure reaches the renderer instead
+    // of closing the app without an actionable error.
+    try {
+      autoUpdater.quitAndInstall(false, true)
+    } catch (err: any) {
+      console.error('[AutoUpdater] quitAndInstall failed:', err)
+      const errorMessage = err?.message || err?.toString() || 'Update install failed'
+      this.broadcast("update-error", errorMessage)
+      throw err
+    }
   }
 
   public async checkForUpdates(): Promise<void> {
@@ -1048,6 +1050,7 @@ export class AppState {
       console.error('[AutoUpdater] checkForUpdates failed:', err)
       const errorMessage = err.message || err.toString() || 'Update check failed'
       this.broadcast("update-error", errorMessage)
+      throw err
     }
   }
 

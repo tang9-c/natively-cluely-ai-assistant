@@ -47,6 +47,7 @@ const UpdateBanner: React.FC = () => {
             console.error('[UpdateBanner] Update error:', err);
             setStatus('error');
             setErrorMessage(err);
+            setIsVisible(true);
         });
 
         return () => {
@@ -95,12 +96,16 @@ const UpdateBanner: React.FC = () => {
             } catch (err) {
                 console.error("Failed to get arch", err);
                 setStatus('downloading');
-                window.electronAPI.downloadUpdate();
+                await window.electronAPI.downloadUpdate().catch(downloadError => {
+                    console.error('[UpdateBanner] Failed to start update download:', downloadError);
+                });
             }
         } else {
             setStatus('downloading');
             // Trigger download via IPC
-            window.electronAPI.downloadUpdate();
+            await window.electronAPI.downloadUpdate().catch(err => {
+                console.error('[UpdateBanner] Failed to start update download:', err);
+            });
         }
     };
 

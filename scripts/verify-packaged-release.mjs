@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { listPackage } from '@electron/asar';
@@ -194,6 +195,73 @@ export function validatePackagedRelease({ appPath, platform, arch }) {
   return { ok: errors.length === 0, platform, arch, errors };
 }
 
+function readYamlScalar(source, key) {
+  const match = source.match(new RegExp(`^${key}:\\s*['\"]?([^'\"\\r\\n]+)['\"]?\\s*$`, 'm'));
+  return match?.[1]?.trim();
+}
+
+function sha512File(filePath) {
+  const hash = crypto.createHash('sha512');
+  const buffer = Buffer.alloc(1024 * 1024);
+  const descriptor = fs.openSync(filePath, 'r');
+  try {
+    let position = 0;
+    let bytesRead = 0;
+    do {
+      bytesRead = fs.readSync(descriptor, buffer, 0, buffer.length, position);
+      if (bytesRead > 0) {
+        hash.update(buffer.subarray(0, bytesRead));
+        position += bytesRead;
+      }
+    } while (bytesRead > 0);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  return hash.digest('base64');
+}
+
+export function validateWindowsUpdateArtifacts({ releaseDir, expectedVersion }) {
+  const errors = [];
+  const metadataPath = path.join(releaseDir, 'latest.yml');
+  const expectedInstaller = `CueUp-Setup-${expectedVersion}.exe`;
+  if (!fs.existsSync(metadataPath)) {
+    return { ok: false, version: expectedVersion, installer: expectedInstaller, size: 0, errors: ['Missing latest.yml'] };
+  }
+
+  const metadata = fs.readFileSync(metadataPath, 'utf8');
+  const version = readYamlScalar(metadata, 'version');
+  const installer = readYamlScalar(metadata, 'path');
+  const declaredHash = readYamlScalar(metadata, 'sha512');
+  const fileEntry = metadata.match(/^\s*- url:\s*['\"]?([^'\"\r\n]+)['\"]?\s*\r?\n\s+sha512:\s*['\"]?([^'\"\r\n]+)['\"]?\s*\r?\n\s+size:\s*(\d+)\s*$/m);
+
+  if (version !== expectedVersion) errors.push(`latest.yml version ${version ?? 'missing'} does not match ${expectedVersion}`);
+  if (installer !== expectedInstaller) errors.push(`latest.yml path ${installer ?? 'missing'} does not reference ${expectedInstaller}`);
+  if (!fileEntry || fileEntry[1].trim() !== expectedInstaller) {
+    errors.push(`latest.yml files entry does not reference ${expectedInstaller}`);
+  }
+
+  const installerPath = path.join(releaseDir, expectedInstaller);
+  if (!fs.existsSync(installerPath)) {
+    errors.push(`Missing Windows installer: ${expectedInstaller}`);
+    return { ok: false, version: version ?? expectedVersion, installer: installer ?? expectedInstaller, size: 0, errors };
+  }
+
+  const size = fs.statSync(installerPath).size;
+  const declaredSize = fileEntry ? Number(fileEntry[3]) : NaN;
+  if (declaredSize !== size) errors.push(`Installer size ${size} does not match latest.yml size ${declaredSize}`);
+
+  const actualHash = sha512File(installerPath);
+  const fileHash = fileEntry?.[2]?.trim();
+  if (declaredHash !== actualHash || fileHash !== actualHash) {
+    errors.push('Installer SHA-512 does not match latest.yml');
+  }
+
+  const header = readNativeHeader(installerPath);
+  if (header.subarray(0, 2).toString('ascii') !== 'MZ') errors.push('Windows installer is not a PE executable');
+
+  return { ok: errors.length === 0, version: version ?? expectedVersion, installer: installer ?? expectedInstaller, size, errors };
+}
+
 function readOption(name) {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 ? process.argv[index + 1] : undefined;
@@ -201,6 +269,21 @@ function readOption(name) {
 
 const invokedAsScript = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 if (invokedAsScript) {
+  const windowsUpdateDir = readOption('windows-update-dir');
+  const expectedVersion = readOption('version');
+  if (windowsUpdateDir) {
+    if (!expectedVersion) {
+      console.error('Usage: node scripts/verify-packaged-release.mjs --windows-update-dir <release> --version <version>');
+      process.exit(2);
+    }
+    const result = validateWindowsUpdateArtifacts({
+      releaseDir: path.resolve(windowsUpdateDir),
+      expectedVersion,
+    });
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.ok) process.exit(1);
+    process.exit(0);
+  }
   const appPath = readOption('path');
   const platform = readOption('platform');
   const arch = readOption('arch');

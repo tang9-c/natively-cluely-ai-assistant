@@ -31,6 +31,11 @@ jobs:
         shell: bash
         run: npm install
 
+      - name: Read package version
+        id: package-version
+        shell: bash
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+
       - name: Typecheck Electron main process
         shell: bash
         run: npm run typecheck:electron
@@ -63,6 +68,10 @@ jobs:
         run: |
           set -o pipefail
           node scripts/verify-packaged-release.mjs --path release/win-unpacked --platform win32 --arch x64 | tee release/native-architecture-report.json
+
+      - name: Verify Windows updater metadata and installer integrity
+        shell: bash
+        run: node scripts/verify-packaged-release.mjs --windows-update-dir release --version ${{ steps.package-version.outputs.version }}
 
       - name: Smoke test final Windows packaged runtime
         shell: bash

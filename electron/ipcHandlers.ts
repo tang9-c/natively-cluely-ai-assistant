@@ -876,10 +876,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       console.log('[IPC] Quit and install update requested');
       await appState.quitAndInstallUpdate();
-      return { success: true };
     } catch (err: any) {
       console.error('[IPC] quit-and-install-update failed:', err);
-      return { success: false, error: err.message };
+      throw err;
     }
   });
 
@@ -891,10 +890,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       console.log('[IPC] Manual update check requested');
       await appState.checkForUpdates();
-      return { success: true };
     } catch (err: any) {
       console.error('[IPC] check-for-updates failed:', err);
-      return { success: false, error: err.message };
+      throw err;
     }
   });
 
@@ -902,10 +900,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       console.log('[IPC] Download update requested');
       await appState.downloadUpdate();
-      return { success: true };
     } catch (err: any) {
       console.error('[IPC] download-update failed:', err);
-      return { success: false, error: err.message };
+      throw err;
     }
   });
 
