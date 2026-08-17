@@ -52,7 +52,7 @@ jobs:
 
       - name: Read package version
         id: package-version
-        run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+        run: node -e "process.stdout.write('version=' + require('./package.json').version + '\n')" >> "$GITHUB_OUTPUT"
 
       # The fixture validator runs as a PR gate in sales-transcript-fixture.yml:
       # node tests/utils/sales-transcript-fixture-validator.mjs tests/fixtures/demo/03_master_transcript/sales/sales_full_lifecycle_meeting.json

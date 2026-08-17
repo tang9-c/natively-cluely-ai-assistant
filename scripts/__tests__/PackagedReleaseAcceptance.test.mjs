@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -252,6 +253,38 @@ test('both macOS workflows validate architecture-specific manual update assets',
 
   assert.match(intel, /verify-packaged-release\.mjs --mac-update-dir release --version \$\{\{ steps\.package-version\.outputs\.version \}\} --arch x64/);
   assert.match(arm, /verify-packaged-release\.mjs --mac-update-dir release --version \$\{\{ steps\.package-version\.outputs\.version \}\} --arch arm64/);
+});
+
+test('release workflows can write the package version to GITHUB_OUTPUT with bash', () => {
+  const root = path.resolve(import.meta.dirname, '../..');
+  const expectedVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+  const workflowPaths = [
+    '.github/workflows/build-arm64-mac.yml',
+    '.github/workflows/build-intel-mac.yml',
+    '.github/workflows/build-windows-x64.yml',
+  ];
+
+  for (const relativePath of workflowPaths) {
+    const workflow = fs.readFileSync(path.join(root, relativePath), 'utf8');
+    const command = workflow.match(/^\s*run:\s*(.*GITHUB_OUTPUT.*)$/m)?.[1];
+    assert.ok(command, `${relativePath} must define the package-version output command`);
+    assert.doesNotMatch(command, /\$\(/, `${relativePath} must not hide version-read failures inside command substitution`);
+
+    const outputPath = path.join(os.tmpdir(), `cueup-package-version-${process.pid}.txt`);
+    fs.rmSync(outputPath, { force: true });
+    const result = spawnSync('bash', ['-c', command], {
+      cwd: root,
+      env: { ...process.env, GITHUB_OUTPUT: outputPath },
+      encoding: 'utf8',
+    });
+
+    try {
+      assert.equal(result.status, 0, `${relativePath}: ${result.stderr}`);
+      assert.equal(fs.readFileSync(outputPath, 'utf8'), `version=${expectedVersion}\n`);
+    } finally {
+      fs.rmSync(outputPath, { force: true });
+    }
+  }
 });
 
 test('all release workflows execute the final packaged runtime smoke suite', () => {

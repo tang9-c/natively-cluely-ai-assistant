@@ -28,7 +28,7 @@ jobs:
 
       - name: Read package version
         id: package-version
-        run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+        run: node -e "process.stdout.write('version=' + require('./package.json').version + '\n')" >> "$GITHUB_OUTPUT"
 
       - name: Build renderer, main, and native module
         env:
