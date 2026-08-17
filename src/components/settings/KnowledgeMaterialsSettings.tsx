@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw, Trash2, Upload } from 'lucide-react';
 import { explainMaterialStatus } from '../../../shared/realtimeAnswerTrustViewModel';
+import type { EmbeddingHealthStatus } from '../../types/electron';
 
 const MATERIAL_POLL_INTERVAL_MS = 2_000;
 const MATERIAL_POLL_MAX_ATTEMPTS = 300;
+const CONTEXT_HEALTH_POLL_INTERVAL_MS = 3_000;
 
 function isBatchSettled(materials: any[], ids: string[]) {
   const byId = new Map(materials.map((material) => [material.id, material]));
@@ -36,7 +38,7 @@ function summarizeUploadResult(result: any) {
 export function KnowledgeMaterialsSettings() {
   const [materials, setMaterials] = useState<any[]>([]);
   const [status, setStatus] = useState<string | null>(null);
-  const [embeddingReady, setEmbeddingReady] = useState<boolean | null>(null);
+  const [embeddingStatus, setEmbeddingStatus] = useState<EmbeddingHealthStatus | null>(null);
   const [materialEmbeddingFailed, setMaterialEmbeddingFailed] = useState(false);
   const [pptxQCloudAvailable, setPptxQCloudAvailable] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -54,7 +56,7 @@ export function KnowledgeMaterialsSettings() {
   const refreshContextHealth = useCallback(async () => {
     const result = await window.electronAPI?.getContextHealth?.();
     if (result) {
-      setEmbeddingReady(Boolean(result.embeddingReady));
+      setEmbeddingStatus(result.embeddingStatus ?? (result.embeddingReady ? 'ready' : 'idle'));
       setMaterialEmbeddingFailed((result.materialQueue?.failed || 0) > 0);
     }
   }, []);
@@ -69,6 +71,14 @@ export function KnowledgeMaterialsSettings() {
     refreshContextHealth().catch(() => {});
     refreshPptxAvailability().catch(() => setPptxQCloudAvailable(false));
   }, [refreshContextHealth, refreshMaterials, refreshPptxAvailability]);
+
+  useEffect(() => {
+    if (embeddingStatus !== 'initializing') return;
+    const intervalId = window.setInterval(() => {
+      refreshContextHealth().catch(() => {});
+    }, CONTEXT_HEALTH_POLL_INTERVAL_MS);
+    return () => window.clearInterval(intervalId);
+  }, [embeddingStatus, refreshContextHealth]);
 
   useEffect(() => () => {
     if (pollingRef.current) {
@@ -184,13 +194,19 @@ export function KnowledgeMaterialsSettings() {
         </div>
       )}
 
-      {embeddingReady === false && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-100">
-          未配置语义检索。CueUp 会对上传资料使用关键词匹配。
+      {embeddingStatus === 'initializing' && (
+        <div className="rounded-xl border border-border-subtle bg-bg-input px-3.5 py-2.5 text-xs text-text-secondary">
+          语义检索正在初始化，完成后将自动启用。
         </div>
       )}
 
-      {embeddingReady === true && materialEmbeddingFailed && (
+      {embeddingStatus === 'failed' && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-100">
+          语义检索暂不可用。CueUp 会对上传资料使用关键词匹配。
+        </div>
+      )}
+
+      {embeddingStatus === 'ready' && materialEmbeddingFailed && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-100">
           部分资料文本可用，但语义索引失败。CueUp 仍可尝试关键词匹配。
         </div>

@@ -54,6 +54,30 @@ test('failed lazy initialization can be retried with the same configuration', as
   assert.equal(pipeline.isReady(), true);
 });
 
+test('embedding health distinguishes idle, initializing, ready, and failed', async () => {
+  const pipeline = new EmbeddingPipeline({}, {});
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  pipeline.configure({});
+  assert.equal(pipeline.getStatus(), 'idle');
+
+  pipeline._doInitialize = async function () {
+    await gate;
+    this.provider = { name: 'local', dimensions: 384, space: 'local:test:384' };
+  };
+  const initializing = pipeline.ensureInitialized();
+  assert.equal(pipeline.getStatus(), 'initializing');
+  release();
+  await initializing;
+  assert.equal(pipeline.getStatus(), 'ready');
+
+  const failed = new EmbeddingPipeline({}, {});
+  failed.configure({});
+  failed._doInitialize = async () => { throw new Error('broken model'); };
+  await assert.rejects(() => failed.ensureInitialized(), /broken model/);
+  assert.equal(failed.getStatus(), 'failed');
+});
+
 test('configuration updated during initialization is applied before initialization completes', async () => {
   const pipeline = new EmbeddingPipeline({}, {});
   const seenKeys = [];

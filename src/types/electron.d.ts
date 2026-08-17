@@ -298,9 +298,12 @@ export interface KnowledgeMaterial {
   updated_at?: string
 }
 
+export type EmbeddingHealthStatus = 'idle' | 'initializing' | 'ready' | 'failed'
+
 export interface ContextHealth {
   ragReady: boolean
   embeddingReady: boolean
+  embeddingStatus: EmbeddingHealthStatus
   ragQueue: { pending: number; processing: number; completed: number; failed: number }
   materialCount: number
   materialQueue: { pending: number; processing: number; completed: number; failed: number }

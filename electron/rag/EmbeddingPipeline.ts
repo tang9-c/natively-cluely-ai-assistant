@@ -18,6 +18,8 @@ const RETRY_DELAY_BASE_MS = 2000;
 // 30s is generous for large chunks on slow connections (typical: 200-800ms).
 const EMBED_TIMEOUT_MS = 30_000;
 
+export type EmbeddingPipelineStatus = 'idle' | 'initializing' | 'ready' | 'failed';
+
 /**
  * EmbeddingPipeline - Handles post-meeting embedding generation
  * 
@@ -37,6 +39,7 @@ export class EmbeddingPipeline {
     private vectorStore: VectorStore;
     private isProcessing = false;
     private initPromise: Promise<void> | null = null;
+    private initializationFailed = false;
     private pendingConfig: AppAPIConfig | null = null;
     private readonly initializedCallbacks = new Set<() => void>();
     /** Tracks the config used in the most recent successful initialize() call to enable idempotency. */
@@ -66,6 +69,13 @@ export class EmbeddingPipeline {
 
     isInitializing(): boolean {
         return this.initPromise !== null && this.provider === null;
+    }
+
+    getStatus(): EmbeddingPipelineStatus {
+        if (this.provider) return 'ready';
+        if (this.initPromise) return 'initializing';
+        if (this.initializationFailed) return 'failed';
+        return 'idle';
     }
 
     /** Initialize on first real embedding consumer; concurrent consumers share initPromise. */
@@ -107,10 +117,14 @@ export class EmbeddingPipeline {
                 if (!this._hasConfigChanged(currentConfig, this.pendingConfig)) return;
             }
         };
+        this.initializationFailed = false;
         const initialization = initializeLatestConfig();
         this.initPromise = initialization;
         try {
             await initialization;
+        } catch (error) {
+            this.initializationFailed = true;
+            throw error;
         } finally {
             if (this.initPromise === initialization) this.initPromise = null;
         }

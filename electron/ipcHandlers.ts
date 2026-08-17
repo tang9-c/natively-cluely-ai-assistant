@@ -83,6 +83,7 @@ import {
 import { executeMeetingSearch } from './rag/MeetingSearchFlow';
 import { MeetingSearchRequestRegistry } from './rag/MeetingSearchRequestRegistry';
 import { buildEmbeddingRuntimeConfig } from './rag/EmbeddingRuntimeConfig';
+import type { EmbeddingPipelineStatus } from './rag/EmbeddingPipeline';
 
 const QCLOUD_KEY_PATTERN = /^sk-[A-Za-z0-9_-]{32,}$/;
 const EMBEDDING_READY_STATUS_WAIT_MS = 2_500;
@@ -100,11 +101,19 @@ async function waitForEmbeddingReadiness(ragManager: any): Promise<void> {
   }
 }
 
-async function getRagReadiness(ragManager: any): Promise<{ ragReady: boolean; embeddingReady: boolean }> {
+async function getRagReadiness(ragManager: any): Promise<{
+  ragReady: boolean;
+  embeddingReady: boolean;
+  embeddingStatus: EmbeddingPipelineStatus;
+}> {
   await waitForEmbeddingReadiness(ragManager);
+  const embeddingPipeline = ragManager?.getEmbeddingPipeline?.();
+  const embeddingStatus: EmbeddingPipelineStatus = embeddingPipeline?.getStatus?.()
+    ?? (embeddingPipeline?.isReady?.() ? 'ready' : 'failed');
   return {
     ragReady: Boolean(ragManager?.isReady?.()),
-    embeddingReady: Boolean(ragManager?.getEmbeddingPipeline?.().isReady?.()),
+    embeddingReady: embeddingStatus === 'ready',
+    embeddingStatus,
   };
 }
 
@@ -4538,7 +4547,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('get-context-health', async () => {
     const ragManager = appState.getRAGManager();
-    const { ragReady, embeddingReady } = await getRagReadiness(ragManager);
+    const { ragReady, embeddingReady, embeddingStatus } = await getRagReadiness(ragManager);
     const db = DatabaseManager.getInstance();
     const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
     const materialService = new KnowledgeMaterialService(db, ragManager?.getEmbeddingPipeline?.());
@@ -4547,6 +4556,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     return {
       ragReady,
       embeddingReady,
+      embeddingStatus,
       ragQueue,
       materialCount: materialHealth.materialCount,
       materialQueue: materialHealth.queue,

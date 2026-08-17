@@ -18,7 +18,14 @@ test('knowledge material settings uses trust view model and honest failed-materi
   assert.match(source, /onClick=\{uploadMaterials\}/);
   assert.match(source, /canReindex/);
   assert.match(source, /primaryActionLabel/);
-  assert.match(source, /未配置语义检索/);
+  assert.match(source, /embeddingStatus === 'failed'/);
+  assert.match(source, /语义检索暂不可用/);
+  assert.match(source, /embeddingStatus === 'initializing'/);
+  assert.match(source, /语义检索正在初始化/);
+  assert.match(source, /window\.setInterval/);
+  assert.match(source, /window\.clearInterval/);
+  assert.match(source, /result\.embeddingStatus \?\? \(result\.embeddingReady \? 'ready' : 'idle'\)/);
+  assert.doesNotMatch(source, /embeddingReady === false/);
   assert.match(source, /语义索引失败/);
   assert.doesNotMatch(source, /title=\{canReindex \? '重新索引' : '仅已完成资料可重新索引'\}/);
 

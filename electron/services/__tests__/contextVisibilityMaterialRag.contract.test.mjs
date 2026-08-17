@@ -61,8 +61,11 @@ test('material upload exposes PPTX content extraction behind QCLOUD availability
   assert.match(settings, /explainMaterialStatus/);
   assert.match(settings, /explanation\.label/);
   assert.match(settings, /explanation\.message/);
-  assert.match(settings, /embeddingReady === false/);
-  assert.match(settings, /未配置语义检索。CueUp 会对上传资料使用关键词匹配。/);
+  assert.match(settings, /embeddingStatus === 'failed'/);
+  assert.match(settings, /语义检索暂不可用。CueUp 会对上传资料使用关键词匹配。/);
+  assert.match(settings, /embeddingStatus === 'initializing'/);
+  assert.match(settings, /语义检索正在初始化，完成后将自动启用。/);
+  assert.doesNotMatch(settings, /embeddingReady === false/);
   assert.match(settings, /materialEmbeddingFailed/);
   assert.match(settings, /部分资料文本可用，但语义索引失败。CueUp 仍可尝试关键词匹配。/);
   assert.match(settings, /summarizeUploadResult/);
@@ -106,13 +109,18 @@ test('material RAG diagnostics propagate embedding fallback into realtime answer
 
 test('context health waits briefly for async embedding initialization before reporting unavailable', () => {
   const ipc = read('electron/ipcHandlers.ts');
+  const types = read('src/types/electron.d.ts');
 
   assert.match(ipc, /EMBEDDING_READY_STATUS_WAIT_MS/);
   assert.match(ipc, /waitForEmbeddingReadiness/);
   assert.match(ipc, /embeddingPipeline\.waitForReady\(EMBEDDING_READY_STATUS_WAIT_MS\)/);
   assert.match(ipc, /async function getRagReadiness/);
+  assert.match(ipc, /embeddingStatus/);
+  assert.match(ipc, /getStatus/);
+  assert.match(types, /export type EmbeddingHealthStatus\s*=\s*'idle'\s*\|\s*'initializing'\s*\|\s*'ready'\s*\|\s*'failed'/);
+  assert.match(types, /embeddingStatus:\s*EmbeddingHealthStatus/);
   assert.match(ipc, /const \{ ragReady, embeddingReady \} = await getRagReadiness\(ragManagerForHealth\)/);
-  assert.match(ipc, /const \{ ragReady, embeddingReady \} = await getRagReadiness\(ragManager\)/);
+  assert.match(ipc, /const \{ ragReady, embeddingReady, embeddingStatus \} = await getRagReadiness\(ragManager\)/);
 });
 
 test('RAG retrieval combines lexical and vector scoring and does not treat chunk offset as wall-clock recency', () => {
