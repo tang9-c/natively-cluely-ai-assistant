@@ -70,10 +70,21 @@ test('QCLOUD API speech channel multipart form enables speaker, emotion, utteran
       enable_emotion_detection: 'true',
       show_utterances: 'true',
       enable_itn: 'true',
+      enable_ddc: 'true',
       boosting_table_name: 'doubaoboostingind',
       correct_table_name: 'doubaoreplacements',
     });
   });
+});
+
+test('QCLOUD API speech channel allows disabling DDC through a boolean option', async () => {
+  const { RestSTT } = await loadRestSTT();
+  const stt = new RestSTT('qcloud-stt', 'qcloud-test-key', undefined, undefined, {
+    enableDdc: false,
+  });
+  const fields = stt.config.buildMultipartFields?.();
+
+  assert.equal(fields.enable_ddc, 'false');
 });
 
 test('QCLOUD API speech channel allows Doubao vocabulary table names to be overridden for validation', async () => {

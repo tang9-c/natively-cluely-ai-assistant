@@ -36,6 +36,7 @@ export type SpeakerSeparationMode = 'auto' | 'off';
 
 interface RestSttOptions {
     speakerSeparationMode?: SpeakerSeparationMode;
+    enableDdc?: boolean;
     speaker?: 'interviewer' | 'user';
 }
 
@@ -227,6 +228,7 @@ const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
             || requestedBcp47 === 'zh-CN';
         const enableSpeakerSeparation =
             speakerSeparationMode === 'auto' && languageSupportsSpeakerSeparation;
+        const enableDdc = options?.enableDdc ?? true;
         const boostingTableName = resolveQCloudAucTableName(
             'QCLOUD_AUC_BOOSTING_TABLE_NAME',
             DEFAULT_QCLOUD_AUC_BOOSTING_TABLE_NAME,
@@ -253,6 +255,7 @@ const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
                 enable_emotion_detection: 'true',
                 show_utterances: 'true',
                 enable_itn: 'true',
+                enable_ddc: String(enableDdc),
                 ...(boostingTableName ? { boosting_table_name: boostingTableName } : {}),
                 ...(correctTableName ? { correct_table_name: correctTableName } : {}),
             }),
