@@ -6,7 +6,6 @@ import {
     RefreshCw, Trash2, Check, ExternalLink, Volume2, Globe, Brain, Cpu, Calendar, Star, CreditCard, X, Pencil, Lightbulb,
     SlidersHorizontal, PointerOff, ArrowRight, LayoutGrid, DollarSign, Building2, Database
 } from 'lucide-react';
-import { SiOpenai, SiGoogle } from 'react-icons/si';
 import { useShortcuts, ShortcutConfig } from '../../hooks/useShortcuts';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { isMac, getModifierSymbol } from '../../utils/platformUtils';
@@ -776,7 +775,7 @@ const SetupGuide = () => {
         },
         {
             title: '连接 AI 模型',
-            desc: '打开设置 → AI 提供商，默认聊天模型是 Doubao；也可以配置 QCLOUD、OpenAI、Claude、Gemini、Groq 或自定义端点。',
+            desc: '打开设置 → AI 提供商，默认聊天模型是 Doubao；也可以配置 QCLOUD 或自定义端点。',
         },
         {
             title: '个性化（可选）',
@@ -1002,7 +1001,7 @@ export const HelpSettings: React.FC = () => {
                                     <span>2. QCLOUD API</span>
                                 </h5>
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    使用同一把 QCLOUD key 同时支持 LLM 路由和语音转写。保存 key 后，语音提供商下拉会出现 <strong>QCLOUD API</strong>；它默认中文优先，支持说话人分离。Embedding 保持本地优先；本地向量模型不可用时，可使用同一把 QCLOUD key 调用 embedding-vision。云端回退顺序：QCLOUD、豆包 Embedding、OpenAI、Gemini。
+                                    使用同一把 QCLOUD key 同时支持 LLM 路由和语音转写。保存 key 后，语音提供商下拉会出现 <strong>QCLOUD API</strong>；它默认中文优先，支持说话人分离。Embedding 保持本地优先；本地向量模型不可用时，可使用 QCLOUD 或豆包 Embedding 云端回退。
                                 </p>
                             </div>
 
@@ -1048,55 +1047,12 @@ export const HelpSettings: React.FC = () => {
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="3. AI 提供商与提示词引擎" icon={<Key className="w-4 h-4" />}>
+                <AccordionSection title="3. AI 模型与提示词引擎" icon={<Key className="w-4 h-4" />}>
                     <div className="space-y-4">
-                        <p className="text-sm">CueUp 使用大语言模型（LLM）来理解屏幕、转录、模式、参考资料和个人上下文。默认聊天模型是 Doubao Seed 2.0 Lite；你也可以在“设置 → AI 提供商”中切换到 QCLOUD API、OpenAI、Claude、Gemini、Groq、本地 Ollama 或自定义端点。QCLOUD API 的密钥和连通性测试位于独立的“设置 → QCLOUD API”页。</p>
+                        <p className="text-sm">CueUp 使用大语言模型（LLM）来理解屏幕、转录、模式、参考资料和个人上下文。默认聊天模型是 Doubao Seed 2.0 Lite；你也可以在“设置 → AI 提供商”中切换到 QCLOUD API 或自定义端点。QCLOUD API 的密钥和连通性测试位于独立的“设置 → QCLOUD API”页。</p>
 
                         <div className="space-y-3 pt-2">
-                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">1. 标准云端提供商</h4>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
-                                    <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
-                                        <span className="flex items-center gap-2">
-                                            <img src="https://groq.com/favicon.svg" alt="Groq" className="w-4 h-4 object-contain" /> Groq
-                                        </span>
-                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.groq.com/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 获取密钥</button>
-                                    </h5>
-                                    <p className="text-[11px] opacity-80 mb-2">使用 LPU 硬件实现快速推理。可在模型下拉中选择已拉取到注册表的 Groq 模型。</p>
-                                    <span className={kbdClass}>gsk_...</span>
-                                </div>
-                                <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
-                                    <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
-                                        <span className="flex items-center gap-2">
-                                            <SiOpenai className={`w-3.5 h-3.5 ${isLight ? 'text-black' : 'text-white'}`} /> OpenAI
-                                        </span>
-                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://platform.openai.com/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 获取密钥</button>
-                                    </h5>
-                                    <p className="text-[11px] opacity-80 mb-2">标准 OpenAI 管线。保存 key 后可选择 OpenAI 系列聊天与视觉模型。</p>
-                                    <span className={kbdClass}>sk-proj-...</span>
-                                </div>
-                                <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
-                                    <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
-                                        <span className="flex items-center gap-2">
-                                            <img src="https://cdn.simpleicons.org/anthropic/000000" style={{ filter: isLight ? '' : 'invert(1)' }} alt="Anthropic" className="w-4 h-4 object-contain" /> Anthropic
-                                        </span>
-                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.anthropic.com/settings/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 获取密钥</button>
-                                    </h5>
-                                    <p className="text-[11px] opacity-80 mb-2">适合长上下文和代码推理。保存 key 后可选择 Claude 系列模型。</p>
-                                    <span className={kbdClass}>sk-ant-...</span>
-                                </div>
-                                <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
-                                    <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
-                                        <span className="flex items-center gap-2">
-                                            <SiGoogle className="w-3.5 h-3.5 text-blue-500" /> Google Gemini
-                                        </span>
-                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://aistudio.google.com/app/apikey') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> 获取密钥</button>
-                                    </h5>
-                                    <p className="text-[11px] opacity-80 mb-2">适合长上下文和视觉输入。保存 key 后可选择 Gemini 系列模型。</p>
-                                    <span className={kbdClass}>AIzaSy...</span>
-                                </div>
-                            </div>
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">1. 当前云端模型</h4>
 
                             <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
@@ -1137,27 +1093,7 @@ export const HelpSettings: React.FC = () => {
                         </div>
 
                         <div className="space-y-3 pt-4">
-                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">2. 本地模型（Ollama）</h4>
-                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-3">
-                                <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                    你可以使用 Ollama 让 CueUp 完全离线运行，100% 保护数据隐私。CueUp 会自动扫描 <span className={kbdClass}>http://localhost:11434</span> 上的活跃模型。
-                                </p>
-                                <ol className="list-decimal pl-4 text-xs space-y-2 opacity-90 text-text-secondary">
-                                    <li>通过 <button onClick={() => { (window as any).electronAPI?.openExternal('https://ollama.com/download') }} className="text-accent-primary hover:underline inline-flex items-center gap-1 font-medium">ollama.com <ExternalLink size={10} /></button> 下载 Ollama</li>
-                                    <li>
-                                        打开终端，运行我们推荐的 8B 参数指令模型：
-                                        <div className="mt-1 bg-bg-input p-2 rounded border border-border-subtle font-mono text-[11px]">ollama run llama3:8b</div>
-                                    </li>
-                                    <li>另外，如果想要在没有 GPU 的情况下更快速地生成，可以使用微软的较小模型：
-                                        <div className="mt-1 bg-bg-input p-2 rounded border border-border-subtle font-mono text-[11px]">ollama run phi3</div>
-                                    </li>
-                                    <li>返回 CueUp 的 AI 提供商面板，你将看到本地模型已就绪可用。</li>
-                                </ol>
-                            </div>
-                        </div>
-
-                        <div className="space-y-3 pt-4">
-                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">3. 自定义提供商</h4>
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">2. 自定义提供商</h4>
                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-3">
                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
                                     使用自定义提供商接入任何标准的外部 LLM 路由（例如 OpenRouter、LMStudio 或企业内部端点）。使用 cURL 命令模板创建新提供商。
@@ -1172,7 +1108,7 @@ export const HelpSettings: React.FC = () => {
                                 <div className="flex items-start gap-2 mt-2">
                                     <div className="w-5 h-5 rounded bg-orange-500/20 text-orange-500 flex items-center justify-center shrink-0 mt-0.5"><Zap size={10} /></div>
                                     <div className="text-xs text-text-secondary leading-relaxed">
-                                        <strong>关键：响应路径。</strong> 你必须告诉 CueUp 如何解析返回的 JSON。深层嵌套的输出必须定义准确的路径数组。对于兼容 OpenAI/OpenRouter 的端点，必须填写：<span className={kbdClass}>choices[0].message.content</span>。
+                                        <strong>关键：响应路径。</strong> 你必须告诉 CueUp 如何解析返回的 JSON。深层嵌套的输出必须定义准确的路径数组。对于使用 Chat Completions 返回格式的端点，通常填写：<span className={kbdClass}>choices[0].message.content</span>。
                                     </div>
                                 </div>
                             </div>

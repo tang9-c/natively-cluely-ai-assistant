@@ -110,11 +110,12 @@ test('HelpSettings distinguishes speaker separation from speaker verification', 
 // 5. AI providers + default chat model.
 // ---------------------------------------------------------------------------
 
-test('HelpSettings lists default chat model and standard cloud providers', () => {
+test('HelpSettings lists only currently supported chat providers', () => {
   const source = read('src/components/settings/HelpSettings.tsx');
 
   assert.match(source, /默认聊天模型是 Doubao Seed 2\.0 Lite/);
-  assert.match(source, /QCLOUD API、OpenAI、Claude、Gemini、Groq、本地 Ollama 或自定义端点/);
+  assert.match(source, /切换到 QCLOUD API 或自定义端点/);
+  assert.doesNotMatch(source, /OpenAI|Claude|Anthropic|Gemini|Groq|Ollama/);
 
   // Vision / data-scope awareness in the model engine card.
   assert.match(source, /屏幕截图只会发送给具备视觉能力且数据范围允许的提供商/);
@@ -295,8 +296,8 @@ test('QCLOUD settings guide explains local-first embeddings and cloud fallback o
   assert.match(source, /可在“语音”标签选择 QCLOUD API/);
   assert.match(source, /Embedding 保持本地优先；本地向量模型不可用时，可使用同一把 QCLOUD key 调用 embedding-vision。/);
   assert.match(source, /云端回退顺序：QCLOUD、豆包 Embedding、OpenAI、Gemini。/);
-  assert.match(help, /Embedding 保持本地优先；本地向量模型不可用时，可使用同一把 QCLOUD key 调用 embedding-vision。/);
-  assert.match(help, /云端回退顺序：QCLOUD、豆包 Embedding、OpenAI、Gemini。/);
+  assert.match(help, /Embedding 保持本地优先；本地向量模型不可用时，可使用 QCLOUD 或豆包 Embedding 云端回退。/);
+  assert.doesNotMatch(help, /OpenAI|Claude|Anthropic|Gemini|Groq|Ollama/);
   assert.doesNotMatch(source, /Embedding 不使用 QCLOUD/);
   assert.doesNotMatch(source, /实时转录和向量模型不使用 QCLOUD/);
 });
