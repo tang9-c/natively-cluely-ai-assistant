@@ -102,4 +102,49 @@ test.describe('FINDING-006: Natively E2E smoke', () => {
     await page.getByRole('button', { name: /关闭/ }).first().click();
     await expect(settingsPanel, 'Settings panel should close from its close action').toBeHidden({ timeout: 5_000 });
   });
+
+  test('modes onboarding can be dismissed from the macOS launcher title bar', async ({ page }) => {
+    await page.evaluate(() => {
+      window.localStorage.removeItem('natively_seen_modes_onboarding_v5');
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+
+    const closeButton = page.getByRole('button', { name: '关闭模式提示' });
+    await expect(closeButton).toBeVisible({ timeout: 10_000 });
+    await closeButton.click();
+
+    await expect(closeButton).toBeHidden();
+    await expect.poll(() => page.evaluate(() => (
+      window.localStorage.getItem('natively_seen_modes_onboarding_v5')
+    ))).toBe('true');
+  });
+
+  test('modes onboarding ignore action remains clickable on macOS', async ({ page }) => {
+    await page.evaluate(() => {
+      window.localStorage.removeItem('natively_seen_modes_onboarding_v5');
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+
+    const closeButton = page.getByRole('button', { name: '关闭模式提示' });
+    await expect(closeButton).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: '忽略', exact: true }).click();
+
+    await expect(closeButton).toBeHidden();
+    await expect.poll(() => page.evaluate(() => (
+      window.localStorage.getItem('natively_seen_modes_onboarding_v5')
+    ))).toBe('true');
+  });
+
+  test('profile onboarding does not stack behind an open modes onboarding popover', async ({ page }) => {
+    await page.evaluate(() => {
+      window.localStorage.removeItem('natively_seen_modes_onboarding_v5');
+      window.localStorage.removeItem('natively_seen_profile_onboarding_v1');
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+
+    await expect(page.getByRole('button', { name: '关闭模式提示' })).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(11_000);
+
+    await expect(page.getByRole('button', { name: '关闭档案智能提示' })).toHaveCount(0);
+  });
 });

@@ -191,11 +191,6 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
             setTimeout(() => {
                 if (mounted && shouldShowProfileOnboarding()) setShowProfileOnboarding(true);
             }, 9000);
-        } else if (!hasSeenProfileOnboarding && !hasSeenModesOnboarding) {
-             // If both haven't been seen, show profile after modes
-             setTimeout(() => {
-                if (mounted && shouldShowProfileOnboarding()) setShowProfileOnboarding(true);
-            }, 18000);
         }
 
         fetchMeetings();
@@ -465,7 +460,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                             e.stopPropagation();
                                             dismissProfileOnboarding();
                                         }}
-                                        className={`absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full transition-all active:scale-95 no-drag ${
+                                        className={`absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full transition-all active:scale-95 no-drag ${
                                             isLight
                                                 ? 'text-slate-500 hover:bg-slate-100/70 hover:text-slate-800'
                                                 : 'text-slate-400 hover:bg-white/10 hover:text-slate-100'
@@ -569,7 +564,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                             e.stopPropagation();
                                             dismissModesOnboarding();
                                         }}
-                                        className={`absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full transition-all active:scale-95 no-drag ${
+                                        className={`absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full transition-all active:scale-95 no-drag ${
                                             isLight
                                                 ? 'text-slate-500 hover:bg-slate-100/70 hover:text-slate-800'
                                                 : 'text-slate-400 hover:bg-white/10 hover:text-slate-100'
