@@ -15,6 +15,7 @@ function readWorkflow() {
 
 test('release-publish workflow exists and is well-formed', () => {
   const wf = readWorkflow();
+  const template = readFileSync(join(repoRoot, '.github', 'RELEASE_TEMPLATE.md'), 'utf8');
 
   assert.match(wf, /^name:\s*Release Publish$/m, 'workflow must declare name "Release Publish"');
 
@@ -29,6 +30,11 @@ test('release-publish workflow exists and is well-formed', () => {
   // Permissions required to create releases and query workflow runs.
   assert.match(wf, /contents:\s*write/);
   assert.match(wf, /actions:\s*read/);
+  assert.match(template, /## 发布摘要/);
+  assert.match(template, /## 新增功能/);
+  assert.match(template, /## 改进/);
+  assert.match(template, /## 修复/);
+  assert.match(template, /## 技术变更/);
 });
 
 test('release-publish workflow aggregates builds per commit SHA and creates a draft', () => {
@@ -80,6 +86,8 @@ test('release-publish workflow aggregates builds per commit SHA and creates a dr
   assert.match(wf, /softprops\/action-gh-release@v2/);
   assert.match(wf, /draft:\s*true/);
   assert.match(wf, /tag_name:\s*\$\{\{\s*steps\.tag\.outputs\.tag\s*\}\}/);
+  assert.match(wf, /HEAD_SHA: \$\{\{ github\.event\.workflow_run\.head_sha \}\}[\s\S]*REPO: \$\{\{ github\.repository \}\}/);
+  assert.match(wf, /https:\/\/github\.com\/\$\{REPO\}\/commit\/\$\{HEAD_SHA\}/);
 
   // Must upload the canonical release artifacts.
   for (const pattern of [

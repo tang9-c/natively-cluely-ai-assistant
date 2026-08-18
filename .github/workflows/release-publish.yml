@@ -213,6 +213,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO: ${{ github.repository }}
         run: |
           template=".github/RELEASE_TEMPLATE.md"
           if [ -f "${template}" ]; then

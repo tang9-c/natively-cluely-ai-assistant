@@ -1,54 +1,54 @@
-## Summary
+## 发布摘要
 
-Short one-line description of the release.
+请用一句话概括本次发布内容。
 
-## What's New
+## 新增功能
 
-- Feature one description
-- Feature two description
-- Feature three description
+- 功能一说明
+- 功能二说明
+- 功能三说明
 
-## Improvements
+## 改进
 
-- Performance improvement
-- UX refinement
-- Internal optimization
+- 性能优化
+- 用户体验改进
+- 内部实现优化
 
-## Fixes
+## 修复
 
-- Fixed issue with stealth activation
-- Resolved crash on startup
-- Corrected UI alignment issue
+- 修复隐身激活问题
+- 修复应用启动崩溃
+- 修复界面对齐问题
 
-## Technical
+## 技术变更
 
-- Dependency updates
-- Refactored updater logic
+- 更新项目依赖
+- 重构自动更新逻辑
 
-## ⚠️macOS Installation (Unsigned Build)
+## ⚠️ macOS 安装说明（未签名版本）
 
-Download the correct architecture .zip or .dmg file for your device (Apple Silicon or Intel).
+请根据设备架构下载对应的 `.zip` 或 `.dmg` 文件（Apple Silicon 或 Intel）。
 
-If you see "App is damaged":
+如果看到“应用已损坏”提示：
 
-- **For .zip downloads:**
-  1. Move the app to your Applications folder.
-  2. Open Terminal and run: `xattr -cr /Applications/CueUp.app`
+- **对于 `.zip` 文件：**
+  1. 将应用移动到“应用程序”文件夹。
+  2. 打开终端并执行：`xattr -cr /Applications/CueUp.app`
 
-- **For .dmg downloads:**
-  1. Open Terminal and run:
+- **对于 `.dmg` 文件：**
+  1. 打开终端并执行：
      ```bash
      xattr -cr ~/Downloads/CueUp-<version>-arm64.dmg
-     # Or for Intel Macs:
+     # Intel Mac 请执行：
      xattr -cr ~/Downloads/CueUp-<version>-x64.dmg
      ```
-  2. Open the downloaded CueUp `.dmg` and install the app.
-  3. Open Terminal and run: `xattr -cr /Applications/CueUp.app`
+  2. 打开下载的 CueUp `.dmg` 并完成安装。
+  3. 打开终端并执行：`xattr -cr /Applications/CueUp.app`
 
-## ⚠️Windows Installation (Unsigned Build)
+## ⚠️ Windows 安装说明（未签名版本）
 
-When running the installer on Windows, you might see a "Windows protected your PC" warning from Microsoft Defender SmartScreen saying it prevented an unrecognized app from starting. 
+运行 Windows 安装程序时，Microsoft Defender SmartScreen 可能提示“Windows 已保护你的电脑”，并阻止未知应用启动。
 
-Since this is an unsigned build, this is expected. You can safely ignore it by clicking **More info** and then **Run anyway**.
+由于这是未签名版本，此提示属于正常现象。点击 **更多信息**，然后点击 **仍要运行** 即可。
 
-\\ refer to change.md for detailed changes
+详细变更请参阅仓库中的 [CHANGELOG.md](https://github.com/tang9-c/natively-cluely-ai-assistant/blob/main/CHANGELOG.md)。

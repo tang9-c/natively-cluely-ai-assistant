@@ -26,6 +26,14 @@ test('release SHA tags compare by their product semantic version', () => {
   assert.equal(releaseNotes.extractReleaseSemver('latest'), null);
 });
 
+test('release notes parser accepts Chinese release sections', () => {
+  const manager = releaseNotes.ReleaseNotesManager.getInstance();
+  const parsed = manager.parseReleaseNotes(`## 发布摘要\n\n中文摘要\n\n## 新增功能\n\n- 新功能`, 'v2.8.0', '', []);
+
+  assert.equal(parsed.summary, '中文摘要');
+  assert.deepEqual(parsed.sections, [{ title: "What's New", items: ['新功能'] }]);
+});
+
 test('macOS manual updater selects the architecture-specific DMG from release assets', () => {
   assert.equal(typeof releaseNotes.selectMacDmgAsset, 'function');
   const assets = [

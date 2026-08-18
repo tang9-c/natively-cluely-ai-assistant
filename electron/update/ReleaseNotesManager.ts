@@ -123,6 +123,13 @@ export class ReleaseNotesManager {
     private parseReleaseNotes(body: string, version: string, url: string, assets: ReleaseAsset[]): ParsedReleaseNotes {
         console.log(`[ReleaseNotesManager] Parsing body for ${version}. Length: ${body.length}`);
         const allowedHeaders = ['Summary', "What's New", "Improvements", "Fixes", "Technical"];
+        const sectionAliases: Record<string, string> = {
+            '发布摘要': 'Summary',
+            '新增功能': "What's New",
+            '改进': 'Improvements',
+            '修复': 'Fixes',
+            '技术变更': 'Technical',
+        };
         const bulletSections = ["What's New", "Improvements", "Fixes", "Technical"];
 
         const sections: ReleaseNoteSection[] = [];
@@ -139,7 +146,8 @@ export class ReleaseNotesManager {
             if (!sectionText) continue;
 
             const lines = sectionText.split('\n');
-            const title = lines[0].trim();
+            const rawTitle = lines[0].trim();
+            const title = sectionAliases[rawTitle] ?? rawTitle;
 
             // STRICTNESS: Only process allowed headers
             if (!allowedHeaders.includes(title)) {
