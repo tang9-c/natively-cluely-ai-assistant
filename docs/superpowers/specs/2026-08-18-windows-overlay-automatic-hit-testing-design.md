@@ -36,9 +36,9 @@ Windows 安装版在会议期间会把透明、置顶且可聚焦的 Overlay 扩
 
 Overlay 根节点保持透明。可交互区域由一个稳定的 DOM 标记声明，例如 `data-overlay-interactive`，标在可见的 TopPill、主面板以及需要浮出面板边界的菜单上。
 
-Renderer 在 `pointermove` 中使用 `document.elementFromPoint()` 和 `closest()` 判断命中，另外在 `pointerleave`、窗口失焦和组件卸载时报告非交互。IPC 只在布尔值发生变化时发送，避免鼠标移动产生高频主进程调用。
+Renderer 在 `mousemove` 中使用 `document.elementFromPoint()` 和 `closest()` 判断命中，另外在窗口失焦和组件卸载时报告非交互。IPC 只在布尔值发生变化时发送，避免鼠标移动产生高频主进程调用。
 
-输入框聚焦、拖动窗口、按下鼠标或菜单展开期间保持交互锁，直到对应操作结束，避免操作中途切换为穿透。
+拖动窗口或按下鼠标期间保持短时交互锁，直到鼠标释放，避免操作中途切换为穿透。输入框焦点不能锁住整个原生窗口；`setIgnoreMouseEvents()` 只改变鼠标命中，输入焦点存在时鼠标移到透明区域仍应穿透，从而允许用户点击下方应用并自然触发失焦。
 
 ## IPC 与日志
 
