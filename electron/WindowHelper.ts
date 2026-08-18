@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, screen } from 'electron';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { resolveOverlayMouseInteractionPolicy } from '../shared/overlayMouseInteractionPolicy';
 import { AppState } from './main';
 import { KeybindManager } from './services/KeybindManager';
 import { applyNativeStealthIfEnabled } from './utils/nativeStealth';
@@ -31,6 +32,8 @@ export class WindowHelper {
   private overlayRendererReady = false;
   private pendingOverlayShowInactive: boolean | null = null;
   private overlayReadyRecoveryTimer: NodeJS.Timeout | null = null;
+  private overlayAutomaticInteractive = process.platform !== 'win32';
+  private lastAppliedIgnoreMouseEvents: boolean | null = null;
   // Track current window mode (persists even when overlay is hidden via Cmd+B)
   private currentWindowMode: 'launcher' | 'overlay' = 'launcher';
 
@@ -75,6 +78,8 @@ export class WindowHelper {
         opacity: this.overlayWindow.getOpacity(),
         focusable: this.overlayWindow.isFocusable(),
         alwaysOnTop: this.overlayWindow.isAlwaysOnTop(),
+        automaticInteractive: this.overlayAutomaticInteractive,
+        ignoreMouseEvents: this.lastAppliedIgnoreMouseEvents,
         currentWindowMode: this.currentWindowMode,
         isWindowVisible: this.isWindowVisible,
         platform: process.platform,
@@ -475,6 +480,7 @@ export class WindowHelper {
     };
 
     this.overlayWindow = new BrowserWindow(overlaySettings);
+    this.syncOverlayInteractionPolicy();
 
     if (process.platform === 'darwin') {
       this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -732,6 +738,7 @@ export class WindowHelper {
     // re-register the app as a regular window, breaking the panel's stealth behavior
     // (fixed in v2.0.8, regressed when opacity was re-added for screenshot flash).
     // Screenshot capture already waits 80ms after hide() for compositor flush.
+    this.resetOverlayAutomaticInteraction();
     if (process.platform === 'win32') {
       this.launcherWindow?.setOpacity(0);
       this.overlayWindow?.setOpacity(0);
@@ -741,31 +748,44 @@ export class WindowHelper {
     this.isWindowVisible = false;
   }
 
-  // Apply or remove click-through (mouse passthrough) on the overlay window.
-  // Called whenever the passthrough state changes in AppState.
+  private resetOverlayAutomaticInteraction(): void {
+    if (process.platform !== 'win32') return;
+    this.overlayAutomaticInteractive = false;
+    this.syncOverlayInteractionPolicy();
+  }
+
+  public setOverlayAutomaticInteractive(interactive: boolean): void {
+    if (process.platform !== 'win32') return;
+    if (this.overlayAutomaticInteractive === interactive) return;
+
+    this.overlayAutomaticInteractive = interactive;
+    this.syncOverlayInteractionPolicy();
+  }
+
+  // Apply the resolved manual/automatic click-through policy to the native overlay.
   public syncOverlayInteractionPolicy(): void {
     if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
 
-    const passthrough = this.appState.getOverlayMousePassthrough();
-    if (passthrough) {
-      // forward: true — pointer events are still delivered to the OS layer beneath.
-      // NOTE: We intentionally do NOT call setFocusable(false) here.
-      //
-      // Rationale: setIgnoreMouseEvents() alone is sufficient for transparent
-      // mouse behaviour.  Setting focusable=false when the overlay is the only
-      // visible window makes macOS treat the app as having NO active windows.
-      // In that state, macOS may stop delivering Carbon/IOKit global hotkey
-      // events to the process — silently breaking every globalShortcut binding.
-      // Keeping the window focusable costs nothing: in passthrough mode the
-      // user is in another app and will not accidentally focus the overlay.
+    const manualPassthrough = this.appState.getOverlayMousePassthrough();
+    const policy = resolveOverlayMouseInteractionPolicy({
+      platform: process.platform,
+      manualPassthrough,
+      automaticInteractive: this.overlayAutomaticInteractive,
+    });
+    if (this.lastAppliedIgnoreMouseEvents === policy.ignoreMouseEvents) return;
+
+    if (policy.ignoreMouseEvents) {
       this.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-      console.log('[WindowHelper] Overlay mouse passthrough ON');
     } else {
       this.overlayWindow.setIgnoreMouseEvents(false);
-      // Restore full interactivity when passthrough is turned off.
       this.overlayWindow.setFocusable(true);
-      console.log('[WindowHelper] Overlay mouse passthrough OFF');
     }
+    this.lastAppliedIgnoreMouseEvents = policy.ignoreMouseEvents;
+    console.log('[WindowHelper] Overlay mouse interaction policy changed', {
+      manualPassthrough,
+      automaticInteractive: this.overlayAutomaticInteractive,
+      ignoreMouseEvents: policy.ignoreMouseEvents,
+    });
   }
 
   // Show overlay directly without going through full switchToOverlay flow.
@@ -773,6 +793,7 @@ export class WindowHelper {
   public showOverlay(): void {
     if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
 
+    this.resetOverlayAutomaticInteraction();
     // Restore opacity in case it was zeroed by hideMainWindow() before a screenshot.
     this.overlayWindow.setOpacity(1);
 
@@ -842,6 +863,8 @@ export class WindowHelper {
 
   public switchToOverlay(inactive?: boolean): void {
     console.log(`[WindowHelper] Switching to OVERLAY (inactive: ${!!inactive})`);
+    const shouldResetAutomaticInteraction =
+      this.currentWindowMode !== 'overlay' || !this.overlayWindow?.isVisible();
 
     if (this.overlayWindow && !this.overlayWindow.isDestroyed() && !this.overlayRendererReady) {
       this.pendingOverlayShowInactive = !!inactive;
@@ -858,6 +881,9 @@ export class WindowHelper {
 
     // Show Overlay FIRST
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+      if (shouldResetAutomaticInteraction) {
+        this.resetOverlayAutomaticInteraction();
+      }
       const currentBounds = this.overlayWindow.getBounds();
       const savedBounds = this.overlayBounds
         ? {
@@ -937,6 +963,7 @@ export class WindowHelper {
 
     // Hide Overlay SECOND
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+      this.resetOverlayAutomaticInteraction();
       this.overlayWindow.hide();
     }
   }

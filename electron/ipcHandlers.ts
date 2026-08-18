@@ -514,6 +514,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
+  safeHandle('set-overlay-automatic-interactive', async (_, interactive: boolean) => {
+    appState.getWindowHelper().setOverlayAutomaticInteractive(interactive);
+    return { success: true };
+  });
+
   safeHandle('delete-screenshot', async (event, filePath: string) => {
     // Guard: only allow deletion of files within the app's own userData directory
     const userDataDir = app.getPath('userData');

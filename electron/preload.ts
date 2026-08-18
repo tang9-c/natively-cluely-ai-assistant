@@ -596,6 +596,7 @@ interface ElectronAPI {
   onOpenSettingsTab: (callback: (tab: string) => void) => () => void;
   onOpenModesManager: (callback: () => void) => () => void;
   setOverlayMousePassthrough: (enabled: boolean) => Promise<{ success: boolean }>;
+  setOverlayAutomaticInteractive: (interactive: boolean) => Promise<{ success: boolean }>;
   toggleOverlayMousePassthrough: () => Promise<{ success: boolean; enabled: boolean }>;
   getOverlayMousePassthrough: () => Promise<boolean>;
   onOverlayMousePassthroughChanged: (callback: (enabled: boolean) => void) => () => void;
@@ -1177,6 +1178,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openAdLink: (url: string) => ipcRenderer.invoke('open-ad-link', url),
   setOverlayMousePassthrough: (enabled: boolean) =>
     ipcRenderer.invoke('set-overlay-mouse-passthrough', enabled),
+  setOverlayAutomaticInteractive: (interactive: boolean) =>
+    ipcRenderer.invoke('set-overlay-automatic-interactive', interactive),
   toggleOverlayMousePassthrough: () => ipcRenderer.invoke('toggle-overlay-mouse-passthrough'),
   getOverlayMousePassthrough: () => ipcRenderer.invoke('get-overlay-mouse-passthrough'),
   setOpenAtLogin: (open: boolean) => ipcRenderer.invoke('set-open-at-login', open),

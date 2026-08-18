@@ -51,6 +51,7 @@ import {
   getOverlayAppearance,
   OVERLAY_OPACITY_DEFAULT,
 } from '../lib/overlayAppearance';
+import { isOverlayInteractiveTarget } from '../lib/overlayPointerHitTest';
 import { NegotiationCoachingCard } from './NegotiationCoachingCard';
 import { SENSEVOICE_EMOTION_LABELS, TRANSCRIPT_EMOTION_DEGREE_LABELS } from '../../shared/senseVoiceEmotion';
 import type { TranscriptEmotion, TranscriptEmotionDegree } from '../../shared/senseVoiceEmotion';
@@ -1082,6 +1083,49 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => unsub?.();
   }, []);
 
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (api?.platform !== 'win32' || !api.setOverlayAutomaticInteractive) return;
+
+    let lastReported: boolean | null = null;
+    let pointerLocked = false;
+    const report = (interactive: boolean) => {
+      if (lastReported === interactive) return;
+      lastReported = interactive;
+      void api.setOverlayAutomaticInteractive(interactive).catch(() => {});
+    };
+    const evaluate = (event: MouseEvent) => {
+      const target = document.elementFromPoint(event.clientX, event.clientY);
+      report(pointerLocked || isOverlayInteractiveTarget(target));
+    };
+    const onMouseDown = (event: MouseEvent) => {
+      if (!isOverlayInteractiveTarget(event.target)) return;
+      pointerLocked = true;
+      report(true);
+    };
+    const onMouseUp = (event: MouseEvent) => {
+      pointerLocked = false;
+      evaluate(event);
+    };
+    const onWindowBlur = () => {
+      pointerLocked = false;
+      report(false);
+    };
+
+    report(false);
+    document.addEventListener('mousemove', evaluate);
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('blur', onWindowBlur);
+    return () => {
+      report(false);
+      document.removeEventListener('mousemove', evaluate);
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('blur', onWindowBlur);
+    };
+  }, []);
+
   // Audio capture / screen-recording warning banner. Two distinct IPC
   // events feed the same banner surface but require different title and
   // action: the macOS screen-recording-permission denial points at the
@@ -1602,6 +1646,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       window.electronAPI.showWindow(isStealthRef.current);
       isStealthRef.current = false; // Reset back to default
     } else {
+      if (window.electronAPI.platform === 'win32') {
+        void window.electronAPI.setOverlayAutomaticInteractive?.(false).catch(() => {});
+      }
       // Slight delay to allow animation to clean up if needed, though immediate is safer for click-through
       // Using setTimeout to ensure the render cycle completes first
       // Increased to 400ms to allow "contract to bottom" exit animation to finish
@@ -3989,6 +4036,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             />
             <motion.div
               ref={shellRef}
+              data-overlay-interactive="true"
               className={`relative max-w-full backdrop-blur-2xl border rounded-[24px] ${isModeDropdownOpen ? 'overflow-visible' : 'overflow-hidden'} flex flex-col draggable-area overlay-shell-surface ${overlayPanelClass}`}
               style={{
                 ...appearance.shellStyle,

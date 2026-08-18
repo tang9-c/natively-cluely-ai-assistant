@@ -20,6 +20,7 @@ export default function TopPill({
     return (
         <div className="flex justify-center mt-2 select-none z-50">
             <div
+                data-overlay-interactive="true"
                 className="
           draggable-area
           flex items-center gap-2

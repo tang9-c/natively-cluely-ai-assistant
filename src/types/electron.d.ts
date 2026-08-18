@@ -563,6 +563,8 @@ export interface ElectronAPI {
   openAdLink: (url: string) => Promise<{ success: boolean }>
   // @ipc-channel set-overlay-mouse-passthrough
   setOverlayMousePassthrough: (enabled: boolean) => Promise<{ success: boolean }>
+  // @ipc-channel set-overlay-automatic-interactive
+  setOverlayAutomaticInteractive: (interactive: boolean) => Promise<{ success: boolean }>
   // @ipc-channel toggle-overlay-mouse-passthrough
   toggleOverlayMousePassthrough: () => Promise<{ success: boolean; enabled: boolean }>
   // @ipc-channel get-overlay-mouse-passthrough

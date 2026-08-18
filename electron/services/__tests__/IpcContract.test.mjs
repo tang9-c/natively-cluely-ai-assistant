@@ -594,3 +594,27 @@ test('hide-window IPC channel is wired through main, preload, and renderer types
     'src/types/electron.d.ts must declare hideWindow returning Promise<void>',
   );
 });
+
+test('set-overlay-automatic-interactive is wired through main, preload, and renderer types', () => {
+  const ipc = read('electron/ipcHandlers.ts');
+  const preload = read('electron/preload.ts');
+  const types = read('src/types/electron.d.ts');
+
+  assert.match(
+    ipc,
+    /safeHandle\(\s*['"]set-overlay-automatic-interactive['"]\s*,\s*async\s*\(\s*_,\s*interactive:\s*boolean\s*\)\s*=>/,
+  );
+  assert.match(
+    ipc,
+    /getWindowHelper\(\)\.setOverlayAutomaticInteractive\(interactive\)/,
+  );
+  assert.match(
+    preload,
+    /setOverlayAutomaticInteractive:\s*\(interactive:\s*boolean\)\s*=>\s*ipcRenderer\.invoke\(\s*['"]set-overlay-automatic-interactive['"]\s*,\s*interactive\s*\)/,
+  );
+  assert.match(types, /@ipc-channel set-overlay-automatic-interactive/);
+  assert.match(
+    types,
+    /setOverlayAutomaticInteractive:\s*\(\s*interactive:\s*boolean,?\s*\)\s*=>\s*Promise<\{\s*success:\s*boolean;?\s*\}>/,
+  );
+});
