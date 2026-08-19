@@ -51,7 +51,7 @@ test('meeting stop flushes transcript IPC after STT drain and before persistence
 });
 
 test('main routes renderer transcript delivery through the batcher only', () => {
-  assert.match(source, /this\.transcriptIpcBatcher\.enqueue\(transcriptPayload\)/);
+  assert.match(source, /this\.transcriptIpcBatcher\.enqueue\(routedPayload\)/);
   assert.doesNotMatch(source, /webContents\.send\('native-audio-transcript', transcriptPayload\)/);
   assert.match(source, /native-audio-transcript-batch/);
 });

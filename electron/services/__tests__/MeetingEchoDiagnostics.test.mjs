@@ -14,7 +14,7 @@ function read(rel) {
 test('meeting echo diagnostics compare mic/system transcripts without logging raw text', () => {
   const main = read('electron/main.ts');
 
-  assert.match(main, /logMeetingEchoDiagnostics\(speaker, segment\.text, segment\.isFinal, receivedAt\)/);
+  assert.match(main, /logMeetingEchoDiagnostics\(speaker, routedPayload\.text, routedPayload\.final, receivedAt\)/);
   assert.match(main, /recordMeetingAudioPeak\('interviewer', sttChunk, now\)/);
   assert.match(main, /recordMeetingAudioPeak\('user', chunk, now\)/);
   assert.match(main, /sameWindow = absDeltaMs != null && absDeltaMs <= 2500/);
