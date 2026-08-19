@@ -42,8 +42,8 @@ export function summarizeLongMeetingRun(input) {
     checkpoints.T2.rag.processing,
     checkpoints.T2.ipc.pending,
   ];
-  const monotonicSegments = samples.every((sample, index) => (
-    index === 0 || sample.session.fullSegments >= samples[index - 1].session.fullSegments
+  const monotonicSegments = meetingSamples.every((sample, index) => (
+    index === 0 || sample.session.fullSegments >= meetingSamples[index - 1].session.fullSegments
   ));
   const domBounded = samples.every(sample => {
     const { transcriptRenderedRows, transcriptTotalRows } = sample.renderer;

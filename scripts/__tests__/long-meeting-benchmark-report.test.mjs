@@ -49,6 +49,14 @@ test('non-zero queues at T2 fail release acceptance', () => {
   assert.equal(report.acceptance.queuesReleased.pass, false);
 });
 
+test('post-stop session reset does not fail meeting transcript monotonicity', () => {
+  const input = fixture();
+  input.samples[2].session.fullSegments = 0;
+  input.samples[2].session.effectiveSegments = 0;
+  const report = summarizeLongMeetingRun(input);
+  assert.equal(report.acceptance.transcriptMonotonic.pass, true);
+});
+
 test('missing values remain null and reports contain no content-bearing fields', () => {
   const report = summarizeLongMeetingRun(fixture({ vadBacklog: null }));
   assert.equal(report.samples[0].stt.vadBacklog, null);
