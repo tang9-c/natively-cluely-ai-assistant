@@ -10,7 +10,8 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { SkillSummary } from '../types/electron';
-import { resolveEffectiveSpeaker, type SpeakerIdentityCorrection } from '../../shared/speakerIdentity';
+import { resolveEffectiveSpeaker } from '../../shared/speakerIdentity';
+import type { MeetingTranscriptEntry } from '../../shared/transcriptVirtualization';
 
 const formatTime = (ms: number) => {
     const date = new Date(ms);
@@ -80,12 +81,7 @@ interface Meeting {
             evidence?: string;
         }>;
     };
-    transcript?: Array<{
-        speaker: string;
-        text: string;
-        timestamp: number;
-        speakerIdentityCorrection?: SpeakerIdentityCorrection;
-    }>;
+    transcript?: MeetingTranscriptEntry[];
     usage?: Array<{
         type: 'assist' | 'followup' | 'chat' | 'followup_questions';
         timestamp: number;
