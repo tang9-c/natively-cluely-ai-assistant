@@ -211,7 +211,7 @@ test('main tracks microphone transcript presence as meeting usability', () => {
   );
   assert.match(
     main,
-    /if \(segment\.isFinal && segment\.text\.trim\(\)\) \{\s*this\._meetingHasAnyTranscript = true;\s*if \(speaker === 'user'\) this\._meetingHasMicTranscript = true;/,
+    /if \(routedPayload\.final && routedPayload\.text\.trim\(\)\) \{\s*this\._meetingHasAnyTranscript = true;\s*if \(speaker === 'user'\) this\._meetingHasMicTranscript = true;/,
     'final user transcripts should mark the meeting as usable even when system audio is absent'
   );
 });
