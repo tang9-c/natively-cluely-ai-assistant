@@ -21,6 +21,10 @@ import type {
   MeetingSearchResult,
 } from '../../shared/meetingSearch'
 import type { GlobalMeetingSearchResponse } from '../../shared/globalMeetingSearch'
+import type {
+  LongMeetingBenchmarkPhase,
+  LongMeetingBenchmarkSample,
+} from '../../shared/longMeetingBenchmark'
 export type {
   ContextNeedDecision,
   ContextNeedDecisionSource,
@@ -859,6 +863,16 @@ export interface ElectronAPI {
   startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string }>
   // @ipc-channel end-meeting
   endMeeting: () => Promise<{ success: boolean; error?: string }>
+  // @ipc-channel benchmark:inject-transcript
+  benchmarkInjectTranscript: (payload: NativeAudioTranscriptPayload) => Promise<{ success: true }>
+  // @ipc-channel benchmark:get-runtime-snapshot
+  benchmarkGetRuntimeSnapshot: (input: {
+    elapsedMs: number
+    phase: LongMeetingBenchmarkPhase
+    checkpoint?: 'T0' | 'T1' | 'T2'
+  }) => Promise<LongMeetingBenchmarkSample>
+  // @ipc-channel benchmark:mark-stop
+  benchmarkMarkStop: () => Promise<{ success: true }>
   // @ipc-channel finalize-mic-stt
   finalizeMicSTT: () => Promise<void>
   // @ipc-channel get-recent-meetings

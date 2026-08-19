@@ -396,8 +396,11 @@ import {
   AdaptivePreloadManager,
   type LocalSttPreloadSelection,
 } from './services/AdaptivePreloadManager'
-import type { LocalSttWorkerLease } from './audio/LocalSttWorkerPool'
+import { localSttWorkerPool, type LocalSttWorkerLease } from './audio/LocalSttWorkerPool'
 import { TranscriptIpcBatcher } from './services/TranscriptIpcBatcher'
+import { LongMeetingRuntimeProbe } from './services/LongMeetingRuntimeProbe'
+import type { NativeAudioTranscriptPayload } from '../shared/transcriptIpc'
+import type { LongMeetingBenchmarkPhase, LongMeetingBenchmarkSample } from '../shared/longMeetingBenchmark'
 
 type MeetingAudioSpeaker = 'interviewer' | 'user';
 
@@ -421,6 +424,7 @@ export class AppState {
   private intelligenceManager: IntelligenceManager
   private themeManager: ThemeManager
   private ragManager: RAGManager | null = null
+  private longMeetingRuntimeProbe: LongMeetingRuntimeProbe | null = null
   private readonly transcriptIpcBatcher = new TranscriptIpcBatcher({
     sendBatch: (batch) => {
       const helper = this.getWindowHelper();
@@ -1292,6 +1296,54 @@ export class AppState {
     this._meetingEchoTranscriptDiagnostics[speaker] = current;
   }
 
+  private routeTranscriptPayload(transcriptPayload: NativeAudioTranscriptPayload): void {
+    const receivedAt = transcriptPayload.timestamp ?? Date.now();
+    const speaker = transcriptPayload.speaker === 'user' ? 'user' : 'interviewer';
+    const routedPayload = {
+      ...transcriptPayload,
+      speaker,
+      timestamp: receivedAt,
+    };
+    this.logMeetingEchoDiagnostics(speaker, routedPayload.text, routedPayload.final, receivedAt);
+
+    const transcriptResult = this.intelligenceManager.handleTranscript(routedPayload);
+    if (routedPayload.final && this.ragManager && !transcriptResult?.mergedIntoPrevious) {
+      const ragTranscript = transcriptResult?.segment ?? routedPayload;
+      this.ragManager.feedLiveTranscript([{
+        speaker: ragTranscript.speaker,
+        text: ragTranscript.text,
+        timestamp: ragTranscript.timestamp ?? receivedAt,
+      }]);
+    }
+
+    if (routedPayload.final && routedPayload.text.trim()) {
+      this._meetingHasAnyTranscript = true;
+      if (speaker === 'user') this._meetingHasMicTranscript = true;
+    }
+    this.transcriptIpcBatcher.enqueue(routedPayload);
+
+    if (routedPayload.final && speaker === 'interviewer') {
+      let trackerFeedAllowed = true;
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        trackerFeedAllowed = ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed();
+      } catch (_err) {
+        // Fail open to preserve the existing mode behavior.
+      }
+      if (trackerFeedAllowed) {
+        this.knowledgeOrchestrator?.feedInterviewerUtterance?.(transcriptPayload.text);
+      }
+    }
+  }
+
+  public injectBenchmarkTranscript(payload: NativeAudioTranscriptPayload): { success: true } {
+    if (!this.isMeetingActive && !this._isDraining) {
+      throw new Error('Cannot inject transcript without an active meeting');
+    }
+    this.routeTranscriptPayload(payload);
+    return { success: true };
+  }
+
   private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider | null {
     const { CredentialsManager } = require('./services/CredentialsManager');
     const sttProvider = CredentialsManager.getInstance().getSttProvider();
@@ -1345,7 +1397,7 @@ export class AppState {
       }
 
       const receivedAt = Date.now();
-      const transcriptPayload = {
+      const transcriptPayload: NativeAudioTranscriptPayload = {
         speaker: speaker,
         speakerId: segment.speakerId,
         speakerLabel: segment.speakerLabel,
@@ -1368,48 +1420,7 @@ export class AppState {
         rawSegmentIds: segment.rawSegmentIds
       };
 
-      this.logMeetingEchoDiagnostics(speaker, segment.text, segment.isFinal, receivedAt);
-
-      const transcriptResult = this.intelligenceManager.handleTranscript(transcriptPayload);
-
-      // Feed final transcript to JIT RAG indexer
-      if (segment.isFinal && this.ragManager) {
-        if (!transcriptResult?.mergedIntoPrevious) {
-          const ragTranscript = transcriptResult?.segment ?? transcriptPayload;
-          this.ragManager.feedLiveTranscript([{
-            speaker: ragTranscript.speaker,
-            text: ragTranscript.text,
-            timestamp: ragTranscript.timestamp
-          }]);
-        }
-      }
-
-      if (segment.isFinal && segment.text.trim()) {
-        this._meetingHasAnyTranscript = true;
-        if (speaker === 'user') this._meetingHasMicTranscript = true;
-      }
-
-      this.transcriptIpcBatcher.enqueue(transcriptPayload);
-
-      // Feed final recruiter (system audio) transcripts to the premium
-      // negotiation tracker. Issue #272: gate by active mode template so the
-      // tracker never accumulates negotiation state in modes where salary is
-      // out of scope (technical-interview, team-meet, lecture). Output gating
-      // in LLMHelper is the primary defense; gating at the source stops state
-      // from carrying over to any future read site. Fails open if ModesManager
-      // is unavailable.
-      if (segment.isFinal && speaker === 'interviewer') {
-        let trackerFeedAllowed = true;
-        try {
-          const { ModesManager } = require('./services/ModesManager');
-          trackerFeedAllowed = ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed();
-        } catch (_err) {
-          // fail open — preserve existing behaviour for modes that need the tracker
-        }
-        if (trackerFeedAllowed) {
-          this.knowledgeOrchestrator?.feedInterviewerUtterance?.(segment.text);
-        }
-      }
+      this.routeTranscriptPayload(transcriptPayload);
     });
 
     this.broadcast('stt-status', {
@@ -2204,6 +2215,8 @@ export class AppState {
 
   public async disposeIdleResources(): Promise<void> {
     this.transcriptIpcBatcher.dispose();
+    this.longMeetingRuntimeProbe?.dispose();
+    this.longMeetingRuntimeProbe = null;
     await this.adaptivePreloadManager.disposeIdleResources();
   }
 
@@ -4131,6 +4144,82 @@ export class AppState {
   // Getters and Setters
   public getMainWindow(): BrowserWindow | null {
     return this.windowHelper.getMainWindow()
+  }
+
+  public async getLongMeetingRuntimeSnapshot(input: {
+    elapsedMs: number;
+    phase: LongMeetingBenchmarkPhase;
+    checkpoint?: 'T0' | 'T1' | 'T2';
+  }): Promise<LongMeetingBenchmarkSample> {
+    if (!this.longMeetingRuntimeProbe) {
+      const fileSize = (filePath: string | null): number => {
+        if (!filePath) return 0;
+        try { return fs.statSync(filePath).size; } catch { return 0; }
+      };
+      this.longMeetingRuntimeProbe = new LongMeetingRuntimeProbe({
+        getSession: () => {
+          const counts = this.intelligenceManager.getRuntimeCounts();
+          return {
+            fullSegments: counts.fullSegments,
+            effectiveSegments: counts.effectiveSegments,
+            epochSummaries: counts.epochSummaries,
+            actionCandidates: counts.actionCandidates,
+            shownCards: counts.shownCards,
+          };
+        },
+        getStt: () => {
+          const workerStats = localSttWorkerPool.getRuntimeStats();
+          const instances = [this.googleSTT, this.googleSTT_User]
+            .map(provider => (provider as any)?.getRuntimeStats?.())
+            .filter(Boolean);
+          return {
+            ...workerStats,
+            pendingAudio: instances.reduce(
+              (sum, stats) => sum + Number(stats.pendingAudio ?? 0) + Number(stats.inFlightAudio ?? 0),
+              0,
+            ),
+            vadBacklog: null,
+          };
+        },
+        getRag: () => this.ragManager?.getRuntimeStats() ?? {
+          pending: 0, processing: 0, completed: 0, failed: 0, embeddingBatches: 0,
+        },
+        getIpc: () => {
+          const diagnostics = this.transcriptIpcBatcher.getDiagnosticsSnapshot();
+          return {
+            pending: this.transcriptIpcBatcher.getPendingCount(),
+            batches: diagnostics.batchCount,
+            averageBatchSize: diagnostics.averageBatchSize,
+            maxPending: diagnostics.maxPendingCount,
+          };
+        },
+        getProcesses: () => app.getAppMetrics().map(metric => ({
+          type: metric.type,
+          pid: metric.pid,
+          cpuPercent: metric.cpu.percentCPUUsage,
+          workingSetBytes: metric.memory.workingSetSize * 1024,
+        })),
+        getFiles: () => {
+          const database = DatabaseManager.getInstance();
+          const dbPath = database.getDbPath();
+          const db = database.getDb();
+          let embeddingRows = 0;
+          if (db) {
+            const chunks = db.prepare('SELECT COUNT(*) AS count FROM chunks WHERE embedding IS NOT NULL').get() as { count: number };
+            const summaries = db.prepare('SELECT COUNT(*) AS count FROM chunk_summaries WHERE embedding IS NOT NULL').get() as { count: number };
+            embeddingRows = chunks.count + summaries.count;
+          }
+          return {
+            databaseBytes: fileSize(dbPath),
+            walBytes: fileSize(`${dbPath}-wal`),
+            tempAudioBytes: 0,
+            logBytes: fileSize(getLogFile()),
+            embeddingRows,
+          };
+        },
+      });
+    }
+    return this.longMeetingRuntimeProbe.snapshot(input);
   }
 
   public getWindowHelper(): WindowHelper {

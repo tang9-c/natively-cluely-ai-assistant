@@ -248,6 +248,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     ipcMain.removeHandler(channel);
     ipcMain.handle(channel, listener);
   };
+  const assertLongMeetingBenchmarkEnabled = () => {
+    if (process.env.CUEUP_LONG_MEETING_BENCHMARK !== '1') {
+      throw new Error('Long meeting benchmark bridge is disabled');
+    }
+  };
 
   /**
    * Wraps an async handler so that any thrown error is caught and returned
@@ -3197,6 +3202,22 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.error('Error ending meeting:', error);
       return { success: false, error: error.message };
     }
+  });
+
+  safeHandle('benchmark:inject-transcript', (_event, payload) => {
+    assertLongMeetingBenchmarkEnabled();
+    return appState.injectBenchmarkTranscript(payload);
+  });
+
+  safeHandle('benchmark:get-runtime-snapshot', (_event, input) => {
+    assertLongMeetingBenchmarkEnabled();
+    return appState.getLongMeetingRuntimeSnapshot(input);
+  });
+
+  safeHandle('benchmark:mark-stop', async () => {
+    assertLongMeetingBenchmarkEnabled();
+    await appState.endMeeting();
+    return { success: true };
   });
 
   safeHandle('get-recent-meetings', async () => {

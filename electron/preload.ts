@@ -20,6 +20,10 @@ import type {
   MeetingSearchResult,
 } from '../shared/meetingSearch';
 import type { GlobalMeetingSearchResponse } from '../shared/globalMeetingSearch';
+import type {
+  LongMeetingBenchmarkPhase,
+  LongMeetingBenchmarkSample,
+} from '../shared/longMeetingBenchmark';
 
 type RAGStreamChunkPayload =
   | MeetingSearchChunkEvent
@@ -443,6 +447,15 @@ interface ElectronAPI {
   // Meeting Lifecycle
   startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string }>;
   endMeeting: () => Promise<{ success: boolean; error?: string }>;
+  benchmarkInjectTranscript: (
+    payload: NativeAudioTranscriptPayload,
+  ) => Promise<{ success: true }>;
+  benchmarkGetRuntimeSnapshot: (input: {
+    elapsedMs: number;
+    phase: LongMeetingBenchmarkPhase;
+    checkpoint?: 'T0' | 'T1' | 'T2';
+  }) => Promise<LongMeetingBenchmarkSample>;
+  benchmarkMarkStop: () => Promise<{ success: true }>;
   finalizeMicSTT: () => Promise<void>;
   getRecentMeetings: () => Promise<
     Array<{ id: string; title: string; date: string; duration: string; summary: string }>
@@ -1593,6 +1606,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Meeting Lifecycle
   startMeeting: (metadata?: any) => ipcRenderer.invoke('start-meeting', metadata),
   endMeeting: () => ipcRenderer.invoke('end-meeting'),
+  benchmarkInjectTranscript: (payload: NativeAudioTranscriptPayload) =>
+    ipcRenderer.invoke('benchmark:inject-transcript', payload),
+  benchmarkGetRuntimeSnapshot: (input: {
+    elapsedMs: number;
+    phase: LongMeetingBenchmarkPhase;
+    checkpoint?: 'T0' | 'T1' | 'T2';
+  }) => ipcRenderer.invoke('benchmark:get-runtime-snapshot', input),
+  benchmarkMarkStop: () => ipcRenderer.invoke('benchmark:mark-stop'),
   finalizeMicSTT: () => ipcRenderer.invoke('finalize-mic-stt'),
   getRecentMeetings: () => ipcRenderer.invoke('get-recent-meetings'),
   getMeetingDetails: (id: string) => ipcRenderer.invoke('get-meeting-details', id),
