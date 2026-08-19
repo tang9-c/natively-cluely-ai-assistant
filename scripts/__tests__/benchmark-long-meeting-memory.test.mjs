@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   availabilityForSource,
   generateTranscriptSchedule,
+  mergeSenseVoiceSample,
   parseArgs,
   validateOptions,
 } from '../benchmark-long-meeting-memory.mjs';
@@ -45,4 +46,21 @@ test('SenseVoice audio source requires audio, model, and tokens paths', () => {
 test('file replay marks VAD backlog unavailable', () => {
   const availability = availabilityForSource('sensevoice-audio');
   assert.equal(availability.vadBacklog, 'file_replay_bypasses_capture_vad');
+});
+
+test('SenseVoice worker metrics replace app STT counters without exposing text', () => {
+  const sample = {
+    stt: { workerCount: 0, leaseCount: 0, activeTasks: 0, queuedTasks: 0, pendingAudio: 0, vadBacklog: null },
+    processes: [],
+  };
+  const merged = mergeSenseVoiceSample(sample, {
+    finalCount: 3,
+    partialCount: 1,
+    stt: { pendingAudio: 2, inFlightAudio: 1 },
+    workerPool: { workerCount: 1, leaseCount: 1, activeTasks: 1, queuedTasks: 0 },
+    memory: { rss: 1234 },
+  });
+  assert.equal(merged.stt.pendingAudio, 3);
+  assert.equal(merged.processes.at(-1).type, 'sensevoice-worker');
+  assert.doesNotMatch(JSON.stringify(merged), /transcript|recognizedText/);
 });

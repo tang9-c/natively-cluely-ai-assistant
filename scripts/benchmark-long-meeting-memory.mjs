@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn } from 'node:child_process';
+import { fork, spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -127,6 +127,89 @@ export function availabilityForSource(source) {
   };
 }
 
+export function mergeSenseVoiceSample(sample, workerSample) {
+  if (!workerSample) return sample;
+  const pendingAudio = Number(workerSample.stt?.pendingAudio ?? 0)
+    + Number(workerSample.stt?.inFlightAudio ?? 0);
+  return {
+    ...sample,
+    session: sample.session ? {
+      ...sample.session,
+      fullSegments: workerSample.finalCount,
+      effectiveSegments: workerSample.finalCount,
+    } : sample.session,
+    stt: {
+      workerCount: workerSample.workerPool.workerCount,
+      leaseCount: workerSample.workerPool.leaseCount,
+      activeTasks: workerSample.workerPool.activeTasks,
+      queuedTasks: workerSample.workerPool.queuedTasks,
+      pendingAudio,
+      vadBacklog: null,
+    },
+    processes: [
+      ...sample.processes,
+      {
+        type: 'sensevoice-worker',
+        pid: workerSample._pid ?? 0,
+        cpuPercent: 0,
+        workingSetBytes: workerSample.memory.rss,
+      },
+    ],
+  };
+}
+
+function startSenseVoiceWorker(options) {
+  const child = fork(path.join(ROOT, 'scripts/long-meeting-sensevoice-audio-worker.mjs'), [], {
+    cwd: ROOT,
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
+      CUEUP_BENCHMARK_AUDIO: path.resolve(ROOT, options.audioPath),
+      CUEUP_BENCHMARK_MODEL: path.resolve(ROOT, options.modelPath),
+      CUEUP_BENCHMARK_TOKENS: path.resolve(ROOT, options.tokensPath),
+      CUEUP_BENCHMARK_DURATION_MS: String(options.durationMinutes * 60_000),
+      CUEUP_BENCHMARK_SAMPLE_INTERVAL_MS: String(options.sampleIntervalMs),
+    },
+    stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+  });
+  let latestSample = null;
+  let audioHashPrefix = null;
+  let readyResolve;
+  let readyReject;
+  let doneResolve;
+  let doneReject;
+  const ready = new Promise((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
+  const done = new Promise((resolve, reject) => { doneResolve = resolve; doneReject = reject; });
+  child.on('message', (message) => {
+    if (message?.type === 'ready') {
+      audioHashPrefix = message.audioHashPrefix;
+      readyResolve();
+    } else if (message?.type === 'sample') {
+      latestSample = { ...message, _pid: child.pid ?? 0 };
+    } else if (message?.type === 'done') {
+      doneResolve();
+    } else if (message?.type === 'error') {
+      const error = new Error(String(message.code || 'sensevoice_worker_failed'));
+      readyReject(error);
+      doneReject(error);
+    }
+  });
+  child.once('exit', (code) => {
+    if (code !== 0) {
+      const error = new Error(`sensevoice_worker_exit_${code}`);
+      readyReject(error);
+      doneReject(error);
+    }
+  });
+  return {
+    child,
+    ready,
+    done,
+    latest: () => latestSample,
+    audioHashPrefix: () => audioHashPrefix,
+  };
+}
+
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 async function waitForDevServer(url, timeoutMs = 30_000) {
@@ -249,13 +332,11 @@ async function closeElectronApp(app) {
 
 export async function runLongMeetingBenchmark(options) {
   const validated = validateOptions(options);
-  if (validated.source !== 'synthetic') {
-    throw new Error('sensevoice-audio source requires the SenseVoice replay worker');
-  }
   const server = await ensureDevServer();
   const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cueup-long-meeting-'));
   let app;
   let report;
+  let senseVoiceWorker;
   try {
     app = await electron.launch({
       args: ['.', `--user-data-dir=${userDataDir}`],
@@ -286,35 +367,58 @@ export async function runLongMeetingBenchmark(options) {
     }), validated.meetingMode);
     if (!startResult?.success) throw new Error(`Meeting start failed: ${startResult?.error ?? 'unknown_error'}`);
 
+    if (validated.source === 'sensevoice-audio') {
+      senseVoiceWorker = startSenseVoiceWorker(validated);
+      await senseVoiceWorker.ready;
+    }
     const startedAt = Date.now();
-    const schedule = generateTranscriptSchedule({
-      seed: 42,
-      minutes: validated.durationMinutes,
-      transcriptRate: validated.transcriptRate,
-    });
     const samples = [];
-    let nextSampleAt = 0;
-    for (const item of schedule) {
-      const waitMs = startedAt + item.atMs - Date.now();
-      if (waitMs > 0) await delay(waitMs);
-      await page.evaluate((payload) => window.electronAPI.benchmarkInjectTranscript(payload), {
-        ...item.payload,
-        timestamp: startedAt + item.atMs,
+    if (validated.source === 'synthetic') {
+      const schedule = generateTranscriptSchedule({
+        seed: 42,
+        minutes: validated.durationMinutes,
+        transcriptRate: validated.transcriptRate,
       });
-      if (item.atMs >= nextSampleAt) {
-        samples.push(await takeSample(page, startedAt, 'meeting'));
-        nextSampleAt += validated.sampleIntervalMs;
+      let nextSampleAt = 0;
+      for (const item of schedule) {
+        const waitMs = startedAt + item.atMs - Date.now();
+        if (waitMs > 0) await delay(waitMs);
+        await page.evaluate((payload) => window.electronAPI.benchmarkInjectTranscript(payload), {
+          ...item.payload,
+          timestamp: startedAt + item.atMs,
+        });
+        if (item.atMs >= nextSampleAt) {
+          samples.push(await takeSample(page, startedAt, 'meeting'));
+          nextSampleAt += validated.sampleIntervalMs;
+        }
       }
+    } else {
+      const meetingEndAt = startedAt + validated.durationMinutes * 60_000;
+      while (Date.now() < meetingEndAt) {
+        await delay(Math.min(validated.sampleIntervalMs, meetingEndAt - Date.now()));
+        const sample = await takeSample(page, startedAt, 'meeting');
+        samples.push(mergeSenseVoiceSample(sample, senseVoiceWorker.latest()));
+      }
+      await senseVoiceWorker.done;
     }
     const meetingEndAt = startedAt + validated.durationMinutes * 60_000;
     if (Date.now() < meetingEndAt) await delay(meetingEndAt - Date.now());
-    samples.push(await takeSample(page, startedAt, 'meeting', 'T0'));
+    samples.push(mergeSenseVoiceSample(
+      await takeSample(page, startedAt, 'meeting', 'T0'),
+      senseVoiceWorker?.latest(),
+    ));
     const stopResult = await page.evaluate(() => window.electronAPI.benchmarkMarkStop());
     if (!stopResult?.success) throw new Error(`Meeting stop failed: ${stopResult?.error ?? 'unknown_error'}`);
     await delay(5_000);
-    samples.push(await takeSample(page, startedAt, 'stopping', 'T1'));
+    samples.push(mergeSenseVoiceSample(
+      await takeSample(page, startedAt, 'stopping', 'T1'),
+      senseVoiceWorker?.latest(),
+    ));
     await delay(25_000);
-    samples.push(await takeSample(page, startedAt, 'post_stop', 'T2'));
+    samples.push(mergeSenseVoiceSample(
+      await takeSample(page, startedAt, 'post_stop', 'T2'),
+      senseVoiceWorker?.latest(),
+    ));
 
     const packageJson = JSON.parse(await fs.readFile(path.join(ROOT, 'package.json'), 'utf8'));
     report = summarizeLongMeetingRun({
@@ -330,12 +434,18 @@ export async function runLongMeetingBenchmark(options) {
         sampleIntervalMs: validated.sampleIntervalMs,
         meetingMode: validated.meetingMode,
       },
-      availability: availabilityForSource(validated.source),
+      availability: {
+        ...availabilityForSource(validated.source),
+        ...(senseVoiceWorker?.audioHashPrefix()
+          ? { audioFixture: `sha256:${senseVoiceWorker.audioHashPrefix()}` }
+          : {}),
+      },
       samples,
     });
     await writeReport(validated, report);
   } finally {
     if (app) await closeElectronApp(app);
+    if (senseVoiceWorker?.child.exitCode == null) senseVoiceWorker.child.kill('SIGTERM');
     if (server && server.exitCode == null) server.kill('SIGTERM');
     await fs.rm(userDataDir, { recursive: true, force: true });
   }
