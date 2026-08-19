@@ -13,11 +13,14 @@ function read(relativePath) {
 
 test('TranscriptSegment and renderer payload carry speakerVerification metadata', () => {
   const base = read('electron/audio/BaseSTT.ts');
-  const rendererTypes = read('src/types/electron.d.ts');
+  const sharedTranscriptTypes = read('shared/transcriptIpc.ts');
 
   assert.match(base, /speakerVerification\?: SpeakerVerificationMetadata/);
   assert.match(base, /setSpeakerVerificationAnnotator/);
-  assert.match(rendererTypes, /speakerVerification\?: SpeakerVerificationMetadata/);
+  assert.match(
+    sharedTranscriptTypes,
+    /speakerVerification\?: TranscriptSpeakerVerificationMetadata/,
+  );
 });
 
 test('main forwards speakerVerification without changing channel speaker semantics', () => {
