@@ -38,6 +38,24 @@ test('meeting teardown clears transient resources only after persistence snapsho
   assert.ok(deferredCleanupIndex > screenshotQueueIndex, 'timed-out consumers own detached files until they settle');
 });
 
+test('meeting stop flushes transcript IPC after STT drain and before persistence', () => {
+  const drainIndex = endMeetingSource.indexOf('await this.drainSttFinalsForMeetingStop()');
+  const flushIndex = endMeetingSource.indexOf("this.transcriptIpcBatcher.flush('meeting_stop')");
+  const snapshotIndex = endMeetingSource.indexOf(
+    'const meetingId = await this.intelligenceManager.stopMeeting()',
+  );
+
+  assert.ok(drainIndex >= 0, 'STT finals must drain before IPC flush');
+  assert.ok(flushIndex > drainIndex, 'IPC flush must include trailing STT finals');
+  assert.ok(snapshotIndex > flushIndex, 'meeting persistence must start after IPC flush');
+});
+
+test('main routes renderer transcript delivery through the batcher only', () => {
+  assert.match(source, /this\.transcriptIpcBatcher\.enqueue\(transcriptPayload\)/);
+  assert.doesNotMatch(source, /webContents\.send\('native-audio-transcript', transcriptPayload\)/);
+  assert.match(source, /native-audio-transcript-batch/);
+});
+
 test('ProcessingHelper bounds teardown wait while retaining a completion for cancelled tasks', () => {
   const processingSource = fs.readFileSync(path.join(root, 'electron/ProcessingHelper.ts'), 'utf8');
 

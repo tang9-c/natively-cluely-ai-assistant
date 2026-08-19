@@ -397,6 +397,7 @@ import {
   type LocalSttPreloadSelection,
 } from './services/AdaptivePreloadManager'
 import type { LocalSttWorkerLease } from './audio/LocalSttWorkerPool'
+import { TranscriptIpcBatcher } from './services/TranscriptIpcBatcher'
 
 type MeetingAudioSpeaker = 'interviewer' | 'user';
 
@@ -420,6 +421,21 @@ export class AppState {
   private intelligenceManager: IntelligenceManager
   private themeManager: ThemeManager
   private ragManager: RAGManager | null = null
+  private readonly transcriptIpcBatcher = new TranscriptIpcBatcher({
+    sendBatch: (batch) => {
+      const helper = this.getWindowHelper();
+      for (const target of [helper.getLauncherWindow(), helper.getOverlayWindow()]) {
+        if (!target || target.isDestroyed() || target.webContents.isDestroyed()) continue;
+        try {
+          target.webContents.send('native-audio-transcript-batch', batch);
+        } catch {
+          console.warn('[TranscriptIpcBatcher] Failed to deliver transcript batch', {
+            batchSize: batch.items.length,
+          });
+        }
+      }
+    },
+  });
   private knowledgeOrchestrator: any = null
   private tray: Tray | null = null
   private updateAvailable: boolean = false
@@ -1373,9 +1389,7 @@ export class AppState {
         if (speaker === 'user') this._meetingHasMicTranscript = true;
       }
 
-      const helper = this.getWindowHelper();
-      helper.getLauncherWindow()?.webContents.send('native-audio-transcript', transcriptPayload);
-      helper.getOverlayWindow()?.webContents.send('native-audio-transcript', transcriptPayload);
+      this.transcriptIpcBatcher.enqueue(transcriptPayload);
 
       // Feed final recruiter (system audio) transcripts to the premium
       // negotiation tracker. Issue #272: gate by active mode template so the
@@ -2189,6 +2203,7 @@ export class AppState {
   }
 
   public async disposeIdleResources(): Promise<void> {
+    this.transcriptIpcBatcher.dispose();
     await this.adaptivePreloadManager.disposeIdleResources();
   }
 
@@ -3713,6 +3728,9 @@ export class AppState {
         //    providers keep the old short wait; local Whisper can need longer
         //    on Intel CPUs because the final pass runs in a worker.
         await this.drainSttFinalsForMeetingStop();
+        this.transcriptIpcBatcher.flush('meeting_stop');
+        const transcriptIpcDiagnostics = this.transcriptIpcBatcher.snapshotAndResetDiagnostics();
+        console.log('[TranscriptIpcBatcher] Meeting delivery summary', transcriptIpcDiagnostics);
 
         // 2. Retain one matching local-model lease before the channel leases stop.
         this.adaptivePreloadManager.notifyMeetingStopped();
