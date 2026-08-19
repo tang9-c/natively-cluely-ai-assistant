@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, Sparkles, FolderOpen, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,7 +11,11 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { SkillSummary } from '../types/electron';
 import { resolveEffectiveSpeaker } from '../../shared/speakerIdentity';
-import type { MeetingTranscriptEntry } from '../../shared/transcriptVirtualization';
+import {
+    buildVisibleTranscriptRows,
+    type MeetingTranscriptEntry,
+} from '../../shared/transcriptVirtualization';
+import { TranscriptVirtualList } from './meeting/TranscriptVirtualList';
 
 const formatTime = (ms: number) => {
     const date = new Date(ms);
@@ -129,6 +133,10 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [skillsLoading, setSkillsLoading] = useState(false);
     const [runningSkillId, setRunningSkillId] = useState<string | null>(null);
     const [skillExportStatus, setSkillExportStatus] = useState<{ message: string; filePath?: string; error?: boolean } | null>(null);
+    const visibleTranscriptRows = useMemo(
+        () => buildVisibleTranscriptRows(meeting.transcript),
+        [meeting.transcript],
+    );
     const transcriptMarkdown = formatTranscriptForSkill(meeting.transcript);
     const canRunTranscriptSkill = activeTab === 'transcript' && transcriptMarkdown.trim().length > 0;
     const visibleCoachingInsights = getVisibleCoachingInsights(meeting.detailedSummary);
@@ -744,33 +752,11 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
 
                         {activeTab === 'transcript' && (
                             <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                                <div className="space-y-6">
-                                    {(() => {
-                                        console.log('Raw Transcript:', meeting.transcript);
-                                        const filteredTranscript = meeting.transcript?.filter(entry => {
-                                            const isHidden = ['system', 'ai', 'assistant', 'model'].includes(entry.speaker?.toLowerCase());
-                                            if (isHidden) console.log('Filtered out:', entry);
-                                            return !isHidden;
-                                        }) || [];
-                                        console.log('Filtered Transcript:', filteredTranscript);
-
-                                        if (filteredTranscript.length === 0) {
-                                            return <p className="text-text-tertiary">没有可用的转录。</p>;
-                                        }
-
-                                        return filteredTranscript.map((entry, i) => (
-                                            <div key={i} className="group">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className="text-xs font-semibold text-text-secondary">
-                                                        {resolveEffectiveSpeaker(entry) === 'user' ? '我' : '对方'}
-                                                    </span>
-                                                    <span className="text-xs text-text-tertiary font-mono">{entry.timestamp ? formatTime(entry.timestamp) : '0:00'}</span>
-                                                </div>
-                                                <p className="text-text-secondary text-[15px] leading-relaxed transition-colors select-text cursor-text">{entry.text}</p>
-                                            </div>
-                                        ));
-                                    })()}
-                                </div>
+                                <TranscriptVirtualList
+                                    meetingId={meeting.id}
+                                    rows={visibleTranscriptRows}
+                                    formatTime={formatTime}
+                                />
                             </motion.section>
                         )}
 

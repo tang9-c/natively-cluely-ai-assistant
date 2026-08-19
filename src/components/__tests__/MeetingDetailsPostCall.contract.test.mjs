@@ -5,6 +5,10 @@ import path from 'node:path';
 
 const sourcePath = path.resolve(process.cwd(), 'src/components/MeetingDetails.tsx');
 const source = fs.readFileSync(sourcePath, 'utf8');
+const transcriptRowSource = fs.readFileSync(
+  path.resolve(process.cwd(), 'src/components/meeting/TranscriptRow.tsx'),
+  'utf8',
+);
 const databaseSourcePath = path.resolve(process.cwd(), 'electron/db/DatabaseManager.ts');
 const databaseSource = fs.readFileSync(databaseSourcePath, 'utf8');
 
@@ -38,7 +42,7 @@ test('MeetingDetails labels the usage-tab copy action as copying usage records',
 test('MeetingDetails resolves persisted manual speaker corrections for display and export', () => {
   assert.match(source, /resolveEffectiveSpeaker/);
   assert.match(source, /const speaker = resolveEffectiveSpeaker\(t\)/);
-  assert.match(source, /resolveEffectiveSpeaker\(entry\) === 'user'/);
+  assert.match(transcriptRowSource, /resolveEffectiveSpeaker\(entry\) === 'user'/);
 });
 
 test('MeetingDetails filters legacy English post-call enhancements from saved summaries', () => {
@@ -68,4 +72,18 @@ test('Meeting detailed summary types include the cloud summary generation status
 
   assert.match(source, generationStatusType);
   assert.match(databaseSource, generationStatusType);
+});
+
+test('MeetingDetails delegates transcript DOM rendering without truncating full-data consumers', () => {
+  assert.match(
+    source,
+    /useMemo\(\s*\(\) => buildVisibleTranscriptRows\(meeting\.transcript\)/,
+  );
+  assert.match(source, /<TranscriptVirtualList/);
+  assert.match(source, /meetingId=\{meeting\.id\}/);
+  assert.doesNotMatch(source, /console\.log\('Raw Transcript:'/);
+  assert.doesNotMatch(source, /console\.log\('Filtered Transcript:'/);
+  assert.match(source, /meeting\.transcript\.map\(t =>/);
+  assert.match(source, /transcript: meeting\.transcript/);
+  assert.match(source, /formatTranscriptForSkill\(meeting\.transcript\)/);
 });
