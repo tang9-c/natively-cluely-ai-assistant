@@ -30,6 +30,7 @@
     "test:modes:e2e": "npm run test:modes",
     "test:modes:long": "ELECTRON_RUN_AS_NODE=1 npx electron --test electron/services/__tests__/ModeLongSession.test.mjs",
     "test:e2e": "ELECTRON_E2E=1 npx playwright test",
+    "test:e2e:transcript-virtualization": "ELECTRON_E2E=1 npx playwright test tests/e2e/meeting-transcript-virtualization.spec.ts",
     "test:e2e:headed": "ELECTRON_E2E=1 npx playwright test --headed",
     "test:e2e:parity": "ELECTRON_E2E=1 ELECTRON_APP_PORT=${ELECTRON_APP_PORT:-5173} npx playwright test tests/e2e/parity-gaps-evidence.spec.ts",
     "test:doubao-auc:real": "node scripts/test-doubao-auc-real.mjs",
