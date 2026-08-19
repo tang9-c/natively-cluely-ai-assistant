@@ -42,6 +42,7 @@ export class EmbeddingPipeline {
     private initializationFailed = false;
     private pendingConfig: AppAPIConfig | null = null;
     private readonly initializedCallbacks = new Set<() => void>();
+    private embeddingBatchCalls = 0;
     /** Tracks the config used in the most recent successful initialize() call to enable idempotency. */
     private _lastConfig: AppAPIConfig | null = null;
 
@@ -581,6 +582,7 @@ export class EmbeddingPipeline {
      */
     async getEmbeddings(texts: string[]): Promise<number[][]> {
         if (texts.length === 0) return [];
+        this.embeddingBatchCalls += 1;
         await this.ensureInitialized();
         const provider = this.provider;
         return new Promise<number[][]>((resolve, reject) => {
@@ -594,6 +596,10 @@ export class EmbeddingPipeline {
                 (err)     => { clearTimeout(timer); reject(err); }
             );
         });
+    }
+
+    getRuntimeStats(): { embeddingBatches: number } {
+        return { embeddingBatches: this.embeddingBatchCalls };
     }
 
     /**

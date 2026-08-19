@@ -145,6 +145,14 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     return { ...this.hardwareDiagnostics };
   }
 
+  public getRuntimeStats(): { active: boolean; pendingAudio: number; inFlightAudio: number } {
+    return {
+      active: this._isActive,
+      pendingAudio: this.pendingAudio.length,
+      inFlightAudio: this.pendingAudioByTaskId.size,
+    };
+  }
+
   setSampleRate(rate: number): void {
     this.inputSampleRate = rate;
   }

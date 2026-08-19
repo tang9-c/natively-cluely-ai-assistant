@@ -471,6 +471,13 @@ export class RAGManager {
         return this.embeddingPipeline.getQueueStatus();
     }
 
+    getRuntimeStats(): { pending: number; processing: number; completed: number; failed: number; embeddingBatches: number } {
+        return {
+            ...this.embeddingPipeline.getQueueStatus(),
+            ...this.embeddingPipeline.getRuntimeStats(),
+        };
+    }
+
     /**
      * Retry pending embeddings
      */

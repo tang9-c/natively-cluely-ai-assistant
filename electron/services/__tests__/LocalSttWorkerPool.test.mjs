@@ -45,6 +45,29 @@ const config = (modelId = 'model-a', dtype = 'q8') => ({
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
+test('worker pool reports workers, leases, active tasks, and queued tasks', async () => {
+  const worker = new FakeWorker();
+  const pool = new LocalSttWorkerPool({ workerFactory: () => worker });
+  const mic = pool.acquire(config(), 'mic');
+  const system = pool.acquire(config(), 'system');
+  await tick();
+  const active = mic.transcribe(new Float32Array([1]), { taskId: 'active' });
+  const queued = system.transcribe(new Float32Array([2]), { taskId: 'queued' });
+  await tick();
+  assert.deepEqual(pool.getRuntimeStats(), {
+    workerCount: 1,
+    leaseCount: 2,
+    activeTasks: 1,
+    queuedTasks: 1,
+  });
+  worker.completeNext('active');
+  await active;
+  await tick();
+  worker.completeNext('queued');
+  await queued;
+  await Promise.all([mic.release(), system.release()]);
+});
+
 test('same complete worker key shares one worker across mic and system channels', async () => {
   const workers = [];
   const pool = new LocalSttWorkerPool({ workerFactory: () => workers.push(new FakeWorker()) && workers.at(-1) });

@@ -304,6 +304,16 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.getActiveDynamicActionsWithExpired();
     }
 
+    getRuntimeCounts(): { fullSegments: number; effectiveSegments: number; epochSummaries: number; usageCount: number; actionCandidates: number; shownCards: number } {
+        const session = this.session.getRuntimeCounts();
+        const { actions } = this.engine.getActiveDynamicActionsWithExpired();
+        return {
+            ...session,
+            actionCandidates: actions.filter(action => action.status === 'candidate').length,
+            shownCards: actions.filter(action => action.status === 'shown').length,
+        };
+    }
+
     // ============================================
     // Reset (resets all sub-modules)
     // ============================================

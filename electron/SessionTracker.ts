@@ -682,6 +682,15 @@ export class SessionTracker {
         return this.fullTranscript.map(segment => this.applySpeakerVerificationOverride(segment));
     }
 
+    getRuntimeCounts(): { fullSegments: number; effectiveSegments: number; epochSummaries: number; usageCount: number } {
+        return {
+            fullSegments: this.fullTranscript.length,
+            effectiveSegments: this.getEffectiveFullTranscript().length,
+            epochSummaries: this.transcriptEpochSummaries.length,
+            usageCount: this.fullUsage.length,
+        };
+    }
+
     getEffectiveTranscriptTail(limit: number): TranscriptSegment[] {
         const normalizedLimit = Math.max(0, Math.floor(limit));
         if (normalizedLimit === 0) {

@@ -207,6 +207,16 @@ export class LocalSttWorkerPool {
     return lease;
   }
 
+  getRuntimeStats(): { workerCount: number; leaseCount: number; activeTasks: number; queuedTasks: number } {
+    const entries = [...this.entries.values()];
+    return {
+      workerCount: entries.length,
+      leaseCount: entries.reduce((sum, entry) => sum + entry.leases.size, 0),
+      activeTasks: entries.reduce((sum, entry) => sum + Number(entry.activeTask !== null), 0),
+      queuedTasks: entries.reduce((sum, entry) => sum + entry.queue.length, 0),
+    };
+  }
+
   enqueue(
     lease: LocalSttWorkerLease,
     audio: Float32Array,
