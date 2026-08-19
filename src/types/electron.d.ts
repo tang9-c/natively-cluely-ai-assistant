@@ -1,7 +1,15 @@
 import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
 import type { DynamicActionAvailabilityEvent } from '../../shared/dynamicActionAvailability'
 import type { DynamicActionUiStageReport } from '../../shared/dynamicActionUiStage'
+import type {
+  NativeAudioTranscriptPayload,
+  TranscriptBatchPayload,
+} from '../../shared/transcriptIpc'
 export type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSource } from '../../shared/senseVoiceEmotion'
+export type {
+  NativeAudioTranscriptPayload,
+  TranscriptBatchPayload,
+} from '../../shared/transcriptIpc'
 import type { ContextNeedDecision } from '../../shared/contextNeedDecision'
 import type { DynamicActionSpeakerConfirmation } from '../../shared/speakerConfirmation'
 export type { DynamicActionSpeakerConfirmation } from '../../shared/speakerConfirmation'
@@ -320,29 +328,6 @@ export interface ResearchProgressPayload {
   requestId?: string
   stage: ResearchProgressStage
   message: string
-}
-
-export interface NativeAudioTranscriptPayload {
-  speaker: string
-  speakerId?: string
-  speakerLabel?: string
-  providerSpeakerId?: string
-  diarizationProvider?: 'doubao-auc'
-  text: string
-  timestamp?: number
-  final: boolean
-  confidence?: number
-  startTimestampMs?: number
-  endTimestampMs?: number
-  emotion?: TranscriptEmotion
-  emotionSource?: TranscriptEmotionSource
-  emotionDegree?: TranscriptEmotionDegree
-  emotionScore?: number
-  emotionDegreeScore?: number
-  speakerVerification?: SpeakerVerificationMetadata
-  coalescedFromCount?: number
-  coalescedProvider?: 'post_stt' | 'local_vad'
-  rawSegmentIds?: string[]
 }
 
 export interface SpeakerVerificationMetadata {
@@ -749,6 +734,7 @@ export interface ElectronAPI {
   onCredentialsChanged: (callback: () => void) => () => void
 
   // Native Audio Service Events
+  onNativeAudioTranscriptBatch: (callback: (batch: TranscriptBatchPayload) => void) => () => void
   onNativeAudioTranscript: (callback: (transcript: NativeAudioTranscriptPayload) => void) => () => void
   onNativeAudioSuggestion: (callback: (suggestion: { context: string; lastQuestion: string; confidence: number }) => void) => () => void
   onNativeAudioConnected: (callback: () => void) => () => void

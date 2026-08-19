@@ -4,6 +4,10 @@ import type { TranscriptEmotion, TranscriptEmotionDegree, TranscriptEmotionSourc
 import type { DynamicActionAvailabilityEvent } from '../shared/dynamicActionAvailability';
 import type { DynamicActionUiStageReport } from '../shared/dynamicActionUiStage';
 import type {
+  NativeAudioTranscriptPayload,
+  TranscriptBatchPayload,
+} from '../shared/transcriptIpc';
+import type {
   DownloadedModelKind,
   StorageMutationResult,
   StorageUsageSummary,
@@ -312,29 +316,11 @@ interface ElectronAPI {
   onCredentialsChanged: (callback: () => void) => () => void;
 
   // Native Audio Service Events
+  onNativeAudioTranscriptBatch: (
+    callback: (batch: TranscriptBatchPayload) => void,
+  ) => () => void;
   onNativeAudioTranscript: (
-    callback: (transcript: {
-      speaker: string;
-      speakerId?: string;
-      speakerLabel?: string;
-      providerSpeakerId?: string;
-      diarizationProvider?: 'doubao-auc';
-      text: string;
-      timestamp?: number;
-      final: boolean;
-      confidence?: number;
-      startTimestampMs?: number;
-      endTimestampMs?: number;
-      emotion?: TranscriptEmotion;
-      emotionSource?: TranscriptEmotionSource;
-      emotionDegree?: TranscriptEmotionDegree;
-      emotionScore?: number;
-      emotionDegreeScore?: number;
-      speakerVerification?: import('../src/types/electron').SpeakerVerificationMetadata;
-      coalescedFromCount?: number;
-      coalescedProvider?: 'post_stt' | 'local_vad';
-      rawSegmentIds?: string[];
-    }) => void,
+    callback: (transcript: NativeAudioTranscriptPayload) => void,
   ) => () => void;
   onNativeAudioSuggestion: (
     callback: (suggestion: { context: string; lastQuestion: string; confidence: number }) => void,
@@ -1404,6 +1390,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Native Audio Service Events
+  onNativeAudioTranscriptBatch: (
+    callback: (batch: TranscriptBatchPayload) => void,
+  ) => {
+    const subscription = (_: Electron.IpcRendererEvent, batch: TranscriptBatchPayload) => callback(batch);
+    ipcRenderer.on('native-audio-transcript-batch', subscription);
+    return () => {
+      ipcRenderer.removeListener('native-audio-transcript-batch', subscription);
+    };
+  },
   onNativeAudioTranscript: (
     callback: (transcript: {
       speaker: string;

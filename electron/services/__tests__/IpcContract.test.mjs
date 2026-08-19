@@ -13,6 +13,21 @@ function read(rel) {
   return fs.readFileSync(path.join(root, rel), 'utf8');
 }
 
+test('native transcript batch contract is shared by preload and renderer types', () => {
+  const sharedPath = path.join(root, 'shared/transcriptIpc.ts');
+  const shared = fs.existsSync(sharedPath) ? fs.readFileSync(sharedPath, 'utf8') : '';
+  const preload = read('electron/preload.ts');
+  const rendererTypes = read('src/types/electron.d.ts');
+
+  assert.match(shared, /export interface NativeAudioTranscriptPayload/);
+  assert.match(shared, /export interface TranscriptBatchPayload/);
+  assert.match(shared, /items: NativeAudioTranscriptPayload\[\]/);
+  assert.match(shared, /batchId: string/);
+  assert.match(shared, /emittedAt: number/);
+  assert.match(preload, /onNativeAudioTranscriptBatch/);
+  assert.match(rendererTypes, /onNativeAudioTranscriptBatch/);
+});
+
 test('get-verbose-logging IPC channel is wired through main, preload, and renderer types', () => {
   const ipc = read('electron/ipcHandlers.ts');
   const preload = read('electron/preload.ts');
