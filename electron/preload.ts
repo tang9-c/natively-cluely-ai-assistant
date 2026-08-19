@@ -1400,24 +1400,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   onNativeAudioTranscript: (
-    callback: (transcript: {
-      speaker: string;
-      text: string;
-      final: boolean;
-      emotion?: TranscriptEmotion;
-      emotionSource?: TranscriptEmotionSource;
-      emotionDegree?: TranscriptEmotionDegree;
-      emotionScore?: number;
-      emotionDegreeScore?: number;
-      coalescedFromCount?: number;
-      coalescedProvider?: 'post_stt' | 'local_vad';
-      rawSegmentIds?: string[];
-    }) => void,
+    callback: (transcript: NativeAudioTranscriptPayload) => void,
   ) => {
-    const subscription = (_: any, data: any) => callback(data);
-    ipcRenderer.on('native-audio-transcript', subscription);
+    const subscription = (_: Electron.IpcRendererEvent, batch: TranscriptBatchPayload) => {
+      batch.items.forEach(callback);
+    };
+    ipcRenderer.on('native-audio-transcript-batch', subscription);
     return () => {
-      ipcRenderer.removeListener('native-audio-transcript', subscription);
+      ipcRenderer.removeListener('native-audio-transcript-batch', subscription);
     };
   },
   onNativeAudioSuggestion: (

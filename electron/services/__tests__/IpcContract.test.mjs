@@ -26,6 +26,12 @@ test('native transcript batch contract is shared by preload and renderer types',
   assert.match(shared, /emittedAt: number/);
   assert.match(preload, /onNativeAudioTranscriptBatch/);
   assert.match(rendererTypes, /onNativeAudioTranscriptBatch/);
+  assert.match(preload, /ipcRenderer\.on\('native-audio-transcript-batch', subscription\)/);
+  assert.match(
+    preload,
+    /onNativeAudioTranscript:[\s\S]*?batch\.items\.forEach\(callback\)[\s\S]*?native-audio-transcript-batch/,
+    'legacy single-item subscriptions must adapt the batch channel instead of waiting on the removed channel',
+  );
 });
 
 test('get-verbose-logging IPC channel is wired through main, preload, and renderer types', () => {

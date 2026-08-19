@@ -115,11 +115,12 @@ test('renderer does not report STT as unconfigured after live transcript arrives
     /const getSttSummary = \([\s\S]*?\n\};/
   );
   const transcriptHandler = ui.match(
-    /onNativeAudioTranscript\(\(transcript\) => \{[\s\S]*?\n\s*\}\),/
+    /onNativeAudioTranscriptBatch\(\(batch\) => \{[\s\S]*?\n\s*\}\),/
   );
 
   assert.ok(summaryFn, 'getSttSummary should exist');
-  assert.ok(transcriptHandler, 'native-audio-transcript handler should exist');
+  assert.ok(transcriptHandler, 'native-audio-transcript batch handler should exist');
+  assert.match(transcriptHandler[0], /for \(const transcript of batch\.items\)/);
   assert.match(summaryFn[0], /hasUserTranscript: boolean/);
   assert.match(
     summaryFn[0],
@@ -141,10 +142,10 @@ test('renderer does not report STT as unconfigured after live transcript arrives
 test('native audio transcript handler no longer drops user transcripts outside Answer recording mode', () => {
   const ui = read('src/components/NativelyInterface.tsx');
   const transcriptHandler = ui.match(
-    /onNativeAudioTranscript\(\(transcript\) => \{[\s\S]*?\n\s*\}\),/
+    /onNativeAudioTranscriptBatch\(\(batch\) => \{[\s\S]*?\n\s*\}\),/
   );
 
-  assert.ok(transcriptHandler, 'native-audio-transcript handler should exist');
+  assert.ok(transcriptHandler, 'native-audio-transcript batch handler should exist');
   assert.doesNotMatch(
     transcriptHandler[0],
     /if \(transcript\.speaker === 'user'\) \{\s*return;/,

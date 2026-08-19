@@ -1917,68 +1917,74 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     // Real-time Transcripts
     cleanups.push(
-      window.electronAPI.onNativeAudioTranscript((transcript) => {
-        showSenseVoiceEmotion(transcript);
+      window.electronAPI.onNativeAudioTranscriptBatch((batch) => {
+        const rollingItems: NativeAudioTranscriptPayload[] = [];
 
-        // When Answer button is active, capture USER transcripts for voice input
-        // Use ref to avoid stale closure issue
-        if (isRecordingRef.current && transcript.speaker === 'user') {
-          if (transcript.final) {
-            // Accumulate final transcripts
-            setVoiceInput((prev) => {
-              const updated = prev + (prev ? ' ' : '') + transcript.text;
-              voiceInputRef.current = updated;
-              return updated;
-            });
-            setManualTranscript(''); // Clear partial preview
-            manualTranscriptRef.current = '';
-          } else {
-            // Show live partial transcript
-            setManualTranscript(transcript.text);
-            manualTranscriptRef.current = transcript.text;
+        for (const transcript of batch.items) {
+          showSenseVoiceEmotion(transcript);
+
+          // When Answer button is active, capture USER transcripts for voice input
+          // Use ref to avoid stale closure issue
+          if (isRecordingRef.current && transcript.speaker === 'user') {
+            if (transcript.final) {
+              // Accumulate final transcripts
+              setVoiceInput((prev) => {
+                const updated = prev + (prev ? ' ' : '') + transcript.text;
+                voiceInputRef.current = updated;
+                return updated;
+              });
+              setManualTranscript(''); // Clear partial preview
+              manualTranscriptRef.current = '';
+            } else {
+              // Show live partial transcript
+              setManualTranscript(transcript.text);
+              manualTranscriptRef.current = transcript.text;
+            }
+            continue; // Don't add to messages while recording
           }
-          return; // Don't add to messages while recording
+
+          if (transcript.speaker !== 'interviewer' && transcript.speaker !== 'user') {
+            continue; // Safety check for any other speaker types
+          }
+
+          setSttNotConfigured(false);
+          if (transcript.speaker === 'user') {
+            setHasUserTranscript(true);
+            setSttUserStatus('connected');
+            setSttUserError('');
+          } else if (transcript.speaker === 'interviewer') {
+            setHasInterviewerTranscript(true);
+            setSttInterviewerStatus('connected');
+            setSttInterviewerError('');
+            setSystemAudioIssue(null);
+          }
+
+          rollingItems.push(transcript);
+          setIsInterviewerSpeaking(!transcript.final);
+
+          if (transcript.final) {
+            // Clear speaking indicator after pause
+            setTimeout(() => {
+              setIsInterviewerSpeaking(false);
+            }, 3000);
+          }
         }
 
-        if (transcript.speaker !== 'interviewer' && transcript.speaker !== 'user') {
-          return; // Safety check for any other speaker types
-        }
-
-        setSttNotConfigured(false);
-        if (transcript.speaker === 'user') {
-          setHasUserTranscript(true);
-          setSttUserStatus('connected');
-          setSttUserError('');
-        } else if (transcript.speaker === 'interviewer') {
-          setHasInterviewerTranscript(true);
-          setSttInterviewerStatus('connected');
-          setSttInterviewerError('');
-          setSystemAudioIssue(null);
-        }
-
-        const speakerLabel = transcript.speaker === 'user' ? 'Me' : 'Interviewer';
-        const displaySpeakerLabel = transcript.speakerLabel || speakerLabel;
-        // Route to rolling transcript bar - accumulate text continuously
-        setIsInterviewerSpeaking(!transcript.final);
-
-        if (transcript.final) {
-          // Append finalized text to accumulated transcript
+        if (rollingItems.length > 0) {
           setRollingTranscript((prev) => {
-            const separator = prev ? '  ·  ' : '';
-            return prev + separator + `${displaySpeakerLabel}: ${transcript.text}`;
-          });
+            return rollingItems.reduce((current, transcript) => {
+              const speakerLabel = transcript.speaker === 'user' ? 'Me' : 'Interviewer';
+              if (transcript.final) {
+                const separator = current ? '  ·  ' : '';
+                const displaySpeakerLabel = transcript.speakerLabel || speakerLabel;
+                return current + separator + `${displaySpeakerLabel}: ${transcript.text}`;
+              }
 
-          // Clear speaking indicator after pause
-          setTimeout(() => {
-            setIsInterviewerSpeaking(false);
-          }, 3000);
-        } else {
-          // For partial transcripts, show current segment appended to accumulated
-          setRollingTranscript((prev) => {
-            // Find where previous finalized content ends (look for last separator)
-            const lastSeparator = prev.lastIndexOf('  ·  ');
-            const accumulated = lastSeparator >= 0 ? prev.substring(0, lastSeparator + 5) : '';
-            return accumulated + `${speakerLabel}: ${transcript.text}`;
+              // Replace only the current partial while preserving finalized text.
+              const lastSeparator = current.lastIndexOf('  ·  ');
+              const accumulated = lastSeparator >= 0 ? current.substring(0, lastSeparator + 5) : '';
+              return accumulated + `${speakerLabel}: ${transcript.text}`;
+            }, prev);
           });
         }
       }),
