@@ -53,6 +53,7 @@ import {
 } from '../lib/overlayAppearance';
 import { isOverlayInteractiveTarget } from '../lib/overlayPointerHitTest';
 import { NegotiationCoachingCard } from './NegotiationCoachingCard';
+import { supportsOverlayAutomaticHitTesting } from '../../shared/overlayMouseInteractionPolicy';
 import { SENSEVOICE_EMOTION_LABELS, TRANSCRIPT_EMOTION_DEGREE_LABELS } from '../../shared/senseVoiceEmotion';
 import type { TranscriptEmotion, TranscriptEmotionDegree } from '../../shared/senseVoiceEmotion';
 import {
@@ -1085,7 +1086,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   useEffect(() => {
     const api = window.electronAPI;
-    if (api?.platform !== 'win32' || !api.setOverlayAutomaticInteractive) return;
+    if (!api || !supportsOverlayAutomaticHitTesting(api.platform) || !api.setOverlayAutomaticInteractive) {
+      return;
+    }
 
     let lastReported: boolean | null = null;
     let pointerLocked = false;
@@ -1646,7 +1649,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       window.electronAPI.showWindow(isStealthRef.current);
       isStealthRef.current = false; // Reset back to default
     } else {
-      if (window.electronAPI.platform === 'win32') {
+      if (supportsOverlayAutomaticHitTesting(window.electronAPI.platform)) {
         void window.electronAPI.setOverlayAutomaticInteractive?.(false).catch(() => {});
       }
       // Slight delay to allow animation to clean up if needed, though immediate is safer for click-through

@@ -9,10 +9,12 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
 
-test('Overlay reports deduplicated automatic hit state on Windows mouse movement', () => {
+test('Overlay reports deduplicated automatic hit state on supported desktop platforms', () => {
   const source = read('src/components/NativelyInterface.tsx');
 
-  assert.match(source, /platform\s*!==\s*['"]win32['"]/);
+  assert.match(source, /supportsOverlayAutomaticHitTesting/);
+  assert.match(source, /!supportsOverlayAutomaticHitTesting\(api\.platform\)/);
+  assert.doesNotMatch(source, /api\?\.platform\s*!==\s*['"]win32['"]/);
   assert.match(source, /setOverlayAutomaticInteractive/);
   assert.match(source, /lastReported/);
   assert.match(source, /lastReported\s*===\s*interactive/);
@@ -58,7 +60,7 @@ test('collapsing the active meeting overlay enables passthrough before hide is a
 
   assert.match(
     visibilityEffect,
-    /else\s*\{[\s\S]*setOverlayAutomaticInteractive\?\.\(false\)[\s\S]*setTimeout\(\(\)\s*=>\s*window\.electronAPI\.hideWindow\(\),\s*400\)/,
+    /else\s*\{[\s\S]*supportsOverlayAutomaticHitTesting\(window\.electronAPI\.platform\)[\s\S]*setOverlayAutomaticInteractive\?\.\(false\)[\s\S]*setTimeout\(\(\)\s*=>\s*window\.electronAPI\.hideWindow\(\),\s*400\)/,
   );
   assert.ok(
     visibilityEffect.indexOf('setOverlayAutomaticInteractive?.(false)')
