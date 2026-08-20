@@ -1,7 +1,10 @@
 import { app, BrowserWindow, Menu, screen } from 'electron';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { resolveOverlayMouseInteractionPolicy } from '../shared/overlayMouseInteractionPolicy';
+import {
+  resolveOverlayMouseInteractionPolicy,
+  supportsOverlayAutomaticHitTesting,
+} from '../shared/overlayMouseInteractionPolicy';
 import { AppState } from './main';
 import { KeybindManager } from './services/KeybindManager';
 import { applyNativeStealthIfEnabled } from './utils/nativeStealth';
@@ -32,7 +35,7 @@ export class WindowHelper {
   private overlayRendererReady = false;
   private pendingOverlayShowInactive: boolean | null = null;
   private overlayReadyRecoveryTimer: NodeJS.Timeout | null = null;
-  private overlayAutomaticInteractive = process.platform !== 'win32';
+  private overlayAutomaticInteractive = !supportsOverlayAutomaticHitTesting(process.platform);
   private lastAppliedIgnoreMouseEvents: boolean | null = null;
   // Track current window mode (persists even when overlay is hidden via Cmd+B)
   private currentWindowMode: 'launcher' | 'overlay' = 'launcher';
@@ -749,13 +752,13 @@ export class WindowHelper {
   }
 
   private resetOverlayAutomaticInteraction(): void {
-    if (process.platform !== 'win32') return;
+    if (!supportsOverlayAutomaticHitTesting(process.platform)) return;
     this.overlayAutomaticInteractive = false;
     this.syncOverlayInteractionPolicy();
   }
 
   public setOverlayAutomaticInteractive(interactive: boolean): void {
-    if (process.platform !== 'win32') return;
+    if (!supportsOverlayAutomaticHitTesting(process.platform)) return;
     if (this.overlayAutomaticInteractive === interactive) return;
 
     this.overlayAutomaticInteractive = interactive;

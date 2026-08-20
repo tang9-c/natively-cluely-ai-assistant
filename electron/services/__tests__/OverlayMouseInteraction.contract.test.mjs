@@ -52,12 +52,36 @@ test('duplicate switchToOverlay calls do not clear a current interactive hit', (
   );
 });
 
-test('non-Windows automatic interaction reports are ignored', () => {
+test('WindowHelper enables automatic interaction on Windows and macOS only', () => {
   const source = read('electron/WindowHelper.ts');
+  const resetter = source.slice(
+    source.indexOf('private resetOverlayAutomaticInteraction'),
+    source.indexOf('public setOverlayAutomaticInteractive'),
+  );
   const setter = source.slice(
     source.indexOf('public setOverlayAutomaticInteractive'),
     source.indexOf('public syncOverlayInteractionPolicy'),
   );
 
-  assert.match(setter, /process\.platform\s*!==\s*['"]win32['"]/);
+  assert.match(source, /supportsOverlayAutomaticHitTesting/);
+  assert.match(
+    source,
+    /overlayAutomaticInteractive\s*=\s*!supportsOverlayAutomaticHitTesting\(process\.platform\)/,
+  );
+  assert.match(resetter, /!supportsOverlayAutomaticHitTesting\(process\.platform\)/);
+  assert.match(setter, /!supportsOverlayAutomaticHitTesting\(process\.platform\)/);
+  assert.doesNotMatch(resetter, /process\.platform\s*!==\s*['"]win32['"]/);
+  assert.doesNotMatch(setter, /process\.platform\s*!==\s*['"]win32['"]/);
+});
+
+test('restoring overlay interaction keeps the native window focusable', () => {
+  const source = read('electron/WindowHelper.ts');
+  const syncPolicy = source.slice(
+    source.indexOf('public syncOverlayInteractionPolicy'),
+    source.indexOf('public showOverlay'),
+  );
+
+  assert.match(syncPolicy, /setIgnoreMouseEvents\(false\)/);
+  assert.match(syncPolicy, /setFocusable\(true\)/);
+  assert.doesNotMatch(syncPolicy, /setFocusable\(false\)/);
 });
