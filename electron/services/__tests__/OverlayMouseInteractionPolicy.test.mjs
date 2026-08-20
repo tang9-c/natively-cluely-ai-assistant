@@ -32,6 +32,35 @@ test('Windows transparent area passes through until the pointer reaches CueUp UI
   );
 });
 
+test('automatic hit testing is supported on Windows and macOS only', async () => {
+  const { supportsOverlayAutomaticHitTesting } = await loadPolicy();
+
+  assert.equal(supportsOverlayAutomaticHitTesting('win32'), true);
+  assert.equal(supportsOverlayAutomaticHitTesting('darwin'), true);
+  assert.equal(supportsOverlayAutomaticHitTesting('linux'), false);
+});
+
+test('macOS transparent area passes through while visible CueUp UI stays interactive', async () => {
+  const { resolveOverlayMouseInteractionPolicy } = await loadPolicy();
+
+  assert.deepEqual(
+    resolveOverlayMouseInteractionPolicy({
+      platform: 'darwin',
+      manualPassthrough: false,
+      automaticInteractive: false,
+    }),
+    { ignoreMouseEvents: true, forward: true },
+  );
+  assert.deepEqual(
+    resolveOverlayMouseInteractionPolicy({
+      platform: 'darwin',
+      manualPassthrough: false,
+      automaticInteractive: true,
+    }),
+    { ignoreMouseEvents: false, forward: false },
+  );
+});
+
 test('manual passthrough overrides automatic interactivity on every platform', async () => {
   const { resolveOverlayMouseInteractionPolicy } = await loadPolicy();
 
@@ -47,17 +76,15 @@ test('manual passthrough overrides automatic interactivity on every platform', a
   }
 });
 
-test('non-Windows automatic state does not alter existing interactive behavior', async () => {
+test('unsupported platforms ignore automatic hit-testing state', async () => {
   const { resolveOverlayMouseInteractionPolicy } = await loadPolicy();
 
-  for (const platform of ['darwin', 'linux']) {
-    assert.deepEqual(
-      resolveOverlayMouseInteractionPolicy({
-        platform,
-        manualPassthrough: false,
-        automaticInteractive: false,
-      }),
-      { ignoreMouseEvents: false, forward: false },
-    );
-  }
+  assert.deepEqual(
+    resolveOverlayMouseInteractionPolicy({
+      platform: 'linux',
+      manualPassthrough: false,
+      automaticInteractive: false,
+    }),
+    { ignoreMouseEvents: false, forward: false },
+  );
 });

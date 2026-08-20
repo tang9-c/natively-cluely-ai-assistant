@@ -9,11 +9,16 @@ export interface OverlayMouseInteractionPolicy {
   forward: boolean;
 }
 
+export function supportsOverlayAutomaticHitTesting(platform: NodeJS.Platform): boolean {
+  return platform === 'win32' || platform === 'darwin';
+}
+
 export function resolveOverlayMouseInteractionPolicy(
   input: OverlayMouseInteractionInput,
 ): OverlayMouseInteractionPolicy {
   const ignoreMouseEvents =
-    input.manualPassthrough || (input.platform === 'win32' && !input.automaticInteractive);
+    input.manualPassthrough ||
+    (supportsOverlayAutomaticHitTesting(input.platform) && !input.automaticInteractive);
 
   return {
     ignoreMouseEvents,
