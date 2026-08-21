@@ -43,11 +43,11 @@
 
 **Acceptance:** 现有 QCloud STT renderer 基线功能通过其测试并形成独立提交；不得夹带本计划尚未实现的诊断矩阵代码。
 
-- [ ] **Step 1: 审查当前 diff 与提交边界**
+- [x] **Step 1: 审查当前 diff 与提交边界**
 
 确认这些改动只属于已经完成的统一性能基线和 QCloud renderer 报告接入。若发现与本诊断方案无关或未完成的代码，先明确拆分，不得盲目提交。
 
-- [ ] **Step 2: 运行现有基线测试**
+- [x] **Step 2: 运行现有基线测试**
 
 Run: `node --test scripts/__tests__/run-performance-baseline.test.mjs`
 
@@ -57,13 +57,13 @@ Run: `node --check scripts/benchmark-qcloud-stt-renderer.mjs scripts/run-sales-l
 
 Expected: PASS。
 
-- [ ] **Step 3: 检查格式与敏感信息**
+- [x] **Step 3: 检查格式与敏感信息**
 
 Run: `git diff --check -- package.json scripts/__tests__/run-performance-baseline.test.mjs scripts/run-performance-baseline.mjs scripts/run-sales-local-stt-benchmark.mjs scripts/benchmark-qcloud-stt-renderer.mjs`
 
 确认 diff 中没有凭据、原始转录、请求体或响应体。
 
-- [ ] **Step 4: 独立提交既有功能**
+- [x] **Step 4: 独立提交既有功能**
 
 ```bash
 git add package.json scripts/__tests__/run-performance-baseline.test.mjs scripts/run-performance-baseline.mjs scripts/run-sales-local-stt-benchmark.mjs scripts/benchmark-qcloud-stt-renderer.mjs
@@ -78,7 +78,7 @@ git commit -m "perf: integrate QCloud STT renderer baseline"
 
 **Acceptance:** 未传观察器时行为与当前完全一致；成功路径按顺序产生脱敏阶段事件；观察器抛错不会中断转录；测试不访问网络。
 
-- [ ] **Step 1: 编写失败测试，锁定阶段事件契约**
+- [x] **Step 1: 编写失败测试，锁定阶段事件契约**
 
 测试通过 mock `postMultipart`、`fetchImpl`、`sleepImpl` 覆盖以下事件：
 
@@ -95,13 +95,13 @@ git commit -m "perf: integrate QCloud STT renderer baseline"
 
 断言事件只包含 `phase`、`atMs`、`attempt`、`taskStatus`、`durationMs` 等非敏感字段，不包含 headers、body、audio、transcript、taskId。
 
-- [ ] **Step 2: 运行测试并确认红灯**
+- [x] **Step 2: 运行测试并确认红灯**
 
 Run: `node --test electron/audio/__tests__/DoubaoAucClientPhases.test.mjs`
 
 Expected: FAIL，原因是 options 尚无 `onPhase`，且没有阶段事件。
 
-- [ ] **Step 3: 实现最小可选观察器**
+- [x] **Step 3: 实现最小可选观察器**
 
 在 `NewApiDoubaoAucMultipartOptions` 增加：
 
@@ -124,11 +124,11 @@ onPhase?: (event: QCloudAucPhaseEvent) => void;
 - 不发送 task id、URL、响应体、文本和凭据。
 - 不改变现有 submit/poll 次序、默认间隔、重试上限和返回值。
 
-- [ ] **Step 4: 补充失败与观察器异常测试**
+- [x] **Step 4: 补充失败与观察器异常测试**
 
 覆盖 submit 失败、poll 失败、观察器自身抛错。断言原始业务错误仍按既有方式抛出，观察器错误不影响成功结果。
 
-- [ ] **Step 5: 运行局部验证**
+- [x] **Step 5: 运行局部验证**
 
 Run: `node --test electron/audio/__tests__/DoubaoAucClientPhases.test.mjs`
 
@@ -138,7 +138,7 @@ Run: `npm run typecheck:electron`
 
 Expected: PASS。
 
-- [ ] **Step 6: 自审并提交**
+- [x] **Step 6: 自审并提交**
 
 Run: `git diff --check -- electron/audio/doubaoAucClient.ts electron/audio/__tests__/DoubaoAucClientPhases.test.mjs`
 
@@ -157,7 +157,7 @@ git commit -m "test: expose QCloud STT phase timings"
 
 **Acceptance:** 对固定输入稳定地产生 p50/p95、失败率、质量统计和胜者；任何失败详情只保留允许的阶段码。
 
-- [ ] **Step 1: 编写失败测试定义报告数据模型**
+- [x] **Step 1: 编写失败测试定义报告数据模型**
 
 测试至少覆盖：
 
@@ -168,13 +168,13 @@ git commit -m "test: expose QCloud STT phase timings"
 - p95 差异小于 5% 时选择请求更少者；完全相同则保留当前默认。
 - 质量未达门槛的候选不得因延迟更低而获胜。
 
-- [ ] **Step 2: 运行测试并确认红灯**
+- [x] **Step 2: 运行测试并确认红灯**
 
 Run: `node --test scripts/__tests__/qcloud-stt-diagnostics.test.mjs`
 
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 3: 实现最小纯函数库**
+- [x] **Step 3: 实现最小纯函数库**
 
 导出：
 
@@ -188,17 +188,17 @@ export function buildExperimentMatrix(config) {}
 
 报告中只保留数值、布尔值、参数枚举、阶段码和聚合统计。质量门槛沿用现有 benchmark 的参考窗口与文本比较结果，不在此模块保存文本。
 
-- [ ] **Step 4: 添加边界测试**
+- [x] **Step 4: 添加边界测试**
 
 覆盖空样本、单样本、偶数样本、全部失败、NaN/负值、恰好 5% 差异、候选缺少质量字段、未知异常。
 
-- [ ] **Step 5: 运行验证**
+- [x] **Step 5: 运行验证**
 
 Run: `node --test scripts/__tests__/qcloud-stt-diagnostics.test.mjs`
 
 Expected: PASS。
 
-- [ ] **Step 6: 自审并提交**
+- [x] **Step 6: 自审并提交**
 
 Run: `git diff --check -- scripts/lib/qcloudSttDiagnostics.mjs scripts/__tests__/qcloud-stt-diagnostics.test.mjs`
 
@@ -216,7 +216,7 @@ git commit -m "test: add QCloud STT diagnostic scoring"
 
 **Acceptance:** 单次运行可显式设置 segment、poll、parameter-group 和 VAD 变体；输出阶段耗时、请求次数、质量判定和 renderer 耗时；默认参数仍与当前运行器一致。
 
-- [ ] **Step 1: 编写 CLI 与样本格式失败测试**
+- [x] **Step 1: 编写 CLI 与样本格式失败测试**
 
 把参数解析和样本组装导出为纯函数，测试：
 
@@ -230,21 +230,21 @@ git commit -m "test: add QCloud STT diagnostic scoring"
 
 断言非法 segment、poll、parameter-group 和样本数会快速失败，且错误只给稳定参数码。
 
-- [ ] **Step 2: 运行测试并确认红灯**
+- [x] **Step 2: 运行测试并确认红灯**
 
 Run: `node --test scripts/__tests__/benchmark-qcloud-stt-renderer.test.mjs`
 
 Expected: FAIL，当前运行器参数固定且没有所需导出。
 
-- [ ] **Step 3: 将阶段观察器贯通到 QCloud 调用**
+- [x] **Step 3: 将阶段观察器贯通到 QCloud 调用**
 
 扩展 `transcribeClipWithQcloud()` 接收 `pollIntervalMs`、`parameterGroup`、`onPhase`，再传给 `transcribeNewApiDoubaoAucMultipartFile()`。保持未传参数时仍使用现有值。
 
-- [ ] **Step 4: 参数化音频分段与 QCloud 参数组**
+- [x] **Step 4: 参数化音频分段与 QCloud 参数组**
 
 运行器支持 5/10/15 秒分段，支持 `qcloud-current` 与 `qcloud-current-plus-vad`。参数组映射复用现有 benchmark 定义，不能在多个文件各维护一份业务常量。
 
-- [ ] **Step 5: 生成脱敏单元报告**
+- [x] **Step 5: 生成脱敏单元报告**
 
 每个样本至少记录：
 
@@ -270,11 +270,11 @@ Expected: FAIL，当前运行器参数固定且没有所需导出。
 
 失败样本仅含 `valid: false`、参数与 `failureStage`，不得出现 Error 文本。
 
-- [ ] **Step 6: 接入现有质量比较**
+- [x] **Step 6: 接入现有质量比较**
 
 复用 `extractTimedTranscriptSegments()`、`selectReferenceWindow()`、`compareTranscripts()`。原始参考文本和识别文本仅在内存中比较；报告只写入长度、覆盖率或相似度等数值及 `qualityPassed`。
 
-- [ ] **Step 7: 运行局部验证**
+- [x] **Step 7: 运行局部验证**
 
 Run: `node --test scripts/__tests__/benchmark-qcloud-stt-renderer.test.mjs scripts/__tests__/qcloud-stt-diagnostics.test.mjs`
 
@@ -284,7 +284,7 @@ Run: `node --check scripts/benchmark-qcloud-stt-renderer.mjs`
 
 Expected: PASS。
 
-- [ ] **Step 8: 自审并提交**
+- [x] **Step 8: 自审并提交**
 
 确认 diff 中没有 key、转录文本或响应体：
 
@@ -304,7 +304,7 @@ git commit -m "perf: parameterize QCloud STT renderer samples"
 
 **Acceptance:** 编排器严格串行执行，已完成单元不会重跑，失败可继续补样；每阶段只推进合格胜者；每阶段胜者累计达到 30 个有效样本。
 
-- [ ] **Step 1: 编写失败测试定义三阶段矩阵**
+- [x] **Step 1: 编写失败测试定义三阶段矩阵**
 
 预期矩阵：
 
@@ -315,7 +315,7 @@ git commit -m "perf: parameterize QCloud STT renderer samples"
 
 测试使用 fake runner，不调用 QCloud。
 
-- [ ] **Step 2: 编写恢复与补样失败测试**
+- [x] **Step 2: 编写恢复与补样失败测试**
 
 覆盖：
 
@@ -325,13 +325,13 @@ git commit -m "perf: parameterize QCloud STT renderer samples"
 - 前一阶段无合格胜者时停止后续阶段，并报告 `blockedStage`。
 - 同一时刻最多一个 runner 子进程。
 
-- [ ] **Step 3: 运行测试并确认红灯**
+- [x] **Step 3: 运行测试并确认红灯**
 
 Run: `node --test scripts/__tests__/run-qcloud-stt-diagnostics-matrix.test.mjs`
 
 Expected: FAIL，编排器不存在。
 
-- [ ] **Step 4: 实现串行编排器**
+- [x] **Step 4: 实现串行编排器**
 
 支持：
 
@@ -345,7 +345,7 @@ node scripts/run-qcloud-stt-diagnostics-matrix.mjs \
 
 通过 `spawn` 调用单次运行器，显式传递参数；不通过拼接 shell 字符串执行。每次样本完成后原子写入 cell JSON，避免中断损坏。
 
-- [ ] **Step 5: 输出阶段和最终聚合报告**
+- [x] **Step 5: 输出阶段和最终聚合报告**
 
 最终报告必须包含：
 
@@ -355,7 +355,7 @@ node scripts/run-qcloud-stt-diagnostics-matrix.mjs \
 - 最终建议仅在所有阶段通过时出现。
 - 任一阶段缺样或质量不合格时状态为 `blocked`，不得输出伪胜者。
 
-- [ ] **Step 6: 增加 npm 命令**
+- [x] **Step 6: 增加 npm 命令**
 
 在 `package.json` 添加一个清晰入口，例如：
 
@@ -363,7 +363,7 @@ node scripts/run-qcloud-stt-diagnostics-matrix.mjs \
 "perf:qcloud-stt-diagnostics": "node scripts/run-qcloud-stt-diagnostics-matrix.mjs"
 ```
 
-- [ ] **Step 7: 运行自动化验证**
+- [x] **Step 7: 运行自动化验证**
 
 Run: `node --test scripts/__tests__/run-qcloud-stt-diagnostics-matrix.test.mjs scripts/__tests__/qcloud-stt-diagnostics.test.mjs scripts/__tests__/benchmark-qcloud-stt-renderer.test.mjs`
 
@@ -373,7 +373,7 @@ Run: `node --check scripts/run-qcloud-stt-diagnostics-matrix.mjs`
 
 Expected: PASS。
 
-- [ ] **Step 8: 自审并提交**
+- [x] **Step 8: 自审并提交**
 
 Run: `git diff --check -- scripts/run-qcloud-stt-diagnostics-matrix.mjs scripts/__tests__/run-qcloud-stt-diagnostics-matrix.test.mjs package.json`
 
@@ -390,7 +390,7 @@ git commit -m "perf: orchestrate QCloud STT diagnostic matrix"
 
 **Acceptance:** 所有矩阵单元有足够有效样本；每阶段胜者有 30 个有效样本；报告无敏感内容、无 blocked；结论能从报告数值直接复算。
 
-- [ ] **Step 1: 前置检查**
+- [x] **Step 1: 前置检查**
 
 确认当前分支：
 
@@ -406,17 +406,17 @@ Expected: Apple M4，内存 16GB。若不匹配，停止真实验收，不伪造
 
 确认 `.env` 中存在 QCloud 所需配置，但只检查键是否存在，绝不打印值。
 
-- [ ] **Step 2: 先跑一个真实 smoke 样本**
+- [x] **Step 2: 先跑一个真实 smoke 样本**
 
 使用 10 秒、2000ms、`qcloud-current` 跑 1 个有效样本。检查报告只含允许字段，renderer 有最终结果，质量通过。
 
-- [ ] **Step 3: 执行完整矩阵**
+- [x] **Step 3: 执行完整矩阵**
 
 Run: `npm run perf:qcloud-stt-diagnostics -- --machine m4-16gb --audio <fixture.wav> --reference <timed-reference.json> --output-dir reports/performance/m4-16gb/qcloud-stt-diagnostics`
 
 Expected: 进程退出码 0；三阶段完成；阶段胜者均达到 30 个有效样本；最终报告状态 `completed`。
 
-- [ ] **Step 4: 复核报告证据**
+- [x] **Step 4: 复核报告证据**
 
 用独立脚本或 Node one-liner 复算每个 cell 的 valid 数、失败率、p50/p95 和胜者排序。复算值必须与报告一致。
 
@@ -428,7 +428,7 @@ rg -n 'api[_-]?key|authorization|transcript|audioData|responseBody|requestBody|t
 
 Expected: 无匹配。
 
-- [ ] **Step 5: 运行最终回归验证**
+- [x] **Step 5: 运行最终回归验证**
 
 Run: `node --test electron/audio/__tests__/DoubaoAucClientPhases.test.mjs scripts/__tests__/qcloud-stt-diagnostics.test.mjs scripts/__tests__/benchmark-qcloud-stt-renderer.test.mjs scripts/__tests__/run-qcloud-stt-diagnostics-matrix.test.mjs`
 
@@ -442,7 +442,7 @@ Run: `git diff --check`
 
 Expected: PASS。
 
-- [ ] **Step 6: 最终验收门槛（不可跳过）**
+- [x] **Step 6: 最终验收门槛（不可跳过）**
 
 以下条件必须全部满足，否则结论只能是“未完成”：
 
@@ -452,7 +452,7 @@ Expected: PASS。
 4. 报告不含凭据、原始音频、原始转录、请求/响应体、task id 或未经脱敏的异常文本。
 5. 自动化测试、Electron 类型检查和报告独立复算全部通过。
 
-- [ ] **Step 7: 提交最终代码状态**
+- [x] **Step 7: 提交最终代码状态**
 
 先检查提交范围，不提交忽略的本地报告或 `.env`：
 
@@ -463,3 +463,14 @@ Run: `git status --short`
 ## Completion Definition
 
 本计划只有在 Task 5 的五项不可跳过门槛全部通过后才算完成。若真实 QCloud、固定基准机、音频 fixture 或参考文本不可用，必须明确标记对应阶段 `blocked`，不得以 mock、历史报告或不足样本替代最终验收。
+
+## Execution Evidence
+
+- 最终报告：`reports/performance/m4-16gb/qcloud-stt-diagnostics/final.json`
+- 固定机器：Apple M4 / 16GB。
+- Poll、Segment、VAD 全部候选各至少 10 个有效样本。
+- 三阶段胜者各 30 个有效样本、0 个失败、质量门槛通过。
+- 最终状态：`completed`，无 `blockedStage`。
+- 独立复算：所有胜者的 p50/p95 与 cell 原始脱敏样本一致，胜者排序一致。
+- 隐私扫描：未发现凭据、原始音频、原始转录、请求/响应体、task id、错误正文或文本哈希。
+- 自动化验证：目标测试 27/27 通过，`npm test` 2888/2888 通过，Electron 类型检查通过。
