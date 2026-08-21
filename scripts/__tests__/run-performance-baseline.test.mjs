@@ -42,6 +42,9 @@ test('ingests QCloud benchmark reports without response text or keys', () => {
     qcloudSummaryReports: [{
       runs: [{ variant: 'after', completedMs: 1500, generationStatus: 'success' }],
     }],
+    qcloudSttRendererReports: [{
+      runs: [{ segmentSubmitToFinalMs: 8000, finalToRendererMs: 50, segmentSubmitToRendererMs: 8050, errorCode: null }],
+    }],
   });
 
   assert.deepEqual(metrics.find((metric) => metric.id === 'app.cold-start').samples, [900]);
@@ -50,6 +53,8 @@ test('ingests QCloud benchmark reports without response text or keys', () => {
   assert.deepEqual(metrics.find((metric) => metric.id === 'llm.first-token').samples, [300]);
   assert.deepEqual(metrics.find((metric) => metric.id === 'llm.completed').samples, [700]);
   assert.deepEqual(metrics.find((metric) => metric.id === 'meeting.summary').samples, [1500]);
+  assert.deepEqual(metrics.find((metric) => metric.id === 'qcloud-stt.segment-submit-to-final').samples, [8000]);
+  assert.deepEqual(metrics.find((metric) => metric.id === 'qcloud-stt.final-to-renderer').samples, [50]);
 });
 
 test('writes JSON and Markdown reports under the requested local directory', () => {

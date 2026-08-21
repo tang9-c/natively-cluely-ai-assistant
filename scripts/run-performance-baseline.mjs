@@ -25,6 +25,7 @@ export function buildMetricInputs({
   dynamicActionReports = [],
   qcloudRealtimeReports = [],
   qcloudSummaryReports = [],
+  qcloudSttRendererReports = [],
 }) {
   const metrics = METRICS.map(([id, unit, blockedReason]) => ({ id, unit, samples: [], blockedReason }));
   const byId = new Map(metrics.map((metric) => [metric.id, metric]));
@@ -82,6 +83,15 @@ export function buildMetricInputs({
     }
   }
 
+  for (const report of qcloudSttRendererReports) {
+    const samples = (report.runs ?? []).filter((run) => run.errorCode == null);
+    metrics.push(
+      metricFromSamples('qcloud-stt.segment-submit-to-final', 'ms', samples.map((run) => run.segmentSubmitToFinalMs), 'qcloud_stt_segment_final_not_recorded'),
+      metricFromSamples('qcloud-stt.final-to-renderer', 'ms', samples.map((run) => run.finalToRendererMs), 'qcloud_stt_renderer_not_recorded'),
+      metricFromSamples('qcloud-stt.segment-submit-to-renderer', 'ms', samples.map((run) => run.segmentSubmitToRendererMs), 'qcloud_stt_end_to_end_not_recorded'),
+    );
+  }
+
   for (const report of longMeetingReports) {
     const duration = report.configuration?.durationMinutes ?? 30;
     const prefix = `meeting.${duration}m`;
@@ -104,7 +114,7 @@ function metricFromSamples(id, unit, samples, blockedReason) {
 
 function parseArgs(argv) {
   const options = {
-    telemetry: [], longMeeting: [], coldStart: [], stt: [], dynamicAction: [], qcloudRealtime: [], qcloudSummary: [],
+    telemetry: [], longMeeting: [], coldStart: [], stt: [], dynamicAction: [], qcloudRealtime: [], qcloudSummary: [], qcloudSttRenderer: [],
   };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
@@ -116,6 +126,7 @@ function parseArgs(argv) {
     else if (flag === '--dynamic-action' && value) { options.dynamicAction.push(value); index += 1; }
     else if (flag === '--qcloud-realtime' && value) { options.qcloudRealtime.push(value); index += 1; }
     else if (flag === '--qcloud-summary' && value) { options.qcloudSummary.push(value); index += 1; }
+    else if (flag === '--qcloud-stt-renderer' && value) { options.qcloudSttRenderer.push(value); index += 1; }
     else if (flag === '--output' && value) { options.output = value; index += 1; }
     else if (flag === '--markdown' && value) { options.markdown = value; index += 1; }
     else throw new Error(`Unknown or incomplete option: ${flag}`);
@@ -136,7 +147,7 @@ function readJson(filePath) {
 }
 
 export function runPerformanceBaseline({
-  telemetry = [], longMeeting = [], coldStart = [], stt = [], dynamicAction = [], qcloudRealtime = [], qcloudSummary = [], ...options
+  telemetry = [], longMeeting = [], coldStart = [], stt = [], dynamicAction = [], qcloudRealtime = [], qcloudSummary = [], qcloudSttRenderer = [], ...options
 }) {
   const report = buildPerformanceBaselineReport({
     environment: {
@@ -160,6 +171,7 @@ export function runPerformanceBaseline({
       dynamicActionReports: dynamicAction.map(readJson),
       qcloudRealtimeReports: qcloudRealtime.map(readJson),
       qcloudSummaryReports: qcloudSummary.map(readJson),
+      qcloudSttRendererReports: qcloudSttRenderer.map(readJson),
     }),
   });
   fs.mkdirSync(path.dirname(options.output), { recursive: true });

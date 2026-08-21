@@ -418,7 +418,7 @@ function parseArgs(argv) {
   return opts;
 }
 
-function buildClip(inputPath, opts) {
+export function buildClip(inputPath, opts) {
   const outputPath = path.join(os.tmpdir(), `${opts.entry}-benchmark-${Date.now()}-${process.pid}.wav`);
   const ffmpegArgs = [
     '-y',
@@ -885,7 +885,7 @@ async function importAucClient() {
   return import(pathToFileURL(aucClientPath).href);
 }
 
-async function transcribeClipWithQcloud({ clipPath, entry, opts, apiKey }) {
+export async function transcribeClipWithQcloud({ clipPath, entry, opts, apiKey }) {
   const constantsPath = path.join(root, 'dist-electron/electron/llm/QCloudLlmConstants.js');
   if (!fs.existsSync(constantsPath)) {
     throw new Error('Missing dist-electron QCLOUD constants. Run npm run build:electron first.');
