@@ -519,7 +519,12 @@ export class ModesManager {
      * we fall back to the existing sync lexical path so the answer flow
      * never breaks. Telemetry distinguishes hybrid hits from lexical fallback.
      */
-    public async buildRetrievedActiveModeContextBlockHybrid(query: string, transcript?: string, tokenBudget?: number): Promise<string> {
+    public async buildRetrievedActiveModeContextBlockHybrid(
+        query: string,
+        transcript?: string,
+        tokenBudget?: number,
+        telemetryMetadata?: { benchmarkRunId?: string },
+    ): Promise<string> {
         const mode = this.getActiveMode();
         if (!mode) return '';
         const files = this.getReferenceFiles(mode.id);
@@ -536,7 +541,12 @@ export class ModesManager {
                     name: 'rag_query',
                     modeId: mode.id,
                     durationMs: performance.now() - ragStartedAt,
-                    properties: { modeTemplateType: mode.templateType, fileCount: files.length, hasTranscript: Boolean(transcript) },
+                    properties: {
+                        modeTemplateType: mode.templateType,
+                        fileCount: files.length,
+                        hasTranscript: Boolean(transcript),
+                        ...(telemetryMetadata?.benchmarkRunId ? { benchmarkRunId: telemetryMetadata.benchmarkRunId } : {}),
+                    },
                 });
             } catch { /* non-fatal */ }
         };

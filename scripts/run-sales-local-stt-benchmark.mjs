@@ -187,6 +187,7 @@ function parseArgs(argv) {
     includePrivateText: false,
     prepareOnly: false,
     preparedOutputDir: '',
+    reportOutput: '',
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -330,6 +331,10 @@ function parseArgs(argv) {
     }
     if (arg === '--prepared-output-dir') {
       opts.preparedOutputDir = String(argv[++index] ?? '');
+      continue;
+    }
+    if (arg === '--report-output') {
+      opts.reportOutput = String(argv[++index] ?? '');
       continue;
     }
     throw new Error(`Unknown option: ${arg}`);
@@ -1781,6 +1786,7 @@ function buildInvalidReferenceReport({ opts, referenceWindow, audioDurationSec }
 }
 
 function reportOutputPath(opts) {
+  if (opts.reportOutput) return path.resolve(root, opts.reportOutput);
   const parts = [
     opts.entry,
     opts.provider,

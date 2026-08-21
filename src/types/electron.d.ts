@@ -865,6 +865,10 @@ export interface ElectronAPI {
   endMeeting: () => Promise<{ success: boolean; error?: string }>
   // @ipc-channel benchmark:inject-transcript
   benchmarkInjectTranscript: (payload: NativeAudioTranscriptPayload) => Promise<{ success: true }>
+  // @ipc-channel benchmark:prepare-rag
+  benchmarkPrepareRag: (input: { fileName: string; content: string }) => Promise<{ success: true }>
+  // @ipc-channel benchmark:run-rag-query
+  benchmarkRunRagQuery: (input: { query: string; transcript?: string; runId?: string }) => Promise<{ success: true; hasContext: boolean }>
   // @ipc-channel benchmark:get-runtime-snapshot
   benchmarkGetRuntimeSnapshot: (input: {
     elapsedMs: number

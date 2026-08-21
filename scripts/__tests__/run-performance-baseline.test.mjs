@@ -31,6 +31,27 @@ test('maps redacted telemetry and long-meeting samples into baseline metrics', (
   assert.equal(metrics.find((metric) => metric.id === 'app.cold-start').blockedReason, 'cold_start_runner_not_configured');
 });
 
+test('ingests QCloud benchmark reports without response text or keys', () => {
+  const metrics = buildMetricInputs({
+    coldStartReports: [{ runs: [{ readyMs: 900, errorCode: null }] }],
+    sttReports: [{ runs: [{ audioToFinalMs: 1100, errorCode: null }] }],
+    dynamicActionReports: [{ runs: [{ finalTranscriptToCardShownMs: 420, errorCode: null }] }],
+    qcloudRealtimeReports: [{
+      runs: [{ firstTokenMs: 300, completedMs: 700, errorCode: null }],
+    }],
+    qcloudSummaryReports: [{
+      runs: [{ variant: 'after', completedMs: 1500, generationStatus: 'success' }],
+    }],
+  });
+
+  assert.deepEqual(metrics.find((metric) => metric.id === 'app.cold-start').samples, [900]);
+  assert.deepEqual(metrics.find((metric) => metric.id === 'stt.audio-to-final').samples, [1100]);
+  assert.deepEqual(metrics.find((metric) => metric.id === 'dynamic-action.final-transcript-to-card').samples, [420]);
+  assert.deepEqual(metrics.find((metric) => metric.id === 'llm.first-token').samples, [300]);
+  assert.deepEqual(metrics.find((metric) => metric.id === 'llm.completed').samples, [700]);
+  assert.deepEqual(metrics.find((metric) => metric.id === 'meeting.summary').samples, [1500]);
+});
+
 test('writes JSON and Markdown reports under the requested local directory', () => {
   const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'performance-baseline-'));
   const jsonPath = path.join(outputDir, 'report.json');

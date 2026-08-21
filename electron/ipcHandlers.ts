@@ -3209,6 +3209,32 @@ export function initializeIpcHandlers(appState: AppState): void {
     return appState.injectBenchmarkTranscript(payload);
   });
 
+  safeHandle('benchmark:prepare-rag', (_event, input: { fileName?: string; content?: string }) => {
+    assertLongMeetingBenchmarkEnabled();
+    if (!input?.fileName || !input?.content?.trim()) throw new Error('Invalid RAG benchmark fixture');
+    const { ModesManager } = require('./services/ModesManager');
+    const manager = ModesManager.getInstance();
+    manager.ensureSeeded();
+    const mode = manager.getModes().find((item: any) => item.templateType === 'sales');
+    if (!mode) throw new Error('Sales mode unavailable for RAG benchmark');
+    manager.setActiveMode(mode.id);
+    manager.addReferenceFile({ modeId: mode.id, fileName: input.fileName, content: input.content });
+    return { success: true };
+  });
+
+  safeHandle('benchmark:run-rag-query', async (_event, input: { query?: string; transcript?: string; runId?: string }) => {
+    assertLongMeetingBenchmarkEnabled();
+    if (!input?.query?.trim()) throw new Error('Invalid RAG benchmark query');
+    const { ModesManager } = require('./services/ModesManager');
+    const context = await ModesManager.getInstance().buildRetrievedActiveModeContextBlockHybrid(
+      input.query,
+      input.transcript,
+      1_800,
+      { benchmarkRunId: input.runId },
+    );
+    return { success: true, hasContext: Boolean(context) };
+  });
+
   safeHandle('benchmark:get-runtime-snapshot', (_event, input) => {
     assertLongMeetingBenchmarkEnabled();
     return appState.getLongMeetingRuntimeSnapshot(input);

@@ -17,7 +17,15 @@ const METRICS = [
   ['meeting.summary', 'ms', 'post_call_summary_latency_not_recorded'],
 ];
 
-export function buildMetricInputs({ telemetryRecords = [], longMeetingReports = [] }) {
+export function buildMetricInputs({
+  telemetryRecords = [],
+  longMeetingReports = [],
+  coldStartReports = [],
+  sttReports = [],
+  dynamicActionReports = [],
+  qcloudRealtimeReports = [],
+  qcloudSummaryReports = [],
+}) {
   const metrics = METRICS.map(([id, unit, blockedReason]) => ({ id, unit, samples: [], blockedReason }));
   const byId = new Map(metrics.map((metric) => [metric.id, metric]));
   const add = (id, record, predicate = () => true) => {
@@ -36,6 +44,42 @@ export function buildMetricInputs({ telemetryRecords = [], longMeetingReports = 
     add('llm.completed', record, (item) => item.name === 'llm_completed');
     add('rag.query', record, (item) => item.name === 'rag_query');
     add('meeting.summary', record, (item) => item.name === 'post_call_summary_completed');
+  }
+
+  for (const report of coldStartReports) {
+    for (const run of report.runs ?? []) {
+      if (run.errorCode == null && Number.isFinite(run.readyMs)) byId.get('app.cold-start').samples.push(run.readyMs);
+    }
+  }
+
+  for (const report of sttReports) {
+    for (const run of report.runs ?? []) {
+      if (run.errorCode == null && Number.isFinite(run.audioToFinalMs)) byId.get('stt.audio-to-final').samples.push(run.audioToFinalMs);
+    }
+  }
+
+  for (const report of dynamicActionReports) {
+    for (const run of report.runs ?? []) {
+      if (run.errorCode == null && Number.isFinite(run.finalTranscriptToCardShownMs)) {
+        byId.get('dynamic-action.final-transcript-to-card').samples.push(run.finalTranscriptToCardShownMs);
+      }
+    }
+  }
+
+  for (const report of qcloudRealtimeReports) {
+    for (const run of report.runs ?? []) {
+      if (run.errorCode !== null && run.errorCode !== undefined) continue;
+      if (Number.isFinite(run.firstTokenMs)) byId.get('llm.first-token').samples.push(run.firstTokenMs);
+      if (Number.isFinite(run.completedMs)) byId.get('llm.completed').samples.push(run.completedMs);
+    }
+  }
+
+  for (const report of qcloudSummaryReports) {
+    for (const run of report.runs ?? []) {
+      if (run.variant === 'after' && run.generationStatus === 'success' && Number.isFinite(run.completedMs)) {
+        byId.get('meeting.summary').samples.push(run.completedMs);
+      }
+    }
   }
 
   for (const report of longMeetingReports) {
@@ -59,12 +103,19 @@ function metricFromSamples(id, unit, samples, blockedReason) {
 }
 
 function parseArgs(argv) {
-  const options = { telemetry: [], longMeeting: [] };
+  const options = {
+    telemetry: [], longMeeting: [], coldStart: [], stt: [], dynamicAction: [], qcloudRealtime: [], qcloudSummary: [],
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = argv[index + 1];
     if (flag === '--telemetry' && value) { options.telemetry.push(value); index += 1; }
     else if (flag === '--long-meeting' && value) { options.longMeeting.push(value); index += 1; }
+    else if (flag === '--cold-start' && value) { options.coldStart.push(value); index += 1; }
+    else if (flag === '--stt' && value) { options.stt.push(value); index += 1; }
+    else if (flag === '--dynamic-action' && value) { options.dynamicAction.push(value); index += 1; }
+    else if (flag === '--qcloud-realtime' && value) { options.qcloudRealtime.push(value); index += 1; }
+    else if (flag === '--qcloud-summary' && value) { options.qcloudSummary.push(value); index += 1; }
     else if (flag === '--output' && value) { options.output = value; index += 1; }
     else if (flag === '--markdown' && value) { options.markdown = value; index += 1; }
     else throw new Error(`Unknown or incomplete option: ${flag}`);
@@ -84,7 +135,9 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
-export function runPerformanceBaseline(options) {
+export function runPerformanceBaseline({
+  telemetry = [], longMeeting = [], coldStart = [], stt = [], dynamicAction = [], qcloudRealtime = [], qcloudSummary = [], ...options
+}) {
   const report = buildPerformanceBaselineReport({
     environment: {
       platform: process.platform,
@@ -100,8 +153,13 @@ export function runPerformanceBaseline(options) {
       provider: 'natively-qcloud',
     },
     metrics: buildMetricInputs({
-      telemetryRecords: options.telemetry.flatMap(readTelemetry),
-      longMeetingReports: options.longMeeting.map(readJson),
+      telemetryRecords: telemetry.flatMap(readTelemetry),
+      longMeetingReports: longMeeting.map(readJson),
+      coldStartReports: coldStart.map(readJson),
+      sttReports: stt.map(readJson),
+      dynamicActionReports: dynamicAction.map(readJson),
+      qcloudRealtimeReports: qcloudRealtime.map(readJson),
+      qcloudSummaryReports: qcloudSummary.map(readJson),
     }),
   });
   fs.mkdirSync(path.dirname(options.output), { recursive: true });

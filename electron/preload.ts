@@ -450,6 +450,8 @@ interface ElectronAPI {
   benchmarkInjectTranscript: (
     payload: NativeAudioTranscriptPayload,
   ) => Promise<{ success: true }>;
+  benchmarkPrepareRag: (input: { fileName: string; content: string }) => Promise<{ success: true }>;
+  benchmarkRunRagQuery: (input: { query: string; transcript?: string; runId?: string }) => Promise<{ success: true; hasContext: boolean }>;
   benchmarkGetRuntimeSnapshot: (input: {
     elapsedMs: number;
     phase: LongMeetingBenchmarkPhase;
@@ -1608,6 +1610,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   endMeeting: () => ipcRenderer.invoke('end-meeting'),
   benchmarkInjectTranscript: (payload: NativeAudioTranscriptPayload) =>
     ipcRenderer.invoke('benchmark:inject-transcript', payload),
+  benchmarkPrepareRag: (input: { fileName: string; content: string }) =>
+    ipcRenderer.invoke('benchmark:prepare-rag', input),
+  benchmarkRunRagQuery: (input: { query: string; transcript?: string; runId?: string }) =>
+    ipcRenderer.invoke('benchmark:run-rag-query', input),
   benchmarkGetRuntimeSnapshot: (input: {
     elapsedMs: number;
     phase: LongMeetingBenchmarkPhase;
