@@ -42,6 +42,7 @@ test('parses required matrix paths and rejects an unsupported machine label', ()
   assert.equal(options.audio, '/tmp/audio.wav');
   assert.equal(options.reference, '/tmp/reference.docx');
   assert.equal(options.outputDir, '/tmp/qcloud-diagnostics');
+  assert.equal(options.startSeconds, 3083);
   assert.throws(() => parseMatrixArgs(['--machine', 'intel']), /invalid_machine/);
 });
 

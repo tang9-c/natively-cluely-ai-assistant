@@ -18,7 +18,13 @@ const QUALITY_THRESHOLDS = { characterErrorRate: 0.35, keywordRecall: 0.75, leng
 const CURRENT_DEFAULTS = { poll: 'poll-2000', segment: 'segment-10', vad: 'vad-qcloud-current' };
 
 export function parseMatrixArgs(argv) {
-  const options = { machine: 'm4-16gb', audio: null, reference: null, outputDir: null };
+  const options = {
+    machine: 'm4-16gb',
+    audio: null,
+    reference: null,
+    outputDir: null,
+    startSeconds: 3083,
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = argv[index + 1];
@@ -27,10 +33,12 @@ export function parseMatrixArgs(argv) {
     else if (flag === '--audio') options.audio = value;
     else if (flag === '--reference') options.reference = value;
     else if (flag === '--output-dir') options.outputDir = value;
+    else if (flag === '--start-seconds') options.startSeconds = Number(value);
     else throw new Error('unknown_option');
     index += 1;
   }
   if (options.machine !== 'm4-16gb') throw new Error('invalid_machine');
+  if (!Number.isFinite(options.startSeconds) || options.startSeconds < 0) throw new Error('invalid_start_seconds');
   return options;
 }
 
@@ -220,6 +228,7 @@ async function collectWithChild(options, cell, missing) {
     '--output', temporary,
     '--audio', options.audio,
     '--reference', options.reference,
+    '--start-seconds', String(options.startSeconds),
     '--segment-seconds', String(cell.segmentSeconds),
     '--poll-interval-ms', String(cell.pollIntervalMs),
     '--parameter-group', cell.parameterGroup,
