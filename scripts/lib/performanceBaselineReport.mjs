@@ -43,7 +43,7 @@ export function buildPerformanceBaselineReport({ environment = {}, configuration
   const statuses = Object.values(scenarios).map((scenario) => scenario.status);
   return {
     schemaVersion: 1,
-    status: statuses.includes('failed') ? 'failed' : 'completed',
+    status: statuses.includes('failed') ? 'failed' : (statuses.includes('blocked') ? 'blocked' : 'completed'),
     generatedAt: new Date().toISOString(),
     environment: sanitize(environment),
     configuration: sanitize(configuration),

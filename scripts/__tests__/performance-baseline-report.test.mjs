@@ -36,6 +36,7 @@ test('marks metrics with no valid samples as blocked instead of inventing a valu
     failures: 0,
     blockedReason: 'missing_credentials',
   });
+  assert.equal(report.status, 'blocked');
 });
 
 test('removes sensitive values from environment and metric metadata', () => {
