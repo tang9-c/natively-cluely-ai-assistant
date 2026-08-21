@@ -11,6 +11,22 @@ export type DoubaoAucPost = (
     options: { headers: Record<string, string>; timeout: number }
 ) => Promise<DoubaoAucHttpResponse>;
 
+export type QCloudAucPhase =
+    | 'submit_started'
+    | 'submit_completed'
+    | 'poll_started'
+    | 'poll_completed'
+    | 'task_completed'
+    | 'result_parsed';
+
+export interface QCloudAucPhaseEvent {
+    phase: QCloudAucPhase;
+    atMs: number;
+    attempt?: number;
+    taskStatus?: string;
+    durationMs?: number;
+}
+
 export interface DoubaoAucTranscribeOptions {
     submitEndpoint: string;
     queryEndpoint: string;
@@ -41,6 +57,8 @@ export interface NewApiDoubaoAucMultipartOptions {
     submitTimeoutMs?: number;
     queryTimeoutMs?: number;
     logger?: Pick<Console, 'log'>;
+    onPhase?: (event: QCloudAucPhaseEvent) => void;
+    nowMs?: () => number;
 }
 
 export interface DoubaoAucUtterance {
@@ -219,6 +237,14 @@ export function extractDoubaoAucTranscriptionJson(data: any): string {
 export async function transcribeNewApiDoubaoAucMultipartFile(
     options: NewApiDoubaoAucMultipartOptions,
 ): Promise<string> {
+    const nowMs = options.nowMs ?? (() => performance.now());
+    const emitPhase = (event: Omit<QCloudAucPhaseEvent, 'atMs'> & { atMs?: number }): void => {
+        try {
+            options.onPhase?.({ ...event, atMs: event.atMs ?? nowMs() });
+        } catch {
+            // Diagnostics must never affect transcription behavior.
+        }
+    };
     const form = new FormData();
     form.append('file', options.audioBuffer, {
         filename: options.filename,
@@ -228,12 +254,20 @@ export async function transcribeNewApiDoubaoAucMultipartFile(
         form.append(key, value);
     }
 
+    const submitStartedAt = nowMs();
+    emitPhase({ phase: 'submit_started', atMs: submitStartedAt });
     const submitResponse = await options.post(options.submitEndpoint, form, {
         headers: {
             ...options.authHeader,
             ...form.getHeaders(),
         },
         timeout: options.submitTimeoutMs ?? 30000,
+    });
+    const submitCompletedAt = nowMs();
+    emitPhase({
+        phase: 'submit_completed',
+        atMs: submitCompletedAt,
+        durationMs: submitCompletedAt - submitStartedAt,
     });
 
     const taskId = submitResponse.data?.task_id;
@@ -245,6 +279,8 @@ export async function transcribeNewApiDoubaoAucMultipartFile(
     const maxAttempts = options.maxAttempts ?? 60;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
         if (attempt > 0 && pollIntervalMs > 0) await wait(pollIntervalMs);
+        const pollStartedAt = nowMs();
+        emitPhase({ phase: 'poll_started', atMs: pollStartedAt, attempt: attempt + 1 });
         const queryResponse = await options.post(options.queryEndpoint, { task_id: taskId }, {
             headers: {
                 ...options.authHeader,
@@ -254,12 +290,33 @@ export async function transcribeNewApiDoubaoAucMultipartFile(
         });
 
         const statusCode = String(queryResponse.data?.status_code || '');
+        const pollCompletedAt = nowMs();
+        emitPhase({
+            phase: 'poll_completed',
+            atMs: pollCompletedAt,
+            attempt: attempt + 1,
+            taskStatus: statusCode,
+            durationMs: pollCompletedAt - pollStartedAt,
+        });
         options.logger?.log('[RestSTT] QCLOUD API AUC query status:', {
             attempt: attempt + 1,
             statusCode,
         });
         if (statusCode === AUC_STATUS_OK || statusCode === AUC_STATUS_SILENT) {
-            return options.extractTranscript(queryResponse.data);
+            emitPhase({
+                phase: 'task_completed',
+                attempt: attempt + 1,
+                taskStatus: statusCode,
+            });
+            const parseStartedAt = nowMs();
+            const transcript = options.extractTranscript(queryResponse.data);
+            const parseCompletedAt = nowMs();
+            emitPhase({
+                phase: 'result_parsed',
+                atMs: parseCompletedAt,
+                durationMs: parseCompletedAt - parseStartedAt,
+            });
+            return transcript;
         }
         if (!AUC_STATUS_PROCESSING.has(statusCode)) {
             throw new Error(`QCLOUD API AUC task failed with status: ${statusCode || 'unknown'}`);
