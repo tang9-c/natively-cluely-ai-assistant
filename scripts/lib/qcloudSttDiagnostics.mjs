@@ -29,6 +29,8 @@ const FAILURE_STAGE_MAP = new Map([
   ['renderer_timeout', 'renderer_timeout'],
   ['quality', 'quality_rejected'],
   ['quality_rejected', 'quality_rejected'],
+  ['runner', 'runner_failed'],
+  ['runner_failed', 'runner_failed'],
 ]);
 
 function finiteNonNegative(values) {

@@ -36,6 +36,7 @@
     "benchmark:cold-start": "node scripts/benchmark-cold-start.mjs",
     "benchmark:dynamic-action": "node scripts/benchmark-qcloud-dynamic-action.mjs",
     "benchmark:qcloud-stt-renderer": "node scripts/benchmark-qcloud-stt-renderer.mjs",
+    "perf:qcloud-stt-diagnostics": "node scripts/run-qcloud-stt-diagnostics-matrix.mjs",
     "benchmark:rag": "node scripts/benchmark-rag-query.mjs",
     "benchmark:stt": "node scripts/benchmark-stt-samples.mjs",
     "test:bench:long-meeting": "npm run build && npm run build:electron && node --test scripts/__tests__/benchmark-long-meeting-memory.test.mjs",
