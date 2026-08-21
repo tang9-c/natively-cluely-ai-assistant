@@ -101,6 +101,15 @@ describe('Phase 6 — TelemetryService production emission sites', () => {
     assert.match(persistenceFailureBlock, /failureStage:\s*['"]persistence['"]/);
   });
 
+  test('ModesManager records RAG query duration without including query text', () => {
+    const src = read('electron/services/ModesManager.ts');
+    const start = src.indexOf('public async buildRetrievedActiveModeContextBlockHybrid');
+    const block = src.slice(start, start + 3200);
+    assert.match(block, /const ragStartedAt = performance\.now\(\)/);
+    assert.match(block, /name:\s*'rag_query'[\s\S]{0,500}durationMs:/);
+    assert.doesNotMatch(block, /properties:\s*\{[^}]*query\b/);
+  });
+
   test('telemetry calls are wrapped in try/catch (must never break app)', () => {
     // Look for the four known sites and ensure each is bracketed by try { ... } catch
     const files = [

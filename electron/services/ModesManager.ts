@@ -528,14 +528,18 @@ export class ModesManager {
         let usedHybrid = false;
         let usedFallback = false;
         let chunkCount = 0;
-        try {
-            const { telemetryService } = require('./telemetry/TelemetryService');
-            telemetryService.track({
-                name: 'rag_query',
-                modeId: mode.id,
-                properties: { modeTemplateType: mode.templateType, fileCount: files.length, hasTranscript: Boolean(transcript) },
-            });
-        } catch { /* non-fatal */ }
+        const ragStartedAt = performance.now();
+        const trackRagQuery = () => {
+            try {
+                const { telemetryService } = require('./telemetry/TelemetryService');
+                telemetryService.track({
+                    name: 'rag_query',
+                    modeId: mode.id,
+                    durationMs: performance.now() - ragStartedAt,
+                    properties: { modeTemplateType: mode.templateType, fileCount: files.length, hasTranscript: Boolean(transcript) },
+                });
+            } catch { /* non-fatal */ }
+        };
 
         try {
             const result = await this.modeContextRetriever.retrieveHybrid(mode, files, {
@@ -547,6 +551,7 @@ export class ModesManager {
             usedFallback = result.usedFallback;
             chunkCount = result.chunks?.length ?? 0;
             if (result.formattedContext) {
+                trackRagQuery();
                 try {
                     const { telemetryService } = require('./telemetry/TelemetryService');
                     telemetryService.track({
@@ -563,6 +568,7 @@ export class ModesManager {
         }
 
         const lexical = this.buildRetrievedActiveModeContextBlock(query, transcript, tokenBudget);
+        trackRagQuery();
         try {
             const { telemetryService } = require('./telemetry/TelemetryService');
             telemetryService.track({

@@ -1,0 +1,43 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import test from 'node:test';
+
+import { buildMetricInputs, runPerformanceBaseline } from '../run-performance-baseline.mjs';
+
+test('maps redacted telemetry and long-meeting samples into baseline metrics', () => {
+  const metrics = buildMetricInputs({
+    telemetryRecords: [
+      { name: 'llm_first_token_latency', durationMs: 110, properties: {} },
+      { name: 'llm_completed', durationMs: 240, properties: {} },
+      { name: 'dynamic_action_shown', durationMs: 85, properties: { latencyKind: 'final_transcript_to_card_shown' } },
+      { name: 'post_call_summary_completed', durationMs: 500, properties: {} },
+    ],
+    longMeetingReports: [{
+      samples: [
+        { main: { cpuPercent: 10, rssBytes: 1000 }, renderer: { updateCount: 4, longTaskCount: 1 }, files: { databaseBytes: 50 } },
+        { main: { cpuPercent: 20, rssBytes: 1200 }, renderer: { updateCount: 7, longTaskCount: 2 }, files: { databaseBytes: 70 } },
+      ],
+    }],
+  });
+
+  assert.deepEqual(metrics.find((metric) => metric.id === 'llm.first-token').samples, [110]);
+  assert.deepEqual(metrics.find((metric) => metric.id === 'dynamic-action.final-transcript-to-card').samples, [85]);
+  assert.deepEqual(metrics.find((metric) => metric.id === 'meeting.summary').samples, [500]);
+  assert.deepEqual(metrics.find((metric) => metric.id === 'meeting.30m.cpu').samples, [10, 20]);
+  assert.deepEqual(metrics.find((metric) => metric.id === 'meeting.30m.database-size').samples, [50, 70]);
+  assert.equal(metrics.find((metric) => metric.id === 'app.cold-start').status, undefined);
+  assert.equal(metrics.find((metric) => metric.id === 'app.cold-start').blockedReason, 'cold_start_runner_not_configured');
+});
+
+test('writes JSON and Markdown reports under the requested local directory', () => {
+  const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'performance-baseline-'));
+  const jsonPath = path.join(outputDir, 'report.json');
+  const markdownPath = path.join(outputDir, 'report.md');
+
+  runPerformanceBaseline({ telemetry: [], longMeeting: [], output: jsonPath, markdown: markdownPath });
+
+  assert.equal(JSON.parse(fs.readFileSync(jsonPath, 'utf8')).schemaVersion, 1);
+  assert.match(fs.readFileSync(markdownPath, 'utf8'), /性能基线报告/);
+});
