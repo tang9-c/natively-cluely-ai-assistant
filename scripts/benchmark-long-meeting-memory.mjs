@@ -170,7 +170,11 @@ function startSenseVoiceWorker(options) {
       CUEUP_BENCHMARK_DURATION_MS: String(options.durationMinutes * 60_000),
       CUEUP_BENCHMARK_SAMPLE_INTERVAL_MS: String(options.sampleIntervalMs),
     },
-    stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+  });
+  let workerStderr = '';
+  child.stderr?.on('data', (chunk) => {
+    workerStderr = `${workerStderr}${chunk}`.slice(-4_000);
   });
   let latestSample = null;
   let audioHashPrefix = null;
@@ -194,9 +198,11 @@ function startSenseVoiceWorker(options) {
       doneReject(error);
     }
   });
-  child.once('exit', (code) => {
+  child.once('exit', (code, signal) => {
     if (code !== 0) {
-      const error = new Error(`sensevoice_worker_exit_${code}`);
+      const diagnostics = workerStderr.trim();
+      const suffix = diagnostics ? `:${diagnostics}` : '';
+      const error = new Error(`sensevoice_worker_exit_${code ?? 'null'}_${signal ?? 'none'}${suffix}`);
       readyReject(error);
       doneReject(error);
     }
