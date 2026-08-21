@@ -4,7 +4,11 @@ import test from 'node:test';
 
 import {
   atomicWriteReport,
+  buildCollectionPlan,
   decideScenarioAction,
+  executeCollectionPlan,
+  inspectBaselineMachine,
+  inspectScenarioCredentials,
   mergeScenarioReports,
   readScenarioReport,
   createScenarioManifest,
@@ -277,3 +281,111 @@ function longMeetingReport(durationMinutes) {
     }],
   };
 }
+
+test('accepts only Apple M4 machines in the 15-17 GiB memory range', () => {
+  const gib = 1024 ** 3;
+  assert.deepEqual(inspectBaselineMachine({
+    cpus: () => [{ model: 'Apple M4' }],
+    totalmem: () => 16 * gib,
+  }), { valid: true, cpuModel: 'Apple M4', memoryBytes: 16 * gib, stageCode: null });
+  assert.equal(inspectBaselineMachine({ cpus: () => [{ model: 'Intel Core i9' }], totalmem: () => 16 * gib }).stageCode, 'preflight_machine_mismatch');
+  assert.equal(inspectBaselineMachine({ cpus: () => [{ model: 'Apple M4' }], totalmem: () => 8 * gib }).stageCode, 'preflight_machine_mismatch');
+  assert.equal(inspectBaselineMachine({ cpus: () => [{ model: 'Apple M4' }], totalmem: () => 18 * gib }).stageCode, 'preflight_machine_mismatch');
+});
+
+test('checks credential presence without returning secret values', () => {
+  const manifest = createScenarioManifest({ rootDir, mode: 'full' });
+  const result = inspectScenarioCredentials(manifest, {
+    QCLOUD_LIVE_API_KEY: 'super-secret-value',
+    STT_BENCHMARK_ENTRY: 'sales-real-001',
+    LONG_MEETING_AUDIO: '/audio.wav',
+    SENSEVOICE_MODEL_PATH: '/model.onnx',
+  });
+  assert.equal(result.valid, false);
+  assert.equal(result.stageCode, 'preflight_credentials_missing');
+  assert.deepEqual(result.missing, [{ scenarioId: 'long-meeting', variables: ['SENSEVOICE_TOKENS_PATH'] }]);
+  assert.equal(JSON.stringify(result).includes('super-secret-value'), false);
+});
+
+test('builds a collection plan only for missing scenarios and tops up on resume', () => {
+  const manifest = createScenarioManifest({ rootDir, mode: 'full' });
+  const validations = Object.fromEntries(manifest.map((definition, index) => [definition.id, {
+    valid: index < 2,
+    validSamples: index < 2 ? (Array.isArray(definition.target) ? 2 : 30) : (definition.id === 'rag' ? 12 : 0),
+  }]));
+  const plan = buildCollectionPlan(manifest, validations, {
+    mode: 'full', resume: true, only: null, randomId: () => 'fixed',
+  });
+
+  assert.equal(plan.filter(({ type }) => type === 'build').length, 1);
+  assert.equal(plan.filter(({ type }) => type === 'vite').length, 1);
+  assert.equal(plan.some(({ scenarioId }) => scenarioId === 'cold-start'), false);
+  assert.equal(plan.some(({ scenarioId }) => scenarioId === 'stt'), false);
+  const rag = plan.find(({ scenarioId }) => scenarioId === 'rag');
+  assert.equal(rag.env.RAG_BENCHMARK_RUNS, '18');
+  assert.match(rag.outputPath, /\.rag-30\.jsonl\.fixed\.tmp$/);
+  const longSteps = plan.filter(({ scenarioId }) => scenarioId === 'long-meeting');
+  assert.deepEqual(longSteps.map(({ durationMinutes }) => durationMinutes), [30, 60]);
+  assert.equal(longSteps[0].args.includes('sensevoice-audio'), true);
+  assert.equal(longSteps[0].args.includes('--audio'), true);
+  assert.equal(longSteps[0].args.includes('--model'), true);
+  assert.equal(longSteps[0].args.includes('--tokens'), true);
+});
+
+test('default collection reruns a full target while quick-only narrows the plan', () => {
+  const manifest = createScenarioManifest({ rootDir, mode: 'full' });
+  const validations = Object.fromEntries(manifest.map((definition) => [definition.id, { valid: false, validSamples: 12 }]));
+  const fullPlan = buildCollectionPlan(manifest, validations, {
+    mode: 'full', resume: false, only: ['rag'], randomId: () => 'fixed',
+  });
+  assert.deepEqual(fullPlan.filter(({ type }) => type === 'collector').map(({ scenarioId }) => scenarioId), ['rag']);
+  assert.equal(fullPlan.find(({ scenarioId }) => scenarioId === 'rag').env.RAG_BENCHMARK_RUNS, '30');
+
+  const quickManifest = createScenarioManifest({ rootDir, mode: 'quick' });
+  const quickPlan = buildCollectionPlan(quickManifest, {}, {
+    mode: 'quick', resume: false, only: ['rag', 'long-meeting'], randomId: () => 'fixed',
+  });
+  assert.deepEqual(quickPlan.filter(({ type }) => type === 'collector').map(({ scenarioId }) => scenarioId), ['rag']);
+  assert.equal(quickPlan.find(({ scenarioId }) => scenarioId === 'rag').env.RAG_BENCHMARK_RUNS, '1');
+});
+
+test('executes build, Vite, and collectors serially and stops owned Vite', async () => {
+  let active = 0;
+  let maxActive = 0;
+  const calls = [];
+  const plan = [
+    { type: 'build', command: 'npm', args: ['run', 'build:electron'], stageCode: 'build_failed' },
+    { type: 'vite', command: 'npm', args: ['run', 'dev'], stageCode: 'vite_start_failed' },
+    { type: 'collector', scenarioId: 'rag', command: 'node', args: ['rag'], stageCode: 'collector_rag_failed' },
+    { type: 'collector', scenarioId: 'llm', command: 'node', args: ['llm'], stageCode: 'collector_llm_failed' },
+  ];
+  const result = await executeCollectionPlan(plan, {
+    runProcess: async (_command, args) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      calls.push(args.at(-1));
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return { code: 0 };
+    },
+    startVite: async () => ({ owned: true, process: { pid: 123 } }),
+    stopVite: async (service) => calls.push(`stop-${service.process.pid}`),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(maxActive, 1);
+  assert.deepEqual(calls, ['build:electron', 'rag', 'llm', 'stop-123']);
+});
+
+test('returns stable stage codes for process failure and interruption', async () => {
+  const failed = await executeCollectionPlan([
+    { type: 'collector', scenarioId: 'rag', command: 'node', args: ['rag'], stageCode: 'collector_rag_failed' },
+  ], { runProcess: async () => ({ code: 2 }) });
+  assert.deepEqual(failed, { ok: false, stageCode: 'collector_rag_failed', executions: [] });
+
+  const controller = new AbortController();
+  controller.abort();
+  const interrupted = await executeCollectionPlan([
+    { type: 'collector', scenarioId: 'rag', command: 'node', args: ['rag'], stageCode: 'collector_rag_failed' },
+  ], { signal: controller.signal, runProcess: async () => ({ code: 0 }) });
+  assert.deepEqual(interrupted, { ok: false, stageCode: 'collection_interrupted', executions: [] });
+});

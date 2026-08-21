@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 export const SCENARIO_IDS = Object.freeze([
@@ -113,6 +115,7 @@ export function createScenarioManifest({ rootDir, mode }) {
       aggregateFlags: ['--telemetry'],
       target: sampleTarget,
       countEnv: 'RAG_BENCHMARK_RUNS',
+      requiresBuild: true,
     }),
     scenario({
       id: 'summary',
@@ -147,6 +150,7 @@ export function createScenarioManifest({ rootDir, mode }) {
       excluded: quick,
       outputStyle: 'long-meeting',
       requiresBuild: true,
+      requiredEnv: ['LONG_MEETING_AUDIO', 'SENSEVOICE_MODEL_PATH', 'SENSEVOICE_TOKENS_PATH'],
     }),
   ];
 }
@@ -265,6 +269,215 @@ export function loadBaselineState(filePath, fileSystem = fs) {
 
 export async function writeBaselineState(filePath, state, fileSystem = fs.promises) {
   await atomicWriteReport(filePath, `${JSON.stringify(state, null, 2)}\n`, fileSystem);
+}
+
+export function inspectBaselineMachine(system = os) {
+  const cpuModel = system.cpus()[0]?.model ?? 'unknown';
+  const memoryBytes = system.totalmem();
+  const gib = 1024 ** 3;
+  const valid = /Apple M4\b/i.test(cpuModel) && memoryBytes >= 15 * gib && memoryBytes <= 17 * gib;
+  return {
+    valid,
+    cpuModel,
+    memoryBytes,
+    stageCode: valid ? null : 'preflight_machine_mismatch',
+  };
+}
+
+export function inspectScenarioCredentials(manifest, environment) {
+  const missing = [];
+  for (const definition of manifest.filter(({ excluded }) => !excluded)) {
+    const variables = definition.requiredEnv.filter((name) => !environment[name]?.trim());
+    for (const group of definition.requiredAnyEnv) {
+      if (!group.some((name) => environment[name]?.trim())) variables.push(...group);
+    }
+    if (variables.length > 0) missing.push({ scenarioId: definition.id, variables });
+  }
+  return {
+    valid: missing.length === 0,
+    stageCode: missing.length === 0 ? null : 'preflight_credentials_missing',
+    missing,
+  };
+}
+
+export function buildCollectionPlan(manifest, validations, options) {
+  const selected = new Set(options.only ?? manifest.map(({ id }) => id));
+  const definitions = manifest.filter(({ id, excluded }) => selected.has(id) && !excluded);
+  const collectors = [];
+  for (const definition of definitions) {
+    const validation = validations[definition.id] ?? { valid: false, validSamples: 0 };
+    if (validation.valid) continue;
+    const missing = Array.isArray(definition.target)
+      ? definition.target.length
+      : Math.max(1, definition.target - (options.resume ? validation.validSamples : 0));
+    if (definition.id === 'long-meeting') {
+      for (let index = 0; index < definition.target.length; index += 1) {
+        collectors.push(longMeetingCollectionStep(definition, index, options));
+      }
+      continue;
+    }
+    collectors.push(sampleCollectionStep(definition, missing, options));
+  }
+
+  if (collectors.length === 0) return [];
+  const plan = [];
+  if (collectors.some(({ definition }) => definition.requiresBuild)) {
+    plan.push({
+      type: 'build',
+      command: 'npm',
+      args: ['run', 'build:electron'],
+      stageCode: 'build_failed',
+    });
+    plan.push({
+      type: 'vite',
+      command: 'npm',
+      args: ['run', 'dev', '--', '--host', '127.0.0.1', '--port', '5180', '--strictPort'],
+      stageCode: 'vite_start_failed',
+    });
+  }
+  return [...plan, ...collectors.map(({ definition: _definition, ...step }) => step)];
+}
+
+export async function executeCollectionPlan(plan, dependencies = {}) {
+  const runProcess = dependencies.runProcess ?? defaultRunProcess;
+  const startVite = dependencies.startVite ?? defaultStartVite;
+  const stopVite = dependencies.stopVite ?? defaultStopVite;
+  const signal = dependencies.signal;
+  const executions = [];
+  let viteService = null;
+  try {
+    for (const step of plan) {
+      if (signal?.aborted) return { ok: false, stageCode: 'collection_interrupted', executions };
+      if (step.type === 'vite') {
+        try {
+          viteService = await startVite(step.command, step.args, { cwd: step.cwd, env: step.env, signal });
+        } catch {
+          return { ok: false, stageCode: step.stageCode, executions };
+        }
+        continue;
+      }
+      let result;
+      try {
+        result = await runProcess(step.command, step.args, {
+          cwd: step.cwd,
+          env: { ...process.env, ...step.env },
+          signal,
+        });
+      } catch {
+        result = { code: 1 };
+      }
+      if (signal?.aborted) return { ok: false, stageCode: 'collection_interrupted', executions };
+      if (result.code !== 0) return { ok: false, stageCode: step.stageCode, executions };
+      if (step.type === 'collector') {
+        executions.push({
+          scenarioId: step.scenarioId,
+          outputPath: step.outputPath,
+          ...(step.durationMinutes ? { durationMinutes: step.durationMinutes } : {}),
+        });
+      }
+    }
+    return { ok: true, stageCode: null, executions };
+  } finally {
+    if (viteService?.owned) await stopVite(viteService).catch(() => {});
+  }
+}
+
+function sampleCollectionStep(definition, missing, options) {
+  const outputPath = temporaryReportPath(definition.reportPaths[0], options.randomId);
+  const args = definition.outputStyle === 'flag'
+    ? [definition.runner, '--output', outputPath]
+    : [definition.runner, outputPath];
+  return {
+    definition,
+    type: 'collector',
+    scenarioId: definition.id,
+    command: process.execPath,
+    args,
+    env: { [definition.countEnv]: String(missing) },
+    outputPath,
+    reportPath: definition.reportPaths[0],
+    stageCode: `collector_${definition.id.replaceAll('-', '_')}_failed`,
+  };
+}
+
+function longMeetingCollectionStep(definition, index, options) {
+  const durationMinutes = definition.target[index];
+  const outputPath = temporaryReportPath(definition.reportPaths[index], options.randomId);
+  const markdownPath = outputPath.replace(/\.json\.([^.]+)\.tmp$/, '.md.$1.tmp');
+  const environment = options.env ?? process.env;
+  return {
+    definition,
+    type: 'collector',
+    scenarioId: definition.id,
+    durationMinutes,
+    command: process.execPath,
+    args: [
+      definition.runner,
+      '--source', 'sensevoice-audio',
+      '--audio', environment.LONG_MEETING_AUDIO ?? '',
+      '--model', environment.SENSEVOICE_MODEL_PATH ?? '',
+      '--tokens', environment.SENSEVOICE_TOKENS_PATH ?? '',
+      '--duration-minutes', String(durationMinutes),
+      '--json', outputPath,
+      '--markdown', markdownPath,
+    ],
+    env: {},
+    outputPath,
+    markdownPath,
+    reportPath: definition.reportPaths[index],
+    stageCode: `collector_long_meeting_${durationMinutes}m_failed`,
+  };
+}
+
+function temporaryReportPath(reportPath, randomId = () => `${process.pid}-${Date.now()}`) {
+  return path.join(path.dirname(reportPath), `.${path.basename(reportPath)}.${randomId()}.tmp`);
+}
+
+function defaultRunProcess(command, args, options) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: 'ignore',
+    });
+    const abort = () => child.kill('SIGTERM');
+    options.signal?.addEventListener('abort', abort, { once: true });
+    child.once('error', () => resolve({ code: 1 }));
+    child.once('exit', (code) => {
+      options.signal?.removeEventListener('abort', abort);
+      resolve({ code: code ?? 1 });
+    });
+  });
+}
+
+async function defaultStartVite(command, args, options) {
+  if (await isViteReady()) return { owned: false, process: null };
+  const child = spawn(command, args, {
+    cwd: options.cwd,
+    env: { ...process.env, ...options.env },
+    stdio: 'ignore',
+  });
+  const abort = () => child.kill('SIGTERM');
+  options.signal?.addEventListener('abort', abort, { once: true });
+  for (let attempt = 0; attempt < 150; attempt += 1) {
+    if (options.signal?.aborted || child.exitCode != null) break;
+    if (await isViteReady()) return { owned: true, process: child };
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  child.kill('SIGTERM');
+  throw new OrchestratorError(options.signal?.aborted ? 'collection_interrupted' : 'vite_start_failed');
+}
+
+async function defaultStopVite(service) {
+  service.process?.kill('SIGTERM');
+}
+
+async function isViteReady() {
+  try {
+    return (await fetch('http://127.0.0.1:5180')).ok;
+  } catch {
+    return false;
+  }
 }
 
 function extractScenarioSamples(definition, parsed) {
