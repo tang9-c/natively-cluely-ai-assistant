@@ -33,6 +33,8 @@
     "test:e2e:transcript-virtualization": "ELECTRON_E2E=1 npx playwright test tests/e2e/meeting-transcript-virtualization.spec.ts",
     "bench:long-meeting": "npm run build && npm run build:electron && node scripts/benchmark-long-meeting-memory.mjs",
     "benchmark:performance": "node scripts/run-performance-baseline.mjs",
+    "perf:baseline:all": "node scripts/run-all-performance-baselines.mjs",
+    "test:perf-baseline-orchestrator": "node --test scripts/__tests__/performance-baseline-orchestrator.test.mjs scripts/__tests__/run-performance-baseline.test.mjs",
     "benchmark:cold-start": "node scripts/benchmark-cold-start.mjs",
     "benchmark:dynamic-action": "node scripts/benchmark-qcloud-dynamic-action.mjs",
     "benchmark:qcloud-stt-renderer": "node scripts/benchmark-qcloud-stt-renderer.mjs",

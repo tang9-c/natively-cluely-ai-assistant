@@ -2,10 +2,10 @@
 
 ## 状态
 
-- 状态：待开发
+- 状态：已完成
 - 目标平台：Apple M4 / 16GB
-- 计划命令：`npm run perf:baseline:all`
-- 当前限制：该命令尚未加入 `package.json`，不可作为现成功能调用。
+- 命令：`npm run perf:baseline:all`
+- 当前行为：完整模式复用通过 schema、机器、样本数、采样器哈希、独立复算和隐私检查的已有报告，只补采缺失或失效场景。统一报告会明确记录 `reused`、`collected`、`resumed` 或 `excluded`，复用不冒充本次新实测。
 
 ## 产品目标
 
@@ -27,7 +27,7 @@ npm run perf:baseline:all
 npm run perf:baseline:all -- --quick
 ```
 
-从已有脱敏样本和 cell 状态继续补跑：
+从已有脱敏样本和 sidecar 状态继续补跑：
 
 ```bash
 npm run perf:baseline:all -- --resume
@@ -69,7 +69,7 @@ npm run perf:baseline:all -- --only qcloud-stt,rag
 
 ## 输出
 
-统一入口只对外提供两份最终报告：
+完整模式提供两份正式报告：
 
 ```text
 reports/performance/m4-16gb/unified-final.json
@@ -77,6 +77,8 @@ reports/performance/m4-16gb/unified-final.md
 ```
 
 底层场景报告继续保存在各自目录，用于定位失败，但不得要求用户手工合并。
+
+快速模式输出 `unified-quick.json/.md`，指定场景模式输出 `unified-selected.json/.md`。两者与正式报告隔离，不能替代完整基线验收。
 
 ## 退出状态
 
@@ -86,7 +88,7 @@ reports/performance/m4-16gb/unified-final.md
 
 ## 完工标志
 
-以下条件全部满足后，才可将本 PRD 状态改为“已完成”：
+以下完工条件均已满足：
 
 1. `package.json` 存在 `perf:baseline:all` 命令。
 2. 完整、`--quick`、`--resume` 和 `--only` 均有自动化测试。
