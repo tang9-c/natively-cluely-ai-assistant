@@ -22,7 +22,9 @@ function validSample(overrides = {}) {
     timingsMs: {
       submit: 100,
       poll: 50,
-      providerProcessing: 7000,
+      pollWait: 1000,
+      providerProcessingLowerBound: 6000,
+      providerProcessingUpperBound: 7000,
       parse: 2,
       submitToFinal: 7152,
       finalToRenderer: 20,
@@ -53,7 +55,9 @@ test('summarizes valid latency samples separately from failures and quality', ()
       timingsMs: {
         submit: 200,
         poll: 80,
-        providerProcessing: 8000,
+        pollWait: 2000,
+        providerProcessingLowerBound: 7000,
+        providerProcessingUpperBound: 8000,
         parse: 4,
         submitToFinal: 8284,
         finalToRenderer: 40,
@@ -75,6 +79,8 @@ test('summarizes valid latency samples separately from failures and quality', ()
     minMs: 7152,
     maxMs: 8284,
   });
+  assert.equal(summary.timingsMs.providerProcessingLowerBound.p95Ms, 7000);
+  assert.equal(summary.timingsMs.providerProcessingUpperBound.p95Ms, 8000);
   assert.equal(summary.pollRequests.p50, 3);
   assert.equal(summary.pollRequests.p95, 5);
   assert.equal(summary.quality.passed, true);

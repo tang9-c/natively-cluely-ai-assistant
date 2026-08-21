@@ -885,22 +885,29 @@ async function importAucClient() {
   return import(pathToFileURL(aucClientPath).href);
 }
 
-export async function transcribeClipWithQcloud({ clipPath, entry, opts, apiKey }) {
+export async function transcribeClipWithQcloud({
+  clipPath,
+  entry,
+  opts,
+  apiKey,
+  onPhase,
+  dependencies = {},
+}) {
   const constantsPath = path.join(root, 'dist-electron/electron/llm/QCloudLlmConstants.js');
-  if (!fs.existsSync(constantsPath)) {
+  if (!dependencies.constants && !fs.existsSync(constantsPath)) {
     throw new Error('Missing dist-electron QCLOUD constants. Run npm run build:electron first.');
   }
 
   const {
     extractDoubaoAucTranscript,
     transcribeNewApiDoubaoAucMultipartFile,
-  } = await importAucClient();
+  } = dependencies.aucClient ?? await importAucClient();
   const {
     QCLOUD_STT_QUERY_ENDPOINT,
     QCLOUD_STT_SUBMIT_ENDPOINT,
-  } = await import(pathToFileURL(constantsPath).href);
+  } = dependencies.constants ?? await import(pathToFileURL(constantsPath).href);
 
-  async function post(url, body, options) {
+  const post = dependencies.post ?? (async (url, body, options) => {
     const response = await axios.post(url, body, {
       headers: options.headers,
       timeout: options.timeout,
@@ -913,9 +920,9 @@ export async function transcribeClipWithQcloud({ clipPath, entry, opts, apiKey }
       throw err;
     }
     return { data: response.data, headers: response.headers };
-  }
+  });
 
-  const audioBuffer = fs.readFileSync(clipPath);
+  const audioBuffer = dependencies.audioBuffer ?? fs.readFileSync(clipPath);
   const parameterConfig = getQcloudParameterFields(opts.parameterGroup, opts);
   const text = await transcribeNewApiDoubaoAucMultipartFile({
     submitEndpoint: QCLOUD_STT_SUBMIT_ENDPOINT,
@@ -929,6 +936,7 @@ export async function transcribeClipWithQcloud({ clipPath, entry, opts, apiKey }
     post,
     pollIntervalMs: opts.pollIntervalMs,
     maxAttempts: opts.maxAttempts,
+    onPhase,
   });
 
   return { text, providerConfig: parameterConfig };

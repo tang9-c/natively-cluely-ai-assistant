@@ -1,7 +1,9 @@
 const TIMING_FIELDS = [
   'submit',
   'poll',
-  'providerProcessing',
+  'pollWait',
+  'providerProcessingLowerBound',
+  'providerProcessingUpperBound',
   'parse',
   'submitToFinal',
   'finalToRenderer',
