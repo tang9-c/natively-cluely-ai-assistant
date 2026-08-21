@@ -1,21 +1,28 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
 import {
   atomicWriteReport,
+  buildAggregatorOptions,
   buildCollectionPlan,
   decideScenarioAction,
   executeCollectionPlan,
   inspectBaselineMachine,
   inspectScenarioCredentials,
+  resolveUnifiedOutputPaths,
   mergeScenarioReports,
   readScenarioReport,
+  runAllPerformanceBaselines,
   createScenarioManifest,
   parseOrchestratorArgs,
   SCENARIO_IDS,
   validateScenarioReport,
   validateStateEntry,
+  verifyUnifiedReport,
+  scanReportPrivacy,
 } from '../lib/performanceBaselineOrchestrator.mjs';
 
 const rootDir = '/workspace/natively';
@@ -106,6 +113,7 @@ test('quick manifest targets one sample and excludes long meetings', () => {
     assert.equal(scenario.target, 1);
   }
   assert.equal(manifest.find(({ id }) => id === 'long-meeting').excluded, true);
+  assert.equal(manifest.find(({ id }) => id === 'rag').reportPaths[0], path.join(rootDir, 'reports/performance/m4-16gb/quick/rag.jsonl'));
 });
 
 test('returns fresh manifest objects', () => {
@@ -388,4 +396,148 @@ test('returns stable stage codes for process failure and interruption', async ()
     { type: 'collector', scenarioId: 'rag', command: 'node', args: ['rag'], stageCode: 'collector_rag_failed' },
   ], { signal: controller.signal, runProcess: async () => ({ code: 0 }) });
   assert.deepEqual(interrupted, { ok: false, stageCode: 'collection_interrupted', executions: [] });
+});
+
+test('isolates full, quick, and selected unified output paths', () => {
+  assert.deepEqual(resolveUnifiedOutputPaths(rootDir, { mode: 'full', only: null }), {
+    json: path.join(rootDir, 'reports/performance/m4-16gb/unified-final.json'),
+    markdown: path.join(rootDir, 'reports/performance/m4-16gb/unified-final.md'),
+  });
+  assert.equal(resolveUnifiedOutputPaths(rootDir, { mode: 'quick', only: ['rag'] }).json.endsWith('unified-quick.json'), true);
+  assert.equal(resolveUnifiedOutputPaths(rootDir, { mode: 'selected', only: ['rag'] }).json.endsWith('unified-selected.json'), true);
+});
+
+test('maps selected scenarios to aggregator inputs and exact metric IDs', () => {
+  const manifest = createScenarioManifest({ rootDir, mode: 'full' });
+  const outputs = resolveUnifiedOutputPaths(rootDir, { mode: 'selected', only: ['qcloud-stt', 'rag'] });
+  const options = buildAggregatorOptions(manifest, {
+    mode: 'selected', only: ['qcloud-stt', 'rag'], environment: { cpuModel: 'Apple M4' }, outputs,
+  });
+  assert.deepEqual(options.telemetry, [path.join(rootDir, 'reports/performance/m4-16gb/rag-30.jsonl')]);
+  assert.deepEqual(options.qcloudSttRenderer, [path.join(rootDir, 'reports/performance/m4-16gb/qcloud-stt-renderer-final.json')]);
+  assert.deepEqual(options.metricIds, [
+    'rag.query',
+    'qcloud-stt.segment-submit-to-final',
+    'qcloud-stt.final-to-renderer',
+    'qcloud-stt.segment-submit-to-renderer',
+  ]);
+  assert.equal(options.output, outputs.json);
+  assert.equal(options.configuration.mode, 'selected');
+});
+
+test('independently rejects sample-count, percentile, missing, and blocked mismatches', () => {
+  const manifest = createScenarioManifest({ rootDir, mode: 'quick' });
+  const rag = manifest.find(({ id }) => id === 'rag');
+  const sources = new Map([['rag', [{ name: 'rag_query', durationMs: 10 }]]]);
+  const passing = {
+    status: 'completed',
+    scenarios: { 'rag.query': { status: 'passed', sampleCount: 1, p50Ms: 10, p95Ms: 10 } },
+  };
+  assert.deepEqual(verifyUnifiedReport(passing, [rag], sources), { valid: true, stageCode: null });
+  assert.equal(verifyUnifiedReport({ ...passing, scenarios: { 'rag.query': { ...passing.scenarios['rag.query'], sampleCount: 2 } } }, [rag], sources).stageCode, 'verification_sample_count_mismatch');
+  assert.equal(verifyUnifiedReport({ ...passing, scenarios: { 'rag.query': { ...passing.scenarios['rag.query'], p95Ms: 9 } } }, [rag], sources).stageCode, 'verification_percentile_mismatch');
+  assert.equal(verifyUnifiedReport({ ...passing, scenarios: {} }, [rag], sources).stageCode, 'verification_metric_missing');
+  assert.equal(verifyUnifiedReport({ ...passing, status: 'blocked' }, [rag], sources).stageCode, 'verification_report_incomplete');
+});
+
+test('independently verifies dual and long-meeting metrics', () => {
+  const manifest = createScenarioManifest({ rootDir, mode: 'full' });
+  const llm = manifest.find(({ id }) => id === 'llm');
+  const longMeeting = manifest.find(({ id }) => id === 'long-meeting');
+  const sources = new Map([
+    ['llm', { runs: [{ firstTokenMs: 20, completedMs: 40, errorCode: null }] }],
+    ['long-meeting', [longMeetingReport(30), longMeetingReport(60)]],
+  ]);
+  const scenarios = {
+    'llm.first-token': summary(20),
+    'llm.completed': summary(40),
+    'meeting.30m.cpu': summary(10),
+    'meeting.30m.memory': summary(1000),
+    'meeting.30m.database-size': summary(50),
+    'meeting.30m.renderer-long-frames': summary(1),
+    'meeting.30m.renderer-render-commits': summary(2),
+    'meeting.60m.cpu': summary(10),
+    'meeting.60m.memory': summary(1000),
+    'meeting.60m.database-size': summary(50),
+    'meeting.60m.renderer-long-frames': summary(1),
+    'meeting.60m.renderer-render-commits': summary(2),
+  };
+  assert.equal(verifyUnifiedReport({ status: 'completed', scenarios }, [llm, longMeeting], sources).valid, true);
+});
+
+test('privacy scan rejects secrets, sensitive payloads, tokens, audio, and stacks', () => {
+  assert.deepEqual(scanReportPrivacy({ stageCode: 'collector_rag_failed', durationMs: 12 }, ['secret-value']), { valid: true, stageCode: null });
+  assert.equal(scanReportPrivacy({ value: 'secret-value' }, ['secret-value']).stageCode, 'privacy_secret_detected');
+  assert.equal(scanReportPrivacy({ transcript: 'raw words' }, []).stageCode, 'privacy_sensitive_field_detected');
+  assert.equal(scanReportPrivacy({ transcript: '[REMOVED]' }, []).valid, true);
+  assert.equal(scanReportPrivacy({ token: 'abc' }, []).stageCode, 'privacy_sensitive_field_detected');
+  assert.equal(scanReportPrivacy({ value: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signaturevalue' }, []).stageCode, 'privacy_token_pattern_detected');
+  assert.equal(scanReportPrivacy({ audio: 'data:audio/wav;base64,AAAA' }, []).stageCode, 'privacy_audio_detected');
+  assert.equal(scanReportPrivacy({ stack: 'Error: failed\n at file.mjs:1:1' }, []).stageCode, 'privacy_sensitive_field_detected');
+});
+
+function summary(value) {
+  return { status: 'passed', sampleCount: 1, p50Ms: value, p95Ms: value };
+}
+
+test('runs a quick selected baseline end to end with atomic verified output', async () => {
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'baseline-orchestrator-'));
+  fs.mkdirSync(path.join(temporaryRoot, 'scripts'), { recursive: true });
+  fs.writeFileSync(path.join(temporaryRoot, 'scripts/benchmark-rag-query.mjs'), '// fixture runner\n');
+  const gib = 1024 ** 3;
+  const result = await runAllPerformanceBaselines({ mode: 'quick', resume: false, only: ['rag'] }, {
+    rootDir: temporaryRoot,
+    env: {},
+    system: { cpus: () => [{ model: 'Apple M4' }], totalmem: () => 16 * gib },
+    runProcess: async (_command, args) => {
+      if (args[0]?.endsWith('benchmark-rag-query.mjs')) {
+        fs.mkdirSync(path.dirname(args[1]), { recursive: true });
+        fs.writeFileSync(args[1], '{"name":"rag_query","durationMs":12,"properties":{"benchmarkRunId":"quick-1"}}\n', { mode: 0o600 });
+      }
+      return { code: 0 };
+    },
+    startVite: async () => ({ owned: false, process: null }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.summary.status, 'quick-completed');
+  const output = JSON.parse(fs.readFileSync(path.join(temporaryRoot, 'reports/performance/m4-16gb/unified-quick.json'), 'utf8'));
+  assert.equal(output.status, 'quick-completed');
+  assert.equal(output.scenarios['rag.query'].sampleCount, 1);
+  assert.equal(output.orchestration.scenarios.rag.decision, 'collected');
+  assert.equal(fs.existsSync(path.join(temporaryRoot, 'reports/performance/m4-16gb/.baseline-state.json')), true);
+});
+
+test('reuses a valid selected report without invoking collectors', async () => {
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'baseline-reuse-'));
+  const reportPath = path.join(temporaryRoot, 'reports/performance/m4-16gb/rag-30.jsonl');
+  const runnerPath = path.join(temporaryRoot, 'scripts/benchmark-rag-query.mjs');
+  fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+  fs.mkdirSync(path.dirname(runnerPath), { recursive: true });
+  fs.writeFileSync(runnerPath, '// fixture runner\n');
+  fs.writeFileSync(reportPath, validRuns(30, (index) => JSON.stringify({ name: 'rag_query', durationMs: index, properties: { benchmarkRunId: `rag-${index}` } })).join('\n') + '\n');
+  let processCalls = 0;
+  const result = await runAllPerformanceBaselines({ mode: 'selected', resume: false, only: ['rag'] }, {
+    rootDir: temporaryRoot,
+    env: {},
+    system: { cpus: () => [{ model: 'Apple M4' }], totalmem: () => 16 * 1024 ** 3 },
+    runProcess: async () => { processCalls += 1; return { code: 0 }; },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.summary.status, 'selected-completed');
+  assert.equal(processCalls, 0);
+  const output = JSON.parse(fs.readFileSync(path.join(temporaryRoot, 'reports/performance/m4-16gb/unified-selected.json'), 'utf8'));
+  assert.equal(output.orchestration.scenarios.rag.decision, 'reused');
+});
+
+test('fails before collection on a non-baseline machine', async () => {
+  const result = await runAllPerformanceBaselines({ mode: 'quick', resume: false, only: ['rag'] }, {
+    rootDir,
+    env: {},
+    system: { cpus: () => [{ model: 'Intel' }], totalmem: () => 8 * 1024 ** 3 },
+  });
+  assert.deepEqual(result, {
+    ok: false,
+    summary: { status: 'failed', stageCode: 'preflight_machine_mismatch' },
+  });
 });

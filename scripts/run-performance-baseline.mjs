@@ -147,8 +147,30 @@ function readJson(filePath) {
 }
 
 export function runPerformanceBaseline({
-  telemetry = [], longMeeting = [], coldStart = [], stt = [], dynamicAction = [], qcloudRealtime = [], qcloudSummary = [], qcloudSttRenderer = [], ...options
+  telemetry = [],
+  longMeeting = [],
+  coldStart = [],
+  stt = [],
+  dynamicAction = [],
+  qcloudRealtime = [],
+  qcloudSummary = [],
+  qcloudSttRenderer = [],
+  environment = {},
+  configuration = {},
+  metricIds,
+  ...options
 }) {
+  const metrics = buildMetricInputs({
+    telemetryRecords: telemetry.flatMap(readTelemetry),
+    longMeetingReports: longMeeting.map(readJson),
+    coldStartReports: coldStart.map(readJson),
+    sttReports: stt.map(readJson),
+    dynamicActionReports: dynamicAction.map(readJson),
+    qcloudRealtimeReports: qcloudRealtime.map(readJson),
+    qcloudSummaryReports: qcloudSummary.map(readJson),
+    qcloudSttRendererReports: qcloudSttRenderer.map(readJson),
+  });
+  const selectedMetricIds = metricIds ? new Set(metricIds) : null;
   const report = buildPerformanceBaselineReport({
     environment: {
       platform: process.platform,
@@ -157,22 +179,15 @@ export function runPerformanceBaseline({
       cpuCount: os.cpus().length,
       memoryBytes: os.totalmem(),
       nodeVersion: process.version,
+      ...environment,
     },
     configuration: {
       executionMode: 'dedicated-baseline',
       baselineMachine: 'apple-m4-16gb',
       provider: 'natively-qcloud',
+      ...configuration,
     },
-    metrics: buildMetricInputs({
-      telemetryRecords: telemetry.flatMap(readTelemetry),
-      longMeetingReports: longMeeting.map(readJson),
-      coldStartReports: coldStart.map(readJson),
-      sttReports: stt.map(readJson),
-      dynamicActionReports: dynamicAction.map(readJson),
-      qcloudRealtimeReports: qcloudRealtime.map(readJson),
-      qcloudSummaryReports: qcloudSummary.map(readJson),
-      qcloudSttRendererReports: qcloudSttRenderer.map(readJson),
-    }),
+    metrics: selectedMetricIds ? metrics.filter(({ id }) => selectedMetricIds.has(id)) : metrics,
   });
   fs.mkdirSync(path.dirname(options.output), { recursive: true });
   fs.writeFileSync(options.output, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });

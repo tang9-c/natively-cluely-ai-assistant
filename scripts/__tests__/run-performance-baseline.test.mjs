@@ -69,3 +69,31 @@ test('writes JSON and Markdown reports under the requested local directory', () 
   assert.equal(report.configuration.baselineMachine, 'apple-m4-16gb');
   assert.match(fs.readFileSync(markdownPath, 'utf8'), /性能基线报告/);
 });
+
+test('accepts environment overrides and filters unselected metrics', () => {
+  const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'performance-baseline-filtered-'));
+  const jsonPath = path.join(outputDir, 'report.json');
+  const telemetryPath = path.join(outputDir, 'rag.jsonl');
+  fs.writeFileSync(telemetryPath, '{"name":"rag_query","durationMs":12}\n');
+
+  const report = runPerformanceBaseline({
+    telemetry: [telemetryPath],
+    output: jsonPath,
+    metricIds: ['rag.query'],
+    environment: { cpuModel: 'Apple M4', memoryBytes: 16 * 1024 ** 3 },
+    configuration: { mode: 'quick' },
+  });
+
+  assert.deepEqual(Object.keys(report.scenarios), ['rag.query']);
+  assert.equal(report.scenarios['rag.query'].status, 'passed');
+  assert.equal(report.environment.cpuModel, 'Apple M4');
+  assert.equal(report.configuration.mode, 'quick');
+  assert.equal(report.configuration.baselineMachine, 'apple-m4-16gb');
+});
+
+test('preserves the complete default metric set when no filter is supplied', () => {
+  const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'performance-baseline-default-'));
+  const report = runPerformanceBaseline({ output: path.join(outputDir, 'report.json') });
+  assert.equal(Object.hasOwn(report.scenarios, 'app.cold-start'), true);
+  assert.equal(Object.hasOwn(report.scenarios, 'rag.query'), true);
+});
