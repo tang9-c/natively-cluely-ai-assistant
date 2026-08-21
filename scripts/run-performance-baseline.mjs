@@ -94,7 +94,11 @@ export function runPerformanceBaseline(options) {
       memoryBytes: os.totalmem(),
       nodeVersion: process.version,
     },
-    configuration: { executionMode: 'dedicated-baseline', provider: 'natively-qcloud' },
+    configuration: {
+      executionMode: 'dedicated-baseline',
+      baselineMachine: 'apple-m4-16gb',
+      provider: 'natively-qcloud',
+    },
     metrics: buildMetricInputs({
       telemetryRecords: options.telemetry.flatMap(readTelemetry),
       longMeetingReports: options.longMeeting.map(readJson),

@@ -38,6 +38,8 @@ test('writes JSON and Markdown reports under the requested local directory', () 
 
   runPerformanceBaseline({ telemetry: [], longMeeting: [], output: jsonPath, markdown: markdownPath });
 
-  assert.equal(JSON.parse(fs.readFileSync(jsonPath, 'utf8')).schemaVersion, 1);
+  const report = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+  assert.equal(report.schemaVersion, 1);
+  assert.equal(report.configuration.baselineMachine, 'apple-m4-16gb');
   assert.match(fs.readFileSync(markdownPath, 'utf8'), /性能基线报告/);
 });
