@@ -451,12 +451,13 @@ test('take-screenshot IPC channel is wired through main, preload, and renderer t
   const preload = read('electron/preload.ts');
   const types = read('src/types/electron.d.ts');
 
-  // 1. main process: handler returns {path, preview}
+  // 1. main process: handler binds an image grant to the requesting renderer.
   assert.match(
     ipc,
-    /safeHandle\(\s*['"]take-screenshot['"]\s*,\s*async\s*\(\s*\)\s*=>/,
+    /safeHandle\(\s*['"]take-screenshot['"]\s*,\s*async\s*\(\s*event\s*\)\s*=>/,
     'ipcHandlers.ts must register take-screenshot',
   );
+  assert.match(ipc, /issue\(screenshotPath, 'chat-image', event\.sender\.id\)/);
 
   // 2. preload
   assert.match(
@@ -472,11 +473,11 @@ test('take-screenshot IPC channel is wired through main, preload, and renderer t
     'src/types/electron.d.ts must reference channel name "take-screenshot"',
   );
 
-  // 4. types: returns Promise<{path: string; preview: string}>
+  // 4. types: returns the preview plus an opaque image grant.
   assert.match(
     types,
-    /takeScreenshot:\s*\(\s*\)\s*=>\s*Promise<\s*\{\s*path:\s*string\s*;[^}]*preview[^}]*\}\s*>\s*;?/,
-    'src/types/electron.d.ts must declare takeScreenshot returning Promise<{path:string;preview:string}>',
+    /takeScreenshot:\s*\(\s*\)\s*=>\s*Promise<\s*\{\s*path:\s*string\s*;[^}]*preview[^}]*accessToken[^}]*\}\s*>\s*;?/,
+    'src/types/electron.d.ts must declare takeScreenshot returning an accessToken',
   );
 });
 

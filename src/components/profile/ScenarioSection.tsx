@@ -80,10 +80,10 @@ export function ScenarioSection() {
         setError('');
         try {
             const fileResult = await window.electronAPI?.profileSelectFile?.();
-            if (fileResult?.cancelled || !fileResult?.filePath) return;
+            if (fileResult?.cancelled || !fileResult?.fileToken) return;
 
             const result = await window.electronAPI?.profileUploadDocument?.({
-                filePath: fileResult.filePath,
+                fileToken: fileResult.fileToken,
                 docSubtype,
             });
             if (!result?.success) {

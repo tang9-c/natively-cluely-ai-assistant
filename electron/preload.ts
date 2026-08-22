@@ -97,11 +97,11 @@ interface ElectronAPI {
   updateContentDimensions: (dimensions: { width: number; height: number }) => Promise<void>;
   updateContentDimensionsCentered: (dimensions: { width: number; height: number }) => Promise<void>;
   getRecognitionLanguages: () => Promise<Record<string, any>>;
-  getScreenshots: () => Promise<Array<{ path: string; preview: string }>>;
+  getScreenshots: () => Promise<Array<{ path: string; preview: string; accessToken: string }>>;
   deleteScreenshot: (path: string) => Promise<{ success: boolean; error?: string }>;
-  onScreenshotTaken: (callback: (data: { path: string; preview: string }) => void) => () => void;
-  onScreenshotAttached: (callback: (data: { path: string; preview: string }) => void) => () => void;
-  onCaptureAndProcess: (callback: (data: { path: string; preview: string }) => void) => () => void;
+  onScreenshotTaken: (callback: (data: { path: string; preview: string; accessToken: string }) => void) => () => void;
+  onScreenshotAttached: (callback: (data: { path: string; preview: string; accessToken: string }) => void) => () => void;
+  onCaptureAndProcess: (callback: (data: { path: string; preview: string; accessToken: string }) => void) => () => void;
   onSolutionsReady: (callback: (solutions: string) => void) => () => void;
   onResetView: (callback: () => void) => () => void;
   onSolutionStart: (callback: () => void) => () => void;
@@ -114,8 +114,8 @@ interface ElectronAPI {
 
   onUnauthorized: (callback: () => void) => () => void;
   onDebugError: (callback: (error: string) => void) => () => void;
-  takeScreenshot: () => Promise<void>;
-  takeSelectiveScreenshot: () => Promise<{ path: string; preview: string; cancelled?: boolean }>;
+  takeScreenshot: () => Promise<{ path: string; preview: string; accessToken: string }>;
+  takeSelectiveScreenshot: () => Promise<{ path: string; preview: string; accessToken: string; cancelled?: boolean }>;
   moveWindowLeft: () => Promise<void>;
   moveWindowRight: () => Promise<void>;
   moveWindowUp: () => Promise<void>;
@@ -125,7 +125,7 @@ interface ElectronAPI {
   windowClose: () => Promise<void>;
   windowIsMaximized: () => Promise<boolean>;
 
-  analyzeImageFile: (path: string) => Promise<void>;
+  analyzeImageFile: (fileToken: string) => Promise<void>;
   quitApp: () => Promise<void>;
 
   // LLM Model Management
@@ -400,7 +400,7 @@ interface ElectronAPI {
   generateAssist: () => Promise<{ insight: string | null }>;
   generateWhatToSay: (
     question?: string,
-    imagePaths?: string[],
+    imageTokens?: string[],
     options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; requestId?: string; modeEvent?: ModeEventContext },
   ) => Promise<{
     answerId?: string;
@@ -605,7 +605,7 @@ interface ElectronAPI {
   // Streaming listeners
   streamGeminiChat: (
     message: string,
-    imagePaths?: string[],
+    imageTokens?: string[],
     context?: string,
     options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
   ) => Promise<void>;
@@ -739,7 +739,7 @@ interface ElectronAPI {
   onGlobalShortcut: (callback: (data: { action: string }) => void) => () => void;
 
   // Profile Engine API
-  profileUploadResume: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+  profileUploadResume: (fileToken: string) => Promise<{ success: boolean; error?: string }>;
   profileGetStatus: () => Promise<{
     hasProfile: boolean;
     profileMode: boolean;
@@ -753,19 +753,20 @@ interface ElectronAPI {
   profileSelectFile: () => Promise<{
     success?: boolean;
     cancelled?: boolean;
-    filePath?: string;
+    fileToken?: string;
+    fileName?: string;
     error?: string;
   }>;
   profileGetActiveScenario: () => Promise<{ success: boolean; scenario?: any; error?: string }>;
   profileListDocuments: (params?: { modeId?: string }) => Promise<{ success: boolean; documents: any[]; error?: string }>;
-  profileUploadDocument: (params: { filePath: string; docSubtype: string }) => Promise<{ success: boolean; id?: string; error?: string }>;
+  profileUploadDocument: (params: { fileToken: string; docSubtype: string }) => Promise<{ success: boolean; id?: string; error?: string }>;
   profileUpdateDocumentSubtype: (params: { referenceFileId: string; docSubtype: string }) => Promise<{ success: boolean; error?: string }>;
   profileDeleteDocument: (params: { referenceFileId: string }) => Promise<{ success: boolean; error?: string }>;
   profileGetMasterProfile: () => Promise<{ success: boolean; profile?: any; error?: string }>;
   profileUpdateMasterProfile: (profile: any) => Promise<{ success: boolean; error?: string }>;
 
   // JD & Research API
-  profileUploadJD: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+  profileUploadJD: (fileToken: string) => Promise<{ success: boolean; error?: string }>;
   profileDeleteJD: () => Promise<{ success: boolean; error?: string }>;
   profileResearchCompany: (
     companyName: string,
@@ -1005,22 +1006,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteScreenshot: (path: string) => ipcRenderer.invoke('delete-screenshot', path),
 
   // Event listeners
-  onScreenshotTaken: (callback: (data: { path: string; preview: string }) => void) => {
-    const subscription = (_: any, data: { path: string; preview: string }) => callback(data);
+  onScreenshotTaken: (callback: (data: { path: string; preview: string; accessToken: string }) => void) => {
+    const subscription = (_: any, data: { path: string; preview: string; accessToken: string }) => callback(data);
     ipcRenderer.on('screenshot-taken', subscription);
     return () => {
       ipcRenderer.removeListener('screenshot-taken', subscription);
     };
   },
-  onScreenshotAttached: (callback: (data: { path: string; preview: string }) => void) => {
-    const subscription = (_: any, data: { path: string; preview: string }) => callback(data);
+  onScreenshotAttached: (callback: (data: { path: string; preview: string; accessToken: string }) => void) => {
+    const subscription = (_: any, data: { path: string; preview: string; accessToken: string }) => callback(data);
     ipcRenderer.on('screenshot-attached', subscription);
     return () => {
       ipcRenderer.removeListener('screenshot-attached', subscription);
     };
   },
-  onCaptureAndProcess: (callback: (data: { path: string; preview: string }) => void) => {
-    const subscription = (_: any, data: { path: string; preview: string }) => callback(data);
+  onCaptureAndProcess: (callback: (data: { path: string; preview: string; accessToken: string }) => void) => {
+    const subscription = (_: any, data: { path: string; preview: string; accessToken: string }) => callback(data);
     ipcRenderer.on('capture-and-process', subscription);
     return () => {
       ipcRenderer.removeListener('capture-and-process', subscription);
@@ -1114,7 +1115,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   windowClose: () => ipcRenderer.invoke('window-close'),
   windowIsMaximized: () => ipcRenderer.invoke('window-is-maximized'),
 
-  analyzeImageFile: (path: string) => ipcRenderer.invoke('analyze-image-file', path),
+  analyzeImageFile: (fileToken: string) => ipcRenderer.invoke('analyze-image-file', fileToken),
   quitApp: () => ipcRenderer.invoke('quit-app'),
   toggleWindow: () => ipcRenderer.invoke('toggle-window'),
   showWindow: (inactive?: boolean) => ipcRenderer.invoke('show-window', inactive),
@@ -1563,14 +1564,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateAssist: () => ipcRenderer.invoke('generate-assist'),
   generateWhatToSay: (
     question?: string,
-    imagePaths?: string[],
+    imageTokens?: string[],
     options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; requestId?: string; modeEvent?: ModeEventContext },
-  ) => ipcRenderer.invoke('generate-what-to-say', question, imagePaths, options),
+  ) => ipcRenderer.invoke('generate-what-to-say', question, imageTokens, options),
   generateClarify: () => ipcRenderer.invoke('generate-clarify'),
-  generateCodeHint: (imagePaths?: string[], problemStatement?: string) =>
-    ipcRenderer.invoke('generate-code-hint', imagePaths, problemStatement),
-  generateBrainstorm: (imagePaths?: string[], problemStatement?: string) =>
-    ipcRenderer.invoke('generate-brainstorm', imagePaths, problemStatement),
+  generateCodeHint: (imageTokens?: string[], problemStatement?: string) =>
+    ipcRenderer.invoke('generate-code-hint', imageTokens, problemStatement),
+  generateBrainstorm: (imageTokens?: string[], problemStatement?: string) =>
+    ipcRenderer.invoke('generate-brainstorm', imageTokens, problemStatement),
   generateRecap: () => ipcRenderer.invoke('generate-recap'),
   submitManualQuestion: (question: string) =>
     ipcRenderer.invoke('submit-manual-question', question),
@@ -1799,10 +1800,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Streaming Chat
   streamGeminiChat: (
     message: string,
-    imagePaths?: string[],
+    imageTokens?: string[],
     context?: string,
     options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
-  ) => ipcRenderer.invoke('gemini-chat-stream', message, imagePaths, context, options),
+  ) => ipcRenderer.invoke('gemini-chat-stream', message, imageTokens, context, options),
 
   onGeminiStreamToken: (callback: (token: string) => void) => {
     const subscription = (_: any, token: string) => callback(token);
@@ -2090,7 +2091,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Profile Engine API
-  profileUploadResume: (filePath: string) => ipcRenderer.invoke('profile:upload-resume', filePath),
+  profileUploadResume: (fileToken: string) => ipcRenderer.invoke('profile:upload-resume', fileToken),
   profileGetStatus: () => ipcRenderer.invoke('profile:get-status'),
   profileSetMode: (enabled: boolean) => ipcRenderer.invoke('profile:set-mode', enabled),
   profileDelete: () => ipcRenderer.invoke('profile:delete'),
@@ -2099,7 +2100,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   profileGetActiveScenario: () => ipcRenderer.invoke('profile:get-active-scenario'),
   profileListDocuments: (params?: { modeId?: string }) =>
     ipcRenderer.invoke('profile:list-documents', params),
-  profileUploadDocument: (params: { filePath: string; docSubtype: string }) =>
+  profileUploadDocument: (params: { fileToken: string; docSubtype: string }) =>
     ipcRenderer.invoke('profile:upload-document', params),
   profileUpdateDocumentSubtype: (params: { referenceFileId: string; docSubtype: string }) =>
     ipcRenderer.invoke('profile:update-document-subtype', params),
@@ -2110,7 +2111,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('profile:update-master-profile', profile),
 
   // JD & Research API
-  profileUploadJD: (filePath: string) => ipcRenderer.invoke('profile:upload-jd', filePath),
+  profileUploadJD: (fileToken: string) => ipcRenderer.invoke('profile:upload-jd', fileToken),
   profileDeleteJD: () => ipcRenderer.invoke('profile:delete-jd'),
   profileResearchCompany: (companyName: string, options?: { forceRefresh?: boolean }) =>
     ipcRenderer.invoke('profile:research-company', companyName, options),

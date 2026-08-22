@@ -41,7 +41,8 @@ import {
   getQCloudModelSpec,
 } from "./llm/QCloudLlmConstants"
 import type { TranscriptTurn } from "./llm/transcriptCleaner"
-import { deepVariableReplacer, getByPath, injectImageIntoMessages } from './utils/curlUtils';
+import { deepVariableReplacer, getByPath, injectImageIntoMessages, validateImagePath } from './utils/curlUtils';
+import { getFileAccessGrantStore } from './security/FileAccessGrantStore';
 import curl2Json from "@bany/curl-to-json";
 import { CustomProvider, CurlProvider } from './services/CredentialsManager';
 import { exec } from 'child_process';
@@ -3628,6 +3629,51 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   /**
    * Universal Stream Chat - Routes to correct provider based on currentModelId
    */
+  public consumeChatImageGrants(ownerWebContentsId: number, imageTokens?: string[]): string[] | undefined {
+    if (imageTokens !== undefined && (
+      !Array.isArray(imageTokens)
+      || imageTokens.length > 5
+      || imageTokens.some((token) => typeof token !== 'string' || token.length === 0)
+    )) {
+      throw new Error('invalid_chat_image_grants');
+    }
+
+    return imageTokens?.map((token) => {
+      const imagePath = getFileAccessGrantStore().consume(token, 'chat-image', ownerWebContentsId);
+      const { app } = require('electron');
+      const validation = validateImagePath(imagePath, app.getPath('userData'));
+      if (!validation.isValid) {
+        throw new Error('invalid_chat_image_grant_target');
+      }
+      return imagePath;
+    });
+  }
+
+  public async * streamChatWithFileGrants(
+    ownerWebContentsId: number,
+    message: string,
+    imageTokens?: string[],
+    context?: string,
+    systemPromptOverride?: string,
+    ignoreKnowledgeMode: boolean = false,
+    skipModeInjection: boolean = false,
+    extraDataScopes: ProviderDataScope[] = [],
+    chatPromptOptions?: ChatPromptOptions,
+  ): AsyncGenerator<string, void, unknown> {
+    const imagePaths = this.consumeChatImageGrants(ownerWebContentsId, imageTokens);
+
+    yield* this.streamChat(
+      message,
+      imagePaths,
+      context,
+      systemPromptOverride,
+      ignoreKnowledgeMode,
+      skipModeInjection,
+      extraDataScopes,
+      chatPromptOptions,
+    );
+  }
+
   /**
    * Public streaming entry point. Wraps the inner streamChat generator with
    * a token-level dash filter (em / en / sentence-connector hyphen → comma)

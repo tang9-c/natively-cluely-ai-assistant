@@ -84,6 +84,8 @@ import { executeMeetingSearch } from './rag/MeetingSearchFlow';
 import { MeetingSearchRequestRegistry } from './rag/MeetingSearchRequestRegistry';
 import { buildEmbeddingRuntimeConfig } from './rag/EmbeddingRuntimeConfig';
 import type { EmbeddingPipelineStatus } from './rag/EmbeddingPipeline';
+import { assertSafeHttpsUrl, createSsrfSafeHttpsAgent } from './security/NetworkTargetPolicy';
+import { getFileAccessGrantStore } from './security/FileAccessGrantStore';
 
 const QCLOUD_KEY_PATTERN = /^sk-[A-Za-z0-9_-]{32,}$/;
 const EMBEDDING_READY_STATUS_WAIT_MS = 2_500;
@@ -535,22 +537,24 @@ export function initializeIpcHandlers(appState: AppState): void {
     return appState.deleteScreenshot(resolved);
   });
 
-  safeHandle('take-screenshot', async () => {
+  safeHandle('take-screenshot', async (event) => {
     try {
       const screenshotPath = await appState.takeScreenshot();
       const preview = await appState.getImagePreview(screenshotPath);
-      return { path: screenshotPath, preview };
+      const accessToken = getFileAccessGrantStore().issue(screenshotPath, 'chat-image', event.sender.id);
+      return { path: screenshotPath, preview, accessToken };
     } catch (error) {
       // console.error("Error taking screenshot:", error)
       throw error;
     }
   });
 
-  safeHandle('take-selective-screenshot', async () => {
+  safeHandle('take-selective-screenshot', async (event) => {
     try {
       const screenshotPath = await appState.takeSelectiveScreenshot();
       const preview = await appState.getImagePreview(screenshotPath);
-      return { path: screenshotPath, preview };
+      const accessToken = getFileAccessGrantStore().issue(screenshotPath, 'chat-image', event.sender.id);
+      return { path: screenshotPath, preview, accessToken };
     } catch (error) {
       // EC-04 fix: cast unknown error to Error before accessing .message
       if ((error as Error).message === 'Selection cancelled') {
@@ -560,7 +564,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('get-screenshots', async () => {
+  safeHandle('get-screenshots', async (event) => {
     // console.log({ view: appState.getView() })
     try {
       let previews = [];
@@ -569,6 +573,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           appState.getScreenshotQueue().map(async (path) => ({
             path,
             preview: await appState.getImagePreview(path),
+            accessToken: getFileAccessGrantStore().issue(path, 'chat-image', event.sender.id),
           })),
         );
       } else {
@@ -576,6 +581,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           appState.getExtraScreenshotQueue().map(async (path) => ({
             path,
             preview: await appState.getImagePreview(path),
+            accessToken: getFileAccessGrantStore().issue(path, 'chat-image', event.sender.id),
           })),
         );
       }
@@ -651,17 +657,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     appState.finalizeMicSTT();
   });
 
-  // IPC handler for analyzing image from file path
-  safeHandle('analyze-image-file', async (event, filePath: string) => {
-    // Guard: only allow reading files within the app's own userData directory
-    const userDataDir = app.getPath('userData');
-    const resolved = path.resolve(filePath);
-    if (!resolved.startsWith(userDataDir + path.sep)) {
-      console.warn('[IPC] analyze-image-file: path outside userData rejected:', filePath);
-      throw new Error('Path not allowed');
-    }
+  safeHandle('analyze-image-file', async (event, fileToken: string) => {
     try {
-      const result = await appState.processingHelper.getLLMHelper().analyzeImageFiles([resolved]);
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      const imagePaths = llmHelper.consumeChatImageGrants(event.sender.id, [fileToken]);
+      const result = await llmHelper.analyzeImageFiles(imagePaths || []);
       return result;
     } catch (error: any) {
       throw error;
@@ -673,13 +673,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     async (
       event,
       message: string,
-      imagePaths?: string[],
+      imageTokens?: string[],
       context?: string,
       options?: { skipSystemPrompt?: boolean },
     ) => {
       try {
         const chatPromptOptions = resolveChatPromptOptions(message, options?.skipSystemPrompt);
         const chatContext = await resolveUploadedMaterialChatContext(event.sender, message, context);
+        const llmHelper = appState.processingHelper.getLLMHelper();
+        const imagePaths = llmHelper.consumeChatImageGrants(event.sender.id, imageTokens);
         const result = await appState.processingHelper
           .getLLMHelper()
           .chatWithGemini(message, imagePaths, chatContext.context, options?.skipSystemPrompt, undefined, chatPromptOptions);
@@ -745,7 +747,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     async (
       event,
       message: string,
-      imagePaths?: string[],
+      imageTokens?: string[],
       context?: string,
       options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
     ) => {
@@ -761,7 +763,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Identity probe short-circuit — bypasses the LLM entirely so small models can't
         // reframe the canned reply or misfire it on coding asks (the original bug).
         // Regex is `^...$` anchored, so non-probe questions cannot match.
-        if (!imagePaths?.length && typeof message === 'string') {
+        if (!imageTokens?.length && typeof message === 'string') {
           const identityHit = CREATOR_PROBE_RE.test(message)
             ? 'I was developed by Evin John.'
             : IDENTITY_PROBE_RE.test(message)
@@ -835,9 +837,10 @@ export function initializeIpcHandlers(appState: AppState): void {
 
         try {
           // USE streamChat which handles routing
-          const stream = llmHelper.streamChat(
+          const stream = llmHelper.streamChatWithFileGrants(
+            event.sender.id,
             message,
-            imagePaths,
+            imageTokens,
             context,
             systemPromptOverride,
             options?.ignoreKnowledgeMode,
@@ -2016,7 +2019,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('set-openai-stt-base-url', async (_, url: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setOpenAiSttBaseUrl(url);
+      const normalizedUrl = typeof url === 'string' ? url.trim() : '';
+      if (normalizedUrl) await assertSafeHttpsUrl(normalizedUrl);
+      CredentialsManager.getInstance().setOpenAiSttBaseUrl(normalizedUrl);
       // Reconfigure the active pipeline so the new endpoint is used immediately,
       // matching the behavior of azure/ibmwatson region setters.
       await appState.reconfigureSttProvider();
@@ -2461,6 +2466,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         } else {
           // Groq / OpenAI: multipart FormData
           let openAiEndpoint = 'https://api.openai.com/v1/audio/transcriptions';
+          let openAiHttpsAgent: ReturnType<typeof createSsrfSafeHttpsAgent> | undefined;
           if (provider === 'openai') {
             // If a custom OpenAI-compatible base URL is configured, test against it.
             const { CredentialsManager } = require('./services/CredentialsManager');
@@ -2468,6 +2474,8 @@ export function initializeIpcHandlers(appState: AppState): void {
               CredentialsManager.getInstance().getOpenAiSttBaseUrl() || ''
             ).trim();
             if (customBase) {
+              await assertSafeHttpsUrl(customBase);
+              openAiHttpsAgent = createSsrfSafeHttpsAgent();
               const trimmed = customBase.replace(/\/+$/, '');
               openAiEndpoint = /\/v\d+$/.test(trimmed)
                 ? `${trimmed}/audio/transcriptions`
@@ -2497,6 +2505,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               ...form.getHeaders(),
             },
             timeout: 15000,
+            ...(openAiHttpsAgent ? { httpsAgent: openAiHttpsAgent, maxRedirects: 0, proxy: false as const } : {}),
           });
         }
 
@@ -3382,13 +3391,16 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle(
     'generate-what-to-say',
     async (
-      _,
+      event,
       question?: string,
-      imagePaths?: string[],
+      imageTokens?: string[],
       options?: { requestId?: string; promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; modeEvent?: ModeEventContext },
       ) => {
         try {
         const requestOptions = sanitizeGenerateWhatToSayOptions(options);
+        const imagePaths = appState.processingHelper
+          .getLLMHelper()
+          .consumeChatImageGrants(event.sender.id, imageTokens);
         const intelligenceManager = appState.getIntelligenceManager();
         intelligenceManager.reserveWhatShouldISayRequest(requestOptions.requestId);
         const providerScopes = SettingsManager.getInstance().get('providerDataScopes') || {};
@@ -3782,7 +3794,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   }
 
-  safeHandle('generate-code-hint', async (_, imagePaths?: string[], problemStatement?: string) => {
+  safeHandle('generate-code-hint', async (event, imageTokens?: string[], problemStatement?: string) => {
     try {
       const providerDataScopes = SettingsManager.getInstance().get('providerDataScopes') || {};
       const screenshotsScopeDenied = providerDataScopes.screenshots === false;
@@ -3799,25 +3811,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       // If no explicit images were passed from the frontend, fall back to the
       // screenshot queue so the AI can always "see" the user's screen.
       const screenshotQueue = appState.getScreenshotQueue();
+      const imagePaths = appState.processingHelper
+        .getLLMHelper()
+        .consumeChatImageGrants(event.sender.id, imageTokens);
       const resolvedImagePaths: string[] =
         imagePaths && imagePaths.length > 0 ? imagePaths : screenshotQueue;
-
-      // SECURITY (P0): Validate image paths if provided from renderer
-      if (imagePaths && imagePaths.length > 0) {
-        const { app } = require('electron');
-        const { validateImagePath } = require('./utils/curlUtils');
-        const userDataDir = app.getPath('userData');
-
-        for (const imagePath of imagePaths) {
-          const validation = validateImagePath(imagePath, userDataDir);
-          if (!validation.isValid) {
-            console.warn(
-              `[IPC] generate-code-hint: invalid image path rejected: ${validation.reason}`,
-            );
-            return { error: `Invalid image path: ${validation.reason}`, hint: null };
-          }
-        }
-      }
 
       console.log(
         `[IPC] generate-code-hint: using ${resolvedImagePaths.length} image(s) (${imagePaths?.length ? 'explicit' : 'queue fallback'})`,
@@ -3846,30 +3844,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('generate-brainstorm', async (_, imagePaths?: string[], problemStatement?: string) => {
+  safeHandle('generate-brainstorm', async (event, imageTokens?: string[], problemStatement?: string) => {
     try {
       // If no explicit images were passed from the frontend, fall back to the
       // screenshot queue so the AI can always "see" the user's screen.
       const screenshotQueue = appState.getScreenshotQueue();
+      const imagePaths = appState.processingHelper
+        .getLLMHelper()
+        .consumeChatImageGrants(event.sender.id, imageTokens);
       const resolvedImagePaths: string[] =
         imagePaths && imagePaths.length > 0 ? imagePaths : screenshotQueue;
-
-      // SECURITY (P0): Validate image paths if provided from renderer
-      if (imagePaths && imagePaths.length > 0) {
-        const { app } = require('electron');
-        const { validateImagePath } = require('./utils/curlUtils');
-        const userDataDir = app.getPath('userData');
-
-        for (const imagePath of imagePaths) {
-          const validation = validateImagePath(imagePath, userDataDir);
-          if (!validation.isValid) {
-            console.warn(
-              `[IPC] generate-brainstorm: invalid image path rejected: ${validation.reason}`,
-            );
-            return { error: `Invalid image path: ${validation.reason}`, script: null };
-          }
-        }
-      }
 
       console.log(
         `[IPC] generate-brainstorm: using ${resolvedImagePaths.length} image(s) (${imagePaths?.length ? 'explicit' : 'queue fallback'})`,
@@ -4779,9 +4763,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     };
   }
 
-  safeHandle('profile:upload-resume', async (_, filePath: string) => {
+  safeHandle('profile:upload-resume', async (event, fileToken: string) => {
     try {
-      console.log(`[IPC] profile:upload-resume called with: ${filePath}`);
+      const filePath = getFileAccessGrantStore().consume(fileToken, 'profile-document', event.sender.id);
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
         return {
@@ -4793,7 +4777,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       const result = await orchestrator.ingestDocument(filePath, DocType.RESUME);
       return result;
     } catch (error: any) {
-      console.error('[IPC] profile:upload-resume error:', error);
+      console.error('[IPC] profile:upload-resume failed', {
+        stage: 'profile_document_ingest',
+        name: error?.name || 'Error',
+        code: error?.code || 'unknown',
+      });
       return { success: false, error: error.message };
     }
   });
@@ -4859,7 +4847,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('profile:select-file', async () => {
+  safeHandle('profile:select-file', async (event) => {
     try {
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
@@ -4870,7 +4858,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { cancelled: true };
       }
 
-      return { success: true, filePath: result.filePaths[0] };
+      const filePath = result.filePaths[0];
+      return {
+        success: true,
+        fileToken: getFileAccessGrantStore().issue(filePath, 'profile-document', event.sender.id),
+        fileName: path.basename(filePath),
+      };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
@@ -4940,11 +4933,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('profile:upload-document', async (_, params: { filePath: string; docSubtype: string }) => {
+  safeHandle('profile:upload-document', async (event, params: { fileToken: string; docSubtype: string }) => {
     try {
-      if (!params?.filePath || !params?.docSubtype) {
+      if (!params?.fileToken || !params?.docSubtype) {
         return { success: false, error: 'invalid_document_upload' };
       }
+      const filePath = getFileAccessGrantStore().consume(
+        params.fileToken,
+        'profile-document',
+        event.sender.id,
+      );
       const { ModesManager } = require('./services/ModesManager');
       const { ScenarioRegistry } = require('./services/profile/scenarios/registry');
       const { DocumentTextExtractor } = require('./services/profile/DocumentTextExtractor');
@@ -4953,8 +4951,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       const mode = modesManager.getActiveMode()
         ?? modesManager.getModes().find((candidate: any) => candidate.templateType === 'general');
       if (!mode) return { success: false, error: 'No active mode selected' };
-      const rawText = await DocumentTextExtractor.extract(params.filePath);
-      const fileName = path.basename(params.filePath);
+      const rawText = await DocumentTextExtractor.extract(filePath);
+      const fileName = path.basename(filePath);
       const added = modesManager.addReferenceFile({ modeId: mode.id, fileName, content: rawText });
       const referenceFileId = added.id;
       const registry = ScenarioRegistry.createDefault();
@@ -4983,7 +4981,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       });
       return { success: true, id: referenceFileId };
     } catch (error: any) {
-      console.error('[IPC] profile:upload-document error:', redactForLog([error]));
+      console.error('[IPC] profile:upload-document failed', {
+        stage: 'profile_document_extract',
+        name: error?.name || 'Error',
+        code: error?.code || 'unknown',
+      });
       return { success: false, error: error.message };
     }
   });
@@ -5048,9 +5050,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   // JD & Research IPC Handlers
   // ==========================================
 
-  safeHandle('profile:upload-jd', async (_, filePath: string) => {
+  safeHandle('profile:upload-jd', async (event, fileToken: string) => {
     try {
-      console.log(`[IPC] profile:upload-jd called with: ${filePath}`);
+      const filePath = getFileAccessGrantStore().consume(fileToken, 'profile-document', event.sender.id);
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
         return {
@@ -5062,7 +5064,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       const result = await orchestrator.ingestDocument(filePath, DocType.JD);
       return result;
     } catch (error: any) {
-      console.error('[IPC] profile:upload-jd error:', error);
+      console.error('[IPC] profile:upload-jd failed', {
+        stage: 'profile_document_ingest',
+        name: error?.name || 'Error',
+        code: error?.code || 'unknown',
+      });
       return { success: false, error: error.message };
     }
   });

@@ -658,10 +658,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // Captures data from onCaptureAndProcess before the React state flush so
   // handleWhatToSay() can access it even in React 18 concurrent mode (where
   // a plain setTimeout(0) may fire before setAttachedContext flushes).
-  const pendingCaptureRef = useRef<{ path: string; preview: string } | null>(null);
+  const pendingCaptureRef = useRef<{ path: string; preview: string; accessToken: string } | null>(null);
 
   // Latent Context State (Screenshots attached but not sent)
-  const [attachedContext, setAttachedContext] = useState<Array<{ path: string; preview: string }>>(
+  const [attachedContext, setAttachedContext] = useState<Array<{ path: string; preview: string; accessToken: string }>>(
     [],
   );
 
@@ -1705,7 +1705,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => unsubscribe();
   }, []);
 
-  const handleScreenshotAttach = (data: { path: string; preview: string }) => {
+  const handleScreenshotAttach = (data: { path: string; preview: string; accessToken: string }) => {
     setIsExpanded(true);
     setAttachedContext((prev) => {
       // Prevent duplicates and cap at 5
@@ -2467,7 +2467,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // Pass imagePath if attached
       const result = await window.electronAPI.generateWhatToSay(
         undefined,
-        currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
+        currentAttachments.length > 0 ? currentAttachments.map((s) => s.accessToken) : undefined,
         {
           requestId: realtimeRequestId,
           promptInstruction: dynamicPromptInstruction,
@@ -2608,7 +2608,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     try {
       await window.electronAPI.generateCodeHint(
-        currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
+        currentAttachments.length > 0 ? currentAttachments.map((s) => s.accessToken) : undefined,
       );
     } catch (err) {
       setMessages((prev) => [
@@ -2651,7 +2651,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     try {
       await window.electronAPI.generateBrainstorm(
-        currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
+        currentAttachments.length > 0 ? currentAttachments.map((s) => s.accessToken) : undefined,
       );
     } catch (err) {
       setMessages((prev) => [
@@ -2935,7 +2935,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         requestStartTimeRef.current = Date.now();
         await window.electronAPI.streamGeminiChat(
           question,
-          currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
+          currentAttachments.length > 0 ? currentAttachments.map((s) => s.accessToken) : undefined,
           prompt,
           { skipSystemPrompt: true },
         );
@@ -3061,7 +3061,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       requestStartTimeRef.current = Date.now();
       await window.electronAPI.streamGeminiChat(
         userText || 'Analyze this screenshot',
-        currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
+        currentAttachments.length > 0 ? currentAttachments.map((s) => s.accessToken) : undefined,
         conversationContext, // Pass context so "answer this" works
       );
     } catch (err) {
@@ -3600,7 +3600,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       try {
         const data = await window.electronAPI.takeScreenshot();
         if (data && data.path) {
-          handleScreenshotAttach(data as { path: string; preview: string });
+          handleScreenshotAttach(data as { path: string; preview: string; accessToken: string });
         }
       } catch (err) {
         await handleScreenshotFailure(err);
@@ -3610,7 +3610,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       try {
         const data = await window.electronAPI.takeSelectiveScreenshot();
         if (data && !data.cancelled && data.path) {
-          handleScreenshotAttach(data as { path: string; preview: string });
+          handleScreenshotAttach(data as { path: string; preview: string; accessToken: string });
         }
       } catch (err) {
         await handleScreenshotFailure(err);
@@ -3641,7 +3641,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       try {
         const data = await window.electronAPI.takeScreenshot();
         if (data && data.path) {
-          handleScreenshotAttach(data as { path: string; preview: string });
+          handleScreenshotAttach(data as { path: string; preview: string; accessToken: string });
         }
       } catch (err) {
         await handleScreenshotFailure(err);
@@ -3651,7 +3651,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       try {
         const data = await window.electronAPI.takeSelectiveScreenshot();
         if (data && !data.cancelled && data.path) {
-          handleScreenshotAttach(data as { path: string; preview: string });
+          handleScreenshotAttach(data as { path: string; preview: string; accessToken: string });
         }
       } catch (err) {
         await handleScreenshotFailure(err);

@@ -5,6 +5,7 @@
 import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
+import { parseSafeHttpsUrl } from '../security/NetworkTargetPolicy';
 import type {
     BusinessSystemCredentialInput,
     BusinessSystemKnowledgeSource,
@@ -344,9 +345,10 @@ export class CredentialsManager {
         // Store undefined (not empty string) when clearing, so callers can fall back
         // to the default api.openai.com endpoint with a simple truthiness check.
         const trimmed = url.trim();
+        if (trimmed) parseSafeHttpsUrl(trimmed);
         this.credentials.openAiSttBaseUrl = trimmed || undefined;
         this.saveCredentials();
-        console.log(`[CredentialsManager] OpenAI STT Base URL set to: ${trimmed || '(default)'}`);
+        console.log('[CredentialsManager] OpenAI STT Base URL updated', { custom: Boolean(trimmed) });
     }
 
     public setGroqSttModel(model: string): void {

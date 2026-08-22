@@ -6,6 +6,7 @@ import { autoUpdater } from "electron-updater"
 import type { ProfileOrchestratorRuntime } from "./services/profile/ProfileOrchestratorContract"
 import { formatAcceleratorForPlatform, quitAcceleratorForPlatform } from "./utils/platformAccelerators"
 import { dynamicActionAvailabilityFromArbitrations } from "../shared/dynamicActionAvailability"
+import { getFileAccessGrantStore } from "./security/FileAccessGrantStore"
 if (!app.isPackaged) {
   require('dotenv').config();
 }
@@ -584,7 +585,12 @@ export class AppState {
           if (mainWindow) {
             mainWindow.webContents.send("capture-and-process", {
               path: screenshotPath,
-              preview
+              preview,
+              accessToken: getFileAccessGrantStore().issue(
+                screenshotPath,
+                'chat-image',
+                mainWindow.webContents.id,
+              ),
             });
           }
 
@@ -4617,7 +4623,12 @@ export class AppState {
             if (mainWindow) {
               mainWindow.webContents.send("screenshot-taken", {
                 path: screenshotPath,
-                preview
+                preview,
+                accessToken: getFileAccessGrantStore().issue(
+                  screenshotPath,
+                  'chat-image',
+                  mainWindow.webContents.id,
+                ),
               })
             }
           } catch (error) {

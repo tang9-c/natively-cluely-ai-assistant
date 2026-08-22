@@ -279,9 +279,8 @@ export function validateImagePath(imagePath: string, userDataPath: string): { is
     // Normalize userDataPath for comparison
     const normalizedUserData = userDataPath.replace(/\\/g, '/');
 
-    // Define allowed roots (app-owned directories only)
+    // Only screenshot directories may cross the renderer-to-main trust boundary.
     const allowedRoots = [
-        normalizedUserData,
         path.join(normalizedUserData, 'screenshots').replace(/\\/g, '/'),
         path.join(normalizedUserData, 'extra_screenshots').replace(/\\/g, '/'),
     ].filter(Boolean);
@@ -308,17 +307,6 @@ export function validateImagePath(imagePath: string, userDataPath: string): { is
     });
 
     if (isAllowed) {
-        return { isValid: true };
-    }
-
-    // Also check the original path against allowed roots as fallback
-    // This handles cases where the resolved path is the same as normalized
-    const originalIsAllowed = allowedRoots.some(allowedRoot => {
-        const allowedWithSlash = allowedRoot.replace(/\/?$/, '/');
-        return normalizedPath.startsWith(allowedWithSlash) || normalizedPath === allowedRoot;
-    });
-
-    if (originalIsAllowed) {
         return { isValid: true };
     }
 

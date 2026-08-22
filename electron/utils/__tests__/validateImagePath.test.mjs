@@ -12,6 +12,8 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -32,6 +34,27 @@ describe('validateImagePath — macOS userData ordering (obs 2631)', () => {
     const p = `${MAC_USER_DATA}/extra_screenshots/abc-123.png`;
     const r = validateImagePath(p, MAC_USER_DATA);
     assert.equal(r.isValid, true, `should allow ${p}, got ${r.reason}`);
+  });
+
+  test('blocks sensitive files directly under userData', () => {
+    const r = validateImagePath(`${MAC_USER_DATA}/credentials.enc`, MAC_USER_DATA);
+    assert.equal(r.isValid, false);
+  });
+
+  test('blocks a symlink inside screenshots that resolves outside the screenshot roots', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-image-path-'));
+    const userData = path.join(root, 'userData');
+    const screenshots = path.join(userData, 'screenshots');
+    fs.mkdirSync(screenshots, { recursive: true });
+    const outside = path.join(root, 'outside.png');
+    const link = path.join(screenshots, 'escape.png');
+    fs.writeFileSync(outside, 'secret');
+    fs.symlinkSync(outside, link);
+    try {
+      assert.equal(validateImagePath(link, userData).isValid, false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test('blocks /Users/ path outside userData', () => {

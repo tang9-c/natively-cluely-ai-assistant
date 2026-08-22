@@ -477,19 +477,19 @@ export interface ElectronAPI {
   // @ipc-channel get-recognition-languages
   getRecognitionLanguages: () => Promise<Record<string, any>>
   // @ipc-channel get-screenshots
-  getScreenshots: () => Promise<Array<{ path: string; preview: string }>>
+  getScreenshots: () => Promise<Array<{ path: string; preview: string; accessToken: string }>>
   // @ipc-channel delete-screenshot
   deleteScreenshot: (
     path: string
   ) => Promise<{ success: boolean; error?: string }>
   onScreenshotTaken: (
-    callback: (data: { path: string; preview: string }) => void
+    callback: (data: { path: string; preview: string; accessToken: string }) => void
   ) => () => void
   onScreenshotAttached: (
-    callback: (data: { path: string; preview: string }) => void
+    callback: (data: { path: string; preview: string; accessToken: string }) => void
   ) => () => void
   onCaptureAndProcess: (
-    callback: (data: { path: string; preview: string }) => void
+    callback: (data: { path: string; preview: string; accessToken: string }) => void
   ) => () => void
   onSolutionsReady: (callback: (solutions: string) => void) => () => void
   onResetView: (callback: () => void) => () => void
@@ -503,9 +503,9 @@ export interface ElectronAPI {
   onUnauthorized: (callback: () => void) => () => void
   onDebugError: (callback: (error: string) => void) => () => void
   // @ipc-channel take-screenshot
-  takeScreenshot: () => Promise<{ path: string; preview: string }>
+  takeScreenshot: () => Promise<{ path: string; preview: string; accessToken: string }>
   // @ipc-channel take-selective-screenshot
-  takeSelectiveScreenshot: () => Promise<{ path: string; preview: string; cancelled?: boolean }>
+  takeSelectiveScreenshot: () => Promise<{ path: string; preview: string; accessToken: string; cancelled?: boolean }>
   // @ipc-channel move-window-left
   moveWindowLeft: () => Promise<void>
   // @ipc-channel move-window-right
@@ -524,7 +524,7 @@ export interface ElectronAPI {
   windowIsMaximized: () => Promise<boolean>
 
   // @ipc-channel analyze-image-file
-  analyzeImageFile: (path: string) => Promise<void>
+  analyzeImageFile: (fileToken: string) => Promise<void>
   // @ipc-channel quit-app
   quitApp: () => Promise<void>
   // @ipc-channel toggle-window
@@ -785,7 +785,7 @@ export interface ElectronAPI {
   // @ipc-channel generate-assist
   generateAssist: () => Promise<{ insight: string | null }>
   // @ipc-channel generate-what-to-say
-  generateWhatToSay: (question?: string, imagePaths?: string[], options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; requestId?: string; modeEvent?: DynamicActionModeEvent }) => Promise<{
+  generateWhatToSay: (question?: string, imageTokens?: string[], options?: { promptInstruction?: string; persist?: boolean; source?: 'overlay' | 'launcher' | 'dynamic_action'; requestId?: string; modeEvent?: DynamicActionModeEvent }) => Promise<{
     answerId?: string;
     answer: string | null;
     question?: string;
@@ -806,9 +806,9 @@ export interface ElectronAPI {
   // @ipc-channel generate-clarify
   generateClarify: () => Promise<{ clarification: string | null }>
   // @ipc-channel generate-code-hint
-  generateCodeHint: (imagePaths?: string[], problemStatement?: string) => Promise<{ hint: string | null }>
+  generateCodeHint: (imageTokens?: string[], problemStatement?: string) => Promise<{ hint: string | null }>
   // @ipc-channel generate-brainstorm
-  generateBrainstorm: (imagePaths?: string[], problemStatement?: string) => Promise<{ script: string | null }>
+  generateBrainstorm: (imageTokens?: string[], problemStatement?: string) => Promise<{ script: string | null }>
   // @ipc-channel generate-recap
   generateRecap: () => Promise<{ summary: string | null }>
   // @ipc-channel submit-manual-question
@@ -931,7 +931,7 @@ export interface ElectronAPI {
 
   // Streaming listeners
   // @ipc-channel gemini-chat-stream
-  streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean }) => Promise<void>
+  streamGeminiChat: (message: string, imageTokens?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean }) => Promise<void>
   onGeminiStreamToken: (callback: (token: string) => void) => () => void
   onGeminiStreamDone: (callback: () => void) => () => void
   onGeminiStreamError: (callback: (error: string) => void) => () => void;
@@ -1091,7 +1091,7 @@ export interface ElectronAPI {
 
   // Profile Engine API
   // @ipc-channel profile:upload-resume
-  profileUploadResume: (filePath: string) => Promise<{ success: boolean; error?: string }>
+  profileUploadResume: (fileToken: string) => Promise<{ success: boolean; error?: string }>
   // @ipc-channel profile:get-status
   profileGetStatus: () => Promise<{ hasProfile: boolean; profileMode: boolean; name?: string; role?: string; totalExperienceYears?: number }>
   // @ipc-channel profile:set-mode
@@ -1101,13 +1101,13 @@ export interface ElectronAPI {
   // @ipc-channel profile:get-profile
   profileGetProfile: () => Promise<any>
   // @ipc-channel profile:select-file
-  profileSelectFile: () => Promise<{ success?: boolean; cancelled?: boolean; filePath?: string; error?: string }>
+  profileSelectFile: () => Promise<{ success?: boolean; cancelled?: boolean; fileToken?: string; fileName?: string; error?: string }>
   // @ipc-channel profile:get-active-scenario
   profileGetActiveScenario: () => Promise<{ success: boolean; scenario?: any; error?: string }>
   // @ipc-channel profile:list-documents
   profileListDocuments: (params?: { modeId?: string }) => Promise<{ success: boolean; documents: any[]; error?: string }>
   // @ipc-channel profile:upload-document
-  profileUploadDocument: (params: { filePath: string; docSubtype: string }) => Promise<{ success: boolean; id?: string; error?: string }>
+  profileUploadDocument: (params: { fileToken: string; docSubtype: string }) => Promise<{ success: boolean; id?: string; error?: string }>
   // @ipc-channel profile:update-document-subtype
   profileUpdateDocumentSubtype: (params: { referenceFileId: string; docSubtype: string }) => Promise<{ success: boolean; error?: string }>
   // @ipc-channel profile:delete-document
@@ -1119,7 +1119,7 @@ export interface ElectronAPI {
 
   // JD & Research API
   // @ipc-channel profile:upload-jd
-  profileUploadJD: (filePath: string) => Promise<{ success: boolean; error?: string }>
+  profileUploadJD: (fileToken: string) => Promise<{ success: boolean; error?: string }>
   // @ipc-channel profile:delete-jd
   profileDeleteJD: () => Promise<{ success: boolean; error?: string }>
   // @ipc-channel profile:research-company

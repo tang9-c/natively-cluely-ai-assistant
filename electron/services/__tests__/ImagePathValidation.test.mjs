@@ -109,14 +109,13 @@ test('runWhatShouldISay receives validated imagePaths from IPC handler', () => {
 });
 
 test('image path validation rejects path traversal attempts', () => {
-  const source = read('electron/ipcHandlers.ts');
+  const ipcSource = read('electron/ipcHandlers.ts');
+  const llmSource = read('electron/LLMHelper.ts');
 
-  // Check for path validation utility
-  const hasPathValidation =
-    /validateImagePath|isValidPath|checkPathSafety|isOwnedPath|validatePath|checkPath/.test(source);
-
-  // The validation should be present
-  assert.ok(hasPathValidation, 'Should have image path validation function');
+  assert.match(ipcSource, /consumeChatImageGrants/);
+  assert.match(llmSource, /getFileAccessGrantStore\(\)\.consume/);
+  assert.match(llmSource, /validateImagePath/);
+  assert.match(llmSource, /invalid_chat_image_grant_target/);
 });
 
 test('generate-what-to-say rejects malformed image path payloads before OCR or model calls', () => {
@@ -151,11 +150,8 @@ test('image path validation is applied at IPC handler level', () => {
   const brainstormHandler = sliceSafeHandleBlock(ipcSource, 'generate-brainstorm');
   const whatToSayHandler = sliceSafeHandleBlock(ipcSource, 'generate-what-to-say');
 
-  // At least one should have path validation
-  const hasValidation =
-    /validate.*Path|isValid.*Path|check.*Path|resolvedImagePaths/.test(codeHintHandler) ||
-    /validate.*Path|isValid.*Path|check.*Path|resolvedImagePaths/.test(brainstormHandler) ||
-    /validate.*Path|isValid.*Path|check.*Path|resolvedImagePaths/.test(whatToSayHandler);
-
-  assert.ok(hasValidation, 'At least one handler should validate imagePaths');
+  for (const handler of [codeHintHandler, brainstormHandler, whatToSayHandler]) {
+    assert.match(handler, /consumeChatImageGrants/);
+    assert.doesNotMatch(handler, /imagePaths\?: string\[\]/);
+  }
 });

@@ -16,6 +16,7 @@ import WebSocket from 'ws';
 import axios from 'axios';
 import FormData from 'form-data';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
+import { assertSafeHttpsUrl, createSsrfSafeHttpsAgent, parseSafeHttpsUrl } from '../security/NetworkTargetPolicy';
 import { streamingStttWsOptions } from './dnsHelpers';
 import { BaseSTT } from './BaseSTT';
 
@@ -138,9 +139,10 @@ export class OpenAIStreamingSTT extends BaseSTT {
         this.apiKey = apiKey;
         const effectiveBase = (baseUrl || '').trim();
         if (effectiveBase && effectiveBase !== DEFAULT_OPENAI_BASE) {
+            parseSafeHttpsUrl(effectiveBase);
             this.restEndpoint = deriveRestEndpoint(effectiveBase);
             this.isCustomEndpoint = true;
-            console.log(`[OpenAIStreaming] Initialized — custom endpoint (REST only): ${this.restEndpoint}`);
+            console.log('[OpenAIStreaming] Initialized — custom HTTPS endpoint (REST only)');
         } else {
             console.log('[OpenAIStreaming] Initialized — WebSocket priority (gpt-4o-transcribe → gpt-4o-mini-transcribe → whisper-1 REST)');
         }
@@ -915,6 +917,13 @@ export class OpenAIStreamingSTT extends BaseSTT {
     }
 
     private async _restUpload(wavBuffer: Buffer): Promise<string> {
+        const customEndpointOptions = this.isCustomEndpoint
+            ? { httpsAgent: createSsrfSafeHttpsAgent(), maxRedirects: 0, proxy: false as const }
+            : {};
+        if (this.isCustomEndpoint) {
+            await assertSafeHttpsUrl(this.restEndpoint);
+        }
+
         const form = new FormData();
         form.append('file', wavBuffer, {
             filename:    'audio.wav',
@@ -933,6 +942,7 @@ export class OpenAIStreamingSTT extends BaseSTT {
                 ...form.getHeaders(),
             },
             timeout: 30_000,
+            ...customEndpointOptions,
         });
 
         const data = response.data;
