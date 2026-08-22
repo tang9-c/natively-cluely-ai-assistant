@@ -169,7 +169,25 @@ test('QCLOUD API forwards non-neutral AUC utterance emotion metadata', async () 
   assert.equal(transcripts.length, 1);
   assert.equal(transcripts[0].emotion, 'angry');
   assert.equal(transcripts[0].emotionSource, 'qcloud');
-  assert.equal(transcripts[0].diarizationProvider, 'doubao-auc');
+  assert.equal(transcripts[0].diarizationProvider, 'qcloud');
+});
+
+test('QCLOUD API does not invent diarization metadata when AUC omits speaker_id', async () => {
+  const { RestSTT } = await loadRestSTT();
+  const stt = new RestSTT('qcloud-stt', 'qcloud-test-key');
+  const transcripts = [];
+
+  stt.on('transcript', event => transcripts.push(event));
+  await stt.emitUploadResult({
+    text: '云端没有返回说话人。',
+    utterances: [{ text: '云端没有返回说话人。', startMs: 0, endMs: 1200 }],
+  }, Buffer.alloc(32_000));
+
+  assert.equal(transcripts.length, 1);
+  assert.equal(transcripts[0].speakerId, undefined);
+  assert.equal(transcripts[0].speakerLabel, undefined);
+  assert.equal(transcripts[0].providerSpeakerId, undefined);
+  assert.equal(transcripts[0].diarizationProvider, undefined);
 });
 
 test('QCLOUD API does not forward neutral AUC utterance emotion metadata', async () => {

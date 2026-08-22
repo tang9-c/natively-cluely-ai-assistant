@@ -112,6 +112,7 @@ test('transcript persistence preserves optional speaker diarization metadata', (
     assert.match(db, /segment\.speakerLabel/);
     assert.match(db, /row\.speaker_id/);
     assert.match(db, /row\.speaker_label/);
+    assert.match(db, /row\.diarization_provider === 'qcloud'/);
 });
 
 test('local speaker verification does not replace Doubao AUC provider diarization', () => {
@@ -119,7 +120,7 @@ test('local speaker verification does not replace Doubao AUC provider diarizatio
     const rest = read('electron/audio/RestSTT.ts');
 
     assert.match(base, /speakerVerification/);
-    assert.match(rest, /diarizationProvider: 'doubao-auc'/);
+    assert.match(rest, /this\.provider === 'qcloud-stt' \? 'qcloud' : 'doubao-auc'/);
     assert.match(rest, /speakerVerification/);
     assert.doesNotMatch(rest, /diarizationProvider: 'local-speaker-verification'/);
 });

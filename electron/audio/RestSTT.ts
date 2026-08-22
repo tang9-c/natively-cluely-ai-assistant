@@ -675,6 +675,14 @@ export class RestSTT extends BaseSTT {
             }));
 
         for (const { utterance, speakerVerification } of annotatedUtterances) {
+            const diarizationMetadata = utterance.providerSpeakerId && utterance.speakerId && utterance.speakerLabel
+                ? {
+                    speakerId: utterance.speakerId,
+                    speakerLabel: utterance.speakerLabel,
+                    providerSpeakerId: utterance.providerSpeakerId,
+                    diarizationProvider: (this.provider === 'qcloud-stt' ? 'qcloud' : 'doubao-auc') as 'qcloud' | 'doubao-auc',
+                }
+                : {};
             const emotionMetadata = utterance.emotion && utterance.emotion !== 'neutral'
                 ? {
                     emotion: utterance.emotion,
@@ -688,10 +696,7 @@ export class RestSTT extends BaseSTT {
                 text: utterance.text.trim(),
                 isFinal: true,
                 confidence: 1.0,
-                speakerId: utterance.speakerId,
-                speakerLabel: utterance.speakerLabel,
-                providerSpeakerId: utterance.providerSpeakerId,
-                diarizationProvider: 'doubao-auc',
+                ...diarizationMetadata,
                 startTimestampMs: utterance.startMs,
                 endTimestampMs: utterance.endMs,
                 ...(speakerVerification ? { speakerVerification } : {}),

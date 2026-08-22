@@ -1,8 +1,8 @@
 import type { DoubaoAucUtterance } from './doubaoAucClient';
 
 export interface AlignedDiarizedUtterance extends DoubaoAucUtterance {
-    speakerId: string;
-    speakerLabel: string;
+    speakerId?: string;
+    speakerLabel?: string;
 }
 
 export interface SpeakerDiarizationAlignInput {
@@ -35,6 +35,13 @@ export class SpeakerDiarizationAligner {
         const aligned: AlignedDiarizedUtterance[] = [];
 
         for (const utterance of input.utterances) {
+            if (!utterance.providerSpeakerId) {
+                if (!this.isOverlapOnly(utterance, input.emitAfterMs)) {
+                    aligned.push({ ...utterance });
+                }
+                continue;
+            }
+
             const speakerId = this.resolveSpeakerId(utterance, input.emitAfterMs, batchProviderMap);
             const withSpeaker = {
                 ...utterance,
@@ -120,7 +127,7 @@ export class SpeakerDiarizationAligner {
         return this.lastEmitted.speakerId;
     }
 
-    private remember(utterance: AlignedDiarizedUtterance): void {
+    private remember(utterance: DoubaoAucUtterance & { speakerId: string }): void {
         this.history.push({
             speakerId: utterance.speakerId,
             startMs: utterance.startMs,

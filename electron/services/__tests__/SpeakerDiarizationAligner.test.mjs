@@ -60,3 +60,20 @@ test('SpeakerDiarizationAligner allocates a new speaker after a long gap without
         ['later turn', 'interviewer-2', 'Interviewer 2'],
     ]);
 });
+
+test('SpeakerDiarizationAligner does not invent speaker labels without provider evidence', async () => {
+    const { SpeakerDiarizationAligner } = await loadAligner();
+    const aligner = new SpeakerDiarizationAligner('interviewer');
+
+    const aligned = aligner.align({
+        utterances: [
+            { text: 'provider returned no speaker id', startMs: 0, endMs: 1000 },
+        ],
+        emitAfterMs: 0,
+    });
+
+    assert.equal(aligned.length, 1);
+    assert.equal(aligned[0].providerSpeakerId, undefined);
+    assert.equal(aligned[0].speakerId, undefined);
+    assert.equal(aligned[0].speakerLabel, undefined);
+});

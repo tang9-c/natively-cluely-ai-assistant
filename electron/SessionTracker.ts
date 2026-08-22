@@ -15,7 +15,7 @@ export interface TranscriptSegment {
     speakerId?: string;
     speakerLabel?: string;
     providerSpeakerId?: string;
-    diarizationProvider?: 'doubao-auc';
+    diarizationProvider?: 'doubao-auc' | 'qcloud';
     text: string;
     timestamp: number;
     final: boolean;

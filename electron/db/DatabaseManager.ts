@@ -50,7 +50,7 @@ export interface Meeting {
         speakerId?: string;
         speakerLabel?: string;
         providerSpeakerId?: string;
-        diarizationProvider?: 'doubao-auc';
+        diarizationProvider?: 'doubao-auc' | 'qcloud';
         text: string;
         timestamp: number;
         startTimestampMs?: number;
@@ -3298,7 +3298,9 @@ export class DatabaseManager {
             speakerId: row.speaker_id || undefined,
             speakerLabel: row.speaker_label || undefined,
             providerSpeakerId: row.provider_speaker_id || undefined,
-            diarizationProvider: row.diarization_provider === 'doubao-auc' ? 'doubao-auc' as const : undefined,
+            diarizationProvider: row.diarization_provider === 'doubao-auc' || row.diarization_provider === 'qcloud'
+                ? row.diarization_provider as 'doubao-auc' | 'qcloud'
+                : undefined,
             text: row.content,
             timestamp: row.timestamp_ms,
             startTimestampMs: row.start_timestamp_ms ?? undefined,

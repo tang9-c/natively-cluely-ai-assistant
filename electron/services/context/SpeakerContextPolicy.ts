@@ -14,7 +14,7 @@ export interface SpeakerContextTrace {
         minConfidence: number | null;
         maxConfidence: number | null;
     };
-    sources: Array<'local-speaker-verification' | 'doubao-auc'>;
+    sources: Array<'local-speaker-verification' | 'doubao-auc' | 'qcloud'>;
 }
 
 export interface SpeakerContextPolicyResult {
@@ -48,7 +48,7 @@ function addReason(reasons: AnswerDegradedReason[], reason: AnswerDegradedReason
 
 export function evaluateSpeakerContextForAnswer(turns: TranscriptTurn[]): SpeakerContextPolicyResult {
     const degradedReasons: AnswerDegradedReason[] = [];
-    const sources = new Set<'local-speaker-verification' | 'doubao-auc'>();
+    const sources = new Set<'local-speaker-verification' | 'doubao-auc' | 'qcloud'>();
     let speakerMetadataUsed = false;
     let localVerificationUsed = false;
     let diarizationUsed = false;
@@ -66,9 +66,9 @@ export function evaluateSpeakerContextForAnswer(turns: TranscriptTurn[]): Speake
     const sanitizedTurns = turns.map((turn) => {
         let speakerVerification = turn.speakerVerification;
 
-        if (turn.diarizationProvider === 'doubao-auc' || turn.providerSpeakerId) {
+        if (turn.diarizationProvider || turn.providerSpeakerId) {
             diarizationUsed = true;
-            sources.add('doubao-auc');
+            sources.add(turn.diarizationProvider || 'doubao-auc');
         }
 
         if (speakerVerification !== undefined) {

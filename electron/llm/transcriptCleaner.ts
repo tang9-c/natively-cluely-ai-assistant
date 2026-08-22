@@ -9,7 +9,7 @@ export interface TranscriptTurn {
     speakerId?: string;
     speakerLabel?: string;
     providerSpeakerId?: string;
-    diarizationProvider?: 'doubao-auc';
+    diarizationProvider?: 'doubao-auc' | 'qcloud';
     speakerVerification?: import('../services/speaker/speakerVerificationTypes').SpeakerVerificationMetadata;
 }
 

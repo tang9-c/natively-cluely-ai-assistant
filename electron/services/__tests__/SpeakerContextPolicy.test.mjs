@@ -289,6 +289,23 @@ describe('SpeakerContextPolicy', () => {
     assert.deepEqual(result.trace.sources, ['doubao-auc']);
   });
 
+  test('records QCLOUD as the diarization source without treating it as identity', async () => {
+    const { evaluateSpeakerContextForAnswer } = await loadSpeakerContextPolicy();
+
+    const result = evaluateSpeakerContextForAnswer([
+      turn(1, 'interviewer', 'QCLOUD grouped this speaker.', {
+        speakerId: 'speaker-1',
+        speakerLabel: 'Interviewer 1',
+        providerSpeakerId: '1',
+        diarizationProvider: 'qcloud',
+      }),
+    ]);
+
+    assert.equal(result.trace.diarizationUsed, true);
+    assert.deepEqual(result.trace.sources, ['qcloud']);
+    assert.equal(result.turns[0].speakerVerification, undefined);
+  });
+
   test('ignores malformed speaker verification without throwing', async () => {
     const { evaluateSpeakerContextForAnswer } = await loadSpeakerContextPolicy();
     const { prepareTranscriptForWhatToAnswer } = await loadTranscriptCleaner();

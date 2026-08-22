@@ -35,7 +35,7 @@ export interface TranscriptSegment {
     speakerId?: string;
     speakerLabel?: string;
     providerSpeakerId?: string;
-    diarizationProvider?: 'doubao-auc';
+    diarizationProvider?: 'doubao-auc' | 'qcloud';
     startTimestampMs?: number;
     endTimestampMs?: number;
     emotion?: TranscriptEmotion;
