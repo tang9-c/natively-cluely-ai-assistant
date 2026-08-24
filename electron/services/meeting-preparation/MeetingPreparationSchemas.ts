@@ -53,6 +53,8 @@ export const evidenceCoverageSchema = z.object({
   missing: z.array(z.string().max(1000)).max(10),
   limitations: z.array(z.string().max(1000)).max(10),
   citedChunkIds: z.array(z.number().int().nonnegative()).max(20),
+  handlingScript: z.string().max(2000),
+  followupQuestions: z.array(z.string().max(1000)).max(10),
 });
 
 const unwrapJson = (raw: string): string => {
