@@ -12,6 +12,8 @@ import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { isMac } from '../utils/platformUtils';
 import WindowControls from './WindowControls';
 import { LauncherAdCarousel } from './launcher/LauncherAdCarousel';
+import { MeetingPreparationEntryCard } from './meeting-preparation/MeetingPreparationEntryCard';
+import { MeetingPreparationPage } from './meeting-preparation/MeetingPreparationPage';
 
 interface Meeting {
     id: string;
@@ -81,6 +83,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     const [isMeetingActive, setIsMeetingActive] = useState(false);
     const [isStartingMeeting, setIsStartingMeeting] = useState(false);
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
+    const [isMeetingPreparationOpen, setIsMeetingPreparationOpen] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [showNotification, setShowNotification] = useState(false);
 
@@ -294,9 +297,9 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     // Notify parent if we are on the main launcher list view
     useEffect(() => {
         if (onPageChange) {
-            onPageChange(!selectedMeeting && !isGlobalChatOpen);
+            onPageChange(!selectedMeeting && !isGlobalChatOpen && !isMeetingPreparationOpen);
         }
-    }, [selectedMeeting, isGlobalChatOpen, onPageChange]);
+    }, [selectedMeeting, isGlobalChatOpen, isMeetingPreparationOpen, onPageChange]);
 
     const handleOpenMeeting = async (meeting: Meeting | string) => {
         const meetingId = typeof meeting === 'string' ? meeting : meeting.id;
@@ -669,6 +672,22 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                 onOpenSettings={onOpenSettings}
                             />
                         </motion.div>
+                    ) : isMeetingPreparationOpen ? (
+                        <motion.div
+                            key="meeting-preparation"
+                            className="flex-1 overflow-hidden"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.08 }}
+                        >
+                            <MeetingPreparationPage
+                                onBack={() => setIsMeetingPreparationOpen(false)}
+                                onOpenResearch={() => onOpenResearch?.()}
+                                onOpenSettings={onOpenSettings}
+                                onStartMeeting={onStartMeeting}
+                            />
+                        </motion.div>
                     ) : (
                         <motion.div
                             key="launcher"
@@ -812,6 +831,12 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 h-[198px]">
                                         {/* Default Intro — natively support & upcoming features. */}
                                         <div className="md:col-span-2 h-full">
+                                            <MeetingPreparationEntryCard
+                                                title="让 AI 先替你备好这场会议"
+                                                description="说明会议对象、目标和背景，AI 会推荐合适模式，并整理历史、承诺、预测问题和资料缺口。"
+                                                helper="可直接说一段话，AI 自动拆解"
+                                                onStart={() => setIsMeetingPreparationOpen(true)}
+                                            />
                                         </div>
 
 
