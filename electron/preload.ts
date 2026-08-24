@@ -24,6 +24,13 @@ import type {
   LongMeetingBenchmarkPhase,
   LongMeetingBenchmarkSample,
 } from '../shared/longMeetingBenchmark';
+import type {
+  MeetingContext,
+  MeetingPreparationOperationResult,
+  MeetingPreparationRecord,
+  MeetingPreparationSaveInput,
+  PrepareContextResult,
+} from '../shared/meetingPreparation';
 
 type RAGStreamChunkPayload =
   | MeetingSearchChunkEvent
@@ -94,6 +101,25 @@ type MeetingStartStatus = {
 };
 
 interface ElectronAPI {
+  meetingPreparationSave: (input: MeetingPreparationSaveInput) => Promise<MeetingPreparationRecord>;
+  meetingPreparationGet: (id: string) => Promise<MeetingPreparationRecord | null>;
+  meetingPreparationList: () => Promise<MeetingPreparationRecord[]>;
+  meetingPreparationDelete: (id: string) => Promise<{ success: true }>;
+  meetingPreparationParseInput: (input: {
+    id: string;
+    rawInput: string;
+  }) => Promise<MeetingPreparationOperationResult<MeetingContext>>;
+  meetingPreparationPrepareContext: (input: {
+    id: string;
+    context: MeetingContext;
+  }) => Promise<MeetingPreparationOperationResult<PrepareContextResult>>;
+  meetingPreparationGenerate: (id: string) => Promise<MeetingPreparationOperationResult<MeetingPreparationRecord>>;
+  meetingPreparationRecheckQuestion: (input: {
+    preparationId: string;
+    questionId: string;
+  }) => Promise<MeetingPreparationOperationResult<MeetingPreparationRecord>>;
+  meetingPreparationApplyMode: (id: string) => Promise<{ success: boolean; error?: 'failed' }>;
+  meetingPreparationCancelOperation: (id: string) => Promise<{ success: boolean }>;
   updateContentDimensions: (dimensions: { width: number; height: number }) => Promise<void>;
   updateContentDimensionsCentered: (dimensions: { width: number; height: number }) => Promise<void>;
   getRecognitionLanguages: () => Promise<Record<string, any>>;
@@ -995,6 +1021,21 @@ export const PROCESSING_EVENTS = {
 
 // Expose the Electron API to the renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
+  meetingPreparationSave: (input: MeetingPreparationSaveInput) =>
+    ipcRenderer.invoke('meeting-preparation-save', input),
+  meetingPreparationGet: (id: string) => ipcRenderer.invoke('meeting-preparation-get', id),
+  meetingPreparationList: () => ipcRenderer.invoke('meeting-preparation-list'),
+  meetingPreparationDelete: (id: string) => ipcRenderer.invoke('meeting-preparation-delete', id),
+  meetingPreparationParseInput: (input: { id: string; rawInput: string }) =>
+    ipcRenderer.invoke('meeting-preparation-parse-input', input),
+  meetingPreparationPrepareContext: (input: { id: string; context: MeetingContext }) =>
+    ipcRenderer.invoke('meeting-preparation-prepare-context', input),
+  meetingPreparationGenerate: (id: string) => ipcRenderer.invoke('meeting-preparation-generate', id),
+  meetingPreparationRecheckQuestion: (input: { preparationId: string; questionId: string }) =>
+    ipcRenderer.invoke('meeting-preparation-recheck-question', input),
+  meetingPreparationApplyMode: (id: string) => ipcRenderer.invoke('meeting-preparation-apply-mode', id),
+  meetingPreparationCancelOperation: (id: string) =>
+    ipcRenderer.invoke('meeting-preparation-cancel-operation', id),
   updateContentDimensions: (dimensions: { width: number; height: number }) =>
     ipcRenderer.invoke('update-content-dimensions', dimensions),
   updateContentDimensionsCentered: (dimensions: { width: number; height: number }) =>

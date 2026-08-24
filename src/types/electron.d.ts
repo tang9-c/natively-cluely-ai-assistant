@@ -25,6 +25,13 @@ import type {
   LongMeetingBenchmarkPhase,
   LongMeetingBenchmarkSample,
 } from '../../shared/longMeetingBenchmark'
+import type {
+  MeetingContext,
+  MeetingPreparationOperationResult,
+  MeetingPreparationRecord,
+  MeetingPreparationSaveInput,
+  PrepareContextResult,
+} from '../../shared/meetingPreparation'
 export type {
   ContextNeedDecision,
   ContextNeedDecisionSource,
@@ -468,6 +475,35 @@ export interface LauncherAd {
 }
 
 export interface ElectronAPI {
+  // @ipc-channel meeting-preparation-save
+  meetingPreparationSave: (input: MeetingPreparationSaveInput) => Promise<MeetingPreparationRecord>
+  // @ipc-channel meeting-preparation-get
+  meetingPreparationGet: (id: string) => Promise<MeetingPreparationRecord | null>
+  // @ipc-channel meeting-preparation-list
+  meetingPreparationList: () => Promise<MeetingPreparationRecord[]>
+  // @ipc-channel meeting-preparation-delete
+  meetingPreparationDelete: (id: string) => Promise<{ success: true }>
+  // @ipc-channel meeting-preparation-parse-input
+  meetingPreparationParseInput: (input: {
+    id: string
+    rawInput: string
+  }) => Promise<MeetingPreparationOperationResult<MeetingContext>>
+  // @ipc-channel meeting-preparation-prepare-context
+  meetingPreparationPrepareContext: (input: {
+    id: string
+    context: MeetingContext
+  }) => Promise<MeetingPreparationOperationResult<PrepareContextResult>>
+  // @ipc-channel meeting-preparation-generate
+  meetingPreparationGenerate: (id: string) => Promise<MeetingPreparationOperationResult<MeetingPreparationRecord>>
+  // @ipc-channel meeting-preparation-recheck-question
+  meetingPreparationRecheckQuestion: (input: {
+    preparationId: string
+    questionId: string
+  }) => Promise<MeetingPreparationOperationResult<MeetingPreparationRecord>>
+  // @ipc-channel meeting-preparation-apply-mode
+  meetingPreparationApplyMode: (id: string) => Promise<{ success: boolean; error?: 'failed' }>
+  // @ipc-channel meeting-preparation-cancel-operation
+  meetingPreparationCancelOperation: (id: string) => Promise<{ success: boolean }>
   // @ipc-channel update-content-dimensions
   updateContentDimensions: (dimensions: {
     width: number

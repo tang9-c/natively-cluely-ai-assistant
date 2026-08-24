@@ -40,6 +40,10 @@ import { getContextQualityDiagnosticsCollector } from './services/eval/ContextQu
 import { QaReportService } from './services/qa/QaReportService';
 import { telemetryService } from './services/telemetry/TelemetryService';
 import { RemoteAdService } from './services/launcher-ads/RemoteAdService';
+import { KnowledgeMaterialService } from './services/knowledge/KnowledgeMaterialService';
+import { MeetingPreparationService } from './services/meeting-preparation/MeetingPreparationService';
+import { meetingContextSchema } from './services/meeting-preparation/MeetingPreparationSchemas';
+import { ModesManager } from './services/ModesManager';
 import type { DynamicActionOutputType } from './services/dynamic-actions/DynamicAction';
 import { buildDynamicActionRuntimeGrounding } from './services/dynamic-actions/DynamicActionRuntimeGrounding';
 import { getDynamicActionRuntimeValidationPolicy } from './services/dynamic-actions/DynamicActionRuntimeValidationPolicy';
@@ -86,6 +90,7 @@ import { buildEmbeddingRuntimeConfig } from './rag/EmbeddingRuntimeConfig';
 import type { EmbeddingPipelineStatus } from './rag/EmbeddingPipeline';
 import { assertSafeHttpsUrl, createSsrfSafeHttpsAgent } from './security/NetworkTargetPolicy';
 import { getFileAccessGrantStore } from './security/FileAccessGrantStore';
+import type { MeetingPreparationSaveInput } from '../shared/meetingPreparation';
 
 const QCLOUD_KEY_PATTERN = /^sk-[A-Za-z0-9_-]{32,}$/;
 const EMBEDDING_READY_STATUS_WAIT_MS = 2_500;
@@ -285,6 +290,130 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     });
   };
+
+  const meetingPreparationDb = DatabaseManager.getInstance();
+  const meetingPreparationModes = ModesManager.getInstance();
+  const meetingPreparationService = new MeetingPreparationService({
+    db: meetingPreparationDb,
+    llm: appState.processingHelper.getLLMHelper(),
+    modes: meetingPreparationModes,
+    materials: new KnowledgeMaterialService(
+      meetingPreparationDb,
+      appState.getRAGManager()?.getEmbeddingPipeline?.() ?? null,
+    ),
+  });
+  const requirePreparationId = (value: unknown): string => {
+    if (typeof value !== 'string' || !/^prep_[A-Za-z0-9_-]{6,128}$/.test(value)) {
+      throw new Error('invalid_preparation_id');
+    }
+    return value;
+  };
+  const requireQuestionId = (value: unknown): string => {
+    if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{2,128}$/.test(value)) {
+      throw new Error('invalid_question_id');
+    }
+    return value;
+  };
+  const requirePreparationText = (value: unknown): string => {
+    if (typeof value !== 'string' || value.length > 20_000) {
+      throw new Error('invalid_preparation_text');
+    }
+    return value;
+  };
+  const requirePreparationSaveInput = (value: unknown): MeetingPreparationSaveInput => {
+    if (!value || typeof value !== 'object') throw new Error('invalid_preparation_input');
+    const input = value as Partial<MeetingPreparationSaveInput>;
+    if (input.id !== undefined) requirePreparationId(input.id);
+    const rawInput = requirePreparationText(input.rawInput);
+    if (input.inputMethod !== 'voice' && input.inputMethod !== 'text') {
+      throw new Error('invalid_preparation_input_method');
+    }
+    if (input.status !== undefined && input.status !== 'draft' && input.status !== 'ready') {
+      throw new Error('invalid_preparation_status');
+    }
+    if (input.questions !== undefined && (!Array.isArray(input.questions) || input.questions.length > 3)) {
+      throw new Error('invalid_preparation_questions');
+    }
+    return { ...input, rawInput, inputMethod: input.inputMethod } as MeetingPreparationSaveInput;
+  };
+  const meetingPreparationError = (error: unknown): 'busy' | 'cancelled' | 'invalid_output' | 'failed' => {
+    const message = error instanceof Error ? error.message : '';
+    if (message.includes('busy')) return 'busy';
+    if (message.includes('cancel') || (error instanceof Error && error.name === 'AbortError')) return 'cancelled';
+    if (message.includes('invalid') || message.includes('parse') || message.includes('JSON')) return 'invalid_output';
+    return 'failed';
+  };
+
+  safeHandle('meeting-preparation-save', (_event, input: unknown) =>
+    meetingPreparationDb.saveMeetingPreparation(requirePreparationSaveInput(input)));
+  safeHandle('meeting-preparation-get', (_event, id: unknown) =>
+    meetingPreparationDb.getMeetingPreparation(requirePreparationId(id)));
+  safeHandle('meeting-preparation-list', () => meetingPreparationDb.listMeetingPreparations(20));
+  safeHandle('meeting-preparation-delete', (_event, id: unknown) => {
+    meetingPreparationDb.deleteMeetingPreparation(requirePreparationId(id));
+    return { success: true as const };
+  });
+  safeHandle('meeting-preparation-parse-input', async (_event, input: unknown) => {
+    try {
+      if (!input || typeof input !== 'object') throw new Error('invalid_preparation_input');
+      const value = input as { id?: unknown; rawInput?: unknown };
+      const result = await meetingPreparationService.parseInput(
+        requirePreparationId(value.id),
+        requirePreparationText(value.rawInput),
+      );
+      return { success: true as const, result };
+    } catch (error) {
+      return { success: false as const, error: meetingPreparationError(error) };
+    }
+  });
+  safeHandle('meeting-preparation-prepare-context', async (_event, input: unknown) => {
+    try {
+      if (!input || typeof input !== 'object') throw new Error('invalid_preparation_input');
+      const value = input as { id?: unknown; context?: unknown };
+      const result = await meetingPreparationService.prepareContext(
+        requirePreparationId(value.id),
+        meetingContextSchema.parse(value.context),
+      );
+      return { success: true as const, result };
+    } catch (error) {
+      return { success: false as const, error: meetingPreparationError(error) };
+    }
+  });
+  safeHandle('meeting-preparation-generate', async (_event, id: unknown) => {
+    try {
+      const result = await meetingPreparationService.generate(requirePreparationId(id));
+      return { success: true as const, result };
+    } catch (error) {
+      return { success: false as const, error: meetingPreparationError(error) };
+    }
+  });
+  safeHandle('meeting-preparation-recheck-question', async (_event, input: unknown) => {
+    try {
+      if (!input || typeof input !== 'object') throw new Error('invalid_preparation_input');
+      const value = input as { preparationId?: unknown; questionId?: unknown };
+      const result = await meetingPreparationService.recheckQuestion(
+        requirePreparationId(value.preparationId),
+        requireQuestionId(value.questionId),
+      );
+      return { success: true as const, result };
+    } catch (error) {
+      return { success: false as const, error: meetingPreparationError(error) };
+    }
+  });
+  safeHandle('meeting-preparation-apply-mode', (_event, id: unknown) => {
+    const record = meetingPreparationDb.getMeetingPreparation(requirePreparationId(id));
+    const selectedMode = record?.selectedModeId
+      ? meetingPreparationModes.getModes().find((mode) => mode.id === record.selectedModeId)
+      : null;
+    if (!selectedMode || (selectedMode.templateType !== 'sales' && selectedMode.templateType !== 'fde')) {
+      return { success: false as const, error: 'failed' as const };
+    }
+    meetingPreparationModes.setActiveMode(selectedMode.id);
+    return { success: true as const };
+  });
+  safeHandle('meeting-preparation-cancel-operation', (_event, id: unknown) => ({
+    success: meetingPreparationService.cancelOperation(requirePreparationId(id)),
+  }));
 
   const resolveChatPromptOptions = (
     message: string,
