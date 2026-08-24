@@ -112,6 +112,13 @@ test('parseInput declares transcript scope and returns validated context', async
   assert.equal(result.customer.value, '启明机器人');
   assert.deepEqual(calls[0].options.dataScopes, ['transcript']);
   assert.equal(calls[0].options.providerStrategy, 'selected_model_only');
+  const prompt = calls[0].prompt;
+  assert.match(prompt, /只返回一个 JSON 对象/);
+  assert.ok(prompt.includes('"topic":{"value":"产品技术交流","state":"confirmed"}'));
+  assert.ok(prompt.includes('"participants":[{"name":"张三","role":"研发总监"}]'));
+  assert.ok(prompt.includes('"agenda":["机器人行业案例","产品集成"]'));
+  assert.ok(prompt.includes('"background":"首次交流"'));
+  assert.match(prompt, /confirmed 或 needs_confirmation/);
 });
 
 test('prepareContext recommends only Sales or FDE and returns at most five meetings', async () => {

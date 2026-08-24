@@ -9,9 +9,20 @@ interface PromptMode {
 }
 
 export function buildMeetingContextPrompt(rawInput: string): string {
+    const example = {
+        topic: { value: '产品技术交流', state: 'confirmed' },
+        customer: { value: '启明机器人', state: 'confirmed' },
+        participants: [{ name: '张三', role: '研发总监' }],
+        goal: { value: '确认产品集成方案', state: 'confirmed' },
+        agenda: ['机器人行业案例', '产品集成'],
+        background: '首次交流',
+    };
     return [
         '你只负责拆解会议信息，不补充输入中不存在的事实。',
-        '返回 JSON：topic/customer/participants/goal/agenda/background；不确定字段的 state 必须为 needs_confirmation。',
+        '必须只返回一个 JSON 对象，不要解释，不要使用 Markdown 代码块。',
+        '严格使用以下字段和类型：topic、customer、goal 都是 { value: string, state: string }；participants 是 { name: string, role: string }[]；agenda 是 string[]；background 是 string。',
+        'state 只能是 confirmed 或 needs_confirmation；输入未明确的信息使用空字符串、空数组和 needs_confirmation，不得猜测。',
+        `合法格式示例（只展示结构和类型，不得照抄内容）：${JSON.stringify(example)}`,
         `用户输入：${JSON.stringify(rawInput)}`,
     ].join('\n');
 }
