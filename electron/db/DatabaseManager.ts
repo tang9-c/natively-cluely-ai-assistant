@@ -18,6 +18,12 @@ import {
 import type { ResumeNode, UserProfileRecord } from '../services/profile/types';
 import type { SpeakerVerificationMetadata } from '../services/speaker/speakerVerificationTypes';
 import type { SpeakerIdentityCorrection } from '../../shared/speakerIdentity';
+import type {
+    MeetingPreparationRecord,
+    MeetingPreparationResult,
+    MeetingPreparationSaveInput,
+    PreparationQuestion,
+} from '../../shared/meetingPreparation';
 
 // Interfaces for our data objects
 export interface CompanyResearchCacheRow {
@@ -1687,6 +1693,47 @@ export class DatabaseManager {
             this.db.pragma('user_version = 34');
         }
 
+        // Version 34 -> 35: Persist meeting preparation drafts and their
+        // evidence-backed predicted questions.
+        if (version < 35) {
+            console.log('[DatabaseManager] Applying migration v34 -> v35: Add meeting preparation tables');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS meeting_preparations (
+                    id TEXT PRIMARY KEY,
+                    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'ready')),
+                    raw_input TEXT NOT NULL DEFAULT '',
+                    input_method TEXT NOT NULL CHECK(input_method IN ('voice', 'text')),
+                    meeting_context_json TEXT,
+                    selected_mode_id TEXT,
+                    linked_meeting_id TEXT,
+                    result_json TEXT NOT NULL DEFAULT '{"modeRecommendation":null,"historySummary":[],"commitments":[]}',
+                    generated_at TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(linked_meeting_id) REFERENCES meetings(id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS meeting_preparation_questions (
+                    id TEXT PRIMARY KEY,
+                    preparation_id TEXT NOT NULL,
+                    sort_order INTEGER NOT NULL,
+                    question TEXT NOT NULL,
+                    key_moment_type TEXT NOT NULL,
+                    rationale_json TEXT NOT NULL DEFAULT '[]',
+                    evidence_status TEXT CHECK(evidence_status IS NULL OR evidence_status IN ('sufficient', 'partial', 'missing', 'not_needed')),
+                    evidence_json TEXT NOT NULL,
+                    checked_at TEXT,
+                    FOREIGN KEY(preparation_id) REFERENCES meeting_preparations(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_meeting_preparations_updated_at
+                    ON meeting_preparations(updated_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_meeting_preparation_questions_parent
+                    ON meeting_preparation_questions(preparation_id, sort_order);
+            `);
+            this.db.pragma('user_version = 35');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -3235,6 +3282,188 @@ export class DatabaseManager {
         }
     }
 
+    private replaceMeetingPreparationQuestions(preparationId: string, questions: PreparationQuestion[]): void {
+        if (!this.db) throw new Error('Database not initialized');
+
+        this.db.prepare('DELETE FROM meeting_preparation_questions WHERE preparation_id = ?').run(preparationId);
+        const insert = this.db.prepare(`
+            INSERT INTO meeting_preparation_questions (
+                id, preparation_id, sort_order, question, key_moment_type,
+                rationale_json, evidence_status, evidence_json, checked_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const question of questions) {
+            insert.run(
+                question.id,
+                preparationId,
+                question.sortOrder,
+                question.question,
+                question.keyMomentType,
+                JSON.stringify(question.rationale),
+                question.evidenceStatus,
+                JSON.stringify(question.evidence),
+                question.checkedAt,
+            );
+        }
+    }
+
+    private mapMeetingPreparationRow(row: Record<string, unknown>): MeetingPreparationRecord {
+        if (!this.db) throw new Error('Database not initialized');
+
+        const questions = this.db.prepare(`
+            SELECT * FROM meeting_preparation_questions
+            WHERE preparation_id = ?
+            ORDER BY sort_order ASC
+        `).all(row.id) as Array<Record<string, unknown>>;
+
+        return {
+            id: String(row.id),
+            status: row.status as MeetingPreparationRecord['status'],
+            rawInput: String(row.raw_input ?? ''),
+            inputMethod: row.input_method as MeetingPreparationRecord['inputMethod'],
+            meetingContext: safeJson(row.meeting_context_json as string | null, null),
+            selectedModeId: (row.selected_mode_id as string | null) ?? null,
+            linkedMeetingId: (row.linked_meeting_id as string | null) ?? null,
+            result: safeJson(row.result_json as string | null, {
+                modeRecommendation: null,
+                historySummary: [],
+                commitments: [],
+            }),
+            questions: questions.map((question) => ({
+                id: String(question.id),
+                sortOrder: Number(question.sort_order),
+                question: String(question.question),
+                keyMomentType: String(question.key_moment_type),
+                rationale: safeJson(question.rationale_json as string | null, []),
+                evidenceStatus: (question.evidence_status as PreparationQuestion['evidenceStatus']) ?? null,
+                evidence: safeJson(question.evidence_json as string | null, {
+                    knowledgeRequirements: [],
+                    supported: [],
+                    missing: [],
+                    limitations: [],
+                    citations: [],
+                    handlingScript: '',
+                    followupQuestions: [],
+                }),
+                checkedAt: (question.checked_at as string | null) ?? null,
+            })),
+            generatedAt: (row.generated_at as string | null) ?? null,
+            createdAt: String(row.created_at),
+            updatedAt: String(row.updated_at),
+        };
+    }
+
+    public saveMeetingPreparation(input: MeetingPreparationSaveInput): MeetingPreparationRecord {
+        if (!this.db) throw new Error('Database not initialized');
+
+        const id = input.id ?? `prep_${cryptoRandomId()}`;
+        const existing = input.id ? this.getMeetingPreparation(input.id) : null;
+        const now = new Date().toISOString();
+        const status = input.status ?? existing?.status ?? 'draft';
+        const meetingContext = input.meetingContext === undefined
+            ? existing?.meetingContext ?? null
+            : input.meetingContext;
+        const selectedModeId = input.selectedModeId === undefined
+            ? existing?.selectedModeId ?? null
+            : input.selectedModeId;
+        const linkedMeetingId = input.linkedMeetingId === undefined
+            ? existing?.linkedMeetingId ?? null
+            : input.linkedMeetingId;
+        const result = input.result ?? existing?.result ?? {
+            modeRecommendation: null,
+            historySummary: [],
+            commitments: [],
+        };
+
+        const persist = this.db.transaction(() => {
+            this.db!.prepare(`
+                INSERT INTO meeting_preparations (
+                    id, status, raw_input, input_method, meeting_context_json,
+                    selected_mode_id, linked_meeting_id, result_json,
+                    generated_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status = excluded.status,
+                    raw_input = excluded.raw_input,
+                    input_method = excluded.input_method,
+                    meeting_context_json = excluded.meeting_context_json,
+                    selected_mode_id = excluded.selected_mode_id,
+                    linked_meeting_id = excluded.linked_meeting_id,
+                    result_json = excluded.result_json,
+                    generated_at = excluded.generated_at,
+                    updated_at = excluded.updated_at
+            `).run(
+                id,
+                status,
+                input.rawInput,
+                input.inputMethod,
+                meetingContext ? JSON.stringify(meetingContext) : null,
+                selectedModeId,
+                linkedMeetingId,
+                JSON.stringify(result),
+                existing?.generatedAt ?? null,
+                existing?.createdAt ?? now,
+                now,
+            );
+
+            if (input.questions !== undefined) {
+                this.replaceMeetingPreparationQuestions(id, input.questions);
+            }
+        });
+        persist();
+
+        const saved = this.getMeetingPreparation(id);
+        if (!saved) throw new Error('Failed to save meeting preparation');
+        return saved;
+    }
+
+    public getMeetingPreparation(id: string): MeetingPreparationRecord | null {
+        if (!this.db) return null;
+        const row = this.db.prepare('SELECT * FROM meeting_preparations WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+        return row ? this.mapMeetingPreparationRow(row) : null;
+    }
+
+    public listMeetingPreparations(limit: number = 20): MeetingPreparationRecord[] {
+        if (!this.db) return [];
+        const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+        const rows = this.db.prepare(`
+            SELECT * FROM meeting_preparations
+            ORDER BY updated_at DESC
+            LIMIT ?
+        `).all(safeLimit) as Array<Record<string, unknown>>;
+        return rows.map((row) => this.mapMeetingPreparationRow(row));
+    }
+
+    public deleteMeetingPreparation(id: string): void {
+        if (!this.db) return;
+        this.db.prepare('DELETE FROM meeting_preparations WHERE id = ?').run(id);
+    }
+
+    public saveMeetingPreparationResult(
+        id: string,
+        result: MeetingPreparationResult,
+        questions: PreparationQuestion[],
+    ): MeetingPreparationRecord {
+        if (!this.db) throw new Error('Database not initialized');
+        const existing = this.getMeetingPreparation(id);
+        if (!existing) throw new Error('Meeting preparation not found');
+
+        const now = new Date().toISOString();
+        const persist = this.db.transaction(() => {
+            this.db!.prepare(`
+                UPDATE meeting_preparations
+                SET status = 'ready', result_json = ?, generated_at = ?, updated_at = ?
+                WHERE id = ?
+            `).run(JSON.stringify(result), existing.generatedAt ?? now, now, id);
+            this.replaceMeetingPreparationQuestions(id, questions);
+        });
+        persist();
+
+        const saved = this.getMeetingPreparation(id);
+        if (!saved) throw new Error('Failed to save meeting preparation result');
+        return saved;
+    }
+
     public getRecentMeetings(limit: number = 50): Meeting[] {
         if (!this.db) return [];
 
@@ -3403,10 +3632,17 @@ export class DatabaseManager {
         if (!this.db) return false;
 
         try {
+            const hasMeetingPreparations = Boolean(this.db.prepare(`
+                SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meeting_preparations'
+            `).get());
             // Clear all tables atomically (order matters due to foreign keys,
             // but SQLite handles cascades). Using a transaction ensures we never
             // end up in a half-cleared state if one statement fails.
             this.db.transaction(() => {
+                if (hasMeetingPreparations) {
+                    this.db!.exec('DELETE FROM meeting_preparation_questions');
+                    this.db!.exec('DELETE FROM meeting_preparations');
+                }
                 this.db!.exec('DELETE FROM embedding_queue');
                 this.db!.exec('DELETE FROM chunk_summaries');
                 this.db!.exec('DELETE FROM chunks');
