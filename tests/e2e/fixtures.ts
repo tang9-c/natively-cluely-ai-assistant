@@ -84,6 +84,7 @@ export const test = base.extend<{
         ELECTRON_ENABLE_LOGGING: '1',
         ELECTRON_E2E: '1',
         ELECTRON_E2E_SKIP_AUDIO_START: '1',
+        ELECTRON_E2E_MEETING_PREPARATION_FIXTURES: '1',
       },
     });
 

@@ -573,7 +573,7 @@ describe('DatabaseManager — interrupted knowledge material recovery', () => {
 });
 
 describe('DatabaseManager — knowledge material embedding-space migration', () => {
-  it('adds material embedding identity columns and advances schema to v34', () => {
+  it('adds material embedding identity columns and advances to the current schema', () => {
     const { db, manager } = makeManager();
 
     manager.runMigrations();
@@ -582,6 +582,6 @@ describe('DatabaseManager — knowledge material embedding-space migration', () 
     assert.equal(columns.has('embedding_provider'), true);
     assert.equal(columns.has('embedding_dimensions'), true);
     assert.equal(columns.has('embedding_space'), true);
-    assert.equal(db.pragma('user_version', { simple: true }), 34);
+    assert.equal(db.pragma('user_version', { simple: true }), 35);
   });
 });

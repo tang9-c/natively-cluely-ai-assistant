@@ -65,7 +65,7 @@ test('v30 -> v31 adds strict meeting index state without changing existing data'
 
   migrate(db);
 
-  assert.equal(db.pragma('user_version', { simple: true }), 34);
+  assert.equal(db.pragma('user_version', { simple: true }), 35);
   assert.deepEqual(
     db.prepare(`
       SELECT rag_transcript_hash, rag_index_state

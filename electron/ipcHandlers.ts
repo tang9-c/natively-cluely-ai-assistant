@@ -40,7 +40,10 @@ import { getContextQualityDiagnosticsCollector } from './services/eval/ContextQu
 import { QaReportService } from './services/qa/QaReportService';
 import { telemetryService } from './services/telemetry/TelemetryService';
 import { RemoteAdService } from './services/launcher-ads/RemoteAdService';
-import { KnowledgeMaterialService } from './services/knowledge/KnowledgeMaterialService';
+import {
+  KnowledgeMaterialService,
+  type KnowledgeMaterialSearchResponse,
+} from './services/knowledge/KnowledgeMaterialService';
 import { MeetingPreparationService } from './services/meeting-preparation/MeetingPreparationService';
 import { meetingContextSchema } from './services/meeting-preparation/MeetingPreparationSchemas';
 import { ModesManager } from './services/ModesManager';
@@ -293,14 +296,71 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   const meetingPreparationDb = DatabaseManager.getInstance();
   const meetingPreparationModes = ModesManager.getInstance();
+  const useMeetingPreparationE2EFixtures = process.env.ELECTRON_E2E_MEETING_PREPARATION_FIXTURES === '1';
+  const meetingPreparationLlm = useMeetingPreparationE2EFixtures
+    ? {
+        async generateContentStructured(_message: string, options: any): Promise<string> {
+          if (options?.taskLabel === 'meeting-preparation-parse') {
+            return JSON.stringify({
+              topic: { value: '机器人行业案例与产品集成', state: 'confirmed' },
+              customer: { value: '启明机器人', state: 'confirmed' },
+              participants: [{ name: '', role: '研发总监' }],
+              goal: { value: '确认案例适配性与集成条件', state: 'confirmed' },
+              agenda: ['机器人行业案例', '产品集成条件'],
+              background: '新客户产品技术交流',
+            });
+          }
+          if (options?.taskLabel === 'meeting-preparation-mode') {
+            return JSON.stringify({
+              templateType: 'sales',
+              reason: '会议重点是案例价值与需求发现',
+              focus: '案例匹配、业务目标和下一步',
+            });
+          }
+          if (options?.taskLabel === 'meeting-preparation-predict') {
+            return JSON.stringify({
+              historySummary: [],
+              commitments: [],
+              questions: [
+                {
+                  question: '机器人行业有哪些已落地案例？',
+                  keyMomentType: 'case_proof',
+                  rationale: ['客户明确关注行业案例'],
+                  knowledgeRequirements: ['机器人行业案例详情'],
+                  requiresInternalEvidence: true,
+                },
+                {
+                  question: '产品如何接入现有机器人系统？',
+                  keyMomentType: 'integration',
+                  rationale: ['会议议程包含产品集成'],
+                  knowledgeRequirements: ['产品集成方案'],
+                  requiresInternalEvidence: true,
+                },
+                {
+                  question: '贵方最希望先验证哪个业务场景？',
+                  keyMomentType: 'discovery',
+                  rationale: ['需要进一步明确需求优先级'],
+                  knowledgeRequirements: [],
+                  requiresInternalEvidence: false,
+                },
+              ],
+            });
+          }
+          throw new Error('unsupported_meeting_preparation_e2e_task');
+        },
+      }
+    : appState.processingHelper.getLLMHelper();
+  const meetingPreparationMaterials = useMeetingPreparationE2EFixtures
+    ? { searchWithDiagnostics: async (): Promise<KnowledgeMaterialSearchResponse> => ({ hits: [] }) }
+    : new KnowledgeMaterialService(
+        meetingPreparationDb,
+        appState.getRAGManager()?.getEmbeddingPipeline?.() ?? null,
+      );
   const meetingPreparationService = new MeetingPreparationService({
     db: meetingPreparationDb,
-    llm: appState.processingHelper.getLLMHelper(),
+    llm: meetingPreparationLlm,
     modes: meetingPreparationModes,
-    materials: new KnowledgeMaterialService(
-      meetingPreparationDb,
-      appState.getRAGManager()?.getEmbeddingPipeline?.() ?? null,
-    ),
+    materials: meetingPreparationMaterials,
   });
   const requirePreparationId = (value: unknown): string => {
     if (typeof value !== 'string' || !/^prep_[A-Za-z0-9_-]{6,128}$/.test(value)) {
