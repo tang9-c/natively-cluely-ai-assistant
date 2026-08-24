@@ -120,6 +120,20 @@ interface ElectronAPI {
   }) => Promise<MeetingPreparationOperationResult<MeetingPreparationRecord>>;
   meetingPreparationApplyMode: (id: string) => Promise<{ success: boolean; error?: 'failed' }>;
   meetingPreparationCancelOperation: (id: string) => Promise<{ success: boolean }>;
+  meetingPreparationDictationStart: () => Promise<{
+    success: boolean;
+    error?: 'audio_session_busy' | 'stt_not_configured' | 'failed';
+  }>;
+  meetingPreparationDictationStop: () => Promise<{ success: true }>;
+  meetingPreparationDictationCancel: () => Promise<{ success: true }>;
+  meetingPreparationDictationInject?: (payload: {
+    text: string;
+    final: boolean;
+    timestamp?: number;
+  }) => Promise<{ success: true }>;
+  onMeetingPreparationDictationTranscript: (
+    callback: (payload: { text: string; final: boolean; timestamp: number }) => void,
+  ) => () => void;
   updateContentDimensions: (dimensions: { width: number; height: number }) => Promise<void>;
   updateContentDimensionsCentered: (dimensions: { width: number; height: number }) => Promise<void>;
   getRecognitionLanguages: () => Promise<Record<string, any>>;
@@ -1036,6 +1050,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
   meetingPreparationApplyMode: (id: string) => ipcRenderer.invoke('meeting-preparation-apply-mode', id),
   meetingPreparationCancelOperation: (id: string) =>
     ipcRenderer.invoke('meeting-preparation-cancel-operation', id),
+  meetingPreparationDictationStart: () =>
+    ipcRenderer.invoke('meeting-preparation-dictation-start'),
+  meetingPreparationDictationStop: () =>
+    ipcRenderer.invoke('meeting-preparation-dictation-stop'),
+  meetingPreparationDictationCancel: () =>
+    ipcRenderer.invoke('meeting-preparation-dictation-cancel'),
+  ...(process.env.ELECTRON_E2E === '1'
+    ? {
+        meetingPreparationDictationInject: (payload: {
+          text: string;
+          final: boolean;
+          timestamp?: number;
+        }) => ipcRenderer.invoke('meeting-preparation-dictation-inject', payload),
+      }
+    : {}),
+  onMeetingPreparationDictationTranscript: (
+    callback: (payload: { text: string; final: boolean; timestamp: number }) => void,
+  ) => {
+    const subscription = (
+      _event: Electron.IpcRendererEvent,
+      payload: { text: string; final: boolean; timestamp: number },
+    ) => callback(payload);
+    ipcRenderer.on('meeting-preparation-dictation-transcript', subscription);
+    return () => {
+      ipcRenderer.removeListener('meeting-preparation-dictation-transcript', subscription);
+    };
+  },
   updateContentDimensions: (dimensions: { width: number; height: number }) =>
     ipcRenderer.invoke('update-content-dimensions', dimensions),
   updateContentDimensionsCentered: (dimensions: { width: number; height: number }) =>

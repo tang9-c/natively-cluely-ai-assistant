@@ -1118,6 +1118,11 @@ export class AppState {
   private _audioTestStarting = false;               // P2-12: in-flight guard against concurrent calls
   private googleSTT: STTProvider | null = null; // Interviewer
   private googleSTT_User: STTProvider | null = null; // User
+  private preparationDictation: {
+    sender: Electron.WebContents;
+    active: boolean;
+    onDestroyed: () => void;
+  } | null = null;
 
   private getSttRuntimeDiagnostics(
     speaker: 'interviewer' | 'user',
@@ -1394,6 +1399,15 @@ export class AppState {
 
     // Wire Transcript Events
     stt.on('transcript', (segment: TranscriptSegment) => {
+      if (speaker === 'user' && this.preparationDictation?.active) {
+        this.sendPreparationDictationTranscript({
+          text: segment.text,
+          final: segment.isFinal,
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
       // Accept transcripts while a meeting is active OR while we're draining
       // trailing finals after Stop. `_isDraining` covers the ~250 ms grace
       // window between Stop click and STT socket close so the user's last
@@ -3393,7 +3407,102 @@ export class AppState {
     }
   }
 
+  private sendPreparationDictationTranscript(payload: {
+    text: string;
+    final: boolean;
+    timestamp: number;
+  }): void {
+    const session = this.preparationDictation;
+    if (!session?.active) return;
+    if (session.sender.isDestroyed()) {
+      void this.cancelPreparationDictation();
+      return;
+    }
+    session.sender.send('meeting-preparation-dictation-transcript', payload);
+  }
+
+  private teardownPreparationDictation(session: NonNullable<AppState['preparationDictation']>): void {
+    session.active = false;
+    if (!session.sender.isDestroyed()) {
+      session.sender.removeListener('destroyed', session.onDestroyed);
+    }
+    if (this.preparationDictation === session) this.preparationDictation = null;
+
+    try { this.microphoneCapture?.stop(); } catch { /* already stopped */ }
+    try { this.microphoneCapture?.destroy(); } catch { /* already destroyed */ }
+    this.microphoneCapture = null;
+
+    try { this.googleSTT_User?.stop(); } catch { /* already stopped */ }
+    this.googleSTT_User?.removeAllListeners();
+    this.googleSTT_User = null;
+    this._micSttRateApplied = false;
+  }
+
+  public async startPreparationDictation(sender: Electron.WebContents): Promise<void> {
+    if (
+      this.isMeetingActive
+      || this._meetingStartInFlight
+      || this._isDraining
+      || this.preparationDictation?.active
+      || this.audioTestCapture
+    ) {
+      throw new Error('audio_session_busy');
+    }
+
+    if (!this.microphoneCapture) {
+      this.microphoneCapture = new MicrophoneCapture();
+      this.wireMicCapture(this.microphoneCapture, '(Preparation)');
+    }
+    if (!this.googleSTT_User) this.googleSTT_User = this.createSTTProvider('user');
+    if (!this.googleSTT_User) throw new Error('stt_not_configured');
+
+    const onDestroyed = () => { void this.cancelPreparationDictation(); };
+    const session = { sender, active: true, onDestroyed };
+    this.preparationDictation = session;
+    sender.once('destroyed', onDestroyed);
+    this._micSttRateApplied = false;
+    try {
+      this.googleSTT_User.start();
+      this.microphoneCapture.start();
+    } catch (error) {
+      this.teardownPreparationDictation(session);
+      throw error;
+    }
+  }
+
+  public async stopPreparationDictation(): Promise<void> {
+    const session = this.preparationDictation;
+    if (!session?.active) return;
+
+    this.microphoneCapture?.stop();
+    this.googleSTT_User?.finalize?.();
+    await new Promise<void>((resolve) => setTimeout(resolve, 250));
+    if (this.preparationDictation === session) this.teardownPreparationDictation(session);
+  }
+
+  public async cancelPreparationDictation(): Promise<void> {
+    const session = this.preparationDictation;
+    if (!session) return;
+    this.teardownPreparationDictation(session);
+  }
+
+  public injectPreparationDictationTranscript(payload: {
+    text: string;
+    final: boolean;
+    timestamp?: number;
+  }): { success: true } {
+    if (process.env.ELECTRON_E2E !== '1') throw new Error('e2e_bridge_disabled');
+    if (!this.preparationDictation?.active) throw new Error('preparation_dictation_inactive');
+    this.sendPreparationDictationTranscript({
+      text: String(payload.text ?? '').slice(0, 20_000),
+      final: payload.final === true,
+      timestamp: payload.timestamp ?? Date.now(),
+    });
+    return { success: true };
+  }
+
   public async startMeeting(metadata?: any): Promise<void> {
+    if (this.preparationDictation) await this.cancelPreparationDictation();
     if (this.isMeetingActive) {
       this.windowHelper.setWindowMode('overlay', true);
       this.broadcastMeetingState();

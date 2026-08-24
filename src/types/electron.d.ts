@@ -504,6 +504,23 @@ export interface ElectronAPI {
   meetingPreparationApplyMode: (id: string) => Promise<{ success: boolean; error?: 'failed' }>
   // @ipc-channel meeting-preparation-cancel-operation
   meetingPreparationCancelOperation: (id: string) => Promise<{ success: boolean }>
+  // @ipc-channel meeting-preparation-dictation-start
+  meetingPreparationDictationStart: () => Promise<{
+    success: boolean
+    error?: 'audio_session_busy' | 'stt_not_configured' | 'failed'
+  }>
+  // @ipc-channel meeting-preparation-dictation-stop
+  meetingPreparationDictationStop: () => Promise<{ success: true }>
+  // @ipc-channel meeting-preparation-dictation-cancel
+  meetingPreparationDictationCancel: () => Promise<{ success: true }>
+  meetingPreparationDictationInject?: (payload: {
+    text: string
+    final: boolean
+    timestamp?: number
+  }) => Promise<{ success: true }>
+  onMeetingPreparationDictationTranscript: (
+    callback: (payload: { text: string; final: boolean; timestamp: number }) => void
+  ) => () => void
   // @ipc-channel update-content-dimensions
   updateContentDimensions: (dimensions: {
     width: number

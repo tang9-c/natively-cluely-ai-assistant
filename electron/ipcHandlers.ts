@@ -414,6 +414,40 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('meeting-preparation-cancel-operation', (_event, id: unknown) => ({
     success: meetingPreparationService.cancelOperation(requirePreparationId(id)),
   }));
+  safeHandle('meeting-preparation-dictation-start', async (event) => {
+    try {
+      await appState.startPreparationDictation(event.sender);
+      return { success: true as const };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      const code = message === 'audio_session_busy' || message === 'stt_not_configured'
+        ? message
+        : 'failed';
+      return { success: false as const, error: code };
+    }
+  });
+  safeHandle('meeting-preparation-dictation-stop', async () => {
+    await appState.stopPreparationDictation();
+    return { success: true as const };
+  });
+  safeHandle('meeting-preparation-dictation-cancel', async () => {
+    await appState.cancelPreparationDictation();
+    return { success: true as const };
+  });
+  if (process.env.ELECTRON_E2E === '1') {
+    safeHandle('meeting-preparation-dictation-inject', (_event, payload: unknown) => {
+      if (!payload || typeof payload !== 'object') throw new Error('invalid_dictation_payload');
+      const value = payload as { text?: unknown; final?: unknown; timestamp?: unknown };
+      if (typeof value.text !== 'string' || typeof value.final !== 'boolean') {
+        throw new Error('invalid_dictation_payload');
+      }
+      return appState.injectPreparationDictationTranscript({
+        text: value.text,
+        final: value.final,
+        timestamp: typeof value.timestamp === 'number' ? value.timestamp : undefined,
+      });
+    });
+  }
 
   const resolveChatPromptOptions = (
     message: string,

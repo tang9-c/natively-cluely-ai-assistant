@@ -131,7 +131,10 @@ export interface MeetingPreparationApi {
   }): Promise<MeetingPreparationOperationResult<MeetingPreparationRecord>>;
   meetingPreparationApplyMode(id: string): Promise<{ success: true }>;
   meetingPreparationCancelOperation(id: string): Promise<{ success: boolean }>;
-  meetingPreparationDictationStart(): Promise<{ success: true }>;
+  meetingPreparationDictationStart(): Promise<{
+    success: boolean;
+    error?: 'audio_session_busy' | 'stt_not_configured' | 'failed';
+  }>;
   meetingPreparationDictationStop(): Promise<{ success: true }>;
   meetingPreparationDictationCancel(): Promise<{ success: true }>;
   onMeetingPreparationDictationTranscript(
