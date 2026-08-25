@@ -401,3 +401,99 @@ test('PPTX render child rejects decks above 60 slides before rendering pages', (
   assert.match(source, /slides\.length > 60/);
   assert.match(source, /pptx_page_limit_exceeded:\$\{slides\.length\}/);
 });
+
+test('PptxIngestionService rejects a defensive 61-slide deck before model calls', async () => {
+  const { PptxIngestionService } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxIngestionService.js');
+  let descriptorCalls = 0;
+  let indexCalls = 0;
+  let cleanedUp = false;
+  const renderer = {
+    renderToTempImages: async () => ({
+      tempDir: '/tmp/pptx-page-limit',
+      slides: Array.from({ length: 61 }, (_, index) => ({
+        slideIndex: index + 1,
+        imagePath: `/tmp/slide-${index + 1}.jpg`,
+      })),
+      cleanup: async () => { cleanedUp = true; },
+    }),
+  };
+  const descriptor = {
+    describeSlide: async () => {
+      descriptorCalls += 1;
+      return '# 标题\nDemo';
+    },
+    enhanceMarkdown: async () => ({
+      summary: '摘要',
+      hypotheticalQuestions: ['问1', '问2', '问3', '问4', '问5'],
+    }),
+  };
+  const service = new PptxIngestionService(renderer, descriptor, async () => { indexCalls += 1; });
+
+  await assert.rejects(() => service.ingest('mat_limit', '/tmp/deck.pptx'), (error) => {
+    assert.equal(error.code, 'pptx_page_limit_exceeded');
+    assert.equal(error.slideCount, 61);
+    return true;
+  });
+  assert.equal(descriptorCalls, 0);
+  assert.equal(indexCalls, 0);
+  assert.equal(cleanedUp, true);
+});
+
+test('PptxIngestionService skips a failed slide and indexes successful slides with original indexes', async () => {
+  const { PptxIngestionService } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxIngestionService.js');
+  let indexedChunks = [];
+  let cleanedUp = false;
+  const slides = [1, 2, 3].map((slideIndex) => ({ slideIndex, imagePath: `/tmp/slide-${slideIndex}.jpg` }));
+  const renderer = {
+    renderToTempImages: async () => ({
+      tempDir: '/tmp/pptx-partial',
+      slides,
+      cleanup: async () => { cleanedUp = true; },
+    }),
+  };
+  const descriptor = {
+    describeSlide: async (_imagePath, slideIndex) => {
+      if (slideIndex === 2) throw new Error('QCLOUD API request timed out after 20000ms');
+      return `# 标题\nSlide ${slideIndex}`;
+    },
+    enhanceMarkdown: async () => ({
+      summary: '摘要',
+      hypotheticalQuestions: ['问1', '问2', '问3', '问4', '问5'],
+    }),
+  };
+  const service = new PptxIngestionService(renderer, descriptor, async (_materialId, chunks) => {
+    indexedChunks = chunks;
+  });
+
+  const result = await service.ingest('mat_partial', '/tmp/deck.pptx');
+
+  assert.deepEqual(result, { slideCount: 3, successCount: 2, failedSlideIndexes: [2] });
+  assert.deepEqual(indexedChunks.map((chunk) => chunk.metadata.slide_index), [1, 3]);
+  assert.deepEqual(indexedChunks.map((chunk) => chunk.chunkIndex), [0, 2]);
+  assert.equal(cleanedUp, true);
+});
+
+test('PptxIngestionService rejects when every slide fails without creating an empty index', async () => {
+  const { PptxIngestionService } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxIngestionService.js');
+  let indexCalls = 0;
+  let cleanedUp = false;
+  const renderer = {
+    renderToTempImages: async () => ({
+      tempDir: '/tmp/pptx-all-failed',
+      slides: [1, 2].map((slideIndex) => ({ slideIndex, imagePath: `/tmp/slide-${slideIndex}.jpg` })),
+      cleanup: async () => { cleanedUp = true; },
+    }),
+  };
+  const descriptor = {
+    describeSlide: async () => { throw new Error('QCLOUD API request timed out after 20000ms'); },
+    enhanceMarkdown: async () => { throw new Error('unexpected_enhance_call'); },
+  };
+  const service = new PptxIngestionService(renderer, descriptor, async () => { indexCalls += 1; });
+
+  await assert.rejects(
+    () => service.ingest('mat_failed', '/tmp/deck.pptx'),
+    (error) => error.code === 'pptx_all_slides_failed',
+  );
+  assert.equal(indexCalls, 0);
+  assert.equal(cleanedUp, true);
+});
