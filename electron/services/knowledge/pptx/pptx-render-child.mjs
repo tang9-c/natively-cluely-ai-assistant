@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
+import JSZip from 'jszip';
 import { convertPptxToPng } from 'pptx-glimpse';
 import { createPptxFontMapping } from './createPptxFontMapping.js';
 
@@ -14,6 +15,21 @@ if (!inputPath || !outputDir || !fontDir) {
 await fs.mkdir(outputDir, { recursive: true });
 
 const input = await fs.readFile(inputPath);
+let archive;
+try {
+  archive = await JSZip.loadAsync(input);
+} catch {
+  console.error('pptx_invalid_file');
+  process.exit(5);
+}
+const declaredSlideCount = Object.keys(archive.files)
+  .filter((name) => /^ppt\/slides\/slide\d+\.xml$/i.test(name))
+  .length;
+if (declaredSlideCount > 60) {
+  console.error(`pptx_page_limit_exceeded:${declaredSlideCount}`);
+  process.exit(4);
+}
+
 const report = await convertPptxToPng(input, {
   width: 1280,
   fontDirs: [fontDir],

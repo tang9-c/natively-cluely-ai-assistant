@@ -402,6 +402,40 @@ test('PPTX render child rejects decks above 60 slides before rendering pages', (
   assert.match(source, /pptx_page_limit_exceeded:\$\{slides\.length\}/);
 });
 
+test('PPTX render child preflights slide count before converting an oversized deck', async () => {
+  const JSZip = require('jszip');
+  const { resolvePptxFontDir, runRenderChild } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-page-preflight-'));
+  const inputPath = path.join(tempDir, 'oversized.pptx');
+  const outputDir = path.join(tempDir, 'output');
+  fs.mkdirSync(outputDir);
+  const archive = new JSZip();
+  for (let index = 1; index <= 61; index += 1) {
+    archive.file(`ppt/slides/slide${index}.xml`, '<p:sld/>');
+  }
+  fs.writeFileSync(inputPath, await archive.generateAsync({ type: 'nodebuffer' }));
+  const scriptPath = path.resolve(
+    process.cwd(),
+    'dist-electron/electron/services/knowledge/pptx/pptx-render-child.mjs',
+  );
+  const fontDir = resolvePptxFontDir();
+  assert.ok(fontDir);
+
+  try {
+    await assert.rejects(
+      () => runRenderChild(scriptPath, inputPath, outputDir, 10_000, fontDir),
+      (error) => {
+        assert.equal(error.code, 'pptx_page_limit_exceeded');
+        assert.equal(error.slideCount, 61);
+        return true;
+      },
+    );
+    assert.deepEqual(fs.readdirSync(outputDir), []);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('PptxIngestionService rejects a defensive 61-slide deck before model calls', async () => {
   const { PptxIngestionService } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxIngestionService.js');
   let descriptorCalls = 0;
