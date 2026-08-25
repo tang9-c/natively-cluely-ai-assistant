@@ -1,4 +1,4 @@
-import type { MeetingContext } from '../../../shared/meetingPreparation';
+import type { MeetingContext, MeetingPreparationTemplateType } from '../../../shared/meetingPreparation';
 import type { PredictedQuestion } from './MeetingPreparationSchemas';
 import type { KnowledgeMaterialSearchResult } from '../knowledge/KnowledgeMaterialService';
 
@@ -29,10 +29,14 @@ export function buildMeetingContextPrompt(rawInput: string): string {
 
 export function buildModePrompt(context: MeetingContext, modes: PromptMode[]): string {
     const allowed = modes
-        .filter((mode) => mode.templateType === 'sales' || mode.templateType === 'fde')
+        .filter((mode) => mode.templateType === 'sales'
+            || mode.templateType === 'fde'
+            || mode.templateType === 'recruiting'
+            || mode.templateType === 'team-meet')
         .map((mode) => ({ id: mode.id, name: mode.name, templateType: mode.templateType }));
     return [
-        '只能在 sales 与 fde 中推荐一个主模式。',
+        '只能在 sales、fde、recruiting 与 team-meet 中推荐一个主模式。',
+        '推荐边界：外部客户会议不得推荐 team-meet；技术与交付型客户会议优先 fde；商务与价值沟通优先 sales；只有明确涉及候选人或招聘流程时才推荐 recruiting；只有明确属于内部协作时才推荐 team-meet。',
         '返回 JSON：templateType、reason、focus。',
         `可选模式：${JSON.stringify(allowed)}`,
         `会议信息：${JSON.stringify(context)}`,
@@ -50,12 +54,16 @@ const confirmedContext = (context: MeetingContext): Record<string, unknown> => (
 
 export function buildPredictionPrompt(
     context: MeetingContext,
-    mode: { id: string; name: string; templateType: 'sales' | 'fde' },
+    mode: { id: string; name: string; templateType: MeetingPreparationTemplateType },
     history: unknown | null,
 ): string {
     const keyMoments = mode.templateType === 'sales'
         ? ['需求发现', '案例与价值证明', '异议', '决策与下一步']
-        : ['目标与场景', '集成与安全约束', '交付风险', '成功标准与下一步'];
+        : mode.templateType === 'fde'
+            ? ['目标与场景', '集成与安全约束', '交付风险', '成功标准与下一步']
+            : mode.templateType === 'recruiting'
+                ? ['岗位职责与成功标准', '团队结构与文化', '招聘流程', '薪酬福利与工作制度']
+                : ['项目进展', '优先级与决策', '阻塞与风险', '负责人、资源和跨团队协作'];
     const example = {
         historySummary: ['上次会议讨论了集成范围'],
         commitments: [{ text: '会后补充机器人案例' }],
@@ -72,12 +80,14 @@ export function buildPredictionPrompt(
         '必须只返回一个 JSON 对象，不要解释，不要使用 Markdown 代码块。',
         '严格使用以下字段和类型：historySummary 是 string[]；commitments 是 { text: string }[]；questions 是 0–3 个问题对象的数组。',
         '每个问题对象必须包含 question: string、keyMomentType: string、rationale: string[]、knowledgeRequirements: string[]、requiresInternalEvidence: boolean。',
-        'questions 只允许生成客户向销售或现场顾问提出、需要我方回答的问题；question 必须使用客户直接提问的口吻。',
-        '不得生成销售或顾问向客户追问其现状、痛点、预算、计划、系统或决策流程的问题；这些属于需求发现，不属于“可能被问到的问题”。',
+        'questions 只允许生成对方参会者向当前用户提出、需要当前用户回答的问题；销售和 FDE 的对方是客户，招聘的对方是候选人，团队会议的对方是其他参会同事。question 必须使用对方直接提问的口吻。',
+        '不得生成当前用户应该向对方提出的问题；不得生成面试官题库、销售需求发现问题或团队待确认事项。',
         '视角示例：“贵公司当前在图纸、物料和变更管理方面存在哪些痛点？”不得生成；应改为客户可能问我方的“你们的产品如何解决机器人企业在图纸、物料和变更管理方面的痛点？”。',
         'requiresInternalEvidence 判定规则：回答需要引用公司掌握或提供的事实时必须为 true；包括具体客户或行业案例、案例成效与指标、产品功能与技术能力、接口与集成兼容性、解决方案、价格、认证与合规、安全能力、部署与交付承诺。',
         '只有我方回答完全依据已确认会议信息、历史会议原文或现场会议原文，不需要声明公司事实时，requiresInternalEvidence 才允许为 false。',
         '同一问题同时涉及公司事实与客户现场信息时，requiresInternalEvidence 必须为 true。输出前逐题自检：只要回答中可能需要作出公司事实声明，就不得返回 false。',
+        '招聘问题涉及岗位政策、公司制度、招聘流程或薪酬福利等组织事实时，requiresInternalEvidence 必须为 true。',
+        '团队会议问题涉及项目状态、内部指标、计划、资源或组织政策等事实时，requiresInternalEvidence 必须为 true；完全依据已确认会议描述或关联会议原文回答时才允许为 false。',
         '判定示例：“本次会议需要交流的具体机器人行业案例有哪些？” requiresInternalEvidence=true；“你们的产品如何接入我们的现有控制系统？” requiresInternalEvidence=true；“你们理解的本次会议目标是什么？” requiresInternalEvidence=false。',
         '没有历史会议时，historySummary 和 commitments 必须为空数组。没有问题时 questions 必须为空数组，不得省略字段。',
         `合法格式示例（只展示结构和类型，不得照抄内容）：${JSON.stringify(example)}`,

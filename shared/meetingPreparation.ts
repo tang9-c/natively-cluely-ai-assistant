@@ -1,6 +1,6 @@
 export type MeetingPreparationStatus = 'draft' | 'ready';
 export type MeetingPreparationInputMethod = 'voice' | 'text';
-export type MeetingPreparationTemplateType = 'sales' | 'fde';
+export type MeetingPreparationTemplateType = 'sales' | 'fde' | 'recruiting' | 'team-meet';
 export type FieldState = 'confirmed' | 'needs_confirmation';
 export type EvidenceStatus = 'sufficient' | 'partial' | 'missing' | 'not_needed';
 export type PreparationOperation = 'parse' | 'prepare_context' | 'generate' | 'recheck';

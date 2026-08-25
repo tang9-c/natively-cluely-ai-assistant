@@ -50,7 +50,7 @@ const fallbackMeetingContext = (rawInput: string): MeetingContext => ({
 });
 
 export const modeRecommendationSchema = z.object({
-  templateType: z.enum(['sales', 'fde']),
+  templateType: z.enum(['sales', 'fde', 'recruiting', 'team-meet']),
   reason: z.string().min(1).max(1000),
   focus: z.string().min(1).max(1000),
 });

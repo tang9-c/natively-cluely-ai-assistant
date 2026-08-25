@@ -82,8 +82,11 @@ function makeService(overrides = {}) {
   };
   const modes = overrides.modes ?? {
     getModes: () => [
-      { id: 'sales-mode', name: 'Sales', templateType: 'sales' },
+      { id: 'sales-mode', name: '销售', templateType: 'sales' },
       { id: 'fde-mode', name: 'FDE', templateType: 'fde' },
+      { id: 'recruiting-mode', name: '招聘', templateType: 'recruiting' },
+      { id: 'team-meet-mode', name: '团队会议', templateType: 'team-meet' },
+      { id: 'general-mode', name: '通用', templateType: 'general' },
     ],
     setActiveMode: () => {},
   };
@@ -216,6 +219,34 @@ test('prepareContext keeps mode recommendation usable when history lookup fails'
   assert.deepEqual(result.historyCandidates, []);
 });
 
+test('prepareContext accepts recruiting and team-meet while excluding other templates', async () => {
+  for (const templateType of ['recruiting', 'team-meet']) {
+    const calls = [];
+    const service = makeService({
+      llm: {
+        async generateContentStructured(prompt) {
+          calls.push(prompt);
+          return JSON.stringify({ templateType, reason: '匹配会议性质', focus: '准备重点' });
+        },
+      },
+    });
+
+    const result = await service.prepareContext('prep-1', validContext);
+    assert.equal(result.modeRecommendation.templateType, templateType);
+    assert.match(calls[0], /sales、fde、recruiting 与 team-meet/);
+    assert.match(calls[0], /外部客户会议不得推荐 team-meet/);
+    assert.doesNotMatch(calls[0], /"templateType":"general"/);
+  }
+
+  const invalidService = makeService({
+    llm: jsonLlm({ templateType: 'general', reason: '通用会议', focus: '摘要' }),
+  });
+  await assert.rejects(
+    invalidService.prepareContext('prep-1', validContext),
+    /invalid|templateType|meeting_preparation/i,
+  );
+});
+
 test('rejects a second AI operation for the same preparation', async () => {
   const gate = deferred();
   const service = makeService({ llm: { generateContentStructured: () => gate.promise } });
@@ -281,8 +312,8 @@ test('generate returns no more than three questions and cites only retrieved chu
   assert.match(predictionPrompt, /没有历史会议时，historySummary 和 commitments 必须为空数组/);
   assert.match(predictionPrompt, /公司掌握或提供的事实/);
   assert.match(predictionPrompt, /同时涉及公司事实与客户现场信息时，requiresInternalEvidence 必须为 true/);
-  assert.match(predictionPrompt, /客户向销售或现场顾问提出/);
-  assert.match(predictionPrompt, /不得生成销售或顾问向客户追问/);
+  assert.match(predictionPrompt, /对方参会者向当前用户提出/);
+  assert.match(predictionPrompt, /不得生成当前用户应该向对方提出的问题/);
   assert.match(predictionPrompt, /贵公司当前在图纸、物料和变更管理方面存在哪些痛点.*不得生成/);
   assert.match(predictionPrompt, /你们的产品如何解决机器人企业在图纸、物料和变更管理方面的痛点/);
   assert.match(predictionPrompt, /本次会议需要交流的具体机器人行业案例有哪些？.*requiresInternalEvidence=true/);
@@ -299,6 +330,39 @@ test('generate returns no more than three questions and cites only retrieved chu
   assert.match(evidencePrompt, /任何“未知”“暂无”“未提供”“无法确认”或不支持的内容必须放入 missing，不得放入 supported/);
   assert.ok(evidencePrompt.includes('"coverage":"partial"'));
   assert.ok(evidencePrompt.includes('"citedChunkIds":[123]'));
+});
+
+test('generate gives recruiting and team-meet distinct key moments under one counterpart-question contract', async () => {
+  const cases = [
+    ['recruiting-mode', /岗位职责与成功标准/, /候选人/],
+    ['team-meet-mode', /项目进展/, /其他参会同事/],
+  ];
+
+  for (const [selectedModeId, keyMoment, counterpart] of cases) {
+    const prompts = [];
+    const record = { ...structuredClone(baseRecord), selectedModeId };
+    const service = makeService({
+      db: {
+        getMeetingPreparation: () => structuredClone(record),
+        getRecentMeetings: () => [],
+        getMeetingDetails: () => null,
+        saveMeetingPreparation: (input) => ({ ...structuredClone(record), ...input }),
+        saveMeetingPreparationResult: (_id, result, questions) => ({ ...record, result, questions }),
+      },
+      llm: {
+        async generateContentStructured(prompt) {
+          prompts.push(prompt);
+          return JSON.stringify({ historySummary: [], commitments: [], questions: [] });
+        },
+      },
+    });
+
+    await service.generate('prep-1');
+    assert.match(prompts[0], keyMoment);
+    assert.match(prompts[0], counterpart);
+    assert.match(prompts[0], /对方参会者向当前用户提出/);
+    assert.match(prompts[0], /不得生成当前用户应该向对方提出的问题/);
+  }
 });
 
 test('missing evidence never becomes sufficient', async () => {

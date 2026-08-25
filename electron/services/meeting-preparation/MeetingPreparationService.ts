@@ -127,7 +127,10 @@ export class MeetingPreparationService {
         return this.runExclusive(preparationId, externalSignal, async (signal) => {
             const allowedModes = this.deps.modes
                 .getModes()
-                .filter((mode) => mode.templateType === 'sales' || mode.templateType === 'fde');
+                .filter((mode) => mode.templateType === 'sales'
+                    || mode.templateType === 'fde'
+                    || mode.templateType === 'recruiting'
+                    || mode.templateType === 'team-meet');
             if (allowedModes.length === 0) throw new Error('meeting_preparation_modes_unavailable');
 
             const raw = await this.deps.llm.generateContentStructured(
@@ -408,11 +411,17 @@ export class MeetingPreparationService {
             }
             const selectedMode = this.deps.modes.getModes().find(
                 (mode) => mode.id === record.selectedModeId
-                    && (mode.templateType === 'sales' || mode.templateType === 'fde'),
+                    && (mode.templateType === 'sales'
+                        || mode.templateType === 'fde'
+                        || mode.templateType === 'recruiting'
+                        || mode.templateType === 'team-meet'),
             );
             if (!selectedMode) throw new Error('meeting_preparation_invalid_mode');
             const selectedTemplateType = selectedMode.templateType;
-            if (selectedTemplateType !== 'sales' && selectedTemplateType !== 'fde') {
+            if (selectedTemplateType !== 'sales'
+                && selectedTemplateType !== 'fde'
+                && selectedTemplateType !== 'recruiting'
+                && selectedTemplateType !== 'team-meet') {
                 throw new Error('meeting_preparation_invalid_mode');
             }
 
