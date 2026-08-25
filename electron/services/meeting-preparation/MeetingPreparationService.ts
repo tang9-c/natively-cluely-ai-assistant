@@ -20,8 +20,8 @@ import {
     evidenceCoverageSchema,
     extractAndParse,
     generationBundleSchema,
-    meetingContextSchema,
     modeRecommendationSchema,
+    parseMeetingContext,
     type PredictedQuestion,
 } from './MeetingPreparationSchemas';
 import {
@@ -113,24 +113,7 @@ export class MeetingPreparationService {
                     abortSignal: signal,
                 },
             );
-            try {
-                return extractAndParse(raw, meetingContextSchema);
-            } catch (error) {
-                const issues = error && typeof error === 'object' && 'issues' in error
-                    && Array.isArray((error as { issues?: unknown[] }).issues)
-                    ? (error as { issues: Array<{ path?: unknown[]; code?: string }> }).issues
-                        .slice(0, 8)
-                        .map((issue) => ({
-                            path: Array.isArray(issue.path) ? issue.path.join('.') : '',
-                            code: issue.code ?? 'unknown',
-                        }))
-                    : [];
-                console.warn('[MeetingPreparation] Structured parse output rejected', {
-                    errorType: error instanceof Error ? error.name : 'unknown',
-                    issues,
-                });
-                throw error;
-            }
+            return parseMeetingContext(raw, trimmed);
         });
     }
 

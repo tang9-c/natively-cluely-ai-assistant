@@ -121,6 +121,50 @@ test('parseInput declares transcript scope and returns validated context', async
   assert.match(prompt, /confirmed 或 needs_confirmation/);
 });
 
+test('parseInput preserves valid fields when other context fields are missing or invalid', async () => {
+  const service = makeService({
+    llm: {
+      async generateContentStructured() {
+        return JSON.stringify({
+          topic: { value: '产品技术交流', state: 'confirmed' },
+          customer: '启明机器人',
+          participants: [{ name: '张三', role: 42 }],
+          goal: { value: '确认产品集成方案', state: 'confirmed' },
+        });
+      },
+    },
+  });
+
+  const result = await service.parseInput('prep-1', '和启明机器人讨论产品集成方案');
+
+  assert.deepEqual(result.topic, { value: '产品技术交流', state: 'confirmed' });
+  assert.deepEqual(result.customer, { value: '启明机器人', state: 'needs_confirmation' });
+  assert.deepEqual(result.participants, []);
+  assert.deepEqual(result.goal, { value: '确认产品集成方案', state: 'confirmed' });
+  assert.deepEqual(result.agenda, []);
+  assert.equal(result.background, '');
+});
+
+test('parseInput falls back to the original description when JSON is malformed', async () => {
+  const rawInput = '和机器人客户讨论产品生命周期管理方案';
+  const service = makeService({
+    llm: {
+      async generateContentStructured() {
+        return '无法生成结构化结果';
+      },
+    },
+  });
+
+  const result = await service.parseInput('prep-1', rawInput);
+
+  assert.deepEqual(result.topic, { value: rawInput, state: 'needs_confirmation' });
+  assert.deepEqual(result.customer, { value: '', state: 'needs_confirmation' });
+  assert.deepEqual(result.participants, []);
+  assert.deepEqual(result.goal, { value: '', state: 'needs_confirmation' });
+  assert.deepEqual(result.agenda, []);
+  assert.equal(result.background, '');
+});
+
 test('prepareContext recommends only Sales or FDE and returns at most five meetings', async () => {
   const meetings = Array.from({ length: 8 }, (_, index) => ({
     id: `meeting-${index}`,
