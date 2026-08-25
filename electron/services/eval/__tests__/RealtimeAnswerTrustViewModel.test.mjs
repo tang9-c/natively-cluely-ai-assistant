@@ -225,6 +225,23 @@ test('failed material guidance is honest about replacement upload', async () => 
   assert.equal(complete.primaryActionLabel, '重新索引');
 });
 
+test('partial PPTX material is complete but displays a missing-pages warning', async () => {
+  const { explainMaterialStatus } = await loadViewModel();
+  const explanation = explainMaterialStatus({
+    id: 'partial-pptx',
+    title: 'deck.pptx',
+    status: 'complete',
+    errorCode: 'pptx_partial_pages',
+    errorMessage: '处理完成，但有缺页 · 59/60 页',
+  });
+
+  assert.equal(explanation.label, '处理完成，但有缺页');
+  assert.match(explanation.message, /59\/60 页/);
+  assert.equal(explanation.severity, 'warning');
+  assert.equal(explanation.canReindex, true);
+  assert.equal(explanation.primaryActionLabel, '重新索引');
+});
+
 test('interrupted material indexing asks for a new upload instead of staying in progress', async () => {
   const { explainMaterialStatus } = await loadViewModel();
   const explanation = explainMaterialStatus({

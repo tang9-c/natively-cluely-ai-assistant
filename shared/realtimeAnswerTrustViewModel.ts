@@ -247,6 +247,16 @@ export function buildLatestAnswerTrustExplanation(input: LatestAnswerTrustInput)
 
 export function explainMaterialStatus(material: MaterialStatusInput): MaterialStatusExplanation {
     const status = material.status;
+    const code = material.errorCode ?? material.error_code ?? '';
+    if (status === 'complete' && code === 'pptx_partial_pages') {
+        return {
+            label: '处理完成，但有缺页',
+            message: material.errorMessage ?? material.error_message ?? '部分页面内容提取失败，其余页面已可用于回答。',
+            severity: 'warning',
+            canReindex: true,
+            primaryActionLabel: '重新索引',
+        };
+    }
     if (status === 'complete') {
         return {
             label: '已完成',
@@ -265,7 +275,6 @@ export function explainMaterialStatus(material: MaterialStatusInput): MaterialSt
     if (status === 'deleted') {
         return { label: '已删除', message: '资料已删除，不会再用于回答。', severity: 'info', canReindex: false };
     }
-    const code = material.errorCode ?? material.error_code ?? '';
     return {
         label: '索引失败',
         message: MATERIAL_FAILURE_COPY[code] ?? (material.errorMessage ?? material.error_message ?? '资料索引失败。请重新上传新文件。'),
