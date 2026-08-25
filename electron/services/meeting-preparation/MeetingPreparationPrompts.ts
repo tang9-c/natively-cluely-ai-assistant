@@ -94,11 +94,21 @@ export function buildEvidencePrompt(
         text: hit.text,
         parentText: hit.parentText,
     }));
+    const example = {
+        coverage: 'partial',
+        supported: ['资料已经支持的结论'],
+        missing: ['仍缺少的信息'],
+        limitations: ['现有资料的适用边界'],
+        citedChunkIds: [123],
+        handlingScript: '可以先说明已有证据覆盖的部分。',
+        followupQuestions: ['您更关注哪个具体场景？'],
+    };
     return [
         '你只判断所给内部资料对问题的覆盖程度，不得使用外部知识。',
-        'coverage 只能是 sufficient 或 partial；missing 与 not_needed 由系统确定。',
-        'citedChunkIds 只能引用下方提供的 chunkId。',
-        '返回 JSON：coverage、supported、missing、limitations、citedChunkIds、handlingScript、followupQuestions。',
+        '必须只返回一个 JSON 对象，不要解释，不要使用 Markdown 代码块。',
+        '严格使用以下字段和类型：coverage 是 sufficient 或 partial；supported、missing、limitations、followupQuestions 都是 string[]；citedChunkIds 是非负整数数组；handlingScript 是 string。',
+        'citedChunkIds 只能引用下方提供的 chunkId。没有内容时使用空数组或空字符串，不得省略字段。',
+        `合法格式示例（只展示结构和类型，不得照抄内容）：${JSON.stringify(example)}`,
         `问题与知识要求：${JSON.stringify({ question: question.question, knowledgeRequirements: question.knowledgeRequirements })}`,
         `检索资料：${JSON.stringify(chunks)}`,
     ].join('\n');

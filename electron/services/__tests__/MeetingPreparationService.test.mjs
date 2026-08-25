@@ -241,6 +241,14 @@ test('generate returns no more than three questions and cites only retrieved chu
   assert.match(predictionPrompt, /我们的产品如何接入客户现有控制系统？.*requiresInternalEvidence=true/);
   assert.match(predictionPrompt, /客户当前使用什么控制系统？.*requiresInternalEvidence=false/);
   assert.deepEqual(calls[1].options.dataScopes, ['reference_files']);
+  const evidencePrompt = calls[1].prompt;
+  assert.match(evidencePrompt, /必须只返回一个 JSON 对象/);
+  assert.match(evidencePrompt, /supported、missing、limitations、followupQuestions 都是 string\[\]/);
+  assert.match(evidencePrompt, /citedChunkIds 是非负整数数组/);
+  assert.match(evidencePrompt, /handlingScript 是 string/);
+  assert.match(evidencePrompt, /没有内容时使用空数组或空字符串，不得省略字段/);
+  assert.ok(evidencePrompt.includes('"coverage":"partial"'));
+  assert.ok(evidencePrompt.includes('"citedChunkIds":[123]'));
 });
 
 test('missing evidence never becomes sufficient', async () => {
