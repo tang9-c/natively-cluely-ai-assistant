@@ -31,3 +31,13 @@ test('manual questions remain addable after AI generated three questions', () =>
   assert.doesNotMatch(page, /record\.questions\.length >= 3/);
   assert.doesNotMatch(page, /已达 3 个上限/);
 });
+
+test('evidence checks progress sequentially without blocking meeting start', () => {
+  assert.match(page, /const \[evidenceChecking, setEvidenceChecking\] = useState\(false\)/);
+  assert.match(page, /const \[checkingQuestionId, setCheckingQuestionId\] = useState<string \| null>\(null\)/);
+  assert.match(page, /for \(const questionId of pendingQuestionIds\)[\s\S]*await window\.electronAPI\.meetingPreparationRecheckQuestion/);
+  assert.match(page, /const isEditingLocked = activeOperation !== null \|\| evidenceChecking/);
+  assert.match(page, /question\.id === checkingQuestionId[\s\S]*'检查中'/);
+  assert.match(page, /disabled=\{activeOperation !== null\}[\s\S]*使用推荐模式开始会议/);
+  assert.match(page, /recordRef\.current\?\.id === response\.result\.id/);
+});
