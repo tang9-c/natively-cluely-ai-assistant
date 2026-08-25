@@ -31,6 +31,7 @@ type PptxRenderError = Error & {
   code: string;
   stage: PptxRenderStage;
   retryable: boolean;
+  slideCount?: number;
   exitCode?: number | null;
   signal?: NodeJS.Signals | null;
 };
@@ -118,8 +119,10 @@ export class PptxSlideRenderer {
         throw createPptxRenderError('pptx_no_slides', 'render_child_exit', false);
       }
 
-      if (files.length > 200) {
-        throw createPptxRenderError('pptx_too_many_slides', 'render_child_exit', false);
+      if (files.length > 60) {
+        throw createPptxRenderError('pptx_page_limit_exceeded', 'render_child_exit', false, {
+          slideCount: files.length,
+        });
       }
 
       return createRenderedDeckForTest(
@@ -244,8 +247,12 @@ export function runRenderChild(
 
       const message = stderr || `pptx_render_child_exit_${code}`;
 
-      if (message.includes('pptx_too_many_slides')) {
-        finish(createPptxRenderError('pptx_too_many_slides', 'render_child_exit', false, { exitCode: code }));
+      const pageLimitMatch = message.match(/pptx_page_limit_exceeded:(\d+)/);
+      if (pageLimitMatch) {
+        finish(createPptxRenderError('pptx_page_limit_exceeded', 'render_child_exit', false, {
+          exitCode: code,
+          slideCount: Number(pageLimitMatch[1]),
+        }));
         return;
       }
 
@@ -278,12 +285,13 @@ function createPptxRenderError(
   code: string,
   stage: PptxRenderStage,
   retryable: boolean,
-  metadata: { exitCode?: number | null; signal?: NodeJS.Signals | null } = {},
+  metadata: { slideCount?: number; exitCode?: number | null; signal?: NodeJS.Signals | null } = {},
 ): PptxRenderError {
   const error = new Error(code) as PptxRenderError;
   error.code = code;
   error.stage = stage;
   error.retryable = retryable;
+  error.slideCount = metadata.slideCount;
   error.exitCode = metadata.exitCode;
   error.signal = metadata.signal;
   return error;

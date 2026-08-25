@@ -28,8 +28,8 @@ if (!Array.isArray(slides) || slides.length === 0) {
   process.exit(3);
 }
 
-if (slides.length > 200) {
-  console.error(`pptx_too_many_slides:${slides.length}`);
+if (slides.length > 60) {
+  console.error(`pptx_page_limit_exceeded:${slides.length}`);
   process.exit(4);
 }
 

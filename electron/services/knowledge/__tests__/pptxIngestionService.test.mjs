@@ -363,3 +363,41 @@ test('PptxIngestionService writes one chunk per slide and cleans temp files', as
   assert.equal(chunks[0].metadata.slide_index, 1);
   assert.equal(fs.existsSync(tempDir), false);
 });
+
+test('PptxSlideRenderer rejects decks above 60 slides with the actual slide count', async () => {
+  const { PptxSlideRenderer } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-page-limit-source-'));
+  const sourcePath = path.join(sourceDir, 'input.pptx');
+  fs.writeFileSync(sourcePath, 'fake');
+  const renderer = new PptxSlideRenderer({
+    runRenderChild: async (_scriptPath, _filePath, outputDir) => {
+      for (let index = 1; index <= 61; index += 1) {
+        fs.writeFileSync(path.join(outputDir, `slide-${String(index).padStart(3, '0')}.jpg`), 'ok');
+      }
+    },
+  });
+
+  try {
+    await assert.rejects(
+      () => renderer.renderToTempImages(sourcePath),
+      (error) => {
+        assert.equal(error.code, 'pptx_page_limit_exceeded');
+        assert.equal(error.slideCount, 61);
+        assert.equal(error.retryable, false);
+        return true;
+      },
+    );
+  } finally {
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+test('PPTX render child rejects decks above 60 slides before rendering pages', () => {
+  const source = fs.readFileSync(
+    path.resolve(process.cwd(), 'electron/services/knowledge/pptx/pptx-render-child.mjs'),
+    'utf8',
+  );
+
+  assert.match(source, /slides\.length > 60/);
+  assert.match(source, /pptx_page_limit_exceeded:\$\{slides\.length\}/);
+});
