@@ -572,6 +572,40 @@ test('material retrieval failure stays outside business evidence states', async 
   }
 });
 
+test('recheck persists check_failed when evidence requirement refresh fails', async () => {
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  try {
+    const record = pendingEvidenceRecord();
+    let savedQuestions;
+    const service = makeService({
+      db: recheckDb(record, (input) => { savedQuestions = input.questions; }),
+      llm: {
+        async generateContentStructured() {
+          throw new Error('provider_timeout');
+        },
+      },
+    });
+
+    const result = await service.recheckQuestion('prep-1', 'q1');
+
+    assert.equal(savedQuestions[0].id, 'q1');
+    assert.equal(savedQuestions[0].evidenceStatus, null);
+    assert.equal(savedQuestions[0].evidence.checkError, 'check_failed');
+    assert.ok(savedQuestions[0].checkedAt);
+    assert.equal(result.questions[0].evidence.checkError, 'check_failed');
+    assert.deepEqual(warnings, [[
+      '[MeetingPreparation] Evidence requirement refresh failed',
+      { errorType: 'Error' },
+    ]]);
+    assert.ok(!JSON.stringify(warnings).includes('provider_timeout'));
+    assert.ok(!JSON.stringify(warnings).includes('机器人行业案例'));
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
 test('recheck updates only the latest selected question', async () => {
   const firstQuestion = {
     id: 'q1',

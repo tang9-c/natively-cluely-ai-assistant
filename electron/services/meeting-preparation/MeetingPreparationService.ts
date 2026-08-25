@@ -531,18 +531,41 @@ export class MeetingPreparationService {
             if (questionIndex < 0) throw new Error('meeting_preparation_question_not_found');
 
             const current = record.questions[questionIndex];
-            const refreshed = await this.refreshEvidenceRequirements(
-                current,
-                record.meetingContext,
-                signal,
-            );
-            throwIfAborted(signal);
-            const rechecked = await this.checkEvidence(
-                refreshed,
-                signal,
-                { id: current.id, sortOrder: current.sortOrder },
-            );
-            throwIfAborted(signal);
+            let rechecked: PreparationQuestion;
+            try {
+                const refreshed = await this.refreshEvidenceRequirements(
+                    current,
+                    record.meetingContext,
+                    signal,
+                );
+                throwIfAborted(signal);
+                rechecked = await this.checkEvidence(
+                    refreshed,
+                    signal,
+                    { id: current.id, sortOrder: current.sortOrder },
+                );
+                throwIfAborted(signal);
+            } catch (error) {
+                throwIfAborted(signal);
+                console.warn('[MeetingPreparation] Evidence requirement refresh failed', {
+                    errorType: error instanceof Error ? error.name : 'UnknownError',
+                });
+                rechecked = {
+                    ...current,
+                    evidenceStatus: null,
+                    evidence: {
+                        ...current.evidence,
+                        supported: [],
+                        missing: [],
+                        limitations: [],
+                        citations: [],
+                        handlingScript: '',
+                        followupQuestions: [],
+                        checkError: 'check_failed',
+                    },
+                    checkedAt: new Date().toISOString(),
+                };
+            }
 
             const questions = record.questions.map((question, index) =>
                 index === questionIndex ? rechecked : question,
