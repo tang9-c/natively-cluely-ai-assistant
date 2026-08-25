@@ -391,7 +391,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (input.status !== undefined && input.status !== 'draft' && input.status !== 'ready') {
       throw new Error('invalid_preparation_status');
     }
-    if (input.questions !== undefined && (!Array.isArray(input.questions) || input.questions.length > 3)) {
+    if (input.questions !== undefined && !Array.isArray(input.questions)) {
       throw new Error('invalid_preparation_questions');
     }
     return { ...input, rawInput, inputMethod: input.inputMethod } as MeetingPreparationSaveInput;

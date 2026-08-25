@@ -30,3 +30,8 @@ test('meeting preparation IPC is wired through Main, preload and renderer types'
   assert.match(rendererTypes, /meetingPreparationSave/);
   assert.match(rendererTypes, /meetingPreparationGenerate/);
 });
+
+test('manual question saves are not capped at the AI prediction limit', () => {
+  assert.match(ipc, /input\.questions !== undefined && !Array\.isArray\(input\.questions\)/);
+  assert.doesNotMatch(ipc, /input\.questions\.length > 3/);
+});
