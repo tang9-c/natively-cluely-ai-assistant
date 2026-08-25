@@ -28,7 +28,16 @@ test.describe('meeting preparation', () => {
     await page.getByRole('button', { name: '生成准备结果' }).click();
     await expect(page.getByTestId('meeting-preparation-page')).toContainText('准备完成');
     await expect(page.locator('[data-testid="preparation-question"]')).toHaveCount(3);
-    await expect(page.getByText('资料缺失').first()).toBeVisible();
+
+    await expect(page.getByText('检查中')).toBeVisible();
+    await expect(page.getByText('等待检查')).toBeVisible();
+    await expect(page.getByRole('button', { name: '添加问题' })).toBeDisabled();
+    await expect(page.getByLabel('预测问题 1')).toBeDisabled();
+    await expect(page.getByRole('button', { name: '使用推荐模式开始会议' })).toBeEnabled();
+
+    await expect(page.getByText('资料缺失')).toHaveCount(2);
+    await expect(page.getByText('无需内部资料')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: '添加问题' })).toBeEnabled();
   });
 
   test('keeps step two compact by replacing details with mode selection', async ({ page }) => {

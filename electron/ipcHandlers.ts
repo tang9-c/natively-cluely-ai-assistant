@@ -346,12 +346,23 @@ export function initializeIpcHandlers(appState: AppState): void {
               ],
             });
           }
+          if (options?.taskLabel === 'meeting-preparation-evidence-requirements') {
+            return JSON.stringify({
+              knowledgeRequirements: ['对应问题的内部产品或案例资料'],
+              requiresInternalEvidence: true,
+            });
+          }
           throw new Error('unsupported_meeting_preparation_e2e_task');
         },
       }
     : appState.processingHelper.getLLMHelper();
   const meetingPreparationMaterials = useMeetingPreparationE2EFixtures
-    ? { searchWithDiagnostics: async (): Promise<KnowledgeMaterialSearchResponse> => ({ hits: [] }) }
+    ? {
+        searchWithDiagnostics: async (): Promise<KnowledgeMaterialSearchResponse> => {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return { hits: [] };
+        },
+      }
     : new KnowledgeMaterialService(
         meetingPreparationDb,
         appState.getRAGManager()?.getEmbeddingPipeline?.() ?? null,
