@@ -15,11 +15,11 @@ function read(relativePath) {
 // 1. Help header + speech provider paths (stable triples).
 // ---------------------------------------------------------------------------
 
-test('HelpSettings header covers permissions, speech, AI, screen, notes, modes, hotkeys', () => {
+test('HelpSettings header covers permissions, speech, AI, screen, preparation, notes, modes, hotkeys', () => {
   const source = read('src/components/settings/HelpSettings.tsx');
 
   assert.match(source, /帮助与设置指南/);
-  assert.match(source, /权限、语音转写、AI 提供商、屏幕理解、会议记录、模式和快捷键/);
+  assert.match(source, /权限、语音转写、AI 提供商、屏幕理解、会前准备、会议记录、模式和快捷键/);
 });
 
 // ---------------------------------------------------------------------------
@@ -283,6 +283,23 @@ test('HelpSettings documents Markdown export flow from transcript via skills', (
   assert.match(source, /从转录生成 Markdown/);
   assert.match(source, /会议详情.*转录.*用技能处理/s);
   assert.match(source, /生成 Markdown 文件后.*打开文件.*打开文件夹/s);
+});
+
+test('HelpSettings documents the AI meeting preparation flow and current boundaries', () => {
+  const source = read('src/components/settings/HelpSettings.tsx');
+
+  const preparationSection = source.match(/<AccordionSection title="[^"]*AI 会前准备[^"]*"/);
+  assert.ok(preparationSection, '应存在独立的 AI 会前准备帮助章节');
+  assert.match(source, /开始准备.*新的空白会议准备/s);
+  assert.match(source, /最近准备/);
+  assert.match(source, /描述会议.*确认信息与模式.*查看准备结果/s);
+  assert.match(source, /Sales 或 FDE/);
+  assert.match(source, /客户可能问我们的问题/);
+  assert.match(source, /资料充分.*部分准备.*资料缺失.*无需内部资料.*检查失败/s);
+  assert.match(source, /补充资料.*重新检查/s);
+  assert.match(source, /公司调研只是跳转入口/);
+  assert.match(source, /准备结果不会注入会议回答/);
+  assert.match(source, /只应用已确认的推荐模式/);
 });
 
 // ---------------------------------------------------------------------------

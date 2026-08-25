@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, Sparkles, FolderOpen, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -133,6 +133,8 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [skillsLoading, setSkillsLoading] = useState(false);
     const [runningSkillId, setRunningSkillId] = useState<string | null>(null);
     const [skillExportStatus, setSkillExportStatus] = useState<{ message: string; filePath?: string; error?: boolean } | null>(null);
+    const skillsMenuRef = useRef<HTMLDivElement | null>(null);
+    const skillsTriggerRef = useRef<HTMLButtonElement | null>(null);
     const visibleTranscriptRows = useMemo(
         () => buildVisibleTranscriptRows(meeting.transcript),
         [meeting.transcript],
@@ -163,6 +165,24 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         if (skillsMenuOpen && skills.length === 0) {
             void loadTranscriptSkills();
         }
+    }, [skillsMenuOpen]);
+
+    useEffect(() => {
+        if (!skillsMenuOpen) return;
+        const closeOnOutsidePointer = (event: PointerEvent) => {
+            if (!skillsMenuRef.current?.contains(event.target as Node)) setSkillsMenuOpen(false);
+        };
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            setSkillsMenuOpen(false);
+            skillsTriggerRef.current?.focus();
+        };
+        document.addEventListener('pointerdown', closeOnOutsidePointer);
+        document.addEventListener('keydown', closeOnEscape);
+        return () => {
+            document.removeEventListener('pointerdown', closeOnOutsidePointer);
+            document.removeEventListener('keydown', closeOnEscape);
+        };
     }, [skillsMenuOpen]);
 
     const handleSubmitQuestion = () => {
@@ -406,8 +426,12 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
 
                         <div className="relative flex items-center gap-3">
                             {canRunTranscriptSkill && (
-                                <div className="relative">
+                                <div ref={skillsMenuRef} className="relative">
                                     <button
+                                        ref={skillsTriggerRef}
+                                        aria-expanded={skillsMenuOpen}
+                                        aria-controls="transcript-skills-menu"
+                                        aria-haspopup="menu"
                                         onClick={() => setSkillsMenuOpen((open) => !open)}
                                         className="flex items-center gap-1.5 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors"
                                     >
@@ -417,7 +441,7 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                                     </button>
 
                                     {skillsMenuOpen && (
-                                        <div className={`absolute right-0 top-7 z-50 w-64 rounded-lg border shadow-xl overflow-hidden ${isLight ? 'bg-white border-black/[0.08]' : 'bg-[#1C1C1E] border-white/[0.10]'}`}>
+                                        <div id="transcript-skills-menu" role="menu" className={`absolute right-0 top-7 z-50 w-64 rounded-lg border shadow-xl overflow-hidden ${isLight ? 'bg-white border-black/[0.08]' : 'bg-[#1C1C1E] border-white/[0.10]'}`}>
                                             <div className="px-3 py-2 border-b border-border-subtle">
                                                 <p className="text-xs font-semibold text-text-primary">选择技能</p>
                                                 <p className="mt-0.5 text-[11px] leading-snug text-text-tertiary">将完整转录交给所选技能，生成 Markdown 文件。</p>

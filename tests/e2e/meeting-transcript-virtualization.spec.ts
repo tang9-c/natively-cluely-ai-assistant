@@ -106,3 +106,29 @@ test('large transcripts keep the DOM bounded and preserve full operations', asyn
   await expect(resetList).toBeVisible();
   expect(await resetList.evaluate(element => element.scrollTop)).toBeLessThan(2);
 });
+
+test('transcript skills menu exposes its state and closes conventionally', async ({
+  electronApp,
+  page,
+}) => {
+  await seedTranscriptMeetings(electronApp);
+  await openTranscript(page, 100);
+
+  const trigger = page.getByRole('button', { name: '用技能处理' });
+  const menuHeading = page.getByText('选择技能', { exact: true });
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+  await trigger.click();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await expect(trigger.locator('svg').last()).toHaveClass(/rotate-180/);
+  await expect(menuHeading).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(menuHeading).toBeHidden();
+
+  await trigger.click();
+  await page.getByRole('heading', { name: 'Virtual 100', exact: true }).click();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(menuHeading).toBeHidden();
+});

@@ -48,13 +48,38 @@ test.describe('meeting preparation', () => {
     await expect(page.getByText('已确认的会议信息')).toBeHidden();
   });
 
-  test('draft survives leaving and reopening the preparation page', async ({ page }) => {
+  test('starts a new preparation while keeping the previous draft in recent preparations', async ({ page }) => {
     await page.getByTestId('meeting-preparation-entry').click();
     await page.getByLabel('会议描述').fill('明天和新客户讨论机器人行业案例');
     await page.getByRole('button', { name: '返回' }).click();
+    await expect(page.getByTestId('meeting-preparation-page')).toHaveCount(0);
 
     await page.getByTestId('meeting-preparation-entry').click();
-    await expect(page.getByLabel('会议描述')).toHaveValue('明天和新客户讨论机器人行业案例');
+    await expect(page.getByLabel('会议描述')).toHaveValue('');
+
+    await page.getByRole('button', { name: '最近准备' }).click();
+    await expect(page.getByText('明天和新客户讨论机器人行业案例')).toBeVisible();
+  });
+
+  test('recent preparations menu exposes its state and closes conventionally', async ({ page }) => {
+    await page.getByTestId('meeting-preparation-entry').click();
+    const trigger = page.getByRole('button', { name: '最近准备' });
+    const createNew = page.getByRole('button', { name: '准备一场新会议' });
+
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await trigger.click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await expect(trigger.locator('svg')).toHaveClass(/rotate-180/);
+    await expect(createNew).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await expect(createNew).toBeHidden();
+
+    await trigger.click();
+    await page.getByRole('heading', { name: '会议作战准备卡' }).click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await expect(createNew).toBeHidden();
   });
 
   test('company research remains navigation-only and preserves the draft', async ({ page }) => {
@@ -68,21 +93,27 @@ test.describe('meeting preparation', () => {
     await expect(page.getByLabel('客户')).toHaveValue('启明机器人');
   });
 
-  test('accepts a controlled microphone-only dictation transcript', async ({ page }) => {
+  test('shows interim dictation in a readable textarea before recording stops', async ({ page }) => {
     await page.getByTestId('meeting-preparation-entry').click();
-    await page.getByRole('button', { name: '开始语音输入' }).click();
+    const startButton = page.getByRole('button', { name: '开始语音输入' });
+    await expect(startButton).toHaveClass(/bg-violet-600/);
+    await startButton.click();
     await expect(page.getByText(/录音中/)).toBeVisible();
+    const description = page.getByLabel('会议描述');
+    await expect(description).toBeEnabled();
+    await expect(description).toHaveAttribute('readonly', '');
 
     await page.evaluate(async () => {
       await (window as any).electronAPI.meetingPreparationDictationInject({
         text: '明天和启明机器人讨论行业案例',
-        final: true,
+        final: false,
         timestamp: Date.now(),
       });
     });
-    await page.getByRole('button', { name: '停止听写' }).click();
 
-    await expect(page.getByLabel('会议描述')).toHaveValue('明天和启明机器人讨论行业案例');
+    await expect(description).toHaveValue('明天和启明机器人讨论行业案例');
+    await page.getByRole('button', { name: '停止听写' }).click();
+    await expect(description).not.toHaveAttribute('readonly', '');
   });
 
   test('applies the confirmed mode and starts without a preparation payload', async ({ page }) => {

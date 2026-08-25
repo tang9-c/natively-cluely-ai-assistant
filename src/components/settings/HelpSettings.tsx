@@ -867,7 +867,7 @@ export const HelpSettings: React.FC = () => {
                     帮助与设置指南
                 </h2>
                 <p className={`text-sm text-text-secondary mt-3 max-w-2xl`}>
-                    了解如何配置 CueUp 的权限、语音转写、AI 提供商、屏幕理解、会议记录、模式和快捷键。
+                    了解如何配置 CueUp 的权限、语音转写、AI 提供商、屏幕理解、会前准备、会议记录、模式和快捷键。
                 </p>
             </div>
 
@@ -1255,7 +1255,67 @@ export const HelpSettings: React.FC = () => {
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="5. 会议智能" icon={<Calendar className="w-4 h-4" />}>
+                <AccordionSection title="5. AI 会前准备" icon={<Sparkles className="w-4 h-4" />}>
+                    <div className="space-y-6">
+                        <p className="text-[13px] leading-relaxed">
+                            AI 会前准备用于在开会前明确会议背景、选择合适模式，并检查客户可能问我们的问题是否已有资料支持。在启动器点击 <strong>开始准备</strong> 会创建一条<strong>新的空白会议准备</strong>，不会自动打开上一次记录；历史草稿和已完成结果可从 <strong>最近准备</strong> 中打开。
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl">
+                                <div className="mb-2 flex h-6 w-6 items-center justify-center rounded-full bg-sky-500/15 text-[11px] font-bold text-sky-500">1</div>
+                                <h4 className="font-semibold text-sm text-text-primary">描述会议</h4>
+                                <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+                                    输入或说出会议主题、客户、参会人、目标、议程和背景。语音服务返回临时识别结果时，文本会同步显示；停止后仍可编辑。AI 拆解缺失字段时会保留为空或标记待确认，不会凭空补全。
+                                </p>
+                            </div>
+                            <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl">
+                                <div className="mb-2 flex h-6 w-6 items-center justify-center rounded-full bg-violet-500/15 text-[11px] font-bold text-violet-500">2</div>
+                                <h4 className="font-semibold text-sm text-text-primary">确认信息与模式</h4>
+                                <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+                                    修正拆解结果后，让 AI 在 <strong>Sales 或 FDE</strong> 中推荐一个主模式。可以不关联历史会议，也可以选择一场历史会议，用于整理上次讨论和待确认承诺。
+                                </p>
+                            </div>
+                            <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl">
+                                <div className="mb-2 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/15 text-[11px] font-bold text-emerald-500">3</div>
+                                <h4 className="font-semibold text-sm text-text-primary">查看准备结果</h4>
+                                <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+                                    查看已关联会议的摘要和承诺，以及<strong>客户可能问我们的问题</strong>。系统会针对每个问题检查资料覆盖情况；你可以编辑、新增或删除问题，再决定是否补充资料。
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                            <h4 className="font-semibold text-sm mb-3 text-text-primary flex items-center gap-2">
+                                <FileText className="w-4 h-4 text-sky-500" /> 如何理解资料状态
+                            </h4>
+                            <ul className="text-[11px] text-text-secondary space-y-1.5 list-disc pl-4">
+                                <li><strong>资料充分</strong>：检索资料支持回答，且存在可核对的引用来源。</li>
+                                <li><strong>部分准备</strong>：已有证据支持一部分内容，但仍有明确缺口或适用边界。</li>
+                                <li><strong>资料缺失</strong>：当前没有足够证据支持回答，需要补充相应资料。</li>
+                                <li><strong>无需内部资料</strong>：回答只依赖已确认会议信息或历史／现场原文，不需要声明公司事实。</li>
+                                <li><strong>检查失败</strong>：检索或 AI 校验发生技术错误，不代表资料充分或缺失；请稍后点击<strong>重新检查</strong>。</li>
+                            </ul>
+                            <p className="mt-3 text-[11px] leading-relaxed text-text-secondary">
+                                点击 <strong>补充资料</strong> 可前往资料库；资料准备完成后返回当前问题并点击 <strong>重新检查</strong>。重新检查只更新所选问题，不会重新生成整份准备结果。
+                            </p>
+                        </div>
+
+                        <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+                            <h4 className="font-semibold text-sm mb-2 text-amber-500 flex items-center gap-2">
+                                <Lightbulb className="w-4 h-4" /> 当前能力边界
+                            </h4>
+                            <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                <li><strong>公司调研只是跳转入口</strong>，不会自动把调研结果写入当前会议准备。</li>
+                                <li>当前不会自动同步 CRM 或日历，也不会自动判定承诺已经兑现或资料已经组织审批。</li>
+                                <li><strong>准备结果不会注入会议回答</strong>；点击“使用推荐模式开始会议”时，CueUp <strong>只应用已确认的推荐模式</strong>。</li>
+                                <li>重要案例、价格、能力、合规和交付承诺仍应打开引用来源核对后再对外表达。</li>
+                            </ul>
+                        </div>
+                    </div>
+                </AccordionSection>
+
+                <AccordionSection title="6. 会议智能" icon={<Calendar className="w-4 h-4" />}>
                     <div className="space-y-6">
                         <p className="text-[13px]">会话结束后，CueUp 会把会议保存到本地数据库，并生成包含转录、AI 用量和结构化摘要的会议详情。</p>
 
@@ -1351,7 +1411,7 @@ export const HelpSettings: React.FC = () => {
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="6. 全局搜索与快捷键" icon={<Search className="w-4 h-4" />}>
+                <AccordionSection title="7. 全局搜索与快捷键" icon={<Search className="w-4 h-4" />}>
                     <div className="space-y-6">
                         <p className="text-[13px]">按 <span className={kbdClass}>{isMac ? 'Cmd+K' : 'Ctrl+K'}</span> 在电脑任意位置唤出 CueUp 全局面板。这相当于你的 Spotlight 覆盖层，用于直接与系统核心交互。</p>
 
@@ -1448,7 +1508,7 @@ export const HelpSettings: React.FC = () => {
 
 
 
-                <AccordionSection title="7. 专业版智能" icon={<Star className="w-4 h-4" />}>
+                <AccordionSection title="8. 专业版智能" icon={<Star className="w-4 h-4" />}>
                     <div className="space-y-6">
                         {/* Profile */}
                         <div>
@@ -1553,7 +1613,7 @@ export const HelpSettings: React.FC = () => {
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="8. 模式管理器" icon={<LayoutGrid className="w-4 h-4" />}>
+                <AccordionSection title="9. 模式管理器" icon={<LayoutGrid className="w-4 h-4" />}>
                     <div className="space-y-6">
                         <p className="text-[13px]">模式让你为会话分配专门的 AI 角色。每个模式都有定制的系统提示词、个人上下文区域、参考文件和智能笔记模板分区——因此 CueUp 会根据你是在销售电话、编码面试还是团队站会中表现出不同的行为。</p>
 
@@ -1656,7 +1716,7 @@ export const HelpSettings: React.FC = () => {
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="9. 技能" icon={<Sparkles className="w-4 h-4" />}>
+                <AccordionSection title="10. 技能" icon={<Sparkles className="w-4 h-4" />}>
                     <div className="space-y-6">
                         <p className="text-[13px]">
                             技能是本地 <code className="bg-bg-tertiary px-1.5 py-0.5 rounded text-[12px] font-mono text-text-primary border border-border-subtle">SKILL.md</code> 指令包。CueUp 会随安装包预置常用技能，也允许你在技能文件夹里继续添加自己的技能。
@@ -1703,7 +1763,7 @@ export const HelpSettings: React.FC = () => {
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="10. 窗口与通用设置" icon={<Monitor className="w-4 h-4" />}>
+                <AccordionSection title="11. 窗口与通用设置" icon={<Monitor className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                             <h4 className="font-semibold text-sm mb-2 text-text-primary">通用开关</h4>
@@ -1751,7 +1811,7 @@ export const HelpSettings: React.FC = () => {
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="11. 资料库与业务系统知识源" icon={<Upload className="w-4 h-4" />}>
+                <AccordionSection title="12. 资料库与业务系统知识源" icon={<Upload className="w-4 h-4" />}>
                     <div className="space-y-6">
                         <p className="text-[13px]">CueUp 在会议回答中可以直接引用两类外部资料：本地“资料库”和受控的“业务系统知识源”。两者都用于补充事实，但接入方式和能力范围不同。</p>
 

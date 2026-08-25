@@ -87,6 +87,8 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
   const dictationOriginalRef = useRef('');
   const skipAutosaveRef = useRef(false);
   const mainRef = useRef<HTMLElement | null>(null);
+  const recordsMenuRef = useRef<HTMLDivElement | null>(null);
+  const recordsTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const showConfirmationView = useCallback((view: ConfirmationView) => {
     setConfirmationView(view);
@@ -109,14 +111,11 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
       if (!mounted) return;
       setAvailableModes(modes.filter((mode) => mode.templateType === 'sales' || mode.templateType === 'fde'));
       setRecords(existing);
-      let current = existing[0];
-      if (!current) {
-        current = await window.electronAPI.meetingPreparationSave({ rawInput: '', inputMethod: 'text' });
-      }
+      const current = await window.electronAPI.meetingPreparationSave({ rawInput: '', inputMethod: 'text' });
       if (!mounted) return;
       acceptRecord(current);
-      setStep(current.status === 'ready' ? 3 : current.meetingContext ? 2 : 1);
-      setConfirmationView(current.result.modeRecommendation ? 'mode' : 'details');
+      setStep(1);
+      setConfirmationView('details');
     }).catch(() => {
       if (mounted) setError('无法载入会议准备，请稍后重试。');
     }).finally(() => {
@@ -180,6 +179,24 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [saveStatus]);
+
+  useEffect(() => {
+    if (!showRecords) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!recordsMenuRef.current?.contains(event.target as Node)) setShowRecords(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setShowRecords(false);
+      recordsTriggerRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [showRecords]);
 
   useEffect(() => {
     const unsubscribe = window.electronAPI.onMeetingPreparationDictationTranscript((payload) => {
@@ -411,15 +428,15 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
               <h1 className="mt-1 text-[22px] font-semibold tracking-[-0.03em]">会议作战准备卡</h1>
             </div>
           </div>
-          <div className="relative flex items-center gap-3">
+          <div ref={recordsMenuRef} className="relative flex items-center gap-3">
             <span className={`text-[11px] ${saveStatus === 'failed' ? 'text-red-400' : 'text-text-tertiary'}`}>
               {saveStatus === 'saving' ? '保存中' : saveStatus === 'saved' ? '已保存' : saveStatus === 'failed' ? '保存失败' : ''}
             </span>
-            <button type="button" onClick={() => setShowRecords((value) => !value)} className="flex items-center gap-2 rounded-full border border-border-subtle bg-bg-elevated px-3 py-2 text-[12px] text-text-secondary hover:text-text-primary">
-              最近准备 <ChevronDown size={13} />
+            <button ref={recordsTriggerRef} type="button" aria-expanded={showRecords} aria-controls="recent-preparations-menu" aria-haspopup="menu" onClick={() => setShowRecords((value) => !value)} className="flex items-center gap-2 rounded-full border border-border-subtle bg-bg-elevated px-3 py-2 text-[12px] text-text-secondary hover:text-text-primary">
+              最近准备 <ChevronDown size={13} className={`transition-transform ${showRecords ? 'rotate-180' : ''}`} />
             </button>
             {showRecords && (
-              <div className="absolute right-0 top-11 z-30 w-80 rounded-2xl border border-border-subtle bg-bg-elevated p-2 shadow-2xl">
+              <div id="recent-preparations-menu" role="menu" className="absolute right-0 top-11 z-30 max-h-[min(70vh,32rem)] w-80 overflow-y-auto rounded-2xl border border-border-subtle bg-bg-elevated p-2 shadow-2xl custom-scrollbar">
                 <button type="button" onClick={() => { void createRecord(); }} className="mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[12px] text-sky-400 hover:bg-sky-500/10"><Plus size={14} />准备一场新会议</button>
                 {records.map((item) => (
                   <div key={item.id} className="group flex items-center rounded-xl hover:bg-bg-item-surface">
@@ -466,10 +483,11 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
                 <textarea
                   aria-label="会议描述"
                   value={record.rawInput}
-                  disabled={isLocked || isRecording}
+                  disabled={isLocked}
+                  readOnly={isRecording}
                   onChange={(event) => updateRecord((current) => ({ ...current, rawInput: event.target.value, inputMethod: 'text' }))}
                   placeholder="例如：明天下午和启明机器人研发总监做产品技术交流，希望了解集成条件并准备机器人行业案例。"
-                  className="mt-5 min-h-[220px] w-full resize-none rounded-2xl border border-border-subtle bg-bg-primary/70 p-4 text-[14px] leading-6 outline-none transition-colors placeholder:text-text-tertiary focus:border-sky-400/60 disabled:opacity-60"
+                  className="mt-5 min-h-[220px] w-full resize-none rounded-2xl border border-border-subtle bg-bg-primary/70 p-4 text-[14px] leading-6 outline-none transition-colors placeholder:text-text-tertiary focus:border-sky-400/60 read-only:cursor-default read-only:border-violet-400/30 disabled:opacity-60"
                 />
                 <div className="mt-4 flex items-center justify-between gap-3">
                   <span className="text-[11px] text-text-tertiary">最多 20,000 字 · 文字和语音权重相同</span>
@@ -482,7 +500,7 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
               <aside className="rounded-[24px] border border-border-subtle bg-gradient-to-b from-violet-500/10 to-bg-elevated p-5">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-500/15 text-violet-300"><Mic2 size={19} /></div>
                 <h3 className="mt-4 text-[15px] font-semibold">直接说一段话</h3>
-                <p className="mt-2 text-[12px] leading-5 text-text-secondary">无需填写独立表单。停止后仍可修改转写文本，再让 AI 拆解。</p>
+                <p className="mt-2 text-[12px] leading-5 text-text-secondary">识别内容会同步显示在左侧。停止后仍可修改转写文本，再让 AI 拆解。</p>
                 {isRecording ? (
                   <div className="mt-6 space-y-3">
                     <div className="flex items-center gap-2 text-[12px] text-red-300"><span className="h-2 w-2 animate-pulse rounded-full bg-red-400" />录音中 {formatDuration(recordingSeconds)}</div>
@@ -490,7 +508,7 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
                     <button type="button" onClick={() => { void cancelDictation(); }} className="w-full rounded-full border border-border-subtle px-4 py-2 text-[11px] text-text-secondary">取消并恢复原文</button>
                   </div>
                 ) : (
-                  <button type="button" onClick={() => { void startDictation(); }} disabled={isLocked} className="mt-6 flex w-full items-center justify-center gap-2 rounded-full border border-violet-400/30 bg-violet-500/10 px-4 py-2.5 text-[12px] font-semibold text-violet-200 hover:bg-violet-500/20 disabled:opacity-40"><Mic2 size={14} />开始语音输入</button>
+                  <button type="button" onClick={() => { void startDictation(); }} disabled={isLocked} className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-violet-600 px-4 py-2.5 text-[12px] font-semibold text-white shadow-lg shadow-violet-500/20 transition-colors hover:bg-violet-700 disabled:opacity-40"><Mic2 size={14} />开始语音输入</button>
                 )}
               </aside>
             </section>

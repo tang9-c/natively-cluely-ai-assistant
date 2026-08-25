@@ -281,9 +281,14 @@ test('generate returns no more than three questions and cites only retrieved chu
   assert.match(predictionPrompt, /没有历史会议时，historySummary 和 commitments 必须为空数组/);
   assert.match(predictionPrompt, /公司掌握或提供的事实/);
   assert.match(predictionPrompt, /同时涉及公司事实与客户现场信息时，requiresInternalEvidence 必须为 true/);
+  assert.match(predictionPrompt, /客户向销售或现场顾问提出/);
+  assert.match(predictionPrompt, /不得生成销售或顾问向客户追问/);
+  assert.match(predictionPrompt, /贵公司当前在图纸、物料和变更管理方面存在哪些痛点.*不得生成/);
+  assert.match(predictionPrompt, /你们的产品如何解决机器人企业在图纸、物料和变更管理方面的痛点/);
   assert.match(predictionPrompt, /本次会议需要交流的具体机器人行业案例有哪些？.*requiresInternalEvidence=true/);
-  assert.match(predictionPrompt, /我们的产品如何接入客户现有控制系统？.*requiresInternalEvidence=true/);
-  assert.match(predictionPrompt, /客户当前使用什么控制系统？.*requiresInternalEvidence=false/);
+  assert.match(predictionPrompt, /你们的产品如何接入我们的现有控制系统？.*requiresInternalEvidence=true/);
+  assert.match(predictionPrompt, /你们理解的本次会议目标是什么？.*requiresInternalEvidence=false/);
+  assert.doesNotMatch(predictionPrompt, /客户当前使用什么控制系统？.*requiresInternalEvidence=false/);
   assert.deepEqual(calls[1].options.dataScopes, ['reference_files']);
   const evidencePrompt = calls[1].prompt;
   assert.match(evidencePrompt, /必须只返回一个 JSON 对象/);
