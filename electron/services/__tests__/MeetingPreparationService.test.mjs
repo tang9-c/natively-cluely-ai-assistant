@@ -66,6 +66,43 @@ const predictedQuestionsJson = {
   ],
 };
 
+function pendingEvidenceRecord() {
+  return {
+    ...structuredClone(baseRecord),
+    questions: [{
+      id: 'q1',
+      sortOrder: 0,
+      question: '机器人行业案例有哪些？',
+      keyMomentType: 'case_request',
+      rationale: ['议程包含行业案例'],
+      evidenceStatus: null,
+      evidence: {
+        knowledgeRequirements: ['机器人行业案例'],
+        supported: [],
+        missing: [],
+        limitations: [],
+        citations: [],
+        handlingScript: '',
+        followupQuestions: [],
+      },
+      checkedAt: null,
+    }],
+  };
+}
+
+function recheckDb(record, onSave = () => {}) {
+  return {
+    getMeetingPreparation: () => structuredClone(record),
+    getRecentMeetings: () => [],
+    getMeetingDetails: () => null,
+    saveMeetingPreparation: (input) => {
+      onSave(input);
+      return { ...structuredClone(record), ...input };
+    },
+    saveMeetingPreparationResult: () => structuredClone(record),
+  };
+}
+
 function makeService(overrides = {}) {
   const { MeetingPreparationService } = serviceModule();
   const db = overrides.db ?? {
@@ -282,42 +319,13 @@ test('rejects a second AI operation for the same preparation', async () => {
   await first;
 });
 
-test('generate returns no more than three questions and cites only retrieved chunks', async () => {
+test('generate returns no more than three base questions with the prediction contract', async () => {
   const calls = [];
-  const queue = [
-    predictedQuestionsJson,
-    {
-      coverage: 'sufficient',
-      supported: ['装配案例'],
-      missing: [],
-      limitations: [],
-      citedChunkIds: [18, 999],
-      handlingScript: '可以先分享已核对的装配案例。',
-      followupQuestions: ['您更关注哪类装配场景？'],
-    },
-  ].map((value) => JSON.stringify(value));
   const service = makeService({
     llm: {
       async generateContentStructured(prompt, options) {
         calls.push({ prompt, options });
-        return queue.shift();
-      },
-    },
-    materials: {
-      async searchWithDiagnostics() {
-        return {
-          hits: [
-            {
-              sourceType: 'uploaded_material',
-              sourceId: 'mat-1',
-              chunkId: 18,
-              score: 0.8,
-              title: '机器人案例',
-              text: '装配案例',
-              parentText: '装配案例详情',
-            },
-          ],
-        };
+        return JSON.stringify(predictedQuestionsJson);
       },
     },
   });
@@ -325,8 +333,9 @@ test('generate returns no more than three questions and cites only retrieved chu
   const result = await service.generate('prep-1');
 
   assert.ok(result.questions.length <= 3);
-  assert.deepEqual(result.questions[0].evidence.citations.map(({ chunkId }) => chunkId), [18]);
-  assert.equal(result.questions[0].evidence.handlingScript, '可以先分享已核对的装配案例。');
+  assert.equal(calls.length, 1);
+  assert.equal(result.questions[0].evidenceStatus, null);
+  assert.deepEqual(result.questions[0].evidence.knowledgeRequirements, ['机器人行业案例']);
   const predictionPrompt = calls[0].prompt;
   assert.match(predictionPrompt, /只返回一个 JSON 对象/);
   assert.ok(predictionPrompt.includes('"historySummary":["上次会议讨论了集成范围"]'));
@@ -345,16 +354,6 @@ test('generate returns no more than three questions and cites only retrieved chu
   assert.match(predictionPrompt, /你们的产品如何接入我们的现有控制系统？.*requiresInternalEvidence=true/);
   assert.match(predictionPrompt, /你们理解的本次会议目标是什么？.*requiresInternalEvidence=false/);
   assert.doesNotMatch(predictionPrompt, /客户当前使用什么控制系统？.*requiresInternalEvidence=false/);
-  assert.deepEqual(calls[1].options.dataScopes, ['reference_files']);
-  const evidencePrompt = calls[1].prompt;
-  assert.match(evidencePrompt, /必须只返回一个 JSON 对象/);
-  assert.match(evidencePrompt, /supported、missing、limitations、followupQuestions 都是 string\[\]/);
-  assert.match(evidencePrompt, /citedChunkIds 是非负整数数组/);
-  assert.match(evidencePrompt, /handlingScript 是 string/);
-  assert.match(evidencePrompt, /没有内容时使用空数组或空字符串，不得省略字段/);
-  assert.match(evidencePrompt, /任何“未知”“暂无”“未提供”“无法确认”或不支持的内容必须放入 missing，不得放入 supported/);
-  assert.ok(evidencePrompt.includes('"coverage":"partial"'));
-  assert.ok(evidencePrompt.includes('"citedChunkIds":[123]'));
 });
 
 test('generate gives recruiting and team-meet distinct key moments under one counterpart-question contract', async () => {
@@ -390,32 +389,72 @@ test('generate gives recruiting and team-meet distinct key moments under one cou
   }
 });
 
-test('missing evidence never becomes sufficient', async () => {
+test('generate saves base questions without waiting for evidence retrieval', async () => {
+  let llmCalls = 0;
+  let retrievalCalls = 0;
   const service = makeService({
-    llm: queuedJsonLlm([predictedQuestionsJson]),
-    materials: { searchWithDiagnostics: async () => ({ hits: [] }) },
+    llm: {
+      async generateContentStructured() {
+        llmCalls += 1;
+        return JSON.stringify({
+          ...predictedQuestionsJson,
+          questions: [
+            predictedQuestionsJson.questions[0],
+            {
+              question: '贵方希望优先验证哪个业务场景？',
+              keyMomentType: 'discovery',
+              rationale: ['需要明确现场优先级'],
+              knowledgeRequirements: [],
+              requiresInternalEvidence: false,
+            },
+          ],
+        });
+      },
+    },
+    materials: {
+      async searchWithDiagnostics() {
+        retrievalCalls += 1;
+        return { hits: [] };
+      },
+    },
   });
 
   const result = await service.generate('prep-1');
 
-  assert.equal(result.questions[0].evidenceStatus, 'missing');
-  assert.deepEqual(result.questions[0].evidence.citations, []);
+  assert.equal(llmCalls, 1);
+  assert.equal(retrievalCalls, 0);
+  assert.equal(result.questions[0].evidenceStatus, null);
+  assert.equal(result.questions[0].checkedAt, null);
+  assert.deepEqual(result.questions[0].evidence.knowledgeRequirements, ['机器人行业案例']);
+  assert.equal(result.questions[0].evidence.checkError, undefined);
+  assert.equal(result.questions[1].evidenceStatus, 'not_needed');
+  assert.ok(result.questions[1].checkedAt);
+  assert.deepEqual(result.questions.map((question) => question.sortOrder), [0, 1]);
 });
 
 test('uncited support is normalized to missing evidence', async () => {
+  const record = pendingEvidenceRecord();
+  const calls = [];
+  const queue = [
+    { knowledgeRequirements: ['机器人行业案例'], requiresInternalEvidence: true },
+    {
+      coverage: 'partial',
+      supported: ['暂无明确对应机器人行业案例的信息'],
+      missing: ['具体机器人行业案例'],
+      limitations: [],
+      citedChunkIds: [],
+      handlingScript: '当前资料未覆盖该问题。',
+      followupQuestions: [],
+    },
+  ].map((value) => JSON.stringify(value));
   const service = makeService({
-    llm: queuedJsonLlm([
-      predictedQuestionsJson,
-      {
-        coverage: 'partial',
-        supported: ['暂无明确对应机器人行业案例的信息'],
-        missing: ['具体机器人行业案例'],
-        limitations: [],
-        citedChunkIds: [],
-        handlingScript: '当前资料未覆盖该问题。',
-        followupQuestions: [],
+    db: recheckDb(record),
+    llm: {
+      async generateContentStructured(prompt, options) {
+        calls.push({ prompt, options });
+        return queue.shift();
       },
-    ]),
+    },
     materials: {
       searchWithDiagnostics: async () => ({
         hits: [{
@@ -431,12 +470,22 @@ test('uncited support is normalized to missing evidence', async () => {
     },
   });
 
-  const result = await service.generate('prep-1');
+  const result = await service.recheckQuestion('prep-1', 'q1');
 
   assert.equal(result.questions[0].evidenceStatus, 'missing');
   assert.deepEqual(result.questions[0].evidence.supported, []);
   assert.deepEqual(result.questions[0].evidence.missing, ['具体机器人行业案例']);
   assert.deepEqual(result.questions[0].evidence.citations, []);
+  assert.deepEqual(calls[1].options.dataScopes, ['reference_files']);
+  const evidencePrompt = calls[1].prompt;
+  assert.match(evidencePrompt, /必须只返回一个 JSON 对象/);
+  assert.match(evidencePrompt, /supported、missing、limitations、followupQuestions 都是 string\[\]/);
+  assert.match(evidencePrompt, /citedChunkIds 是非负整数数组/);
+  assert.match(evidencePrompt, /handlingScript 是 string/);
+  assert.match(evidencePrompt, /没有内容时使用空数组或空字符串，不得省略字段/);
+  assert.match(evidencePrompt, /任何“未知”“暂无”“未提供”“无法确认”或不支持的内容必须放入 missing，不得放入 supported/);
+  assert.ok(evidencePrompt.includes('"coverage":"partial"'));
+  assert.ok(evidencePrompt.includes('"citedChunkIds":[123]'));
 });
 
 test('evidence validation logs only safe issue metadata', async () => {
@@ -444,9 +493,11 @@ test('evidence validation logs only safe issue metadata', async () => {
   const originalWarn = console.warn;
   console.warn = (...args) => warnings.push(args);
   try {
+    const record = pendingEvidenceRecord();
     const service = makeService({
+      db: recheckDb(record),
       llm: queuedJsonLlm([
-        predictedQuestionsJson,
+        { knowledgeRequirements: ['机器人行业案例'], requiresInternalEvidence: true },
         {
           coverage: 'partial',
           supported: 'secretx',
@@ -472,7 +523,7 @@ test('evidence validation logs only safe issue metadata', async () => {
       },
     });
 
-    const result = await service.generate('prep-1');
+    const result = await service.recheckQuestion('prep-1', 'q1');
 
     assert.equal(result.questions[0].evidenceStatus, null);
     assert.equal(result.questions[0].evidence.checkError, 'check_failed');
@@ -494,8 +545,12 @@ test('material retrieval failure stays outside business evidence states', async 
   const originalWarn = console.warn;
   console.warn = (...args) => warnings.push(args);
   try {
+    const record = pendingEvidenceRecord();
     const service = makeService({
-      llm: queuedJsonLlm([predictedQuestionsJson]),
+      db: recheckDb(record),
+      llm: queuedJsonLlm([
+        { knowledgeRequirements: ['机器人行业案例'], requiresInternalEvidence: true },
+      ]),
       materials: {
         searchWithDiagnostics: async () => {
           throw new Error('rag_failed');
@@ -503,7 +558,7 @@ test('material retrieval failure stays outside business evidence states', async 
       },
     });
 
-    const result = await service.generate('prep-1');
+    const result = await service.recheckQuestion('prep-1', 'q1');
 
     assert.equal(result.questions[0].evidenceStatus, null);
     assert.equal(result.questions[0].evidence.checkError, 'check_failed');

@@ -200,7 +200,7 @@ export class MeetingPreparationService {
         question: PredictedQuestion,
         evidenceStatus: PreparationQuestion['evidenceStatus'],
         evidence: PreparationEvidence,
-        checkedAt: string,
+        checkedAt: string | null,
         identity?: { id: string; sortOrder: number },
     ): PreparationQuestion {
         return {
@@ -466,11 +466,38 @@ export class MeetingPreparationService {
             }
             throwIfAborted(signal);
 
-            const questions: PreparationQuestion[] = [];
-            for (let index = 0; index < bundle.questions.length; index += 1) {
-                const checked = await this.checkEvidence(bundle.questions[index], signal);
-                questions.push({ ...checked, sortOrder: index });
-            }
+            const questions = bundle.questions.map((question, sortOrder) => {
+                const initial = question.requiresInternalEvidence
+                    ? this.toQuestion(
+                        question,
+                        null,
+                        {
+                            knowledgeRequirements: question.knowledgeRequirements,
+                            supported: [],
+                            missing: [],
+                            limitations: [],
+                            citations: [],
+                            handlingScript: '',
+                            followupQuestions: [],
+                        },
+                        null,
+                    )
+                    : this.toQuestion(
+                        question,
+                        'not_needed',
+                        {
+                            knowledgeRequirements: question.knowledgeRequirements,
+                            supported: [],
+                            missing: [],
+                            limitations: ['该问题主要依赖现场信息'],
+                            citations: [],
+                            handlingScript: '',
+                            followupQuestions: [],
+                        },
+                        new Date().toISOString(),
+                    );
+                return { ...initial, sortOrder };
+            });
             throwIfAborted(signal);
 
             const hasLinkedHistory = Boolean(record.linkedMeetingId && historyMeeting);
