@@ -293,8 +293,9 @@ test('HelpSettings documents the AI meeting preparation flow and current boundar
   assert.match(source, /开始准备.*新的空白会议准备/s);
   assert.match(source, /最近准备/);
   assert.match(source, /描述会议.*确认信息与模式.*查看准备结果/s);
-  assert.match(source, /Sales 或 FDE/);
-  assert.match(source, /客户可能问我们的问题/);
+  assert.match(source, /Sales、FDE、招聘或团队会议/);
+  assert.match(source, /对方参会者可能问我们的问题/);
+  assert.doesNotMatch(source, /Sales 或 FDE/);
   assert.match(source, /资料充分.*部分准备.*资料缺失.*无需内部资料.*检查失败/s);
   assert.match(source, /补充资料.*重新检查/s);
   assert.match(source, /公司调研只是跳转入口/);

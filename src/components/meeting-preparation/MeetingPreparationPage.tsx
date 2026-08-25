@@ -20,6 +20,7 @@ import type {
   HistoryCandidate,
   MeetingContext,
   MeetingPreparationRecord,
+  MeetingPreparationTemplateType,
   ModeRecommendation,
   PreparationOperation,
 } from '../../../shared/meetingPreparation';
@@ -38,7 +39,7 @@ type ConfirmationView = 'details' | 'mode';
 interface AvailableMode {
   id: string;
   name: string;
-  templateType: string;
+  templateType: MeetingPreparationTemplateType;
 }
 
 const emptyEvidence = () => ({
@@ -109,7 +110,13 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
       window.electronAPI.modesGetAll(),
     ]).then(async ([existing, modes]) => {
       if (!mounted) return;
-      setAvailableModes(modes.filter((mode) => mode.templateType === 'sales' || mode.templateType === 'fde'));
+      setAvailableModes(modes.filter(
+        (mode): mode is (typeof modes)[number] & { templateType: MeetingPreparationTemplateType } =>
+          mode.templateType === 'sales'
+          || mode.templateType === 'fde'
+          || mode.templateType === 'recruiting'
+          || mode.templateType === 'team-meet',
+      ));
       setRecords(existing);
       const current = await window.electronAPI.meetingPreparationSave({ rawInput: '', inputMethod: 'text' });
       if (!mounted) return;
@@ -284,7 +291,7 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
 
   const generate = async () => {
     if (!record?.selectedModeId) {
-      setError('请先确认 Sales 或 FDE 模式。');
+      setError('请先确认推荐模式。');
       return;
     }
     await runOperation('generate', async () => {
@@ -345,7 +352,7 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
       const prior = current.result.modeRecommendation;
       const recommendation: ModeRecommendation = {
         modeId: mode.id,
-        templateType: mode.templateType as 'sales' | 'fde',
+        templateType: mode.templateType,
         label: mode.name,
         reason: prior?.modeId === mode.id ? prior.reason : '用户选择',
         focus: prior?.modeId === mode.id ? prior.focus : '',

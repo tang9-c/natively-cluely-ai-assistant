@@ -465,7 +465,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     const selectedMode = record?.selectedModeId
       ? meetingPreparationModes.getModes().find((mode) => mode.id === record.selectedModeId)
       : null;
-    if (!selectedMode || (selectedMode.templateType !== 'sales' && selectedMode.templateType !== 'fde')) {
+    if (!selectedMode || (selectedMode.templateType !== 'sales'
+      && selectedMode.templateType !== 'fde'
+      && selectedMode.templateType !== 'recruiting'
+      && selectedMode.templateType !== 'team-meet')) {
       return { success: false as const, error: 'failed' as const };
     }
     meetingPreparationModes.setActiveMode(selectedMode.id);

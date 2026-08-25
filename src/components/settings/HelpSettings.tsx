@@ -1273,14 +1273,14 @@ export const HelpSettings: React.FC = () => {
                                 <div className="mb-2 flex h-6 w-6 items-center justify-center rounded-full bg-violet-500/15 text-[11px] font-bold text-violet-500">2</div>
                                 <h4 className="font-semibold text-sm text-text-primary">确认信息与模式</h4>
                                 <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
-                                    修正拆解结果后，让 AI 在 <strong>Sales 或 FDE</strong> 中推荐一个主模式。可以不关联历史会议，也可以选择一场历史会议，用于整理上次讨论和待确认承诺。
+                                    修正拆解结果后，让 AI 在 <strong>Sales、FDE、招聘或团队会议</strong> 中推荐一个主模式。可以不关联历史会议，也可以选择一场历史会议，用于整理上次讨论和待确认承诺。
                                 </p>
                             </div>
                             <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl">
                                 <div className="mb-2 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/15 text-[11px] font-bold text-emerald-500">3</div>
                                 <h4 className="font-semibold text-sm text-text-primary">查看准备结果</h4>
                                 <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
-                                    查看已关联会议的摘要和承诺，以及<strong>客户可能问我们的问题</strong>。系统会针对每个问题检查资料覆盖情况；你可以编辑、新增或删除问题，再决定是否补充资料。
+                                    查看已关联会议的摘要和承诺，以及<strong>对方参会者可能问我们的问题</strong>。系统会针对每个问题检查资料覆盖情况；你可以编辑、新增或删除问题，再决定是否补充资料。
                                 </p>
                             </div>
                         </div>

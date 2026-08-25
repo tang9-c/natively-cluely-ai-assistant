@@ -48,6 +48,33 @@ test.describe('meeting preparation', () => {
     await expect(page.getByText('已确认的会议信息')).toBeHidden();
   });
 
+  test('offers, restores, and applies recruiting and team meeting modes', async ({ page }) => {
+    await advanceToConfirmation(page);
+    await page.getByRole('button', { name: '确认并推荐模式' }).click();
+
+    await expect(page.getByRole('button', { name: '招聘', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '团队会议', exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: '团队会议', exact: true }).click();
+    await page.getByRole('button', { name: '返回', exact: true }).click();
+    await page.getByTestId('meeting-preparation-entry').click();
+    await page.getByRole('button', { name: '最近准备' }).click();
+    await page.getByRole('button', { name: /机器人行业案例与产品集成/ }).click();
+    await expect(page.getByText('推荐模式：团队会议')).toBeVisible();
+
+    await page.getByRole('button', { name: '生成准备结果' }).click();
+    await page.getByRole('button', { name: '使用推荐模式开始会议' }).click();
+
+    try {
+      await expect.poll(() => page.evaluate(async () => {
+        const mode = await (window as any).electronAPI.modesGetActive();
+        return mode?.templateType;
+      })).toBe('team-meet');
+    } finally {
+      await page.evaluate(() => (window as any).electronAPI?.endMeeting?.()).catch(() => {});
+    }
+  });
+
   test('starts a new preparation while keeping the previous draft in recent preparations', async ({ page }) => {
     await page.getByTestId('meeting-preparation-entry').click();
     await page.getByLabel('会议描述').fill('明天和新客户讨论机器人行业案例');
