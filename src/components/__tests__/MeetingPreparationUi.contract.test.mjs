@@ -24,3 +24,10 @@ test('starting a prepared meeting passes no preparation payload', () => {
   assert.match(page, /await onStartMeeting\(\)/);
   assert.doesNotMatch(page, /onStartMeeting\([^)]*(questions|citations|evidence|result)/);
 });
+
+test('manual questions remain addable after AI generated three questions', () => {
+  assert.match(page, /<Plus size=\{13\} \/>添加问题/);
+  assert.doesNotMatch(page, /disabled=\{isLocked \|\| record\.questions\.length >= 3\}/);
+  assert.doesNotMatch(page, /record\.questions\.length >= 3/);
+  assert.doesNotMatch(page, /已达 3 个上限/);
+});

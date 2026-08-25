@@ -617,7 +617,10 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
               )}
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between"><h3 className="text-[14px] font-semibold">可能被问到的问题</h3><button type="button" disabled={isLocked || record.questions.length >= 3} onClick={() => updateRecord((current) => ({ ...current, questions: [...current.questions, { id: `question_manual_${Date.now()}`, sortOrder: current.questions.length, question: '', keyMomentType: 'custom', rationale: [], evidenceStatus: null, evidence: emptyEvidence(), checkedAt: null }] }))} className="flex items-center gap-1 text-[11px] text-sky-400 disabled:opacity-30"><Plus size={13} />添加问题</button></div>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[14px] font-semibold">可能被问到的问题</h3>
+                  <button type="button" disabled={isLocked} onClick={() => updateRecord((current) => ({ ...current, questions: [...current.questions, { id: `question_manual_${Date.now()}`, sortOrder: current.questions.length, question: '', keyMomentType: 'custom', rationale: [], evidenceStatus: null, evidence: emptyEvidence(), checkedAt: null }] }))} className="flex items-center gap-1 text-[11px] text-sky-400 disabled:opacity-30"><Plus size={13} />添加问题</button>
+                </div>
                 {record.questions.map((question, index) => (
                   <article key={question.id} data-testid="preparation-question" className="rounded-[24px] border border-border-subtle bg-bg-elevated p-5">
                     <div className="flex items-start gap-3">
