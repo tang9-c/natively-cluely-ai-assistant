@@ -65,6 +65,11 @@ export const predictedQuestionSchema = z.object({
 
 export type PredictedQuestion = z.infer<typeof predictedQuestionSchema>;
 
+export const evidenceRequirementSchema = z.object({
+  knowledgeRequirements: z.array(z.string().max(500)).max(10),
+  requiresInternalEvidence: z.boolean(),
+});
+
 export const predictedQuestionsSchema = z.object({
   questions: z.array(predictedQuestionSchema).max(3),
 });

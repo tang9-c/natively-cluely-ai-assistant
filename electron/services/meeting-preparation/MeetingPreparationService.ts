@@ -18,6 +18,7 @@ import type {
 import type { ModesManager } from '../ModesManager';
 import {
     evidenceCoverageSchema,
+    evidenceRequirementSchema,
     extractAndParse,
     generationBundleSchema,
     modeRecommendationSchema,
@@ -26,6 +27,7 @@ import {
 } from './MeetingPreparationSchemas';
 import {
     buildEvidencePrompt,
+    buildEvidenceRequirementPrompt,
     buildMeetingContextPrompt,
     buildModePrompt,
     buildPredictionPrompt,
@@ -289,18 +291,29 @@ export class MeetingPreparationService {
                         chunkId: hit.chunkId,
                     };
                 });
-            const status = coverage.coverage === 'sufficient' && citations.length > 0
-                ? 'sufficient'
-                : 'partial';
+            const supported = coverage.supported
+                .map((item) => item.trim())
+                .filter(Boolean);
+            const missing = coverage.missing
+                .map((item) => item.trim())
+                .filter(Boolean);
+            const hasSupportedEvidence = supported.length > 0 && citations.length > 0;
+            const status = !hasSupportedEvidence
+                ? 'missing'
+                : coverage.coverage === 'sufficient' && missing.length === 0
+                    ? 'sufficient'
+                    : 'partial';
             return this.toQuestion(
                 question,
                 status,
                 {
                     knowledgeRequirements: question.knowledgeRequirements,
-                    supported: coverage.supported,
-                    missing: coverage.missing,
+                    supported: hasSupportedEvidence ? supported : [],
+                    missing: status === 'missing' && missing.length === 0
+                        ? question.knowledgeRequirements
+                        : missing,
                     limitations: coverage.limitations,
-                    citations,
+                    citations: hasSupportedEvidence ? citations : [],
                     handlingScript: coverage.handlingScript,
                     followupQuestions: coverage.followupQuestions,
                 },
@@ -342,6 +355,32 @@ export class MeetingPreparationService {
                 identity,
             );
         }
+    }
+
+    private async refreshEvidenceRequirements(
+        question: PreparationQuestion,
+        context: MeetingContext | null,
+        signal: AbortSignal,
+    ): Promise<PredictedQuestion> {
+        const raw = await this.deps.llm.generateContentStructured(
+            buildEvidenceRequirementPrompt(question.question, context),
+            {
+                taskLabel: 'meeting-preparation-evidence-requirements',
+                providerStrategy: 'selected_model_only',
+                dataScopes: ['transcript'],
+                abortSignal: signal,
+            },
+        );
+        const refreshed = extractAndParse(raw, evidenceRequirementSchema);
+        return {
+            question: question.question,
+            keyMomentType: question.keyMomentType,
+            rationale: question.rationale,
+            knowledgeRequirements: refreshed.requiresInternalEvidence
+                ? refreshed.knowledgeRequirements
+                : [],
+            requiresInternalEvidence: refreshed.requiresInternalEvidence,
+        };
     }
 
     private compactHistory(meeting: Meeting | null): unknown | null {
@@ -456,14 +495,14 @@ export class MeetingPreparationService {
             if (questionIndex < 0) throw new Error('meeting_preparation_question_not_found');
 
             const current = record.questions[questionIndex];
+            const refreshed = await this.refreshEvidenceRequirements(
+                current,
+                record.meetingContext,
+                signal,
+            );
+            throwIfAborted(signal);
             const rechecked = await this.checkEvidence(
-                {
-                    question: current.question,
-                    keyMomentType: current.keyMomentType,
-                    rationale: current.rationale,
-                    knowledgeRequirements: current.evidence.knowledgeRequirements,
-                    requiresInternalEvidence: current.evidenceStatus !== 'not_needed',
-                },
+                refreshed,
                 signal,
                 { id: current.id, sortOrder: current.sortOrder },
             );

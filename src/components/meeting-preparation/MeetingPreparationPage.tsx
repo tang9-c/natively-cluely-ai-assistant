@@ -33,6 +33,7 @@ interface MeetingPreparationPageProps {
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
 type Step = 1 | 2 | 3;
+type ConfirmationView = 'details' | 'mode';
 
 interface AvailableMode {
   id: string;
@@ -72,6 +73,7 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
   const [historyCandidates, setHistoryCandidates] = useState<HistoryCandidate[]>([]);
   const [historyUnavailable, setHistoryUnavailable] = useState(false);
   const [step, setStep] = useState<Step>(1);
+  const [confirmationView, setConfirmationView] = useState<ConfirmationView>('details');
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [activeOperation, setActiveOperation] = useState<PreparationOperation | null>(null);
@@ -84,6 +86,12 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
   const dictationBaseRef = useRef('');
   const dictationOriginalRef = useRef('');
   const skipAutosaveRef = useRef(false);
+  const mainRef = useRef<HTMLElement | null>(null);
+
+  const showConfirmationView = useCallback((view: ConfirmationView) => {
+    setConfirmationView(view);
+    requestAnimationFrame(() => mainRef.current?.scrollTo({ top: 0 }));
+  }, []);
 
   const acceptRecord = useCallback((next: MeetingPreparationRecord) => {
     recordRef.current = next;
@@ -108,6 +116,7 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
       if (!mounted) return;
       acceptRecord(current);
       setStep(current.status === 'ready' ? 3 : current.meetingContext ? 2 : 1);
+      setConfirmationView(current.result.modeRecommendation ? 'mode' : 'details');
     }).catch(() => {
       if (mounted) setError('无法载入会议准备，请稍后重试。');
     }).finally(() => {
@@ -233,6 +242,7 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
         meetingContext: response.result,
       });
       acceptRecord(updated);
+      showConfirmationView('details');
       setStep(2);
     });
   };
@@ -251,6 +261,7 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
       setHistoryUnavailable(response.result.historyUnavailable);
       const latest = await window.electronAPI.meetingPreparationGet(saved.id);
       if (latest) acceptRecord(latest);
+      showConfirmationView('mode');
     });
   };
 
@@ -333,6 +344,7 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
   const openRecord = (next: MeetingPreparationRecord) => {
     acceptRecord(next);
     setStep(next.status === 'ready' ? 3 : next.meetingContext ? 2 : 1);
+    showConfirmationView(next.result.modeRecommendation ? 'mode' : 'details');
     setHistoryCandidates([]);
     setShowRecords(false);
   };
@@ -341,6 +353,7 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
     const created = await window.electronAPI.meetingPreparationSave({ rawInput: '', inputMethod: 'text' });
     acceptRecord(created);
     setStep(1);
+    showConfirmationView('details');
     setHistoryCandidates([]);
     setShowRecords(false);
   };
@@ -436,7 +449,7 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
         </div>
       </div>
 
-      <main className="flex-1 overflow-y-auto px-8 py-7 custom-scrollbar">
+      <main ref={mainRef} className="flex-1 overflow-y-auto px-8 py-7 custom-scrollbar">
         <div className="mx-auto max-w-4xl">
           {error && (
             <div className="mb-5 flex items-center justify-between rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-300">
@@ -485,51 +498,80 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
 
           {step === 2 && context && (
             <section className="space-y-5">
-              <div className="rounded-[24px] border border-border-subtle bg-bg-elevated p-6">
-                <div className="flex items-start justify-between gap-5">
-                  <div><h2 className="text-[18px] font-semibold">确认信息与模式</h2><p className="mt-1 text-[12px] text-text-secondary">修正 AI 拆解结果后，先推荐模式，再预测问题和所需资料。</p></div>
-                  <button type="button" onClick={() => setStep(1)} disabled={isLocked} className="text-[11px] text-text-secondary hover:text-text-primary">返回修改描述</button>
-                </div>
-                <div className="mt-5 grid gap-4 md:grid-cols-2">
-                  <label className="text-[11px] text-text-secondary">主题<input aria-label="主题" disabled={isLocked} value={context.topic.value} onChange={(event) => updateContext({ topic: { value: event.target.value, state: 'confirmed' } })} className="mt-1.5 w-full rounded-xl border border-border-subtle bg-bg-primary px-3 py-2.5 text-[13px] text-text-primary outline-none focus:border-sky-400/60" /></label>
-                  <label className="text-[11px] text-text-secondary">客户<input aria-label="客户" disabled={isLocked} value={context.customer.value} onChange={(event) => updateContext({ customer: { value: event.target.value, state: 'confirmed' } })} className="mt-1.5 w-full rounded-xl border border-border-subtle bg-bg-primary px-3 py-2.5 text-[13px] text-text-primary outline-none focus:border-sky-400/60" /></label>
-                  <label className="text-[11px] text-text-secondary">参会人<input aria-label="参会人" disabled={isLocked} value={context.participants.map((item) => [item.name, item.role].filter(Boolean).join(' ')).join('、')} onChange={(event) => updateContext({ participants: event.target.value.split(/[、,，]/).map((role) => ({ name: '', role: role.trim() })).filter((item) => item.role) })} className="mt-1.5 w-full rounded-xl border border-border-subtle bg-bg-primary px-3 py-2.5 text-[13px] text-text-primary outline-none focus:border-sky-400/60" /></label>
-                  <label className="text-[11px] text-text-secondary">目标<input aria-label="目标" disabled={isLocked} value={context.goal.value} onChange={(event) => updateContext({ goal: { value: event.target.value, state: 'confirmed' } })} className="mt-1.5 w-full rounded-xl border border-border-subtle bg-bg-primary px-3 py-2.5 text-[13px] text-text-primary outline-none focus:border-sky-400/60" /></label>
-                  <label className="text-[11px] text-text-secondary md:col-span-2">议程<textarea aria-label="议程" disabled={isLocked} value={context.agenda.join('\n')} onChange={(event) => updateContext({ agenda: event.target.value.split('\n').map((item) => item.trim()).filter(Boolean) })} className="mt-1.5 min-h-20 w-full rounded-xl border border-border-subtle bg-bg-primary px-3 py-2.5 text-[13px] text-text-primary outline-none focus:border-sky-400/60" /></label>
-                  <label className="text-[11px] text-text-secondary md:col-span-2">背景<textarea aria-label="背景" disabled={isLocked} value={context.background} onChange={(event) => updateContext({ background: event.target.value })} className="mt-1.5 min-h-20 w-full rounded-xl border border-border-subtle bg-bg-primary px-3 py-2.5 text-[13px] text-text-primary outline-none focus:border-sky-400/60" /></label>
-                </div>
-                <div className="mt-5 flex items-center justify-between gap-4 border-t border-border-subtle pt-5">
-                  <a href="#company-research" onClick={openResearch} className="flex items-center gap-1.5 text-[12px] text-sky-400 hover:text-sky-300">前往公司研究 <ArrowRight size={13} /></a>
-                  <button type="button" onClick={() => { void prepareContext(); }} disabled={isLocked} className="flex items-center gap-2 rounded-full bg-sky-500 px-5 py-2.5 text-[12px] font-semibold text-white disabled:opacity-40">{activeOperation === 'prepare_context' ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}确认并推荐模式</button>
-                </div>
-              </div>
-
-              {record.result.modeRecommendation && (
-                <div className="grid gap-5 lg:grid-cols-2">
-                  <div className="rounded-[24px] border border-sky-400/20 bg-sky-500/10 p-5">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-400">AI 推荐</div>
-                    <h3 className="mt-2 text-[18px] font-semibold">推荐模式：{record.result.modeRecommendation.label}</h3>
-                    <p className="mt-2 text-[12px] leading-5 text-text-secondary">{record.result.modeRecommendation.reason}</p>
-                    <div className="mt-4 flex gap-2">
-                      {availableModes.map((mode) => (
-                        <button key={mode.id} type="button" disabled={isLocked} onClick={() => chooseMode(mode)} className={`rounded-full px-4 py-2 text-[11px] font-semibold ${record.selectedModeId === mode.id ? 'bg-sky-500 text-white' : 'border border-border-subtle text-text-secondary'}`}>{mode.name}</button>
-                      ))}
-                    </div>
+              {confirmationView === 'details' ? (
+                <div className="rounded-[24px] border border-border-subtle bg-bg-elevated p-6">
+                  <div className="flex items-start justify-between gap-5">
+                    <div><h2 className="text-[18px] font-semibold">确认会议信息</h2><p className="mt-1 text-[12px] text-text-secondary">修正 AI 拆解结果后，再让 AI 推荐模式和可关联的历史会议。</p></div>
+                    <button type="button" onClick={() => setStep(1)} disabled={isLocked} className="text-[11px] text-text-secondary hover:text-text-primary">返回修改描述</button>
                   </div>
+                  <div className="mt-5 grid gap-4 md:grid-cols-2">
+                    <label className="text-[11px] text-text-secondary">主题<input aria-label="主题" disabled={isLocked} value={context.topic.value} onChange={(event) => updateContext({ topic: { value: event.target.value, state: 'confirmed' } })} className="mt-1.5 w-full rounded-xl border border-border-subtle bg-bg-primary px-3 py-2.5 text-[13px] text-text-primary outline-none focus:border-sky-400/60" /></label>
+                    <label className="text-[11px] text-text-secondary">客户<input aria-label="客户" disabled={isLocked} value={context.customer.value} onChange={(event) => updateContext({ customer: { value: event.target.value, state: 'confirmed' } })} className="mt-1.5 w-full rounded-xl border border-border-subtle bg-bg-primary px-3 py-2.5 text-[13px] text-text-primary outline-none focus:border-sky-400/60" /></label>
+                    <label className="text-[11px] text-text-secondary">参会人<input aria-label="参会人" disabled={isLocked} value={context.participants.map((item) => [item.name, item.role].filter(Boolean).join(' ')).join('、')} onChange={(event) => updateContext({ participants: event.target.value.split(/[、,，]/).map((role) => ({ name: '', role: role.trim() })).filter((item) => item.role) })} className="mt-1.5 w-full rounded-xl border border-border-subtle bg-bg-primary px-3 py-2.5 text-[13px] text-text-primary outline-none focus:border-sky-400/60" /></label>
+                    <label className="text-[11px] text-text-secondary">目标<input aria-label="目标" disabled={isLocked} value={context.goal.value} onChange={(event) => updateContext({ goal: { value: event.target.value, state: 'confirmed' } })} className="mt-1.5 w-full rounded-xl border border-border-subtle bg-bg-primary px-3 py-2.5 text-[13px] text-text-primary outline-none focus:border-sky-400/60" /></label>
+                    <label className="text-[11px] text-text-secondary md:col-span-2">议程<textarea aria-label="议程" disabled={isLocked} value={context.agenda.join('\n')} onChange={(event) => updateContext({ agenda: event.target.value.split('\n').map((item) => item.trim()).filter(Boolean) })} className="mt-1.5 min-h-20 w-full rounded-xl border border-border-subtle bg-bg-primary px-3 py-2.5 text-[13px] text-text-primary outline-none focus:border-sky-400/60" /></label>
+                    <label className="text-[11px] text-text-secondary md:col-span-2">背景<textarea aria-label="背景" disabled={isLocked} value={context.background} onChange={(event) => updateContext({ background: event.target.value })} className="mt-1.5 min-h-20 w-full rounded-xl border border-border-subtle bg-bg-primary px-3 py-2.5 text-[13px] text-text-primary outline-none focus:border-sky-400/60" /></label>
+                  </div>
+                  <div className="mt-5 flex items-center justify-between gap-4 border-t border-border-subtle pt-5">
+                    <a href="#company-research" onClick={openResearch} className="flex items-center gap-1.5 text-[12px] text-sky-400 hover:text-sky-300">前往公司研究 <ArrowRight size={13} /></a>
+                    <button type="button" onClick={() => { void prepareContext(); }} disabled={isLocked} className="flex items-center gap-2 rounded-full bg-sky-500 px-5 py-2.5 text-[12px] font-semibold text-white disabled:opacity-40">{activeOperation === 'prepare_context' ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}确认并推荐模式</button>
+                  </div>
+                </div>
+              ) : (
+                <>
                   <div className="rounded-[24px] border border-border-subtle bg-bg-elevated p-5">
-                    <div className="flex items-center justify-between"><h3 className="text-[14px] font-semibold">关联一次历史会议（可选）</h3>{historyUnavailable && <span className="text-[10px] text-amber-400">历史暂不可用</span>}</div>
-                    <div className="mt-3 max-h-40 space-y-2 overflow-y-auto">
-                      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border-subtle px-3 py-2 text-[11px] text-text-secondary"><input type="radio" name="history" checked={!record.linkedMeetingId} onChange={() => updateRecord((current) => ({ ...current, linkedMeetingId: null }))} />不关联，作为新会议</label>
-                      {historyCandidates.map((candidate) => (
-                        <label key={candidate.id} className="flex cursor-pointer items-start gap-3 rounded-xl border border-border-subtle px-3 py-2"><input className="mt-1" type="radio" name="history" checked={record.linkedMeetingId === candidate.id} onChange={() => updateRecord((current) => ({ ...current, linkedMeetingId: candidate.id }))} /><span className="min-w-0"><span className="block truncate text-[11px] font-medium text-text-primary">{candidate.title}</span><span className="mt-0.5 block text-[10px] text-text-tertiary">{candidate.matchReason} · {new Date(candidate.date).toLocaleDateString()}</span></span></label>
-                      ))}
+                    <div className="flex items-start justify-between gap-5">
+                      <div><h2 className="text-[18px] font-semibold">选择模式与历史会议</h2><p className="mt-1 text-[12px] text-text-secondary">会议信息已确认。选择模式和历史会议后即可生成准备结果。</p></div>
+                      <button type="button" onClick={() => showConfirmationView('details')} disabled={isLocked} className="text-[11px] text-sky-400 hover:text-sky-300">返回修改信息</button>
+                    </div>
+                    <div className="mt-4 rounded-2xl border border-border-subtle bg-bg-primary/60 px-4 py-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-tertiary">已确认的会议信息</div>
+                      <dl className="mt-3 grid gap-x-5 gap-y-3 md:grid-cols-3">
+                        {[
+                          ['主题', context.topic.value],
+                          ['客户', context.customer.value],
+                          ['参会人', context.participants.map((item) => [item.name, item.role].filter(Boolean).join(' ')).join('、')],
+                          ['目标', context.goal.value],
+                          ['议程', context.agenda.join('；')],
+                          ['背景', context.background],
+                        ].map(([label, value]) => (
+                          <div key={label} className="min-w-0">
+                            <dt className="text-[10px] text-text-tertiary">{label}</dt>
+                            <dd className="mt-0.5 truncate text-[11px] text-text-secondary" title={value || '未提供'}>{value || '未提供'}</dd>
+                          </div>
+                        ))}
+                      </dl>
                     </div>
                   </div>
-                </div>
-              )}
 
-              {record.result.modeRecommendation && (
-                <div className="flex justify-end"><button type="button" onClick={() => { void generate(); }} disabled={isLocked || !selectedMode} className="flex items-center gap-2 rounded-full bg-gradient-to-r from-sky-500 to-violet-500 px-6 py-3 text-[12px] font-semibold text-white shadow-lg shadow-sky-500/15 disabled:opacity-40">{activeOperation === 'generate' ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}生成准备结果</button></div>
+                  {record.result.modeRecommendation && (
+                    <div className="grid gap-5 lg:grid-cols-2">
+                      <div className="rounded-[24px] border border-sky-400/20 bg-sky-500/10 p-5">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-400">AI 推荐</div>
+                        <h3 className="mt-2 text-[18px] font-semibold">推荐模式：{record.result.modeRecommendation.label}</h3>
+                        <p className="mt-2 text-[12px] leading-5 text-text-secondary">{record.result.modeRecommendation.reason}</p>
+                        <div className="mt-4 flex gap-2">
+                          {availableModes.map((mode) => (
+                            <button key={mode.id} type="button" disabled={isLocked} onClick={() => chooseMode(mode)} className={`rounded-full px-4 py-2 text-[11px] font-semibold ${record.selectedModeId === mode.id ? 'bg-sky-500 text-white' : 'border border-border-subtle text-text-secondary'}`}>{mode.name}</button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="rounded-[24px] border border-border-subtle bg-bg-elevated p-5">
+                        <div className="flex items-center justify-between"><h3 className="text-[14px] font-semibold">关联一次历史会议（可选）</h3>{historyUnavailable && <span className="text-[10px] text-amber-400">历史暂不可用</span>}</div>
+                        <div className="mt-3 max-h-40 space-y-2 overflow-y-auto">
+                          <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border-subtle px-3 py-2 text-[11px] text-text-secondary"><input type="radio" name="history" checked={!record.linkedMeetingId} onChange={() => updateRecord((current) => ({ ...current, linkedMeetingId: null }))} />不关联，作为新会议</label>
+                          {historyCandidates.map((candidate) => (
+                            <label key={candidate.id} className="flex cursor-pointer items-start gap-3 rounded-xl border border-border-subtle px-3 py-2"><input className="mt-1" type="radio" name="history" checked={record.linkedMeetingId === candidate.id} onChange={() => updateRecord((current) => ({ ...current, linkedMeetingId: candidate.id }))} /><span className="min-w-0"><span className="block truncate text-[11px] font-medium text-text-primary">{candidate.title}</span><span className="mt-0.5 block text-[10px] text-text-tertiary">{candidate.matchReason} · {new Date(candidate.date).toLocaleDateString()}</span></span></label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {record.result.modeRecommendation && (
+                    <div className="flex justify-end"><button type="button" onClick={() => { void generate(); }} disabled={isLocked || !selectedMode} className="flex items-center gap-2 rounded-full bg-gradient-to-r from-sky-500 to-violet-500 px-6 py-3 text-[12px] font-semibold text-white shadow-lg shadow-sky-500/15 disabled:opacity-40">{activeOperation === 'generate' ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}生成准备结果</button></div>
+                  )}
+                </>
               )}
             </section>
           )}
@@ -538,7 +580,7 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
             <section className="space-y-5">
               <div className="flex items-start justify-between gap-5 rounded-[24px] border border-sky-400/20 bg-gradient-to-r from-sky-500/12 to-violet-500/10 p-6">
                 <div><div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-400">准备完成</div><h2 className="mt-2 text-[22px] font-semibold">{record.meetingContext?.topic.value || '会议作战准备卡'}</h2><p className="mt-2 text-[12px] text-text-secondary">{record.result.modeRecommendation ? `推荐模式：${record.result.modeRecommendation.label} · ${record.result.modeRecommendation.focus}` : '已生成会议准备结果'}</p></div>
-                <button type="button" onClick={() => setStep(2)} disabled={isLocked} className="flex items-center gap-1.5 rounded-full border border-border-subtle px-3 py-2 text-[11px] text-text-secondary"><RotateCcw size={13} />返回调整</button>
+                <button type="button" onClick={() => { showConfirmationView('mode'); setStep(2); }} disabled={isLocked} className="flex items-center gap-1.5 rounded-full border border-border-subtle px-3 py-2 text-[11px] text-text-secondary"><RotateCcw size={13} />返回调整</button>
               </div>
 
               {record.result.historySummary.length > 0 && (

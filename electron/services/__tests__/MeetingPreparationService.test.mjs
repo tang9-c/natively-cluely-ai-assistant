@@ -291,6 +291,7 @@ test('generate returns no more than three questions and cites only retrieved chu
   assert.match(evidencePrompt, /citedChunkIds 是非负整数数组/);
   assert.match(evidencePrompt, /handlingScript 是 string/);
   assert.match(evidencePrompt, /没有内容时使用空数组或空字符串，不得省略字段/);
+  assert.match(evidencePrompt, /任何“未知”“暂无”“未提供”“无法确认”或不支持的内容必须放入 missing，不得放入 supported/);
   assert.ok(evidencePrompt.includes('"coverage":"partial"'));
   assert.ok(evidencePrompt.includes('"citedChunkIds":[123]'));
 });
@@ -304,6 +305,43 @@ test('missing evidence never becomes sufficient', async () => {
   const result = await service.generate('prep-1');
 
   assert.equal(result.questions[0].evidenceStatus, 'missing');
+  assert.deepEqual(result.questions[0].evidence.citations, []);
+});
+
+test('uncited support is normalized to missing evidence', async () => {
+  const service = makeService({
+    llm: queuedJsonLlm([
+      predictedQuestionsJson,
+      {
+        coverage: 'partial',
+        supported: ['暂无明确对应机器人行业案例的信息'],
+        missing: ['具体机器人行业案例'],
+        limitations: [],
+        citedChunkIds: [],
+        handlingScript: '当前资料未覆盖该问题。',
+        followupQuestions: [],
+      },
+    ]),
+    materials: {
+      searchWithDiagnostics: async () => ({
+        hits: [{
+          sourceType: 'uploaded_material',
+          sourceId: 'mat-1',
+          chunkId: 18,
+          score: 0.8,
+          title: '产品概述',
+          text: '通用产品介绍',
+          parentText: '产品介绍详情',
+        }],
+      }),
+    },
+  });
+
+  const result = await service.generate('prep-1');
+
+  assert.equal(result.questions[0].evidenceStatus, 'missing');
+  assert.deepEqual(result.questions[0].evidence.supported, []);
+  assert.deepEqual(result.questions[0].evidence.missing, ['具体机器人行业案例']);
   assert.deepEqual(result.questions[0].evidence.citations, []);
 });
 
@@ -408,6 +446,10 @@ test('recheck updates only the latest selected question', async () => {
   let savedQuestions;
   const record = { ...structuredClone(baseRecord), questions: [firstQuestion, untouched] };
   const service = makeService({
+    llm: queuedJsonLlm([{
+      knowledgeRequirements: ['行业案例'],
+      requiresInternalEvidence: true,
+    }]),
     db: {
       getMeetingPreparation: () => structuredClone(record),
       getRecentMeetings: () => [],
@@ -425,4 +467,132 @@ test('recheck updates only the latest selected question', async () => {
 
   assert.equal(savedQuestions[0].question, '最新编辑后的案例问题？');
   assert.deepEqual(savedQuestions[1], untouched);
+});
+
+test('recheck refreshes evidence requirements before running material retrieval', async () => {
+  const question = {
+    id: 'q1',
+    sortOrder: 0,
+    question: '产品如何接入客户现有控制系统？',
+    keyMomentType: 'integration',
+    rationale: [],
+    evidenceStatus: 'not_needed',
+    evidence: {
+      knowledgeRequirements: ['客户当前使用的控制系统'],
+      supported: [],
+      missing: [],
+      limitations: ['该问题主要依赖现场信息'],
+      citations: [],
+      handlingScript: '',
+      followupQuestions: [],
+    },
+    checkedAt: null,
+  };
+  const record = { ...structuredClone(baseRecord), questions: [question] };
+  const queries = [];
+  let savedQuestions;
+  const service = makeService({
+    llm: queuedJsonLlm([
+      {
+        knowledgeRequirements: ['产品接口能力', '集成兼容性'],
+        requiresInternalEvidence: true,
+      },
+      {
+        coverage: 'partial',
+        supported: ['支持标准接口集成'],
+        missing: ['客户控制系统的具体兼容性'],
+        limitations: [],
+        citedChunkIds: [18],
+        handlingScript: '可以先介绍已确认的标准接口能力。',
+        followupQuestions: ['客户当前使用哪种控制系统？'],
+      },
+    ]),
+    db: {
+      getMeetingPreparation: () => structuredClone(record),
+      getRecentMeetings: () => [],
+      getMeetingDetails: () => null,
+      saveMeetingPreparation: (input) => {
+        savedQuestions = input.questions;
+        return { ...structuredClone(record), ...input };
+      },
+      saveMeetingPreparationResult: () => structuredClone(record),
+    },
+    materials: {
+      searchWithDiagnostics: async (query) => {
+        queries.push(query);
+        return {
+          hits: [{
+            sourceType: 'uploaded_material',
+            sourceId: 'mat-1',
+            chunkId: 18,
+            score: 0.8,
+            title: '产品接口说明',
+            text: '支持标准接口集成',
+            parentText: '产品接口与集成能力',
+          }],
+        };
+      },
+    },
+  });
+
+  await service.recheckQuestion('prep-1', 'q1');
+
+  assert.equal(queries.length, 1);
+  assert.match(queries[0], /产品如何接入客户现有控制系统/);
+  assert.match(queries[0], /产品接口能力/);
+  assert.doesNotMatch(queries[0], /客户当前使用的控制系统/);
+  assert.deepEqual(savedQuestions[0].evidence.knowledgeRequirements, ['产品接口能力', '集成兼容性']);
+  assert.equal(savedQuestions[0].evidenceStatus, 'partial');
+});
+
+test('recheck skips material retrieval when the edited question only needs onsite information', async () => {
+  const question = {
+    id: 'q1',
+    sortOrder: 0,
+    question: '客户当前使用什么控制系统？',
+    keyMomentType: 'discovery',
+    rationale: [],
+    evidenceStatus: 'partial',
+    evidence: {
+      knowledgeRequirements: ['产品接口能力'],
+      supported: ['支持标准接口集成'],
+      missing: [],
+      limitations: [],
+      citations: [{ sourceType: 'uploaded_material', sourceId: 'mat-1', title: '产品接口说明', chunkId: 18 }],
+      handlingScript: '',
+      followupQuestions: [],
+    },
+    checkedAt: null,
+  };
+  const record = { ...structuredClone(baseRecord), questions: [question] };
+  let retrievalCalls = 0;
+  let savedQuestions;
+  const service = makeService({
+    llm: queuedJsonLlm([{
+      knowledgeRequirements: ['产品接口能力'],
+      requiresInternalEvidence: false,
+    }]),
+    db: {
+      getMeetingPreparation: () => structuredClone(record),
+      getRecentMeetings: () => [],
+      getMeetingDetails: () => null,
+      saveMeetingPreparation: (input) => {
+        savedQuestions = input.questions;
+        return { ...structuredClone(record), ...input };
+      },
+      saveMeetingPreparationResult: () => structuredClone(record),
+    },
+    materials: {
+      searchWithDiagnostics: async () => {
+        retrievalCalls += 1;
+        return { hits: [] };
+      },
+    },
+  });
+
+  await service.recheckQuestion('prep-1', 'q1');
+
+  assert.equal(retrievalCalls, 0);
+  assert.equal(savedQuestions[0].evidenceStatus, 'not_needed');
+  assert.deepEqual(savedQuestions[0].evidence.knowledgeRequirements, []);
 });

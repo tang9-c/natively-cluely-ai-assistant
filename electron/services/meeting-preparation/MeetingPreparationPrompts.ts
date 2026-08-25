@@ -107,9 +107,32 @@ export function buildEvidencePrompt(
         '你只判断所给内部资料对问题的覆盖程度，不得使用外部知识。',
         '必须只返回一个 JSON 对象，不要解释，不要使用 Markdown 代码块。',
         '严格使用以下字段和类型：coverage 是 sufficient 或 partial；supported、missing、limitations、followupQuestions 都是 string[]；citedChunkIds 是非负整数数组；handlingScript 是 string。',
+        'supported 只能包含检索资料明确支持的正向结论；任何“未知”“暂无”“未提供”“无法确认”或不支持的内容必须放入 missing，不得放入 supported。',
         'citedChunkIds 只能引用下方提供的 chunkId。没有内容时使用空数组或空字符串，不得省略字段。',
         `合法格式示例（只展示结构和类型，不得照抄内容）：${JSON.stringify(example)}`,
         `问题与知识要求：${JSON.stringify({ question: question.question, knowledgeRequirements: question.knowledgeRequirements })}`,
         `检索资料：${JSON.stringify(chunks)}`,
+    ].join('\n');
+}
+
+export function buildEvidenceRequirementPrompt(
+    question: string,
+    context: MeetingContext | null,
+): string {
+    const example = {
+        knowledgeRequirements: ['产品接口能力', '集成兼容性'],
+        requiresInternalEvidence: true,
+    };
+    return [
+        '你只重新判断当前问题是否需要内部资料，以及需要检索哪些知识，不得改写问题。',
+        '必须只返回一个 JSON 对象，不要解释，不要使用 Markdown 代码块。',
+        '严格使用以下字段和类型：knowledgeRequirements 是 string[]；requiresInternalEvidence 是 boolean。',
+        '回答需要引用公司掌握或提供的事实时必须为 true；包括具体客户或行业案例、案例成效与指标、产品功能与技术能力、接口与集成兼容性、解决方案、价格、认证与合规、安全能力、部署与交付承诺。',
+        '只有问题完全依赖会议现场向客户了解的信息时才允许为 false，例如客户目标、客户现有系统、时间计划和决策流程；此时 knowledgeRequirements 必须为空数组。',
+        '同一问题同时涉及公司事实与客户现场信息时必须为 true，并只列出回答公司事实所需的知识。',
+        '判定示例：“我们的产品如何接入客户现有控制系统？” requiresInternalEvidence=true；“客户当前使用什么控制系统？” requiresInternalEvidence=false。',
+        `合法格式示例（只展示结构和类型，不得照抄内容）：${JSON.stringify(example)}`,
+        `当前问题：${JSON.stringify(question)}`,
+        `已确认会议信息：${JSON.stringify(context ? confirmedContext(context) : {})}`,
     ].join('\n');
 }

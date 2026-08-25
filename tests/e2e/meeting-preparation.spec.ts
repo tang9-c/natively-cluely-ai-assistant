@@ -31,6 +31,23 @@ test.describe('meeting preparation', () => {
     await expect(page.getByText('资料缺失').first()).toBeVisible();
   });
 
+  test('keeps step two compact by replacing details with mode selection', async ({ page }) => {
+    await advanceToConfirmation(page);
+
+    await expect(page.getByTestId('meeting-preparation-page')).toContainText('描述会议');
+    await expect(page.getByTestId('meeting-preparation-page')).toContainText('确认信息与模式');
+    await expect(page.getByTestId('meeting-preparation-page')).toContainText('查看准备结果');
+    await page.getByRole('button', { name: '确认并推荐模式' }).click();
+
+    await expect(page.getByLabel('客户')).toBeHidden();
+    await expect(page.getByText('已确认的会议信息')).toBeVisible();
+    await expect(page.getByText(/推荐模式：(Sales|销售)/)).toBeVisible();
+
+    await page.getByRole('button', { name: '返回修改信息' }).click();
+    await expect(page.getByLabel('客户')).toHaveValue('启明机器人');
+    await expect(page.getByText('已确认的会议信息')).toBeHidden();
+  });
+
   test('draft survives leaving and reopening the preparation page', async ({ page }) => {
     await page.getByTestId('meeting-preparation-entry').click();
     await page.getByLabel('会议描述').fill('明天和新客户讨论机器人行业案例');
