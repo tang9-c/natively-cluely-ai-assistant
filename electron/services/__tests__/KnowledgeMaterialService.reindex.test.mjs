@@ -173,6 +173,38 @@ test('reindexMaterial rebuilds material from previously indexed chunks', async (
   }
 });
 
+test('reindexMaterial preserves a PPTX partial-pages warning', async () => {
+  const db = createDbStub();
+  db.materials.set('mat-partial-pptx', {
+    id: 'mat-partial-pptx',
+    file_name: 'partial.pptx',
+    title: 'partial.pptx',
+    mime_or_ext: '.pptx',
+    file_hash: 'partial-hash',
+    status: 'complete',
+    error_code: 'pptx_partial_pages',
+    error_message: '处理完成，但有缺页 · 2/3 页',
+    created_at: '2026-08-25T00:00:00Z',
+    updated_at: '2026-08-25T00:00:00Z',
+  });
+  db.chunks.set(1, {
+    id: 1,
+    material_id: 'mat-partial-pptx',
+    chunk_index: 0,
+    cleaned_text: 'Slide 1 extracted text',
+    parent_text: 'Slide 1 extracted text',
+    token_count: 5,
+    embedding: null,
+  });
+  const service = new KnowledgeMaterialService(db, null);
+
+  const material = await service.reindexMaterial('mat-partial-pptx');
+
+  assert.equal(material.status, 'complete');
+  assert.equal(material.error_code, 'pptx_partial_pages');
+  assert.equal(material.error_message, '处理完成，但有缺页 · 2/3 页');
+});
+
 test('reindexMaterial is idempotent for overlapping multi-chunk Chinese text', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'material-reindex-idempotent-'));
   try {

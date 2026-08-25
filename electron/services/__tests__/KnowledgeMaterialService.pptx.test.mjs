@@ -304,6 +304,55 @@ test('PPTX background processing is marked indexing before slide analysis comple
   }
 });
 
+test('PPTX partial ingestion remains complete and stores the successful slide count', async () => {
+  const db = createDbStub();
+  const service = new KnowledgeMaterialService(db, null, {
+    getQCloudAvailability: async () => ({ hasNativelyApiKey: true, activeProvider: 'natively', available: true }),
+    createPptxIngestionService: (indexPreparedChunks) => ({
+      ingest: async (materialId) => {
+        await indexPreparedChunks(materialId, [
+          {
+            materialId,
+            chunkIndex: 0,
+            parentChunkIndex: 0,
+            cleanedText: 'Slide 1 text',
+            parentText: 'Slide 1 text',
+            tokenCount: 3,
+            metadata: { source_format: 'pptx', slide_index: 1, slide_count: 3 },
+          },
+          {
+            materialId,
+            chunkIndex: 2,
+            parentChunkIndex: 2,
+            cleanedText: 'Slide 3 text',
+            parentText: 'Slide 3 text',
+            tokenCount: 3,
+            metadata: { source_format: 'pptx', slide_index: 3, slide_count: 3 },
+          },
+        ]);
+        return { slideCount: 3, successCount: 2, failedSlideIndexes: [2] };
+      },
+    }),
+  });
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-partial-status-'));
+
+  try {
+    const pptxPath = path.join(tmpDir, 'deck.pptx');
+    fs.writeFileSync(pptxPath, 'fake pptx', 'utf8');
+    const result = await service.uploadFiles([pptxPath]);
+    const materialId = result.materials[0].id;
+
+    await waitFor(() => {
+      const material = db.getKnowledgeMaterial(materialId);
+      assert.equal(material.status, 'complete');
+      assert.equal(material.error_code, 'pptx_partial_pages');
+      assert.equal(material.error_message, '处理完成，但有缺页 · 2/3 页');
+    });
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test('uploadFiles rejects pptx with localized error from getQCloudAvailability', async () => {
   const db = createDbStub();
   const service = new KnowledgeMaterialService(db, null, {
@@ -398,7 +447,7 @@ test('pptx_too_many_slides error maps to user-facing slide count message', async
       const material = db.getKnowledgeMaterial(materialId);
       assert.equal(material.status, 'failed');
       assert.equal(material.error_code, 'pptx_too_many_slides');
-      assert.match(material.error_message, /PPTX 页数超过 200/);
+      assert.match(material.error_message, /最多处理 60 页/);
     });
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });

@@ -39,13 +39,19 @@ interface PptxQCloudAvailability {
     available: boolean;
 }
 
+interface PptxIngestionResult {
+    slideCount: number;
+    successCount: number;
+    failedSlideIndexes: number[];
+}
+
 interface KnowledgeMaterialServiceOptions {
     onMaterialIndexChanged?: () => void;
     getQCloudAvailability?: () => Promise<PptxQCloudAvailability>;
     createPptxIngestionService?: (
         indexPreparedChunks: (materialId: string, chunks: KnowledgeMaterialChunkInput[]) => Promise<void>,
     ) => {
-        ingest(materialId: string, filePath: string): Promise<void>;
+        ingest(materialId: string, filePath: string): Promise<PptxIngestionResult | void>;
     };
 }
 
@@ -153,6 +159,9 @@ export class KnowledgeMaterialService {
     async reindexMaterial(materialId: string): Promise<any> {
         const material = this.db.getKnowledgeMaterial(materialId);
         if (!material) throw new Error('material_not_found');
+        const partialWarning = material.error_code === 'pptx_partial_pages'
+            ? { code: material.error_code, message: material.error_message }
+            : null;
         // The first implementation keeps extracted text only in chunks, so reindex
         // reconstructs from parent/child chunk text. Upload again for a pristine parse.
         const chunks = this.db.getKnowledgeMaterialChunks({ withEmbeddingsOnly: false })
@@ -160,6 +169,9 @@ export class KnowledgeMaterialService {
         const text = reconstructOverlappingChunks(chunks.map((chunk: any) => chunk.cleaned_text));
         if (!text) throw new Error('material_has_no_indexable_text');
         await this.indexMaterial(materialId, text);
+        if (partialWarning && this.isMaterialIndexable(materialId)) {
+            this.db.updateKnowledgeMaterialStatus(materialId, 'complete', partialWarning);
+        }
         return this.db.getKnowledgeMaterial(materialId);
     }
 
@@ -308,7 +320,13 @@ export class KnowledgeMaterialService {
                 const service = this.options.createPptxIngestionService
                     ? this.options.createPptxIngestionService((id, chunks) => this.indexPreparedChunks(id, chunks))
                     : this.createDefaultPptxIngestionService();
-                await service.ingest(materialId, filePath);
+                const result = await service.ingest(materialId, filePath);
+                if (result && result.successCount < result.slideCount && this.isMaterialIndexable(materialId)) {
+                    this.db.updateKnowledgeMaterialStatus(materialId, 'complete', {
+                        code: 'pptx_partial_pages',
+                        message: `处理完成，但有缺页 · ${result.successCount}/${result.slideCount} 页`,
+                    });
+                }
                 return;
             }
             const rawText = await DocumentTextExtractor.extract(filePath);
@@ -355,7 +373,7 @@ export class KnowledgeMaterialService {
         };
     }
 
-    private createDefaultPptxIngestionService(): { ingest(materialId: string, filePath: string): Promise<void> } {
+    private createDefaultPptxIngestionService(): { ingest(materialId: string, filePath: string): Promise<PptxIngestionResult> } {
         const { LLMHelper } = require('../../LLMHelper');
         const { PptxIngestionService } = require('./pptx/PptxIngestionService');
         const { PptxSlideRenderer } = require('./pptx/PptxSlideRenderer');
@@ -398,7 +416,9 @@ function logPrivacySafePptxFailure(errorCode: string, error: any): void {
 export function classifyMaterialIndexError(error: any): string {
     if (error?.code) return error.code;
     const message = String(error?.message || '').toLowerCase();
+    if (message.includes('pptx_page_limit_exceeded')) return 'pptx_page_limit_exceeded';
     if (message.includes('pptx_too_many_slides')) return 'pptx_too_many_slides';
+    if (message.includes('pptx_all_slides_failed')) return 'pptx_all_slides_failed';
     if (message.includes('pptx_invalid_file')) return 'pptx_invalid_file';
     if (
         message.includes('pptx_renderer_asset_missing') ||
@@ -433,7 +453,15 @@ export function toUserFacingMaterialError(error: any): string {
     if (code === 'empty_document') return '文档没有可索引的文本。';
     if (code === 'binary_text_file') return 'TXT 文件看起来是二进制内容，无法作为文本资料索引。';
     if (code === 'embedding_failed') return '资料文本已读取，但向量索引失败。';
-    if (code === 'pptx_too_many_slides') return 'PPTX 页数超过 200，请拆分后上传。';
+    if (code === 'pptx_page_limit_exceeded') {
+        const slideCount = Number(error?.slideCount);
+        if (Number.isInteger(slideCount) && slideCount > 0) {
+            return `该 PPTX 共 ${slideCount} 页，当前单个文件最多处理 60 页。请按章节拆分为多份，每份不超过 60 页后重新上传。`;
+        }
+        return '该 PPTX 超过 60 页，当前单个文件最多处理 60 页。请按章节拆分为多份，每份不超过 60 页后重新上传。';
+    }
+    if (code === 'pptx_too_many_slides') return '该 PPTX 超过 60 页，当前单个文件最多处理 60 页。请按章节拆分为多份，每份不超过 60 页后重新上传。';
+    if (code === 'pptx_all_slides_failed') return 'PPTX 内容提取失败，请稍后重试。';
     if (code === 'pptx_invalid_file') return 'PPTX 文件已损坏或不是有效的 PowerPoint 文件。';
     if (code === 'pptx_renderer_asset_missing') return 'PPTX 渲染组件缺失，请重新构建或更新应用后重试。';
     if (code === 'pptx_render_timeout') return 'PPTX 渲染超时，请重试；如果仍失败，请拆分文件后重新上传。';

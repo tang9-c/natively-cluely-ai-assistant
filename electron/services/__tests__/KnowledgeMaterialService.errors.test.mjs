@@ -247,6 +247,17 @@ test('PPTX render stages preserve actionable process error codes without blaming
   }
 });
 
+test('PPTX page limits and all-slide failures have accurate user guidance', () => {
+  assert.equal(
+    toUserFacingMaterialError({ code: 'pptx_page_limit_exceeded', slideCount: 107 }),
+    '该 PPTX 共 107 页，当前单个文件最多处理 60 页。请按章节拆分为多份，每份不超过 60 页后重新上传。',
+  );
+  assert.equal(
+    toUserFacingMaterialError({ code: 'pptx_all_slides_failed' }),
+    'PPTX 内容提取失败，请稍后重试。',
+  );
+});
+
 test('searchWithDiagnostics uses candidateReader when present and reports degradedReason', async () => {
   const db = createDbStub();
   db.getKnowledgeMaterialCandidateChunks = (query, options) => {
