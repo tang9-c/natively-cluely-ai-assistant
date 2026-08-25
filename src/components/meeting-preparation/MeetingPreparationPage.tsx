@@ -93,6 +93,7 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
   const recordsMenuRef = useRef<HTMLDivElement | null>(null);
   const recordsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const mountedRef = useRef(true);
+  const pendingQuestionFocusRef = useRef<string | null>(null);
 
   const showConfirmationView = useCallback((view: ConfirmationView) => {
     setConfirmationView(view);
@@ -147,6 +148,27 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
       return next;
     });
   }, []);
+
+  const addQuestion = () => {
+    const questionId = `question_manual_${Date.now()}`;
+    pendingQuestionFocusRef.current = questionId;
+    updateRecord((current) => ({
+      ...current,
+      questions: [
+        ...current.questions,
+        {
+          id: questionId,
+          sortOrder: current.questions.length,
+          question: '',
+          keyMomentType: 'custom',
+          rationale: [],
+          evidenceStatus: null,
+          evidence: emptyEvidence(),
+          checkedAt: null,
+        },
+      ],
+    }));
+  };
 
   const saveNow = useCallback(async (): Promise<MeetingPreparationRecord | null> => {
     const current = recordRef.current;
@@ -663,14 +685,14 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-[14px] font-semibold">可能被问到的问题</h3>
-                  <button type="button" disabled={isEditingLocked} onClick={() => updateRecord((current) => ({ ...current, questions: [...current.questions, { id: `question_manual_${Date.now()}`, sortOrder: current.questions.length, question: '', keyMomentType: 'custom', rationale: [], evidenceStatus: null, evidence: emptyEvidence(), checkedAt: null }] }))} className="flex items-center gap-1 text-[11px] text-sky-400 disabled:opacity-30"><Plus size={13} />添加问题</button>
+                  <button type="button" disabled={isEditingLocked} onClick={addQuestion} className="flex items-center gap-1 text-[11px] text-sky-400 disabled:opacity-30"><Plus size={13} />添加问题</button>
                 </div>
                 {record.questions.map((question, index) => (
                   <article key={question.id} data-testid="preparation-question" className="rounded-[24px] border border-border-subtle bg-bg-elevated p-5">
                     <div className="flex items-start gap-3">
                       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-[11px] font-semibold text-sky-300">{index + 1}</span>
                       <div className="min-w-0 flex-1">
-                        <textarea aria-label={`预测问题 ${index + 1}`} disabled={isEditingLocked} value={question.question} onChange={(event) => updateRecord((current) => ({ ...current, questions: current.questions.map((item) => item.id === question.id ? { ...item, question: event.target.value } : item) }))} className="min-h-12 w-full resize-none bg-transparent text-[14px] font-medium leading-5 outline-none" />
+                        <textarea ref={(node) => { if (!node || pendingQuestionFocusRef.current !== question.id) return; pendingQuestionFocusRef.current = null; node.focus({ preventScroll: true }); node.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} aria-label={`预测问题 ${index + 1}`} disabled={isEditingLocked} value={question.question} onChange={(event) => updateRecord((current) => ({ ...current, questions: current.questions.map((item) => item.id === question.id ? { ...item, question: event.target.value } : item) }))} className="min-h-12 w-full resize-none bg-transparent text-[14px] font-medium leading-5 outline-none" />
                         <div className="mt-2 flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-[10px] ${question.evidenceStatus === 'sufficient' ? 'bg-emerald-500/12 text-emerald-400' : question.evidenceStatus === 'missing' ? 'bg-red-500/12 text-red-400' : question.evidenceStatus === null ? 'bg-amber-500/12 text-amber-400' : 'bg-sky-500/12 text-sky-400'}`}>{question.evidence.checkError ? '检查失败' : question.id === checkingQuestionId ? '检查中' : statusLabel[question.evidenceStatus || ''] || '等待检查'}</span>{question.rationale.map((item) => <span key={item} className="text-[10px] text-text-tertiary">{item}</span>)}</div>
                       </div>
                       <button type="button" disabled={isEditingLocked} aria-label="删除问题" onClick={() => updateRecord((current) => ({ ...current, questions: current.questions.filter((item) => item.id !== question.id).map((item, sortOrder) => ({ ...item, sortOrder })) }))} className="rounded-lg p-1.5 text-text-tertiary hover:bg-red-500/10 hover:text-red-400"><Trash2 size={14} /></button>

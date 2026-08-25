@@ -40,6 +40,24 @@ test.describe('meeting preparation', () => {
     await expect(page.getByRole('button', { name: '添加问题' })).toBeEnabled();
   });
 
+  test('reveals and focuses a newly added question', async ({ page }) => {
+    await advanceToResults(page);
+
+    const addQuestion = page.getByRole('button', { name: '添加问题' });
+    const questions = page.getByTestId('preparation-question');
+    await expect(addQuestion).toBeEnabled();
+    await expect(questions).toHaveCount(3);
+
+    await addQuestion.click();
+
+    await expect(questions).toHaveCount(4);
+    const newQuestion = questions.last().getByRole('textbox');
+    await expect(newQuestion).toBeFocused();
+    await expect(newQuestion).toBeInViewport();
+    await newQuestion.fill('客户还会关注哪些集成限制？');
+    await expect(newQuestion).toHaveValue('客户还会关注哪些集成限制？');
+  });
+
   test('keeps step two compact by replacing details with mode selection', async ({ page }) => {
     await advanceToConfirmation(page);
 
