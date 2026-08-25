@@ -263,20 +263,82 @@ test('missing evidence never becomes sufficient', async () => {
   assert.deepEqual(result.questions[0].evidence.citations, []);
 });
 
-test('material retrieval failure stays outside business evidence states', async () => {
-  const service = makeService({
-    llm: queuedJsonLlm([predictedQuestionsJson]),
-    materials: {
-      searchWithDiagnostics: async () => {
-        throw new Error('rag_failed');
+test('evidence validation logs only safe issue metadata', async () => {
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  try {
+    const service = makeService({
+      llm: queuedJsonLlm([
+        predictedQuestionsJson,
+        {
+          coverage: 'partial',
+          supported: 'secretx',
+          missing: [],
+          limitations: [],
+          citedChunkIds: [18],
+          handlingScript: '',
+          followupQuestions: [],
+        },
+      ]),
+      materials: {
+        searchWithDiagnostics: async () => ({
+          hits: [{
+            sourceType: 'uploaded_material',
+            sourceId: 'private-source-id',
+            chunkId: 18,
+            score: 0.8,
+            title: 'private material title',
+            text: 'private material text',
+            parentText: 'private parent text',
+          }],
+        }),
       },
-    },
-  });
+    });
 
-  const result = await service.generate('prep-1');
+    const result = await service.generate('prep-1');
 
-  assert.equal(result.questions[0].evidenceStatus, null);
-  assert.equal(result.questions[0].evidence.checkError, 'check_failed');
+    assert.equal(result.questions[0].evidenceStatus, null);
+    assert.equal(result.questions[0].evidence.checkError, 'check_failed');
+    assert.deepEqual(warnings, [[
+      '[MeetingPreparation] Evidence check failed',
+      { errorType: 'ZodError', issues: [{ path: 'supported', code: 'invalid_type' }] },
+    ]]);
+    const serializedWarnings = JSON.stringify(warnings);
+    assert.ok(!serializedWarnings.includes('secretx'));
+    assert.ok(!serializedWarnings.includes('private material'));
+    assert.ok(!serializedWarnings.includes('机器人行业案例'));
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
+test('material retrieval failure stays outside business evidence states', async () => {
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  try {
+    const service = makeService({
+      llm: queuedJsonLlm([predictedQuestionsJson]),
+      materials: {
+        searchWithDiagnostics: async () => {
+          throw new Error('rag_failed');
+        },
+      },
+    });
+
+    const result = await service.generate('prep-1');
+
+    assert.equal(result.questions[0].evidenceStatus, null);
+    assert.equal(result.questions[0].evidence.checkError, 'check_failed');
+    assert.deepEqual(warnings, [[
+      '[MeetingPreparation] Evidence check failed',
+      { errorType: 'Error' },
+    ]]);
+    assert.ok(!JSON.stringify(warnings).includes('rag_failed'));
+  } finally {
+    console.warn = originalWarn;
+  }
 });
 
 test('recheck updates only the latest selected question', async () => {

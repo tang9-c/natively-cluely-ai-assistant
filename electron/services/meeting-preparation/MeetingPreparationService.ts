@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import { ZodError } from 'zod';
 import type { LLMHelper } from '../../LLMHelper';
 import type { DatabaseManager, Meeting } from '../../db/DatabaseManager';
 import type {
@@ -323,8 +324,24 @@ export class MeetingPreparationService {
                 checkedAt,
                 identity,
             );
-        } catch {
+        } catch (error) {
             throwIfAborted(signal);
+            const diagnostics = error instanceof ZodError
+                ? {
+                    errorType: 'ZodError',
+                    issues: error.issues.map((issue) => ({
+                        path: issue.path.join('.'),
+                        code: issue.code,
+                    })),
+                }
+                : {
+                    errorType: error instanceof SyntaxError
+                        ? 'SyntaxError'
+                        : error instanceof Error
+                            ? 'Error'
+                            : 'UnknownError',
+                };
+            console.warn('[MeetingPreparation] Evidence check failed', diagnostics);
             return this.toQuestion(
                 question,
                 null,
