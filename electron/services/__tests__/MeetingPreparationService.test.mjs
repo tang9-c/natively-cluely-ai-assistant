@@ -235,6 +235,11 @@ test('generate returns no more than three questions and cites only retrieved chu
   assert.ok(predictionPrompt.includes('"knowledgeRequirements":["机器人行业案例"]'));
   assert.ok(predictionPrompt.includes('"requiresInternalEvidence":true'));
   assert.match(predictionPrompt, /没有历史会议时，historySummary 和 commitments 必须为空数组/);
+  assert.match(predictionPrompt, /公司掌握或提供的事实/);
+  assert.match(predictionPrompt, /同时涉及公司事实与客户现场信息时，requiresInternalEvidence 必须为 true/);
+  assert.match(predictionPrompt, /本次会议需要交流的具体机器人行业案例有哪些？.*requiresInternalEvidence=true/);
+  assert.match(predictionPrompt, /我们的产品如何接入客户现有控制系统？.*requiresInternalEvidence=true/);
+  assert.match(predictionPrompt, /客户当前使用什么控制系统？.*requiresInternalEvidence=false/);
   assert.deepEqual(calls[1].options.dataScopes, ['reference_files']);
 });
 
