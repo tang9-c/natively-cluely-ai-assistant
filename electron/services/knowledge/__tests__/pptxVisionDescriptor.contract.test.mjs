@@ -23,8 +23,10 @@ test('PptxVisionDescriptor uses image only for markdown stage', async () => {
   assert.equal(calls.length, 2);
   assert.deepEqual(calls[0].imagePaths, ['/tmp/slide-001.jpg']);
   assert.equal(calls[0].options?.maxOutputTokens, 8192);
+  assert.equal(calls[0].options?.timeoutMs, 20_000);
   assert.equal(calls[1].imagePaths, undefined);
   assert.equal(calls[1].options?.maxOutputTokens, 2048);
+  assert.equal(calls[1].options?.timeoutMs, 20_000);
   assert.equal(enhanced.hypotheticalQuestions.length, 5);
 });
 
@@ -53,6 +55,8 @@ test('PptxVisionDescriptor enhance retries once for invalid JSON then succeeds',
   assert.equal(calls[1].imagePaths, undefined);
   assert.equal(calls[0].options?.maxOutputTokens, 2048);
   assert.equal(calls[1].options?.maxOutputTokens, 2048);
+  assert.equal(calls[0].options?.timeoutMs, 20_000);
+  assert.equal(calls[1].options?.timeoutMs, 20_000);
   assert.equal(enhanced.summary, '第二次成功。');
   assert.equal(enhanced.hypotheticalQuestions.length, 5);
 });
@@ -76,4 +80,23 @@ test('PptxVisionDescriptor enhance does not retry deterministic JSON shape error
   );
   assert.equal(calls.length, 1);
   assert.equal(calls[0].options?.maxOutputTokens, 2048);
+});
+
+test('PptxVisionDescriptor enhance does not retry timeout errors', async () => {
+  const { PptxVisionDescriptor } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxVisionDescriptor.js');
+  const calls = [];
+  const llm = {
+    generatePptxKnowledgeWithNatively: async (userMessage, systemPrompt, imagePaths, options) => {
+      calls.push({ userMessage, systemPrompt, imagePaths, options });
+      throw new Error('QCLOUD API request timed out after 20000ms');
+    },
+  };
+  const descriptor = new PptxVisionDescriptor(llm);
+
+  await assert.rejects(
+    () => descriptor.enhanceMarkdown('# 标题\nDemo'),
+    /timed out/,
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].options?.timeoutMs, 20_000);
 });
