@@ -198,8 +198,8 @@ test('generate returns no more than three questions and cites only retrieved chu
   ].map((value) => JSON.stringify(value));
   const service = makeService({
     llm: {
-      async generateContentStructured(_prompt, options) {
-        calls.push(options);
+      async generateContentStructured(prompt, options) {
+        calls.push({ prompt, options });
         return queue.shift();
       },
     },
@@ -227,7 +227,15 @@ test('generate returns no more than three questions and cites only retrieved chu
   assert.ok(result.questions.length <= 3);
   assert.deepEqual(result.questions[0].evidence.citations.map(({ chunkId }) => chunkId), [18]);
   assert.equal(result.questions[0].evidence.handlingScript, '可以先分享已核对的装配案例。');
-  assert.deepEqual(calls[1].dataScopes, ['reference_files']);
+  const predictionPrompt = calls[0].prompt;
+  assert.match(predictionPrompt, /只返回一个 JSON 对象/);
+  assert.ok(predictionPrompt.includes('"historySummary":["上次会议讨论了集成范围"]'));
+  assert.ok(predictionPrompt.includes('"commitments":[{"text":"会后补充机器人案例"}]'));
+  assert.ok(predictionPrompt.includes('"rationale":["议程包含机器人行业案例"]'));
+  assert.ok(predictionPrompt.includes('"knowledgeRequirements":["机器人行业案例"]'));
+  assert.ok(predictionPrompt.includes('"requiresInternalEvidence":true'));
+  assert.match(predictionPrompt, /没有历史会议时，historySummary 和 commitments 必须为空数组/);
+  assert.deepEqual(calls[1].options.dataScopes, ['reference_files']);
 });
 
 test('missing evidence never becomes sufficient', async () => {

@@ -56,10 +56,24 @@ export function buildPredictionPrompt(
     const keyMoments = mode.templateType === 'sales'
         ? ['需求发现', '案例与价值证明', '异议', '决策与下一步']
         : ['目标与场景', '集成与安全约束', '交付风险', '成功标准与下一步'];
+    const example = {
+        historySummary: ['上次会议讨论了集成范围'],
+        commitments: [{ text: '会后补充机器人案例' }],
+        questions: [{
+            question: '是否有机器人行业案例？',
+            keyMomentType: '案例与价值证明',
+            rationale: ['议程包含机器人行业案例'],
+            knowledgeRequirements: ['机器人行业案例'],
+            requiresInternalEvidence: true,
+        }],
+    };
     return [
         '你只生成会前准备信息，不得编造客户、案例、ROI、价格、认证、部署承诺或资料来源。',
-        '返回 JSON：historySummary、commitments、questions。questions 必须为 0–3 个，每项包含 question、keyMomentType、rationale、knowledgeRequirements、requiresInternalEvidence。',
-        '没有历史会议时，historySummary 和 commitments 必须为空数组。',
+        '必须只返回一个 JSON 对象，不要解释，不要使用 Markdown 代码块。',
+        '严格使用以下字段和类型：historySummary 是 string[]；commitments 是 { text: string }[]；questions 是 0–3 个问题对象的数组。',
+        '每个问题对象必须包含 question: string、keyMomentType: string、rationale: string[]、knowledgeRequirements: string[]、requiresInternalEvidence: boolean。',
+        '没有历史会议时，historySummary 和 commitments 必须为空数组。没有问题时 questions 必须为空数组，不得省略字段。',
+        `合法格式示例（只展示结构和类型，不得照抄内容）：${JSON.stringify(example)}`,
         `已确认会议信息：${JSON.stringify(confirmedContext(context))}`,
         `模式与关键时刻：${JSON.stringify({ ...mode, keyMoments })}`,
         `用户选择的历史会议：${JSON.stringify(history)}`,

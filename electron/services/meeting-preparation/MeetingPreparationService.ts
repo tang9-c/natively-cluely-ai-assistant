@@ -397,7 +397,25 @@ export class MeetingPreparationService {
                     abortSignal: signal,
                 },
             );
-            const bundle = extractAndParse(raw, generationBundleSchema);
+            let bundle: ReturnType<typeof generationBundleSchema.parse>;
+            try {
+                bundle = extractAndParse(raw, generationBundleSchema);
+            } catch (error) {
+                const issues = error && typeof error === 'object' && 'issues' in error
+                    && Array.isArray((error as { issues?: unknown[] }).issues)
+                    ? (error as { issues: Array<{ path?: unknown[]; code?: string }> }).issues
+                        .slice(0, 8)
+                        .map((issue) => ({
+                            path: Array.isArray(issue.path) ? issue.path.join('.') : '',
+                            code: issue.code ?? 'unknown',
+                        }))
+                    : [];
+                console.warn('[MeetingPreparation] Prediction output rejected', {
+                    errorType: error instanceof Error ? error.name : 'unknown',
+                    issues,
+                });
+                throw error;
+            }
             throwIfAborted(signal);
 
             const questions: PreparationQuestion[] = [];
