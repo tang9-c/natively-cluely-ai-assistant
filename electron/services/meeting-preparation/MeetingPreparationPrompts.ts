@@ -36,8 +36,12 @@ export function buildModePrompt(context: MeetingContext, modes: PromptMode[]): s
         .map((mode) => ({ id: mode.id, name: mode.name, templateType: mode.templateType }));
     return [
         '只能在 sales、fde、recruiting 与 team-meet 中推荐一个主模式。',
-        '推荐边界：外部客户会议不得推荐 team-meet；技术与交付型客户会议优先 fde；商务与价值沟通优先 sales；只有明确涉及候选人或招聘流程时才推荐 recruiting；只有明确属于内部协作时才推荐 team-meet。',
-        '返回 JSON：templateType、reason、focus。',
+        '必须依据会议的主任务判断，不得根据“售前”“技术”“管理层”等单个关键词直接决定模式。信息冲突时严格按以下优先级判断：会议目标 > 议程 > 参会人 > 主题名称。',
+        '模式边界：明确属于内部协作时推荐 team-meet；明确涉及候选人或招聘流程时推荐 recruiting；外部客户会议不得推荐 team-meet。',
+        '外部客户会议中，核心任务是技术需求发现、产品能力确认、集成、安全、部署、交付风险或成功标准时推荐 fde；核心任务是解决方案价值汇报、管理层认可、预算、决策链、商务异议或采购推进时推荐 sales。',
+        '“售前”不等于 sales：售前技术交流、技术验证或集成讨论推荐 fde；首次向客户管理层做解决方案与价值汇报推荐 sales；向 CTO 和架构团队做技术方案评审推荐 fde；处理报价异议并确认采购流程推荐 sales。',
+        '会议同时包含销售和技术内容时，按照会议结束时希望达成的主要结果选择一个主模式。',
+        '返回 JSON：templateType、reason、focus。reason 必须说明采用了哪些会议信息和主任务；focus 必须匹配所选模式。',
         `可选模式：${JSON.stringify(allowed)}`,
         `会议信息：${JSON.stringify(context)}`,
     ].join('\n');

@@ -198,6 +198,31 @@ test('prepareContext recommends only Sales or FDE and returns at most five meeti
   ]);
 });
 
+test('mode prompt prioritizes meeting intent and locks Sales/FDE boundary examples', async () => {
+  let prompt = '';
+  const service = makeService({
+    llm: {
+      async generateContentStructured(value) {
+        prompt = value;
+        return JSON.stringify({
+          templateType: 'fde',
+          reason: '技术与交付型客户会议',
+          focus: '技术需求、集成约束和成功标准',
+        });
+      },
+    },
+  });
+
+  await service.prepareContext('prep-1', validContext);
+
+  assert.match(prompt, /会议目标 > 议程 > 参会人 > 主题名称/);
+  assert.match(prompt, /售前技术交流.*fde/);
+  assert.match(prompt, /首次向客户管理层做解决方案.*sales/);
+  assert.match(prompt, /CTO.*技术方案评审.*fde/);
+  assert.match(prompt, /报价异议.*采购流程.*sales/);
+  assert.match(prompt, /会议结束时希望达成的主要结果/);
+});
+
 test('prepareContext keeps mode recommendation usable when history lookup fails', async () => {
   const service = makeService({
     llm: jsonLlm({ templateType: 'fde', reason: '技术约束沟通', focus: '集成风险' }),
