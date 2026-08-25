@@ -103,6 +103,33 @@ function recheckDb(record, onSave = () => {}) {
   };
 }
 
+function mutableRecheckDb(initialRecord) {
+  let current = structuredClone(initialRecord);
+  let saveCalls = 0;
+  return {
+    db: {
+      getMeetingPreparation: () => structuredClone(current),
+      getRecentMeetings: () => [],
+      getMeetingDetails: () => null,
+      saveMeetingPreparation: (input) => {
+        saveCalls += 1;
+        current = structuredClone(input);
+        return structuredClone(current);
+      },
+      saveMeetingPreparationResult: () => structuredClone(current),
+    },
+    replace(next) {
+      current = structuredClone(next);
+    },
+    getCurrent() {
+      return structuredClone(current);
+    },
+    getSaveCalls() {
+      return saveCalls;
+    },
+  };
+}
+
 function makeService(overrides = {}) {
   const { MeetingPreparationService } = serviceModule();
   const db = overrides.db ?? {
@@ -604,6 +631,87 @@ test('recheck persists check_failed when evidence requirement refresh fails', as
   } finally {
     console.warn = originalWarn;
   }
+});
+
+test('recheck discards stale evidence when the question text changes during the check', async () => {
+  const gate = deferred();
+  const started = deferred();
+  const store = mutableRecheckDb(pendingEvidenceRecord());
+  const service = makeService({
+    db: store.db,
+    llm: {
+      async generateContentStructured() {
+        started.resolve();
+        return gate.promise;
+      },
+    },
+  });
+
+  const operation = service.recheckQuestion('prep-1', 'q1');
+  await started.promise;
+  const edited = store.getCurrent();
+  edited.questions[0].question = '用户重新编辑后的案例问题？';
+  edited.result.commitments = [{
+    text: '新增加的承诺',
+    sourceMeetingId: 'meeting-new',
+    status: 'needs_confirmation',
+  }];
+  store.replace(edited);
+  gate.resolve(JSON.stringify({
+    knowledgeRequirements: ['机器人行业案例'],
+    requiresInternalEvidence: true,
+  }));
+
+  const result = await operation;
+
+  assert.equal(store.getSaveCalls(), 0);
+  assert.equal(result.questions[0].question, '用户重新编辑后的案例问题？');
+  assert.equal(result.questions[0].evidenceStatus, null);
+  assert.equal(result.result.commitments[0].text, '新增加的承诺');
+});
+
+test('recheck merges evidence into the latest record without dropping unrelated edits', async () => {
+  const gate = deferred();
+  const started = deferred();
+  const store = mutableRecheckDb(pendingEvidenceRecord());
+  const service = makeService({
+    db: store.db,
+    llm: {
+      async generateContentStructured() {
+        started.resolve();
+        return gate.promise;
+      },
+    },
+    materials: { searchWithDiagnostics: async () => ({ hits: [] }) },
+  });
+
+  const operation = service.recheckQuestion('prep-1', 'q1');
+  await started.promise;
+  const edited = store.getCurrent();
+  edited.result.commitments = [{
+    text: '检查期间确认的新承诺',
+    sourceMeetingId: 'meeting-new',
+    status: 'needs_confirmation',
+  }];
+  edited.questions.push({
+    ...structuredClone(edited.questions[0]),
+    id: 'q2',
+    sortOrder: 1,
+    question: '检查期间新增的问题？',
+  });
+  store.replace(edited);
+  gate.resolve(JSON.stringify({
+    knowledgeRequirements: ['机器人行业案例'],
+    requiresInternalEvidence: true,
+  }));
+
+  const result = await operation;
+
+  assert.equal(store.getSaveCalls(), 1);
+  assert.equal(result.result.commitments[0].text, '检查期间确认的新承诺');
+  assert.equal(result.questions.length, 2);
+  assert.equal(result.questions[0].evidenceStatus, 'missing');
+  assert.equal(result.questions[1].question, '检查期间新增的问题？');
 });
 
 test('recheck updates only the latest selected question', async () => {

@@ -567,10 +567,27 @@ export class MeetingPreparationService {
                 };
             }
 
-            const questions = record.questions.map((question, index) =>
-                index === questionIndex ? rechecked : question,
+            const latest = this.deps.db.getMeetingPreparation(preparationId);
+            if (!latest) throw new Error('meeting_preparation_not_found');
+            const latestQuestionIndex = latest.questions.findIndex(
+                (question) => question.id === questionId,
             );
-            return this.deps.db.saveMeetingPreparation({ ...record, questions });
+            if (latestQuestionIndex < 0) return latest;
+
+            const latestQuestion = latest.questions[latestQuestionIndex];
+            if (latestQuestion.question !== current.question) return latest;
+
+            const questions = latest.questions.map((question, index) =>
+                index === latestQuestionIndex
+                    ? {
+                        ...question,
+                        evidenceStatus: rechecked.evidenceStatus,
+                        evidence: rechecked.evidence,
+                        checkedAt: rechecked.checkedAt,
+                    }
+                    : question,
+            );
+            return this.deps.db.saveMeetingPreparation({ ...latest, questions });
         });
     }
 }
