@@ -436,6 +436,34 @@ test('PPTX render child preflights slide count before converting an oversized de
   }
 });
 
+test('PPTX render child classifies an invalid archive as a deterministic invalid-file failure', async () => {
+  const { resolvePptxFontDir, runRenderChild } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxSlideRenderer.js');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-invalid-preflight-'));
+  const inputPath = path.join(tempDir, 'invalid.pptx');
+  const outputDir = path.join(tempDir, 'output');
+  fs.writeFileSync(inputPath, 'not-a-zip');
+  fs.mkdirSync(outputDir);
+  const scriptPath = path.resolve(
+    process.cwd(),
+    'dist-electron/electron/services/knowledge/pptx/pptx-render-child.mjs',
+  );
+  const fontDir = resolvePptxFontDir();
+  assert.ok(fontDir);
+
+  try {
+    await assert.rejects(
+      () => runRenderChild(scriptPath, inputPath, outputDir, 10_000, fontDir),
+      (error) => {
+        assert.equal(error.code, 'pptx_invalid_file');
+        assert.equal(error.retryable, false);
+        return true;
+      },
+    );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('PptxIngestionService rejects a defensive 61-slide deck before model calls', async () => {
   const { PptxIngestionService } = require('../../../../dist-electron/electron/services/knowledge/pptx/PptxIngestionService.js');
   let descriptorCalls = 0;

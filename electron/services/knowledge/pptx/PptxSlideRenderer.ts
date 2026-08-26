@@ -256,7 +256,7 @@ export function runRenderChild(
         return;
       }
 
-      if (message.includes('invalid zip')) {
+      if (message.includes('pptx_invalid_file') || message.includes('invalid zip')) {
         finish(createPptxRenderError('pptx_invalid_file', 'render_child_exit', false, { exitCode: code }));
         return;
       }
