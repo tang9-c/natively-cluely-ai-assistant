@@ -560,7 +560,7 @@ export const MeetingPreparationPage: React.FC<MeetingPreparationPageProps> = ({
                   readOnly={isRecording}
                   onChange={(event) => updateRecord((current) => ({ ...current, rawInput: event.target.value, inputMethod: 'text' }))}
                   placeholder="例如：明天下午和启明机器人研发总监做产品技术交流，希望了解集成条件并准备机器人行业案例。"
-                  className="mt-5 min-h-[220px] w-full resize-none rounded-2xl border border-border-subtle bg-bg-primary/70 p-4 text-[14px] leading-6 outline-none transition-colors placeholder:text-text-tertiary focus:border-sky-400/60 read-only:cursor-default read-only:border-violet-400/30 disabled:opacity-60"
+                  className="mt-5 min-h-[220px] w-full resize-none rounded-2xl border border-border-subtle bg-bg-primary p-4 text-[14px] text-text-primary leading-6 outline-none transition-colors placeholder:text-text-tertiary focus:border-sky-400/60 read-only:cursor-default read-only:border-violet-400/30 disabled:opacity-60"
                 />
                 <div className="mt-4 flex items-center justify-between gap-3">
                   <span className="text-[11px] text-text-tertiary">最多 20,000 字 · 文字和语音权重相同</span>

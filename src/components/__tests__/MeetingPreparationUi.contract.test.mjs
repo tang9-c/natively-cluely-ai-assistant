@@ -32,6 +32,14 @@ test('manual questions remain addable after AI generated three questions', () =>
   assert.doesNotMatch(page, /已达 3 个上限/);
 });
 
+test('meeting description textarea keeps readable semantic colors in both themes', () => {
+  const descriptionTextarea = page.match(/<textarea[\s\S]*?aria-label="会议描述"[\s\S]*?className="([^"]+)"[\s\S]*?\/>/);
+  assert.ok(descriptionTextarea);
+  assert.match(descriptionTextarea[1], /\bbg-bg-primary\b/);
+  assert.match(descriptionTextarea[1], /\btext-text-primary\b/);
+  assert.doesNotMatch(descriptionTextarea[1], /\bbg-bg-primary\/70\b/);
+});
+
 test('evidence checks progress sequentially without blocking meeting start', () => {
   assert.match(page, /const \[evidenceChecking, setEvidenceChecking\] = useState\(false\)/);
   assert.match(page, /const \[checkingQuestionId, setCheckingQuestionId\] = useState<string \| null>\(null\)/);
