@@ -323,19 +323,19 @@
     "@google-cloud/speech": "^7.2.1",
     "@google/genai": "^1.44.0",
     "@google/stitch-sdk": "^0.0.3",
-    "@grpc/grpc-js": "^1.14.3",
+    "@grpc/grpc-js": "^1.14.4",
     "@grpc/proto-loader": "^0.8.0",
     "@huggingface/transformers": "^3.8.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@tavily/core": "^0.7.2",
-    "axios": "^1.7.7",
+    "axios": "^1.18.0",
     "better-sqlite3": "12.11.1",
     "diff": "^7.0.0",
     "docx": "^9.7.1",
     "dompurify": "^3.4.14",
     "electron-store": "^8.1.0",
-    "electron-updater": "^6.7.3",
-    "form-data": "^4.0.1",
+    "electron-updater": "^6.8.9",
+    "form-data": "^4.0.6",
     "groq-sdk": "^0.37.0",
     "jszip": "^3.10.1",
     "keytar": "^7.9.0",
@@ -353,7 +353,7 @@
     "tesseract.js": "^5.0.5",
     "tree-kill": "^1.2.2",
     "uuid": "^11.0.3",
-    "ws": "^8.19.0"
+    "ws": "^8.21.0"
   },
   "optionalDependencies": {
     "sqlite-vec-darwin-arm64": "^0.1.7-alpha.2",
@@ -361,7 +361,7 @@
     "sqlite-vec-windows-x64": "^0.1.7-alpha.2"
   },
   "overrides": {
-    "dompurify": "^3.4.11",
+    "dompurify": "$dompurify",
     "onnxruntime-node": "1.22.0"
   }
 }
