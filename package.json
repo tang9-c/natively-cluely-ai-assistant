@@ -1,6 +1,6 @@
 {
   "name": "cueup",
-  "version": "2.7.3",
+  "version": "2.7.4",
   "main": "dist-electron/electron/main.js",
   "description": "CueUp is a meeting notes app that uses AI to generate notes from your meetings.",
   "scripts": {
