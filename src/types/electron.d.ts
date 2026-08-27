@@ -936,6 +936,13 @@ export interface ElectronAPI {
   getRecentMeetings: () => Promise<Array<{ id: string; title: string; date: string; duration: string; summary: string }>>
   // @ipc-channel get-meeting-details
   getMeetingDetails: (id: string) => Promise<any>
+  // @ipc-channel export-meeting-docx
+  exportMeetingDocx: (meetingId: string, includeTranscript: boolean) => Promise<{
+    success: boolean
+    filePath?: string
+    error?: string
+    cancelled?: boolean
+  }>
   // @ipc-channel update-meeting-title
   updateMeetingTitle: (id: string, title: string) => Promise<boolean>
   // @ipc-channel update-meeting-summary

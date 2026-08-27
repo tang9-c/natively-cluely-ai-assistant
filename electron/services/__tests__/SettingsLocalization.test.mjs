@@ -15,7 +15,7 @@ test('settings evidence pages keep user-facing labels localized', () => {
   const settings = read('src/components/SettingsOverlay.tsx');
   const aiProviders = read('src/components/settings/AIProvidersSettings.tsx');
   const meetingDetails = read('src/components/MeetingDetails.tsx');
-  const pdfGenerator = read('src/utils/pdfGenerator.ts');
+  const docxExporter = read('electron/services/MeetingDocxExportService.ts');
 
   for (const [sourceName, source, phrases] of [
     ['SettingsOverlay', settings, [
@@ -38,7 +38,7 @@ test('settings evidence pages keep user-facing labels localized', () => {
       'No custom providers added yet.',
     ]],
     ['MeetingDetails', meetingDetails, ['Follow-up Draft']],
-    ['pdfGenerator', pdfGenerator, ['Action Items', 'Key Points', 'Transcript', 'AI Usage & Interactions']],
+    ['MeetingDocxExportService', docxExporter, ['Action Items', 'Key Points', 'AI Usage & Interactions']],
   ]) {
     for (const phrase of phrases) {
       assert.equal(source.includes(phrase), false, `${sourceName} should not show "${phrase}"`);
@@ -49,5 +49,6 @@ test('settings evidence pages keep user-facing labels localized', () => {
   assert.match(settings, /截图并询问 AI/);
   assert.match(aiProviders, /添加 API Key 后即可使用云端 AI 模型。/);
   assert.match(meetingDetails, /跟进草稿/);
-  assert.match(pdfGenerator, /AI 使用记录与互动/);
+  assert.match(docxExporter, /会议概述/);
+  assert.match(docxExporter, /完整转录/);
 });

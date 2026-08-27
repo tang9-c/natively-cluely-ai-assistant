@@ -18,7 +18,6 @@ export type AnalyticsEventName =
     | 'assistant_stopped'
     | 'mode_selected'
     | 'copy_answer_clicked'
-    | 'pdf_exported'
     // Meeting Lifecycle
     | 'meeting_started'
     | 'meeting_ended'
@@ -206,11 +205,6 @@ class AnalyticsService {
     public trackMeetingEnded(): void {
         if (!this.initialized) return;
         this.trackEvent('meeting_ended');
-    }
-
-    public trackPdfExported(): void {
-        if (!this.initialized) return;
-        this.trackEvent('pdf_exported');
     }
 
     private trackSessionDuration(): void {

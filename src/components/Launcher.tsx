@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ToggleLeft, ToggleRight, Search, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Telescope, X, Play } from 'lucide-react';
-import { generateMeetingPDF } from '../utils/pdfGenerator';
 import mainui from "../UI_comp/mainui.png";
 import MeetingDetails from './MeetingDetails';
 import TopSearchPill from './TopSearchPill';
@@ -135,6 +134,28 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         } finally {
             // Ensure distinct feedback provided (min 500ms spin)
             setTimeout(() => setIsRefreshing(false), 500);
+        }
+    };
+
+    const exportMeetingDocx = async (meetingId: string, includeTranscript: boolean) => {
+        const api = window.electronAPI?.exportMeetingDocx;
+        if (!api) {
+            window.alert('导出功能不可用，请重启 CueUp 后重试。');
+            return;
+        }
+
+        try {
+            const result = await api(meetingId, includeTranscript);
+            if (result.success || result.cancelled) return;
+            if (result.error === 'summary_not_ready') {
+                window.alert('会议摘要尚未生成完成，请稍后重试。');
+            } else if (result.error === 'meeting_not_found') {
+                window.alert('未找到该会议，请刷新会议列表后重试。');
+            } else {
+                window.alert('会议纪要导出失败，请稍后重试。');
+            }
+        } catch {
+            window.alert('会议纪要导出失败，请稍后重试。');
         }
     };
 
@@ -912,7 +933,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                                         animate={{ opacity: 1, scale: 1, y: 0 }}
                                                                         exit={{ opacity: 0, scale: 0.95, y: 5 }}
                                                                         transition={{ duration: 0.1 }}
-                                                                        className={`absolute right-0 top-full mt-1 w-[90px] backdrop-blur-xl rounded-lg shadow-2xl z-50 overflow-hidden border ${isLight ? 'bg-bg-elevated border-border-muted shadow-[0_8px_24px_rgba(0,0,0,0.12)]' : 'bg-[#1E1E1E]/80 border-white/10'}`}
+                                                                        className={`absolute right-0 top-full mt-1 w-[220px] backdrop-blur-xl rounded-lg shadow-2xl z-50 overflow-hidden border ${isLight ? 'bg-bg-elevated border-border-muted shadow-[0_8px_24px_rgba(0,0,0,0.12)]' : 'bg-[#1E1E1E]/80 border-white/10'}`}
                                                                         onClick={(e) => e.stopPropagation()}
                                                                         onMouseEnter={() => setMenuEntered(true)}
                                                                         onMouseLeave={() => {
@@ -924,27 +945,21 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                                                 className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-text-primary rounded-lg transition-colors text-left ${isLight ? 'hover:bg-bg-item-surface' : 'hover:bg-white/10'}`}
                                                                                 onClick={async () => {
                                                                                     setActiveMenuId(null);
-                                                                                    analytics.trackPdfExported();
-                                                                                    // Fetch full details if needed
-                                                                                    if (window.electronAPI && window.electronAPI.getMeetingDetails) {
-                                                                                        try {
-                                                                                            const fullMeeting = await window.electronAPI.getMeetingDetails(m.id);
-                                                                                            if (fullMeeting) {
-                                                                                                await generateMeetingPDF(fullMeeting);
-                                                                                            } else {
-                                                                                                await generateMeetingPDF(m);
-                                                                                            }
-                                                                                        } catch (e) {
-                                                                                            console.error("Failed to fetch details for PDF", e);
-                                                                                            await generateMeetingPDF(m);
-                                                                                        }
-                                                                                    } else {
-                                                                                        await generateMeetingPDF(m);
-                                                                                    }
+                                                                                    await exportMeetingDocx(m.id, false);
                                                                                 }}
                                                                             >
                                                                                 <Download size={13} />
-                                                                                导出
+                                                                                导出会议纪要
+                                                                            </button>
+                                                                            <button
+                                                                                className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-text-primary rounded-lg transition-colors text-left ${isLight ? 'hover:bg-bg-item-surface' : 'hover:bg-white/10'}`}
+                                                                                onClick={async () => {
+                                                                                    setActiveMenuId(null);
+                                                                                    await exportMeetingDocx(m.id, true);
+                                                                                }}
+                                                                            >
+                                                                                <Download size={13} />
+                                                                                导出会议纪要（含完整转录）
                                                                             </button>
                                                                             <button
                                                                                 className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-lg transition-colors text-left"

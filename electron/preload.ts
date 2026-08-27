@@ -503,6 +503,10 @@ interface ElectronAPI {
     Array<{ id: string; title: string; date: string; duration: string; summary: string }>
   >;
   getMeetingDetails: (id: string) => Promise<any>;
+  exportMeetingDocx: (
+    meetingId: string,
+    includeTranscript: boolean,
+  ) => Promise<{ success: boolean; filePath?: string; error?: string; cancelled?: boolean }>;
   updateMeetingTitle: (id: string, title: string) => Promise<boolean>;
   updateMeetingSummary: (
     id: string,
@@ -1706,6 +1710,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   finalizeMicSTT: () => ipcRenderer.invoke('finalize-mic-stt'),
   getRecentMeetings: () => ipcRenderer.invoke('get-recent-meetings'),
   getMeetingDetails: (id: string) => ipcRenderer.invoke('get-meeting-details', id),
+  exportMeetingDocx: (meetingId: string, includeTranscript: boolean) =>
+    ipcRenderer.invoke('export-meeting-docx', meetingId, includeTranscript),
   updateMeetingTitle: (id: string, title: string) =>
     ipcRenderer.invoke('update-meeting-title', { id, title }),
   updateMeetingSummary: (id: string, updates: any) =>

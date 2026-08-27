@@ -36,6 +36,11 @@ import { SkillActivationManager, type ActivateSkillInput, type SkillActivationSc
 import { SkillWatcherService } from './services/SkillWatcherService';
 import { SkillsManager } from './services/SkillsManager';
 import { runTranscriptSkillExport, type TranscriptSkillRunInput } from './services/TranscriptSkillExportService';
+import {
+  buildMeetingDocxBuffer,
+  hasExportableMeetingSummary,
+  safeDocxFilename,
+} from './services/MeetingDocxExportService';
 import { getContextQualityDiagnosticsCollector } from './services/eval/ContextQualityDiagnostics';
 import { QaReportService } from './services/qa/QaReportService';
 import { telemetryService } from './services/telemetry/TelemetryService';
@@ -3500,6 +3505,36 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('get-meeting-details', async (event, id) => {
     // Helper to fetch full details
     return DatabaseManager.getInstance().getMeetingDetails(id);
+  });
+
+  safeHandle('export-meeting-docx', async (_event, meetingId: string, includeTranscript: boolean) => {
+    const meeting = typeof meetingId === 'string'
+      ? DatabaseManager.getInstance().getMeetingDetails(meetingId)
+      : null;
+    if (!meeting) return { success: false, error: 'meeting_not_found' };
+    if (!hasExportableMeetingSummary(meeting)) {
+      return { success: false, error: 'summary_not_ready' };
+    }
+
+    const result = await ((dialog.showSaveDialog as any)({
+      title: '导出会议纪要',
+      defaultPath: safeDocxFilename(meeting.title, Boolean(includeTranscript)),
+      filters: [{ name: 'Word 文档', extensions: ['docx'] }],
+    }) as Promise<{ canceled: boolean; filePath?: string }>);
+    if (result.canceled || !result.filePath) {
+      return { success: false, cancelled: true };
+    }
+
+    try {
+      const buffer = await buildMeetingDocxBuffer(meeting, { includeTranscript: Boolean(includeTranscript) });
+      await fs.promises.writeFile(result.filePath, buffer);
+      return { success: true, filePath: result.filePath };
+    } catch (error) {
+      console.warn('[IPC] export-meeting-docx failed', {
+        name: error instanceof Error ? error.name : 'UnknownError',
+      });
+      return { success: false, error: 'export_failed' };
+    }
   });
 
   safeHandle('update-meeting-title', async (_, { id, title }: { id: string; title: string }) => {
