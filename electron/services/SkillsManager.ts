@@ -1,4 +1,5 @@
 import { app, shell } from 'electron';
+import { createHash } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -18,6 +19,13 @@ export interface SkillDetails extends SkillSummary {
 
 const MAX_SKILL_FILE_BYTES = 100 * 1024;
 const SKILL_FILE_NAME = 'SKILL.md';
+const BUILTIN_SKILL_STATE_FILE = '.builtin-skill-state.json';
+const BUILTIN_SKILL_LEGACY_HASHES_FILE = 'builtin-skill-legacy-hashes.json';
+
+interface BuiltinSkillState {
+  version: 1;
+  skills: Record<string, string>;
+}
 
 function slugify(value: string): string {
   return value
@@ -38,6 +46,10 @@ function escapeXmlAttribute(value: string): string {
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
+}
+
+function contentHash(content: string): string {
+  return createHash('sha256').update(content).digest('hex');
 }
 
 function truncateToTokenBudget(text: string, maxTokens: number): { content: string; truncated: boolean } {
@@ -182,6 +194,63 @@ ${budgeted.content}
     return path.join(resourceRoot, 'skills');
   }
 
+  private getBuiltinSkillStatePath(): string {
+    return path.join(this.skillsDir, BUILTIN_SKILL_STATE_FILE);
+  }
+
+  private loadBuiltinSkillState(): BuiltinSkillState {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(this.getBuiltinSkillStatePath(), 'utf8'));
+      if (parsed?.version !== 1 || !parsed.skills || typeof parsed.skills !== 'object') {
+        throw new Error('Invalid state shape');
+      }
+
+      const skills: Record<string, string> = {};
+      for (const [id, hash] of Object.entries(parsed.skills)) {
+        if (typeof hash === 'string') {
+          skills[id] = hash;
+        }
+      }
+      return { version: 1, skills };
+    } catch (error: any) {
+      if (error?.code !== 'ENOENT') {
+        console.warn('[SkillsManager] Failed to load bundled skill state:', error?.message || error);
+      }
+      return { version: 1, skills: {} };
+    }
+  }
+
+  private saveBuiltinSkillState(state: BuiltinSkillState): void {
+    try {
+      fs.writeFileSync(this.getBuiltinSkillStatePath(), `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+    } catch (error: any) {
+      console.warn('[SkillsManager] Failed to save bundled skill state:', error?.message || error);
+    }
+  }
+
+  private loadBuiltinSkillLegacyHashes(packagedSkillsDir: string): Record<string, string[]> {
+    try {
+      const legacyHashesPath = path.join(packagedSkillsDir, BUILTIN_SKILL_LEGACY_HASHES_FILE);
+      const parsed = JSON.parse(fs.readFileSync(legacyHashesPath, 'utf8'));
+      if (parsed?.version !== 1 || !parsed.skills || typeof parsed.skills !== 'object') {
+        throw new Error('Invalid legacy hash state shape');
+      }
+
+      return Object.fromEntries(Object.entries(parsed.skills).flatMap(([id, hashes]) => {
+        const normalizedId = slugify(id);
+        const validHashes = Array.isArray(hashes)
+          ? hashes.filter((hash): hash is string => typeof hash === 'string' && /^[a-f0-9]{64}$/.test(hash))
+          : [];
+        return normalizedId && validHashes.length > 0 ? [[normalizedId, validHashes]] : [];
+      }));
+    } catch (error: any) {
+      if (error?.code !== 'ENOENT') {
+        console.warn('[SkillsManager] Failed to load bundled skill legacy hashes:', error?.message || error);
+      }
+      return {};
+    }
+  }
+
   private ensurePackagedResourceSkills(): void {
     const packagedSkillsDir = this.getPackagedSkillsDir();
     let entries: fs.Dirent[];
@@ -194,6 +263,10 @@ ${budgeted.content}
       }
       return;
     }
+
+    const state = this.loadBuiltinSkillState();
+    const legacyHashes = this.loadBuiltinSkillLegacyHashes(packagedSkillsDir);
+    let stateChanged = false;
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
@@ -216,16 +289,43 @@ ${budgeted.content}
         const content = fs.readFileSync(sourcePath, 'utf8');
         parseSkillMarkdown(content, id, 'builtin', sourcePath);
         this.builtinSkillIds.add(id);
+        const sourceHash = contentHash(content);
 
         if (!fs.existsSync(targetPath)) {
           fs.mkdirSync(skillDir, { recursive: true });
           fs.writeFileSync(targetPath, content, 'utf8');
+          state.skills[id] = sourceHash;
+          stateChanged = true;
+          continue;
+        }
+
+        const targetStat = fs.lstatSync(targetPath);
+        if (!targetStat.isFile() || targetStat.isSymbolicLink() || targetStat.size > MAX_SKILL_FILE_BYTES) {
+          continue;
+        }
+
+        const targetContent = fs.readFileSync(targetPath, 'utf8');
+        const targetHash = contentHash(targetContent);
+
+        if (targetHash === sourceHash) {
+          if (state.skills[id] !== sourceHash) {
+            state.skills[id] = sourceHash;
+            stateChanged = true;
+          }
+        } else if (state.skills[id] === targetHash || legacyHashes[id]?.includes(targetHash)) {
+          fs.writeFileSync(targetPath, content, 'utf8');
+          state.skills[id] = sourceHash;
+          stateChanged = true;
         }
       } catch (error: any) {
         if (error?.code !== 'ENOENT') {
           console.warn(`[SkillsManager] Failed to seed packaged skill "${entry.name}":`, error?.message || error);
         }
       }
+    }
+
+    if (stateChanged) {
+      this.saveBuiltinSkillState(state);
     }
   }
 

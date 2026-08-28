@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import Module from 'node:module';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -533,6 +534,152 @@ test('SkillsManager seeds packaged resource skills as builtin skills', () => {
       const seededPath = path.join(tmpUserData, 'skills', dirName, 'SKILL.md');
       assert.ok(fs.existsSync(seededPath), `${dirName} packaged skill must be seeded into userData skills dir`);
     }
+  } finally {
+    Object.defineProperty(process, 'resourcesPath', {
+      value: originalResourcesPath,
+      configurable: true,
+    });
+  }
+});
+
+test('SkillsManager upgrades a managed packaged skill copy', () => {
+  const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-skills-test-'));
+  const tmpResources = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-skill-resources-test-'));
+  const packagedSkillDir = path.join(tmpResources, 'skills', 'humanize-text');
+  const userSkillDir = path.join(tmpUserData, 'skills', 'humanize-text');
+  const previousContent = [
+    '---',
+    'name: humanize-ai-text',
+    'description: Previous bundled wording.',
+    '---',
+    '',
+    '# Previous bundled instructions',
+  ].join('\n');
+  const currentContent = [
+    '---',
+    'name: humanize-ai-text',
+    'description: Current bundled wording.',
+    '---',
+    '',
+    '# Current bundled instructions',
+  ].join('\n');
+
+  fs.mkdirSync(packagedSkillDir, { recursive: true });
+  fs.mkdirSync(userSkillDir, { recursive: true });
+  fs.writeFileSync(path.join(packagedSkillDir, 'SKILL.md'), currentContent, 'utf8');
+  fs.writeFileSync(path.join(userSkillDir, 'SKILL.md'), previousContent, 'utf8');
+  fs.writeFileSync(path.join(tmpUserData, 'skills', '.builtin-skill-state.json'), JSON.stringify({
+    version: 1,
+    skills: {
+      'humanize-text': crypto.createHash('sha256').update(previousContent).digest('hex'),
+    },
+  }), 'utf8');
+
+  const originalResourcesPath = process.resourcesPath;
+  Object.defineProperty(process, 'resourcesPath', {
+    value: tmpResources,
+    configurable: true,
+  });
+
+  const cjsRequire = createRequire(import.meta.url);
+  const electronId = 'electron';
+  const stubModule = new Module(electronId);
+  stubModule.exports = {
+    app: {
+      isPackaged: true,
+      isReady: () => true,
+      getPath: (name) => name === 'userData' ? tmpUserData : os.tmpdir(),
+      getAppPath: () => root,
+    },
+    shell: { openPath: async () => '' },
+  };
+  stubModule.loaded = true;
+  require_cache_set(cjsRequire, electronId, stubModule);
+
+  const distPath = path.join(root, 'dist-electron/electron/services/SkillsManager.js');
+  delete cjsRequire.cache[distPath];
+  const { SkillsManager } = cjsRequire(distPath);
+  if (SkillsManager.instance) SkillsManager.instance = undefined;
+
+  try {
+    SkillsManager.getInstance().listSkills();
+    assert.equal(fs.readFileSync(path.join(userSkillDir, 'SKILL.md'), 'utf8'), currentContent);
+
+    const customizedContent = `${currentContent}\n\n# Local customization`;
+    fs.writeFileSync(path.join(userSkillDir, 'SKILL.md'), customizedContent, 'utf8');
+    SkillsManager.instance = undefined;
+    SkillsManager.getInstance().listSkills();
+    assert.equal(fs.readFileSync(path.join(userSkillDir, 'SKILL.md'), 'utf8'), customizedContent);
+  } finally {
+    Object.defineProperty(process, 'resourcesPath', {
+      value: originalResourcesPath,
+      configurable: true,
+    });
+  }
+});
+
+test('SkillsManager migrates a known legacy packaged skill copy without state', () => {
+  const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-skills-test-'));
+  const tmpResources = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-skill-resources-test-'));
+  const packagedSkillDir = path.join(tmpResources, 'skills', 'humanize-text');
+  const userSkillDir = path.join(tmpUserData, 'skills', 'humanize-text');
+  const legacyContent = [
+    '---',
+    'name: humanize-ai-text',
+    'description: Legacy bundled wording.',
+    '---',
+    '',
+    '# Legacy bundled instructions',
+  ].join('\n');
+  const currentContent = [
+    '---',
+    'name: humanize-ai-text',
+    'description: Current bundled wording.',
+    '---',
+    '',
+    '# Current bundled instructions',
+  ].join('\n');
+
+  fs.mkdirSync(packagedSkillDir, { recursive: true });
+  fs.mkdirSync(userSkillDir, { recursive: true });
+  fs.writeFileSync(path.join(packagedSkillDir, 'SKILL.md'), currentContent, 'utf8');
+  fs.writeFileSync(path.join(userSkillDir, 'SKILL.md'), legacyContent, 'utf8');
+  fs.writeFileSync(path.join(tmpResources, 'skills', 'builtin-skill-legacy-hashes.json'), JSON.stringify({
+    version: 1,
+    skills: {
+      'humanize-text': [crypto.createHash('sha256').update(legacyContent).digest('hex')],
+    },
+  }), 'utf8');
+
+  const originalResourcesPath = process.resourcesPath;
+  Object.defineProperty(process, 'resourcesPath', {
+    value: tmpResources,
+    configurable: true,
+  });
+
+  const cjsRequire = createRequire(import.meta.url);
+  const electronId = 'electron';
+  const stubModule = new Module(electronId);
+  stubModule.exports = {
+    app: {
+      isPackaged: true,
+      isReady: () => true,
+      getPath: (name) => name === 'userData' ? tmpUserData : os.tmpdir(),
+      getAppPath: () => root,
+    },
+    shell: { openPath: async () => '' },
+  };
+  stubModule.loaded = true;
+  require_cache_set(cjsRequire, electronId, stubModule);
+
+  const distPath = path.join(root, 'dist-electron/electron/services/SkillsManager.js');
+  delete cjsRequire.cache[distPath];
+  const { SkillsManager } = cjsRequire(distPath);
+  if (SkillsManager.instance) SkillsManager.instance = undefined;
+
+  try {
+    SkillsManager.getInstance().listSkills();
+    assert.equal(fs.readFileSync(path.join(userSkillDir, 'SKILL.md'), 'utf8'), currentContent);
   } finally {
     Object.defineProperty(process, 'resourcesPath', {
       value: originalResourcesPath,
