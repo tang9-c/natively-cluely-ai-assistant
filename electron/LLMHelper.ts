@@ -23,6 +23,7 @@ import {
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { applyQCloudInputBudget, QCLOUD_MEETING_SUMMARY_SAFE_CHUNK_CHARS, QCLOUD_TIMEOUT_POLICIES, readQCloudUsage, resolveQCloudReasoningEffort, type QCloudRequestClass, type QCloudUsageMetrics } from "./llm/QCloudRequestPolicy"
 import { qcloudBackgroundScheduler } from "./llm/QCloudBackgroundScheduler"
+import { normalizeQCloudSkillError } from "./llm/QCloudSkillError"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { DOUBAO_PRO_MODEL, DOUBAO_PRO_PROVIDER_LABEL } from "./llm/DoubaoModelConstants"
 import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
@@ -1788,10 +1789,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
               qcloudReasoningEffort: qcloudReasoningEffort,
             });
           } catch (err: any) {
-            console.warn('[LLMHelper] QCLOUD API failed in chatWithGemini:', err.message);
             if (chatPromptOptions?.activeSkill) {
-              return "AI 服务未返回有效内容，请稍后重试。";
+              throw normalizeQCloudSkillError(err);
             }
+            console.warn('[LLMHelper] QCLOUD API failed in chatWithGemini:', err.message);
             // Fall through to smart dynamic fallback below
           }
         }

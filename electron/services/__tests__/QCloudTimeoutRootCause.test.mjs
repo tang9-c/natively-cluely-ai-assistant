@@ -69,7 +69,8 @@ test('active skill chat does not retry QCLOUD through generic non-streaming fall
   );
 
   assert.match(directRoutingBlock, /if\s*\(chatPromptOptions\?\.activeSkill\)\s*\{/);
-  assert.match(directRoutingBlock, /return "AI 服务未返回有效内容，请稍后重试。";/);
+  assert.match(directRoutingBlock, /throw normalizeQCloudSkillError\(err\);/);
+  assert.doesNotMatch(directRoutingBlock, /return "AI 服务未返回有效内容，请稍后重试。";/);
   assert.match(providerQueueBlock, /hasNatively:\s*chatPromptOptions\?\.activeSkill\s*\?\s*false\s*:\s*this\.hasNatively\(\)/);
 });
 

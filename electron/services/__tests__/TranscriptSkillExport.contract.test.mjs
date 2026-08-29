@@ -103,3 +103,14 @@ test('transcript skill export handler delegates to service and openPath is downl
   assert.match(openBlock, /path\.relative\(downloadsDir,\s*targetPath\)/);
   assert.match(openBlock, /shell\.openPath\(targetPath\)/);
 });
+
+test('transcript skill IPC returns classified user messages and logs only safe fields', () => {
+  const ipc = read('electron/ipcHandlers.ts');
+  const runBlock = sliceSafeHandleBlock(ipc, 'transcript-skills:run');
+
+  assert.match(runBlock, /e instanceof QCloudSkillError/);
+  assert.match(runBlock, /error:\s*e\.userMessage/);
+  assert.match(runBlock, /e\.toSafeLogFields\(\)/);
+  assert.match(runBlock, /redactForLog/);
+  assert.doesNotMatch(runBlock, /error:\s*e\?\.message/);
+});

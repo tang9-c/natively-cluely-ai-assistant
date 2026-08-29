@@ -76,6 +76,7 @@ import { CHAT_MODE_PROMPT } from './llm/prompts';
 import type { ModeEventContext } from './llm';
 import type { ChatPromptOptions } from './llm/chatPromptAssembly';
 import { getDeniedDataScopes } from './llm/ProviderRouter';
+import { QCloudSkillError } from './llm/QCloudSkillError';
 import type { ResearchProgress } from './services/research/types';
 import { LlmInvalidFormatError } from './services/research/ResearchDossierBuilder';
 import { getOpenAtLoginForPlatform, setOpenAtLoginForPlatform } from './utils/loginItemSettings';
@@ -6025,8 +6026,15 @@ export function initializeIpcHandlers(appState: AppState): void {
       const llmHelper = appState.processingHelper?.getLLMHelper?.();
       return await runTranscriptSkillExport(input, llmHelper);
     } catch (e: any) {
-      console.warn('[IPC] transcript-skills:run error:', e?.message || e);
-      return { success: false, error: e?.message || 'failed to run transcript skill' };
+      if (e instanceof QCloudSkillError) {
+        console.warn(
+          '[IPC] transcript-skills:run QCLOUD failure',
+          redactForLog([e.toSafeLogFields()]),
+        );
+        return { success: false, error: e.userMessage };
+      }
+      console.warn('[IPC] transcript-skills:run error', redactForLog([e]));
+      return { success: false, error: '生成 Markdown 文件失败。' };
     }
   });
 

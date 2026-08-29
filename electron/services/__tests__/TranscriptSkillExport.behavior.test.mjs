@@ -69,6 +69,21 @@ test('short transcript uses one direct request with the complete transcript', as
   assert.equal('qcloudReasoningEffort' in calls[0][5], false);
 });
 
+test('short transcript propagates provider failures instead of converting them to empty response', async () => {
+  const { generateTranscriptSkillContent } = loadService();
+  const providerError = new Error('QCLOUD skill request failed: rate_limit');
+  const llmHelper = {
+    async chatWithGemini() {
+      throw providerError;
+    },
+  };
+
+  await assert.rejects(
+    generateTranscriptSkillContent({ transcriptMarkdown: '有效转录', activeSkill, llmHelper }),
+    error => error === providerError,
+  );
+});
+
 test('long transcript maps with concurrency two and reduces ordered intermediate output', async () => {
   const { generateTranscriptSkillContent } = loadService();
   const transcriptMarkdown = '中'.repeat(12_001);
@@ -157,7 +172,8 @@ test('long transcript does not reduce an LLM failure fallback from a map request
       activeSkill,
       llmHelper,
     }),
-    /AI 服务未返回有效内容/,
+    error => error?.code === 'invalid_response'
+      && error?.userMessage === 'AI 服务未返回有效内容，请稍后重试。',
   );
   assert.equal(calls.some(call => call[5].qcloudReasoningEffort === 'minimal'), false);
 });

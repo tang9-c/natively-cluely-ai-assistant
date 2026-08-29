@@ -9,6 +9,7 @@ import {
   QCLOUD_TRANSCRIPT_SKILL_OUTPUT_TOKENS,
   QCLOUD_TRANSCRIPT_SKILL_TIMEOUT_MS,
 } from '../llm/QCloudLlmConstants';
+import { QCloudSkillError, normalizeQCloudSkillError } from '../llm/QCloudSkillError';
 import { getDeniedDataScopes } from '../llm/ProviderRouter';
 import { SettingsManager } from './SettingsManager';
 import { SkillsManager } from './SkillsManager';
@@ -82,18 +83,23 @@ export async function runTranscriptSkillExport(
   }
 
   const promptBlock = SkillsManager.getInstance().buildPromptBlock(skill);
-  const generatedMarkdown = await generateTranscriptSkillContent({
-    transcriptMarkdown,
-    activeSkill: {
-      id: skill.id,
-      name: skill.name,
-      promptBlock,
-    },
-    llmHelper,
-  });
+  let generatedMarkdown: string;
+  try {
+    generatedMarkdown = await generateTranscriptSkillContent({
+      transcriptMarkdown,
+      activeSkill: {
+        id: skill.id,
+        name: skill.name,
+        promptBlock,
+      },
+      llmHelper,
+    });
+  } catch (error) {
+    throw normalizeQCloudSkillError(error);
+  }
 
   if (isLlmFailureFallback(generatedMarkdown)) {
-    return { success: false, error: 'AI 服务未返回有效内容，请稍后重试。' };
+    throw new QCloudSkillError('invalid_response');
   }
 
   const filePath = writeMarkdownExport({
@@ -139,7 +145,7 @@ export async function generateTranscriptSkillContent(
         },
       });
       if (isLlmFailureFallback(summary)) {
-        throw new Error('AI 服务未返回有效内容，请稍后重试。');
+        throw new QCloudSkillError('invalid_response');
       }
       return summary;
     },
