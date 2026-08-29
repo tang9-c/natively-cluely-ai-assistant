@@ -64,8 +64,8 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p "$RUNNER_TEMP/sensevoice"
-          curl --fail --location --retry 3 --output "$RUNNER_TEMP/sensevoice/model.int8.onnx" https://feigenbaum.cdn.bcebos.com/onnx/model.int8.onnx
-          curl --fail --location --retry 3 --output "$RUNNER_TEMP/sensevoice/tokens.txt" https://feigenbaum.cdn.bcebos.com/onnx/tokens.txt
+          curl --fail --location --retry 3 --retry-all-errors --output "$RUNNER_TEMP/sensevoice/model.int8.onnx" https://feigenbaum.cdn.bcebos.com/onnx/model.int8.onnx
+          curl --fail --location --retry 3 --retry-all-errors --output "$RUNNER_TEMP/sensevoice/tokens.txt" https://feigenbaum.cdn.bcebos.com/onnx/tokens.txt
           node scripts/smoke-packaged-runtime.mjs --app release/mac-arm64/CueUp.app --sensevoice-model-dir "$RUNNER_TEMP/sensevoice" --audio tests/fixtures/dynamic-actions/replay/audio/sales-pricing-objection-zh-001.wav | tee release/runtime-smoke-report.json
 
       - name: Validate ARM64 artifact set

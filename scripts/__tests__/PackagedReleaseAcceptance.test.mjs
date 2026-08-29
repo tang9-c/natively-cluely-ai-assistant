@@ -302,6 +302,13 @@ test('all release workflows execute the final packaged runtime smoke suite', () 
     assert.match(workflow, new RegExp(`--app ${appPath.replaceAll('.', '\\.')}`));
     assert.match(workflow, /--sensevoice-model-dir/);
     assert.match(workflow, /--audio tests\/fixtures\/dynamic-actions\/replay\/audio\/sales-pricing-objection-zh-001\.wav/);
+    const senseVoiceDownloads = workflow
+      .split('\n')
+      .filter((line) => line.includes('curl ') && line.includes('/onnx/'));
+    assert.equal(senseVoiceDownloads.length, 2, `${relativePath} must download both SenseVoice model files`);
+    for (const command of senseVoiceDownloads) {
+      assert.match(command, /--retry-all-errors/, `${relativePath} must retry interrupted SenseVoice downloads`);
+    }
   }
 });
 
