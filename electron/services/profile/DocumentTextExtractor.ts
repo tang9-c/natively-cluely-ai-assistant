@@ -164,10 +164,15 @@ export class DocumentTextExtractor {
   }
 }
 
-function resolvePdfWorkerPath(): string {
-  const bundledWorkerPath = path.resolve(__dirname, '../../pdf.worker.mjs');
-  if (fs.existsSync(bundledWorkerPath)) {
-    return bundledWorkerPath;
-  }
-  return path.resolve(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs');
+export function resolvePdfWorkerPath(runtimeDir: string = __dirname): string {
+  const workerCandidates = [
+    path.resolve(runtimeDir, 'pdf.worker.mjs'),
+    path.resolve(runtimeDir, '../../pdf.worker.mjs'),
+  ];
+  const workerPath = workerCandidates.find(candidate => fs.existsSync(candidate));
+  if (workerPath) return workerPath;
+
+  const error = new Error('PDF worker is unavailable.') as CodedError;
+  error.code = 'pdf_worker_failed';
+  throw error;
 }

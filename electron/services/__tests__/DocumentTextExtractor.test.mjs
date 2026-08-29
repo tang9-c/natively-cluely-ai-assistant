@@ -11,6 +11,7 @@ const require = createRequire(import.meta.url);
 const {
   DocumentTextExtractor,
   extractPdfTextWithParser,
+  resolvePdfWorkerPath,
 } = require('../../../dist-electron/electron/services/profile/DocumentTextExtractor.js');
 
 const MINIMAL_DOCX_BASE64 = 'UEsDBBQAAAAIAEkT5lzXeYTq8QAAALgBAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbH2QzU7DMBCE730Ky9cqccoBIZSkB36OwKE8wMreJFb9J69b2rdn00KREOVozXwz62nXB+/EHjPZGDq5qhspMOhobBg7+b55ru6koALBgIsBO3lEkut+0W6OCUkwHKiTUynpXinSE3qgOiYMrAwxeyj8zKNKoLcworppmlulYygYSlXmDNkvhGgfcYCdK+LpwMr5loyOpHg4e+e6TkJKzmoorKt9ML+Kqq+SmsmThyabaMkGqa6VzOL1jh/0lSfK1qB4g1xewLNRfcRslIl65xmu/0/649o4DFbjhZ/TUo4aiXh77+qL4sGG71+06jR8/wlQSwMEFAAAAAgASRPmXCAbhuqyAAAALgEAAAsAAABfcmVscy8ucmVsc43Puw6CMBQG4J2naM4uBQdjDIXFmLAafICmPZRGeklbL7y9HRzEODie23fyN93TzOSOIWpnGdRlBQStcFJbxeAynDZ7IDFxK/nsLDJYMELXFs0ZZ57yTZy0jyQjNjKYUvIHSqOY0PBYOo82T0YXDE+5DIp6Lq5cId1W1Y6GTwPagpAVS3rJIPSyBjIsHv/h3ThqgUcnbgZt+vHlayPLPChMDB4uSCrf7TKzQHNKuorZvgBQSwMEFAAAAAgASRPmXO7yi1CwAAAA5AAAABEAAAB3b3JkL2RvY3VtZW50LnhtbEWOywrCMBBF935FyF5TXYiUPhDFrQgW3MZkbAvNTExSq39vUhduzmW4cO4U9dsM7AXO94QlX68yzgAV6R7bkjfX03LHmQ8StRwIoeQf8LyuFsWUa1KjAQwsGtDnU8m7EGwuhFcdGOlXZAFj9yBnZIina8VETltHCryPA2YQmyzbCiN75FVU3kl/UtoElxCqwwiNZcfz4cZO+wsbsX+OwB5ShUKkPtHNtDN/DvH/r/oCUEsBAhQDFAAAAAgASRPmXNd5hOrxAAAAuAEAABMAAAAAAAAAAAAAAIABAAAAAFtDb250ZW50X1R5cGVzXS54bWxQSwECFAMUAAAACABJE+ZcIBuG6rIAAAAuAQAACwAAAAAAAAAAAAAAgAEiAQAAX3JlbHMvLnJlbHNQSwECFAMUAAAACABJE+Zc7vKLULAAAADkAAAAEQAAAAAAAAAAAAAAgAH9AQAAd29yZC9kb2N1bWVudC54bWxQSwUGAAAAAAMAAwC5AAAA3AIAAAAA';
@@ -80,6 +81,33 @@ describe('DocumentTextExtractor', () => {
     fs.writeFileSync(filePath, createMinimalPdf('CueUp PDF FAQ unique fact'));
     const text = await DocumentTextExtractor.extract(filePath);
     assert.match(text, /CueUp PDF FAQ unique fact/);
+  });
+
+  it('keeps the packaged PDF worker producer and consumer aligned without using cwd', () => {
+    const buildScript = fs.readFileSync(
+      path.resolve(__dirname, '../../../scripts/build-electron.js'),
+      'utf8',
+    );
+    assert.match(
+      buildScript,
+      /path\.resolve\(outDir,\s*['"]electron\/pdf\.worker\.mjs['"]\)/,
+      'the package build must copy the worker next to dist-electron/electron/main.js',
+    );
+
+    const packagedRuntimeDir = path.join(tmpDir, 'resources', 'app.asar', 'dist-electron', 'electron');
+    const packagedWorkerPath = path.join(packagedRuntimeDir, 'pdf.worker.mjs');
+    const unrelatedCwd = path.join(tmpDir, 'unrelated-cwd');
+    fs.mkdirSync(packagedRuntimeDir, { recursive: true });
+    fs.mkdirSync(unrelatedCwd, { recursive: true });
+    fs.writeFileSync(packagedWorkerPath, 'packaged worker fixture');
+
+    const originalCwd = process.cwd();
+    process.chdir(unrelatedCwd);
+    try {
+      assert.equal(resolvePdfWorkerPath(packagedRuntimeDir), packagedWorkerPath);
+    } finally {
+      process.chdir(originalCwd);
+    }
   });
 
   it('destroys the PDF parser after successful extraction', async () => {
