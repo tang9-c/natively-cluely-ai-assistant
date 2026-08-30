@@ -76,15 +76,16 @@ test('release-publish workflow aggregates builds per commit SHA and creates a dr
   // Must skip when a build did not succeed.
   assert.match(wf, /Skip when triggering build did not succeed/);
 
-  // Idempotency check before creating a release.
-  assert.match(wf, /Skip upload if release already has the expected artifacts/);
-  assert.match(wf, /gh release view/);
-  // Self-healing: an existing-but-empty release must be re-uploaded.
-  assert.match(wf, /Release exists but has no assets; will upload/);
+  // A release may initially contain only the first architecture to finish.
+  // Later runs must still upload newly available architectures instead of
+  // treating any existing asset as proof that the release is complete.
+  assert.doesNotMatch(wf, /existing_assets/);
+  assert.doesNotMatch(wf, /steps\.existing\.outputs\.exists/);
 
   // Must publish a DRAFT release via softprops/action-gh-release.
   assert.match(wf, /softprops\/action-gh-release@v2/);
   assert.match(wf, /draft:\s*true/);
+  assert.match(wf, /overwrite_files:\s*true/);
   assert.match(wf, /tag_name:\s*\$\{\{\s*steps\.tag\.outputs\.tag\s*\}\}/);
   assert.match(wf, /HEAD_SHA: \$\{\{ github\.event\.workflow_run\.head_sha \}\}[\s\S]*REPO: \$\{\{ github\.repository \}\}/);
   assert.match(wf, /https:\/\/github\.com\/\$\{REPO\}\/commit\/\$\{HEAD_SHA\}/);

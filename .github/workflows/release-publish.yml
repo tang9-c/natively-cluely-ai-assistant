@@ -238,33 +238,7 @@ jobs:
           echo "Release body preview:"
           head -40 /tmp/release-body.md
 
-      - name: Skip upload if release already has the expected artifacts
-        id: existing
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          tag="${{ steps.tag.outputs.tag }}"
-          if ! gh release view "${tag}" > /dev/null 2>&1; then
-            echo "Release ${tag} does not exist yet."
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Release exists — but is it populated? A previously-published empty
-          # draft must be re-uploaded so this workflow is self-healing for the
-          # case where a prior run lost assets (subshell bug, GH outage, etc.).
-          existing_assets=$(gh release view "${tag}" --json assets --jq '.assets | length')
-          echo "Release ${tag} exists with ${existing_assets} asset(s)."
-          if [ "${existing_assets}" -gt 0 ]; then
-            echo "Release already populated; skipping upload to avoid duplicating assets."
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Release exists but has no assets; will upload."
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Upload artifacts to a new (or empty) draft release
-        if: steps.existing.outputs.exists != 'true'
+      - name: Upload available artifacts to the release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
@@ -272,6 +246,7 @@ jobs:
           draft: true
           generate_release_notes: false
           body_path: /tmp/release-body.md
+          overwrite_files: true
           fail_on_unmatched_files: false
           files: |
             artifacts/Build-Intel-Mac/cueup-intel-mac-*/*.zip
