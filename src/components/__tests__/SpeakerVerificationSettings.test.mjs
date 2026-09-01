@@ -17,6 +17,15 @@ function read(relativePath) {
 
 function loadSpeakerVerificationSettings() {
   const componentPath = path.join(repoRoot, 'src/components/settings/SpeakerVerificationSettings.tsx');
+  const previousTsLoader = Module._extensions['.ts'];
+  Module._extensions['.ts'] = (module, filename) => {
+    const compiledModule = transformSync(fs.readFileSync(filename, 'utf8'), {
+      loader: 'ts',
+      format: 'cjs',
+      target: 'es2020',
+    });
+    module._compile(compiledModule.code, filename);
+  };
   const compiled = transformSync(fs.readFileSync(componentPath, 'utf8'), {
     loader: 'tsx',
     format: 'cjs',
@@ -25,8 +34,16 @@ function loadSpeakerVerificationSettings() {
   const componentModule = new Module(componentPath);
   componentModule.filename = componentPath;
   componentModule.paths = Module._nodeModulePaths(path.dirname(componentPath));
-  componentModule._compile(compiled.code, componentPath);
-  return componentModule.exports;
+  try {
+    componentModule._compile(compiled.code, componentPath);
+    return componentModule.exports;
+  } finally {
+    if (previousTsLoader) {
+      Module._extensions['.ts'] = previousTsLoader;
+    } else {
+      delete Module._extensions['.ts'];
+    }
+  }
 }
 
 test('SpeakerVerificationSettings renders its primary Chinese status and controls', () => {
@@ -136,6 +153,21 @@ test('recording UI exposes live quality state and next action guidance', () => {
   assert.match(source, /可以停止本段录音/);
 });
 
+test('speaker enrollment uses long prompts with eight voiced seconds and a ten second cap', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+
+  assert.match(source, /const MAX_RECORDING_DURATION_MS = 10_000/);
+  assert.match(source, /今天的会议我们会依次讨论产品目标、技术方案、交付时间和团队分工/);
+  assert.match(source, /客户最近重点关注系统稳定性、数据安全、部署方式和使用体验/);
+  assert.match(source, /包括遇到的问题、你的判断以及下一步准备怎么做/);
+  assert.match(source, /durationMs \* voiceRatio/);
+  assert.match(source, /durationMs >= MAX_RECORDING_DURATION_MS/);
+  assert.match(source, /disabled=\{busy \|\| recordingMetrics\.state !== 'ready'\}/);
+  assert.match(source, /mediaRef\.current = null;\s+setBusy\(true\);/);
+  assert.match(source, /formatDuration\(MAX_RECORDING_DURATION_MS\)/);
+  assert.match(source, /formatDuration\(qualityPolicy\.minDurationMs\)/);
+});
+
 test('recording quality policy is loaded from IPC with an internal default fallback', () => {
   const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
   assert.match(source, /speakerVerificationGetQualityPolicy/);
@@ -169,10 +201,11 @@ test('UI renders all speaker verification runtime health states', () => {
   assert.match(source, /当前不可用/);
 });
 
-test('unstable enrollment preserves a safe rerecord message instead of blaming the model', () => {
+test('unstable enrollment explains cross-recording inconsistency without blaming room noise', () => {
   const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
   assert.match(source, /speaker_enrollment_unstable_profile/);
-  assert.match(source, /声音样本不稳定，请在安静环境重新录制三段语音。/);
+  assert.match(source, /三段录音的声纹差异较大，请保持同一麦克风和自然音量重新录制。/);
+  assert.doesNotMatch(source, /声音样本不稳定，请在安静环境重新录制三段语音。/);
 });
 
 test('UI exposes speaker model health check states and latency', () => {
