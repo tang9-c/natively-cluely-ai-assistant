@@ -247,6 +247,7 @@ jobs:
           generate_release_notes: false
           body_path: /tmp/release-body.md
           overwrite_files: true
+          preserve_order: true
           fail_on_unmatched_files: false
           files: |
             artifacts/Build-Intel-Mac/cueup-intel-mac-*/*.zip
@@ -254,16 +255,11 @@ jobs:
             artifacts/Build-Intel-Mac/cueup-intel-mac-*/*.blockmap
             artifacts/Build-Intel-Mac/cueup-intel-mac-*/OPEN-UNSIGNED-CUEUP-MAC.sh
             artifacts/Build-Intel-Mac/cueup-intel-mac-*/INSTALL-UNSIGNED-MACOS.txt
-            artifacts/Build-Intel-Mac/cueup-intel-mac-*/size-report.txt
             artifacts/Build-ARM64-Mac/cueup-arm64-mac-*/*arm64*.zip
             artifacts/Build-ARM64-Mac/cueup-arm64-mac-*/*arm64*.dmg
             artifacts/Build-ARM64-Mac/cueup-arm64-mac-*/*arm64*.blockmap
-            artifacts/Build-ARM64-Mac/cueup-arm64-mac-*/OPEN-UNSIGNED-CUEUP-MAC.sh
-            artifacts/Build-ARM64-Mac/cueup-arm64-mac-*/INSTALL-UNSIGNED-MACOS.txt
-            artifacts/Build-ARM64-Mac/cueup-arm64-mac-*/size-report.txt
             artifacts/Build-Windows-x64/cueup-windows-x64-*/*.exe
             artifacts/Build-Windows-x64/cueup-windows-x64-*/*.blockmap
             artifacts/Build-Windows-x64/cueup-windows-x64-*/latest.yml
-            artifacts/Build-Windows-x64/cueup-windows-x64-*/size-report.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

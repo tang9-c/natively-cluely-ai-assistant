@@ -256,3 +256,20 @@ test('release-publish workflow does not modify the per-arch build workflows', ()
     assert.ok(!wf.includes(forbidden), `release-publish.yml must not switch to ${forbidden}`);
   }
 });
+
+test('release-publish uploads a unique asset batch sequentially', () => {
+  const wf = readWorkflow();
+
+  assert.match(wf, /preserve_order:\s*true/);
+  assert.doesNotMatch(wf, /size-report\.txt/);
+  assert.equal(
+    (wf.match(/OPEN-UNSIGNED-CUEUP-MAC\.sh/g) || []).length,
+    1,
+    'shared macOS launcher must be uploaded exactly once',
+  );
+  assert.equal(
+    (wf.match(/INSTALL-UNSIGNED-MACOS\.txt/g) || []).length,
+    1,
+    'shared macOS instructions must be uploaded exactly once',
+  );
+});
