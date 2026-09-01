@@ -1,11 +1,20 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+const ENROLLMENT_SECONDS = 10;
+const WINDOWS_PER_ENROLLMENT_SAMPLE = 9;
+
 function loudSamples(seconds = 2, sampleRate = 16000, frequency = 220) {
   const samples = new Float32Array(seconds * sampleRate);
   for (let i = 0; i < samples.length; i++) {
     samples[i] = Math.sin((i / sampleRate) * frequency * Math.PI * 2) * 0.2;
   }
+  return samples;
+}
+
+function partiallyVoicedSamples(totalSeconds, voicedSeconds, sampleRate = 16000) {
+  const samples = new Float32Array(totalSeconds * sampleRate);
+  samples.set(loudSamples(voicedSeconds, sampleRate));
   return samples;
 }
 
@@ -60,6 +69,15 @@ class SplitEmbeddingExtractor extends FakeExtractor {
   calls = 0;
   async extract() {
     this.calls += 1;
+    const recordingIndex = Math.floor((this.calls - 1) / WINDOWS_PER_ENROLLMENT_SAMPLE);
+    return new Float32Array(recordingIndex === 1 ? [0, 1, 0, 0] : [1, 0, 0, 0]);
+  }
+}
+
+class WithinRecordingVariationExtractor extends FakeExtractor {
+  calls = 0;
+  async extract() {
+    this.calls += 1;
     return new Float32Array(this.calls % 2 ? [1, 0, 0, 0] : [0, 1, 0, 0]);
   }
 }
@@ -68,12 +86,8 @@ class BorderlineEmbeddingExtractor extends FakeExtractor {
   calls = 0;
   async extract() {
     this.calls += 1;
-    const vectors = [
-      [1, 0, 0, 0],
-      [1, 0, 0, 0],
-      [0.5, 0.8660254, 0, 0],
-    ];
-    return new Float32Array(vectors[(this.calls - 1) % vectors.length]);
+    const recordingIndex = Math.floor((this.calls - 1) / WINDOWS_PER_ENROLLMENT_SAMPLE);
+    return new Float32Array(recordingIndex < 2 ? [1, 0, 0, 0] : [0.5, 0.8660254, 0, 0]);
   }
 }
 
@@ -88,9 +102,9 @@ test('enrollment stores one normalized ME profile and discards raw audio', async
   });
 
   const status = await service.enroll([
-    { samples: loudSamples(3), sampleRate: 16000, deviceFingerprint: 'mic-a' },
-    { samples: loudSamples(3), sampleRate: 16000, deviceFingerprint: 'mic-a' },
-    { samples: loudSamples(3), sampleRate: 16000, deviceFingerprint: 'mic-a' },
+    { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000, deviceFingerprint: 'mic-a' },
+    { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000, deviceFingerprint: 'mic-a' },
+    { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000, deviceFingerprint: 'mic-a' },
   ]);
 
   assert.equal(status.enrolled, true);
@@ -127,9 +141,9 @@ test('verification rejects confidence below the calibrated enrollment threshold'
     extractor: new FakeExtractor(),
     threshold: 0.9,
   }).enroll([
-    { samples: loudSamples(3), sampleRate: 16000 },
-    { samples: loudSamples(3), sampleRate: 16000 },
-    { samples: loudSamples(3), sampleRate: 16000 },
+    { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000 },
+    { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000 },
+    { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000 },
   ]);
 
   const result = await new SpeakerVerificationService({
@@ -152,13 +166,31 @@ test('enrollment rejects split embeddings without writing an unstable profile', 
 
   await assert.rejects(
     service.enroll([
-      { samples: loudSamples(3), sampleRate: 16000 },
-      { samples: loudSamples(3), sampleRate: 16000 },
-      { samples: loudSamples(3), sampleRate: 16000 },
+      { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000 },
+      { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000 },
+      { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000 },
     ]),
     /speaker_enrollment_unstable_profile/,
   );
   assert.equal(store.profile, null);
+});
+
+test('enrollment compares recording-level embeddings instead of rejecting phonetic window variation', async () => {
+  const { SpeakerEnrollmentService } = await import('../../../dist-electron/electron/services/speaker/SpeakerEnrollmentService.js');
+  const store = new MemoryStore();
+  const service = new SpeakerEnrollmentService({
+    store,
+    extractor: new WithinRecordingVariationExtractor(),
+  });
+
+  const status = await service.enroll([
+    { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000 },
+    { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000 },
+    { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000 },
+  ]);
+
+  assert.equal(status.enrolled, true);
+  assert.equal(store.profile.quality.qualityBand, 'stable');
 });
 
 test('enrollment accepts borderline but calibrated samples as a weak boundary profile', async () => {
@@ -170,9 +202,9 @@ test('enrollment accepts borderline but calibrated samples as a weak boundary pr
   });
 
   const status = await service.enroll([
-    { samples: loudSamples(2), sampleRate: 16000 },
-    { samples: loudSamples(2), sampleRate: 16000 },
-    { samples: loudSamples(2), sampleRate: 16000 },
+    { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000 },
+    { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000 },
+    { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000 },
   ]);
 
   assert.equal(status.enrolled, true);
@@ -195,6 +227,31 @@ test('audio quality uses distinct enrollment and verification duration threshold
   assert.equal(measureAudioQuality(loudSamples(2), policy, { durationKind: 'verification' }).ok, true);
 });
 
+test('audio quality measures voiced time by short-time frame energy rather than waveform sample crossings', async () => {
+  const { measureAudioQuality } = await import('../../../dist-electron/electron/services/speaker/speakerAudioUtils.js');
+  const samples = loudSamples(2);
+  for (let i = 0; i < samples.length; i += 1) samples[i] *= 0.075;
+
+  const quality = measureAudioQuality(samples);
+
+  assert.ok(quality.voiceRatio > 0.95, `expected continuous speech near 100%, got ${quality.voiceRatio}`);
+});
+
+test('enrollment requires eight seconds of effective speech while verification keeps its short threshold', async () => {
+  const { measureAudioQuality } = await import('../../../dist-electron/electron/services/speaker/speakerAudioUtils.js');
+
+  assert.equal(
+    measureAudioQuality(loudSamples(7.5), undefined, { durationKind: 'enrollment' }).reason,
+    'too_short',
+  );
+  assert.equal(
+    measureAudioQuality(partiallyVoicedSamples(10, 7), undefined, { durationKind: 'enrollment' }).reason,
+    'not_enough_voice',
+  );
+  assert.equal(measureAudioQuality(loudSamples(8), undefined, { durationKind: 'enrollment' }).ok, true);
+  assert.equal(measureAudioQuality(loudSamples(2), undefined, { durationKind: 'verification' }).ok, true);
+});
+
 test('verification skips when no profile exists', async () => {
   const { SpeakerVerificationService } = await import('../../../dist-electron/electron/services/speaker/SpeakerVerificationService.js');
   const service = new SpeakerVerificationService({
@@ -213,9 +270,9 @@ test('verification returns ME metadata when similarity meets threshold', async (
   const store = new MemoryStore();
   const extractor = new FakeExtractor([1, 0, 0, 0]);
   await new SpeakerEnrollmentService({ store, extractor, threshold: 0.72 }).enroll([
-    { samples: loudSamples(3), sampleRate: 16000 },
-    { samples: loudSamples(3), sampleRate: 16000 },
-    { samples: loudSamples(3), sampleRate: 16000 },
+    { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000 },
+    { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000 },
+    { samples: loudSamples(ENROLLMENT_SECONDS), sampleRate: 16000 },
   ]);
 
   const result = await new SpeakerVerificationService({ store, extractor }).verify(loudSamples(2));

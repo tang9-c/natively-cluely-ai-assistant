@@ -65,7 +65,7 @@ export class SpeakerEnrollmentService {
       throw new Error('speaker_enrollment_requires_three_samples');
     }
 
-    const embeddings: Float32Array[] = [];
+    const recordingEmbeddings: Float32Array[] = [];
     const deviceFingerprint = samples.find(sample => sample.deviceFingerprint)?.deviceFingerprint;
 
     for (const sample of samples) {
@@ -75,19 +75,24 @@ export class SpeakerEnrollmentService {
         throw new Error(`speaker_enrollment_quality_${quality.reason}`);
       }
 
+      const windowEmbeddings: Float32Array[] = [];
       for (const window of slidingWindows(samples16k, 2000, 1000)) {
-        const windowQuality = measureAudioQuality(window, undefined, { durationKind: 'enrollment' });
+        const windowQuality = measureAudioQuality(window, undefined, { durationKind: 'verification' });
         if (!windowQuality.ok) continue;
-        embeddings.push(await this.options.extractor.extract(window));
+        windowEmbeddings.push(await this.options.extractor.extract(window));
       }
+      if (windowEmbeddings.length === 0) {
+        throw new Error('speaker_enrollment_not_enough_valid_windows');
+      }
+      recordingEmbeddings.push(meanEmbedding(windowEmbeddings));
     }
 
-    if (embeddings.length < 3) {
+    if (recordingEmbeddings.length < 3) {
       throw new Error('speaker_enrollment_not_enough_valid_windows');
     }
 
-    const embedding = meanEmbedding(embeddings);
-    const quality = calculateQuality(embeddings, embedding);
+    const embedding = meanEmbedding(recordingEmbeddings);
+    const quality = calculateQuality(recordingEmbeddings, embedding);
     if (
       quality.minSelfSimilarity < quality.calibratedThreshold
       || quality.similarityStddev > MAX_ENROLLMENT_SIMILARITY_STDDEV

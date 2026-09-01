@@ -1,11 +1,12 @@
 import type { AudioQualityResult, SpeakerRecordingQualityPolicy } from './speakerVerificationTypes';
+import { measureVoiceActivity } from '../../../shared/speakerVoiceActivity';
 
 const TARGET_SAMPLE_RATE = 16_000;
 
 export type AudioQualityDurationKind = 'enrollment' | 'verification';
 
 export const SPEAKER_RECORDING_QUALITY_POLICY: SpeakerRecordingQualityPolicy = {
-  minDurationMs: 1500,
+  minDurationMs: 8000,
   minRms: 0.005,
   minVoiceRatio: 0.12,
   voiceSampleThreshold: 0.01,
@@ -96,22 +97,22 @@ export function measureAudioQuality(
     return { ok: false, durationMs: 0, rms: 0, voiceRatio: 0, reason: 'empty' };
   }
 
-  let sumSquares = 0;
-  let voiced = 0;
-  for (const value of samples16k) {
-    sumSquares += value * value;
-    if (Math.abs(value) >= policy.voiceSampleThreshold) voiced += 1;
-  }
-
-  const rms = Math.sqrt(sumSquares / samples16k.length);
+  const { rms, voiceRatio } = measureVoiceActivity(
+    samples16k,
+    TARGET_SAMPLE_RATE,
+    policy.voiceSampleThreshold,
+  );
   const durationMs = Math.round((samples16k.length / TARGET_SAMPLE_RATE) * 1000);
-  const voiceRatio = voiced / samples16k.length;
 
-  const minDurationMs = options.durationKind === 'verification'
+  const durationKind = options.durationKind ?? 'enrollment';
+  const minDurationMs = durationKind === 'verification'
     ? policy.minVerificationDurationMs
     : policy.minDurationMs;
   if (durationMs < minDurationMs) return { ok: false, durationMs, rms, voiceRatio, reason: 'too_short' };
   if (rms < policy.minRms) return { ok: false, durationMs, rms, voiceRatio, reason: 'too_quiet' };
   if (voiceRatio < policy.minVoiceRatio) return { ok: false, durationMs, rms, voiceRatio, reason: 'not_enough_voice' };
+  if (durationKind === 'enrollment' && durationMs * voiceRatio < policy.minDurationMs) {
+    return { ok: false, durationMs, rms, voiceRatio, reason: 'not_enough_voice' };
+  }
   return { ok: true, durationMs, rms, voiceRatio };
 }
