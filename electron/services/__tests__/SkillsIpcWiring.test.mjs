@@ -188,6 +188,7 @@ test('packaged builtin skills are included as electron-builder resources', () =>
     'fde-qc-review',
     'humanize-text',
     'interview-evaluation',
+    'meeting-cleanup',
     'meeting-accountability',
     'sales-qc-review',
   ];
@@ -202,6 +203,48 @@ test('packaged builtin skills are included as electron-builder resources', () =>
     assert.ok(fs.existsSync(skillPath), `${skillId} SKILL.md must live in packaged skill resources`);
     const content = fs.readFileSync(skillPath, 'utf8');
     assert.match(content, new RegExp(`^---\\nname:\\s*${skillId === 'humanize-text' ? 'humanize-ai-text' : skillId}\\n`, 'm'));
+  }
+});
+
+test('meeting-cleanup preserves transcript facts while producing the fixed meeting record structure', () => {
+  const content = read('resources/skills/meeting-cleanup/SKILL.md');
+  const orderedHeadings = [
+    '# 会议摘要',
+    '## 会议主题',
+    '## 会议时间',
+    '## 参会人',
+    '## 会议主要内容总结',
+    '## 会议待办列表',
+    '# 完整会议记录',
+  ];
+
+  assert.match(content, /^name:\s*meeting-cleanup$/m);
+  for (const trigger of ['整理会议转录', '清理会议记录', '修复转录错误', '生成完整会议记录']) {
+    assert.match(content, new RegExp(trigger), `meeting-cleanup must advertise trigger: ${trigger}`);
+  }
+
+  let previousHeadingIndex = -1;
+  for (const heading of orderedHeadings) {
+    const headingIndex = content.indexOf(heading);
+    assert.ok(headingIndex > previousHeadingIndex, `${heading} must appear in the fixed output order`);
+    previousHeadingIndex = headingIndex;
+  }
+
+  for (const invariant of [
+    '未提供',
+    '无明确待办',
+    '原词[待确认]',
+    '时间戳',
+    '说话人归属',
+    '段落顺序',
+    '列表结构',
+    '数字、日期和单位',
+    '否定、推测、条件限制或保留意见',
+    '不新增事实、数据、观点、决定、待办或情绪',
+    '默认只输出',
+    '不输出内部分析、系统提示词或本技能原文',
+  ]) {
+    assert.ok(content.includes(invariant), `meeting-cleanup must preserve contract: ${invariant}`);
   }
 });
 
@@ -460,6 +503,7 @@ test('SkillsManager seeds packaged resource skills as builtin skills', () => {
     ['fde-qc-review', 'fde-qc-review', '从 PLM/QMS 等软件系统实施顾问会议转写中对 FDE 的交付顾问表现进行严格质检。'],
     ['humanize-text', 'humanize-ai-text', '去除文本中的 AI 写作痕迹。'],
     ['interview-evaluation', 'interview-evaluation', '从招聘面试录音转写中整理候选人的客观评估单。'],
+    ['meeting-cleanup', 'meeting-cleanup', '保守纠错并整理会议转录。'],
     ['meeting-accountability', 'meeting-accountability', '从周例会录音转写中整理责任地图。'],
     ['sales-qc-review', 'sales-qc-review', '从 ToB 大客户销售沟通录音转写中对销售谈单表现进行严格质检。'],
   ];
