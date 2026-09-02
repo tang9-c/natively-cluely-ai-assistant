@@ -508,7 +508,7 @@ const MockPillControlsAnim = () => {
                             <EyeOff className="w-3.5 h-3.5 text-text-tertiary" />
                         </motion.div>
                     </div>
-                    <span className="text-[11px] text-text-secondary leading-snug">切换整个窗口 — 让你完全<strong className="text-text-primary">隐身</strong></span>
+                    <span className="text-[11px] text-text-secondary leading-snug">切换整个窗口 — 隐藏或显示 <strong className="text-text-primary">CueUp 窗口</strong></span>
                 </div>
             </div>
 
@@ -1765,6 +1765,21 @@ export const HelpSettings: React.FC = () => {
 
                 <AccordionSection title="11. 窗口与通用设置" icon={<Monitor className="w-4 h-4" />}>
                     <div className="space-y-4">
+                        <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                            <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                <Monitor className="w-4 h-4 text-accent-primary" /> 屏幕共享边界
+                            </h4>
+                            {isMac ? (
+                                <p className="text-[11px] text-text-secondary leading-relaxed">
+                                    在 <strong>macOS 15+</strong> 中使用腾讯会议、飞书会议时，请选择<strong>单个窗口共享</strong>。整屏共享可能包含 CueUp，系统内容保护无法保证排除会议浮窗。
+                                </p>
+                            ) : (
+                                <p className="text-[11px] text-text-secondary leading-relaxed">
+                                    在 <strong>Windows 11</strong> 中，CueUp 会通过系统内容保护尝试在整屏共享时排除会议浮窗；实际效果取决于会议软件是否使用 Windows 标准捕获接口。
+                                </p>
+                            )}
+                        </div>
+
                         <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                             <h4 className="font-semibold text-sm mb-2 text-text-primary">通用开关</h4>
                             <p className="text-[11px] text-text-secondary leading-relaxed">

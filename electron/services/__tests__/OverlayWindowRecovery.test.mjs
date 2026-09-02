@@ -10,6 +10,10 @@ const nativeLoaderSource = fs.readFileSync(
   'utf8',
 );
 const ipcHandlersSource = fs.readFileSync(path.join(repoRoot, 'electron/ipcHandlers.ts'), 'utf8');
+const helpSettingsSource = fs.readFileSync(
+  path.join(repoRoot, 'src/components/settings/HelpSettings.tsx'),
+  'utf8',
+);
 
 test('expanded overlay resize cannot collapse to a 1px invisible window', () => {
   assert.match(
@@ -74,6 +78,50 @@ test('Apple Silicon overlay skips native AppKit stealth path', () => {
     /overlay-ready-to-show-native-stealth-skipped/,
     'skipping native overlay stealth should be visible in logs',
   );
+});
+
+test('meeting overlay enables public content protection before platform-specific stealth setup', () => {
+  const creation = source.indexOf('this.overlayWindow = new BrowserWindow(overlaySettings);');
+  const protection = source.indexOf('this.overlayWindow.setContentProtection(true);', creation);
+  const macSetup = source.indexOf("if (process.platform === 'darwin')", creation);
+
+  assert.ok(creation >= 0, 'meeting overlay BrowserWindow creation must exist');
+  assert.ok(protection > creation, 'meeting overlay must enable public content protection after creation');
+  assert.ok(
+    protection < macSetup,
+    'public content protection must run before the macOS native stealth gate, including on Apple Silicon',
+  );
+});
+
+test('public content protection is restored only for the meeting overlay', () => {
+  const otherWindowHelpers = [
+    'electron/SettingsWindowHelper.ts',
+    'electron/ModelSelectorWindowHelper.ts',
+    'electron/CropperWindowHelper.ts',
+  ];
+
+  assert.equal(
+    source.match(/\.setContentProtection\(true\)/g)?.length,
+    1,
+    'WindowHelper should protect only the meeting overlay, not the launcher',
+  );
+  for (const relativePath of otherWindowHelpers) {
+    const helperSource = fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+    assert.doesNotMatch(
+      helperSource,
+      /\.setContentProtection\(/,
+      `${relativePath} must not restore the removed global hidden mode`,
+    );
+  }
+});
+
+test('help describes the supported screen-sharing boundary without claiming complete invisibility', () => {
+  assert.match(helpSettingsSource, /Windows 11/);
+  assert.match(helpSettingsSource, /腾讯会议、飞书会议/);
+  assert.match(helpSettingsSource, /单个窗口共享/);
+  assert.match(helpSettingsSource, /macOS 15\+/);
+  assert.match(helpSettingsSource, /整屏共享可能包含 CueUp/);
+  assert.doesNotMatch(helpSettingsSource, /完全隐身/);
 });
 
 test('native module diagnostics identify the loaded architecture-specific binary', () => {
