@@ -3058,12 +3058,14 @@ export class DatabaseManager {
 
     public getCompanyResearchCache(companyName: string): CompanyResearchCacheRow | null {
         if (!this.db) return null;
+        const normalizedCompanyName = companyName.trim().toLowerCase().replace(/\s+/g, ' ');
+        if (!normalizedCompanyName) return null;
         try {
             const row = this.db.prepare(`
                 SELECT dossier_json, expires_at, schema_version
                 FROM company_research_cache
                 WHERE company_name = ?
-            `).get(companyName) as CompanyResearchCacheRow | undefined;
+            `).get(normalizedCompanyName) as CompanyResearchCacheRow | undefined;
             return row ?? null;
         } catch (error) {
             console.error(`[DatabaseManager] getCompanyResearchCache failed for "${companyName}":`, error);

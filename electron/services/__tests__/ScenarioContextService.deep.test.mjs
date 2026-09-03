@@ -66,7 +66,30 @@ function buildDeps(overrides = {}) {
       getModeReferenceFileMetadataForMode: () => metaRows,
       getProfileMaster: () => overrides.profile ?? null,
       getPersona: () => '',
+      getActiveJD: () => overrides.activeJD ?? null,
+      getCompanyResearchCache: (companyName) =>
+        typeof overrides.researchCache === 'function'
+          ? overrides.researchCache(companyName)
+          : overrides.researchCache ?? null,
     },
+  };
+}
+
+function makeDossier(companyName = 'Acme Corp') {
+  const dimension = { summary: '已验证摘要', details: [], confidence: 'high' };
+  return {
+    schemaVersion: '1.0',
+    companyName,
+    generatedAt: '2026-09-03T00:00:00.000Z',
+    expiresAt: '2099-01-01T00:00:00.000Z',
+    source: 'tavily',
+    financials: dimension,
+    business: dimension,
+    strategy: dimension,
+    people: dimension,
+    infrastructure: dimension,
+    procurement: dimension,
+    sources: [],
   };
 }
 
@@ -356,6 +379,69 @@ describe('ScenarioContextService — reference data scope', () => {
     });
     const result = await service.buildForRequest({ query: 'q' });
     assert.deepEqual(result.dataScopes, []);
+  });
+});
+
+describe('ScenarioContextService — company research reuse', () => {
+  for (const templateType of ['looking-for-work', 'recruiting']) {
+    test(`injects current, valid research in ${templateType}`, async () => {
+      const { ScenarioContextService } = cjsRequire(servicePath);
+      const dossier = makeDossier();
+      const service = new ScenarioContextService(buildDeps({
+        mode: {
+          id: `mode_${templateType}`, name: templateType, templateType,
+          isActive: true, customContext: '', createdAt: '',
+        },
+        activeJD: { parsed_json: JSON.stringify({ company: '  Acme   Corp  ' }) },
+        researchCache: (companyName) => {
+          assert.equal(companyName, 'Acme Corp');
+          return {
+            dossier_json: JSON.stringify(dossier),
+            expires_at: dossier.expiresAt,
+            schema_version: '1.0',
+          };
+        },
+      }));
+
+      const result = await service.buildForRequest({ query: 'q' });
+      assert.match(result.contextBlock, /<company_research_evidence/);
+      assert.match(result.contextBlock, /已验证摘要/);
+      assert.ok(result.dataScopes.includes('profile_history'));
+    });
+  }
+
+  test('does not inject company research in sales mode', async () => {
+    const { ScenarioContextService } = cjsRequire(servicePath);
+    let cacheReads = 0;
+    const service = new ScenarioContextService(buildDeps({
+      activeJD: { parsed_json: JSON.stringify({ company: 'Acme Corp' }) },
+      researchCache: () => { cacheReads += 1; return null; },
+    }));
+
+    const result = await service.buildForRequest({ query: 'q' });
+    assert.doesNotMatch(result.contextBlock, /company_research_evidence/);
+    assert.equal(cacheReads, 0);
+  });
+
+  test('skips expired and malformed research cache entries', async () => {
+    const { ScenarioContextService } = cjsRequire(servicePath);
+    const mode = {
+      id: 'mode_job', name: 'Job', templateType: 'looking-for-work',
+      isActive: true, customContext: '', createdAt: '',
+    };
+    for (const researchCache of [
+      { dossier_json: '{bad', expires_at: '2099-01-01T00:00:00.000Z', schema_version: '1.0' },
+      { dossier_json: JSON.stringify(makeDossier()), expires_at: '2000-01-01T00:00:00.000Z', schema_version: '1.0' },
+      { dossier_json: JSON.stringify(makeDossier()), expires_at: '2099-01-01T00:00:00.000Z', schema_version: '0.9' },
+    ]) {
+      const service = new ScenarioContextService(buildDeps({
+        mode,
+        activeJD: { parsed_json: JSON.stringify({ company: 'Acme Corp' }) },
+        researchCache,
+      }));
+      const result = await service.buildForRequest({ query: 'q' });
+      assert.doesNotMatch(result.contextBlock, /company_research_evidence/);
+    }
   });
 });
 

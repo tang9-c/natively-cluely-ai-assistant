@@ -15,6 +15,10 @@ import { ResearchProgress } from './ResearchProgress';
 import { ResearchDimension } from './ResearchDimension';
 import { ResearchErrorBanner } from './ResearchErrorBanner';
 import { ResearchFallbackBanner } from './ResearchFallbackBanner';
+import {
+  COMPANY_RESEARCH_DIMENSION_KEYS,
+  type CompanyResearchDimensionKey,
+} from '../../../shared/companyResearch';
 
 interface Props {
   isOpen: boolean;
@@ -22,14 +26,14 @@ interface Props {
   onClose: () => void;
 }
 
-const DIMENSION_DEFS = [
-  { key: 'financials', title: '经营实力', subtitle: 'Financials' },
-  { key: 'business', title: '业务版图', subtitle: 'Business' },
-  { key: 'strategy', title: '战略动向', subtitle: 'Strategy' },
-  { key: 'people', title: '关键人画像', subtitle: 'People' },
-  { key: 'infrastructure', title: '技术与资产现状', subtitle: 'Infrastructure' },
-  { key: 'procurement', title: '采购合规历史', subtitle: 'Procurement' },
-] as const;
+const DIMENSION_LABELS: Record<CompanyResearchDimensionKey, { title: string; subtitle: string }> = {
+  financials: { title: '经营实力', subtitle: 'Financials' },
+  business: { title: '业务版图', subtitle: 'Business' },
+  strategy: { title: '战略动向', subtitle: 'Strategy' },
+  people: { title: '关键人画像', subtitle: 'People' },
+  infrastructure: { title: '技术与资产现状', subtitle: 'Infrastructure' },
+  procurement: { title: '采购合规历史', subtitle: 'Procurement' },
+};
 
 export function ResearchPanel({ isOpen, initialCompanyName = '', onClose }: Props) {
   const r = useResearch();
@@ -104,12 +108,12 @@ export function ResearchPanel({ isOpen, initialCompanyName = '', onClose }: Prop
                   </div>
 
                   <div>
-                    {DIMENSION_DEFS.map((d) => (
+                    {COMPANY_RESEARCH_DIMENSION_KEYS.map((key) => (
                       <ResearchDimension
-                        key={d.key}
-                        title={d.title}
-                        subtitle={d.subtitle}
-                        dimension={(r.dossier as any)[d.key]}
+                        key={key}
+                        title={DIMENSION_LABELS[key].title}
+                        subtitle={DIMENSION_LABELS[key].subtitle}
+                        dimension={r.dossier![key]}
                         sources={r.dossier!.sources}
                       />
                     ))}

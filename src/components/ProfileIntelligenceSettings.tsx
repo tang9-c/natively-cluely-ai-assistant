@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Pencil, Check,
-    Building2, Search, AlertCircle, Gift, Star, Sparkles, User, ArrowUpRight
+    Building2, Search, Sparkles, User, ArrowUpRight
 } from 'lucide-react';
 import { ProfileVisualizer } from './profile/ProfileVisualizer';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -356,29 +356,6 @@ const MagneticButton = ({ children, onClick, disabled, className = "", primary =
     );
 };
 
-// ---------------------------------------------------------------------------
-// StarRating
-// ---------------------------------------------------------------------------
-const StarRating = ({ value, size = 11 }: { value: number; size?: number }) => {
-    const clamped = Math.min(5, Math.max(0, value ?? 0));
-    // Round to nearest 0.5 so 3.7→3.5 stars, 3.8→4 stars, 4.75→5 stars
-    const rounded = Math.round(clamped * 2) / 2;
-    const full = Math.floor(rounded);
-    const half = rounded - full === 0.5;
-    const empty = 5 - full - (half ? 1 : 0);
-    return (
-        <span className="flex items-center gap-0.5">
-            {Array.from({ length: full }).map((_, i) => (
-                <Star key={`f${i}`} size={size} className="text-yellow-400 fill-yellow-400" />
-            ))}
-            {half && <Star size={size} className="text-yellow-400 fill-yellow-400/40" />}
-            {Array.from({ length: empty }).map((_, i) => (
-                <Star key={`e${i}`} size={size} className="text-text-tertiary/25 fill-transparent" />
-            ))}
-        </span>
-    );
-};
-
 export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }) {
     const hasProfileAccess = true;
     const isLight = useResolvedTheme() === 'light';
@@ -396,9 +373,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
     const [profileData, setProfileData] = useState<any>(null);
     const [jdUploading, setJdUploading] = useState(false);
     const [jdError, setJdError] = useState('');
-    const [companyResearching, setCompanyResearching] = useState(false);
-    const [companyDossier, setCompanyDossier] = useState<any>(null);
-    const [companySearchQuotaExhausted, setCompanySearchQuotaExhausted] = useState(false);
     const [customNotes, setCustomNotes] = useState('');
     const [customNotesSaved, setCustomNotesSaved] = useState(false);
     const customNotesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -698,7 +672,6 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                 await window.electronAPI?.profileDeleteJD?.();
                                                                 const data = await window.electronAPI?.profileGetProfile?.();
                                                                 if (data) setProfileData(data);
-                                                                setCompanyDossier(null);
                                                             }}
                                                             className="shrink-0 mt-0.5 px-2.5 py-2 rounded-full text-xs text-text-tertiary hover:text-red-500 hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/20"
                                                             aria-label="移除职位描述"
@@ -900,286 +873,29 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                             <div className="mt-4 space-y-4">
                                     {profileData?.activeJD?.company && (
                                         <BezelCard delay={0.5}>
-                                            <div className="p-5">
-                                                <div className="flex items-center justify-between mb-4">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 rounded-lg bg-bg-input border border-border-subtle flex items-center justify-center text-purple-500">
-                                                            <Building2 size={20} />
-                                                        </div>
-                                                        <div>
-                                                            <div className="flex items-center gap-2">
-                                                                <h4 className="text-sm font-bold text-text-primary">
-                                                                    公司情报：<span className="text-purple-400">{profileData.activeJD.company}</span>
-                                                                </h4>
-                                                            </div>
-                                                            <p className="text-[11px] text-text-secondary mt-0.5">
-                                                                {companyDossier ? '调研完成' : '运行调研以获取招聘策略、薪资和竞争对手信息'}
-                                                            </p>
-                                                        </div>
+                                            <div className="p-5 flex items-center justify-between gap-4">
+                                                <div className="flex items-center gap-4 min-w-0">
+                                                    <div className="w-10 h-10 rounded-lg bg-bg-input border border-border-subtle flex items-center justify-center text-purple-500 shrink-0">
+                                                        <Building2 size={20} />
                                                     </div>
-
-                                                    <MagneticButton
-                                                        onClick={async () => {
-                                                            setCompanyResearching(true);
-                                                            setCompanySearchQuotaExhausted(false);
-                                                            try {
-                                                                const result = await window.electronAPI?.profileResearchCompany?.(profileData.activeJD.company, { forceRefresh: Boolean(companyDossier) });
-                                                                if (result?.success && result.dossier) {
-                                                                    setCompanyDossier(result.dossier);
-                                                                }
-                                                                if (result?.searchQuotaExhausted) {
-                                                                    setCompanySearchQuotaExhausted(true);
-                                                                }
-                                                            } catch (e) {
-                                                                console.error('调研失败：', e);
-                                                            } finally {
-                                                                setCompanyResearching(false);
-                                                            }
-                                                        }}
-                                                        disabled={companyResearching}
-                                                    >
-                                                        {companyResearching ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
-                                                        {companyResearching ? '调研中…' : companyDossier ? '刷新' : '立即调研'}
-                                                    </MagneticButton>
+                                                    <div className="min-w-0">
+                                                        <h4 className="text-sm font-bold text-text-primary truncate">
+                                                            公司情报：<span className="text-purple-400">{profileData.activeJD.company}</span>
+                                                        </h4>
+                                                        <p className="text-[11px] text-text-secondary mt-0.5">
+                                                            查看经营、业务、战略、人员、基础设施和采购六个维度。
+                                                        </p>
+                                                    </div>
                                                 </div>
-
-                                                {/* Search quota exhausted notice */}
-                                                {companySearchQuotaExhausted && (
-                                                    <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/8 border border-amber-500/20 text-[11px] text-amber-400 leading-relaxed">
-                                                        <span className="shrink-0 mt-[1px]">⚠</span>
-                                                        <span>
-                                                            本月网络搜索额度已用完 — 仅显示 AI 调研结果。
-                                                            将在下个计费周期重置，或<span className="underline cursor-pointer" onClick={() => (window.electronAPI as any)?.openExternal?.('https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl')}>升级你的计划</span>。
-                                                        </span>
-                                                    </div>
-                                                )}
-
-                                                {/* Dossier Results */}
-                                                {companyDossier && (
-                                                    <div className="space-y-4 border-t border-border-subtle pt-4 mt-2">
-
-                                                        {/* Hiring Strategy */}
-                                                        {companyDossier.hiring_strategy && (
-                                                            <div>
-                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-1">招聘策略</div>
-                                                                <p className="text-xs text-text-secondary leading-relaxed bg-bg-input p-3 rounded-lg">{companyDossier.hiring_strategy}</p>
-                                                            </div>
-                                                        )}
-
-                                                        {/* Interview Focus + Difficulty badge */}
-                                                        {companyDossier.interview_focus && (
-                                                            <div>
-                                                                <div className="flex items-center gap-2 mb-1">
-                                                                    <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide">面试专注</div>
-                                                                    {companyDossier.interview_difficulty && (
-                                                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
-                                                                            companyDossier.interview_difficulty === 'easy' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
-                                                                            companyDossier.interview_difficulty === 'medium' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
-                                                                            companyDossier.interview_difficulty === 'hard' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' :
-                                                                            'bg-red-500/10 text-red-400 border-red-500/20'
-                                                                        }`}>
-                                                                            {companyDossier.interview_difficulty.replace('_', ' ').toUpperCase()}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                                <p className="text-xs text-text-secondary leading-relaxed bg-bg-input p-3 rounded-lg">{companyDossier.interview_focus}</p>
-                                                            </div>
-                                                        )}
-
-                                                        {/* Salary Estimates */}
-                                                        {companyDossier.salary_estimates?.length > 0 && (
-                                                            <div>
-                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-1">薪资估算</div>
-                                                                <div className="space-y-2 bg-bg-input p-3 rounded-lg">
-                                                                    {companyDossier.salary_estimates.map((s: any, i: number) => (
-                                                                        <div key={i} className="flex items-center justify-between pb-2 mb-2 border-b border-border-subtle last:border-0 last:pb-0 last:mb-0">
-                                                                            <span className="text-xs text-text-primary font-medium">{s.title} <span className="text-text-tertiary">({s.location})</span></span>
-                                                                            <div className="flex items-center gap-2">
-                                                                                <span className="text-xs font-bold text-green-400">
-                                                                                    {s.currency} {s.min?.toLocaleString()} – {s.max?.toLocaleString()}
-                                                                                </span>
-                                                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${s.confidence === 'high' ? 'bg-green-500/10 text-green-500 border-green-500/20' : s.confidence === 'medium' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
-                                                                                    {s.confidence?.toUpperCase()}
-                                                                                </span>
-                                                                            </div>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {/* Work Culture — 5-star ratings */}
-                                                        {companyDossier.culture_ratings && typeof companyDossier.culture_ratings === 'object' &&
-                                                          Object.values(companyDossier.culture_ratings).some(v => typeof v === 'number' && (v as number) > 0) && (
-                                                            <div>
-                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-2">工作文化</div>
-                                                                <div className="bg-bg-input p-3 rounded-lg">
-                                                                    {/* Overall score hero */}
-                                                                    <div className="flex items-center justify-between mb-3 pb-3 border-b border-border-subtle">
-                                                                        <div>
-                                                                            <span className="text-2xl font-bold text-text-primary">{companyDossier.culture_ratings.overall.toFixed(1)}</span>
-                                                                            <span className="text-xs text-text-tertiary"> / 5</span>
-                                                                            {companyDossier.culture_ratings.review_count && (
-                                                                                <div className="text-[10px] text-text-tertiary mt-0.5">{companyDossier.culture_ratings.review_count}</div>
-                                                                            )}
-                                                                        </div>
-                                                                        <div className="text-right">
-                                                                            <StarRating value={companyDossier.culture_ratings.overall} size={14} />
-                                                                            {companyDossier.culture_ratings.data_sources?.length > 0 && (
-                                                                                <div className="flex gap-1 mt-1 justify-end">
-                                                                                    {companyDossier.culture_ratings.data_sources.map((src: string, i: number) => (
-                                                                                        <span key={i} className="text-[9px] text-text-tertiary bg-bg-input px-1.5 py-0.5 rounded">{src}</span>
-                                                                                    ))}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    </div>
-                                                                    {/* Sub-ratings grid */}
-                                                                    <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                                                                        {[
-                                                                            { label: '工作生活平衡', key: 'work_life_balance' },
-                                                                            { label: '职业成长', key: 'career_growth' },
-                                                                            { label: '薪酬待遇', key: 'compensation' },
-                                                                            { label: '管理风格', key: 'management' },
-                                                                            { label: '多元包容', key: 'diversity' },
-                                                                        ].map(({ label, key }) => {
-                                                                            const raw = (companyDossier.culture_ratings as any)[key];
-                                                                            const val: number = typeof raw === 'number' ? raw : 0;
-                                                                            return val > 0 ? (
-                                                                                <div key={key} className="flex items-center justify-between gap-2">
-                                                                                    <span className="text-[10px] text-text-tertiary truncate">{label}</span>
-                                                                                    <div className="flex items-center gap-1 shrink-0">
-                                                                                        <StarRating value={val} size={9} />
-                                                                                        <span className="text-[10px] text-text-secondary font-medium">{val.toFixed(1)}</span>
-                                                                                    </div>
-                                                                                </div>
-                                                                            ) : null;
-                                                                        })}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {/* Employee Reviews */}
-                                                        {companyDossier.employee_reviews?.length > 0 && (
-                                                            <div>
-                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-2">员工评价</div>
-                                                                <div className="space-y-2">
-                                                                    {companyDossier.employee_reviews.map((r: any, i: number) => (
-                                                                        <div key={i} className="bg-bg-input p-3 rounded-lg">
-                                                                            <div className="flex items-start gap-2">
-                                                                                <span className={`mt-0.5 shrink-0 w-2 h-2 rounded-full ${r.sentiment === 'positive' ? 'bg-green-400' : r.sentiment === 'mixed' ? 'bg-yellow-400' : 'bg-red-400'}`} />
-                                                                                <p className="text-xs text-text-secondary leading-relaxed italic">"{r.quote}"</p>
-                                                                            </div>
-                                                                            <div className="flex items-center gap-2 mt-2 ml-4">
-                                                                                {r.role && <span className="text-[10px] text-text-tertiary">{r.role}</span>}
-                                                                                {r.role && r.source && <span className="text-text-tertiary/40 text-[10px]">·</span>}
-                                                                                {r.source && <span className="text-[10px] text-text-tertiary/70 bg-bg-input px-1.5 py-0.5 rounded">{r.source}</span>}
-                                                                            </div>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {/* Critics — common complaints */}
-                                                        {companyDossier.critics?.length > 0 && (
-                                                            <div>
-                                                                <div className="flex items-center gap-1.5 mb-2">
-                                                                    <AlertCircle size={11} className="text-orange-400" />
-                                                                    <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide">常见投诉</div>
-                                                                </div>
-                                                                <div className="space-y-2">
-                                                                    {companyDossier.critics.map((c: any, i: number) => (
-                                                                        <div key={i} className="bg-bg-input p-3 rounded-lg">
-                                                                            <div className="flex items-center justify-between mb-1">
-                                                                                <span className="text-[10px] font-semibold text-orange-400/90">{c.category}</span>
-                                                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
-                                                                                    c.frequency === 'widespread' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                                                                                    c.frequency === 'frequently' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' :
-                                                                                    'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
-                                                                                }`}>
-                                                                                    {c.frequency?.toUpperCase()}
-                                                                                </span>
-                                                                            </div>
-                                                                            <p className="text-xs text-text-secondary leading-relaxed">{c.complaint}</p>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {/* Benefits */}
-                                                        {companyDossier.benefits?.length > 0 && (
-                                                            <div>
-                                                                <div className="flex items-center gap-1.5 mb-2">
-                                                                    <Gift size={11} className="text-emerald-400" />
-                                                                    <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide">福利与待遇</div>
-                                                                </div>
-                                                                <div className="flex flex-wrap gap-1.5">
-                                                                    {companyDossier.benefits.map((b: string, i: number) => (
-                                                                        <span key={i} className="text-[11px] text-emerald-400/90 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">{b}</span>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {/* Core Values */}
-                                                        {companyDossier.core_values?.length > 0 && (
-                                                            <div>
-                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-2">核心价值观</div>
-                                                                <div className="flex flex-wrap gap-1.5">
-                                                                    {companyDossier.core_values.map((v: string, i: number) => (
-                                                                        <span key={i} className="text-[11px] text-purple-400/90 px-2.5 py-1 rounded-full bg-purple-500/10 border border-purple-500/20">{v}</span>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {/* Recent News */}
-                                                        {companyDossier.recent_news && (
-                                                            <div>
-                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-1">最近新闻</div>
-                                                                <p className="text-xs text-text-secondary leading-relaxed bg-bg-input p-3 rounded-lg">{companyDossier.recent_news}</p>
-                                                            </div>
-                                                        )}
-
-                                                        {/* Competitors */}
-                                                        {companyDossier.competitors?.length > 0 && (
-                                                            <div>
-                                                                <div className="text-[10px] font-bold text-text-primary uppercase tracking-wide mb-2">竞争对手</div>
-                                                                <div className="flex flex-wrap gap-2">
-                                                                    {companyDossier.competitors.map((c: string, i: number) => (
-                                                                        <span key={i} className="text-[11px] text-text-secondary px-2.5 py-1 rounded-full bg-bg-input flex items-center gap-1.5">
-                                                                            <Building2 size={10} className="text-text-tertiary" /> {c}
-                                                                        </span>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {/* Sources count */}
-                                                        {companyDossier.sources?.length > 0 && (
-                                                            <div className="text-[10px] text-text-tertiary mt-2">
-                                                                来源：{companyDossier.sources.filter(Boolean).length} 条引用
-                                                            </div>
-                                                        )}
-
-                                                    </div>
-                                                )}
-
-                                                {/* Quick-action: open full ResearchPanel */}
-                                                <div className="mt-4 pt-3 border-t border-border-subtle">
-                                                    <button
-                                                        onClick={() => window.dispatchEvent(new CustomEvent(
-                                                            'open-research-panel',
-                                                            { detail: { companyName: profileData.activeJD.company } },
-                                                        ))}
-                                                        className="text-xs text-accent-primary hover:underline inline-flex items-center gap-1"
-                                                    >
-                                                        在新面板中打开此公司 →
-                                                    </button>
-                                                </div>
+                                                <MagneticButton
+                                                    onClick={() => window.dispatchEvent(new CustomEvent(
+                                                        'open-research-panel',
+                                                        { detail: { companyName: profileData.activeJD.company } },
+                                                    ))}
+                                                >
+                                                    <Search size={14} />
+                                                    打开公司调研
+                                                </MagneticButton>
                                             </div>
                                         </BezelCard>
                                     )}

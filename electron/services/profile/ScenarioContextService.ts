@@ -3,6 +3,11 @@ import { ModesManager } from '../ModesManager';
 import { ScenarioRegistry } from './scenarios/registry';
 import type { ScenarioContextBuildResult } from './scenarios/types';
 import type { ProviderDataScope } from '../../llm/ProviderRouter';
+import {
+  DOSSIER_SCHEMA_VERSION,
+  isCompanyDossier,
+} from '../../../shared/companyResearch';
+import { buildCompanyResearchEvidence } from '../research/CompanyResearchContext';
 
 interface BuildForRequestInput {
   query: string;
@@ -81,6 +86,12 @@ export class ScenarioContextService {
     if (retrievedContext) {
       contextParts.push(retrievedContext);
       dataScopes.add('reference_files');
+    }
+
+    const companyResearch = this.buildCompanyResearchBlock(activeMode.templateType);
+    if (companyResearch) {
+      contextParts.push(companyResearch);
+      dataScopes.add('profile_history');
     }
 
     const masterProfile = this.buildMasterProfileBlock(this.db);
@@ -175,5 +186,33 @@ export class ScenarioContextService {
     }).slice(0, this.masterProfileMaxChars);
 
     return `<profile_master format="json">${escapeXml(payload)}</profile_master>`;
+  }
+
+  private buildCompanyResearchBlock(templateType: string): string {
+    if (templateType !== 'looking-for-work' && templateType !== 'recruiting') return '';
+    if (
+      typeof this.db.getActiveJD !== 'function'
+      || typeof this.db.getCompanyResearchCache !== 'function'
+    ) return '';
+
+    try {
+      const activeJD = this.db.getActiveJD();
+      const parsedJD = safeJsonParse(activeJD?.parsed_json) as Record<string, unknown> | undefined;
+      const companyName = typeof parsedJD?.company === 'string'
+        ? parsedJD.company.trim().replace(/\s+/g, ' ')
+        : '';
+      if (!companyName) return '';
+
+      const cache = this.db.getCompanyResearchCache(companyName);
+      if (!cache || cache.schema_version !== DOSSIER_SCHEMA_VERSION) return '';
+      const expiresAt = Date.parse(cache.expires_at);
+      if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return '';
+
+      const dossier = safeJsonParse(cache.dossier_json);
+      if (!isCompanyDossier(dossier)) return '';
+      return buildCompanyResearchEvidence(dossier);
+    } catch {
+      return '';
+    }
   }
 }

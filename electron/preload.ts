@@ -31,6 +31,7 @@ import type {
   MeetingPreparationSaveInput,
   PrepareContextResult,
 } from '../shared/meetingPreparation';
+import type { ProfileResearchCompanyResponse } from '../shared/companyResearch';
 
 type RAGStreamChunkPayload =
   | MeetingSearchChunkEvent
@@ -815,7 +816,7 @@ interface ElectronAPI {
   profileResearchCompany: (
     companyName: string,
     options?: { forceRefresh?: boolean; requestId?: string },
-  ) => Promise<{ success: boolean; dossier?: any; error?: string; searchQuotaExhausted?: boolean }>;
+  ) => Promise<ProfileResearchCompanyResponse>;
   onResearchProgressChanged: (callback: (data: ResearchProgressPayload) => void) => () => void;
   profileClearResearchCache: () => Promise<{ success: boolean; deleted?: number; error?: string }>;
   testTavilyApiKey: (key: string) => Promise<{
@@ -2201,7 +2202,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // JD & Research API
   profileUploadJD: (fileToken: string) => ipcRenderer.invoke('profile:upload-jd', fileToken),
   profileDeleteJD: () => ipcRenderer.invoke('profile:delete-jd'),
-  profileResearchCompany: (companyName: string, options?: { forceRefresh?: boolean }) =>
+  profileResearchCompany: (companyName: string, options?: { forceRefresh?: boolean; requestId?: string }) =>
     ipcRenderer.invoke('profile:research-company', companyName, options),
   profileClearResearchCache: () => ipcRenderer.invoke('profile:clear-research-cache'),
   testTavilyApiKey: (key: string) => ipcRenderer.invoke('profile:test-tavily-key', key),

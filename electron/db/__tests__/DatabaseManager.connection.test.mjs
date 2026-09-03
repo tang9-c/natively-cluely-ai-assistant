@@ -144,3 +144,27 @@ describe('DatabaseManager — KNOWN_DIMS constant', () => {
     }
   });
 });
+
+describe('DatabaseManager — company research cache lookup', () => {
+  it('normalizes case and repeated whitespace before lookup', () => {
+    const { db, manager } = makeManager();
+    db.exec(`
+      CREATE TABLE company_research_cache (
+        company_name TEXT PRIMARY KEY,
+        company_name_display TEXT NOT NULL,
+        dossier_json TEXT NOT NULL,
+        generated_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        source TEXT NOT NULL,
+        schema_version TEXT NOT NULL
+      )
+    `);
+    db.prepare('INSERT INTO company_research_cache VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+      'acme corp', 'Acme Corp', '{}', '', '2099-01-01T00:00:00.000Z', 'tavily', '1.0',
+    );
+
+    const row = manager.getCompanyResearchCache('  ACME   Corp  ');
+    assert.ok(row);
+    assert.equal(row.schema_version, '1.0');
+  });
+});

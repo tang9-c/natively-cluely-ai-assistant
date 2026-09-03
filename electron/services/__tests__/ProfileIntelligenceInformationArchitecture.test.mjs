@@ -43,12 +43,14 @@ test('profile intelligence keeps job-specific tools in a secondary job enhanceme
   assert.match(source, /profileData\?\.hasActiveJD/);
 });
 
-test('profile intelligence inline company research refresh bypasses cache', () => {
+test('profile intelligence opens the shared research panel instead of rendering the legacy schema', () => {
   const source = read('src/components/ProfileIntelligenceSettings.tsx');
-  assert.match(
-    source,
-    /profileResearchCompany\?\.\(\s*profileData\.activeJD\.company,\s*\{\s*forceRefresh:\s*Boolean\(companyDossier\)\s*\}/s,
-  );
+
+  assert.match(source, /open-research-panel/);
+  assert.match(source, /打开公司调研/);
+  assert.doesNotMatch(source, /profileResearchCompany/);
+  assert.doesNotMatch(source, /companyDossier/);
+  assert.doesNotMatch(source, /hiring_strategy|salary_estimates|culture_ratings/);
 });
 
 test('profile intelligence avoids English-only unavailable negotiation copy', () => {

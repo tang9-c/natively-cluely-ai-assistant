@@ -32,6 +32,7 @@ import type {
   MeetingPreparationSaveInput,
   PrepareContextResult,
 } from '../../shared/meetingPreparation'
+import type { ProfileResearchCompanyResponse } from '../../shared/companyResearch'
 export type {
   ContextNeedDecision,
   ContextNeedDecisionSource,
@@ -1183,7 +1184,7 @@ export interface ElectronAPI {
   // @ipc-channel profile:delete-jd
   profileDeleteJD: () => Promise<{ success: boolean; error?: string }>
   // @ipc-channel profile:research-company
-  profileResearchCompany: (companyName: string, options?: { forceRefresh?: boolean; requestId?: string }) => Promise<{ success: boolean; dossier?: any; cached?: boolean; searchQuotaExhausted?: boolean; error?: string; errorCode?: string }>
+  profileResearchCompany: (companyName: string, options?: { forceRefresh?: boolean; requestId?: string }) => Promise<ProfileResearchCompanyResponse>
   onResearchProgressChanged: (callback: (data: ResearchProgressPayload) => void) => () => void
   // @ipc-channel profile:clear-research-cache
   profileClearResearchCache: () => Promise<{ success: boolean; deleted?: number; error?: string }>

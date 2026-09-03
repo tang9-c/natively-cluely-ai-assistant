@@ -10,41 +10,22 @@
 // one place.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type {
+  CompanyDossier,
+  ProfileResearchCompanyResponse,
+  ResearchErrorCode,
+} from '../../shared/companyResearch';
 
 export type ResearchStage = 'idle' | 'loading' | 'success' | 'error';
 export type ResearchProgressStage = 'cache-check' | 'searching' | 'synthesizing' | null;
 
-interface Dossier {
-  schemaVersion: '1.0';
-  companyName: string;
-  generatedAt: string;
-  expiresAt: string;
-  source: 'tavily' | 'llm-fallback';
-  financials: any;
-  business: any;
-  strategy: any;
-  people: any;
-  infrastructure: any;
-  procurement: any;
-  sources: Array<{ index: number; title: string; url: string; snippet: string }>;
-}
-
-interface ResearchResponse {
-  success: boolean;
-  dossier?: Dossier;
-  cached?: boolean;
-  searchQuotaExhausted?: boolean;
-  error?: string;
-  errorCode?: string;
-}
-
 export interface UseResearchReturn {
   stage: ResearchStage;
   progressStage: ResearchProgressStage;
-  dossier: Dossier | null;
+  dossier: CompanyDossier | null;
   cached: boolean;
   error: string | null;
-  errorCode: string | null;
+  errorCode: ResearchErrorCode | null;
   quotaExhausted: boolean;
   research(name: string, opts?: { forceRefresh?: boolean }): Promise<void>;
   reset(): void;
@@ -53,10 +34,10 @@ export interface UseResearchReturn {
 export function useResearch(): UseResearchReturn {
   const [stage, setStage] = useState<ResearchStage>('idle');
   const [progressStage, setProgressStage] = useState<ResearchProgressStage>(null);
-  const [dossier, setDossier] = useState<Dossier | null>(null);
+  const [dossier, setDossier] = useState<CompanyDossier | null>(null);
   const [cached, setCached] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<ResearchErrorCode | null>(null);
   const [quotaExhausted, setQuotaExhausted] = useState(false);
   const requestIdRef = useRef<string | null>(null);
 
@@ -89,7 +70,7 @@ export function useResearch(): UseResearchReturn {
     setErrorCode(null);
     setQuotaExhausted(false);
     try {
-      const res: ResearchResponse = await window.electronAPI.profileResearchCompany(name, {
+      const res: ProfileResearchCompanyResponse = await window.electronAPI.profileResearchCompany(name, {
         ...opts,
         requestId,
       });
