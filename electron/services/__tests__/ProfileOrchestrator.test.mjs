@@ -86,12 +86,9 @@ describe('ProfileOrchestrator', () => {
 
     const profile = orchestrator.getProfileData();
     assert.equal(profile.identity.name, 'Alice');
-    // Task 4: profile_master no longer persists projects/education fields —
-    // only display_name/headline/summary/contact/experience/skills. Counts
-    // for projects/education drop to zero as a consequence.
     assert.equal(profile.experienceCount, 1);
-    assert.equal(profile.projectCount, 0);
-    assert.equal(profile.nodeCount, 1);
+    assert.equal(profile.projectCount, 1);
+    assert.equal(profile.nodeCount, 3);
     assert.deepEqual(profile.skills, ['TypeScript']);
   });
 

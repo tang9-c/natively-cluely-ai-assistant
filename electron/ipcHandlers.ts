@@ -5005,6 +5005,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       contactInfo: safeJsonParseProfileField(row.contact_info_json, row.contactInfo ?? {}),
       experience: safeJsonParseProfileField(row.experience_json, row.experience ?? []),
       skills: Array.isArray(skills) ? skills.join('\n') : String(skills ?? ''),
+      projects: safeJsonParseProfileField(row.projects_json, row.projects ?? []),
+      education: safeJsonParseProfileField(row.education_json, row.education ?? []),
     };
   }
 
@@ -5015,6 +5017,8 @@ export function initializeIpcHandlers(appState: AppState): void {
     contactInfoJson: string;
     experienceJson: string;
     skillsJson: string;
+    projectsJson: string;
+    educationJson: string;
   } {
     return {
       displayName: typeof profile?.displayName === 'string' && profile.displayName.trim()
@@ -5033,6 +5037,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         Array.isArray(profile?.experience) ? profile.experience : [],
       ),
       skillsJson: JSON.stringify(normalizeProfileListInput(profile?.skills)),
+      projectsJson: JSON.stringify(Array.isArray(profile?.projects) ? profile.projects : []),
+      educationJson: JSON.stringify(Array.isArray(profile?.education) ? profile.education : []),
     };
   }
 

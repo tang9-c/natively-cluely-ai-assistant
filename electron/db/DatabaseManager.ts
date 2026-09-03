@@ -15,7 +15,7 @@ import {
     getDefaultModeCustomContext,
     isLegacyDefaultModeCustomContext,
 } from '../services/ModeDefaultContexts';
-import type { ResumeNode, UserProfileRecord } from '../services/profile/types';
+import type { ResumeNode, ResumeParsed, UserProfileRecord } from '../services/profile/types';
 import type { SpeakerVerificationMetadata } from '../services/speaker/speakerVerificationTypes';
 import type { SpeakerIdentityCorrection } from '../../shared/speakerIdentity';
 import type {
@@ -1087,6 +1087,8 @@ export class DatabaseManager {
                     contact_info_json TEXT NOT NULL DEFAULT '{}',
                     experience_json TEXT NOT NULL DEFAULT '[]',
                     skills_json TEXT NOT NULL DEFAULT '[]',
+                    projects_json TEXT NOT NULL DEFAULT '[]',
+                    education_json TEXT NOT NULL DEFAULT '[]',
                     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
                 );
 
@@ -1108,71 +1110,10 @@ export class DatabaseManager {
             this.db.pragma('user_version = 18');
         }
 
-        // Version 18 -> 19: Migrate user_profile to profile_master, drop legacy tables.
-        // user_profile.structured_json (raw ResumeParsed) was the only consumer of
-        // getUserProfile(). ScenarioContextService now reads profile_master, so we
-        // fold any pre-existing structured_json into profile_master (only when the
-        // master is still empty so we never clobber user edits) and drop both legacy
-        // tables. resume_nodes has been dead since the original orchestrator work;
-        // its embedding BLOB column was never written.
+        // Version 18 -> 19: Migrate the complete legacy resume before dropping its tables.
         if (version < 19) {
-            console.log('[DatabaseManager] Applying migration v18 -> v19: Drop legacy user_profile + resume_nodes');
-
-            try {
-                const old = this.db.prepare(
-                    'SELECT structured_json FROM user_profile WHERE id = 1'
-                ).get() as { structured_json: string } | undefined;
-
-                const master = this.db.prepare(
-                    'SELECT display_name, headline, summary FROM profile_master WHERE id = 1'
-                ).get() as { display_name?: string | null; headline?: string | null; summary?: string | null } | undefined;
-
-                const masterIsEmpty = !master
-                    || (!master.display_name && !master.headline && !(master.summary && master.summary.length > 0));
-
-                if (old?.structured_json && masterIsEmpty) {
-                    try {
-                        const parsed = JSON.parse(old.structured_json);
-                        this.db.prepare(
-                            `UPDATE profile_master
-                                SET display_name = ?,
-                                    headline = ?,
-                                    summary = ?,
-                                    contact_info_json = ?,
-                                    experience_json = ?,
-                                    skills_json = ?,
-                                    updated_at = datetime('now')
-                              WHERE id = 1`
-                        ).run(
-                            parsed?.identity?.name ?? null,
-                            parsed?.identity?.role ?? null,
-                            parsed?.summary ?? '',
-                            JSON.stringify(parsed?.identity?.contact ?? {}),
-                            JSON.stringify(parsed?.experience ?? []),
-                            JSON.stringify(parsed?.skills ?? []),
-                        );
-                        console.log('[DatabaseManager] v19: migrated user_profile.structured_json to profile_master');
-                    } catch (parseErr) {
-                        console.warn('[DatabaseManager] v19: structured_json parse failed, skipping data migration', parseErr);
-                    }
-                }
-            } catch (e) {
-                // user_profile may already be absent (fresh install or earlier manual cleanup)
-                console.warn('[DatabaseManager] v19: user_profile migration step skipped', e);
-            }
-
-            try {
-                this.db.exec('DROP TABLE IF EXISTS user_profile');
-            } catch (e) {
-                console.warn('[DatabaseManager] v19: DROP user_profile failed', e);
-            }
-            try {
-                this.db.exec('DROP TABLE IF EXISTS resume_nodes');
-            } catch (e) {
-                console.warn('[DatabaseManager] v19: DROP resume_nodes failed', e);
-            }
-
-            this.db.pragma('user_version = 19');
+            console.log('[DatabaseManager] Applying migration v18 -> v19: Migrate legacy profile');
+            this.migrateLegacyProfileToMaster(19);
         }
 
         // Version 19 -> 20: Add company_research_cache table for the Research Pipeline.
@@ -1736,7 +1677,173 @@ export class DatabaseManager {
             this.db.pragma('user_version = 35');
         }
 
+        // Version 35 -> 36: add the fields omitted by v19 and recover any
+        // legacy tables that survived an interrupted/manual migration.
+        if (version < 36) {
+            console.log('[DatabaseManager] Applying migration v35 -> v36: Complete profile persistence');
+            this.migrateLegacyProfileToMaster(36);
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
+    }
+
+    public migrateLegacyProfileToMaster(targetVersion: number): void {
+        if (!this.db) return;
+        if (!Number.isInteger(targetVersion) || targetVersion < 1) {
+            throw new Error('Invalid profile migration target version');
+        }
+
+        const db = this.db;
+        const migrate = db.transaction(() => {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS profile_master (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    display_name TEXT,
+                    headline TEXT,
+                    summary TEXT NOT NULL DEFAULT '',
+                    contact_info_json TEXT NOT NULL DEFAULT '{}',
+                    experience_json TEXT NOT NULL DEFAULT '[]',
+                    skills_json TEXT NOT NULL DEFAULT '[]',
+                    projects_json TEXT NOT NULL DEFAULT '[]',
+                    education_json TEXT NOT NULL DEFAULT '[]',
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                )
+            `);
+            const columns = db.prepare('PRAGMA table_info(profile_master)').all() as Array<{ name: string }>;
+            if (!columns.some((column) => column.name === 'projects_json')) {
+                db.exec("ALTER TABLE profile_master ADD COLUMN projects_json TEXT NOT NULL DEFAULT '[]'");
+            }
+            if (!columns.some((column) => column.name === 'education_json')) {
+                db.exec("ALTER TABLE profile_master ADD COLUMN education_json TEXT NOT NULL DEFAULT '[]'");
+            }
+            db.prepare("INSERT OR IGNORE INTO profile_master (id, summary) VALUES (1, '')").run();
+
+            const tableExists = (name: string): boolean => Boolean(db.prepare(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            ).get(name));
+            const hasUserProfile = tableExists('user_profile');
+            const hasResumeNodes = tableExists('resume_nodes');
+            const old = hasUserProfile
+                ? db.prepare('SELECT structured_json FROM user_profile WHERE id = 1').get() as { structured_json: string } | undefined
+                : undefined;
+
+            let parsed: ResumeParsed | null = null;
+            if (old?.structured_json) {
+                parsed = JSON.parse(old.structured_json) as ResumeParsed;
+            }
+
+            const master = db.prepare('SELECT * FROM profile_master WHERE id = 1').get() as any;
+            const parseObject = (value: unknown): Record<string, unknown> => {
+                try {
+                    const result = JSON.parse(typeof value === 'string' ? value : '{}');
+                    return result && typeof result === 'object' && !Array.isArray(result) ? result : {};
+                } catch {
+                    return {};
+                }
+            };
+            const parseArray = (value: unknown): unknown[] => {
+                try {
+                    const result = JSON.parse(typeof value === 'string' ? value : '[]');
+                    return Array.isArray(result) ? result : [];
+                } catch {
+                    return [];
+                }
+            };
+
+            const legacyNodes = hasResumeNodes
+                ? db.prepare('SELECT category, title, organization, text_content FROM resume_nodes ORDER BY id ASC').all() as Array<{
+                    category: string;
+                    title?: string | null;
+                    organization?: string | null;
+                    text_content?: string | null;
+                }>
+                : [];
+            const nodeProjects = legacyNodes
+                .filter((node) => node.category === 'project')
+                .map((node) => ({ name: node.title ?? '', description: node.text_content ?? undefined }));
+            const nodeEducation = legacyNodes
+                .filter((node) => node.category === 'education')
+                .map((node) => ({
+                    degree: node.title ?? undefined,
+                    institution: node.organization ?? undefined,
+                    year: node.text_content ?? undefined,
+                }));
+
+            if (parsed || nodeProjects.length > 0 || nodeEducation.length > 0) {
+                const currentContact = parseObject(master.contact_info_json);
+                const legacyContact = parsed ? {
+                    email: parsed.identity?.email,
+                    phone: parsed.identity?.phone,
+                    location: parsed.identity?.location,
+                    linkedin: parsed.identity?.linkedin,
+                } : {};
+                const currentExperience = parseArray(master.experience_json);
+                const currentSkills = parseArray(master.skills_json);
+                const currentProjects = parseArray(master.projects_json);
+                const currentEducation = parseArray(master.education_json);
+                const values = {
+                    displayName: master.display_name || parsed?.identity?.name || null,
+                    headline: master.headline || parsed?.experience?.[0]?.title || null,
+                    summary: master.summary || parsed?.summary || '',
+                    contact: { ...legacyContact, ...currentContact },
+                    experience: currentExperience.length > 0 ? currentExperience : (parsed?.experience ?? []),
+                    skills: currentSkills.length > 0 ? currentSkills : (parsed?.skills ?? []),
+                    projects: currentProjects.length > 0
+                        ? currentProjects
+                        : (parsed?.projects?.length ? parsed.projects : nodeProjects),
+                    education: currentEducation.length > 0
+                        ? currentEducation
+                        : (parsed?.education?.length ? parsed.education : nodeEducation),
+                };
+                const serialized = {
+                    contact: JSON.stringify(values.contact),
+                    experience: JSON.stringify(values.experience),
+                    skills: JSON.stringify(values.skills),
+                    projects: JSON.stringify(values.projects),
+                    education: JSON.stringify(values.education),
+                };
+                const result = db.prepare(`
+                    UPDATE profile_master
+                    SET display_name = ?, headline = ?, summary = ?, contact_info_json = ?,
+                        experience_json = ?, skills_json = ?, projects_json = ?, education_json = ?,
+                        updated_at = datetime('now')
+                    WHERE id = 1
+                `).run(
+                    values.displayName,
+                    values.headline,
+                    values.summary,
+                    serialized.contact,
+                    serialized.experience,
+                    serialized.skills,
+                    serialized.projects,
+                    serialized.education,
+                );
+                if (result.changes !== 1) throw new Error('Profile migration did not update the master row');
+
+                const verified = db.prepare(`
+                    SELECT display_name, headline, summary, contact_info_json, experience_json,
+                           skills_json, projects_json, education_json
+                    FROM profile_master WHERE id = 1
+                `).get() as any;
+                if (!verified
+                    || verified.display_name !== values.displayName
+                    || verified.headline !== values.headline
+                    || verified.summary !== values.summary
+                    || verified.contact_info_json !== serialized.contact
+                    || verified.experience_json !== serialized.experience
+                    || verified.skills_json !== serialized.skills
+                    || verified.projects_json !== serialized.projects
+                    || verified.education_json !== serialized.education) {
+                    throw new Error('Profile migration verification failed');
+                }
+            }
+
+            db.exec('DROP TABLE IF EXISTS user_profile');
+            db.exec('DROP TABLE IF EXISTS resume_nodes');
+            db.pragma(`user_version = ${targetVersion}`);
+        });
+
+        migrate();
     }
 
     private vectorToBlob(vector: number[]): Buffer {
@@ -2533,13 +2640,16 @@ export class DatabaseManager {
         contactInfoJson?: string;
         experienceJson?: string;
         skillsJson?: string;
+        projectsJson?: string;
+        educationJson?: string;
     }): void {
         if (!this.db) return;
         try {
             this.db.prepare(`
                 INSERT INTO profile_master
-                    (id, display_name, headline, summary, contact_info_json, experience_json, skills_json, updated_at)
-                VALUES (1, ?, ?, ?, ?, ?, ?, datetime('now'))
+                    (id, display_name, headline, summary, contact_info_json, experience_json, skills_json,
+                     projects_json, education_json, updated_at)
+                VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
                 ON CONFLICT(id) DO UPDATE SET
                     display_name = excluded.display_name,
                     headline = excluded.headline,
@@ -2547,6 +2657,8 @@ export class DatabaseManager {
                     contact_info_json = excluded.contact_info_json,
                     experience_json = excluded.experience_json,
                     skills_json = excluded.skills_json,
+                    projects_json = excluded.projects_json,
+                    education_json = excluded.education_json,
                     updated_at = excluded.updated_at
             `).run(
                 input.displayName ?? null,
@@ -2555,6 +2667,8 @@ export class DatabaseManager {
                 input.contactInfoJson ?? '{}',
                 input.experienceJson ?? '[]',
                 input.skillsJson ?? '[]',
+                input.projectsJson ?? '[]',
+                input.educationJson ?? '[]',
             );
         } catch (e) {
             console.error('[DatabaseManager] updateProfileMaster failed:', e);

@@ -74,6 +74,8 @@ export interface MasterProfile {
     contactInfo?: string;
     experience?: string;
     skills?: string;
+    projects?: unknown[];
+    education?: unknown[];
 }
 
 export interface ProfileVisualizerExperience {

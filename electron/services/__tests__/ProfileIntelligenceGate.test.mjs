@@ -124,15 +124,11 @@ describe('Profile Intelligence: current schema tables exist in the schema', () =
     );
   });
 
-  test('v19 migration is idempotent: skips migration when master is non-empty', () => {
-    // Source must guard the UPDATE so user-edited profile_master data is
-    // never clobbered by stale structured_json during migration.
-    const v19Block = dbSource.match(/if\s*\(\s*version\s*<\s*19\s*\)[\s\S]*?user_version\s*=\s*19/);
-    assert.ok(v19Block, 'v19 migration block must exist');
+  test('v19 migration delegates to the transactional legacy profile migration', () => {
     assert.match(
-      v19Block[0],
-      /masterIsEmpty|!\s*master|!\s*master\?\./,
-      'v19 migration must check whether profile_master is empty before overwriting',
+      dbSource,
+      /if\s*\(\s*version\s*<\s*19\s*\)[\s\S]*?migrateLegacyProfileToMaster\(19\)/,
+      'v19 migration must use the tested transactional migration path',
     );
   });
 });

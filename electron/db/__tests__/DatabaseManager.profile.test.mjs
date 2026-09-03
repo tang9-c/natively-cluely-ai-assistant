@@ -66,6 +66,8 @@ function createProfileSchema(db) {
       contact_info_json TEXT NOT NULL DEFAULT '{}',
       experience_json TEXT NOT NULL DEFAULT '[]',
       skills_json TEXT NOT NULL DEFAULT '[]',
+      projects_json TEXT NOT NULL DEFAULT '[]',
+      education_json TEXT NOT NULL DEFAULT '[]',
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     INSERT OR IGNORE INTO profile_master (id, summary) VALUES (1, '');
@@ -267,6 +269,8 @@ describe('DatabaseManager — profile_master', () => {
       contactInfoJson: JSON.stringify({ email: 'a@b.c' }),
       experienceJson: JSON.stringify([{ company: 'Acme' }]),
       skillsJson: JSON.stringify(['TypeScript', 'Rust']),
+      projectsJson: JSON.stringify([{ name: 'Migration project' }]),
+      educationJson: JSON.stringify([{ institution: 'SJTU' }]),
     });
     const row = manager.getProfileMaster();
     assert.equal(row.display_name, 'Alex Doe');
@@ -275,6 +279,8 @@ describe('DatabaseManager — profile_master', () => {
     assert.equal(JSON.parse(row.contact_info_json).email, 'a@b.c');
     assert.equal(JSON.parse(row.experience_json)[0].company, 'Acme');
     assert.deepEqual(JSON.parse(row.skills_json), ['TypeScript', 'Rust']);
+    assert.equal(JSON.parse(row.projects_json)[0].name, 'Migration project');
+    assert.equal(JSON.parse(row.education_json)[0].institution, 'SJTU');
   });
 
   it('updateProfileMaster preserves only the fields it received (defaults for missing)', () => {
@@ -286,5 +292,7 @@ describe('DatabaseManager — profile_master', () => {
     assert.equal(row.contact_info_json, '{}');
     assert.equal(row.experience_json, '[]');
     assert.equal(row.skills_json, '[]');
+    assert.equal(row.projects_json, '[]');
+    assert.equal(row.education_json, '[]');
   });
 });

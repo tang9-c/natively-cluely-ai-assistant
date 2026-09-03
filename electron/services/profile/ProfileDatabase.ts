@@ -57,6 +57,8 @@ export class ProfileDatabase {
         }),
         experienceJson: JSON.stringify(resume.experience ?? []),
         skillsJson: JSON.stringify(resume.skills ?? []),
+        projectsJson: JSON.stringify(resume.projects ?? []),
+        educationJson: JSON.stringify(resume.education ?? []),
       });
     });
     persist();
@@ -77,6 +79,8 @@ export class ProfileDatabase {
 
     const experience = safeJsonArray(master.experience_json);
     const skills = safeJsonArray(master.skills_json);
+    const projects = safeJsonArray(master.projects_json);
+    const education = safeJsonArray(master.education_json);
     const contact = safeJsonObject(master.contact_info_json);
 
     // If everything is empty, treat as "no resume" so UI shows zero state.
@@ -88,7 +92,9 @@ export class ProfileDatabase {
       headline.length > 0 ||
       summary.length > 0 ||
       experience.length > 0 ||
-      skills.length > 0;
+      skills.length > 0 ||
+      projects.length > 0 ||
+      education.length > 0;
     if (!hasContent) return null;
 
     return {
@@ -102,8 +108,8 @@ export class ProfileDatabase {
       summary: summary || undefined,
       skills: skills,
       experience: experience,
-      projects: [],
-      education: [],
+      projects,
+      education,
     };
   }
 
@@ -118,6 +124,8 @@ export class ProfileDatabase {
       contactInfoJson: '{}',
       experienceJson: '[]',
       skillsJson: '[]',
+      projectsJson: '[]',
+      educationJson: '[]',
     });
   }
 
