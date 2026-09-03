@@ -132,6 +132,7 @@ function installActiveMode(templateType) {
   manager.getActiveModeSystemPromptSuffix = () => '';
   manager.buildRetrievedActiveModeContextBlock = () => '';
   manager.buildActiveModeContextBlock = () => '';
+  return manager;
 }
 
 function buildHelper() {
@@ -414,6 +415,28 @@ test('streamChat: premium context block REACHES dispatch in looking-for-work (po
     dispatched.context.includes('PREMIUM_CONTEXT_SENTINEL'),
     `looking-for-work must inject premium context at dispatch; saw context=${JSON.stringify(dispatched.context).slice(0, 200)}`,
   );
+});
+
+test('streamChat: knowledge context skips duplicate mode retrieval but keeps the mode prompt', async () => {
+  const helper = buildHelper();
+  helper.setKnowledgeOrchestrator(buildInjectionOrchestratorStub());
+  const calls = attachDispatchSpy(helper);
+  const manager = installActiveMode('sales');
+  let retrievalCalls = 0;
+  manager.getActiveModeSystemPromptSuffix = () => 'ACTIVE_MODE_SUFFIX_SENTINEL';
+  manager.buildRetrievedActiveModeContextBlock = () => {
+    retrievalCalls += 1;
+    return 'DUPLICATE_MODE_CONTEXT_SENTINEL';
+  };
+
+  await drainStream(helper.streamChat('客户问题'));
+
+  const dispatched = calls.find(c => c.via === 'streamWithCustom');
+  assert.ok(dispatched, 'streamWithCustom must be reached after the intercept');
+  assert.equal(retrievalCalls, 0, 'knowledge context already contains mode RAG and must not retrieve it again');
+  assert.equal(dispatched.context.includes('DUPLICATE_MODE_CONTEXT_SENTINEL'), false);
+  assert.match(dispatched.context, /PREMIUM_CONTEXT_SENTINEL/);
+  assert.match(dispatched.systemPrompt, /ACTIVE_MODE_SUFFIX_SENTINEL/);
 });
 
 test('streamChat: profile/scenario context block still reaches dispatch in technical-interview', async () => {

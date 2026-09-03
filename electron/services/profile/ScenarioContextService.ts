@@ -1,7 +1,7 @@
 import { DatabaseManager } from '../../db/DatabaseManager';
 import { ModesManager } from '../ModesManager';
 import { ScenarioRegistry } from './scenarios/registry';
-import type { ScenarioContextBuildResult, ScenarioDocSubtype } from './scenarios/types';
+import type { ScenarioContextBuildResult } from './scenarios/types';
 import type { ProviderDataScope } from '../../llm/ProviderRouter';
 
 interface BuildForRequestInput {
@@ -80,32 +80,6 @@ export class ScenarioContextService {
     const retrievedContext = await this.getRetrievedModeContext(this.modesManager, input);
     if (retrievedContext) {
       contextParts.push(retrievedContext);
-      dataScopes.add('reference_files');
-    }
-
-    const files = this.modesManager.getReferenceFiles(activeMode.id);
-    const metadataRows = this.db.getModeReferenceFileMetadataForMode(activeMode.id);
-    const metadataByFileId = new Map(metadataRows.map((row: any) => [row.reference_file_id, row]));
-    const documentBlocks: string[] = [];
-
-    for (const file of files) {
-      const metadata = metadataByFileId.get(file.id);
-      if (!metadata) continue;
-      if (metadata.scenario_type !== resolution.scenarioType) continue;
-      documentBlocks.push(adapter.formatDocumentContext({
-        subtype: metadata.doc_subtype as ScenarioDocSubtype,
-        title: file.fileName,
-        source: file.fileName,
-        content: file.content ?? '',
-      }));
-    }
-
-    if (documentBlocks.length > 0) {
-      contextParts.push([
-        '<scenario_documents>',
-        ...documentBlocks,
-        '</scenario_documents>',
-      ].join('\n'));
       dataScopes.add('reference_files');
     }
 

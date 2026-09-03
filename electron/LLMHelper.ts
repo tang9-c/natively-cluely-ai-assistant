@@ -3750,6 +3750,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     // ============================================================
     const shouldRunKnowledge = !ignoreKnowledgeMode &&
       this.knowledgeOrchestrator?.isKnowledgeMode();
+    let knowledgeContextApplied = false;
 
     if (shouldRunKnowledge) {
       try {
@@ -3785,6 +3786,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           context = appliedKnowledge.context;
           systemPromptOverride = appliedKnowledge.systemPromptOverride;
           extraDataScopes = [...extraDataScopes, ...appliedKnowledge.extraDataScopes];
+          knowledgeContextApplied = true;
         }
       } catch (knowledgeError: any) {
         console.warn('[LLMHelper] Knowledge mode (stream) processing failed, falling back:', knowledgeError.message);
@@ -3816,7 +3818,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         const { ModesManager } = require('./services/ModesManager');
         const modesMgr = ModesManager.getInstance();
         const modePromptSuffix = modesMgr.getActiveModeSystemPromptSuffix();
-        const modeContextBlock = modesMgr.buildRetrievedActiveModeContextBlock(message, context, 1800);
+        const modeContextBlock = knowledgeContextApplied
+          ? ''
+          : modesMgr.buildRetrievedActiveModeContextBlock(message, context, 1800);
 
         if (modePromptSuffix) {
           const baseForMode = systemPromptOverride || HARD_SYSTEM_PROMPT;

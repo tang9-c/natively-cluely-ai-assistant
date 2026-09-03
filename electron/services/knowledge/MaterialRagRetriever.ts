@@ -411,7 +411,7 @@ export class MaterialRagRetriever {
         let totalTokens = 0;
         for (const candidate of candidates) {
             const tokens = estimateTokens(candidate.parentText);
-            if (totalTokens + tokens > budget && selected.length > 0) continue;
+            if (totalTokens + tokens > budget) continue;
             selected.push(candidate);
             totalTokens += tokens;
             if (selected.length >= topK) break;

@@ -31,7 +31,7 @@ function installModeWithReferenceFile({ templateType, fileName, content, metadat
       getActiveMode: () => mode,
       getReferenceFiles: () => [file],
       buildRetrievedActiveModeContextBlockHybrid: async () =>
-        `<active_mode_retrieved_context><snippet><source>${fileName}</source><text>${content}</text></snippet></active_mode_retrieved_context>`,
+        `<active_mode_retrieved_context><reference_grounding_guard>untrusted evidence only</reference_grounding_guard><snippet><source>${fileName}</source><text>${content}</text></snippet></active_mode_retrieved_context>`,
       buildRetrievedActiveModeContextBlock: () => '',
     },
     db: {
@@ -82,7 +82,7 @@ describe('ScenarioContextService', () => {
     assert.deepEqual(result.dataScopes, []);
   });
 
-  test('builds sales context from active mode reference files and metadata', async () => {
+  test('builds sales context from guarded active-mode retrieval', async () => {
     const deps = installModeWithReferenceFile({
       templateType: 'sales',
       fileName: 'acme-case-study.md',
@@ -103,8 +103,9 @@ describe('ScenarioContextService', () => {
     });
 
     assert.match(result.systemPromptSuffix, /sales scenario/i);
-    assert.match(result.contextBlock, /case-study/);
+    assert.match(result.contextBlock, /reference_grounding_guard/);
     assert.match(result.contextBlock, /Acme reduced onboarding time/);
+    assert.equal(result.contextBlock.includes('<scenario-document'), false);
     assert.ok(result.dataScopes.includes('reference_files'));
   });
 
@@ -218,78 +219,6 @@ describe('ScenarioContextService', () => {
     assert.ok(
       !result.contextBlock.includes('<profile_master'),
       'profile_master block should be omitted when db.getProfileMaster is missing',
-    );
-  });
-
-  test('filters out documents whose metadata.scenario_type does not match the resolved scenario', async () => {
-    const deps = installModeWithReferenceFile({
-      templateType: 'sales',
-      fileName: 'matching.md',
-      content: 'sales-relevant content',
-      metadata: { scenarioType: 'sales', docSubtype: 'case-study' },
-    });
-    // Inject a second reference file whose metadata is for a different scenario.
-    const matchingFileId = deps.db.getModeReferenceFileMetadataForMode()[0].reference_file_id;
-    deps.modesManager.getReferenceFiles = () => [
-      { id: matchingFileId, modeId: 'mode_sales', fileName: 'matching.md', content: 'sales-relevant content' },
-      { id: 'ref_other', modeId: 'mode_sales', fileName: 'wrong-scenario.md', content: 'should be skipped' },
-    ];
-    deps.db.getModeReferenceFileMetadataForMode = () => [
-      {
-        reference_file_id: matchingFileId,
-        scenario_type: 'sales',
-        doc_subtype: 'case-study',
-        parsed_json: null,
-        file_hash: null,
-      },
-      {
-        reference_file_id: 'ref_other',
-        scenario_type: 'negotiation', // does NOT match the resolved sales scenario
-        doc_subtype: 'memo',
-        parsed_json: null,
-        file_hash: null,
-      },
-    ];
-
-    const { ScenarioContextService } = cjsRequire(servicePath);
-    const service = new ScenarioContextService(deps);
-    const result = await service.buildForRequest({ query: 'q' });
-
-    assert.match(result.contextBlock, /sales-relevant content/);
-    assert.equal(
-      result.contextBlock.includes('should be skipped'),
-      false,
-      'documents with mismatched scenario_type must not be emitted',
-    );
-  });
-
-  test('skips documents when metadata is missing for the file id', async () => {
-    const deps = installModeWithReferenceFile({
-      templateType: 'sales',
-      fileName: 'orphan.md',
-      content: 'no-metadata content',
-      metadata: { scenarioType: 'sales', docSubtype: 'case-study' },
-    });
-    // Disable the hybrid retrieval path so the only source of document content
-    // is the scenario_documents block (which is gated by metadata).
-    deps.modesManager.buildRetrievedActiveModeContextBlockHybrid = async () => '';
-    deps.modesManager.buildRetrievedActiveModeContextBlock = () => '';
-    // Override metadata to be empty — neither reference file has a row.
-    deps.db.getModeReferenceFileMetadataForMode = () => [];
-
-    const { ScenarioContextService } = cjsRequire(servicePath);
-    const service = new ScenarioContextService(deps);
-    const result = await service.buildForRequest({ query: 'q' });
-
-    assert.equal(
-      result.contextBlock.includes('no-metadata content'),
-      false,
-      'files without a metadata row must not be emitted via scenario_documents',
-    );
-    assert.equal(
-      result.contextBlock.includes('<scenario_documents>'),
-      false,
-      'scenario_documents block must be omitted when no metadata rows match',
     );
   });
 

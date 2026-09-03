@@ -108,6 +108,25 @@ test('material retrieval uses semanticQuery for embeddings while lexical scoring
   assert.equal(result.chunks[0]?.sourceId, 'robotics');
 });
 
+test('material tokenBudget never admits an oversized first candidate', async () => {
+  const retriever = new MaterialRagRetriever(null);
+  const result = await retriever.retrieve({
+    query: 'pricing',
+    sources: [{
+      id: 'oversized',
+      scope: 'mode',
+      title: 'Oversized evidence',
+      text: `pricing ${'evidence '.repeat(100)}`,
+      parentText: `pricing ${'evidence '.repeat(100)}`,
+    }],
+    tokenBudget: 1,
+    topK: 1,
+    format: 'none',
+  });
+
+  assert.deepEqual(result.chunks, []);
+});
+
 test('hybrid retrieval ignores a same-dimensional vector from a different embedding space', async () => {
   const embeddingPipeline = {
     isReady: () => true,

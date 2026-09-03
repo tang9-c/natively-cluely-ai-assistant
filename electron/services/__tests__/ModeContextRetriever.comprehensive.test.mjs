@@ -138,6 +138,24 @@ test('tiny tokenBudget truncates highly-relevant content', async () => {
     `tiny budget should truncate, got ${result.snippets.length} of ${chunks.length}`);
 });
 
+test('tokenBudget never admits an oversized first lexical snippet', async () => {
+  const { ModeContextRetriever } = await loadRetriever();
+  const retriever = new ModeContextRetriever();
+  const result = retriever.retrieve(baseMode, [
+    makeFile({
+      id: 'oversized',
+      fileName: 'oversized.md',
+      content: `pricing ${'evidence '.repeat(100)}`,
+    }),
+  ], {
+    query: 'pricing',
+    tokenBudget: 1,
+  });
+
+  assert.deepEqual(result.snippets, []);
+  assert.equal(result.formattedContext, '');
+});
+
 test('punctuation-only query returns fallback (zero-token query guard)', async () => {
   const { ModeContextRetriever } = await loadRetriever();
   const retriever = new ModeContextRetriever();

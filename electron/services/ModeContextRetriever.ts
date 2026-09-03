@@ -141,7 +141,7 @@ export class ModeContextRetriever {
 
         for (const candidate of candidates) {
             const tokens = estimateTokens(candidate.text);
-            if (tokenTotal + tokens > tokenBudget && selected.length > 0) continue;
+            if (tokenTotal + tokens > tokenBudget) continue;
             selected.push(candidate);
             tokenTotal += tokens;
             if (selected.length >= topK) break;
