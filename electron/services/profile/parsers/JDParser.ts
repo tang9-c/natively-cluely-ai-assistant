@@ -55,7 +55,7 @@ export class JDParser {
 
   async parse(rawText: string): Promise<JDParsed> {
     const prompt = buildPrompt(rawText);
-    const parsed = await this.llm.parse<any>(prompt, SCHEMA_DESCRIPTION);
+    const parsed = await this.llm.parse<any>(prompt, SCHEMA_DESCRIPTION, ['reference_files']);
     const result = normalize(parsed);
     const hasAnyData =
       result.title && result.title !== 'Untitled Position' && result.title.trim().length > 0 ||

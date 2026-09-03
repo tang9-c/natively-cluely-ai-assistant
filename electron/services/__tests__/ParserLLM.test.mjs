@@ -6,6 +6,57 @@ const require = createRequire(import.meta.url);
 const { ParserLLM } = require('../../../dist-electron/electron/services/profile/parsers/ParserLLM.js');
 
 describe('ParserLLM', () => {
+  it('forwards the required reference file scope to structured generation', async () => {
+    let capturedOptions;
+    const mockHelper = {
+      generateContentStructured: async (_prompt, options) => {
+        capturedOptions = options;
+        return '{"ok":true}';
+      },
+    };
+    const parser = new ParserLLM(mockHelper);
+
+    await parser.parse('private resume sentinel', 'schema', ['reference_files']);
+
+    assert.deepEqual(capturedOptions?.dataScopes, ['reference_files']);
+  });
+
+  it('does not retry a data-scope policy rejection', async () => {
+    let calls = 0;
+    const scopeError = new Error('reference files blocked');
+    scopeError.name = 'ProviderScopeError';
+    const mockHelper = {
+      generateContentStructured: async () => {
+        calls += 1;
+        throw scopeError;
+      },
+    };
+    const parser = new ParserLLM(mockHelper);
+
+    await assert.rejects(
+      () => parser.parse('private resume sentinel', 'schema', ['reference_files']),
+      error => error === scopeError,
+    );
+    assert.equal(calls, 1);
+  });
+
+  it('does not write model response content to logs', async () => {
+    const sentinel = 'PRIVATE_RESUME_RESPONSE_7F3A';
+    const logs = [];
+    const originalLog = console.log;
+    console.log = (...args) => logs.push(args.map(String).join(' '));
+    try {
+      const parser = new ParserLLM({
+        generateContentStructured: async () => `{"summary":"${sentinel}"}`,
+      });
+      await parser.parse('prompt', 'schema', ['reference_files']);
+    } finally {
+      console.log = originalLog;
+    }
+
+    assert.doesNotMatch(logs.join('\n'), new RegExp(sentinel));
+  });
+
   it('parses a JSON object from a plain string response', async () => {
     const mockHelper = {
       generateContentStructured: async () => '{"name":"Alice","age":30}',

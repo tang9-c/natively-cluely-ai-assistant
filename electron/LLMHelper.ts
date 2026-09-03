@@ -26,7 +26,7 @@ import { qcloudBackgroundScheduler } from "./llm/QCloudBackgroundScheduler"
 import { normalizeQCloudSkillError } from "./llm/QCloudSkillError"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { DOUBAO_PRO_MODEL, DOUBAO_PRO_PROVIDER_LABEL } from "./llm/DoubaoModelConstants"
-import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
+import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, ProviderScopeError, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
 import { buildChatSystemPrompt, type ChatPromptOptions } from "./llm/chatPromptAssembly"
 import {
   QCLOUD_CHAT_COMPLETIONS_ENDPOINT,
@@ -630,7 +630,7 @@ export class LLMHelper {
   ): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.doubaoClient) throw new Error("Doubao client not initialized");
-    this.assertOutboundScopes('doubao', userMessage, imagePaths);
+    this.assertOutboundScopes('doubao', userMessage, imagePaths, options.dataScopes ?? []);
 
     await this.rateLimiters.openai.acquire(options.abortSignal); // Reuse OpenAI rate limiter
 
@@ -2175,6 +2175,29 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const maxRotations = options.maxRotations ?? 3;
     const taskLabel = options.taskLabel ?? 'structured';
     const requireCloudProvider = options.requireCloudProvider === true;
+    const deniedScopes = this.getDeniedOutboundScopes(
+      message,
+      undefined,
+      options.dataScopes ?? [],
+    );
+
+    if (deniedScopes.length > 0) {
+      if (!requireCloudProvider && this.useOllama && await this.checkOllamaAvailable()) {
+        this.logScopeFallback(deniedScopes[0], 'routing');
+        const result = await this.withTimeout(
+          this.callOllama(message, undefined, undefined, {
+            maxOutputTokens,
+            timeoutMs: perProviderTimeoutMs,
+            dataScopes: options.dataScopes,
+            abortSignal: options.abortSignal,
+          }),
+          perProviderTimeoutMs,
+          `Ollama (${this.ollamaModel}) ${taskLabel} structured generation`,
+        );
+        if (result?.trim()) return result;
+      }
+      throw new ProviderScopeError('structured_generation', deniedScopes);
+    }
 
     // Priority 0: Codex CLI (when enabled). Structured-JSON workloads still
     // benefit from the user's selected backend; downstream callers run their
@@ -2182,7 +2205,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     if (!requireCloudProvider && this.codexCliConfig.enabled) {
       providers.push({
         name: `Codex CLI (${this.codexCliConfig.model})`,
-        execute: () => this.generateWithCodexCli(message),
+        execute: () => {
+          this.assertOutboundScopes('codex', message, undefined, options.dataScopes ?? []);
+          return this.generateWithCodexCli(message);
+        },
       });
     }
 
@@ -2193,6 +2219,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         execute: () => this.generateWithOpenai(message, undefined, undefined, undefined, {
           maxOutputTokens,
           timeoutMs: perProviderTimeoutMs,
+          dataScopes: options.dataScopes,
         }),
       });
     }
@@ -2205,6 +2232,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         execute: () => this.generateWithClaude(message, undefined, undefined, undefined, {
           maxOutputTokens,
           timeoutMs: perProviderTimeoutMs,
+          dataScopes: options.dataScopes,
         }),
       });
     }
@@ -2214,6 +2242,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       providers.push({
         name: `Gemini Pro (${GEMINI_PRO_MODEL})`,
         execute: async () => {
+          this.assertOutboundScopes('gemini', message, undefined, options.dataScopes ?? []);
           // Call the API directly with the Pro model instead of touching shared state
           await this.rateLimiters.gemini.acquire();
           const response = await this.withRetry(async () => {
@@ -2237,6 +2266,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       providers.push({
         name: `Gemini Flash (${GEMINI_FLASH_MODEL})`,
         execute: async () => {
+          this.assertOutboundScopes('gemini', message, undefined, options.dataScopes ?? []);
           await this.rateLimiters.gemini.acquire();
           const response = await this.withRetry(async () => {
             // @ts-ignore
@@ -2264,6 +2294,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         execute: () => this.generateWithDoubao(message, undefined, undefined, DOUBAO_PRO_MODEL, {
           maxOutputTokens,
           timeoutMs: perProviderTimeoutMs,
+          dataScopes: options.dataScopes,
         }),
       });
     }
@@ -2297,13 +2328,17 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           message,
           '',
           message,
-          ''
+          '',
+          undefined,
+          { dataScopes: options.dataScopes }
         )
       });
     } else if (!requireCloudProvider && this.activeCurlProvider) {
       providers.push({
         name: `cURL Provider (${this.activeCurlProvider.name})`,
-        execute: () => this.chatWithCurl(message)
+        execute: () => this.chatWithCurl(message, undefined, undefined, {
+          dataScopes: options.dataScopes,
+        })
       });
     }
 
@@ -2408,7 +2443,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   ): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.groqClient) throw new Error("Groq client not initialized");
-    this.assertOutboundScopes('groq', userMessage);
+    this.assertOutboundScopes('groq', userMessage, undefined, options.dataScopes ?? []);
 
     await this.rateLimiters.groq.acquire(options.abortSignal);
 
@@ -2729,7 +2764,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   ): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.openaiClient) throw new Error("OpenAI client not initialized");
-    this.assertOutboundScopes('openai', userMessage, imagePaths);
+    this.assertOutboundScopes('openai', userMessage, imagePaths, options.dataScopes ?? []);
 
     await this.rateLimiters.openai.acquire(options.abortSignal);
 
@@ -2781,7 +2816,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     options: ProviderRequestOptions = {},
   ): Promise<string> {
     if (!this.activeCurlProvider) throw new Error("No cURL provider active");
-    this.assertOutboundScopes('custom_curl', userMessage, imagePath ? [imagePath] : undefined);
+    this.assertOutboundScopes('custom_curl',
+      userMessage,
+      imagePath ? [imagePath] : undefined,
+      options.dataScopes ?? [],
+    );
 
     const { curlCommand, responsePath } = this.activeCurlProvider;
 
@@ -2870,6 +2909,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   ): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.claudeClient) throw new Error("Claude client not initialized");
+    this.assertOutboundScopes('claude', userMessage, imagePaths, options.dataScopes ?? []);
 
     await this.rateLimiters.claude.acquire(options.abortSignal);
 
@@ -2946,7 +2986,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     imagePath?: string,
     options: ProviderRequestOptions = {},
   ): Promise<string> {
-    this.assertOutboundScopes('custom_provider', combinedMessage, imagePath ? [imagePath] : undefined);
+    this.assertOutboundScopes('custom_provider',
+      combinedMessage,
+      imagePath ? [imagePath] : undefined,
+      options.dataScopes ?? [],
+    );
 
     // 1. Parse cURL to JSON object
     const requestConfig = curl2Json(curlCommand);

@@ -154,13 +154,16 @@ export class ResumeParser {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const prompt = buildPrompt(rawText, attempt);
-        const parsed = await this.llm.parse<any>(prompt, SCHEMA_DESCRIPTION);
+        const parsed = await this.llm.parse<any>(prompt, SCHEMA_DESCRIPTION, ['reference_files']);
         const result = normalize(parsed);
         if (isValidResult(result)) {
           return result;
         }
         throw new Error('Parsed resume is empty — model returned skeleton with no extracted data');
       } catch (error: any) {
+        if (error?.name === 'ProviderScopeError') {
+          throw error;
+        }
         console.warn('[ResumeParser] Attempt', attempt + 1, 'failed:', error.message);
         lastError = error;
       }

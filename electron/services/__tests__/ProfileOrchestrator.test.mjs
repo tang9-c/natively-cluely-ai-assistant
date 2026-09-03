@@ -127,6 +127,23 @@ describe('ProfileOrchestrator', () => {
     assert.equal(result.success, false);
   });
 
+  it('returns an explicit local-model message when reference file cloud access is denied', async () => {
+    const filePath = path.join(tmpDir, 'private-resume.txt');
+    fs.writeFileSync(filePath, 'UNIQUE_PRIVATE_RESUME_SENTINEL');
+    const scopeError = new Error('Provider structured_generation blocked by data scope policy: reference_files');
+    scopeError.name = 'ProviderScopeError';
+    orchestrator.setLLMHelper({
+      generateContentStructured: async () => {
+        throw scopeError;
+      },
+    });
+
+    const result = await orchestrator.ingestDocument(filePath, DocType.RESUME);
+
+    assert.equal(result.success, false);
+    assert.match(result.error, /参考文件.*云端.*关闭.*本地解析模型/);
+  });
+
   it('exposes runtime methods used by main and LLMHelper', () => {
     for (const method of [
       'setLLMHelper',

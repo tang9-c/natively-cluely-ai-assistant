@@ -10,6 +10,82 @@ const helperPath = path.resolve(__dirname, '../../../dist-electron/electron/LLMH
 const doubaoConstantsPath = path.resolve(__dirname, '../../../dist-electron/electron/llm/DoubaoModelConstants.js');
 
 describe('LLMHelper structured generation', () => {
+  test('denied reference files never reach cloud structured providers when no local model is available', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    const calls = { codex: 0, openai: 0, claude: 0, gemini: 0, doubao: 0, custom: 0, qcloud: 0 };
+    helper.getProviderScopePolicy = () => ({ reference_files: false, transcript: true });
+    helper.codexCliConfig = { ...helper.codexCliConfig, enabled: true, model: 'cloud-codex' };
+    helper.generateWithCodexCli = async () => {
+      calls.codex += 1;
+      return '{"source":"codex"}';
+    };
+    helper.openaiClient = { chat: { completions: { create: async () => {
+      calls.openai += 1;
+      return { choices: [{ message: { content: '{"source":"openai"}' } }] };
+    } } } };
+    helper.claudeClient = { messages: { stream: () => {
+      calls.claude += 1;
+      return { finalMessage: async () => ({ content: [{ type: 'text', text: '{"source":"claude"}' }] }) };
+    } } };
+    helper.client = { models: { generateContent: async () => {
+      calls.gemini += 1;
+      return { text: '{"source":"gemini"}', candidates: [{}] };
+    } } };
+    helper.doubaoClient = { chat: { completions: { create: async () => {
+      calls.doubao += 1;
+      return { choices: [{ message: { content: '{"source":"doubao"}' } }] };
+    } } } };
+    helper.customProvider = { name: 'cloud-custom', curlCommand: 'curl https://example.test' };
+    helper.executeCustomProvider = async () => {
+      calls.custom += 1;
+      return '{"source":"custom"}';
+    };
+    helper.setNativelyKey('test-qcloud-key');
+    helper.generateWithNatively = async () => {
+      calls.qcloud += 1;
+      return '{"source":"qcloud"}';
+    };
+    helper.useOllama = false;
+
+    await assert.rejects(
+      helper.generateContentStructured('UNIQUE_PRIVATE_RESUME_SENTINEL', {
+        dataScopes: ['reference_files'],
+        maxRotations: 1,
+      }),
+      error => error.name === 'ProviderScopeError',
+    );
+    assert.deepEqual(calls, { codex: 0, openai: 0, claude: 0, gemini: 0, doubao: 0, custom: 0, qcloud: 0 });
+  });
+
+  test('denied reference files use Ollama without attempting cloud structured providers', async () => {
+    const { LLMHelper } = cjsRequire(helperPath);
+    const helper = new LLMHelper();
+    let cloudCalls = 0;
+    let localCalls = 0;
+    helper.getProviderScopePolicy = () => ({ reference_files: false, transcript: true });
+    helper.codexCliConfig = { ...helper.codexCliConfig, enabled: true, model: 'cloud-codex' };
+    helper.generateWithCodexCli = async () => {
+      cloudCalls += 1;
+      return '{"source":"codex"}';
+    };
+    helper.useOllama = true;
+    helper.checkOllamaAvailable = async () => true;
+    helper.callOllama = async () => {
+      localCalls += 1;
+      return '{"source":"ollama"}';
+    };
+
+    const result = await helper.generateContentStructured('UNIQUE_PRIVATE_RESUME_SENTINEL', {
+      dataScopes: ['reference_files'],
+      maxRotations: 1,
+    });
+
+    assert.equal(result, '{"source":"ollama"}');
+    assert.equal(localCalls, 1);
+    assert.equal(cloudCalls, 0);
+  });
+
   test('generateContentStructured() falls back when Doubao exceeds per-provider timeout', async () => {
     const { LLMHelper } = cjsRequire(helperPath);
     const helper = new LLMHelper();

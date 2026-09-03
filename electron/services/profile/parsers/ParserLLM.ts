@@ -1,3 +1,5 @@
+import type { ProviderDataScope } from '../../../llm/ProviderRouter';
+
 function getParseTimeoutMs(): number {
   return Number(process.env.NATIVELY_PARSER_TIMEOUT_MS ?? 60_000);
 }
@@ -31,7 +33,11 @@ function extractJsonObject(raw: string): string {
 export class ParserLLM {
   constructor(private llmHelper: any) {}
 
-  async parse<T>(prompt: string, schemaDescription: string): Promise<T> {
+  async parse<T>(
+    prompt: string,
+    schemaDescription: string,
+    dataScopes: ProviderDataScope[],
+  ): Promise<T> {
     const systemHint =
       'Respond with valid JSON and nothing else. Do not wrap the output in markdown code fences.';
     const fullPrompt = `${prompt}\n\n${schemaDescription}\n\n${systemHint}`;
@@ -45,15 +51,18 @@ export class ParserLLM {
 
       try {
         const raw: string = await withTimeout(
-          this.llmHelper.generateContentStructured(promptForAttempt),
+          this.llmHelper.generateContentStructured(promptForAttempt, { dataScopes }),
           getParseTimeoutMs(),
           'ParserLLM',
         );
-        console.log('[ParserLLM] Raw response length:', raw.length, 'preview:', raw.slice(0, 200));
+        console.log('[ParserLLM] Raw response length:', raw.length);
         const candidate = extractJsonObject(raw);
         const parsed = JSON.parse(candidate) as T;
         return parsed;
       } catch (err: any) {
+        if (err?.name === 'ProviderScopeError') {
+          throw err;
+        }
         console.warn('[ParserLLM] Attempt', attempt + 1, 'failed:', err.message);
         lastError = err;
       }

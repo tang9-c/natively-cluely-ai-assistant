@@ -6,6 +6,35 @@ const require = createRequire(import.meta.url);
 const { ResumeParser } = require('../../../dist-electron/electron/services/profile/parsers/ResumeParser.js');
 
 describe('ResumeParser', () => {
+  it('classifies resume text as reference_files', async () => {
+    let capturedScopes;
+    const parser = new ResumeParser({
+      parse: async (_prompt, _schema, scopes) => {
+        capturedScopes = scopes;
+        return { identity: { name: 'Alice' } };
+      },
+    });
+
+    await parser.parse('private resume text');
+
+    assert.deepEqual(capturedScopes, ['reference_files']);
+  });
+
+  it('does not retry a data-scope policy rejection', async () => {
+    let calls = 0;
+    const scopeError = new Error('reference files blocked');
+    scopeError.name = 'ProviderScopeError';
+    const parser = new ResumeParser({
+      parse: async () => {
+        calls += 1;
+        throw scopeError;
+      },
+    });
+
+    await assert.rejects(() => parser.parse('private resume text'), error => error === scopeError);
+    assert.equal(calls, 1);
+  });
+
   it('normalizes LLM output into ResumeParsed', async () => {
     const mockLlm = {
       parse: async () => ({
@@ -182,4 +211,3 @@ describe('ResumeParser', () => {
     });
   });
 });
-

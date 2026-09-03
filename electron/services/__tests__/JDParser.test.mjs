@@ -6,6 +6,20 @@ const require = createRequire(import.meta.url);
 const { JDParser } = require('../../../dist-electron/electron/services/profile/parsers/JDParser.js');
 
 describe('JDParser', () => {
+  it('classifies job description text as reference_files', async () => {
+    let capturedScopes;
+    const parser = new JDParser({
+      parse: async (_prompt, _schema, scopes) => {
+        capturedScopes = scopes;
+        return { title: 'Engineer' };
+      },
+    });
+
+    await parser.parse('private job description');
+
+    assert.deepEqual(capturedScopes, ['reference_files']);
+  });
+
   it('normalizes LLM output into JDParsed', async () => {
     const mockLlm = {
       parse: async () => ({

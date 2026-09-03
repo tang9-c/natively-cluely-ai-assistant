@@ -158,6 +158,12 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
       if (message.includes('timed out')) {
         return { success: false, error: 'Document parsing timed out. Please try again.' };
       }
+      if (error?.name === 'ProviderScopeError') {
+        return {
+          success: false,
+          error: '参考文件的云端访问已关闭，且当前没有可用的本地解析模型。',
+        };
+      }
       return {
         success: false,
         error: 'Could not parse document. Please try a simpler format.',

@@ -37,6 +37,7 @@ export class CompanyNameExtractor {
       const parsed = await this.parserLLM.parse<{ companyName?: string | null }>(
         buildPrompt(trimmed),
         SCHEMA_DESCRIPTION,
+        ['reference_files'],
       );
       const companyName = parsed?.companyName;
       if (typeof companyName === 'string') {
@@ -45,6 +46,9 @@ export class CompanyNameExtractor {
       }
       return null;
     } catch (error: any) {
+      if (error?.name === 'ProviderScopeError') {
+        throw error;
+      }
       console.warn('[CompanyNameExtractor] Extraction failed:', error.message);
       return null;
     }
