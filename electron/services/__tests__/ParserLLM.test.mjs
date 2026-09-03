@@ -57,6 +57,43 @@ describe('ParserLLM', () => {
     assert.doesNotMatch(logs.join('\n'), new RegExp(sentinel));
   });
 
+  it('does not expose provider response content through logs or the final error', async () => {
+    const email = 'private.person@example.com';
+    const phone = '13800138000';
+    const captured = [];
+    const originalLog = console.log;
+    const originalWarn = console.warn;
+    const originalError = console.error;
+    console.log = (...args) => captured.push(args.map(String).join(' '));
+    console.warn = (...args) => captured.push(args.map(String).join(' '));
+    console.error = (...args) => captured.push(args.map(String).join(' '));
+
+    let thrownText = '';
+    try {
+      const parser = new ParserLLM({
+        generateContentStructured: async () => {
+          throw new Error(`upstream response contained ${email} and ${phone}`);
+        },
+      });
+      await assert.rejects(
+        () => parser.parse('prompt', 'schema', ['reference_files']),
+        (error) => {
+          thrownText = `${error?.name ?? ''} ${error?.message ?? ''}`;
+          return true;
+        },
+      );
+    } finally {
+      console.log = originalLog;
+      console.warn = originalWarn;
+      console.error = originalError;
+    }
+
+    const observableText = `${captured.join('\n')}\n${thrownText}`;
+    assert.doesNotMatch(observableText, new RegExp(email.replace('.', '\\.')));
+    assert.doesNotMatch(observableText, new RegExp(phone));
+    assert.match(observableText, /provider_error/);
+  });
+
   it('parses a JSON object from a plain string response', async () => {
     const mockHelper = {
       generateContentStructured: async () => '{"name":"Alice","age":30}',
