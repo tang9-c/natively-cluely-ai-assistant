@@ -175,9 +175,13 @@ export class KnowledgeMaterialService {
         return this.db.getKnowledgeMaterial(materialId);
     }
 
-    deleteMaterial(materialId: string): void {
+    deleteMaterial(materialId: string): { materials: number; chunks: number; queue: number } {
         KnowledgeMaterialService.cancelledMaterialIds.add(materialId);
-        this.db.deleteKnowledgeMaterial(materialId);
+        try {
+            return this.db.deleteKnowledgeMaterial(materialId);
+        } finally {
+            KnowledgeMaterialService.cancelledMaterialIds.delete(materialId);
+        }
     }
 
     async search(query: string, options: KnowledgeMaterialSearchOptions = {}): Promise<KnowledgeMaterialSearchResult[]> {

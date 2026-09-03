@@ -140,7 +140,7 @@ describe('DatabaseManager — upsertKnowledgeMaterial / list / get / update stat
     assert.equal(row.error_message, 'bad pdf');
   });
 
-  it('updateKnowledgeMaterialStatus does not resurrect a deleted material', () => {
+  it('updateKnowledgeMaterialStatus does not resurrect a hard-deleted material', () => {
     manager.upsertKnowledgeMaterial({
       id: 'mat_5',
       fileName: 'x.pdf',
@@ -150,7 +150,6 @@ describe('DatabaseManager — upsertKnowledgeMaterial / list / get / update stat
     });
     manager.deleteKnowledgeMaterial('mat_5');
     manager.updateKnowledgeMaterialStatus('mat_5', 'complete', null);
-    // Still considered deleted (the row stays, but with status='deleted').
     const row = manager.getKnowledgeMaterial('mat_5');
     assert.equal(row, null);
   });
@@ -460,15 +459,40 @@ describe('DatabaseManager — deleteKnowledgeMaterial / getMaterialQueueStatus /
     manager.upsertKnowledgeMaterial({ id: 'md', fileName: 'd', mimeOrExt: 'pdf', fileHash: 'hd', status: 'indexing' });
   });
 
-  it('deleteKnowledgeMaterial soft-deletes the material and removes its chunks', () => {
+  it('deleteKnowledgeMaterial hard-deletes the material, chunks, and embedding queue', () => {
+    db.pragma('foreign_keys = OFF');
     manager.replaceKnowledgeMaterialChunks('md', [
       { chunkIndex: 0, cleanedText: 'A', tokenCount: 1 },
     ]);
-    manager.deleteKnowledgeMaterial('md');
+    const deleted = manager.deleteKnowledgeMaterial('md');
+
+    assert.deepEqual(deleted, { materials: 1, chunks: 1, queue: 1 });
     const row = manager.getKnowledgeMaterial('md');
     assert.equal(row, null);
     const chunkCount = db.prepare('SELECT COUNT(*) AS c FROM knowledge_material_chunks WHERE material_id = ?').get('md').c;
     assert.equal(chunkCount, 0);
+    const queueCount = db.prepare('SELECT COUNT(*) AS c FROM material_embedding_queue').get().c;
+    assert.equal(queueCount, 0);
+    const materialCount = db.prepare('SELECT COUNT(*) AS c FROM knowledge_materials WHERE id = ?').get('md').c;
+    assert.equal(materialCount, 0);
+  });
+
+  it('deleteKnowledgeMaterial rolls back and reports failure when the parent cannot be deleted', () => {
+    manager.replaceKnowledgeMaterialChunks('md', [
+      { chunkIndex: 0, cleanedText: 'A', tokenCount: 1 },
+    ]);
+    db.exec(`
+      CREATE TRIGGER prevent_material_delete
+      BEFORE DELETE ON knowledge_materials
+      BEGIN
+        SELECT RAISE(ABORT, 'delete blocked');
+      END;
+    `);
+
+    assert.throws(() => manager.deleteKnowledgeMaterial('md'), /delete blocked/);
+    assert.equal(db.prepare('SELECT COUNT(*) AS c FROM knowledge_materials WHERE id = ?').get('md').c, 1);
+    assert.equal(db.prepare('SELECT COUNT(*) AS c FROM knowledge_material_chunks WHERE material_id = ?').get('md').c, 1);
+    assert.equal(db.prepare('SELECT COUNT(*) AS c FROM material_embedding_queue').get().c, 1);
   });
 
   it('getMaterialQueueStatus counts by status', () => {

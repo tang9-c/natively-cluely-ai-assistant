@@ -370,8 +370,8 @@ export class ModesManager {
         return this.getIntentKeywords(id);
     }
 
-    public deleteMode(id: string): void {
-        ModesManager.getDatabase().deleteMode(id);
+    public deleteMode(id: string) {
+        return ModesManager.getDatabase().deleteMode(id);
     }
 
     public setActiveMode(id: string | null): void {
@@ -417,8 +417,8 @@ export class ModesManager {
         };
     }
 
-    public deleteReferenceFile(id: string): void {
-        ModesManager.getDatabase().deleteReferenceFile(id);
+    public deleteReferenceFile(id: string) {
+        return ModesManager.getDatabase().deleteReferenceFile(id);
     }
 
     // ── Note Sections ─────────────────────────────────────────────

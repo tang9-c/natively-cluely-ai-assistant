@@ -4945,9 +4945,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { KnowledgeMaterialService } = require('./services/knowledge/KnowledgeMaterialService');
       const service = new KnowledgeMaterialService(DatabaseManager.getInstance(), appState.getRAGManager()?.getEmbeddingPipeline?.());
-      service.deleteMaterial(id);
+      const deleted = service.deleteMaterial(id);
       WhatToSayContextPreparationService.getInstance().invalidateMaterialCache();
-      return { success: true };
+      return { success: true, deleted };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
@@ -5109,8 +5109,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
       const { DocType } = require('./services/profile/types');
-      orchestrator.deleteDocumentsByType(DocType.RESUME);
-      return { success: true };
+      const deleted = orchestrator.deleteDocumentsByType(DocType.RESUME);
+      return { success: true, deleted };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
@@ -5298,8 +5298,8 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       if (!params?.referenceFileId) return { success: false, error: 'invalid_reference_file' };
       const { ModesManager } = require('./services/ModesManager');
-      ModesManager.getInstance().deleteReferenceFile(params.referenceFileId);
-      return { success: true };
+      const deleted = ModesManager.getInstance().deleteReferenceFile(params.referenceFileId);
+      return { success: true, deleted };
     } catch (error: any) {
       console.error('[IPC] profile:delete-document error:', redactForLog([error]));
       return { success: false, error: error.message };
@@ -5359,8 +5359,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
       const { DocType } = require('./services/profile/types');
-      orchestrator.deleteDocumentsByType(DocType.JD);
-      return { success: true };
+      const deleted = orchestrator.deleteDocumentsByType(DocType.JD);
+      return { success: true, deleted };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
@@ -5695,8 +5695,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('modes:delete', async (_, id: string) => {
     try {
       const { ModesManager } = require('./services/ModesManager');
-      ModesManager.getInstance().deleteMode(id);
-      return { success: true };
+      const deleted = ModesManager.getInstance().deleteMode(id);
+      return { success: true, deleted };
     } catch (e: any) {
       console.error('[IPC] modes:delete error:', e);
       return { success: false, error: e.message };
@@ -5948,8 +5948,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('modes:delete-reference-file', async (_, id: string) => {
     try {
       const { ModesManager } = require('./services/ModesManager');
-      ModesManager.getInstance().deleteReferenceFile(id);
-      return { success: true };
+      const deleted = ModesManager.getInstance().deleteReferenceFile(id);
+      return { success: true, deleted };
     } catch (e: any) {
       console.error('[IPC] modes:delete-reference-file error:', e);
       return { success: false, error: e.message };

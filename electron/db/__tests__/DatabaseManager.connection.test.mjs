@@ -51,6 +51,15 @@ describe('DatabaseManager — connection state', () => {
     assert.ok(ext === undefined || typeof ext === 'string');
   });
 
+  it('configureConnectionPragmas explicitly enables and verifies foreign keys', () => {
+    db.pragma('foreign_keys = OFF');
+    assert.equal(db.pragma('foreign_keys', { simple: true }), 0);
+
+    manager.configureConnectionPragmas();
+
+    assert.equal(db.pragma('foreign_keys', { simple: true }), 1);
+  });
+
   it('transaction() wraps work in a BEGIN/COMMIT block', () => {
     db.exec('CREATE TABLE t (id INTEGER PRIMARY KEY, n INTEGER NOT NULL)');
     // better-sqlite3's db.transaction(fn) returns a callable wrapper; invoking

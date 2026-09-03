@@ -116,8 +116,9 @@ export class ProfileDatabase {
   /**
    * Task 4: Clear profile_master resume fields. Used by deleteDocumentsByType.
    */
-  clearMasterResume(): void {
-    this.db.updateProfileMaster({
+  clearMasterResume(): number {
+    if (!this.db.isAvailable()) throw new Error('Database not initialized');
+    return this.db.updateProfileMaster({
       displayName: null,
       headline: null,
       summary: '',
@@ -158,8 +159,8 @@ export class ProfileDatabase {
     this.db.saveActiveJD(rawText, JSON.stringify(parsed), fileHash);
   }
 
-  clearJD(): void {
-    this.db.clearActiveJD();
+  clearJD(): number {
+    return this.db.clearActiveJD();
   }
 
   upsertModeReferenceFileMetadata(input: {

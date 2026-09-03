@@ -8,11 +8,12 @@ import { createRequire } from 'node:module';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
+const mockUserDataPath = fs.mkdtempSync(path.join(os.tmpdir(), 'profile-orch-userdata-'));
 
 const mockElectron = {
   app: {
     getPath: (name) => {
-      if (name === 'userData') return path.join(os.tmpdir(), `profile-orch-userdata-${process.hrtime.bigint()}`);
+      if (name === 'userData') return mockUserDataPath;
       return os.tmpdir();
     },
     getAppPath: () => process.cwd(),
@@ -37,6 +38,7 @@ describe('ProfileOrchestrator', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'profile-orch-'));
+    fs.rmSync(path.join(mockUserDataPath, 'profile-uploads'), { recursive: true, force: true });
     orchestrator = new ProfileOrchestrator();
     orchestrator.deleteDocumentsByType(DocType.RESUME);
     orchestrator.deleteDocumentsByType(DocType.JD);
@@ -115,6 +117,39 @@ describe('ProfileOrchestrator', () => {
     await orchestrator.ingestDocument(filePath, DocType.RESUME);
     orchestrator.deleteDocumentsByType(DocType.RESUME);
     assert.equal(orchestrator.getStatus().hasResume, false);
+  });
+
+  it('does not retain an internal copy after successful resume ingestion', async () => {
+    const filePath = path.join(tmpDir, 'private-resume.txt');
+    fs.writeFileSync(filePath, 'Alice engineer.');
+
+    const result = await orchestrator.ingestDocument(filePath, DocType.RESUME);
+
+    assert.equal(result.success, true);
+    const uploadsDir = path.join(mockUserDataPath, 'profile-uploads');
+    const retained = fs.existsSync(uploadsDir) ? fs.readdirSync(uploadsDir) : [];
+    assert.deepEqual(retained, []);
+  });
+
+  it('deletes only legacy copies owned by the selected profile type and returns counts', async () => {
+    const filePath = path.join(tmpDir, 'active-resume.txt');
+    fs.writeFileSync(filePath, 'Alice engineer.');
+    assert.equal((await orchestrator.ingestDocument(filePath, DocType.RESUME)).success, true);
+
+    const uploadsDir = path.join(mockUserDataPath, 'profile-uploads');
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    fs.writeFileSync(path.join(uploadsDir, 'resume-1700000000000.pdf'), 'RESUME_SENTINEL');
+    fs.writeFileSync(path.join(uploadsDir, 'jd-1700000000001.docx'), 'JD_SENTINEL');
+    fs.writeFileSync(path.join(uploadsDir, 'keep.txt'), 'UNRELATED_SENTINEL');
+
+    const deleted = orchestrator.deleteDocumentsByType(DocType.RESUME);
+
+    assert.equal(deleted.files, 1);
+    assert.equal(deleted.records, 1);
+    assert.deepEqual(fs.readdirSync(uploadsDir).sort(), [
+      'jd-1700000000001.docx',
+      'keep.txt',
+    ]);
   });
 
   it('returns an error for unsupported file types', async () => {
@@ -228,7 +263,7 @@ describe('ProfileOrchestrator', () => {
   });
 
   // Task 4: ingestDocument must roll back the file copy when parsing fails.
-  it('ingestDocument rolls back file copy when resume parsing throws', async () => {
+  it('ingestDocument does not create a retained copy when resume parsing throws', async () => {
     const orch2 = new ProfileOrchestrator();
     orch2.deleteDocumentsByType(DocType.RESUME);
     orch2.setLLMHelper({

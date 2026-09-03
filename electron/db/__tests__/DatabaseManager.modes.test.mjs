@@ -35,6 +35,35 @@ function createModeSchema(db) {
       UNIQUE(mode_id, intent),
       FOREIGN KEY(mode_id) REFERENCES modes(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE mode_reference_files (
+      id TEXT PRIMARY KEY,
+      mode_id TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      content TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(mode_id) REFERENCES modes(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE mode_reference_file_metadata (
+      reference_file_id TEXT PRIMARY KEY,
+      scenario_type TEXT NOT NULL,
+      doc_subtype TEXT NOT NULL,
+      parsed_json TEXT,
+      file_hash TEXT,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(reference_file_id) REFERENCES mode_reference_files(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE mode_note_sections (
+      id TEXT PRIMARY KEY,
+      mode_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(mode_id) REFERENCES modes(id) ON DELETE CASCADE
+    );
   `);
 }
 
@@ -137,6 +166,64 @@ describe('DatabaseManager — updateMode / deleteMode', () => {
 
   it('deleteMode is a no-op for an unknown id (no throw)', () => {
     assert.doesNotThrow(() => manager.deleteMode('nope'));
+  });
+
+  it('deleteMode explicitly removes all owned sensitive rows even with foreign keys disabled', () => {
+    db.prepare('INSERT INTO mode_reference_files (id, mode_id, file_name, content) VALUES (?, ?, ?, ?)')
+      .run('ref1', 'm1', 'private.txt', 'REFERENCE_SENTINEL');
+    db.prepare('INSERT INTO mode_reference_file_metadata (reference_file_id, scenario_type, doc_subtype, parsed_json) VALUES (?, ?, ?, ?)')
+      .run('ref1', 'sales', 'references', '{"secret":"METADATA_SENTINEL"}');
+    db.prepare('INSERT INTO mode_note_sections (id, mode_id, title) VALUES (?, ?, ?)')
+      .run('section1', 'm1', 'Private section');
+    db.prepare('INSERT INTO mode_intent_keywords (id, mode_id, intent, keywords_csv) VALUES (?, ?, ?, ?)')
+      .run('intent1', 'm1', 'custom', 'private');
+    db.pragma('foreign_keys = OFF');
+
+    const deleted = manager.deleteMode('m1');
+
+    assert.deepEqual(deleted, {
+      modes: 1,
+      referenceFiles: 1,
+      metadata: 1,
+      noteSections: 1,
+      intentKeywords: 1,
+    });
+    for (const table of ['modes', 'mode_reference_files', 'mode_reference_file_metadata', 'mode_note_sections', 'mode_intent_keywords']) {
+      assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count, 0, table);
+    }
+  });
+
+  it('deleteMode propagates failure instead of reporting success', () => {
+    db.exec(`
+      CREATE TRIGGER reject_mode_delete BEFORE DELETE ON modes
+      BEGIN SELECT RAISE(ABORT, 'simulated mode delete failure'); END;
+    `);
+
+    assert.throws(() => manager.deleteMode('m1'), /simulated mode delete failure/);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM modes').get().count, 1);
+  });
+});
+
+describe('DatabaseManager — deleteReferenceFile', () => {
+  let db, manager;
+
+  beforeEach(() => {
+    ({ db, manager } = makeManager());
+    createModeSchema(db);
+    manager.createMode({ id: 'm1', name: 'A', templateType: 'general', customContext: '' });
+    db.prepare('INSERT INTO mode_reference_files (id, mode_id, file_name, content) VALUES (?, ?, ?, ?)')
+      .run('ref1', 'm1', 'private.txt', 'REFERENCE_SENTINEL');
+    db.prepare('INSERT INTO mode_reference_file_metadata (reference_file_id, scenario_type, doc_subtype, parsed_json) VALUES (?, ?, ?, ?)')
+      .run('ref1', 'general', 'references', '{"secret":"METADATA_SENTINEL"}');
+    db.pragma('foreign_keys = OFF');
+  });
+
+  it('explicitly deletes content and metadata with foreign keys disabled', () => {
+    const deleted = manager.deleteReferenceFile('ref1');
+
+    assert.deepEqual(deleted, { referenceFiles: 1, metadata: 1 });
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM mode_reference_files').get().count, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM mode_reference_file_metadata').get().count, 0);
   });
 });
 

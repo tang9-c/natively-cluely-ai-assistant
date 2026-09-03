@@ -502,7 +502,7 @@ export class DatabaseManager {
             }
 
             this.db = new Database(this.dbPath);
-            this.db.pragma('journal_mode = WAL');
+            this.configureConnectionPragmas();
 
             // Load sqlite-vec extension for native vector search
             try {
@@ -524,6 +524,15 @@ export class DatabaseManager {
             console.error('[DatabaseManager] Failed to initialize database:', error);
             throw error;
         }
+    }
+
+    private configureConnectionPragmas(): void {
+        if (!this.db) throw new Error('Database not initialized');
+        this.db.pragma('foreign_keys = ON');
+        if (this.db.pragma('foreign_keys', { simple: true }) !== 1) {
+            throw new Error('SQLite foreign key enforcement could not be enabled');
+        }
+        this.db.pragma('journal_mode = WAL');
     }
 
     // ============================================
@@ -2301,18 +2310,17 @@ export class DatabaseManager {
         return this.db.prepare('SELECT * FROM knowledge_materials WHERE id = ? AND status != \'deleted\'').get(id) ?? null;
     }
 
-    public deleteKnowledgeMaterial(id: string): void {
-        if (!this.db) return;
+    public deleteKnowledgeMaterial(id: string): { materials: number; chunks: number; queue: number } {
+        if (!this.db) throw new Error('Database not initialized');
         const txn = this.db.transaction(() => {
-            this.db!.prepare('DELETE FROM material_embedding_queue WHERE material_chunk_id IN (SELECT id FROM knowledge_material_chunks WHERE material_id = ?)').run(id);
-            this.db!.prepare('DELETE FROM knowledge_material_chunks WHERE material_id = ?').run(id);
-            this.db!.prepare(`
-                UPDATE knowledge_materials
-                SET status = 'deleted', updated_at = datetime('now')
-                WHERE id = ?
-            `).run(id);
+            const queue = this.db!.prepare(
+                'DELETE FROM material_embedding_queue WHERE material_chunk_id IN (SELECT id FROM knowledge_material_chunks WHERE material_id = ?)'
+            ).run(id).changes;
+            const chunks = this.db!.prepare('DELETE FROM knowledge_material_chunks WHERE material_id = ?').run(id).changes;
+            const materials = this.db!.prepare('DELETE FROM knowledge_materials WHERE id = ?').run(id).changes;
+            return { materials, chunks, queue };
         });
-        txn();
+        return txn();
     }
 
     public getKnowledgeMaterialChunks(options: { withEmbeddingsOnly?: boolean } = {}): any[] {
@@ -2614,13 +2622,9 @@ export class DatabaseManager {
         }
     }
 
-    public clearActiveJD(): void {
-        if (!this.db) return;
-        try {
-            this.db.prepare('DELETE FROM profile_jds WHERE id = 1').run();
-        } catch (e) {
-            console.error('[DatabaseManager] clearActiveJD failed:', e);
-        }
+    public clearActiveJD(): number {
+        if (!this.db) throw new Error('Database not initialized');
+        return this.db.prepare('DELETE FROM profile_jds WHERE id = 1').run().changes;
     }
 
     public getProfileMaster(): any | null {
@@ -2642,10 +2646,10 @@ export class DatabaseManager {
         skillsJson?: string;
         projectsJson?: string;
         educationJson?: string;
-    }): void {
-        if (!this.db) return;
+    }): number {
+        if (!this.db) return 0;
         try {
-            this.db.prepare(`
+            return this.db.prepare(`
                 INSERT INTO profile_master
                     (id, display_name, headline, summary, contact_info_json, experience_json, skills_json,
                      projects_json, education_json, updated_at)
@@ -2669,7 +2673,7 @@ export class DatabaseManager {
                 input.skillsJson ?? '[]',
                 input.projectsJson ?? '[]',
                 input.educationJson ?? '[]',
-            );
+            ).changes;
         } catch (e) {
             console.error('[DatabaseManager] updateProfileMaster failed:', e);
             throw e;
@@ -2783,13 +2787,28 @@ export class DatabaseManager {
         this.upsertIntentKeywords(modeId, defaults);
     }
 
-    public deleteMode(id: string): void {
-        if (!this.db) return;
-        try {
-            this.db.prepare('DELETE FROM modes WHERE id = ?').run(id);
-        } catch (e) {
-            console.error('[DatabaseManager] deleteMode failed:', e);
-        }
+    public deleteMode(id: string): {
+        modes: number;
+        referenceFiles: number;
+        metadata: number;
+        noteSections: number;
+        intentKeywords: number;
+    } {
+        if (!this.db) throw new Error('Database not initialized');
+        const db = this.db;
+        return db.transaction(() => {
+            const metadata = db.prepare(`
+                DELETE FROM mode_reference_file_metadata
+                WHERE reference_file_id IN (
+                    SELECT id FROM mode_reference_files WHERE mode_id = ?
+                )
+            `).run(id).changes;
+            const referenceFiles = db.prepare('DELETE FROM mode_reference_files WHERE mode_id = ?').run(id).changes;
+            const noteSections = db.prepare('DELETE FROM mode_note_sections WHERE mode_id = ?').run(id).changes;
+            const intentKeywords = db.prepare('DELETE FROM mode_intent_keywords WHERE mode_id = ?').run(id).changes;
+            const modes = db.prepare('DELETE FROM modes WHERE id = ?').run(id).changes;
+            return { modes, referenceFiles, metadata, noteSections, intentKeywords };
+        })();
     }
 
     public setActiveMode(id: string | null): void {
@@ -2833,13 +2852,16 @@ export class DatabaseManager {
         }
     }
 
-    public deleteReferenceFile(id: string): void {
-        if (!this.db) return;
-        try {
-            this.db.prepare('DELETE FROM mode_reference_files WHERE id = ?').run(id);
-        } catch (e) {
-            console.error('[DatabaseManager] deleteReferenceFile failed:', e);
-        }
+    public deleteReferenceFile(id: string): { referenceFiles: number; metadata: number } {
+        if (!this.db) throw new Error('Database not initialized');
+        const db = this.db;
+        return db.transaction(() => {
+            const metadata = db.prepare(
+                'DELETE FROM mode_reference_file_metadata WHERE reference_file_id = ?',
+            ).run(id).changes;
+            const referenceFiles = db.prepare('DELETE FROM mode_reference_files WHERE id = ?').run(id).changes;
+            return { referenceFiles, metadata };
+        })();
     }
 
     public upsertModeReferenceFileMetadata(input: {

@@ -94,55 +94,32 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
     filePath: string,
     docType: DocType,
   ): Promise<{ success: boolean; error?: string }> {
-    let destPath: string | null = null;
     try {
       const rawText = await DocumentTextExtractor.extract(filePath);
       if (!rawText || rawText.trim().length === 0) {
         return { success: false, error: 'File appears to be empty' };
       }
 
-      const uploadsDir = this.getUploadsDir();
-      if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
-      }
-      const ext = path.extname(filePath);
-      const prefix = docType === 'resume' ? 'resume' : 'jd';
-      destPath = path.join(uploadsDir, `${prefix}-${Date.now()}${ext}`);
-      fs.copyFileSync(filePath, destPath);
-
-      // Task 4: parsing + DB write must roll back together. If anything throws
-      // after we copied the file, we unlink the copy so the uploads directory
-      // doesn't accumulate orphan files from failed parses.
-      try {
-        if (docType === 'resume') {
-          if (!this.resumeParser) {
-            throw new Error('Knowledge engine not initialized');
-          }
-          const parsed = await withTimeout(
-            this.resumeParser.parse(rawText),
-            60_000,
-            'Resume parse',
-          );
-          // Atomic write to profile_master via better-sqlite3 transaction.
-          this.db.saveResumeToMaster(parsed);
-        } else if (docType === 'job_description') {
-          if (!this.jdParser) {
-            throw new Error('Knowledge engine not initialized');
-          }
-          const parsed = await withTimeout(
-            this.jdParser.parse(rawText),
-            60_000,
-            'JD parse',
-          );
-          this.db.saveJD(rawText, parsed);
+      if (docType === 'resume') {
+        if (!this.resumeParser) {
+          throw new Error('Knowledge engine not initialized');
         }
-      } catch (innerError) {
-        // Parse or save failed — unlink the copied file so the user does
-        // not accumulate junk uploads from failed attempts.
-        if (destPath) {
-          try { fs.unlinkSync(destPath); } catch { /* best effort */ }
+        const parsed = await withTimeout(
+          this.resumeParser.parse(rawText),
+          60_000,
+          'Resume parse',
+        );
+        this.db.saveResumeToMaster(parsed);
+      } else if (docType === 'job_description') {
+        if (!this.jdParser) {
+          throw new Error('Knowledge engine not initialized');
         }
-        throw innerError;
+        const parsed = await withTimeout(
+          this.jdParser.parse(rawText),
+          60_000,
+          'JD parse',
+        );
+        this.db.saveJD(rawText, parsed);
       }
 
       return { success: true };
@@ -238,12 +215,12 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
     };
   }
 
-  deleteDocumentsByType(docType: DocType): void {
+  deleteDocumentsByType(docType: DocType): { records: number; files: number } {
+    const files = this.deleteLegacyUploadCopies(docType);
     if (docType === 'resume') {
-      this.db.clearMasterResume();
-    } else if (docType === 'job_description') {
-      this.db.clearJD();
+      return { records: this.db.clearMasterResume(), files };
     }
+    return { records: this.db.clearJD(), files };
   }
 
   getProfileData(): ProfileData | null {
@@ -325,6 +302,25 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
     } catch {
       return path.join(os.tmpdir(), 'profile-uploads');
     }
+  }
+
+  private deleteLegacyUploadCopies(docType: DocType): number {
+    const uploadsDir = this.getUploadsDir();
+    if (!fs.existsSync(uploadsDir)) return 0;
+
+    const prefix = docType === 'resume' ? 'resume' : 'jd';
+    const ownedFilePattern = new RegExp(`^${prefix}-[0-9]+\\.[A-Za-z0-9]+$`, 'i');
+    let deleted = 0;
+    for (const entry of fs.readdirSync(uploadsDir, { withFileTypes: true })) {
+      if (!entry.isFile() || !ownedFilePattern.test(entry.name)) continue;
+      const target = path.join(uploadsDir, entry.name);
+      fs.unlinkSync(target);
+      if (fs.existsSync(target)) {
+        throw new Error('Profile upload cleanup verification failed');
+      }
+      deleted += 1;
+    }
+    return deleted;
   }
 
   private computeExperienceYears(
