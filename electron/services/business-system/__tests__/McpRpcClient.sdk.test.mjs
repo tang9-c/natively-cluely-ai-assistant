@@ -71,6 +71,7 @@ test('McpRpcClient uses an SDK session and preserves every tool field across all
     url: 'https://example.test/mcp',
     authType: 'api_key',
     credentials: { apiKey: 'secret-key' },
+    now: () => 0,
     sessionFactory: (config) => {
       factoryConfig = config;
       return fake.session;

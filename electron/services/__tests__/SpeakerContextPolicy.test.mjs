@@ -95,9 +95,9 @@ describe('SpeakerContextPolicy', () => {
     const extractor = new FakeSpeakerExtractor([1, 0, 0, 0]);
 
     await new SpeakerEnrollmentService({ store, extractor }).enroll([
-      { samples: loudSamples(3), sampleRate: 16000 },
-      { samples: loudSamples(3), sampleRate: 16000 },
-      { samples: loudSamples(3), sampleRate: 16000 },
+      { samples: loudSamples(8), sampleRate: 16000 },
+      { samples: loudSamples(8), sampleRate: 16000 },
+      { samples: loudSamples(8), sampleRate: 16000 },
     ]);
     const verification = await new SpeakerVerificationService({ store, extractor }).verify(loudSamples(2));
     const result = evaluateSpeakerContextForAnswer([
