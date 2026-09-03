@@ -5091,10 +5091,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!orchestrator) {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
-      orchestrator.setKnowledgeMode(enabled);
-
       const { SettingsManager } = require('./services/SettingsManager');
       SettingsManager.getInstance().set('knowledgeMode', enabled);
+      orchestrator.setKnowledgeMode(enabled);
 
       return { success: true };
     } catch (error: any) {
@@ -5230,12 +5229,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       const mode = modesManager.getActiveMode()
         ?? modesManager.getModes().find((candidate: any) => candidate.templateType === 'general');
       if (!mode) return { success: false, error: 'No active mode selected' };
-      const rawText = await DocumentTextExtractor.extract(filePath);
-      const fileName = path.basename(filePath);
-      const added = modesManager.addReferenceFile({ modeId: mode.id, fileName, content: rawText });
-      const referenceFileId = added.id;
       const registry = ScenarioRegistry.createDefault();
       const resolution = registry.resolveByTemplateType(mode.templateType);
+      const adapter = registry.get(resolution.scenarioType);
+      if (!adapter.supportedDocSubtypes.includes(params.docSubtype)) {
+        return { success: false, error: 'invalid_document_subtype' };
+      }
+      const rawText = await DocumentTextExtractor.extract(filePath);
+      const fileName = path.basename(filePath);
 
       let parsedJson: string | undefined;
       const llmHelper = appState.processingHelper?.getLLMHelper?.();
@@ -5251,14 +5252,16 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
       }
 
-      DatabaseManager.getInstance().upsertModeReferenceFileMetadata({
-        referenceFileId,
+      const added = modesManager.addReferenceFileWithMetadata({
+        modeId: mode.id,
+        fileName,
+        content: rawText,
         scenarioType: resolution.scenarioType,
         docSubtype: params.docSubtype,
         fileHash: crypto.createHash('sha256').update(rawText).digest('hex'),
         parsedJson,
       });
-      return { success: true, id: referenceFileId };
+      return { success: true, id: added.id };
     } catch (error: any) {
       console.error('[IPC] profile:upload-document failed', {
         stage: 'profile_document_extract',
@@ -5491,7 +5494,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       // Enforce a max length of 4000 chars to prevent prompt bloat
       const trimmed = typeof content === 'string' ? content.slice(0, 4000) : '';
-      DatabaseManager.getInstance().saveCustomNotes(trimmed);
+      const db = DatabaseManager.getInstance();
+      db.saveCustomNotes(trimmed);
+      if (db.getCustomNotes() !== trimmed) {
+        throw new Error('Profile notes persistence verification failed');
+      }
 
       // Propagate to orchestrator (premium path) and LLMHelper (all-provider path)
       const orchestrator = appState.getKnowledgeOrchestrator();
@@ -5521,7 +5528,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       if (typeof content !== 'string') return { success: false, error: 'invalid_persona' };
       const trimmed = content.trim().slice(0, 4000);
-      DatabaseManager.getInstance().savePersona(trimmed);
+      const db = DatabaseManager.getInstance();
+      db.savePersona(trimmed);
+      if (db.getPersona() !== trimmed) {
+        throw new Error('Profile persona persistence verification failed');
+      }
 
       const llmHelper = appState.processingHelper?.getLLMHelper?.();
       if (llmHelper?.setPersonaPrompt) llmHelper.setPersonaPrompt(trimmed);

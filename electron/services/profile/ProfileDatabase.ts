@@ -156,7 +156,12 @@ export class ProfileDatabase {
   }
 
   saveJD(rawText: string, parsed: JDParsed, fileHash?: string): void {
-    this.db.saveActiveJD(rawText, JSON.stringify(parsed), fileHash);
+    const parsedJson = JSON.stringify(parsed);
+    const changes = this.db.saveActiveJD(rawText, parsedJson, fileHash);
+    const saved = this.db.getActiveJD();
+    if (changes < 1 || saved?.raw_text !== rawText || saved?.parsed_json !== parsedJson) {
+      throw new Error('JD persistence verification failed');
+    }
   }
 
   clearJD(): number {

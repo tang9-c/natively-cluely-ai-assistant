@@ -227,6 +227,53 @@ describe('DatabaseManager — deleteReferenceFile', () => {
   });
 });
 
+describe('DatabaseManager — atomic reference file metadata writes', () => {
+  let db, manager;
+
+  beforeEach(() => {
+    ({ db, manager } = makeManager());
+    createModeSchema(db);
+    manager.createMode({ id: 'm1', name: 'Sales', templateType: 'sales', customContext: '' });
+  });
+
+  it('writes the reference file and metadata in one transaction', () => {
+    manager.addReferenceFileWithMetadata(
+      { id: 'ref1', modeId: 'm1', fileName: 'customer.md', content: 'Acme context' },
+      {
+        referenceFileId: 'ref1',
+        scenarioType: 'sales',
+        docSubtype: 'customer-profile',
+        fileHash: 'hash-1',
+      },
+    );
+
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM mode_reference_files').get().count, 1);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM mode_reference_file_metadata').get().count, 1);
+  });
+
+  it('rolls back the reference file when metadata insertion fails', () => {
+    db.exec(`
+      CREATE TRIGGER reject_reference_metadata BEFORE INSERT ON mode_reference_file_metadata
+      BEGIN SELECT RAISE(ABORT, 'simulated metadata failure'); END;
+    `);
+
+    assert.throws(
+      () => manager.addReferenceFileWithMetadata(
+        { id: 'ref1', modeId: 'm1', fileName: 'customer.md', content: 'Acme context' },
+        {
+          referenceFileId: 'ref1',
+          scenarioType: 'sales',
+          docSubtype: 'customer-profile',
+          fileHash: 'hash-1',
+        },
+      ),
+      /simulated metadata failure/,
+    );
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM mode_reference_files').get().count, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM mode_reference_file_metadata').get().count, 0);
+  });
+});
+
 describe('DatabaseManager — mode_intent_keywords', () => {
   let db, manager;
 

@@ -105,8 +105,19 @@ export class SettingsManager {
     }
 
     public set<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void {
+        const hadPreviousValue = Object.prototype.hasOwnProperty.call(this.settings, key);
+        const previousValue = this.settings[key];
         this.settings[key] = value;
-        this.saveSettings();
+        try {
+            this.saveSettings();
+        } catch (error) {
+            if (hadPreviousValue) {
+                this.settings[key] = previousValue;
+            } else {
+                Reflect.deleteProperty(this.settings, key);
+            }
+            throw error;
+        }
     }
 
     // Resolved screen-understanding mode with default and runtime validation.
@@ -235,6 +246,7 @@ export class SettingsManager {
             fs.renameSync(tmpPath, this.settingsPath);
         } catch (e) {
             console.error('[SettingsManager] Failed to save settings:', e);
+            throw e;
         }
     }
 }

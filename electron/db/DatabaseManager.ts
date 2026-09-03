@@ -2471,14 +2471,15 @@ export class DatabaseManager {
         }
     }
 
-    public saveCustomNotes(content: string): void {
-        if (!this.db) return;
+    public saveCustomNotes(content: string): number {
+        if (!this.db) throw new Error('Database not initialized');
         try {
-            this.db.prepare(
+            return this.db.prepare(
                 'INSERT INTO profile_custom_notes (id, content, updated_at) VALUES (1, ?, datetime(\'now\')) ON CONFLICT(id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at'
-            ).run(content);
+            ).run(content).changes;
         } catch (e) {
             console.error('[DatabaseManager] saveCustomNotes failed:', e);
+            throw e;
         }
     }
 
@@ -2493,23 +2494,25 @@ export class DatabaseManager {
         }
     }
 
-    public savePersona(content: string): void {
-        if (!this.db) return;
+    public savePersona(content: string): number {
+        if (!this.db) throw new Error('Database not initialized');
         try {
-            this.db.prepare(
+            return this.db.prepare(
                 'INSERT INTO profile_persona (id, content, updated_at) VALUES (1, ?, datetime(\'now\')) ON CONFLICT(id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at'
-            ).run(content);
+            ).run(content).changes;
         } catch (e) {
             console.error('[DatabaseManager] savePersona failed:', e);
+            throw e;
         }
     }
 
-    public clearProfilePersona(): void {
-        if (!this.db) return;
+    public clearProfilePersona(): number {
+        if (!this.db) throw new Error('Database not initialized');
         try {
-            this.db.prepare('UPDATE profile_persona SET content = \'\', updated_at = datetime(\'now\') WHERE id = 1').run();
+            return this.db.prepare('UPDATE profile_persona SET content = \'\', updated_at = datetime(\'now\') WHERE id = 1').run().changes;
         } catch (e) {
             console.error('[DatabaseManager] clearProfilePersona failed:', e);
+            throw e;
         }
     }
 
@@ -2611,14 +2614,15 @@ export class DatabaseManager {
         }
     }
 
-    public saveActiveJD(rawText: string, parsedJson: string, fileHash?: string): void {
-        if (!this.db) return;
+    public saveActiveJD(rawText: string, parsedJson: string, fileHash?: string): number {
+        if (!this.db) throw new Error('Database not initialized');
         try {
-            this.db.prepare(
+            return this.db.prepare(
                 'INSERT INTO profile_jds (id, raw_text, parsed_json, file_hash, created_at) VALUES (1, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET raw_text = excluded.raw_text, parsed_json = excluded.parsed_json, file_hash = excluded.file_hash, created_at = excluded.created_at'
-            ).run(rawText, parsedJson, fileHash ?? null, Date.now());
+            ).run(rawText, parsedJson, fileHash ?? null, Date.now()).changes;
         } catch (e) {
             console.error('[DatabaseManager] saveActiveJD failed:', e);
+            throw e;
         }
     }
 
@@ -2850,6 +2854,37 @@ export class DatabaseManager {
             console.error('[DatabaseManager] addReferenceFile failed:', e);
             throw e;
         }
+    }
+
+    public addReferenceFileWithMetadata(
+        file: { id: string; modeId: string; fileName: string; content: string },
+        metadata: {
+            referenceFileId: string;
+            scenarioType: string;
+            docSubtype: string;
+            parsedJson?: string | null;
+            fileHash?: string | null;
+        },
+    ): void {
+        if (!this.db) throw new Error('Database not initialized');
+        const db = this.db;
+        db.transaction(() => {
+            db.prepare(`
+                INSERT INTO mode_reference_files (id, mode_id, file_name, content)
+                VALUES (?, ?, ?, ?)
+            `).run(file.id, file.modeId, file.fileName, file.content);
+            db.prepare(`
+                INSERT INTO mode_reference_file_metadata
+                    (reference_file_id, scenario_type, doc_subtype, parsed_json, file_hash, updated_at)
+                VALUES (?, ?, ?, ?, ?, datetime('now'))
+            `).run(
+                metadata.referenceFileId,
+                metadata.scenarioType,
+                metadata.docSubtype,
+                metadata.parsedJson ?? null,
+                metadata.fileHash ?? null,
+            );
+        })();
     }
 
     public deleteReferenceFile(id: string): { referenceFiles: number; metadata: number } {

@@ -417,6 +417,40 @@ export class ModesManager {
         };
     }
 
+    public addReferenceFileWithMetadata(params: {
+        modeId: string;
+        fileName: string;
+        content: string;
+        scenarioType: string;
+        docSubtype: string;
+        parsedJson?: string | null;
+        fileHash?: string | null;
+    }): ModeReferenceFile {
+        const id = `ref_${crypto.randomUUID()}`;
+        ModesManager.getDatabase().addReferenceFileWithMetadata(
+            {
+                id,
+                modeId: params.modeId,
+                fileName: params.fileName,
+                content: params.content,
+            },
+            {
+                referenceFileId: id,
+                scenarioType: params.scenarioType,
+                docSubtype: params.docSubtype,
+                parsedJson: params.parsedJson,
+                fileHash: params.fileHash,
+            },
+        );
+        return {
+            id,
+            modeId: params.modeId,
+            fileName: params.fileName,
+            content: params.content,
+            createdAt: new Date().toISOString(),
+        };
+    }
+
     public deleteReferenceFile(id: string) {
         return ModesManager.getDatabase().deleteReferenceFile(id);
     }

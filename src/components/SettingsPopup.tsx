@@ -224,10 +224,12 @@ const SettingsPopup = () => {
                         <button
                             onClick={async () => {
                                 const newState = !profileMode;
-                                setProfileMode(newState);
                                 try {
                                     // @ts-ignore
-                                    await window.electronAPI?.profileSetMode?.(newState);
+                                    const result = await window.electronAPI?.profileSetMode?.(newState);
+                                    if (result?.success) {
+                                        setProfileMode(newState);
+                                    }
                                 } catch (e) { console.error(e); }
                             }}
                             className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${profileMode ? 'bg-accent-primary shadow-[0_2px_10px_rgba(var(--color-accent-primary),0.3)]' : defaultToggleTrackClass}`}

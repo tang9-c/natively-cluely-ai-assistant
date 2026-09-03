@@ -473,9 +473,13 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                 onClick={async () => {
                                                                     if (!confirm('确定要删除已解析的专业形象吗？这将清除所有结构化时间线数据。')) return;
                                                                     try {
-                                                                        await window.electronAPI?.profileDelete?.();
-                                                                        setProfileStatus({ hasProfile: false, profileMode: false });
-                                                                        setProfileData(null);
+                                                                        const result = await window.electronAPI?.profileDelete?.();
+                                                                        if (result?.success) {
+                                                                            setProfileStatus({ hasProfile: false, profileMode: false });
+                                                                            setProfileData(null);
+                                                                        } else {
+                                                                            setProfileError(result?.error || '删除档案失败');
+                                                                        }
                                                                     } catch (e) { console.error('删除档案失败：', e); }
                                                                 }}
                                                                 className="text-[12px] font-medium text-text-tertiary hover:text-red-500 transition-colors px-3 py-1.5 rounded-full hover:bg-red-500/10"
@@ -492,8 +496,12 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                                     if (!profileStatus.hasProfile) return;
                                                                     const newState = !profileStatus.profileMode;
                                                                     try {
-                                                                        await window.electronAPI?.profileSetMode?.(newState);
-                                                                        setProfileStatus(prev => ({ ...prev, profileMode: newState }));
+                                                                        const result = await window.electronAPI?.profileSetMode?.(newState);
+                                                                        if (result?.success) {
+                                                                            setProfileStatus(prev => ({ ...prev, profileMode: newState }));
+                                                                        } else {
+                                                                            setProfileError(result?.error || '切换档案智能失败');
+                                                                        }
                                                                     } catch (e) {
                                                                         console.error('切换档案智能失败：', e);
                                                                     }
@@ -669,9 +677,13 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                     {profileData?.hasActiveJD && !jdUploading && (
                                                         <button
                                                             onClick={async () => {
-                                                                await window.electronAPI?.profileDeleteJD?.();
-                                                                const data = await window.electronAPI?.profileGetProfile?.();
-                                                                if (data) setProfileData(data);
+                                                                const result = await window.electronAPI?.profileDeleteJD?.();
+                                                                if (result?.success) {
+                                                                    const data = await window.electronAPI?.profileGetProfile?.();
+                                                                    if (data) setProfileData(data);
+                                                                } else {
+                                                                    setJdError(result?.error || '移除职位描述失败');
+                                                                }
                                                             }}
                                                             className="shrink-0 mt-0.5 px-2.5 py-2 rounded-full text-xs text-text-tertiary hover:text-red-500 hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/20"
                                                             aria-label="移除职位描述"
@@ -777,9 +789,13 @@ export function ProfileIntelligenceSettings({ onClose }: { onClose: () => void }
                                                             if (customNotesDebounceRef.current) clearTimeout(customNotesDebounceRef.current);
                                                             customNotesDebounceRef.current = setTimeout(async () => {
                                                                 try {
-                                                                    await window.electronAPI?.profileSaveNotes?.(val);
-                                                                    setCustomNotesSaved(true);
-                                                                    setTimeout(() => setCustomNotesSaved(false), 2000);
+                                                                    const result = await window.electronAPI?.profileSaveNotes?.(val);
+                                                                    if (result?.success) {
+                                                                        setCustomNotesSaved(true);
+                                                                        setTimeout(() => setCustomNotesSaved(false), 2000);
+                                                                    } else {
+                                                                        setProfileError(result?.error || '保存备注失败');
+                                                                    }
                                                                 } catch (_) {}
                                                             }, 800);
                                                         }}

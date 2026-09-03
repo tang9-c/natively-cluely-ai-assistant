@@ -240,18 +240,20 @@ describe('DatabaseManager — getCustomNotes / saveCustomNotes', () => {
 });
 
 describe('DatabaseManager — error resilience', () => {
-  it('all profile methods are safe when db is null', () => {
+  it('profile writes fail explicitly when db is unavailable', () => {
     const manager = Object.create(DatabaseManager.prototype);
     manager.db = null;
     manager.ensuredDims = new Map();
-    // Should never throw.
-    assert.doesNotThrow(() => manager.savePersona('x'));
+
+    assert.throws(() => manager.savePersona('x'), /Database not initialized/);
+    assert.throws(() => manager.saveCustomNotes('x'), /Database not initialized/);
+    assert.throws(() => manager.saveActiveJD('raw', '{}', 'h'), /Database not initialized/);
+    assert.throws(() => manager.clearProfilePersona(), /Database not initialized/);
+    assert.throws(() => manager.clearActiveJD(), /Database not initialized/);
+
+    // Legacy no-op facades remain tolerant while read methods keep safe defaults.
     assert.doesNotThrow(() => manager.saveUserProfile('{}'));
-    assert.doesNotThrow(() => manager.saveCustomNotes('x'));
-    assert.doesNotThrow(() => manager.saveActiveJD('raw', '{}', 'h'));
-    assert.doesNotThrow(() => manager.clearProfilePersona());
     assert.doesNotThrow(() => manager.clearUserProfile());
-    assert.doesNotThrow(() => manager.clearActiveJD());
     assert.doesNotThrow(() => manager.upsertResumeNodes([]));
 
     // Read methods return safe defaults.
@@ -265,6 +267,20 @@ describe('DatabaseManager — error resilience', () => {
     assert.equal(manager.getCustomNotes(), '');
   });
 
+  it('profile writes propagate SQL failures instead of reporting success', () => {
+    const manager = Object.create(DatabaseManager.prototype);
+    manager.db = {
+      prepare() {
+        throw new Error('simulated readonly database');
+      },
+    };
+
+    assert.throws(() => manager.savePersona('x'), /simulated readonly database/);
+    assert.throws(() => manager.saveCustomNotes('x'), /simulated readonly database/);
+    assert.throws(() => manager.saveActiveJD('raw', '{}', 'h'), /simulated readonly database/);
+    assert.throws(() => manager.clearProfilePersona(), /simulated readonly database/);
+  });
+
   it('getKnowledgeMaterial helpers return safe defaults when db is null', () => {
     const manager = Object.create(DatabaseManager.prototype);
     manager.db = null;
@@ -275,7 +291,7 @@ describe('DatabaseManager — error resilience', () => {
     assert.equal(manager.getKnowledgeMaterialCandidateChunks('foo').length, 0);
     assert.equal(manager.getMaterialQueueStatus().pending, 0);
     assert.doesNotThrow(() => manager.upsertKnowledgeMaterial({ id: 'x', fileName: 'x', mimeOrExt: 'x', fileHash: 'x' }));
-    assert.doesNotThrow(() => manager.deleteKnowledgeMaterial('x'));
+    assert.throws(() => manager.deleteKnowledgeMaterial('x'), /Database not initialized/);
     assert.equal(manager.upsertKnowledgeMaterial({ id: 'x', fileName: 'x', mimeOrExt: 'x', fileHash: 'x' }), null);
   });
 
