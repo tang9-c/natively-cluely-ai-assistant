@@ -204,18 +204,16 @@ export class ResearchDossierBuilder {
       companyName: valid.companyName || companyName,
       generatedAt: now,
       expiresAt: expires,
-      // source reflects what actually produced the dossier: 'tavily' only
-      // if Tavily returned sources AND the LLM echoed them back in the
-      // normalized dossier. If LLM omits sources, the dossier is effectively
-      // an LLM-only synthesis regardless of whether Tavily was consulted.
-      source: isFallback || valid.sources.length === 0 ? 'llm-fallback' : 'tavily',
-      financials: this.maybeDowngrade(valid.financials, isFallback),
-      business: this.maybeDowngrade(valid.business, isFallback),
-      strategy: this.maybeDowngrade(valid.strategy, isFallback),
-      people: this.maybeDowngrade(valid.people, isFallback),
-      infrastructure: this.maybeDowngrade(valid.infrastructure, isFallback),
-      procurement: this.maybeDowngrade(valid.procurement, isFallback),
-      sources: isFallback ? [] : valid.sources,
+      source: isFallback ? 'llm-fallback' : 'tavily',
+      financials: this.maybeDowngrade(reconcileDimensionCitations(valid.financials, sources.length), isFallback),
+      business: this.maybeDowngrade(reconcileDimensionCitations(valid.business, sources.length), isFallback),
+      strategy: this.maybeDowngrade(reconcileDimensionCitations(valid.strategy, sources.length), isFallback),
+      people: this.maybeDowngrade(reconcileDimensionCitations(valid.people, sources.length), isFallback),
+      infrastructure: this.maybeDowngrade(reconcileDimensionCitations(valid.infrastructure, sources.length), isFallback),
+      procurement: this.maybeDowngrade(reconcileDimensionCitations(valid.procurement, sources.length), isFallback),
+      // Source provenance belongs to the service boundary. LLM-returned source
+      // metadata is untrusted and must never replace the original Tavily rows.
+      sources,
     };
   }
 
@@ -268,6 +266,20 @@ Field rules — these are STRICT, the schema validation will reject mismatches:
 - Include the top-level "schemaVersion" and "companyName" fields above.
 - Every "url" in sources must be a valid HTTP/HTTPS URL. Do not invent URLs.`;
   }
+}
+
+function reconcileDimensionCitations(
+  dimension: ResearchDimension,
+  sourceCount: number,
+): ResearchDimension {
+  return {
+    ...dimension,
+    details: dimension.details.map((bullet) => {
+      if (bullet.citation == null || bullet.citation <= sourceCount) return bullet;
+      const { citation: _citation, ...withoutCitation } = bullet;
+      return withoutCitation;
+    }),
+  };
 }
 
 function formatZodError(err: unknown): string {

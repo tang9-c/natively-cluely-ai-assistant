@@ -43,6 +43,68 @@ describe('ResearchDossierBuilder', () => {
     assert.equal(out.financials.confidence, 'high');
   });
 
+  test('build() reconstructs final sources from trusted Tavily input', async () => {
+    const dimension = { summary: 's', details: [], confidence: 'high' };
+    const llmDossier = {
+      schemaVersion: '1.0', companyName: 'Acme',
+      financials: dimension,
+      business: dimension,
+      strategy: dimension,
+      people: dimension,
+      infrastructure: dimension,
+      procurement: dimension,
+      sources: [
+        { index: 99, title: 'Forged title', url: 'https://invented.example', snippet: 'forged' },
+        { index: 99, title: 'Duplicate index', url: 'https://another.example', snippet: 'forged again' },
+      ],
+    };
+    const llm = makeMockLlm([llmDossier]);
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+
+    const out = await b.build('Acme', [
+      { title: 'Trusted title', url: 'https://real.example', content: 'trusted source body' },
+    ]);
+
+    assert.deepEqual(out.sources, [{
+      index: 1,
+      title: 'Trusted title',
+      url: 'https://real.example',
+      snippet: 'trusted source body',
+    }]);
+  });
+
+  test('build() removes out-of-range citations and preserves trusted citations', async () => {
+    const llmDossier = {
+      schemaVersion: '1.0', companyName: 'Acme',
+      financials: {
+        summary: 's',
+        details: [
+          { text: 'trusted claim', citation: 1 },
+          { text: 'forged claim', citation: 99 },
+        ],
+        confidence: 'high',
+      },
+      business: { summary: 's', details: [{ text: 'also forged', citation: 2 }], confidence: 'high' },
+      strategy: { summary: 's', details: [], confidence: 'high' },
+      people: { summary: 's', details: [], confidence: 'high' },
+      infrastructure: { summary: 's', details: [], confidence: 'high' },
+      procurement: { summary: 's', details: [], confidence: 'high' },
+      sources: [{ index: 99, title: 'Forged', url: 'https://invented.example', snippet: 'fake' }],
+    };
+    const llm = makeMockLlm([llmDossier]);
+    const { ResearchDossierBuilder } = cjsRequire(builderPath);
+    const b = new ResearchDossierBuilder({ llm });
+
+    const out = await b.build('Acme', [
+      { title: 'Trusted', url: 'https://real.example', content: 'real' },
+    ]);
+
+    assert.equal(out.financials.details[0].citation, 1);
+    assert.equal(out.financials.details[1].citation, undefined);
+    assert.equal(out.business.details[0].citation, undefined);
+  });
+
   test('build() accepts provider responses wrapped in markdown JSON fences', async () => {
     const validDossier = {
       schemaVersion: '1.0', companyName: 'IBM',
@@ -245,10 +307,7 @@ describe('ResearchDossierBuilder', () => {
     assert.equal(out.companyName, 'X');
   });
 
-  // Regression guard 2026-06-22 (final review I3): when LLM omits sources in
-  // the dossier even though Tavily provided them, source must be 'llm-fallback'
-  // (not 'tavily'). Otherwise the UI shows a Tavily badge with no links.
-  test('build() marks source=llm-fallback when LLM omits sources (non-empty Tavily input)', async () => {
+  test('build() keeps trusted Tavily sources when LLM omits sources', async () => {
     const llmDossier = {
       schemaVersion: '1.0', companyName: 'X',
       financials: { summary: 's', details: [], confidence: 'high' },
@@ -257,14 +316,19 @@ describe('ResearchDossierBuilder', () => {
       people: { summary: 's', details: [], confidence: 'high' },
       infrastructure: { summary: 's', details: [], confidence: 'high' },
       procurement: { summary: 's', details: [], confidence: 'high' },
-      // sources intentionally omitted — normalize injects []; source must
-      // downgrade to llm-fallback.
+      // sources intentionally omitted — final provenance comes from rawSources.
     };
     const llm = { generateStructured: async () => llmDossier };
     const { ResearchDossierBuilder } = cjsRequire(builderPath);
     const b = new ResearchDossierBuilder({ llm });
     const out = await b.build('X', [{ title: 't', url: 'https://x.example', content: 's' }]);
-    assert.equal(out.source, 'llm-fallback', 'LLM-omitted sources must downgrade source to llm-fallback');
+    assert.equal(out.source, 'tavily');
+    assert.deepEqual(out.sources, [{
+      index: 1,
+      title: 't',
+      url: 'https://x.example',
+      snippet: 's',
+    }]);
   });
 
   test('build() injects schemaVersion and companyName when LLM omits them', async () => {
@@ -639,7 +703,8 @@ describe('ResearchDossierBuilder', () => {
     // fields, no control chars inside strings) is already valid.
     const out = await b.build('X', [{ title: 't', url: 'https://x.example', content: 's' }]);
     assert.equal(out.companyName, 'X');
-    assert.equal(out.sources.length, 0);
+    assert.equal(out.sources.length, 1);
+    assert.equal(out.sources[0].url, 'https://x.example');
   });
 
   // Debug session 2026-06-23 (正浩创新 sample): LLM emitted `citation: null`
