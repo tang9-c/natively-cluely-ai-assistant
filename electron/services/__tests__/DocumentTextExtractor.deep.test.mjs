@@ -179,6 +179,23 @@ describe('DocumentTextExtractor — boundaries', () => {
     assert.equal(text.length, 50000);
   });
 
+  it('accepts a plain-text file exactly at the 10 MiB profile limit', async () => {
+    const filePath = path.join(tmpDir, 'limit.txt');
+    fs.writeFileSync(filePath, 'A'.repeat(10 * 1024 * 1024), 'utf8');
+    const text = await DocumentTextExtractor.extract(filePath);
+    assert.equal(text.length, 10 * 1024 * 1024);
+  });
+
+  it('rejects a profile document larger than 10 MiB before parsing', async () => {
+    const filePath = path.join(tmpDir, 'too-large.txt');
+    fs.writeFileSync(filePath, '');
+    fs.truncateSync(filePath, 10 * 1024 * 1024 + 1);
+    await assert.rejects(
+      async () => DocumentTextExtractor.extract(filePath),
+      (error) => error?.code === 'profile_document_too_large' && /maximum is 10 MB/.test(error.message),
+    );
+  });
+
   it('rejects a binary file marked as .txt (contains NUL byte)', async () => {
     const filePath = path.join(tmpDir, 'bintxt.txt');
     // 2048 bytes with a NUL embedded — well within the sniff window

@@ -129,6 +129,9 @@ export class ProfileOrchestrator implements ProfileOrchestratorRuntime {
         redactForLog([error]),
       );
       const message = error?.message ?? '';
+      if (error?.code === 'profile_document_too_large') {
+        return { success: false, error: 'File is too large; the maximum is 10 MB.' };
+      }
       if (message.includes('empty')) {
         return { success: false, error: message };
       }

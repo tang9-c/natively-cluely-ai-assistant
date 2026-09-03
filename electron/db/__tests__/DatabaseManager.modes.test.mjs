@@ -227,6 +227,26 @@ describe('DatabaseManager — deleteReferenceFile', () => {
   });
 });
 
+describe('DatabaseManager — reference file summaries', () => {
+  it('returns metadata without loading stored document content', () => {
+    const { db, manager } = makeManager();
+    createModeSchema(db);
+    manager.createMode({ id: 'm1', name: 'A', templateType: 'general', customContext: '' });
+    manager.addReferenceFile({
+      id: 'ref1',
+      modeId: 'm1',
+      fileName: 'large.txt',
+      content: 'PRIVATE_DOCUMENT_BODY',
+    });
+
+    const summaries = manager.getReferenceFileSummaries('m1');
+
+    assert.equal(summaries.length, 1);
+    assert.equal(summaries[0].file_name, 'large.txt');
+    assert.equal(Object.hasOwn(summaries[0], 'content'), false);
+  });
+});
+
 describe('DatabaseManager — atomic reference file metadata writes', () => {
   let db, manager;
 

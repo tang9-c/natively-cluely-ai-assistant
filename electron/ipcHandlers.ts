@@ -5193,10 +5193,13 @@ export function initializeIpcHandlers(appState: AppState): void {
       const db = DatabaseManager.getInstance();
       const metadataRows = db.getModeReferenceFileMetadataForMode(mode.id);
       const metadataByFileId = new Map(metadataRows.map((row: any) => [row.reference_file_id, row]));
-      const documents = modesManager.getReferenceFiles(mode.id).map((file: any) => {
+      const documents = modesManager.getReferenceFileSummaries(mode.id).map((file: any) => {
         const metadata = metadataByFileId.get(file.id) ?? null;
         return {
-          ...file,
+          id: file.id,
+          modeId: file.modeId,
+          fileName: file.fileName,
+          createdAt: file.createdAt,
           metadata,
           scenarioType: metadata?.scenario_type,
           scenario_type: metadata?.scenario_type,

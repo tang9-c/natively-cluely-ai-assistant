@@ -2843,6 +2843,21 @@ export class DatabaseManager {
         }
     }
 
+    public getReferenceFileSummaries(modeId: string): any[] {
+        if (!this.db) return [];
+        try {
+            return this.db.prepare(`
+                SELECT id, mode_id, file_name, created_at
+                FROM mode_reference_files
+                WHERE mode_id = ?
+                ORDER BY created_at ASC
+            `).all(modeId);
+        } catch (e) {
+            console.error('[DatabaseManager] getReferenceFileSummaries failed:', e);
+            return [];
+        }
+    }
+
     public addReferenceFile(file: { id: string; modeId: string; fileName: string; content: string }): void {
         if (!this.db) throw new Error('Database not initialized');
         try {

@@ -3,6 +3,7 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 
 const PARSE_TIMEOUT_MS = 15_000;
+export const MAX_PROFILE_DOCUMENT_BYTES = 10 * 1024 * 1024;
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -79,13 +80,18 @@ export class DocumentTextExtractor {
     const ext = path.extname(filePath).toLowerCase();
     let stats: fs.Stats;
     try {
-      stats = fs.lstatSync(filePath);
+      stats = await fs.promises.lstat(filePath);
     } catch (error) {
       if (ext === '.pdf') throw attachPdfRuntimeCode(error);
       throw error;
     }
     if (!stats.isFile()) {
       throw new Error('Selected path is not a regular file.');
+    }
+    if (stats.size > MAX_PROFILE_DOCUMENT_BYTES) {
+      const error = new Error('File is too large; the maximum is 10 MB.') as CodedError;
+      error.code = 'profile_document_too_large';
+      throw error;
     }
 
     let raw = '';
@@ -95,7 +101,7 @@ export class DocumentTextExtractor {
       } else if (ext === '.docx' || ext === '.doc') {
         raw = await this.extractDocx(filePath);
       } else if (ext === '.txt' || ext === '.md' || ext === '.markdown') {
-        raw = this.extractPlainText(filePath);
+        raw = await this.extractPlainText(filePath);
       } else {
         throw new Error(`Unsupported file type "${ext}". Supported formats: PDF, DOCX, DOC, TXT, MD.`);
       }
@@ -120,7 +126,7 @@ export class DocumentTextExtractor {
     PDFParse.setWorker(pathToFileURL(resolvePdfWorkerPath()).href);
     let buffer: Buffer;
     try {
-      buffer = fs.readFileSync(filePath);
+      buffer = await fs.promises.readFile(filePath);
     } catch (error) {
       throw attachPdfRuntimeCode(error);
     }
@@ -137,8 +143,8 @@ export class DocumentTextExtractor {
     return result?.value ?? '';
   }
 
-  private static extractPlainText(filePath: string): string {
-    const probe = fs.readFileSync(filePath, { encoding: null });
+  private static async extractPlainText(filePath: string): Promise<string> {
+    const probe = await fs.promises.readFile(filePath, { encoding: null });
     if (probe.length === 0) return '';
 
     if (probe.length >= 2 && probe[0] === 0xff && probe[1] === 0xfe) {

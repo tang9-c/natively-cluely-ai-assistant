@@ -50,6 +50,8 @@ export interface ModeReferenceFile {
     createdAt: string;
 }
 
+export type ModeReferenceFileSummary = Omit<ModeReferenceFile, 'content'>;
+
 export interface ModeNoteSection {
     id: string;
     modeId: string;
@@ -211,6 +213,15 @@ function rowToFile(row: any): ModeReferenceFile {
         modeId: row.mode_id,
         fileName: row.file_name,
         content: row.content ?? '',
+        createdAt: row.created_at,
+    };
+}
+
+function rowToFileSummary(row: any): ModeReferenceFileSummary {
+    return {
+        id: row.id,
+        modeId: row.mode_id,
+        fileName: row.file_name,
         createdAt: row.created_at,
     };
 }
@@ -398,6 +409,10 @@ export class ModesManager {
 
     public getReferenceFiles(modeId: string): ModeReferenceFile[] {
         return ModesManager.getDatabase().getReferenceFiles(modeId).map(rowToFile);
+    }
+
+    public getReferenceFileSummaries(modeId: string): ModeReferenceFileSummary[] {
+        return ModesManager.getDatabase().getReferenceFileSummaries(modeId).map(rowToFileSummary);
     }
 
     public addReferenceFile(params: { modeId: string; fileName: string; content: string }): ModeReferenceFile {
