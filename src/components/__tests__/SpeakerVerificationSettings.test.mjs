@@ -153,10 +153,10 @@ test('recording UI exposes live quality state and next action guidance', () => {
   assert.match(source, /可以停止本段录音/);
 });
 
-test('speaker enrollment uses long prompts with eight voiced seconds and a ten second cap', () => {
+test('speaker enrollment uses long prompts with eight voiced seconds and a fifteen second cap', () => {
   const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
 
-  assert.match(source, /const MAX_RECORDING_DURATION_MS = 10_000/);
+  assert.match(source, /const MAX_RECORDING_DURATION_MS = 15_000/);
   assert.match(source, /今天的会议我们会依次讨论产品目标、技术方案、交付时间和团队分工/);
   assert.match(source, /客户最近重点关注系统稳定性、数据安全、部署方式和使用体验/);
   assert.match(source, /包括遇到的问题、你的判断以及下一步准备怎么做/);
@@ -166,6 +166,15 @@ test('speaker enrollment uses long prompts with eight voiced seconds and a ten s
   assert.match(source, /mediaRef\.current = null;\s+setBusy\(true\);/);
   assert.match(source, /formatDuration\(MAX_RECORDING_DURATION_MS\)/);
   assert.match(source, /formatDuration\(qualityPolicy\.minDurationMs\)/);
+});
+
+test('recording limit failure asks for a rerecord instead of asking the user to continue a stopped recording', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+
+  assert.match(source, /\(\) => void finishRecording\(true\)/);
+  assert.match(source, /onClick=\{\(\) => void finishRecording\(false\)\}/);
+  assert.match(source, /recordingEnded/);
+  assert.match(source, /有效语音不足，请重录/);
 });
 
 test('recording quality policy is loaded from IPC with an internal default fallback', () => {

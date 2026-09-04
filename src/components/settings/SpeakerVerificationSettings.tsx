@@ -13,7 +13,7 @@ import {
 } from '../../../shared/speakerVoiceActivity';
 
 const SPEAKER_MODEL_ID = 'csukuangfj/speaker-embedding-models';
-const MAX_RECORDING_DURATION_MS = 10_000;
+const MAX_RECORDING_DURATION_MS = 15_000;
 
 interface LocalSpeakerModelInfo {
   id: string;
@@ -189,13 +189,27 @@ function enrollmentQualityClassName(band: NonNullable<SpeakerVerificationStatus[
   }
 }
 
-function recordingQualityMessage(metrics: RecordingMetrics, policy: SpeakerRecordingQualityPolicy): string {
+function recordingQualityMessage(
+  metrics: RecordingMetrics,
+  policy: SpeakerRecordingQualityPolicy,
+  recordingEnded = false,
+): string {
   switch (metrics.state) {
     case 'too_short':
+      if (recordingEnded) {
+        return `录音已结束，录音时长不足，请重录。本段录制了 ${formatDuration(metrics.durationMs)}`;
+      }
       return `继续说话，还需要至少 ${formatDuration(Math.max(0, policy.minDurationMs - metrics.durationMs))}`;
     case 'too_quiet':
-      return '声音偏小，靠近麦克风或提高音量';
+      return recordingEnded
+        ? '录音已结束，声音偏小，请靠近麦克风或提高音量后重录'
+        : '声音偏小，靠近麦克风或提高音量';
     case 'not_enough_voice':
+      if (recordingEnded) {
+        return `录音已结束，有效语音不足，请重录。本段检测到 ${formatDuration(
+          metrics.durationMs * metrics.voiceRatio,
+        )} 有效语音，需要 ${formatDuration(policy.minDurationMs)}`;
+      }
       return `有效语音不足，请继续说话，还需要 ${formatDuration(Math.max(
         0,
         policy.minDurationMs - metrics.durationMs * metrics.voiceRatio,
@@ -394,7 +408,7 @@ export function SpeakerVerificationSettings() {
       mediaRef.current = await startActiveRecording(
         qualityPolicy,
         setRecordingMetrics,
-        () => void finishRecording(),
+        () => void finishRecording(true),
       );
       setRecordingIndex(shouldRestart ? 0 : samples.length);
     } catch (err: any) {
@@ -402,7 +416,7 @@ export function SpeakerVerificationSettings() {
     }
   };
 
-  const finishRecording = async () => {
+  const finishRecording = async (recordingEnded = false) => {
     const active = mediaRef.current;
     if (!active) return;
     mediaRef.current = null;
@@ -413,7 +427,8 @@ export function SpeakerVerificationSettings() {
       const quality = evaluateRecordingQuality(sample.samples, sample.sampleRate, qualityPolicy);
       setRecordingMetrics(quality);
       if (quality.state !== 'ready') {
-        setError(`本段录音未达标，请重录。${recordingQualityMessage(quality, qualityPolicy)}`);
+        const guidance = recordingQualityMessage(quality, qualityPolicy, recordingEnded);
+        setError(recordingEnded ? guidance : `本段录音未达标，请重录。${guidance}`);
         return;
       }
       const next = [...samples, sample];
@@ -528,7 +543,7 @@ export function SpeakerVerificationSettings() {
               <Download size={14} />
             </button>
           ) : recordingIndex !== null ? (
-            <button type="button" onClick={finishRecording} disabled={busy || recordingMetrics.state !== 'ready'} className="rounded-md p-2 bg-red-500/15 text-red-300 disabled:opacity-50" title={recordingButtonTitle}>
+            <button type="button" onClick={() => void finishRecording(false)} disabled={busy || recordingMetrics.state !== 'ready'} className="rounded-md p-2 bg-red-500/15 text-red-300 disabled:opacity-50" title={recordingButtonTitle}>
               <Square size={14} />
             </button>
           ) : (
