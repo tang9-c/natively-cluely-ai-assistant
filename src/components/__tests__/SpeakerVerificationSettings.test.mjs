@@ -168,6 +168,19 @@ test('speaker enrollment uses long prompts with eight voiced seconds and a fifte
   assert.match(source, /formatDuration\(qualityPolicy\.minDurationMs\)/);
 });
 
+test('each speaker enrollment prompt contains enough Chinese speech for the eight-second voice target', () => {
+  const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
+  const promptBlock = source.match(/const PROMPTS = \[([\s\S]*?)\] as const;/)?.[1] ?? '';
+  const prompts = [...promptBlock.matchAll(/'([^']+)'/g)].map(match => match[1]);
+
+  assert.equal(prompts.length, 3);
+  for (const prompt of prompts) {
+    const hanCharacters = [...prompt].filter(character => /\p{Script=Han}/u.test(character)).length;
+    assert.ok(hanCharacters >= 65, `提示词汉字数不足：${hanCharacters}`);
+    assert.ok(hanCharacters <= 75, `提示词汉字数过多：${hanCharacters}`);
+  }
+});
+
 test('recording limit failure asks for a rerecord instead of asking the user to continue a stopped recording', () => {
   const source = read('src/components/settings/SpeakerVerificationSettings.tsx');
 
