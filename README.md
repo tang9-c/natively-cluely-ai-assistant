@@ -33,6 +33,8 @@ CueUp 是一个桌面应用，运行在 macOS 和 Windows 上。它可以在会�
 
 第一次使用请先阅读[快速入门指南](docs/QUICKSTART.md)：其中包含 macOS 与 Windows 权限、本地 SenseVoice 与云端语音服务、会议模式、会后搜索和导出的实际操作步骤。
 
+完整功能文档、操作指南、设置参考与架构说明见[文档目录](docs/README.md)。
+
 ## CueUp 是什么
 
 CueUp 不是一个简单的语音转写工具。它是一个本地优先的会议智能系统：
