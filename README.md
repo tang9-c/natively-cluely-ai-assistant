@@ -29,6 +29,10 @@ CueUp 是一个桌面应用，运行在 macOS 和 Windows 上。它可以在会�
   </p>
 </div>
 
+## 快速开始
+
+第一次使用请先阅读[快速入门指南](docs/QUICKSTART.md)：其中包含 macOS 与 Windows 权限、本地 SenseVoice 与云端语音服务、会议模式、会后搜索和导出的实际操作步骤。
+
 ## CueUp 是什么
 
 CueUp 不是一个简单的语音转写工具。它是一个本地优先的会议智能系统：
@@ -95,7 +99,7 @@ CueUp 随安装包分发 4 个预制 `SKILL.md` 技能：
 - 自动生成会议摘要和结构化概览。
 - 统计 AI token 用量。
 - 在单场会议范围内进行语义搜索。
-- 导出 Markdown、JSON 或 Text。
+- 导出以详细会议摘要为主、可继续编辑的 DOCX；需要时可附带完整转录。
 - 使用技能把完整转录变成面试评估、客户复盘、周会纪要等具体产物。
 
 ### 本地资料和 RAG
@@ -125,9 +129,9 @@ CueUp 支持只读业务系统知识源。当前重点是 Windchill 知识源：
 
 ### 语音与本地模型
 
-- 支持 Local SenseVoice、QCLOUD API、Doubao AUC 等语音提供商。
+- 默认推荐本地 SenseVoice；也支持 QCLOUD API、Doubao AUC 等云端语音服务。
 - 支持本地模型管理。
-- 支持说话人和情绪信息的归一化传递。
+- 云端语音服务支持说话人分离；本地 SenseVoice 不提供通用多人说话人分离。
 - 麦克风转写和系统音频采集分开诊断。
 
 ## 隐私与安全
@@ -179,7 +183,7 @@ npm run app:build
 
 你可以在设置里配置：
 
-- LLM 提供商，例如 QCLOUD API、Doubao、OpenAI、Claude、Gemini、Groq、本地 Ollama、自定义端点。
+- 默认聊天模型为 Doubao Seed 2.0 Lite；也可配置 QCLOUD API 或自定义端点。
 - 语音提供商，例如 Local SenseVoice、QCLOUD API、Doubao AUC。
 - 屏幕理解模式。
 - 云提供商数据范围。
@@ -192,9 +196,6 @@ npm run app:build
 ```bash
 DOUBAO_API_KEY=...
 NATIVE_API_KEY=...
-USE_OLLAMA=false
-OLLAMA_MODEL=...
-OLLAMA_URL=http://localhost:11434
 ```
 
 生产环境主要使用应用内安全存储的凭据。
