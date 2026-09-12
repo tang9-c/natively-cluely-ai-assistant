@@ -1622,7 +1622,7 @@ export const HelpSettings: React.FC = () => {
                                 { name: 'General', desc: '默认通用模式，无特定主题时的兜底助手。' },
                                 { name: 'Interview', desc: 'STAR 格式回答、行为故事、分步编码提示；覆盖数据结构与算法/系统设计推理。' },
                                 { name: 'Sales', desc: '异议处理、发现性问题、产品推销框架。' },
-                                { name: 'FDE', desc: '客户现场发现、多人会议事实捕捉、交付风险与下一步推进。' },
+                                { name: 'FDE', desc: '面向 PLM、QMS 和企业 AI Agent 部署，辅助客户现场发现、交付风险识别与下一步推进。' },
                                 { name: 'Recruiting', desc: '候选人评估、职位描述交叉参考、结构化评估。' },
                                 { name: 'Team Meet', desc: '行动项、公告、阻塞项、决策——自动提取。' },
                                 { name: 'Looking for work', desc: '求职与面试准备，简历对齐、行为问题与谈判话术。' },

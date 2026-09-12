@@ -161,6 +161,14 @@ test('HelpSettings advertises 8 expert modes and is section-number neutral', () 
   assert.match(source, /文本去 AI 味/);
 });
 
+test('FDE user-facing descriptions state the PLM QMS and enterprise AI Agent scope', () => {
+  const help = read('src/components/settings/HelpSettings.tsx');
+  const modes = read('electron/services/ModesManager.ts');
+
+  assert.match(modes, /type: 'fde',[^\n]+description: '[^']*PLM、QMS 和企业 AI Agent 部署[^']*'/);
+  assert.match(help, /name: 'FDE', desc: '[^']*PLM、QMS 和企业 AI Agent 部署[^']*'/);
+});
+
 test('HelpSettings describes intent keywords as user-editable classifier inputs', () => {
   const source = read('src/components/settings/HelpSettings.tsx');
 

@@ -68,7 +68,7 @@ export const MODE_TEMPLATES: Array<{
 }> = [
     { type: 'general',              label: '通用',              description: '适用于任何会议或对话的通用智能助手。' },
     { type: 'sales',                label: '销售',              description: '通过策略性需求发现和异议处理来促成交易。' },
-    { type: 'fde',                  label: 'FDE',               description: '支持前线部署工程师完成客户现场多人会议、需求澄清、技术约束识别与交付推进。' },
+    { type: 'fde',                  label: 'FDE',               description: '支持前线部署工程师完成 PLM、QMS 和企业 AI Agent 部署中的需求澄清、技术约束识别与交付推进。' },
     { type: 'recruiting',           label: '招聘',              description: '通过结构化面试洞察来评估候选人。' },
     { type: 'team-meet',            label: '团队会议',          description: '跟踪会议中的行动项和关键决策。' },
     { type: 'looking-for-work',     label: '求职',              description: '自信、清晰地回答面试问题。' },
