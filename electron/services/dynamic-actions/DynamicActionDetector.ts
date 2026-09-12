@@ -433,6 +433,7 @@ const FDE_TRIGGERS: ActionTrigger[] = [
         patterns: [
             /\b(PII|SOC2|compliance|audit logs?|permissions?|access control|data residency|encryption|security review|privacy)\b/i,
             zh('合规', '审计日志', '权限', '访问控制', '数据驻留', '加密', '安全评审', '隐私', '敏感数据', '脱敏'),
+            /(?:没(?:有)?办法|无法).{0,12}(?:证明|追溯|确认).{0,20}(?:哪份|哪个|来源|从哪).{0,12}(?:数据|记录|结果)/i,
         ],
         priority: 0.92,
         label: 'Clarify security review',
@@ -446,6 +447,8 @@ const FDE_TRIGGERS: ActionTrigger[] = [
             /\b(blocker|blocked|dependency|risk|timeline|delay|migration|cutover|rollback|edge case|launch risk|non-conformance|traceability|quality risk|audit risk)\b/i,
             zh('阻塞', '卡住', '依赖', '风险', '延期', '迁移', '切换', '回滚', '边界情况', '上线风险', '不确定', '质量风险', '追溯风险', '审计风险', '偏差'),
             /(?:流程|审批|项目|交付).{0,20}卡在.{0,20}(?:部门|环节|阶段|系统|审批|验收|联调|数据|权限)/i,
+            /审批.{0,30}(?:平均|通常|需要|要).{0,8}(?:\d+|[一二两三四五六七八九十几]+).{0,3}(?:天|周|月)/i,
+            /(?:历史)?(?:客户)?数据.{0,12}(?:格式)?(?:不统一|不一致).{0,20}(?:清洗|工作量).{0,16}(?:没|未|没有).{0,8}(?:评估|确定)/i,
         ],
         priority: 0.9,
         label: 'Unblock deployment risk',
@@ -470,6 +473,8 @@ const FDE_TRIGGERS: ActionTrigger[] = [
         patterns: [
             /\b(next step|owner|follow up|action item|rollout plan|launch plan|go live|by Friday|by next week)\b/i,
             zh('下一步', '负责人', '跟进', '行动项', '上线计划', '推进计划', '灰度', '正式上线', '周五前', '下周'),
+            /(?:上线|投产)(?:之后|以后|后).{0,24}(?:谁.{0,8}(?:维护|负责)|出了问题.{0,8}找谁)/i,
+            /谁来(?:拍板|决定|确认).{0,24}(?:确定|确认)(?:之后|以后|后).{0,16}(?:开工|推进|开始)/i,
         ],
         priority: 0.9,
         label: 'Lock next step',
@@ -499,6 +504,9 @@ const FDE_TRIGGERS: ActionTrigger[] = [
                 '(PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|Windchill).{0,80}(只读|写回).{0,80}(PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|流程)',
                 '(PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|Windchill).{0,80}(PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|流程).{0,80}(只读|写回)'
             ),
+            /(?:审批|工单|订单).{0,20}(?:状态|数据).{0,16}(?:串起来|打通|同步)/i,
+            /(?:手工|人工).{0,12}(?:导入|录入|同步).{0,24}(?:系统|ERP|财务|PLM|QMS|MES|CRM)/i,
+            /(?:财务|ERP|PLM|QMS|MES|CRM|业务)?系统.{0,12}(?:每天|每日|每晚|每小时).{0,12}(?:才)?(?:同步|更新).{0,6}(?:一次)?/i,
         ],
         priority: 0.88,
         label: 'Clarify integration',
@@ -511,6 +519,7 @@ const FDE_TRIGGERS: ActionTrigger[] = [
         patterns: [
             /\b(success criteria|acceptance criteria|acceptance test|pilot|POC|measurement|metric|KPI|validation|sign off)\b/i,
             zh('验收标准', '成功标准', '试点', '验证', '指标', '度量', 'KPI', '验收测试', '通过标准', '效果衡量'),
+            /(?:先拿|先在|先选).{0,20}(?:团队|区域|部门).{0,16}(?:试一轮|试用|验证).{0,24}(?:看效果|评估效果|复盘)/i,
         ],
         priority: 0.86,
         label: 'Define success criteria',
@@ -523,6 +532,9 @@ const FDE_TRIGGERS: ActionTrigger[] = [
         patterns: [
             /\b(current workflow|current process|business process|user workflow|stakeholder|requirements|what are you trying to solve|what does success look like|PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|revision|version|release|part number|drawing|material master|routing|manufacturing|quality object)\b/i,
             zh('现有流程', '当前流程', '业务流程', '用户流程', '需求是什么', '想解决什么', '谁会使用', '谁负责', '干系人', '业务场景', '客户现场', 'PLM', 'QMS', 'BOM', 'ECO', 'ECN', 'CAPA', 'NCR', '8D', '版本', '变更单', '发布', '图纸', '物料', '工艺', '质量对象'),
+            /(?:邮件|Excel).{0,20}(?:跟踪|维护|流转)|(?:跟踪|维护|流转).{0,20}(?:邮件|Excel)/i,
+            /(?:组织|业务).{0,8}流程.{0,16}(?:没|未|没有).{0,8}(?:定|明确|确定)/i,
+            /(?:每个|各个|各).{0,10}(?:区域|团队|部门).{0,20}(?:维护|使用).{0,16}(?:自己|各自).{0,8}(?:一套|一份).{0,12}(?:编码|主数据)/i,
         ],
         priority: 0.84,
         label: 'Probe deployment context',
@@ -581,16 +593,25 @@ function isSalesCustomerQuestionOrRequest(text: string): boolean {
         /(?:有|存在).{0,24}(?:需求|要求)/i.test(text);
 }
 
-function shouldSuppressFdeTrigger(trigger: ActionTrigger, transcript: string): boolean {
+const FDE_AGENT_FEASIBILITY_BOUNDARY_PATTERN =
+    /能力边界|权限边界|自动化|自动执行|人审|人工确认|人工复核|审批|工具调用|只读|写回|自动写入|写入\s*(?:PLM|QMS)|能做什么|不能做什么|可以做什么|capabilit(?:y|ies) boundar(?:y|ies)|permission boundar(?:y|ies)|automat(?:e|ion)|human[- ]in[- ]the[- ]loop|human (?:confirmation|review)|approval|tool call|read[- ]only|write[- ]?back|write (?:to|into) (?:PLM|QMS)/i;
+
+export function shouldSuppressFdeTrigger(trigger: ActionTrigger, transcript: string): boolean {
     const text = transcript.replace(/\s+/g, ' ').trim();
     if (!text) return true;
     if (/(午饭|吃什么|天气|闲聊|random chat)/i.test(text)) return true;
+    if (/(?:会议室.{0,12}(?:环境|安静)|环境.{0,8}(?:不错|安静|舒适)|公司团建)/i.test(text)) return true;
     if (/(内部复盘|我们内部|内部待办|internal note|internal planning|draft wording|not a customer ask)/i.test(text)) return true;
-    if (/(只是(?:文件名|提到)|文件名|材料名|不是客户流程|不是集成需求|不是要查|没有客户问题|没有新证据|没人提问|not about deployment|only in (?:our )?slide title|attendee title only)/i.test(text)) return true;
+    if (/(只是(?:文件名|提到)|文件名|材料名|不是客户流程|不是集成需求|不是要查|没有客户问题|没有新证据|没人提问|not about deployment|only in (?:our )?slide title|attendee title only|(?:只是|写在|出现在|列在).{0,24}(?:标题|目录|附件|组织架构图)|(?:附件|组织架构图|文档).{0,12}(?:标题|目录))/i.test(text)) return true;
     if (/(上周话题|old topic|still joining the call|还在加入会议|测试麦克风)/i.test(text)) return true;
+    if (trigger.type === 'fde_integration_check' && /接口.{0,4}(?:同事|负责人|工程师).{0,10}(?:请假|休假|不在)/i.test(text)) return true;
+    if (trigger.type === 'fde_security_review' && /(?:隐私|权限|合规).{0,12}(?:没问题|没有问题)|不需要.{0,8}安全评审/i.test(text)) return true;
+    if (trigger.type === 'fde_risk_blocker' && /(?:迁移|切换|回滚).{0,12}(?:不是风险|已完成|已经完成)|不是风险.{0,12}(?:已完成|已经完成)/i.test(text)) return true;
+    if (trigger.type === 'fde_success_criteria' && /(?:指标|KPI|OKR).{0,24}(?:跟|与).{0,12}(?:项目)?验收无关/i.test(text)) return true;
+    if (trigger.type === 'fde_agent_feasibility' && !FDE_AGENT_FEASIBILITY_BOUNDARY_PATTERN.test(text)) return true;
     if (
         trigger.type === 'fde_discovery_probe' &&
-        !/(客户|customer|PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|part number|drawing revision|material master|workflow|process|流程|权限|验收|集成|AI Agent|智能体|物料|图纸|变更|质量|质量对象)/i.test(text)
+        !/(客户|customer|PLM|QMS|BOM|ECO|ECN|CAPA|NCR|8D|part number|drawing revision|material master|workflow|process|流程|权限|验收|集成|AI Agent|智能体|物料|图纸|变更|质量|质量对象|编码|数据)/i.test(text)
     ) {
         return true;
     }

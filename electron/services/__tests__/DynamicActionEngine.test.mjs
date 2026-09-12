@@ -426,6 +426,90 @@ test('FDE detects workflow blockage phrased as 卡在 without changing other mod
   assert.deepEqual(unrelatedTypes, []);
 });
 
+test('FDE compound customer statements enter the expected action candidate', async () => {
+  const { DynamicActionDetector, MODE_TRIGGERS } = await loadModules();
+  const detector = new DynamicActionDetector(MODE_TRIGGERS);
+  const cases = [
+    ['我们现在的变更申请主要靠邮件和 Excel 跟踪', 'fde_discovery_probe'],
+    ['如果系统能把审批状态串起来就好了', 'fde_integration_check'],
+    ['上线之后谁来维护这些数据', 'fde_next_step'],
+    ['这不是技术问题，主要是组织流程没有定下来', 'fde_discovery_probe'],
+    ['销售订单每天都要手工导入财务系统', 'fde_integration_check'],
+    ['审批要经过法务和财务，平均要两周', 'fde_risk_blocker'],
+    ['历史客户数据格式不统一，清洗工作量还没评估', 'fde_risk_blocker'],
+    ['先拿华东一个团队试一轮，月底再看效果', 'fde_success_criteria'],
+    ['谁来拍板字段口径，确定后我们再开工', 'fde_next_step'],
+    ['每个区域都维护自己的一套客户编码', 'fde_discovery_probe'],
+    ['财务系统每天晚上才同步一次', 'fde_integration_check'],
+    ['没有办法证明这个结果是从哪份数据来的', 'fde_security_review'],
+  ];
+
+  for (const [transcript, expectedType] of cases) {
+    const types = detector.detectTriggers({
+      transcript,
+      speaker: 'interviewer',
+      modeTemplateType: 'fde',
+    }).map(({ trigger }) => trigger.type);
+    assert.deepEqual(types, [expectedType], transcript);
+  }
+});
+
+test('FDE obvious non-actions are suppressed for detector and persisted keyword candidates', async () => {
+  const { DynamicActionDetector, DynamicActionEngine, MODE_TRIGGERS } = await loadModules();
+  const detector = new DynamicActionDetector(MODE_TRIGGERS);
+  const cases = [
+    ['环境不错，会议室很安静', 'fde_integration'],
+    ['权限这个词写在组织架构图标题里', 'fde_security'],
+    ['下周公司团建', 'fde_next_step'],
+    ['版本图纸只是附件标题', 'fde_discovery'],
+    ['隐私没问题，不需要安全评审', 'fde_security'],
+    ['迁移不是风险，已经完成', 'fde_risk'],
+    ['生产环境写在文档目录里', 'fde_integration'],
+    ['接口同事今天请假', 'fde_integration'],
+    ['指标是市场部季度 OKR，跟项目验收无关', 'fde_success'],
+    ['AI Agent 是客户公司名称的一部分', 'fde_agent_feasibility'],
+  ];
+
+  for (const [transcript, intent] of cases) {
+    const detected = detector.detectTriggers({
+      transcript,
+      speaker: 'interviewer',
+      modeTemplateType: 'fde',
+    });
+    assert.deepEqual(detected, [], `detector: ${transcript}`);
+
+    const engine = new DynamicActionEngine();
+    let cloudCalls = 0;
+    const actions = await engine.assessSignals({
+      transcript,
+      speaker: 'interviewer',
+      modeTemplateType: 'fde',
+      modeId: 'mode_fde_suppression',
+      sessionId: `session_${intent}`,
+      detectedTriggers: [],
+      intentResult: {
+        intent,
+        confidence: 0.92,
+        answerShape: 'checklist',
+        source: 'mode_keyword',
+        matchedKeyword: transcript,
+      },
+      cloudClassifier: async input => {
+        cloudCalls += 1;
+        return input.candidates.map(candidate => ({
+          actionType: candidate.actionType,
+          decision: 'pass',
+          confidence: 0.95,
+          reasons: ['cloud_confirmed'],
+        }));
+      },
+      now: 4_000,
+    });
+    assert.deepEqual(actions, [], `engine: ${transcript}`);
+    assert.equal(cloudCalls, 0, `gate: ${transcript}`);
+  }
+});
+
 test('FDE intent result can synthesize gated action when detector has no candidate', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();

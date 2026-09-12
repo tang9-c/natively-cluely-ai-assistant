@@ -2,7 +2,7 @@ import * as crypto from 'crypto';
 import { DynamicAction, DynamicActionAcceptTriggerSource, DynamicActionCandidateSource, EvidenceRef } from './DynamicAction';
 import { buildDynamicActionProductContract } from './DynamicActionProductContract';
 import { DynamicActionStore } from './DynamicActionStore';
-import { ActionTrigger, DynamicActionDetector, MODE_TRIGGERS } from './DynamicActionDetector';
+import { ActionTrigger, DynamicActionDetector, MODE_TRIGGERS, shouldSuppressFdeTrigger } from './DynamicActionDetector';
 import { buildRetrievalQuery, detectLanguage, extractKeyEntities } from './ModeEventUtils';
 import {
     CloudSemanticGateClassifier,
@@ -63,9 +63,6 @@ const DETECTOR_ONLY_MODE_TEMPLATE_TYPES = new Set([
     'team-meet',
     'team_meeting',
 ]);
-
-const FDE_AGENT_FEASIBILITY_BOUNDARY_PATTERN =
-    /能力边界|权限边界|自动化|自动执行|人审|人工确认|人工复核|审批|工具调用|只读|写回|自动写入|写入\s*(?:PLM|QMS)|能做什么|不能做什么|可以做什么|capabilit(?:y|ies) boundar(?:y|ies)|permission boundar(?:y|ies)|automat(?:e|ion)|human[- ]in[- ]the[- ]loop|human (?:confirmation|review)|approval|tool call|read[- ]only|write[- ]?back|write (?:to|into) (?:PLM|QMS)/i;
 
 export function isDetectorOnlyDynamicActionMode(modeTemplateType: string): boolean {
     return DETECTOR_ONLY_MODE_TEMPLATE_TYPES.has(modeTemplateType);
@@ -246,8 +243,8 @@ export class DynamicActionEngine {
 
         const actionableTriggerCandidates = triggerCandidates.filter(candidate => !(
             modeTemplateType === 'fde'
-            && candidate.trigger.type === 'fde_agent_feasibility'
-            && !FDE_AGENT_FEASIBILITY_BOUNDARY_PATTERN.test(transcript)
+            && candidate.trigger.type.startsWith('fde_')
+            && shouldSuppressFdeTrigger(candidate.trigger, transcript)
         ));
         const gateCandidates: ModeEventCandidate[] = actionableTriggerCandidates.map(candidate => {
             const policy = getActionGatePolicy(modeTemplateType, candidate.trigger.type);
