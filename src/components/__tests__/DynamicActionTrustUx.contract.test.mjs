@@ -63,6 +63,35 @@ test('DynamicActionBar removes actions dismissed by backend speaker correction',
   assert.match(engine, /this\.emit\('dynamic_action_emitted', \{ \.\.\.activeAction, status: 'dismissed' \}\)/);
 });
 
+test('DynamicActionBar does not generate an answer when main rejects a stale action', () => {
+  const source = read('src/components/dynamic-actions/DynamicActionBar.tsx');
+  const acceptStart = source.indexOf('const accept = useCallback');
+  const acceptEnd = source.indexOf('const scheduleAutoTrigger', acceptStart);
+  const acceptBlock = source.slice(acceptStart, acceptEnd);
+
+  const backendAccept = acceptBlock.indexOf('acceptDynamicAction?.');
+  const successGuard = acceptBlock.indexOf('if (!result?.success)');
+  const activeActionGuard = acceptBlock.indexOf('actionsRef.current.some');
+  const answerGeneration = acceptBlock.indexOf('onAcceptAction(action');
+
+  assert.ok(backendAccept >= 0, 'expected renderer to validate the action with main');
+  assert.ok(successGuard > backendAccept, 'expected a failed acceptance guard after main responds');
+  assert.ok(activeActionGuard > successGuard, 'expected session reset to invalidate an in-flight acceptance');
+  assert.ok(answerGeneration > activeActionGuard, 'answer generation must only run for an active action accepted by main');
+});
+
+test('DynamicActionBar clears cards and timers when the session or active mode changes', () => {
+  const source = read('src/components/dynamic-actions/DynamicActionBar.tsx');
+
+  assert.match(source, /const clearDynamicActions = useCallback/);
+  assert.match(source, /autoTimersRef\.current\.forEach\(\(timer\) => clearTimeout\(timer\)\)/);
+  assert.match(source, /dismissRemovalTimersRef\.current\.forEach\(\(timer\) => clearTimeout\(timer\)\)/);
+  assert.match(source, /triggeringIdsRef\.current\.clear\(\)/);
+  assert.match(source, /setActions\(\[\]\)/);
+  assert.match(source, /onSessionReset\?\.\(clearDynamicActions\)/);
+  assert.match(source, /onModeChanged\?\.\(clearDynamicActions\)/);
+});
+
 test('speaker-uncertain dynamic actions require bidirectional confirmation before execution', () => {
   const bar = read('src/components/dynamic-actions/DynamicActionBar.tsx');
   const card = read('src/components/dynamic-actions/DynamicActionCard.tsx');

@@ -132,6 +132,22 @@ export const DynamicActionBar: React.FC<Props> = ({
     }
   }, []);
 
+  const clearDynamicActions = useCallback(() => {
+    autoTimersRef.current.forEach((timer) => clearTimeout(timer));
+    autoTimersRef.current.clear();
+    dismissRemovalTimersRef.current.forEach((timer) => clearTimeout(timer));
+    dismissRemovalTimersRef.current.clear();
+    if (availabilityTimerRef.current) clearTimeout(availabilityTimerRef.current);
+    availabilityTimerRef.current = null;
+    triggeringIdsRef.current.clear();
+    reportedRenderedIdsRef.current.clear();
+    reportedDroppedIdsRef.current.clear();
+    pendingQueuedAgeRef.current.clear();
+    actionsRef.current = [];
+    setActions([]);
+    setAvailability(null);
+  }, []);
+
   const accept = useCallback(
     async (action: DynamicActionPayload, triggerSource: 'manual' | 'auto_countdown' = 'manual') => {
       if (action.speakerConfirmation) return;
@@ -143,7 +159,16 @@ export const DynamicActionBar: React.FC<Props> = ({
         prev.map((a) => (a.id === action.id ? { ...a, uiStatus: 'generating' } : a)),
       );
       try {
-        await window.electronAPI?.acceptDynamicAction?.(action.id, { triggerSource });
+        const result = await window.electronAPI?.acceptDynamicAction?.(action.id, { triggerSource });
+        if (!result?.success) {
+          triggeringIdsRef.current.delete(action.id);
+          setActions((prev) => prev.filter((item) => item.id !== action.id));
+          return;
+        }
+        if (!actionsRef.current.some((item) => item.id === action.id)) {
+          triggeringIdsRef.current.delete(action.id);
+          return;
+        }
         await onAcceptAction(action, {
           source: 'dynamic_action',
           persist: true,
@@ -328,6 +353,15 @@ export const DynamicActionBar: React.FC<Props> = ({
       }
     };
   }, [handleIncoming]);
+
+  useEffect(() => {
+    const offSessionReset = window.electronAPI?.onSessionReset?.(clearDynamicActions);
+    const offModeChanged = window.electronAPI?.onModeChanged?.(clearDynamicActions);
+    return () => {
+      offSessionReset?.();
+      offModeChanged?.();
+    };
+  }, [clearDynamicActions]);
 
   useEffect(() => {
     const clearAvailabilityTimer = () => {
