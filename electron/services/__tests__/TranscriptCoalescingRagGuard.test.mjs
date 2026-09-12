@@ -8,12 +8,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
 const mainSource = fs.readFileSync(path.join(repoRoot, 'electron/main.ts'), 'utf8');
 
-test('main does not feed merged transcript prefixes into live RAG twice', () => {
+test('main feeds every final fragment to live RAG without replaying merged prefixes', () => {
   const anchor = mainSource.indexOf('private routeTranscriptPayload');
   assert.ok(anchor >= 0, 'shared transcript route should feed live RAG');
   const block = mainSource.slice(anchor, anchor + 1_500);
 
-  assert.match(block, /mergedIntoPrevious/);
-  assert.match(block, /routedPayload\.final[\s\S]*!transcriptResult\?\.mergedIntoPrevious/);
+  assert.match(block, /routedPayload\.final\s*&&\s*this\.ragManager/);
+  assert.doesNotMatch(block, /!transcriptResult\?\.mergedIntoPrevious/);
+  assert.match(block, /speaker: routedPayload\.speaker,[\s\S]*text: routedPayload\.text/);
   assert.match(block, /feedLiveTranscript/);
 });

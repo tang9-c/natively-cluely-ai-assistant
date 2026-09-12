@@ -1317,13 +1317,12 @@ export class AppState {
     };
     this.logMeetingEchoDiagnostics(speaker, routedPayload.text, routedPayload.final, receivedAt);
 
-    const transcriptResult = this.intelligenceManager.handleTranscript(routedPayload);
-    if (routedPayload.final && this.ragManager && !transcriptResult?.mergedIntoPrevious) {
-      const ragTranscript = transcriptResult?.segment ?? routedPayload;
+    this.intelligenceManager.handleTranscript(routedPayload);
+    if (routedPayload.final && this.ragManager) {
       this.ragManager.feedLiveTranscript([{
-        speaker: ragTranscript.speaker,
-        text: ragTranscript.text,
-        timestamp: ragTranscript.timestamp ?? receivedAt,
+        speaker: routedPayload.speaker,
+        text: routedPayload.text,
+        timestamp: routedPayload.timestamp ?? receivedAt,
       }]);
     }
 
