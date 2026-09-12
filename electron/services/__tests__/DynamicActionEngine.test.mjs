@@ -465,7 +465,7 @@ test('FDE agent intent can synthesize action when detector has no candidate', as
   const engine = new DynamicActionEngine();
 
   const actions = await engine.assessSignals({
-    transcript: '客户在讨论一个内部边界问题',
+    transcript: '这个 AI Agent 是否必须只读，并由人工审批后才能写回 QMS？',
     speaker: 'Customer',
     modeTemplateType: 'fde',
     modeId: 'mode_fde_agent_boundary',
@@ -487,6 +487,52 @@ test('FDE agent intent can synthesize action when detector has no candidate', as
   });
 
   assert.ok(actions.some(action => action.type === 'fde_agent_feasibility'));
+});
+
+test('FDE agent feasibility ignores explanation-only mentions from detector and persisted keywords', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const explanation = '客户可能听不懂 AI Agent，能不能换一种方式解释？';
+  const cases = [
+    { sessionId: 'session_fde_agent_explanation_detector' },
+    {
+      sessionId: 'session_fde_agent_explanation_keyword',
+      detectedTriggers: [],
+      intentResult: {
+        intent: 'fde_agent_feasibility',
+        confidence: 0.92,
+        answerShape: 'Explain the AI Agent boundary as a checklist.',
+        source: 'mode_keyword',
+        matchedKeyword: 'AI Agent',
+      },
+    },
+  ];
+
+  for (const testCase of cases) {
+    const engine = new DynamicActionEngine();
+    let cloudCalls = 0;
+    const actions = await engine.assessSignals({
+      transcript: explanation,
+      speaker: 'interviewer',
+      modeTemplateType: 'fde',
+      modeId: 'mode_fde_agent_explanation',
+      sessionId: testCase.sessionId,
+      detectedTriggers: testCase.detectedTriggers,
+      intentResult: testCase.intentResult,
+      cloudClassifier: async input => {
+        cloudCalls += 1;
+        return input.candidates.map(item => ({
+          actionType: item.actionType,
+          decision: 'pass',
+          confidence: 0.95,
+          reasons: ['cloud_confirmed_agent_boundary'],
+        }));
+      },
+      now: 3_000,
+    });
+
+    assert.deepEqual(actions, []);
+    assert.equal(cloudCalls, 0);
+  }
 });
 
 test('mode keyword sales capability question passes gate as capability answer without CARD_MIN drop', async () => {
