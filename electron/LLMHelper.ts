@@ -5386,14 +5386,17 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     options?: { maxOutputTokens?: number; qcloudRequestClass?: QCloudRequestClass },
   ): Promise<string> {
     console.log(`[LLMHelper] generateMeetingSummary called. Context length: ${context.length}`);
-    const summaryDeniedScopes = getDeniedDataScopes(['post_call_summary'], this.getProviderScopePolicy());
-    if (summaryDeniedScopes.includes('post_call_summary')) {
+    const summaryDeniedScopes = getDeniedDataScopes(
+      ['transcript', 'post_call_summary'],
+      this.getProviderScopePolicy(),
+    );
+    if (summaryDeniedScopes.length > 0) {
       const ollamaAvailable = this.useOllama && await this.checkOllamaAvailable();
-      this.logScopeFallback('post_call_summary', ollamaAvailable ? 'routing' : 'omitting');
+      this.logScopeFallback(summaryDeniedScopes[0], ollamaAvailable ? 'routing' : 'omitting');
       if (ollamaAvailable) {
         return this.processResponse(await this.callOllama(`Context:\n${context}`, undefined, systemPrompt));
       }
-      context = '';
+      return '';
     }
 
     // Helper: Estimate tokens (crude approximation: 4 chars = 1 token)

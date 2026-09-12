@@ -92,7 +92,7 @@ test('recruiting audio replay runs through STT output and dynamic action detecti
   assert.equal(byId.get('recruiting-replay-candidate-concern-zh-001')?.status, 'passed');
   assert.equal(byId.get('recruiting-replay-candidate-concern-zh-001')?.actionType, 'candidate_concern');
   assert.equal(byId.get('recruiting-replay-experience-probe-en-001')?.status, 'passed');
-  assert.equal(byId.get('recruiting-replay-experience-probe-en-001')?.actionType, 'candidate_experience_probe');
+  assert.equal(byId.get('recruiting-replay-experience-probe-en-001')?.emitted, false);
   assert.equal(byId.get('recruiting-replay-identity-mismatch-mixed-001')?.status, 'passed');
   assert.equal(byId.get('recruiting-replay-identity-mismatch-mixed-001')?.emitted, false);
 });

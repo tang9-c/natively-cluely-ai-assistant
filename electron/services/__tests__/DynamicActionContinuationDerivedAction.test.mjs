@@ -81,7 +81,7 @@ test('enqueueDerivedAction stores one FDE grounded answer card per parent', asyn
   assert.equal(engine.getStore().getAllActions('fde-session').length, 1);
 });
 
-test('enqueueDerivedAction stores one recruiting evidence summary card per parent', async () => {
+test('enqueueDerivedAction rejects recruiting evidence summaries while evaluation is paused', async () => {
   const { DynamicActionEngine } = await loadEngine();
   const engine = new DynamicActionEngine();
   const input = {
@@ -107,49 +107,7 @@ test('enqueueDerivedAction stores one recruiting evidence summary card per paren
   };
   const first = engine.enqueueDerivedAction(input);
   const duplicate = engine.enqueueDerivedAction({ ...input, latestTurn: '再次补充事故率口径', createdAt: 2_000 });
-  assert.equal(first.type, 'candidate_evidence_summary');
-  assert.equal(first.parentActionId, 'recruiting-parent-1');
-  assert.equal(first.modeTemplateType, 'recruiting');
-  assert.equal(first.label, '生成候选人证据摘要');
-  assert.deepEqual(first.evidenceRefs, input.evidenceRefs);
-  assert.ok(first.keyEntities.includes('个人 ownership'));
-  assert.match(first.retrievalQuery, /已观察证据/);
-  assert.match(first.retrievalQuery, /验证需求/);
-  assert.equal(first.autoSurfacePolicy, 'card');
-  assert.equal(first.autoTriggerEligible, false);
+  assert.equal(first, null);
   assert.equal(duplicate, null);
-  assert.equal(engine.getStore().getAllActions('recruiting-session').length, 1);
-});
-
-test('enqueueDerivedAction keeps recruiting children distinct by parent when turns match', async () => {
-  const { DynamicActionEngine } = await loadEngine();
-  const engine = new DynamicActionEngine();
-  const input = {
-    sessionId: 'recruiting-shared-turn-session',
-    modeId: 'recruiting',
-    modeTemplateType: 'recruiting',
-    type: 'candidate_evidence_summary',
-    parentActionId: 'recruiting-parent-1',
-    sourceIntent: 'recruiting_bei_evidence_gap',
-    latestTurn: '我负责灰度方案，事故率下降了 30%。',
-    evidenceRefs: [{ source: 'transcript', text: '我负责灰度方案，事故率下降了 30%。', speaker: 'interviewer' }],
-    keyEntities: ['灰度方案'],
-    retrievalQuery: '已观察证据: 候选人负责灰度方案并将事故率降低 30%',
-    confidence: 0.91,
-    language: 'zh',
-    createdAt: 1_000,
-  };
-  const first = engine.enqueueDerivedAction(input);
-  const second = engine.enqueueDerivedAction({ ...input, parentActionId: 'recruiting-parent-2', createdAt: 1_001 });
-  const sameParentDuplicate = engine.enqueueDerivedAction({ ...input, createdAt: 1_002 });
-
-  assert.ok(first);
-  assert.ok(second);
-  assert.equal(first.parentActionId, 'recruiting-parent-1');
-  assert.equal(second.parentActionId, 'recruiting-parent-2');
-  assert.equal(sameParentDuplicate, null);
-  assert.deepEqual(
-    engine.getStore().getAllActions('recruiting-shared-turn-session').map((action) => action.parentActionId).sort(),
-    ['recruiting-parent-1', 'recruiting-parent-2'],
-  );
+  assert.deepEqual(engine.getStore().getAllActions('recruiting-session'), []);
 });

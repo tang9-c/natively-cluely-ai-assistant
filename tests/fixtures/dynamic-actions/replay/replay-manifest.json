@@ -98,7 +98,7 @@
     "language": "en",
     "speakerCount": 2,
     "syntheticAudio": true,
-    "coverage": ["candidate_experience_probe", "english", "backend_ownership"]
+    "coverage": ["candidate_experience_probe_disabled", "english", "backend_ownership"]
   },
   {
     "id": "recruiting-replay-identity-mismatch-mixed-001",

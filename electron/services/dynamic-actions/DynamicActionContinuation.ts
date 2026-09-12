@@ -132,15 +132,8 @@ DynamicActionContinuationModePolicy
     },
     recruiting: {
         ...DYNAMIC_ACTION_CONTINUATION_POLICY,
-        parentActionTypes: new Set(['candidate_experience_probe']),
-        sourceIntents: new Set([
-            'recruiting_scorecard_gap',
-            'recruiting_bei_evidence_gap',
-            'recruiting_situational_evidence_gap',
-            'recruiting_risk_verification',
-            'evaluate_answer',
-            'request_example',
-        ]),
+        parentActionTypes: new Set(),
+        sourceIntents: new Set(),
         answerActionType: 'candidate_evidence_summary',
         observedSpeaker: 'interviewer',
     },

@@ -13,6 +13,11 @@ async function loadRouter() {
   return import(pathToFileURL(routerPath).href);
 }
 
+async function loadLLMHelper() {
+  const helperPath = path.resolve(__dirname, '../../../dist-electron/electron/LLMHelper.js');
+  return import(pathToFileURL(helperPath).href);
+}
+
 test('embeddings scope denial routes through Ollama before local fallback', () => {
   const src = read('electron/rag/EmbeddingProviderResolver.ts');
 
@@ -94,7 +99,36 @@ test('MeetingPersistence post_call_summary denial falls back to local summary pa
   const llmHelper = read('electron/LLMHelper.ts');
 
   assert.match(meetingPersistence, /\[ScopeFallback\] post_call_summary denied for cloud; routing to Ollama/);
-  assert.match(llmHelper, /getDeniedDataScopes\(\['post_call_summary'\], this\.getProviderScopePolicy\(\)\)/);
-  assert.match(llmHelper, /this\.logScopeFallback\('post_call_summary', ollamaAvailable \? 'routing' : 'omitting'\)/);
+  assert.match(llmHelper, /\['transcript', 'post_call_summary'\]/);
+  assert.match(llmHelper, /this\.logScopeFallback\(summaryDeniedScopes\[0\], ollamaAvailable \? 'routing' : 'omitting'\)/);
   assert.match(llmHelper, /this\.callOllama\(`Context:\\n\$\{context\}`/);
+});
+
+test('meeting summaries never call remote providers when either required scope is denied', async () => {
+  const { LLMHelper } = await loadLLMHelper();
+
+  for (const scopePolicy of [
+    { transcript: false, post_call_summary: true },
+    { transcript: true, post_call_summary: false },
+  ]) {
+    const helper = new LLMHelper();
+    let remoteCalls = 0;
+    helper.getProviderScopePolicy = () => scopePolicy;
+    helper.checkOllamaAvailable = async () => false;
+    helper.customProvider = { id: 'remote-test-provider' };
+    helper.streamChat = async function* () {
+      remoteCalls += 1;
+      yield 'remote summary';
+    };
+    helper.hasNatively = () => true;
+    helper.generateWithNatively = async () => {
+      remoteCalls += 1;
+      return 'remote summary';
+    };
+
+    const summary = await helper.generateMeetingSummary('summarize', 'private transcript');
+
+    assert.equal(summary, '');
+    assert.equal(remoteCalls, 0);
+  }
 });

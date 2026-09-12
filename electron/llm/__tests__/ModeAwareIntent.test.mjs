@@ -412,6 +412,23 @@ test('sales default intent keywords avoid broad noisy install-time triggers', ()
   assert.doesNotMatch(byIntent.get('sales_buying_signal') ?? '', /(^|,)(启动|试点)(,|$)/);
 });
 
+test('recruiting ignores persisted coding keywords', () => {
+  const defaultsPath = path.resolve(
+    __dirname, '../../../dist-electron/electron/llm/IntentKeywordDefaults.js',
+  );
+  const { matchIntentKeywords } = cjsRequire(defaultsPath);
+  const persistedKeywords = {
+    coding: ['了解一下', '系统重构'],
+    recruiting_policy_question: ['薪资范围'],
+  };
+
+  assert.equal(matchIntentKeywords('我之前做过系统重构', 'recruiting', persistedKeywords), null);
+  assert.equal(
+    matchIntentKeywords('我想了解一下薪资范围', 'recruiting', persistedKeywords)?.intent,
+    'recruiting_policy_question',
+  );
+});
+
 describe('IntentResult provenance', () => {
   test('pattern result has source=pattern', async () => {
     const { classifyIntent } = loadModule();

@@ -132,6 +132,7 @@ export function matchIntentKeywords(
     const order = INTENT_MATCH_ORDER_BY_TEMPLATE[modeTemplateType ?? 'general']
         ?? INTENT_MATCH_ORDER_BY_TEMPLATE.general;
     for (const intent of order) {
+        if (modeTemplateType === 'recruiting' && intent === 'coding') continue;
         const keywords = keywordMap[intent] ?? [];
         for (const keyword of keywords) {
             if (normalizedText.includes(keyword.toLocaleLowerCase())) {

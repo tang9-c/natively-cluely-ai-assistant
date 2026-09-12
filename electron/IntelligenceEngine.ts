@@ -718,8 +718,8 @@ export class IntelligenceEngine extends EventEmitter {
         // Dynamic action gating gets first access to the selected model. The
         // transcript path remains fire-and-forget; continuation starts after
         // the gate settles so the two structured requests do not contend.
-        if (segment.final) {
-            const effectiveSegment = this.session.applySpeakerVerificationOverride(segment);
+        if (segment.final && result) {
+            const effectiveSegment = this.session.applySpeakerVerificationOverride(result.segment);
             const providerDataScopes = this.buildIntentClassificationOptions().providerDataScopes;
             const latencyContext: DynamicActionLatencyContext = {
                 requestId: `dynamic_gate_${segment.timestamp}_${++this.dynamicActionLatencySequence}`,
@@ -1153,6 +1153,9 @@ export class IntelligenceEngine extends EventEmitter {
             return;
         }
         if (segment.speaker !== 'interviewer' && segment.speaker !== 'user') {
+            return;
+        }
+        if (this.currentDynamicActionTemplateType === 'recruiting' && segment.speaker !== 'interviewer') {
             return;
         }
         const text = (segment.text || '').trim();

@@ -12,7 +12,7 @@ failure modes that text fixtures cannot cover well:
 - ASR-prone terms such as ECO, ECN, CAPA, NCR, and 8D
 - internal/customer identity mismatch
 - missing owner, date, or artifact details
-- recruiting candidate concerns, experience probes, and interviewer/candidate
+- recruiting candidate concerns and interviewer/candidate
   identity mismatch
 
 The default replay runner verifies asset presence and can execute deterministic
@@ -31,5 +31,5 @@ same audio assets through the live QCLOUD API speech path.
 | `fde-asr-eco-capa-001.wav` | fde | ASR-prone ECO/ECN/8D terms, missing acceptance criteria |
 | `team-action-item-multi-speaker-001.wav` | team-meet | multi-speaker action item, blocker, owner/date/artifact gap |
 | `recruiting-candidate-concern-zh-001.wav` | recruiting | candidate visa/start-date concern, speaker identity |
-| `recruiting-experience-probe-en-001.wav` | recruiting | English experience probe, backend ownership |
+| `recruiting-experience-probe-en-001.wav` | recruiting | disabled experience-probe regression, backend ownership |
 | `recruiting-identity-mismatch-mixed-001.wav` | recruiting | internal/candidate identity mismatch, false-positive guard |

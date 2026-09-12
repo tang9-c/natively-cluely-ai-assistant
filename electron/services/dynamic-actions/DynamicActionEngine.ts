@@ -431,6 +431,9 @@ export class DynamicActionEngine {
     }
 
     enqueueDerivedAction(input: EnqueueDerivedActionInput): DynamicAction | null {
+        if (input.modeTemplateType === 'recruiting' && input.type === 'candidate_evidence_summary') {
+            return null;
+        }
         const existing = this.store.getAllActions(input.sessionId).some((action) =>
             action.type === input.type && action.parentActionId === input.parentActionId
         );
@@ -605,7 +608,9 @@ export class DynamicActionEngine {
             timestamp: params.now,
             speaker: params.speaker,
         }];
-        const autoSurfacePolicy = params.autoSurfaceEligible ? 'auto' : 'card';
+        const autoSurfacePolicy = params.trigger.type === 'strong_fit_signal'
+            ? 'card'
+            : params.autoSurfaceEligible ? 'auto' : 'card';
         const retrievalQuery = buildRetrievalQuery({
             modeTemplateType: params.modeTemplateType,
             intent: params.trigger.type,
@@ -805,14 +810,6 @@ export class DynamicActionEngine {
             },
             recruiting: {
                 recruiting_policy_question: 'candidate_concern',
-                recruiting_scorecard_gap: 'candidate_experience_probe',
-                recruiting_bei_evidence_gap: 'candidate_experience_probe',
-                recruiting_situational_evidence_gap: 'candidate_experience_probe',
-                recruiting_risk_verification: 'candidate_experience_probe',
-                evaluate_answer: 'candidate_experience_probe',
-                request_example: 'candidate_experience_probe',
-                behavioral: 'candidate_experience_probe',
-                example_request: 'candidate_experience_probe',
             },
             'team-meet': {
                 capture_action: 'action_item',

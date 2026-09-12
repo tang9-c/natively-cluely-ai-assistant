@@ -73,7 +73,7 @@ test('detectSignalCandidates exposes detector-only candidates before semantic as
   assert.deepEqual(candidates.map(({ trigger }) => trigger.type), ['pricing_objection']);
 });
 
-test('recruiting evidence rubric intents can create detector-less gated candidates', async () => {
+test('recruiting evidence rubric intents stay disabled', async () => {
   const mappings = [
     'recruiting_scorecard_gap',
     'recruiting_bei_evidence_gap',
@@ -99,11 +99,41 @@ test('recruiting evidence rubric intents can create detector-less gated candidat
         rejectedCandidates: [],
       })),
     });
-    assert.ok(
-      actions.some(action => action.type === 'candidate_experience_probe'),
-      `${intent} should synthesize candidate_experience_probe; got ${actions.map(action => action.type).join(', ')}`,
-    );
+    assert.equal(actions.some(action => action.type === 'candidate_experience_probe'), false);
   }
+});
+
+test('recruiting disables candidate evidence evaluation and keeps interest as a manual card', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const engine = new DynamicActionEngine();
+  const probeActions = await engine.assessSignals({
+    transcript: '候选人的回答没有说明个人行动，请举一个具体例子。',
+    speaker: 'interviewer',
+    modeTemplateType: 'recruiting',
+    modeId: 'mode-recruiting-disabled-evaluation',
+    sessionId: 'session-recruiting-disabled-evaluation',
+    intentResult: { intent: 'recruiting_bei_evidence_gap', confidence: 0.95, answerShape: '', source: 'cloud' },
+    cloudClassifier: async ({ candidates }) => candidates.map(candidate => ({
+      actionType: candidate.actionType,
+      decision: 'pass',
+      confidence: 0.95,
+      reasons: ['test'],
+      rejectedCandidates: [],
+    })),
+  });
+  const interestActions = engine.detectActions({
+    transcript: '我对这个岗位很感兴趣。',
+    speaker: 'interviewer',
+    modeTemplateType: 'recruiting',
+    modeId: 'mode-recruiting-interest',
+    sessionId: 'session-recruiting-interest',
+  });
+
+  assert.equal(probeActions.some(action => action.type === 'candidate_experience_probe'), false);
+  assert.equal(interestActions.length, 1);
+  assert.equal(interestActions[0].type, 'strong_fit_signal');
+  assert.equal(interestActions[0].autoSurfacePolicy, 'card');
+  assert.equal(interestActions[0].autoTriggerEligible, false);
 });
 
 test('one recruiting turn emits at most one exclusive live-assist card', async () => {
@@ -263,8 +293,8 @@ test('All eight real mode template keys have matching trigger packs', async () =
     },
     {
       modeTemplateType: 'recruiting',
-      transcript: '你能不能举一个具体的例子?',
-      expectedType: 'candidate_experience_probe',
+      transcript: '我想确认这个岗位的薪资范围。',
+      expectedType: 'candidate_concern',
     },
     {
       modeTemplateType: 'team-meet',
@@ -787,7 +817,7 @@ test('expanded trigger packs cover canonical Cluely-style phrases across modes',
     ['negotiation', 'This is our final offer.', 'final_offer'],
     ['sales', "What's the ROI and payback for this?", 'case_study_request'],
     ['sales', 'Can you send me pricing after this call?', 'pricing_request'],
-    ['recruiting', 'Tell me about your experience and why this role.', 'candidate_experience_probe'],
+    ['recruiting', 'Can you confirm the compensation range?', 'candidate_concern'],
     ['team_meeting', 'Are there any blockers or risks to the timeline?', 'blocker_check'],
     ['team_meeting', 'Who owns this and by when?', 'owner_deadline_check'],
     ['interview', 'Tell me about yourself.', 'intro_pitch'],
@@ -995,7 +1025,6 @@ test('assessSignals covers seven real modes with Chinese-first confirmed actions
     ['sales', '这个价格太高了, 我们预算不够', 'pricing_objection'],
     ['sales', '我们准备推进, 你们发合同给法务审核吧', 'buying_signal'],
     ['recruiting', '候选人问薪资和远程办公政策怎么回答', 'candidate_concern'],
-    ['recruiting', '你能举一个具体例子说明过往经验吗', 'candidate_experience_probe'],
     ['team-meet', '这个行动项我来做, 周五前发出去', 'action_item'],
     ['team-meet', '我们最终决定就选第二个方案', 'decision_point'],
     ['looking-for-work', '讲一个你面对挑战最后成功的例子', 'behavioral_question'],
@@ -1721,8 +1750,8 @@ test('safe intent synthesis creates gated candidates across detector-only modes'
     },
     {
       modeTemplateType: 'recruiting',
-      intentResult: { intent: 'recruiting_risk_verification', confidence: 0.93, answerShape: 'probe', source: 'cloud' },
-      expectedAction: 'candidate_experience_probe',
+      intentResult: { intent: 'recruiting_policy_question', confidence: 0.93, answerShape: 'policy', source: 'cloud' },
+      expectedAction: 'candidate_concern',
     },
     {
       modeTemplateType: 'team-meet',
@@ -2519,17 +2548,14 @@ describe('ActionTrigger fixtures — recruiting mode', () => {
     assert.equal(a.priority, 0.9);
   });
 
-  test('candidate_experience_probe (zh: 举一个具体例子) → priority 0.84', async () => {
+  test('candidate_experience_probe stays disabled for recruiter example questions', async () => {
     const { DynamicActionEngine } = await loadModules();
     const engine = new DynamicActionEngine();
     const actions = engine.detectActions({
       transcript: '你能举一个具体的例子吗?',
       modeTemplateType: 'recruiting', modeId: 'm_r', sessionId: 's_r_cep',
     });
-    const a = findAction(actions, 'candidate_experience_probe');
-    assert.ok(a);
-    assert.equal(a.label, '追问岗位相关证据');
-    assert.equal(a.priority, 0.84);
+    assert.equal(actions.some(action => action.type === 'candidate_experience_probe'), false);
   });
 });
 

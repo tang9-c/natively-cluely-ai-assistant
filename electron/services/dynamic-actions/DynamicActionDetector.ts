@@ -238,28 +238,6 @@ const RECRUITING_TRIGGERS: ActionTrigger[] = [
             'You are in Recruiting mode. Acknowledge that the candidate expressed interest in the role. Do not claim the candidate is a strong fit or make a hiring judgment.',
         answerStyle: { maxWords: 60, format: 'bullets', tone: 'encouraging' },
     },
-    {
-        type: 'candidate_experience_probe',
-        patterns: [
-            /\b(tell me about your experience|walk me through your background|why this role|why are you interested|specific example|concrete example|give me an example)\b/i,
-            zh(
-                '讲讲你的经验',
-                '介绍一下你的背景',
-                '为什么这个岗位',
-                '为什么感兴趣',
-                '具体的例子',
-                '举个具体例子',
-                '举一个具体例子',
-                '举一个例子',
-                '追问.{0,12}(具体)?例子'
-            ),
-        ],
-        priority: 0.84,
-        label: '追问岗位相关证据',
-        promptInstruction:
-            'You are in Recruiting mode. Ask one neutral follow-up for observable job-related evidence such as personal action, result, ownership, tradeoff, or verification. Do not name an interview method or judge the candidate.',
-        answerStyle: { maxWords: 100, format: 'bullets', tone: 'structured' },
-    },
 ];
 
 // Team Meeting triggers

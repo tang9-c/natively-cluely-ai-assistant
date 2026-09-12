@@ -175,6 +175,30 @@ describe('ScenarioContextService', () => {
     assert.ok(result.dataScopes.includes('profile_history'));
   });
 
+  test('recruiting context excludes the global master profile', async () => {
+    const deps = installModeWithReferenceFile({
+      templateType: 'recruiting',
+      fileName: 'candidate-resume.md',
+      content: 'Candidate resume content.',
+      metadata: { scenarioType: 'recruiting', docSubtype: 'resume' },
+    });
+    deps.db.getProfileMaster = () => ({
+      display_name: 'Alice Recruiter',
+      headline: 'VP Engineering',
+      summary: 'Private employment history.',
+      contact_info_json: JSON.stringify({ email: 'alice@example.com' }),
+      experience_json: JSON.stringify([{ title: 'VP Engineering', org: 'Private Corp' }]),
+      skills_json: '[]',
+    });
+
+    const { ScenarioContextService } = cjsRequire(servicePath);
+    const service = new ScenarioContextService(deps);
+    const result = await service.buildForRequest({ query: 'Assess the interview context.' });
+
+    assert.match(result.contextBlock, /Candidate resume content/);
+    assert.doesNotMatch(result.contextBlock, /profile_master|alice@example\.com|Private employment history|Private Corp/);
+  });
+
   test('buildMasterProfileBlock omits block when profile_master is empty', async () => {
     const deps = installModeWithReferenceFile({
       templateType: 'sales',

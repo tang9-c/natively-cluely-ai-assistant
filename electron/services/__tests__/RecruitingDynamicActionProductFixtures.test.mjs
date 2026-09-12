@@ -20,8 +20,8 @@ const deterministicRecruitingClassifier = async (input) => {
   const candidateTypes = new Set(input.candidates.map((candidate) => candidate.actionType));
   const policyTypes = new Set(input.policySummary.actions.map((action) => action.actionType));
   const canDecide = (actionType) => candidateTypes.has(actionType) && policyTypes.has(actionType);
-  const isCandidate = input.speaker === 'candidate';
-  const isInterviewer = input.speaker === 'interviewer';
+  const isCandidate = input.speaker === 'interviewer';
+  const isInterviewer = input.speaker === 'user';
   const policyConcern = /签证|薪资|offer|入职时间|远程|混合办公|搬迁|安全审查|visa|compensation|salary|offer|start date|remote|hybrid|relocation|security/.test(transcript);
   const policyRequest = /确认|说明|担心|支持|可以吗|吗|\?|？|confirm|concern|can you|support|timeline/.test(transcript);
   const experienceRequest = /tell me about.*experience|walk me through.*background|specific example|concrete example|give me an example|why this role|讲讲你的经验|介绍一下你的背景|具体的例子|举个具体例子|举一个具体例子|举一个例子/.test(transcript);
@@ -50,20 +50,14 @@ test('recruiting product fixtures cover the release matrix', () => {
 
   assert.ok(fixtures.length >= 40);
   assert.ok(byAction('candidate_concern').length >= 8);
-  assert.ok(byAction('candidate_experience_probe').length >= 18);
+  assert.equal(byAction('candidate_experience_probe').length, 0);
+  assert.ok(negatives.filter((fixture) => fixture.negativeReason === 'evaluation_paused').length >= 18);
   assert.ok(byAction('strong_fit_signal').length >= 4);
   assert.ok(negatives.length >= 10);
   assert.ok(['zh', 'en', 'mixed'].every((language) => fixtures.some((fixture) => fixture.language === language)));
   assert.ok(['candidate', 'interviewer', 'internal'].every((speaker) =>
     fixtures.some((fixture) => fixture.transcriptTurns.some((turn) => turn.speaker === speaker)),
   ));
-
-  const rubricIntents = new Set(
-    byAction('candidate_experience_probe').flatMap((fixture) => fixture.tags ?? []),
-  );
-  for (const intent of ['personal_action', 'result', 'ownership', 'tradeoff_or_verification']) {
-    assert.ok(rubricIntents.has(intent), `missing recruiting rubric intent ${intent}`);
-  }
 
   const collisions = fixtures.filter((fixture) => (fixture.tags ?? []).includes('multi_candidate_collision'));
   assert.ok(collisions.length >= 6);
@@ -104,7 +98,7 @@ test('recruiting product fixtures exercise the deterministic action and accepted
       modeId: 'recruiting',
       sessionId: fixture.id,
       language: fixture.language,
-      speaker: fixture.transcriptTurns.at(-1)?.speaker,
+      speaker: fixture.transcriptTurns.at(-1)?.speaker === 'candidate' ? 'interviewer' : 'user',
       cloudClassifier: deterministicRecruitingClassifier,
     });
     assert.equal(actions.length, 1, `collision must emit one card: ${fixture.id}`);
@@ -114,7 +108,7 @@ test('recruiting product fixtures exercise the deterministic action and accepted
 test('deterministic recruiting classifier ignores a conflicting fixture expectation', async () => {
   const input = {
     transcript: 'I am very interested in this role.',
-    speaker: 'candidate',
+    speaker: 'interviewer',
     candidates: [
       { actionType: 'candidate_concern' },
       { actionType: 'strong_fit_signal' },

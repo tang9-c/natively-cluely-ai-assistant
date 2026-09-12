@@ -21,7 +21,7 @@ const MODE_PROMPTS = {
 const MODE_CONTRACT_TERMS = {
   general: ['全能的会议与对话副驾驶', '感知对话内容', '最近的问题'],
   sales: ['销售方', '潜在客户', '价格异议', '价格', '案例研究'],
-  recruiting: ['面试官', '候选人', '招聘经理', 'lean no', '排练过'],
+  recruiting: ['面试官', '候选人', '已观察证据', '缺失证据', '待验证事项', '建议追问'],
   'team-meet': ['记录', '行动项', '决策', '阻碍', '状态'],
   'looking-for-work': ['候选人', '面试', '简历', '薪资'],
   'technical-interview': ['技术面试', '编程', '系统设计', '复杂度', 'Edge cases'],
@@ -32,7 +32,7 @@ const MODE_CONTRACT_TERMS = {
 const UNIQUE_MODE_TERMS = {
   general: ['全能的会议与对话副驾驶'],
   sales: ['潜在客户', '价格异议'],
-  recruiting: ['招聘经理', '候选人'],
+  recruiting: ['候选人', '已观察证据'],
   'team-meet': ['行动项', '阻碍'],
   'looking-for-work': ['面试', '简历'],
   'technical-interview': ['编程', '系统设计'],
@@ -56,6 +56,17 @@ test('every mode prompt includes shared prompt-leakage and safety controls', () 
       'reveal',
       "I can't share that information",
     ], modeType);
+  }
+});
+
+test('recruiting prompt does not produce hiring recommendations', async () => {
+  const tinyPath = path.resolve(__dirname, '../../../dist-electron/electron/llm/tinyPrompts.js');
+  const tiny = await import(pathToFileURL(tinyPath).href);
+  const combined = `${prompts.MODE_RECRUITING_PROMPT}\n${tiny.TINY_MODE_RECRUITING_PROMPT}`;
+
+  assert.doesNotMatch(combined, /Strong Yes|Lean Yes|Lean No|Strong No|lean no|排练过|rehearsed answers/i);
+  for (const term of ['已观察证据', '缺失证据', '待验证事项', '建议追问']) {
+    assert.match(combined, new RegExp(term));
   }
 });
 

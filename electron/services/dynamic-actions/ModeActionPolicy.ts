@@ -90,10 +90,6 @@ const POLICIES: Record<string, Record<string, ActionGatePolicy>> = {
             'counterpart explicitly asks or expresses concern about recruiting policy',
             'policy category is compensation, visa, remote work, relocation, offer, level, or start date',
         ], false, { exclusiveGroup: 'recruiting_live_assist', selectionPriority: 100 }),
-        candidate_experience_probe: policy('candidate_experience_probe', 'high', 'required', false, [], [
-            'counterpart answer or claim lacks observable job-related evidence',
-            'follow-up can request personal action, result, ownership, tradeoff, or verification',
-        ], false, { exclusiveGroup: 'recruiting_live_assist', selectionPriority: 80 }),
         strong_fit_signal: policy('strong_fit_signal', 'high', 'required', false, [], [
             'counterpart explicitly expresses interest in the role or company',
             'do not infer hiring fit from interest',

@@ -1763,6 +1763,111 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     assert.equal(emitted.some(action => action.type === 'candidate_concern'), false);
   });
 
+  test('recruiting ignores local-user utterances before semantic gating', async () => {
+    const helper = new StubLLMHelper();
+    const { engine } = await makeEngine(helper);
+    const emitted = [];
+    engine.on('dynamic_action_emitted', action => emitted.push(action));
+    engine.setDynamicActionContext({
+      sessionId: 's-recruiting-local-user',
+      modeId: 'm-recruiting',
+      modeTemplateType: 'recruiting',
+    });
+
+    engine.handleTranscript({
+      speaker: 'user',
+      text: '我想确认这个岗位的薪资范围。',
+      timestamp: Date.now(),
+      final: true,
+    }, true);
+    await waitForAsyncSignals();
+
+    assert.equal(
+      helper.structuredCalls.some(call => call.options?.taskLabel === 'dynamic-action-semantic-gate'),
+      false,
+    );
+    assert.deepEqual(emitted, []);
+  });
+
+  test('recruiting speaker isolation does not change sales local-user handling', async () => {
+    const helper = new StubLLMHelper();
+    const { engine } = await makeEngine(helper);
+    engine.setDynamicActionContext({
+      sessionId: 's-sales-local-user',
+      modeId: 'm-sales',
+      modeTemplateType: 'sales',
+    });
+
+    engine.handleTranscript({
+      speaker: 'user',
+      text: '这个价格太高了，我们预算不够。',
+      timestamp: Date.now(),
+      final: true,
+    }, true);
+    await waitForAsyncSignals();
+
+    assert.equal(
+      helper.structuredCalls.some(call => call.options?.taskLabel === 'dynamic-action-semantic-gate'),
+      true,
+    );
+  });
+
+  test('recruiting speaker isolation does not change FDE local-user handling', async () => {
+    const helper = new StubLLMHelper();
+    const { engine } = await makeEngine(helper);
+    engine.setDynamicActionContext({
+      sessionId: 's-fde-local-user',
+      modeId: 'm-fde',
+      modeTemplateType: 'fde',
+    });
+
+    engine.handleTranscript({
+      speaker: 'user',
+      text: '客户要求确认 SSO 对接和生产环境部署方案。',
+      timestamp: Date.now(),
+      final: true,
+    }, true);
+    await waitForAsyncSignals();
+
+    assert.equal(
+      helper.structuredCalls.some(call => call.options?.taskLabel === 'dynamic-action-semantic-gate'),
+      true,
+    );
+  });
+
+  test('coalesced final fragments use the complete text for the triggered assessment', async () => {
+    const helper = new StubLLMHelper();
+    const { engine } = await makeEngine(helper);
+    const base = Date.now();
+    engine.setDynamicActionContext({
+      sessionId: 's-recruiting-coalesced',
+      modeId: 'm-recruiting',
+      modeTemplateType: 'recruiting',
+    });
+
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: '这个岗位是否支持',
+      timestamp: base,
+      endTimestampMs: base + 200,
+      final: true,
+    }, true);
+    engine.handleTranscript({
+      speaker: 'interviewer',
+      text: '远程办公？',
+      timestamp: base + 300,
+      startTimestampMs: base + 300,
+      final: true,
+    }, true);
+    await waitForAsyncSignals();
+
+    const gateCalls = helper.structuredCalls.filter(
+      call => call.options?.taskLabel === 'dynamic-action-semantic-gate',
+    );
+    assert.equal(gateCalls.length, 1);
+    assert.match(gateCalls[0].prompt, /这个岗位是否支持远程办公？/);
+  });
+
   test('selected model failures emit model-specific availability without a card', async () => {
     for (const [code, expectedStatus] of [
       ['selected_model_unavailable', 'selected_model_unavailable'],
@@ -2046,10 +2151,10 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
     const aCount = emitted.length;
     assert.ok(aCount >= 1, 'first session should emit');
 
-    // Same trigger phrase in a fresh session must emit again — proving the
-    // store was flushed (otherwise dedup would suppress it).
+    // An equivalent trigger in a fresh session must emit again — proving the
+    // action store was flushed without being suppressed by transcript deduplication.
     engine.setDynamicActionContext({ sessionId: 's-B', modeId: 'm1', modeTemplateType: 'sales' });
-    engine.handleTranscript({ speaker: 'interviewer', text: '这个价格太高了', timestamp: Date.now(), final: true }, true);
+    engine.handleTranscript({ speaker: 'interviewer', text: '这个报价太高了', timestamp: Date.now(), final: true }, true);
     await waitForAsyncSignals();
     assert.ok(emitted.length > aCount, 'second session must produce a fresh action even with identical phrase');
     const last = emitted[emitted.length - 1];

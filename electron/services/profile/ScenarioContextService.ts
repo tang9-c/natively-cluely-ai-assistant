@@ -94,10 +94,12 @@ export class ScenarioContextService {
       dataScopes.add('profile_history');
     }
 
-    const masterProfile = this.buildMasterProfileBlock(this.db);
-    if (masterProfile) {
-      contextParts.push(masterProfile);
-      dataScopes.add('profile_history');
+    if (activeMode.templateType !== 'recruiting') {
+      const masterProfile = this.buildMasterProfileBlock(this.db);
+      if (masterProfile) {
+        contextParts.push(masterProfile);
+        dataScopes.add('profile_history');
+      }
     }
 
     return {

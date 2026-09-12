@@ -71,7 +71,7 @@ test('FDE continuation fixtures meet process-first release gates', async () => {
   }
 });
 
-test('recruiting continuation fixtures emit neutral evidence summaries only after eligible evidence', async () => {
+test('recruiting continuation is disabled while candidate evaluation is paused', async () => {
   const { loadDynamicActionContinuationFixtures, runDynamicActionContinuationFixture } = await import(moduleUrl);
   const fixtures = loadDynamicActionContinuationFixtures(
     path.join(process.cwd(), 'tests/fixtures/dynamic-actions/continuation/recruiting.json'),
@@ -79,36 +79,8 @@ test('recruiting continuation fixtures emit neutral evidence summaries only afte
   const results = [];
   for (const fixture of fixtures) results.push(await runDynamicActionContinuationFixture({ fixture }));
 
-  const positives = results.filter((result) => result.shouldEmit);
-  const negatives = results.filter((result) => !result.shouldEmit);
-  assert.equal(fixtures.length, 16);
-  assert.equal(positives.length, 8);
-  assert.equal(negatives.length, 8);
-  assert.equal(positives.every((result) =>
-    result.derivedActionEmitted &&
-    result.derivedActionType === 'candidate_evidence_summary' &&
-    result.derivedActionCount === 1 &&
-    result.duplicateDerivedActions === 0,
-  ), true);
-  assert.equal(negatives.every((result) =>
-    !result.derivedActionEmitted &&
-    result.derivedActionCount === 0 &&
-    result.visibleAnswerKind === 'none',
-  ), true);
-  assert.equal(positives.every((result) => result.visibleAnswerKind === 'generated' && result.postCallCarryover), true);
-  assert.deepEqual(
-    new Set(negatives.map((result) => fixtures.find((fixture) => fixture.id === result.fixtureId)?.negativeReason)),
-    new Set([
-      'wrong_speaker',
-      'interim_turn',
-      'unrelated_topic',
-      'provider_scope_denial',
-      'planner_timeout',
-      'invalid_json',
-      'final_hiring_judgment',
-      'unsupported_invented_evidence',
-    ]),
-  );
+  assert.deepEqual(fixtures, []);
+  assert.deepEqual(results, []);
 });
 
 function mentionsArchitectureContext(text) {

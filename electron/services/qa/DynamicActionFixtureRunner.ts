@@ -78,6 +78,14 @@ export async function runDynamicActionProductFixtures(input: ProductRunnerInput)
 
   for (const fixture of fixtures) {
     const transcript = fixture.transcriptTurns.map((turn) => turn.text).join('\n');
+    const fixtureSpeaker = fixture.transcriptTurns.at(-1)?.speaker;
+    const runtimeSpeaker = fixture.modeTemplateType === 'recruiting'
+      ? fixtureSpeaker === 'candidate'
+        ? 'interviewer'
+        : fixtureSpeaker === 'interviewer'
+          ? 'user'
+          : fixtureSpeaker
+      : fixtureSpeaker;
     const runnerMode = fixture.assessment?.runnerMode ?? 'assessSignals';
     const traces: unknown[] = [];
     const semanticGateMode = input.semanticGateMode ?? 'real';
@@ -95,7 +103,7 @@ export async function runDynamicActionProductFixtures(input: ProductRunnerInput)
           modeId: fixture.modeTemplateType,
           sessionId: `fixture-${fixture.id}`,
           language: fixture.language,
-          speaker: fixture.transcriptTurns.at(-1)?.speaker,
+          speaker: runtimeSpeaker,
           recentContextTurns: fixture.assessment?.recentContextTurns,
           intentResult: fixture.assessment?.intentResult as any,
           providerDataScopes: fixture.assessment?.providerDataScopes as any,

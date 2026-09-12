@@ -599,13 +599,9 @@ export class RAGManager {
         this.vectorStore.deleteChunksForMeeting(meetingId);
         
         // 2. Clear embedding queue for this meeting to prevent "Chunk not found" errors on re-processing
-        try {
-            const info = this.db.prepare('DELETE FROM embedding_queue WHERE meeting_id = ?').run(meetingId);
-            if (info.changes > 0) {
-                console.log(`[RAGManager] Cleared ${info.changes} items from embedding_queue for meeting ${meetingId}`);
-            }
-        } catch (e) {
-            console.warn(`[RAGManager] Failed to clear embedding_queue for meeting ${meetingId}`, e);
+        const info = this.db.prepare('DELETE FROM embedding_queue WHERE meeting_id = ?').run(meetingId);
+        if (info.changes > 0) {
+            console.log(`[RAGManager] Cleared ${info.changes} items from embedding_queue for meeting ${meetingId}`);
         }
         
         // 3. Clean up transient meeting row if it was a live session
@@ -615,6 +611,18 @@ export class RAGManager {
             }
         } catch (e) {
             console.warn('[RAGManager] Failed to delete transient meeting row', e);
+        }
+    }
+
+    deleteMeetingCompletely(meetingId: string): boolean {
+        try {
+            return this.db.transaction(() => {
+                this.deleteMeetingData(meetingId);
+                return this.db.prepare('DELETE FROM meetings WHERE id = ?').run(meetingId).changes > 0;
+            })();
+        } catch (error) {
+            console.warn(`[RAGManager] Failed to delete meeting ${meetingId}`, error);
+            return false;
         }
     }
 

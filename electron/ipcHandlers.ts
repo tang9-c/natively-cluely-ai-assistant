@@ -1148,7 +1148,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('delete-meeting', async (_, id: string) => {
-    return DatabaseManager.getInstance().deleteMeeting(id);
+    const ragManager = appState.getRAGManager();
+    if (!ragManager) return false;
+    return ragManager.deleteMeetingCompletely(id);
   });
 
   safeHandle('check-for-updates', async () => {

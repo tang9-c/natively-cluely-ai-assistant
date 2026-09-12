@@ -157,7 +157,7 @@ describe('sales industrial discovery dynamic actions', () => {
 
     for (const fixture of NON_SALES_INDUSTRIAL_ISOLATION_FIXTURES) {
       const engine = new DynamicActionEngine();
-      if (['fde', 'recruiting', 'team-meet'].includes(fixture.modeTemplateType)) {
+      if (fixture.expectedAction && ['fde', 'recruiting', 'team-meet'].includes(fixture.modeTemplateType)) {
         const detectedTypes = engine.detectSignalCandidates({
           transcript: fixture.utterance,
           modeTemplateType: fixture.modeTemplateType,
@@ -183,7 +183,11 @@ describe('sales industrial discovery dynamic actions', () => {
       });
 
       assert.equal(actions.some(item => item.type === fixture.mustNotAction), false, fixture.notes);
-      assert.ok(actions.some(item => item.type === fixture.expectedAction), `${fixture.notes}; got ${actions.map(item => item.type).join(', ')}`);
+      if (fixture.expectedAction) {
+        assert.ok(actions.some(item => item.type === fixture.expectedAction), `${fixture.notes}; got ${actions.map(item => item.type).join(', ')}`);
+      } else {
+        assert.deepEqual(actions, [], fixture.notes);
+      }
     }
   });
 });

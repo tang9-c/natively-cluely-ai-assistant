@@ -139,7 +139,7 @@ test('sales continuation registration remains sales-only discovery behavior', as
   })), null);
 });
 
-test('completed recruiting evidence probe observes only the configured counterpart speaker', async () => {
+test('completed recruiting evidence probe does not register a continuation while evaluation is paused', async () => {
   let calls = 0;
   const service = await emptyService({ decide: async () => { calls += 1; return readyResult(); } });
   const record = service.registerCompletedAction(completedAction({
@@ -149,31 +149,9 @@ test('completed recruiting evidence probe observes only the configured counterpa
     sourceIntent: 'recruiting_bei_evidence_gap',
     latestTurn: '请补充你个人采取的行动。',
   }));
-  assert.ok(record);
-  assert.equal(record.observedSpeaker, 'interviewer');
-
-  const recruiterTurn = await service.observeFinalCustomerTurn(turn({
-    modeId: 'recruiting',
-    modeTemplateType: 'recruiting',
-    speaker: 'user',
-    text: '请补充你个人采取的行动。',
-    timestamp: 1,
-  }));
-  assert.equal(recruiterTurn.kind, 'none');
-  assert.equal(recruiterTurn.reasonCode, 'speaker_mismatch');
+  assert.equal(record, null);
+  assert.equal(service.getActiveForSession('session-1'), null);
   assert.equal(calls, 0);
-  assert.equal(service.getActiveForSession('session-1').plannerAttempts, 0);
-  assert.equal(service.getActiveForSession('session-1').observedCustomerTurns, 0);
-
-  const candidateTurn = await service.observeFinalCustomerTurn(turn({
-    modeId: 'recruiting',
-    modeTemplateType: 'recruiting',
-    speaker: 'interviewer',
-    text: '我负责灰度方案，事故率下降了 30%。',
-    timestamp: 2,
-  }));
-  assert.equal(candidateTurn.kind, 'ready');
-  assert.equal(calls, 1);
 });
 
 test('recruiting candidate concern does not register a continuation', async () => {

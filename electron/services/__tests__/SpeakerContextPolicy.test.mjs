@@ -486,7 +486,7 @@ describe('SpeakerContextPolicy', () => {
 
   test('dynamic action path uses the session-overridden segment for speaker skip checks', () => {
     const source = fs.readFileSync(path.resolve(__dirname, '../../../electron/IntelligenceEngine.ts'), 'utf8');
-    assert.match(source, /const effectiveSegment = this\.session\.applySpeakerVerificationOverride\(segment\)/);
+    assert.match(source, /const effectiveSegment = this\.session\.applySpeakerVerificationOverride\(result\.segment\)/);
     assert.match(source, /detectConfirmAndEmitDynamicActions\(effectiveSegment, latencyContext\)/);
     assert.match(source, /observeDynamicActionContinuation\(effectiveSegment, providerDataScopes\)/);
     assert.match(source, /getEffectiveTranscriptTail\(12\)/);
