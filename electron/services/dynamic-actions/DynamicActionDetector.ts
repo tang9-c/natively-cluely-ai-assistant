@@ -445,6 +445,7 @@ const FDE_TRIGGERS: ActionTrigger[] = [
         patterns: [
             /\b(blocker|blocked|dependency|risk|timeline|delay|migration|cutover|rollback|edge case|launch risk|non-conformance|traceability|quality risk|audit risk)\b/i,
             zh('阻塞', '卡住', '依赖', '风险', '延期', '迁移', '切换', '回滚', '边界情况', '上线风险', '不确定', '质量风险', '追溯风险', '审计风险', '偏差'),
+            /(?:流程|审批|项目|交付).{0,20}卡在.{0,20}(?:部门|环节|阶段|系统|审批|验收|联调|数据|权限)/i,
         ],
         priority: 0.9,
         label: 'Unblock deployment risk',

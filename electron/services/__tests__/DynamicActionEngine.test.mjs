@@ -397,6 +397,35 @@ test('FDE quality object names alone remain discovery candidates instead of risk
   assert.deepEqual(matches.map(({ trigger }) => trigger.type), ['fde_discovery_probe']);
 });
 
+test('FDE detects workflow blockage phrased as 卡在 without changing other mode trigger packs', async () => {
+  const { DynamicActionDetector, MODE_TRIGGERS } = await loadModules();
+  const detector = new DynamicActionDetector(MODE_TRIGGERS);
+  const transcript = '这个流程中间经常卡在质量部门';
+
+  const fdeTypes = detector.detectTriggers({
+    transcript,
+    speaker: 'Customer',
+    modeTemplateType: 'fde',
+  }).map(({ trigger }) => trigger.type);
+  assert.deepEqual(fdeTypes, ['fde_risk_blocker']);
+
+  for (const modeTemplateType of ['sales', 'recruiting', 'team-meet']) {
+    const otherTypes = detector.detectTriggers({
+      transcript,
+      speaker: 'Customer',
+      modeTemplateType,
+    }).map(({ trigger }) => trigger.type);
+    assert.deepEqual(otherTypes, [], `${modeTemplateType} trigger pack must remain unchanged`);
+  }
+
+  const unrelatedTypes = detector.detectTriggers({
+    transcript: '椅子卡在会议室门口',
+    speaker: 'Customer',
+    modeTemplateType: 'fde',
+  }).map(({ trigger }) => trigger.type);
+  assert.deepEqual(unrelatedTypes, []);
+});
+
 test('FDE intent result can synthesize gated action when detector has no candidate', async () => {
   const { DynamicActionEngine } = await loadModules();
   const engine = new DynamicActionEngine();

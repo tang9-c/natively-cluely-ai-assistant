@@ -251,6 +251,7 @@ test('FDE modes seed deployment-specific default intent keywords', () => {
   assert.ok(rows.some(row => row.intent === 'fde_agent_feasibility' && /AI Agent|人工确认|只读/.test(row.keywords_csv)));
   assert.ok(rows.some(row => row.intent === 'fde_integration' && /API|SSO|数据源/.test(row.keywords_csv)));
   assert.ok(rows.some(row => row.intent === 'fde_security' && /PII|SOC2|权限/.test(row.keywords_csv)));
+  assert.ok(rows.some(row => row.intent === 'fde_risk' && row.keywords_csv.includes('卡在质量部门')));
 });
 
 test('updateMode persists intent keyword edits without affecting other modes', () => {
