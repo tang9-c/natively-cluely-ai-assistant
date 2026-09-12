@@ -523,13 +523,10 @@ export class DynamicActionEngine {
 
     acceptAction(actionId: string, options?: { triggerSource?: DynamicActionAcceptTriggerSource }): DynamicAction | null {
         const action = this.store.getAction(actionId);
-        if (action?.speakerConfirmation) return null;
-        if (action) {
-            const status = options?.triggerSource === 'auto_countdown' ? 'auto_generated' : 'accepted';
-            this.store.updateStatus(actionId, status);
-            return this.store.getAction(actionId) ?? action;
-        }
-        return null;
+        if (!action || !['candidate', 'shown'].includes(action.status) || action.speakerConfirmation) return null;
+        const status = options?.triggerSource === 'auto_countdown' ? 'auto_generated' : 'accepted';
+        this.store.updateStatus(actionId, status);
+        return this.store.getAction(actionId) ?? action;
     }
 
     dismissAction(actionId: string, options?: { now?: number }): void {

@@ -2891,6 +2891,25 @@ describe('DynamicActionEngine semantic gate trace sink', () => {
 // ============================================================================
 
 describe('DynamicActionEngine deduplication', () => {
+  test('superseded action cannot be accepted after a split final produces a replacement', async () => {
+    const { DynamicActionEngine } = await loadModules();
+    const engine = new DynamicActionEngine();
+    const params = {
+      modeTemplateType: 'fde',
+      modeId: 'mode_fde',
+      sessionId: 'session_split_final',
+    };
+
+    const [first] = engine.detectActions({ ...params, transcript: '现有流程' });
+    const [replacement] = engine.detectActions({ ...params, transcript: '现有流程还有物料主数据。' });
+
+    assert.ok(first);
+    assert.ok(replacement);
+    assert.equal(engine.getStore().getAction(first.id)?.status, 'expired');
+    assert.equal(engine.acceptAction(first.id), null);
+    assert.equal(engine.acceptAction(replacement.id)?.status, 'accepted');
+  });
+
   test('same trigger called twice within window → store has only one action', async () => {
     const { DynamicActionEngine } = await loadModules();
     const engine = new DynamicActionEngine();
