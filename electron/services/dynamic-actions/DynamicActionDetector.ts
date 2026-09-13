@@ -179,6 +179,18 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         answerStyle: { maxWords: 120, format: 'bullets', tone: 'credible' },
     },
     {
+        type: 'capability_fit_answer',
+        patterns: [
+            /\b(?:how (?:do|does) (?:you|your product|it|this) compare (?:with|to)|what(?:'s| is) the difference between|how (?:are|is) (?:you|your product|it|this) different from)\b/i,
+            /(?:和|跟|与).{1,30}(?:相比|对比|比).{0,16}(?:有什么|有何|哪些|哪里|什么)?(?:区别|差异|优势|不同)/i,
+        ],
+        priority: 0.89,
+        label: 'Answer competitor comparison',
+        promptInstruction:
+            'You are in Sales mode. The prospect asked for a competitor comparison. Generate a short answer grounded only in trusted materials or the current conversation. Separate confirmed differences from what still needs validation. If grounding is insufficient, say so and ask which comparison criteria matter. Do not invent competitor capabilities, weaknesses, pricing, or customer outcomes.',
+        answerStyle: { maxWords: 120, format: 'short_script', tone: 'credible' },
+    },
+    {
         type: 'technical_requirements',
         patterns: [
             /\b(technical requirements?|technical needs?|integration requirements?|API requirements?|security requirements?|deployment requirements?|implementation details?|technical solution|architecture requirements?|SSO requirements?)\b/i,
@@ -566,7 +578,7 @@ export const MODE_TRIGGERS: Record<string, ActionTrigger[]> = {
 function shouldSuppressSalesTrigger(trigger: ActionTrigger, transcript: string, speaker?: string): boolean {
     const text = transcript.replace(/\s+/g, ' ').trim();
     if (/(?:只是|写在|出现在).{0,16}(?:表格列名|标题|目录)|(?:表格列名|章节标题|下一页标题)/i.test(text)) return true;
-    const customerIntentTypes = ['pricing_request', 'case_study_request', 'technical_requirements', 'discovery_question'];
+    const customerIntentTypes = ['pricing_request', 'case_study_request', 'technical_requirements', 'discovery_question', 'capability_fit_answer'];
     if (customerIntentTypes.includes(trigger.type) && isSalesSellerResponse(text)) return true;
     if (trigger.type === 'case_study_request') {
         return /内部复盘|不是客户要材料|file name is outdated|our drive|材料还没上传|先别引用/i.test(text);

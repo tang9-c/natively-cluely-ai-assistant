@@ -72,6 +72,7 @@ const POLICIES: Record<string, Record<string, ActionGatePolicy>> = {
         pricing_objection: policy('pricing_objection', 'high', 'required', false, [], [], false, { exclusiveGroup: 'sales_live_assist', selectionPriority: 90 }),
         pricing_request: policy('pricing_request', 'high', 'required', false, [], [], false, { exclusiveGroup: 'sales_live_assist', selectionPriority: 86 }),
         case_study_request: policy('case_study_request', 'high', 'required', false, [], [], false, { exclusiveGroup: 'sales_live_assist', selectionPriority: 87 }),
+        capability_fit_answer: policy('capability_fit_answer', 'high', 'required', false, [], [], false, { exclusiveGroup: 'sales_live_assist', selectionPriority: 89 }),
         discovery_question: policy('discovery_question', 'high', 'required', false, [], [], false, { exclusiveGroup: 'sales_live_assist', selectionPriority: 84 }),
         technical_requirements: policy('technical_requirements', 'high', 'required', false, [], [], false, { exclusiveGroup: 'sales_live_assist', selectionPriority: 88 }),
         buying_signal: policy('buying_signal', 'high', 'required', false, [], [], false, { exclusiveGroup: 'sales_live_assist', selectionPriority: 95 }),

@@ -18,7 +18,7 @@ describe('ModeActionPolicy', () => {
   test('dynamic-card target modes are fail-closed and share one exclusive group per mode', async () => {
     const { getActionGatePolicy } = await loadPolicy();
     const fixtures = [
-      ['sales', ['pricing_objection', 'pricing_request', 'case_study_request', 'discovery_question', 'technical_requirements', 'buying_signal'], 'sales_live_assist'],
+      ['sales', ['pricing_objection', 'pricing_request', 'case_study_request', 'capability_fit_answer', 'discovery_question', 'technical_requirements', 'buying_signal'], 'sales_live_assist'],
       ['fde', ['fde_discovery_probe', 'fde_integration_check', 'fde_security_review', 'fde_risk_blocker', 'fde_agent_feasibility', 'fde_success_criteria', 'fde_next_step'], 'fde_live_assist'],
       ['recruiting', ['candidate_concern', 'strong_fit_signal'], 'recruiting_live_assist'],
       ['team-meet', ['action_item', 'decision_point', 'blocker_check', 'owner_deadline_check'], 'team_meet_live_assist'],

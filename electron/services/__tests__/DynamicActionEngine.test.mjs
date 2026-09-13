@@ -80,6 +80,8 @@ test('common explicit sales questions enter the semantic gate candidate path', a
   const cases = [
     ['你们这个产品多少钱？', 'pricing_request'],
     ['折扣最低能到什么程度？', 'pricing_objection'],
+    ['和 Salesforce 相比有什么区别？', 'capability_fit_answer'],
+    ['你们和竞品比优势在哪里？', 'capability_fit_answer'],
     ['你们实施周期通常多久？', 'technical_requirements'],
     ['上线和数据迁移有什么风险？', 'technical_requirements'],
   ];
@@ -125,6 +127,8 @@ test('narrow sales detector rules ignore nearby document mentions', async () => 
     '折扣最低值写在内部价格表里。',
     '实施周期是文档目录里的章节标题。',
     '上线和数据迁移是下一页标题。',
+    'Salesforce',
+    '竞品对比写在 PPT 标题里。',
   ];
 
   for (const transcript of transcripts) {
@@ -1721,6 +1725,7 @@ test('sales seller-response semantics suppress customer-intent cards regardless 
     '我把案例脱敏后发您。',
     '报价单稍后发,商务条款我们电话沟通。',
     'SAML/OAuth 都支持,API 是 REST。',
+    '我们和 Salesforce 相比集成更灵活。',
   ];
 
   for (const transcript of sellerResponses) {
@@ -1737,7 +1742,7 @@ test('sales seller-response semantics suppress customer-intent cards regardless 
       });
 
       assert.equal(
-        actions.some(action => ['pricing_request', 'case_study_request', 'technical_requirements', 'discovery_question'].includes(action.type)),
+        actions.some(action => ['pricing_request', 'case_study_request', 'technical_requirements', 'discovery_question', 'capability_fit_answer'].includes(action.type)),
         false,
         `seller response should not emit a Sales customer-intent card for speaker=${speaker}: ${transcript}; got ${actions.map(action => action.type).join(', ')}`,
       );
