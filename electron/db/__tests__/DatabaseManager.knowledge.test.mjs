@@ -606,6 +606,6 @@ describe('DatabaseManager — knowledge material embedding-space migration', () 
     assert.equal(columns.has('embedding_provider'), true);
     assert.equal(columns.has('embedding_dimensions'), true);
     assert.equal(columns.has('embedding_space'), true);
-    assert.equal(db.pragma('user_version', { simple: true }), 36);
+    assert.equal(db.pragma('user_version', { simple: true }), 37);
   });
 });

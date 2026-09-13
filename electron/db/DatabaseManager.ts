@@ -1693,6 +1693,37 @@ export class DatabaseManager {
             this.migrateLegacyProfileToMaster(36);
         }
 
+        // Version 36 -> 37: Upgrade only unchanged shipped Sales keyword defaults.
+        if (version < 37) {
+            console.log('[DatabaseManager] Applying migration v36 -> v37: Upgrade Sales intent keyword defaults');
+            const currentSalesDefaults = new Map(
+                DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE.sales.map((row) => [row.intent, row.keywordsCsv]),
+            );
+            const legacyDefaults = [
+                ['sales_pricing_objection', 'too expensive,too pricey,too high,out of budget,not in budget,can.t afford,discount,do better on price,lower the price,reduce the price,太贵,价格高,价格太高,报价太高,超出预算,预算不够,预算不足,能不能便宜,便宜点,打个折,有折扣吗'],
+                ['sales_quote_request', 'quote,pricing,proposal,commercial terms,send pricing,send proposal,send quote,what does it cost,报价单,方案报价,商务条款,发报价,给报价,发方案,发 proposal,模块多少钱,维护费多少钱'],
+                ['sales_technical_requirements', 'API,SSO,SAML,OAuth,SCIM,security,deployment,production,sandbox,integration,architecture,technical requirements,API 接口,SSO,单点登录,安全,部署,生产环境,沙盒,集成,技术需求,技术要求,架构要求,对接方式'],
+            ] as const;
+            this.db.transaction(() => {
+                const hasIntentTables = ['modes', 'mode_intent_keywords'].every((tableName) => Boolean(
+                    this.db!.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName),
+                ));
+                if (hasIntentTables) {
+                    const update = this.db!.prepare(`
+                        UPDATE mode_intent_keywords
+                        SET keywords_csv = ?, updated_at = datetime('now')
+                        WHERE intent = ? AND keywords_csv = ?
+                          AND mode_id IN (SELECT id FROM modes WHERE template_type = 'sales')
+                    `);
+                    for (const [intent, legacyKeywords] of legacyDefaults) {
+                        const currentKeywords = currentSalesDefaults.get(intent);
+                        if (currentKeywords) update.run(currentKeywords, intent, legacyKeywords);
+                    }
+                }
+                this.db!.pragma('user_version = 37');
+            })();
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 

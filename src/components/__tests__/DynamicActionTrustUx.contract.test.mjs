@@ -92,6 +92,22 @@ test('DynamicActionBar clears cards and timers when the session or active mode c
   assert.match(source, /onModeChanged\?\.\(clearDynamicActions\)/);
 });
 
+test('DynamicActionBar subscribes before hydrating active actions and invalidates stale hydration', () => {
+  const source = read('src/components/dynamic-actions/DynamicActionBar.tsx');
+  const comment = source.indexOf('// Subscribe to push from main process');
+  const effectStart = source.indexOf('useEffect(() => {', comment);
+  const effectEnd = source.indexOf('useEffect(() => {', effectStart + 1);
+  const hydrationEffect = source.slice(effectStart, effectEnd);
+
+  const subscribe = hydrationEffect.indexOf('onIntelligenceDynamicAction?.');
+  const hydrate = hydrationEffect.indexOf('listDynamicActions?.');
+  assert.ok(subscribe >= 0, 'expected push subscription');
+  assert.ok(hydrate > subscribe, 'push subscription must be active before hydration starts');
+  assert.match(hydrationEffect, /hydrationRevisionRef/);
+  assert.match(hydrationEffect, /handleIncoming\(action\)/);
+  assert.match(source, /hydrationRevisionRef\.current \+= 1/);
+});
+
 test('speaker-uncertain dynamic actions require bidirectional confirmation before execution', () => {
   const bar = read('src/components/dynamic-actions/DynamicActionBar.tsx');
   const card = read('src/components/dynamic-actions/DynamicActionCard.tsx');

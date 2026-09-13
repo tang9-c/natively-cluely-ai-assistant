@@ -95,6 +95,7 @@ export const DynamicActionBar: React.FC<Props> = ({
   const reportedRenderedIdsRef = useRef<Set<string>>(new Set());
   const reportedDroppedIdsRef = useRef<Set<string>>(new Set());
   const pendingQueuedAgeRef = useRef<Map<string, number | undefined>>(new Map());
+  const hydrationRevisionRef = useRef(0);
   const [visibilityRevision, setVisibilityRevision] = useState(0);
   const surface = useMemo(getDynamicActionSurface, []);
   actionsRef.current = actions;
@@ -134,6 +135,7 @@ export const DynamicActionBar: React.FC<Props> = ({
   }, []);
 
   const clearDynamicActions = useCallback(() => {
+    hydrationRevisionRef.current += 1;
     autoTimersRef.current.forEach((timer) => clearTimeout(timer));
     autoTimersRef.current.clear();
     dismissRemovalTimersRef.current.forEach((timer) => clearTimeout(timer));
@@ -354,10 +356,20 @@ export const DynamicActionBar: React.FC<Props> = ({
 
   // Subscribe to push from main process
   useEffect(() => {
+    let disposed = false;
+    const hydrationRevision = hydrationRevisionRef.current;
     const off = window.electronAPI?.onIntelligenceDynamicAction?.((data) => {
       if (data?.action) handleIncoming(data.action);
     });
+    const hydration = window.electronAPI?.listDynamicActions?.();
+    void hydration?.then((result) => {
+      if (disposed || hydrationRevision !== hydrationRevisionRef.current || !result.success) return;
+      result.actions.forEach((action) => handleIncoming(action));
+    }).catch(() => {
+      /* hydration failure must not affect live push */
+    });
     return () => {
+      disposed = true;
       try {
         off?.();
       } catch {

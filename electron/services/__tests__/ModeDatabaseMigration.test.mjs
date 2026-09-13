@@ -43,6 +43,15 @@ function runFromVersion(version, customContext) {
       meeting_id TEXT,
       FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
     );
+    CREATE TABLE mode_intent_keywords (
+      id TEXT PRIMARY KEY,
+      mode_id TEXT NOT NULL,
+      intent TEXT NOT NULL,
+      keywords_csv TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(mode_id, intent)
+    );
   `);
   db.pragma(`user_version = ${version}`);
   db.prepare('INSERT INTO modes (id, name, template_type, custom_context, is_active) VALUES (?, ?, ?, ?, 1)')
@@ -53,6 +62,44 @@ function runFromVersion(version, customContext) {
   manager.runMigrations();
 
   return db.prepare('SELECT custom_context FROM modes WHERE id = ?').get('mode_fde_default').custom_context;
+}
+
+function runSalesIntentKeywordMigration() {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE modes (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      template_type TEXT NOT NULL DEFAULT 'general',
+      custom_context TEXT NOT NULL DEFAULT '',
+      is_active INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE mode_intent_keywords (
+      id TEXT PRIMARY KEY,
+      mode_id TEXT NOT NULL,
+      intent TEXT NOT NULL,
+      keywords_csv TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(mode_id, intent)
+    );
+    CREATE TABLE speaker_profile_stats (profile_id TEXT PRIMARY KEY);
+    CREATE TABLE transcripts (id INTEGER PRIMARY KEY);
+  `);
+  db.pragma('user_version = 36');
+  db.prepare('INSERT INTO modes (id, name, template_type) VALUES (?, ?, ?)').run('sales-default', 'Sales', 'sales');
+  db.prepare('INSERT INTO modes (id, name, template_type) VALUES (?, ?, ?)').run('sales-custom', 'Sales Custom', 'sales');
+  const insert = db.prepare('INSERT INTO mode_intent_keywords (id, mode_id, intent, keywords_csv) VALUES (?, ?, ?, ?)');
+  insert.run('pricing-default', 'sales-default', 'sales_pricing_objection', 'too expensive,too pricey,too high,out of budget,not in budget,can.t afford,discount,do better on price,lower the price,reduce the price,太贵,价格高,价格太高,报价太高,超出预算,预算不够,预算不足,能不能便宜,便宜点,打个折,有折扣吗');
+  insert.run('quote-default', 'sales-default', 'sales_quote_request', 'quote,pricing,proposal,commercial terms,send pricing,send proposal,send quote,what does it cost,报价单,方案报价,商务条款,发报价,给报价,发方案,发 proposal,模块多少钱,维护费多少钱');
+  insert.run('technical-default', 'sales-default', 'sales_technical_requirements', 'API,SSO,SAML,OAuth,SCIM,security,deployment,production,sandbox,integration,architecture,technical requirements,API 接口,SSO,单点登录,安全,部署,生产环境,沙盒,集成,技术需求,技术要求,架构要求,对接方式');
+  insert.run('pricing-custom', 'sales-custom', 'sales_pricing_objection', '客户自定义价格词');
+
+  const manager = Object.create(DatabaseManager.prototype);
+  manager.db = db;
+  manager.runMigrations();
+  return db;
 }
 
 describe('Mode database migrations', () => {
@@ -124,6 +171,20 @@ describe('Mode database migrations', () => {
     assert.match(v23Block[0], /FOREIGN\s+KEY\s*\(\s*mode_id\s*\)\s+REFERENCES\s+modes\s*\(\s*id\s*\)\s+ON\s+DELETE\s+CASCADE/i);
     assert.match(v23Block[0], /DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE/);
     assert.match(v23Block[0], /INSERT\s+OR\s+IGNORE\s+INTO\s+mode_intent_keywords/i);
+  });
+
+  test('v36 -> v37 upgrades only unchanged shipped Sales intent defaults', () => {
+    const db = runSalesIntentKeywordMigration();
+    const rows = db.prepare('SELECT mode_id, intent, keywords_csv FROM mode_intent_keywords ORDER BY mode_id, intent').all();
+    const value = (modeId, intent) => rows.find((row) => row.mode_id === modeId && row.intent === intent)?.keywords_csv;
+
+    assert.match(value('sales-default', 'sales_pricing_objection'), /折扣最低能到什么程度/);
+    assert.match(value('sales-default', 'sales_quote_request'), /产品多少钱/);
+    assert.match(value('sales-default', 'sales_quote_request'), /怎么收费/);
+    assert.match(value('sales-default', 'sales_technical_requirements'), /实施周期通常多久/);
+    assert.match(value('sales-default', 'sales_technical_requirements'), /上线和数据迁移有什么风险/);
+    assert.equal(value('sales-custom', 'sales_pricing_objection'), '客户自定义价格词');
+    assert.equal(db.pragma('user_version', { simple: true }), 37);
   });
 
   test('v21 -> v22 migration is registered for FDE seed backfill', () => {
