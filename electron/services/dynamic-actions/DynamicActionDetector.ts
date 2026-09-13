@@ -97,7 +97,7 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         type: 'pricing_objection',
         patterns: [
             /\b(expensive|too pricey|price (?:is|seems|looks|feels) (?:a bit |really |too )?(?:high|expensive)|pricing (?:is|seems|looks|feels) (?:a bit |really |too )?(?:high|expensive)|cost (?:is|seems|looks|feels) (?:a bit |really |too )?(?:high|expensive)|too much|out of (?:our|my|the) budget|not in (?:our|my|the) budget|can't afford|cannot afford|do better on price|lower the price|reduce the price|discount)\b/i,
-            zh('太贵', '价格高', '价格太高', '报价太高', '预算不够', '预算不足', '预算.{0,8}过不了', '年付.{0,12}预算.{0,8}过不了', '太高.{0,12}预算', '负担不起'),
+            zh('太贵', '价格高', '价格太高', '报价太高', '预算不够', '预算不足', '预算.{0,8}过不了', '年付.{0,12}预算.{0,8}过不了', '太高.{0,12}预算', '负担不起', '折扣.{0,8}(最低|底价).{0,8}(多少|到什么程度|能到)'),
         ],
         priority: 0.9,
         label: 'Handle pricing objection',
@@ -124,7 +124,7 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         type: 'pricing_request',
         patterns: [
             /\b(send me pricing|pricing page|quote|proposal|commercials|what does it cost)\b/i,
-            zh('发我报价', '发.{0,6}报价', '给.{0,6}报价', '报(?:个|一下|下)价(?:格)?', '给(?:我)?(?:个|一下|下)价(?:格)?', '想要报价', '要报价', '需要报价', '报价怎么给', '报价单', '价格页', '方案报价', '商务条款', '(模块|维护费|全部|整体|搞下来|系统).{0,8}多少钱'),
+            zh('发我报价', '发.{0,6}报价', '给.{0,6}报价', '报(?:个|一下|下)价(?:格)?', '给(?:我)?(?:个|一下|下)价(?:格)?', '想要报价', '要报价', '需要报价', '报价怎么给', '报价单', '价格页', '方案报价', '商务条款', '(产品|模块|维护费|全部|整体|搞下来|系统|方案|服务).{0,8}(多少钱|怎么收费|如何收费|什么价格)'),
         ],
         priority: 0.86,
         label: 'Draft quote email',
@@ -201,6 +201,8 @@ const SALES_TRIGGERS: ActionTrigger[] = [
                 '安全合规',
                 '合规要求',
                 '审计报告',
+                '(实施|交付|部署|上线).{0,8}(周期|工期).{0,8}(多久|多长|多少)',
+                '(上线|数据迁移|迁移).{0,12}(风险|隐患|有什么问题|担心)',
                 '(API|SSO|SAML|OAuth|REST|生产部署|生产环境|SOC2|数据驻留|安全合规).{0,24}(怎么做|如何做|怎么实现|如何实现|要求|确认)'
             ),
         ],
@@ -561,6 +563,7 @@ export const MODE_TRIGGERS: Record<string, ActionTrigger[]> = {
 
 function shouldSuppressSalesTrigger(trigger: ActionTrigger, transcript: string, speaker?: string): boolean {
     const text = transcript.replace(/\s+/g, ' ').trim();
+    if (/(?:只是|写在|出现在).{0,16}(?:表格列名|标题|目录)|(?:表格列名|章节标题|下一页标题)/i.test(text)) return true;
     const customerIntentTypes = ['pricing_request', 'case_study_request', 'technical_requirements', 'discovery_question'];
     if (customerIntentTypes.includes(trigger.type) && isSalesSellerResponse(text)) return true;
     if (trigger.type === 'case_study_request') {

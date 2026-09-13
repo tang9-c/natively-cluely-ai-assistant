@@ -667,7 +667,7 @@ function detectSalesIntentByPattern(text: string): RawIntentResult | null {
     }
     // 2. Pricing objection — price/budget pushback, not internal price-sheet references.
     if (/(too expensive|too pricey|too high|can'?t afford|out of (our|my|the) budget|not in (our|my|the) budget|cheaper (option|alternative)|discount|price is|reduce the price|lower the price|do better on (price|cost)|can you (do better|lower|reduce))/i.test(text)
-        || /(太贵|价格高|价格太高|报价太高|超出预算|预算不够|预算不足|预算.{0,8}过不了|年付.{0,12}预算.{0,8}过不了|太高.{0,12}预算|负担不起|能不能便宜|便宜点|打个折|有折扣吗)/.test(text)) {
+        || /(太贵|价格高|价格太高|报价太高|超出预算|预算不够|预算不足|预算.{0,8}过不了|年付.{0,12}预算.{0,8}过不了|太高.{0,12}预算|负担不起|能不能便宜|便宜点|打个折|有折扣吗|折扣.{0,8}(?:最低|底价).{0,8}(?:多少|到什么程度|能到))/.test(text)) {
         return { intent: 'sales_pricing_objection', confidence: 0.92, answerShape: getAnswerShapeForMode('sales', 'sales_pricing_objection') };
     }
     const industrialDiscovery = detectSalesIndustrialDiscoveryIntent(text);
@@ -684,13 +684,13 @@ function detectSalesIntentByPattern(text: string): RawIntentResult | null {
     }
     // 4. Technical requirements — clarify before promising capability.
     if (/(technical requirements?|technical needs?|integration requirements?|API requirements?|security requirements?|deployment requirements?|implementation details?|technical solution|architecture requirements?|SSO requirements?|SOC2|data residency|production environment|sandbox)/i.test(text)
-        || /(技术需求|技术要求|集成需求|集成要求|接口需求|API 需求|部署要求|安全要求|技术方案|实现细节|对接方式|架构要求|SSO 对接|生产环境|沙盒|数据驻留)/.test(text)) {
+        || /(技术需求|技术要求|集成需求|集成要求|接口需求|API 需求|部署要求|安全要求|技术方案|实现细节|对接方式|架构要求|SSO 对接|生产环境|沙盒|数据驻留|(实施|交付|部署|上线).{0,8}(周期|工期).{0,8}(多久|多长|多少)|(上线|数据迁移|迁移).{0,12}(风险|隐患|有什么问题|担心))/.test(text)) {
         return { intent: 'sales_technical_requirements', confidence: 0.88, answerShape: getAnswerShapeForMode('sales', 'sales_technical_requirements') };
     }
     // 5. Quote request — external ask for pricing/proposal/commercial terms.
     if (!/(我们的报价表|内部报价|报价表在这|等客户问再发|internal price|price sheet)/i.test(text)
         && (/(send me pricing|send pricing|send (over )?(the|a) proposal|send (over )?(the|a) quote|pricing page|quote|proposal|commercials|commercial terms|what does it cost)/i.test(text)
-            || /(发我报价|发.{0,6}报价|给.{0,6}报价|报(?:个|一下|下)价(?:格)?|给(?:我)?(?:个|一下|下)价(?:格)?|报价单|价格页|方案报价|商务条款|(模块|维护费|全部|整体|搞下来|系统).{0,8}多少钱)/.test(text))) {
+            || /(发我报价|发.{0,6}报价|给.{0,6}报价|报(?:个|一下|下)价(?:格)?|给(?:我)?(?:个|一下|下)价(?:格)?|报价单|价格页|方案报价|商务条款|(产品|模块|维护费|全部|整体|搞下来|系统|方案|服务).{0,8}(多少钱|怎么收费|如何收费|什么价格))/.test(text))) {
         return { intent: 'sales_quote_request', confidence: 0.86, answerShape: getAnswerShapeForMode('sales', 'sales_quote_request') };
     }
     return null;

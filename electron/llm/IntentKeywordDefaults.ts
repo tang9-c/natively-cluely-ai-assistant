@@ -49,10 +49,10 @@ export const DEFAULT_INTENT_KEYWORDS_BY_TEMPLATE: Record<string, IntentKeywordCo
         ...INTERVIEW_KEYWORDS,
     ],
     sales: [
-        { intent: 'sales_pricing_objection', keywordsCsv: 'too expensive,too pricey,too high,out of budget,not in budget,can.t afford,discount,do better on price,lower the price,reduce the price,太贵,价格高,价格太高,报价太高,超出预算,预算不够,预算不足,能不能便宜,便宜点,打个折,有折扣吗' },
-        { intent: 'sales_quote_request', keywordsCsv: 'quote,pricing,proposal,commercial terms,send pricing,send proposal,send quote,what does it cost,报价单,方案报价,商务条款,发报价,给报价,发方案,发 proposal,模块多少钱,维护费多少钱' },
+        { intent: 'sales_pricing_objection', keywordsCsv: 'too expensive,too pricey,too high,out of budget,not in budget,can.t afford,discount,do better on price,lower the price,reduce the price,太贵,价格高,价格太高,报价太高,超出预算,预算不够,预算不足,能不能便宜,便宜点,打个折,有折扣吗,折扣最低能到什么程度' },
+        { intent: 'sales_quote_request', keywordsCsv: 'quote,pricing,proposal,commercial terms,send pricing,send proposal,send quote,what does it cost,报价单,方案报价,商务条款,发报价,给报价,发方案,发 proposal,产品多少钱,模块多少钱,系统多少钱,维护费多少钱,怎么收费,如何收费' },
         { intent: 'sales_proof_request', keywordsCsv: 'case study,customer story,customer example,reference customer,proof point,success story,similar customer,ROI,return on investment,客户案例,成功案例,类似客户,参考客户,证明材料,ROI,投资回报,回报率,成功证明' },
-        { intent: 'sales_technical_requirements', keywordsCsv: 'API,SSO,SAML,OAuth,SCIM,security,deployment,production,sandbox,integration,architecture,technical requirements,API 接口,SSO,单点登录,安全,部署,生产环境,沙盒,集成,技术需求,技术要求,架构要求,对接方式' },
+        { intent: 'sales_technical_requirements', keywordsCsv: 'API,SSO,SAML,OAuth,SCIM,security,deployment,production,sandbox,integration,architecture,technical requirements,API 接口,SSO,单点登录,安全,部署,生产环境,沙盒,集成,技术需求,技术要求,架构要求,对接方式,实施周期通常多久,实施周期多久,交付周期多久,部署周期多久,上线和数据迁移有什么风险,数据迁移有什么风险,上线有什么风险' },
         { intent: 'sales_buying_signal', keywordsCsv: 'ready to move,ready to sign,next steps,legal review,procurement,contract,finalize,when can we start,准备签,准备推进,下一步怎么走,下一步是,法务审核,采购流程,合同,敲定' },
         { intent: 'sales_pain_discovery', keywordsCsv: 'broken workflow,manual workaround,duplicated entry,out of sync,version mismatch,workflow pain,流程不同步,靠邮件通知,靠 Excel 跟踪,重复录入,版本不一致,流程断点,返工停线,审计痛苦' },
         { intent: 'sales_capability_fit', keywordsCsv: 'does it support,can it handle,fit our scenario,capability fit,module capability,能不能支持,是否适合,功能是否匹配,模块功能,能不能追溯,能不能校验' },

@@ -10,6 +10,8 @@ const storePath = path.join(root, 'dist-electron/electron/services/dynamic-actio
 const detectorPath = path.join(root, 'dist-electron/electron/services/dynamic-actions/DynamicActionDetector.js');
 const actionPath = path.join(root, 'dist-electron/electron/services/dynamic-actions/DynamicAction.js');
 const policyPath = path.join(root, 'dist-electron/electron/services/dynamic-actions/ModeActionPolicy.js');
+const intentClassifierPath = path.join(root, 'dist-electron/electron/llm/IntentClassifier.js');
+const intentKeywordDefaultsPath = path.join(root, 'dist-electron/electron/llm/IntentKeywordDefaults.js');
 
 async function loadModules() {
   const [engineMod, storeMod, detectorMod, actionMod] = await Promise.all([
@@ -71,6 +73,68 @@ test('detectSignalCandidates exposes detector-only candidates before semantic as
   });
 
   assert.deepEqual(candidates.map(({ trigger }) => trigger.type), ['pricing_objection']);
+});
+
+test('common explicit sales questions enter the semantic gate candidate path', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const cases = [
+    ['你们这个产品多少钱？', 'pricing_request'],
+    ['折扣最低能到什么程度？', 'pricing_objection'],
+    ['你们实施周期通常多久？', 'technical_requirements'],
+    ['上线和数据迁移有什么风险？', 'technical_requirements'],
+  ];
+
+  for (const [transcript, expectedType] of cases) {
+    const engine = new DynamicActionEngine();
+    const candidates = engine.detectSignalCandidates({
+      transcript,
+      modeTemplateType: 'sales',
+      speaker: 'interviewer',
+    });
+    assert.ok(candidates.some(({ trigger }) => trigger.type === expectedType), transcript);
+  }
+});
+
+test('sales intent defaults and classifier agree with explicit sales questions', async () => {
+  const [{ classifyIntent }, { defaultKeywordMapForTemplate }] = await Promise.all([
+    import(pathToFileURL(intentClassifierPath).href),
+    import(pathToFileURL(intentKeywordDefaultsPath).href),
+  ]);
+  const cases = [
+    ['你们这个产品多少钱？', 'sales_quote_request'],
+    ['折扣最低能到什么程度？', 'sales_pricing_objection'],
+    ['你们实施周期通常多久？', 'sales_technical_requirements'],
+    ['上线和数据迁移有什么风险？', 'sales_technical_requirements'],
+  ];
+
+  for (const [transcript, expectedIntent] of cases) {
+    const result = await classifyIntent(transcript, transcript, 0, 'sales', {
+      customIntentKeywords: defaultKeywordMapForTemplate('sales'),
+      cloudFirst: false,
+      localIntentEnhancementEnabled: false,
+      localIntentEnhancementAvailable: false,
+    });
+    assert.equal(result.intent, expectedIntent, transcript);
+  }
+});
+
+test('narrow sales detector rules ignore nearby document mentions', async () => {
+  const { DynamicActionEngine } = await loadModules();
+  const transcripts = [
+    '“产品多少钱”只是表格列名。',
+    '折扣最低值写在内部价格表里。',
+    '实施周期是文档目录里的章节标题。',
+    '上线和数据迁移是下一页标题。',
+  ];
+
+  for (const transcript of transcripts) {
+    const engine = new DynamicActionEngine();
+    assert.equal(engine.detectSignalCandidates({
+      transcript,
+      modeTemplateType: 'sales',
+      speaker: 'interviewer',
+    }).length, 0, transcript);
+  }
 });
 
 test('recruiting evidence rubric intents stay disabled', async () => {
@@ -1486,6 +1550,10 @@ test('assessSignals rejects common sales false-positive turns when semantic gate
     '材料里有成功案例这个章节。',
     '报价表我们内部再整理。',
     'BOM 这个词前面材料里有。',
+    '“产品多少钱”只是表格列名。',
+    '折扣最低值写在内部价格表里。',
+    '实施周期是文档目录里的章节标题。',
+    '上线和数据迁移是下一页标题。',
   ];
 
   for (const transcript of falsePositiveSalesTurns) {
