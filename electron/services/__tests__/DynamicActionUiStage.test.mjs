@@ -45,3 +45,29 @@ test('UI stage reports reject unknown stages surfaces and free-form drop reasons
     actionId: 'action_1', stage: 'dropped', surface: 'launcher', reason: 'raw diagnostic text',
   }), null);
 });
+
+test('a newer action replaces only the previous card in the same action slot', async () => {
+  const { isDynamicActionCardReplacement } = await import(moduleUrl);
+  const current = {
+    id: 'action_old',
+    sessionId: 'session_1',
+    modeId: 'sales_mode',
+    type: 'pricing_objection',
+  };
+
+  assert.equal(isDynamicActionCardReplacement(current, {
+    ...current,
+    id: 'action_new',
+  }), true);
+  assert.equal(isDynamicActionCardReplacement(current, {
+    ...current,
+    id: 'action_other_type',
+    type: 'pricing_request',
+  }), false);
+  assert.equal(isDynamicActionCardReplacement(current, {
+    ...current,
+    id: 'action_other_session',
+    sessionId: 'session_2',
+  }), false);
+  assert.equal(isDynamicActionCardReplacement(current, current), false);
+});

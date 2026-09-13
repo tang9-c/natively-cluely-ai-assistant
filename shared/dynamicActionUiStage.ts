@@ -22,6 +22,23 @@ export interface DynamicActionUiStageReport {
   visibleCount?: number;
 }
 
+type DynamicActionCardSlot = {
+  id: string;
+  sessionId: string;
+  modeId: string;
+  type: string;
+};
+
+export function isDynamicActionCardReplacement(
+  current: DynamicActionCardSlot,
+  incoming: DynamicActionCardSlot,
+): boolean {
+  return current.id !== incoming.id
+    && current.sessionId === incoming.sessionId
+    && current.modeId === incoming.modeId
+    && current.type === incoming.type;
+}
+
 export function sanitizeDynamicActionUiStageReport(value: unknown): DynamicActionUiStageReport | null {
   if (!value || typeof value !== 'object') return null;
   const input = value as Record<string, unknown>;

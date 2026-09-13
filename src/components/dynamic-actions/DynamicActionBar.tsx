@@ -11,6 +11,7 @@ import type {
   DynamicActionUiStageReport,
   DynamicActionUiSurface,
 } from '../../../shared/dynamicActionUiStage';
+import { isDynamicActionCardReplacement } from '../../../shared/dynamicActionUiStage';
 import { sameSpeakerConfirmationSegment } from '../../../shared/speakerConfirmation';
 import { DynamicActionCard, type DynamicActionCardStatus } from './DynamicActionCard';
 
@@ -234,6 +235,9 @@ export const DynamicActionBar: React.FC<Props> = ({
       if (existing) {
         reportDroppedOnce(action.id, 'duplicate', ageMs, actionsRef.current.length);
       }
+      actionsRef.current
+        .filter((item) => isDynamicActionCardReplacement(item, action))
+        .forEach((item) => clearAutoTimer(item.id));
       const isAuto = isSemiAutoAction(action);
       const actionView: DynamicActionView = action.speakerConfirmation
         ? {
@@ -250,7 +254,12 @@ export const DynamicActionBar: React.FC<Props> = ({
             ...action,
             uiStatus: 'candidate',
           };
-      const projected = [...actionsRef.current.filter((item) => item.id !== action.id), actionView]
+      const projected = [
+        ...actionsRef.current.filter((item) => (
+          item.id !== action.id && !isDynamicActionCardReplacement(item, action)
+        )),
+        actionView,
+      ]
         .filter((item) => Date.now() - item.createdAt < staleAfterMs)
         .sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt)
         .slice(0, maxVisible * 2);
@@ -270,7 +279,10 @@ export const DynamicActionBar: React.FC<Props> = ({
           return next;
         }
         // Sort by priority desc, then createdAt desc (newer first when tied).
-        const next = [...prev, actionView]
+        const next = [
+          ...prev.filter((item) => !isDynamicActionCardReplacement(item, action)),
+          actionView,
+        ]
           .filter((a) => Date.now() - a.createdAt < staleAfterMs)
           .sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt);
         return next.slice(0, maxVisible * 2); // keep a small buffer past the visible cap
