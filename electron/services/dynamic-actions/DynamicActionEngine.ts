@@ -851,7 +851,8 @@ export class DynamicActionEngine {
             if (intentResult.intent === 'sales_capability_fit') {
                 return this.isExplicitCapabilityQuestion(latestTurn) ? 'capability_fit_answer' : 'discovery_question';
             }
-            if (intentResult.intent === 'sales_contextual_proof_discovery') {
+            if (intentResult.intent === 'sales_contextual_proof_discovery'
+                || intentResult.intent === 'sales_proof_request') {
                 return this.isExplicitCaseProofRequest(latestTurn) ? 'case_study_request' : 'discovery_question';
             }
         }
@@ -863,7 +864,7 @@ export class DynamicActionEngine {
     }
 
     private isExplicitCaseProofRequest(text: string): boolean {
-        return /(案例|客户案例|成功案例|收益|ROI|投资回报|证明|proof|case stud|customer story|reference customer|return on investment)/i.test(text);
+        return /(案例|客户案例|成功案例|证明|proof|case stud|customer story|customer example|reference customer|similar customer)/i.test(text);
     }
 
     private syntheticTriggerFor(type: string, modeTemplateType: string): ActionTrigger | null {

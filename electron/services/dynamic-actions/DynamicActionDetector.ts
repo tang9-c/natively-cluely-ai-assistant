@@ -136,6 +136,8 @@ const SALES_TRIGGERS: ActionTrigger[] = [
         type: 'discovery_question',
         patterns: [
             /\b(PLM|Windchill|QMS|ERP|SAP|Oracle|MES|ALM|Creo|CAD|BOM|ECO|ECN|CAPA|NCR|AI Agent|Agent)\b.{0,100}\b(pain|workflow|capability|fit|integrat|sync|cycle time|quality cost|case study|customer example|ROI)\b/i,
+            /\b(?:what(?:'s| is) (?:the )?(?:ROI|return on investment|payback(?: period)?)|how (?:do|can|should) (?:we |you )?(?:calculate|measure) (?:the )?(?:ROI|return on investment)|how is (?:the )?(?:ROI|return on investment) calculated)\b/i,
+            /(?:ROI|投资回报|回报率).{0,12}(?:怎么|如何)(?:计算|测算|算)|(?:怎么|如何)(?:计算|测算).{0,12}(?:ROI|投资回报|回报率)/i,
             zh(
                 'BOM.{0,30}(不同步|关联|闭环|变更)',
                 'BOM.{0,60}(邮件通知|旧版本|断点)',
@@ -167,8 +169,8 @@ const SALES_TRIGGERS: ActionTrigger[] = [
     {
         type: 'case_study_request',
         patterns: [
-            /\b(case study|customer story|customer example|reference customer|proof point|success story|similar customer|implementation example|ROI|return on investment)\b/i,
-            zh('客户案例', '成功案例', '参考客户', '类似客户', '落地案例', '实施案例', '证明材料', '投资回报', '回报率', '想看.{0,8}案例', '有没有.{0,8}案例', '能不能.{0,8}案例', '展示.{0,12}案例', '分享.{0,8}案例', '给.{0,8}案例'),
+            /\b(case study|customer story|customer example|reference customer|proof point|success story|similar customer|implementation example)\b/i,
+            zh('客户案例', '成功案例', '参考客户', '类似客户', '类似.{0,8}案例', '落地案例', '实施案例', '证明材料', '想看.{0,8}案例', '有没有.{0,8}案例', '能不能.{0,8}案例', '展示.{0,12}案例', '分享.{0,8}案例', '给.{0,8}案例'),
         ],
         priority: 0.87,
         label: 'Share relevant case study',

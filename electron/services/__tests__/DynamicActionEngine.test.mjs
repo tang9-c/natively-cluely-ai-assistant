@@ -1038,7 +1038,7 @@ test('expanded trigger packs cover canonical Cluely-style phrases across modes',
     ['negotiation', "What's your budget range for this deal?", 'budget_probe'],
     ['negotiation', 'Can you do better on the price?', 'price_pushback'],
     ['negotiation', 'This is our final offer.', 'final_offer'],
-    ['sales', "What's the ROI and payback for this?", 'case_study_request'],
+    ['sales', "What's the ROI and payback for this?", 'discovery_question'],
     ['sales', 'Can you send me pricing after this call?', 'pricing_request'],
     ['recruiting', 'Can you confirm the compensation range?', 'candidate_concern'],
     ['team_meeting', 'Are there any blockers or risks to the timeline?', 'blocker_check'],
@@ -2559,17 +2559,40 @@ describe('ActionTrigger fixtures — sales mode', () => {
     assert.equal(a.priority, 0.9);
   });
 
-  test('ROI proof request maps to case_study_request', async () => {
+  test('ROI calculation uses value discovery while explicit proof stays a case request', async () => {
     const { DynamicActionEngine } = await loadModules();
     const engine = new DynamicActionEngine();
-    const actions = engine.detectActions({
-      transcript: 'What is the ROI on this and the payback period?',
+    const calculationActions = engine.detectActions({
+      transcript: 'ROI 怎么计算？',
       modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_roi',
     });
-    const a = findAction(actions, 'case_study_request');
-    assert.ok(a);
-    assert.equal(a.label, 'Share relevant case study');
-    assert.equal(a.priority, 0.87);
+    assert.ok(findAction(calculationActions, 'discovery_question'));
+    assert.equal(findAction(calculationActions, 'case_study_request'), undefined);
+
+    const proofActions = engine.detectActions({
+      transcript: '有没有可以参考的 ROI 客户案例？',
+      modeTemplateType: 'sales', modeId: 'm_s', sessionId: 's_s_roi_proof',
+    });
+    assert.ok(findAction(proofActions, 'case_study_request'));
+
+    const fallbackActions = await engine.assessSignals({
+      transcript: 'How do you calculate ROI?',
+      speaker: 'interviewer',
+      modeTemplateType: 'sales',
+      modeId: 'm_s',
+      sessionId: 's_s_roi_fallback',
+      detectedTriggers: [],
+      intentResult: {
+        intent: 'sales_proof_request',
+        confidence: 0.9,
+        source: 'mode_keyword',
+        matchedKeyword: 'ROI',
+      },
+      cloudClassifier: cloudSelect('discovery_question'),
+      now: 20_000,
+    });
+    assert.ok(findAction(fallbackActions, 'discovery_question'));
+    assert.equal(findAction(fallbackActions, 'case_study_request'), undefined);
   });
 
   test('pricing_request (zh: 报价) → priority 0.86', async () => {
