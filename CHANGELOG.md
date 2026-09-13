@@ -1,5 +1,28 @@
     # Changelog
 
+    ## [2.7.11] - 2026-09-13
+
+    ### Summary
+
+    This release improves the reliability and relevance of real-time Sales assistance, while fixing dynamic action cards that could become stale or disappear after the interface reloaded.
+
+    ### Improvements
+
+    - Expanded Sales assistance for explicit pricing, competitor comparison, implementation timeline, migration risk, demo, follow-up material, and discount questions.
+    - Generalized competitor comparison detection beyond specific product names.
+    - Distinguished ROI calculation questions from customer proof and case-study requests so the generated assistance matches the user's intent.
+    - Safely upgrades unchanged official Sales intent defaults for existing installations while preserving user-customized values.
+
+    ### Fixes
+
+    - Replaced superseded dynamic action cards in the interface instead of leaving an expired duplicate visible.
+    - Restored active dynamic action cards after the meeting overlay loads or remounts.
+
+    ### Testing
+
+    - Clarified the boundary between fixture-oracle state-machine tests and real decision-path quality tests.
+    - Added Sales fixtures using production speaker roles and coverage for common customer questions, ROI calculation, and competitor comparisons.
+
     ## [2.0.7] - 2026-03-20
 
     ### What's New
