@@ -23,7 +23,7 @@ test('product fixtures include sales, FDE, team-meet, and recruiting schema fiel
     assert.equal('expectedActions' in fixture, false);
     return acc;
   }, {});
-  assert.equal(counts.sales, 50);
+  assert.equal(counts.sales, 52);
   assert.equal(counts.fde, 40);
   assert.equal(counts['team-meet'], 30);
   assert.equal(counts.recruiting, 46);
@@ -36,13 +36,80 @@ test('product runner writes JSON and Markdown reports', async () => {
   const report = await runDynamicActionProductFixtures({
     fixtureDir: path.join(process.cwd(), 'tests/fixtures/dynamic-actions/product'),
     outputDir: outDir,
+    semanticGateMode: 'fixture_oracle',
   });
-  assert.equal(report.totalFixtures, 166);
+  assert.equal(report.totalFixtures, 168);
   assert.equal(report.results.find((entry) => entry.fixtureId === 'sales-pricing-objection-zh-001')?.actionType, 'pricing_objection');
   assert.ok(fs.existsSync(path.join(outDir, 'product-report.json')));
   assert.ok(fs.existsSync(path.join(outDir, 'product-report.md')));
   assert.equal(typeof report.score.recallRate, 'number');
   assert.equal(typeof report.score.falsePositiveRate, 'number');
+});
+
+test('oracle reports identify fixture metrics as non-production accuracy', async () => {
+  const { runDynamicActionProductFixtures } = await load();
+  const fixtureDir = fs.mkdtempSync(path.join(process.cwd(), 'reports/dynamic-actions-scope-fixtures-'));
+  const outputDir = fs.mkdtempSync(path.join(process.cwd(), 'reports/dynamic-actions-scope-output-'));
+  for (const file of ['sales.json', 'fde.json', 'team-meet.json', 'recruiting.json']) {
+    fs.writeFileSync(path.join(fixtureDir, file), '[]', 'utf8');
+  }
+
+  const report = await runDynamicActionProductFixtures({
+    fixtureDir,
+    outputDir,
+    semanticGateMode: 'fixture_oracle',
+  });
+  const markdown = fs.readFileSync(path.join(outputDir, 'product-report.md'), 'utf8');
+
+  assert.equal(report.semanticGateMode, 'fixture_oracle');
+  assert.equal(report.metricScope, 'fixture_contract');
+  assert.match(markdown, /Semantic gate: fixture_oracle/);
+  assert.match(markdown, /not production accuracy/i);
+});
+
+test('sales fixture speakers are normalized to production runtime roles', async () => {
+  const { runDynamicActionProductFixtures } = await load();
+  const fixtureDir = fs.mkdtempSync(path.join(process.cwd(), 'reports/dynamic-actions-sales-role-fixtures-'));
+  const outputDir = fs.mkdtempSync(path.join(process.cwd(), 'reports/dynamic-actions-sales-role-output-'));
+  for (const file of ['fde.json', 'team-meet.json', 'recruiting.json']) {
+    fs.writeFileSync(path.join(fixtureDir, file), '[]', 'utf8');
+  }
+  fs.writeFileSync(path.join(fixtureDir, 'sales.json'), JSON.stringify([
+    {
+      id: 'sales-customer-runtime-role',
+      modeTemplateType: 'sales',
+      language: 'zh',
+      transcriptTurns: [{ speaker: 'customer', text: '这个价格太高了。' }],
+      expected: { shouldEmit: true, actionType: 'pricing_objection' },
+    },
+    {
+      id: 'sales-internal-runtime-role',
+      modeTemplateType: 'sales',
+      language: 'zh',
+      transcriptTurns: [{ speaker: 'internal', text: '这个价格太高了。' }],
+      expected: { shouldEmit: false },
+    },
+  ]), 'utf8');
+
+  const observedSpeakers = [];
+  const report = await runDynamicActionProductFixtures({
+    fixtureDir,
+    outputDir,
+    semanticGateMode: 'real',
+    cloudClassifier: async (input) => {
+      observedSpeakers.push(input.speaker);
+      return input.candidates.map((candidate) => ({
+        actionType: candidate.actionType,
+        decision: input.speaker === 'interviewer' ? 'pass' : 'reject',
+        confidence: 0.95,
+        reasons: ['production_speaker_policy'],
+        rejectedCandidates: input.speaker === 'interviewer' ? [] : [candidate.actionType],
+      }));
+    },
+  });
+
+  assert.deepEqual(observedSpeakers, ['interviewer', 'user']);
+  assert.deepEqual(report.results.map((result) => result.emitted), [true, false]);
 });
 
 test('product runner reports per-mode quality gates', async () => {

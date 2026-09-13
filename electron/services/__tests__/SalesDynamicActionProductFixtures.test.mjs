@@ -17,15 +17,16 @@ async function load() {
   };
 }
 
-test('sales product fixtures cover the full 50 item matrix', async () => {
+test('sales product fixtures cover the full 52 item candidate matrix', async () => {
   const fixtures = JSON.parse(fs.readFileSync(salesFixturePath, 'utf8'));
-  assert.equal(fixtures.length, 50);
+  assert.equal(fixtures.length, 52);
 
   const actionTypes = new Set(fixtures.filter((fixture) => fixture.expected.shouldEmit).map((fixture) => fixture.expected.actionType));
   for (const expectedType of [
     'pricing_objection',
     'pricing_request',
     'case_study_request',
+    'discovery_question',
     'technical_requirements',
     'buying_signal',
   ]) {

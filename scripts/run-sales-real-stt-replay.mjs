@@ -12,4 +12,5 @@ await runRealSttReplay({
   scriptName: 'test:dynamic-actions:sales-replay:real-stt',
   modeTemplateType: 'sales',
   outputDirName: 'dynamic-actions-sales-real-stt',
+  semanticGateMode: process.env.SALES_REAL_SEMANTIC_GATE === '1' ? 'real' : 'fixture_oracle',
 });

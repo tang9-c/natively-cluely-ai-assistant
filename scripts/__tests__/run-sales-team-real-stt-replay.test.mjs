@@ -27,6 +27,7 @@ test('Sales and team-meet real STT replay scripts are wired as blocked-capable s
     'npm run build:electron && node scripts/run-team-meet-real-stt-replay.mjs',
   );
   assert.match(salesScript, /modeTemplateType:\s*'sales'/);
+  assert.match(salesScript, /SALES_REAL_SEMANTIC_GATE/);
   assert.match(teamScript, /modeTemplateType:\s*'team-meet'/);
   assert.match(salesScript, /DO NOT print API keys/i);
   assert.match(teamScript, /DO NOT print API keys/i);

@@ -1133,5 +1133,51 @@
     ],
     "sourceRefs": [],
     "negativeReason": "low_value"
+  },
+  {
+    "id": "sales-discovery-question-zh-001",
+    "modeTemplateType": "sales",
+    "language": "zh",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "我们的 BOM 经常不同步，变更还是靠邮件通知。",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "discovery_question",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "discovery",
+      "workflow",
+      "positive"
+    ],
+    "sourceRefs": []
+  },
+  {
+    "id": "sales-discovery-question-en-001",
+    "modeTemplateType": "sales",
+    "language": "en",
+    "transcriptTurns": [
+      {
+        "speaker": "customer",
+        "text": "Our PLM workflow is painful because engineering changes do not sync.",
+        "final": true
+      }
+    ],
+    "expected": {
+      "shouldEmit": true,
+      "actionType": "discovery_question",
+      "outputType": "spoken_response"
+    },
+    "tags": [
+      "discovery",
+      "workflow",
+      "positive"
+    ],
+    "sourceRefs": []
   }
 ]

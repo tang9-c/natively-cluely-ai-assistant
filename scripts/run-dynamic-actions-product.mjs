@@ -15,7 +15,8 @@ const report = await runDynamicActionProductFixtures({
 
 console.log(JSON.stringify({
   totalFixtures: report.totalFixtures,
-  semanticGateMode: 'fixture_oracle',
+  semanticGateMode: report.semanticGateMode,
+  metricScope: report.metricScope,
   recallRate: report.score.recallRate,
   falsePositiveRate: report.score.falsePositiveRate,
   modeScores: report.modeScores,
@@ -51,6 +52,6 @@ for (const invalid of report.invalidFixtures ?? []) {
 }
 
 if (failures.length > 0) {
-  console.error(`Dynamic action product quality gate failed:\n- ${failures.join('\n- ')}`);
+  console.error(`Dynamic action fixture contract gate failed:\n- ${failures.join('\n- ')}`);
   process.exit(1);
 }

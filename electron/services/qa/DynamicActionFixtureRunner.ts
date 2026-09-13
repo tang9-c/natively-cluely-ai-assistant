@@ -26,6 +26,8 @@ export interface ProductRunnerInput {
 
 export interface ProductRunnerReport {
   totalFixtures: number;
+  semanticGateMode: DynamicActionProductFixtureRunnerSemanticGateMode;
+  metricScope: 'fixture_contract' | 'semantic_gate_integration';
   results: DynamicActionProductFixtureResult[];
   score: ReturnType<typeof scoreDynamicActionProductFixtures>;
   modeScores: ReturnType<typeof scoreDynamicActionProductFixturesByMode>;
@@ -75,20 +77,14 @@ export async function runDynamicActionProductFixtures(input: ProductRunnerInput)
   const fixtures = loadProductFixtures(input.fixtureDir, invalidFixtures);
   const engine = new DynamicActionEngine();
   const results: DynamicActionProductFixtureResult[] = [];
+  const semanticGateMode = input.semanticGateMode ?? 'real';
 
   for (const fixture of fixtures) {
     const transcript = fixture.transcriptTurns.map((turn) => turn.text).join('\n');
     const fixtureSpeaker = fixture.transcriptTurns.at(-1)?.speaker;
-    const runtimeSpeaker = fixture.modeTemplateType === 'recruiting'
-      ? fixtureSpeaker === 'candidate'
-        ? 'interviewer'
-        : fixtureSpeaker === 'interviewer'
-          ? 'user'
-          : fixtureSpeaker
-      : fixtureSpeaker;
+    const runtimeSpeaker = normalizeFixtureSpeaker(fixture.modeTemplateType, fixtureSpeaker);
     const runnerMode = fixture.assessment?.runnerMode ?? 'assessSignals';
     const traces: unknown[] = [];
-    const semanticGateMode = input.semanticGateMode ?? 'real';
     const actions = runnerMode === 'regex'
       ? engine.detectActions({
           transcript,
@@ -172,11 +168,31 @@ export async function runDynamicActionProductFixtures(input: ProductRunnerInput)
 
   const score = scoreDynamicActionProductFixtures(results);
   const modeScores = scoreDynamicActionProductFixturesByMode(results);
-  const report = { totalFixtures: fixtures.length, results, score, modeScores, invalidFixtures };
+  const report: ProductRunnerReport = {
+    totalFixtures: fixtures.length,
+    semanticGateMode,
+    metricScope: semanticGateMode === 'fixture_oracle' ? 'fixture_contract' : 'semantic_gate_integration',
+    results,
+    score,
+    modeScores,
+    invalidFixtures,
+  };
   fs.mkdirSync(input.outputDir, { recursive: true });
   fs.writeFileSync(path.join(input.outputDir, 'product-report.json'), JSON.stringify(report, null, 2));
   fs.writeFileSync(path.join(input.outputDir, 'product-report.md'), renderMarkdown(report));
   return report;
+}
+
+function normalizeFixtureSpeaker(modeTemplateType: string, speaker?: string): string | undefined {
+  if (modeTemplateType === 'sales') {
+    if (speaker === 'customer') return 'interviewer';
+    if (speaker === 'internal') return 'user';
+  }
+  if (modeTemplateType === 'recruiting') {
+    if (speaker === 'candidate') return 'interviewer';
+    if (speaker === 'interviewer') return 'user';
+  }
+  return speaker;
 }
 
 function validateFixture(fixture: DynamicActionProductFixture): void {
@@ -315,8 +331,10 @@ function renderMarkdown(report: ProductRunnerReport): string {
     '# Dynamic Action Product Report',
     '',
     `Total fixtures: ${report.totalFixtures}`,
-    `Recall: ${report.score.recallNumerator}/${report.score.recallDenominator} (${formatRate(report.score.recallRate)})`,
-    `False positives: ${report.score.falsePositiveNumerator}/${report.score.falsePositiveDenominator} (${formatRate(report.score.falsePositiveRate)})`,
+    `Semantic gate: ${report.semanticGateMode}`,
+    `Metric scope: ${report.metricScope} (not production accuracy)`,
+    `Fixture recall: ${report.score.recallNumerator}/${report.score.recallDenominator} (${formatRate(report.score.recallRate)})`,
+    `Fixture false positives: ${report.score.falsePositiveNumerator}/${report.score.falsePositiveDenominator} (${formatRate(report.score.falsePositiveRate)})`,
     '',
     '## Mode Scores',
     '',
