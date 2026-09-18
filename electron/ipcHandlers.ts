@@ -3825,7 +3825,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           0.8,
           validatedImagePaths,
           {
-            skipCooldown: true,
+            skipCooldown: process.env.NODE_ENV === 'test',
             screenContext,
             promptInstruction: requestOptions.promptInstruction,
             uploadedMaterialContext,
