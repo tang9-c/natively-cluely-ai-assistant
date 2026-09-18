@@ -1,6 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -234,7 +233,6 @@ test('selected QCLOUD does not append another provider after a partial stream fa
 
 test('selected QCLOUD aborts when no meaningful token arrives before the configured deadline', async () => {
   const originalFetch = globalThis.fetch;
-  const requestId = `test-first-chunk-timeout-${Date.now()}`;
   globalThis.fetch = async (_url, init) => new Response(new ReadableStream({
     start(controller) {
       init.signal.addEventListener('abort', () => controller.error(init.signal.reason), { once: true });
@@ -250,57 +248,10 @@ test('selected QCLOUD aborts when no meaningful token arrives before the configu
     await assert.rejects(
       drainStream(helper.streamChat(
         'hello', undefined, undefined, undefined, true, true, [],
-        { firstTokenTimeoutMs: 20, idleTimeoutMs: 50, totalTimeoutMs: 100, requestId },
+        { firstTokenTimeoutMs: 20, idleTimeoutMs: 50, totalTimeoutMs: 100 },
       )),
       /first token timeout/i,
     );
-    const telemetryPath = path.resolve('logs/telemetry.jsonl');
-    const timingEvents = fs.readFileSync(telemetryPath, 'utf8')
-      .trim().split('\n').slice(-10).map((line) => JSON.parse(line))
-      .filter((event) => event.properties?.requestId === requestId);
-    assert.ok(timingEvents.some((event) => event.name === 'llm_response_headers_latency'));
-    assert.ok(timingEvents.some((event) =>
-      event.name === 'llm_stream_diagnostic'
-      && event.properties.failureClass === 'first_chunk_timeout'
-      && event.properties.httpStatus === 200
-      && event.properties.firstChunkMs === null));
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test('selected QCLOUD distinguishes a metadata-only SSE chunk from no network chunk', async () => {
-  const originalFetch = globalThis.fetch;
-  const requestId = `test-first-token-timeout-${Date.now()}`;
-  globalThis.fetch = async (_url, init) => new Response(new ReadableStream({
-    start(controller) {
-      controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n'));
-      init.signal.addEventListener('abort', () => controller.error(init.signal.reason), { once: true });
-    },
-  }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
-
-  try {
-    const { LLMHelper } = await import(pathToFileURL(helperPath).href);
-    const helper = new LLMHelper();
-    helper.setNativelyKey('test-qcloud-key');
-    helper.setModel('natively');
-
-    await assert.rejects(
-      drainStream(helper.streamChat(
-        'hello', undefined, undefined, undefined, true, true, [],
-        { firstTokenTimeoutMs: 20, idleTimeoutMs: 50, totalTimeoutMs: 100, requestId },
-      )),
-      /first token timeout/i,
-    );
-    const telemetryPath = path.resolve('logs/telemetry.jsonl');
-    const diagnostic = fs.readFileSync(telemetryPath, 'utf8')
-      .trim().split('\n').slice(-10).map((line) => JSON.parse(line))
-      .find((event) => event.name === 'llm_stream_diagnostic' && event.properties?.requestId === requestId);
-    assert.equal(diagnostic?.properties.failureClass, 'first_token_timeout');
-    assert.equal(diagnostic?.properties.sseDataFrames, 1);
-    assert.equal(diagnostic?.properties.sseMalformedFrames, 0);
-    assert.equal(diagnostic?.properties.sseContentlessFrames, 1);
-    assert.equal(diagnostic?.properties.thinkingEnabled, false);
   } finally {
     globalThis.fetch = originalFetch;
   }

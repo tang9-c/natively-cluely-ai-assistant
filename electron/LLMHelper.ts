@@ -4058,19 +4058,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
   private async * streamWithNatively(userContent: string, systemPrompt?: string, imagePaths?: string[], options: ProviderRequestOptions = {}): AsyncGenerator<string, void, unknown> {
     this.assertOutboundScopes('natively', userContent, imagePaths, options.dataScopes ?? []);
     const inputBudget = applyQCloudInputBudget(userContent, options.qcloudRequestClass);
-    const qcloudModel = this.resolveQCloudRequestModel(options);
-    const qcloudThinking = options.qcloudThinking ?? { type: 'disabled' as const };
     const requestStartedAt = Date.now();
-    const diagnosticStartedAt = performance.now();
-    let fetchStartedAt: number | null = null;
-    let responseHeadersMs: number | null = null;
-    let firstChunkMs: number | null = null;
-    let lastNetworkPhase = 'request_setup';
-    let httpStatus: number | null = null;
-    let responseKind: 'sse' | 'non_stream' | null = null;
-    let sseDataFrames = 0;
-    let sseMalformedFrames = 0;
-    let sseContentlessFrames = 0;
     let limiterWaitMs = 0;
     let firstTokenRecorded = false;
     const trackQCloudTiming = (name: string, status: string, durationMs: number, properties: Record<string, unknown> = {}) => {
@@ -4086,8 +4074,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
             source: options.requestSource ?? 'other',
             limiterWaitMs,
             requestClass: options.qcloudRequestClass,
-            model: qcloudModel,
-            thinkingEnabled: qcloudThinking.type === 'enabled',
             inputChars: inputBudget.text.length,
             inputEstimatedTokens: inputBudget.estimatedTokens,
             originalInputEstimatedTokens: inputBudget.originalEstimatedTokens,
@@ -4106,7 +4092,9 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     }
     if (!nativelyKey) throw new Error('QCLOUD API key not set');
 
+    const qcloudModel = this.resolveQCloudRequestModel(options);
     const qcloudPromptCacheKey = this.getQCloudPromptCacheKey(systemPrompt);
+    const qcloudThinking = options.qcloudThinking ?? { type: 'disabled' as const };
     const qcloudReasoningEffort = resolveQCloudReasoningEffort(qcloudThinking, options.qcloudReasoningEffort);
     const body: Record<string, unknown> = {
       model: qcloudModel,
@@ -4175,19 +4163,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       limiterWaitMs = Date.now() - limiterStartedAt;
       firstTokenTimer = setTimeout(() => abortWith('QCLOUD API first token timeout'), firstTokenTimeoutMs);
       connectTimer = setTimeout(() => abortWith('QCLOUD API connect timeout'), 10_000);
-      fetchStartedAt = performance.now();
-      lastNetworkPhase = 'awaiting_response_headers';
       response = await fetch(QCLOUD_CHAT_COMPLETIONS_ENDPOINT, {
         method: 'POST',
         headers: streamHeaders,
         body: JSON.stringify(body),
         signal: controller.signal,
-      });
-      responseHeadersMs = performance.now() - fetchStartedAt;
-      httpStatus = response.status;
-      lastNetworkPhase = 'response_headers_received';
-      trackQCloudTiming('llm_response_headers_latency', 'received', responseHeadersMs, {
-        httpStatus,
       });
       clearTimer(connectTimer);
       connectTimer = null;
@@ -4198,11 +4178,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       }
 
       const contentType = response.headers.get('content-type') || '';
-      responseKind = contentType.includes('text/event-stream') || contentType.includes('stream')
-        ? 'sse'
-        : 'non_stream';
-      if (responseKind === 'non_stream') {
-        lastNetworkPhase = 'non_streaming_response';
+      if (!contentType.includes('text/event-stream') && !contentType.includes('stream')) {
         const data = await response.json().catch((): null => null);
         usageMetrics = readQCloudUsage(data);
         const content = this.extractQCloudStreamContent(data);
@@ -4228,14 +4204,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       outer: while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        if (firstChunkMs === null && fetchStartedAt !== null) {
-          firstChunkMs = performance.now() - fetchStartedAt;
-          lastNetworkPhase = 'first_chunk_received';
-          trackQCloudTiming('llm_first_chunk_latency', 'received', firstChunkMs, {
-            responseHeadersMs,
-            byteCount: value.byteLength,
-          });
-        }
 
         buf += decoder.decode(value, { stream: true });
         const lines = buf.split('\n');
@@ -4246,18 +4214,15 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           if (!line.startsWith('data:')) continue;
           const payload = line.slice(5).trim();
           if (payload === '[DONE]') break outer;
-          sseDataFrames++;
 
           let chunk: any;
-          try { chunk = JSON.parse(payload); } catch { sseMalformedFrames++; continue; }
+          try { chunk = JSON.parse(payload); } catch { continue; }
 
           usageMetrics = readQCloudUsage(chunk) ?? usageMetrics;
 
           if (chunk.error) throw new Error(`Server error: ${chunk.error}`);
           const content = this.extractQCloudStreamContent(chunk);
-          if (!content) sseContentlessFrames++;
           if (content) {
-            lastNetworkPhase = 'first_token_received';
             if (!yieldedContent) {
               clearTimer(firstTokenTimer);
               firstTokenTimer = null;
@@ -4305,49 +4270,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
         streamCompleted = true;
     } catch (error: any) {
       const reason = controller.signal.aborted ? controller.signal.reason : error;
-      const message = reason instanceof Error ? reason.message : '';
-      const causeCode = reason instanceof Error && reason.cause && typeof reason.cause === 'object' && 'code' in reason.cause
-        ? String((reason.cause as { code?: unknown }).code ?? '')
-        : '';
-      let failureClass = 'network_or_parse_error';
-      if (/QCLOUD API first token timeout/.test(message)) {
-        failureClass = responseHeadersMs === null ? 'response_headers_timeout'
-          : responseKind === 'sse' && firstChunkMs === null ? 'first_chunk_timeout'
-            : 'first_token_timeout';
-      } else if (/QCLOUD API connect timeout/.test(message)) {
-        failureClass = 'response_headers_timeout';
-      } else if (/QCLOUD API total timeout/.test(message)) {
-        failureClass = 'total_timeout';
-      } else if (/QCLOUD API idle timeout/.test(message)) {
-        failureClass = 'idle_timeout';
-      } else if (httpStatus === 429) {
-        failureClass = 'provider_rate_limited';
-      } else if (httpStatus !== null && httpStatus >= 500) {
-        failureClass = 'provider_server_error';
-      } else if (httpStatus !== null && httpStatus >= 400) {
-        failureClass = 'http_status_error';
-      } else if (['ENOTFOUND', 'EAI_AGAIN'].includes(causeCode)) {
-        failureClass = 'dns_error';
-      } else if (['ECONNREFUSED', 'ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT'].includes(causeCode)) {
-        failureClass = 'tcp_connection_error';
-      } else if (/CERT|SSL|TLS/.test(causeCode)) {
-        failureClass = 'tls_error';
-      } else if (['EPIPE', 'ECONNRESET'].includes(causeCode)) {
-        failureClass = 'request_write_error';
-      } else if (controller.signal.aborted) {
-        failureClass = 'abort_error';
-      }
-      trackQCloudTiming('llm_stream_diagnostic', 'failed', performance.now() - diagnosticStartedAt, {
-        failureClass,
-        lastNetworkPhase,
-        httpStatus,
-        responseKind,
-        responseHeadersMs,
-        firstChunkMs,
-        sseDataFrames,
-        sseMalformedFrames,
-        sseContentlessFrames,
-      });
       if (yieldedContent) {
         trackQCloudTiming('provider_error', 'stream_interrupted', Date.now() - requestStartedAt);
         throw new Error(`QCLOUD stream_interrupted: ${reason?.message || String(reason)}`);
