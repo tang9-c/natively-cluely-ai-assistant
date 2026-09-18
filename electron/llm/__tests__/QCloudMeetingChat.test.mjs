@@ -257,6 +257,37 @@ test('selected QCLOUD aborts when no meaningful token arrives before the configu
   }
 });
 
+test('selected QCLOUD first-token deadline starts after limiter queue waiting', async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = async () => {
+    fetchCalls++;
+    return sseResponse(['data: {"delta":"ready"}\n', 'data: [DONE]\n']);
+  };
+
+  try {
+    const { LLMHelper } = await import(pathToFileURL(helperPath).href);
+    const helper = new LLMHelper();
+    helper.setNativelyKey('test-qcloud-key');
+    helper.setModel('natively');
+    helper.rateLimiters.qcloud.acquire = (signal) => new Promise((resolve, reject) => {
+      const timer = setTimeout(resolve, 180);
+      signal.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      }, { once: true });
+    });
+
+    assert.equal(await drainStream(helper.streamChat(
+      'hello', undefined, undefined, undefined, true, true, [],
+      { firstTokenTimeoutMs: 100, totalTimeoutMs: 1000 },
+    )), 'ready');
+    assert.equal(fetchCalls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('selected QCLOUD rejects transcript scope even when reference-file scope is also present', async () => {
   const originalFetch = globalThis.fetch;
   let fetchCalls = 0;

@@ -2463,6 +2463,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       },
     ]);
 
+    let statusDisplayed = false;
     try {
       // Pass imagePath if attached
       const result = await window.electronAPI.generateWhatToSay(
@@ -2492,6 +2493,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       refreshContextHealth().catch(() => {});
       const statusMessage = formatRealtimeAnswerStatusForDisplay(result.statusCode, result.error);
       if (result.statusCode !== 'ok' && statusMessage && !result.answer) {
+        statusDisplayed = true;
         setMessages((prev) => {
           const index = prev.findLastIndex((item) => item.id === realtimeRequestId);
           if (index >= 0) {
@@ -2521,14 +2523,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         }, surface);
       }
     } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: genMessageId(),
-          role: 'system',
-          text: `Error: ${err}`,
-        },
-      ]);
+      if (!statusDisplayed) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: genMessageId(),
+            role: 'system',
+            text: `Error: ${err}`,
+          },
+        ]);
+      }
       if (generationOptions?.throwOnError) {
         throw err;
       }

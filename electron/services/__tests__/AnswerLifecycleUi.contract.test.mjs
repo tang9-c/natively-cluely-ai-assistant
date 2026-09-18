@@ -87,6 +87,21 @@ test('NativelyInterface renders stable realtime answer failure status instead of
   assert.match(source, /role:\s*'system'/);
 });
 
+test('explicit realtime answers bypass automatic cooldown and display a returned failure only once', () => {
+  const renderer = read('src/components/NativelyInterface.tsx');
+  const ipc = read('electron/ipcHandlers.ts');
+  const callStart = ipc.indexOf('const answer = await intelligenceManager.runWhatShouldISay(');
+  const handler = ipc.slice(callStart, callStart + 500);
+  const start = renderer.indexOf('const handleWhatToSay = async');
+  const end = renderer.indexOf('const handleRecap = async', start);
+  const answerHandler = renderer.slice(start, end);
+
+  assert.ok(callStart > 0);
+  assert.match(handler, /runWhatShouldISay\([\s\S]*?skipCooldown:\s*true/);
+  assert.match(answerHandler, /statusMessage[\s\S]*?statusDisplayed = true[\s\S]*?throw new Error\(statusMessage\)/);
+  assert.match(answerHandler, /catch \(err\)[\s\S]*?if \(!statusDisplayed\)/);
+});
+
 test('manual voice question prompt is mode-aware instead of interview-only', () => {
   const source = read('src/components/NativelyInterface.tsx');
 

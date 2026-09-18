@@ -4157,11 +4157,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
 
     let response: Response;
     try {
-      firstTokenTimer = setTimeout(() => abortWith('QCLOUD API first token timeout'), firstTokenTimeoutMs);
       totalTimer = setTimeout(() => abortWith('QCLOUD API total timeout'), totalTimeoutMs);
       const limiterStartedAt = Date.now();
       await this.rateLimiters.qcloud.acquire(controller.signal);
       limiterWaitMs = Date.now() - limiterStartedAt;
+      firstTokenTimer = setTimeout(() => abortWith('QCLOUD API first token timeout'), firstTokenTimeoutMs);
       connectTimer = setTimeout(() => abortWith('QCLOUD API connect timeout'), 10_000);
       response = await fetch(QCLOUD_CHAT_COMPLETIONS_ENDPOINT, {
         method: 'POST',
