@@ -1,6 +1,22 @@
-    # Changelog
+# Changelog
 
-    ## [2.7.11] - 2026-09-13
+## [2.7.12] - 2026-09-18
+
+### Summary
+
+This patch release restores the meeting overlay on Apple Silicon Macs and prevents false QCLOUD first-token timeouts in real-time assistance.
+
+### Fixes
+
+- Keep the meeting overlay visible on Apple Silicon, including Intel builds running under Rosetta, while retaining content protection on Intel Macs.
+- Start the QCLOUD first-token deadline after provider rate-limit queueing so queued requests are not reported as failed before they are sent.
+
+### Testing
+
+- Added coverage for Apple Silicon and Intel Mac overlay content-protection behavior.
+- Added a delayed-limiter regression test for QCLOUD streaming and verified the shared real-time assistance path.
+
+## [2.7.11] - 2026-09-13
 
     ### Summary
 
