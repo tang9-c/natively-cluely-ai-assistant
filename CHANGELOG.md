@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.7.13] - 2026-09-18
+
+### Summary
+
+This patch release keeps real-time meeting answers fast by making writing Skills opt-in, while preserving manual Skill use and correcting QCLOUD response-language handling.
+
+### Fixes
+
+- Stop applying the global `humanize-ai-text` Skill automatically to real-time meeting answers; explicit manual and trigger-based use remains available.
+- Default automatic Skill triggering to off and warn in Settings that enabling it can delay real-time answers.
+- Let thinking-enabled Skill requests use the full request budget instead of failing at the ordinary first-token deadline.
+- Send the configured response-language instruction as a QCLOUD streaming system message so Chinese remains effective for English-only queries such as `qms test`.
+
+### Testing
+
+- Added regression coverage for real-time Skill activation, automatic-trigger defaults, manual invocation, thinking timeouts, and QCLOUD streaming language instructions.
+- Passed the full Electron test suite: 3,105 tests.
+
 ## [2.7.12] - 2026-09-18
 
 ### Summary
