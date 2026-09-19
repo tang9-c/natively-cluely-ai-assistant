@@ -63,6 +63,34 @@ test('shared native stealth helper preserves env and platform gates', () => {
   }
 });
 
+test('Apple Silicon detection covers native ARM, Rosetta, Intel, and non-macOS runtimes', () => {
+  const mod = require('../../../dist-electron/electron/utils/nativeStealth.js');
+  const calls = [];
+  const sysctl = (_file, args) => {
+    calls.push(args.join(' '));
+    if (args.includes('sysctl.proc_translated')) return '1\n';
+    return '0\n';
+  };
+
+  assert.equal(mod.isAppleSiliconMac({ platform: 'linux', arch: 'arm64', execFileSync: sysctl }), false);
+  assert.equal(mod.isAppleSiliconMac({ platform: 'darwin', arch: 'arm64', execFileSync: sysctl }), true);
+  assert.deepEqual(calls, [], 'native ARM should not invoke sysctl');
+
+  assert.equal(mod.isAppleSiliconMac({ platform: 'darwin', arch: 'x64', execFileSync: sysctl }), true);
+  assert.deepEqual(calls, ['-in sysctl.proc_translated'], 'Rosetta should be detected first');
+
+  const intelSysctl = (_file, args) => {
+    if (args.includes('sysctl.proc_translated')) throw new Error('unsupported');
+    return '0\n';
+  };
+  assert.equal(mod.isAppleSiliconMac({ platform: 'darwin', arch: 'x64', execFileSync: intelSysctl }), false);
+
+  const armHardwareSysctl = (_file, args) => (
+    args.includes('sysctl.proc_translated') ? '0\n' : '1\n'
+  );
+  assert.equal(mod.isAppleSiliconMac({ platform: 'darwin', arch: 'x64', execFileSync: armHardwareSysctl }), true);
+});
+
 test('shared native stealth helper does not load native module when disabled by env', () => {
   const mod = require('../../../dist-electron/electron/utils/nativeStealth.js');
   const previous = process.env.NATIVELY_DISABLE_NATIVE_OVERLAY_STEALTH;

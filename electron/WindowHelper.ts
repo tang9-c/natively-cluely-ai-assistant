@@ -1,5 +1,4 @@
 import { app, BrowserWindow, Menu, screen } from 'electron';
-import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import {
   resolveOverlayMouseInteractionPolicy,
@@ -7,7 +6,7 @@ import {
 } from '../shared/overlayMouseInteractionPolicy';
 import { AppState } from './main';
 import { KeybindManager } from './services/KeybindManager';
-import { applyNativeStealthIfEnabled } from './utils/nativeStealth';
+import { applyNativeStealthIfEnabled, isAppleSiliconMac } from './utils/nativeStealth';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -90,31 +89,6 @@ export class WindowHelper {
       });
     } catch (err) {
       console.warn('[WindowHelper] Failed to log overlay state:', err);
-    }
-  }
-
-  private isAppleSiliconMac(): boolean {
-    if (process.platform !== 'darwin') return false;
-    if (process.arch === 'arm64') return true;
-
-    try {
-      const translated = execFileSync('/usr/sbin/sysctl', ['-in', 'sysctl.proc_translated'], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }).trim();
-      if (translated === '1') return true;
-    } catch {
-      // sysctl.proc_translated is absent on non-Rosetta macOS.
-    }
-
-    try {
-      const supportsArm64 = execFileSync('/usr/sbin/sysctl', ['-n', 'hw.optional.arm64'], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }).trim();
-      return supportsArm64 === '1';
-    } catch {
-      return false;
     }
   }
 
@@ -483,7 +457,7 @@ export class WindowHelper {
     };
 
     this.overlayWindow = new BrowserWindow(overlaySettings);
-    if (!this.isAppleSiliconMac()) {
+    if (!isAppleSiliconMac()) {
       this.overlayWindow.setContentProtection(true);
     }
     this.syncOverlayInteractionPolicy();
@@ -522,7 +496,7 @@ export class WindowHelper {
         const result = applyNativeStealthIfEnabled(this.overlayWindow, {
           label: 'WindowHelper',
           skipOnAppleSilicon: true,
-          isAppleSiliconMac: () => this.isAppleSiliconMac(),
+          isAppleSiliconMac,
         });
         if (result.status === 'skipped') {
           this.logOverlayState('overlay-ready-to-show-native-stealth-skipped');

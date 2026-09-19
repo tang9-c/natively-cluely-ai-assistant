@@ -1,4 +1,39 @@
 import type { BrowserWindow } from 'electron';
+import { execFileSync } from 'node:child_process';
+
+interface AppleSiliconDetectionOptions {
+  platform?: NodeJS.Platform;
+  arch?: string;
+  execFileSync?: typeof execFileSync;
+}
+
+export function isAppleSiliconMac(options: AppleSiliconDetectionOptions = {}): boolean {
+  const platform = options.platform ?? process.platform;
+  const arch = options.arch ?? process.arch;
+  const run = options.execFileSync ?? execFileSync;
+  if (platform !== 'darwin') return false;
+  if (arch === 'arm64') return true;
+
+  try {
+    const translated = run('/usr/sbin/sysctl', ['-in', 'sysctl.proc_translated'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    if (translated === '1') return true;
+  } catch {
+    // sysctl.proc_translated is absent on non-Rosetta macOS.
+  }
+
+  try {
+    const supportsArm64 = run('/usr/sbin/sysctl', ['-n', 'hw.optional.arm64'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return supportsArm64 === '1';
+  } catch {
+    return false;
+  }
+}
 
 export interface NativeStealthGateOptions {
   platform?: NodeJS.Platform;

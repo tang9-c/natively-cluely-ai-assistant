@@ -9,6 +9,10 @@ const nativeLoaderSource = fs.readFileSync(
   path.join(repoRoot, 'electron/audio/nativeModuleLoader.ts'),
   'utf8',
 );
+const nativeStealthSource = fs.readFileSync(
+  path.join(repoRoot, 'electron/utils/nativeStealth.ts'),
+  'utf8',
+);
 const ipcHandlersSource = fs.readFileSync(path.join(repoRoot, 'electron/ipcHandlers.ts'), 'utf8');
 const helpSettingsSource = fs.readFileSync(
   path.join(repoRoot, 'src/components/settings/HelpSettings.tsx'),
@@ -60,16 +64,16 @@ test('Apple Silicon overlay skips native AppKit stealth path', () => {
   );
   assert.match(
     source,
-    /isAppleSiliconMac:\s*\(\)\s*=>\s*this\.isAppleSiliconMac\(\)/,
+    /isAppleSiliconMac,/,
     'native overlay stealth should be disabled on Apple Silicon until the native path is fixed',
   );
   assert.match(
-    source,
+    nativeStealthSource,
     /sysctl\.proc_translated/,
     'Apple Silicon detection should include Intel builds running under Rosetta',
   );
   assert.match(
-    source,
+    nativeStealthSource,
     /hw\.optional\.arm64/,
     'Apple Silicon detection should fall back to the hardware capability sysctl',
   );
@@ -82,7 +86,7 @@ test('Apple Silicon overlay skips native AppKit stealth path', () => {
 
 test('Apple Silicon meeting overlay skips content protection so the panel remains visible', () => {
   const creation = source.indexOf('this.overlayWindow = new BrowserWindow(overlaySettings);');
-  const siliconGuard = source.indexOf('if (!this.isAppleSiliconMac())', creation);
+  const siliconGuard = source.indexOf('if (!isAppleSiliconMac())', creation);
   const protection = source.indexOf('this.overlayWindow.setContentProtection(true);', siliconGuard);
   const macSetup = source.indexOf("if (process.platform === 'darwin')", creation);
 
