@@ -149,7 +149,7 @@ test('LLMHelper validates reasoning effort against the effective thinking mode',
   assert.match(streamingBody, /resolveQCloudReasoningEffort\(qcloudThinking,\s*options\.qcloudReasoningEffort\)/);
 });
 
-test('non-streaming QCLOUD sends system prompt as a chat message while streaming stays unchanged', () => {
+test('QCLOUD sends system prompt as a chat message for non-streaming and streaming requests', () => {
   const helper = read('electron/LLMHelper.ts');
   const nonStreamingStart = helper.indexOf('  private async generateWithNatively(');
   const streamingStart = helper.indexOf('  private async * streamWithNatively(');
@@ -165,8 +165,11 @@ test('non-streaming QCLOUD sends system prompt as a chat message while streaming
   assert.match(nonStreamingBody, /messages,\s*\n\s*max_tokens:/);
   assert.doesNotMatch(nonStreamingBody, /body\.system\s*=\s*systemPrompt/);
 
-  assert.match(streamingBody, /messages:\s*\[\{[\s\S]{0,120}role:\s*['"]user['"],[\s\S]{0,120}content:\s*await this\.buildQCloudUserContent\(inputBudget\.text,\s*imagePaths\)/);
-  assert.match(streamingBody, /body\.system\s*=\s*systemPrompt/);
+  assert.match(streamingBody, /const messages:\s*Array<\{\s*role:\s*['"]system['"]\s*\|\s*['"]user['"]/);
+  assert.match(streamingBody, /messages\.push\(\{\s*role:\s*['"]system['"],\s*content:\s*systemPrompt\s*\}\)/);
+  assert.match(streamingBody, /messages\.push\(\{[\s\S]{0,120}role:\s*['"]user['"],[\s\S]{0,120}content:\s*await this\.buildQCloudUserContent\(inputBudget\.text,\s*imagePaths\)/);
+  assert.match(streamingBody, /messages,\s*\n\s*stream:\s*true/);
+  assert.doesNotMatch(streamingBody, /body\.system\s*=\s*systemPrompt/);
 });
 
 test('streamChat uses real QCLOUD SSE stream for the selected QCLOUD model', () => {
