@@ -65,7 +65,7 @@ describe('SkillActivationManager', () => {
     ({ SkillActivationManager, SettingsManager } = loadModules(tmpUserData));
   });
 
-  test('resolves default active skill for what_to_answer requests', () => {
+  test('does not inherit global humanize default for realtime answers', () => {
     SettingsManager.getInstance().set('defaultActiveSkillIds', ['humanize-ai-text']);
     const manager = SkillActivationManager.getInstance();
 
@@ -75,11 +75,7 @@ describe('SkillActivationManager', () => {
       now: 1_000,
     });
 
-    assert.ok(resolved, 'expected default skill to resolve');
-    assert.equal(resolved.id, 'humanize-ai-text');
-    assert.equal(resolved.activation.scope, 'global_default');
-    assert.match(resolved.promptBlock, /<active_skill/);
-    assert.match(resolved.promptBlock, /humanize-ai-text/);
+    assert.equal(resolved, null);
   });
 
   test('ephemeral activation outranks global default and expires', () => {
@@ -109,8 +105,7 @@ describe('SkillActivationManager', () => {
       latestText: 'Please help.',
       now: 70_001,
     });
-    assert.ok(expired);
-    assert.equal(expired.activation.scope, 'global_default');
+    assert.equal(expired, null);
   });
 
   test('turn activation outranks meeting activation and is single-use', () => {
@@ -171,8 +166,8 @@ describe('SkillActivationManager', () => {
   });
 
   test('resolved prompt block respects maxPromptTokens and records truncation marker', () => {
-    SettingsManager.getInstance().set('defaultActiveSkillIds', ['humanize-ai-text']);
     const manager = SkillActivationManager.getInstance();
+    manager.activateSkill({ skillId: 'humanize-ai-text', source: 'user', scope: 'turn', now: 900 });
 
     const resolved = manager.resolveActiveSkill({
       requestType: 'what_to_answer',
@@ -187,6 +182,19 @@ describe('SkillActivationManager', () => {
     assert.match(resolved.promptBlock, /<active_skill/);
     assert.match(resolved.promptBlock, /<\/active_skill>/);
   });
+
+
+  for (const enabled of [undefined, false, true]) {
+    test(`automatic trigger opt-in: saved value ${enabled}`, () => {
+      if (enabled !== undefined) SettingsManager.getInstance().set('skillsAutoTriggerEnabled', enabled);
+      const manager = SkillActivationManager.getInstance();
+      const resolved = manager.resolveActiveSkill({
+        requestType: 'what_to_answer', latestText: '润色一下这段回答', now: 1_000,
+      });
+      if (enabled === true) assert.equal(resolved?.activation.source, 'voice');
+      else assert.equal(resolved, null);
+    });
+  }
 
   test('resolves default active skill for chat requests', () => {
     SettingsManager.getInstance().set('defaultActiveSkillIds', ['humanize-ai-text']);

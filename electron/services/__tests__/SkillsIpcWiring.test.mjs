@@ -13,6 +13,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import vm from 'node:vm';
+import ts from 'typescript';
 import Module from 'node:module';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +23,37 @@ import { findSafeHandle, sliceSafeHandleBlock } from './ipcTestUtils.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
+
+test('skill settings IPC defaults automatic triggering off and requires explicit opt-in', () => {
+  const values = new Map();
+  const handlers = new Map();
+  let unavailable = false;
+  const context = {
+    safeHandle: (name, handler) => handlers.set(name, handler),
+    SettingsManager: { getInstance: () => {
+      if (unavailable) throw new Error('settings unavailable');
+      return { get: key => values.get(key), set: (key, value) => values.set(key, value) };
+    } },
+    console: { warn() {} },
+  };
+  for (const channel of ['skills:get-settings', 'skills:set-settings']) {
+    const code = ts.transpileModule(sliceSafeHandleBlock(read('electron/ipcHandlers.ts'), channel), {
+      compilerOptions: { target: ts.ScriptTarget.ES2022 },
+    }).outputText;
+    vm.runInNewContext(code, context);
+  }
+  const get = handlers.get('skills:get-settings');
+  const set = input => handlers.get('skills:set-settings')(null, input);
+  assert.equal(get().skillsAutoTriggerEnabled, false);
+  set({ defaultActiveSkillIds: ['humanize-ai-text'] });
+  assert.equal(get().skillsAutoTriggerEnabled, false);
+  set({ defaultActiveSkillIds: ['humanize-ai-text'], skillsAutoTriggerEnabled: true });
+  assert.equal(get().skillsAutoTriggerEnabled, true);
+  set({ skillsAutoTriggerEnabled: false });
+  assert.equal(get().skillsAutoTriggerEnabled, false);
+  unavailable = true;
+  assert.equal(get().skillsAutoTriggerEnabled, false);
+});
 
 // ---------------------------------------------------------------------------
 // 1. Static wiring invariants — full three-tier contract

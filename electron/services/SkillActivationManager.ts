@@ -148,6 +148,10 @@ export class SkillActivationManager {
     ].sort(this.compareActivation);
 
     for (const activation of candidates) {
+      // Realtime answers already have spoken-response instructions. Only apply
+      // humanizing when explicitly selected or triggered, not as a global default.
+      if (request.requestType === 'what_to_answer' &&
+          activation.scope === 'global_default' && activation.skillId === 'humanize-ai-text') continue;
       const skill = SkillsManager.getInstance().getSkill(activation.skillId);
       if (!skill) continue;
 
@@ -193,9 +197,9 @@ export class SkillActivationManager {
 
   private getAutoTriggerEnabled(): boolean {
     try {
-      return SettingsManager.getInstance().get('skillsAutoTriggerEnabled') !== false;
+      return SettingsManager.getInstance().get('skillsAutoTriggerEnabled') === true;
     } catch {
-      return true;
+      return false;
     }
   }
 

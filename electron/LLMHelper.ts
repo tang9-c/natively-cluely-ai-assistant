@@ -4096,12 +4096,15 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const qcloudPromptCacheKey = this.getQCloudPromptCacheKey(systemPrompt);
     const qcloudThinking = options.qcloudThinking ?? { type: 'disabled' as const };
     const qcloudReasoningEffort = resolveQCloudReasoningEffort(qcloudThinking, options.qcloudReasoningEffort);
+    const messages: Array<{ role: 'system' | 'user'; content: QCloudUserContent }> = [];
+    if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+    messages.push({
+      role: 'user',
+      content: await this.buildQCloudUserContent(inputBudget.text, imagePaths),
+    });
     const body: Record<string, unknown> = {
       model: qcloudModel,
-      messages: [{
-        role: 'user',
-        content: await this.buildQCloudUserContent(inputBudget.text, imagePaths),
-      }],
+      messages,
       stream: true,
       stream_options: { include_usage: true },
       max_tokens: this.clampQCloudMaxOutputTokens(options.maxOutputTokens, qcloudModel),
@@ -4109,7 +4112,6 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       ...(qcloudPromptCacheKey ? { prompt_cache_key: qcloudPromptCacheKey } : {}),
     };
     if (qcloudReasoningEffort) body.reasoning_effort = qcloudReasoningEffort;
-    if (systemPrompt) body.system = systemPrompt;
     if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {
       body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it
     }
@@ -4125,9 +4127,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
     const requestTimeoutPolicy = options.qcloudRequestClass
       ? QCLOUD_TIMEOUT_POLICIES[options.qcloudRequestClass]
       : undefined;
-    const firstTokenTimeoutMs = options.firstTokenTimeoutMs ?? requestTimeoutPolicy?.firstTokenMs ?? 12_000;
-    const idleTimeoutMs = options.idleTimeoutMs ?? requestTimeoutPolicy?.idleMs ?? 5_000;
     const totalTimeoutMs = options.totalTimeoutMs ?? requestTimeoutPolicy?.totalMs ?? 30_000;
+    // Thinking may produce no visible content until reasoning finishes. Keep it
+    // within the total budget instead of aborting at the ordinary first-token limit.
+    const firstTokenTimeoutMs = options.firstTokenTimeoutMs
+      ?? (qcloudThinking.type === 'enabled' ? totalTimeoutMs : requestTimeoutPolicy?.firstTokenMs ?? 12_000);
+    const idleTimeoutMs = options.idleTimeoutMs ?? requestTimeoutPolicy?.idleMs ?? 5_000;
     let connectTimer: ReturnType<typeof setTimeout> | null = null;
     let firstTokenTimer: ReturnType<typeof setTimeout> | null = null;
     let idleTimer: ReturnType<typeof setTimeout> | null = null;

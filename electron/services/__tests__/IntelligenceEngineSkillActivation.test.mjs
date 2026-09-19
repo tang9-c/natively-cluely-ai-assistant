@@ -42,6 +42,7 @@ async function loadIntelligenceEngine(tmpUserData) {
   const settingsModule = await import(pathToFileURL(settingsPath).href);
 
   settingsModule.SettingsManager.instance = undefined;
+  settingsModule.SettingsManager.getInstance().set('skillsAutoTriggerEnabled', true);
 
   return {
     IntelligenceEngine: engineModule.IntelligenceEngine,

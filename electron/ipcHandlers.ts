@@ -6088,11 +6088,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       const defaultActiveSkillIds = settings.get('defaultActiveSkillIds');
       return {
         defaultActiveSkillIds: Array.isArray(defaultActiveSkillIds) ? defaultActiveSkillIds : [],
-        skillsAutoTriggerEnabled: settings.get('skillsAutoTriggerEnabled') !== false,
+        skillsAutoTriggerEnabled: settings.get('skillsAutoTriggerEnabled') === true,
       };
     } catch (e: any) {
       console.warn('[IPC] skills:get-settings error:', e?.message || e);
-      return { defaultActiveSkillIds: [], skillsAutoTriggerEnabled: true };
+      return { defaultActiveSkillIds: [], skillsAutoTriggerEnabled: false };
     }
   });
 
@@ -6107,7 +6107,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         : [];
 
       settings.set('defaultActiveSkillIds', Array.from(new Set(ids)));
-      settings.set('skillsAutoTriggerEnabled', input?.skillsAutoTriggerEnabled !== false);
+      settings.set('skillsAutoTriggerEnabled', input?.skillsAutoTriggerEnabled === true);
       return { success: true };
     } catch (e: any) {
       console.warn('[IPC] skills:set-settings error:', e?.message || e);

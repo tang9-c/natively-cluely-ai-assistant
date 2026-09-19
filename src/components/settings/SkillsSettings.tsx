@@ -15,7 +15,7 @@ export const SkillsSettings: React.FC = () => {
     const [status, setStatus] = useState<string | null>(null);
     const [skillSettings, setSkillSettings] = useState<SkillSettings>({
         defaultActiveSkillIds: [],
-        skillsAutoTriggerEnabled: true,
+        skillsAutoTriggerEnabled: false,
     });
     const [activations, setActivations] = useState<SkillActivation[]>([]);
     const [watcherSettings, setWatcherSettings] = useState<SkillWatcherSettings>({
@@ -64,7 +64,7 @@ export const SkillsSettings: React.FC = () => {
             const settings = await window.electronAPI.skillsGetSettings();
             setSkillSettings({
                 defaultActiveSkillIds: Array.isArray(settings?.defaultActiveSkillIds) ? settings.defaultActiveSkillIds : [],
-                skillsAutoTriggerEnabled: settings?.skillsAutoTriggerEnabled !== false,
+                skillsAutoTriggerEnabled: settings?.skillsAutoTriggerEnabled === true,
             });
 
             const active = await window.electronAPI.skillsListActivations();
@@ -248,7 +248,7 @@ export const SkillsSettings: React.FC = () => {
                     <div className="min-w-0">
                         <h4 className="text-sm font-semibold text-text-primary">自动触发</h4>
                         <p className="text-xs text-text-secondary mt-1">
-                            在实时建议中识别类似“把这段改得更自然”或“润色一下”的短语，并自动套用对应技能。
+                            开启后，会识别“把这段改得更自然”或“润色一下”等请求，并自动应用对应技能。触发技能后可能延长实时回答的等待时间；如果希望更快获得回答，建议保持关闭，需要时手动选择技能。
                         </p>
                     </div>
                     <button
@@ -352,6 +352,11 @@ export const SkillsSettings: React.FC = () => {
                                             </span>
                                         </div>
                                         <p className="text-xs text-text-secondary leading-relaxed">{skill.description}</p>
+                                        {skill.id === 'humanize-ai-text' && (
+                                            <p className="mt-2 text-xs text-text-secondary leading-relaxed">
+                                                此技能的“默认开启”仅适用于普通聊天。实时会议不会默认应用，可在需要润色时手动选择，或开启自动触发；使用技能可能延长回答等待时间。
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
