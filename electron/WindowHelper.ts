@@ -483,7 +483,9 @@ export class WindowHelper {
     };
 
     this.overlayWindow = new BrowserWindow(overlaySettings);
-    this.overlayWindow.setContentProtection(true);
+    if (!this.isAppleSiliconMac()) {
+      this.overlayWindow.setContentProtection(true);
+    }
     this.syncOverlayInteractionPolicy();
 
     if (process.platform === 'darwin') {

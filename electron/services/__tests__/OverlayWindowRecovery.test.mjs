@@ -80,20 +80,22 @@ test('Apple Silicon overlay skips native AppKit stealth path', () => {
   );
 });
 
-test('meeting overlay enables public content protection before platform-specific stealth setup', () => {
+test('Apple Silicon meeting overlay skips content protection so the panel remains visible', () => {
   const creation = source.indexOf('this.overlayWindow = new BrowserWindow(overlaySettings);');
-  const protection = source.indexOf('this.overlayWindow.setContentProtection(true);', creation);
+  const siliconGuard = source.indexOf('if (!this.isAppleSiliconMac())', creation);
+  const protection = source.indexOf('this.overlayWindow.setContentProtection(true);', siliconGuard);
   const macSetup = source.indexOf("if (process.platform === 'darwin')", creation);
 
   assert.ok(creation >= 0, 'meeting overlay BrowserWindow creation must exist');
-  assert.ok(protection > creation, 'meeting overlay must enable public content protection after creation');
+  assert.ok(siliconGuard > creation, 'meeting overlay content protection must detect Apple Silicon');
+  assert.ok(protection > siliconGuard, 'Intel Mac and non-macOS overlays must retain content protection');
   assert.ok(
     protection < macSetup,
-    'public content protection must run before the macOS native stealth gate, including on Apple Silicon',
+    'the content protection guard must run before macOS-specific window setup',
   );
 });
 
-test('public content protection is restored only for the meeting overlay', () => {
+test('public content protection remains scoped to the non-Apple-Silicon meeting overlay', () => {
   const otherWindowHelpers = [
     'electron/SettingsWindowHelper.ts',
     'electron/ModelSelectorWindowHelper.ts',
@@ -103,7 +105,7 @@ test('public content protection is restored only for the meeting overlay', () =>
   assert.equal(
     source.match(/\.setContentProtection\(true\)/g)?.length,
     1,
-    'WindowHelper should protect only the meeting overlay, not the launcher',
+    'WindowHelper should protect only the non-Apple-Silicon meeting overlay, not the launcher',
   );
   for (const relativePath of otherWindowHelpers) {
     const helperSource = fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
