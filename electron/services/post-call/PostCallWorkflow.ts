@@ -140,10 +140,19 @@ const FDE_EMOTION_PATTERN = /\b(worried|concerned|frustrated|skeptical|urgent|de
 export function buildPostCallEnhancements(params: {
   transcript: PostCallTranscriptSegment[];
   modeTemplateType?: PostCallModeType | null;
-  summaryData?: { overview?: string; actionItems?: string[]; keyPoints?: string[]; sections?: Array<{ title: string; bullets: string[] }> };
+  summaryData?: { overview?: string; actionItems?: string[]; keyPoints?: string[]; sections?: Array<{ title: string; bullets: string[] }>; generationStatus?: 'success' | 'failed' };
   dynamicActionArtifacts?: ActionArtifact[];
 }): PostCallEnhancements {
-  const extractedActionItems = extractStructuredActionItems(params.transcript, params.summaryData?.actionItems ?? []);
+  const transcriptActions = extractStructuredActionItems(params.transcript);
+  const summaryActions = params.summaryData?.actionItems ?? [];
+  // A successful summary has already corrected ASR noise and classified actionable commitments.
+  const useSummaryActions = params.summaryData?.generationStatus === 'success' || summaryActions.length > 0;
+  const extractedActionItems = useSummaryActions
+    ? extractStructuredActionItems([], summaryActions).map((item) => ({
+      ...transcriptActions.find((source) => source.text.toLowerCase() === item.text.toLowerCase()),
+      ...item,
+    }))
+    : transcriptActions;
   const actionItemsStructured = params.dynamicActionArtifacts?.length
     ? mergeAcceptedActionArtifacts(extractedActionItems, params.dynamicActionArtifacts)
     : extractedActionItems;

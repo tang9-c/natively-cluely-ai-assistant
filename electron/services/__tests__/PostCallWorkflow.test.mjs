@@ -48,6 +48,72 @@ test('extractStructuredActionItems merges summary action items without duplicate
   assert.deepEqual(items.map(item => item.text), ['send the recap', 'share the deck']);
 });
 
+test('FDE next steps use summarized Chinese actions instead of raw English ASR fragments', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'fde',
+    transcript: [
+      { speaker: '客户', text: '请下周提供 Windchill 协同演示，并确认 PLM 与 ERP 接口。', timestamp: 1 },
+      ...Array.from({ length: 9 }, (_, index) => ({
+        speaker: 'speaker',
+        text: `We should have a lot of the component to develop ${index} clear我一`,
+        timestamp: index + 2,
+      })),
+    ],
+    summaryData: {
+      generationStatus: 'success',
+      actionItems: ['下周提供 Windchill 协同演示', '确认 PLM 与 ERP 接口'],
+    },
+  });
+
+  assert.deepEqual(result.actionItemsStructured.map(item => item.text), [
+    '下周提供 Windchill 协同演示', '确认 PLM 与 ERP 接口',
+  ]);
+});
+
+test('successful summary with no actions does not turn raw suggestions into next steps', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'fde',
+    transcript: [{ speaker: 'speaker', text: 'We could have more data.', timestamp: 1 }],
+    summaryData: { generationStatus: 'success', actionItems: [] },
+  });
+
+  assert.deepEqual(result.actionItemsStructured, []);
+});
+
+test('summary actions without generation status also take precedence over transcript fragments', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'fde',
+    transcript: [{ speaker: 'speaker', text: 'We should do a proper consolidation of the data and control.', timestamp: 1 }],
+    summaryData: { actionItems: ['整理数据并确认管控边界'] },
+  });
+
+  assert.deepEqual(result.actionItemsStructured.map(item => item.text), ['整理数据并确认管控边界']);
+});
+
+test('failed summary retains transcript action extraction as a fallback', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'fde',
+    transcript: [{ speaker: 'user', text: 'I will send the integration checklist by Friday.', timestamp: 1 }],
+    summaryData: { generationStatus: 'failed', actionItems: [] },
+  });
+
+  assert.equal(result.actionItemsStructured[0].text, 'send the integration checklist');
+  assert.equal(result.actionItemsStructured[0].owner, 'Me');
+  assert.equal(result.actionItemsStructured[0].deadline, 'Friday');
+});
+
+test('summarized actions retain metadata for exactly matching transcript actions', () => {
+  const result = buildPostCallEnhancements({
+    modeTemplateType: 'fde',
+    transcript: [{ speaker: 'user', text: 'I will send the integration checklist by Friday.', timestamp: 1 }],
+    summaryData: { generationStatus: 'success', actionItems: ['send the integration checklist'] },
+  });
+
+  assert.deepEqual(result.actionItemsStructured, [{
+    id: 'action_1', text: 'send the integration checklist', owner: 'Me', deadline: 'Friday', sourceTimestamp: 1,
+  }]);
+});
+
 test('buildFollowUpDraft includes overview and structured next steps', () => {
   const draft = buildFollowUpDraft('sales', [
     { id: 'action_1', text: 'send the proposal', owner: 'Me', deadline: 'Friday' },
