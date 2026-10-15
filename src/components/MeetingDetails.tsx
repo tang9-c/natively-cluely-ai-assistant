@@ -125,6 +125,7 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'usage'>('summary');
     const [query, setQuery] = useState('');
     const [isCopied, setIsCopied] = useState(false);
+    const [followUpCopyStatus, setFollowUpCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [submittedQuery, setSubmittedQuery] = useState('');
     const [submittedQueryNonce, setSubmittedQueryNonce] = useState(0);
@@ -143,6 +144,25 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const canRunTranscriptSkill = activeTab === 'transcript' && transcriptMarkdown.trim().length > 0;
     const visibleCoachingInsights = getVisibleCoachingInsights(meeting.detailedSummary);
     const visibleFollowUpDraft = getVisibleFollowUpDraft(meeting.detailedSummary);
+
+    useEffect(() => {
+        setFollowUpCopyStatus('idle');
+    }, [visibleFollowUpDraft]);
+
+    useEffect(() => {
+        if (followUpCopyStatus !== 'copied') return;
+        const timer = setTimeout(() => setFollowUpCopyStatus('idle'), 2000);
+        return () => clearTimeout(timer);
+    }, [followUpCopyStatus]);
+
+    const handleCopyFollowUpDraft = async () => {
+        try {
+            await navigator.clipboard.writeText(visibleFollowUpDraft);
+            setFollowUpCopyStatus('copied');
+        } catch {
+            setFollowUpCopyStatus('error');
+        }
+    };
 
     const loadTranscriptSkills = async () => {
         if (typeof window.electronAPI?.skillsRefresh !== 'function') {
@@ -737,14 +757,16 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                                             <h2 className="text-lg font-semibold text-text-primary">跟进草稿</h2>
                                             <button
                                                 type="button"
-                                                onClick={() => {
-                                                    navigator.clipboard?.writeText(visibleFollowUpDraft).catch(() => { /* swallow */ });
-                                                }}
-                                                className="text-[11px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-text-secondary border border-white/10 transition-colors"
+                                                onClick={handleCopyFollowUpDraft}
+                                                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-bg-tertiary hover:bg-bg-item-active text-text-secondary hover:text-text-primary border border-border-subtle transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
                                             >
-                                                复制
+                                                {followUpCopyStatus === 'copied' ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                                                {followUpCopyStatus === 'copied' ? '已复制' : '复制草稿'}
                                             </button>
                                         </div>
+                                        {followUpCopyStatus === 'error' && (
+                                            <p role="status" className="text-xs text-red-500 mb-3">复制失败，请重试或选中草稿手动复制。</p>
+                                        )}
                                         <pre className="text-[12.5px] text-text-secondary leading-relaxed whitespace-pre-wrap font-sans select-text cursor-text p-3 rounded-[10px] border border-white/10 bg-white/[0.02]">{visibleFollowUpDraft}</pre>
                                     </section>
                                 )}
