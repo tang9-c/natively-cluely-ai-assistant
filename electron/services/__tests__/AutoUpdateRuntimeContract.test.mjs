@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import vm from 'node:vm';
+import { transformSync } from 'esbuild';
 
 const root = process.cwd();
 
@@ -16,6 +18,38 @@ function between(source, start, end) {
   assert.notEqual(endAt, -1, `Missing end marker: ${end}`);
   return source.slice(startAt, endAt);
 }
+
+test('packaged startup configures manual updates without checking in the background', async () => {
+  const setup = between(read('electron/main.ts'), 'private setupAutoUpdater()', 'private async checkForUpdatesManual()');
+  const { code } = transformSync(`class AppState {
+    ${setup}
+    checkForUpdates() { return checkForUpdates(); }
+  }
+  new AppState().setupAutoUpdater();`, { loader: 'ts', format: 'cjs' });
+
+  for (const platform of ['darwin', 'win32', 'linux']) {
+    const timers = [];
+    let checks = 0;
+    const checkForUpdates = async () => { checks += 1; };
+    const autoUpdater = {
+      on() {},
+      checkForUpdatesAndNotify: checkForUpdates,
+    };
+    vm.runInNewContext(code, {
+      autoUpdater,
+      app: { isPackaged: true },
+      process: { platform },
+      console: { log() {}, error() {} },
+      checkForUpdates,
+      setTimeout: callback => timers.push(callback),
+    });
+    for (const callback of timers) await callback();
+
+    assert.equal(checks, 0, `${platform}: startup must not check for updates`);
+    assert.equal(autoUpdater.autoDownload, false);
+    assert.equal(autoUpdater.autoInstallOnAppQuit, false);
+  }
+});
 
 test('update IPC handlers reject failures instead of returning a successful invoke result', () => {
   const source = read('electron/ipcHandlers.ts');

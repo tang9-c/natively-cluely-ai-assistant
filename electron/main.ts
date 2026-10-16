@@ -900,20 +900,6 @@ export class AppState {
       this.broadcast("update-downloaded", info)
     })
 
-    // Start checking for updates with a 10-second delay
-    setTimeout(() => {
-      if (!app.isPackaged) {
-        console.log("[AutoUpdater] Development mode: Skipping auto check (use manual button)");
-      } else if (process.platform === 'darwin') {
-        this.checkForUpdates().catch(err => {
-          console.error("[AutoUpdater] Failed to check for macOS updates:", err);
-        });
-      } else {
-        autoUpdater.checkForUpdatesAndNotify().catch(err => {
-          console.error("[AutoUpdater] Failed to check for updates:", err);
-        });
-      }
-    }, 10000);
   }
 
   private async checkForUpdatesManual(): Promise<void> {
