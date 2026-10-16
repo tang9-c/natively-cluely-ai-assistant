@@ -61,6 +61,7 @@ export class RAGManager {
     private liveIndexer: LiveRAGIndexer;
     private liveRagStartPromise: Promise<void> | null = null;
     private pendingLiveSegments: RawSegment[] = [];
+    private disposed = false;
     private ensureMeetingIndexInFlight = new Map<string, Promise<void>>();
     /** Guards against concurrent reprocessMeeting() calls for the same meeting ID. */
     private _reprocessInFlight = new Set<string>();
@@ -72,6 +73,7 @@ export class RAGManager {
         this.retriever = new RAGRetriever(this.vectorStore, this.embeddingPipeline);
         this.liveIndexer = new LiveRAGIndexer(this.vectorStore, this.embeddingPipeline);
         this.embeddingPipeline.onInitialized(() => {
+            if (this.disposed) return;
             this._backfillEmbeddingProviderMetadata();
             this.scheduleAutoReindex();
         });
@@ -141,6 +143,7 @@ export class RAGManager {
         }
 
         const buildPromise = Promise.resolve().then(async () => {
+            if (this.disposed) return;
             if (isCurrent()) return;
 
             this.vectorStore.markMeetingIndexState(meetingId, 'building');
@@ -167,7 +170,7 @@ export class RAGManager {
                     await this.embeddingPipeline.queueMeeting(meetingId);
                 }
             } catch {
-                this.vectorStore.markMeetingIndexState(meetingId, 'failed');
+                if (!this.disposed) this.vectorStore.markMeetingIndexState(meetingId, 'failed');
                 throw new Error('Meeting index rebuild failed');
             }
         });
@@ -310,6 +313,7 @@ export class RAGManager {
         transcript: RawSegment[],
         summary?: string
     ): Promise<{ chunkCount: number }> {
+        if (this.disposed) return { chunkCount: 0 };
         console.log(`[RAGManager] Processing meeting ${meetingId} with ${transcript.length} segments`);
 
         // 1. Preprocess transcript
@@ -499,6 +503,7 @@ export class RAGManager {
      * Call when a meeting session begins.
      */
     startLiveIndexing(meetingId: string): Promise<void> {
+        if (this.disposed) return Promise.resolve();
         if (this.liveRagStartPromise) {
             return this.liveRagStartPromise;
         }
@@ -523,7 +528,8 @@ export class RAGManager {
 
     private async startLiveIndexingInternal(meetingId: string): Promise<void> {
         await this.embeddingPipeline.ensureInitialized();
-        
+        if (this.disposed) return;
+
         // Ensure meeting row exists in DB to satisfy foreign key constraints for chunks
         try {
             this.db.prepare(`
@@ -535,6 +541,7 @@ export class RAGManager {
         }
 
         await this.liveIndexer.start(meetingId);
+        if (this.disposed) return;
         if (this.pendingLiveSegments.length > 0) {
             const pendingSegments = this.pendingLiveSegments;
             this.pendingLiveSegments = [];
@@ -547,6 +554,7 @@ export class RAGManager {
      * Call whenever new transcript arrives during the meeting.
      */
     feedLiveTranscript(segments: RawSegment[]): void {
+        if (this.disposed) return;
         if (this.liveRagStartPromise) {
             this.pendingLiveSegments.push(...segments);
             return;
@@ -561,6 +569,7 @@ export class RAGManager {
      * with the complete, properly indexed version.
      */
     async stopLiveIndexing(): Promise<void> {
+        if (this.disposed) return;
         const starting = this.liveRagStartPromise;
         if (starting) {
             try {
@@ -569,6 +578,7 @@ export class RAGManager {
                 // A failed start has no live resources, but stop still clears pending input.
             }
         }
+        if (this.disposed) return;
         await this.liveIndexer.stop();
         this.pendingLiveSegments = [];
     }
@@ -800,7 +810,12 @@ export class RAGManager {
      * terminates the VectorStore worker thread. Call from the before-quit handler.
      */
     async dispose(): Promise<void> {
+        if (this.disposed) return;
+        this.disposed = true;
         this.cancelPendingReindex();
+        this.pendingLiveSegments = [];
+        this.liveIndexer.dispose();
+        this.embeddingPipeline.dispose();
         try { await this.vectorStore.destroy(); } catch (e) {
             console.warn('[RAGManager] dispose: vectorStore.destroy failed (non-fatal):', e);
         }
@@ -808,6 +823,7 @@ export class RAGManager {
 
     /** Shared guarded re-index routine for both the auto and manual paths. */
     private async _runReindex(): Promise<void> {
+        if (this.disposed) return;
         if (this._reindexInFlight) {
             console.log('[RAGManager] Re-index already in flight — skipping duplicate trigger.');
             return;
@@ -845,9 +861,11 @@ export class RAGManager {
                     }
                     waits++;
                     await new Promise(r => setTimeout(r, RAGManager.REINDEX_LIVE_RECHECK_MS));
+                    if (this.disposed) return;
                 }
                 // Atomic clear + enqueue (crash-safe — see requeueMeetingForReindex).
                 await this.embeddingPipeline.requeueMeetingForReindex(meetingId);
+                if (this.disposed) return;
             }
 
             console.log(`[RAGManager] Re-index: requeued ${total} meeting(s). Awaiting background embedding...`);
@@ -865,6 +883,7 @@ export class RAGManager {
                 if (pending === 0) break;
                 polls++;
                 await new Promise(r => setTimeout(r, RAGManager.REINDEX_DRAIN_POLL_MS));
+                if (this.disposed) return;
             }
 
             const stillPending = this.embeddingPipeline.getQueueStatus().pending;

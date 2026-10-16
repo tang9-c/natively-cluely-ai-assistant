@@ -26,6 +26,7 @@ export class LiveRAGIndexer {
     private processingPromise: Promise<boolean> | null = null;
     private stoppingPromise: Promise<void> | null = null;
     private isActive = false;
+    private disposed = false;
 
     constructor(vectorStore: VectorStore, embeddingPipeline: EmbeddingPipeline) {
         this.vectorStore = vectorStore;
@@ -37,9 +38,11 @@ export class LiveRAGIndexer {
      * Begins a background timer that periodically chunks & embeds new transcript.
      */
     async start(meetingId: string): Promise<void> {
+        if (this.disposed) return;
         if (this.isActive || this.stoppingPromise) {
             await this.stop();
         }
+        if (this.disposed) return;
 
         this.meetingId = meetingId;
         this.allSegments = [];
@@ -141,10 +144,13 @@ export class LiveRAGIndexer {
                 let embeddedCount = 0;
                 for (let i = 0; i < chunkIds.length; i++) {
                     try {
+                        if (this.disposed) return false;
                         const embedding = await this.embeddingPipeline.getEmbedding(indexedChunks[i].text);
+                        if (this.disposed) return false;
                         this.vectorStore.storeEmbedding(chunkIds[i], embedding);
                         embeddedCount++;
                     } catch (err) {
+                        if (this.disposed) return false;
                         console.warn(`[LiveRAGIndexer] Failed to embed chunk ${chunkIds[i]}:`, err);
                         // Continue with remaining chunks — partial indexing is better than none
                     }
@@ -234,6 +240,16 @@ export class LiveRAGIndexer {
         this.processingPromise = null;
 
         console.log(`[LiveRAGIndexer] Stopped for meeting ${meetingId}`);
+    }
+
+    /** Quit discards derived work; the durable transcript can rebuild it later. */
+    dispose(): void {
+        this.disposed = true;
+        this.isActive = false;
+        if (this.timer) clearInterval(this.timer);
+        this.timer = null;
+        this.meetingId = null;
+        this.allSegments = [];
     }
 
     /**

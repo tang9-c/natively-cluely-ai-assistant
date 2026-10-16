@@ -38,6 +38,9 @@ export class EmbeddingPipeline {
     private db: Database.Database;
     private vectorStore: VectorStore;
     private isProcessing = false;
+    private disposed = false;
+    private cancelRetryDelay: (() => void) | null = null;
+    private postInitTimer: ReturnType<typeof setTimeout> | null = null;
     private initPromise: Promise<void> | null = null;
     private initializationFailed = false;
     private pendingConfig: AppAPIConfig | null = null;
@@ -51,8 +54,18 @@ export class EmbeddingPipeline {
         this.vectorStore = vectorStore;
     }
 
+    /** Invalidate asynchronous continuations without waiting for remote embeddings. */
+    dispose(): void {
+        this.disposed = true;
+        if (this.postInitTimer) clearTimeout(this.postInitTimer);
+        this.postInitTimer = null;
+        this.cancelRetryDelay?.();
+        this.initializedCallbacks.clear();
+    }
+
     /** Store provider configuration without loading any model or opening a network connection. */
     configure(config: AppAPIConfig): Promise<void> | null {
+        if (this.disposed) return null;
         this.pendingConfig = { ...config };
         if (this.provider && (!this._lastConfig || this._hasConfigChanged(this._lastConfig, config))) {
             return this.initialize(config);
@@ -81,6 +94,7 @@ export class EmbeddingPipeline {
 
     /** Initialize on first real embedding consumer; concurrent consumers share initPromise. */
     async ensureInitialized(): Promise<void> {
+        if (this.disposed) return;
         if (this.provider) return;
         if (this.initPromise) return this.initPromise;
         if (!this.pendingConfig) throw new Error('Embedding pipeline has not been configured');
@@ -94,6 +108,7 @@ export class EmbeddingPipeline {
      * If the config is unchanged or strictly worse, the existing initPromise is returned.
      */
     async initialize(config: AppAPIConfig): Promise<void> {
+        if (this.disposed) return;
         this.pendingConfig = { ...config };
         if (this.initPromise) return this.initPromise;
         if (this._lastConfig && !this._hasConfigChanged(this._lastConfig, config)) {
@@ -114,6 +129,7 @@ export class EmbeddingPipeline {
                     geminiEmbeddingDims: currentConfig.geminiEmbeddingDims || null,
                 });
                 await this._doInitialize(currentConfig);
+                if (this.disposed) return;
                 this._lastConfig = currentConfig;
                 if (!this._hasConfigChanged(currentConfig, this.pendingConfig)) return;
             }
@@ -155,7 +171,9 @@ export class EmbeddingPipeline {
         // so activateMeetingFallback() is always safe to call.
         try {
             const local = new LocalEmbeddingProvider();
-            if (await local.isAvailable()) {
+            const available = await local.isAvailable();
+            if (this.disposed) return;
+            if (available) {
                 this.fallbackProvider = local;
                 console.log(`[EmbeddingPipeline] Local fallback provider ready (${local.dimensions}d)`);
             } else {
@@ -165,9 +183,11 @@ export class EmbeddingPipeline {
             console.warn('[EmbeddingPipeline] Could not initialize local fallback provider:', e);
         }
 
+        if (this.disposed) return;
         // ── Step 2: Resolve primary provider.
         try {
             this.provider = await EmbeddingProviderResolver.resolve(config, this.fallbackProvider ?? undefined);
+            if (this.disposed) return;
             console.log(`[EmbeddingPipeline] Ready with provider: ${this.provider.name} (${this.provider.dimensions}d)`);
 
             // If the primary IS local, point fallbackProvider at the same instance to avoid
@@ -197,6 +217,7 @@ export class EmbeddingPipeline {
             this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(activeSpace);
 
         } catch (err) {
+            if (this.disposed) return;
             console.error('[EmbeddingPipeline] Failed to initialize primary provider:', err);
             // Don't rethrow — if we have a fallback, the pipeline can still function
             // in local-only mode. Callers check isReady() which checks this.provider.
@@ -216,7 +237,9 @@ export class EmbeddingPipeline {
 
         // Flush any queue items submitted during the startup race window (i.e. before the
         // provider was ready). processQueue() is idempotent and a no-op if the queue is empty.
-        setTimeout(() => {
+        if (this.disposed) return;
+        this.postInitTimer = setTimeout(() => {
+            this.postInitTimer = null;
             this.processQueue().catch(err => {
                 console.warn('[EmbeddingPipeline] Post-init queue flush failed (non-fatal):', err.message);
             });
@@ -284,6 +307,7 @@ export class EmbeddingPipeline {
      * Called when meeting ends
      */
     async queueMeeting(meetingId: string): Promise<void> {
+        if (this.disposed) return;
         // Get chunks without embeddings
         const chunks = this.vectorStore.getChunksWithoutEmbeddings(meetingId);
 
@@ -334,6 +358,7 @@ export class EmbeddingPipeline {
      * AND queue rows (crash after commit → queue drains on next launch). No orphan.
      */
     async requeueMeetingForReindex(meetingId: string): Promise<void> {
+        if (this.disposed) return;
         const chunkIds = this.db
             .prepare('SELECT id FROM chunks WHERE meeting_id = ?')
             .all(meetingId) as { id: number }[];
@@ -372,6 +397,7 @@ export class EmbeddingPipeline {
      * and its queue is reset so it re-embeds from scratch at the correct dimensions.
      */
     async processQueue(): Promise<void> {
+        if (this.disposed) return;
         if (this.isProcessing) {
             console.log('[EmbeddingPipeline] Already processing queue');
             return;
@@ -381,6 +407,7 @@ export class EmbeddingPipeline {
 
         try {
             await this.ensureInitialized();
+            if (this.disposed) return;
 
             // Recover items stuck in 'processing' from a previous app crash.
             const stuckCount = this.db.prepare(
@@ -390,7 +417,7 @@ export class EmbeddingPipeline {
                 console.warn(`[EmbeddingPipeline] Recovered ${stuckCount} stuck 'processing' items from prior crash.`);
             }
 
-            while (true) {
+            while (!this.disposed) {
                 // Fetch next pending item. Items marked for local fallback (retry_count = -1)
                 // are also eligible, so we use a broad filter.
                 const pending = this.db.prepare(`
@@ -436,6 +463,7 @@ export class EmbeddingPipeline {
                         await this.embedMeetingSummary(pending.meeting_id, activeProvider);
                     }
 
+                    if (this.disposed) return;
                     // Mark as completed
                     this.db.prepare(`
                         UPDATE embedding_queue 
@@ -445,6 +473,7 @@ export class EmbeddingPipeline {
                     this.releaseMeetingFallbackIfSettled(pending.meeting_id);
 
                 } catch (error: any) {
+                    if (this.disposed) return;
                     const newRetryCount = (pending.retry_count === -1 ? 0 : pending.retry_count) + 1;
                     console.error(
                         `[EmbeddingPipeline] Error processing queue item ${pending.id} ` +
@@ -566,6 +595,7 @@ export class EmbeddingPipeline {
      */
     async getEmbedding(text: string): Promise<number[]> {
         await this.ensureInitialized();
+        if (this.disposed) throw new Error('Embedding pipeline disposed');
         return this.embedWithTimeout(this.provider, text, 'live-chunk');
     }
 
@@ -584,6 +614,7 @@ export class EmbeddingPipeline {
         if (texts.length === 0) return [];
         this.embeddingBatchCalls += 1;
         await this.ensureInitialized();
+        if (this.disposed) throw new Error('Embedding pipeline disposed');
         const provider = this.provider;
         return new Promise<number[][]>((resolve, reject) => {
             const timer = setTimeout(() => {
@@ -608,6 +639,7 @@ export class EmbeddingPipeline {
      */
     async getEmbeddingForQuery(text: string): Promise<number[]> {
         await this.ensureInitialized();
+        if (this.disposed) throw new Error('Embedding pipeline disposed');
         // embedQuery() uses a query-specific prefix for asymmetric models (e.g. Nomic).
         // Wrap with a manual timeout since embedQuery is not covered by embedWithTimeout directly.
         return new Promise<number[]>((resolve, reject) => {
@@ -654,6 +686,7 @@ export class EmbeddingPipeline {
 
     async getEmbeddingForQueryLocalOnly(text: string): Promise<number[] | null> {
         await this.ensureInitialized().catch(() => {});
+        if (this.disposed) return null;
         const local = this.fallbackProvider;
         if (!local) return null;
         try {
@@ -699,6 +732,7 @@ export class EmbeddingPipeline {
         }
 
         const embedding = await this.embedWithTimeout(p, row.cleaned_text, `chunk ${chunkId}`);
+        if (this.disposed) return;
         this.vectorStore.storeEmbedding(chunkId, embedding);
 
         // Record provider metadata on the meeting after first successful embedding
@@ -731,6 +765,7 @@ export class EmbeddingPipeline {
         }
 
         const embedding = await this.embedWithTimeout(p, row.summary_text, `summary:${meetingId}`);
+        if (this.disposed) return;
         this.vectorStore.storeSummaryEmbedding(meetingId, embedding);
 
         // P2-8: record provider metadata on the meeting row so that provider-switch
@@ -795,6 +830,15 @@ export class EmbeddingPipeline {
     }
 
     private delay(ms: number): Promise<void> {
-        return new Promise(resolve => setTimeout(resolve, ms));
+        if (this.disposed) return Promise.resolve();
+        return new Promise(resolve => {
+            const finish = () => {
+                clearTimeout(timer);
+                this.cancelRetryDelay = null;
+                resolve();
+            };
+            const timer = setTimeout(finish, ms);
+            this.cancelRetryDelay = finish;
+        });
     }
 }

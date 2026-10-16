@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mainPath = path.resolve(__dirname, '../../main.ts');
+const root = path.resolve(__dirname, '../../..');
 const source = fs.readFileSync(mainPath, 'utf8');
 const endMeetingStart = source.indexOf('public async endMeeting');
 const endMeetingEnd = source.indexOf('private async processCompletedMeetingForRAG', endMeetingStart);
@@ -41,6 +42,8 @@ test('endMeeting keeps draining enabled during STT grace window', () => {
 // Execute production methods with controlled collaborators, rather than asserting source order.
 import ts from 'typescript';
 import vm from 'node:vm';
+import os from 'node:os';
+import { createRequire } from 'node:module';
 function lifecycleHarness() {
   const tree = ts.createSourceFile('main.ts', source, ts.ScriptTarget.Latest, true);
   const cls = tree.statements.find(n => ts.isClassDeclaration(n) && n.name.text === 'AppState');
@@ -64,7 +67,7 @@ function lifecycleHarness() {
     intelligenceManager: {stopMeeting: async () => 'A', resetEngine(){}, clearDynamicActionContext(){}},
     drainSttFinalsForMeetingStop: async () => {}, processCompletedMeetingForRAG: async () => {},
   });
-  return {state, notices};
+  return {state, notices, context};
 }
 function deferred() { let resolve; const promise = new Promise(r => {resolve = r;}); return {promise, resolve}; }
 
@@ -105,7 +108,7 @@ test('A2-M3 explicit Stop after write failure retries A and releases B gate', as
 
 function quitHarness(state) {
   let callback; let quits = 0; let cleanups = 0;
-  Object.assign(state, {setQuitting(){}, disposeIdleResources: async () => {cleanups++;}, getRAGManager: () => null});
+  Object.assign(state, {setQuitting(value){this._isQuitting = value;}, disposeIdleResources: async () => {cleanups++;}, getRAGManager: () => null});
   const start = source.indexOf('let quitCleanupPromise:');
   const end = source.indexOf('// app.dock?.hide()', start);
   const code = ts.transpileModule(source.slice(start, end), {compilerOptions: {target: ts.ScriptTarget.ES2022}}).outputText;
@@ -189,4 +192,74 @@ test('A2-M6 Start joining another failed retry reports failed status without ini
   assert.equal(await result, null);
   assert.equal(resets, 0);
   assert.ok(events.some(event => event.channel === 'meeting-start-status' && event.payload.phase === 'failed'));
+});
+
+
+test('A2-fix2-Q4 Start is blocked while quit waits on save', async () => {
+  const {state} = lifecycleHarness(); const drain = deferred(); let resets = 0;
+  state.drainSttFinalsForMeetingStop = () => drain.promise;
+  state.resetMeetingEchoDiagnostics = () => {resets++; throw new Error('B must not initialize');};
+  const quit = quitHarness(state); quit.trigger(); await tick();
+  const start = state.startMeeting().then(() => null, error => error);
+  drain.resolve(); await tick();
+  assert.equal(await start, null); assert.equal(resets, 0); assert.equal(quit.quits(), 1);
+});
+
+test('A2-fix2-Q5 Start already awaiting microphone permission cannot commit after Quit', async () => {
+  const {state, context} = lifecycleHarness(); const permission = deferred(); let initialized = 0;
+  state.isMeetingActive = false;
+  state.resetMeetingEchoDiagnostics = () => {};
+  state.logSttRuntimeDiagnostics = () => {initialized++; throw new Error('B must not initialize');};
+  context.ensureMacMicrophoneAccess = () => permission.promise;
+  context.process = {platform: 'linux'};
+  const start = state.startMeeting().then(() => null, error => error);
+  const quit = quitHarness(state); quit.trigger(); await tick(); permission.resolve(true); await tick();
+  assert.equal(await start, null); assert.equal(initialized, 0); assert.equal(state.isMeetingActive, false);
+  assert.equal(quit.quits(), 1);
+});
+
+test('A2-fix2-Q6 durable SQLite placeholder permits quit while live RAG and an earlier Start remain pending', async () => {
+  const {state} = lifecycleHarness(); const embedding = deferred(); const title = deferred(); let completedRag = 0;
+  const require = createRequire(import.meta.url);
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'a2-quit-'));
+  const electronPath = require.resolve('electron');
+  require.cache[electronPath] = {id: electronPath, filename: electronPath, loaded: true, exports: {
+    app: {getPath: () => userData, getAppPath: () => root, isReady: () => true, isPackaged: false, whenReady: async () => {}, getVersion: () => 'test'},
+    BrowserWindow: {getAllWindows: () => []},
+  }};
+  const {MeetingPersistence} = require(path.join(root, 'dist-electron/electron/MeetingPersistence.js'));
+  const transcript = Array.from({length: 3}, (_, i) => ({speaker: 'user', text: `durable fixture ${i}`, timestamp: i}));
+  const session = {flushInterimTranscript(){}, getSessionStartTime: () => Date.now() - 5000,
+    getFullTranscript: () => transcript, getEffectiveFullTranscript: () => transcript, getFullUsage: () => [],
+    getFullSessionContext: () => 'fixture', getMeetingMetadata: () => null, reset(){}};
+  let calls = 0;
+  const persistence = new MeetingPersistence(session, {generateMeetingSummary: async () => ++calls === 1 ? title.promise : JSON.stringify({keyPoints: [], actionItems: [], decisions: [], openQuestions: []})});
+  let meetingId;
+  state.intelligenceManager.stopMeeting = async () => {meetingId = await persistence.stopMeeting(); return meetingId;};
+  state.ragManager = {stopLiveIndexing: () => embedding.promise};
+  state.processCompletedMeetingForRAG = async () => {completedRag++;};
+  state.resetMeetingEchoDiagnostics = () => {throw new Error('B must not initialize');};
+  await state.endMeeting(); await tick();
+  const start = state.startMeeting().then(() => null, error => error);
+  const quit = quitHarness(state); quit.trigger(); await tick();
+  const Database = require('better-sqlite3');
+  const reopened = new Database(path.join(userData, 'natively.db'), {readonly: true});
+  try {
+    assert.equal(quit.quits(), 1);
+    assert.equal(reopened.prepare('SELECT is_processed FROM meetings WHERE id = ?').get(meetingId).is_processed, 0);
+    assert.deepEqual(reopened.prepare('SELECT content FROM transcripts WHERE meeting_id = ? ORDER BY timestamp_ms').all(meetingId).map(row => row.content), transcript.map(segment => segment.text));
+  } finally {reopened.close(); embedding.resolve(); title.resolve('fixture title'); await state._pendingTeardown;}
+  assert.equal(await start, null); assert.equal(completedRag, 0);
+});
+
+test('A2-fix2-Q7 Start is blocked while post-save quit cleanup remains pending', async () => {
+  const {state} = lifecycleHarness(); state.isMeetingActive = false;
+  const cleanup = deferred(); let resets = 0;
+  const quit = quitHarness(state);
+  state.disposeIdleResources = () => cleanup.promise;
+  state.resetMeetingEchoDiagnostics = () => {resets++; throw new Error('B must not initialize');};
+  quit.trigger(); await tick();
+  try {await state.startMeeting(); assert.equal(resets, 0); assert.equal(quit.quits(), 0);}
+  finally {cleanup.resolve(); await tick();}
+  assert.equal(quit.quits(), 1);
 });

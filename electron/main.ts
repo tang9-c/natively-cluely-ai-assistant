@@ -472,6 +472,9 @@ export class AppState {
   // before booting a new session so the shared STT instances are not torn down
   // mid-meeting by a stale teardown task.
   private _pendingTeardown: Promise<void> | null = null;
+  // Quit waits for durable transcript + local cleanup, while Start also waits
+  // for the complete teardown (including optional RAG final indexing).
+  private _pendingMeetingSave: Promise<void> | null = null;
   private _meetingStartInFlight: Promise<void> | null = null;
   private _isQuitting: boolean = false;
   private _verboseLogging: boolean = false;
@@ -3487,7 +3490,9 @@ export class AppState {
   }
 
   public async startMeeting(metadata?: any): Promise<void> {
+    if (this._isQuitting) return;
     if (this.preparationDictation) await this.cancelPreparationDictation();
+    if (this._isQuitting) return;
     if (this.isMeetingActive) {
       this.windowHelper.setWindowMode('overlay', true);
       this.broadcastMeetingState();
@@ -3507,6 +3512,7 @@ export class AppState {
   }
 
   private async startMeetingInternal(metadata?: any): Promise<void> {
+    if (this._isQuitting) return;
     console.log('[Main] Starting Meeting...', metadata);
 
     this.windowHelper.resetOverlayPosition();
@@ -3522,6 +3528,7 @@ export class AppState {
       try {
         await this._pendingTeardown;
       } catch {
+        if (this._isQuitting) return;
         // Start is available in the launcher after Stop. Save the retained A
         // before any B initialization; a failed retry keeps the same gate.
         try {
@@ -3533,6 +3540,7 @@ export class AppState {
           return;
         }
       }
+      if (this._isQuitting) return;
       this._pendingTeardown = null;
     }
     // PR #173: Reset audio recovery state for fresh session
@@ -3551,11 +3559,13 @@ export class AppState {
     }
 
     if (!(await ensureMacMicrophoneAccess('meeting start'))) {
+      if (this._isQuitting) return;
       const message = formatPermissionMessage('mic-denied');
       this.broadcast('meeting-start-status', { phase: 'failed', message });
       this.broadcast('meeting-audio-error', message);
       throw new Error(message);
     }
+    if (this._isQuitting) return;
 
     // Check Screen Recording permission required for system audio capture
     // (CoreAudio Global Process Tap + ScreenCaptureKit both need this).
@@ -3565,6 +3575,7 @@ export class AppState {
     // with microphone-only transcription.
     if (process.platform === 'darwin') {
       const screenCapability = await resolveMacScreenCaptureCapability('meeting start');
+      if (this._isQuitting) return;
       console.log(`[Main] macOS screen recording permission status: ${screenCapability.status}; capturable=${screenCapability.capturable}; sources=${screenCapability.sourceCount}`);
       if (screenCapability.effectiveDenied) {
         if (screenCapability.staleGrantSuspected) {
@@ -3659,7 +3670,7 @@ export class AppState {
       // BUG-02 fix: a fast start→stop sequence can call endMeeting() before
       // this callback fires, leaving isMeetingActive=false. If that happened,
       // do NOT boot the audio pipeline — it would run forever with no stop signal.
-      if (!this.isMeetingActive) {
+      if (this._isQuitting || !this.isMeetingActive) {
         console.warn('[Main] Meeting was cancelled before audio pipeline could start — aborting init.');
         return;
       }
@@ -3667,10 +3678,12 @@ export class AppState {
         // Check for audio configuration preference
         if (metadata?.audio) {
           await this.reconfigureAudio(metadata.audio.inputDeviceId, metadata.audio.outputDeviceId);
+          if (this._isQuitting || !this.isMeetingActive) return;
         }
 
         // LAZY INIT: Ensure pipeline is ready (if not reconfigured above)
         await this.setupSystemAudioPipeline();
+        if (this._isQuitting || !this.isMeetingActive) return;
 
         // Start System Audio
         this.systemAudioCapture?.start();
@@ -3833,6 +3846,13 @@ export class AppState {
     // completion in startMeeting() before booting a new session on the
     // (still-shared) STT instances.
     const ragManager = this.ragManager;
+    let resolveSave!: () => void;
+    let rejectSave!: (error: unknown) => void;
+    this._pendingMeetingSave = new Promise<void>((resolve, reject) => {
+      resolveSave = resolve;
+      rejectSave = reject;
+    });
+    void this._pendingMeetingSave.catch(() => {});
     this._pendingTeardown = (async () => {
       let persistenceCommitted = false;
       try {
@@ -3893,13 +3913,18 @@ export class AppState {
             .catch(() => {});
         }
 
+        resolveSave();
+        if (this._isQuitting) return;
+
         // 5. RAG cleanup — same logic as before, just inside the BG IIFE.
         if (meetingId) {
           if (ragManager) {
             await ragManager.stopLiveIndexing();
+            if (this._isQuitting) return;
             console.log('[Main] Live RAG indexing stopped.');
           }
           await this.processCompletedMeetingForRAG(meetingId);
+          if (this._isQuitting) return;
           if (ragManager && !this.isMeetingActive) {
             ragManager.deleteMeetingData('live-meeting-current');
             console.log('[Main] JIT RAG provisional chunks cleaned up.');
@@ -3909,15 +3934,18 @@ export class AppState {
         } else {
           if (ragManager) {
             await ragManager.stopLiveIndexing().catch(() => {});
+            if (this._isQuitting) return;
             if (!this.isMeetingActive) ragManager.deleteMeetingData('live-meeting-current');
           }
         }
       } catch (err) {
         console.error('[Main] Background meeting teardown failed');
         if (!persistenceCommitted) {
+          rejectSave(err);
           require('electron').dialog.showErrorBox('会议保存失败', '会议内容仍保留在内存中。请点击开始会议或再次尝试退出以重试保存，保存成功后才能继续。');
           throw err;
         }
+        resolveSave();
       } finally {
         this._isDraining = false;
       }
@@ -3930,9 +3958,19 @@ export class AppState {
   }
 
   public async finishMeetingBeforeQuit(): Promise<void> {
-    if (this._meetingStartInFlight) await this._meetingStartInFlight;
-    if (this.isMeetingActive || this._pendingTeardown) await this.endMeeting();
-    if (this._pendingTeardown) await this._pendingTeardown;
+    // Start checks _isQuitting after every preflight await, so a suspended Start
+    // cannot commit B. Do not await its optional A/RAG teardown here.
+    if (this.isMeetingActive) {
+      await this.endMeeting();
+    } else if (this._pendingMeetingSave) {
+      try {
+        await this._pendingMeetingSave;
+      } catch {
+        // A new, explicit Quit retries a previously failed first write.
+        await this.endMeeting();
+      }
+    }
+    if (this._pendingMeetingSave) await this._pendingMeetingSave;
   }
 
   private async drainSttFinalsForMeetingStop(): Promise<void> {
