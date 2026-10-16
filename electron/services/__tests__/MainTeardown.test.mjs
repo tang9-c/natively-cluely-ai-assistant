@@ -102,3 +102,45 @@ test('A2-M3 explicit Stop after write failure retries A and releases B gate', as
   await state.endMeeting();
   assert.equal(saves, 2);
 });
+
+function quitHarness(state) {
+  let callback; let quits = 0; let cleanups = 0;
+  Object.assign(state, {setQuitting(){}, disposeIdleResources: async () => {cleanups++;}, getRAGManager: () => null});
+  const start = source.indexOf('let quitCleanupPromise:');
+  const end = source.indexOf('// app.dock?.hide()', start);
+  const code = ts.transpileModule(source.slice(start, end), {compilerOptions: {target: ts.ScriptTarget.ES2022}}).outputText;
+  vm.runInNewContext(code, {app: {on: (name, cb) => {callback = cb;}, quit: () => {quits++;}}, appState: state,
+    OllamaManager: {getInstance: () => ({stop(){}})}, console: {log(){}, error(){}}, require: name => {
+      if (name === 'electron') return {dialog: {showErrorBox(){}}};
+      throw new Error('unused collaborator');
+    }});
+  return {trigger: () => callback({preventDefault(){}}), quits: () => quits, cleanups: () => cleanups};
+}
+const tick = () => new Promise(resolve => setImmediate(resolve));
+
+test('A2-Q1 quit while recording waits for received finals to save before cleanup', async () => {
+  const {state} = lifecycleHarness(); const gate = deferred(); let saved = false;
+  state.drainSttFinalsForMeetingStop = () => gate.promise;
+  state.intelligenceManager.stopMeeting = async () => {saved = true; return 'A';};
+  const quit = quitHarness(state); quit.trigger(); await tick();
+  assert.equal(quit.quits(), 0); assert.equal(quit.cleanups(), 0); assert.equal(saved, false);
+  gate.resolve(); await tick(); assert.equal(saved, true); assert.equal(quit.quits(), 1);
+});
+
+test('A2-Q2 Stop then immediate Quit waits for one save', async () => {
+  const {state} = lifecycleHarness(); const gate = deferred(); let saves = 0;
+  state.drainSttFinalsForMeetingStop = () => gate.promise;
+  state.intelligenceManager.stopMeeting = async () => {saves++; return 'A';};
+  await state.endMeeting(); const quit = quitHarness(state); quit.trigger(); await tick();
+  assert.equal(quit.quits(), 0); gate.resolve(); await tick();
+  assert.equal(saves, 1); assert.equal(quit.quits(), 1);
+});
+
+test('A2-Q3 first-write failure prevents quit and leaves retry resources intact', async () => {
+  const {state} = lifecycleHarness();
+  state.intelligenceManager.stopMeeting = async () => {throw new Error('disk');};
+  const quit = quitHarness(state); quit.trigger(); await tick();
+  assert.equal(quit.quits(), 0); assert.equal(quit.cleanups(), 0);
+  state.intelligenceManager.stopMeeting = async () => 'A';
+  quit.trigger(); await tick(); assert.equal(quit.quits(), 1);
+});

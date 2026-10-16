@@ -156,8 +156,10 @@ describe('MeetingPersistence.deep — stopMeeting duration branches', () => {
     assert.equal(llm._calls.length, 0);
   });
 
-  test('duration 999ms is still too short', async () => {
-    const session = buildMockSession({ startTime: Date.now() - 999 });
+  test('duration 999ms is still too short', async (t) => {
+    const now = Date.now();
+    t.mock.method(Date, 'now', () => now);
+    const session = buildMockSession({ startTime: now - 999 });
     const llm = buildMockLLMHelper();
     const mp = new MeetingPersistence(session, llm);
     const result = await mp.stopMeeting();
@@ -667,5 +669,49 @@ describe('A2 durable snapshot boundary', () => {
     try {
       assert.throws(() => db.saveMeeting({id: 'A2-unavailable'}, Date.now(), 5000), /DB not initialized/);
     } finally { db.db = connection; }
+  });
+});
+
+
+describe('A2 background persistence scheduling', () => {
+  let restoreRetention;
+  beforeEach(() => { restoreRetention = setRetention('forever'); });
+  afterEach(() => { restoreRetention(); });
+  test('A2-P3 late A title completes after B and updates only its durable snapshot', async () => {
+    const db = DatabaseManager.getInstance();
+    const session = buildMockSession();
+    session.reset = function () { this._transcript = []; this._metadata = null; };
+    let release;
+    const delayedTitle = new Promise(resolve => {release = resolve;});
+    let calls = 0;
+    const llm = {generateMeetingSummary: async () => {
+      if (++calls === 1) return delayedTitle;
+      return JSON.stringify({keyPoints: ['fixture point'], actionItems: [], decisions: [], openQuestions: []});
+    }};
+    const mp = new MeetingPersistence(session, llm);
+    const aText = session.getFullTranscript().map(s => s.text);
+    const a = await mp.stopMeeting();
+    assert.equal(db.getMeetingDetails(a).title, 'Processing...');
+    session._transcript = [{speaker: 'user', text: 'B isolated fixture', timestamp: Date.now()}];
+    const b = await mp.stopMeeting();
+    await waitFor(() => db.getMeetingDetails(b)?.title !== 'Processing...');
+    release('A fixture title');
+    assert.ok(await waitFor(() => db.getMeetingDetails(a)?.title === 'A fixture title'));
+    assert.deepEqual(db.getMeetingDetails(a).transcript.map(s => s.text), aText);
+    assert.deepEqual(db.getMeetingDetails(b).transcript.map(s => s.text), ['B isolated fixture']);
+  });
+
+  test('A2-P4 final-write transaction failure preserves recoverable placeholder transcript', async () => {
+    const db = DatabaseManager.getInstance();
+    const session = buildMockSession({transcript: [{speaker: 'user', text: 'durable fixture', timestamp: Date.now()}]});
+    db.db.exec("CREATE TRIGGER a2_fail_final BEFORE INSERT ON meetings WHEN NEW.is_processed = 1 BEGIN SELECT RAISE(ABORT, 'A2 final-write failure'); END");
+    try {
+      const id = await new MeetingPersistence(session, buildMockLLMHelper()).stopMeeting();
+      await new Promise(resolve => setImmediate(resolve));
+      const row = db.getMeetingDetails(id);
+      assert.equal(row.title, 'Processing...');
+      assert.deepEqual(row.transcript.map(s => s.text), ['durable fixture']);
+      assert.equal(db.db.prepare('SELECT is_processed FROM meetings WHERE id = ?').get(id).is_processed, 0);
+    } finally {db.db.exec('DROP TRIGGER a2_fail_final');}
   });
 });
