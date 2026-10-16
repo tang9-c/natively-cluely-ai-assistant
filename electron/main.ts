@@ -3522,7 +3522,9 @@ export class AppState {
       try {
         await this._pendingTeardown;
       } catch {
-        // teardown already logs; safe to swallow here
+        this.broadcast('meeting-start-status', { phase: 'failed', message: '上一场会议尚未保存，请重试停止后再开始。' });
+        this.windowHelper.setWindowMode('launcher');
+        return;
       }
       this._pendingTeardown = null;
     }
@@ -3719,6 +3721,14 @@ export class AppState {
   }
 
   public async endMeeting(): Promise<void> {
+    if (!this.isMeetingActive && this._pendingTeardown) {
+      try {
+        await this._pendingTeardown;
+        return;
+      } catch {
+        // An explicit Stop may retry the retained session after a write failure.
+      }
+    }
     console.log('[Main] Ending Meeting...');
     console.log(
       `[Main] Meeting usability before stop: micTranscript=${this._meetingHasMicTranscript} anyTranscript=${this._meetingHasAnyTranscript}`,
@@ -3815,6 +3825,7 @@ export class AppState {
     // (still-shared) STT instances.
     const ragManager = this.ragManager;
     this._pendingTeardown = (async () => {
+      let persistenceCommitted = false;
       try {
         // 0. Revert to Default Model. Moved into BG: getDefaultModel() and the
         //    provider list reads touch disk, and the 'model-changed' broadcast
@@ -3855,6 +3866,7 @@ export class AppState {
         // 4. Snapshot transcript + persist placeholder + queue title/summary LLM.
         //    intelligenceManager.stopMeeting itself runs LLM in background.
         const meetingId = await this.intelligenceManager.stopMeeting();
+        persistenceCommitted = true;
 
         // The persistence snapshot is complete, so meeting-scoped request,
         // action, and screenshot state can now be released safely.
@@ -3892,11 +3904,17 @@ export class AppState {
           }
         }
       } catch (err) {
-        console.error('[Main] Background meeting teardown failed:', err);
+        console.error('[Main] Background meeting teardown failed');
+        if (!persistenceCommitted) {
+          require('electron').dialog.showErrorBox('会议保存失败', '会议内容仍保留在内存中。请重试停止会议，保存成功后再开始新会议或退出。');
+          throw err;
+        }
       } finally {
         this._isDraining = false;
       }
     })();
+    // Keep the rejection for Start / Quit, while handling it when no caller awaits yet.
+    void this._pendingTeardown.catch(() => {});
     // endMeeting returns NOW — the IPC handler resolves and the renderer's
     // "Stop" button transitions instantly. Total endMeeting wall-clock time
     // is now bounded by the synchronous block above (~1–5ms typical).

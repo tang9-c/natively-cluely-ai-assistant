@@ -634,3 +634,38 @@ describe('MeetingPersistence.deep — buildDynamicActionArtifactActionsFromUsage
     assert.equal(result.length, 0, 'missing actionId must skip');
   });
 });
+
+
+describe('A2 durable snapshot boundary', () => {
+  let restoreRetention;
+  beforeEach(() => { restoreRetention = setRetention('forever'); mockWindows.length = 0; });
+  afterEach(() => { restoreRetention(); mockWindows.length = 0; });
+
+  test('A2-P1 SQLite first-write rollback rejects stop and preserves the only transcript', async () => {
+    const db = DatabaseManager.getInstance();
+    const session = buildMockSession();
+    session.reset = function () { this._resetCount++; this._transcript = []; this._metadata = null; };
+    const original = [...session._transcript];
+    const llm = buildMockLLMHelper();
+    const mp = new MeetingPersistence(session, llm);
+    db.db.exec("CREATE TRIGGER a2_fail_placeholder BEFORE INSERT ON meetings BEGIN SELECT RAISE(ABORT, 'A2 injected write failure'); END");
+    try {
+      await assert.rejects(mp.stopMeeting(), /A2 injected write failure/);
+      assert.deepEqual(session.getFullTranscript(), original);
+      assert.equal(session._resetCount, 0);
+      assert.equal(llm._calls.length, 0);
+    } finally { db.db.exec('DROP TRIGGER a2_fail_placeholder'); }
+    const id = await mp.stopMeeting();
+    assert.deepEqual(db.getMeetingDetails(id).transcript.map(s => s.text), original.map(s => s.text));
+    assert.equal(session._resetCount, 1);
+  });
+
+  test('A2-P2 unavailable database rejects writes rather than reporting success', () => {
+    const db = DatabaseManager.getInstance();
+    const connection = db.db;
+    db.db = null;
+    try {
+      assert.throws(() => db.saveMeeting({id: 'A2-unavailable'}, Date.now(), 5000), /DB not initialized/);
+    } finally { db.db = connection; }
+  });
+});

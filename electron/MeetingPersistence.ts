@@ -144,9 +144,6 @@ export class MeetingPersistence {
             console.warn('[MeetingPersistence] Failed to capture mode snapshot:', modeErr?.message);
         }
 
-        // 2. Reset state immediately so new meeting can start or UI is clean
-        this.session.reset();
-
         const meetingId = crypto.randomUUID();
 
         // 4. Initial Save (Placeholder)
@@ -166,13 +163,16 @@ export class MeetingPersistence {
             isProcessed: false
         };
 
+        // The placeholder is the durable recovery copy. Never clear the only
+        // in-memory transcript or start remote processing before this commits.
+        DatabaseManager.getInstance().saveMeeting(placeholder, snapshot.startTime, durationMs);
+        this.session.reset();
+
         try {
-            DatabaseManager.getInstance().saveMeeting(placeholder, snapshot.startTime, durationMs);
-            // Notify Frontend
             const wins = require('electron').BrowserWindow.getAllWindows();
             wins.forEach((w: any) => w.webContents.send('meetings-updated'));
-        } catch (e) {
-            console.error("Failed to save placeholder", e);
+        } catch {
+            console.error('[MeetingPersistence] Failed to notify windows after saving meeting');
         }
 
         this.processAndSaveMeeting(snapshot, meetingId, metadataSnapshot, modeSnapshot).catch(err => {

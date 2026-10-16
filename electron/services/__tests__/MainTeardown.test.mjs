@@ -37,3 +37,68 @@ test('endMeeting keeps draining enabled during STT grace window', () => {
     /this\._isDraining = true;[\s\S]*this\._pendingTeardown = \(async[\s\S]*drainSttFinalsForMeetingStop/,
   );
 });
+
+// Execute production methods with controlled collaborators, rather than asserting source order.
+import ts from 'typescript';
+import vm from 'node:vm';
+function lifecycleHarness() {
+  const tree = ts.createSourceFile('main.ts', source, ts.ScriptTarget.Latest, true);
+  const cls = tree.statements.find(n => ts.isClassDeclaration(n) && n.name.text === 'AppState');
+  const names = new Set(['endMeeting', 'startMeetingInternal', 'finishMeetingBeforeQuit']);
+  const methods = cls.members.filter(n => n.name && names.has(n.name.getText(tree))).map(n => n.getText(tree)).join('\n');
+  const notices = [];
+  const compiled = ts.transpileModule(`class Lifecycle { ${methods} }; globalThis.Lifecycle = Lifecycle;`, {compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS}}).outputText;
+  const context = {console: {log(){}, error(){}, warn(){}}, BrowserWindow: {getAllWindows: () => []}, require: name => {
+    if (name === 'electron') return {dialog: {showErrorBox: (...args) => notices.push(args)}};
+    throw new Error('unused collaborator');
+  }};
+  vm.runInNewContext(compiled, context);
+  const state = new context.Lifecycle();
+  Object.assign(state, {
+    isMeetingActive: true, _isDraining: false, _pendingTeardown: null,
+    windowHelper: {setWindowMode(){}, resetOverlayPosition(){}},
+    getWindowHelper: () => ({getOverlayWindow: () => null}), broadcastMeetingState(){}, broadcast(){},
+    stopDefaultOutputWatcher(){}, processingHelper: {cancelAndDrain: async () => true}, clearQueues(){},
+    transcriptIpcBatcher: {flush(){}, snapshotAndResetDiagnostics(){}},
+    adaptivePreloadManager: {notifyMeetingStopped(){}},
+    intelligenceManager: {stopMeeting: async () => 'A', resetEngine(){}, clearDynamicActionContext(){}},
+    drainSttFinalsForMeetingStop: async () => {}, processCompletedMeetingForRAG: async () => {},
+  });
+  return {state, notices};
+}
+function deferred() { let resolve; const promise = new Promise(r => {resolve = r;}); return {promise, resolve}; }
+
+test('A2-M1 repeated Stop during final drain saves A once', async () => {
+  const {state} = lifecycleHarness();
+  const gate = deferred(); let saves = 0;
+  state.drainSttFinalsForMeetingStop = () => gate.promise;
+  state.intelligenceManager.stopMeeting = async () => {saves++; return 'A';};
+  await state.endMeeting();
+  const first = state._pendingTeardown;
+  const duplicate = state.endMeeting();
+  gate.resolve(); await duplicate; await first; await state._pendingTeardown;
+  assert.equal(saves, 1);
+});
+
+test('A2-M2 failed placeholder blocks B before shared session reset', async () => {
+  const {state, notices} = lifecycleHarness();
+  state.intelligenceManager.stopMeeting = async () => {throw new Error('private SQLite detail');};
+  await state.endMeeting();
+  await assert.rejects(state._pendingTeardown);
+  let resets = 0;
+  state.resetMeetingEchoDiagnostics = () => {resets++; throw new Error('must not start B');};
+  await state.startMeetingInternal();
+  assert.equal(resets, 0);
+  assert.equal(state.isMeetingActive, false);
+  assert.ok(notices.length);
+  assert.ok(notices.every(args => !args.join(' ').includes('private SQLite detail')));
+});
+
+test('A2-M3 explicit Stop after write failure retries A and releases B gate', async () => {
+  const {state} = lifecycleHarness(); let saves = 0;
+  state.intelligenceManager.stopMeeting = async () => {if (++saves === 1) throw new Error('disk'); return 'A';};
+  await state.endMeeting(); await assert.rejects(state._pendingTeardown);
+  await state.endMeeting(); await state._pendingTeardown;
+  await state.endMeeting();
+  assert.equal(saves, 2);
+});

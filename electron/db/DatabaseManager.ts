@@ -3347,8 +3347,7 @@ export class DatabaseManager {
 
     public saveMeeting(meeting: Meeting, startTimeMs: number, durationMs: number) {
         if (!this.db) {
-            console.error('[DatabaseManager] DB not initialized');
-            return;
+            throw new Error('[DatabaseManager] DB not initialized');
         }
 
         const insertMeeting = this.db.prepare(`
