@@ -44,7 +44,7 @@ import vm from 'node:vm';
 function lifecycleHarness() {
   const tree = ts.createSourceFile('main.ts', source, ts.ScriptTarget.Latest, true);
   const cls = tree.statements.find(n => ts.isClassDeclaration(n) && n.name.text === 'AppState');
-  const names = new Set(['endMeeting', 'startMeetingInternal', 'finishMeetingBeforeQuit']);
+  const names = new Set(['endMeeting', 'startMeeting', 'startMeetingInternal', 'finishMeetingBeforeQuit']);
   const methods = cls.members.filter(n => n.name && names.has(n.name.getText(tree))).map(n => n.getText(tree)).join('\n');
   const notices = [];
   const compiled = ts.transpileModule(`class Lifecycle { ${methods} }; globalThis.Lifecycle = Lifecycle;`, {compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS}}).outputText;
@@ -143,4 +143,50 @@ test('A2-Q3 first-write failure prevents quit and leaves retry resources intact'
   assert.equal(quit.quits(), 0); assert.equal(quit.cleanups(), 0);
   state.intelligenceManager.stopMeeting = async () => 'A';
   quit.trigger(); await tick(); assert.equal(quit.quits(), 1);
+});
+
+test('A2-M4 concurrent Stop waiters share one retry after the same first-write failure', async () => {
+  const {state} = lifecycleHarness(); const firstWrite = deferred(); const retryWrite = deferred(); let saves = 0;
+  state.intelligenceManager.stopMeeting = async () => {
+    if (++saves === 1) {await firstWrite.promise; throw new Error('disk');}
+    await retryWrite.promise; return 'A';
+  };
+  await state.endMeeting();
+  const duplicateOne = state.endMeeting(); const duplicateTwo = state.endMeeting();
+  firstWrite.resolve(); await tick();
+  let bInitialized = false;
+  state.resetMeetingEchoDiagnostics = () => {bInitialized = true; throw new Error('B begins');};
+  const startB = state.startMeeting().catch(error => assert.match(error.message, /B begins/));
+  await tick();
+  try {assert.equal(saves, 2); assert.equal(bInitialized, false);}
+  finally {retryWrite.resolve(); await Promise.all([duplicateOne, duplicateTwo, startB]);}
+  assert.equal(saves, 2); assert.equal(bInitialized, true);
+});
+
+test('A2-M5 existing Start action retries retained A before allowing B initialization', async () => {
+  const {state} = lifecycleHarness(); let saves = 0;
+  state.intelligenceManager.stopMeeting = async () => {if (++saves === 1) throw new Error('disk'); return 'A';};
+  await state.endMeeting(); await assert.rejects(state._pendingTeardown);
+  state.resetMeetingEchoDiagnostics = () => {assert.equal(saves, 2); throw new Error('B initialization reached after A save');};
+  await assert.rejects(state.startMeeting(), /B initialization reached after A save/);
+  assert.equal(saves, 2);
+});
+
+test('A2-M6 Start joining another failed retry reports failed status without initializing B', async () => {
+  const {state} = lifecycleHarness(); const retryWrite = deferred(); const events = []; let saves = 0; let resets = 0;
+  state.broadcast = (channel, payload) => events.push({channel, payload});
+  state.resetMeetingEchoDiagnostics = () => {resets++;};
+  state.intelligenceManager.stopMeeting = async () => {
+    if (++saves > 1) await retryWrite.promise;
+    throw new Error('private disk failure');
+  };
+  await state.endMeeting(); await assert.rejects(state._pendingTeardown);
+  const retryStop = state.endMeeting();
+  const start = state.startMeeting();
+  // Observe rejection immediately so the deliberately failing RED run does not create an unhandled rejection.
+  const result = start.then(() => null, error => error);
+  await tick(); retryWrite.resolve(); await retryStop;
+  assert.equal(await result, null);
+  assert.equal(resets, 0);
+  assert.ok(events.some(event => event.channel === 'meeting-start-status' && event.payload.phase === 'failed'));
 });

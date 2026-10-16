@@ -3522,9 +3522,16 @@ export class AppState {
       try {
         await this._pendingTeardown;
       } catch {
-        this.broadcast('meeting-start-status', { phase: 'failed', message: '上一场会议尚未保存，请重试停止后再开始。' });
-        this.windowHelper.setWindowMode('launcher');
-        return;
+        // Start is available in the launcher after Stop. Save the retained A
+        // before any B initialization; a failed retry keeps the same gate.
+        try {
+          await this.endMeeting();
+          await this._pendingTeardown;
+        } catch {
+          this.broadcast('meeting-start-status', { phase: 'failed', message: '上一场会议尚未保存，请再次点击开始会议重试。' });
+          this.windowHelper.setWindowMode('launcher');
+          return;
+        }
       }
       this._pendingTeardown = null;
     }
@@ -3722,11 +3729,13 @@ export class AppState {
 
   public async endMeeting(): Promise<void> {
     if (!this.isMeetingActive && this._pendingTeardown) {
+      const previousTeardown = this._pendingTeardown;
       try {
-        await this._pendingTeardown;
+        await previousTeardown;
         return;
       } catch {
-        // An explicit Stop may retry the retained session after a write failure.
+        // Another waiter may already have started the one explicit retry.
+        if (this._pendingTeardown !== previousTeardown) return this._pendingTeardown;
       }
     }
     console.log('[Main] Ending Meeting...');
@@ -3906,7 +3915,7 @@ export class AppState {
       } catch (err) {
         console.error('[Main] Background meeting teardown failed');
         if (!persistenceCommitted) {
-          require('electron').dialog.showErrorBox('会议保存失败', '会议内容仍保留在内存中。请重试停止会议，保存成功后再开始新会议或退出。');
+          require('electron').dialog.showErrorBox('会议保存失败', '会议内容仍保留在内存中。请点击开始会议或再次尝试退出以重试保存，保存成功后才能继续。');
           throw err;
         }
       } finally {
