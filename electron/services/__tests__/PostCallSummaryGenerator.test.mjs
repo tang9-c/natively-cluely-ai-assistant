@@ -309,6 +309,7 @@ test('generateFullTranscriptSummary locally merges partials when final merge fai
     maxChunkChars: 1000,
   });
 
+  assert.equal(summary.generationStatus, 'success');
   assert.deepEqual(summary.keyPoints, ['头部确认 SRM 现状', '尾部确认验收标准']);
   assert.deepEqual(summary.actionItems, ['客户下周提供测试数据']);
   assert.deepEqual(summary.decisions, ['采用只读接入']);
@@ -509,3 +510,45 @@ test('generateFullTranscriptSummary skips the full request above 50,000 characte
   }
   assert.equal(summary.generationStatus, 'success');
 });
+
+for (const [label, respond] of [
+  ['throws', () => { throw new Error('chunk unavailable'); }],
+  ['returns invalid JSON', () => '{invalid'],
+  ['returns empty text', () => ''],
+  ['returns an empty structure', () => '{}'],
+]) {
+  test(`generateFullTranscriptSummary fails when a middle chunk ${label}`, async () => {
+    const context = '会议片段。'.repeat(500);
+    const chunks = chunkTranscriptForSummary(context, 1000);
+    let chunkCalls = 0;
+    let mergeCalls = 0;
+    const summary = await generateFullTranscriptSummary({
+      llmHelper: {
+        generateMeetingSummary: async (prompt) => {
+          if (prompt.includes('归并')) {
+            mergeCalls += 1;
+            return JSON.stringify({ overview: '不完整归并', keyPoints: [], actionItems: [] });
+          }
+          chunkCalls += 1;
+          if (chunkCalls === 2) return respond();
+          return JSON.stringify({ overview: '有效局部摘要', keyPoints: ['有效要点'], actionItems: [] });
+        },
+      },
+      transcript: [],
+      context,
+      modeTemplateType: 'fde',
+      modeNoteSections: [{ title: '客户目标', description: '' }],
+      modeContextBlock: '',
+      baseRules: '规则：只基于会议内容。',
+      groqSummaryPrompt: 'fallback',
+      maxChunkChars: 1000,
+    });
+
+    assert.equal(summary.generationStatus, 'failed');
+    assert.deepEqual(summary.actionItems, []);
+    assert.deepEqual(summary.keyPoints, []);
+    assert.deepEqual(summary.sections, [{ title: '客户目标', bullets: [] }]);
+    assert.equal(chunkCalls, chunks.length);
+    assert.equal(mergeCalls, 0, 'incomplete source coverage must not reach final merge');
+  });
+}

@@ -400,7 +400,7 @@ export async function generateFullTranscriptSummary(params: GenerateFullTranscri
     }
   }
 
-  if (partials.length === 0) return emptySummary(params.modeNoteSections);
+  if (partials.length !== chunks.length) return emptySummary(params.modeNoteSections);
   if (partials.length === 1 && chunks.length === 1) return successfulSummary(partials[0]);
 
   try {
