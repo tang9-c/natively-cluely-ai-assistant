@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -8,6 +9,11 @@ import {
   parseArgs,
   validateOptions,
 } from '../benchmark-long-meeting-memory.mjs';
+
+const benchmarkSource = fs.readFileSync(new URL('../benchmark-long-meeting-memory.mjs', import.meta.url), 'utf8');
+const cleanupFinally = benchmarkSource.match(/finally \{\n([\s\S]*?)\n  \}\n  return report;/)?.[1];
+
+assert.ok(cleanupFinally, 'benchmark finally cleanup block should be present');
 
 test('normal mode accepts only supported long-meeting durations', () => {
   for (const durationMinutes of [30, 60, 180]) {
@@ -63,4 +69,42 @@ test('SenseVoice worker metrics replace app STT counters without exposing text',
   assert.equal(merged.stt.pendingAudio, 3);
   assert.equal(merged.processes.at(-1).type, 'sensevoice-worker');
   assert.doesNotMatch(JSON.stringify(merged), /transcript|recognizedText/);
+});
+
+test('synthetic cleanup still stops the server and removes user data without a SenseVoice worker', async () => {
+  const calls = [];
+  const server = { exitCode: null, kill: (signal) => calls.push(['server-kill', signal]) };
+  const executeCleanup = new Function(
+    'app', 'closeElectronApp', 'senseVoiceWorker', 'server', 'userDataDir', 'fs',
+    `return (async () => {${cleanupFinally}})();`,
+  );
+
+  await executeCleanup(null, async () => {}, undefined, server, '/tmp/benchmark-user-data', {
+    rm: async (...args) => calls.push(['rm', ...args]),
+  });
+
+  assert.deepEqual(calls, [
+    ['server-kill', 'SIGTERM'],
+    ['rm', '/tmp/benchmark-user-data', { recursive: true, force: true }],
+  ]);
+});
+
+test('cleanup stops a live SenseVoice worker and the server', async () => {
+  const calls = [];
+  const worker = { child: { exitCode: null, kill: (signal) => calls.push(['worker-kill', signal]) } };
+  const server = { exitCode: null, kill: (signal) => calls.push(['server-kill', signal]) };
+  const executeCleanup = new Function(
+    'app', 'closeElectronApp', 'senseVoiceWorker', 'server', 'userDataDir', 'fs',
+    `return (async () => {${cleanupFinally}})();`,
+  );
+
+  await executeCleanup(null, async () => {}, worker, server, '/tmp/benchmark-user-data', {
+    rm: async (...args) => calls.push(['rm', ...args]),
+  });
+
+  assert.deepEqual(calls, [
+    ['worker-kill', 'SIGTERM'],
+    ['server-kill', 'SIGTERM'],
+    ['rm', '/tmp/benchmark-user-data', { recursive: true, force: true }],
+  ]);
 });

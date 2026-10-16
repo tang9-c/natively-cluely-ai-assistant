@@ -451,7 +451,7 @@ export async function runLongMeetingBenchmark(options) {
     await writeReport(validated, report);
   } finally {
     if (app) await closeElectronApp(app);
-    if (senseVoiceWorker?.child.exitCode == null) senseVoiceWorker.child.kill('SIGTERM');
+    if (senseVoiceWorker && senseVoiceWorker.child.exitCode == null) senseVoiceWorker.child.kill('SIGTERM');
     if (server && server.exitCode == null) server.kill('SIGTERM');
     await fs.rm(userDataDir, { recursive: true, force: true });
   }
