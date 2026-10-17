@@ -186,3 +186,63 @@ test('Chinese composition Enter keeps focus and saves completed text without add
  await page.getByRole('button',{name:'转录',exact:true}).click();
  const saved=await readMeeting(page);expect(saved.detailedSummary.actionItemsStructured).toHaveLength(2);expect(saved.detailedSummary.actionItemsStructured[1].owner).toBe('中文姓名');
 });
+
+async function eraseWithKeyboard(page: any, label: string) {
+ const input=page.getByLabel(label,{exact:true});await input.click();await page.keyboard.press('ControlOrMeta+A');await page.keyboard.press('Backspace');return input;
+}
+test('review I1: keyboard clear pause and replacement retain action row plus owner and deadline',async({electronApp,page})=>{
+ await seed(electronApp);await open(page);
+ const row=await page.getByLabel('行动项 2 内容',{exact:true}).elementHandle();
+ const content=await eraseWithKeyboard(page,'行动项 2 内容');
+ await expect(content).toBeVisible();expect(await row!.evaluate(node=>node.isConnected)).toBe(true);
+ await page.waitForTimeout(750); // Deliberately cross the autosave debounce with an empty intermediate input.
+ await expect(content).toBeFocused();await expect(page.getByText('行动项内容不能为空，请填写内容或使用删除。',{exact:true})).toBeVisible();
+ await page.screenshot({path:'.tmp/v28-t4/fix-round-1/empty-action-draft-retained.png'});
+ await eraseWithKeyboard(page,'行动项 2 负责人');await page.keyboard.type('乙');
+ await eraseWithKeyboard(page,'行动项 2 期限');
+ await expect(content).toBeVisible();expect(await row!.evaluate(node=>node.isConnected)).toBe(true);
+ await content.click();await page.keyboard.type('替换后的任务');
+ await page.getByRole('button',{name:'转录',exact:true}).click();
+ const saved=await readMeeting(page);expect(saved.detailedSummary.actionItemsStructured[1]).toMatchObject({id:'owned',text:'替换后的任务',owner:'乙',deadline:''});
+ await page.getByRole('button',{name:'摘要',exact:true}).click();await expect(content).toHaveText('替换后的任务');
+ await page.screenshot({path:'.tmp/v28-t4/fix-round-1/empty-action-replacement.png'});
+});
+
+test('review I2: section title typing composition and pause only migrate on final exact blur',async({electronApp,page})=>{
+ await seed(electronApp);await open(page);
+ const title=await eraseWithKeyboard(page,'分区 1 标题');const original=await title.elementHandle();
+ await title.pressSequentially('下一步',{delay:80});await page.waitForTimeout(750);
+ await expect(title).toBeFocused();expect(await original!.evaluate(node=>node.isConnected)).toBe(true);
+ expect((await readMeeting(page)).detailedSummary.sections[0].title).toBe('会议结论');
+ await title.pressSequentially('计划',{delay:80});await page.getByRole('button',{name:'摘要',exact:true}).click();
+ expect((await readMeeting(page)).detailedSummary.sections[0]).toEqual({title:'下一步计划',bullets:['分区结论']});
+ await eraseWithKeyboard(page,'分区 1 标题');await title.dispatchEvent('compositionstart');
+ await title.fill('下一步');await title.dispatchEvent('keydown',{key:'Enter',code:'Enter',isComposing:true,keyCode:229});
+ await page.waitForTimeout(750);await expect(title).toBeFocused();
+ await title.fill('下一步计划');await title.dispatchEvent('compositionend',{data:'下一步计划'});
+ await page.getByRole('button',{name:'摘要',exact:true}).click();expect((await readMeeting(page)).detailedSummary.sections[0].title).toBe('下一步计划');
+ await eraseWithKeyboard(page,'分区 1 标题');await title.pressSequentially('下一步',{delay:80});
+ await page.waitForTimeout(750);await expect(title).toBeFocused();
+ await page.getByRole('button',{name:'摘要',exact:true}).click();
+ await expect(title).toHaveCount(0);const migrated=await readMeeting(page);
+ expect(migrated.detailedSummary.sections).toEqual([]);expect(migrated.detailedSummary.actionItemsStructured.map((item:any)=>item.text)).toContain('分区结论');
+ await page.screenshot({path:'.tmp/v28-t4/fix-round-1/section-final-blur-migration.png'});
+});
+
+test('review I3: failed identity then title input keeps retry and recovers copy plus actual return',async({electronApp,page})=>{
+ await seed(electronApp);await open(page);await fakeClipboard(page);
+ await database(electronApp,"CREATE TRIGGER fail_identity BEFORE UPDATE OF speaker_identity_correction_json ON transcripts BEGIN SELECT RAISE(ABORT,'fixture_identity_failure'); END;");
+ await page.getByRole('button',{name:'转录',exact:true}).click();
+ await page.getByRole('button',{name:'身份未确认',exact:true}).click();await page.getByRole('menuitem',{name:'标记为我',exact:true}).click();
+ await expect(page.getByRole('button',{name:'重试保存',exact:true})).toBeVisible();
+ await edit(page,'会议标题','身份失败后的标题');await page.waitForTimeout(750);
+ await expect(page.getByRole('button',{name:'重试保存',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'复制完整转录',exact:true}).click();expect(await page.evaluate(()=>(window as any).__copied.length)).toBe(0);
+ await page.getByRole('button',{name:'返回会议列表',exact:true}).click();await expect(page.getByLabel('会议标题',{exact:true})).toBeVisible();
+ await page.screenshot({path:'.tmp/v28-t4/fix-round-1/identity-failure-with-title-draft.png'});
+ await database(electronApp,'DROP TRIGGER fail_identity');await page.getByRole('button',{name:'重试保存',exact:true}).click();
+ await expect(page.getByText('已保存',{exact:true})).toBeVisible();const saved=await readMeeting(page);
+ expect(saved.title).toBe('身份失败后的标题');expect(saved.transcript[0].speakerIdentityCorrection.identity).toBe('me');
+ await page.getByRole('button',{name:'复制完整转录',exact:true}).click();expect(await page.evaluate(()=>(window as any).__copied[0])).toContain('我: 原始转录');
+ await page.getByRole('button',{name:'返回会议列表',exact:true}).click();await expect(page.getByLabel('会议标题',{exact:true})).toBeHidden();await expect(page.getByText('身份失败后的标题',{exact:true})).toBeVisible();
+});

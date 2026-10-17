@@ -302,9 +302,9 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
         }
     };
 
-    const textEditor = (label: string, value: string, change: (text: string) => void, multiline = true) => (
+    const textEditor = (label: string, value: string, change: (text: string) => void, multiline = true, onEditingChange?: (editing: boolean) => void) => (
         <EditableTextBlock key={label} ariaLabel={label} initialValue={value} onDraftChange={change}
-            onSave={controller.flush} onFlush={controller.flush} multiline={multiline}
+            onSave={controller.flush} onFlush={controller.flush} multiline={multiline} onEditingChange={onEditingChange}
             className="text-sm text-text-secondary leading-relaxed px-2 py-1 rounded-sm" placeholder={label.includes('负责人') || label.includes('期限') ? '待确认' : '点击填写...'} />
     );
     const updateList = (field: 'keyPoints' | 'decisions' | 'openQuestions', index: number, text: string) => {
@@ -354,8 +354,8 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                     </div>
 
                     <div role="status" aria-live="polite" className="mb-3 text-xs text-text-tertiary">
-                        {saveStatus === 'pending' ? '有未保存修改' : saveStatus === 'saving' ? '正在保存...' : saveStatus === 'saved' ? '已保存' : saveStatus === 'error' ? '保存失败，输入已保留。请重试后再离开或复制导出。' : saveStatus === 'conflict' ? '记录已变化，输入已保留。请选择重新加载或保留本次修改。' : ''}
-                        {saveStatus === 'error' && <button className="ml-2 underline" onClick={() => void controller.retry()}>重试保存</button>}
+                        {saveStatus === 'pending' ? '有未保存修改' : saveStatus === 'saving' ? '正在保存...' : saveStatus === 'saved' ? '已保存' : saveStatus === 'invalid' ? '行动项内容不能为空，请填写内容或使用删除。' : saveStatus === 'error' ? '保存失败，输入已保留。请重试后再离开或复制导出。' : saveStatus === 'conflict' ? '记录已变化，输入已保留。请选择重新加载或保留本次修改。' : ''}
+                        {saveStatus === 'error' && <button className="ml-2 underline" onClick={async () => { if (await controller.retry()) setIdentityStatus(''); }}>重试保存</button>}
                         {saveStatus === 'conflict' && <>
                             <button className="ml-2 underline" onClick={() => void controller.reload()}>重新加载</button>
                             <button className="ml-2 underline" onClick={() => void controller.keepLocal()}>保留本次修改</button>
@@ -593,7 +593,7 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                                             section.bullets.length > 0 && (
                                                 <section key={si}>
                                                     <div className="flex items-center justify-between mb-4">
-                                                        <h2 className="text-lg font-semibold text-text-primary">{textEditor(`分区 ${si + 1} 标题`, section.title, text => updateSection(si, null, text), false)}</h2>
+                                                        <h2 className="text-lg font-semibold text-text-primary">{textEditor(`分区 ${si + 1} 标题`, section.title, text => updateSection(si, null, text), false, controller.setSectionTitleEditing)}</h2>
                                                     </div>
                                                     <ul className="space-y-3">
                                                         {section.bullets.map((bullet, bi) => (

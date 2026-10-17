@@ -6,6 +6,7 @@ interface EditableTextBlockProps {
     onSave: (value: string) => void | boolean | Promise<void | boolean>;
     onDraftChange?: (value: string) => void;
     onFlush?: () => Promise<boolean>;
+    onEditingChange?: (editing: boolean) => void;
     renderValue?: (value: string) => ReactNode;
     ariaLabel?: string;
     tagName?: 'h1' | 'h2' | 'h3' | 'p' | 'span' | 'div';
@@ -18,7 +19,7 @@ interface EditableTextBlockProps {
 
 const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
     initialValue,
-    onSave, onDraftChange, onFlush, renderValue, ariaLabel,
+    onSave, onDraftChange, onFlush, onEditingChange, renderValue, ariaLabel,
     tagName = 'div',
     className = '',
     placeholder = 'Type here...',
@@ -48,7 +49,7 @@ const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
 
     const handleChange = useCallback(() => {
         if (!contentRef.current) return;
-        const newValue = contentRef.current.innerText;
+        const newValue = contentRef.current.textContent ? contentRef.current.innerText : '';
         setLocalValue(newValue);
 
         if (onDraftChange) { onDraftChange(newValue); return; }
@@ -67,14 +68,15 @@ const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
             clearTimeout(saveTimeoutRef.current);
         }
         if (contentRef.current) {
-            const value = contentRef.current.innerText;
+            const value = contentRef.current.textContent ? contentRef.current.innerText : '';
             if (onDraftChange) onDraftChange(value);
+            onEditingChange?.(false);
             const ok = onFlush ? await onFlush() : await handleSave(value);
             if (ok === false) return;
         }
         if (renderValue && contentRef.current) contentRef.current.textContent = '';
         setIsEditing(false);
-    }, [handleSave, onDraftChange, onFlush, renderValue]);
+    }, [handleSave, onDraftChange, onFlush, onEditingChange, renderValue]);
 
     const lastEnterTime = useRef<number>(0);
 
@@ -83,6 +85,7 @@ const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
         if (e.key === 'Escape') {
             e.preventDefault();
             // Revert
+            onEditingChange?.(false);
             setIsEditing(false);
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
@@ -117,6 +120,7 @@ const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
     };
 
     const handleClick = () => {
+        onEditingChange?.(true);
         setIsEditing(true);
     };
 

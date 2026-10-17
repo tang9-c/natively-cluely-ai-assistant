@@ -3,7 +3,7 @@ import type { Meeting, MeetingEditRequest, MeetingEditResult, MeetingSummaryPatc
 import { normalizeMeetingActionItems } from '../../shared/meetingActionItems';
 
 type Field = keyof MeetingSummaryPatch;
-type Status = 'idle' | 'pending' | 'saving' | 'saved' | 'error' | 'conflict';
+type Status = 'idle' | 'pending' | 'saving' | 'saved' | 'error' | 'conflict' | 'invalid';
 interface Bridge {
     applyMeetingEdit(request: MeetingEditRequest): Promise<MeetingEditResult>;
     getMeetingDetails(id: string): Promise<Meeting | null>;
@@ -20,6 +20,7 @@ export function createMeetingAutosave(initial: Meeting, bridge: Bridge) {
     let status: Status = 'idle';
     let failedOperation: MeetingEditRequest['operation'] | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let sectionTitleEditing = false;
     let queue = Promise.resolve(true);
     let flushPromise: Promise<boolean> | undefined;
     const listeners = new Set<() => void>();
@@ -30,7 +31,9 @@ export function createMeetingAutosave(initial: Meeting, bridge: Bridge) {
             if (field === 'title') meeting.title = draft.value as string;
             else (meeting.detailedSummary as any)[field] = draft.value;
         }
-        return project(meeting);
+        // Keep intermediate input intact; only saved responses use the canonical projection.
+        meeting.detailedSummary.actionItems = (meeting.detailedSummary.actionItemsStructured || []).map(item => item.text);
+        return meeting;
     };
     const cancelTimer = () => { clearTimeout(timer); timer = undefined; };
     const enqueue = (work: () => Promise<boolean>) => {
@@ -46,11 +49,15 @@ export function createMeetingAutosave(initial: Meeting, bridge: Bridge) {
     const flush = (): Promise<boolean> => {
         cancelTimer();
         if (failedOperation) return Promise.resolve(false);
+        if (sectionTitleEditing && drafts.has('sections')) return Promise.resolve(false);
         if (flushPromise) return flushPromise.then(ok => ok && drafts.size ? flush() : ok);
         flushPromise = enqueue(async () => {
             while (drafts.size) {
                 if (status === 'conflict') return false;
                 const batch = new Map(drafts);
+                const actions = batch.get('actionItemsStructured')?.value as MeetingSummaryPatch['actionItemsStructured'];
+                if (actions?.some(item => !item.text.trim())) { status = 'invalid'; notify(); return false; }
+                if (sectionTitleEditing && batch.has('sections')) return false;
                 if ([...batch].some(([field, draft]) => !equal(valueAt(saved, field), draft.base) && !equal(valueAt(saved, field), draft.value))) {
                     status = 'conflict'; notify(); return false;
                 }
@@ -106,11 +113,6 @@ export function createMeetingAutosave(initial: Meeting, bridge: Bridge) {
         subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
         refresh,
         patch(patch: MeetingSummaryPatch) {
-            if (patch.sections) {
-                const normalized = normalizeMeetingActionItems({ ...view().detailedSummary!, ...patch }, true);
-                if (!equal(normalized.actionItemsStructured, view().detailedSummary?.actionItemsStructured)) patch = { ...patch, actionItemsStructured: normalized.actionItemsStructured };
-                patch = { ...patch, sections: normalized.sections };
-            }
             let changed = false;
             for (const [field, value] of Object.entries(patch) as [Field, unknown][]) {
                 const previous = drafts.get(field);
@@ -119,10 +121,12 @@ export function createMeetingAutosave(initial: Meeting, bridge: Bridge) {
                 changed = true;
             }
             if (!changed) return;
-            if (status !== 'conflict') status = 'pending';
+            if (failedOperation) status = 'error';
+            else if (status !== 'conflict') status = 'pending';
             notify(); cancelTimer();
             timer = setTimeout(() => { void flush(); }, 600);
         },
+        setSectionTitleEditing(editing: boolean) { sectionTitleEditing = editing; },
         flush,
         operation: runOperation,
         retry: () => failedOperation ? runOperation(failedOperation) : flush(),

@@ -84,3 +84,37 @@ test('failed identity cannot be reported saved by an empty flush and retries the
  assert.equal(await f.controller.flush(),false);assert.equal(f.controller.snapshot().status,'error');
  assert.equal(await f.controller.operation(operation),true);assert.equal(f.calls.length,2);
 });
+
+test('review I1: empty action draft keeps its stable row and metadata until explicit deletion',async t=>{
+ const f=fixture(t);const item={id:'a',text:'',owner:'甲',deadline:'周五'};
+ f.controller.patch({actionItemsStructured:[item]});
+ assert.deepEqual(f.controller.snapshot().meeting.detailedSummary.actionItemsStructured,[item]);
+ assert.equal(await f.controller.flush(),false);assert.equal(f.calls.length,0);assert.equal(f.controller.snapshot().status,'invalid');
+ f.controller.patch({actionItemsStructured:[{...item,owner:'乙',deadline:''}]});
+ assert.equal(f.controller.snapshot().meeting.detailedSummary.actionItemsStructured[0].owner,'乙');
+ f.controller.patch({actionItemsStructured:[{...item,text:'替换任务',owner:'乙',deadline:''}]});
+ assert.equal(await f.controller.flush(),true);assert.equal(f.latest.detailedSummary.actionItemsStructured[0].text,'替换任务');
+ f.controller.patch({actionItemsStructured:[{...item,text:'替换任务',owner:'',deadline:''}]});assert.equal(await f.controller.flush(),true);assert.equal(f.latest.detailedSummary.actionItemsStructured[0].owner,'');
+ f.controller.patch({actionItemsStructured:[item]});assert.equal(await f.controller.flush(),false);
+ f.controller.patch({actionItemsStructured:[]});assert.equal(await f.controller.flush(),true);assert.deepEqual(f.latest.detailedSummary.actionItemsStructured,[]);
+});
+test('review I2: intermediate action section heading stays a draft until explicit edit end',async t=>{
+ const f=fixture(t);const sections=[{title:'下一步',bullets:['必须保留正文']}];
+ f.controller.patch({sections});
+ assert.deepEqual(f.controller.snapshot().meeting.detailedSummary.sections,sections);
+ assert.deepEqual(f.controller.snapshot().meeting.detailedSummary.actionItemsStructured,[]);
+ assert.equal(typeof f.controller.setSectionTitleEditing,'function');
+ f.controller.setSectionTitleEditing(true);assert.equal(await f.controller.flush(),false);assert.equal(f.calls.length,0);
+ f.controller.patch({sections:[{title:'下一步计划',bullets:['必须保留正文']}]});f.controller.setSectionTitleEditing(false);
+ assert.equal(await f.controller.flush(),true);assert.equal(f.latest.detailedSummary.sections[0].title,'下一步计划');
+ f.controller.setSectionTitleEditing(true);f.controller.patch({sections});f.controller.setSectionTitleEditing(false);
+ assert.equal(await f.controller.flush(),true);assert.deepEqual(f.calls.at(-1).operation.patch.sections,sections); // DB performs the atomic canonical migration; Electron regression verifies its result.
+});
+test('review I3: summary input after failed identity keeps the retryable error and retries both edits',async t=>{
+ const f=fixture(t,async(_request,n)=>n===1?{ok:false,error:'save_failed'}:undefined);
+ assert.equal(await f.controller.operation({type:'identity',segmentIds:['seg'],identity:'me'}),false);
+ f.controller.patch({title:'身份失败后修改标题'});assert.equal(f.controller.snapshot().status,'error');
+ assert.equal(await f.controller.flush(),false);assert.equal(f.controller.snapshot().status,'error');
+ assert.equal(await f.controller.retry(),true);assert.equal(f.latest.title,'身份失败后修改标题');
+ assert.equal(f.calls.at(-1).operation.type,'identity');assert.equal(await f.controller.flush(),true);
+});
