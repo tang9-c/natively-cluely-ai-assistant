@@ -88,6 +88,34 @@ export function sanitizeSenseVoiceTerms(input: unknown): SenseVoiceTermEntry[] {
   return terms;
 }
 
+// Persistence rejects invalid input instead of silently sanitizing user edits.
+export function validateSenseVoiceTerms(input: unknown, maxTerms = MAX_TERMS): SenseVoiceTermEntry[] {
+  if (!Array.isArray(input) || input.length > maxTerms) throw new Error('词条最多 200 条，请在原词表管理页整理后重试。');
+  const canonicals = new Set<string>();
+  const variants = new Map<string, string>();
+  return input.map(row => {
+    if (!row || typeof row !== 'object' || typeof row.canonical !== 'string' || !Array.isArray(row.variants)) throw new Error('词条格式无效。');
+    const canonical = normalizeText(row.canonical);
+    if (!canonical || canonical.length > MAX_TERM_CHARS) throw new Error('正确词须为 1–80 字符。');
+    const key = canonical.toLowerCase();
+    if (canonicals.has(key)) throw new Error('正确词重复，请在原词表管理页合并。');
+    canonicals.add(key);
+    if (row.variants.length > MAX_VARIANTS) throw new Error('每个正确词最多 20 个错词。');
+    const normalizedVariants: string[] = row.variants.map((value: unknown) => {
+      const variant = normalizeText(value);
+      if (typeof value !== 'string' || variant.length > MAX_TERM_CHARS || !isSafeVariant(variant) || variant === canonical) {
+        throw new Error('错词须为 2–80 字符，纯 ASCII 错词至少 3 字符，且须与正确词不同。');
+      }
+      const variantKey = variant.toLowerCase();
+      const target = variants.get(variantKey);
+      if (target && target !== key) throw new Error('同一错词已有不同正确词，请到原词表管理页处理冲突。');
+      variants.set(variantKey, key);
+      return variant;
+    });
+    return { id: normalizeText(row.id) || canonical, canonical, variants: [...new Set(normalizedVariants)], enabled: row.enabled !== false };
+  });
+}
+
 function collectMatches(text: string, rules: CorrectionRule[]): CorrectionMatch[] {
   const matches: CorrectionMatch[] = [];
 
@@ -126,7 +154,7 @@ function collectMatches(text: string, rules: CorrectionRule[]): CorrectionMatch[
 export function applySenseVoiceTermCorrection(text: string, terms: SenseVoiceTermEntry[]): string {
   if (!text || !Array.isArray(terms) || terms.length === 0) return text;
 
-  const rules = sanitizeSenseVoiceTerms(terms)
+  const rules = terms.flatMap(term => sanitizeSenseVoiceTerms([term]))
     .filter(term => term.enabled)
     .flatMap(term => term.variants.map(variant => ({ canonical: term.canonical, variant })))
     .filter(rule => rule.variant && rule.variant !== rule.canonical)

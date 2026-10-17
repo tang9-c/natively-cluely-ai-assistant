@@ -732,9 +732,11 @@ export interface ElectronAPI {
   deleteDownloadedModel: (kind: DownloadedModelKind, modelId: string) => Promise<StorageMutationResult>
   deleteLegacyData: (candidateId: string) => Promise<StorageMutationResult>
   // @ipc-channel local-sensevoice-get-terms
-  localSenseVoiceGetTerms: () => Promise<{ terms: LocalSenseVoiceTermEntry[]; correctionEnabled: boolean }>
+  localSenseVoiceGetTerms: () => Promise<{ terms: LocalSenseVoiceTermEntry[]; revision: number; correctionEnabled: boolean }>
   // @ipc-channel local-sensevoice-set-terms
-  localSenseVoiceSetTerms: (input: { terms: LocalSenseVoiceTermEntry[]; correctionEnabled?: boolean }) => Promise<{ success: boolean; error?: string }>
+  localSenseVoiceSetTerms: (input: { terms: LocalSenseVoiceTermEntry[]; revision: number; correctionEnabled?: boolean }) => Promise<{ success: boolean; error?: string }>
+  // @ipc-channel local-sensevoice-add-term-pair
+  localSenseVoiceAddTermPair: (input: { variant: string; canonical: string }) => Promise<{ success: boolean; enabled?: boolean; error?: string }>
   // @ipc-channel local-sensevoice-delete-model
   localSenseVoiceDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>
   // @ipc-channel local-sensevoice-start-download

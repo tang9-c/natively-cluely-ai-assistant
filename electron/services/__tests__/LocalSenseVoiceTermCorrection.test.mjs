@@ -149,3 +149,12 @@ test('default SenseVoice term corrections are overridden by user canonical entri
     '皮诶勒姆和PLM都出现了。',
   );
 });
+
+test('strict persistence validates capacities without silently truncating and merged rules all apply', async () => {
+ const {validateSenseVoiceTerms,applySenseVoiceTermCorrection}=await loadTermCorrection();
+ const term={id:'fixture',canonical:'星舟',variants:['星州'],enabled:true};
+ for(const rows of [Array(201).fill(term),[{...term,canonical:'长'.repeat(81)}],[{...term,variants:['AI']}],[{...term,variants:['字']}],[{...term,variants:Array.from({length:21},(_,i)=>`错词${i}`)}]])assert.throws(()=>validateSenseVoiceTerms(rows));
+ assert.equal(validateSenseVoiceTerms([{...term,canonical:'长'.repeat(80),variants:['abc','错词']}])[0].canonical.length,80);
+ const many=Array.from({length:210},(_,i)=>({id:`t${i}`,canonical:`专名${i}`,variants:[`错字${i}词`],enabled:true}));
+ assert.equal(applySenseVoiceTermCorrection('错字209词',many),'专名209');
+});

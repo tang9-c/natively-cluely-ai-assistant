@@ -3072,27 +3072,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('local-sensevoice-get-terms', async () => {
-    const settings = SettingsManager.getInstance().getLocalSenseVoiceTermCorrectionConfig();
-    return {
-      terms: settings.terms,
-      correctionEnabled: settings.enabled,
-    };
-  });
+  safeHandle('local-sensevoice-get-terms', async () => SettingsManager.getInstance().getLocalSenseVoiceTermSettings());
 
-  safeHandle('local-sensevoice-set-terms', async (_, input: any) => {
-    try {
-      const { sanitizeSenseVoiceTerms } = require('./audio/sensevoice/termCorrection');
-      const sm = SettingsManager.getInstance();
-      sm.set('localSenseVoiceTerms', sanitizeSenseVoiceTerms(input?.terms ?? []));
-      if (typeof input?.correctionEnabled === 'boolean') {
-        sm.set('localSenseVoiceCorrectionEnabled', input.correctionEnabled);
-      }
-      return { success: true };
-    } catch (e: any) {
-      return { success: false, error: e?.message ?? String(e) };
-    }
-  });
+  safeHandle('local-sensevoice-set-terms', async (_, input) => SettingsManager.getInstance().setLocalSenseVoiceTerms(input));
+
+  safeHandle('local-sensevoice-add-term-pair', async (_, input) =>
+    SettingsManager.getInstance().addLocalSenseVoiceTermPair(input?.variant, input?.canonical));
 
   safeHandle('local-sensevoice-delete-model', async (_, modelId: string) => {
     try {

@@ -31,3 +31,10 @@ test('STT registry logs a safe warning when Local SenseVoice term settings are u
   assert.match(source, /error\?\.message/);
   assert.doesNotMatch(source, /console\.warn[\s\S]{0,160}termCorrection\.terms/);
 });
+
+test('registry-created provider owns a live term-config getter with safe fallback', async () => {
+ const {createSTTProvider}=await import(pathToFileURL(registryPath).href);
+ const provider=createSTTProvider('local-sensevoice','user');
+ assert.equal(typeof provider.getTermCorrectionConfig,'function');
+ assert.deepEqual(provider.getTermCorrectionConfig(),provider.termCorrection);
+});

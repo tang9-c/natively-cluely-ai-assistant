@@ -31,6 +31,7 @@ export function LocalSenseVoiceModelPanel() {
     const [downloading, setDownloading] = useState(false);
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState<string | null>(null);
+    const [termRevision, setTermRevision] = useState(0);
     const [terms, setTerms] = useState<SenseVoiceTermEntry[]>([]);
     const [correctionEnabled, setCorrectionEnabled] = useState(true);
     const [termStatus, setTermStatus] = useState<string | null>(null);
@@ -42,6 +43,7 @@ export function LocalSenseVoiceModelPanel() {
         setProgress(0);
         const termResult = await electronAPI?.localSenseVoiceGetTerms?.();
         setTerms(termResult?.terms ?? []);
+        setTermRevision(termResult?.revision ?? 0);
         setCorrectionEnabled(termResult?.correctionEnabled !== false);
     }, []);
 
@@ -103,15 +105,17 @@ export function LocalSenseVoiceModelPanel() {
         setError(null);
         const result = await electronAPI?.localSenseVoiceSetTerms?.({
             terms,
+            revision: termRevision,
             correctionEnabled,
         });
         if (!result?.success) {
             setError(result?.error ?? 'Failed to save SenseVoice term corrections');
             return false;
         }
-        setTermStatus('已保存，下次转写会话生效。');
+        setTermStatus('已保存，下一段 SenseVoice 最终结果生效。');
         const refreshed = await electronAPI?.localSenseVoiceGetTerms?.();
         setTerms(refreshed?.terms ?? []);
+        setTermRevision(refreshed?.revision ?? 0);
         setCorrectionEnabled(refreshed?.correctionEnabled !== false);
         return true;
     };
@@ -207,12 +211,13 @@ export function LocalSenseVoiceModelPanel() {
                             </button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-4">
+                            {error && <p role="alert" className="mb-3 text-xs text-red-500">{error}</p>}
                             <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-border-subtle bg-bg-item-surface/60 px-3 py-2">
                                 <div>
                                     <p className="text-xs font-medium text-text-primary">
                                         {correctionEnabled ? `已启用 · ${terms.length} 条词条` : `已关闭 · ${terms.length} 条词条`}
                                     </p>
-                                    <p className="mt-0.5 text-[11px] text-text-tertiary">保存后下次转写会话生效。</p>
+                                    <p className="mt-0.5 text-[11px] text-text-tertiary">保存后下一段 SenseVoice 最终结果生效。</p>
                                 </div>
                                 <label className="flex shrink-0 items-center gap-2 text-xs text-text-secondary">
                                     <input
@@ -227,6 +232,7 @@ export function LocalSenseVoiceModelPanel() {
                                     启用 final 文本纠错
                                 </label>
                             </div>
+                            <button type="button" onClick={() => { setError(null); void refresh().catch(() => setError('词表刷新失败，请重试。')); }} className="mb-3 text-xs text-text-secondary">刷新词表（放弃此表单修改）</button>
                             <div className="space-y-3">
                                 {terms.map((term) => (
                                     <div key={term.id} className="grid gap-2 rounded-md border border-border-subtle p-3 md:grid-cols-[1fr_1.4fr_auto]">
@@ -279,7 +285,7 @@ export function LocalSenseVoiceModelPanel() {
                             </div>
                         </div>
                         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-subtle p-4">
-                            <p className="text-xs text-text-tertiary">保存后下次转写会话生效。</p>
+                            <p className="text-xs text-text-tertiary">保存后下一段 SenseVoice 最终结果生效。</p>
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"

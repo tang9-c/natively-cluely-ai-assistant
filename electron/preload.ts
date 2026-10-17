@@ -276,11 +276,14 @@ interface ElectronAPI {
   localSenseVoiceGetTerms: () => Promise<{
     terms: LocalSenseVoiceTermEntry[];
     correctionEnabled: boolean;
+    revision: number;
   }>;
   localSenseVoiceSetTerms: (input: {
     terms: LocalSenseVoiceTermEntry[];
+    revision: number;
     correctionEnabled?: boolean;
   }) => Promise<{ success: boolean; error?: string }>;
+  localSenseVoiceAddTermPair: (input: { variant: string; canonical: string }) => Promise<{ success: boolean; enabled?: boolean; error?: string }>;
   localSenseVoiceDeleteModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   localSenseVoiceStartDownload: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   onLocalSenseVoiceDownloadProgress: (
@@ -1422,8 +1425,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   localSenseVoiceGetTerms: () => ipcRenderer.invoke('local-sensevoice-get-terms'),
   localSenseVoiceSetTerms: (input: {
     terms: LocalSenseVoiceTermEntry[];
+    revision: number;
     correctionEnabled?: boolean;
   }) => ipcRenderer.invoke('local-sensevoice-set-terms', input),
+  localSenseVoiceAddTermPair: (input: { variant: string; canonical: string }) => ipcRenderer.invoke('local-sensevoice-add-term-pair', input),
   localSenseVoiceDeleteModel: (modelId: string) =>
     ipcRenderer.invoke('local-sensevoice-delete-model', modelId),
   localSenseVoiceStartDownload: (modelId: string) =>

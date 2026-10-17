@@ -1,8 +1,8 @@
 import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import { sanitizeSenseVoiceTerms } from '../audio/sensevoice/termCorrection';
-import { mergeSenseVoiceTermCorrections } from '../audio/sensevoice/defaultTermCorrections';
+import { sanitizeSenseVoiceTerms, validateSenseVoiceTerms } from '../audio/sensevoice/termCorrection';
+import { mergeSenseVoiceTermCorrections, DEFAULT_SENSEVOICE_TERM_CORRECTIONS } from '../audio/sensevoice/defaultTermCorrections';
 import type { SenseVoiceTermCorrectionConfig, SenseVoiceTermEntry } from '../audio/sensevoice/types';
 
 export interface AppSettings {
@@ -29,6 +29,7 @@ export interface AppSettings {
     localWhisperModelMic?: string;
     localWhisperModelSystem?: string;
     localSenseVoiceTerms?: SenseVoiceTermEntry[];
+    localSenseVoiceTermsRevision?: number;
     localSenseVoiceCorrectionEnabled?: boolean;
     // Phase 6 — TelemetryService toggle. Defaults to true (local-only JSONL).
     // When false, no telemetry is written to disk and no sinks fire.
@@ -155,6 +156,53 @@ export class SettingsManager {
             terms: mergeSenseVoiceTermCorrections(this.settings.localSenseVoiceTerms ?? []),
             enabled: this.settings.localSenseVoiceCorrectionEnabled !== false,
         };
+    }
+
+    public getLocalSenseVoiceTermSettings() {
+        const config = this.getLocalSenseVoiceTermCorrectionConfig();
+        return { terms: config.terms, correctionEnabled: config.enabled, revision: this.settings.localSenseVoiceTermsRevision ?? 0 };
+    }
+
+    private saveLocalSenseVoiceTerms(terms: SenseVoiceTermEntry[], enabled: boolean) {
+        const previous = this.settings;
+        this.settings = { ...previous, localSenseVoiceTerms: terms, localSenseVoiceCorrectionEnabled: enabled,
+            localSenseVoiceTermsRevision: (previous.localSenseVoiceTermsRevision ?? 0) + 1 };
+        try { this.saveSettings(); }
+        catch { this.settings = previous; throw new Error('词表保存失败，请重试。'); }
+        return { success: true, enabled, revision: this.settings.localSenseVoiceTermsRevision };
+    }
+
+    public setLocalSenseVoiceTerms(input: { terms: unknown; revision: number; correctionEnabled?: boolean }) {
+        try {
+            if (!input || input.revision !== (this.settings.localSenseVoiceTermsRevision ?? 0)) {
+                return { success: false, error: '词表已变化。表单已保留，请刷新词表后重试。' };
+            }
+            const terms = validateSenseVoiceTerms(input.terms, DEFAULT_SENSEVOICE_TERM_CORRECTIONS.length + 200);
+            const defaults = new Map(DEFAULT_SENSEVOICE_TERM_CORRECTIONS.map(term => [term.canonical.toLowerCase(), term]));
+            const overrides = terms.filter(term => JSON.stringify(term) !== JSON.stringify(defaults.get(term.canonical.toLowerCase())));
+            for (const term of DEFAULT_SENSEVOICE_TERM_CORRECTIONS) {
+                if (!terms.some(value => value.canonical.toLowerCase() === term.canonical.toLowerCase())) overrides.push({ ...term, enabled: false });
+            }
+            return this.saveLocalSenseVoiceTerms(validateSenseVoiceTerms(overrides), input.correctionEnabled ?? this.getLocalSenseVoiceTermCorrectionConfig().enabled);
+        } catch (error) { return { success: false, error: error instanceof Error ? error.message : '词表保存失败。' }; }
+    }
+
+    public addLocalSenseVoiceTermPair(variant: string, canonical: string) {
+        try {
+            const [pair] = validateSenseVoiceTerms([{ canonical, variants: [variant], enabled: true }]);
+            const config = this.getLocalSenseVoiceTermCorrectionConfig();
+            const matched = config.terms.find(term => term.variants.some(value => value.toLowerCase() === pair.variants[0].toLowerCase()));
+            if (matched && matched.canonical.toLowerCase() !== pair.canonical.toLowerCase()) {
+                return { success: false, error: '同一错词已有不同正确词，请到原词表管理页处理冲突。' };
+            }
+            if (matched) return { success: true, enabled: config.enabled && matched.enabled };
+            const existing = config.terms.find(term => term.canonical.toLowerCase() === pair.canonical.toLowerCase());
+            const merged = existing ? { ...existing, variants: [...existing.variants, pair.variants[0]] } : pair;
+            const userTerms = sanitizeSenseVoiceTerms(this.settings.localSenseVoiceTerms ?? []).filter(term => term.canonical.toLowerCase() !== pair.canonical.toLowerCase());
+            userTerms.push(merged);
+            const result = this.saveLocalSenseVoiceTerms(validateSenseVoiceTerms(userTerms), config.enabled);
+            return { ...result, enabled: config.enabled && merged.enabled };
+        } catch (error) { return { success: false, error: error instanceof Error ? error.message : '词对保存失败。' }; }
     }
 
     public getSpeakerSeparationMode(): 'auto' | 'off' {

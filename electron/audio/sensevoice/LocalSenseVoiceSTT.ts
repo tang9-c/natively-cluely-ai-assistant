@@ -45,6 +45,7 @@ export interface LocalSenseVoiceSTTOptions {
   modelFiles?: { modelDir: string; modelFile: string; tokensFile: string };
   vadOptions?: VadProcessorOptions;
   termCorrection?: SenseVoiceTermCorrectionConfig;
+  getTermCorrectionConfig?: () => SenseVoiceTermCorrectionConfig;
   numThreads?: number;
   providerPlan?: LocalSttProviderPlan;
 }
@@ -98,6 +99,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
   private readonly modelFiles?: { modelDir: string; modelFile: string; tokensFile: string };
   private readonly vadOptions?: VadProcessorOptions;
   private readonly termCorrection?: SenseVoiceTermCorrectionConfig;
+  private readonly getTermCorrectionConfig?: () => SenseVoiceTermCorrectionConfig;
   private readonly numThreads: number;
   private readonly providerPlan?: LocalSttProviderPlan;
   private hardwareDiagnostics: {
@@ -135,6 +137,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     this.modelFiles = options.modelFiles;
     this.vadOptions = options.vadOptions;
     this.termCorrection = options.termCorrection;
+    this.getTermCorrectionConfig = options.getTermCorrectionConfig;
     this.numThreads = options.numThreads ?? getDefaultSenseVoiceNumThreads();
     this.providerPlan = options.providerPlan;
     this.workerPool = this.workerFactory
@@ -367,7 +370,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       }
       this.inFlightTasks = Math.max(0, this.inFlightTasks - 1);
       const parsed = parseSenseVoiceOutput(message.text);
-      const text = this.applyTermCorrection(parsed.text);
+      const text = parsed.text;
       debugLog('worker-result', {
         taskId: message.taskId,
         textLength: text.length,
@@ -447,15 +450,19 @@ export class LocalSenseVoiceSTT extends BaseSTT {
       this.completedTranscripts.delete(this.nextTranscriptTaskNumber);
       this.nextTranscriptTaskNumber += 1;
       if (completed.segment && completed.generation !== this.speakerVerificationAnnotator?.getGenerationToken?.()) delete completed.segment.speakerVerification;
-      if (completed.segment) this.emit('transcript', completed.segment);
+      if (completed.segment) {
+        completed.segment.text = this.applyTermCorrection(completed.segment.text);
+        this.emit('transcript', completed.segment);
+      }
     }
   }
 
   private applyTermCorrection(text: string): string {
-    if (!this.termCorrection?.enabled || this.termCorrection.terms.length === 0) {
+    const config = this.getTermCorrectionConfig?.() ?? this.termCorrection;
+    if (!config?.enabled || config.terms.length === 0) {
       return text;
     }
-    return applySenseVoiceTermCorrection(text, this.termCorrection.terms);
+    return applySenseVoiceTermCorrection(text, config.terms);
   }
 
   private flushVad(): void {

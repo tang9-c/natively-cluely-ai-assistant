@@ -658,3 +658,18 @@ test('identity annotation failure preserves SenseVoice text', async () => {
   assert.equal(transcripts[0]?.speakerVerification,undefined);
   stt.stop();
 });
+
+test('term config is read at actual emission after asynchronous identity annotation', async () => {
+ const { LocalSenseVoiceSTT } = await loadLocalSenseVoiceSTT();
+ let config={enabled:true,terms:[{id:'fixture',canonical:'旧项目',variants:['星州'],enabled:true}]};
+ let release;const gate=new Promise(resolve=>release=resolve);
+ const worker=new ControlledSenseVoiceWorker();
+ const stt=new LocalSenseVoiceSTT({workerFactory:()=>worker,getTermCorrectionConfig:()=>config});
+ stt.setSpeakerVerificationAnnotator({annotate:async()=>{await gate;return undefined;}});
+ const events=[];stt.on('transcript',event=>events.push(event));stt.start();await sleep(0);
+ stt.dispatchFinal(new Float32Array(1600).fill(.1));worker.completeNext('讨论星州接口。');await sleep(0);
+ config={enabled:true,terms:[{id:'fixture',canonical:'星舟',variants:['星州'],enabled:true}]};release();await stt.drainFinals(1000);
+ assert.equal(events[0].text,'讨论星舟接口。');
+ config={...config,enabled:false};stt.dispatchFinal(new Float32Array(1600).fill(.1));worker.completeNext('讨论星州接口。');await stt.drainFinals(1000);
+ assert.equal(events[1].text,'讨论星州接口。');assert.equal(events[0].text,'讨论星舟接口。');stt.stop();
+});

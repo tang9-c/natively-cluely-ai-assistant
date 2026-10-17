@@ -184,6 +184,10 @@ export const STT_REGISTRY: Record<SttProviderId, RegistryEntry | undefined> = {
       }
       const sv = new LocalSenseVoiceSTT({
         termCorrection,
+        getTermCorrectionConfig: () => {
+          try { return SettingsManager.getInstance().getLocalSenseVoiceTermCorrectionConfig(); }
+          catch { return termCorrection; }
+        },
       });
       sv.setChannel(speaker === 'interviewer' ? 'system' : 'mic');
       return sv;

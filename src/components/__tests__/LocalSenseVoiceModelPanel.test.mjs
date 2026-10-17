@@ -18,7 +18,7 @@ test('LocalSenseVoiceModelPanel exposes term correction controls', () => {
   assert.match(source, /role="dialog"/);
   assert.match(source, /管理词表/);
   assert.match(source, /已启用 · \$\{terms\.length\} 条词条/);
-  assert.match(source, /下次转写会话生效/);
+  assert.match(source, /下一段 SenseVoice 最终结果生效/);
   assert.match(source, /未填写常见误识别，不会生效/);
   assert.match(source, /Math\.random\(\)\.toString\(36\)/);
   assert.doesNotMatch(source, /localSenseVoiceSuggestTerms/);
