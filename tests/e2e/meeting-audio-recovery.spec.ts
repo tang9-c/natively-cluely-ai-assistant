@@ -15,11 +15,20 @@ test('audio recovery stays quiet, failures remain channel-specific and permissio
   const live = electronApp.windows().find(p => p.url().includes('window=overlay'))!;
   await live.waitForLoadState('domcontentloaded');
   const send = async (payload: Record<string, unknown>) => {
+    await live.evaluate(() => {
+      (window as any).__audioStateDelivered = new Promise<void>((resolve) => {
+        const unsubscribe = window.electronAPI.onAudioCaptureFailed(() => {
+          unsubscribe();
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        });
+      });
+    });
     await electronApp.evaluate(({ BrowserWindow }, payload) => {
       for (const win of BrowserWindow.getAllWindows()) {
         if (win.webContents.getURL().includes('window=overlay')) win.webContents.send('audio-capture-failed', payload);
       }
     }, { attempt: 1, maxAttempts: 3, message: '', ...payload });
+    await live.evaluate(() => (window as any).__audioStateDelivered);
   };
   for (let i = 0; i < 3; i++) await send({ channel: 'system', state: 'recovering' });
   await expect(live.getByText('音频采集异常', { exact: true })).toBeHidden();
@@ -39,6 +48,42 @@ test('audio recovery stays quiet, failures remain channel-specific and permissio
   await live.screenshot({ path: '.tmp/v28-t3/ui-mic-failed-system-healthy.png' });
   await send({ channel: 'mic', state: 'healthy' });
   await expect(live.getByText(micMessage, { exact: true })).toBeHidden();
+
+  const connected = async (channel: 'system' | 'mic') => {
+    await live.evaluate(() => {
+      (window as any).__sttStateDelivered = new Promise<void>((resolve) => {
+        const unsubscribe = window.electronAPI.onSttStatusChanged(() => {
+          unsubscribe();
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        });
+      });
+    });
+    await electronApp.evaluate(({ BrowserWindow }, channel) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (win.webContents.getURL().includes('window=overlay')) win.webContents.send('stt-status', { channel: channel === 'system' ? 'interviewer' : 'user', provider: 'fictional-local', state: 'connected' });
+      }
+    }, channel);
+    await live.evaluate(() => (window as any).__sttStateDelivered);
+  };
+  for (const channel of ['system', 'mic'] as const) {
+    const recognitionMessage = channel === 'system'
+      ? '系统音频识别未启动，请打开设置检查识别服务。'
+      : '麦克风识别未启动，请打开设置检查识别服务。';
+    const captureMessage = channel === 'system' ? systemMessage : micMessage;
+    await send({ channel, source: 'stt', terminal: true, message: recognitionMessage, recommendedFix: 'open-settings' });
+    await send({ channel, source: 'capture', state: 'failed', terminal: true, message: captureMessage, recommendedFix: 'open-settings' });
+    await send({ channel, source: 'capture', state: 'healthy' });
+    await expect(live.getByText(recognitionMessage, { exact: true })).toBeVisible();
+    await expect(live.getByText('语音识别异常', { exact: true })).toBeVisible();
+    await live.screenshot({ path: `.tmp/v28-t3/fix-round-1/ui-${channel}-stt-failed-capture-healthy.png` });
+    await connected(channel);
+    await expect(live.getByText(recognitionMessage, { exact: true })).toBeHidden();
+    await send({ channel, source: 'capture', state: 'failed', terminal: true, message: captureMessage, recommendedFix: 'open-settings' });
+    await connected(channel);
+    await expect(live.getByText(captureMessage, { exact: true })).toBeVisible();
+    await send({ channel, source: 'capture', state: 'healthy' });
+    await expect(live.getByText(captureMessage, { exact: true })).toBeHidden();
+  }
 
   await send({ channel: 'system', state: 'failed', terminal: true, message: '系统音频权限异常，请修复权限并重启应用。', recommendedFix: 'reset-tcc' });
   await expect(live.getByRole('button', { name: '修复权限并重启', exact: true })).toBeVisible();

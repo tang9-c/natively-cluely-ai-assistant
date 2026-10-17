@@ -67,23 +67,27 @@ test('permission failure is terminal without consuming retries or accepting late
 // Execute the production recovery and wire methods with fake native boundaries.
 function mainFixture() {
   const c=clock(), instances=[], broadcasts=[], constructions=[];
-  const control={failPreferred:null,failAll:false,permissionAwait:null};
+  const control={failPreferred:null,failAll:false,permissionAwait:null,sttFail:false,actualUnknown:false,releaseGate:null};
   class Capture extends EventEmitter {
-    constructor(device) { super(); constructions.push(device); if(control.failAll || (control.failPreferred && device===control.failPreferred)) throw new Error('device unavailable'); this.device=device; instances.push(this); }
-    start(){this.emit('start');} async destroy(){this.emit('stop');}
+    constructor(device) { super(); constructions.push(device); if(control.failAll || (control.failPreferred && device===control.failPreferred)) throw new Error('device unavailable'); this.device=device; this.destroyCalls=0; this.nativeStops=0; this.nativeStarted=false; instances.push(this); }
+    start(){this.nativeStarted=true;this.emit('start');}
+    async stop(){if(this.nativeStarted){this.nativeStops++;this.nativeStarted=false;this.emit('stop');}}
+    async destroy(){this.destroyCalls++;await this.stop();if(control.releaseGate)await control.releaseGate;this.removeAllListeners();}
     getBackendName(){return 'coreaudio';} getSampleRate(){return 16000;} getNativeSampleRate(){return 48000;}
-    supportsContinuousHeartbeat(){return true;} getActualDeviceId(){return this.device || 'fictional-default';}
+    supportsContinuousHeartbeat(){return true;} getActualDeviceId(){return control.actualUnknown ? null : this.device || 'fictional-default';}
   }
   const main=fs.readFileSync(new URL('electron/main.ts',root),'utf8');
   const ast=ts.createSourceFile('main.ts',main,ts.ScriptTarget.Latest,true);
   const cls=ast.statements.find(s=>ts.isClassDeclaration(s)&&s.name.text==='AppState');
-  const selected = ['setupAudioRecoveryHandler','setupMicRecoveryHandler','recoverAudioCapture','waitForAudioRelease','cancelAudioRecovery','wireMicCapture','wireSystemCapture','wireCaptureHealth','restartCapturesAfterResume','handleDefaultOutputChanged','reconfigureAudio','normalizeDeviceId'];
+  const selected = ['setupAudioRecoveryHandler','setupMicRecoveryHandler','recoverAudioCapture','waitForAudioRelease','cancelAudioRecovery','wireMicCapture','wireSystemCapture','wireCaptureHealth','restartCapturesAfterResume','handleDefaultOutputChanged','reconfigureAudio','normalizeDeviceId','setupSystemAudioPipeline','_doReconfigureSttProvider','releaseAudioCapture'];
   const methods=cls.members.filter(m=>selected.includes(m.name?.getText(ast))).map(m=>m.getText(ast)).join('\n');
   const code=ts.transpileModule(`class Main { ${methods} }`,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
   const Monitor=fs.existsSync(monitorPath)?load('electron/audio/AudioCaptureHealthMonitor.ts','AudioCaptureHealthMonitor',{Date:{now:c.now},setTimeout:c.setTimeout,clearTimeout:c.clearTimeout}):class {};
-  const scope={SystemAudioCapture:Capture,MicrophoneCapture:Capture,AudioCaptureHealthMonitor:Monitor,setTimeout:c.setTimeout,clearTimeout:c.clearTimeout,Date:{now:c.now},console:{log(){},warn(){},error(){}},isNativeAudioModuleUnavailable:()=>false,resolveMacScreenCaptureCapability:()=>control.permissionAwait ?? Promise.resolve({effectiveDenied:false}),isAudioCapturePermissionError:e=>/permission denied/i.test(e.message),redactForLog:x=>x};
+  const scope={require:id=>id==='./services/CredentialsManager'?{CredentialsManager:{getInstance:()=>({getSttProvider:()=> 'fictional-local'})}}:require(id),SystemAudioCapture:Capture,MicrophoneCapture:Capture,AudioCaptureHealthMonitor:Monitor,setTimeout:c.setTimeout,clearTimeout:c.clearTimeout,Date:{now:c.now},console:{log(){},warn(){},error(){}},isNativeAudioModuleUnavailable:()=>false,resolveMacScreenCaptureCapability:()=>control.permissionAwait ?? Promise.resolve({effectiveDenied:false}),isAudioCapturePermissionError:e=>/permission denied/i.test(e.message),redactForLog:x=>x};
   const Main=new Function(...Object.keys(scope),`${code};return Main;`)(...Object.values(scope));
-  const app=new Main(); Object.assign(app,{isMeetingActive:true,_audioCaptureEpoch:0,_systemAudioRecoveryAttempts:0,_micRecoveryAttempts:0,_systemAudioRecoveryInProgress:false,_micRecoveryInProgress:false,_systemAudioConsecutiveFailures:0,_systemAudioSuccessfulRestarts:0,_audioRecoveryWaits:new Map(),_captureHealth:{},broadcast:(...args)=>broadcasts.push(args),broadcastDeviceSelection:p=>broadcasts.push(['device-selection-applied',p]),maybeBroadcastSckOutputRouteIgnored(){},checkSameInputOutputDevice:()=>null,recordMeetingAudioPeak(){},getOutputRouteDiagnostics:()=>({}),detectSameInputOutputDevice:()=>null});
+  const app=new Main(); Object.assign(app,{isMeetingActive:true,_audioCaptureEpoch:0,_systemAudioRecoveryAttempts:0,_micRecoveryAttempts:0,_systemAudioRecoveryInProgress:false,_micRecoveryInProgress:false,_systemAudioConsecutiveFailures:0,_systemAudioSuccessfulRestarts:0,_audioRecoveryWaits:new Map(),_audioRecoveryOwners:{},_audioCaptureReleases:new Set(),_captureHealth:{},broadcast:(...args)=>broadcasts.push(args),broadcastDeviceSelection:p=>broadcasts.push(['device-selection-applied',p]),maybeBroadcastSckOutputRouteIgnored(){},checkSameInputOutputDevice:()=>null,recordMeetingAudioPeak(){},getOutputRouteDiagnostics:()=>({}),detectSameInputOutputDevice:()=>null});
+  app.scheduleAdaptiveLocalSttPreload=()=>{};
+  app.createSTTProvider=()=>{if(control.sttFail)throw new Error('fictional STT init failure');const stt=new EventEmitter();Object.assign(stt,{start(){},stop(){},setSampleRate(){},setAudioChannelCount(){},write(){}});return stt;};
   app.systemAudioCapture=new Capture(); app.microphoneCapture=new Capture();
   app.wireSystemCapture(app.systemAudioCapture); app.wireMicCapture(app.microphoneCapture);
   app.systemAudioCapture.start(); app.microphoneCapture.start();
@@ -259,4 +263,91 @@ test('native errors still release the original device exactly once when destroy 
     assert.equal(native.stops,1,'native teardown must not be skipped after a callback error');
     assert.equal(f.c.timers.size,0);
   }
+});
+test('fix I1: destroyed recovery capture leaves reusable fields before cancellation and next meeting rebuilds listeners', async () => {
+  const {app,c}=mainFixture(); const old=app.microphoneCapture;
+  old.emit('error',new Error('unplugged')); await c.tick(0);
+  assert.equal(old.listenerCount('start'),0,'fake destroy must remove all listeners like the real wrapper');
+  assert.equal(app.microphoneCapture,null,'destroyed capture cannot stay reusable');
+  app.isMeetingActive=false; app._audioCaptureEpoch++; app.cancelAudioRecovery();
+  Object.values(app._captureHealth).forEach(h=>h.resetSession()); app.isMeetingActive=true;
+  await app.setupSystemAudioPipeline(); app.microphoneCapture.start(); app.microphoneCapture.emit('data',Buffer.alloc(640));
+  assert.notEqual(app.microphoneCapture,old); assert.equal(app._captureHealth.mic.state,'healthy');
+  await c.tick(1500); assert.equal(old.destroyCalls,1); app.cancelAudioRecovery();
+});
+test('fix I1: changing STT during a release wait rebuilds capture wiring instead of restarting a disposed wrapper', async () => {
+  const {app,c}=mainFixture(); const old=app.microphoneCapture;
+  old.emit('error',new Error('unplugged')); await c.tick(0);
+  await app._doReconfigureSttProvider();
+  assert.notEqual(app.microphoneCapture,old); assert.ok(app.microphoneCapture.listenerCount('data')>0);
+  app.microphoneCapture.emit('data',Buffer.alloc(640)); assert.equal(app._captureHealth.mic.state,'healthy');
+  app.cancelAudioRecovery(); await c.tick(1500); assert.equal(old.destroyCalls,1);
+});
+test('fix I2: terminal permission and retry exhaustion release only the failed native device once', async () => {
+  for(const channel of ['mic','system']) for(const permanent of [true,false]) {
+    const {app,c,instances,broadcasts}=mainFixture();
+    const field=channel==='mic'?'microphoneCapture':'systemAudioCapture';
+    const healthy=channel==='mic'?app.systemAudioCapture:app.microphoneCapture;
+    if(!permanent) {
+      for(let i=0;i<3;i++){app[field].emit('error',new Error('unplugged'));await c.tick(1500);}
+    }
+    const failed=app[field]; failed.emit('error',new Error(permanent?'Permission denied':'retry exhausted')); await c.tick(0);
+    assert.equal(app[field],null); assert.equal(failed.nativeStops,1); assert.equal(failed.destroyCalls,1);
+    assert.equal(healthy.nativeStops,0); healthy.emit('data',Buffer.alloc(640));
+    assert.equal(app._captureHealth[channel==='mic'?'system':'mic'].state,'healthy');
+    assert.equal(broadcasts.filter(([,p])=>p?.channel===channel&&p.terminal).length,1);
+    const count=instances.length; app.cancelAudioRecovery(); await c.tick(60000); assert.equal(instances.length,count);
+  }
+});
+test('fix I3: production STT initialization failures carry recognition origin independently of capture healthy', async () => {
+  const {app,broadcasts,control}=mainFixture();control.sttFail=true;
+  await app.setupSystemAudioPipeline();
+  for(const channel of ['system','mic']) {
+    const failure=broadcasts.find(([event,p])=>event==='audio-capture-failed'&&p.channel===channel&&p.terminal);
+    assert.equal(failure[1].source,'stt');
+    (channel==='system'?app.systemAudioCapture:app.microphoneCapture).emit('data',Buffer.alloc(640));
+    assert.ok(broadcasts.some(([,p])=>p?.channel===channel&&p.state==='healthy'&&p.source==='capture'));
+  }
+  assert.equal(app.googleSTT,null); assert.equal(app.googleSTT_User,null); app.cancelAudioRecovery();
+});
+test('fix I4: setup and reconfigure do not claim actual devices before valid current data, including legacy natives', async () => {
+  const f=mainFixture();await f.app.systemAudioCapture.destroy();await f.app.microphoneCapture.destroy();
+  f.app.systemAudioCapture=null;f.app.microphoneCapture=null;await f.app.setupSystemAudioPipeline();
+  assert.ok(f.broadcasts.filter(([e])=>e==='device-selection-applied').every(([,p])=>p.actual===null));f.app.cancelAudioRecovery();
+  for(const legacy of [false,true]) {
+    const {app,control,broadcasts}=mainFixture();control.actualUnknown=legacy;
+    await app.reconfigureAudio('requested-mic','requested-output');
+    const initial=broadcasts.filter(([e])=>e==='device-selection-applied');
+    assert.ok(initial.length>=2);assert.ok(initial.every(([,p])=>p.actual===null));
+    assert.equal(initial.find(([,p])=>p.kind==='input')[1].requested,'requested-mic');
+    assert.equal(initial.find(([,p])=>p.kind==='output')[1].requested,'requested-output');
+    app.microphoneCapture.start();app.systemAudioCapture.start();
+    app.microphoneCapture.emit('data',Buffer.alloc(640));app.systemAudioCapture.emit('data',Buffer.alloc(640));
+    for(const kind of ['input','output']) {
+      const p=broadcasts.filter(([e,p])=>e==='device-selection-applied'&&p.kind===kind).at(-1)[1];
+      assert.equal(p.actual,legacy?null:kind==='input'?'requested-mic':'requested-output');
+    }
+    app.cancelAudioRecovery();
+  }
+});
+test('fix I1: canceled recovery still awaits original native teardown before constructing replacement', async () => {
+  const {app,c,control,instances}=mainFixture();let release;
+  control.releaseGate=new Promise(resolve=>{release=resolve;});
+  app.microphoneCapture.emit('error',new Error('unplugged'));await c.tick(0);
+  const switching=app._doReconfigureSttProvider();await c.tick(0);
+  assert.equal(instances.length,2,'new native capture cannot race a pending destroy');
+  control.releaseGate=null;release();await switching;
+  assert.equal(instances.length,3);assert.ok(app.microphoneCapture.listenerCount('data')>0);app.cancelAudioRecovery();
+});
+test('fix I4: automatic conflict fallback preserves the original requested input until actual data confirms fallback', async () => {
+  const {app,broadcasts}=mainFixture();
+  app.checkSameInputOutputDevice=()=> 'fictional conflict';
+  app.pickFallbackInputDevice=()=>({id:'fallback-mic',name:'fictional fallback'});
+  await app.reconfigureAudio('requested-mic','requested-output');
+  const initial=broadcasts.find(([e,p])=>e==='device-selection-applied'&&p.kind==='input')[1];
+  assert.equal(initial.requested,'requested-mic');assert.equal(initial.actual,null);
+  app.microphoneCapture.start();app.microphoneCapture.emit('data',Buffer.alloc(640));
+  const confirmed=broadcasts.filter(([e,p])=>e==='device-selection-applied'&&p.kind==='input').at(-1)[1];
+  assert.equal(confirmed.requested,'requested-mic');assert.equal(confirmed.actual,'fallback-mic');assert.equal(confirmed.fellBack,true);
+  app.cancelAudioRecovery();
 });

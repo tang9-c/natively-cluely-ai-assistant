@@ -1156,6 +1156,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       | 'audio-capture-failure'
       | 'microphone-capture-failure';
     message: string;
+    source?: 'capture' | 'stt';
     backend?: string;
     code?: string;
     recommendedFix?: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
@@ -1165,7 +1166,22 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [systemAudioWarning, setSystemAudioWarning] = useState<SystemAudioWarning | null>(null);
   const [isRepairingTcc, setIsRepairingTcc] = useState(false);
   const captureWarningsRef = useRef<Partial<Record<'system' | 'mic', SystemAudioWarning>>>({});
-  const captureStatesRef = useRef<Partial<Record<'system' | 'mic', 'starting' | 'healthy' | 'recovering' | 'failed'>>>({});
+  const sttWarningsRef = useRef<Partial<Record<'system' | 'mic', SystemAudioWarning>>>({});
+  const clearAudioWarning = useCallback((channel: 'system' | 'mic', source: 'capture' | 'stt') => {
+    const warnings = source === 'stt' ? sttWarningsRef.current : captureWarningsRef.current;
+    delete warnings[channel];
+    if (channel === 'mic') micCaptureFailureRef.current = !!captureWarningsRef.current.mic || !!sttWarningsRef.current.mic;
+    else setSystemAudioIssue(captureWarningsRef.current.system?.message ?? sttWarningsRef.current.system?.message ?? null);
+    setSystemAudioWarning((previous) => {
+      const matches = (previous?.source ?? 'capture') === source && (channel === 'mic'
+        ? previous?.kind === 'microphone-capture-failure'
+        : previous?.kind === 'audio-capture-failure' || previous?.kind === 'screen-recording-permission');
+      return matches
+        ? captureWarningsRef.current.mic ?? sttWarningsRef.current.mic ?? captureWarningsRef.current.system ?? sttWarningsRef.current.system ?? null
+        : previous;
+    });
+  }, []);
+
   useEffect(() => {
     sttUserStatusRef.current = sttUserStatus;
     if (sttUserStatus === 'failed') {
@@ -1195,7 +1211,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         return;
       }
       captureWarningsRef.current = {};
-      captureStatesRef.current = {};
+      sttWarningsRef.current = {};
       setSystemAudioWarning(null);
       setSystemAudioIssue(null);
       setMeetingStartStatus(null);
@@ -1239,18 +1255,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   useEffect(() => {
     const unsub = window.electronAPI?.onAudioCaptureFailed?.((payload) => {
       const channel = payload.channel;
-      if (payload.state) captureStatesRef.current[channel] = payload.state;
+      const source = payload.source ?? 'capture';
       if (payload.state === 'starting' || payload.state === 'recovering') return;
       if (payload.state === 'healthy') {
-        delete captureWarningsRef.current[channel];
-        if (channel === 'mic') micCaptureFailureRef.current = false;
-        else setSystemAudioIssue(null);
-        setSystemAudioWarning((previous) => {
-          const matches = channel === 'mic'
-            ? previous?.kind === 'microphone-capture-failure'
-            : previous?.kind === 'audio-capture-failure' || previous?.kind === 'screen-recording-permission';
-          return matches ? captureWarningsRef.current.mic ?? captureWarningsRef.current.system ?? null : previous;
-        });
+        clearAudioWarning(channel, source);
         return;
       }
 
@@ -1260,12 +1268,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           const warning: SystemAudioWarning = {
             kind: 'microphone-capture-failure',
             message: payload.message,
+            source,
             backend: payload.backend,
             code: payload.code,
             recommendedFix: payload.recommendedFix,
             staleGrantSuspected: payload.staleGrantSuspected,
           };
-          captureWarningsRef.current.mic = warning;
+          (source === 'stt' ? sttWarningsRef.current : captureWarningsRef.current).mic = warning;
           setSystemAudioWarning(warning);
           setIsExpanded(true);
         }
@@ -1279,12 +1288,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         const warning: SystemAudioWarning = {
           kind: 'audio-capture-failure',
           message: payload.message,
+          source,
           backend: payload.backend,
           code: payload.code,
           recommendedFix: payload.recommendedFix,
           staleGrantSuspected: payload.staleGrantSuspected,
         };
-        captureWarningsRef.current.system = warning;
+        (source === 'stt' ? sttWarningsRef.current : captureWarningsRef.current).system = warning;
         setSystemAudioWarning(warning);
         setIsExpanded(true);
       }
@@ -1758,12 +1768,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         setSttUserStatus(data.state);
         setSttUserProvider(data.provider);
         if (data.error) setSttUserError(data.error);
-        if (data.state === 'connected') setSttUserError('');
+        if (data.state === 'connected') {
+          setSttUserError('');
+          clearAudioWarning('mic', 'stt');
+        }
       } else if (data.channel === 'interviewer') {
         setSttInterviewerStatus(data.state);
         setSttInterviewerProvider(data.provider);
         if (data.error) setSttInterviewerError(data.error);
-        if (data.state === 'connected') setSttInterviewerError('');
+        if (data.state === 'connected') {
+          setSttInterviewerError('');
+          clearAudioWarning('system', 'stt');
+        }
       }
     });
   }, []);
@@ -1985,11 +2001,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             setHasUserTranscript(true);
             setSttUserStatus('connected');
             setSttUserError('');
+            clearAudioWarning('mic', 'stt');
           } else if (transcript.speaker === 'interviewer') {
             setHasInterviewerTranscript(true);
             setSttInterviewerStatus('connected');
             setSttInterviewerError('');
-            if (captureStatesRef.current.system !== 'failed') setSystemAudioIssue(null);
+            clearAudioWarning('system', 'stt');
           }
 
           rollingItems.push(transcript);
@@ -4318,7 +4335,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
                         </svg>
                       </div>
                       <span>
-                        {systemAudioWarning.kind === 'screen-recording-permission'
+                        {systemAudioWarning.source === 'stt'
+                          ? '语音识别异常'
+                          : systemAudioWarning.kind === 'screen-recording-permission'
                           ? '屏幕录制权限被拒绝'
                           : systemAudioWarning.kind === 'screenshot-capture-failure'
                             ? '截图失败'

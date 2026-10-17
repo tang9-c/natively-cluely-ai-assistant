@@ -1874,6 +1874,8 @@ export class AppState {
 
   private async setupSystemAudioPipeline(): Promise<void> {
     const epoch = this._audioCaptureEpoch;
+    await Promise.all(this._audioCaptureReleases);
+    if (epoch !== this._audioCaptureEpoch) return;
     // REMOVED EARLY RETURN: if (this.systemAudioCapture && this.microphoneCapture) return; // Already initialized
 
     try {
@@ -1902,15 +1904,11 @@ export class AppState {
         } else {
           this.systemAudioCapture = new SystemAudioCapture();
           this.wireSystemCapture(this.systemAudioCapture);
-          // Transparency: tell the renderer which device is actually being captured
-          // even on the no-metadata default path. Previously only reconfigureAudio
-          // broadcast this, so a meeting started without an explicit device choice
-          // left the UI in the dark about whether system audio was using the
-          // expected output route.
+          // Publish the request now; current capture data will confirm the actual device.
           this.broadcastDeviceSelection({
             kind: 'output',
             requested: null,
-            actual: 'default',
+            actual: null,
             fellBack: false,
           });
         }
@@ -1949,7 +1947,8 @@ export class AppState {
         if (!this.googleSTT) {
           this.broadcast('audio-capture-failed', {
             channel: 'system',
-            message: `Speech-to-text provider "${sttProv}" failed to initialize for the interviewer channel. Check your API key and credentials in Settings.`,
+            source: 'stt',
+            message: '系统音频识别未启动，请打开设置检查识别服务。',
             attempt: 0,
             maxAttempts: 0,
             terminal: true,
@@ -1969,7 +1968,8 @@ export class AppState {
         if (!this.googleSTT_User) {
           this.broadcast('audio-capture-failed', {
             channel: 'mic',
-            message: `Speech-to-text provider "${sttProv}" failed to initialize for the microphone channel. Check your API key and credentials in Settings.`,
+            source: 'stt',
+            message: '麦克风识别未启动，请打开设置检查识别服务。',
             attempt: 0,
             maxAttempts: 0,
             terminal: true,
@@ -2383,7 +2383,9 @@ export class AppState {
     // destroy()+new() costs 50–200ms (macOS CoreAudio Tap re-init, Windows
     // WASAPI device contention, CPAL stream open). The common case — user
     // starts a second meeting with the same mic/speakers — hits this path.
-    let wantedInput = this.normalizeDeviceId(inputDeviceId);
+    const requestedInput = this.normalizeDeviceId(inputDeviceId);
+    this._lastRequestedInputSelectionId = requestedInput;
+    let wantedInput = requestedInput;
     const wantedOutput = this.normalizeDeviceId(outputDeviceId);
 
     // Auto-fallback for the "same device on both sides" conflict (most common
@@ -2435,6 +2437,8 @@ export class AppState {
 
     const epoch = ++this._audioCaptureEpoch;
     this.cancelAudioRecovery();
+    await Promise.all(this._audioCaptureReleases);
+    if (epoch !== this._audioCaptureEpoch) return;
     // 1. System Audio (Output Capture)
     if (this.systemAudioCapture) {
       // destroy() calls stop() AND removeAllListeners(), preventing EventEmitter listener leaks.
@@ -2475,7 +2479,7 @@ export class AppState {
         this.broadcastDeviceSelection({
           kind: 'output',
           requested: wantedOutput || null,
-          actual: wantedOutput || 'default',
+          actual: null,
           fellBack: false,
         });
       } catch (err) {
@@ -2487,7 +2491,7 @@ export class AppState {
           this.broadcastDeviceSelection({
             kind: 'output',
             requested: wantedOutput || null,
-            actual: 'default',
+            actual: null,
             fellBack: true,
             reason: (err as Error)?.message || 'unknown',
           });
@@ -2521,8 +2525,8 @@ export class AppState {
       console.log('[Main] MicrophoneCapture initialized.');
       this.broadcastDeviceSelection({
         kind: 'input',
-        requested: wantedInput || null,
-        actual: wantedInput || 'default',
+        requested: requestedInput || null,
+        actual: null,
         fellBack: false,
       });
     } catch (err) {
@@ -2533,8 +2537,8 @@ export class AppState {
         this.wireMicCapture(this.microphoneCapture, '(Default)');
         this.broadcastDeviceSelection({
           kind: 'input',
-          requested: wantedInput || null,
-          actual: 'default',
+          requested: requestedInput || null,
+          actual: null,
           fellBack: true,
           reason: (err as Error)?.message || 'unknown',
         });
@@ -2563,8 +2567,8 @@ export class AppState {
             this.wireMicCapture(this.microphoneCapture, `(Fallback:${candidateId})`);
             this.broadcastDeviceSelection({
               kind: 'input',
-              requested: wantedInput || null,
-              actual: candidateId,
+              requested: requestedInput || null,
+              actual: null,
               fellBack: true,
               reason: `Preferred and default failed; using ${candidateId}.`,
             });
@@ -2580,7 +2584,7 @@ export class AppState {
           this.microphoneCapture = null;
           this.broadcastDeviceSelection({
             kind: 'input',
-            requested: wantedInput || null,
+            requested: requestedInput || null,
             actual: null,
             fellBack: true,
             reason: `All ${candidates.length + 2} input devices failed: ${(lastErr as Error)?.message || 'unknown'}`,
@@ -2697,6 +2701,8 @@ export class AppState {
   /** One channel budget and recovery entry for native errors, stalls, routes and resume. */
   private _audioCaptureEpoch = 0;
   private _captureHealth: Partial<Record<'system' | 'mic', AudioCaptureHealthMonitor>> = {};
+  private _audioCaptureReleases = new Set<Promise<void>>();
+  private _audioRecoveryOwners: Partial<Record<'system' | 'mic', object>> = {};
   private _audioRecoveryWaits = new Map<'system' | 'mic', { timer: NodeJS.Timeout; resolve: () => void }>();
 
   private wireCaptureHealth(channel: 'system' | 'mic', capture: SystemAudioCapture | MicrophoneCapture): void {
@@ -2706,12 +2712,12 @@ export class AppState {
         if (state === 'healthy') {
           const current = channel === 'system' ? this.systemAudioCapture : this.microphoneCapture;
           const actual = current?.getActualDeviceId() ?? null;
-          const requested = (channel === 'system' ? this._lastRequestedOutputDeviceId : this._lastRequestedInputDeviceId) || null;
+          const requested = (channel === 'system' ? this._lastRequestedOutputDeviceId : this._lastRequestedInputSelectionId ?? this._lastRequestedInputDeviceId) || null;
           this.broadcastDeviceSelection({ kind: channel === 'system' ? 'output' : 'input', requested, actual,
             fellBack: !!requested && !!actual && requested !== actual, reason: 'capture-confirmed' });
         }
         this.broadcast('audio-capture-failed', {
-          channel, state,
+          channel, state, source: 'capture',
           message: state === 'failed'
             ? channel === 'mic' ? '麦克风采集未恢复，请打开设置检查输入设备或权限。' : '系统音频采集未恢复，请打开设置检查输出设备或权限。'
             : '',
@@ -2742,7 +2748,14 @@ export class AppState {
     capture.on('error', (err: Error) => {
       if (!isCurrent()) return;
       const permanent = isNativeAudioModuleUnavailable(err) || /(?:permission|access).*denied|not authorized|not permitted|EACCES|EPERM/i.test(err.message);
-      if (!health.beginRecovery(token, permanent)) return;
+      if (!health.beginRecovery(token, permanent)) {
+        if (health.state === 'failed') {
+          if (channel === 'system') this.systemAudioCapture = null;
+          else this.microphoneCapture = null;
+          void this.releaseAudioCapture(capture);
+        }
+        return;
+      }
       void this.recoverAudioCapture(channel, capture, epoch);
     });
   }
@@ -2755,6 +2768,7 @@ export class AppState {
   }
 
   private cancelAudioRecovery(): void {
+    this._audioRecoveryOwners = {};
     for (const { timer, resolve } of this._audioRecoveryWaits.values()) {
       clearTimeout(timer);
       resolve();
@@ -2763,53 +2777,67 @@ export class AppState {
     for (const health of Object.values(this._captureHealth)) health?.stop();
   }
 
-  private async recoverAudioCapture(channel: 'system' | 'mic', capture: SystemAudioCapture | MicrophoneCapture, epoch: number): Promise<void> {
-    const isCurrent = () => this.isMeetingActive && epoch === this._audioCaptureEpoch &&
-      (channel === 'system' ? this.systemAudioCapture : this.microphoneCapture) === capture;
-    while (isCurrent()) {
-      // Release the failed stream first; the healthy channel remains untouched.
-      try { await capture.destroy(); } catch { /* still allow fresh acquisition */ }
-      if (!isCurrent()) return;
-      await this.waitForAudioRelease(channel);
-      if (!isCurrent()) return;
-      try {
-        if (channel === 'system') {
-          const screenCapability = await resolveMacScreenCaptureCapability('system audio recovery');
-          if (!isCurrent()) return;
-          if (screenCapability.effectiveDenied) {
-            const health = this._captureHealth.system!;
-            health.beginRecovery(health.bind(), true);
-            return;
-          }
-          const fresh = new SystemAudioCapture(this._lastRequestedOutputDeviceId);
-          this.systemAudioCapture = fresh;
-          this._sysSttRateApplied = false;
-          this.wireSystemCapture(fresh, '(Recovery)');
-          fresh.start();
-          this.maybeBroadcastSckOutputRouteIgnored(fresh);
-        } else {
-          let fresh: MicrophoneCapture;
-          try { fresh = new MicrophoneCapture(this._lastRequestedInputDeviceId); }
-          catch (err) {
-            if (err instanceof Error && /(?:permission|access).*denied|not authorized|not permitted|EACCES|EPERM/i.test(err.message)) throw err;
-            fresh = new MicrophoneCapture();
-          }
-          if (!isCurrent()) { void fresh.destroy(); return; }
-          this.microphoneCapture = fresh;
-          this._micSttRateApplied = false;
-          this.wireMicCapture(fresh, '(Recovery)');
-          fresh.start();
+  private async releaseAudioCapture(capture: SystemAudioCapture | MicrophoneCapture): Promise<void> {
+    const release = capture.destroy().catch(() => {});
+    this._audioCaptureReleases.add(release);
+    try { await release; } finally { this._audioCaptureReleases.delete(release); }
+  }
 
-        }
-        return;
-      } catch (err) {
+  private async recoverAudioCapture(channel: 'system' | 'mic', capture: SystemAudioCapture | MicrophoneCapture, epoch: number): Promise<void> {
+    const owner = {};
+    this._audioRecoveryOwners[channel] = owner;
+    // A destroyed wrapper must never be eligible for pipeline reuse.
+    if (channel === 'system') this.systemAudioCapture = null;
+    else this.microphoneCapture = null;
+    const isCurrent = () => this.isMeetingActive && epoch === this._audioCaptureEpoch &&
+      this._audioRecoveryOwners[channel] === owner &&
+      (channel === 'system' ? this.systemAudioCapture : this.microphoneCapture) === null;
+    try {
+      await this.releaseAudioCapture(capture);
+      while (isCurrent()) {
+        await this.waitForAudioRelease(channel);
         if (!isCurrent()) return;
-        // A constructor failure uses the same budget; no second retry scheduler.
-        const health = this._captureHealth[channel]!;
-        const permanent = isNativeAudioModuleUnavailable(err) ||
-          (err instanceof Error && /(?:permission|access).*denied|not authorized|not permitted|EACCES|EPERM/i.test(err.message));
-        if (!health.beginRecovery(health.bind(), permanent)) return;
+        try {
+          if (channel === 'system') {
+            const screenCapability = await resolveMacScreenCaptureCapability('system audio recovery');
+            if (!isCurrent()) return;
+            if (screenCapability.effectiveDenied) {
+              const health = this._captureHealth.system!;
+              health.beginRecovery(health.bind(), true);
+              return;
+            }
+            const fresh = new SystemAudioCapture(this._lastRequestedOutputDeviceId);
+            this.systemAudioCapture = fresh;
+            this._sysSttRateApplied = false;
+            this.wireSystemCapture(fresh, '(Recovery)');
+            fresh.start();
+            this.maybeBroadcastSckOutputRouteIgnored(fresh);
+          } else {
+            let fresh: MicrophoneCapture;
+            try { fresh = new MicrophoneCapture(this._lastRequestedInputDeviceId); }
+            catch (err) {
+              if (err instanceof Error && /(?:permission|access).*denied|not authorized|not permitted|EACCES|EPERM/i.test(err.message)) throw err;
+              fresh = new MicrophoneCapture();
+            }
+            if (!isCurrent()) { void fresh.destroy(); return; }
+            this.microphoneCapture = fresh;
+            this._micSttRateApplied = false;
+            this.wireMicCapture(fresh, '(Recovery)');
+            fresh.start();
+
+          }
+          return;
+        } catch (err) {
+          if (!isCurrent()) return;
+          // A constructor failure uses the same budget; no second retry scheduler.
+          const health = this._captureHealth[channel]!;
+          const permanent = isNativeAudioModuleUnavailable(err) ||
+            (err instanceof Error && /(?:permission|access).*denied|not authorized|not permitted|EACCES|EPERM/i.test(err.message));
+          if (!health.beginRecovery(health.bind(), permanent)) return;
+        }
       }
+    } finally {
+      if (this._audioRecoveryOwners[channel] === owner) delete this._audioRecoveryOwners[channel];
     }
   }
 
@@ -2899,6 +2927,8 @@ export class AppState {
 
   /** Last input device id passed to reconfigureAudio; used by mic recovery. */
   private _lastRequestedInputDeviceId: string | undefined = undefined;
+  /** Keep the user request visible when conflict resolution chooses another mic. */
+  private _lastRequestedInputSelectionId: string | undefined = undefined;
 
   public async startAudioTest(deviceId?: string): Promise<void> {
     // P2-12: guard against two concurrent calls both passing the async permission check

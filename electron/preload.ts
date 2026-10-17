@@ -404,6 +404,7 @@ interface ElectronAPI {
     callback: (payload: {
       channel: 'system' | 'mic';
       state?: 'starting' | 'healthy' | 'recovering' | 'failed';
+      source?: 'capture' | 'stt';
       message: string;
       code?: string;
       recommendedFix?: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
@@ -1604,6 +1605,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     callback: (payload: {
       channel: 'system' | 'mic';
       state?: 'starting' | 'healthy' | 'recovering' | 'failed';
+      source?: 'capture' | 'stt';
       message: string;
       code?: string;
       recommendedFix?: 'open-settings' | 'reset-tcc' | 'restart-app' | 'none';
