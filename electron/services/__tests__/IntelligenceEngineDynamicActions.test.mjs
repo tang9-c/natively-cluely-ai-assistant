@@ -184,6 +184,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       acceptAction: () => null,
       dismissAction: () => {},
       getTopActions: () => [],
+      getStore: () => ({ getActiveActions: () => [] }),
     });
 
     engine.handleTranscript({
@@ -232,6 +233,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       discardSignalsForAssessment: params => { discardedSignals.push(params.sessionId); },
       discardAction: id => { discarded.push(id); },
       getTopActions: () => [],
+      getStore: () => ({ getActiveActions: () => [] }),
     });
     const segment = {
       speaker: 'interviewer', text: '这个价格太高了，我们预算不够', timestamp: Date.now(), final: true,
@@ -280,6 +282,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       dismissAction: () => {},
       discardAction: id => discarded.push(id),
       getTopActions: () => [oldAction],
+      getStore: () => ({ getActiveActions: () => [oldAction] }),
     });
 
     engine.handleSpeakerVerificationSessionOverride({
@@ -324,6 +327,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       dismissAction: () => {},
       discardAction: id => discarded.push(id),
       getTopActions: () => [earlierAction, correctedAction],
+      getStore: () => ({ getActiveActions: () => [earlierAction, correctedAction] }),
     });
 
     engine.handleSpeakerVerificationSessionOverride({
@@ -686,6 +690,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
         acceptAction: () => null,
         dismissAction: () => {},
         getTopActions: () => [],
+      getStore: () => ({ getActiveActions: () => [] }),
       });
 
       engine.handleTranscript({
@@ -719,6 +724,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       acceptAction: () => null,
       dismissAction: () => {},
       getTopActions: () => [],
+      getStore: () => ({ getActiveActions: () => [] }),
     });
     const verifiedMeSegment = {
       speaker: 'user',
@@ -766,6 +772,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       acceptAction: () => null,
       dismissAction: () => {},
       getTopActions: () => [],
+      getStore: () => ({ getActiveActions: () => [] }),
     });
 
     engine.handleTranscript({
@@ -810,6 +817,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       acceptAction: () => null,
       dismissAction: () => {},
       getTopActions: () => [],
+      getStore: () => ({ getActiveActions: () => [] }),
     });
 
     engine.handleTranscript({
@@ -858,6 +866,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       acceptAction: () => null,
       dismissAction: () => {},
       getTopActions: () => [],
+      getStore: () => ({ getActiveActions: () => [] }),
     });
 
     engine.handleTranscript({
@@ -915,6 +924,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
         acceptAction: () => null,
         dismissAction: () => {},
         getTopActions: () => [],
+      getStore: () => ({ getActiveActions: () => [] }),
       });
 
       engine.handleTranscript({
@@ -950,6 +960,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       acceptAction: () => null,
       dismissAction: () => {},
       getTopActions: () => [],
+      getStore: () => ({ getActiveActions: () => [] }),
     });
 
     engine.handleTranscript({
@@ -1495,6 +1506,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       acceptAction: () => null,
       dismissAction: () => {},
       getTopActions: () => [],
+      getStore: () => ({ getActiveActions: () => [] }),
     });
 
     try {
@@ -1575,6 +1587,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       acceptAction: () => null,
       dismissAction: () => {},
       getTopActions: () => [],
+      getStore: () => ({ getActiveActions: () => [] }),
     });
 
     engine.handleTranscript({
@@ -1613,6 +1626,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       acceptAction: () => null,
       dismissAction: () => {},
       getTopActions: () => [],
+      getStore: () => ({ getActiveActions: () => [] }),
     });
 
     const base = Date.now();
@@ -1714,6 +1728,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       acceptAction: () => null,
       dismissAction: () => {},
       getTopActions: () => [],
+      getStore: () => ({ getActiveActions: () => [] }),
     });
 
     engine.handleTranscript({
@@ -2174,6 +2189,7 @@ describe('IntelligenceEngine — dynamic action wiring (Phase 3)', () => {
       acceptAction: () => null,
       dismissAction: () => {},
       getTopActions: () => [],
+      getStore: () => ({ getActiveActions: () => [] }),
     });
     engine.setDynamicActionContext({ sessionId: 's', modeId: 'm', modeTemplateType: 'sales' });
 

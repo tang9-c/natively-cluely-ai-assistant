@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
+import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
+
+const { fingerprintTranscript } = createRequire(import.meta.url)('../../../dist-electron/electron/rag/MeetingTranscriptFingerprint.js');
 
 const { RAGManager } = await import(
   pathToFileURL(path.resolve('dist-electron/electron/rag/RAGManager.js')).href
@@ -19,9 +22,12 @@ test('structured global meeting search groups retriever hits with meeting metada
       ];
     },
   };
+  const rows = [{ id: 1, speaker: 'user', timestampMs: 1, content: '虚构转录' }];
+  manager.vectorStore = { getMeetingChunkState: () => ({ indexState: 'complete', transcriptHash: fingerprintTranscript(rows) }) };
   manager.db = {
     prepare() {
       return {
+        all: () => rows,
         get(meetingId) {
           return meetingId === 'meeting-a'
             ? { id: meetingId, title: '交付会议', start_time: 100 }

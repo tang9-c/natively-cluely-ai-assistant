@@ -53,6 +53,8 @@ export interface DynamicActionProductContract {
 }
 
 export interface EvidenceRef {
+    segmentId?: string;
+    rawSegmentIds?: string[];
     source: 'transcript' | 'screen' | 'reference' | 'meeting_history';
     text: string;
     timestamp?: number;

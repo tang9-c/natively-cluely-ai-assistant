@@ -63,7 +63,7 @@ export interface PendingActionContinuation {
     originalEvidenceRefs: EvidenceRef[];
     keyEntities: string[];
     language?: string;
-    collectedCustomerTurns: Array<{ text: string; timestamp: number }>;
+    collectedCustomerTurns: Array<{ text: string; timestamp: number; segmentId?: string; rawSegmentIds?: string[] }>;
     observedCustomerTurns: number;
     plannerAttempts: number;
     lastTurnHash?: string;

@@ -1311,14 +1311,18 @@ export class AppState {
     this.intelligenceManager.handleTranscript(routedPayload);
     if (routedPayload.final) {
       const canonical = this.intelligenceManager.findSpeakerIdentitySegment(routedPayload);
-      if (canonical) Object.assign(routedPayload, {
+      if (canonical) {
+        this.ragManager?.correctLiveSpeakerIdentity(canonical);
+        Object.assign(routedPayload, {
         canonicalSegmentId: canonical.segmentId, canonicalText: canonical.text,
         canonicalRawSegmentIds: canonical.rawSegmentIds, speakerIdentityCorrection: canonical.speakerIdentityCorrection,
-      });
+        });
+      }
     }
     if (routedPayload.final && this.ragManager) {
       this.ragManager.feedLiveTranscript([{
         ...routedPayload,
+        rawSegmentIds: routedPayload.canonicalRawSegmentIds ?? routedPayload.rawSegmentIds,
         speaker: routedPayload.speaker,
         text: routedPayload.text,
         timestamp: routedPayload.timestamp ?? receivedAt,

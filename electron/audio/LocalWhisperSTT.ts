@@ -92,7 +92,7 @@ export class LocalWhisperSTT extends BaseSTT {
     private acceptedAudioGenerations = new WeakMap<Float32Array, string | undefined>();
     private pendingAudioByTaskId = new Map<string, { samples: Float32Array; generation?: string; openedAt: number }>();
     private finalTaskOrder: string[] = [];
-    private completedFinals = new Map<string, TranscriptSegment | null>();
+    private completedFinals = new Map<string, { segment: TranscriptSegment | null; generation?: string }>();
     private processingFinals = new Set<string>();
 
     // Gap-flush: ensures a segment closes even if Rust SilenceSuppressor
@@ -670,7 +670,7 @@ export class LocalWhisperSTT extends BaseSTT {
                 console.error('[LocalWhisperSTT] Worker error:', msg.message);
                 if (msg.taskId?.startsWith('t')) {
                     this.pendingAudioByTaskId.delete(msg.taskId);
-                    if (this.finalTaskOrder.includes(msg.taskId)) this.completedFinals.set(msg.taskId, null);
+                    if (this.finalTaskOrder.includes(msg.taskId)) this.completedFinals.set(msg.taskId, { segment: null });
                     this.flushCompletedFinals();
                 }
                 // If the failed task was the in-flight streaming one, unblock
@@ -735,7 +735,7 @@ export class LocalWhisperSTT extends BaseSTT {
             this.processingFinals.delete(taskId);
             // A bounded drain may have invalidated this task while annotation was pending.
             if (this.pendingAudioByTaskId.delete(taskId)) {
-                this.completedFinals.set(taskId, segment);
+                this.completedFinals.set(taskId, { segment, generation: audio.generation });
                 this.flushCompletedFinals();
             }
         }
@@ -744,8 +744,10 @@ export class LocalWhisperSTT extends BaseSTT {
     private flushCompletedFinals(): void {
         while (this.finalTaskOrder.length && this.completedFinals.has(this.finalTaskOrder[0])) {
             const id = this.finalTaskOrder.shift()!;
-            const segment = this.completedFinals.get(id);
+            const completed = this.completedFinals.get(id)!;
+            const segment = completed.segment;
             this.completedFinals.delete(id);
+            if (segment && completed.generation !== this.speakerVerificationAnnotator?.getGenerationToken?.()) delete segment.speakerVerification;
             if (segment) this.emit('transcript', segment);
             this.drainingFinalsInFlight = Math.max(0, this.drainingFinalsInFlight - 1);
         }

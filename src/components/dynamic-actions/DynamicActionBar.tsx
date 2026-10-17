@@ -332,10 +332,6 @@ export const DynamicActionBar: React.FC<Props> = ({
     }));
   }, []);
 
-  useEffect(() => window.electronAPI.onSpeakerIdentityCorrected(segment => {
-    setActions(previous => previous.filter(action => action.speakerConfirmation?.segmentId !== segment.segmentId));
-  }), []);
-
   // Subscribe to push from main process
   useEffect(() => {
     let disposed = false;

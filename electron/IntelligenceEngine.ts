@@ -774,15 +774,17 @@ export class IntelligenceEngine extends EventEmitter {
         if (!this.dynamicActionEngine || !this.currentSessionId) return;
 
         const normalizedText = (segment.text || '').replace(/\s+/g, ' ').trim();
-        if (!normalizedText) return;
-        for (const activeAction of this.getActiveDynamicActions()) {
+        const segmentIds = new Set([segment.segmentId, ...(segment.rawSegmentIds ?? [])].filter(Boolean));
+        for (const activeAction of this.dynamicActionEngine.getStore().getActiveActions(this.currentSessionId)) {
             const confirmation = activeAction.speakerConfirmation;
-            const matchesTargetSegment = confirmation
-                ? confirmation.timestamp === segment.timestamp
-                    && confirmation.text.replace(/\s+/g, ' ').trim() === normalizedText
-                : activeAction.evidenceRefs.some((evidence) =>
-                    (evidence.text || '').replace(/\s+/g, ' ').trim() === normalizedText
-                );
+            const evidenceIds = [confirmation?.segmentId, ...(confirmation?.rawSegmentIds ?? []),
+                ...activeAction.evidenceRefs.filter(evidence => evidence.source === 'transcript').flatMap(evidence => [evidence.segmentId, ...(evidence.rawSegmentIds ?? [])])].filter(Boolean);
+            // Stable IDs remain valid after merging, text edits, or clearing the confirmation gate.
+            const matchesTargetSegment = evidenceIds.length > 0
+                ? evidenceIds.some(id => segmentIds.has(id))
+                : !!normalizedText && (confirmation
+                    ? confirmation.timestamp === segment.timestamp && confirmation.text.replace(/\s+/g, ' ').trim() === normalizedText
+                    : activeAction.evidenceRefs.some(evidence => (evidence.text || '').replace(/\s+/g, ' ').trim() === normalizedText));
             if (!matchesTargetSegment) continue;
             if (discardWithoutCooldown) {
                 this.dynamicActionEngine.discardAction(activeAction.id);
@@ -974,6 +976,7 @@ export class IntelligenceEngine extends EventEmitter {
             modeId: this.currentDynamicActionModeId,
             modeTemplateType: this.currentDynamicActionTemplateType,
             speaker: segment.speaker === 'interviewer' ? 'interviewer' : 'user',
+            ...(segment.segmentId ? { segmentId: segment.segmentId, rawSegmentIds: segment.rawSegmentIds } : {}),
             text: segment.text,
             timestamp: segment.timestamp,
             providerDataScopes,
@@ -986,6 +989,7 @@ export class IntelligenceEngine extends EventEmitter {
             ...continuation.originalEvidenceRefs.slice(0, 1),
             ...continuation.collectedCustomerTurns.slice(-1).map((turn) => ({
                 source: 'transcript' as const,
+                ...(turn.segmentId ? { segmentId: turn.segmentId, rawSegmentIds: turn.rawSegmentIds } : {}),
                 text: turn.text,
                 timestamp: turn.timestamp,
                 speaker: 'interviewer',
@@ -1251,6 +1255,8 @@ export class IntelligenceEngine extends EventEmitter {
         const dynamicActionAssessmentNow = Date.now();
         const newActions = await this.dynamicActionEngine.assessSignals({
             transcript: text,
+            segmentId: segment.segmentId,
+            rawSegmentIds: segment.rawSegmentIds,
             speaker: segment.speaker,
             modeTemplateType: this.currentDynamicActionTemplateType,
             modeId: this.currentDynamicActionModeId,

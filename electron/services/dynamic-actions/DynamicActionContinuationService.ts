@@ -21,6 +21,8 @@ export interface DynamicActionContinuationServiceOptions {
 }
 
 export interface ContinuationObservationInput {
+    segmentId?: string;
+    rawSegmentIds?: string[];
     sessionId: string;
     modeId: string;
     modeTemplateType: string;
@@ -153,7 +155,8 @@ export class DynamicActionContinuationService {
         record.lastTurnHash = hash;
         record.seenTurnHashes = [...record.seenTurnHashes, hash].slice(-12);
         record.observedCustomerTurns += 1;
-        record.collectedCustomerTurns.push({ text, timestamp: input.timestamp });
+        record.collectedCustomerTurns.push({ text, timestamp: input.timestamp,
+            ...(input.segmentId ? { segmentId: input.segmentId, rawSegmentIds: input.rawSegmentIds } : {}) });
         record.collectedCustomerTurns = record.collectedCustomerTurns.slice(-6);
 
         if (record.inFlightToken) {

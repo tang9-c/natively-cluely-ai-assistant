@@ -58,7 +58,7 @@ export const DynamicActionCard: React.FC<Props> = ({
     ? `${Math.max(1, countdownSeconds ?? 5)} 秒后自动生成`
     : STATUS_LABELS[status]
   const buttonLabel = isGenerating ? '正在生成' : ctaLabelForOutputType(productContract.outputType)
-  const speakerPrompt = '身份未确认，执行前请确认此动作'
+  const speakerPrompt = '身份未确认，请确认此段相关动作'
 
   const accept = async () => {
     if (speakerConfirmation || isGenerating || status === 'cancelled' || status === 'expired') return
@@ -128,9 +128,9 @@ export const DynamicActionCard: React.FC<Props> = ({
                 void onConfirmSpeaker(action)
               }}
               className="inline-flex h-7 items-center justify-center rounded-md border border-sky-200/45 bg-sky-500 px-2.5 text-[11px] font-semibold text-white transition-colors hover:bg-sky-400"
-              aria-label={`确认说话人：${speakerPrompt}`}
+              aria-label="确认此段相关动作"
             >
-              仅执行此动作
+              确认此段相关动作
             </button>
             {onIdentityChange && <div onClick={event => event.stopPropagation()}>
               <SpeakerIdentityMenu segment={speakerConfirmation} label="修改身份"

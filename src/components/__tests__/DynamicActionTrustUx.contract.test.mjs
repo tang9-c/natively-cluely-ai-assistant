@@ -118,7 +118,8 @@ test('speaker-uncertain dynamic actions require bidirectional confirmation befor
   assert.match(bar, /!action\.speakerConfirmation/);
   assert.match(bar, /filter\(\(action\) => !action\.speakerConfirmation\)/);
   assert.match(card, /身份未确认/);
-  assert.match(card, /仅执行此动作/);
+  assert.match(card, /确认此段相关动作/);
+  assert.match(card, /aria-label="确认此段相关动作"/);
   assert.match(card, /确认/);
   assert.match(card, /SpeakerIdentityMenu/);
   assert.match(card, /onIdentityChange/);

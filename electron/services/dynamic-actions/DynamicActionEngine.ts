@@ -162,6 +162,8 @@ export class DynamicActionEngine {
 
     async assessSignals(params: {
         transcript: string;
+        segmentId?: string;
+        rawSegmentIds?: string[];
         speaker?: string;
         modeTemplateType: string;
         modeId: string;
@@ -316,6 +318,7 @@ export class DynamicActionEngine {
 
             const evidenceRef: EvidenceRef = {
                 source: 'transcript',
+                ...(params.segmentId ? { segmentId: params.segmentId, rawSegmentIds: params.rawSegmentIds } : {}),
                 text: transcript,
                 timestamp: now,
                 speaker,

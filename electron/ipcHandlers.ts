@@ -1580,7 +1580,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       });
       if (applied) {
         const segment = appState.getIntelligenceManager().findSpeakerIdentitySegment(input);
-        if (segment) broadcast('speaker-identity-corrected', segment);
+        if (segment) {
+          appState.getRAGManager()?.correctLiveSpeakerIdentity(segment);
+          broadcast('speaker-identity-corrected', segment);
+        }
       }
       return applied ? { success: true } : { success: false, error: 'segment_not_found' };
     } catch (error: any) {

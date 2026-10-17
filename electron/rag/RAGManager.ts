@@ -5,11 +5,11 @@
 import Database from 'better-sqlite3';
 import { LLMHelper } from '../LLMHelper';
 import { preprocessTranscript, RawSegment } from './TranscriptPreprocessor';
-import { chunkTranscript } from './SemanticChunker';
+import { chunkTranscript, formatChunkForContext } from './SemanticChunker';
 import { VectorStore } from './VectorStore';
 import { EmbeddingPipeline } from './EmbeddingPipeline';
 import { RAGRetriever, type QueryIntent } from './RAGRetriever';
-import { LiveRAGIndexer } from './LiveRAGIndexer';
+import { LiveRAGIndexer, applyLiveSpeakerIdentity } from './LiveRAGIndexer';
 import { buildRAGPrompt, NO_CONTEXT_FALLBACK, NO_GLOBAL_CONTEXT_FALLBACK } from './prompts';
 import type { ProviderDataScopePolicy } from '../llm/ProviderRouter';
 import type { MeetingSearchResult } from '../../shared/meetingSearch';
@@ -366,6 +366,10 @@ export class RAGManager {
             throw new Error('LLM helper not initialized');
         }
 
+        const liveMeeting = this.liveIndexer.getActiveMeetingId() === meetingId;
+        const liveIdentityRevision = liveMeeting ? this.liveIndexer.getIdentityRevision() : undefined;
+        if (liveMeeting && !this.liveIndexer.hasCurrentIdentity()) throw new Error('LIVE_TRANSCRIPT_CHANGED');
+        if (!liveMeeting && !this.isStoredMeetingIdentityCurrent(meetingId)) throw new Error('STALE_MEETING_IDENTITY');
         // Check if meeting has embeddings (post-meeting RAG)
         const hasEmbeddings = this.vectorStore.hasEmbeddings(meetingId);
 
@@ -383,6 +387,9 @@ export class RAGManager {
 
         // Retrieve relevant context
         const context = await this.retriever.retrieve(query, { meetingId });
+        if (liveMeeting && (liveIdentityRevision !== this.liveIndexer.getIdentityRevision() || !this.liveIndexer.hasCurrentIdentity())) {
+            throw new Error('LIVE_TRANSCRIPT_CHANGED');
+        }
 
         if (context.chunks.length === 0) {
             // No context relevant to query - trigger wrapper fallback to use context window
@@ -396,9 +403,24 @@ export class RAGManager {
         const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true);
 
         for await (const chunk of stream) {
-            if (abortSignal?.aborted) break;
+            if (abortSignal?.aborted || (liveMeeting && liveIdentityRevision !== this.liveIndexer.getIdentityRevision())) break;
             yield chunk;
         }
+    }
+
+    private storedMeetingEditRevision(meetingId: string): string | undefined {
+        const row = this.db.prepare('SELECT * FROM meetings WHERE id = ?').get(meetingId) as { edit_state_json?: string } | undefined;
+        return row ? row.edit_state_json ?? '' : undefined;
+    }
+
+    private isStoredMeetingIdentityCurrent(meetingId: string): boolean {
+        try {
+            const rows = this.db.prepare(`SELECT *, timestamp_ms AS timestampMs FROM transcripts
+                WHERE meeting_id = ? ORDER BY timestamp_ms ASC, id ASC`).all(meetingId) as FingerprintTranscriptRow[];
+            if (!rows.length) return false;
+            const state = this.vectorStore.getMeetingChunkState(meetingId);
+            return state.indexState === 'complete' && state.transcriptHash === fingerprintTranscript(rows);
+        } catch { return false; }
     }
 
     /**
@@ -415,19 +437,23 @@ export class RAGManager {
         // Retrieve from all meetings
         const context = await this.retriever.retrieveGlobal(query);
 
-        if (context.chunks.length === 0) {
+        const currentMeetings = new Map(context.meetingIds.map(id => [id, this.isStoredMeetingIdentityCurrent(id)]));
+        const safeChunks = context.chunks.filter(chunk => currentMeetings.get(chunk.meetingId));
+        if (safeChunks.length === 0) {
             yield NO_GLOBAL_CONTEXT_FALLBACK;
             return;
         }
 
+        const revisions = new Map([...new Set(safeChunks.map(chunk => chunk.meetingId))]
+            .map(id => [id, this.storedMeetingEditRevision(id)]));
         // Build prompt with intent hint
-        const prompt = buildRAGPrompt(query, context.formattedContext, 'global', context.intent);
+        const prompt = buildRAGPrompt(query, safeChunks.map(chunk => `--- Meeting ${chunk.meetingId} ---\n${formatChunkForContext(chunk)}`).join('\n\n'), 'global', context.intent);
 
         // Stream response
         const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true);
 
         for await (const chunk of stream) {
-            if (abortSignal?.aborted) break;
+            if (abortSignal?.aborted || [...revisions].some(([id, revision]) => revision !== this.storedMeetingEditRevision(id))) break;
             yield chunk;
         }
     }
@@ -441,6 +467,7 @@ export class RAGManager {
             WHERE id = ?
         `);
         return candidates.flatMap((candidate) => {
+            if (!this.isStoredMeetingIdentityCurrent(candidate.meetingId)) return [];
             const meeting = readMeeting.get(candidate.meetingId) as {
                 id: string;
                 title: string | null;
@@ -566,6 +593,12 @@ export class RAGManager {
             return;
         }
         this.liveIndexer.feedSegments(segments);
+    }
+
+    correctLiveSpeakerIdentity(segment: RawSegment): void {
+        if (this.disposed) return;
+        applyLiveSpeakerIdentity(this.pendingLiveSegments, segment);
+        this.liveIndexer.correctSpeakerIdentity(segment);
     }
 
     /**

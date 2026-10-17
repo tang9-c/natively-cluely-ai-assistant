@@ -116,7 +116,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
   private taskCounter = 0;
   private pendingAudio: PendingAudioSegment[] = [];
   private pendingAudioByTaskId = new Map<string, PendingAudioSegment>();
-  private completedTranscripts = new Map<number, TranscriptSegment | null>();
+  private completedTranscripts = new Map<number, { segment: TranscriptSegment | null; generation?: string }>();
   private nextTranscriptTaskNumber = 1;
   private inFlightTasks = 0;
   private inFlightAnnotations = 0;
@@ -406,7 +406,7 @@ export class LocalSenseVoiceSTT extends BaseSTT {
           // Optional identity failures cannot discard recognized text.
         } finally {
           this.inFlightAnnotations = Math.max(0, this.inFlightAnnotations - 1);
-          this.completeTranscriptTask(message.taskId, segment);
+          this.completeTranscriptTask(message.taskId, segment, pendingTask.generation);
           this.flushPendingAudio();
         }
       } else {
@@ -438,15 +438,16 @@ export class LocalSenseVoiceSTT extends BaseSTT {
     }
   }
 
-  private completeTranscriptTask(taskId: string, segment: TranscriptSegment | null): void {
+  private completeTranscriptTask(taskId: string, segment: TranscriptSegment | null, generation?: string): void {
     const taskNumber = Number(taskId.slice('sensevoice-'.length));
     if (!Number.isInteger(taskNumber) || taskNumber < this.nextTranscriptTaskNumber) return;
-    this.completedTranscripts.set(taskNumber, segment);
+    this.completedTranscripts.set(taskNumber, { segment, generation });
     while (this.completedTranscripts.has(this.nextTranscriptTaskNumber)) {
-      const completed = this.completedTranscripts.get(this.nextTranscriptTaskNumber);
+      const completed = this.completedTranscripts.get(this.nextTranscriptTaskNumber)!;
       this.completedTranscripts.delete(this.nextTranscriptTaskNumber);
       this.nextTranscriptTaskNumber += 1;
-      if (completed) this.emit('transcript', completed);
+      if (completed.segment && completed.generation !== this.speakerVerificationAnnotator?.getGenerationToken?.()) delete completed.segment.speakerVerification;
+      if (completed.segment) this.emit('transcript', completed.segment);
     }
   }
 

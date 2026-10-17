@@ -4,6 +4,7 @@ import { speakerIdentityPromptLabel, type SpeakerIdentitySegmentLike } from '../
 // Adds semantic detection (questions, decisions, action items)
 
 export interface RawSegment extends SpeakerIdentitySegmentLike {
+    segmentId?: string;
     speaker: string;
     text: string;
     timestamp: number;  // ms

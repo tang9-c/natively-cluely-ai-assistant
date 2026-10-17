@@ -1,3 +1,4 @@
+import { speakerIdentityPromptLabel } from '../../shared/speakerIdentity';
 // electron/rag/LiveRAGIndexer.ts
 // JIT RAG: Incrementally indexes transcript during a live meeting.
 //
@@ -15,12 +16,30 @@ import { EmbeddingPipeline } from './EmbeddingPipeline';
 const INDEXING_INTERVAL_MS = 30_000;  // 30 seconds
 const MIN_NEW_SEGMENTS = 3;           // Don't chunk unless we have enough new content
 
+/** Update only explicitly linked raw units; preserve their text and capture source. */
+export function applyLiveSpeakerIdentity(segments: RawSegment[], target: RawSegment): boolean {
+    const ids = new Set([target.segmentId, ...(target.rawSegmentIds ?? [])].filter(Boolean));
+    let changed = false;
+    segments.forEach((segment, index) => {
+        if (![segment.segmentId, ...(segment.rawSegmentIds ?? [])].some(id => id && ids.has(id))) return;
+        const updated = { ...segment, speakerIdentityCorrection: target.speakerIdentityCorrection,
+            rawSegmentIds: target.rawSegmentIds, coalescedFromCount: target.coalescedFromCount };
+        changed ||= speakerIdentityPromptLabel(segment) !== speakerIdentityPromptLabel(updated);
+        segments[index] = updated;
+    });
+    return changed;
+}
+
 export class LiveRAGIndexer {
     private vectorStore: VectorStore;
     private embeddingPipeline: EmbeddingPipeline;
     private meetingId: string | null = null;
     private timer: ReturnType<typeof setInterval> | null = null;
     private allSegments: RawSegment[] = [];
+    // Text-only source units let corrections rebuild derived chunks after a tick released its pending prefix.
+    private acceptedSegments: RawSegment[] = [];
+    private identityRevision = 0;
+    private identityRebuildPending = false;
     private chunkCounter = 0;         // Running chunk index
     private indexedChunkCount = 0;    // Total chunks with embeddings
     private processingPromise: Promise<boolean> | null = null;
@@ -46,6 +65,9 @@ export class LiveRAGIndexer {
 
         this.meetingId = meetingId;
         this.allSegments = [];
+        this.acceptedSegments = [];
+        this.identityRevision++;
+        this.identityRebuildPending = false;
         this.chunkCounter = 0;
         this.indexedChunkCount = 0;
         this.processingPromise = null;
@@ -63,12 +85,34 @@ export class LiveRAGIndexer {
     /**
      * Feed new transcript segments from the live meeting.
      * Called by SessionTracker whenever new transcript arrives.
-     * This is append-only — segments are never modified after being fed.
+     * Stable raw IDs preserve the link to canonical identity corrections.
      */
     feedSegments(segments: RawSegment[]): void {
         if (!this.isActive || !this.meetingId) return;
-        this.allSegments.push(...segments);
+        const copies = segments.map(segment => ({ ...segment }));
+        this.acceptedSegments.push(...copies);
+        this.allSegments.push(...copies);
     }
+
+    correctSpeakerIdentity(segment: RawSegment): void {
+        if (!this.isActive || !this.meetingId) return;
+        const changed = applyLiveSpeakerIdentity(this.acceptedSegments, segment);
+        applyLiveSpeakerIdentity(this.allSegments, segment);
+        if (!changed && !this.identityRebuildPending) return;
+        this.identityRevision++;
+        this.identityRebuildPending = true;
+        this.allSegments = this.acceptedSegments.slice();
+        this.chunkCounter = 0;
+        this.indexedChunkCount = 0;
+        // Invalidate synchronously, before a concurrent query can consume the previous labels.
+        this.vectorStore.deleteChunksForMeeting(this.meetingId);
+        void (this.processingPromise ?? Promise.resolve()).then(() => this.tick(true)).catch(() => {
+            // Remain unavailable until a later tick can rebuild; stale evidence must not be reused.
+        });
+    }
+
+    getIdentityRevision(): number { return this.identityRevision; }
+    hasCurrentIdentity(): boolean { return !this.identityRebuildPending; }
 
     /**
      * Core indexing tick — processes only NEW segments since last tick.
@@ -105,9 +149,11 @@ export class LiveRAGIndexer {
         if (batchEnd === 0 || (!force && batchEnd < MIN_NEW_SEGMENTS)) return false;
 
         const meetingId = this.meetingId;
+        const identityRevision = this.identityRevision;
         let batchProcessed = false;
 
         try {
+            if (this.identityRebuildPending) this.vectorStore.deleteChunksForMeeting(meetingId);
             // 1. Snapshot the current prefix. Segments appended while awaiting
             // embeddings stay beyond batchEnd and are handled by the next tick.
             const newSegments = this.allSegments.slice(0, batchEnd);
@@ -116,6 +162,7 @@ export class LiveRAGIndexer {
             const cleaned = preprocessTranscript(newSegments);
             if (cleaned.length === 0) {
                 batchProcessed = true;
+                this.identityRebuildPending = false;
                 return true;
             }
 
@@ -123,6 +170,7 @@ export class LiveRAGIndexer {
             const chunks = chunkTranscript(meetingId, cleaned);
             if (chunks.length === 0) {
                 batchProcessed = true;
+                this.identityRebuildPending = false;
                 return true;
             }
 
@@ -136,6 +184,7 @@ export class LiveRAGIndexer {
             const chunkIds = this.vectorStore.saveChunks(indexedChunks);
             this.chunkCounter += indexedChunks.length;
             batchProcessed = true;
+            this.identityRebuildPending = false;
 
             console.log(`[LiveRAGIndexer] Saved ${indexedChunks.length} chunks (${this.chunkCounter} total) for meeting ${meetingId}`);
 
@@ -144,13 +193,13 @@ export class LiveRAGIndexer {
                 let embeddedCount = 0;
                 for (let i = 0; i < chunkIds.length; i++) {
                     try {
-                        if (this.disposed) return false;
+                        if (this.disposed || identityRevision !== this.identityRevision) return false;
                         const embedding = await this.embeddingPipeline.getEmbedding(indexedChunks[i].text);
-                        if (this.disposed) return false;
+                        if (this.disposed || identityRevision !== this.identityRevision) return false;
                         this.vectorStore.storeEmbedding(chunkIds[i], embedding);
                         embeddedCount++;
                     } catch (err) {
-                        if (this.disposed) return false;
+                        if (this.disposed || identityRevision !== this.identityRevision) return false;
                         console.warn(`[LiveRAGIndexer] Failed to embed chunk ${chunkIds[i]}:`, err);
                         // Continue with remaining chunks — partial indexing is better than none
                     }
@@ -178,7 +227,7 @@ export class LiveRAGIndexer {
             console.error('[LiveRAGIndexer] Processing error:', err);
             return false;
         } finally {
-            if (batchProcessed) {
+            if (batchProcessed && identityRevision === this.identityRevision) {
                 this.allSegments.splice(0, batchEnd);
             }
         }
@@ -235,6 +284,9 @@ export class LiveRAGIndexer {
         this.isActive = false;
         this.meetingId = null;
         this.allSegments = [];
+        this.acceptedSegments = [];
+        this.identityRevision++;
+        this.identityRebuildPending = false;
         this.chunkCounter = 0;
         this.indexedChunkCount = 0;
         this.processingPromise = null;
@@ -250,6 +302,8 @@ export class LiveRAGIndexer {
         this.timer = null;
         this.meetingId = null;
         this.allSegments = [];
+        this.acceptedSegments = [];
+        this.identityRevision++;
     }
 
     /**

@@ -44,6 +44,8 @@ export type {
 // Kept as a structural interface (not a class import) to preserve the strict main↔renderer
 // type boundary — the renderer never imports from electron/* directly.
 export interface DynamicActionEvidenceRef {
+  segmentId?: string
+  rawSegmentIds?: string[]
   source: 'transcript' | 'screen' | 'reference' | 'meeting_history'
   text: string
   timestamp?: number
