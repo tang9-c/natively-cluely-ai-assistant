@@ -23,7 +23,7 @@ test('structured global meeting search groups retriever hits with meeting metada
     },
   };
   const rows = [{ id: 1, speaker: 'user', timestampMs: 1, content: '虚构转录' }];
-  manager.vectorStore = { getMeetingChunkState: () => ({ indexState: 'complete', transcriptHash: fingerprintTranscript(rows) }) };
+  manager.vectorStore = { isCurrentChunk: () => true, getMeetingChunkState: () => ({ indexState: 'complete', transcriptHash: fingerprintTranscript(rows) }) };
   manager.db = {
     prepare() {
       return {

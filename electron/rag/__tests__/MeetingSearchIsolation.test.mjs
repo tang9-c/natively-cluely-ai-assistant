@@ -76,6 +76,7 @@ function createManager() {
   const meetingAChunk = scoredChunk(1, 'meeting-a', '客户 A', '预算 为 700 万');
   const meetingBChunk = scoredChunk(2, 'meeting-b', '客户 B', '预算 为 300 万');
   const vectorStore = {
+    isCurrentChunk: () => true,
     getMeetingChunkState(meetingId) {
       if (meetingId === 'meeting-a') {
         return {

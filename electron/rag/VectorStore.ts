@@ -21,6 +21,7 @@ export interface StoredChunk extends Chunk {
 }
 
 export interface ScoredChunk extends StoredChunk {
+    indexSnapshot?: string;
     similarity: number;
     lexicalScore?: number;
     vectorScore?: number;
@@ -28,6 +29,10 @@ export interface ScoredChunk extends StoredChunk {
 }
 
 export type MeetingIndexState = 'missing' | 'building' | 'complete' | 'failed';
+
+function indexSnapshot(row: { edit_state_json?: string; rag_transcript_hash?: string; embedding_space?: string }): string {
+    return JSON.stringify([row.edit_state_json ?? '', row.rag_transcript_hash ?? '', row.embedding_space ?? '']);
+}
 
 function parseDateLike(value: unknown): number | null {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -411,6 +416,7 @@ export class VectorStore {
                 const score = lexicalScore(queryText, chunk.text);
                 return {
                     ...chunk,
+                    indexSnapshot: this.captureMeetingIndexSnapshots(chunk.meetingId).get(chunk.meetingId),
                     similarity: score,
                     lexicalScore: score,
                     vectorScore: 0,
@@ -499,6 +505,7 @@ export class VectorStore {
                 return {
                     id: stableNegativeId(String(row.id)),
                     meetingId: row.id,
+                    indexSnapshot: this.captureMeetingIndexSnapshots(row.id).get(row.id),
                     chunkIndex: -1,
                     speaker: 'Meeting search',
                     startMs: 0,
@@ -543,10 +550,12 @@ export class VectorStore {
             return [];
         }
 
+        const snapshots = this.captureMeetingIndexSnapshots(meetingId);
         const chunks = this.useNativeVec
             ? await this.searchSimilarNative(queryEmbedding, meetingId, limit, minSimilarity, spaceKey)
             : await this.searchSimilarJSWorker(queryEmbedding, meetingId, limit, minSimilarity, spaceKey);
-        return chunks.filter(chunk => this.isMeetingIndexClean(chunk.meetingId));
+        return chunks.map(chunk => ({ ...chunk, indexSnapshot: snapshots.get(chunk.meetingId) }))
+            .filter(chunk => this.isCurrentChunk(chunk));
     }
 
     /**
@@ -823,6 +832,21 @@ export class VectorStore {
     /**
      * Search summaries for global queries using native vec0 or JS fallback
      */
+    private captureMeetingIndexSnapshots(meetingId?: string): Map<string, string> {
+        const rows = this.db.prepare(meetingId ? 'SELECT * FROM meetings WHERE id = ?' : 'SELECT * FROM meetings')
+            .all(...(meetingId ? [meetingId] : [])) as Array<{ id: string; edit_state_json?: string; rag_transcript_hash?: string; embedding_space?: string }>;
+        return new Map(rows.map(row => [row.id, indexSnapshot(row)]));
+    }
+
+    isCurrentChunk(chunk: ScoredChunk): boolean {
+        if (chunk.indexSnapshot === undefined || chunk.indexSnapshot !== this.captureMeetingIndexSnapshots(chunk.meetingId).get(chunk.meetingId)
+            || !this.isMeetingIndexClean(chunk.meetingId)) return false;
+        if (chunk.id < 0) return true; // Current-record fallback is bound to the meeting revision.
+        const row = this.db.prepare('SELECT * FROM chunks WHERE id = ? AND meeting_id = ?').get(chunk.id, chunk.meetingId) as any;
+        return Boolean(row && row.cleaned_text === chunk.text && row.speaker === chunk.speaker
+            && row.start_timestamp_ms === chunk.startMs && row.end_timestamp_ms === chunk.endMs);
+    }
+
     private isMeetingIndexClean(meetingId: string): boolean {
         const row = this.db.prepare('SELECT * FROM meetings WHERE id = ?').get(meetingId) as { edit_state_json?: string } | undefined;
         return Boolean(row && !readMeetingEditState(row.edit_state_json).indexDirty);
@@ -839,13 +863,19 @@ export class VectorStore {
             console.warn('[VectorStore] searchSummaries called without an active spaceKey — returning empty.');
             return [];
         }
+        const snapshots = this.captureMeetingIndexSnapshots();
+        const summaryRows = this.db.prepare('SELECT * FROM chunk_summaries').all() as Array<{ id: number; meeting_id: string; summary_text: string }>;
+        const summaries = new Map(summaryRows.map(row => [row.meeting_id, row]));
         const results = this.useNativeVec
             ? await this.searchSummariesNative(queryEmbedding, limit, spaceKey)
             : await this.searchSummariesJSWorker(queryEmbedding, limit, spaceKey);
         // T5 rebuilds these embeddings; until then old summaries cannot supply evidence or rank boosts.
         return results.filter(result => {
             const row = this.db.prepare('SELECT * FROM meetings WHERE id = ?').get(result.meetingId) as any;
-            return row && !readMeetingEditState(row.edit_state_json).indexDirty;
+            if (!row || snapshots.get(result.meetingId) !== indexSnapshot(row) || readMeetingEditState(row.edit_state_json).indexDirty) return false;
+            const previous = summaries.get(result.meetingId);
+            const current = this.db.prepare('SELECT * FROM chunk_summaries WHERE meeting_id = ?').get(result.meetingId) as typeof previous;
+            return Boolean(previous && current && previous.id === current.id && current.summary_text === result.summaryText);
         });
     }
 

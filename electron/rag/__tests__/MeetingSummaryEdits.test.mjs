@@ -5,7 +5,8 @@ import {VectorStore} from '../../../dist-electron/electron/rag/VectorStore.js';
 import {assembleMeetingEvidence} from '../../../dist-electron/electron/rag/MeetingEvidenceAssembler.js';
 test('both native and JS summary results exclude edited stale evidence',async t=>{
  const db=new Database(':memory:');t.after(()=>db.close());
- db.exec('CREATE TABLE meetings(id TEXT PRIMARY KEY, edit_state_json TEXT)');
+ db.exec('CREATE TABLE meetings(id TEXT PRIMARY KEY, edit_state_json TEXT);CREATE TABLE chunk_summaries(id INTEGER PRIMARY KEY, meeting_id TEXT,summary_text TEXT)');
+ db.prepare('INSERT INTO chunk_summaries VALUES(?,?,?)').run(1,'dirty','OLD TEXT');db.prepare('INSERT INTO chunk_summaries VALUES(?,?,?)').run(2,'clean','valid');
  db.prepare('INSERT INTO meetings VALUES(?,?)').run('dirty',JSON.stringify({indexDirty:true}));db.prepare('INSERT INTO meetings VALUES(?,?)').run('clean','{}');
  const store=Object.create(VectorStore.prototype);store.db=db;
  const stale=[{meetingId:'dirty',summaryText:'OLD TEXT',similarity:1},{meetingId:'clean',summaryText:'valid',similarity:.8}];

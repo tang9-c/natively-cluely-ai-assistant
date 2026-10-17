@@ -103,6 +103,7 @@ function createHarness({
     retrieve: [],
   };
   const vectorStore = {
+    isCurrentChunk: () => true,
     getMeetingChunkState() {
       return { ...state };
     },

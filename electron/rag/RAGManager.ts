@@ -8,7 +8,7 @@ import Database from 'better-sqlite3';
 import { LLMHelper } from '../LLMHelper';
 import { preprocessTranscript, RawSegment } from './TranscriptPreprocessor';
 import { chunkTranscript, formatChunkForContext } from './SemanticChunker';
-import { VectorStore } from './VectorStore';
+import { VectorStore, type ScoredChunk } from './VectorStore';
 import { EmbeddingPipeline } from './EmbeddingPipeline';
 import { RAGRetriever, type QueryIntent } from './RAGRetriever';
 import { LiveRAGIndexer, applyLiveSpeakerIdentity } from './LiveRAGIndexer';
@@ -34,6 +34,8 @@ export type MeetingQueryPreparation =
         meetingId: string;
         query: string;
         formattedContext: string;
+        editRevision: string | undefined;
+        chunks: ScoredChunk[];
         intent: QueryIntent;
     }
     | Exclude<MeetingSearchResult, { status: 'success' }>;
@@ -213,6 +215,7 @@ export class RAGManager {
             return { status: 'meeting_not_found', message: '无法找到本次会议。' };
         }
 
+        const editRevision = this.storedMeetingEditRevision(meetingId);
         const transcriptRows = this.db.prepare(`
             SELECT *, timestamp_ms AS timestampMs
             FROM transcripts
@@ -263,11 +266,16 @@ export class RAGManager {
             };
         }
 
+        if (editRevision !== this.storedMeetingEditRevision(meetingId)) {
+            return { status: 'query_failed', message: '会议记录已修改，请重试本次搜索。' };
+        }
+
+        const evidenceChunks = retrieved.chunks.filter(chunk => chunk.meetingId === meetingId && this.vectorStore.isCurrentChunk(chunk));
         const assembled = assembleMeetingEvidence({
             meetingId,
             intent,
             summary,
-            retrievedChunks: retrieved.chunks,
+            retrievedChunks: evidenceChunks,
             timelineChunks: this.vectorStore.getChunksForMeeting(meetingId),
             maxTokens: 1500,
         });
@@ -289,6 +297,8 @@ export class RAGManager {
             meetingId,
             query,
             formattedContext: assembled.formattedContext,
+            editRevision,
+            chunks: evidenceChunks,
             intent,
         };
     }
@@ -300,6 +310,9 @@ export class RAGManager {
         if (!this.llmHelper) {
             throw new Error('LLM helper not initialized');
         }
+        const isCurrent = () => prepared.editRevision === this.storedMeetingEditRevision(prepared.meetingId)
+            && prepared.chunks.every(chunk => this.vectorStore.isCurrentChunk(chunk));
+        if (!isCurrent()) throw new Error('STALE_MEETING_EVIDENCE');
         const prompt = buildRAGPrompt(
             prepared.query,
             prepared.formattedContext,
@@ -313,7 +326,7 @@ export class RAGManager {
             true
         );
         for await (const chunk of stream) {
-            if (abortSignal?.aborted) return;
+            if (abortSignal?.aborted || !isCurrent()) return;
             yield chunk;
         }
     }
@@ -404,6 +417,7 @@ export class RAGManager {
             throw new Error('STALE_MEETING_IDENTITY');
         }
 
+        if (context.chunks.some(chunk => !this.vectorStore.isCurrentChunk(chunk))) throw new Error('STALE_MEETING_EVIDENCE');
         if (context.chunks.length === 0) {
             // No context relevant to query - trigger wrapper fallback to use context window
             throw new Error('NO_RELEVANT_CONTEXT_FOUND');
@@ -416,7 +430,7 @@ export class RAGManager {
         const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true);
 
         for await (const chunk of stream) {
-            if (abortSignal?.aborted || (liveMeeting
+            if (abortSignal?.aborted || context.chunks.some(chunk => !this.vectorStore.isCurrentChunk(chunk)) || (liveMeeting
                 ? liveIdentityRevision !== this.liveIndexer.getIdentityRevision()
                 : storedIdentityRevision !== this.storedMeetingEditRevision(meetingId))) break;
             yield chunk;
@@ -454,7 +468,7 @@ export class RAGManager {
         const context = await this.retriever.retrieveGlobal(query);
 
         const currentMeetings = new Map(context.meetingIds.map(id => [id, this.isStoredMeetingIdentityCurrent(id)]));
-        const safeChunks = context.chunks.filter(chunk => currentMeetings.get(chunk.meetingId));
+        const safeChunks = context.chunks.filter(chunk => currentMeetings.get(chunk.meetingId) && this.vectorStore.isCurrentChunk(chunk));
         if (safeChunks.length === 0) {
             yield NO_GLOBAL_CONTEXT_FALLBACK;
             return;
@@ -469,7 +483,8 @@ export class RAGManager {
         const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true);
 
         for await (const chunk of stream) {
-            if (abortSignal?.aborted || [...revisions].some(([id, revision]) => revision !== this.storedMeetingEditRevision(id))) break;
+            if (abortSignal?.aborted || safeChunks.some(chunk => !this.vectorStore.isCurrentChunk(chunk))
+                || [...revisions].some(([id, revision]) => revision !== this.storedMeetingEditRevision(id))) break;
             yield chunk;
         }
     }
@@ -483,7 +498,7 @@ export class RAGManager {
             WHERE id = ?
         `);
         return candidates.flatMap((candidate) => {
-            if (!this.isStoredMeetingIdentityCurrent(candidate.meetingId)) return [];
+            if (!this.isStoredMeetingIdentityCurrent(candidate.meetingId) || !this.vectorStore.isCurrentChunk(candidate)) return [];
             const meeting = readMeeting.get(candidate.meetingId) as {
                 id: string;
                 title: string | null;
@@ -535,6 +550,7 @@ export class RAGManager {
      * Retry pending embeddings
      */
     async retryPendingEmbeddings(): Promise<void> {
+        this.recoverDirtyMeetingIndexes();
         await this.embeddingPipeline.processQueue();
     }
 
@@ -695,16 +711,20 @@ export class RAGManager {
      * Manually trigger processing for a meeting
      * Useful for demo meetings or reprocessing failed ones
      */
-    scheduleMeetingReindex(meetingId: string): void {
+    scheduleMeetingReindex(meetingId: string, retryAttempt = 0): void {
         if (this.disposed) return;
         clearTimeout(this.meetingReindexTimers.get(meetingId));
         this.meetingReindexTimers.set(meetingId, setTimeout(() => {
             this.meetingReindexTimers.delete(meetingId);
             void this.reprocessMeeting(meetingId).catch(() => {
-                // The persisted dirty flag and embedding queue remain retryable.
                 console.warn('[RAGManager] Edited meeting index refresh failed; latest record retained');
+                if (this.disposed) return;
+                const latest = this.db.prepare('SELECT * FROM meetings WHERE id = ?').get(meetingId) as { edit_state_json?: string } | undefined;
+                if (!this.disposed && latest && readMeetingEditState(latest.edit_state_json).indexDirty && !this.meetingReindexTimers.has(meetingId)) {
+                    this.scheduleMeetingReindex(meetingId, retryAttempt + 1);
+                }
             });
-        }, 600));
+        }, retryAttempt ? Math.min(30_000, 2_000 * Math.pow(2, Math.min(retryAttempt - 1, 4))) : 600));
     }
 
     recoverDirtyMeetingIndexes(): void {
@@ -753,8 +773,10 @@ export class RAGManager {
             await this.embeddingPipeline.queueMeeting(meetingId);
         } finally {
             this._reprocessInFlight.delete(meetingId);
-            const latest = this.db.prepare('SELECT edit_state_json FROM meetings WHERE id = ?').get(meetingId) as { edit_state_json?: string } | undefined;
-            if (latest && readMeetingEditState(latest.edit_state_json).meetingRevision !== state.meetingRevision) this.scheduleMeetingReindex(meetingId);
+            if (!this.disposed) {
+                const latest = this.db.prepare('SELECT edit_state_json FROM meetings WHERE id = ?').get(meetingId) as { edit_state_json?: string } | undefined;
+                if (latest && readMeetingEditState(latest.edit_state_json).meetingRevision !== state.meetingRevision) this.scheduleMeetingReindex(meetingId);
+            }
         }
     }
 

@@ -1,15 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import { createRequire } from 'node:module';
 const require=createRequire(import.meta.url);
+const {RAGRetriever}=require('../../../dist-electron/electron/rag/RAGRetriever.js');
 const {RAGManager}=require('../../../dist-electron/electron/rag/RAGManager.js');
 const {VectorStore}=require('../../../dist-electron/electron/rag/VectorStore.js');
 const {EmbeddingPipeline}=require('../../../dist-electron/electron/rag/EmbeddingPipeline.js');
 const {DatabaseManager}=require('../../../dist-electron/electron/db/DatabaseManager.js');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-function harness(t) {
- const db=new Database(':memory:');
+function harness(t, disk=false) {
+ const dir=disk?mkdtempSync(join(tmpdir(),'t5-retrieval-')):null;
+ const db=new Database(dir?join(dir,'fixture.db'):':memory:');
  db.exec(`CREATE TABLE meetings(id TEXT PRIMARY KEY,title TEXT,start_time INTEGER,duration_ms INTEGER,created_at TEXT,source TEXT,is_processed INTEGER,summary_json TEXT,edit_state_json TEXT,rag_transcript_hash TEXT,rag_index_state TEXT DEFAULT 'missing',embedding_provider TEXT,embedding_dimensions INTEGER,embedding_space TEXT);
  CREATE TABLE transcripts(id INTEGER PRIMARY KEY AUTOINCREMENT,meeting_id TEXT,segment_id TEXT,raw_segment_ids_json TEXT,speaker TEXT,speaker_id TEXT,speaker_label TEXT,provider_speaker_id TEXT,diarization_provider TEXT,content TEXT,original_content TEXT,edit_revision INTEGER DEFAULT 0,timestamp_ms INTEGER,start_timestamp_ms INTEGER,end_timestamp_ms INTEGER,speaker_verification_json TEXT,speaker_identity_correction_json TEXT);
  CREATE TABLE ai_interactions(id INTEGER PRIMARY KEY,meeting_id TEXT,type TEXT,timestamp INTEGER,user_query TEXT,ai_response TEXT,metadata_json TEXT);
@@ -24,7 +29,7 @@ function harness(t) {
  const pipeline=new EmbeddingPipeline(db,store);
  const manager=Object.create(RAGManager.prototype);Object.assign(manager,{db,vectorStore:store,embeddingPipeline:pipeline,_reprocessInFlight:new Set(),meetingReindexTimers:new Map(),disposed:false});
  const edit=operation=>dm.applyMeetingEdit({meetingId:'m',expectedRevision:dm.getMeetingDetails('m').editState.meetingRevision,operation});
- t.after(()=>{for(const timer of manager.meetingReindexTimers.values())clearTimeout(timer);pipeline.dispose();DatabaseManager.instance=previous;db.close();});
+ t.after(()=>{for(const timer of manager.meetingReindexTimers.values())clearTimeout(timer);pipeline.dispose();DatabaseManager.instance=previous;db.close();if(dir)rmSync(dir,{recursive:true,force:true});});
  return {db,dm,store,pipeline,manager,edit};
 }
 
@@ -131,4 +136,84 @@ test('a dirty pending rebuild cannot block embeddings of other meetings',async t
  h.pipeline.provider={name:'fixture',dimensions:2,space:'fixture:2',embed:async()=>[1,0]};await h.pipeline.processQueue();
  assert.ok(h.db.prepare('SELECT embedding FROM chunks WHERE id=?').get(id).embedding);
  assert.equal(h.dm.getMeetingDetails('m').editState.indexDirty,true);
+});
+
+
+const deferred=()=>{let resolve;const promise=new Promise(done=>resolve=done);return {promise,resolve};};
+async function cleanIndex(h,text) {
+ if(text)assert.equal(h.edit({type:'text',segmentId:'s',text}).ok,true);
+ h.pipeline.provider={name:'fixture',dimensions:2,space:'fixture:2',embed:async()=>[1,0]};
+ await h.manager.reprocessMeeting('m');while(h.pipeline.isProcessing)await tick();await h.pipeline.processQueue();
+ assert.equal(h.dm.getMeetingDetails('m').editState.indexDirty,false);
+}
+const until=async condition=>{const deadline=Date.now()+6000;while(!condition()){assert.ok(Date.now()<deadline,'fixture timed out');await new Promise(resolve=>setTimeout(resolve,20));}};
+function retrievalHarness(t) {
+ const h=harness(t,true);h.pipeline.getEmbeddingForQuery=async()=>[1,0];
+ h.manager.retriever=new RAGRetriever(h.store,h.pipeline);h.manager.liveIndexer={getActiveMeetingId:()=>null};
+ h.prompts=[];h.manager.llmHelper={streamChatWithGemini:async function*(prompt){h.prompts.push(prompt);yield 'fixture answer';}};
+ h.manager.ensureMeetingIndexInFlight=new Map();return h;
+}
+for(const native of [false,true])test(`I1 ${native?'native':'JS'} worker candidate is rejected after edit rebuild and clean`,async t=>{
+ const h=retrievalHarness(t);await cleanIndex(h);const gate=deferred(),entered=deferred();
+ h.store.postToWorker=async message=>{const captured=h.store.getChunksForMeeting('m').map(chunk=>({...chunk,similarity:1}));entered.resolve();await gate.promise;return captured;};
+ h.store.useNativeVec=native;const pending=h.store.searchSimilar([1,0],{spaceKey:'fixture:2'});await entered.promise;
+ h.store.useNativeVec=false;await cleanIndex(h,'虚构星舟已经纠正');h.store.useNativeVec=native;gate.resolve();
+ assert.deepEqual(await pending,[],'old worker snapshot cannot be accepted just because the new index is clean');
+ h.store.postToWorker=async()=>h.store.getChunksForMeeting('m').map(chunk=>({...chunk,similarity:1}));
+ assert.match((await h.store.searchSimilar([1,0],{spaceKey:'fixture:2'}))[0].text,/星舟已经纠正/);
+});
+for(const kind of ['structured','prompt'])test(`I1 final ${kind} consumer rejects candidates invalidated during a later await`,async t=>{
+ const h=retrievalHarness(t);await cleanIndex(h);h.pipeline.isReady=()=>false;
+ const gate=deferred(),entered=deferred();const method=kind==='structured'?'searchGlobalMeetings':'retrieveGlobal';const original=h.manager.retriever[method].bind(h.manager.retriever);
+ h.manager.retriever[method]=async(...args)=>{const captured=await original(...args);entered.resolve();await gate.promise;return captured;};
+ const pending=kind==='structured'?h.manager.searchGlobalMeetings('星州'):(async()=>{const out=[];for await(const text of h.manager.queryGlobal('星州'))out.push(text);return out;})();
+ await entered.promise;await cleanIndex(h,'虚构星舟已经纠正');gate.resolve();
+ const result=await pending;if(kind==='structured')assert.deepEqual(result,[]);assert.equal(h.prompts.length,0,'stale retrieved text must not reach LLM');
+});
+test('I1 prepared meeting evidence is invalidated before later streaming consumption',async t=>{
+ const h=retrievalHarness(t);await cleanIndex(h);h.pipeline.isReady=()=>false;
+ const prepared=await h.manager.prepareMeetingQuery('m','星州');assert.equal(prepared.status,'ready');
+ await cleanIndex(h,'虚构星舟已经纠正');
+ const answer=(async()=>{for await(const _ of h.manager.streamMeetingAnswer(prepared)){} })();
+ await assert.rejects(answer,/STALE_MEETING/);assert.equal(h.prompts.length,0);
+});
+test('rebuild failure before enqueue retries automatically in the same session',async t=>{
+ const h=harness(t,true);h.edit({type:'text',segmentId:'s',text:'虚构星舟自动恢复'});
+ h.db.exec("CREATE TRIGGER t5_once BEFORE INSERT ON chunks BEGIN SELECT RAISE(ABORT,'fixture transient SQLite fault'); END");
+ let attempts=0;const save=h.store.saveChunks.bind(h.store);h.store.saveChunks=chunks=>{attempts++;return save(chunks);};
+ const warnings=[];const original=console.warn;t.mock.method(console,'warn',(...args)=>{if(args[0]==='[RAGManager] Edited meeting index refresh failed; latest record retained')warnings.push(args);else original(...args);});
+ h.manager.scheduleMeetingReindex('m');await until(()=>warnings.length===1);assert.equal(attempts,1);
+ h.db.exec('DROP TRIGGER t5_once');await until(()=>attempts===2);
+ assert.match(h.store.getChunksForMeeting('m')[0].text,/自动恢复/);assert.equal(h.dm.getMeetingDetails('m').editState.indexDirty,true);
+ assert.ok(h.db.prepare("SELECT 1 FROM embedding_queue WHERE status='pending'").get(),'same-session retry must reach the existing persistent queue');
+});
+test('dispose cancels a delayed rebuild retry after the SQLite failure',async t=>{
+ const h=harness(t,true);h.edit({type:'text',segmentId:'s',text:'虚构取消重试'});
+ h.db.exec("CREATE TRIGGER t5_fail BEFORE INSERT ON chunks BEGIN SELECT RAISE(ABORT,'fixture transient SQLite fault'); END");
+ let attempts=0;const save=h.store.saveChunks.bind(h.store);h.store.saveChunks=chunks=>{attempts++;return save(chunks);};
+ const warnings=[];const original=console.warn;t.mock.method(console,'warn',(...args)=>{if(args[0]==='[RAGManager] Edited meeting index refresh failed; latest record retained')warnings.push(args);else original(...args);});
+ h.manager.liveIndexer={dispose(){}};h.store.destroy=async()=>{};
+ h.manager.scheduleMeetingReindex('m');await until(()=>warnings.length===1);await h.manager.dispose();
+ assert.equal(h.manager.meetingReindexTimers.size,0);await new Promise(resolve=>setTimeout(resolve,2200));assert.equal(attempts,1);
+});
+
+test('I1 current chunk identity is checked even when a rebuild has the same meeting revision',async t=>{
+ const h=retrievalHarness(t);await cleanIndex(h);h.pipeline.isReady=()=>false;
+ const gate=deferred(),entered=deferred();const original=h.manager.retriever.searchGlobalMeetings.bind(h.manager.retriever);
+ h.manager.retriever.searchGlobalMeetings=async(...args)=>{const captured=await original(...args);entered.resolve();await gate.promise;return captured;};
+ const pending=h.manager.searchGlobalMeetings('星州');await entered.promise;await cleanIndex(h);gate.resolve();
+ assert.deepEqual(await pending,[],'the old chunk ID was deleted even though the meeting revision stayed the same');
+});
+test('I1 summary worker cannot return its old snapshot after summary edit rebuild and clean',async t=>{
+ const h=retrievalHarness(t);await cleanIndex(h);const gate=deferred(),entered=deferred();
+ h.store.postToWorker=async()=>{const captured=h.db.prepare('SELECT * FROM chunk_summaries').get();entered.resolve();await gate.promise;return [{meetingId:'m',summaryText:captured.summary_text,similarity:1}];};
+ const pending=h.store.searchSummaries([1,0],5,'fixture:2');await entered.promise;
+ assert.equal(h.edit({type:'summary',patch:{overview:'新的虚构人工摘要'}}).ok,true);await cleanIndex(h);gate.resolve();assert.deepEqual(await pending,[]);
+});
+for(const kind of ['global','prepared'])test(`I1 ${kind} first streamed token keeps chunk validity across provider await`,async t=>{
+ const h=retrievalHarness(t);await cleanIndex(h);h.pipeline.isReady=()=>false;
+ const gate=deferred(),entered=deferred();h.manager.llmHelper.streamChatWithGemini=async function*(){entered.resolve();await gate.promise;yield 'old citation continuation';};
+ const prepared=kind==='prepared'?await h.manager.prepareMeetingQuery('m','星州'):null;
+ const pending=(async()=>{const output=[];const stream=kind==='prepared'?h.manager.streamMeetingAnswer(prepared):h.manager.queryGlobal('星州');for await(const text of stream)output.push(text);return output;})();
+ await entered.promise;await cleanIndex(h);gate.resolve();assert.deepEqual(await pending,[]);
 });
