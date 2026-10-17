@@ -4,6 +4,8 @@
 // On provider exhaustion, automatically falls back to LocalEmbeddingProvider (on-device).
 
 import Database from 'better-sqlite3';
+import { readMeetingEditState } from '../../shared/meetingEdits';
+import { assertProviderDataScopes } from '../llm/ProviderRouter';
 import { VectorStore } from './VectorStore';
 
 import { EmbeddingProviderResolver, AppAPIConfig } from './EmbeddingProviderResolver';
@@ -329,7 +331,8 @@ export class EmbeddingPipeline {
                 insert.run(meetingId, chunk.id);
             }
             // Also queue summary (chunk_id = NULL means summary)
-            insert.run(meetingId, null);
+            if (this.db.prepare('SELECT 1 FROM chunk_summaries WHERE meeting_id = ?').get(meetingId)
+                && !this.db.prepare('SELECT 1 FROM embedding_queue WHERE meeting_id = ? AND chunk_id IS NULL').get(meetingId)) insert.run(meetingId, null);
         });
 
         queueAll();
@@ -341,8 +344,8 @@ export class EmbeddingPipeline {
         console.log(`[EmbeddingPipeline] Queued ${chunks.length} chunks + 1 summary for meeting ${meetingId}`);
 
         // Start processing in background
-        this.processQueue().catch(err => {
-            console.error('[EmbeddingPipeline] Queue processing error:', err);
+        if (this.isReady()) this.processQueue().catch(err => {
+            console.warn('[EmbeddingPipeline] Queue processing failed; work retained');
         });
     }
 
@@ -417,6 +420,7 @@ export class EmbeddingPipeline {
                 console.warn(`[EmbeddingPipeline] Recovered ${stuckCount} stuck 'processing' items from prior crash.`);
             }
 
+            const deferredMeetings = new Set<string>();
             while (!this.disposed) {
                 // Fetch next pending item. Items marked for local fallback (retry_count = -1)
                 // are also eligible, so we use a broad filter.
@@ -424,9 +428,10 @@ export class EmbeddingPipeline {
                     SELECT * FROM embedding_queue 
                     WHERE status = 'pending'
                       AND (retry_count < ? OR retry_count = -1)
+                      ${deferredMeetings.size ? `AND meeting_id NOT IN (${[...deferredMeetings].map(() => '?').join(',')})` : ''}
                     ORDER BY created_at ASC
                     LIMIT 1
-                `).get(MAX_RETRIES) as any;
+                `).get(MAX_RETRIES, ...deferredMeetings) as any;
 
                 if (!pending) {
                     console.log('[EmbeddingPipeline] Queue empty');
@@ -451,6 +456,8 @@ export class EmbeddingPipeline {
                     break;
                 }
 
+                if (!this.isCurrentIndex(pending.meeting_id)) { deferredMeetings.add(pending.meeting_id); continue; }
+
                 // Mark as processing
                 this.db.prepare(
                     `UPDATE embedding_queue SET status = 'processing' WHERE id = ?`
@@ -470,6 +477,7 @@ export class EmbeddingPipeline {
                         SET status = 'completed', processed_at = ?
                         WHERE id = ?
                     `).run(new Date().toISOString(), pending.id);
+                    this.completeMeetingIndexIfReady(pending.meeting_id);
                     this.releaseMeetingFallbackIfSettled(pending.meeting_id);
 
                 } catch (error: any) {
@@ -510,6 +518,35 @@ export class EmbeddingPipeline {
         } finally {
             this.isProcessing = false;
         }
+    }
+
+    private completeMeetingIndexIfReady(meetingId: string): void {
+        const row = this.db.prepare('SELECT * FROM meetings WHERE id = ?').get(meetingId) as { edit_state_json?: string } | undefined;
+        if (!row) return;
+        const state = readMeetingEditState(row.edit_state_json);
+        if (!state.indexDirty || state.indexRevision !== state.meetingRevision) return;
+        const unfinished = this.db.prepare(`SELECT 1 FROM embedding_queue WHERE meeting_id = ? AND status != 'completed' LIMIT 1`).get(meetingId);
+        const missing = this.db.prepare('SELECT 1 FROM chunks WHERE meeting_id = ? AND embedding IS NULL LIMIT 1').get(meetingId);
+        const summaryMissing = this.db.prepare('SELECT 1 FROM chunk_summaries WHERE meeting_id = ? AND embedding IS NULL').get(meetingId);
+        if (unfinished || missing || summaryMissing || !this.db.prepare('SELECT 1 FROM chunks WHERE meeting_id = ?').get(meetingId)) return;
+        state.indexDirty = false;
+        this.db.prepare('UPDATE meetings SET edit_state_json = ? WHERE id = ? AND edit_state_json = ?').run(JSON.stringify(state), meetingId, row.edit_state_json);
+    }
+
+    private isCurrentIndex(meetingId: string): boolean {
+        const row = this.db.prepare('SELECT * FROM meetings WHERE id = ?').get(meetingId) as { edit_state_json?: string } | undefined;
+        if (!row) return false;
+        const state = readMeetingEditState(row.edit_state_json);
+        return !state.indexDirty || state.indexRevision === state.meetingRevision;
+    }
+
+    private editRevision(meetingId: string): number | undefined {
+        const row = this.db.prepare('SELECT * FROM meetings WHERE id = ?').get(meetingId) as { edit_state_json?: string } | undefined;
+        return row ? readMeetingEditState(row.edit_state_json).meetingRevision : undefined;
+    }
+
+    private assertEmbeddingScope(provider: IEmbeddingProvider): void {
+        if (!['local', 'ollama'].includes(provider.name)) assertProviderDataScopes('cloud_embeddings', ['embeddings'], this.pendingConfig?.providerDataScopes);
     }
 
     private releaseMeetingFallbackIfSettled(meetingId: string): void {
@@ -731,8 +768,14 @@ export class EmbeddingPipeline {
             return;
         }
 
+        if (!this.isCurrentIndex(row.meeting_id)) return;
+        const revision = this.editRevision(row.meeting_id);
+        this.assertEmbeddingScope(p);
         const embedding = await this.embedWithTimeout(p, row.cleaned_text, `chunk ${chunkId}`);
-        if (this.disposed) return;
+        if (this.disposed || revision !== this.editRevision(row.meeting_id)) return;
+        const current = this.db.prepare('SELECT cleaned_text, meeting_id FROM chunks WHERE id = ?').get(chunkId) as typeof row;
+        if (!current || current.meeting_id !== row.meeting_id || current.cleaned_text !== row.cleaned_text) return;
+        this.assertEmbeddingScope(p);
         this.vectorStore.storeEmbedding(chunkId, embedding);
 
         // Record provider metadata on the meeting after first successful embedding
@@ -756,7 +799,7 @@ export class EmbeddingPipeline {
 
         // Get summary text
         const row = this.db.prepare(
-            'SELECT summary_text FROM chunk_summaries WHERE meeting_id = ?'
+            'SELECT id, summary_text FROM chunk_summaries WHERE meeting_id = ?'
         ).get(meetingId) as any;
 
         if (!row) {
@@ -764,8 +807,14 @@ export class EmbeddingPipeline {
             return;
         }
 
+        if (!this.isCurrentIndex(meetingId)) return;
+        const revision = this.editRevision(meetingId);
+        this.assertEmbeddingScope(p);
         const embedding = await this.embedWithTimeout(p, row.summary_text, `summary:${meetingId}`);
-        if (this.disposed) return;
+        if (this.disposed || revision !== this.editRevision(meetingId)) return;
+        const current = this.db.prepare('SELECT id, summary_text FROM chunk_summaries WHERE meeting_id = ?').get(meetingId) as typeof row;
+        if (!current || current.id !== row.id || current.summary_text !== row.summary_text) return;
+        this.assertEmbeddingScope(p);
         this.vectorStore.storeSummaryEmbedding(meetingId, embedding);
 
         // P2-8: record provider metadata on the meeting row so that provider-switch

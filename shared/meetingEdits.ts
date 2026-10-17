@@ -58,6 +58,7 @@ export interface MeetingEditState {
   summarySourceRevision: number;
   editedSummaryFields: string[];
   indexDirty: boolean;
+  indexRevision?: number;
 }
 export type MeetingSummaryPatch = Partial<Pick<NonNullable<Meeting['detailedSummary']>,
   'overview' | 'keyPoints' | 'decisions' | 'openQuestions' | 'sections' | 'actionItemsTitle' | 'keyPointsTitle' | 'actionItemsStructured'>> & { title?: string };
@@ -78,5 +79,6 @@ export function readMeetingEditState(value?: string | null): MeetingEditState {
     summarySourceRevision: state.summarySourceRevision ?? 0,
     editedSummaryFields: state.editedSummaryFields ?? [],
     indexDirty: state.indexDirty ?? false,
+    ...(Number.isSafeInteger(state.indexRevision) ? { indexRevision: state.indexRevision } : {}),
   };
 }

@@ -1,3 +1,4 @@
+import { readMeetingEditState } from '../../shared/meetingEdits';
 import { normalizeMeetingActionItems, formatMeetingActionItem, type MeetingActionItem } from '../../shared/meetingActionItems';
 // electron/rag/RAGManager.ts
 // Central orchestrator for RAG pipeline
@@ -71,6 +72,7 @@ export class RAGManager {
     private ensureMeetingIndexInFlight = new Map<string, Promise<void>>();
     /** Guards against concurrent reprocessMeeting() calls for the same meeting ID. */
     private _reprocessInFlight = new Set<string>();
+    private meetingReindexTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
     constructor(config: RAGManagerConfig) {
         this.db = config.db;
@@ -82,6 +84,7 @@ export class RAGManager {
             if (this.disposed) return;
             this._backfillEmbeddingProviderMetadata();
             this.scheduleAutoReindex();
+            this.recoverDirtyMeetingIndexes();
         });
 
         this.embeddingPipeline.configure({
@@ -93,6 +96,7 @@ export class RAGManager {
             ollamaUrl: config.ollamaUrl,
             providerDataScopes: config.providerDataScopes
         });
+        this.recoverDirtyMeetingIndexes();
     }
 
     /**
@@ -233,6 +237,9 @@ export class RAGManager {
 
         let summary: MeetingSummaryEvidence = {};
         try {
+            const current = this.db.prepare('SELECT * FROM meetings WHERE id = ?').get(meetingId) as { edit_state_json?: string } | undefined;
+            const editState = readMeetingEditState(current?.edit_state_json);
+            if (editState.transcriptRevision > editState.summarySourceRevision) throw new Error('Summary is stale');
             const parsed = JSON.parse(meeting.summary_json || '{}');
             summary = normalizeMeetingActionItems(parsed?.detailedSummary ?? {});
         } catch {
@@ -427,7 +434,8 @@ export class RAGManager {
                 WHERE meeting_id = ? ORDER BY timestamp_ms ASC, id ASC`).all(meetingId) as FingerprintTranscriptRow[];
             if (!rows.length) return false;
             const state = this.vectorStore.getMeetingChunkState(meetingId);
-            return state.indexState === 'complete' && state.transcriptHash === fingerprintTranscript(rows);
+            const meeting = this.db.prepare('SELECT * FROM meetings WHERE id = ?').get(meetingId) as { edit_state_json?: string } | undefined;
+            return !readMeetingEditState(meeting?.edit_state_json).indexDirty && state.indexState === 'complete' && state.transcriptHash === fingerprintTranscript(rows);
         } catch { return false; }
     }
 
@@ -687,58 +695,66 @@ export class RAGManager {
      * Manually trigger processing for a meeting
      * Useful for demo meetings or reprocessing failed ones
      */
-    async reprocessMeeting(meetingId: string): Promise<void> {
-        // Guard: if this meeting is already being reprocessed, skip to prevent
-        // concurrent runs from clearing each other's queue work.
-        if (this._reprocessInFlight.has(meetingId)) {
-            console.log(`[RAGManager] Reprocessing already in-flight for ${meetingId}, skipping duplicate call`);
-            return;
+    scheduleMeetingReindex(meetingId: string): void {
+        if (this.disposed) return;
+        clearTimeout(this.meetingReindexTimers.get(meetingId));
+        this.meetingReindexTimers.set(meetingId, setTimeout(() => {
+            this.meetingReindexTimers.delete(meetingId);
+            void this.reprocessMeeting(meetingId).catch(() => {
+                // The persisted dirty flag and embedding queue remain retryable.
+                console.warn('[RAGManager] Edited meeting index refresh failed; latest record retained');
+            });
+        }, 600));
+    }
+
+    recoverDirtyMeetingIndexes(): void {
+        const rows = this.db.prepare('SELECT * FROM meetings').all() as Array<{ id: string; edit_state_json?: string }>;
+        for (const row of rows) {
+            if (readMeetingEditState(row.edit_state_json).indexDirty) this.scheduleMeetingReindex(row.id);
         }
+    }
+
+    async reprocessMeeting(meetingId: string): Promise<void> {
+        if (this.disposed || this._reprocessInFlight.has(meetingId)) return;
         this._reprocessInFlight.add(meetingId);
-
-        console.log(`[RAGManager] Reprocessing meeting ${meetingId}`);
-
+        const row = this.db.prepare('SELECT * FROM meetings WHERE id = ?').get(meetingId) as { summary_json?: string; edit_state_json?: string } | undefined;
+        const state = readMeetingEditState(row?.edit_state_json);
         try {
-            // delete existing RAG data first to avoid duplicates
-            this.deleteMeetingData(meetingId);
-
-            // Fetch meeting details from DB
-            const { DatabaseManager } = require('../db/DatabaseManager');
-            const meeting = DatabaseManager.getInstance().getMeetingDetails(meetingId);
-
-            if (!meeting) {
-                console.error(`[RAGManager] Meeting ${meetingId} not found for reprocessing`);
-                return;
-            }
-
-            if (!meeting.transcript || meeting.transcript.length === 0) {
-                console.log(`[RAGManager] Meeting ${meetingId} has no transcript, skipping`);
-                return;
-            }
-
-            // Convert to RawSegment format
-            const segments = meeting.transcript.map((t: any) => ({
-                ...t,
-                speaker: t.speaker,
-                text: t.text,
-                timestamp: t.timestamp
+            if (!row) return;
+            const transcriptRows = this.db.prepare(`SELECT *, timestamp_ms AS timestampMs FROM transcripts
+                WHERE meeting_id = ? ORDER BY timestamp_ms ASC, id ASC`).all(meetingId) as FingerprintTranscriptRow[];
+            const segments: RawSegment[] = transcriptRows.map(t => ({
+                speaker: t.speaker ?? '发言人', text: t.content, timestamp: t.timestampMs,
+                speakerIdentityCorrection: readIdentityJson(t.speaker_identity_correction_json),
+                speakerVerification: readIdentityJson(t.speaker_verification_json),
+                rawSegmentIds: readIdentityJson(t.raw_segment_ids_json),
+                providerSpeakerId: t.provider_speaker_id ?? undefined,
+                diarizationProvider: t.diarization_provider ?? undefined,
             }));
-
-            // Get summary if available
+            const saved = JSON.parse(row.summary_json || '{}');
             let summary: string | undefined;
-            if (meeting.detailedSummary) {
-                summary = [
-                    ...(meeting.detailedSummary.overview ? [meeting.detailedSummary.overview] : []),
-                    ...(meeting.detailedSummary.keyPoints || []),
-                    ...normalizeMeetingActionItems(meeting.detailedSummary).actionItemsStructured.map((item: MeetingActionItem) => `Action: ${formatMeetingActionItem(item)}`)
-                ].join('. ');
-            } else if (meeting.summary) {
-                summary = meeting.summary;
+            if (state.summarySourceRevision >= state.transcriptRevision) {
+                if (saved.detailedSummary) {
+                    summary = [saved.detailedSummary.overview, ...(saved.detailedSummary.keyPoints || []),
+                        ...normalizeMeetingActionItems(saved.detailedSummary).actionItemsStructured.map((item: MeetingActionItem) => `Action: ${formatMeetingActionItem(item)}`)].filter(Boolean).join('. ');
+                } else summary = saved.legacySummary;
             }
-
-            await this.processMeeting(meetingId, segments, summary);
+            // Delete the old retrieval copies and rebuild from one current snapshot.
+            this.db.transaction(() => {
+                this.deleteMeetingData(meetingId);
+                const chunks = chunkTranscript(meetingId, preprocessTranscript(segments));
+                this.vectorStore.saveChunks(chunks);
+                if (summary) this.vectorStore.saveSummary(meetingId, summary);
+                this.db.prepare(`UPDATE meetings SET rag_transcript_hash = ?, rag_index_state = 'complete',
+                    embedding_provider = NULL, embedding_dimensions = NULL, embedding_space = NULL, edit_state_json = ? WHERE id = ?`)
+                    .run(fingerprintTranscript(transcriptRows), JSON.stringify({ ...state, indexRevision: state.meetingRevision }), meetingId);
+            })();
+            // Persist work even when there is no permitted/available embedding provider.
+            await this.embeddingPipeline.queueMeeting(meetingId);
         } finally {
             this._reprocessInFlight.delete(meetingId);
+            const latest = this.db.prepare('SELECT edit_state_json FROM meetings WHERE id = ?').get(meetingId) as { edit_state_json?: string } | undefined;
+            if (latest && readMeetingEditState(latest.edit_state_json).meetingRevision !== state.meetingRevision) this.scheduleMeetingReindex(meetingId);
         }
     }
 
@@ -861,6 +877,8 @@ export class RAGManager {
         if (this.disposed) return;
         this.disposed = true;
         this.cancelPendingReindex();
+        for (const timer of this.meetingReindexTimers.values()) clearTimeout(timer);
+        this.meetingReindexTimers.clear();
         this.pendingLiveSegments = [];
         this.liveIndexer.dispose();
         this.embeddingPipeline.dispose();

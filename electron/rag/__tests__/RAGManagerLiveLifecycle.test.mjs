@@ -60,7 +60,7 @@ const { EmbeddingPipeline } = require(path.join(root, 'dist-electron/electron/ra
 
 function disposingManager(liveIndexer, embeddingPipeline, vectorStore) {
   const manager = Object.create(RAGManager.prototype);
-  Object.assign(manager, {liveIndexer, embeddingPipeline, vectorStore, pendingLiveSegments: [], cancelPendingReindex(){}});
+  Object.assign(manager, {liveIndexer, embeddingPipeline, vectorStore, pendingLiveSegments: [], meetingReindexTimers: new Map(), cancelPendingReindex(){}});
   return manager;
 }
 

@@ -405,6 +405,7 @@ export class VectorStore {
         }
         const rows = this.db.prepare(query).all(...params) as any[];
         return rows
+            .filter(row => this.isMeetingIndexClean(row.meeting_id))
             .map((row) => {
                 const chunk = this.rowToChunk(row);
                 const score = lexicalScore(queryText, chunk.text);
@@ -466,10 +467,14 @@ export class VectorStore {
         `).all(primaryTerm, primaryTerm, primaryTerm, primaryTerm) as any[];
 
         return rows
+            .filter(row => this.isMeetingIndexClean(row.id))
             .map((row) => {
                 const title = String(row.title || '').trim();
                 let summary = '';
                 try {
+                    const meeting = this.db.prepare('SELECT * FROM meetings WHERE id = ?').get(row.id) as { edit_state_json?: string };
+                    const state = readMeetingEditState(meeting.edit_state_json);
+                    if (state.summarySourceRevision < state.transcriptRevision) throw new Error('Summary is stale');
                     const parsed = JSON.parse(row.summary_json || '{}');
                     summary = parsed.detailedSummary ? JSON.stringify(normalizeMeetingActionItems(parsed.detailedSummary)) : String(parsed.legacySummary || '');
                 } catch { /* Malformed legacy summaries supply no evidence. */ }
@@ -538,10 +543,10 @@ export class VectorStore {
             return [];
         }
 
-        if (this.useNativeVec) {
-            return this.searchSimilarNative(queryEmbedding, meetingId, limit, minSimilarity, spaceKey);
-        }
-        return this.searchSimilarJSWorker(queryEmbedding, meetingId, limit, minSimilarity, spaceKey);
+        const chunks = this.useNativeVec
+            ? await this.searchSimilarNative(queryEmbedding, meetingId, limit, minSimilarity, spaceKey)
+            : await this.searchSimilarJSWorker(queryEmbedding, meetingId, limit, minSimilarity, spaceKey);
+        return chunks.filter(chunk => this.isMeetingIndexClean(chunk.meetingId));
     }
 
     /**
@@ -818,6 +823,11 @@ export class VectorStore {
     /**
      * Search summaries for global queries using native vec0 or JS fallback
      */
+    private isMeetingIndexClean(meetingId: string): boolean {
+        const row = this.db.prepare('SELECT * FROM meetings WHERE id = ?').get(meetingId) as { edit_state_json?: string } | undefined;
+        return Boolean(row && !readMeetingEditState(row.edit_state_json).indexDirty);
+    }
+
     async searchSummaries(
         queryEmbedding: number[],
         limit: number = 5,

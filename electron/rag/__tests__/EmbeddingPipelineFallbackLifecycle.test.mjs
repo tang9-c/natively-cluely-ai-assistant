@@ -68,6 +68,7 @@ test('permanently failing fallback work reaches failed state and releases meetin
       if (sql.includes("status = 'pending' WHERE status = 'processing'")) {
         return { run: () => ({ changes: 0 }) };
       }
+      if (sql.includes('SELECT * FROM meetings')) return { get: () => ({ id: 'meeting-fallback' }) };
       if (sql.includes('SELECT * FROM embedding_queue')) {
         return { get: () => (pending.status === 'pending' && pending.retry_count < 3 ? { ...pending } : undefined) };
       }

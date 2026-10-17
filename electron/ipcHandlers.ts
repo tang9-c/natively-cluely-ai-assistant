@@ -3536,7 +3536,10 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('meeting-apply-edit', async (_, request) => {
     const result = DatabaseManager.getInstance().applyMeetingEdit(request);
-    if (result.ok) broadcast('meetings-updated');
+    if (result.ok) {
+      broadcast('meetings-updated');
+      appState.getRAGManager()?.scheduleMeetingReindex(request.meetingId);
+    }
     return result;
   });
 
