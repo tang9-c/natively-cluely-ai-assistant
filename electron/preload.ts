@@ -508,8 +508,9 @@ interface ElectronAPI {
   getMeetingDetails: (id: string) => Promise<any>;
   exportMeetingDocx: (
     meetingId: string,
-    includeTranscript: boolean,
+    includeTranscript: boolean | { profile: 'minutes' | 'archive'; expectedRevision: number },
   ) => Promise<{ success: boolean; filePath?: string; error?: string; cancelled?: boolean }>;
+  copyMeetingMinutes: (meetingId: string, expectedRevision: number) => Promise<{ success: boolean; error?: string }>;
   applyMeetingEdit: (request: MeetingEditRequest) => Promise<MeetingEditResult>;
   updateMeetingTitle: (id: string, title: string) => Promise<boolean>;
   updateMeetingSummary: (
@@ -1718,8 +1719,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   finalizeMicSTT: () => ipcRenderer.invoke('finalize-mic-stt'),
   getRecentMeetings: () => ipcRenderer.invoke('get-recent-meetings'),
   getMeetingDetails: (id: string) => ipcRenderer.invoke('get-meeting-details', id),
-  exportMeetingDocx: (meetingId: string, includeTranscript: boolean) =>
+  exportMeetingDocx: (meetingId: string, includeTranscript: boolean | { profile: 'minutes' | 'archive'; expectedRevision: number }) =>
     ipcRenderer.invoke('export-meeting-docx', meetingId, includeTranscript),
+  copyMeetingMinutes: (meetingId: string, expectedRevision: number) => ipcRenderer.invoke('copy-meeting-minutes', meetingId, expectedRevision),
   applyMeetingEdit: (request: MeetingEditRequest) => ipcRenderer.invoke('meeting-apply-edit', request),
   updateMeetingTitle: (id: string, title: string) =>
     ipcRenderer.invoke('update-meeting-title', { id, title }),

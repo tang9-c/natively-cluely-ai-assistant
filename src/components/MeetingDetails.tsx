@@ -95,6 +95,50 @@ const MeetingDetails = React.forwardRef<MeetingDetailsHandle, MeetingDetailsProp
     const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'usage'>('summary');
     const [query, setQuery] = useState('');
     const [isCopied, setIsCopied] = useState(false);
+    const [shareMenuOpen, setShareMenuOpen] = useState(false);
+    const [sharePending, setSharePending] = useState(false);
+    const [shareStatus, setShareStatus] = useState('');
+    const shareBusy = useRef(false);
+    const shareRef = useRef<HTMLDivElement>(null);
+    const shareTriggerRef = useRef<HTMLButtonElement>(null);
+    useEffect(() => {
+        if (!shareMenuOpen) return;
+        const outside = (event: PointerEvent) => { if (!shareRef.current?.contains(event.target as Node)) setShareMenuOpen(false); };
+        const key = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') { setShareMenuOpen(false); shareTriggerRef.current?.focus(); }
+            if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+                const items = Array.from(shareRef.current?.querySelectorAll<HTMLButtonElement>('[role=menuitem]') || []);
+                if (!items.length) return;
+                event.preventDefault();
+                const index = items.indexOf(document.activeElement as HTMLButtonElement);
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+                items[next]?.focus();
+            }
+        };
+        document.addEventListener('pointerdown', outside); document.addEventListener('keydown', key);
+        return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', key); };
+    }, [shareMenuOpen]);
+    const handleShare = async (action: 'copy' | 'word') => {
+        if (shareBusy.current) return;
+        shareBusy.current = true; setSharePending(true); setShareStatus(''); setShareMenuOpen(false);
+        try {
+            if (!await controller.flush()) return;
+            const saved = controller.snapshot().meeting;
+            const revision = saved.editState?.meetingRevision ?? 0;
+            const result = action === 'copy'
+                ? await window.electronAPI.copyMeetingMinutes(saved.id, revision)
+                : await window.electronAPI.exportMeetingDocx(saved.id, { profile: 'minutes', expectedRevision: revision });
+            if (result.success) setShareStatus(action === 'copy' ? '已复制' : '已导出');
+            else if (result.error === 'conflict') {
+                const latest = await window.electronAPI.getMeetingDetails(saved.id);
+                if (latest) controller.refresh(latest);
+                setShareStatus('记录已变化，已同步最新内容，请重试。');
+            } else if (!('cancelled' in result && result.cancelled)) {
+                setShareStatus(result.error === 'summary_not_ready' ? '会议纪要尚未生成完成。' : action === 'copy' ? '复制失败，请重试' : '导出失败，请重试');
+            }
+        } catch { setShareStatus(action === 'copy' ? '复制失败，请重试' : '导出失败，请重试'); }
+        finally { shareBusy.current = false; setSharePending(false); }
+    };
     const [followUpCopyStatus, setFollowUpCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [submittedQuery, setSubmittedQuery] = useState('');
@@ -198,48 +242,8 @@ const MeetingDetails = React.forwardRef<MeetingDetailsHandle, MeetingDetailsProp
     const handleCopy = async () => {
         if (!await controller.flush()) return;
         const meeting = controller.snapshot().meeting;
-        const visibleCoachingInsights = getVisibleCoachingInsights(meeting.detailedSummary);
-        const visibleFollowUpDraft = getVisibleFollowUpDraft(meeting.detailedSummary);
-        const followUpDraftNotice = hasManuallyEditedActions(meeting.editState) ? '（行动项已修改，草稿未自动更新）' : '';
         let textToCopy = '';
-
-        if (activeTab === 'summary' && meeting.detailedSummary) {
-            const formatList = (items?: string[]) => items && items.length > 0
-                ? items.map(item => `- ${item}`).join('\n')
-                : '无';
-            const sectionsText = meeting.detailedSummary.sections && meeting.detailedSummary.sections.length > 0
-                ? meeting.detailedSummary.sections
-                    .filter(section => section.bullets.length > 0)
-                    .map(section => `${section.title}：\n${formatList(section.bullets)}`)
-                    .join('\n\n')
-                : '';
-            const coachingText = visibleCoachingInsights.length > 0
-                ? visibleCoachingInsights
-                    .map(insight => `- ${insight.title}：${insight.detail}${insight.evidence ? `\n  证据：${insight.evidence}` : ''}`)
-                    .join('\n')
-                : '';
-            textToCopy = `
-会议：${meeting.title}
-日期：${new Date(meeting.date).toLocaleDateString()}
-
-概述：
-${meeting.detailedSummary.overview || ''}
-
-行动项：
-${formatList(meeting.detailedSummary.actionItemsStructured?.map(formatMeetingActionItem))}
-
-要点：
-${formatList(meeting.detailedSummary.keyPoints)}
-
-决策项：
-${formatList(meeting.detailedSummary.decisions)}
-
-待确认事项：
-${formatList(meeting.detailedSummary.openQuestions)}
-
-${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `辅导：\n${coachingText}\n\n` : ''}${visibleFollowUpDraft ? `跟进草稿${followUpDraftNotice}：\n${visibleFollowUpDraft}` : ''}
-            `.trim();
-        } else if (activeTab === 'transcript' && meeting.transcript) {
+        if (activeTab === 'transcript' && meeting.transcript) {
             textToCopy = meeting.transcript.map(t => {
                 const speaker = resolveSpeakerIdentity(t).label;
                 return `[${formatTime(t.timestamp)}] ${speaker}: ${t.text}`;
@@ -459,15 +463,27 @@ ${sectionsText ? `分区摘要：\n${sectionsText}\n\n` : ''}${coachingText ? `�
                                 </div>
                             )}
 
-                            <button
+                            {activeTab === 'summary' ? <div ref={shareRef} className="relative">
+                                <button ref={shareTriggerRef} type="button" aria-haspopup="menu" aria-expanded={shareMenuOpen} disabled={sharePending}
+                                    onClick={() => setShareMenuOpen(open => !open)}
+                                    className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary disabled:opacity-60">
+                                    分享纪要 <ChevronDown size={14} />
+                                </button>
+                                {shareMenuOpen && <div role="menu" aria-label="分享纪要" className={`absolute right-0 top-7 z-50 w-40 rounded-lg border p-1 shadow-xl ${isLight ? 'bg-white border-black/10' : 'bg-[#1C1C1E] border-white/10'}`}>
+                                    <button role="menuitem" autoFocus type="button" onClick={() => void handleShare('copy')} className="block w-full rounded px-3 py-2 text-left text-xs font-semibold text-text-primary hover:bg-bg-item-active focus-visible:outline">复制纪要</button>
+                                    <button role="menuitem" type="button" onClick={() => void handleShare('word')} className="block w-full rounded px-3 py-2 text-left text-xs text-text-secondary hover:bg-bg-item-active focus-visible:outline">导出 Word</button>
+                                </div>}
+                            </div> : <button
                                 onClick={handleCopy}
                                 className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors"
                             >
                                 {isCopied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                                {isCopied ? '已复制' : activeTab === 'summary' ? '复制完整摘要' : activeTab === 'transcript' ? '复制完整转录' : '复制使用记录'}
-                            </button>
+                                {isCopied ? '已复制' : activeTab === 'transcript' ? '复制完整转录' : '复制使用记录'}
+                            </button>}
                         </div>
                     </div>
+
+                    {shareStatus && <p role="status" className="-mt-5 mb-6 text-right text-xs text-text-secondary">{shareStatus}</p>}
 
                     {skillExportStatus && (
                         <div className={`-mt-5 mb-6 flex flex-wrap items-center justify-end gap-2 text-xs ${skillExportStatus.error ? 'text-red-500' : 'text-text-tertiary'}`}>

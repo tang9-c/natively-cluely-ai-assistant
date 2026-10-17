@@ -1,7 +1,7 @@
 // ipcHandlers.ts
 
 import * as crypto from 'crypto';
-import { app, BrowserWindow, dialog, ipcMain, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, systemPreferences } from 'electron';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -41,6 +41,7 @@ import {
   hasExportableMeetingSummary,
   safeDocxFilename,
 } from './services/MeetingDocxExportService';
+import { buildMeetingMinutes } from './services/MeetingShareService';
 import { getContextQualityDiagnosticsCollector } from './services/eval/ContextQualityDiagnostics';
 import { QaReportService } from './services/qa/QaReportService';
 import { telemetryService } from './services/telemetry/TelemetryService';
@@ -3504,33 +3505,55 @@ export function initializeIpcHandlers(appState: AppState): void {
     return DatabaseManager.getInstance().getMeetingDetails(id);
   });
 
-  safeHandle('export-meeting-docx', async (_event, meetingId: string, includeTranscript: boolean) => {
-    const meeting = typeof meetingId === 'string'
-      ? DatabaseManager.getInstance().getMeetingDetails(meetingId)
-      : null;
-    if (!meeting) return { success: false, error: 'meeting_not_found' };
-    if (!hasExportableMeetingSummary(meeting)) {
-      return { success: false, error: 'summary_not_ready' };
+  safeHandle('copy-meeting-minutes', async (_event, meetingId: string, expectedRevision: number) => {
+    if (typeof meetingId !== 'string' || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
+      return { success: false, error: 'invalid_input' };
     }
-
-    const result = await ((dialog.showSaveDialog as any)({
-      title: '导出会议纪要',
-      defaultPath: safeDocxFilename(meeting.title, Boolean(includeTranscript)),
-      filters: [{ name: 'Word 文档', extensions: ['docx'] }],
-    }) as Promise<{ canceled: boolean; filePath?: string }>);
-    if (result.canceled || !result.filePath) {
-      return { success: false, cancelled: true };
-    }
-
     try {
-      const buffer = await buildMeetingDocxBuffer(meeting, { includeTranscript: Boolean(includeTranscript) });
+      const meeting = DatabaseManager.getInstance().getMeetingDetails(meetingId);
+      if (!meeting) return { success: false, error: 'meeting_not_found' };
+      if ((meeting.editState?.meetingRevision ?? 0) !== expectedRevision) return { success: false, error: 'conflict' };
+      const minutes = buildMeetingMinutes(meeting);
+      clipboard.write({ text: minutes.text, html: minutes.html });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error && error.message === 'summary_not_ready' ? 'summary_not_ready' : 'copy_failed' };
+    }
+  });
+
+  safeHandle('export-meeting-docx', async (_event, meetingId: string,
+    includeTranscript: boolean | { profile: 'minutes' | 'archive'; expectedRevision: number }) => {
+    const options: { profile: 'minutes' | 'archive'; expectedRevision?: number } = typeof includeTranscript === 'boolean'
+      ? { profile: includeTranscript ? 'archive' as const : 'minutes' as const }
+      : includeTranscript;
+    if (typeof meetingId !== 'string' || !options || !['minutes', 'archive'].includes(options.profile)
+      || (typeof includeTranscript !== 'boolean' && !Number.isSafeInteger(options.expectedRevision))
+      || (options.expectedRevision !== undefined && (!Number.isSafeInteger(options.expectedRevision) || options.expectedRevision < 0))) {
+      return { success: false, error: 'invalid_input' };
+    }
+    try {
+      // This detached DB snapshot remains fixed while the system save dialog is open.
+      const meeting = DatabaseManager.getInstance().getMeetingDetails(meetingId);
+      if (!meeting) return { success: false, error: 'meeting_not_found' };
+      if (options.expectedRevision !== undefined && (meeting.editState?.meetingRevision ?? 0) !== options.expectedRevision) {
+        return { success: false, error: 'conflict' };
+      }
+      if (options.profile === 'minutes') buildMeetingMinutes(meeting);
+      else if (!hasExportableMeetingSummary(meeting)) return { success: false, error: 'summary_not_ready' };
+      const result = await ((dialog.showSaveDialog as any)({
+        title: '导出会议纪要',
+        defaultPath: safeDocxFilename(meeting.title, options.profile === 'archive'),
+        filters: [{ name: 'Word 文档', extensions: ['docx'] }],
+      }) as Promise<{ canceled: boolean; filePath?: string }>);
+      if (result.canceled || !result.filePath) return { success: false, cancelled: true };
+      const buffer = await buildMeetingDocxBuffer(meeting, options);
       await fs.promises.writeFile(result.filePath, buffer);
       return { success: true, filePath: result.filePath };
     } catch (error) {
       console.warn('[IPC] export-meeting-docx failed', {
         name: error instanceof Error ? error.name : 'UnknownError',
       });
-      return { success: false, error: 'export_failed' };
+      return { success: false, error: error instanceof Error && error.message === 'summary_not_ready' ? 'summary_not_ready' : 'export_failed' };
     }
   });
 

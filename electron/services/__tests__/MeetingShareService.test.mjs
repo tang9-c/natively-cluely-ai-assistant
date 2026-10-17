@@ -47,3 +47,33 @@ test('DOCX paragraphs, plain text and HTML use the identical ordered content mod
  const htmlTexts=[...result.html.matchAll(/<(?:h1|h2|p|li)>(.*?)<\/(?:h1|h2|p|li)>/g)].map(([,text])=>decode(text));
  assert.deepEqual(htmlTexts,paragraphs);
 });
+
+test('a bold-only factual overview is content rather than a section label',()=>{
+ const result=project({...fixture,detailedSummary:{overview:'**原始摘要**',actionItems:[],keyPoints:[]}});
+ assert.ok(result.text.includes('原始摘要'));
+});
+
+test('public Markdown headings retain long Chinese and English paragraphs without empty sections',()=>{
+ const long='星舟 Azure OpenAI 接口与中文字段保持一致。'.repeat(120);
+ const result=project({...fixture,detailedSummary:{overview:`## 方案范围\n${long}\n\n## 空章节\n\n## 辅导建议\nPRIVATE`,actionItems:[],keyPoints:[]}});
+ assert.ok(result.blocks.some(block=>block.kind==='heading'&&block.text==='方案范围'));
+ assert.ok(result.blocks.some(block=>block.text===long));assert.doesNotMatch(result.text,/空章节|PRIVATE/);
+});
+
+test('canonical rows with distinct saved owners survive while unknown metadata is omitted',()=>{
+ const result=project({...fixture,detailedSummary:{schemaVersion:3,overview:'有效摘要',keyPoints:[],actionItems:[],actionItemsStructured:[{id:'a',text:'同名任务',owner:'甲'},{id:'b',text:'同名任务',owner:'乙'},{id:'c',text:'未分配任务'}]}});
+ assert.equal((result.text.match(/同名任务/g)||[]).length,2);
+ assert.match(result.text,/负责人：甲/);assert.match(result.text,/负责人：乙/);
+ assert.doesNotMatch(result.text,/待确认|未知|截止日期/);
+});
+
+test('known legacy mode fact labels are shared while explicitly labeled coaching and Q&A stay private',()=>{
+ const result=project({...fixture,summary:'',detailedSummary:{overview:'## 会议概述\n公开说明\n## 改进空间\nPRIVATE IMPROVEMENT\n## 问题与回答\nPRIVATE INTERVIEW\n## 要点\n公开要点',actionItems:[],keyPoints:[],sections:[{title:'摘要',bullets:['通用模式事实']},{title:'概览',bullets:['旧模式概览']},{title:'已做决策',bullets:['团队已确认决定']},{title:'回答质量',bullets:['PRIVATE REVIEW']}]}});
+ for(const value of ['公开说明','公开要点','通用模式事实','旧模式概览','团队已确认决定'])assert.ok(result.text.includes(value),value);
+ assert.doesNotMatch(result.text,/PRIVATE/);
+});
+
+test('privacy filtering uses explicit category labels without inferring privacy from a factual heading',()=>{
+ const result=project({...fixture,detailedSummary:{overview:'## 辅导产品部署范围\n这是一条产品会议事实\n\n## 2. 辅导建议\nPRIVATE\n## 决策\n按既定范围试点',actionItems:[],keyPoints:[]}});
+ assert.ok(result.text.includes('这是一条产品会议事实'));assert.doesNotMatch(result.text,/PRIVATE/);
+});

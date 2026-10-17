@@ -57,6 +57,7 @@ const meeting = {
   transcript: [{
     speaker: 'interviewer',
     text: '这段转录只应出现在完整档案中。',
+    originalContent: '修正前的旧转录正文',
     timestamp: 10_000,
     speakerIdentityCorrection: { isMe: true, source: 'user', correctedAt: 20_000 },
   }],
@@ -94,6 +95,7 @@ test('full DOCX adds a transcript appendix and respects speaker correction', asy
   assert.match(xml, /完整转录/);
   assert.match(xml, /我 \[00:10\]/);
   assert.match(xml, /这段转录只应出现在完整档案中/);
+  assert.doesNotMatch(xml, /修正前的旧转录正文/);
 });
 
 test('legacy summary is exportable while placeholder-only meetings are rejected', async () => {

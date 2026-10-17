@@ -1,7 +1,11 @@
 import { test, expect } from './fixtures';
 
 async function seed(electronApp: any, transcriptCount = 1) {
- await electronApp.evaluate(({ app }: any, transcriptCount: number) => {
+ await electronApp.evaluate(({ app, clipboard, dialog }: any, transcriptCount: number) => {
+  (globalThis as any).__minutesClipboard=[];
+  clipboard.write=(data: any)=>{(globalThis as any).__minutesClipboard.push(data);};
+  clipboard.writeText=(text: string)=>{(globalThis as any).__minutesClipboard.push({text});};
+  dialog.showSaveDialog=async()=>({canceled:true});
   const require=process.getBuiltinModule('node:module').createRequire(process.getBuiltinModule('node:path').join(process.cwd(),'edit-e2e.cjs'));
   const blocked=()=>{throw new Error('E2E external boundary disabled');};
   require('node:http').request=blocked;require('node:https').request=blocked;globalThis.fetch=blocked;
@@ -69,15 +73,15 @@ test('failed save retains input and blocks tab, actual return and copy until ret
  await expect(page.getByLabel('摘要正文',{exact:true})).toContainText('失败时保留文字');
  await page.getByRole('button',{name:'返回会议列表',exact:true}).click();
  await expect(page.getByLabel('摘要正文',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'复制完整摘要',exact:true}).click();
- expect(await page.evaluate(()=>(window as any).__copied.length)).toBe(0);
+ await share(page,'复制纪要');
+ expect(await copiedMinutes(electronApp)).toHaveLength(0);
  await page.screenshot({path:'.tmp/v28-t4/save-failure-retains-draft.png'});
  expect((await readMeeting(page)).detailedSummary.overview).toBe('**原始摘要**');
  await database(electronApp,'DROP TRIGGER fail_summary');
  await page.getByRole('button',{name:'重试保存',exact:true}).click();
  await expect(page.getByText('已保存',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'复制完整摘要',exact:true}).click();
- expect(await page.evaluate(()=>(window as any).__copied[0])).toContain('失败时保留文字');
+ await share(page,'复制纪要');
+ expect((await copiedMinutes(electronApp))[0].text).toContain('失败时保留文字');
  expect((await readMeeting(page)).detailedSummary.overview).toBe('**失败时保留文字**');
 });
 
@@ -86,8 +90,8 @@ test('immediate copy and actual Launcher return flush latest draft, followed by 
  await edit(page,'行动项 2 负责人','乙');await edit(page,'行动项 2 期限','明天');
  await page.screenshot({path:'.tmp/v28-t4/action-owner-deadline.png'});
  await edit(page,'摘要正文','**复制导出最新摘要**');
- await page.getByRole('button',{name:'复制完整摘要',exact:true}).click();
- const copied=await page.evaluate(()=>(window as any).__copied[0]);expect(copied).toContain('复制导出最新摘要');expect(copied).toContain('乙');expect(copied).toContain('明天');expect(copied).toContain('行动项已修改，草稿未自动更新');
+ await share(page,'复制纪要');
+ const copied=(await copiedMinutes(electronApp))[0].text;expect(copied).toContain('复制导出最新摘要');expect(copied).toContain('乙');expect(copied).toContain('明天');expect(copied).not.toContain('原有跟进草稿');
  await edit(page,'会议标题','即时返回标题');
  await page.getByRole('button',{name:'返回会议列表',exact:true}).click();
  await expect(page.getByLabel('摘要正文',{exact:true})).toBeHidden();
@@ -103,7 +107,7 @@ test('immediate copy and actual Launcher return flush latest draft, followed by 
   const require=process.getBuiltinModule('node:module').createRequire(process.getBuiltinModule('node:path').join(process.cwd(),'export-fixture.cjs'));
   const zip=await require('jszip').loadAsync(require('node:fs').readFileSync(path));return zip.file('word/document.xml').async('string');
  },path);
- for(const text of ['复制导出最新摘要','即时返回标题','负责人：乙','截止日期：明天','行动项已修改，草稿未自动更新','字符串任务','结构任务'])expect(xml).toContain(text);
+ for(const text of ['复制导出最新摘要','即时返回标题','负责人：乙','截止日期：明天','字符串任务','结构任务'])expect(xml).toContain(text);
  expect(xml.match(/结构任务/g)?.length).toBe(1);
 });
 
@@ -171,7 +175,7 @@ test('in-flight rapid edits, same-revision notifications and identity share a se
  await page.getByRole('button',{name:'转录',exact:true}).click();
  expect(await page.locator('[data-transcript-row-key]').count()).toBeLessThan(40);
  await page.getByRole('button',{name:'身份未确认',exact:true}).first().click();await page.getByRole('menuitem',{name:'标记为我',exact:true}).click();
- await expect(page.getByText('身份已修改，已有摘要可能需要修正。')).toBeVisible();
+ await expect(page.getByText('记录已修改，摘要可能需要调整。')).toBeVisible();
  const saved=await readMeeting(page);expect(saved.transcript).toHaveLength(5000);expect(saved.title).toBe('并行字段标题');expect(saved.detailedSummary.overview).toBe('保存中再次修改');expect(saved.transcript[0].speakerIdentityCorrection.identity).toBe('me');
  const requests=await electronApp.evaluate(()=>(globalThis as any).__editRequests);
  expect(requests.map((request: any)=>request.expectedRevision)).toEqual(requests.map((_: any,index: number)=>index));
@@ -196,7 +200,7 @@ test('review I1: keyboard clear pause and replacement retain action row plus own
  const content=await eraseWithKeyboard(page,'行动项 2 内容');
  await expect(content).toBeVisible();expect(await row!.evaluate(node=>node.isConnected)).toBe(true);
  await page.waitForTimeout(750); // Deliberately cross the autosave debounce with an empty intermediate input.
- await expect(content).toBeFocused();await expect(page.getByText('行动项内容无效，请填写具体内容或使用删除。',{exact:true})).toBeVisible();
+ await expect(content).toBeFocused();await expect(page.getByText('内容无效，请保留有效转录或填写具体行动项。删除行动项请使用删除。',{exact:true})).toBeVisible();
  await page.screenshot({path:'.tmp/v28-t4/fix-round-1/empty-action-draft-retained.png'});
  await eraseWithKeyboard(page,'行动项 2 负责人');await page.keyboard.type('乙');
  await eraseWithKeyboard(page,'行动项 2 期限');
@@ -237,7 +241,7 @@ test('review I3: failed identity then title input keeps retry and recovers copy 
  await expect(page.getByRole('button',{name:'重试保存',exact:true})).toBeVisible();
  await edit(page,'会议标题','身份失败后的标题');await page.waitForTimeout(750);
  await expect(page.getByRole('button',{name:'重试保存',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'复制完整转录',exact:true}).click();expect(await page.evaluate(()=>(window as any).__copied.length)).toBe(0);
+ await page.getByRole('button',{name:'复制完整转录',exact:true}).click();expect(await copiedMinutes(electronApp)).toHaveLength(0);
  await page.getByRole('button',{name:'返回会议列表',exact:true}).click();await expect(page.getByLabel('会议标题',{exact:true})).toBeVisible();
  await page.screenshot({path:'.tmp/v28-t4/fix-round-1/identity-failure-with-title-draft.png'});
  await database(electronApp,'DROP TRIGGER fail_identity');await page.getByRole('button',{name:'重试保存',exact:true}).click();
@@ -254,14 +258,151 @@ test('review I1 punctuation: pause preserves metadata and copy plus actual retur
  await page.waitForTimeout(750); // Pure punctuation must stay a draft past autosave.
  await expect(content).toBeFocused();expect(await row!.evaluate(node=>node.isConnected)).toBe(true);
  await expect(content).toHaveText('。');await expect(page.getByLabel('行动项 2 负责人',{exact:true})).toHaveText('甲');await expect(page.getByLabel('行动项 2 期限',{exact:true})).toHaveText('周五');
- await expect(page.getByText('行动项内容无效，请填写具体内容或使用删除。',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'复制完整摘要',exact:true}).click();expect(await page.evaluate(()=>(window as any).__copied.length)).toBe(0);
+ await expect(page.getByText('内容无效，请保留有效转录或填写具体行动项。删除行动项请使用删除。',{exact:true})).toBeVisible();
+ await share(page,'复制纪要');expect(await copiedMinutes(electronApp)).toHaveLength(0);
  await page.getByRole('button',{name:'返回会议列表',exact:true}).click();await expect(content).toBeVisible();expect(await row!.evaluate(node=>node.isConnected)).toBe(true);
  expect((await readMeeting(page)).detailedSummary.actionItemsStructured[1]).toMatchObject({id:'owned',text:'结构任务',owner:'甲',deadline:'周五'});
  await page.screenshot({path:'.tmp/v28-t4/fix-round-2/punctuation-draft-retained.png'});
  await content.click();await page.keyboard.type('补充任务。');
- await page.getByRole('button',{name:'复制完整摘要',exact:true}).click();
- expect(await page.evaluate(()=>(window as any).__copied[0])).toContain('。补充任务。');
+ await share(page,'复制纪要');
+ expect((await copiedMinutes(electronApp))[0].text).toContain('。补充任务。');
  expect((await readMeeting(page)).detailedSummary.actionItemsStructured[1]).toMatchObject({id:'owned',text:'。补充任务。',owner:'甲',deadline:'周五'});
  await page.getByRole('button',{name:'返回会议列表',exact:true}).click();await expect(content).toBeHidden();
+});
+
+async function share(page: any, action: string) {
+ await page.getByRole('button',{name:'分享纪要',exact:true}).click();
+ await page.getByRole('menuitem',{name:action,exact:true}).click();
+}
+async function copiedMinutes(electronApp: any) {return electronApp.evaluate(()=>(globalThis as any).__minutesClipboard || []);}
+async function minutesClipboard(electronApp: any, fail = false) {
+ await electronApp.evaluate(({clipboard,dialog}: any, fail: boolean)=>{
+  (globalThis as any).__minutesClipboard=[];
+  clipboard.write=(data: any)=>{if(fail)throw new Error('fixture_clipboard_failure');(globalThis as any).__minutesClipboard.push(data);};
+  clipboard.writeText=()=>{throw new Error('Use intercepted rich clipboard boundary');};
+  dialog.showSaveDialog=async()=>({canceled:true});
+ },fail);
+}
+
+test('T6 concise share menu copies only saved minutes via main-process rich clipboard',async({electronApp,page})=>{
+ await seed(electronApp);await minutesClipboard(electronApp);await open(page);
+ await edit(page,'摘要正文','**星舟 Azure 最新纪要**\n\n## 私人问答\n私有回答\n\n## 要点\n公开信息');
+ await page.getByRole('button',{name:'分享纪要',exact:true}).click();
+ await expect(page.getByRole('menu',{name:'分享纪要',exact:true})).toBeVisible();
+ await expect(page.getByRole('menuitem')).toHaveText(['复制纪要','导出 Word']);
+ await expect(page.getByRole('button',{name:'复制完整摘要',exact:true})).toHaveCount(0);
+ await page.screenshot({path:'.tmp/v28-t6/share-menu.png',animations:'disabled'});
+ await page.getByRole('menuitem',{name:'复制纪要',exact:true}).click();
+ await expect(page.getByText('已复制',{exact:true})).toBeVisible();
+ const writes=await copiedMinutes(electronApp);expect(writes).toHaveLength(1);
+ expect(writes[0].text).toContain('星舟 Azure 最新纪要');expect(writes[0].html).toContain('<h1>');expect(writes[0].html).toContain('<ul>');
+ for(const secret of ['私有回答','原有跟进草稿','待确认问题','原始转录','**'])expect(writes[0].text).not.toContain(secret);
+ expect(writes[0].text.match(/结构任务/g)).toHaveLength(1);
+ const saved=await readMeeting(page);
+ expect(saved.detailedSummary.overview).toContain('星舟 Azure 最新纪要');
+ const stale=await page.evaluate(async(revision: number)=>(window.electronAPI as any).copyMeetingMinutes('editing-fixture',revision),saved.editState.meetingRevision-1);
+ expect(stale).toEqual({success:false,error:'conflict'});expect(await copiedMinutes(electronApp)).toHaveLength(1);
+ const invalid=await page.evaluate(async()=>(window.electronAPI as any).copyMeetingMinutes('editing-fixture',-1));
+ expect(invalid).toEqual({success:false,error:'invalid_input'});
+ await page.screenshot({path:'.tmp/v28-t6/share-copied.png',animations:'disabled'});
+});
+
+test('T6 IPC snapshots reject conflicts and preserve the selected saved version across a delayed dialog',async({electronApp,page})=>{
+ await seed(electronApp);await minutesClipboard(electronApp);await open(page);
+ expect(await page.evaluate(()=>typeof (window.electronAPI as any).copyMeetingMinutes)).toBe('function');
+ expect(await page.evaluate(async()=>(window.electronAPI as any).exportMeetingDocx('editing-fixture',{profile:'minutes'}))).toEqual({success:false,error:'invalid_input'});
+ const before=await readMeeting(page);const revision=before.editState.meetingRevision;
+ expect(await page.evaluate(async(revision:number)=>window.electronAPI.copyMeetingMinutes('editing-fixture',revision),revision)).toEqual({success:true});
+ const copied=(await copiedMinutes(electronApp))[0].text;
+ expect(await page.evaluate(async()=> (window.electronAPI as any).copyMeetingMinutes('missing',0))).toEqual({success:false,error:'meeting_not_found'});
+ await electronApp.evaluate(({dialog,app}: any)=>{
+  (globalThis as any).__saveDialogOpened=false;(globalThis as any).__saveDialogRelease=null;
+  dialog.showSaveDialog=async()=>{(globalThis as any).__saveDialogOpened=true;return new Promise(resolve=>{(globalThis as any).__saveDialogRelease=()=>resolve({canceled:false,filePath:process.getBuiltinModule('node:path').join(app.getPath('userData'),'snapshot.docx')});});};
+ });
+ const pending=page.evaluate(async(revision: number)=>(window.electronAPI as any).exportMeetingDocx('editing-fixture',{profile:'minutes',expectedRevision:revision}),revision);
+ await expect.poll(()=>electronApp.evaluate(()=>(globalThis as any).__saveDialogOpened)).toBe(true);
+ const edited=await page.evaluate(async(revision: number)=>window.electronAPI.applyMeetingEdit({meetingId:'editing-fixture',expectedRevision:revision,operation:{type:'summary',patch:{overview:'保存对话框之后的新版本'}}}),revision);
+ expect(edited.ok).toBe(true);
+ await electronApp.evaluate(()=>(globalThis as any).__saveDialogRelease());
+ const result=await pending;expect(result.success).toBe(true);
+ const xml=await electronApp.evaluate(async(_: any,file: string)=>{const require=process.getBuiltinModule('node:module').createRequire(process.getBuiltinModule('node:path').join(process.cwd(),'snapshot.cjs'));const zip=await require('jszip').loadAsync(require('node:fs').readFileSync(file));return zip.file('word/document.xml').async('string');},result.filePath);
+ expect(xml).toContain('原始摘要');expect(xml).not.toContain('保存对话框之后的新版本');expect(xml).not.toContain('原有跟进草稿');
+ const paragraphs=[...xml.matchAll(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g)].map(([p])=>[...p.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(([,t])=>t.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')).join('')).filter(Boolean);
+ expect(paragraphs).toEqual(copied.split('\n').filter(Boolean).map((line:string)=>line.replace(/^• /,'')));
+ const conflict=await page.evaluate(async(revision: number)=>(window.electronAPI as any).exportMeetingDocx('editing-fixture',{profile:'minutes',expectedRevision:revision}),revision);
+ expect(conflict).toEqual({success:false,error:'conflict'});
+ await minutesClipboard(electronApp,true);
+ const failed=await page.evaluate(async(revision: number)=>(window.electronAPI as any).copyMeetingMinutes('editing-fixture',revision),revision+1);
+ expect(failed).toEqual({success:false,error:'copy_failed'});expect(await copiedMinutes(electronApp)).toHaveLength(0);
+});
+
+test.afterEach(async({electronApp},testInfo)=>{
+ if(!testInfo.title.startsWith('T6 '))return;
+ const child=electronApp.process();
+ let timeout: ReturnType<typeof setTimeout>;
+ const exited=new Promise<{code:number|null;signal:string|null}>((resolve,reject)=>{
+  timeout=setTimeout(()=>reject(new Error('T6 Electron did not quit naturally')),15000);
+  child.once('exit',(code,signal)=>resolve({code,signal}));
+ });
+ try {
+  await electronApp.evaluate(({app}: any)=>app.quit()).catch(()=>{});
+  const result=await exited;console.log('T6 natural Electron exit',JSON.stringify(result));
+  expect(result).toEqual({code:0,signal:null});
+ } finally {clearTimeout(timeout!);}
+});
+
+test('T6 copy failure and Word cancellation, write failure and success have accurate feedback',async({electronApp,page})=>{
+ await seed(electronApp);await minutesClipboard(electronApp,true);await open(page);
+ await share(page,'复制纪要');await expect(page.getByText('复制失败，请重试',{exact:true})).toBeVisible();
+ await expect(page.getByText('已复制',{exact:true})).toHaveCount(0);expect(await copiedMinutes(electronApp)).toHaveLength(0);
+ await page.screenshot({path:'.tmp/v28-t6/clipboard-failure.png',animations:'disabled'});
+ await minutesClipboard(electronApp);
+ await share(page,'导出 Word');await expect(page.getByRole('button',{name:'分享纪要',exact:true})).toBeEnabled();
+ await expect(page.getByText('已导出',{exact:true})).toHaveCount(0);await expect(page.getByText('导出失败，请重试',{exact:true})).toHaveCount(0);
+ await page.screenshot({path:'.tmp/v28-t6/word-cancelled.png',animations:'disabled'});
+ await electronApp.evaluate(({dialog,app}: any)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:process.getBuiltinModule('node:path').join(app.getPath('userData'),'missing-directory','fail.docx')});});
+ await share(page,'导出 Word');await expect(page.getByText('导出失败，请重试',{exact:true})).toBeVisible();await expect(page.getByText('已导出',{exact:true})).toHaveCount(0);
+ await page.screenshot({path:'.tmp/v28-t6/word-failure.png',animations:'disabled'});
+ await electronApp.evaluate(({dialog,app}: any)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:process.getBuiltinModule('node:path').join(app.getPath('userData'),'success.docx')});});
+ await share(page,'导出 Word');await expect(page.getByText('已导出',{exact:true})).toBeVisible();
+ await page.screenshot({path:'.tmp/v28-t6/word-success.png',animations:'disabled'});
+});
+
+test('T6 share waits for all rapid edits in the shared queue before creating a DB snapshot',async({electronApp,page})=>{
+ await seed(electronApp);await minutesClipboard(electronApp);await open(page);
+ await electronApp.evaluate(({ipcMain}: any)=>{
+  const original=(ipcMain as any)._invokeHandlers.get('meeting-apply-edit');let count=0;
+  (globalThis as any).__releaseShareEdit=null;
+  ipcMain.removeHandler('meeting-apply-edit');ipcMain.handle('meeting-apply-edit',async(event:any,request:any)=>{
+   if(++count===1)await new Promise(resolve=>{(globalThis as any).__releaseShareEdit=resolve;});return original(event,request);
+  });
+ });
+ await edit(page,'摘要正文','保存中的版本');
+ await expect.poll(()=>electronApp.evaluate(()=>typeof (globalThis as any).__releaseShareEdit)).toBe('function');
+ await share(page,'复制纪要');
+ expect(await copiedMinutes(electronApp)).toHaveLength(0);
+ await page.getByLabel('摘要正文',{exact:true}).click();await page.getByLabel('摘要正文',{exact:true}).fill('快速编辑最终版本');
+ await electronApp.evaluate(()=>(globalThis as any).__releaseShareEdit());
+ await expect(page.getByText('已复制',{exact:true})).toBeVisible();
+ expect(await copiedMinutes(electronApp)).toHaveLength(1);expect((await copiedMinutes(electronApp))[0].text).toContain('快速编辑最终版本');expect((await copiedMinutes(electronApp))[0].text).not.toContain('保存中的版本');
+ expect((await readMeeting(page)).detailedSummary.overview).toBe('快速编辑最终版本');
+ await page.screenshot({path:'.tmp/v28-t6/rapid-edits-latest.png',animations:'disabled'});
+});
+
+test('T6 revision conflict refreshes saved state and requires an explicit retry before copy',async({electronApp,page})=>{
+ await seed(electronApp);await minutesClipboard(electronApp);await open(page);
+ await electronApp.evaluate(({ipcMain,app}: any)=>{
+  const original=(ipcMain as any)._invokeHandlers.get('copy-meeting-minutes');let first=true;
+  ipcMain.removeHandler('copy-meeting-minutes');ipcMain.handle('copy-meeting-minutes',async(event:any,id:string,revision:number)=>{
+   if(first){first=false;const require=process.getBuiltinModule('node:module').createRequire(process.getBuiltinModule('node:path').join(process.cwd(),'share-conflict.cjs'));
+    const db=new (require('better-sqlite3'))(require('node:path').join(app.getPath('userData'),'natively.db'));
+    const row=db.prepare('SELECT summary_json,edit_state_json FROM meetings WHERE id=?').get(id);const summary=JSON.parse(row.summary_json);summary.detailedSummary.overview='冲突后的最新已保存纪要';const state=JSON.parse(row.edit_state_json);state.meetingRevision=(state.meetingRevision||0)+1;
+    db.prepare('UPDATE meetings SET summary_json=?,edit_state_json=? WHERE id=?').run(JSON.stringify(summary),JSON.stringify(state),id);db.close();
+   }return original(event,id,revision);
+  });
+ });
+ await share(page,'复制纪要');await expect(page.getByText('记录已变化，已同步最新内容，请重试。',{exact:true})).toBeVisible();
+ expect(await copiedMinutes(electronApp)).toHaveLength(0);await expect(page.getByLabel('摘要正文',{exact:true})).toHaveText('冲突后的最新已保存纪要');
+ await page.screenshot({path:'.tmp/v28-t6/share-conflict.png',animations:'disabled'});
+ await share(page,'复制纪要');await expect(page.getByText('已复制',{exact:true})).toBeVisible();expect((await copiedMinutes(electronApp))[0].text).toContain('冲突后的最新已保存纪要');
 });

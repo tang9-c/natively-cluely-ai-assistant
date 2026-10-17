@@ -13,8 +13,8 @@ test('meeting DOCX export is wired through IPC, preload, and renderer types', ()
 
   assert.match(ipc, /safeHandle\('export-meeting-docx'/);
   assert.match(ipc, /MeetingDocxExportService/);
-  assert.match(preload, /exportMeetingDocx:\s*\(meetingId:\s*string,\s*includeTranscript:\s*boolean\)\s*=>\s*\n?\s*ipcRenderer\.invoke\('export-meeting-docx'/);
-  assert.match(types, /exportMeetingDocx:\s*\(meetingId:\s*string,\s*includeTranscript:\s*boolean\)/);
+  assert.match(preload, /exportMeetingDocx:\s*\(meetingId:\s*string,\s*includeTranscript:\s*boolean\s*\|\s*\{[^}]+\}\)\s*=>\s*\n?\s*ipcRenderer\.invoke\('export-meeting-docx'/);
+  assert.match(types, /exportMeetingDocx:\s*\(meetingId:\s*string,\s*includeTranscript:\s*boolean\s*\|\s*\{[^}]+\}\)/);
 });
 
 test('meeting menu offers summary and full-transcript DOCX exports without the PDF generator', () => {

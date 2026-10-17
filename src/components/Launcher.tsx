@@ -118,7 +118,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
 
     const fetchMeetings = () => {
         if (window.electronAPI && window.electronAPI.getRecentMeetings) {
-            window.electronAPI.getRecentMeetings().then(setMeetings).catch(err => console.error("Failed to fetch meetings:", err));
+            return window.electronAPI.getRecentMeetings().then(setMeetings).catch(err => console.error("Failed to fetch meetings:", err));
         }
     };
 
@@ -147,9 +147,13 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         }
 
         try {
-            const result = await api(meetingId, includeTranscript);
+            const snapshot = await window.electronAPI.getMeetingDetails(meetingId);
+            const result = await api(meetingId, { profile: includeTranscript ? 'archive' : 'minutes', expectedRevision: snapshot?.editState?.meetingRevision ?? 0 });
             if (result.success || result.cancelled) return;
-            if (result.error === 'summary_not_ready') {
+            if (result.error === 'conflict') {
+                await fetchMeetings();
+                window.alert('记录已变化，请重试导出。');
+            } else if (result.error === 'summary_not_ready') {
                 window.alert('会议摘要尚未生成完成，请稍后重试。');
             } else if (result.error === 'meeting_not_found') {
                 window.alert('未找到该会议，请刷新会议列表后重试。');

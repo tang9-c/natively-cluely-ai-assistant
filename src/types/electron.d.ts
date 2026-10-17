@@ -938,8 +938,10 @@ export interface ElectronAPI {
   getRecentMeetings: () => Promise<Array<{ id: string; title: string; date: string; duration: string; summary: string }>>
   // @ipc-channel get-meeting-details
   getMeetingDetails: (id: string) => Promise<any>
+  // @ipc-channel copy-meeting-minutes
+  copyMeetingMinutes: (meetingId: string, expectedRevision: number) => Promise<{ success: boolean; error?: string }>;
   // @ipc-channel export-meeting-docx
-  exportMeetingDocx: (meetingId: string, includeTranscript: boolean) => Promise<{
+  exportMeetingDocx: (meetingId: string, includeTranscript: boolean | { profile: 'minutes' | 'archive'; expectedRevision: number }) => Promise<{
     success: boolean
     filePath?: string
     error?: string

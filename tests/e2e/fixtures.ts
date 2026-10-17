@@ -36,6 +36,7 @@ async function findLauncherPage(electronApp: ElectronApplication): Promise<Page>
 
 async function closeElectronApp(electronApp: ElectronApplication): Promise<void> {
   const child = electronApp.process();
+  if (child.exitCode !== null || child.signalCode !== null) return;
   const waitForExit = new Promise<void>((resolve) => {
     if (child.exitCode !== null || child.signalCode !== null) {
       resolve();
