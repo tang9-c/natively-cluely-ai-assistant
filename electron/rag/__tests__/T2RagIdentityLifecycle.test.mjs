@@ -13,7 +13,7 @@ const voice={provider:'local-speaker-verification',profileId:'me',isMe:true,conf
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function harness(){
   const db=new Database(':memory:');
-  db.exec(`CREATE TABLE meetings(id TEXT PRIMARY KEY,title TEXT,start_time INTEGER,created_at TEXT,summary_json TEXT,rag_transcript_hash TEXT,rag_index_state TEXT DEFAULT 'missing',embedding_provider TEXT,embedding_dimensions INTEGER,embedding_space TEXT);
+  db.exec(`CREATE TABLE meetings(id TEXT PRIMARY KEY,title TEXT,start_time INTEGER,created_at TEXT,summary_json TEXT,edit_state_json TEXT,rag_transcript_hash TEXT,rag_index_state TEXT DEFAULT 'missing',embedding_provider TEXT,embedding_dimensions INTEGER,embedding_space TEXT);
     CREATE TABLE transcripts(id INTEGER PRIMARY KEY,meeting_id TEXT,speaker TEXT,content TEXT,timestamp_ms INTEGER,speaker_identity_correction_json TEXT,speaker_verification_json TEXT,provider_speaker_id TEXT,diarization_provider TEXT,raw_segment_ids_json TEXT);
     CREATE TABLE chunks(id INTEGER PRIMARY KEY AUTOINCREMENT,meeting_id TEXT,chunk_index INTEGER,speaker TEXT,start_timestamp_ms INTEGER,end_timestamp_ms INTEGER,cleaned_text TEXT,token_count INTEGER,embedding BLOB);
     CREATE TABLE chunk_summaries(id INTEGER PRIMARY KEY,meeting_id TEXT,embedding BLOB);
@@ -122,4 +122,48 @@ test('identity correction during deferred live startup updates the queued source
   release();await starting;
   try{await h.indexer.tick(true);assert.deepEqual(h.store.getChunksForMeeting('fixture').map(x=>x.speaker),['身份未确认']);}
   finally{await h.indexer.stop();h.db.close();}
+});
+
+function savedIdentityFixture() {
+  const h=harness();
+  h.db.prepare('INSERT INTO transcripts(id,meeting_id,speaker,content,timestamp_ms,speaker_identity_correction_json) VALUES(1,?,?,?,?,?)')
+    .run('fixture','user','虚构测试资料由我发送',1,JSON.stringify({identity:'me',source:'user',correctedAt:1}));
+  const hash=fingerprintTranscript(h.db.prepare('SELECT *,timestamp_ms AS timestampMs FROM transcripts').all());
+  h.db.prepare("UPDATE meetings SET rag_index_state='complete',rag_transcript_hash=?,edit_state_json=? WHERE id='fixture'").run(hash,JSON.stringify({revision:0}));
+  const [id]=h.store.saveChunks([{meetingId:'fixture',chunkIndex:0,speaker:'ME',startMs:1,endMs:1,text:'虚构测试资料由我发送',tokenCount:8}]);
+  h.store.storeEmbedding(id,[1,0]);
+  h.correct=()=>{
+    h.db.prepare('UPDATE transcripts SET speaker_identity_correction_json=? WHERE id=1').run(JSON.stringify({identity:'unknown',source:'user',correctedAt:2}));
+    h.db.prepare("UPDATE meetings SET edit_state_json=? WHERE id='fixture'").run(JSON.stringify({revision:1}));
+  };
+  return h;
+}
+
+test('saved correction while retrieval waits rejects its captured ME evidence before prompting',async()=>{
+  const h=savedIdentityFixture();let release;let entered;
+  const waiting=new Promise(resolve=>entered=resolve);
+  h.pipeline.getEmbeddingForQuery=async()=>{entered();await new Promise(resolve=>release=resolve);throw new Error('fixture offline');};
+  const query=collect(h.manager.queryMeeting('fixture','测试资料'));
+  const rejected=assert.rejects(query,/STALE_MEETING_IDENTITY/);
+  try {
+    await waiting;h.correct();release();await rejected;
+    assert.equal(h.prompts.length,0,'captured stale ME evidence cannot be sent to the model');
+  } finally {release?.();h.db.close();}
+});
+
+for(const emittedBefore of [false,true]) test(`saved correction during ${emittedBefore?'next':'first'} streamed token stops the old identity response`,async()=>{
+  const h=savedIdentityFixture();let release;let entered;
+  const waiting=new Promise(resolve=>entered=resolve);
+  h.manager.llmHelper.streamChatWithGemini=async function*(prompt){
+    h.prompts.push(prompt);
+    if(emittedBefore)yield 'before correction';
+    entered();await new Promise(resolve=>release=resolve);
+    yield 'stale ME continuation';
+  };
+  const output=[];
+  const query=(async()=>{for await(const chunk of h.manager.queryMeeting('fixture','测试资料'))output.push(chunk);})();
+  try {
+    await waiting;h.correct();release();await query;
+    assert.deepEqual(output,emittedBefore?['before correction']:[],'no token from the superseded identity version is emitted after correction');
+  } finally {release?.();h.db.close();}
 });

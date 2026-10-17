@@ -368,6 +368,7 @@ export class RAGManager {
 
         const liveMeeting = this.liveIndexer.getActiveMeetingId() === meetingId;
         const liveIdentityRevision = liveMeeting ? this.liveIndexer.getIdentityRevision() : undefined;
+        const storedIdentityRevision = liveMeeting ? undefined : this.storedMeetingEditRevision(meetingId);
         if (liveMeeting && !this.liveIndexer.hasCurrentIdentity()) throw new Error('LIVE_TRANSCRIPT_CHANGED');
         if (!liveMeeting && !this.isStoredMeetingIdentityCurrent(meetingId)) throw new Error('STALE_MEETING_IDENTITY');
         // Check if meeting has embeddings (post-meeting RAG)
@@ -391,6 +392,10 @@ export class RAGManager {
             throw new Error('LIVE_TRANSCRIPT_CHANGED');
         }
 
+        if (!liveMeeting && (storedIdentityRevision !== this.storedMeetingEditRevision(meetingId) || !this.isStoredMeetingIdentityCurrent(meetingId))) {
+            throw new Error('STALE_MEETING_IDENTITY');
+        }
+
         if (context.chunks.length === 0) {
             // No context relevant to query - trigger wrapper fallback to use context window
             throw new Error('NO_RELEVANT_CONTEXT_FOUND');
@@ -403,7 +408,9 @@ export class RAGManager {
         const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true);
 
         for await (const chunk of stream) {
-            if (abortSignal?.aborted || (liveMeeting && liveIdentityRevision !== this.liveIndexer.getIdentityRevision())) break;
+            if (abortSignal?.aborted || (liveMeeting
+                ? liveIdentityRevision !== this.liveIndexer.getIdentityRevision()
+                : storedIdentityRevision !== this.storedMeetingEditRevision(meetingId))) break;
             yield chunk;
         }
     }
