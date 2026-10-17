@@ -4,6 +4,7 @@ import type { ElectronApplication, Page } from '@playwright/test';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
+import { prepareOfflineElectronGuard, verifyOfflineElectronGuard } from './offlineElectronGuard.mjs';
 
 async function findLauncherPage(electronApp: ElectronApplication): Promise<Page> {
   const deadline = Date.now() + 15_000;
@@ -34,8 +35,7 @@ async function findLauncherPage(electronApp: ElectronApplication): Promise<Page>
   return electronApp.firstWindow();
 }
 
-async function closeElectronApp(electronApp: ElectronApplication): Promise<void> {
-  const child = electronApp.process();
+async function closeElectronApp(electronApp: ElectronApplication, child: ReturnType<ElectronApplication['process']>): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
   const waitForExit = new Promise<void>((resolve) => {
     if (child.exitCode !== null || child.signalCode !== null) {
@@ -76,8 +76,10 @@ export const test = base.extend<{
     await fs.rm(userDataDir, { recursive: true, force: true });
     await fs.mkdir(userDataDir, { recursive: true });
 
+    const boundaryGuard = await prepareOfflineElectronGuard(userDataDir);
+
     const app = await electron.launch({
-      args: ['.', `--user-data-dir=${userDataDir}`],
+      args: ['-r', boundaryGuard, '.', `--user-data-dir=${userDataDir}`],
       cwd: process.cwd(),
       env: {
         ...process.env,
@@ -89,9 +91,20 @@ export const test = base.extend<{
       },
     });
 
+    const child = app.process();
+    await verifyOfflineElectronGuard(app, userDataDir);
+    const startupOutput: string[] = [];
+    if (testInfo.title.includes('startup quit')) {
+      child.stdout?.on('data', chunk => startupOutput.push(String(chunk)));
+      child.stderr?.on('data', chunk => startupOutput.push(String(chunk)));
+    }
     await use(app);
 
-    await closeElectronApp(app);
+    await closeElectronApp(app, child);
+    if (testInfo.title.includes('startup quit')) {
+      await fs.mkdir(path.join(process.cwd(), '.tmp/v28-t7'), { recursive: true });
+      await fs.writeFile(path.join(process.cwd(), '.tmp/v28-t7/startup-main.log'), startupOutput.join(''));
+    }
     await fs.rm(userDataDir, { recursive: true, force: true }).catch(() => {});
   },
 
