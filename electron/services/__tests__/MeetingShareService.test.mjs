@@ -77,3 +77,70 @@ test('privacy filtering uses explicit category labels without inferring privacy 
  const result=project({...fixture,detailedSummary:{overview:'## 辅导产品部署范围\n这是一条产品会议事实\n\n## 2. 辅导建议\nPRIVATE\n## 决策\n按既定范围试点',actionItems:[],keyPoints:[]}});
  assert.ok(result.text.includes('这是一条产品会议事实'));assert.doesNotMatch(result.text,/PRIVATE/);
 });
+
+async function assertSavedMinutesModel(meeting, expected) {
+ const result=project(meeting);
+ assert.deepEqual(result.blocks.slice(2),expected,'literal expected content and block kinds');
+ const {buildMeetingDocxBuffer}=require('../../../dist-electron/electron/services/MeetingDocxExportService.js');
+ const zip=await require('jszip').loadAsync(await buildMeetingDocxBuffer(meeting,{profile:'minutes'}));
+ const xml=await zip.file('word/document.xml').async('string');
+ const decode=value=>value.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#39;/g,"'").replace(/&amp;/g,'&');
+ const paragraphs=[...xml.matchAll(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g)].map(([p])=>[...p.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(([,t])=>decode(t)).join('')).filter(Boolean);
+ const want=expected.map(block=>block.text);
+ assert.deepEqual(paragraphs.slice(2),want,'Word ordered paragraphs');
+ assert.deepEqual(result.text.split('\n').filter(Boolean).slice(2).map(line=>line.replace(/^• /,'')),want,'plain text ordered content');
+ assert.deepEqual([...result.html.matchAll(/<(?:h1|h2|p|li)>(.*?)<\/(?:h1|h2|p|li)>/g)].slice(2).map(([,text])=>decode(text)),want,'HTML ordered content');
+}
+const overviewMeeting=overview=>({...fixture,summary:'',detailedSummary:{overview,actionItems:[],keyPoints:[]}});
+
+test('fix1 I1: bold public labels cannot close a real private heading or expose nested actions',async()=>{
+ await assertSavedMinutesModel(overviewMeeting('## 概要\nPUBLIC_A\n\n## 私人问答\nPRIVATE_A\n\n**要点**\nPRIVATE_B\n\n**行动项**\n- PRIVATE_TASK\n\n### 决策\nPRIVATE_CHILD\n\n## 决策\nPUBLIC_C'),[
+  {kind:'heading',text:'会议概述'},{kind:'paragraph',text:'PUBLIC_A'},{kind:'paragraph',text:'PUBLIC_C'},
+ ]);
+});
+test('fix1 I1: a real private heading owns a nested bold-only template through its next real peer',async()=>{
+ await assertSavedMinutesModel(overviewMeeting('## 私人问答\n**辅导建议**\nPRIVATE_A\n\n**要点**\nPRIVATE_B\n\n## 要点\nPUBLIC'),[
+  {kind:'heading',text:'会议概述'},{kind:'paragraph',text:'PUBLIC'},
+ ]);
+ await assertSavedMinutesModel(overviewMeeting('**概要**\nPUBLIC_A\n\n**私人问答**\nPRIVATE\n\n**要点**\nPUBLIC_B'),[
+  {kind:'heading',text:'会议概述'},{kind:'paragraph',text:'PUBLIC_A'},{kind:'paragraph',text:'PUBLIC_B'},
+ ]);
+});
+test('fix1 I2: finite explicit privacy qualifiers keep private sections out of all output models',async()=>{
+ for(const title of ['私人问答（仅自己可见）','2. 辅导建议 (仅本人可见)','Coaching Insights (private)','私人问答（仅供自己查看）']){
+  await assertSavedMinutesModel(overviewMeeting(`## ${title}\nPRIVATE_SUFFIX\n\n**要点**\nPRIVATE_BOLD\n\n## 要点\nPUBLIC`),[
+   {kind:'heading',text:'会议概述'},{kind:'paragraph',text:'PUBLIC'},
+  ]);
+ }
+ await assertSavedMinutesModel(overviewMeeting('## 辅导产品部署范围\nPUBLIC_FACT'),[
+  {kind:'heading',text:'会议概述'},{kind:'heading',text:'辅导产品部署范围'},{kind:'paragraph',text:'PUBLIC_FACT'},
+ ]);
+});
+test('fix1 I3: legacy summary-only Markdown actions are retained once in the shared ordered model',async()=>{
+ await assertSavedMinutesModel({...fixture,detailedSummary:undefined,summary:'## 概要\n公开会议事实\n\n## 行动项\n- 周五提交接口清单\n- 安排回访\n\n## 私人问答\nPRIVATE'},[
+  {kind:'heading',text:'会议概述'},{kind:'paragraph',text:'公开会议事实'},
+  {kind:'heading',text:'行动项'},{kind:'bullet',text:'周五提交接口清单'},{kind:'bullet',text:'安排回访'},
+ ]);
+});
+test('fix1 I3: overview-only stored legacy summaries need no preexisting action arrays',async()=>{
+ await assertSavedMinutesModel({...fixture,summary:'',detailedSummary:{overview:'## 概要\n公开事实\n\n**行动项**\n- 唯一Markdown任务'}},[
+  {kind:'heading',text:'会议概述'},{kind:'paragraph',text:'公开事实'},
+  {kind:'heading',text:'行动项'},{kind:'bullet',text:'唯一Markdown任务'},
+ ]);
+});
+test('fix1 I3: legacy overview actions merge with arrays and sections without losing saved metadata',async()=>{
+ for(const schemaVersion of [undefined,2]){
+  await assertSavedMinutesModel({...overviewMeeting('## 概要\n公开事实\n\n## 行动项\n- 周五提交接口清单\n- 唯一旧任务\n- 仅Markdown任务'),detailedSummary:{schemaVersion,overview:'## 概要\n公开事实\n\n## 行动项\n- 周五提交接口清单\n- 唯一旧任务\n- 仅Markdown任务',keyPoints:[],actionItems:['周五提交接口清单。'],actionItemsStructured:[{id:'saved',text:'周五提交接口清单',owner:'甲',deadline:'周五'}],sections:[{title:'下一步',bullets:['唯一旧任务']}] }},[
+   {kind:'heading',text:'会议概述'},{kind:'paragraph',text:'公开事实'},
+   {kind:'heading',text:'行动项'},{kind:'bullet',text:'周五提交接口清单。'},{kind:'paragraph',text:'负责人：甲'},{kind:'paragraph',text:'截止日期：周五'},{kind:'bullet',text:'唯一旧任务'},{kind:'bullet',text:'仅Markdown任务'},
+  ]);
+ }
+});
+test('fix1 I3: canonical v3 empty or populated actions never resurrect Markdown tasks',async()=>{
+ for(const items of [[],[{id:'kept',text:'保留任务'}]]){
+  await assertSavedMinutesModel({...fixture,summary:'',detailedSummary:{schemaVersion:3,overview:'## 概要\n公开事实\n\n## 行动项\n- 不可复活的旧任务',keyPoints:[],actionItems:['过期数组'],actionItemsStructured:items}},[
+   {kind:'heading',text:'会议概述'},{kind:'paragraph',text:'公开事实'},
+   ...(items.length?[{kind:'heading',text:'行动项'},{kind:'bullet',text:'保留任务'}]:[]),
+  ]);
+ }
+});

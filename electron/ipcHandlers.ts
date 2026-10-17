@@ -3510,7 +3510,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: false, error: 'invalid_input' };
     }
     try {
-      const meeting = DatabaseManager.getInstance().getMeetingDetails(meetingId);
+      const meeting = DatabaseManager.getInstance().getMeetingDetails(meetingId, { summaryFormat: 'stored' });
       if (!meeting) return { success: false, error: 'meeting_not_found' };
       if ((meeting.editState?.meetingRevision ?? 0) !== expectedRevision) return { success: false, error: 'conflict' };
       const minutes = buildMeetingMinutes(meeting);
@@ -3533,7 +3533,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
     try {
       // This detached DB snapshot remains fixed while the system save dialog is open.
-      const meeting = DatabaseManager.getInstance().getMeetingDetails(meetingId);
+      const meeting = DatabaseManager.getInstance().getMeetingDetails(meetingId, options.profile === 'minutes' ? { summaryFormat: 'stored' } : undefined);
       if (!meeting) return { success: false, error: 'meeting_not_found' };
       if (options.expectedRevision !== undefined && (meeting.editState?.meetingRevision ?? 0) !== options.expectedRevision) {
         return { success: false, error: 'conflict' };

@@ -3780,7 +3780,7 @@ export class DatabaseManager {
         });
     }
 
-    public getMeetingDetails(id: string): Meeting | null {
+    public getMeetingDetails(id: string, options?: { summaryFormat: 'stored' }): Meeting | null {
         if (!this.db) return null;
 
         const meetingStmt = this.db.prepare('SELECT * FROM meetings WHERE id = ?');
@@ -3855,7 +3855,9 @@ export class DatabaseManager {
             date: meetingRow.created_at,
             duration: durationStr,
             summary: summaryData.legacySummary || '',
-            detailedSummary: summaryData.detailedSummary ? normalizeMeetingActionItems(summaryData.detailedSummary) : undefined,
+            detailedSummary: summaryData.detailedSummary
+                ? options?.summaryFormat === 'stored' ? summaryData.detailedSummary : normalizeMeetingActionItems(summaryData.detailedSummary)
+                : undefined,
             calendarEventId: meetingRow.calendar_event_id,
             source: meetingRow.source,
             transcript: transcript,

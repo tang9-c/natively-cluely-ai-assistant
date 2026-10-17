@@ -406,3 +406,39 @@ test('T6 revision conflict refreshes saved state and requires an explicit retry 
  await page.screenshot({path:'.tmp/v28-t6/share-conflict.png',animations:'disabled'});
  await share(page,'复制纪要');await expect(page.getByText('已复制',{exact:true})).toBeVisible();expect((await copiedMinutes(electronApp))[0].text).toContain('冲突后的最新已保存纪要');
 });
+
+test('T6 fix1 stored legacy actions and authoritative v3 empty lists reach actual copy and Word IPC unchanged',async({electronApp,page})=>{
+ await seed(electronApp);await minutesClipboard(electronApp);
+ const markdown='## 概要\n公开会议事实\n\n## 行动项\n- 唯一Markdown任务\n\n## 私人问答（仅自己可见）\nPRIVATE\n\n**要点**\nPRIVATE_BOLD';
+ const cases=[
+  {summary:{legacySummary:'',detailedSummary:{overview:markdown}},actions:true},
+  {summary:{legacySummary:markdown},actions:true},
+  {summary:{legacySummary:'',detailedSummary:{schemaVersion:3,overview:markdown,keyPoints:[],actionItems:['过期任务'],actionItemsStructured:[]}},actions:false},
+ ];
+ for(const entry of cases){
+  await minutesClipboard(electronApp);
+  await electronApp.evaluate(({app,dialog}: any,summary: any)=>{
+   const require=process.getBuiltinModule('node:module').createRequire(process.getBuiltinModule('node:path').join(process.cwd(),'fix1-share.cjs'));
+   const db=new (require('better-sqlite3'))(require('node:path').join(app.getPath('userData'),'natively.db'));
+   db.prepare('UPDATE meetings SET summary_json=? WHERE id=?').run(JSON.stringify(summary),'editing-fixture');db.close();
+   dialog.showSaveDialog=async()=>({canceled:false,filePath:require('node:path').join(app.getPath('userData'),'fix1-minutes.docx')});
+  },entry.summary);
+  const defaultMeeting=await readMeeting(page);
+  if(entry.summary.detailedSummary)expect(defaultMeeting.detailedSummary.schemaVersion).toBe(3);
+  const revision=defaultMeeting.editState.meetingRevision;
+  expect(await page.evaluate(async(revision:number)=>window.electronAPI.copyMeetingMinutes('editing-fixture',revision),revision)).toEqual({success:true});
+  const writes=await copiedMinutes(electronApp);expect(writes).toHaveLength(1);
+  const want=['会议概述','公开会议事实',...(entry.actions?['行动项','唯一Markdown任务']:[])];
+  expect(writes[0].text.split('\n').slice(2).map((text:string)=>text.replace(/^• /,''))).toEqual(want);
+  const decode=(text:string)=>text.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&');
+  expect([...writes[0].html.matchAll(/<(?:h1|h2|p|li)>(.*?)<\/(?:h1|h2|p|li)>/g)].slice(2).map((match:any)=>decode(match[1]))).toEqual(want);
+  for(const legacySignature of [false,true]){
+   const exported=await page.evaluate(async({revision,legacySignature}:any)=>window.electronAPI.exportMeetingDocx('editing-fixture',legacySignature?false:{profile:'minutes',expectedRevision:revision}),{revision,legacySignature});
+   expect(exported.success).toBe(true);
+   const xml=await electronApp.evaluate(async(_:any,file:string)=>{const require=process.getBuiltinModule('node:module').createRequire(process.getBuiltinModule('node:path').join(process.cwd(),'fix1-word.cjs'));const zip=await require('jszip').loadAsync(require('node:fs').readFileSync(file));return zip.file('word/document.xml').async('string');},exported.filePath);
+   const paragraphs=[...xml.matchAll(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g)].map(([p]:any)=>[...p.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(([,text]:any)=>decode(text)).join('')).filter(Boolean);
+   expect(paragraphs.slice(2)).toEqual(want);
+   expect(paragraphs).toEqual(writes[0].text.split('\n').map((text:string)=>text.replace(/^• /,'')));
+  }
+ }
+});
